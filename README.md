@@ -2,7 +2,7 @@
 
 Obol is a static, browser-local workspace for OSCP-style labs, Active Directory practice, and CTFs. It tracks targets, Evidence, Next Steps, command-builder guidance, and report readiness without executing commands for the operator.
 
-Live site: `https://platocres.github.io/obol/`
+Live site: `https://platocres.github.io/obol_web/`
 
 Current release: **v10.24**
 
