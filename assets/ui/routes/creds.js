@@ -10,28 +10,9 @@
   var U = OBOL.util;
   function esc(s) { return U.esc(s); }
 
-  // Gather credentials: explicit engagement.credentials + those proven in facts.
-  function gatherCreds() {
-    var eng = OBOL.store.active();
-    var out = [], seen = {};
-    (eng.credentials || []).forEach(function (c) {
-      var user = c.user || c.username || '';
-      if (!user) return;
-      var key = user.toLowerCase() + '|' + (c.secret || c.password || c.nthash || c.hash || '');
-      if (seen[key]) return; seen[key] = 1;
-      out.push({ user: user, secret: c.secret || c.password || '', nthash: c.nthash || c.hash || '', type: c.secretType || (c.nthash || c.hash ? 'NT' : 'PW'), source: 'logged' });
-    });
-    // from facts (credential.available scoped to a host)
-    OBOL.store.factSet().facts.forEach(function (f) {
-      if (f.state !== 'supported') return;
-      if (f.kind !== 'credential.available' && f.kind !== 'credential.plaintext') return;
-      var user = (f.value || {}).user; if (!user) return;
-      var key = user.toLowerCase() + '|' + ((f.value.password || f.value.nthash || f.value.hash) || '');
-      if (seen[key]) return; seen[key] = 1;
-      out.push({ user: user, secret: f.value.password || '', nthash: f.value.nthash || f.value.hash || '', type: f.value.nthash || f.value.hash ? 'NT' : 'PW', source: 'proven', scope: f.scope });
-    });
-    return out;
-  }
+  // Gather credentials via the shared collector (engagement.credentials + proven facts),
+  // so the reuse matrix and the sidebar switcher always agree on the credential set.
+  function gatherCreds() { return OBOL.creds.gather(); }
 
   // Cell status for cred×host: derived from facts scoped to that host.
   function cellStatus(cred, host) {

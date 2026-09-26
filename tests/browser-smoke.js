@@ -178,6 +178,22 @@ function serve() {
   ok(await page.locator('.apath-block .ph-chip').count() >= 1, 'attack-path blocks carry a phase category chip');
   ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Attack Path — What Led to What') !== -1; }), 'attack-path heading is Title Case');
 
+  // Credential switcher: collected creds appear in the sidebar; clicking one fills the params.
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([
+      F.makeFact({ kind: 'credential.available', scope: 'host:10.10.10.9', value: { user: 'alice', domain: 'corp.local', password: 'S3cret!' }, state: F.ProofState.SUPPORTED, source: 'test' }),
+      F.makeFact({ kind: 'credential.available', scope: 'host:10.10.10.9', value: { user: 'bob', domain: 'corp.local', nthash: 'aabbccddeeff00112233445566778899' }, state: F.ProofState.SUPPORTED, source: 'test' }),
+    ], 'test');
+    window.OBOL.app.renderSidebar();
+  });
+  ok(await page.locator('#cred-switch .cred-row').count() >= 2, 'credential switcher lists collected creds (' + (await page.locator('#cred-switch .cred-row').count()) + ')');
+  const bobRow = page.locator('#cred-switch .cred-row', { hasText: 'bob' });
+  await bobRow.click();
+  const swapped = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'bob' && p.nthash === 'aabbccddeeff00112233445566778899'; });
+  ok(swapped, 'clicking a credential fills the engagement params (bob + NT hash)');
+  ok(await page.locator('#cred-switch .cred-row.active', { hasText: 'bob' }).count() === 1, 'the chosen credential is marked active');
+
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.pb-card', { timeout: 6000 }).catch(() => {});

@@ -102,6 +102,26 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 .fact-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; }
 .fact-del:hover { color: var(--red); }
 .facts-empty { color: var(--muted); font-size: 12px; font-style: italic; }
+/* credential switcher (sidebar) — collected creds, click one to fill every command with it */
+.side-h-note { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 10px; color: var(--muted); opacity: .8; }
+.cred-switch { display: flex; flex-direction: column; gap: 5px; }
+.cred-empty { color: var(--muted); font-size: 11.5px; font-style: italic; line-height: 1.35; }
+.cred-row { display: flex; flex-direction: column; gap: 3px; background: var(--bg2); border: 1px solid var(--line);
+  border-left: 3px solid var(--line); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+.cred-row:hover { border-color: var(--accent-soft); background: var(--surf2); }
+.cred-row.active { border-left-color: var(--accent); background: var(--accent-soft); }
+.cred-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cred-top { display: flex; align-items: center; gap: 6px; }
+.cred-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-hot); flex: 0 0 auto; }
+.cred-row.active .cred-dot { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.cred-user { font: 12.5px var(--mono); color: var(--text); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
+.cred-type { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; padding: 1px 5px; border-radius: 10px; flex: 0 0 auto; color: #0a0e18; }
+.cred-type.ct-nt { background: var(--ph-escalate); } .cred-type.ct-pw { background: var(--ph-creds); }
+.cred-sub { display: flex; align-items: baseline; gap: 4px; padding-left: 13px; min-width: 0; }
+.cred-dom { font: 10.5px var(--mono); color: var(--muted); flex: 0 0 auto; }
+.cred-secret { font: 10.5px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cred-copy { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; flex: 0 0 auto; }
+.cred-copy:hover { color: var(--accent); }
 /* guided fact picker (sidebar + evidence) */
 .fact-pick { margin-top: 8px; }
 .fp-row { display: flex; gap: 6px; }
