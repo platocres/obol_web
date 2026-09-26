@@ -365,3 +365,45 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .tmove-title { flex: 1; font-weight: 600; font-size: 13px; }
 a.tcard-main { text-decoration: none; color: inherit; }
 a.tcard-main:hover .tcard-ip { color: var(--accent-2); }
+
+/* ---- credential matrix ---- */
+.cm-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.cm-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.cm-table th, .cm-table td { border: 1px solid var(--line); padding: 0; text-align: center; }
+.cm-corner { background: var(--bg2); color: var(--muted); font-size: 11px; padding: 8px; text-transform: uppercase; letter-spacing: .05em; }
+.cm-hostbtn, .cm-credbtn, .cm-cellbtn { width: 100%; height: 100%; background: none; border: none; color: var(--text); cursor: pointer; padding: 8px 10px; font: inherit; }
+.cm-host { background: var(--bg2); }
+.cm-hostbtn { font-family: var(--mono); font-size: 12px; }
+.cm-hostbtn:hover, .cm-credbtn:hover { color: var(--accent-2); background: var(--accent-soft); }
+.cm-cred { background: var(--bg1); text-align: left; }
+.cm-credbtn { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.cm-user { font-weight: 600; }
+.cm-type { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 1px 6px; }
+.cm-cellbtn { font-weight: 700; }
+.cell-adm { background: color-mix(in srgb, var(--critical) 22%, transparent); color: var(--critical); }
+.cell-ok { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.cell-none { color: var(--muted); }
+.cm-cellbtn:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---- scoreboard ---- */
+.score-total { font-size: 15px; margin: 8px 0 18px; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surf2); display: inline-block; }
+.score-total .score-n { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.score-total.pass { border-color: var(--green); } .score-total.pass .score-n { color: var(--green); }
+.score-total.fail { border-color: var(--line-hot); }
+.score-table { border-collapse: collapse; width: 100%; }
+.score-table th, .score-table td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; }
+.score-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.score-table .ad-row { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.score-chip { display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 20px; }
+.score-chip.got { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.score-chip.miss { color: var(--muted); border: 1px dashed var(--line); }
+.score-note { font-size: 12px; margin-top: 12px; }
+
+/* ---- playbooks / engagement map (styles for the parity surfaces) ---- */
+.pb-card, .map-legend { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; }
+.pb-card.applicable { border-color: var(--accent); }
+.pb-title { font-weight: 700; }
+.pb-step { border-left: 2px solid var(--line); padding-left: 12px; margin: 10px 0; }
+.pb-step.approval { border-left-color: var(--danger); }
+.map-scroll { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 8px; }
+.map-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-2); }

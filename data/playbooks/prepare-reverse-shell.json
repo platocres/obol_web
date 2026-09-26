@@ -1,0 +1,28 @@
+{
+ "name": "prepare-reverse-shell",
+ "title": "Prepare a Reverse Shell",
+ "description": "Stand up everything needed to catch a shell: a listener, a Linux and a Windows payload crafted for it, and the PTY-upgrade recipe for once it lands. obol never fires the payload — it crafts and stages; you trigger it. Each step runs through the same scope-enforced runner as `obol run`.",
+ "steps": [
+  {
+   "label": "Start a reverse-shell listener",
+   "action_id": "shell-listener",
+   "note": "Opens the catcher on an operator/callback port; the crafted payloads point back at it."
+  },
+  {
+   "label": "Craft a Linux reverse-shell payload",
+   "action_id": "shell-revshell-linux",
+   "note": "Renders the one-liner (bash/nc/etc.) targeting the listener — copy it to run on the box; never auto-fired."
+  },
+  {
+   "label": "Craft a Windows reverse-shell payload",
+   "action_id": "shell-revshell-windows",
+   "note": "The Windows equivalent (PowerShell/nc.exe). Skip the OS you don't need — per-step, operator's choice."
+  },
+  {
+   "label": "Upgrade a dumb shell to a full PTY",
+   "action_id": "shell-pty-upgrade",
+   "note": "The recipe to turn the caught shell into an interactive TTY (job control, vim, sudo) — for after it lands."
+  }
+ ],
+ "phase": "access"
+}

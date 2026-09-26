@@ -1,0 +1,38 @@
+{
+ "name": "domain-persistence",
+ "title": "Establish Domain Persistence (defense-in-depth)",
+ "description": "Once you own the domain (a krbtgt hash, a replicated NTDS dump, or Domain-Admin rights), lay down SEVERAL INDEPENDENT persistence mechanisms so cleaning up any one does not evict you. Each step is a separate fact-gated pack action producing its own persistence.domain fact and runs through the same scope-enforced runner as `obol run`; unmet steps (e.g. no krbtgt hash yet) are skipped, and every step is approval-gated because it modifies domain infrastructure — obol crafts and runs on approval, never silently. Post-exploitation / OSEP-tier: opt in deliberately (never needed to pass an OSCP exam).",
+ "steps": [
+  {
+   "label": "Golden ticket (forge a TGT from the krbtgt key)",
+   "action_id": "golden-ticket",
+   "require_approval": true,
+   "note": "The krbtgt-key forgery — any user, any group, offline. The broadest persistence; survives every password reset except krbtgt (twice)."
+  },
+  {
+   "label": "Diamond ticket (re-sign a real DC-issued TGT)",
+   "action_id": "diamond-ticket",
+   "require_approval": true,
+   "note": "Stealthier than golden — modifies a legitimately-issued ticket rather than forging one, so it blends with real Kerberos traffic. Independent of the golden path above."
+  },
+  {
+   "label": "WSUS abuse (push a signed update as SYSTEM)",
+   "action_id": "wsus-abuse",
+   "require_approval": true,
+   "note": "A patch-infrastructure foothold — independent of Kerberos entirely, so it survives a krbtgt double-reset that kills the ticket mechanisms."
+  },
+  {
+   "label": "DnsAdmins ServerLevelPluginDll (DC SYSTEM via a DLL)",
+   "action_id": "dnsadmins-abuse",
+   "require_approval": true,
+   "note": "Load a plugin DLL into the DNS service running as SYSTEM on the DC — a separate write-privesc persistence lever, gated on a control path over the DC/DnsAdmins."
+  },
+  {
+   "label": "SID-history injection (cross-forest / hidden DA membership)",
+   "action_id": "sid-history-abuse",
+   "require_approval": true,
+   "note": "Inject a high-privilege SID into an account you control — persistence that does not depend on holding krbtgt, and reaches across a trust when one exists."
+  }
+ ],
+ "phase": "loot"
+}
