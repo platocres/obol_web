@@ -242,16 +242,18 @@
       var eng = this.active();
       if (!eng) return 0;
       var fs = new OBOL.facts.FactSet((eng.facts || []).map(OBOL.facts.factFromJson));
-      var added = 0;
+      var added = 0, addedKinds = [];
       (facts || []).forEach(function (f) {
         var fact = f.kind ? (f.state ? f : OBOL.facts.factFromJson(f)) : null;
-        if (fact && fs.add(fact)) added++;
+        if (fact && fs.add(fact)) { added++; addedKinds.push(fact.kind); }
       });
       if (added || (facts && facts.length)) {
         eng.facts = fs.facts.map(OBOL.facts.factToJson);
         scheduleSave();
         emit(reason || 'facts');
       }
+      // celebrate genuine milestone proof (foothold/admin/flag/loot) — presentation only.
+      if (addedKinds.length && OBOL.coins) { try { OBOL.coins.burstForFactKinds(addedKinds); } catch (e) {} }
       return added;
     },
     setFacts(factset, reason) {

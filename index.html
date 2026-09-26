@@ -12,6 +12,8 @@
       try {
         var p = JSON.parse(localStorage.getItem('obol-prefs') || '{}');
         if (p && p.skin) document.documentElement.setAttribute('data-skin', p.skin);
+        var a = parseFloat(localStorage.getItem('obol.surface-alpha'));
+        if (a >= 0 && a <= 1) document.documentElement.style.setProperty('--surface-alpha', String(a));
       } catch (e) {}
     })();
     /* Boot guard: if boot never commits, reveal the page anyway so it can't hang hidden. */
@@ -26,7 +28,14 @@
 <body>
   <div id="app">
     <header class="appbar">
-      <div class="brand"><span class="coin" aria-hidden="true"></span>
+      <div class="brand"><svg class="coin" viewBox="0 0 24 24" width="27" height="27" aria-hidden="true">
+          <defs><radialGradient id="obolCoin" cx="38%" cy="34%" r="72%">
+            <stop offset="0" stop-color="#FFF1A8"/><stop offset="55%" stop-color="#FFD34D"/><stop offset="100%" stop-color="#E6A21C"/>
+          </radialGradient></defs>
+          <circle cx="12" cy="12" r="10" fill="url(#obolCoin)" stroke="#B9770E" stroke-width="1.5"/>
+          <circle cx="12" cy="12" r="7.2" fill="none" stroke="#B9770E" stroke-width="0.8" opacity="0.5"/>
+          <path d="M12 7 L16 12 L12 17 L8 12 Z" fill="#B9770E"/>
+        </svg>
         <div><h1>OBOL</h1><div class="tagline">Offensive Box Operations Ledger</div></div>
       </div>
       <nav class="mainnav" aria-label="Primary">
@@ -44,15 +53,6 @@
         <a data-nav href="#/scoreboard">Scoreboard</a>
         <a data-nav href="#/report">Report</a>
       </nav>
-      <div class="appbar-right">
-        <select id="skin-select" title="Skin" aria-label="Skin">
-          <option value="obol">Obol</option>
-          <option value="ghostwire">Ghostwire</option>
-          <option value="amber">Amber</option>
-          <option value="neon">Neon</option>
-          <option value="daylight">Daylight</option>
-        </select>
-      </div>
     </header>
 
     <aside id="sidebar">
@@ -94,5 +94,11 @@
   <script defer src="assets/ui/routes/evidence.js"></script>
   <script defer src="assets/ui/routes/path.js"></script>
   <script defer src="assets/ui/boot.js"></script>
+
+  <!-- Presentation-only, loaded after the critical path so the boot budget is untouched:
+       motion background, coin bursts on genuine proof, and the ⚙ appearance settings. -->
+  <script defer src="assets/ui/backdrop.js"></script>
+  <script defer src="assets/ui/coin.js"></script>
+  <script defer src="assets/ui/settings.js"></script>
 </body>
 </html>

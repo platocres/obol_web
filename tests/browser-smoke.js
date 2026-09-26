@@ -40,6 +40,13 @@ function serve() {
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
 
+  // presentation modules loaded (motion background, coin bursts, ⚙ settings)
+  ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.backdrop && window.OBOL.coins)), 'backdrop + coin modules attached');
+  ok(await page.locator('#obol-settings-toggle').count() === 1, 'bottom-right settings button rendered');
+  ok(await page.locator('#skin-select').count() === 0, 'legacy appbar skin select removed (moved into settings)');
+  const brandCoin = await page.locator('.brand svg.coin').count();
+  ok(brandCoin === 1, 'brand mark is the gold coin SVG');
+
   // engine present + packs loaded
   const actionCount = await page.evaluate(() => window.OBOL && window.OBOL.packs ? window.OBOL.packs.actions().length : 0);
   ok(actionCount === 157, 'packs loaded in browser (157 actions, got ' + actionCount + ')');

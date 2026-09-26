@@ -103,15 +103,7 @@
       renderSidebar(); OBOL.router.render();
     });
 
-    // skin picker
-    var skinSel = document.getElementById('skin-select');
-    if (skinSel) {
-      skinSel.value = OBOL.store.pref().skin || 'obol';
-      skinSel.addEventListener('change', function () {
-        document.documentElement.setAttribute('data-skin', skinSel.value);
-        OBOL.store.setPref('skin', skinSel.value);
-      });
-    }
+    // (skin/motion/opacity live in the bottom-right ⚙ settings panel — see settings.js)
 
     // re-render sidebar whenever state changes
     OBOL.store.onChange(function () { renderSidebar(); });
