@@ -112,7 +112,15 @@
       + '</div>'
       + '<div class="home-spine">' + spine + '</div>'
       + (ranked.length ? ('<div class="eng-nextmove"><span class="mini-label">next move</span> ' + esc(ranked[0].title) + '</div>') : '')
+      + engagementPath()
       + '</div>';
+  }
+
+  // The engagement-wide Attack Path ribbon (identical to a single target's when scope is one host).
+  function engagementPath() {
+    var flow = OBOL.chainview ? OBOL.chainview.engagement() : '';
+    if (!flow) return '';
+    return '<div class="eng-apath"><h2 class="coach-sec-h">Attack Path — What Led to What</h2>' + flow + '</div>';
   }
 
   function libraryList() {

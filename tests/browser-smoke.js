@@ -210,6 +210,12 @@ function serve() {
   await page.waitForTimeout(120);
   ok(await page.locator('#cred-switch .cred-row', { hasText: 'carol' }).count() === 0, 'a manually-added credential can be removed');
 
+  // Engagement-wide Attack Path on the home screen (single target → identical ribbon, no host header).
+  await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.eng-apath .apath-flow', { timeout: 5000 }).catch(() => {});
+  ok(await page.locator('.eng-apath .apath-flow .apath-block').count() >= 1, 'engagement screen shows the engagement-wide Attack Path (' + (await page.locator('.eng-apath .apath-block').count()) + ' blocks)');
+  ok(await page.locator('.eng-apath .apath-host').count() === 0, 'a single-target engagement renders the ribbon with no per-host header (identical to the target page)');
+
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.pb-card', { timeout: 6000 }).catch(() => {});

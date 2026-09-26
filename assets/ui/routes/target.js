@@ -62,25 +62,7 @@
     // Each block synthesizes obol-local's two surfaces: the milestone + concrete subject (attack_path)
     // AND the command that produced it + real causal link (storyline). Off-path parents get "← from".
     var steps = OBOL.chain.build({ facts: facts, activities: eng.activities || [], actions: pack, host: ip });
-    var story = steps.map(function (s, i) {
-      var prevKind = i > 0 ? steps[i - 1].kind : null;
-      var fromPrev = i === 0 || !s.enabledBy.length || s.enabledBy.indexOf(prevKind) !== -1;
-      var arrow = i === 0 ? ''
-        : '<span class="apath-arrow' + (fromPrev ? '' : ' jump') + '" aria-hidden="true">→</span>';
-      // "← from" only names parents that aren't the block immediately to the left (a real jump).
-      var jumped = s.enabledBy.filter(function (k) { return k !== prevKind; });
-      var from = (!fromPrev && jumped.length)
-        ? '<div class="apath-from">← from ' + jumped.map(function (k) { return esc(U.titleCase(OBOL.pack.friendly(k))); }).join(', ') + '</div>' : '';
-      var tech = s.technique ? '<span class="apath-tech">' + esc(s.technique) + '</span>' : '';
-      var detail = s.detail ? '<div class="apath-detail">' + esc(s.detail.length > 96 ? s.detail.slice(0, 94) + '…' : s.detail) + '</div>' : '';
-      var cmd = s.command ? '<code class="apath-cmd" title="' + U.attr(s.command) + '">' + esc(s.command.length > 60 ? s.command.slice(0, 58) + '…' : s.command) + '</code>' : '';
-      // Title Case the milestone label (acronyms like AS-REP / WinRM / NTDS keep their caps).
-      var title = U.titleCase(s.label);
-      return arrow + '<article class="apath-block ph-' + esc(s.phase) + (s.isFlag ? ' apath-flag' : '') + '">'
-        + '<div class="apath-cat"><span class="ph-chip ph-' + esc(s.phase) + '">' + esc(s.phase) + '</span>' + tech + '</div>'
-        + '<div class="apath-title">' + (s.isFlag ? '🚩 ' : '') + esc(title) + '</div>'
-        + detail + cmd + from + '</article>';
-    }).join('');
+    var story = OBOL.chainview.ribbon(steps);
 
     // top scoped moves (compact, copy-ready)
     var params = eng.params || {};

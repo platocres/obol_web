@@ -594,6 +594,11 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .apath-arrow { align-self: center; color: var(--line-hot); font-size: 15px; padding: 0 1px; flex: 0 0 auto; }
 .apath-arrow.jump { color: var(--muted); opacity: .6; }
 @media (max-width: 640px) { .apath-block { flex-basis: 100%; } .apath-arrow { transform: rotate(90deg); align-self: flex-start; margin: 1px 0 1px 14px; } }
+/* engagement-wide Attack Path (home) — single target is identical to its own page; multiple stack */
+.eng-apath { margin-top: 16px; }
+.apath-host { margin-top: 10px; }
+.apath-host-h { font: 12px var(--mono); font-weight: 700; color: var(--text); margin: 0 0 5px; border-left: 3px solid var(--accent); padding-left: 8px; }
+.apath-host-name { color: var(--muted); font-weight: 400; }
 .tmove { background: var(--surf2); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin-bottom: 10px; }
 .tmove-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .tmove-title { flex: 1; font-weight: 600; font-size: 13px; }
