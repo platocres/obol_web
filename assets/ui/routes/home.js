@@ -242,7 +242,7 @@
       var hostsPre = scope.filter(function (s) { return !isCidr(s); });
       var isExam = OBOL.profile.isExamPlatform(platform);
       var base = (OBOL.store.pref && OBOL.store.pref().workspaceBase) || OBOL.workspace.DEFAULT_BASE;
-      var typed = ((document.getElementById('eng-workdir') || {}).value || '').trim();
+      var typed = OBOL.workspace.sanitizeRoot((document.getElementById('eng-workdir') || {}).value || '');
       var slug = OBOL.workspace.slugify(isExam ? name : (hostsPre[0] || name));
       var root = typed || OBOL.workspace.join(base, slug);
       try { OBOL.store.setPref('workspaceBase', root.replace(/\/+[^/]*\/*$/, '') || base); } catch (e) {}
