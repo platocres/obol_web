@@ -13,7 +13,7 @@
     parsers: ['assets/engine/parsers/index.js'],
     graph: ['assets/engine/graph.js', 'assets/ui/routes/graph.js'],
     domain: ['assets/jszip.min.js', 'assets/engine/bloodhound.js', 'assets/ui/routes/domain.js'],
-    report: ['assets/engine/report.js', 'assets/ui/routes/report.js'],
+    report: ['data/reportmeta.js', 'assets/engine/report.js', 'assets/ui/routes/report.js'],
     tools: ['assets/ui/routes/tools.js'],
     checklist: ['assets/ui/routes/checklist.js'],
   };

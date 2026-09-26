@@ -201,3 +201,54 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---- path graph ---- */
+.graph-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.graph-toggle { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+.graph-scroll { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 8px; }
+svg.obol-graph .g-empty { fill: var(--muted); }
+svg.obol-graph .g-edge { stroke: var(--line-hot); stroke-width: 1.5; }
+svg.obol-graph .g-edge-future { stroke: var(--line); stroke-dasharray: 4 4; }
+svg.obol-graph .g-node rect { stroke-width: 1.5; }
+svg.obol-graph .g-node text { fill: #fff; }
+svg.obol-graph .g-fact-proven rect { fill: var(--green); stroke: #0d3b0d; }
+svg.obol-graph .g-fact-future rect { fill: var(--bg3); stroke: var(--line); stroke-dasharray: 3 2; }
+svg.obol-graph .g-fact-future text { fill: var(--muted); }
+svg.obol-graph .g-action-done rect { fill: #2b5d8a; stroke: #173952; }
+svg.obol-graph .g-action-next rect { fill: var(--accent); stroke: var(--accent-2); }
+svg.obol-graph .g-action-locked rect { fill: var(--bg3); stroke: var(--line); stroke-dasharray: 3 2; }
+svg.obol-graph .g-action-locked text { fill: var(--muted); }
+svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
+.ph-text-recon { fill: var(--ph-recon); } .ph-text-enum { fill: var(--ph-enum); } .ph-text-creds { fill: var(--ph-creds); }
+.ph-text-access { fill: var(--ph-access); } .ph-text-escalate { fill: var(--ph-escalate); } .ph-text-loot { fill: var(--ph-loot); }
+.ph-stroke-recon { stroke: var(--ph-recon); } .ph-stroke-enum { stroke: var(--ph-enum); } .ph-stroke-creds { stroke: var(--ph-creds); }
+.ph-stroke-access { stroke: var(--ph-access); } .ph-stroke-escalate { stroke: var(--ph-escalate); } .ph-stroke-loot { stroke: var(--ph-loot); }
+
+/* ---- domain (bloodhound) ---- */
+.bh-drop { border: 2px dashed var(--line-hot); border-radius: var(--radius); padding: 30px; text-align: center; color: var(--text-2); cursor: pointer; background: var(--bg1); }
+.bh-drop.drag { border-color: var(--accent); background: var(--accent-soft); }
+.bh-census { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap: 12px; margin: 18px 0; }
+.bh-card { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.bh-card h3 { margin: 0 0 8px; font-size: 13px; }
+.bh-card .bh-hint { color: var(--muted); font-size: 12px; }
+.bh-count { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bh-count.crit { color: var(--critical); } .bh-count.warn { color: var(--orange); }
+.bh-princ { font-family: var(--mono); font-size: 11px; color: var(--text-2); word-break: break-all; }
+.bh-report-frame { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
+
+/* ---- checklist ---- */
+.chk-phase { margin-bottom: 18px; }
+.chk-phase-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.chk-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.chk-item input { width: 16px; height: 16px; }
+.chk-t { flex: 1; }
+.chk-item.checked .chk-t { color: var(--muted); text-decoration: line-through; }
+.chk-cmd { font-family: var(--mono); font-size: 11px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--text-2); max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- report ---- */
+.rep-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.rep-controls select, .rep-controls label { font-size: 13px; }
+.rep-out { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 16px; max-height: 70vh; overflow: auto; }
+.rep-out.md pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; color: var(--text); margin: 0; }
+.rep-gaps { color: var(--yellow); font-size: 13px; margin: 10px 0; }
+.rep-gaps ul { margin: 6px 0; }
