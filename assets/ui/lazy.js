@@ -12,7 +12,7 @@
   var GROUPS = {
     parsers: [
       'assets/engine/parsers/_common.js',
-      'assets/engine/parsers/nmap.js', 'assets/engine/parsers/ad.js',
+      'assets/engine/parsers/nmap.js', 'assets/engine/parsers/directory.js',
       'assets/engine/parsers/creds.js', 'assets/engine/parsers/host.js',
       'assets/engine/parsers/services.js', 'assets/engine/parsers/database.js',
       'assets/engine/parsers/web.js', 'assets/engine/parsers/websource.js',
@@ -40,7 +40,9 @@
       var s = document.createElement('script');
       s.src = src; s.async = false;
       s.onload = function () { resolve(true); };
-      s.onerror = function () { resolve(false); }; // degrade: missing bundle is not fatal
+      // A failed load (404, or a content/ad blocker blocking a file by name) is not fatal, but we drop
+      // its cached promise so a later attempt can retry it rather than being stuck half-loaded forever.
+      s.onerror = function () { delete _script[src]; resolve(false); };
       document.head.appendChild(s);
     });
     return _script[src];
@@ -49,10 +51,14 @@
   function loadGroup(name) {
     if (_loaded[name]) return _loaded[name];
     var files = GROUPS[name] || [];
-    _loaded[name] = files.reduce(function (p, src) {
-      return p.then(function () { return loadScript(src); });
-    }, Promise.resolve());
-    return _loaded[name];
+    var p = files.reduce(function (acc, src) {
+      return acc.then(function (allOk) { return loadScript(src).then(function (ok) { return allOk && ok; }); });
+    }, Promise.resolve(true));
+    // Don't cache a group that didn't fully load — a retry (e.g. the next paste) re-attempts the
+    // missing file instead of running the engine with a helper permanently undefined.
+    p.then(function (allOk) { if (!allOk) delete _loaded[name]; });
+    _loaded[name] = p;
+    return p;
   }
 
   // Register placeholder routes that lazy-load their group then delegate to the real route.

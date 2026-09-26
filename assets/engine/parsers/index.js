@@ -52,9 +52,18 @@
     var ws = makeWs(opts.scope, opts.domain);
     var text = [stdout, stderr].filter(Boolean).join('\n');
     var facts = [];
+
+    // The dispatch fans one paste out to many independent sub-parsers. A single fragile parser — or a
+    // helper missing because a stale/partial asset load left the parser bundle inconsistent — must
+    // never lose the whole paste (and the facts already collected). So the run is wrapped: on any
+    // throw we log the culprit and return the facts gathered so far. Facts are never invented, only
+    // possibly under-collected. nmap runs first, so a scan paste still yields ports.
     var lc = command.toLowerCase();
-    var domainHint = C._domain_from_text(text);
+    var domainHint = '';
     var actObj = { id: actionId };
+    try {
+
+    domainHint = has('_domain_from_text') ? C._domain_from_text(text) : '';
 
     if (lc.indexOf('nmap ') >= 0 || lc.indexOf('nmap ') === 0) {
       if (has('_parse_nmap')) C._parse_nmap(text, ws, source, facts, actionId);
@@ -127,9 +136,9 @@
 
     if (lc.indexOf('penelope') >= 0) C._parse_penelope(text, ws, source, facts);
 
-    if (C._PRIVESC_ACTION_IDS.has(actionId)) C._parse_privesc_output(actionId, text, ws, command, source, facts);
-    C._parse_script_sinks(text, command, ws, source, facts);
-    C._parse_shadow_file(text, command, ws, source, facts);
+    if (C._PRIVESC_ACTION_IDS && C._PRIVESC_ACTION_IDS.has(actionId)) C._parse_privesc_output(actionId, text, ws, command, source, facts);
+    if (has('_parse_script_sinks')) C._parse_script_sinks(text, command, ws, source, facts);
+    if (has('_parse_shadow_file')) C._parse_shadow_file(text, command, ws, source, facts);
 
     if (lc.indexOf('certipy') >= 0 || lc.indexOf('pywhisker') >= 0) {
       if (has('_parse_adcs')) C._parse_adcs(text, ws, command, source, facts);
@@ -170,6 +179,11 @@
     // §33 content-gated OSWE parsers (only the ported ones run)
     if (has('_has_product_signature') && C._has_product_signature(text)) C._parse_product_signature(text, ws, command, source, facts);
     if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) C._parse_sqli_oracle(text, ws, command, source, facts);
+
+    } catch (e) {
+      try { if (typeof console !== 'undefined' && console.warn) console.warn('obol parser: a sub-parser failed — keeping the ' + facts.length + ' fact(s) already recognized. Command: ' + command + ' — ' + (e && e.message)); } catch (_e) {}
+      return { facts: facts, unmatched: facts.length === 0, error: (e && e.message) || String(e) };
+    }
 
     return { facts: facts, unmatched: facts.length === 0 };
   }

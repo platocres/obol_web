@@ -242,16 +242,19 @@
         if (!okp) { if (out) out.textContent = 'Parsers still loading — try again.'; t.disabled = false; return; }
         var r = OBOL.ingest.run({ text: text, command: box.getAttribute('data-cmd') || '',
           actionId: box.getAttribute('data-action') || '', source: 'paste' });
-        if (!r.ok) { if (out) out.textContent = r.reason === 'error' ? ('Parse error.') : 'Nothing to parse.'; t.disabled = false; return; }
+        if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading — try again.' : 'Nothing to parse.'; t.disabled = false; return; }
         if (r.added) {
           U.toast('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + ' — recomputing');
           OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
         } else {
           t.disabled = false;
           if (out) {
-            out.innerHTML = r.facts.length
-              ? ('Recognized ' + r.facts.length + ', nothing new (already known).')
-              : 'No facts recognized. <a href="#/evidence/' + esc(box.getAttribute('data-action') || '') + '">Set the command in Evidence ↗</a>';
+            // The output is always saved as evidence; only fact extraction may come up empty.
+            out.innerHTML = r.parseError
+              ? ('Output saved — the parser skipped part of it, no new facts. <a href="#/evidence/' + esc(box.getAttribute('data-action') || '') + '">Open in Evidence ↗</a>')
+              : r.facts.length
+                ? ('Recognized ' + r.facts.length + ', nothing new (already known).')
+                : 'No facts recognized (output saved). <a href="#/evidence/' + esc(box.getAttribute('data-action') || '') + '">Set the command in Evidence ↗</a>';
           }
         }
       });

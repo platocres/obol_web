@@ -91,8 +91,7 @@
     var r = OBOL.ingest.run({ text: text, command: cmd, source: meta.source, fileName: meta.fileName });
     if (!r.ok) {
       if (r.reason === 'empty') U.toast('Nothing to parse — the ' + (meta.fileName ? 'file' : 'paste') + ' is empty');
-      else if (r.reason === 'parsers') U.toast('Parsers not loaded yet');
-      else U.toast('Parse error: ' + (r.error || ''), 'err');
+      else U.toast('Parsers not loaded yet');
       return;
     }
     var origin = r.fileName ? (esc(r.fileName) + ' · ' + r.lines.toLocaleString() + ' lines') : null;
@@ -100,7 +99,9 @@
     if (resEl) {
       if (!r.facts.length) {
         resEl.innerHTML = '<div class="ev-none">' + (origin ? ('Read ' + origin + ' — no ') : 'No ')
-          + 'facts recognized (nothing invented). Set the command above if the output is on its own, or add a fact manually.</div>';
+          + 'facts recognized (output saved; nothing invented). '
+          + (r.parseError ? 'The parser skipped part of this output (see the browser console). ' : '')
+          + 'Set the command above if the output is on its own, or add a fact manually.</div>';
       } else {
         resEl.innerHTML = '<div class="ev-added">Minted ' + r.added + ' new fact' + (r.added === 1 ? '' : 's') + ' (' + r.facts.length + ' recognized)'
           + (origin ? (' from ' + origin) : '') + ':</div>'
