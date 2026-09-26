@@ -1,0 +1,15 @@
+$ john --wordlist=/usr/share/wordlists/rockyou.txt --format=NT ntlm.dump
+Using default input encoding: UTF-8
+Loaded 3 password hashes with no different salts (NT [MD4 128/128 AVX 4x3])
+Warning: no OpenMP support for this hash type, consider --fork=8
+Press 'q' or Ctrl-C to abort, almost any other key for status
+0g 0:00:00:03 DONE (2026-09-17 08:15) 0g/s 4783Kp/s 4783Kc/s 14350KC/s ..zzzzzzzz
+Session completed.
+
+$ john --show --format=NT ntlm.dump
+0 password hashes cracked, 3 left
+
+$ john --wordlist=/usr/share/wordlists/rockyou.txt --format=NT ntlm.dump
+Using default input encoding: UTF-8
+Loaded 3 password hashes with no different salts (NT [MD4 128/128 AVX 4x3])
+No password hashes left to crack (see FAQ)

@@ -1,0 +1,6 @@
+$ curl -s "http://shop.example.local/search?q=UNION+SELECT"
+<html><body>
+<h3>Search help</h3>
+<p>Advanced users can try payloads like: id=-1 UNION SELECT 1,2,3 FROM information_schema.tables -- -</p>
+<p>No results found for your query.</p>
+</body></html>

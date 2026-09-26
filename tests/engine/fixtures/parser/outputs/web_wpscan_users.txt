@@ -1,0 +1,51 @@
+$ wpscan --url http://10.129.41.87/ --enumerate u --random-user-agent
+_______________________________________________________________
+         __          _______   _____
+         \ \        / /  __ \ / ____|
+          \ \  /\  / /| |__) | (___   ___  __ _ _ __ ®
+           \ \/  \/ / |  ___/ \___ \ / __|/ _` | '_ \
+            \  /\  /  | |     ____) | (__| (_| | | | |
+             \/  \/   |_|    |_____/ \___|\__,_|_| |_|
+
+         WordPress Security Scanner by the WPScan Team
+                         Version 3.8.25
+_______________________________________________________________
+
+[+] URL: http://10.129.41.87/ [10.129.41.87]
+[+] Started: Wed Sep 17 10:44:02 2026
+
+[i] Plugin(s) Identified:
+
+[+] WordPress version 6.4.3 identified (Insecure, released on 2024-01-30).
+
+[i] User(s) Identified:
+
+[+] admin
+ | Found By: Author Posts - Author Pattern (Passive Detection)
+ | Confirmed By:
+ |  Rss Generator (Passive Detection)
+ |  Author Id Brute Forcing - Author Pattern (Aggressive Detection)
+ |  Login Error Messages (Aggressive Detection)
+
+[+] editor_j
+ | Found By: Author Id Brute Forcing - Author Pattern (Aggressive Detection)
+ | Confirmed By: Login Error Messages (Aggressive Detection)
+
+[+] r.castillo
+ | Found By: Author Id Brute Forcing - Author Pattern (Aggressive Detection)
+ | Confirmed By: Login Error Messages (Aggressive Detection)
+
++----+------------+-------------------+
+| Id | Login      | Name              |
++----+------------+-------------------+
+| 1  | admin      | Administrator     |
+| 2  | editor_j   | Jenna Okafor      |
+| 4  | r.castillo | Ricardo Castillo  |
++----+------------+-------------------+
+
+[i] User(s) Identified:
+
+[+] Finished: Wed Sep 17 10:44:31 2026
+[+] Requests Done: 91
+[+] Cached Requests: 6
+[+] Elapsed time: 00:00:29

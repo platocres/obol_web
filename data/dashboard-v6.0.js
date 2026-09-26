@@ -1,2 +1,0 @@
-// Obol v6.0 dashboard metadata.
-(function(root){'use strict';root.OBOL_DASHBOARD_V60={version:'6.0.0',releaseMilestone:{release:'v6.0',implemented:87,partial:34,gap:6,stale:0,coveragePct:69,representedPct:95,label:'five more canonical gaps completed'},source:'v5.9 generated Build Next queue',completedCanonical:['low_hanging.java-rmi','low_hanging.log4shell','low_hanging.tomcat-jboss','low_hanging.veeam','mitm.kerberos-relay']};})(typeof window!=='undefined'?window:globalThis);

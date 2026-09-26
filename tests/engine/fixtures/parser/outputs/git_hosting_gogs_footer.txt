@@ -1,0 +1,9 @@
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=UTF-8
+
+<html><body>
+  <div id="app">Sign In</div>
+  <footer><div class="ui container">
+    Powered by Gogs Version: 0.12.3 Page: 2ms Template: 1ms
+  </div></footer>
+</body></html>

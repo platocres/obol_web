@@ -1,0 +1,6 @@
+$ hashcat -m 1000 ntlm_hashes.txt --show
+8846f7eaee8fb117ad06bdd830b7586c:password
+e19ccf75ee54e06b06a5907af13cef42:Welcome123
+259745cb123a52aa2e693aaacca2db52:Administrator1
+cf3a5525ee9414229e66279623ed5c58:Liverpool2020
+209c6174da490caeb422f3fa5a7ae634:Company@123

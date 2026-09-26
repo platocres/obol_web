@@ -1,0 +1,50 @@
+name: obol CI
+
+# Lean CI for the static-site edition of obol-local. Runs the engine node tests
+# (pure, fast) and a headless-Chromium smoke of the real app. Replaces the historical
+# runtime-manifest / ledger-equivalence / per-version contract suites, which policed the
+# retired architecture.
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+
+jobs:
+  engine-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Syntax-check the app JavaScript
+        run: |
+          set -e
+          find assets/engine assets/ui tests/engine -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check tests/browser-smoke.js
+          node --check tools/build-packs.js
+          node --check data/toolset.js
+          node --check data/packs-bundle.js
+      - name: Regenerate packs bundle and verify it is in sync
+        run: |
+          node tools/build-packs.js
+          git diff --exit-code data/packs-bundle.js || (echo "packs-bundle.js out of sync — run node tools/build-packs.js" && exit 1)
+      - name: Engine unit tests
+        run: |
+          set -e
+          for t in tests/engine/*.js; do echo "== $t =="; node "$t"; done
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright
+        run: npm install --no-save --no-package-lock playwright@1.62.1
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser smoke (boot, coach, routes, no console errors)
+        run: node tests/browser-smoke.js

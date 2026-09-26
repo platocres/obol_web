@@ -1,0 +1,31 @@
+{
+ "name": "tunnel-and-sweep",
+ "title": "Tunnel and Sweep a New Segment",
+ "description": "Stand up a pivot from a proven foothold and enumerate the segment it exposes. Pick ONE tunnel method (the applicable one is ready; the rest skip or wait for approval), then scan an internal host through the proxy. A proven tunnel auto-extends scope to the exposed subnet — the hard gate stays enforced, never bypassed. Each step runs through the one scope-enforced runner.",
+ "steps": [
+  {
+   "label": "Pivot: SSH dynamic port-forward (SOCKS)",
+   "action_id": "pivot-ssh-dynamic",
+   "require_approval": true,
+   "note": "The simplest pivot when you have SSH creds on the foothold — a SOCKS proxy over the SSH session."
+  },
+  {
+   "label": "Pivot: sshuttle transparent tunnel (alternative)",
+   "action_id": "pivot-sshuttle",
+   "require_approval": true,
+   "note": "A transparent, route-based alternative over SSH — no per-tool proxychains needed."
+  },
+  {
+   "label": "Pivot: Chisel reverse SOCKS (no-SSH alternative)",
+   "action_id": "pivot-chisel-socks",
+   "require_approval": true,
+   "note": "When there's no SSH: stage chisel and open a reverse SOCKS tunnel back through the listener."
+  },
+  {
+   "label": "Scan an internal host through the proxy",
+   "action_id": "pivot-scan-through",
+   "note": "Once a tunnel is up (scope auto-extended to the exposed subnet), enumerate a host on the far side."
+  }
+ ],
+ "phase": "access"
+}

@@ -1,0 +1,23 @@
+$ curl -s -i 'http://blog.acme.internal/search?q=<script>alert(1337)</script>xk9zqmarker'
+HTTP/1.1 200 OK
+Date: Wed, 17 Sep 2026 10:03:44 GMT
+Server: Apache/2.4.58 (Ubuntu)
+Content-Type: text/html; charset=UTF-8
+Content-Length: 734
+Connection: close
+
+<!DOCTYPE html>
+<html>
+<head><title>Search results</title></head>
+<body>
+  <h1>Search</h1>
+  <p>You searched for: <script>alert(1337)</script>xk9zqmarker</p>
+  <div class="results">
+    <p>No posts matched your query.</p>
+  </div>
+  <form action="/search" method="get">
+    <input type="text" name="q" value="<script>alert(1337)</script>xk9zqmarker">
+    <button type="submit">Go</button>
+  </form>
+</body>
+</html>

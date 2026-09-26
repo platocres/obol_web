@@ -1,0 +1,159 @@
+{
+  "name": "Offline password cracking (§3)",
+  "description": "Feed recovered hash material — kerberoast and AS-REP tickets, NTLM/NTDS dumps, captured NetNTLMv2, /etc/shadow entries — to hashcat or john and recover the plaintext. It all runs offline on your own box and touches no target, so these steps auto-advance; a cracked hash stays a candidate secret until a real login proves it.",
+  "source": "OSCP methodology (project-authored, obol-local)",
+  "actions": [
+    {
+      "id": "crack-identify",
+      "title": "Identify an unknown hash",
+      "hypothesis": "Pinning down the hash format before cracking keeps you from burning hours on the wrong hashcat mode.",
+      "tool": "name-that-hash",
+      "tools": ["name-that-hash", "hashid"],
+      "requires_any": ["loot.material", "credential.candidate", "hash.type"],
+      "produces": [],
+      "priority": 40,
+      "autonomy": "auto",
+      "proves": "the likely hash type and cracker mode to use (hashcat --identify records hash.type{mode})",
+      "does_not_prove": "anything about the plaintext behind it",
+      "commands": [
+        {"tool": "name-that-hash", "run": "nth -f hashes.txt"},
+        {"tool": "hashid", "run": "hashid -m hashes.txt"}
+      ]
+    },
+    {
+      "id": "crack-kerberoast",
+      "title": "Crack a kerberoast (TGS) hash",
+      "hypothesis": "Service accounts frequently use weak, human-chosen passwords, so a cracked $krb5tgs$ ticket hands you the service account's plaintext.",
+      "tool": "hashcat",
+      "tools": ["hashcat", "john"],
+      "requires_any": ["hash.tgs"],
+      "produces": ["credential.candidate"],
+      "priority": 74,
+      "autonomy": "auto",
+      "proves": "the plaintext password recovered from a kerberoast hash (a candidate credential)",
+      "does_not_prove": "a working login until that credential is actually used",
+      "refs": ["https://hashcat.net/wiki/doku.php?id=example_hashes"],
+      "commands": [
+        {"tool": "hashcat", "run": "hashcat -m 13100 tgs.hash /usr/share/wordlists/rockyou.txt"},
+        {"tool": "john", "run": "john --format=krb5tgs --wordlist=/usr/share/wordlists/rockyou.txt tgs.hash"}
+      ]
+    },
+    {
+      "id": "crack-asrep-offline",
+      "title": "Crack an AS-REP roast hash",
+      "hypothesis": "An account without Kerberos pre-auth is AS-REP-roastable: the $krb5asrep$ hash it yields cracks to that user's plaintext.",
+      "tool": "hashcat",
+      "tools": ["hashcat", "john"],
+      "requires_any": ["hash.asrep"],
+      "produces": ["credential.candidate"],
+      "priority": 74,
+      "autonomy": "auto",
+      "proves": "the plaintext recovered from an AS-REP hash (a candidate credential)",
+      "does_not_prove": "a working login until that credential is actually used",
+      "commands": [
+        {"tool": "hashcat", "run": "hashcat -m 18200 asrep.hash /usr/share/wordlists/rockyou.txt"},
+        {"tool": "john", "run": "john --format=krb5asrep --wordlist=/usr/share/wordlists/rockyou.txt asrep.hash"}
+      ]
+    },
+    {
+      "id": "crack-ntlm",
+      "title": "Crack a dumped NTLM hash",
+      "hypothesis": "An NTLM hash pulled from SAM or NTDS may crack to a plaintext that logs in here or is reused elsewhere.",
+      "tool": "hashcat",
+      "tools": ["hashcat", "john"],
+      "requires_any": ["hash.ntlm", "loot.ntds"],
+      "produces": ["credential.candidate"],
+      "priority": 60,
+      "autonomy": "auto",
+      "proves": "the plaintext recovered from an NTLM hash (a candidate credential)",
+      "does_not_prove": "a login on its own — and note the NT hash is already usable for pass-the-hash without any cracking",
+      "commands": [
+        {"tool": "hashcat", "run": "hashcat -m 1000 ntlm.hash /usr/share/wordlists/rockyou.txt"}
+      ]
+    },
+    {
+      "id": "crack-netntlmv2",
+      "title": "Crack a captured NetNTLMv2 hash",
+      "hypothesis": "A NetNTLMv2 hash captured by Responder or a relay cracks to the account's plaintext; unlike an NT hash it cannot be passed, so cracking is the only route.",
+      "tool": "hashcat",
+      "tools": ["hashcat", "john"],
+      "requires_any": ["credential.netntlm", "loot.material"],
+      "produces": ["credential.plaintext"],
+      "priority": 58,
+      "autonomy": "auto",
+      "proves": "the plaintext recovered from a NetNTLMv2 capture",
+      "does_not_prove": "a working login until that credential is actually used",
+      "commands": [
+        {"tool": "hashcat", "run": "hashcat -m 5600 netntlmv2.hash /usr/share/wordlists/rockyou.txt"}
+      ]
+    },
+    {
+      "id": "crack-shadow",
+      "title": "Crack a Linux /etc/shadow hash",
+      "hypothesis": "A shadow entry you can read (via a SUID binary, a backup, or a misconfig) cracks to a local password that is often reused for sudo.",
+      "tool": "hashcat",
+      "tools": ["hashcat", "john"],
+      "requires_any": ["loot.shadow", "loot.material"],
+      "produces": ["credential.candidate"],
+      "priority": 56,
+      "autonomy": "auto",
+      "proves": "the plaintext recovered from a shadow hash (a candidate credential)",
+      "does_not_prove": "a login or sudo right until that credential is actually used",
+      "commands": [
+        {"tool": "hashcat", "run": "hashcat -m 1800 shadow.hash /usr/share/wordlists/rockyou.txt"},
+        {"tool": "john", "run": "unshadow /etc/passwd /etc/shadow > unshadowed && john --wordlist=/usr/share/wordlists/rockyou.txt unshadowed"}
+      ]
+    },
+    {
+      "id": "online-brute-ssh",
+      "title": "Online password brute over SSH (hydra)",
+      "hypothesis": "When SSH is reachable and no working credential is known yet, a targeted hydra run against an enumerated user list can recover a login — a noisy, lockout-risky attack, so it is approve-tier and never auto-fires in a normal cruise.",
+      "tool": "hydra",
+      "tools": ["hydra"],
+      "requires_any": ["ssh.reachable"],
+      "produces": [],
+      "priority": 30,
+      "autonomy": "approve",
+      "proves": "a working SSH login (hydra's success line parses to a validated credential)",
+      "does_not_prove": "anything until hydra actually returns a hit",
+      "commands": [
+        {"tool": "hydra", "run": "hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 4 ssh://{{target}}",
+         "note": "seed users.txt from the enumerated user list; -t 4 keeps SSH stable; -f stops on first hit. Mind lockout policy (policy.lockout)."}
+      ]
+    },
+    {
+      "id": "online-brute-ftp",
+      "title": "Online password brute over FTP (hydra)",
+      "hypothesis": "A reachable FTP service with no known credential is a classic hydra target; a recovered login often reuses onto other services.",
+      "tool": "hydra",
+      "tools": ["hydra"],
+      "requires_any": ["ftp.reachable"],
+      "produces": [],
+      "priority": 30,
+      "autonomy": "approve",
+      "proves": "a working FTP login (parses to a validated credential)",
+      "does_not_prove": "anything until hydra returns a hit",
+      "commands": [
+        {"tool": "hydra", "run": "hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f ftp://{{target}}",
+         "note": "seed users.txt from enumeration; watch the lockout policy."}
+      ]
+    },
+    {
+      "id": "online-brute-rdp",
+      "title": "Online password brute over RDP (hydra)",
+      "hypothesis": "A reachable RDP service with no known credential can be sprayed with hydra; go slow to avoid account lockout.",
+      "tool": "hydra",
+      "tools": ["hydra"],
+      "requires_any": ["rdp.reachable"],
+      "produces": [],
+      "priority": 28,
+      "autonomy": "approve",
+      "proves": "a working RDP login (parses to a validated credential)",
+      "does_not_prove": "anything until hydra returns a hit",
+      "commands": [
+        {"tool": "hydra", "run": "hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 1 rdp://{{target}}",
+         "note": "-t 1 (single thread) is important for RDP; lockout risk is high — prefer a small, targeted list."}
+      ]
+    }
+  ]
+}

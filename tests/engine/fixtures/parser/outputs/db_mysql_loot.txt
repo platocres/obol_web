@@ -1,0 +1,18 @@
+mysql> USE customer_portal;
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql> SELECT id, username, email, password FROM users;
++----+------------+---------------------------+--------------------------------------------------------------+
+| id | username   | email                     | password                                                     |
++----+------------+---------------------------+--------------------------------------------------------------+
+|  1 | admin      | admin@corp.local          | $2y$10$N9qo8uLOickgx2ZMRZoMy.MrqP1x9dQ0kZ.4z1B7lQhY7fV8pQe6i |
+|  2 | jdoe       | jdoe@corp.local           | $2y$10$eImiTXuWVxfM37uY4JANjQ==7kO4z2R8f9wQvKm3nHj2sTb1xLp9C |
+|  3 | rsantiago  | r.santiago@corp.local     | 5f4dcc3b5aa765d61d8327deb882cf99                             |
+|  4 | svc_report | reporting@corp.local      | 8621ffdbc5698829397d97767ac13db3                             |
+|  5 | kpatel     | k.patel@corp.local        | $2y$10$7s8Vt0p1qWxYzAbCdEfGhOuI9jKlMnOpQrStUvWxYz0aBcDeFgHi2 |
++----+------------+---------------------------+--------------------------------------------------------------+
+5 rows in set (0.00 sec)
+
+mysql>

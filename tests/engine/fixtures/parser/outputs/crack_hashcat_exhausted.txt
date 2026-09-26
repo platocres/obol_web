@@ -1,0 +1,52 @@
+hashcat (v6.2.6) starting
+
+OpenCL API (OpenCL 3.0 CUDA 12.2.148) - Platform #1 [NVIDIA Corporation]
+====================================================================
+* Device #1: NVIDIA GeForce RTX 3060, 11700/12045 MB (3011 MB allocatable), 28MCU
+
+Minimum password length supported by kernel: 0
+Maximum password length supported by kernel: 256
+
+Hashes: 4 digests; 4 unique digests, 1 unique salts
+Bitmaps: 16 bits, 65536 entries, 0x0000ffff mask, 262144 bytes, 5/13 rotates
+Rules: 1
+
+Optimizers applied:
+* Zero-Byte
+* Early-Skip
+* Not-Salted
+* Not-Iterated
+* Single-Salt
+* Raw-Hash
+
+Watchdog: Temperature abort trigger set to 90c
+
+Host memory required for this attack: 1 MB
+
+Dictionary cache hit:
+* Filename..: /usr/share/wordlists/rockyou.txt
+* Passwords.: 14344385
+* Bytes.....: 139921507
+* Keyspace..: 14344385
+
+Session..........: hashcat
+Status...........: Exhausted
+Hash.Mode........: 1000 (NTLM)
+Hash.Target......: hard_hashes.txt
+Time.Started.....: Wed Sep 17 05:03:11 2026 (6 secs)
+Time.Estimated...: Wed Sep 17 05:03:17 2026 (0 secs)
+Kernel.Feature...: Pure Kernel
+Guess.Base.......: File (/usr/share/wordlists/rockyou.txt)
+Guess.Queue......: 1/1 (100.00%)
+Speed.#1.........:  4201.7 MH/s (2.11ms) @ Accel:256 Loops:1 Thr:256 Vec:8
+Recovered........: 0/4 (0.00%) Digests (total), 0/4 (0.00%) Digests (new)
+Progress.........: 14344385/14344385 (100.00%)
+Rejected.........: 0/14344385 (0.00%)
+Restore.Point....: 14344385/14344385 (100.00%)
+Restore.Sub.#1...: Salt:0 Amplifier:0-1 Iteration:0-1
+Candidate.Engine.: Device Generator
+Candidates.#1....: $HEX[042a0337c2a156616d6f732103] -> $HEX[042a0337c2a1596f6c6f6961]
+Hardware.Mon.#1..: Temp: 58c Fan: 41% Util: 97% Core:1830MHz Mem:7300MHz Bus:16
+
+Started: Wed Sep 17 05:03:09 2026
+Stopped: Wed Sep 17 05:03:18 2026

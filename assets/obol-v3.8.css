@@ -1,8 +1,0 @@
-/* Obol v3.8 — pivot operations, transition-aware lineage, and proof templates. */
-.pivot-ops-note38,.report-template38{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.025)}
-.pivot-ops-note38 span,.report-template38 span{color:var(--muted);font-size:.88rem}.path-ops38{grid-column:1/-1;margin-top:9px;padding-top:9px;border-top:1px solid var(--border)}
-.path-ops-summary38,.path-ops-form38{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.path-ops-summary38{font-size:.82rem;color:var(--muted);margin-bottom:8px}.path-ops-form38 input{min-width:170px;flex:1}.path-ops-form38 select{min-width:130px}
-.health38,.transition38{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:2px 7px;font-size:.72rem}.health38.healthy,.transition38.grounded{border-color:rgba(91,184,114,.6)}.health38.degraded{border-color:rgba(209,166,64,.7)}.health38.down{border-color:rgba(211,86,86,.75)}
-.path-history38{margin-top:7px}.path-history-row38{display:grid;grid-template-columns:auto auto 1fr;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.78rem}.path-history-row38 span,.path-history-row38 small{color:var(--muted)}
-.chain-transitions38{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:8px;padding-top:7px;border-top:1px dashed var(--border)}.transition38.ungrounded{opacity:.65}.transition-arrow38{color:var(--muted)}
-.lineage-explain38{margin-top:12px}.report-template38{margin:0 0 14px 0}@media(max-width:760px){.path-ops-form38{display:grid}.path-history-row38{grid-template-columns:1fr}.pivot-ops-note38,.report-template38{display:block}}

