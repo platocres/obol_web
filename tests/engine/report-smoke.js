@@ -12,6 +12,9 @@
 // reportmeta.js targets `window`; shim it so the real finding backing loads unchanged.
 globalThis.window = globalThis;
 require('../../assets/engine/facts.js');
+require('../../assets/engine/phases.js');
+require('../../assets/engine/pack.js');
+require('../../assets/engine/chain.js');
 require('../../data/reportmeta.js');   // sets window.OBOL_REPORTMETA (the finding backing we keep)
 require('../../assets/engine/report.js');
 const OBOL = globalThis.OBOL;
@@ -61,9 +64,15 @@ const credentials = [{ user: 'admin', secret: SECRET, source: 'nxc', validated: 
 
 ok(globalThis.OBOL_REPORTMETA && globalThis.OBOL_REPORTMETA.cards['smb-anon-enum'], 'reportmeta finding backing loaded (kept from obol_web)');
 
+const CHAIN_ACTIONS = (function () {
+  var fs = require('fs'), path = require('path');
+  var dir = path.join(__dirname, '..', '..', 'data', 'packs');
+  return OBOL.pack.loadPacks(['recon_2026_09', 'ad_2026_09', 'credential_access_2026_09', 'shells_2026_09']
+    .map((n) => JSON.parse(fs.readFileSync(path.join(dir, n + '.json'), 'utf8'))));
+})();
 function ctxWith(includeSecrets, params) {
   return R.buildContext({
-    facts: factset, targets, activities, credentials,
+    facts: factset, targets, activities, credentials, actions: CHAIN_ACTIONS,
     params: Object.assign({ name: 'exam', scope: [HOST_A, HOST_B], platform: 'oscp' }, params || {}),
     screenshots: [], reportmeta: globalThis.OBOL_REPORTMETA, includeSecrets,
   });
@@ -162,6 +171,29 @@ const winCtx = R.buildContext({ facts: winFacts, targets: [{ host: HOST_B, hostn
 const winMd = R.toMarkdown(R.document('oscp', winCtx));
 ok(/└─\$ nxc smb /.test(winMd), 'Windows: nxc recon stays on the Kali prompt');
 ok(/C:\\> whoami\b/.test(winMd), 'Windows: whoami inside the shell renders the C:\\> prompt');
+
+// transcript is scoped to the walked path (Attack Path ribbon): off-path enumeration is collapsed
+const scopeActs = [
+  { tool: 'nmap', command: 'nmap -sC -sV ' + HOST_A, at: 1, target: HOST_A, scope: 'host:' + HOST_A, produced: ['host.up', 'port:445'], stdout: '22/tcp open' },
+  { tool: 'gobuster', command: 'gobuster dir -u http://' + HOST_A, at: 2, target: HOST_A, scope: 'host:' + HOST_A, produced: [], stdout: 'nothing useful' },
+  { tool: 'nxc', command: 'nxc smb ' + HOST_A + ' -u admin', at: 3, target: HOST_A, scope: 'host:' + HOST_A, produced: ['credential.available'], stdout: '[+] admin' },
+  { tool: 'ssh', command: 'ssh svc@' + HOST_A + ' cat local.txt', at: 4, target: HOST_A, scope: 'host:' + HOST_A, produced: ['objective.local_flag'], stdout: 'a1b2' },
+];
+const scopeMd = R.toMarkdown(R.document('oscp', R.buildContext({ facts: factset, targets, activities: scopeActs, credentials, actions: CHAIN_ACTIONS, params: { name: 'exam', platform: 'oscp' }, includeSecrets: true })));
+ok(scopeMd.indexOf('gobuster') === -1, 'transcript omits an off-critical-path command (gobuster produced nothing)');
+ok(scopeMd.indexOf('nxc smb') !== -1, 'transcript keeps an on-critical-path command (produced a credential)');
+ok(/not on the critical path/.test(scopeMd), 'transcript notes the collapsed off-path command count');
+
+// ── 8) attack path woven into the attack narrative ──────────────────────────
+const chainCtx = ctxWith(true);
+const chainMd = R.toMarkdown(R.document('oscp', chainCtx));
+ok(/#### Attack Path/.test(chainMd), 'report renders an "Attack Path" heading in the attack narrative');
+const hostA = (chainCtx.targets || []).find((t) => t.host === HOST_A);
+ok(hostA && hostA.chain && hostA.chain.length >= 2 && hostA.chain[hostA.chain.length - 1].isFlag,
+  'the host chain is built and ends at the captured flag');
+// steps carry the enriched fields (concrete subject + technique framing), not just a generic label
+ok(hostA && hostA.chain.some((s) => typeof s.technique === 'string' && typeof s.detail === 'string'),
+  'chain steps carry synthesized detail + technique fields');
 
 console.log(fail ? ('\nREPORT SMOKE: ' + fail + ' FAILURES') : '\nREPORT SMOKE: all passed');
 process.exit(fail ? 1 : 0);

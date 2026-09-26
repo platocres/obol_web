@@ -65,12 +65,12 @@
       + '<textarea id="ev-text" class="ev-textarea" placeholder="Select your whole terminal and paste it here — prompt, command, and all output. e.g.&#10;&#10;$ nmap -sC -sV -oN nmap/full 10.10.10.10&#10;Starting Nmap 7.94 ...&#10;PORT     STATE SERVICE&#10;53/tcp   open  domain&#10;88/tcp   open  kerberos-sec&#10;389/tcp  open  ldap&#10;..." spellcheck="false"></textarea>'
       + '<div class="ev-row">'
       + '<input id="ev-cmd" class="ev-cmd" placeholder="command (auto-detected from your paste — only set this if the paste is output-only)" value="' + (pin ? U.attr(pin.command) : '') + '">'
-      + '<button id="ev-parse" class="btn-primary"' + (parsersReady ? '' : ' disabled') + '>' + (parsersReady ? 'Parse → facts' : 'Loading parsers…') + '</button>'
+      + '<button id="ev-parse" class="btn-primary"' + (parsersReady ? '' : ' disabled') + '>' + (parsersReady ? 'Parse → Facts' : 'Loading parsers…') + '</button>'
       + '</div>'
       // Attach an output file for firehose tools too big to paste (bloodyAD, full ldapsearch,
       // wide nxc/gobuster sweeps). Read locally, parsed the same way, stored capped. Nothing uploaded.
       + '<div class="ev-row ev-file-row">'
-      + '<label class="ev-filebtn" for="ev-file">⭱ Attach output file…</label>'
+      + '<label class="ev-filebtn" for="ev-file">⭱ Attach Output File…</label>'
       + '<input type="file" id="ev-file" class="ev-file" accept=".txt,.log,.out,.json,.ldif,.csv,.tsv,text/plain" hidden>'
       + '<span class="ev-file-hint">Too big to paste? Attach the tool\'s output file' + fileHintPath() + ' — parsed on your machine, only a sample is kept. Set the command above if the file is output-only.</span>'
       + '</div>'
@@ -85,65 +85,32 @@
       + '</section>';
   }
 
-  // Derive the command line from a full-terminal paste when the operator didn't type one.
-  // Matches a shell prompt line ($ / # / PS>) or a first line that begins with a known tool.
-  var TOOL_HEAD = /^(sudo\s+)?(nmap|rustscan|masscan|netexec|nxc|crackmapexec|cme|smbclient|smbmap|rpcclient|enum4linux[\w-]*|ldapsearch|kerbrute|impacket[\w.-]*|GetNPUsers[\w.]*|GetUserSPNs[\w.]*|secretsdump[\w.]*|evil-winrm|ffuf|feroxbuster|gobuster|wfuzz|nikto|whatweb|curl|wget|sqlmap|hydra|john|hashcat|responder|bloodhound[\w.-]*|sharphound[\w.-]*|dig|host|snmpwalk|ssh|ftp)\b/i;
-  function deriveCommand(text) {
-    var lines = String(text || '').split(/\r?\n/);
-    for (var i = 0; i < lines.length && i < 40; i++) {
-      var ln = lines[i];
-      var m = ln.match(/^\s*(?:\$|#|>|PS[^>]*>|[\w.-]+@[\w.-]+:[^$#]*[$#])\s*(.+\S)\s*$/);
-      if (m && TOOL_HEAD.test(m[1].trim())) return m[1].trim();
-      if (TOOL_HEAD.test(ln.trim())) return ln.trim();
-    }
-    return '';
-  }
-
-  // Shared ingest core for both the paste box and an attached output file. Conservative parsers
-  // mint only proven facts; the raw command+output is kept (capped) as verbatim report evidence.
+  // Ingest via the shared core (OBOL.ingest), then render the Evidence route's result panel.
   function ingest(text, cmd, meta) {
     meta = meta || {};
-    if (!text || !text.trim()) { U.toast('Nothing to parse — the ' + (meta.fileName ? 'file' : 'paste') + ' is empty'); return; }
-    if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers not loaded yet'); return; }
-    if (!cmd || !cmd.trim()) { cmd = deriveCommand(text); } // auto-detect from a whole-terminal capture
-    var params = OBOL.store.active().params || {};
-    var scope = 'host:' + (params.target || 'target');
-    var res;
-    try {
-      res = OBOL.parsers.parseActionOutput({ command: cmd, stdout: text, source: meta.fileName || cmd || 'paste', scope: scope, domain: params.domain || '' });
-    } catch (e) { U.toast('Parse error: ' + (e && e.message), 'err'); return; }
-    var facts = (res && res.facts) || [];
-    var added = OBOL.store.addFacts(facts, 'evidence');
-    // Keep the command+output (capped) as verbatim report evidence — a 46k-line dump is never
-    // stored whole; we keep a sample and record how much was ingested.
-    var CAP = 24000;
-    var lines = text.split(/\r?\n/).length;
-    var stored = text.length > CAP
-      ? (text.slice(0, CAP) + '\n… [truncated — ' + (text.length - CAP) + ' more chars, ' + lines + ' lines total]')
-      : text;
-    OBOL.store.update(function (eng) {
-      eng.activities = eng.activities || [];
-      eng.activities.unshift({ at: Date.now(), command: cmd, source: meta.source || 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
-        target: params.target || '', scope: scope, file: meta.fileName || '',
-        produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
-    }, 'activity');
-    var origin = meta.fileName ? (esc(meta.fileName) + ' · ' + lines.toLocaleString() + ' lines') : null;
+    var r = OBOL.ingest.run({ text: text, command: cmd, source: meta.source, fileName: meta.fileName });
+    if (!r.ok) {
+      if (r.reason === 'empty') U.toast('Nothing to parse — the ' + (meta.fileName ? 'file' : 'paste') + ' is empty');
+      else if (r.reason === 'parsers') U.toast('Parsers not loaded yet');
+      else U.toast('Parse error: ' + (r.error || ''), 'err');
+      return;
+    }
+    var origin = r.fileName ? (esc(r.fileName) + ' · ' + r.lines.toLocaleString() + ' lines') : null;
     var resEl = document.getElementById('ev-result');
     if (resEl) {
-      if (!facts.length) {
+      if (!r.facts.length) {
         resEl.innerHTML = '<div class="ev-none">' + (origin ? ('Read ' + origin + ' — no ') : 'No ')
           + 'facts recognized (nothing invented). Set the command above if the output is on its own, or add a fact manually.</div>';
       } else {
-        resEl.innerHTML = '<div class="ev-added">Minted ' + added + ' new fact' + (added === 1 ? '' : 's') + ' (' + facts.length + ' recognized)'
+        resEl.innerHTML = '<div class="ev-added">Minted ' + r.added + ' new fact' + (r.added === 1 ? '' : 's') + ' (' + r.facts.length + ' recognized)'
           + (origin ? (' from ' + origin) : '') + ':</div>'
-          + '<ul class="ev-factlist">' + facts.map(function (f) {
+          + '<ul class="ev-factlist">' + r.facts.map(function (f) {
             return '<li class="' + esc(f.state) + '"><code>' + esc(f.kind) + '</code> <span class="ev-fscope">' + esc(f.scope) + '</span></li>';
           }).join('') + '</ul>'
-          + '<a class="btn-primary" href="#/path">See updated coach →</a>';
+          + '<a class="btn-primary" href="#/path">See Updated Coach →</a>';
       }
     }
-    OBOL.app.renderSidebar();
-    U.toast(added ? ('Minted ' + added + ' fact' + (added === 1 ? '' : 's') + (meta.fileName ? ' from file' : '')) : 'No new facts');
+    U.toast(r.added ? ('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + (meta.fileName ? ' from file' : '')) : 'No new facts');
   }
   function runParse() {
     ingest((document.getElementById('ev-text') || {}).value || '',
@@ -169,7 +136,7 @@
     if (!(OBOL.parsers && OBOL.parsers.parseActionOutput) && OBOL.lazy) {
       OBOL.lazy.loadGroup('parsers').then(function () {
         var b = document.getElementById('ev-parse');
-        if (b) { b.disabled = false; b.textContent = 'Parse → facts'; }
+        if (b) { b.disabled = false; b.textContent = 'Parse → Facts'; }
       }).catch(function () {});
     }
     var parseBtn = document.getElementById('ev-parse');

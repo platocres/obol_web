@@ -28,7 +28,7 @@
       + '<div class="ev-row targets-add">'
       + '<input id="t-ip" class="ev-cmd" placeholder="IP or CIDR, e.g. 10.10.10.10">'
       + '<input id="t-host" class="ev-cmd" placeholder="hostname (optional)">'
-      + '<button id="t-add" class="btn-primary">Add target</button>'
+      + '<button id="t-add" class="btn-primary">Add Target</button>'
       + '</div>'
       + '<div class="tgrid">' + rows + '</div>'
       + '</section>';

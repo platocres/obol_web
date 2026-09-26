@@ -35,7 +35,7 @@
     var ip = ctx.args[0];
     var eng = OBOL.store.active();
     var t = findTarget(ip);
-    if (!t) return '<section class="target-route"><h1 class="route-h1">Target ' + esc(ip) + '</h1><div class="coach-empty">No such target in this engagement. <a href="#/targets">Back to targets</a></div></section>';
+    if (!t) return '<section class="target-route"><h1 class="route-h1">Target ' + esc(ip) + '</h1><div class="coach-empty">No such target in this engagement. <a href="#/targets">Back to Targets</a></div></section>';
     ip = t.ip || ip;
 
     var facts = OBOL.store.factSetForTarget(ip);
@@ -57,15 +57,12 @@
       if (facts.has(k)) flags.push(k.split('.').pop().replace('_', ' '));
     });
 
-    // storyline: proven facts grouped by phase (what's been established, in order)
-    var proven = facts.facts.filter(function (x) { return x.state === 'supported'; });
-    var byPhase = {}; OBOL.phases.PHASES.forEach(function (p) { byPhase[p] = []; });
-    proven.forEach(function (x) { var ph = OBOL.phases.phaseOfKind(x.kind); (byPhase[ph] = byPhase[ph] || []).push(x.kind); });
-    var story = OBOL.phases.PHASES.filter(function (p) { return byPhase[p] && byPhase[p].length; }).map(function (p) {
-      var uniq = byPhase[p].filter(function (v, i, a) { return a.indexOf(v) === i; });
-      return '<li class="story-row"><span class="ph-chip ph-' + p + '">' + p + '</span>'
-        + '<span class="story-facts">' + uniq.map(function (k) { return esc(OBOL.pack.friendly(k)); }).join(', ') + '</span></li>';
-    }).join('');
+    // Attack Path bar: the ordered, causal path actually walked (what led to what → the flags),
+    // reconstructed from the run ledger + prereq graph, rendered as a dense horizontal block ribbon.
+    // Each block synthesizes obol-local's two surfaces: the milestone + concrete subject (attack_path)
+    // AND the command that produced it + real causal link (storyline). Off-path parents get "← from".
+    var steps = OBOL.chain.build({ facts: facts, activities: eng.activities || [], actions: pack, host: ip });
+    var story = OBOL.chainview.ribbon(steps);
 
     // top scoped moves (compact, copy-ready)
     var params = eng.params || {};
@@ -90,15 +87,15 @@
 
       + '<div class="target-grid">'
       + '<div class="target-col">'
-      + '<h2 class="coach-sec-h">Attack path</h2>'
+      + '<h2 class="coach-sec-h">Attack Path — What Led to What</h2>'
+      + (story ? '<div class="apath-flow">' + story + '</div>' : '<div class="coach-empty">Nothing proven yet — run the recon move.</div>')
+      + '<h2 class="coach-sec-h">Path Graph</h2>'
       + '<div class="graph-scroll">' + svg + '</div>'
-      + '<h2 class="coach-sec-h">Storyline — what\'s proven</h2>'
-      + (story ? '<ul class="story-list">' + story + '</ul>' : '<div class="coach-empty">Nothing proven yet — run the recon move.</div>')
       + '</div>'
       + '<div class="target-col">'
       + '<h2 class="coach-sec-h">Next moves for this target</h2>'
       + (moveHtml || '<div class="coach-empty">No moves — paste evidence to unlock.</div>')
-      + '<a class="btn-ghost" href="#/path">Full coach →</a>'
+      + '<a class="btn-ghost" href="#/path">Full Coach →</a>'
       + '</div>'
       + '</div>'
       + '</section>';

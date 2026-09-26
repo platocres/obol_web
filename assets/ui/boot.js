@@ -43,6 +43,9 @@
       }).join('');
     }
 
+    // credential switcher (collected creds → click to fill commands)
+    if (OBOL.credbar) OBOL.credbar.render();
+
     // facts panel
     var factsEl = document.getElementById('facts-list');
     if (factsEl) {
@@ -96,6 +99,9 @@
       }, 'facts');
       renderSidebar(); OBOL.router.render();
     });
+
+    // credential switcher click/keyboard handling (delegated, wired once)
+    if (OBOL.credbar) OBOL.credbar.mount();
 
     // (skin/motion/opacity live in the bottom-right ⚙ settings panel — see settings.js)
 

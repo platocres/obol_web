@@ -670,6 +670,22 @@
     });
 
     // per-target rollup
+    // the ordered compromise chain per host (what led to what → the flags), redacted like everything else.
+    function hostChain(host) {
+      if (!(OBOL.chain && opts.actions)) return [];
+      var steps;
+      try { steps = OBOL.chain.build({ facts: factset, activities: activities, actions: opts.actions, host: host }); }
+      catch (e) { return []; }
+      return steps.map(function (s) {
+        // the concrete subject (svc@corp) is a principal, not a secret — kept even under redaction;
+        // only a bare hash/password fallback (s.secret) is masked when redaction is opted in.
+        return { kind: s.kind, label: s.label, phase: s.phase, isFlag: !!s.isFlag, technique: s.technique || '',
+          detail: (!includeSecrets && s.secret) ? '«redacted»' : (s.detail || ''),
+          enabledBy: (s.enabledBy || []).map(function (k) { return friendly(k); }),
+          command: redactCommand(s.command || '', { includeSecrets: includeSecrets, secrets: secrets }) };
+      });
+    }
+
     var targetsOut = targets.map(function (t) {
       var host = t.host;
       var tfacts = (factset.facts || []).filter(function (f) { return f.scope === 'host:' + host; });
@@ -696,6 +712,7 @@
             evidence: redactCommand(f.source || 'manual/seeded workspace evidence', { includeSecrets: includeSecrets, secrets: secrets }),
             origin: (f.value && f.value.origin) || 'obol', at: f.created_at };
         }),
+        chain: hostChain(host),
         evidence: evidence.filter(function (e) { return e.target === host; }),
       };
     });
@@ -948,17 +965,40 @@
     };
   }
 
+  // Split a host's run-ledger rows into the walked path (a command that produced an Attack Path
+  // milestone) vs enumeration that wasn't on the critical path — so the report's narrative and
+  // terminals mirror the Attack Path ribbon. The full command log always survives in the appendix.
+  function essentialRows(ctx, host) {
+    var t = (ctx.targets || []).filter(function (x) { return x.host === host; })[0];
+    var chain = (t && t.chain) || [];
+    var onKind = {}; chain.forEach(function (s) { onKind[s.kind] = 1; });
+    var rows = (ctx.timeline || []).filter(function (r) { return (r.target === host) || (r.scope === 'host:' + host); })
+      .slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+    if (!chain.length) return { essential: rows, noise: [], scoped: false };
+    var essential = [], noise = [];
+    rows.forEach(function (r) {
+      if ((r.produced || []).some(function (k) { return onKind[k]; })) essential.push(r);
+      else if ((r.command || '').trim()) noise.push(r);
+    });
+    // chain came only from seeded facts (no matching ledger rows) → don't hide the whole transcript
+    if (!essential.length) return { essential: rows, noise: [], scoped: false };
+    return { essential: essential, noise: noise, scoped: true };
+  }
+
   // per-host verbatim command+output transcript (the operator's pasted terminal), terminal-styled.
+  // Scoped to the walked path (the Attack Path ribbon); off-path enumeration is collapsed to a count.
   // Recon/exploitation commands render with the Kali prompt; post-exploitation commands run inside a
   // proven shell on the box render with a target prompt (user@host:~$ / #, or C:\> on Windows).
   function hostTranscript(ctx, host) {
-    var rows = (ctx.timeline || []).filter(function (r) { return (r.target === host) || (r.scope === 'host:' + host); });
+    var split = essentialRows(ctx, host);
+    var rows = split.essential;
     if (!rows.length) return [];
-    rows = rows.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
     var prof = targetShellProfile(ctx, host, rows);
+    var intro = split.scoped
+      ? 'The commands on the critical path to this host\'s objectives and their output, in the order run (secrets redacted). '
+      : 'The exact commands run against this host and their output, as pasted into Evidence (secrets redacted). ';
     var blocks = [H('Command Transcript', 4),
-      P('The exact commands run against this host and their output, as pasted into Evidence (secrets redacted). '
-        + 'Commands run from Kali carry the ' + '`kali@kali`' + ' prompt; commands run inside a shell on the target carry the box\'s own prompt.')];
+      P(intro + 'Commands run from Kali carry the ' + '`kali@kali`' + ' prompt; commands run inside a shell on the target carry the box\'s own prompt.')];
     var any = false;
     rows.forEach(function (r) {
       var cmd = r.command || '', output = r.stdout || '';
@@ -976,6 +1016,10 @@
         blocks.push(TERM({ command: cmd, output: output }));   // Kali-style attacker box
       }
     });
+    if (split.scoped && split.noise.length) {
+      blocks.push(P('_+ ' + split.noise.length + ' enumeration/no-op command' + (split.noise.length === 1 ? '' : 's')
+        + ' not on the critical path — see Appendix: Key Commands & Evidence for the full log._'));
+    }
     return any ? blocks : [];
   }
   // per-host operator narrative slot (summary + exploitation steps) from ctx.notes.
@@ -1433,11 +1477,32 @@
     var blocks = [H('Attack Narrative', 2), P('The path to each objective, derived from the fact ledger (any methodology). Everything else was enumeration/noise.')];
     owned.forEach(function (t) {
       blocks.push(H((t.label || t.host) + ' (' + t.host + ')', 3));
+      // Attack Path — the ordered, causal path actually walked (what led to what → the flags),
+      // each step carrying its concrete subject, technique framing, causal parent, and command.
+      var ch = t.chain || [];
+      if (ch.length) {
+        blocks.push(H('Attack Path', 4));
+        blocks.push(UL(ch.map(function (s) {
+          var lead = (s.isFlag ? '🚩 ' : '') + '**' + s.label + '**';
+          var det = s.detail ? ' — ' + s.detail : '';
+          var tech = s.technique ? '  ·  _' + s.technique + '_' : '';
+          var from = (s.enabledBy && s.enabledBy.length) ? '  ·  _(from ' + s.enabledBy.join(', ') + ')_' : '';
+          var via = s.command ? '  ·  `' + s.command + '`' : '';
+          return lead + det + tech + from + via;
+        }), true));
+        // everything else the operator ran on this host was enumeration/noise (obol-local parity)
+        var split = essentialRows(ctx, t.host);
+        if (split.scoped && split.noise.length) {
+          blocks.push(P('_+ ' + split.noise.length + ' other move' + (split.noise.length === 1 ? '' : 's')
+            + ' not on the critical path (enumeration/no-op)._'));
+        }
+      }
       var cmds = commandsFor(t);
       if (cmds.length) {
+        blocks.push(H('Key Commands', 4));
         var rows = cmds.map(function (c, i) { return [String(i + 1), '—', (c.split(/\s+/)[0] || ''), c]; });
         blocks.push(TBL(['#', 'Technique', 'Tool', 'Command'], rows));
-      } else {
+      } else if (!ch.length) {
         blocks.push(P('_No copy-pasteable commands were recorded for this host (facts were seeded/ingested)._'));
       }
     });

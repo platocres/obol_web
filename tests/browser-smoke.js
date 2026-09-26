@@ -167,8 +167,68 @@ function serve() {
   await page.waitForSelector('.target-chain .spine-node', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.target-chain .spine-node').count() === 6, 'target page shows the attack-chain bar');
   ok(await page.locator('.target-route svg.obol-graph').count() >= 1, 'target page renders the attack-path graph');
+  // graph node labels are Title Cased (no lowercase-article fact labels like "a live host")
+  const lowerNode = await page.evaluate(() => Array.from(document.querySelectorAll('.target-route svg.obol-graph text'))
+    .map((t) => (t.textContent || '').trim()).some((s) => /^(a|an|the|open|port) /.test(s)));
+  ok(!lowerNode, 'graph node labels are Title Cased (no lowercase-article labels)');
   ok(await page.locator('.acc-pill').count() === 1, 'target page shows an access level');
   ok(await page.locator('.tmove').count() >= 1, 'target page shows scoped next moves');
+  // attack path: dense horizontal block ribbon (this target has recon facts from the earlier nmap paste)
+  ok(await page.locator('.apath-flow .apath-block').count() >= 1, 'target page shows the attack-path ribbon (' + (await page.locator('.apath-flow .apath-block').count()) + ' blocks)');
+  ok(await page.locator('.apath-block .ph-chip').count() >= 1, 'attack-path blocks carry a phase category chip');
+  ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Attack Path — What Led to What') !== -1; }), 'attack-path heading is Title Case');
+
+  // Credential switcher: collected creds appear in the sidebar; clicking one fills the params.
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([
+      F.makeFact({ kind: 'credential.available', scope: 'host:10.10.10.9', value: { user: 'alice', domain: 'corp.local', password: 'S3cret!' }, state: F.ProofState.SUPPORTED, source: 'test' }),
+      F.makeFact({ kind: 'credential.available', scope: 'host:10.10.10.9', value: { user: 'bob', domain: 'corp.local', nthash: 'aabbccddeeff00112233445566778899' }, state: F.ProofState.SUPPORTED, source: 'test' }),
+    ], 'test');
+    window.OBOL.app.renderSidebar();
+  });
+  ok(await page.locator('#cred-switch .cred-row').count() >= 2, 'credential switcher lists collected creds (' + (await page.locator('#cred-switch .cred-row').count()) + ')');
+  const bobRow = page.locator('#cred-switch .cred-row', { hasText: 'bob' });
+  await bobRow.click();
+  const swapped = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'bob' && p.nthash === 'aabbccddeeff00112233445566778899'; });
+  ok(swapped, 'clicking a credential fills the engagement params (bob + NT hash)');
+  ok(await page.locator('#cred-switch .cred-row.active', { hasText: 'bob' }).count() === 1, 'the chosen credential is marked active');
+  // manually add any kind of credential (an NT hash) and use it
+  const credsBefore = await page.locator('#cred-switch .cred-row').count();
+  await page.locator('.cred-add-btn').click();
+  await page.locator('.cf-user').fill('carol');
+  await page.locator('.cf-type').selectOption('NT');
+  await page.locator('.cf-secret').fill('ffeeddccbbaa99887766554433221100');
+  await page.locator('.cf-save').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('#cred-switch .cred-row').count() === credsBefore + 1, 'a manually-added credential joins the switcher');
+  await page.locator('#cred-switch .cred-row', { hasText: 'carol' }).click();
+  const usedAdded = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'carol' && p.nthash === 'ffeeddccbbaa99887766554433221100'; });
+  ok(usedAdded, 'the manually-added credential fills commands when selected');
+  // and it can be removed
+  await page.locator('#cred-switch .cred-row', { hasText: 'carol' }).locator('.cred-del').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('#cred-switch .cred-row', { hasText: 'carol' }).count() === 0, 'a manually-added credential can be removed');
+
+  // Engagement-wide Attack Path on the home screen (single target → identical ribbon, no host header).
+  await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.eng-apath .apath-flow', { timeout: 5000 }).catch(() => {});
+  ok(await page.locator('.eng-apath .apath-flow .apath-block').count() >= 1, 'engagement screen shows the engagement-wide Attack Path (' + (await page.locator('.eng-apath .apath-block').count()) + ' blocks)');
+  ok(await page.locator('.eng-apath .apath-host').count() === 1, 'the engagement Attack Path carries a per-host IP·hostname header (shown even for one target)');
+
+  // Inline per-command ingestion on the coach: open a move's paste box, ingest its output in place.
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.coach .move .btn-pasteback', { timeout: 6000 });
+  const actsBefore = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
+  ok(await page.locator('.coach .move .move-ingest[hidden]').count() >= 1, 'each move carries an inline ingestion box (collapsed by default)');
+  await page.locator('.coach .move .btn-pasteback').first().click();
+  await page.waitForSelector('.coach .move .move-ingest:not([hidden]) .mi-text', { timeout: 3000 });
+  ok(true, 'the Paste Output button expands the inline ingestion box in place (no route jump)');
+  await page.locator('.coach .move .move-ingest:not([hidden]) .mi-text').fill('PORT      STATE SERVICE\n5985/tcp  open  wsman\n');
+  await page.locator('.coach .move .move-ingest:not([hidden]) .mi-go').click();
+  await page.waitForTimeout(500);
+  const actsAfter = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
+  ok(actsAfter === actsBefore + 1, 'inline ingestion records the command+output as an activity (' + actsBefore + '→' + actsAfter + ')');
 
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
@@ -234,6 +294,8 @@ function serve() {
   ok(await page.locator('.rep-out pre.kali-term').count() >= 1, 'report renders the Kali-style terminal transcript');
   ok(await page.locator('.rep-out pre.kali-term .kt-u').count() >= 1, 'transcript shows the kali@kali prompt');
   ok(await page.locator('.rep-notes .rep-note-fld').count() >= 1, 'report shows the per-host notes editor');
+  // redaction is opt-in: the toggle reads "Redact Secrets" and is unchecked (full detail) by default
+  ok(await page.locator('#rep-redact').count() === 1 && !(await page.locator('#rep-redact').isChecked()), 'report redaction is opt-in (Redact Secrets toggle off by default)');
   const transcriptHasCmd = await page.evaluate(() => {
     var pre = document.querySelector('.rep-out pre.kali-term');
     return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1 && pre.textContent.indexOf('kali@kali') !== -1;

@@ -14,6 +14,7 @@
   var _mount = null;       // the #view element
   var _rendering = false;
   var _pending = null;
+  var _lastRoute = null;   // to scroll to top only on a real route change, not in-place re-renders
 
   function parseHash() {
     var h = (location.hash || '').replace(/^#\/?/, '');
@@ -47,6 +48,12 @@
       }
       // reflect active nav
       reflectNav(route.name);
+      // On a real route change (e.g. launch → coach), land at the top; leave scroll alone on the
+      // in-place re-renders that happen after minting a fact or marking a move done.
+      if (route.name !== _lastRoute) {
+        _lastRoute = route.name;
+        try { if (_mount) _mount.scrollTop = 0; if (root.scrollTo) root.scrollTo(0, 0); } catch (e) {}
+      }
     } finally {
       _rendering = false;
       if (_pending) { _pending = false; render(); }
