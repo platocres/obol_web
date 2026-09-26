@@ -39,6 +39,11 @@ function serve() {
 
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
+  // a first-time visitor lands on the neon (synthwave sunset) skin, in a clean untitled run — never
+  // an "Imported engagement" with a stale seed target.
+  ok(await page.getAttribute('html', 'data-skin') === 'neon', 'default skin is neon for a fresh visitor');
+  const firstEng = await page.evaluate(() => { var e = window.OBOL.store.active(); return { name: e && e.name, target: (e && e.params && e.params.target) || '' }; });
+  ok(firstEng.name !== 'Imported engagement' && firstEng.target !== '10.129.85.48', 'fresh engagement is not the legacy import (' + JSON.stringify(firstEng) + ')');
 
   // presentation modules loaded (motion background, coin bursts, ⚙ settings)
   ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.backdrop && window.OBOL.coins)), 'backdrop + coin modules attached');
@@ -79,6 +84,15 @@ function serve() {
   // Live context rail is present on the coach (shown at >=1500px; element always rendered).
   ok(await page.locator('.withrail .context-rail').count() === 1, 'coach live context rail rendered');
   ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.rail && window.OBOL.rail.html)), 'rail module exposed for reuse');
+
+  // Guided fact picker (sidebar): a friendly labelled option adds the underlying fact kind.
+  ok(await page.locator('#fact-pick .fp-sel').count() === 1, 'sidebar guided fact picker rendered');
+  const beforePick = await page.evaluate(() => window.OBOL.store.factSet().has('smb.reachable'));
+  await page.selectOption('#fact-pick .fp-sel', 'smb.reachable');
+  await page.click('#fact-pick .fp-add');
+  await page.waitForTimeout(150);
+  const afterPick = await page.evaluate(() => window.OBOL.store.factSet().has('smb.reachable'));
+  ok(!beforePick && afterPick, 'picker added the smb.reachable fact');
 
   // Evidence route loads + lazy-loads parsers (if built)
   await page.goto(`http://localhost:${PORT}/index.html#/evidence`, { waitUntil: 'networkidle' });
@@ -179,14 +193,53 @@ function serve() {
 
   // Report renders the verbatim command+output transcript (from the nmap paste) + the notes editor.
   await page.goto(`http://localhost:${PORT}/index.html#/report`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(400);
-  ok(await page.locator('.rep-out pre.lang-terminal').count() >= 1, 'report renders the pasted terminal transcript');
+  await page.waitForSelector('.rep-out pre.kali-term', { timeout: 6000 }).catch(() => {});
+  ok(await page.locator('.rep-out pre.kali-term').count() >= 1, 'report renders the Kali-style terminal transcript');
+  ok(await page.locator('.rep-out pre.kali-term .kt-u').count() >= 1, 'transcript shows the kali@kali prompt');
   ok(await page.locator('.rep-notes .rep-note-fld').count() >= 1, 'report shows the per-host notes editor');
   const transcriptHasCmd = await page.evaluate(() => {
-    var pre = document.querySelector('.rep-out pre.lang-terminal');
-    return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1;
+    var pre = document.querySelector('.rep-out pre.kali-term');
+    return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1 && pre.textContent.indexOf('kali@kali') !== -1;
   });
-  ok(transcriptHasCmd, 'transcript contains the command and its output');
+  ok(transcriptHasCmd, 'transcript contains the prompt, command and output');
+  // Export controls present + .docx builds with an embedded screenshot (JSZip loaded with the report bundle).
+  ok(await page.locator('#rep-print').count() === 1 && await page.locator('#rep-docx').count() === 1, 'report has Print/PDF + .docx buttons');
+  const docx = await page.evaluate(async () => {
+    if (!window.JSZip || !window.OBOL.report.docxFiles) return { size: 0, media: 0 };
+    // include a synthetic image block to exercise embedding
+    var e = window.OBOL.store.active();
+    var c = window.OBOL.report.buildContext({ facts: window.OBOL.store.factSet(), targets: (e.targets || []).map(function (t) { return Object.assign({}, t, { host: t.host || t.ip }); }), activities: e.activities || [], params: e.params || {} });
+    var blocks = window.OBOL.report.document('oscp', c);
+    var shot = (e.screenshots && e.screenshots[0]) ? e.screenshots[0].data_uri : null;
+    if (shot) blocks = blocks.concat([{ t: 'image', caption: 'proof', data_uri: shot }]);
+    var files = window.OBOL.report.docxFiles(blocks);
+    var media = files.filter(function (f) { return f.path.indexOf('word/media/') === 0; }).length;
+    var zip = new window.JSZip(); files.forEach(function (f) { zip.file(f.path, f.data, f.base64 ? { base64: true } : undefined); });
+    var blob = await zip.generateAsync({ type: 'blob' });
+    return { size: blob ? blob.size : 0, media: media, hasDrawing: files.some(function (f) { return f.path === 'word/document.xml' && f.data.indexOf('<w:drawing>') !== -1; }) };
+  });
+  ok(docx.size > 400, 'report builds a non-empty .docx (' + docx.size + ' bytes)');
+  ok(docx.media >= 1 && docx.hasDrawing, 'the .docx embeds the proof screenshot as an image');
+
+  // Target shell prompt: post-exploitation commands on a compromised host render with the box's
+  // own prompt (not kali@kali). Built through the live engine so the feature is exercised end-to-end.
+  const termPrompt = await page.evaluate(() => {
+    var R = window.OBOL.report;
+    var F = window.OBOL.facts;
+    var host = '10.10.10.77';
+    var fs = new F.FactSet([F.makeFact({ kind: 'foothold.linux', scope: 'host:' + host, source: 'ssh' })]);
+    var c = R.buildContext({
+      facts: fs, targets: [{ host: host, hostname: 'boxy', os: 'linux' }],
+      activities: [
+        { tool: 'nmap', command: 'nmap -sC -sV ' + host, at: 1, target: host, scope: 'host:' + host, stdout: 'PORT STATE\n22/tcp open ssh' },
+        { tool: 'whoami', command: 'whoami', at: 2, target: host, scope: 'host:' + host, stdout: 'svc' },
+      ], includeSecrets: true, name: 't',
+    });
+    var html = R.toHtml(R.document('oscp', c));
+    return { hasTarget: /kali-term term-target/.test(html), hasBoxPrompt: html.indexOf('svc@boxy:~$') !== -1, hasKali: html.indexOf('kali@kali') !== -1 };
+  });
+  ok(termPrompt.hasTarget && termPrompt.hasBoxPrompt, 'on-target command renders the box shell prompt (svc@boxy:~$)');
+  ok(termPrompt.hasKali, 'recon command keeps the kali@kali prompt alongside it');
 
   // Performance budget: boot-to-interactive + route render must stay fast (guards against the
   // historical "many uncompressed layers / tabs never load" regression). Generous for CI runners.

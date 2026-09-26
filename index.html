@@ -11,8 +11,10 @@
     (function () {
       try {
         var p = JSON.parse(localStorage.getItem('obol-prefs') || '{}');
-        if (p && p.skin) document.documentElement.setAttribute('data-skin', p.skin);
+        /* Neon (synthwave sunset) is the out-of-the-box skin; a stored choice always wins. */
+        document.documentElement.setAttribute('data-skin', (p && p.skin) || 'neon');
         var a = parseFloat(localStorage.getItem('obol.surface-alpha'));
+        if (isNaN(a)) a = 0.3; /* default: fade surfaces so the motion background shows through */
         if (a >= 0 && a <= 1) document.documentElement.style.setProperty('--surface-alpha', String(a));
       } catch (e) {}
     })();
@@ -67,10 +69,7 @@
 
       <div class="side-h">Facts</div>
       <ul id="facts-list"></ul>
-      <div class="fact-add-row">
-        <input id="fact-input" placeholder="add fact kind…" autocomplete="off" spellcheck="false">
-        <button id="fact-add" class="btn-mini">add</button>
-      </div>
+      <div id="fact-pick" class="fact-pick"></div>
     </aside>
 
     <main id="view" role="main"><!-- routes render here (once per navigation) --></main>
@@ -85,6 +84,7 @@
   <script defer src="data/packs-bundle.js"></script>
   <script defer src="assets/engine/packs.js"></script>
   <script defer src="assets/ui/util.js"></script>
+  <script defer src="assets/ui/factpick.js"></script>
   <script defer src="assets/ui/store.js"></script>
   <script defer src="assets/ui/router.js"></script>
   <script defer src="assets/ui/lazy.js"></script>

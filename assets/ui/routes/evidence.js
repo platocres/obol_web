@@ -61,9 +61,8 @@
       + '</div>'
       + shotsSection()
       + '<details class="ev-manual"><summary>Add a fact manually</summary>'
-      + '<div class="ev-row"><input id="ev-mkind" class="ev-cmd" placeholder="fact kind, e.g. smb.reachable">'
-      + '<button id="ev-madd" class="btn-ghost">Add fact</button></div>'
-      + '<div class="ev-hint">Fact kinds gate the methodology. Common: <code>host.up</code>, <code>ports.open</code>, <code>ldap.reachable</code>, <code>credential.available</code>, <code>foothold.linux</code>.</div>'
+      + '<p class="ev-hint">Pick what you\'ve confirmed and the coach advances — use this when you did something obol\'s parsers can\'t read (a manual exploit, an unsupported tool).</p>'
+      + '<div id="ev-factpick" class="fact-pick"></div>'
       + '</details>'
       + '</section>';
   }
@@ -160,15 +159,12 @@
       OBOL.router.render();
     });
 
-    var maddBtn = document.getElementById('ev-madd');
-    if (maddBtn) maddBtn.addEventListener('click', function () {
-      var kind = ((document.getElementById('ev-mkind') || {}).value || '').trim();
-      if (!kind) return;
+    var fpEl = document.getElementById('ev-factpick');
+    if (fpEl && OBOL.factpick) OBOL.factpick.mount(fpEl, function (kind) {
       var scope = 'host:' + ((OBOL.store.active().params || {}).target || 'target');
       OBOL.store.addFacts([OBOL.facts.makeFact({ kind: kind, scope: scope, source: 'manual' })], 'facts');
       OBOL.app.renderSidebar();
       U.toast('Fact added: ' + kind);
-      document.getElementById('ev-mkind').value = '';
     });
   }
 

@@ -24,7 +24,7 @@
     try { return document.documentElement.getAttribute("data-skin") || (OBOL.store && OBOL.store.pref().skin) || "obol"; } catch (e) { return "obol"; }
   }
   function motionLevel() { var v = lsGet(LS_MOTION); return (v === "full" || v === "reduced" || v === "off") ? v : "full"; }
-  function surfaceAlpha() { var v = parseFloat(lsGet(LS_OPACITY)); return (v >= 0 && v <= 1) ? v : 1; }
+  function surfaceAlpha() { var v = parseFloat(lsGet(LS_OPACITY)); return (v >= 0 && v <= 1) ? v : 0.3; }
   function applySurfaceAlpha(v) { try { document.documentElement.style.setProperty("--surface-alpha", String(v)); } catch (e) {} }
   function coinsOn() { return !OBOL.coins || OBOL.coins.enabled(); }
 
@@ -77,6 +77,42 @@
     op.addEventListener("input", function (e) { e.stopPropagation(); var v = parseFloat(op.value); applySurfaceAlpha(v); lsSet(LS_OPACITY, String(v)); syncOp(); });
     op.addEventListener("click", function (e) { e.stopPropagation(); });
     syncOp(); opWrap.appendChild(opLabel); opWrap.appendChild(op); panel.appendChild(opWrap);
+
+    // Workspace: export the active engagement or the whole workspace to JSON, and import it back.
+    panel.appendChild(sectionTitle("Workspace"));
+    var wsWrap = document.createElement("div"); wsWrap.className = "obol-set-row";
+    var fileInput = document.createElement("input");
+    fileInput.type = "file"; fileInput.accept = "application/json,.json"; fileInput.style.display = "none";
+    function mkBtn(label, fn) { var b = document.createElement("button"); b.type = "button"; b.className = "obol-set-btn"; b.textContent = label; b.addEventListener("click", function (e) { e.stopPropagation(); fn(); }); return b; }
+    function toast(m, k) { try { OBOL.util.toast(m, k); } catch (e) {} }
+    function dstamp() { var d = new Date(); function p(n) { return String(n).padStart(2, "0"); } return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes()); }
+    function slugify(s) { return String(s || "engagement").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "engagement"; }
+    function download(stem, obj) {
+      if (!obj) { toast("Nothing to export"); return; }
+      var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = stem + ".json";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    }
+    wsWrap.appendChild(mkBtn("⭳ Export engagement", function () {
+      var eng = OBOL.store.active(); download("obol-" + slugify(eng && eng.name), OBOL.store.exportEngagement());
+    }));
+    wsWrap.appendChild(mkBtn("⭳ Export all", function () { download("obol-workspace-" + dstamp(), OBOL.store.exportAll()); }));
+    wsWrap.appendChild(mkBtn("⭱ Import file…", function () { fileInput.click(); }));
+    fileInput.addEventListener("change", function () {
+      var f = fileInput.files && fileInput.files[0]; if (!f) return;
+      var r = new FileReader();
+      r.onload = function () {
+        var data; try { data = JSON.parse(r.result); } catch (e) { toast("Invalid JSON file", "err"); return; }
+        OBOL.store.importData(data).then(function (n) {
+          fileInput.value = "";
+          if (n) { toast("Imported " + n + " engagement" + (n === 1 ? "" : "s")); if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar(); if (OBOL.router) OBOL.router.render(); }
+          else toast("No engagements found in that file", "err");
+        });
+      };
+      r.readAsText(f);
+    });
+    panel.appendChild(wsWrap); panel.appendChild(fileInput);
 
     var host = document.body || document.documentElement;
     host.appendChild(panel); host.appendChild(btn);

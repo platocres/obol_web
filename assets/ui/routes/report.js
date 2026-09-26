@@ -60,10 +60,16 @@
     return '<section class="report-route">'
       + '<h1 class="route-h1">Report</h1>'
       + '<div class="rep-controls">'
-      + '<label>Profile <select id="rep-profile">' + profOpts + '</select></label>'
-      + '<label><input type="checkbox" id="rep-secrets"' + (includeSecrets ? ' checked' : '') + '> include secrets (default redacted)</label>'
-      + '<button id="rep-md" class="btn-ghost">Download .md</button>'
-      + '<button id="rep-html" class="btn-primary">Download .html</button>'
+      + '<div class="rep-opts">'
+      + '<label class="rep-opt">Profile <select id="rep-profile">' + profOpts + '</select></label>'
+      + '<label class="rep-opt"><input type="checkbox" id="rep-secrets"' + (includeSecrets ? ' checked' : '') + '> include secrets <span class="rep-opt-note">(redacted by default)</span></label>'
+      + '</div>'
+      + '<div class="rep-actions">'
+      + '<button id="rep-print" class="btn-ghost" title="Paper view — choose “Save as PDF” in the print dialog">Print / PDF</button>'
+      + '<button id="rep-md" class="btn-ghost">.md</button>'
+      + '<button id="rep-html" class="btn-ghost">.html</button>'
+      + '<button id="rep-docx" class="btn-primary">.docx</button>'
+      + '</div>'
       + '</div>'
       + (gaps.length ? ('<div class="rep-gaps">Readiness gaps:<ul>' + gaps.map(function (g) { return '<li>' + esc(g.message || g) + '</li>'; }).join('') + '</ul></div>') : '')
       + notesEditor()
@@ -71,8 +77,8 @@
       + '</section>';
   }
 
-  function download(name, text, mime) {
-    var blob = new Blob([text], { type: mime });
+  function download(name, data, mime) {
+    var blob = (data instanceof Blob) ? data : new Blob([data], { type: mime });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -123,6 +129,25 @@
       var stem = (OBOL.report.filenameStem && OBOL.report.filenameStem(p, c)) || ('obol-report-' + p);
       var doc = '<!doctype html><meta charset="utf-8"><title>' + esc(stem) + '</title>' + OBOL.report.toHtml(OBOL.report.document(p, c));
       download(stem + '.html', doc, 'text/html');
+    });
+    // Paper view + PDF via the browser print dialog (print CSS styles the report as paper).
+    var printBtn = document.getElementById('rep-print');
+    if (printBtn) printBtn.addEventListener('click', function () { try { window.print(); } catch (e) {} });
+    // .docx — build the OOXML parts and zip them with JSZip (loaded with the report bundle).
+    var docxBtn = document.getElementById('rep-docx');
+    if (docxBtn) docxBtn.addEventListener('click', function () {
+      var JSZip = root.JSZip;
+      if (!JSZip || !OBOL.report.docxFiles) { U.toast('Still loading — try again in a second', 'err'); return; }
+      var p = currentProfile(), c = ctxOf((OBOL.store.active().ui || {}).reportSecrets);
+      var stem = (OBOL.report.filenameStem && OBOL.report.filenameStem(p, c)) || ('obol-report-' + p);
+      try {
+        var files = OBOL.report.docxFiles(OBOL.report.document(p, c));
+        var zip = new JSZip();
+        files.forEach(function (f) { zip.file(f.path, f.data, f.base64 ? { base64: true } : undefined); });
+        zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+          .then(function (blob) { download(stem + '.docx', blob); })
+          .catch(function () { U.toast('Could not build .docx', 'err'); });
+      } catch (e) { U.toast('Could not build .docx', 'err'); }
     });
   }
 
