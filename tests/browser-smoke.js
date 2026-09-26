@@ -379,6 +379,26 @@ function serve() {
   ok(drawer, 'hamburger opens the engagement drawer on-screen');
   await mob.close();
 
+  // Data reset controls: management sits near the top of Engagements; the store methods wipe cleanly.
+  await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.eng-library', { timeout: 5000 });
+  ok(await page.locator('.eng-library .eng-danger-toggle').count() === 1, 'engagement library carries a Manage / Reset disclosure near the top');
+  await page.locator('.eng-danger-toggle > summary').click();
+  ok(await page.locator('#eng-clear').isVisible() && await page.locator('#eng-reset').isVisible(), 'Delete-All-Engagements and Full-Reset buttons are present');
+  ok(await page.locator('.obol-set-danger').count() === 1, 'the ⚙ settings panel carries an always-reachable Full Reset');
+  // Delete All Engagements clears every run; init() reseeds one fresh engagement.
+  const cleared = await page.evaluate(async () => { await window.OBOL.store.createEngagement('temp-run'); await window.OBOL.store.clearEngagements(); await window.OBOL.store.init(); return window.OBOL.store.listEngagements().length; });
+  ok(cleared === 1, 'Delete All Engagements clears every run; a fresh one is seeded (' + cleared + ')');
+  // Full Reset erases obol localStorage AND the IndexedDB database (the real "start completely fresh").
+  const wiped = await page.evaluate(async () => {
+    try { localStorage.setItem('obol.motion', 'off'); } catch (e) {}
+    await window.OBOL.store.resetAll();
+    let ls = false; try { for (let i = 0; i < localStorage.length; i++) if (/^obol/i.test(localStorage.key(i))) { ls = true; break; } } catch (e) {}
+    const dbs = (indexedDB.databases ? await indexedDB.databases() : []).map((d) => d.name);
+    return { ls: ls, hasDb: dbs.indexOf('obol-db') !== -1 };
+  });
+  ok(!wiped.ls && !wiped.hasDb, 'Full Reset erases all obol localStorage and the IndexedDB database');
+
   ok(errors.length === 0, 'no console errors (' + errors.length + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : '') + ')');
 
   await browser.close();

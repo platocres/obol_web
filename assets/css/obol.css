@@ -152,7 +152,9 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 /* the evidence-route picker sits in a wider column */
 .ev-manual .fact-pick .fp-row { max-width: 520px; }
 
-main#view { grid-area: main; padding: 22px 30px; overflow-y: auto; max-width: 1720px; }
+/* bottom padding clears the fixed ⚙ settings gear so it never covers content (e.g. the last
+   engagement row's delete ×) in the bottom-right corner. */
+main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-width: 1720px; }
 .route-h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .01em; }
 .route-sub { color: var(--text-2); margin: 0 0 20px; max-width: 70ch; }
 
@@ -560,8 +562,29 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .lib-open:hover { color: var(--accent-2); }
 .lib-name { font-weight: 600; }
 .lib-meta { margin-left: auto; color: var(--muted); font-size: 12px; }
-.lib-del { background: none; border: none; color: var(--muted); font-size: 17px; cursor: pointer; }
-.lib-del:hover { color: var(--red); }
+.lib-del { background: none; border: 1px solid transparent; border-radius: 6px; color: var(--muted); font-size: 17px; line-height: 1; padding: 2px 8px; cursor: pointer; }
+.lib-del:hover { color: var(--red); border-color: var(--red); }
+/* engagement library header — heading + a "Manage / Reset" disclosure holding the danger zone */
+.eng-library-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.eng-library-head .coach-sec-h { margin: 0; }
+.eng-danger-toggle { font-size: 12px; }
+.eng-danger-toggle > summary { list-style: none; cursor: pointer; color: var(--muted); border: 1px solid var(--line); border-radius: 7px; padding: 4px 10px; user-select: none; }
+.eng-danger-toggle > summary::-webkit-details-marker { display: none; }
+.eng-danger-toggle > summary:hover { color: var(--red); border-color: var(--red); }
+.eng-danger-toggle[open] > summary { color: var(--red); border-color: var(--red); }
+/* danger zone — obvious, labeled destructive controls (delete all / full reset) */
+.eng-danger { margin-top: 10px; border: 1px solid var(--red); border-radius: 12px; padding: 8px 16px 14px; background: color-mix(in srgb, var(--red) 7%, transparent); }
+.eng-danger-item { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
+.eng-danger-item:first-of-type { border-top: none; }
+.eng-danger-txt { flex: 1 1 260px; min-width: 0; }
+.eng-danger-txt strong { display: block; font-size: 13.5px; }
+.eng-danger-txt span { display: block; color: var(--text-2); font-size: 12.5px; margin-top: 2px; line-height: 1.35; }
+.btn-danger { flex: 0 0 auto; background: none; color: var(--red); border: 1px solid var(--red); border-radius: 8px; padding: 8px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.btn-danger:hover { background: var(--red); color: #fff; }
+.btn-danger-strong { background: var(--red); color: #fff; }
+.btn-danger-strong:hover { filter: brightness(1.12); }
+.obol-set-danger { color: var(--red); border-color: var(--red) !important; }
+.obol-set-danger:hover { background: var(--red); color: #fff; }
 
 /* ---- per-target page ---- */
 .target-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
