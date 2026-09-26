@@ -265,6 +265,8 @@
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u '' -p '' --users",
+     "web": "nxc ldap {{target}} -u '' -p '' --users | tee {{scandir}}/ldap-users.txt",
+     "web_note": "tee saves the full dump to scans/ldap-users.txt and still prints it. Paste it back here — obol reads the names and hands you a one-line command to write the tidy loot/users.txt that every AD move ({{userlist}}) reads.",
      "note": "nxc performs the entire anonymous LDAP dump in a single line, descriptions and all. On anonymously-bindable machines this is the quickest user list you will find anywhere."
     },
     {
@@ -296,8 +298,8 @@
     },
     {
      "tool": "sh",
-     "run": "nxc ldap {{target}} -u '' -p '' --users | awk '{print $5}' | grep -vE '^-Username|^\\[|^SM_|^HealthMailbox|\\$$' | sort -u > users.txt",
-     "note": "HANDOFF — boil the nxc table down to a tidy userlist (username is in column 5; confirm with head first, since nxc versions move columns around). It strips headers, machine accounts ($), and system mailboxes. Point the sidebar userlist at this file afterward: kerbrute, spraying, and roasting all read from it."
+     "run": "nxc ldap {{target}} -u '' -p '' --users | awk '{print $5}' | grep -vE '^-Username|^\\[|^SM_|^HealthMailbox|\\$$' | sort -u | tee {{lootdir}}/users.txt",
+     "note": "HANDOFF — boil the nxc table down to a tidy userlist (username is in column 5; confirm with head first, since nxc versions move columns around). It strips headers, machine accounts ($), and system mailboxes, then writes straight to loot/users.txt — the exact {{userlist}} obol fills into kerbrute, spraying, and roasting, so there is nothing to point by hand."
     }
    ]
   },
@@ -358,8 +360,8 @@
     },
     {
      "tool": "sh",
-     "run": "kerbrute userenum --dc {{target}} -d {{domain}} {{userlist}} -o kerb-valid.txt && grep VALID kerb-valid.txt | awk '{print $NF}' | cut -d@ -f1 | sort -u > users.txt",
-     "note": "HANDOFF — turn kerbrute output into a clean users.txt. For the rpcclient route, feed enumdomusers through grep user: | cut -d[ -f2 | cut -d] -f1 | sort -u. Then aim the sidebar userlist at the result."
+     "run": "kerbrute userenum --dc {{target}} -d {{domain}} {{userlist}} -o {{scandir}}/kerb-valid.txt && grep VALID {{scandir}}/kerb-valid.txt | awk '{print $NF}' | cut -d@ -f1 | sort -u | tee {{lootdir}}/users.txt",
+     "note": "HANDOFF — turn kerbrute output into a clean loot/users.txt, the {{userlist}} every later AD move reads (nothing to point by hand). For the rpcclient route, feed enumdomusers through grep user: | cut -d[ -f2 | cut -d] -f1 | sort -u instead."
     }
    ]
   },

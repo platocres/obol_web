@@ -216,6 +216,29 @@ function serve() {
   ok(await page.locator('.eng-apath .apath-flow .apath-block').count() >= 1, 'engagement screen shows the engagement-wide Attack Path (' + (await page.locator('.eng-apath .apath-block').count()) + ' blocks)');
   ok(await page.locator('.eng-apath .apath-host').count() === 1, 'the engagement Attack Path carries a per-host IP·hostname header (shown even for one target)');
 
+  // Loot glue: proving a user list resolves {{userlist}}/{{hashfile}} to workspace paths and offers
+  // a "set up first" heredoc that writes the exact proven names to loot/users.txt.
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([
+      F.makeFact({ kind: 'ad.user_list', scope: 'domain:corp.local', value: { users: ['Administrator', 'Guest', 'svc-web'], count: 3 }, state: F.ProofState.SUPPORTED, source: 'test' }),
+      F.makeFact({ kind: 'port:88', scope: 'host:10.10.10.9', value: {}, state: F.ProofState.SUPPORTED, source: 'test' }),
+      F.makeFact({ kind: 'kerberos.reachable', scope: 'host:10.10.10.9', value: {}, state: F.ProofState.SUPPORTED, source: 'test' }),
+    ], 'test');
+  });
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(250);
+  const roast = page.locator('.move[data-action="asrep-roast"]');
+  ok(await roast.count() === 1, 'proving a user list surfaces the AS-REP Roasting move on the coach');
+  const roastCmd = (await roast.locator('.cmd-run code').allTextContents()).join('\n');
+  ok(roastCmd.indexOf('/home/kali/lab/box/loot/users.txt') !== -1, '{{userlist}} now resolves to the workspace loot/users.txt path (not a bare placeholder)');
+  ok(roastCmd.indexOf('/home/kali/lab/box/loot/asrep.hashes') !== -1, '{{hashfile}} resolves to loot/asrep.hashes so roast + crack agree on one file');
+  const prep = roast.locator('.move-prep');
+  ok(await prep.count() === 1, 'the roast move offers a "set up first" materialize block');
+  const prepCmd = (await prep.locator('.cmd-run code').first().textContent()) || '';
+  ok(prepCmd.indexOf("cat > /home/kali/lab/box/loot/users.txt <<'EOF'") === 0, 'the materialize command is a heredoc writing the canonical users.txt');
+  ok(prepCmd.indexOf('Administrator') !== -1 && prepCmd.indexOf('svc-web') !== -1, 'the heredoc body carries the exact proven usernames');
+
   // Inline per-command ingestion on the coach: open a move's paste box, ingest its output in place.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.coach .move .btn-pasteback', { timeout: 6000 });

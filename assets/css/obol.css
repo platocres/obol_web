@@ -195,6 +195,12 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .cmd-webnote { margin: 0 10px 8px; padding: 6px 10px; border-left: 2px solid var(--accent-2); background: color-mix(in srgb, var(--accent-2) 8%, transparent); color: var(--text-2); font-size: 12px; border-radius: 0 6px 6px 0; }
 .cmd-needs { padding: 0 12px 8px; color: var(--yellow); font-size: 12px; }
 .cmd-needs code { color: var(--yellow); }
+/* "set up first" — obol hands the operator the command that writes the file this move reads. */
+.move-prep { margin: 10px 0; padding: 8px 10px 4px; border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.move-prep .mini-label { display: block; margin-bottom: 6px; color: var(--accent); }
+.cmd-prep { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.cmd-prep .cmd-tag { color: var(--accent); }
+.cmd-prep .cmd-run { max-height: 220px; overflow-y: auto; }
 .move-produces, .move-dnp { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; margin-top: 8px; }
 .mini-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 4px; }
 .fact-chip { font-size: 11px; background: var(--accent-soft); color: var(--accent-2); border-radius: 20px; padding: 2px 9px; }

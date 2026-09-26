@@ -175,6 +175,17 @@
       if (ctx[k] === undefined && wsd[k] !== undefined) ctx[k] = wsd[k];
     });
 
+    // loot-materialized file tokens ({{userlist}}/{{hashfile}}/{{wordlist}}) — resolve to stable
+    // paths under the workspace loot/ dir so the roast that writes {{hashfile}} and the crack that
+    // reads it agree, and {{userlist}} points at the file obol can materialize from ad.user_list.
+    // Only fills for an action the caller identified (opts.action); params still win over these.
+    if (OBOL.loot && opts.action) {
+      var lt = OBOL.loot.tokensFor(opts.action, facts, wsd, params);
+      Object.keys(lt).forEach(function (k) {
+        if (ctx[k] === undefined && lt[k] !== undefined && lt[k] !== '') ctx[k] = lt[k];
+      });
+    }
+
     // extra wins
     Object.keys(extra).forEach(function (k) {
       var v = extra[k];
@@ -221,7 +232,8 @@
       note: c.note || '',
       webNote: c.web_note || action.web_note || '',
       run: run,
-      filled: fillTemplate(run, facts, opts),
+      // thread the action so the loot glue can resolve {{userlist}}/{{hashfile}} for THIS move.
+      filled: fillTemplate(run, facts, opts.action === action ? opts : Object.assign({}, opts, { action: action })),
     };
   }
 
