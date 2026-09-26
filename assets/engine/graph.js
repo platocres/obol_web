@@ -85,13 +85,16 @@
         + '<line x1="' + cx + '" y1="32" x2="' + (cx + NW) + '" y2="32" class="g-head-rule ph-stroke-' + p + '"/>';
     }).join('');
 
+    // Title Case node labels for display (fact labels come lowercase from friendly()); the pack's
+    // own action titles pass through unchanged where already capitalized.
+    var tc = (OBOL.util && OBOL.util.titleCase) ? OBOL.util.titleCase : function (x) { return x; };
     var nodeSvg = Object.keys(pos).map(function (id) {
       var m = pos[id], n = m.node, rx = n.type === 'fact' ? 16 : 6;
-      var cls = 'g-node g-' + n.type + '-' + n.state;
+      var cls = 'g-node g-' + n.type + '-' + n.state, lbl = tc(n.label);
       return '<g class="' + cls + '">'
         + '<rect x="' + m.x + '" y="' + m.y + '" width="' + NW + '" height="' + NH + '" rx="' + rx + '"/>'
         + '<text x="' + (m.x + NW / 2) + '" y="' + (m.y + NH / 2 + 4) + '" text-anchor="middle" font-size="12">'
-        + '<title>' + esc(n.label) + '</title>' + esc(trunc(n.label)) + '</text></g>';
+        + '<title>' + esc(lbl) + '</title>' + esc(trunc(lbl)) + '</text></g>';
     }).join('');
 
     return '<svg viewBox="0 0 ' + width + ' ' + height + '" width="' + width + '" height="' + height + '" '

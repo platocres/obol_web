@@ -70,12 +70,12 @@
       // "← from" only names parents that aren't the block immediately to the left (a real jump).
       var jumped = s.enabledBy.filter(function (k) { return k !== prevKind; });
       var from = (!fromPrev && jumped.length)
-        ? '<div class="apath-from">← from ' + jumped.map(function (k) { return esc(OBOL.pack.friendly(k)); }).join(', ') + '</div>' : '';
+        ? '<div class="apath-from">← from ' + jumped.map(function (k) { return esc(U.titleCase(OBOL.pack.friendly(k))); }).join(', ') + '</div>' : '';
       var tech = s.technique ? '<span class="apath-tech">' + esc(s.technique) + '</span>' : '';
       var detail = s.detail ? '<div class="apath-detail">' + esc(s.detail.length > 96 ? s.detail.slice(0, 94) + '…' : s.detail) + '</div>' : '';
       var cmd = s.command ? '<code class="apath-cmd" title="' + U.attr(s.command) + '">' + esc(s.command.length > 60 ? s.command.slice(0, 58) + '…' : s.command) + '</code>' : '';
       // Title Case the milestone label (acronyms like AS-REP / WinRM / NTDS keep their caps).
-      var title = String(s.label).replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); });
+      var title = U.titleCase(s.label);
       return arrow + '<article class="apath-block ph-' + esc(s.phase) + (s.isFlag ? ' apath-flag' : '') + '">'
         + '<div class="apath-cat"><span class="ph-chip ph-' + esc(s.phase) + '">' + esc(s.phase) + '</span>' + tech + '</div>'
         + '<div class="apath-title">' + (s.isFlag ? '🚩 ' : '') + esc(title) + '</div>'

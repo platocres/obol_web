@@ -167,6 +167,10 @@ function serve() {
   await page.waitForSelector('.target-chain .spine-node', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.target-chain .spine-node').count() === 6, 'target page shows the attack-chain bar');
   ok(await page.locator('.target-route svg.obol-graph').count() >= 1, 'target page renders the attack-path graph');
+  // graph node labels are Title Cased (no lowercase-article fact labels like "a live host")
+  const lowerNode = await page.evaluate(() => Array.from(document.querySelectorAll('.target-route svg.obol-graph text'))
+    .map((t) => (t.textContent || '').trim()).some((s) => /^(a|an|the|open|port) /.test(s)));
+  ok(!lowerNode, 'graph node labels are Title Cased (no lowercase-article labels)');
   ok(await page.locator('.acc-pill').count() === 1, 'target page shows an access level');
   ok(await page.locator('.tmove').count() >= 1, 'target page shows scoped next moves');
   // attack path: dense horizontal block ribbon (this target has recon facts from the earlier nmap paste)

@@ -19,7 +19,7 @@
   function producesChips(action) {
     if (!action.produces.length) return '';
     var chips = action.produces.map(function (k) {
-      return '<span class="fact-chip" title="' + esc(k) + '">' + esc(OBOL.pack.friendly(k)) + '</span>';
+      return '<span class="fact-chip" title="' + esc(k) + '">' + esc(OBOL.util.titleCase(OBOL.pack.friendly(k))) + '</span>';
     }).join('');
     return '<div class="move-produces"><span class="mini-label">proves</span>' + chips + '</div>';
   }

@@ -52,6 +52,23 @@
     } catch (e) {}
   }
 
+  // Title Case for display labels: capitalizes the first letter of each word (split on space and
+  // hyphen) while leaving intact (a) tokens already starting with a capital — acronyms/proper
+  // casing like AS-REP, WinRM, NTDS, GTFOBins, BloodHound — and (b) literal tokens that carry a
+  // path/command/config shape (a '/', '_' or '.'), so "/etc/passwd", "xp_cmdshell" and
+  // "no_root_squash" survive verbatim. Apostrophe-s is not capitalized ("host's" → "Host's").
+  function titleCase(s) {
+    function cap(p) {
+      if (/^[^A-Za-z]*[A-Z]/.test(p)) return p;       // already starts capitalized (acronym/proper)
+      return p.replace(/^([^A-Za-z]*)([a-z])/, function (_, pre, c) { return pre + c.toUpperCase(); });
+    }
+    return String(s == null ? '' : s).split(/(\s+|-)/).map(function (w) {
+      if (/^\//.test(w) || /[_.]/.test(w)) return w;  // absolute path / command / config key → literal
+      // a "word/word" compound (not a path) has each part capitalized (root/proof → Root/Proof)
+      return w.indexOf('/') !== -1 ? w.split(/(\/)/).map(cap).join('') : cap(w);
+    }).join('');
+  }
+
   // Delegated click helper: on(container, selector, handler).
   function on(container, evt, selector, handler) {
     container.addEventListener(evt, function (e) {
@@ -60,5 +77,5 @@
     });
   }
 
-  OBOL.util = { esc: esc, attr: attr, firstSentence: firstSentence, copy: copy, toast: toast, on: on };
+  OBOL.util = { esc: esc, attr: attr, firstSentence: firstSentence, copy: copy, toast: toast, on: on, titleCase: titleCase };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
