@@ -204,7 +204,11 @@
   }
 
   function mounted(ctx) {
-    var mount = ctx.mount;
+    // The router replaces #view's innerHTML each render but REUSES the #view element, so delegated
+    // listeners bound on it would stack on every re-render — the Paste-Output toggle would then fire
+    // an even number of times (open→closed = no-op) and ingests would duplicate. Bind on the coach's
+    // own container instead: it's recreated on each render, so its listeners die with the old DOM.
+    var mount = ctx.mount.querySelector('.withrail') || ctx.mount;
     // copy buttons
     U.on(mount, 'click', '.btn-copy', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });

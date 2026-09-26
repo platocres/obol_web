@@ -228,7 +228,12 @@ function serve() {
   await page.locator('.coach .move .move-ingest:not([hidden]) .mi-go').click();
   await page.waitForTimeout(500);
   const actsAfter = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
-  ok(actsAfter === actsBefore + 1, 'inline ingestion records the command+output as an activity (' + actsBefore + '→' + actsAfter + ')');
+  ok(actsAfter === actsBefore + 1, 'inline ingestion records exactly ONE activity — no duplicate from re-bound listeners (' + actsBefore + '→' + actsAfter + ')');
+  // After the ingest re-rendered the coach, Paste Output must still toggle open (guards the
+  // stacked-delegated-listener regression where the toggle netted to a no-op).
+  await page.locator('.coach .move .btn-pasteback').first().click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('.coach .move .move-ingest:not([hidden])').count() >= 1, 'Paste Output still opens the box after a re-render (no listener stacking)');
 
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
