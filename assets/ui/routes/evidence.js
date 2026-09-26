@@ -48,14 +48,15 @@
     }
     return '<section class="evidence">'
       + '<h1 class="route-h1">Evidence</h1>'
-      + '<p class="route-sub">Paste real tool output. Conservative parsers mint proven facts; the coach recomputes. Nothing is inferred that the output doesn\'t show.</p>'
+      + '<p class="route-sub">Paste your <strong>whole terminal</strong> — the command you ran <em>and</em> its full output. Conservative parsers mint only proven facts (nothing is inferred that the output doesn\'t show), the coach recomputes, and the raw command+output is kept as verbatim evidence for your report.</p>'
       + pinBlock
       + '<div class="ev-paste">'
-      + '<textarea id="ev-text" class="ev-textarea" placeholder="Paste nmap / netexec / ldapsearch / ffuf / whatever you ran…" spellcheck="false"></textarea>'
+      + '<textarea id="ev-text" class="ev-textarea" placeholder="Select your whole terminal and paste it here — prompt, command, and all output. e.g.&#10;&#10;$ nmap -sC -sV -oN nmap/full 10.10.10.161&#10;Starting Nmap 7.94 ...&#10;PORT     STATE SERVICE&#10;53/tcp   open  domain&#10;88/tcp   open  kerberos-sec&#10;389/tcp  open  ldap&#10;..." spellcheck="false"></textarea>'
       + '<div class="ev-row">'
-      + '<input id="ev-cmd" class="ev-cmd" placeholder="(optional) the exact command you ran — helps routing" value="' + (pin ? U.attr(pin.command) : '') + '">'
+      + '<input id="ev-cmd" class="ev-cmd" placeholder="command (auto-detected from your paste — only set this if the paste is output-only)" value="' + (pin ? U.attr(pin.command) : '') + '">'
       + '<button id="ev-parse" class="btn-primary"' + (parsersReady ? '' : ' disabled') + '>' + (parsersReady ? 'Parse → facts' : 'Loading parsers…') + '</button>'
       + '</div>'
+      + '<div class="ev-hint ev-paste-hint">Tip: paste the full output even if it looks noisy — the parser ignores what it doesn\'t recognize, and the extra context makes your report\'s evidence blocks complete.</div>'
       + '<div id="ev-result" class="ev-result"></div>'
       + '</div>'
       + shotsSection()
@@ -67,11 +68,26 @@
       + '</section>';
   }
 
+  // Derive the command line from a full-terminal paste when the operator didn't type one.
+  // Matches a shell prompt line ($ / # / PS>) or a first line that begins with a known tool.
+  var TOOL_HEAD = /^(sudo\s+)?(nmap|rustscan|masscan|netexec|nxc|crackmapexec|cme|smbclient|smbmap|rpcclient|enum4linux[\w-]*|ldapsearch|kerbrute|impacket[\w.-]*|GetNPUsers[\w.]*|GetUserSPNs[\w.]*|secretsdump[\w.]*|evil-winrm|ffuf|feroxbuster|gobuster|wfuzz|nikto|whatweb|curl|wget|sqlmap|hydra|john|hashcat|responder|bloodhound[\w.-]*|sharphound[\w.-]*|dig|host|snmpwalk|ssh|ftp)\b/i;
+  function deriveCommand(text) {
+    var lines = String(text || '').split(/\r?\n/);
+    for (var i = 0; i < lines.length && i < 40; i++) {
+      var ln = lines[i];
+      var m = ln.match(/^\s*(?:\$|#|>|PS[^>]*>|[\w.-]+@[\w.-]+:[^$#]*[$#])\s*(.+\S)\s*$/);
+      if (m && TOOL_HEAD.test(m[1].trim())) return m[1].trim();
+      if (TOOL_HEAD.test(ln.trim())) return ln.trim();
+    }
+    return '';
+  }
+
   function runParse(mount) {
     var text = (document.getElementById('ev-text') || {}).value || '';
     var cmd = (document.getElementById('ev-cmd') || {}).value || '';
     if (!text.trim()) { U.toast('Paste some output first'); return; }
     if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers not loaded yet'); return; }
+    if (!cmd.trim()) { cmd = deriveCommand(text); } // auto-detect from a whole-terminal paste
     var params = OBOL.store.active().params || {};
     var scope = 'host:' + (params.target || 'target');
     var res;
@@ -80,10 +96,13 @@
     } catch (e) { U.toast('Parse error: ' + (e && e.message), 'err'); return; }
     var facts = (res && res.facts) || [];
     var added = OBOL.store.addFacts(facts, 'evidence');
-    // record activity
+    // record activity — keep the FULL command+output (capped) as verbatim report evidence.
+    var CAP = 24000;
+    var stored = text.length > CAP ? (text.slice(0, CAP) + '\n… [' + (text.length - CAP) + ' more chars truncated]') : text;
     OBOL.store.update(function (eng) {
       eng.activities = eng.activities || [];
-      eng.activities.unshift({ at: Date.now(), command: cmd, source: 'paste', produced: facts.map(function (f) { return f.kind; }), sample: text.slice(0, 400) });
+      eng.activities.unshift({ at: Date.now(), command: cmd, source: 'paste', target: params.target || '', scope: scope,
+        produced: facts.map(function (f) { return f.kind; }), output: stored, sample: text.slice(0, 400) });
     }, 'activity');
     var resEl = document.getElementById('ev-result');
     if (resEl) {

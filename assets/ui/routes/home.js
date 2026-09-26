@@ -56,14 +56,19 @@
       return '<span class="spine-node ph-' + p + (i <= reached ? ' reached' : '') + (i === frontier ? ' frontier' : '') + '">' + p + '</span>';
     }).join('<span class="spine-sep">›</span>');
     var mt = prof.machine_type ? (OBOL.profile.MACHINE_TYPES[prof.machine_type] || {}).name : '';
+    var nt = (eng.targets || []).length, nf = Object.keys(facts.kinds()).length;
+    var isCustom = !prof.platform || prof.platform === 'custom';
     return '<div class="eng-active">'
       + '<div class="eng-active-head">'
       + '<div><div class="eng-active-name">' + esc(eng.name) + '</div>'
-      + '<div class="eng-badges"><span class="pf-badge ' + (exam ? 'exam' : 'lab') + '">' + esc(preset.name) + (exam ? ' · exam' : '') + '</span>'
+      + '<div class="eng-badges">'
+      // only show a platform badge for a real platform — "Custom" told the user nothing
+      + (isCustom ? '' : '<span class="pf-badge ' + (exam ? 'exam' : 'lab') + '">' + esc(preset.name) + (exam ? ' · exam' : '') + '</span>')
       + (mt ? '<span class="pill">' + esc(mt) + '</span>' : '')
       + (prof.osid ? '<span class="pill">OSID ' + esc(prof.osid) + '</span>' : '')
-      + '<span class="pill">' + (eng.targets || []).length + ' targets</span>'
-      + '<span class="pill">' + Object.keys(facts.kinds()).length + ' facts</span></div></div>'
+      + '<span class="pill">' + nt + ' target' + (nt === 1 ? '' : 's') + '</span>'
+      + '<span class="pill">' + nf + ' fact' + (nf === 1 ? '' : 's') + '</span>'
+      + '</div></div>'
       + '<a class="btn-primary" href="#/path">Open coach →</a>'
       + '</div>'
       + '<div class="home-spine">' + spine + '</div>'
@@ -93,7 +98,7 @@
       + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.</p>'
       + activePanel()
       + '<div class="eng-create"><h2 class="coach-sec-h">New engagement</h2>'
-      + '<label class="eng-field"><span>Name</span><input id="eng-name" placeholder="HTB — Forest" autocomplete="off"></label>'
+      + '<label class="eng-field"><span>Name</span><input id="eng-name" placeholder="Name this run — e.g. “OSCP prep” or “Lab night 3”" autocomplete="off"></label>'
       + '<div class="eng-field"><span>Platform profile</span><div class="pf-grid" id="pf-grid">' + platformCards(sel) + '</div></div>'
       + '<div class="eng-row2">'
       + '<label class="eng-field"><span>Machine type</span><select id="eng-mt">' + machineOptions(prof.machine_type || '') + '</select></label>'

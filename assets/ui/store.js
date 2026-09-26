@@ -16,7 +16,6 @@
   var OBOL = root.OBOL = root.OBOL || {};
   var DB_NAME = 'obol-db';
   var DB_VERSION = 1;
-  var LS_LEGACY = 'obol-state-v2';
   var LS_PREFS = 'obol-prefs';
   var LS_SNAPSHOT = 'obol-idb-fallback';
 
@@ -118,28 +117,6 @@
     };
   }
 
-  // ---- migration from the legacy single-blob localStorage state ----
-  function migrateLegacy() {
-    var raw;
-    try { raw = localStorage.getItem(LS_LEGACY); } catch (e) { return null; }
-    if (!raw) return null;
-    var old;
-    try { old = JSON.parse(raw); } catch (e) { return null; }
-    if (!old || typeof old !== 'object') return null;
-    var eng = newEngagement(old.name || 'Imported engagement');
-    eng.migratedFrom = LS_LEGACY;
-    eng.params = old.params || {};
-    eng.targets = (old.hosts || old.boxes || []).map(function (h, i) {
-      return { id: h.id || ('t' + i), ip: h.ip || h.name || '', hostname: h.hostname || '', os: h.os || '' };
-    });
-    eng.credentials = old.credentials || [];
-    eng.activities = old.activities || [];
-    // legacy facts were shaped differently; keep them under raw for reference, don't force-map
-    eng.legacyFacts = old.facts || [];
-    eng.domains = old.domains || (old.domain ? [old.domain] : []);
-    return eng;
-  }
-
   // ---- change notification ----
   function onChange(fn) { _listeners.push(fn); }
   function emit(reason) { _listeners.forEach(function (fn) { try { fn(reason); } catch (e) {} }); }
@@ -182,19 +159,9 @@
           if (snap) { _mem.engagements = snap.engagements || {}; _activeId = snap.activeId || null; }
         } catch (e2) {}
       }
-      // migrate legacy single-blob state if we have no engagements yet
+      // ensure at least one (clean, empty) engagement exists as a starting point
       if (!Object.keys(_mem.engagements).length) {
-        var migrated = migrateLegacy();
-        if (migrated) {
-          _mem.engagements[migrated.id] = migrated;
-          _activeId = migrated.id;
-          await this._persistEngagement(migrated);
-          await this.setSetting('activeEngagement', migrated.id);
-        }
-      }
-      // ensure at least one engagement exists
-      if (!Object.keys(_mem.engagements).length) {
-        var eng = newEngagement('HTB / Lab');
+        var eng = newEngagement('Untitled run');
         _mem.engagements[eng.id] = eng;
         _activeId = eng.id;
         await this._persistEngagement(eng);

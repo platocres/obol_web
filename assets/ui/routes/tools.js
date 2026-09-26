@@ -84,10 +84,16 @@
       return '<label class="tb-check"><input type="checkbox"' + common + (truthy(value) ? ' checked' : '') + '> <span>' + esc(field.label) + '</span></label>' + help;
     }
     if (field.type === 'select') {
+      var anyDesc = false;
       var opts = (field.options || []).map(function (o) {
-        return '<option value="' + esc(o.value) + '"' + (String(o.value) === String(value) ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+        if (o.description) anyDesc = true;
+        return '<option value="' + esc(o.value) + '"' + (String(o.value) === String(value) ? ' selected' : '')
+          + (o.description ? ' data-desc="' + esc(o.description) + '" title="' + esc(o.description) + '"' : '') + '>' + esc(o.label) + '</option>';
       }).join('');
-      return '<label for="' + esc(id) + '">' + esc(field.label) + '</label><select' + common + '>' + opts + '</select>' + help;
+      // A live description line under the select mirrors the hovered/selected option's `description`
+      // (native <option> tooltips are unreliable) — updated in refresh().
+      var optDesc = anyDesc ? '<small class="tb-hint tb-optdesc" data-optdesc-for="' + esc(field.id) + '"></small>' : '';
+      return '<label for="' + esc(id) + '">' + esc(field.label) + '</label><select' + common + '>' + opts + '</select>' + optDesc + help;
     }
     if (field.type === 'textarea') {
       return '<label for="' + esc(id) + '">' + esc(field.label) + '</label><textarea' + common + (field.placeholder ? ' placeholder="' + esc(field.placeholder) + '"' : '') + ' rows="3">' + esc(value == null ? '' : value) + '</textarea>' + help;
@@ -170,13 +176,15 @@
     var open = builder.id === openId || builder.tool === openId || (builder.equips || []).indexOf(openId) !== -1;
     var equipsChips = (builder.equips || []).slice(0, 4).map(function (t) { return '<span class="pill">' + esc(t) + '</span>'; }).join('');
     var cred = (builder.credentialModes && builder.credentialModes.length) ? '<span class="pill tb-cred">' + esc(builder.credentialModes.join(' / ')) + '</span>' : '';
+    // The head is a role=button div (not a real <button>) so it can validly contain the
+    // title/summary blocks; the tag pills live OUTSIDE it, so clicking a tag never toggles the card.
     return '<article class="tool-card' + (open ? ' open' : '') + '" data-tool-id="' + esc(builder.id) + '">'
-      + '<button type="button" class="tool-card-head" aria-expanded="' + (open ? 'true' : 'false') + '">'
+      + '<div class="tool-card-head" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '">'
       + '<div class="tool-card-title"><span class="tool-card-name">' + esc(builder.title) + '</span>'
-      + '<span class="tool-card-exec">' + esc(builder.executionContext || 'any') + '</span></div>'
-      + '<p class="tool-card-sum">' + esc(builder.summary) + '</p>'
+      + '<span class="tool-card-exec">' + esc(builder.executionContext || 'any') + '</span>'
+      + '<span class="tool-card-chev" aria-hidden="true">▾</span></div>'
+      + '<p class="tool-card-sum">' + esc(builder.summary) + '</p></div>'
       + '<div class="tool-card-tags">' + equipsChips + cred + '</div>'
-      + '<span class="tool-card-chev" aria-hidden="true">▾</span></button>'
       + '<div class="tool-body"></div></article>';
   }
 
@@ -199,8 +207,10 @@
 
     // category jump nav
     var present = CATS.filter(function (c) { return byCat[c.id] && byCat[c.id].length; });
+    // Buttons, not <a href="#…"> — a bare hash is misread by the hash router as a route and
+    // bounces the user to the default screen. These scroll to the category in mounted().
     html += '<nav class="tools-nav">' + present.map(function (c) {
-      return '<a class="pill" href="#tb-cat-' + esc(c.id) + '">' + esc(c.label) + ' <b>' + byCat[c.id].length + '</b></a>';
+      return '<button type="button" class="pill tools-jump" data-cat="tb-cat-' + esc(c.id) + '">' + esc(c.label) + ' <b>' + byCat[c.id].length + '</b></button>';
     }).join('') + '</nav>';
 
     present.forEach(function (c) {
@@ -258,6 +268,15 @@
         code.textContent = missing.length ? ('Set required: ' + missing.join(', ')) : 'Complete the required fields to generate a command.';
         code.removeAttribute('data-cmd');
       }
+      // Mirror each select's chosen option description into its live description line.
+      var sels = form.querySelectorAll('select');
+      for (var si = 0; si < sels.length; si++) {
+        var sel = sels[si];
+        var note = sel.parentNode && sel.parentNode.querySelector('.tb-optdesc');
+        if (!note) continue;
+        var opt = sel.options[sel.selectedIndex];
+        note.textContent = (opt && opt.getAttribute('data-desc')) || '';
+      }
       if (save) persistValues(builder.id, current);
     }
 
@@ -305,6 +324,15 @@
 
     U.on(mount, 'click', '.tool-card-head', function (e, t) {
       toggle(t.closest('.tool-card'));
+    });
+    // keyboard access for the role=button head
+    U.on(mount, 'keydown', '.tool-card-head', function (e, t) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); toggle(t.closest('.tool-card')); }
+    });
+    // category jump chips: scroll to the section (no hash navigation → no router hijack)
+    U.on(mount, 'click', '.tools-jump', function (e, t) {
+      var el = document.getElementById(t.getAttribute('data-cat'));
+      if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_e) { el.scrollIntoView(); } }
     });
 
     // any card pre-marked open (deep link #/tools/<tool>) mounts now and scrolls into view
