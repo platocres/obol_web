@@ -1,5 +1,7 @@
 /*!
- * obol engine — parsers/ad.js
+ * obol engine — parsers/directory.js  (AD / directory-services parsers)
+ * NOTE: this file was renamed from `ad.js` because content/ad blockers (AdBlock Plus, uBlock)
+ * block a script literally named `ad.js` by filename, which silently broke ALL evidence parsing.
  * Faithful JS port of the fixture-reachable parsers in obol-local/obol/parsers/ad.py:
  * nxc/LDAP/SMB enumeration, credential validation, kerberos roast/crack material, evil-winrm,
  * BloodHound collection/analysis, and the ACL/Kerberos/gMSA/LAPS abuse primitives.

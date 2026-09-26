@@ -6,7 +6,7 @@ var ctx = { console: { log: function () {}, warn: function () {} } }; ctx.global
 function load(f) { vm.runInContext(fs.readFileSync(f, 'utf8'), ctx, { filename: f }); }
 load(path.join(ENGINE, 'facts.js'));
 load(path.join(ENGINE, 'parsers', '_common.js'));
-['nmap', 'ad', 'creds', 'host', 'web', 'services', 'database', 'websource'].forEach(function (m) { load(path.join(ENGINE, 'parsers', m + '.js')); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource'].forEach(function (m) { load(path.join(ENGINE, 'parsers', m + '.js')); });
 load(path.join(ENGINE, 'parsers', 'index.js'));
 var OBOL = ctx.OBOL, C = OBOL._parserCommon;
 
