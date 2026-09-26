@@ -20,18 +20,18 @@ ok(W.defaultRoot('~/exams', { name: 'OSCP Prep', targets: [{ ip: '10.0.0.9' }] }
 ok(W.defaultRoot('~/htb', { name: 'n', targets: [{ ip: '10.0.0.5' }] }, false) === '~/htb/10.0.0.5',
   'lab default root falls back to the target IP when no hostname');
 
-const eng = { name: 'x', workspace: { root: '/home/kali/ctf/forest' } };
+const eng = { name: 'x', workspace: { root: '/home/kali/ctf/boxy' } };
 const t = W.tokens(eng);
-ok(t.scandir === '/home/kali/ctf/forest/scans' && t.lootdir === '/home/kali/ctf/forest/loot' && t.proofdir === '/home/kali/ctf/forest/proof',
+ok(t.scandir === '/home/kali/ctf/boxy/scans' && t.lootdir === '/home/kali/ctf/boxy/loot' && t.proofdir === '/home/kali/ctf/boxy/proof',
   'tokens resolve to absolute output dirs under the root');
-ok(W.scaffold(eng) === 'mkdir -p /home/kali/ctf/forest/{scans,loot,exploit,www,proof} && cd /home/kali/ctf/forest',
+ok(W.scaffold(eng) === 'mkdir -p /home/kali/ctf/boxy/{scans,loot,exploit,www,proof} && cd /home/kali/ctf/boxy',
   'scaffold builds a one-line mkdir + cd');
 ok(W.isConfigured(eng) === true && W.isConfigured({ name: 'y' }) === false, 'isConfigured tracks whether a root is set');
 
 // command fill: {{scandir}} resolves from opts.workspace; falls back to a relative dir with none
 const nmap = { commands: [{ tool: 'nmap', run: 'nmap -oN {{scandir}}/nmap.txt {{target}}' }] };
 const withWs = C.fillCommand(nmap, new OBOL.facts.FactSet([]), { params: { target: '10.0.0.5' }, workspace: t }, 0);
-ok(withWs.filled === 'nmap -oN /home/kali/ctf/forest/scans/nmap.txt 10.0.0.5', 'command writes into the absolute scans/ dir with a workspace');
+ok(withWs.filled === 'nmap -oN /home/kali/ctf/boxy/scans/nmap.txt 10.0.0.5', 'command writes into the absolute scans/ dir with a workspace');
 const noWs = C.fillCommand(nmap, new OBOL.facts.FactSet([]), { params: { target: '10.0.0.5' } }, 0);
 ok(noWs.filled === 'nmap -oN scans/nmap.txt 10.0.0.5', 'command still forms with a relative scans/ dir when no workspace is set');
 
