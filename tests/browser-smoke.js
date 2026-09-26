@@ -100,6 +100,26 @@ function serve() {
   await page.waitForTimeout(300);
   ok(await page.locator('.move').count() >= 2, 'coach recomputed: more moves unlocked after evidence (' + (await page.locator('.move').count()) + ')');
 
+  // Performance budget: boot-to-interactive + route render must stay fast (guards against the
+  // historical "many uncompressed layers / tabs never load" regression). Generous for CI runners.
+  const perfPage = await browser.newPage();
+  const t0 = Date.now();
+  await perfPage.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
+  await perfPage.waitForFunction(() => document.documentElement.getAttribute('data-obol-boot') === 'ready', { timeout: 8000 });
+  const bootMs = Date.now() - t0;
+  ok(bootMs < 4000, 'boot-to-interactive under budget (' + bootMs + 'ms < 4000)');
+  const t1 = Date.now();
+  await perfPage.evaluate(() => { location.hash = '#/path'; });
+  await perfPage.waitForSelector('.coach', { timeout: 5000 });
+  const routeMs = Date.now() - t1;
+  ok(routeMs < 2500, 'coach route render under budget (' + routeMs + 'ms < 2500)');
+  const t2 = Date.now();
+  await perfPage.evaluate(() => { location.hash = '#/tools'; });
+  await perfPage.waitForSelector('.tools-grid, .tool-card, [class*=tool-card]', { timeout: 6000 }).catch(() => {});
+  const toolsMs = Date.now() - t2;
+  ok(toolsMs < 3500, 'lazy Tools route render under budget (' + toolsMs + 'ms < 3500)');
+  await perfPage.close();
+
   ok(errors.length === 0, 'no console errors (' + errors.length + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : '') + ')');
 
   await browser.close();
