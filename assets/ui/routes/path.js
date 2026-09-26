@@ -65,11 +65,20 @@
       + '</footer></article>';
   }
 
-  function blockedRow(pair) {
-    var a = pair.action;
-    return '<li class="blocked-row"><span class="blocked-title">' + esc(a.title) + '</span>'
-      + phaseChip(OBOL.phases.phaseOfAction(a))
-      + '<span class="blocked-reason">' + esc(pair.reason) + '</span></li>';
+  // A cluster of blocked moves that share one unlocking prerequisite: "prove X → these open".
+  function blockedGroup(g) {
+    var cap = 12;
+    var reason = String(g.reason || '').replace(/^blocked until\s*/i, '');
+    var items = g.actions.slice(0, cap).map(function (a) {
+      return '<li class="blocked-item">' + phaseChip(OBOL.phases.phaseOfAction(a))
+        + '<span class="blocked-title">' + esc(a.title) + '</span></li>';
+    }).join('');
+    var more = g.actions.length > cap ? '<li class="blocked-more">…and ' + (g.actions.length - cap) + ' more</li>' : '';
+    return '<section class="blocked-group">'
+      + '<div class="blocked-group-head"><span class="blocked-unlock">unlock →</span>'
+      + '<span class="blocked-reason">' + esc(reason) + '</span>'
+      + '<span class="blocked-count">' + g.actions.length + '</span></div>'
+      + '<ul class="blocked-items">' + items + more + '</ul></section>';
   }
 
   function render(ctx) {
@@ -125,12 +134,17 @@
 
     // blocked with reasons
     if (locked.length) {
-      html += '<details class="coach-section coach-blocked"><summary class="coach-sec-h">Blocked — unlocks when you prove a prerequisite (' + locked.length + ')</summary>'
-        + '<ul class="blocked-list">';
-      locked.slice(0, 60).forEach(function (p) { html += blockedRow(p); });
-      html += '</ul>';
-      if (locked.length > 60) html += '<div class="blocked-more">…and ' + (locked.length - 60) + ' more</div>';
-      html += '</details>';
+      // Group by the prerequisite that unlocks them, most-unlocking first: one "prove X" can
+      // open many moves, so the operator sees what to hunt for instead of a flat 60-row wall.
+      var groups = {};
+      locked.forEach(function (p) { (groups[p.reason] = groups[p.reason] || []).push(p.action); });
+      var groupList = Object.keys(groups).map(function (r) { return { reason: r, actions: groups[r] }; })
+        .sort(function (a, b) { return b.actions.length - a.actions.length; });
+      html += '<details class="coach-section coach-blocked"><summary class="coach-sec-h">Blocked — grouped by what unlocks them ('
+        + locked.length + ' moves · ' + groupList.length + ' prerequisite' + (groupList.length === 1 ? '' : 's') + ')</summary>'
+        + '<div class="blocked-groups">';
+      groupList.forEach(function (g) { html += blockedGroup(g); });
+      html += '</div></details>';
     }
 
     html += '</section>';
