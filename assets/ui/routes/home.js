@@ -106,7 +106,7 @@
       + '<label class="eng-field pf-osid" id="pf-cand-wrap" style="display:none"><span>Candidate</span><input id="eng-cand" placeholder="Your name"></label>'
       + '</div>'
       + '<label class="eng-field"><span>Scope / targets — paste IPs &amp; CIDRs (junk is filtered)</span>'
-      + '<textarea id="eng-scope" class="ev-textarea" style="min-height:90px" placeholder="10.10.10.161  10.10.10.175&#10;10.10.10.0/24"></textarea></label>'
+      + '<textarea id="eng-scope" class="ev-textarea" style="min-height:90px" placeholder="10.10.10.10  10.10.10.20&#10;10.10.10.0/24"></textarea></label>'
       + '<button id="eng-launch" class="btn-primary">Create &amp; launch run →</button>'
       + '</div>'
       + '<div class="eng-library"><h2 class="coach-sec-h">Engagement library</h2>' + libraryList() + '</div>'

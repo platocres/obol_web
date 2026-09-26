@@ -57,7 +57,7 @@ function serve() {
   ok(await page.locator('.pf-card').count() >= 6, 'engagement screen shows platform profiles (' + (await page.locator('.pf-card').count()) + ')');
   await page.locator('.pf-card:has(input[value="oscp"])').click();
   await page.fill('#eng-name', 'OSCP Exam');
-  await page.fill('#eng-scope', '10.10.10.161 junk 10.10.10.0/24');
+  await page.fill('#eng-scope', '10.10.10.10 junk 10.10.10.0/24');
   await page.click('#eng-launch');
   await page.waitForTimeout(500);
   ok(page.url().indexOf('#/path') >= 0, 'launch lands on the coach');
@@ -89,7 +89,7 @@ function serve() {
   await page.waitForFunction(() => window.OBOL && window.OBOL.parsers && window.OBOL.parsers.parseActionOutput, { timeout: 8000 }).catch(() => {});
   const factsBefore = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()).length);
   const nmapOut = [
-    'Nmap scan report for 10.10.10.161',
+    'Nmap scan report for 10.10.10.10',
     'Host is up (0.021s latency).',
     'PORT     STATE SERVICE',
     '53/tcp   open  domain',
@@ -98,7 +98,7 @@ function serve() {
     '445/tcp  open  microsoft-ds',
   ].join('\n');
   await page.fill('#ev-text', nmapOut);
-  await page.fill('#ev-cmd', 'nmap -Pn -sC -sV 10.10.10.161');
+  await page.fill('#ev-cmd', 'nmap -Pn -sC -sV 10.10.10.10');
   await page.click('#ev-parse');
   await page.waitForTimeout(400);
   const factsAfter = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()).length);
@@ -112,7 +112,7 @@ function serve() {
   ok(await page.locator('.move').count() >= 2, 'coach recomputed: more moves unlocked after evidence (' + (await page.locator('.move').count()) + ')');
 
   // Per-target attack-path page (scoped to the launched target's facts).
-  await page.goto(`http://localhost:${PORT}/index.html#/target/10.10.10.161`, { waitUntil: 'networkidle' });
+  await page.goto(`http://localhost:${PORT}/index.html#/target/10.10.10.10`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(500);
   ok(await page.locator('.target-chain .spine-node').count() === 6, 'target page shows the attack-chain bar');
   ok(await page.locator('.target-route svg.obol-graph').count() >= 1, 'target page renders the attack-path graph');

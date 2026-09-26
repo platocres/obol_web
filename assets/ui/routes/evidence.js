@@ -29,7 +29,7 @@
     return '<div class="ev-shots"><h2 class="coach-sec-h">Proof screenshots</h2>'
       + '<p class="ev-hint">Attach PNGs (for OSCP: the flag <em>and</em> a host-identity command like <code>ip a</code>/<code>hostname</code> in one frame). They embed into your exported report.</p>'
       + '<div class="ev-row"><input type="file" id="ss-file" accept="image/*" multiple>'
-      + '<input id="ss-cap" class="ev-cmd" placeholder="caption (e.g. proof.txt on 10.10.10.161)">'
+      + '<input id="ss-cap" class="ev-cmd" placeholder="caption (e.g. proof.txt on 10.10.10.10)">'
       + '<select id="ss-slot" class="ev-cmd"><option value="">slot…</option><option value="local">local</option><option value="root">root</option><option value="other">other</option></select></div>'
       + '<div class="ev-shot-grid">' + grid + '</div></div>';
   }
@@ -51,7 +51,7 @@
       + '<p class="route-sub">Paste your <strong>whole terminal</strong> — the command you ran <em>and</em> its full output. Conservative parsers mint only proven facts (nothing is inferred that the output doesn\'t show), the coach recomputes, and the raw command+output is kept as verbatim evidence for your report.</p>'
       + pinBlock
       + '<div class="ev-paste">'
-      + '<textarea id="ev-text" class="ev-textarea" placeholder="Select your whole terminal and paste it here — prompt, command, and all output. e.g.&#10;&#10;$ nmap -sC -sV -oN nmap/full 10.10.10.161&#10;Starting Nmap 7.94 ...&#10;PORT     STATE SERVICE&#10;53/tcp   open  domain&#10;88/tcp   open  kerberos-sec&#10;389/tcp  open  ldap&#10;..." spellcheck="false"></textarea>'
+      + '<textarea id="ev-text" class="ev-textarea" placeholder="Select your whole terminal and paste it here — prompt, command, and all output. e.g.&#10;&#10;$ nmap -sC -sV -oN nmap/full 10.10.10.10&#10;Starting Nmap 7.94 ...&#10;PORT     STATE SERVICE&#10;53/tcp   open  domain&#10;88/tcp   open  kerberos-sec&#10;389/tcp  open  ldap&#10;..." spellcheck="false"></textarea>'
       + '<div class="ev-row">'
       + '<input id="ev-cmd" class="ev-cmd" placeholder="command (auto-detected from your paste — only set this if the paste is output-only)" value="' + (pin ? U.attr(pin.command) : '') + '">'
       + '<button id="ev-parse" class="btn-primary"' + (parsersReady ? '' : ' disabled') + '>' + (parsersReady ? 'Parse → facts' : 'Loading parsers…') + '</button>'

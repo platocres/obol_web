@@ -23,7 +23,7 @@ Windows IP Configuration
 
 Ethernet adapter Ethernet0:
 
-   Connection-specific DNS Suffix  . : htb.local
+   Connection-specific DNS Suffix  . : corp.local
    IPv4 Address. . . . . . . . . . . : 10.10.14.22
    Subnet Mask . . . . . . . . . . . : 255.255.255.0
    Default Gateway . . . . . . . . . : 10.10.14.1
