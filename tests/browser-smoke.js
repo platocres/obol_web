@@ -113,7 +113,7 @@ function serve() {
 
   // Per-target attack-path page (scoped to the launched target's facts).
   await page.goto(`http://localhost:${PORT}/index.html#/target/10.10.10.10`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(500);
+  await page.waitForSelector('.target-chain .spine-node', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.target-chain .spine-node').count() === 6, 'target page shows the attack-chain bar');
   ok(await page.locator('.target-route svg.obol-graph').count() >= 1, 'target page renders the attack-path graph');
   ok(await page.locator('.acc-pill').count() === 1, 'target page shows an access level');
@@ -121,13 +121,13 @@ function serve() {
 
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(400);
+  await page.waitForSelector('.pb-card', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.pb-card').count() >= 1, 'playbooks route renders playbook cards (' + (await page.locator('.pb-card').count()) + ')');
   await page.goto(`http://localhost:${PORT}/index.html#/map`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(400);
+  await page.waitForSelector('.engmap-route, svg.obol-engmap, .em-target', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.engmap-route, svg.obol-engmap, .em-target').count() >= 1, 'engagement map route renders');
   await page.goto(`http://localhost:${PORT}/index.html#/scoreboard`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(300);
+  await page.waitForSelector('.score-total', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.score-total').count() === 1, 'scoreboard renders with the OSCP score line');
 
   // BloodHound: ingest a small SharpHound-CE collection and confirm the interactive graph draws.
@@ -155,14 +155,14 @@ function serve() {
   await page.waitForTimeout(150);
   ok(await page.locator('.pal-item').count() >= 1, 'palette finds commands for "nmap" (' + (await page.locator('.pal-item').count()) + ')');
   const palRun = (await page.locator('.pal-item.sel .pal-run').first().textContent().catch(() => '')) || '';
-  ok(/10\.10\.10\.161/.test(palRun) || /nmap/i.test(palRun), 'palette fills the target into the command preview');
+  ok(/10\.10\.10\.10/.test(palRun) || /nmap/i.test(palRun), 'palette fills the target into the command preview');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(100);
   ok(await page.locator('.pal-overlay.show').count() === 0, 'Escape closes the palette');
 
-  // Findings roll-up renders.
+  // Findings roll-up renders (lazy route — wait for the element, not a fixed sleep).
   await page.goto(`http://localhost:${PORT}/index.html#/findings`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(300);
+  await page.waitForSelector('.findings-route', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.findings-route').count() === 1, 'findings roll-up route renders');
 
   // Proof screenshot attaches and embeds into the report.
