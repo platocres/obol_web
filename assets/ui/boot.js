@@ -69,8 +69,21 @@
     if (engSel) engSel.addEventListener('change', function () { OBOL.store.setActive(engSel.value).then(function () { OBOL.router.render(); }); });
     var engNew = document.getElementById('eng-new');
     if (engNew) engNew.addEventListener('click', function () {
-      var name = prompt('New engagement name:', 'New run');
-      if (name) OBOL.store.createEngagement(name).then(function () { renderSidebar(); OBOL.router.render(); });
+      // The full new-run setup (platform profile, machine type, scope, Kali working directory) lives
+      // in the home screen's "New Engagement" form. Route there and focus it rather than spawning a
+      // name-only engagement that skips every option. The form's Create & Launch makes a fresh run
+      // when one is already configured, so nothing here is destroyed.
+      OBOL.router.go('home');
+      var tries = 0;
+      (function focusSetup() {
+        var setup = document.getElementById('eng-setup');
+        if (!setup) { if (tries++ < 20) return void setTimeout(focusSetup, 30); return; }
+        setup.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var nameEl = document.getElementById('eng-name');
+        if (nameEl) { try { nameEl.focus({ preventScroll: true }); } catch (e) { try { nameEl.focus(); } catch (e2) {} } }
+        setup.classList.add('eng-setup-flash');
+        setTimeout(function () { setup.classList.remove('eng-setup-flash'); }, 1400);
+      })();
     });
 
     // params (input -> store)

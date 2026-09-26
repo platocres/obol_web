@@ -238,6 +238,11 @@ function serve() {
   const prepCmd = (await prep.locator('.cmd-run code').first().textContent()) || '';
   ok(prepCmd.indexOf("cat > /home/kali/lab/box/loot/users.txt <<'EOF'") === 0, 'the materialize command is a heredoc writing the canonical users.txt');
   ok(prepCmd.indexOf('Administrator') !== -1 && prepCmd.indexOf('svc-web') !== -1, 'the heredoc body carries the exact proven usernames');
+  const prepBeforeCmds = await roast.evaluate((el) => {
+    const prep = el.querySelector('.move-prep'), cmd = el.querySelector('.cmd:not(.cmd-prep)');
+    return !!(prep && cmd && (prep.compareDocumentPosition(cmd) & Node.DOCUMENT_POSITION_FOLLOWING));
+  });
+  ok(prepBeforeCmds, 'the "set up first" block renders ABOVE the roast commands it must precede');
 
   // Inline per-command ingestion on the coach: open a move's paste box, ingest its output in place.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
@@ -271,6 +276,36 @@ function serve() {
     return (r.facts || []).map((f) => f.kind);
   });
   ok(xmlFacts.indexOf('port:389') !== -1 && xmlFacts.indexOf('service.ldap') !== -1 && xmlFacts.indexOf('ldap.reachable') !== -1, 'nmap XML (-oX -) parses ports/services despite its <!DOCTYPE nmaprun> (' + xmlFacts.length + ' facts)');
+
+  // Reported case: a -sC -sV scan pasted onto the FAST move (tagged with the fast command) must
+  // still prove BOTH scan markers — from the XML args + content — so the coach doesn't re-suggest a
+  // scan already run (the double-paste friction).
+  const scanMarkers = await page.evaluate(async () => {
+    await window.OBOL.ingest.ensureParsers();
+    const xml = '<?xml version="1.0"?>\n<!DOCTYPE nmaprun>\n<nmaprun scanner="nmap" args="nmap -Pn -sC -sV -p 53,389,445 -oX - 10.129.95.210" version="7.95">\n'
+      + '<host><status state="up"/><address addr="10.129.95.210" addrtype="ipv4"/><ports>'
+      + '<port protocol="tcp" portid="389"><state state="open"/><service name="ldap" product="Microsoft Windows Active Directory LDAP"/></port>'
+      + '</ports></host><runstats><finished summary="Nmap done"/></runstats></nmaprun>';
+    const r = window.OBOL.parsers.parseActionOutput({ actionId: 'nmap-fast-open-ports', command: 'nmap -Pn -p- --min-rate 5000 --open -oN scans/allports.txt 10.129.95.210', stdout: xml, source: 'nmap', scope: 'host:10.129.95.210', domain: '' });
+    return (r.facts || []).map((f) => f.kind);
+  });
+  ok(scanMarkers.indexOf('scan.nmap.quick') !== -1 && scanMarkers.indexOf('scan.nmap.version') !== -1,
+    'a -sC -sV scan pasted on the fast move proves BOTH scan markers in one paste (no re-suggest)');
+
+  // The + (new engagement) routes to the full setup form (profile, machine type, working directory),
+  // not a name-only prompt that skips every option.
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.locator('#eng-new').click();
+  await page.waitForTimeout(250);
+  ok(page.url().indexOf('#/home') !== -1, 'the + button routes to the home setup surface');
+  const setup = await page.evaluate(() => ({
+    hasSetup: !!document.getElementById('eng-setup'),
+    hasMt: !!document.getElementById('eng-mt'),
+    hasWorkdir: !!document.getElementById('eng-workdir'),
+    nameFocused: document.activeElement === document.getElementById('eng-name'),
+  }));
+  ok(setup.hasSetup && setup.hasMt && setup.hasWorkdir, 'the setup form exposes the profile, machine-type and Kali working-directory options');
+  ok(setup.nameFocused, 'the new-run name field is focused so the operator can start typing');
 
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });

@@ -157,10 +157,13 @@
       doc = new DOMParser().parseFromString(xml, 'application/xml');
       if (doc.getElementsByTagName('parsererror').length) return false;
     } catch (e) { return false; }
-    var h = 'host:' + ws.target, srcL = source.toLowerCase();
-    if (actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || srcL.indexOf('-p-') >= 0) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
-    if (actionId.indexOf('version') >= 0 || srcL.indexOf('-sc') >= 0 || srcL.indexOf('-sv') >= 0) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
-    if (actionId.indexOf('udp') >= 0 || srcL.indexOf(' -su') >= 0) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
+    var h = 'host:' + ws.target;
+    // The inline coach box tags a paste with the move's OWN suggested command, which may not be what
+    // the operator actually ran. nmap XML carries the real invocation in <nmaprun args="…">, so fold
+    // that into the flag signal — otherwise a `-sC -sV` scan pasted onto the fast-scan move never
+    // proves scan.nmap.version and the coach re-suggests a scan the operator already ran.
+    var nmaprunEl = doc.querySelector('nmaprun');
+    var cmdL = (source + ' ' + ((nmaprunEl && nmaprunEl.getAttribute('args')) || '')).toLowerCase();
 
     var host = doc.querySelector('host');
     var status = host ? host.querySelector('status') : null;
@@ -195,6 +198,14 @@
     if (summary.length) _add(facts, mkFact('ports.open', h, { ports: uniqSortedNums(summary) }, S, source));
 
     var scriptText = Array.prototype.map.call(doc.querySelectorAll('script'), function (el) { return el.getAttribute('output') || ''; }).filter(Boolean).join('\n');
+
+    // Scan-profile markers, now that we can also read the CONTENT: a scan that returned service
+    // versions or NSE script output IS a version/script scan, whatever command it was tagged with.
+    var hasVersionInfo = !!scriptText.trim() || Object.keys(openPorts).some(function (k) { return openPorts[k].version; });
+    if (actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || cmdL.indexOf('-p-') >= 0) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
+    if (actionId.indexOf('version') >= 0 || cmdL.indexOf('-sc') >= 0 || cmdL.indexOf('-sv') >= 0 || hasVersionInfo) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
+    if (actionId.indexOf('udp') >= 0 || cmdL.indexOf(' -su') >= 0) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
+
     var bannerBlob = scriptText + '\n' + Object.keys(openPorts).map(function (k) { return openPorts[k].version; }).filter(Boolean).join('\n');
     if (!facts.some(function (f) { return f.kind === 'host.os_family'; })) C._add_os_from_text(bannerBlob, ws, source, facts, 'nmap', 'high', true);
     var scriptContext = scriptText.trim() ? _parse_nmap_script_facts(scriptText, ws, source, facts) : {};
@@ -243,9 +254,15 @@
       _add(facts, mkFact('host.up', h, value, S, source));
     }
     var scanSeen = Object.keys(openPorts).length > 0 || /Host is up|Nmap done|Nmap scan report for/i.test(text);
-    if (scanSeen && (actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || srcL.indexOf('-p-') >= 0)) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
-    if (scanSeen && (actionId.indexOf('version') >= 0 || srcL.indexOf('-sc') >= 0 || srcL.indexOf('-sv') >= 0)) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
-    if (scanSeen && (actionId.indexOf('udp') >= 0 || srcL.indexOf(' -su') >= 0)) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
+    // Read the real flags where nmap prints them (the `-oN` header's "as:" line), and infer the
+    // profile from CONTENT: service/version columns or NSE script output (`| line`) mean a version/
+    // script scan ran, whatever command the paste was tagged with — so one paste advances the coach.
+    var asCmd = (/^#\s*Nmap\b.*?\bas:\s*(.+)$/im.exec(text) || [])[1] || '';
+    var cmdL = (source + ' ' + asCmd).toLowerCase();
+    var hasVersionInfo = Object.keys(openPorts).some(function (k) { return openPorts[k].version; }) || /^\|[_ ]/m.test(text);
+    if (scanSeen && (actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || cmdL.indexOf('-p-') >= 0)) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
+    if (scanSeen && (actionId.indexOf('version') >= 0 || cmdL.indexOf('-sc') >= 0 || cmdL.indexOf('-sv') >= 0 || hasVersionInfo)) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
+    if (scanSeen && (actionId.indexOf('udp') >= 0 || cmdL.indexOf(' -su') >= 0)) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
     if (scanSeen && (actionId.indexOf('vuln') >= 0 || srcL.indexOf('--script vuln') >= 0 || srcL.indexOf('-script vuln') >= 0)) _add(facts, mkFact('scan.nmap.vuln', h, { profile: 'nse-vuln' }, S, source));
 
     var summary = [];

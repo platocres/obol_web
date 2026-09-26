@@ -105,8 +105,8 @@
       + '<header class="move-head">' + phaseChip(OBOL.phases.phaseOfAction(action))
       + '<h3 class="move-title">' + esc(action.title) + '</h3></header>'
       + '<p class="move-why">' + esc(why) + '</p>'
-      + commandsBlock(action, filled)
       + prepBlock(action, facts, dirs)
+      + commandsBlock(action, filled)
       + producesChips(action) + dnp
       + '<footer class="move-actions">'
       + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output ↴</button>'
