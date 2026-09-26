@@ -50,8 +50,12 @@
     var exam = OBOL.profile.isExamPlatform(prof.platform);
     var facts = OBOL.store.factSet();
     var ranked = OBOL.pack.nextActions(facts, OBOL.packs.actions());
-    var reached = OBOL.phases.phaseIndex(OBOL.phases.targetPhase(facts));
-    var frontier = OBOL.phases.frontierIndex(facts);
+    // Nothing is "reached" until something is actually known. With no facts yet (a brand-new run,
+    // no targets), recon isn't done — it's simply where you start, so mark it the frontier and
+    // leave every phase unlit rather than lighting recon/enum on an empty engagement.
+    var started = Object.keys(facts.kinds()).length > 0;
+    var reached = started ? OBOL.phases.phaseIndex(OBOL.phases.targetPhase(facts)) : -1;
+    var frontier = started ? OBOL.phases.frontierIndex(facts) : 0;
     var spine = OBOL.phases.PHASES.map(function (p, i) {
       return '<span class="spine-node ph-' + p + (i <= reached ? ' reached' : '') + (i === frontier ? ' frontier' : '') + '">' + p + '</span>';
     }).join('<span class="spine-sep">›</span>');
