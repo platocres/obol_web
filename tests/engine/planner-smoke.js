@@ -7,6 +7,7 @@ const path = require('path');
 require('../../assets/engine/facts.js');
 require('../../assets/engine/phases.js');
 require('../../assets/engine/pack.js');
+require('../../assets/engine/command.js');
 const OBOL = globalThis.OBOL;
 
 const PACKS_DIR = path.join(__dirname, '..', '..', 'data', 'packs');
@@ -64,6 +65,19 @@ if (winOnly) {
 } else {
   console.log('  (no single-OS windows action found to test OS gating)');
 }
+
+// 6) web-suited commands: obol web prefers a `web` variant + surfaces its `web_note`, and the
+// AD firehose actions carry one that redirects to a file (for the Evidence file-attach path).
+const emptyFacts = fs1([]);
+const synthetic = { id: 'w', commands: [{ tool: 'x', run: 'cmd --big', web: 'cmd --big | tee out.txt', web_note: 'attach the file' }] };
+const wf = OBOL.command.fillCommand(synthetic, emptyFacts, {}, 0);
+ok(/\| tee out\.txt/.test(wf.run) && wf.webNote === 'attach the file', 'fillCommand prefers the web command variant and exposes its web_note');
+const plain = OBOL.command.fillCommand({ id: 'p', command: 'nmap -sC t' }, emptyFacts, {}, 0);
+ok(plain.run === 'nmap -sC t' && plain.webNote === '', 'fillCommand falls back to the base command when no web variant exists');
+const firehose = pack.filter((a) => (a.commands || []).some((c) => c.web && /\| tee /.test(c.web)));
+ok(firehose.length >= 2, 'AD firehose actions carry a tee-to-file web variant (' + firehose.length + ' found)');
+const anyWebNote = firehose.some((a) => (a.commands || []).some((c) => c.web_note && /attach/i.test(c.web_note)));
+ok(anyWebNote, 'the web variant carries hands-on guidance to attach the file in Evidence');
 
 console.log(fail ? ('\nENGINE SMOKE: ' + fail + ' FAILURES') : '\nENGINE SMOKE: all passed');
 process.exit(fail ? 1 : 0);

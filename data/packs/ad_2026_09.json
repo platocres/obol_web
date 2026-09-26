@@ -290,6 +290,8 @@
     {
      "tool": "windapsearch",
      "run": "windapsearch.py -d {{domain}} --dc-ip {{target}} --custom 'objectClass=*'",
+     "web": "windapsearch.py -d {{domain}} --dc-ip {{target}} --custom 'objectClass=*' | tee ad-objects.txt",
+     "web_note": "Dumps every object — often far too many lines to paste. Pipe it to a file (shown) and attach ad-objects.txt in Evidence. For the full graph, SharpHound → the Domain tab is the heavier tool.",
      "note": "Dump every single object — OUs, groups, computers, service accounts. Service-account names (svc-*) are AS-REP roasting candidates, and Exchange security groups showing up in the results indicate Exchange is deployed (see writedacl-dcsync)."
     },
     {
@@ -883,6 +885,8 @@
     {
      "tool": "bloodyad",
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
+     "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee bloodyad-writable.txt",
+     "web_note": "In a large domain --detail can run to tens of thousands of lines — too many to paste. Pipe it to a file (shown) and attach bloodyad-writable.txt in Evidence; obol only needs the writable-object lines.",
      "note": "LANE 1 (remote, no foothold): the single highest-signal question — what objects can THIS account write to? Every writable group/user/computer is a candidate edge (join a group, reset a password, add a shadow cred, grant DCSync). Start here."
     },
     {
@@ -1735,6 +1739,8 @@
     {
      "tool": "bloodyad",
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
+     "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee bloodyad-writable.txt",
+     "web_note": "In a large domain --detail can run to tens of thousands of lines — too many to paste. Pipe it to a file (shown) and attach bloodyad-writable.txt in Evidence; obol only needs the writable-object lines.",
      "note": "Begin here: what can your account genuinely write to? The detailed output is your menu of options."
     },
     {

@@ -120,6 +120,21 @@ function serve() {
   const kinds = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()));
   ok(kinds.indexOf('ldap.reachable') >= 0 || kinds.indexOf('port:389') >= 0, 'nmap parse produced AD-service facts (ldap.reachable/port:389)');
 
+  // File-ingest: a firehose output (too big to paste — e.g. bloodyAD / full ldapsearch) is attached
+  // as a file, parsed through the same pipeline, and stored CAPPED (never the whole 200k chars).
+  const bigDump = ['# firehose output, attached as a file instead of pasted', 'PORT     STATE SERVICE', '5985/tcp open  wsman']
+    .concat(Array.from({ length: 5000 }, (_, i) => 'noise line ' + i + ' :: nothing the parser recognizes here')).join('\n');
+  await page.fill('#ev-cmd', 'nmap -p- 10.10.10.10');
+  await page.setInputFiles('#ev-file', { name: 'nmap-full.txt', mimeType: 'text/plain', buffer: Buffer.from(bigDump) });
+  await page.waitForTimeout(400);
+  const fileIngest = await page.evaluate(() => {
+    var a = window.OBOL.store.active().activities[0] || {};
+    var res = (document.getElementById('ev-result') || {}).textContent || '';
+    return { source: a.source, file: a.file, capped: (a.stdout || '').indexOf('truncated') !== -1, resHasName: res.indexOf('nmap-full.txt') !== -1 };
+  });
+  ok(fileIngest.source === 'file' && fileIngest.file === 'nmap-full.txt', 'attached output file ingested through the evidence pipeline');
+  ok(fileIngest.capped, 'a huge attached dump is stored capped, not whole');
+
   // The coach should now surface more moves than before parsing.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);

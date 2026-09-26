@@ -56,6 +56,13 @@
       + '<input id="ev-cmd" class="ev-cmd" placeholder="command (auto-detected from your paste — only set this if the paste is output-only)" value="' + (pin ? U.attr(pin.command) : '') + '">'
       + '<button id="ev-parse" class="btn-primary"' + (parsersReady ? '' : ' disabled') + '>' + (parsersReady ? 'Parse → facts' : 'Loading parsers…') + '</button>'
       + '</div>'
+      // Attach an output file for firehose tools too big to paste (bloodyAD, full ldapsearch,
+      // wide nxc/gobuster sweeps). Read locally, parsed the same way, stored capped. Nothing uploaded.
+      + '<div class="ev-row ev-file-row">'
+      + '<label class="ev-filebtn" for="ev-file">⭱ Attach output file…</label>'
+      + '<input type="file" id="ev-file" class="ev-file" accept=".txt,.log,.out,.json,.ldif,.csv,.tsv,text/plain" hidden>'
+      + '<span class="ev-file-hint">Too big to paste? Redirect the command to a file (<code>… | tee out.txt</code>) and attach it — parsed on your machine, only a sample is kept. Set the command above if the file is output-only.</span>'
+      + '</div>'
       + '<div class="ev-hint ev-paste-hint">Tip: paste the full output even if it looks noisy — the parser ignores what it doesn\'t recognize, and the extra context makes your report\'s evidence blocks complete.</div>'
       + '<div id="ev-result" class="ev-result"></div>'
       + '</div>'
@@ -81,35 +88,43 @@
     return '';
   }
 
-  function runParse(mount) {
-    var text = (document.getElementById('ev-text') || {}).value || '';
-    var cmd = (document.getElementById('ev-cmd') || {}).value || '';
-    if (!text.trim()) { U.toast('Paste some output first'); return; }
+  // Shared ingest core for both the paste box and an attached output file. Conservative parsers
+  // mint only proven facts; the raw command+output is kept (capped) as verbatim report evidence.
+  function ingest(text, cmd, meta) {
+    meta = meta || {};
+    if (!text || !text.trim()) { U.toast('Nothing to parse — the ' + (meta.fileName ? 'file' : 'paste') + ' is empty'); return; }
     if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers not loaded yet'); return; }
-    if (!cmd.trim()) { cmd = deriveCommand(text); } // auto-detect from a whole-terminal paste
+    if (!cmd || !cmd.trim()) { cmd = deriveCommand(text); } // auto-detect from a whole-terminal capture
     var params = OBOL.store.active().params || {};
     var scope = 'host:' + (params.target || 'target');
     var res;
     try {
-      res = OBOL.parsers.parseActionOutput({ command: cmd, stdout: text, source: cmd || 'paste', scope: scope, domain: params.domain || '' });
+      res = OBOL.parsers.parseActionOutput({ command: cmd, stdout: text, source: meta.fileName || cmd || 'paste', scope: scope, domain: params.domain || '' });
     } catch (e) { U.toast('Parse error: ' + (e && e.message), 'err'); return; }
     var facts = (res && res.facts) || [];
     var added = OBOL.store.addFacts(facts, 'evidence');
-    // record activity — keep the FULL command+output (capped) as verbatim report evidence.
+    // Keep the command+output (capped) as verbatim report evidence — a 46k-line dump is never
+    // stored whole; we keep a sample and record how much was ingested.
     var CAP = 24000;
-    var stored = text.length > CAP ? (text.slice(0, CAP) + '\n… [' + (text.length - CAP) + ' more chars truncated]') : text;
+    var lines = text.split(/\r?\n/).length;
+    var stored = text.length > CAP
+      ? (text.slice(0, CAP) + '\n… [truncated — ' + (text.length - CAP) + ' more chars, ' + lines + ' lines total]')
+      : text;
     OBOL.store.update(function (eng) {
       eng.activities = eng.activities || [];
-      eng.activities.unshift({ at: Date.now(), command: cmd, source: 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
-        target: params.target || '', scope: scope,
+      eng.activities.unshift({ at: Date.now(), command: cmd, source: meta.source || 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
+        target: params.target || '', scope: scope, file: meta.fileName || '',
         produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
     }, 'activity');
+    var origin = meta.fileName ? (esc(meta.fileName) + ' · ' + lines.toLocaleString() + ' lines') : null;
     var resEl = document.getElementById('ev-result');
     if (resEl) {
       if (!facts.length) {
-        resEl.innerHTML = '<div class="ev-none">No facts recognized in that output (nothing invented). Try the exact command hint, or add a fact manually.</div>';
+        resEl.innerHTML = '<div class="ev-none">' + (origin ? ('Read ' + origin + ' — no ') : 'No ')
+          + 'facts recognized (nothing invented). Set the command above if the output is on its own, or add a fact manually.</div>';
       } else {
-        resEl.innerHTML = '<div class="ev-added">Minted ' + added + ' new fact' + (added === 1 ? '' : 's') + ' (' + facts.length + ' recognized):</div>'
+        resEl.innerHTML = '<div class="ev-added">Minted ' + added + ' new fact' + (added === 1 ? '' : 's') + ' (' + facts.length + ' recognized)'
+          + (origin ? (' from ' + origin) : '') + ':</div>'
           + '<ul class="ev-factlist">' + facts.map(function (f) {
             return '<li class="' + esc(f.state) + '"><code>' + esc(f.kind) + '</code> <span class="ev-fscope">' + esc(f.scope) + '</span></li>';
           }).join('') + '</ul>'
@@ -117,7 +132,24 @@
       }
     }
     OBOL.app.renderSidebar();
-    U.toast(added ? ('Minted ' + added + ' fact' + (added === 1 ? '' : 's')) : 'No new facts');
+    U.toast(added ? ('Minted ' + added + ' fact' + (added === 1 ? '' : 's') + (meta.fileName ? ' from file' : '')) : 'No new facts');
+  }
+  function runParse() {
+    ingest((document.getElementById('ev-text') || {}).value || '',
+      (document.getElementById('ev-cmd') || {}).value || '', { source: 'paste' });
+  }
+  // Read an attached output file as text and ingest it (no upload — FileReader is local).
+  var FILE_MAX = 25 * 1024 * 1024; // 25 MB guard: even huge AD dumps are well under this
+  function ingestFile(file) {
+    if (!file) return;
+    if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers still loading — try again in a second'); return; }
+    if (file.size > FILE_MAX) { U.toast('That file is over 25 MB — attach the relevant portion instead', 'err'); return; }
+    var r = new FileReader();
+    r.onload = function () {
+      ingest(String(r.result || ''), (document.getElementById('ev-cmd') || {}).value || '', { source: 'file', fileName: file.name });
+    };
+    r.onerror = function () { U.toast('Could not read that file', 'err'); };
+    r.readAsText(file);
   }
 
   function mounted(ctx) {
@@ -130,7 +162,14 @@
       }).catch(function () {});
     }
     var parseBtn = document.getElementById('ev-parse');
-    if (parseBtn) parseBtn.addEventListener('click', function () { runParse(mount); });
+    if (parseBtn) parseBtn.addEventListener('click', function () { runParse(); });
+    // attach output file → read locally + ingest through the same pipeline
+    var fileEl = document.getElementById('ev-file');
+    if (fileEl) fileEl.addEventListener('change', function () {
+      var f = fileEl.files && fileEl.files[0];
+      ingestFile(f);
+      fileEl.value = ''; // allow re-attaching the same file
+    });
     // screenshots: attach (readAsDataURL, stored inline for report embedding) + remove
     var ssFile = document.getElementById('ss-file');
     if (ssFile) ssFile.addEventListener('change', function () {

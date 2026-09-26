@@ -196,18 +196,25 @@
     return cmd.split(LIT_OPEN).join('{{').split(LIT_CLOSE).join('}}');
   }
 
-  // Fill a command variant of an action (0-based). Returns {tool, run, note, filled}.
+  // Fill a command variant of an action (0-based). Returns {tool, run, note, filled, webNote}.
+  // obol web is the hands-on edition: where an action carries a web-suited command (`web` on a
+  // variant, or `web_command` on the action) — one tuned for a human who must copy/paste or attach
+  // the output by hand, not a terminal reading it off disk — that form is preferred here. A
+  // `web_note` carries the matching hands-on guidance (e.g. "large output → tee to a file and
+  // attach it in Evidence"). Neither field exists in obol-local's mined data; both are additive.
   function fillCommand(action, facts, opts, index) {
     opts = opts || {};
     index = index || 0;
     var commands = (action.commands && action.commands.length) ? action.commands : [{ run: action.command, tool: action.tool }];
     if (index < 0 || index >= commands.length) index = 0;
     var c = commands[index] || {};
+    var run = c.web || c.run || action.web_command || action.command || '';
     return {
       tool: c.tool || action.tool || '',
       note: c.note || '',
-      run: c.run || action.command || '',
-      filled: fillTemplate(c.run || action.command || '', facts, opts),
+      webNote: c.web_note || action.web_note || '',
+      run: run,
+      filled: fillTemplate(run, facts, opts),
     };
   }
 

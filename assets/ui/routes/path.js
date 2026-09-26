@@ -32,13 +32,15 @@
         ? '<div class="cmd-needs">needs: ' + unfilled.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(', ') + '</div>'
         : '';
       var note = v.note ? '<div class="cmd-note">' + esc(v.note) + '</div>' : '';
+      // hands-on guidance for obol web: big output → tee to a file and attach it in Evidence.
+      var webNote = v.webNote ? '<div class="cmd-webnote">✋ ' + esc(v.webNote) + '</div>' : '';
       var label = action.sequence ? ('step ' + (i + 1)) : (i === 0 ? 'preferred' : 'alt ' + i);
       return '<div class="cmd">'
         + '<div class="cmd-head"><span class="cmd-tag">' + esc(v.tool || action.tool || 'cmd') + '</span>'
         + '<span class="cmd-variant">' + label + '</span>'
         + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '" title="Copy command">copy</button></div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
-        + note + warn + '</div>';
+        + note + webNote + warn + '</div>';
     }).join('');
   }
 
