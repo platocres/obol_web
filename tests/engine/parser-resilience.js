@@ -31,5 +31,14 @@ ok(res.facts.some(function (f) { return f.kind === 'ports.open' || f.kind === 'l
 ok(!!res.error, 'the failure is reported (error field) instead of thrown');
 ok(res.facts.length === base.facts.length, 'exactly the pre-throw facts are kept — nothing invented, nothing new lost here');
 
+// partial/stale asset load: a helper the dispatcher calls came back undefined (bundle inconsistent).
+// Unconditional helpers are guarded, so the paste still parses fully instead of dead-ending.
+var origDom = C._domain_from_text, origShadow = C._parse_shadow_file;
+C._domain_from_text = undefined; C._parse_shadow_file = undefined;
+var partial = OBOL.parsers.parseActionOutput({ command: cmd, stdout: stdout, source: cmd, scope: 'host:10.129.95.210', domain: '' });
+C._domain_from_text = origDom; C._parse_shadow_file = origShadow;
+ok(partial.facts.length === base.facts.length && !partial.error,
+  'a missing helper (partial load) is skipped, not thrown — the nmap paste still parses fully');
+
 console.log(fail ? ('\nPARSER RESILIENCE: ' + fail + ' FAILURES') : '\nPARSER RESILIENCE: all passed');
 process.exit(fail ? 1 : 0);
