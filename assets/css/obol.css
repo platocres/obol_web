@@ -620,6 +620,13 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .rep-out pre.lang-terminal { background: #080d09; border: 1px solid var(--line); border-left: 3px solid var(--green);
   border-radius: 8px; padding: 10px 12px; color: #cfe8cf; overflow-x: auto; font: 12px/1.5 var(--mono); }
 .rep-out pre.lang-terminal code { color: inherit; }
+/* Kali-style terminal emulation (kali@kali prompt) for the walkthrough transcript */
+.kali-term { background: #0b0f0b; border: 1px solid var(--line); border-left: 3px solid var(--green); border-radius: 8px;
+  padding: 10px 12px; margin: 8px 0; color: #c4cfc4; overflow-x: auto; font: 12px/1.55 var(--mono); white-space: pre; }
+.kali-term .kt-b { color: #4d9de0; }
+.kali-term .kt-u { color: #79c0ff; font-weight: 700; }
+.kali-term .kt-c { color: #ffffff; font-weight: 600; }
+.kali-term .kt-o { color: #b7c2b7; }
 .rep-notes { margin: 0 0 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surf1); padding: 4px 14px; }
 .rep-notes > summary { cursor: pointer; color: var(--text-2); font-weight: 600; padding: 10px 0; }
 .rep-note { margin: 10px 0 14px; }
@@ -641,7 +648,8 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
   .rep-out a { color: #000 !important; text-decoration: underline; }
   .rep-out table { border-collapse: collapse; width: 100%; }
   .rep-out table.data th, .rep-out table.data td, .rep-out table.kv th, .rep-out table.kv td { border: 1px solid #999; padding: 4px 8px; color: #000; }
-  .rep-out pre, .rep-out pre.lang-terminal { background: #f4f4f4 !important; color: #111 !important; border: 1px solid #ccc !important; white-space: pre-wrap; }
+  .rep-out pre, .rep-out pre.lang-terminal, .rep-out .kali-term { background: #f6f6f6 !important; color: #111 !important; border: 1px solid #ccc !important; white-space: pre-wrap; }
+  .rep-out .kali-term .kt-b { color: #1a5fb4 !important; } .rep-out .kali-term .kt-u { color: #0b4a9e !important; } .rep-out .kali-term .kt-c { color: #000 !important; } .rep-out .kali-term .kt-o { color: #222 !important; }
   .rep-out .callout { border: 1px solid #ccc; color: #000; }
   .rep-out img.shot { max-width: 100%; }
   .page-break { break-after: page; page-break-after: always; }

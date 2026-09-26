@@ -291,6 +291,9 @@
   function KVB(pairs) { return { t: 'kv', pairs: pairs || [] }; }
   function TBL(headers, rows, caption) { return { t: 'table', headers: headers || [], rows: rows || [], caption: caption || '' }; }
   function CODE(text, lang) { return { t: 'code', text: text || '', lang: lang || '' }; }
+  // A Kali-style terminal block: an emulation of what the operator's terminal looked like
+  // (kali@kali prompt glyphs) for the command + its output, so the report reads like the steps.
+  function TERM(o) { o = o || {}; return { t: 'terminal', command: o.command || '', output: o.output || '', user: o.user || 'kali@kali', dir: o.dir || '~' }; }
   function CALL(text, kind) { return { t: 'callout', text: text || '', kind: kind || 'note' }; }
   function PROOF(o) {
     return { t: 'proof', label: o.label || '', flag: o.flag || '', path: o.path || '', command: o.command || '',
@@ -336,6 +339,13 @@
           out.push(''); break;
         case 'code':
           out.push('```' + b.lang); out.push(String(b.text).replace(/\n+$/, '')); out.push('```'); out.push(''); break;
+        case 'terminal': {
+          out.push('```console');
+          out.push('┌──(' + b.user + ')-[' + b.dir + ']');
+          out.push('└─$ ' + b.command);
+          if (b.output) out.push(String(b.output).replace(/\n+$/, ''));
+          out.push('```'); out.push(''); break;
+        }
         case 'callout': {
           var prefix = { warn: '⚠️ ', gap: '🔴 ', ok: '✅ ', note: '> ' }[b.kind] || '> ';
           out.push(b.kind !== 'note' ? ('> ' + prefix + b.text) : ('> ' + b.text));
@@ -406,6 +416,13 @@
           break;
         }
         case 'code': out.push('<pre' + (b.lang ? ' class="lang-' + esc(b.lang) + '"' : '') + '><code>' + esc(b.text) + '</code></pre>'); break;
+        case 'terminal': {
+          var pTop = '<span class="kt-b">┌──(</span><span class="kt-u">' + esc(b.user) + '</span><span class="kt-b">)-[' + esc(b.dir) + ']</span>';
+          var pCmd = '<span class="kt-b">└─$</span> <span class="kt-c">' + esc(b.command) + '</span>';
+          var oHtml = b.output ? ('\n<span class="kt-o">' + esc(String(b.output).replace(/\n+$/, '')) + '</span>') : '';
+          out.push('<pre class="kali-term">' + pTop + '\n' + pCmd + oHtml + '</pre>');
+          break;
+        }
         case 'callout': out.push('<div class="callout ' + esc(b.kind) + '">' + mdInline(b.text) + '</div>'); break;
         case 'proof': {
           var rws = [];
@@ -860,10 +877,10 @@
       P('The exact commands run against this host and their output, as pasted into Evidence (secrets redacted).')];
     var any = false;
     rows.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (r) {
-      var body = (r.command ? '$ ' + r.command + '\n' : '') + (r.stdout || '');
-      if (!body.trim()) return;
+      var cmd = r.command || '', output = r.stdout || '';
+      if (!cmd && !output.trim()) return;
       any = true;
-      blocks.push(CODE(body, 'terminal'));
+      blocks.push(TERM({ command: cmd, output: output }));   // Kali-style terminal emulation
     });
     return any ? blocks : [];
   }
@@ -1650,7 +1667,55 @@
     (rows || []).forEach(function (row) { out += '<w:tr>' + row.map(function (c) { return dCell(String(c)); }).join('') + '</w:tr>'; });
     return out + '</w:tbl>' + dPara('');
   }
-  function blockToDocx(b) {
+  // decode up to `n` bytes of base64 (browser atob / node Buffer) for image dimension sniffing.
+  function b64Bytes(b64, n) {
+    var slice = b64.slice(0, Math.ceil(n / 3) * 4);
+    try {
+      if (typeof atob === 'function') { var bin = atob(slice); var o = []; for (var i = 0; i < n && i < bin.length; i++) o.push(bin.charCodeAt(i) & 255); return o; }
+      if (typeof Buffer !== 'undefined') { var buf = Buffer.from(slice, 'base64'); var a = []; for (var j = 0; j < n && j < buf.length; j++) a.push(buf[j]); return a; }
+    } catch (e) {}
+    return [];
+  }
+  function pngSize(b64) {
+    var b = b64Bytes(b64, 24);
+    if (b.length < 24 || b[0] !== 0x89) return null;
+    var w = (b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19];
+    var h = (b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23];
+    return (w > 0 && h > 0 && w < 20000 && h < 20000) ? { w: w, h: h } : null;
+  }
+  function emu(px) { return Math.round(px * 9525); }   // 96dpi → EMU
+  var DOCX_MAX_W = 5486400;   // 6 inches
+
+  // Embed a proof screenshot as a real OOXML picture; falls back to a caption line if not decodable.
+  function docxImage(b, images) {
+    var m = /^data:(image\/(png|jpe?g));base64,([\s\S]+)$/i.exec(b.data_uri || '');
+    if (!m) return dPara(dRun('[screenshot: ' + (b.caption || 'evidence') + ']', { i: true, color: '888888' }));
+    var ext = m[2].toLowerCase() === 'jpg' ? 'jpeg' : m[2].toLowerCase();
+    var b64 = m[3].replace(/\s+/g, '');
+    var idx = images.length + 1;
+    var sz = (ext === 'png') ? pngSize(b64) : null;
+    var cx = DOCX_MAX_W, cy = Math.round(DOCX_MAX_W * 0.58);
+    if (sz) { cx = Math.min(emu(sz.w), DOCX_MAX_W); cy = Math.round(cx * sz.h / sz.w); }
+    var rId = 'rIdImg' + idx, file = 'image' + idx + '.' + ext;
+    images.push({ id: rId, file: file, ext: ext, base64: b64 });
+    var drawing = '<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">'
+      + '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:docPr id="' + idx + '" name="Screenshot ' + idx + '"/>'
+      + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic><pic:nvPicPr><pic:cNvPr id="' + idx + '" name="Screenshot ' + idx + '"/><pic:cNvPicPr/></pic:nvPicPr>'
+      + '<pic:blipFill><a:blip r:embed="' + rId + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+      + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+    return drawing + (b.caption ? dPara(dRun(dStrip(b.caption), { i: true, color: '666666', sz: 18 })) : '');
+  }
+  function docxTerminal(b) {
+    var lines = [
+      dPara(dRun('┌──(' + b.user + ')-[' + b.dir + ']', { mono: true, sz: 18, color: '2E7D32' })),
+      dPara(dRun('└─$ ', { mono: true, sz: 18, color: '2E7D32' }) + dRun(b.command, { mono: true, sz: 18, b: true })),
+    ];
+    String(b.output || '').split(/\r?\n/).forEach(function (ln) { lines.push(dPara(dRun(ln || ' ', { mono: true, sz: 18 }))); });
+    return lines.join('');
+  }
+  function blockToDocx(b, images) {
     switch (b.t) {
       case 'heading': return dPara(dRun(b.text, { b: true, sz: HEAD_SZ[b.level] || 24 }), { spaceBefore: 160 });
       case 'para': return dPara(dRun(dStrip(b.text)));
@@ -1658,6 +1723,7 @@
       case 'kv': return (b.pairs || []).map(function (kv) { return dPara(dRun(kv[0] + ': ', { b: true }) + dRun(dStrip(kv[1]))); }).join('');
       case 'table': return dTable(b.headers, b.rows);
       case 'code': return String(b.text).split(/\r?\n/).map(function (ln) { return dPara(dRun(ln || ' ', { mono: true, sz: 18 })); }).join('');
+      case 'terminal': return docxTerminal(b);
       case 'callout': return dPara(dRun(dStrip(b.text), { i: true }));
       case 'proof': {
         var lines = [dPara(dRun(b.label, { b: true }))];
@@ -1667,30 +1733,45 @@
         if (b.block) lines.push(dPara(dRun(b.block, { mono: true, sz: 18 })));
         return lines.join('');
       }
-      case 'image': return dPara(dRun('[screenshot: ' + (b.caption || 'evidence') + ']', { i: true, color: '888888' }));
+      case 'image': return docxImage(b, images);
       case 'divider': return dPara('');
       default: return '';
     }
   }
-  function toDocxXml(blocks) {
-    var body = (blocks || []).map(blockToDocx).join('');
-    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + body
+  // Return the full .docx as a list of { path, data, base64 } — text parts + embedded image media.
+  // The route zips these with JSZip (zip.file(path, data, {base64:true}) for media).
+  function docxFiles(blocks) {
+    var images = [];
+    var body = (blocks || []).map(function (b) { return blockToDocx(b, images); }).join('');
+    var nsRoot = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+      + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+      + ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'
+      + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+      + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+    var documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<w:document ' + nsRoot + '><w:body>' + body
       + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>'
       + '</w:body></w:document>';
-  }
-  function docxParts(blocks) {
-    return {
-      '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
-      '_rels/.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
-      'word/document.xml': toDocxXml(blocks),
-    };
+    var exts = {}; images.forEach(function (im) { exts[im.ext] = 1; });
+    var ctImg = (exts.png ? '<Default Extension="png" ContentType="image/png"/>' : '') + (exts.jpeg ? '<Default Extension="jpeg" ContentType="image/jpeg"/>' : '');
+    var contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' + ctImg + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>';
+    var dotRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
+    var docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + images.map(function (im) { return '<Relationship Id="' + im.id + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + im.file + '"/>'; }).join('')
+      + '</Relationships>';
+    var files = [
+      { path: '[Content_Types].xml', data: contentTypes },
+      { path: '_rels/.rels', data: dotRels },
+      { path: 'word/document.xml', data: documentXml },
+      { path: 'word/_rels/document.xml.rels', data: docRels },
+    ];
+    images.forEach(function (im) { files.push({ path: 'word/media/' + im.file, data: im.base64, base64: true }); });
+    return files;
   }
 
   OBOL.report = {
     buildContext: buildContext,
-    toDocxXml: toDocxXml,
-    docxParts: docxParts,
+    docxFiles: docxFiles,
     PROFILES: PROFILES,
     DEFAULT_PROFILE: DEFAULT_PROFILE,
     resolve: resolve,

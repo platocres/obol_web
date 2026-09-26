@@ -137,13 +137,13 @@
     var docxBtn = document.getElementById('rep-docx');
     if (docxBtn) docxBtn.addEventListener('click', function () {
       var JSZip = root.JSZip;
-      if (!JSZip || !OBOL.report.docxParts) { U.toast('Still loading — try again in a second', 'err'); return; }
+      if (!JSZip || !OBOL.report.docxFiles) { U.toast('Still loading — try again in a second', 'err'); return; }
       var p = currentProfile(), c = ctxOf((OBOL.store.active().ui || {}).reportSecrets);
       var stem = (OBOL.report.filenameStem && OBOL.report.filenameStem(p, c)) || ('obol-report-' + p);
       try {
-        var parts = OBOL.report.docxParts(OBOL.report.document(p, c));
+        var files = OBOL.report.docxFiles(OBOL.report.document(p, c));
         var zip = new JSZip();
-        Object.keys(parts).forEach(function (k) { zip.file(k, parts[k]); });
+        files.forEach(function (f) { zip.file(f.path, f.data, f.base64 ? { base64: true } : undefined); });
         zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
           .then(function (blob) { download(stem + '.docx', blob); })
           .catch(function () { U.toast('Could not build .docx', 'err'); });

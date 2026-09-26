@@ -188,26 +188,33 @@ function serve() {
 
   // Report renders the verbatim command+output transcript (from the nmap paste) + the notes editor.
   await page.goto(`http://localhost:${PORT}/index.html#/report`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('.rep-out pre.lang-terminal', { timeout: 6000 }).catch(() => {});
-  ok(await page.locator('.rep-out pre.lang-terminal').count() >= 1, 'report renders the pasted terminal transcript');
+  await page.waitForSelector('.rep-out pre.kali-term', { timeout: 6000 }).catch(() => {});
+  ok(await page.locator('.rep-out pre.kali-term').count() >= 1, 'report renders the Kali-style terminal transcript');
+  ok(await page.locator('.rep-out pre.kali-term .kt-u').count() >= 1, 'transcript shows the kali@kali prompt');
   ok(await page.locator('.rep-notes .rep-note-fld').count() >= 1, 'report shows the per-host notes editor');
   const transcriptHasCmd = await page.evaluate(() => {
-    var pre = document.querySelector('.rep-out pre.lang-terminal');
-    return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1;
+    var pre = document.querySelector('.rep-out pre.kali-term');
+    return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1 && pre.textContent.indexOf('kali@kali') !== -1;
   });
-  ok(transcriptHasCmd, 'transcript contains the command and its output');
-  // Export controls present + .docx builds (JSZip loaded with the report bundle).
+  ok(transcriptHasCmd, 'transcript contains the prompt, command and output');
+  // Export controls present + .docx builds with an embedded screenshot (JSZip loaded with the report bundle).
   ok(await page.locator('#rep-print').count() === 1 && await page.locator('#rep-docx').count() === 1, 'report has Print/PDF + .docx buttons');
-  const docxOk = await page.evaluate(async () => {
-    if (!window.JSZip || !window.OBOL.report.docxParts) return 0;
+  const docx = await page.evaluate(async () => {
+    if (!window.JSZip || !window.OBOL.report.docxFiles) return { size: 0, media: 0 };
+    // include a synthetic image block to exercise embedding
     var e = window.OBOL.store.active();
     var c = window.OBOL.report.buildContext({ facts: window.OBOL.store.factSet(), targets: (e.targets || []).map(function (t) { return Object.assign({}, t, { host: t.host || t.ip }); }), activities: e.activities || [], params: e.params || {} });
-    var parts = window.OBOL.report.docxParts(window.OBOL.report.document('oscp', c));
-    var zip = new window.JSZip(); Object.keys(parts).forEach(function (k) { zip.file(k, parts[k]); });
+    var blocks = window.OBOL.report.document('oscp', c);
+    var shot = (e.screenshots && e.screenshots[0]) ? e.screenshots[0].data_uri : null;
+    if (shot) blocks = blocks.concat([{ t: 'image', caption: 'proof', data_uri: shot }]);
+    var files = window.OBOL.report.docxFiles(blocks);
+    var media = files.filter(function (f) { return f.path.indexOf('word/media/') === 0; }).length;
+    var zip = new window.JSZip(); files.forEach(function (f) { zip.file(f.path, f.data, f.base64 ? { base64: true } : undefined); });
     var blob = await zip.generateAsync({ type: 'blob' });
-    return blob ? blob.size : 0;
+    return { size: blob ? blob.size : 0, media: media, hasDrawing: files.some(function (f) { return f.path === 'word/document.xml' && f.data.indexOf('<w:drawing>') !== -1; }) };
   });
-  ok(docxOk > 400, 'report builds a non-empty .docx (' + docxOk + ' bytes)');
+  ok(docx.size > 400, 'report builds a non-empty .docx (' + docx.size + ' bytes)');
+  ok(docx.media >= 1 && docx.hasDrawing, 'the .docx embeds the proof screenshot as an image');
 
   // Performance budget: boot-to-interactive + route render must stay fast (guards against the
   // historical "many uncompressed layers / tabs never load" regression). Generous for CI runners.
