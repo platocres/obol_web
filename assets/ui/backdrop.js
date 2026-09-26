@@ -16,7 +16,7 @@
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 
   // obol_web skin (data-skin) → animation name. Unlisted / daylight → none (static base).
-  var SKIN_ANIM = { obol: "particles", ghostwire: "matrix", amber: "crt", neon: "synthwave", daylight: null };
+  var SKIN_ANIM = { obol: "particles", htb: "particles", indigo: "particles", ghostwire: "matrix", amber: "crt", neon: "synthwave", daylight: null };
   function currentSkin() { try { return document.documentElement.getAttribute("data-skin") || "obol"; } catch (e) { return "obol"; } }
   function wantedAnim() { var a = SKIN_ANIM[currentSkin()]; return a === undefined ? "particles" : a; }
 

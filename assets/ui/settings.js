@@ -13,7 +13,8 @@
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
   var SKINS = [
-    { id: "obol", label: "Obol" }, { id: "ghostwire", label: "Ghostwire" }, { id: "amber", label: "Amber" },
+    { id: "obol", label: "Obol" }, { id: "htb", label: "HTB" }, { id: "indigo", label: "Indigo" },
+    { id: "ghostwire", label: "Ghostwire" }, { id: "amber", label: "Amber" },
     { id: "neon", label: "Neon" }, { id: "daylight", label: "Daylight" }
   ];
   var MOTION = ["full", "reduced", "off"];
