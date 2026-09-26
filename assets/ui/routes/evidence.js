@@ -18,6 +18,17 @@
     return OBOL.packs.actions().find(function (a) { return a.id === id; }) || null;
   }
 
+  // Point the attach hint at the engagement's scans/ directory when a workspace is set.
+  function fileHintPath() {
+    try {
+      var eng = OBOL.store.active();
+      if (OBOL.workspace && OBOL.workspace.isConfigured(eng)) {
+        return ' from <code>' + esc(OBOL.workspace.tokens(eng).scandir) + '/</code>';
+      }
+    } catch (e) {}
+    return ' (redirect it there with <code>… | tee out.txt</code>)';
+  }
+
   function shotsSection() {
     var eng = OBOL.store.active();
     var shots = (eng && eng.screenshots) || [];
@@ -40,7 +51,7 @@
     var pinBlock = '';
     if (pin) {
       var facts = OBOL.store.factSet();
-      var v = OBOL.command.fillCommand(pin, facts, { params: (OBOL.store.active().params || {}) }, 0);
+      var v = OBOL.command.fillCommand(pin, facts, { params: (OBOL.store.active().params || {}), workspace: OBOL.workspace.tokens(OBOL.store.active()) }, 0);
       pinBlock = '<div class="ev-pin"><div class="ev-pin-h">Paste result for</div>'
         + '<div class="ev-pin-title">' + esc(pin.title) + '</div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
@@ -61,7 +72,7 @@
       + '<div class="ev-row ev-file-row">'
       + '<label class="ev-filebtn" for="ev-file">⭱ Attach output file…</label>'
       + '<input type="file" id="ev-file" class="ev-file" accept=".txt,.log,.out,.json,.ldif,.csv,.tsv,text/plain" hidden>'
-      + '<span class="ev-file-hint">Too big to paste? Redirect the command to a file (<code>… | tee out.txt</code>) and attach it — parsed on your machine, only a sample is kept. Set the command above if the file is output-only.</span>'
+      + '<span class="ev-file-hint">Too big to paste? Attach the tool\'s output file' + fileHintPath() + ' — parsed on your machine, only a sample is kept. Set the command above if the file is output-only.</span>'
       + '</div>'
       + '<div class="ev-hint ev-paste-hint">Tip: paste the full output even if it looks noisy — the parser ignores what it doesn\'t recognize, and the extra context makes your report\'s evidence blocks complete.</div>'
       + '<div id="ev-result" class="ev-result"></div>'

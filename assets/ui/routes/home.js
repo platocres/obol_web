@@ -36,6 +36,13 @@
     }).join('');
   }
 
+  // Placeholder for the working-directory field: the remembered base + a box/exam hint.
+  function workdirHint() {
+    var base = (OBOL.store.pref && OBOL.store.pref().workspaceBase) || OBOL.workspace.DEFAULT_BASE;
+    var sel = ((OBOL.store.active() || {}).profile || {}).platform || 'custom';
+    return OBOL.workspace.join(base, OBOL.profile.isExamPlatform(sel) ? 'exam' : 'box');
+  }
+
   function machineOptions(selected) {
     return '<option value="">— machine type (optional) —</option>' + OBOL.profile.listMachineTypes().map(function (m) {
       return '<option value="' + esc(m.id) + '"' + (m.id === selected ? ' selected' : '') + '>' + esc(m.name) + '</option>';
@@ -142,6 +149,9 @@
       + '</div>'
       + '<label class="eng-field"><span>Scope / targets — paste IPs &amp; CIDRs (junk is filtered)</span>'
       + '<textarea id="eng-scope" class="ev-textarea" style="min-height:90px" placeholder="10.10.10.10  10.10.10.20&#10;10.10.10.0/24"></textarea></label>'
+      + '<label class="eng-field"><span>Working directory <span class="eng-field-opt">(on your Kali box — optional)</span></span>'
+      + '<input id="eng-workdir" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
+      + '<div class="eng-field-hint">obol fills output paths from this (<code>scans/</code>, <code>loot/</code>, <code>proof/</code>…) and gives you a one-line setup command. Leave blank for a sensible default.</div>'
       + '<button id="eng-launch" class="btn-primary">Create &amp; launch run →</button>'
       + '</div>'
       + '<div class="eng-library"><h2 class="coach-sec-h">Engagement library</h2>' + libraryList() + '</div>'
@@ -200,6 +210,16 @@
       var active = OBOL.store.active();
       var reuse = active && !isConfigured(active, Object.keys(OBOL.store.factSet().kinds()).length);
 
+      // Working directory: use what the operator typed, else a box/exam-centric default from their
+      // remembered base. Remember the base (its parent) so the next run prefills from it.
+      var hostsPre = scope.filter(function (s) { return !isCidr(s); });
+      var isExam = OBOL.profile.isExamPlatform(platform);
+      var base = (OBOL.store.pref && OBOL.store.pref().workspaceBase) || OBOL.workspace.DEFAULT_BASE;
+      var typed = ((document.getElementById('eng-workdir') || {}).value || '').trim();
+      var slug = OBOL.workspace.slugify(isExam ? name : (hostsPre[0] || name));
+      var root = typed || OBOL.workspace.join(base, slug);
+      try { OBOL.store.setPref('workspaceBase', root.replace(/\/+[^/]*\/*$/, '') || base); } catch (e) {}
+
       var seed = function () {
         // seed targets from bare IPs; keep CIDRs as authorized scope only.
         var hosts = scope.filter(function (s) { return !isCidr(s); });
@@ -210,6 +230,7 @@
             e.profile = Object.assign(e.profile || {}, { platform: platform, machine_type: mt, osid: osid.trim(), candidate: cand.trim(), scope: scope });
             e.params = e.params || {}; e.params.platform = platform;
           }
+          e.workspace = { root: root };
           e.targets = [];
           hosts.forEach(function (ip, i) {
             e.targets.push({ id: 't' + i + '-' + Date.now().toString(36), ip: ip, hostname: '', os: '' });

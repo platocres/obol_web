@@ -32,7 +32,7 @@
       items.forEach(function (a) {
         // Fill exactly like the coach (facts + params + profile) so commands become copy-ready
         // as facts are collected; unfilled {{tokens}} are flagged with what would complete them.
-        var variants = OBOL.command.fillAll(a, facts, { params: params, profile: (eng && eng.profile) });
+        var variants = OBOL.command.fillAll(a, facts, { params: params, profile: (eng && eng.profile), workspace: OBOL.workspace.tokens(eng) });
         var v = variants[0] || { filled: '' };
         var unfilled = v.filled ? OBOL.command.unfilledTokens(v.filled) : [];
         var on = !!ticks[a.id];

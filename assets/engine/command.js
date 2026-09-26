@@ -168,6 +168,13 @@
       if (!ctx.flag_names_windows) ctx.flag_names_windows = OBOL.profile.windowsNameList(fc.names);
     }
 
+    // workspace output-directory tokens ({{scandir}} etc.) — from opts.workspace when the caller
+    // supplies it (OBOL.workspace.tokens(eng)), else relative fallbacks so commands still form.
+    var wsd = opts.workspace || { root: '.', scandir: 'scans', lootdir: 'loot', exploitdir: 'exploit', wwwdir: 'www', proofdir: 'proof' };
+    ['root', 'scandir', 'lootdir', 'exploitdir', 'wwwdir', 'proofdir'].forEach(function (k) {
+      if (ctx[k] === undefined && wsd[k] !== undefined) ctx[k] = wsd[k];
+    });
+
     // extra wins
     Object.keys(extra).forEach(function (k) {
       var v = extra[k];

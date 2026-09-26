@@ -25,7 +25,7 @@
   }
 
   function commandsBlock(action, facts, params) {
-    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile });
+    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
     return filled.map(function (v, i) {
       var unfilled = OBOL.command.unfilledTokens(v.filled);
       var warn = unfilled.length
@@ -145,6 +145,20 @@
       + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">facts</span></div>'
       + '</div></div>';
 
+    // one-time workspace scaffold: create the output tree once, then every command below writes
+    // into it and tells you which file to attach. Dismissible; auto-hides once you're rolling.
+    if (OBOL.workspace.isConfigured(eng) && !((eng.ui || {}).wsScaffoldDone) && factCount < 3) {
+      var scaffold = OBOL.workspace.scaffold(eng);
+      var scandir = OBOL.workspace.tokens(eng).scandir;
+      html += '<div class="ws-banner">'
+        + '<div class="ws-banner-h">📁 Set up your working directory — run this once on your Kali box:</div>'
+        + '<pre class="cmd-run"><code>' + esc(scaffold) + '</code></pre>'
+        + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(scaffold) + '">copy</button>'
+        + '<button class="btn-ghost ws-done">Got it</button></div>'
+        + '<div class="ws-banner-note">Commands below write into <code>' + esc(scandir) + '</code> — run one, then attach its output file in Evidence.</div>'
+        + '</div>';
+    }
+
     // ready (on-flow) moves
     if (onFlow.length) {
       html += '<div class="coach-section"><h2 class="coach-sec-h">Ready now</h2>';
@@ -191,6 +205,11 @@
       var id = t.getAttribute('data-action');
       OBOL.store.update(function (eng) { eng.checklist = eng.checklist || {}; eng.checklist[id] = 'done'; }, 'done');
       U.toast('Marked done — recomputing');
+      OBOL.router.render();
+    });
+    // dismiss the workspace scaffold banner
+    U.on(mount, 'click', '.ws-done', function () {
+      OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.wsScaffoldDone = true; }, 'ui');
       OBOL.router.render();
     });
     // paste-back: jump to evidence route pinned to this action

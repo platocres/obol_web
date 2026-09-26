@@ -477,6 +477,16 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .eng-step-n { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-2);
   font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
 .eng-jump { border: none; }
+.eng-field-opt { color: var(--muted); font-weight: 400; }
+.eng-field-hint { color: var(--muted); font-size: 12px; margin: -6px 0 4px; }
+.eng-field-hint code, .ws-banner-note code, .ws-banner-h code { background: var(--bg2); padding: 1px 5px; border-radius: 4px; }
+
+/* one-time workspace scaffold banner on the coach */
+.ws-banner { border: 1px solid var(--line-hot); border-left: 3px solid var(--accent); border-radius: var(--radius); background: var(--surf1); padding: 12px 14px; margin: 0 0 18px; }
+.ws-banner-h { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; }
+.ws-banner .cmd-run { margin: 0 0 8px; }
+.ws-banner-actions { display: flex; gap: 8px; align-items: center; }
+.ws-banner-note { color: var(--text-2); font-size: 12px; margin-top: 8px; }
 
 .eng-active { background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surf2); border: 1px solid var(--accent); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; }
 .eng-active-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }

@@ -36,17 +36,17 @@
    "commands": [
     {
      "tool": "nmap",
-     "run": "nmap -Pn -p- --min-rate 5000 --open -oN nmap-allports.txt {{target}}",
+     "run": "nmap -Pn -p- --min-rate 5000 --open -oN {{scandir}}/nmap-allports.txt {{target}}",
      "note": "PREFERRED: rapid discovery across the full TCP range. Run it first on lab targets so every subsequent suggestion rests on ports that are genuinely open."
     },
     {
      "tool": "nmap",
-     "run": "nmap -Pn --top-ports 1000 --open -oN nmap-top1000.txt {{target}}",
+     "run": "nmap -Pn --top-ports 1000 --open -oN {{scandir}}/nmap-top1000.txt {{target}}",
      "note": "Less noisy and usually adequate for an initial pass, though it will overlook anything listening beyond the well-known ports."
     },
     {
      "tool": "nmap",
-     "run": "nmap -Pn -F --open -oN nmap-fast.txt {{target}}",
+     "run": "nmap -Pn -F --open -oN {{scandir}}/nmap-fast.txt {{target}}",
      "note": "Extremely quick triage. Handy when you need to get moving at once, but it does not substitute for the full-range sweep."
     }
    ]
@@ -82,17 +82,17 @@
    "commands": [
     {
      "tool": "nmap",
-     "run": "nmap -Pn -sC -sV -p {{nmap_ports}} -oN nmap-version.txt -oX - {{target}}",
+     "run": "nmap -Pn -sC -sV -p {{nmap_ports}} -oN {{scandir}}/nmap-version.txt -oX - {{target}}",
      "note": "PREFERRED: run the default script set and version detection against only the ports already confirmed open. This is the scan meant to branch out into service-specific follow-ups. It writes XML to stdout (-oX -) so obol parses nmap's own structured format rather than scraping text, while the readable copy is kept in nmap-version.txt (-oN)."
     },
     {
      "tool": "nmap",
-     "run": "nmap -Pn -sV --version-all -p {{nmap_ports}} -oN nmap-version-all.txt {{target}}",
+     "run": "nmap -Pn -sV --version-all -p {{nmap_ports}} -oN {{scandir}}/nmap-version-all.txt {{target}}",
      "note": "More intensive version fingerprinting for when the standard -sV result is unclear or inaccurate."
     },
     {
      "tool": "nmap",
-     "run": "nmap -Pn -A -p {{nmap_ports}} -oN nmap-aggressive.txt {{target}}",
+     "run": "nmap -Pn -A -p {{nmap_ports}} -oN {{scandir}}/nmap-aggressive.txt {{target}}",
      "note": "An aggressive pass. Valuable in labs but noisier, bundling OS detection, scripts, version detection, and traceroute together."
     }
    ]
@@ -127,7 +127,7 @@
    "commands": [
     {
      "tool": "nmap",
-     "run": "nmap -Pn -sV --script vuln -p {{nmap_ports}} -oN nmap-vuln.txt {{target}}",
+     "run": "nmap -Pn -sV --script vuln -p {{nmap_ports}} -oN {{scandir}}/nmap-vuln.txt {{target}}",
      "note": "Runs the NSE `vuln` category against only the confirmed-open ports and writes the readable copy to nmap-vuln.txt. Detection only (checks for known vulnerabilities; does not exploit), so it is enumeration and exam-safe. obol parses the normal-text output into vulnerability candidates (script id + CVEs + severity) to verify by hand."
     }
    ]
@@ -162,12 +162,12 @@
    "commands": [
     {
      "tool": "nmap",
-     "run": "sudo nmap -Pn -sU --top-ports 20 --open -oN nmap-udp-top20.txt {{target}}",
+     "run": "sudo nmap -Pn -sU --top-ports 20 --open -oN {{scandir}}/nmap-udp-top20.txt {{target}}",
      "note": "A workable UDP starting point. It requires elevated rights and can be slow, but it picks up the UDP services that tend to be important."
     },
     {
      "tool": "nmap",
-     "run": "sudo nmap -Pn -sU -p 53,67,68,69,88,123,137,138,161,162,500,514,520,1900,4500 --open -oN nmap-udp-common.txt {{target}}",
+     "run": "sudo nmap -Pn -sU -p 53,67,68,69,88,123,137,138,161,162,500,514,520,1900,4500 --open -oN {{scandir}}/nmap-udp-common.txt {{target}}",
      "note": "A hand-picked UDP port list covering DNS, DHCP, TFTP, Kerberos, NTP, NetBIOS, SNMP, VPN, syslog, routing, UPnP, and IPsec."
     }
    ]
@@ -290,8 +290,8 @@
     {
      "tool": "windapsearch",
      "run": "windapsearch.py -d {{domain}} --dc-ip {{target}} --custom 'objectClass=*'",
-     "web": "windapsearch.py -d {{domain}} --dc-ip {{target}} --custom 'objectClass=*' | tee ad-objects.txt",
-     "web_note": "Dumps every object — often far too many lines to paste. Pipe it to a file (shown) and attach ad-objects.txt in Evidence. For the full graph, SharpHound → the Domain tab is the heavier tool.",
+     "web": "windapsearch.py -d {{domain}} --dc-ip {{target}} --custom 'objectClass=*' | tee {{scandir}}/ad-objects.txt",
+     "web_note": "Dumps every object — often far too many lines to paste. It writes to scans/ad-objects.txt (shown); attach that file in Evidence. For the full graph, SharpHound → the Domain tab is the heavier tool.",
      "note": "Dump every single object — OUs, groups, computers, service accounts. Service-account names (svc-*) are AS-REP roasting candidates, and Exchange security groups showing up in the results indicate Exchange is deployed (see writedacl-dcsync)."
     },
     {
@@ -885,8 +885,8 @@
     {
      "tool": "bloodyad",
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
-     "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee bloodyad-writable.txt",
-     "web_note": "In a large domain --detail can run to tens of thousands of lines — too many to paste. Pipe it to a file (shown) and attach bloodyad-writable.txt in Evidence; obol only needs the writable-object lines.",
+     "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
+     "web_note": "In a large domain --detail can run to tens of thousands of lines — too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence — obol only needs the writable-object lines.",
      "note": "LANE 1 (remote, no foothold): the single highest-signal question — what objects can THIS account write to? Every writable group/user/computer is a candidate edge (join a group, reset a password, add a shadow cred, grant DCSync). Start here."
     },
     {
@@ -1739,8 +1739,8 @@
     {
      "tool": "bloodyad",
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
-     "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee bloodyad-writable.txt",
-     "web_note": "In a large domain --detail can run to tens of thousands of lines — too many to paste. Pipe it to a file (shown) and attach bloodyad-writable.txt in Evidence; obol only needs the writable-object lines.",
+     "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
+     "web_note": "In a large domain --detail can run to tens of thousands of lines — too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence — obol only needs the writable-object lines.",
      "note": "Begin here: what can your account genuinely write to? The detailed output is your menu of options."
     },
     {

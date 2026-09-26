@@ -162,7 +162,7 @@
   function render(ctx) {
     var eng = OBOL.store.active();
     var facts = OBOL.store.factSet();
-    var opts = { params: (eng && eng.params) || {}, profile: (eng && eng.profile) || {} };
+    var opts = { params: (eng && eng.params) || {}, profile: (eng && eng.profile) || {}, workspace: OBOL.workspace.tokens(eng) };
 
     var all = OBOL.playbooks.list();
     var applicable = OBOL.playbooks.applicable(facts);
@@ -211,7 +211,7 @@
       if (!pb) { U.toast('Playbook not found', 'err'); return; }
       var eng = OBOL.store.active();
       var facts = OBOL.store.factSet();
-      var opts = { params: (eng && eng.params) || {}, profile: (eng && eng.profile) || {} };
+      var opts = { params: (eng && eng.params) || {}, profile: (eng && eng.profile) || {}, workspace: OBOL.workspace.tokens(eng) };
       download(pb.name + '.sh', exportScript(pb, facts, opts), 'text/x-shellscript');
       U.toast('Exported ' + pb.name + '.sh');
     });

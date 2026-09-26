@@ -63,14 +63,23 @@ function serve() {
   // A fresh visitor gets the getting-started guide, not a confusing "Untitled Run" phase bar.
   ok(await page.locator('.eng-welcome').count() === 1 && await page.locator('.home-spine').count() === 0,
     'fresh engagement shows the getting-started guide, no phase bar');
+  ok(await page.locator('#eng-workdir').count() === 1, 'setup form has a working-directory field');
   await page.locator('.pf-card:has(input[value="oscp"])').click();
   await page.fill('#eng-name', 'OSCP Exam');
   await page.fill('#eng-scope', '10.10.10.10 junk 10.10.10.0/24');
+  await page.fill('#eng-workdir', '/home/kali/lab/box');
   await page.click('#eng-launch');
   await page.waitForTimeout(500);
   ok(page.url().indexOf('#/path') >= 0, 'launch lands on the coach');
   const launchedPlatform = await page.evaluate(() => window.OBOL.store.active().profile.platform);
   ok(launchedPlatform === 'oscp', 'launched engagement carries the OSCP profile (' + launchedPlatform + ')');
+  // workspace: saved on the engagement, drives command output paths, and shows the scaffold banner
+  const wsRoot = await page.evaluate(() => (window.OBOL.store.active().workspace || {}).root);
+  ok(wsRoot === '/home/kali/lab/box', 'launch saved the working directory (' + wsRoot + ')');
+  ok(await page.locator('.ws-banner').count() === 1 && (await page.locator('.ws-banner .cmd-run code').first().textContent() || '').indexOf('mkdir -p /home/kali/lab/box/{') === 0,
+    'coach shows the one-time workspace scaffold command');
+  const cmdHasScandir = await page.evaluate(() => Array.prototype.some.call(document.querySelectorAll('.move .cmd-run code'), function (c) { return c.textContent.indexOf('/home/kali/lab/box/scans/') !== -1; }));
+  ok(cmdHasScandir, 'coach commands write into the workspace scans/ directory');
   // launching configured the default in place (no stray second run) and the home panel now shows it
   const engCount = await page.evaluate(() => window.OBOL.store.listEngagements().length);
   ok(engCount === 1, 'launch configured the default run in place, no stray empty engagement (' + engCount + ')');
