@@ -216,6 +216,20 @@ function serve() {
   ok(await page.locator('.eng-apath .apath-flow .apath-block').count() >= 1, 'engagement screen shows the engagement-wide Attack Path (' + (await page.locator('.eng-apath .apath-block').count()) + ' blocks)');
   ok(await page.locator('.eng-apath .apath-host').count() === 1, 'the engagement Attack Path carries a per-host IP·hostname header (shown even for one target)');
 
+  // Inline per-command ingestion on the coach: open a move's paste box, ingest its output in place.
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.coach .move .btn-pasteback', { timeout: 6000 });
+  const actsBefore = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
+  ok(await page.locator('.coach .move .move-ingest[hidden]').count() >= 1, 'each move carries an inline ingestion box (collapsed by default)');
+  await page.locator('.coach .move .btn-pasteback').first().click();
+  await page.waitForSelector('.coach .move .move-ingest:not([hidden]) .mi-text', { timeout: 3000 });
+  ok(true, 'the Paste Output button expands the inline ingestion box in place (no route jump)');
+  await page.locator('.coach .move .move-ingest:not([hidden]) .mi-text').fill('PORT      STATE SERVICE\n5985/tcp  open  wsman\n');
+  await page.locator('.coach .move .move-ingest:not([hidden]) .mi-go').click();
+  await page.waitForTimeout(500);
+  const actsAfter = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
+  ok(actsAfter === actsBefore + 1, 'inline ingestion records the command+output as an activity (' + actsBefore + '→' + actsAfter + ')');
+
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.pb-card', { timeout: 6000 }).catch(() => {});

@@ -24,8 +24,7 @@
     return '<div class="move-produces"><span class="mini-label">proves</span>' + chips + '</div>';
   }
 
-  function commandsBlock(action, facts, params) {
-    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+  function commandsBlock(action, filled) {
     return filled.map(function (v, i) {
       var unfilled = OBOL.command.unfilledTokens(v.filled);
       var warn = unfilled.length
@@ -53,18 +52,28 @@
     var toolLink = (action.tool || (action.tools && action.tools[0]))
       ? '<a class="btn-ghost" href="#/tools/' + esc(action.tool || action.tools[0]) + '">Build in Tools ↗</a>'
       : '';
+    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+    var prefCmd = (filled[0] && filled[0].filled) || action.command || '';
+    // Inline ingestion: paste this move's output right here — the coach mints facts and advances,
+    // so a first-timer never has to guess where the output goes. Big dumps still go to Evidence.
+    var ingestBox = '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr(prefCmd) + '" hidden>'
+      + '<textarea class="mi-text" placeholder="Paste this command\'s full output here — prompt, command and all. The coach reads it, mints only what it proves, and advances." spellcheck="false"></textarea>'
+      + '<div class="mi-row"><button class="btn-primary mi-go" data-action="' + esc(action.id) + '">Ingest → Facts</button>'
+      + '<a class="mi-evlink" href="#/evidence/' + esc(action.id) + '">Big output or a screenshot? Full Evidence ↗</a>'
+      + '<span class="mi-result" role="status"></span></div></div>';
     return '<article class="move' + (opts.primary ? ' move-primary' : '') + '" data-action="' + esc(action.id) + '">'
       + '<header class="move-head">' + phaseChip(OBOL.phases.phaseOfAction(action))
       + '<h3 class="move-title">' + esc(action.title) + '</h3></header>'
       + '<p class="move-why">' + esc(why) + '</p>'
-      + commandsBlock(action, facts, params)
+      + commandsBlock(action, filled)
       + producesChips(action) + dnp
       + '<footer class="move-actions">'
-      + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '">Paste Result ↴</button>'
+      + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output ↴</button>'
       + toolLink
       + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
       + (action.refs && action.refs.length ? '<span class="move-refs">' + action.refs.length + ' ref' + (action.refs.length > 1 ? 's' : '') + '</span>' : '')
-      + '</footer></article>';
+      + '</footer>'
+      + ingestBox + '</article>';
   }
 
   // A cluster of blocked moves that share one unlocking prerequisite: "prove X → these open".
@@ -212,11 +221,40 @@
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.wsScaffoldDone = true; }, 'ui');
       OBOL.router.render();
     });
-    // paste-back: jump to evidence route pinned to this action
+    // paste-back: toggle this move's inline ingestion box (no route jump — ingest right here)
     U.on(mount, 'click', '.btn-pasteback', function (e, t) {
-      var id = t.getAttribute('data-action');
-      try { sessionStorage.setItem('obol-pasteback-action', id); } catch (err) {}
-      OBOL.router.go('evidence/' + id);
+      var art = t.closest('.move'); if (!art) return;
+      var box = art.querySelector('.move-ingest'); if (!box) return;
+      var open = box.hasAttribute('hidden');
+      if (open) { box.removeAttribute('hidden'); } else { box.setAttribute('hidden', ''); }
+      t.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) { var ta = box.querySelector('.mi-text'); if (ta) ta.focus(); }
+    });
+    // inline ingest: parse this move's output, mint facts, advance the coach
+    U.on(mount, 'click', '.mi-go', function (e, t) {
+      var box = t.closest('.move-ingest'); if (!box) return;
+      var ta = box.querySelector('.mi-text'), out = box.querySelector('.mi-result');
+      var text = (ta && ta.value) || '';
+      if (!text.trim()) { if (out) out.textContent = 'Paste the output first.'; return; }
+      if (out) out.textContent = 'Reading…';
+      t.disabled = true;
+      OBOL.ingest.ensureParsers().then(function (okp) {
+        if (!okp) { if (out) out.textContent = 'Parsers still loading — try again.'; t.disabled = false; return; }
+        var r = OBOL.ingest.run({ text: text, command: box.getAttribute('data-cmd') || '',
+          actionId: box.getAttribute('data-action') || '', source: 'paste' });
+        if (!r.ok) { if (out) out.textContent = r.reason === 'error' ? ('Parse error.') : 'Nothing to parse.'; t.disabled = false; return; }
+        if (r.added) {
+          U.toast('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + ' — recomputing');
+          OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
+        } else {
+          t.disabled = false;
+          if (out) {
+            out.innerHTML = r.facts.length
+              ? ('Recognized ' + r.facts.length + ', nothing new (already known).')
+              : 'No facts recognized. <a href="#/evidence/' + esc(box.getAttribute('data-action') || '') + '">Set the command in Evidence ↗</a>';
+          }
+        }
+      });
     });
   }
 
