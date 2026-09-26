@@ -235,6 +235,20 @@ function serve() {
   await page.waitForTimeout(120);
   ok(await page.locator('.coach .move .move-ingest:not([hidden])').count() >= 1, 'Paste Output still opens the box after a re-render (no listener stacking)');
 
+  // nmap XML output (-oX -) must parse in-browser (DOMParser path). nmap always emits
+  // `<!DOCTYPE nmaprun>`, which the XXE guard used to reject — so real nmap XML never parsed.
+  const xmlFacts = await page.evaluate(async () => {
+    await window.OBOL.ingest.ensureParsers();
+    const xml = '<?xml version="1.0"?>\n<!DOCTYPE nmaprun>\n<nmaprun scanner="nmap" args="nmap -sV -oX -" version="7.95">\n'
+      + '<host><status state="up"/><address addr="10.129.95.210" addrtype="ipv4"/><ports>'
+      + '<port protocol="tcp" portid="389"><state state="open"/><service name="ldap" product="Microsoft Windows Active Directory LDAP" extrainfo="Domain: htb.local"/></port>'
+      + '<port protocol="tcp" portid="445"><state state="open"/><service name="microsoft-ds"/></port>'
+      + '</ports></host><runstats><finished summary="Nmap done"/></runstats></nmaprun>';
+    const r = window.OBOL.parsers.parseActionOutput({ actionId: 'nmap-version-scripts', command: 'nmap -sC -sV -oX - 10.129.95.210', stdout: xml, source: 'nmap', scope: 'host:10.129.95.210', domain: '' });
+    return (r.facts || []).map((f) => f.kind);
+  });
+  ok(xmlFacts.indexOf('port:389') !== -1 && xmlFacts.indexOf('service.ldap') !== -1 && xmlFacts.indexOf('ldap.reachable') !== -1, 'nmap XML (-oX -) parses ports/services despite its <!DOCTYPE nmaprun> (' + xmlFacts.length + ' facts)');
+
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.pb-card', { timeout: 6000 }).catch(() => {});

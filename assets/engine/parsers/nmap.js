@@ -142,7 +142,11 @@
 
   function _parse_nmap_xml(text, ws, source, facts, actionId) {
     text = text || '';
-    if (text.indexOf('<!DOCTYPE') >= 0 || text.indexOf('<!ENTITY') >= 0) return false;
+    // XXE hardening: reject entity DEFINITIONS and a DOCTYPE internal subset (where entities live).
+    // nmap ALWAYS emits a bare `<!DOCTYPE nmaprun>` (no subset), which is inert — allow it, or real
+    // nmap XML never parses. The <nmaprun>…</nmaprun> block extracted below excludes the doctype
+    // anyway, and DOMParser (application/xml) is non-validating and never fetches external DTDs.
+    if (/<!ENTITY/i.test(text) || /<!DOCTYPE[^>]*\[/i.test(text)) return false;
     var block = _NMAPRUN_BLOCK_RE.exec(text);
     if (!block) return false;
     var xml = block[0];
