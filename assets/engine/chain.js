@@ -23,6 +23,61 @@
   function phaseOf(kind) { try { return OBOL.phases.phaseOfKind(kind); } catch (e) { return 'recon'; } }
   function phaseIdx(kind) { try { return OBOL.phases.phaseIndex(phaseOf(kind)); } catch (e) { return 0; } }
 
+  // ── concrete "so what" per milestone (ported from obol-local storyline._milestone_detail) ──
+  // Turns a generic kind ("A Usable Credential") into its real subject ("svc@corp.local"), so a
+  // block says WHAT specifically, not just its category. Never returns a bare secret value unless
+  // no subject exists (callers redact that fallback when secrets are hidden).
+  function principal(v) {
+    var user = v.user || v.username || v.account || '';
+    var dom = v.domain || '';
+    return (user && dom) ? (user + '@' + dom) : (user || v.host || '');
+  }
+  function detailOf(kind, v) {
+    v = v || {};
+    if (/^(credential\.|hash\.)/.test(kind)) return principal(v) || String(v.hash || '').slice(0, 24);
+    if (kind === 'ad.acl_lead') {
+      var tg = (v.targets || []).slice(0, 3).join(', ');
+      return String(v.note || (tg ? ('writable: ' + tg) : '')).split(' · ')[0];
+    }
+    if (kind === 'ad.control_paths') return ((v.rights || []).join('/') + ' on ' + (v.target || 'the domain')).trim();
+    if (kind === 'adcs.vulnerable') return v.template || '';
+    if (/^objective\./.test(kind)) return v.flag || v.value || 'captured';
+    if (kind === 'access.admin' || kind === 'access.system' || kind === 'foothold.windows' || kind === 'foothold.linux') {
+      return v.user || v.via || v.method || '';
+    }
+    var keys = ['template', 'service', 'method', 'name', 'target'];
+    for (var i = 0; i < keys.length; i++) { if (v[keys[i]]) return String(v[keys[i]]); }
+    return '';
+  }
+  // Is a detail string a bare secret (a hash/password value, no subject)? Then redaction hides it.
+  function isSecretDetail(kind, v, detail) {
+    if (!/^(credential\.|hash\.)/.test(kind)) return false;
+    return !principal(v || {}) && !!detail; // the [:24] hash fallback fired
+  }
+
+  // ── light technique framing (ported from storyline._technique; substring over produced kinds) ──
+  var TECH_RULES = [
+    [['objective.root_flag'], 'Root Flag Captured'],
+    [['objective.local_flag', 'objective.flag'], 'Local Flag Captured'],
+    [['ntds', 'dcsync', 'krbtgt'], 'DCSync / NTDS Dump'],
+    [['kerberoast', 'tgs'], 'Kerberoasting'],
+    [['asrep', 'asreproast'], 'AS-REP Roasting'],
+    [['ad.control_paths', 'ad.acl_lead', 'rbcd', 'shadow'], 'AD Attack Path'],
+    [['access.system', 'access.admin'], 'Privilege Escalation'],
+    [['foothold', 'access.shell', 'winrm.authenticated', 'webshell'], 'Initial Access / Foothold'],
+    [['credential', 'hash.ntlm'], 'Credential Access'],
+    [['loot'], 'Looting'],
+    [['service.', 'port:', 'scan.', 'http.', 'smb.'], 'Service Enumeration'],
+  ];
+  function techniqueOf(kind) {
+    var j = String(kind).toLowerCase();
+    for (var i = 0; i < TECH_RULES.length; i++) {
+      var needles = TECH_RULES[i][0];
+      for (var n = 0; n < needles.length; n++) { if (j.indexOf(needles[n]) !== -1) return TECH_RULES[i][1]; }
+    }
+    return '';
+  }
+
   // Build the ordered compromise chain for one host.
   //   opts = { facts: FactSet, activities: [row], actions: [Action], host: '10.0.0.5' }
   // Returns [{ kind, label, phase, phaseIdx, command, tool, at, enabledBy:[kind], isFlag, flag }].
@@ -71,9 +126,12 @@
     function emit(kind, command, tool, at) {
       if (seen[kind] || !proven[kind] || isNoise(kind)) return;
       seen[kind] = true;
-      steps.push({ kind: kind, label: label(kind), phase: phaseOf(kind), phaseIdx: phaseIdx(kind),
+      var v = proven[kind].value || {};
+      var detail = detailOf(kind, v);
+      steps.push({ kind: kind, label: label(kind), detail: detail, technique: techniqueOf(kind),
+        secret: isSecretDetail(kind, v, detail), phase: phaseOf(kind), phaseIdx: phaseIdx(kind),
         command: command || '', tool: tool || '', at: at || 0, enabledBy: [], isFlag: !!FLAG_KINDS[kind],
-        flag: (FLAG_KINDS[kind] && proven[kind].value) ? { slot: FLAG_KINDS[kind], value: proven[kind].value.flag || '', path: proven[kind].value.path || '' } : null });
+        flag: (FLAG_KINDS[kind] && v) ? { slot: FLAG_KINDS[kind], value: v.flag || '', path: v.path || '' } : null });
     }
     // recon anchors first (seeded/observed, usually no command)
     ANCHORS.forEach(function (k) { if (proven[k]) emit(k, '', '', (proven[k].created_at) || 0); });
@@ -93,8 +151,10 @@
     // the prereqs of its producer that are already earlier in the chain.
     // Order by run time; on a tie, a captured flag is terminal (sorts last), then by phase — so the
     // winning-path trim below never cuts escalation steps that share a timestamp with the flag.
+    function anchorRank(k) { var i = ANCHORS.indexOf(k); return i === -1 ? 99 : i; }
     steps.sort(function (a, b) {
-      return ((a.at || 0) - (b.at || 0)) || ((a.isFlag ? 1 : 0) - (b.isFlag ? 1 : 0)) || (a.phaseIdx - b.phaseIdx) || a.kind.localeCompare(b.kind);
+      return ((a.at || 0) - (b.at || 0)) || (anchorRank(a.kind) - anchorRank(b.kind))
+        || ((a.isFlag ? 1 : 0) - (b.isFlag ? 1 : 0)) || (a.phaseIdx - b.phaseIdx) || a.kind.localeCompare(b.kind);
     });
     var priorSet = {};
     steps.forEach(function (s) { s.enabledBy = enablers(s.kind, priorSet); priorSet[s.kind] = true; });

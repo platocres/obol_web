@@ -677,7 +677,10 @@
       try { steps = OBOL.chain.build({ facts: factset, activities: activities, actions: opts.actions, host: host }); }
       catch (e) { return []; }
       return steps.map(function (s) {
-        return { label: s.label, phase: s.phase, isFlag: !!s.isFlag,
+        // the concrete subject (svc@corp) is a principal, not a secret — kept even under redaction;
+        // only a bare hash/password fallback (s.secret) is masked when redaction is opted in.
+        return { label: s.label, phase: s.phase, isFlag: !!s.isFlag, technique: s.technique || '',
+          detail: (!includeSecrets && s.secret) ? '«redacted»' : (s.detail || ''),
           enabledBy: (s.enabledBy || []).map(function (k) { return friendly(k); }),
           command: redactCommand(s.command || '', { includeSecrets: includeSecrets, secrets: secrets }) };
       });
@@ -1447,15 +1450,18 @@
     var blocks = [H('Attack Narrative', 2), P('The path to each objective, derived from the fact ledger (any methodology). Everything else was enumeration/noise.')];
     owned.forEach(function (t) {
       blocks.push(H((t.label || t.host) + ' (' + t.host + ')', 3));
-      // Compromise Chain — the ordered, causal path actually walked (what led to what → the flags).
+      // Attack Path — the ordered, causal path actually walked (what led to what → the flags),
+      // each step carrying its concrete subject, technique framing, causal parent, and command.
       var ch = t.chain || [];
       if (ch.length) {
-        blocks.push(H('Compromise Chain', 4));
+        blocks.push(H('Attack Path', 4));
         blocks.push(UL(ch.map(function (s) {
           var lead = (s.isFlag ? '🚩 ' : '') + '**' + s.label + '**';
-          var from = (s.enabledBy && s.enabledBy.length) ? ' _(from ' + s.enabledBy.join(', ') + ')_' : '';
-          var via = s.command ? ' — `' + s.command + '`' : '';
-          return lead + from + via;
+          var det = s.detail ? ' — ' + s.detail : '';
+          var tech = s.technique ? '  ·  _' + s.technique + '_' : '';
+          var from = (s.enabledBy && s.enabledBy.length) ? '  ·  _(from ' + s.enabledBy.join(', ') + ')_' : '';
+          var via = s.command ? '  ·  `' + s.command + '`' : '';
+          return lead + det + tech + from + via;
         }), true));
       }
       var cmds = commandsFor(t);

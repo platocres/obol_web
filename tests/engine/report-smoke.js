@@ -172,13 +172,16 @@ const winMd = R.toMarkdown(R.document('oscp', winCtx));
 ok(/└─\$ nxc smb /.test(winMd), 'Windows: nxc recon stays on the Kali prompt');
 ok(/C:\\> whoami\b/.test(winMd), 'Windows: whoami inside the shell renders the C:\\> prompt');
 
-// ── 8) compromise chain woven into the attack narrative ─────────────────────
+// ── 8) attack path woven into the attack narrative ──────────────────────────
 const chainCtx = ctxWith(true);
 const chainMd = R.toMarkdown(R.document('oscp', chainCtx));
-ok(/#### Compromise Chain/.test(chainMd), 'report renders a "Compromise Chain" heading in the attack narrative');
+ok(/#### Attack Path/.test(chainMd), 'report renders an "Attack Path" heading in the attack narrative');
 const hostA = (chainCtx.targets || []).find((t) => t.host === HOST_A);
 ok(hostA && hostA.chain && hostA.chain.length >= 2 && hostA.chain[hostA.chain.length - 1].isFlag,
   'the host chain is built and ends at the captured flag');
+// steps carry the enriched fields (concrete subject + technique framing), not just a generic label
+ok(hostA && hostA.chain.some((s) => typeof s.technique === 'string' && typeof s.detail === 'string'),
+  'chain steps carry synthesized detail + technique fields');
 
 console.log(fail ? ('\nREPORT SMOKE: ' + fail + ' FAILURES') : '\nREPORT SMOKE: all passed');
 process.exit(fail ? 1 : 0);

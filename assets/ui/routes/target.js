@@ -57,17 +57,29 @@
       if (facts.has(k)) flags.push(k.split('.').pop().replace('_', ' '));
     });
 
-    // compromise chain: the ordered, causal path actually walked (what led to what → the flags),
-    // reconstructed from the run ledger + prereq graph. Replaces the old flat "what's proven" list.
+    // Attack Path bar: the ordered, causal path actually walked (what led to what → the flags),
+    // reconstructed from the run ledger + prereq graph, rendered as a dense horizontal block ribbon.
+    // Each block synthesizes obol-local's two surfaces: the milestone + concrete subject (attack_path)
+    // AND the command that produced it + real causal link (storyline). Off-path parents get "← from".
     var steps = OBOL.chain.build({ facts: facts, activities: eng.activities || [], actions: pack, host: ip });
     var story = steps.map(function (s, i) {
-      var from = s.enabledBy.length ? '<div class="chain-from">← from ' + s.enabledBy.map(function (k) { return esc(OBOL.pack.friendly(k)); }).join(', ') + '</div>' : '';
-      var via = s.command ? '<code class="chain-via">' + esc(s.command.length > 68 ? s.command.slice(0, 66) + '…' : s.command) + '</code>' : '';
-      return '<li class="chain-step ph-' + esc(s.phase) + (s.isFlag ? ' chain-flag' : '') + '">'
-        + '<span class="chain-dot"></span>'
-        + '<div class="chain-body"><div class="chain-head"><span class="ph-chip ph-' + esc(s.phase) + '">' + esc(s.phase) + '</span>'
-        + '<span class="chain-label">' + (s.isFlag ? '🚩 ' : '') + esc(s.label) + '</span></div>'
-        + from + via + '</div></li>';
+      var prevKind = i > 0 ? steps[i - 1].kind : null;
+      var fromPrev = i === 0 || !s.enabledBy.length || s.enabledBy.indexOf(prevKind) !== -1;
+      var arrow = i === 0 ? ''
+        : '<span class="apath-arrow' + (fromPrev ? '' : ' jump') + '" aria-hidden="true">→</span>';
+      // "← from" only names parents that aren't the block immediately to the left (a real jump).
+      var jumped = s.enabledBy.filter(function (k) { return k !== prevKind; });
+      var from = (!fromPrev && jumped.length)
+        ? '<div class="apath-from">← from ' + jumped.map(function (k) { return esc(OBOL.pack.friendly(k)); }).join(', ') + '</div>' : '';
+      var tech = s.technique ? '<span class="apath-tech">' + esc(s.technique) + '</span>' : '';
+      var detail = s.detail ? '<div class="apath-detail">' + esc(s.detail.length > 96 ? s.detail.slice(0, 94) + '…' : s.detail) + '</div>' : '';
+      var cmd = s.command ? '<code class="apath-cmd" title="' + U.attr(s.command) + '">' + esc(s.command.length > 60 ? s.command.slice(0, 58) + '…' : s.command) + '</code>' : '';
+      // Title Case the milestone label (acronyms like AS-REP / WinRM / NTDS keep their caps).
+      var title = String(s.label).replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); });
+      return arrow + '<article class="apath-block ph-' + esc(s.phase) + (s.isFlag ? ' apath-flag' : '') + '">'
+        + '<div class="apath-cat"><span class="ph-chip ph-' + esc(s.phase) + '">' + esc(s.phase) + '</span>' + tech + '</div>'
+        + '<div class="apath-title">' + (s.isFlag ? '🚩 ' : '') + esc(title) + '</div>'
+        + detail + cmd + from + '</article>';
     }).join('');
 
     // top scoped moves (compact, copy-ready)
@@ -93,10 +105,10 @@
 
       + '<div class="target-grid">'
       + '<div class="target-col">'
-      + '<h2 class="coach-sec-h">Attack path</h2>'
+      + '<h2 class="coach-sec-h">Attack Path — What Led to What</h2>'
+      + (story ? '<div class="apath-flow">' + story + '</div>' : '<div class="coach-empty">Nothing proven yet — run the recon move.</div>')
+      + '<h2 class="coach-sec-h">Path Graph</h2>'
       + '<div class="graph-scroll">' + svg + '</div>'
-      + '<h2 class="coach-sec-h">Compromise Chain — What Led to What</h2>'
-      + (story ? '<ul class="chain-list">' + story + '</ul>' : '<div class="coach-empty">Nothing proven yet — run the recon move.</div>')
       + '</div>'
       + '<div class="target-col">'
       + '<h2 class="coach-sec-h">Next moves for this target</h2>'

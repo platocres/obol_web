@@ -47,8 +47,10 @@
   function render() {
     var eng = OBOL.store.active();
     var ui = eng.ui || {};
-    var profile = ui.reportProfile || OBOL.report.defaultFor(ctxOf(false)) || 'oscp';
-    var includeSecrets = !!ui.reportSecrets;
+    var profile = ui.reportProfile || OBOL.report.defaultFor(ctxOf(true)) || 'oscp';
+    // Full detail is shown by default; redaction is opt-in (for a report you intend to share).
+    var redact = !!ui.reportRedact;
+    var includeSecrets = !redact;
     var ctx = ctxOf(includeSecrets);
     var blocks = OBOL.report.document(profile, ctx);
     var bodyHtml = OBOL.report.toHtml(blocks);
@@ -63,7 +65,7 @@
       + '<div class="rep-controls">'
       + '<div class="rep-opts">'
       + '<label class="rep-opt">Profile <select id="rep-profile">' + profOpts + '</select></label>'
-      + '<label class="rep-opt"><input type="checkbox" id="rep-secrets"' + (includeSecrets ? ' checked' : '') + '> include secrets <span class="rep-opt-note">(redacted by default)</span></label>'
+      + '<label class="rep-opt"><input type="checkbox" id="rep-redact"' + (redact ? ' checked' : '') + '> Redact Secrets <span class="rep-opt-note">(off — full detail shown)</span></label>'
       + '</div>'
       + '<div class="rep-actions">'
       + '<button id="rep-print" class="btn-ghost" title="Paper view — choose “Save as PDF” in the print dialog">Print / PDF</button>'
@@ -112,21 +114,21 @@
       OBOL.store.update(function (e) { e.ui = e.ui || {}; e.ui.reportProfile = prof.value; }, 'ui');
       OBOL.router.render();
     });
-    var sec = document.getElementById('rep-secrets');
-    if (sec) sec.addEventListener('change', function () {
-      OBOL.store.update(function (e) { e.ui = e.ui || {}; e.ui.reportSecrets = sec.checked; }, 'ui');
+    var red = document.getElementById('rep-redact');
+    if (red) red.addEventListener('change', function () {
+      OBOL.store.update(function (e) { e.ui = e.ui || {}; e.ui.reportRedact = red.checked; }, 'ui');
       OBOL.router.render();
     });
     function currentProfile() { return (OBOL.store.active().ui || {}).reportProfile || 'oscp'; }
     var md = document.getElementById('rep-md');
     if (md) md.addEventListener('click', function () {
-      var p = currentProfile(), c = ctxOf((OBOL.store.active().ui || {}).reportSecrets);
+      var p = currentProfile(), c = ctxOf(!(OBOL.store.active().ui || {}).reportRedact);
       var stem = (OBOL.report.filenameStem && OBOL.report.filenameStem(p, c)) || ('obol-report-' + p);
       download(stem + '.md', OBOL.report.toMarkdown(OBOL.report.document(p, c)), 'text/markdown');
     });
     var htmlBtn = document.getElementById('rep-html');
     if (htmlBtn) htmlBtn.addEventListener('click', function () {
-      var p = currentProfile(), c = ctxOf((OBOL.store.active().ui || {}).reportSecrets);
+      var p = currentProfile(), c = ctxOf(!(OBOL.store.active().ui || {}).reportRedact);
       var stem = (OBOL.report.filenameStem && OBOL.report.filenameStem(p, c)) || ('obol-report-' + p);
       var doc = '<!doctype html><meta charset="utf-8"><title>' + esc(stem) + '</title>' + OBOL.report.toHtml(OBOL.report.document(p, c));
       download(stem + '.html', doc, 'text/html');
@@ -139,7 +141,7 @@
     if (docxBtn) docxBtn.addEventListener('click', function () {
       var JSZip = root.JSZip;
       if (!JSZip || !OBOL.report.docxFiles) { U.toast('Still loading — try again in a second', 'err'); return; }
-      var p = currentProfile(), c = ctxOf((OBOL.store.active().ui || {}).reportSecrets);
+      var p = currentProfile(), c = ctxOf(!(OBOL.store.active().ui || {}).reportRedact);
       var stem = (OBOL.report.filenameStem && OBOL.report.filenameStem(p, c)) || ('obol-report-' + p);
       try {
         var files = OBOL.report.docxFiles(OBOL.report.document(p, c));

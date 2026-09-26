@@ -169,9 +169,10 @@ function serve() {
   ok(await page.locator('.target-route svg.obol-graph').count() >= 1, 'target page renders the attack-path graph');
   ok(await page.locator('.acc-pill').count() === 1, 'target page shows an access level');
   ok(await page.locator('.tmove').count() >= 1, 'target page shows scoped next moves');
-  // compromise chain: ordered causal steps (this target has recon facts from the earlier nmap paste)
-  ok(await page.locator('.chain-list .chain-step').count() >= 1, 'target page shows the compromise chain (' + (await page.locator('.chain-list .chain-step').count()) + ' steps)');
-  ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Compromise Chain') !== -1; }), 'compromise chain heading is Title Case');
+  // attack path: dense horizontal block ribbon (this target has recon facts from the earlier nmap paste)
+  ok(await page.locator('.apath-flow .apath-block').count() >= 1, 'target page shows the attack-path ribbon (' + (await page.locator('.apath-flow .apath-block').count()) + ' blocks)');
+  ok(await page.locator('.apath-block .ph-chip').count() >= 1, 'attack-path blocks carry a phase category chip');
+  ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Attack Path — What Led to What') !== -1; }), 'attack-path heading is Title Case');
 
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
@@ -237,6 +238,8 @@ function serve() {
   ok(await page.locator('.rep-out pre.kali-term').count() >= 1, 'report renders the Kali-style terminal transcript');
   ok(await page.locator('.rep-out pre.kali-term .kt-u').count() >= 1, 'transcript shows the kali@kali prompt');
   ok(await page.locator('.rep-notes .rep-note-fld').count() >= 1, 'report shows the per-host notes editor');
+  // redaction is opt-in: the toggle reads "Redact Secrets" and is unchecked (full detail) by default
+  ok(await page.locator('#rep-redact').count() === 1 && !(await page.locator('#rep-redact').isChecked()), 'report redaction is opt-in (Redact Secrets toggle off by default)');
   const transcriptHasCmd = await page.evaluate(() => {
     var pre = document.querySelector('.rep-out pre.kali-term');
     return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1 && pre.textContent.indexOf('kali@kali') !== -1;

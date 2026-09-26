@@ -49,6 +49,12 @@ const cred = chain.find((s) => s.kind === 'credential.available');
 ok(cred && cred.enabledBy.indexOf('hash.asrep') !== -1, 'the credential step names the AS-REP hash that enabled it (← from)');
 // each ledger step carries the command that produced it
 ok(chain.find((s) => s.kind === 'foothold.windows').command.indexOf('evil-winrm') === 0, 'each step carries the command that produced it');
+// synthesized detail: the credential resolves to its concrete principal, not a generic label
+ok(cred && cred.detail === 'svc', 'the credential step names its concrete subject (svc), not just "A Usable Credential"');
+// technique framing is derived from the produced kind
+ok(chain.find((s) => s.kind === 'hash.asrep').technique === 'AS-REP Roasting', 'the AS-REP step is framed as AS-REP Roasting');
+ok(chain.find((s) => s.kind === 'foothold.windows').technique === 'Initial Access / Foothold', 'the foothold step is framed as Initial Access / Foothold');
+ok(chain[chain.length - 1].technique === 'Root Flag Captured', 'the flag step is framed as Root Flag Captured');
 
 // no ledger + no flag → falls back to phase/time-ordered proven milestones, still rooted at recon
 const bare = new F.FactSet([mk('target.configured', {}, 'engagement', 1), mk('credential.available', { user: 'x' }, 'manual', 2)]);
