@@ -8,7 +8,7 @@ and quietly assembles your report as you go.
 No install. No login. No backend. Nothing you type ever leaves your browser. Open the page and
 start.
 
-👉 **Live site: https://platocres.github.io/obol/**
+👉 **Live site: https://platocres.github.io/obol_web/**
 
 ---
 
