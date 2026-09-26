@@ -7,23 +7,26 @@
 
 /* ---- tokens ---- */
 :root {
-  --bg: #0A0E18;
-  --bg1: #0D1220; --bg2: #121829; --bg3: #182036; --bg4: #1F2A42;
+  /* Default "obol" skin: a terminal-dark, OLED-black operator console with an emerald-green
+     signature accent and monospace-forward type — the direction the ui-ux-pro-max generator
+     recommended for a security/hacker tool (and the HTB lens). Replaces the old default indigo. */
+  --bg: #020617;
+  --bg1: #0B1120; --bg2: #121A2E; --bg3: #1B2540; --bg4: #26314c;
   --surface-alpha: 1;
   /* alpha-aware surfaces: cards/rails paint with these so the ⚙ block-opacity slider can fade
      them and let the motion background show through. --surface-alpha is driven by settings.js. */
   --surf1: color-mix(in srgb, var(--bg1) calc(var(--surface-alpha, 1) * 100%), transparent);
   --surf2: color-mix(in srgb, var(--bg2) calc(var(--surface-alpha, 1) * 100%), transparent);
   --surf3: color-mix(in srgb, var(--bg3) calc(var(--surface-alpha, 1) * 100%), transparent);
-  --line: #232c44; --line-hot: #33406b;
-  --accent: #6366F1; --accent-2: #818CF8; --accent-soft: rgba(99,102,241,0.14);
-  --text: #E6EAF2; --text-2: #B0B8C9; --muted: #6B7591;
+  --line: #26304c; --line-hot: #3a4870;
+  --accent: #22C55E; --accent-2: #4ADE80; --accent-soft: rgba(34,197,94,0.14);
+  --text: #F1F5FB; --text-2: #94A3B8; --muted: #5f6f88;
   --green: #10B981; --red: #EF4444; --orange: #F97316; --yellow: #EAB308; --teal: #14B8A6; --purple: #A855F7;
   --critical: #E11D48; --high: #F97316; --medium: #EAB308; --low: #3B82F6; --info: #6B7591;
   --ph-recon: #38BDF8; --ph-enum: #818CF8; --ph-creds: #F59E0B; --ph-access: #34D399; --ph-escalate: #F472B6; --ph-loot: #A855F7;
   --radius: 11px;
-  --mono: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "JetBrains Mono", ui-monospace, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 /* Skins: re-declare tokens only. */
 :root[data-skin="ghostwire"] { --bg:#000502; --bg1:#031008; --bg2:#04160b; --bg3:#062012; --accent:#00ff66; --accent-2:#7dffb0; --accent-soft:rgba(0,255,102,0.14); --line:#0c3a22; --line-hot:#125a34; }
@@ -584,6 +587,16 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .rep-note-fld { width: 100%; box-sizing: border-box; background: var(--bg2); color: var(--text); border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 10px; font: 12px var(--sans); margin-bottom: 6px; min-height: 46px; resize: vertical; }
 .rep-note-fld:focus { outline: none; border-color: var(--accent); }
+
+/* ---- palette/type pass (ui-ux-pro-max → terminal-dark + emerald + mono) ---- */
+/* a11y checklist: a crisp, always-visible keyboard focus ring */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* minimal terminal glow on the identity marks (generator: text-shadow 0 0 10px) */
+.brand h1 { text-shadow: 0 0 12px rgba(34,197,94,0.22); }
+nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
+.coach-h1 { text-shadow: 0 0 14px rgba(34,197,94,0.12); }
+/* headings a touch tighter now that everything is monospace */
+.route-h1, .coach-h1, .tools-cat-h { letter-spacing: -0.01em; }
 
 /* ---- live context rail (wide screens): fills the dead right column on the coach/target pages ---- */
 .withrail { display: block; }
