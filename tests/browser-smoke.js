@@ -100,6 +100,14 @@ function serve() {
   await page.waitForTimeout(300);
   ok(await page.locator('.move').count() >= 2, 'coach recomputed: more moves unlocked after evidence (' + (await page.locator('.move').count()) + ')');
 
+  // Per-target attack-path page (scoped to the launched target's facts).
+  await page.goto(`http://localhost:${PORT}/index.html#/target/10.10.10.161`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(500);
+  ok(await page.locator('.target-chain .spine-node').count() === 6, 'target page shows the attack-chain bar');
+  ok(await page.locator('.target-route svg.obol-graph').count() >= 1, 'target page renders the attack-path graph');
+  ok(await page.locator('.acc-pill').count() === 1, 'target page shows an access level');
+  ok(await page.locator('.tmove').count() >= 1, 'target page shows scoped next moves');
+
   // Performance budget: boot-to-interactive + route render must stay fast (guards against the
   // historical "many uncompressed layers / tabs never load" regression). Generous for CI runners.
   const perfPage = await browser.newPage();

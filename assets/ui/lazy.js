@@ -23,6 +23,7 @@
     report: ['data/reportmeta.js', 'assets/engine/report.js', 'assets/ui/routes/report.js'],
     tools: ['assets/engine/toolbuilder.js', 'data/toolset.js', 'assets/ui/routes/tools.js'],
     checklist: ['assets/ui/routes/checklist.js'],
+    target: ['assets/engine/graph.js', 'assets/ui/routes/target.js'],
   };
 
   var _loaded = {};   // group -> Promise
@@ -51,9 +52,9 @@
 
   // Register placeholder routes that lazy-load their group then delegate to the real route.
   function registerLazyRoutes(R) {
-    ['tools', 'domain', 'report', 'checklist', 'graph'].forEach(function (name) {
+    ['tools', 'domain', 'report', 'checklist', 'graph', 'target'].forEach(function (name) {
       R.register(name, {
-        ensure: function () { return loadGroup(name === 'graph' ? 'graph' : name); },
+        ensure: function () { return loadGroup(name); },
         render: function (ctx) {
           var real = OBOL.routes[name];
           if (real && real.render && real !== R._lazyStub) {

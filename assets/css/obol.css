@@ -343,3 +343,25 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .lib-meta { margin-left: auto; color: var(--muted); font-size: 12px; }
 .lib-del { background: none; border: none; color: var(--muted); font-size: 17px; cursor: pointer; }
 .lib-del:hover { color: var(--red); }
+
+/* ---- per-target page ---- */
+.target-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.target-head .crumb { color: var(--muted); font-size: 13px; }
+.route-h1.inline { display: inline; font-size: 20px; margin: 0; }
+.thost { color: var(--muted); font-weight: 400; font-size: 15px; }
+.acc-pill { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; padding: 3px 10px; border-radius: 20px; color: #0a0e18; }
+.acc-pill.a-disc { background: var(--muted); } .acc-pill.a-enum { background: var(--ph-recon); }
+.acc-pill.a-cred { background: var(--ph-creds); } .acc-pill.a-foot { background: var(--ph-access); }
+.acc-pill.a-priv { background: var(--critical); color: #fff; }
+.flag-pill { background: var(--accent-soft); color: var(--accent-2); }
+.target-chain { margin: 8px 0 20px; }
+.target-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 22px; }
+@media (max-width: 900px) { .target-grid { grid-template-columns: 1fr; } }
+.story-list { list-style: none; margin: 0; padding: 0; }
+.story-row { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.story-facts { color: var(--text-2); font-size: 13px; }
+.tmove { background: var(--surf2); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin-bottom: 10px; }
+.tmove-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.tmove-title { flex: 1; font-weight: 600; font-size: 13px; }
+a.tcard-main { text-decoration: none; color: inherit; }
+a.tcard-main:hover .tcard-ip { color: var(--accent-2); }

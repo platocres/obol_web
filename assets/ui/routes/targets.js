@@ -15,9 +15,9 @@
     var rows = targets.length ? targets.map(function (t) {
       return '<article class="tcard" data-tid="' + esc(t.id) + '">'
         + '<div class="tcard-dot ' + (t.os ? ('os-' + esc(t.os)) : '') + '"></div>'
-        + '<div class="tcard-main"><div class="tcard-ip">' + esc(t.ip || t.hostname || '?') + '</div>'
+        + '<a class="tcard-main" href="#/target/' + esc(t.ip || t.id) + '"><div class="tcard-ip">' + esc(t.ip || t.hostname || '?') + '</div>'
         + (t.hostname ? '<div class="tcard-host">' + esc(t.hostname) + '</div>' : '')
-        + '</div>'
+        + '</a>'
         + '<div class="tcard-meta">' + (t.os ? '<span class="pill">' + esc(t.os) + '</span>' : '') + '</div>'
         + '<button class="tcard-del" data-tid="' + esc(t.id) + '" title="Remove">×</button>'
         + '</article>';

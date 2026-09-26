@@ -258,6 +258,18 @@
       var fs = new OBOL.facts.FactSet(arr.map(OBOL.facts.factFromJson));
       return fs;
     },
+    // A per-target FactSet: this host's facts + domain-/engagement-scoped facts (mirrors
+    // obol-local ws.facts_for_target so a target ranks by its own progress).
+    factSetForTarget(ip) {
+      var eng = this.active();
+      var arr = (eng && eng.facts) || [];
+      var hostScope = 'host:' + ip;
+      var sel = arr.filter(function (f) {
+        var s = f.scope || '';
+        return s === hostScope || s.indexOf('domain:') === 0 || s === '' || s.indexOf('scope:') === 0;
+      });
+      return new OBOL.facts.FactSet(sel.map(OBOL.facts.factFromJson));
+    },
     addFacts(facts, reason) {
       // facts: array of OBOL.facts (or serialized). Returns count actually added (deduped).
       var eng = this.active();
