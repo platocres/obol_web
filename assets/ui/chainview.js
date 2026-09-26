@@ -39,9 +39,9 @@
     return steps.length ? '<div class="apath-flow">' + ribbon(steps) + '</div>' : '';
   }
 
-  // The engagement-wide Attack Path: one host's ribbon per target that has walked something. A
-  // single such target renders identically to its own page (no host header); multiple stack under
-  // a compact host header each. Returns '' when nothing has been walked anywhere yet.
+  // The engagement-wide Attack Path: one host's ribbon per target that has walked something, each
+  // under a compact "IP hostname" header (shown even for a single target — a glanceable anchor).
+  // Returns '' when nothing has been walked anywhere yet.
   function engagement() {
     var eng = (OBOL.store && OBOL.store.active()) || {};
     var acts = eng.activities || [];
@@ -51,7 +51,6 @@
       return flow ? { ip: ip, hostname: t.hostname || '', flow: flow } : null;
     }).filter(Boolean);
     if (!flows.length) return '';
-    if (flows.length === 1) return flows[0].flow; // identical to the single target's own ribbon
     return flows.map(function (f) {
       return '<div class="apath-host"><div class="apath-host-h">' + esc(f.ip)
         + (f.hostname ? ' <span class="apath-host-name">' + esc(f.hostname) + '</span>' : '') + '</div>' + f.flow + '</div>';

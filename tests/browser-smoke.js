@@ -214,7 +214,7 @@ function serve() {
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.eng-apath .apath-flow', { timeout: 5000 }).catch(() => {});
   ok(await page.locator('.eng-apath .apath-flow .apath-block').count() >= 1, 'engagement screen shows the engagement-wide Attack Path (' + (await page.locator('.eng-apath .apath-block').count()) + ' blocks)');
-  ok(await page.locator('.eng-apath .apath-host').count() === 0, 'a single-target engagement renders the ribbon with no per-host header (identical to the target page)');
+  ok(await page.locator('.eng-apath .apath-host').count() === 1, 'the engagement Attack Path carries a per-host IP·hostname header (shown even for one target)');
 
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
