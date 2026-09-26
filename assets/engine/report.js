@@ -679,7 +679,7 @@
       return steps.map(function (s) {
         // the concrete subject (svc@corp) is a principal, not a secret — kept even under redaction;
         // only a bare hash/password fallback (s.secret) is masked when redaction is opted in.
-        return { label: s.label, phase: s.phase, isFlag: !!s.isFlag, technique: s.technique || '',
+        return { kind: s.kind, label: s.label, phase: s.phase, isFlag: !!s.isFlag, technique: s.technique || '',
           detail: (!includeSecrets && s.secret) ? '«redacted»' : (s.detail || ''),
           enabledBy: (s.enabledBy || []).map(function (k) { return friendly(k); }),
           command: redactCommand(s.command || '', { includeSecrets: includeSecrets, secrets: secrets }) };
@@ -965,17 +965,40 @@
     };
   }
 
+  // Split a host's run-ledger rows into the walked path (a command that produced an Attack Path
+  // milestone) vs enumeration that wasn't on the critical path — so the report's narrative and
+  // terminals mirror the Attack Path ribbon. The full command log always survives in the appendix.
+  function essentialRows(ctx, host) {
+    var t = (ctx.targets || []).filter(function (x) { return x.host === host; })[0];
+    var chain = (t && t.chain) || [];
+    var onKind = {}; chain.forEach(function (s) { onKind[s.kind] = 1; });
+    var rows = (ctx.timeline || []).filter(function (r) { return (r.target === host) || (r.scope === 'host:' + host); })
+      .slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+    if (!chain.length) return { essential: rows, noise: [], scoped: false };
+    var essential = [], noise = [];
+    rows.forEach(function (r) {
+      if ((r.produced || []).some(function (k) { return onKind[k]; })) essential.push(r);
+      else if ((r.command || '').trim()) noise.push(r);
+    });
+    // chain came only from seeded facts (no matching ledger rows) → don't hide the whole transcript
+    if (!essential.length) return { essential: rows, noise: [], scoped: false };
+    return { essential: essential, noise: noise, scoped: true };
+  }
+
   // per-host verbatim command+output transcript (the operator's pasted terminal), terminal-styled.
+  // Scoped to the walked path (the Attack Path ribbon); off-path enumeration is collapsed to a count.
   // Recon/exploitation commands render with the Kali prompt; post-exploitation commands run inside a
   // proven shell on the box render with a target prompt (user@host:~$ / #, or C:\> on Windows).
   function hostTranscript(ctx, host) {
-    var rows = (ctx.timeline || []).filter(function (r) { return (r.target === host) || (r.scope === 'host:' + host); });
+    var split = essentialRows(ctx, host);
+    var rows = split.essential;
     if (!rows.length) return [];
-    rows = rows.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
     var prof = targetShellProfile(ctx, host, rows);
+    var intro = split.scoped
+      ? 'The commands on the critical path to this host\'s objectives and their output, in the order run (secrets redacted). '
+      : 'The exact commands run against this host and their output, as pasted into Evidence (secrets redacted). ';
     var blocks = [H('Command Transcript', 4),
-      P('The exact commands run against this host and their output, as pasted into Evidence (secrets redacted). '
-        + 'Commands run from Kali carry the ' + '`kali@kali`' + ' prompt; commands run inside a shell on the target carry the box\'s own prompt.')];
+      P(intro + 'Commands run from Kali carry the ' + '`kali@kali`' + ' prompt; commands run inside a shell on the target carry the box\'s own prompt.')];
     var any = false;
     rows.forEach(function (r) {
       var cmd = r.command || '', output = r.stdout || '';
@@ -993,6 +1016,10 @@
         blocks.push(TERM({ command: cmd, output: output }));   // Kali-style attacker box
       }
     });
+    if (split.scoped && split.noise.length) {
+      blocks.push(P('_+ ' + split.noise.length + ' enumeration/no-op command' + (split.noise.length === 1 ? '' : 's')
+        + ' not on the critical path — see Appendix: Key Commands & Evidence for the full log._'));
+    }
     return any ? blocks : [];
   }
   // per-host operator narrative slot (summary + exploitation steps) from ctx.notes.
@@ -1463,6 +1490,12 @@
           var via = s.command ? '  ·  `' + s.command + '`' : '';
           return lead + det + tech + from + via;
         }), true));
+        // everything else the operator ran on this host was enumeration/noise (obol-local parity)
+        var split = essentialRows(ctx, t.host);
+        if (split.scoped && split.noise.length) {
+          blocks.push(P('_+ ' + split.noise.length + ' other move' + (split.noise.length === 1 ? '' : 's')
+            + ' not on the critical path (enumeration/no-op)._'));
+        }
       }
       var cmds = commandsFor(t);
       if (cmds.length) {

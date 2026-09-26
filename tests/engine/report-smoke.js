@@ -172,6 +172,18 @@ const winMd = R.toMarkdown(R.document('oscp', winCtx));
 ok(/└─\$ nxc smb /.test(winMd), 'Windows: nxc recon stays on the Kali prompt');
 ok(/C:\\> whoami\b/.test(winMd), 'Windows: whoami inside the shell renders the C:\\> prompt');
 
+// transcript is scoped to the walked path (Attack Path ribbon): off-path enumeration is collapsed
+const scopeActs = [
+  { tool: 'nmap', command: 'nmap -sC -sV ' + HOST_A, at: 1, target: HOST_A, scope: 'host:' + HOST_A, produced: ['host.up', 'port:445'], stdout: '22/tcp open' },
+  { tool: 'gobuster', command: 'gobuster dir -u http://' + HOST_A, at: 2, target: HOST_A, scope: 'host:' + HOST_A, produced: [], stdout: 'nothing useful' },
+  { tool: 'nxc', command: 'nxc smb ' + HOST_A + ' -u admin', at: 3, target: HOST_A, scope: 'host:' + HOST_A, produced: ['credential.available'], stdout: '[+] admin' },
+  { tool: 'ssh', command: 'ssh svc@' + HOST_A + ' cat local.txt', at: 4, target: HOST_A, scope: 'host:' + HOST_A, produced: ['objective.local_flag'], stdout: 'a1b2' },
+];
+const scopeMd = R.toMarkdown(R.document('oscp', R.buildContext({ facts: factset, targets, activities: scopeActs, credentials, actions: CHAIN_ACTIONS, params: { name: 'exam', platform: 'oscp' }, includeSecrets: true })));
+ok(scopeMd.indexOf('gobuster') === -1, 'transcript omits an off-critical-path command (gobuster produced nothing)');
+ok(scopeMd.indexOf('nxc smb') !== -1, 'transcript keeps an on-critical-path command (produced a credential)');
+ok(/not on the critical path/.test(scopeMd), 'transcript notes the collapsed off-path command count');
+
 // ── 8) attack path woven into the attack narrative ──────────────────────────
 const chainCtx = ctxWith(true);
 const chainMd = R.toMarkdown(R.document('oscp', chainCtx));
