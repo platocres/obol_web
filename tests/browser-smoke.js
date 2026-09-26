@@ -80,6 +80,15 @@ function serve() {
   ok(await page.locator('.withrail .context-rail').count() === 1, 'coach live context rail rendered');
   ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.rail && window.OBOL.rail.html)), 'rail module exposed for reuse');
 
+  // Guided fact picker (sidebar): a friendly labelled option adds the underlying fact kind.
+  ok(await page.locator('#fact-pick .fp-sel').count() === 1, 'sidebar guided fact picker rendered');
+  const beforePick = await page.evaluate(() => window.OBOL.store.factSet().has('smb.reachable'));
+  await page.selectOption('#fact-pick .fp-sel', 'smb.reachable');
+  await page.click('#fact-pick .fp-add');
+  await page.waitForTimeout(150);
+  const afterPick = await page.evaluate(() => window.OBOL.store.factSet().has('smb.reachable'));
+  ok(!beforePick && afterPick, 'picker added the smb.reachable fact');
+
   // Evidence route loads + lazy-loads parsers (if built)
   await page.goto(`http://localhost:${PORT}/index.html#/evidence`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(400);

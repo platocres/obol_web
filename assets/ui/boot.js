@@ -78,20 +78,14 @@
       OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params[key] = val; }, 'params');
     });
 
-    // quick add fact
-    var addBtn = document.getElementById('fact-add');
-    var addInput = document.getElementById('fact-input');
-    function addFact() {
-      var kind = (addInput.value || '').trim();
-      if (!kind) return;
+    // guided fact picker (sidebar) — friendly labels + an advanced raw-kind escape hatch
+    var fpEl = document.getElementById('fact-pick');
+    if (fpEl && OBOL.factpick) OBOL.factpick.mount(fpEl, function (kind) {
       var scope = 'host:' + ((OBOL.store.active().params || {}).target || 'target');
       OBOL.store.addFacts([OBOL.facts.makeFact({ kind: kind, scope: scope, source: 'manual' })], 'facts');
-      addInput.value = '';
       renderSidebar(); OBOL.router.render();
       U.toast('Fact added: ' + kind);
-    }
-    if (addBtn) addBtn.addEventListener('click', addFact);
-    if (addInput) addInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') addFact(); });
+    });
 
     // remove fact
     var factsEl = document.getElementById('facts-list');

@@ -97,8 +97,18 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 .fact-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; }
 .fact-del:hover { color: var(--red); }
 .facts-empty { color: var(--muted); font-size: 12px; font-style: italic; }
-.fact-add-row { display: flex; gap: 6px; margin-top: 8px; }
-.fact-add-row input { flex: 1; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font: 12px var(--mono); }
+/* guided fact picker (sidebar + evidence) */
+.fact-pick { margin-top: 8px; }
+.fp-row { display: flex; gap: 6px; }
+.fp-sel { flex: 1; min-width: 0; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font: 12px var(--sans); }
+.fp-desc { color: var(--muted); font-size: 11px; line-height: 1.4; margin: 5px 2px 0; min-height: 0; }
+.fp-desc:empty { display: none; }
+.fp-adv { display: inline-block; margin-top: 7px; background: none; border: 0; color: var(--text-2); font-size: 11px; cursor: pointer; padding: 0; text-decoration: underline dotted; }
+.fp-adv:hover { color: var(--accent-2); }
+.fp-raw { display: flex; gap: 6px; margin-top: 6px; }
+.fp-input { flex: 1; min-width: 0; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font: 12px var(--mono); }
+/* the evidence-route picker sits in a wider column */
+.ev-manual .fact-pick .fp-row { max-width: 520px; }
 
 main#view { grid-area: main; padding: 22px 30px; overflow-y: auto; max-width: 1720px; }
 .route-h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .01em; }
