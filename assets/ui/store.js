@@ -159,6 +159,17 @@
           if (snap) { _mem.engagements = snap.engagements || {}; _activeId = snap.activeId || null; }
         } catch (e2) {}
       }
+      // One-time cleanup: the removed legacy auto-migration left auto-imported engagements in
+      // some browsers (a `migratedFrom` marker, never user-created). Purge them so a stale
+      // "Imported engagement" stops loading; user-created engagements are untouched.
+      Object.keys(_mem.engagements).forEach(function (id) {
+        if (_mem.engagements[id] && _mem.engagements[id].migratedFrom) {
+          delete _mem.engagements[id];
+          if (_useIDB && _db) idbDelete('engagements', id).catch(function () {});
+          if (_activeId === id) _activeId = null;
+        }
+      });
+
       // ensure at least one (clean, empty) engagement exists as a starting point
       if (!Object.keys(_mem.engagements).length) {
         var eng = newEngagement('Untitled run');
@@ -207,6 +218,43 @@
     async _persistEngagement(eng) {
       if (_useIDB && _db) { try { await idbPut('engagements', eng); return; } catch (e) {} }
       snapshotFallback();
+    },
+
+    // ---- export / import (workspace portability) ----
+    exportEngagement(id) {
+      var e = _mem.engagements[id || _activeId];
+      if (!e) return null;
+      return { format: 'obol-engagement', version: 1, exportedAt: Date.now(), engagement: JSON.parse(JSON.stringify(e)) };
+    },
+    exportAll() {
+      return {
+        format: 'obol-workspace', version: 1, exportedAt: Date.now(),
+        engagements: Object.keys(_mem.engagements).map(function (k) { return JSON.parse(JSON.stringify(_mem.engagements[k])); }),
+      };
+    },
+    // Accepts a single engagement, {engagement}, or {engagements:[...]}. Always assigns fresh ids
+    // (never clobbers existing engagements). Returns the count imported.
+    async importData(data) {
+      var list = [];
+      if (!data || typeof data !== 'object') return 0;
+      if (Array.isArray(data.engagements)) list = data.engagements;
+      else if (data.engagement && typeof data.engagement === 'object') list = [data.engagement];
+      else if (data.id && data.name) list = [data];   // a bare engagement object
+      var added = 0;
+      for (var i = 0; i < list.length; i++) {
+        var e = list[i];
+        if (!e || typeof e !== 'object' || !e.name) continue;
+        e.id = uid('eng');
+        e.importedAt = Date.now();
+        e.updatedAt = Date.now();
+        delete e.migratedFrom;
+        _mem.engagements[e.id] = e;
+        await this._persistEngagement(e);
+        _activeId = e.id;
+        added++;
+      }
+      if (added) { await this.setSetting('activeEngagement', _activeId); emit('active'); }
+      return added;
     },
 
     // mutate the active engagement then persist + notify

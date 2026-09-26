@@ -1610,8 +1610,87 @@
   // ─────────────────────────────────────────────────────────────────────────
   // public API
   // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // 7. .docx (OOXML) — build the WordprocessingML parts from the block model.
+  //    Pure string building (no zip); the route zips docxParts() with JSZip into a real .docx.
+  //    Runs are inline-formatted (bold/size/mono) so no styles.xml is required.
+  // ─────────────────────────────────────────────────────────────────────────
+  function dStrip(text) {
+    return String(text == null ? '' : text)
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '$1')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1');
+  }
+  function dRun(text, o) {
+    o = o || {};
+    var rpr = (o.b || o.i || o.sz || o.mono || o.color) ? ('<w:rPr>'
+      + (o.b ? '<w:b/>' : '') + (o.i ? '<w:i/>' : '')
+      + (o.mono ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>' : '')
+      + (o.color ? '<w:color w:val="' + o.color + '"/>' : '')
+      + (o.sz ? '<w:sz w:val="' + o.sz + '"/><w:szCs w:val="' + o.sz + '"/>' : '') + '</w:rPr>') : '';
+    return '<w:r>' + rpr + '<w:t xml:space="preserve">' + esc(text) + '</w:t></w:r>';
+  }
+  function dPara(inner, o) {
+    o = o || {};
+    var ppr = o.spaceBefore ? ('<w:pPr><w:spacing w:before="' + o.spaceBefore + '"/></w:pPr>') : '';
+    return '<w:p>' + ppr + (inner || '') + '</w:p>';
+  }
+  var HEAD_SZ = { 1: 40, 2: 32, 3: 28, 4: 26 };
+  function dCell(text, hdr) {
+    return '<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>'
+      + (hdr ? '<w:shd w:val="clear" w:color="auto" w:fill="EFEFEF"/>' : '') + '</w:tcPr>'
+      + dPara(dRun(dStrip(text), hdr ? { b: true } : {})) + '</w:tc>';
+  }
+  function dTable(headers, rows) {
+    var borders = '<w:tblBorders>'
+      + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (s) { return '<w:' + s + ' w:val="single" w:sz="4" w:space="0" w:color="BFBFBF"/>'; }).join('')
+      + '</w:tblBorders>';
+    var out = '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>' + borders + '</w:tblPr>';
+    if (headers && headers.length) out += '<w:tr>' + headers.map(function (h) { return dCell(h, true); }).join('') + '</w:tr>';
+    (rows || []).forEach(function (row) { out += '<w:tr>' + row.map(function (c) { return dCell(String(c)); }).join('') + '</w:tr>'; });
+    return out + '</w:tbl>' + dPara('');
+  }
+  function blockToDocx(b) {
+    switch (b.t) {
+      case 'heading': return dPara(dRun(b.text, { b: true, sz: HEAD_SZ[b.level] || 24 }), { spaceBefore: 160 });
+      case 'para': return dPara(dRun(dStrip(b.text)));
+      case 'bullets': return (b.items || []).map(function (it, i) { return dPara(dRun((b.ordered ? (i + 1) + '. ' : '• ') + dStrip(it))); }).join('');
+      case 'kv': return (b.pairs || []).map(function (kv) { return dPara(dRun(kv[0] + ': ', { b: true }) + dRun(dStrip(kv[1]))); }).join('');
+      case 'table': return dTable(b.headers, b.rows);
+      case 'code': return String(b.text).split(/\r?\n/).map(function (ln) { return dPara(dRun(ln || ' ', { mono: true, sz: 18 })); }).join('');
+      case 'callout': return dPara(dRun(dStrip(b.text), { i: true }));
+      case 'proof': {
+        var lines = [dPara(dRun(b.label, { b: true }))];
+        if (b.flag) lines.push(dPara(dRun('flag: ' + b.flag, { mono: true })));
+        if (b.path) lines.push(dPara(dRun('path: ' + b.path, { mono: true })));
+        if (b.command) lines.push(dPara(dRun('command: ' + b.command, { mono: true })));
+        if (b.block) lines.push(dPara(dRun(b.block, { mono: true, sz: 18 })));
+        return lines.join('');
+      }
+      case 'image': return dPara(dRun('[screenshot: ' + (b.caption || 'evidence') + ']', { i: true, color: '888888' }));
+      case 'divider': return dPara('');
+      default: return '';
+    }
+  }
+  function toDocxXml(blocks) {
+    var body = (blocks || []).map(blockToDocx).join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + body
+      + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>'
+      + '</w:body></w:document>';
+  }
+  function docxParts(blocks) {
+    return {
+      '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+      '_rels/.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+      'word/document.xml': toDocxXml(blocks),
+    };
+  }
+
   OBOL.report = {
     buildContext: buildContext,
+    toDocxXml: toDocxXml,
+    docxParts: docxParts,
     PROFILES: PROFILES,
     DEFAULT_PROFILE: DEFAULT_PROFILE,
     resolve: resolve,

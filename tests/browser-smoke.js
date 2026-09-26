@@ -179,7 +179,7 @@ function serve() {
 
   // Report renders the verbatim command+output transcript (from the nmap paste) + the notes editor.
   await page.goto(`http://localhost:${PORT}/index.html#/report`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(400);
+  await page.waitForSelector('.rep-out pre.lang-terminal', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.rep-out pre.lang-terminal').count() >= 1, 'report renders the pasted terminal transcript');
   ok(await page.locator('.rep-notes .rep-note-fld').count() >= 1, 'report shows the per-host notes editor');
   const transcriptHasCmd = await page.evaluate(() => {
@@ -187,6 +187,18 @@ function serve() {
     return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1;
   });
   ok(transcriptHasCmd, 'transcript contains the command and its output');
+  // Export controls present + .docx builds (JSZip loaded with the report bundle).
+  ok(await page.locator('#rep-print').count() === 1 && await page.locator('#rep-docx').count() === 1, 'report has Print/PDF + .docx buttons');
+  const docxOk = await page.evaluate(async () => {
+    if (!window.JSZip || !window.OBOL.report.docxParts) return 0;
+    var e = window.OBOL.store.active();
+    var c = window.OBOL.report.buildContext({ facts: window.OBOL.store.factSet(), targets: (e.targets || []).map(function (t) { return Object.assign({}, t, { host: t.host || t.ip }); }), activities: e.activities || [], params: e.params || {} });
+    var parts = window.OBOL.report.docxParts(window.OBOL.report.document('oscp', c));
+    var zip = new window.JSZip(); Object.keys(parts).forEach(function (k) { zip.file(k, parts[k]); });
+    var blob = await zip.generateAsync({ type: 'blob' });
+    return blob ? blob.size : 0;
+  });
+  ok(docxOk > 400, 'report builds a non-empty .docx (' + docxOk + ' bytes)');
 
   // Performance budget: boot-to-interactive + route render must stay fast (guards against the
   // historical "many uncompressed layers / tabs never load" regression). Generous for CI runners.

@@ -30,13 +30,21 @@
       html += '<div class="chk-phase"><div class="chk-phase-h"><span class="ph-chip ph-' + p + '">' + p + '</span>'
         + '<span class="mini-label">' + items.length + ' actions</span></div>';
       items.forEach(function (a) {
-        var v = OBOL.command.fillCommand(a, facts, { params: params }, 0);
+        // Fill exactly like the coach (facts + params + profile) so commands become copy-ready
+        // as facts are collected; unfilled {{tokens}} are flagged with what would complete them.
+        var variants = OBOL.command.fillAll(a, facts, { params: params, profile: (eng && eng.profile) });
+        var v = variants[0] || { filled: '' };
+        var unfilled = v.filled ? OBOL.command.unfilledTokens(v.filled) : [];
         var on = !!ticks[a.id];
-        html += '<label class="chk-item' + (on ? ' checked' : '') + '">'
-          + '<input type="checkbox" data-chk="' + esc(a.id) + '"' + (on ? ' checked' : '') + '>'
-          + '<span class="chk-t">' + esc(a.title) + '</span>'
-          + (v.filled ? '<code class="chk-cmd" title="' + U.attr(v.filled) + '">' + esc(v.filled) + '</code>' : '')
-          + '</label>';
+        var cmd = v.filled
+          ? '<button type="button" class="chk-cmd ' + (unfilled.length ? 'chk-needs' : 'chk-ready') + '" data-copy="' + U.attr(v.filled)
+            + '" title="' + (unfilled.length ? ('needs: ' + esc(unfilled.join(', '))) : 'click to copy') + '"><code>' + esc(v.filled) + '</code></button>'
+          : '';
+        html += '<div class="chk-item' + (on ? ' checked' : '') + '">'
+          + '<label class="chk-tick"><input type="checkbox" data-chk="' + esc(a.id) + '"' + (on ? ' checked' : '') + '>'
+          + '<span class="chk-t">' + esc(a.title) + '</span></label>'
+          + cmd
+          + '</div>';
       });
       html += '</div>';
     });
@@ -48,7 +56,10 @@
     U.on(ctx.mount, 'change', 'input[data-chk]', function (e, t) {
       var id = t.getAttribute('data-chk'), on = t.checked;
       OBOL.store.update(function (eng) { eng.checkTicks = eng.checkTicks || {}; if (on) eng.checkTicks[id] = true; else delete eng.checkTicks[id]; }, 'checklist');
-      var label = t.closest('.chk-item'); if (label) label.classList.toggle('checked', on);
+      var item = t.closest('.chk-item'); if (item) item.classList.toggle('checked', on);
+    });
+    U.on(ctx.mount, 'click', '.chk-cmd', function (e, t) {
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
   }
 

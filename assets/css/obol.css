@@ -63,7 +63,11 @@ code, pre, .mono { font-family: var(--mono); }
 /* ---- app shell ---- */
 #app { display: grid; grid-template-columns: 264px 1fr; grid-template-rows: auto 1fr; grid-template-areas: "head head" "side main"; min-height: 100vh; }
 header.appbar { grid-area: head; display: flex; align-items: center; gap: 18px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--surf1), var(--surf2)); backdrop-filter: blur(6px); position: sticky; top: 0; z-index: 20; }
-.brand { display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; perspective: 360px; }
+/* the obol coin flips slowly like a spinning coin (edge-on rotateY) — full-motion only */
+@keyframes obolCoinSpin { to { transform: rotateY(360deg); } }
+:root[data-motion="full"] .brand .coin { animation: obolCoinSpin 8s linear infinite; transform-style: preserve-3d; }
+@media (prefers-reduced-motion: reduce) { .brand .coin { animation: none !important; } }
 /* The brand mark is an *obol* — a struck gold coin (inline SVG), the same gold as the coin-burst.
    It stays gold across every skin rather than tracking the UI accent (which made it read purple). */
 .brand .coin { display: block; width: 27px; height: 27px; filter: drop-shadow(0 0 10px rgba(232,181,62,.32)); }
@@ -274,14 +278,24 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .chk-phase { margin-bottom: 18px; }
 .chk-phase-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .chk-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
-.chk-item input { width: 16px; height: 16px; }
-.chk-t { flex: 1; }
+.chk-tick { display: flex; align-items: center; gap: 10px; flex: 1; cursor: pointer; min-width: 0; }
+.chk-tick input { width: 16px; height: 16px; flex: none; }
+.chk-t { flex: 1; min-width: 0; }
 .chk-item.checked .chk-t { color: var(--muted); text-decoration: line-through; }
-.chk-cmd { font-family: var(--mono); font-size: 11px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; color: var(--text-2); max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chk-cmd { font-family: var(--mono); font-size: 11px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 8px; color: var(--text-2); max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; flex: none; }
+.chk-cmd code { color: inherit; }
+.chk-cmd.chk-ready { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--text); }
+.chk-cmd.chk-ready:hover { border-color: var(--accent); }
+.chk-cmd.chk-needs { opacity: .7; }
 
 /* ---- report ---- */
-.rep-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
-.rep-controls select, .rep-controls label { font-size: 13px; }
+.rep-controls { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 16px; }
+.rep-opts { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.rep-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+.rep-opt select { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; font: 12px var(--mono); }
+.rep-opt-note { color: var(--muted); font-size: 11.5px; }
+.rep-actions { display: flex; gap: 8px; align-items: center; }
+.rep-actions .btn-ghost, .rep-actions .btn-primary { padding: 7px 13px; font-size: 12.5px; }
 .rep-out { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 16px; max-height: 70vh; overflow: auto; }
 .rep-out.md pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; color: var(--text); margin: 0; }
 .rep-gaps { color: var(--yellow); font-size: 13px; margin: 10px 0; }
@@ -295,19 +309,21 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .tools-cat-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .tools-cat-h { font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-2); margin: 0; font-weight: 700; }
 .tools-cat-hint { color: var(--muted); font-size: 12px; }
-.tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
-.tool-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surf1); overflow: hidden; align-self: start; }
+.tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; align-items: stretch; }
+/* flex column + head grows so the tag row pins to the bottom → uniform card heights across a row */
+.tool-card { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surf1); overflow: hidden; }
 .tool-card.open { grid-column: 1 / -1; border-color: var(--line-hot); }
-.tool-card-head { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; padding: 13px 15px; position: relative; }
+.tool-card-head { flex: 1 0 auto; display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; padding: 13px 15px 8px; position: relative; }
+.tool-card.open .tool-card-head { flex: 0 0 auto; }
 .tool-card-head:hover { background: var(--surf2); }
 .tool-card-title { display: flex; align-items: center; gap: 9px; }
 .tool-card-name { font-weight: 700; font-size: 14px; color: var(--text); }
-.tool-card-exec { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
-.tool-card-sum { color: var(--text-2); font-size: 12.5px; margin: 6px 0 8px; padding-right: 22px; }
-.tool-card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
-.tool-card-tags .pill { font-family: var(--mono); font-size: 10.5px; }
-.pill.tb-cred { background: var(--accent-soft); color: var(--accent-2); border-color: transparent; }
-.tool-card-chev { position: absolute; top: 14px; right: 14px; color: var(--muted); transition: transform .15s; }
+.tool-card-exec { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+.tool-card-sum { color: var(--text-2); font-size: 12.5px; margin: 7px 0 0; padding-right: 22px; line-height: 1.45; }
+.tool-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 15px 13px; }
+.tool-card-tags .pill { font-family: var(--mono); font-size: 10.5px; padding: 2px 8px; background: var(--bg2); color: var(--text-2); }
+.pill.tb-cred { background: var(--accent-soft); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.tool-card-chev { position: absolute; top: 15px; right: 14px; color: var(--muted); transition: transform .15s; }
 .tool-card.open .tool-card-chev { transform: rotate(180deg); }
 .tool-body { display: none; padding: 0 15px 15px; }
 .tool-card.open .tool-body { display: block; }
@@ -601,6 +617,25 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .rep-note-fld { width: 100%; box-sizing: border-box; background: var(--bg2); color: var(--text); border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 10px; font: 12px var(--sans); margin-bottom: 6px; min-height: 46px; resize: vertical; }
 .rep-note-fld:focus { outline: none; border-color: var(--accent); }
+
+/* ---- print / paper view (Print → Save as PDF) ---- */
+@media print {
+  html, body { background: #fff !important; color: #000 !important; }
+  header.appbar, aside#sidebar, .rep-controls, .rep-notes, .rep-gaps,
+  .obol-settings-toggle, .obol-settings-panel, #obolth-bg, #obolcoin-fx, .obol-toast { display: none !important; }
+  #app { display: block !important; }
+  main#view { max-width: none !important; padding: 0 !important; overflow: visible !important; }
+  .route-h1 { display: none; }
+  .rep-out { border: none !important; background: #fff !important; color: #000 !important; padding: 0 !important; max-height: none !important; overflow: visible !important; box-shadow: none !important; }
+  .rep-out h1, .rep-out h2, .rep-out h3, .rep-out h4 { color: #000 !important; }
+  .rep-out a { color: #000 !important; text-decoration: underline; }
+  .rep-out table { border-collapse: collapse; width: 100%; }
+  .rep-out table.data th, .rep-out table.data td, .rep-out table.kv th, .rep-out table.kv td { border: 1px solid #999; padding: 4px 8px; color: #000; }
+  .rep-out pre, .rep-out pre.lang-terminal { background: #f4f4f4 !important; color: #111 !important; border: 1px solid #ccc !important; white-space: pre-wrap; }
+  .rep-out .callout { border: 1px solid #ccc; color: #000; }
+  .rep-out img.shot { max-width: 100%; }
+  .page-break { break-after: page; page-break-after: always; }
+}
 
 /* ---- palette/type pass (ui-ux-pro-max → terminal-dark + emerald + mono) ---- */
 /* a11y checklist: a crisp, always-visible keyboard focus ring */
