@@ -48,6 +48,25 @@
     return keyOf({ user: p.username, domain: p.domain, secret: p.password, nthash: p.nthash });
   }
 
+  // Add a manually-entered credential (a hash or any other secret) to the engagement ledger, so it
+  // joins the switcher and can fill commands. Type: 'PW' password, 'NT' NT hash, 'OT' other secret.
+  function add(c) {
+    OBOL.store.update(function (eng) {
+      eng.credentials = eng.credentials || [];
+      eng.credentials.push({ user: c.user, domain: c.domain || '', source: 'logged', secretType: c.type,
+        secret: c.type === 'NT' ? '' : (c.secret || ''), nthash: c.type === 'NT' ? (c.secret || '') : '' });
+    }, 'credentials');
+  }
+
+  // Remove a manually-added (logged) credential; proven-fact creds are managed via the Facts panel.
+  function remove(cred) {
+    OBOL.store.update(function (eng) {
+      eng.credentials = (eng.credentials || []).filter(function (c) {
+        return keyOf({ user: c.user || c.username, domain: c.domain, secret: c.secret || c.password, nthash: c.nthash || c.hash }) !== keyOf(cred);
+      });
+    }, 'credentials');
+  }
+
   // Make this credential the active one: push it into params so every command re-fills.
   function activate(cred) {
     if (!cred) return;
@@ -63,11 +82,26 @@
     U.toast('Using ' + (cred.domain ? cred.domain + '\\' : '') + cred.user);
   }
 
-  function typeLabel(t) { return t === 'NT' ? 'nthash' : (t === 'PW' ? 'password' : 'no secret'); }
+  function typeLabel(t) { return t === 'NT' ? 'nthash' : (t === 'PW' ? 'password' : (t === 'OT' ? 'secret' : 'no secret')); }
+  function typeClass(t) { return t === 'NT' ? 'ct-nt' : (t === 'OT' ? 'ct-ot' : 'ct-pw'); }
   function maskSecret(c) {
     var s = c.secret || c.nthash || '';
     if (!s) return '—';
-    return c.type === 'NT' ? (s.slice(0, 8) + '…') : '••••••••';
+    return (c.type === 'NT' || c.type === 'OT') ? (s.slice(0, 8) + (s.length > 8 ? '…' : '')) : '••••••••';
+  }
+
+  var addOpen = false;
+  function addForm() {
+    return '<div class="cred-add-form">'
+      + '<input class="cf-fld cf-user" type="text" placeholder="user" autocomplete="off" spellcheck="false">'
+      + '<input class="cf-fld cf-domain" type="text" placeholder="domain (optional)" autocomplete="off" spellcheck="false">'
+      + '<div class="cf-row">'
+      + '<select class="cf-type" aria-label="Secret type"><option value="PW">password</option><option value="NT">NT hash</option><option value="OT">other secret</option></select>'
+      + '<input class="cf-fld cf-secret" type="text" placeholder="secret / hash" autocomplete="off" spellcheck="false">'
+      + '</div>'
+      + '<div class="cf-actions"><button class="cf-save btn-mini" type="button">Add</button>'
+      + '<button class="cf-cancel btn-ghost-mini" type="button">Cancel</button></div>'
+      + '</div>';
   }
 
   // Render the switcher into the sidebar container.
@@ -76,12 +110,8 @@
     if (!el) return;
     var creds = gather();
     render._creds = creds;
-    if (!creds.length) {
-      el.innerHTML = '<div class="cred-empty">None yet — credentials appear here as you prove or add them, ready to fill commands.</div>';
-      return;
-    }
     var active = activeKey();
-    el.innerHTML = creds.map(function (c, i) {
+    var rows = creds.map(function (c, i) {
       var on = keyOf(c) === active;
       var secret = c.secret || c.nthash || '';
       return '<div class="cred-row' + (on ? ' active' : '') + '" data-cred="' + i + '" role="button" tabindex="0"'
@@ -89,8 +119,9 @@
         + '<div class="cred-top">'
         + '<span class="cred-dot" aria-hidden="true"></span>'
         + '<span class="cred-user">' + esc(c.user) + '</span>'
-        + '<span class="cred-type ct-' + (c.type === 'NT' ? 'nt' : 'pw') + '">' + esc(typeLabel(c.type)) + '</span>'
+        + '<span class="cred-type ' + typeClass(c.type) + '">' + esc(typeLabel(c.type)) + '</span>'
         + (secret ? '<button class="cred-copy" type="button" data-copy="' + U.attr(secret) + '" title="Copy secret" aria-label="Copy secret">⧉</button>' : '')
+        + (c.source === 'logged' ? '<button class="cred-del" type="button" data-cred="' + i + '" title="Remove credential" aria-label="Remove credential">×</button>' : '')
         + '</div>'
         + '<div class="cred-sub">'
         + (c.domain ? '<span class="cred-dom">' + esc(c.domain) + '\\</span>' : '')
@@ -98,6 +129,10 @@
         + '</div>'
         + '</div>';
     }).join('');
+    var empty = creds.length ? '' : '<div class="cred-empty">None yet — prove one from Evidence, or add one below.</div>';
+    var adder = addOpen ? addForm()
+      : '<button class="cred-add-btn" type="button">+ Add Credential</button>';
+    el.innerHTML = empty + rows + adder;
   }
 
   // Wire delegated handlers once.
@@ -109,16 +144,38 @@
       if (e.stopPropagation) e.stopPropagation();
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Secret copied' : 'Copy failed', ok ? '' : 'err'); });
     });
+    U.on(el, 'click', '.cred-del', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      remove((render._creds || [])[+t.getAttribute('data-cred')]);
+    });
     U.on(el, 'click', '.cred-row', function (e, t) {
-      if (e.target && e.target.closest('.cred-copy')) return;
+      if (e.target && (e.target.closest('.cred-copy') || e.target.closest('.cred-del'))) return;
       activate((render._creds || [])[+t.getAttribute('data-cred')]);
     });
     el.addEventListener('keydown', function (e) {
       var row = e.target && e.target.classList && e.target.classList.contains('cred-row') ? e.target : null;
       if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); activate((render._creds || [])[+row.getAttribute('data-cred')]); }
     });
+    // add-credential form: open / cancel / save (store change re-renders the whole sidebar)
+    U.on(el, 'click', '.cred-add-btn', function () { addOpen = true; render(); var u = el.querySelector('.cf-user'); if (u) u.focus(); });
+    U.on(el, 'click', '.cf-cancel', function () { addOpen = false; render(); });
+    U.on(el, 'click', '.cf-save', function () {
+      var user = (el.querySelector('.cf-user') || {}).value, secret = (el.querySelector('.cf-secret') || {}).value;
+      var domain = (el.querySelector('.cf-domain') || {}).value, type = (el.querySelector('.cf-type') || {}).value || 'PW';
+      user = (user || '').trim(); secret = (secret || '').trim();
+      if (!user) { U.toast('Enter a username', 'err'); return; }
+      if (!secret) { U.toast('Enter the secret / hash', 'err'); return; }
+      addOpen = false; // close before add() so the store-change re-render draws the collapsed state
+      add({ user: user, domain: (domain || '').trim(), secret: secret, type: type });
+      U.toast('Credential added: ' + user);
+    });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target && e.target.classList && e.target.classList.contains('cf-fld')) {
+        e.preventDefault(); var b = el.querySelector('.cf-save'); if (b) b.click();
+      }
+    });
   }
 
-  OBOL.creds = { keyOf: keyOf, gather: gather, activeKey: activeKey, activate: activate };
+  OBOL.creds = { keyOf: keyOf, gather: gather, activeKey: activeKey, activate: activate, add: add, remove: remove };
   OBOL.credbar = { render: render, mount: mount };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

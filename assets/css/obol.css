@@ -116,12 +116,29 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 .cred-row.active .cred-dot { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .cred-user { font: 12.5px var(--mono); color: var(--text); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
 .cred-type { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; padding: 1px 5px; border-radius: 10px; flex: 0 0 auto; color: #0a0e18; }
-.cred-type.ct-nt { background: var(--ph-escalate); } .cred-type.ct-pw { background: var(--ph-creds); }
+.cred-type.ct-nt { background: var(--ph-escalate); } .cred-type.ct-pw { background: var(--ph-creds); } .cred-type.ct-ot { background: var(--ph-loot); }
 .cred-sub { display: flex; align-items: baseline; gap: 4px; padding-left: 13px; min-width: 0; }
 .cred-dom { font: 10.5px var(--mono); color: var(--muted); flex: 0 0 auto; }
 .cred-secret { font: 10.5px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .cred-copy { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; flex: 0 0 auto; }
 .cred-copy:hover { color: var(--accent); }
+.cred-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 1px; flex: 0 0 auto; }
+.cred-del:hover { color: var(--red); }
+.cred-add-btn { width: 100%; background: none; border: 1px dashed var(--line); color: var(--muted); border-radius: 6px;
+  padding: 5px; font-size: 11.5px; cursor: pointer; margin-top: 1px; }
+.cred-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+.cred-add-form { display: flex; flex-direction: column; gap: 5px; background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 7px; }
+.cf-fld, .cf-type { background: var(--bg3, var(--bg)); color: var(--text); border: 1px solid var(--line); border-radius: 5px;
+  padding: 5px 7px; font: 11.5px var(--mono); width: 100%; box-sizing: border-box; }
+.cf-row { display: flex; gap: 5px; }
+.cf-row .cf-type { flex: 0 0 auto; width: auto; }
+.cf-row .cf-secret { flex: 1 1 auto; }
+.cf-actions { display: flex; gap: 6px; }
+.cf-save, .cf-cancel { flex: 1 1 auto; border-radius: 5px; padding: 5px; font-size: 11.5px; cursor: pointer; }
+.cf-save { background: var(--accent); color: var(--on-accent, #08120a); border: 1px solid var(--accent); font-weight: 700; }
+.cf-cancel { background: none; color: var(--muted); border: 1px solid var(--line); }
+.cf-cancel:hover { color: var(--text); border-color: var(--muted); }
 /* guided fact picker (sidebar + evidence) */
 .fact-pick { margin-top: 8px; }
 .fp-row { display: flex; gap: 6px; }

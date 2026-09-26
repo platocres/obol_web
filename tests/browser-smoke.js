@@ -193,6 +193,22 @@ function serve() {
   const swapped = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'bob' && p.nthash === 'aabbccddeeff00112233445566778899'; });
   ok(swapped, 'clicking a credential fills the engagement params (bob + NT hash)');
   ok(await page.locator('#cred-switch .cred-row.active', { hasText: 'bob' }).count() === 1, 'the chosen credential is marked active');
+  // manually add any kind of credential (an NT hash) and use it
+  const credsBefore = await page.locator('#cred-switch .cred-row').count();
+  await page.locator('.cred-add-btn').click();
+  await page.locator('.cf-user').fill('carol');
+  await page.locator('.cf-type').selectOption('NT');
+  await page.locator('.cf-secret').fill('ffeeddccbbaa99887766554433221100');
+  await page.locator('.cf-save').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('#cred-switch .cred-row').count() === credsBefore + 1, 'a manually-added credential joins the switcher');
+  await page.locator('#cred-switch .cred-row', { hasText: 'carol' }).click();
+  const usedAdded = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'carol' && p.nthash === 'ffeeddccbbaa99887766554433221100'; });
+  ok(usedAdded, 'the manually-added credential fills commands when selected');
+  // and it can be removed
+  await page.locator('#cred-switch .cred-row', { hasText: 'carol' }).locator('.cred-del').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('#cred-switch .cred-row', { hasText: 'carol' }).count() === 0, 'a manually-added credential can be removed');
 
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
