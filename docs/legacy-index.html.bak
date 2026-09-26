@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en" class="obol-booting" data-obol-boot="pending">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style id="obol-boot-gate">
+html.obol-booting body{visibility:hidden!important}
+html[data-obol-boot="failed"] body{visibility:visible!important}
+</style>
+<title>Obol v10.24 — Product Hardening</title>
+<meta name="obol-runtime-history" content="Obol v3.3 · v3.3 | Obol v3.4 · v3.4 | Obol v3.5 · v3.5 | Obol v3.6 · v3.6 | Obol v3.7 · v3.7 | Obol v3.8 · v3.8 | Obol v3.9 · v3.9 | Obol v4.0 · v4.0 | Obol v4.1 · v4.1 | Obol v4.2 · v4.2 | Obol v4.3 · v4.3 | Obol v4.4 · v4.4 | Obol v4.5 · v4.5 | Obol v4.6 · v4.6 | Obol v4.7 · v4.7 | Obol v4.8 · v4.8 | Obol v4.9 · v4.9 | Obol v5.0 · v5.0 | Obol v5.1 · v5.1 | Obol v5.2 · v5.2 | Obol v5.3 · v5.3 | Obol v5.4 · v5.4 | Obol v5.5 · v5.5 | Obol v5.6 · v5.6 | Obol v5.7 · v5.7 | Obol v5.8 · v5.8 | Obol v5.9 · v5.9 | Obol v6.0 · v6.0 | Obol v6.1 · v6.1 | Obol v6.2 · v6.2 | Obol v6.4 · v6.4 | Obol v6.5 · v6.5 | Obol v6.6 · v6.6 | Obol v6.7 · v6.7 | Obol v6.8 · v6.8 | Obol v6.9 · v6.9 | Obol v7.0 · v7.0 | Obol v7.1 · v7.1 | Obol v7.2 · v7.2 | Obol v7.3 · v7.3 | Obol v7.4 · v7.4 | Obol v7.5 · v7.5 | Obol v7.6 · v7.6 | Obol v7.7 · v7.7 | Obol v7.8 · v7.8 | Obol v7.9 · v7.9 | Obol v8.0 · v8.0 | Obol v8.1 · v8.1 | Obol v8.2 · v8.2 | Obol v8.3 · v8.3 | Obol v8.4 · v8.4 | Obol v8.5 · v8.5 | Obol v8.6 · v8.6 | Obol v8.7 · v8.7 | Obol v8.8 · v8.8">
+<!-- OBOL-RUNTIME-MANIFEST-PROJECTION:START
+obol.css
+obol-v2.css
+obol-v2.1.css
+obol-v2.2.css
+obol-v2.3.css
+obol-v2.4.css
+obol-v2.5.css
+obol-v2.6.css
+obol-v2.7.css
+obol-v2.8.css
+obol-v2.9.css
+obol-v3.0.css
+obol-v3.1.css
+obol-v3.2.css
+obol-v3.3.css
+obol-v3.4.css
+obol-v3.5.css
+obol-v3.6.css
+obol-v3.7.css
+obol-v3.8.css
+obol-v3.9.css
+obol-v4.0.css
+obol-v4.1.css
+obol-v4.2.css
+obol-v4.3.css
+obol-v4.4.css
+obol-v4.5.css
+obol-v4.6.css
+obol-v4.7.css
+obol-v4.8.css
+obol-v4.9.css
+obol-v5.0.css
+obol-v5.1.css
+obol-v5.2.css
+obol-v5.3.css
+obol-v5.4.css
+obol-v5.5.css
+obol-v5.6.css
+obol-v5.7.css
+obol-v5.8.css
+obol-v5.9.css
+obol-v6.0.css
+obol-v6.1.css
+obol-v6.2.css
+obol-v6.4.css
+obol-v6.5.css
+obol-v6.6.css
+obol-v6.7.css
+obol-v6.8.css
+obol-v6.9.css
+obol-v7.0.css
+obol-v7.1.css
+obol-v7.2.css
+obol-v7.3.css
+obol-v7.4.css
+obol-v7.5.css
+obol-v7.6.css
+obol-v7.7.css
+obol-v7.8.css
+obol-v7.9.css
+obol-v8.0.css
+obol-v8.1.css
+obol-v8.2.css
+obol-v8.3.css
+obol-v8.4.css
+obol-v8.5.css
+obol-v8.6.css
+obol-v8.7.css
+obol-v8.8.css
+lanes.js
+methodology-v2.2.js
+methodology-v2.3.js
+methodology-v2.5.js
+tools-v2.2.js
+methodology-v3.3.js
+methodology-v3.4.js
+methodology-v3.6.js
+methodology-v4.1.js
+orange-ad-2025.03.js
+methodology-v4.3.js
+methodology-v4.4.js
+methodology-v4.5.js
+methodology-v4.6.js
+methodology-v4.7.js
+methodology-v4.8.js
+dashboard-v4.9.js
+dashboard-v5.0.js
+dashboard-v5.1.js
+dashboard-v5.2.js
+methodology-v5.3.js
+dashboard-v5.3.js
+methodology-v5.4.js
+dashboard-v5.4.js
+methodology-v5.5.js
+dashboard-v5.5.js
+methodology-v5.6.js
+dashboard-v5.6.js
+methodology-v5.7.js
+dashboard-v5.7.js
+methodology-v5.8.js
+dashboard-v5.8.js
+methodology-v5.9.js
+dashboard-v5.9.js
+methodology-v6.0.js
+dashboard-v6.0.js
+methodology-v6.1.js
+dashboard-v6.1.js
+methodology-v6.2.js
+dashboard-v6.2.js
+orange-fidelity-v6.4.js
+methodology-v6.4.js
+dashboard-v6.4.js
+orange-fidelity-v6.5.js
+methodology-v6.5.js
+source-delivery-v6.5.js
+dashboard-v6.5.js
+project-model-v6.6.js
+orange-fidelity-v6.7.js
+methodology-v6.7.js
+project-model-v6.7.js
+orange-fidelity-v6.8.js
+methodology-v6.8.js
+project-model-v6.8.js
+orange-fidelity-v6.9.js
+methodology-v6.9.js
+project-model-v6.9.js
+orange-fidelity-v7.0.js
+methodology-v7.0.js
+project-model-v7.0.js
+orange-fidelity-v7.1.js
+methodology-v7.1.js
+project-model-v7.1.js
+orange-fidelity-v7.2.js
+methodology-v7.2.js
+source-delivery-v7.2.js
+project-model-v7.2.js
+orange-fidelity-v7.3.js
+methodology-v7.3.js
+source-delivery-v7.3.js
+project-model-v7.3.js
+orange-fidelity-v7.4.js
+methodology-v7.4.js
+project-model-v7.4.js
+orange-fidelity-v7.5.js
+methodology-v7.5.js
+project-model-v7.5.js
+orange-fidelity-v7.6.js
+methodology-v7.6.js
+project-model-v7.6.js
+orange-fidelity-v7.7.js
+methodology-v7.7.js
+project-model-v7.7.js
+orange-fidelity-v7.8.js
+methodology-v7.8.js
+project-model-v7.8.js
+orange-fidelity-v7.9.js
+methodology-v7.9.js
+project-model-v7.9.js
+orange-fidelity-v8.0.js
+methodology-v8.0.js
+project-model-v8.0.js
+orange-fidelity-v8.1.js
+methodology-v8.1.js
+project-model-v8.1.js
+orange-fidelity-v8.2.js
+methodology-v8.2.js
+project-model-v8.2.js
+orange-fidelity-v8.3.js
+methodology-v8.3.js
+project-model-v8.3.js
+orange-fidelity-v8.4.js
+methodology-v8.4.js
+project-model-v8.4.js
+orange-fidelity-v8.5.js
+methodology-v8.5.js
+project-model-v8.5.js
+orange-fidelity-v8.6.js
+methodology-v8.6.js
+project-model-v8.6.js
+orange-fidelity-v8.7.js
+methodology-v8.7.js
+project-model-v8.7.js
+orange-fidelity-v8.8.js
+methodology-v8.8.js
+project-model-v8.8.js
+lanes-notes.js
+wordlists.js
+scripts.js
+scripts-v2.5.js
+reportmeta.js
+signatures.js
+jszip.min.js
+bh.js
+core-v2-base.js
+core-v2.js
+core-v2.1.js
+core-v2.2.js
+core-v2.3.js
+core-v2.4.js
+core-v2.5.js
+core-v2.6.js
+core-v2.7.js
+core-v2.8.js
+core-v2.9.js
+core-v3.0.js
+core-v3.1.js
+core-v3.2.js
+core-v3.3.js
+core-v3.4.js
+core-v3.5.js
+core-v3.6.js
+core-v3.7.js
+core-v3.8.js
+core-v3.9.js
+core-v4.0.js
+core-v4.1.js
+core-v4.2.js
+core-v4.3.js
+core-v4.4.js
+core-v4.5.js
+core-v4.6.js
+core-v4.7.js
+core-v4.8.js
+core-v4.9.js
+core-v5.0.js
+core-v5.1.js
+core-v5.2.js
+core-v5.3.js
+core-v5.4.js
+core-v5.5.js
+core-v5.6.js
+core-v5.7.js
+core-v5.8.js
+core-v5.9.js
+core-v6.0.js
+core-v6.1.js
+core-v6.2.js
+core-v6.4.js
+core-v6.5.js
+core-v6.6.js
+core-v6.7.js
+core-v6.8.js
+core-v6.9.js
+core-v7.0.js
+core-v7.1.js
+core-v7.2.js
+core-v7.3.js
+core-v7.4.js
+core-v7.5.js
+core-v7.6.js
+core-v7.7.js
+core-v7.8.js
+core-v7.9.js
+core-v8.0.js
+core-v8.1.js
+core-v8.2.js
+core-v8.3.js
+core-v8.4.js
+core-v8.5.js
+core-v8.6.js
+core-v8.7.js
+core-v8.8.js
+nmap-v2.js
+nmap-v2.3.js
+nmap-v3.1.js
+report-v2.js
+report-v2.1.js
+report-v2.2.js
+report-v2.3.js
+report-v2.4.js
+report-v2.5.js
+report-v2.6.js
+report-v2.7.js
+report-v2.8.js
+report-v2.9.js
+report-v3.5.js
+report-v4.0.js
+report-v4.7.js
+report-v4.8.js
+report-v5.0.js
+bh-v2-patch.js
+app-v2-base.js
+app-v2-cards.js
+app-v2-intake.js
+intake-v2.1.js
+intake-v2.2.js
+intake-v2.3.js
+intake-v2.5.js
+intake-v2.6.js
+intake-v2.7.js
+intake-v3.5.js
+intake-v3.6.js
+intake-v3.9.js
+intake-v4.5.js
+intake-v4.6.js
+intake-v4.8.js
+intake-v5.3.js
+intake-v5.4.js
+intake-v5.5.js
+intake-v5.6.js
+intake-v5.7.js
+intake-v5.8.js
+intake-v5.9.js
+intake-v6.0.js
+intake-v6.1.js
+intake-v6.2.js
+intake-v6.4.js
+intake-v6.5.js
+intake-v6.7.js
+intake-v6.8.js
+intake-v6.9.js
+intake-v7.0.js
+intake-v7.1.js
+intake-v7.2.js
+intake-v7.3.js
+intake-v7.4.js
+intake-v7.5.js
+intake-v7.6.js
+intake-v7.7.js
+intake-v7.8.js
+intake-v7.9.js
+intake-v8.2.js
+app-v2-boxes.js
+app-v2-tools.js
+app-v2-views.js
+app-v2-main.js
+app-v2.1.js
+app-v2.2.js
+app-v2.3.js
+app-v2.4.js
+app-v2.4-route.js
+app-v2.5.js
+app-v2.6.js
+app-v2.7.js
+review-v2.7.js
+app-v2.8.js
+app-v2.9.js
+app-v3.0.js
+app-v3.1.js
+app-v3.2.js
+app-v3.3.js
+app-v3.4.js
+app-v3.5.js
+app-v3.5-runtime.js
+app-v3.6.js
+app-v3.7.js
+app-v3.8.js
+app-v3.9.js
+app-v4.0.js
+app-v4.1.js
+app-v4.2.js
+app-v4.3.js
+app-v4.4.js
+app-v4.5.js
+app-v4.6.js
+app-v4.7.js
+app-v4.8.js
+app-v4.9.js
+app-v5.0.js
+app-v5.1.js
+app-v5.2.js
+app-v5.3.js
+app-v5.4.js
+app-v5.5.js
+app-v5.6.js
+app-v5.7.js
+app-v5.8.js
+app-v5.9.js
+app-v6.0.js
+app-v6.1.js
+app-v6.2.js
+app-v6.4.js
+app-v6.5.js
+app-v6.6.js
+app-v6.7.js
+app-v6.8.js
+app-v6.9.js
+app-v7.0.js
+app-v7.1.js
+app-v7.2.js
+app-v7.3.js
+app-v7.4.js
+app-v7.5.js
+app-v7.6.js
+app-v7.7.js
+app-v7.8.js
+app-v7.9.js
+app-v8.0.js
+app-v8.1.js
+app-v8.2.js
+app-v8.3.js
+app-v8.4.js
+app-v8.5.js
+app-v8.6.js
+app-v8.7.js
+app-v8.8.js
+OBOL-RUNTIME-MANIFEST-PROJECTION:END -->
+<!-- v9.6: one stable runtime manifest owns the exact historical CSS/script order. The inert projection above exists only so older regression suites can observe their historical ordering without owning current runtime wiring. -->
+<script src="data/runtime-manifest.js"></script>
+<script src="assets/runtime-current.js"></script>
+<script>window.OBOL_RUNTIME_LOADER.writeStyles();</script>
+<!-- Skin engine owner: inlined after the runtime styles so its [data-skin] token overrides win the cascade, and so it adds zero browser requests (route request budgets sit at ceiling). Base skin is a no-op. -->
+<style id="obol-themes">
+:root{--glow:transparent;--glow-soft:transparent;--grid:transparent}
+html[data-skin="matrix"]{--bg:#000502;--panel:#04160c;--panel2:#07200f;--border:#124a2a;--fg:#e6ffe9;--dim:#4fbf74;--accent:#00ff66;--accent2:#ffffff;--danger:#ff2d2d;--info:#7dffb0;--glow:rgba(0,255,102,.55);--glow-soft:rgba(0,255,102,.16)}
+html[data-skin="crt"]{--bg:#0a0700;--panel:#160f02;--panel2:#1f1604;--border:#4a340a;--fg:#ffcf82;--dim:#c08a34;--accent:#ffb000;--accent2:#ffe6b0;--danger:#ff5b3b;--info:#e0ab4a;--glow:rgba(255,176,0,.5);--glow-soft:rgba(255,176,0,.14)}
+html[data-skin="neon"]{--bg:#0a0616;--panel:#160c2a;--panel2:#1e123c;--border:#3d2668;--fg:#f2e9ff;--dim:#a184d0;--accent:#ff2fb9;--accent2:#21e6ff;--danger:#ff4d6a;--info:#21e6ff;--glow:rgba(255,47,185,.5);--glow-soft:rgba(33,230,255,.16);--grid:rgba(126,72,196,.11)}
+html[data-skin="recon"]{--bg:#e9edf1;--panel:#ffffff;--panel2:#f2f5f8;--border:#d0d8e0;--fg:#1a2430;--dim:#5c6a7a;--accent:#0f7a52;--accent2:#b3630b;--danger:#c0392b;--info:#1668c2}
+.brand h1,.coin{text-shadow:0 0 16px var(--glow)}
+.timer{text-shadow:0 0 10px var(--glow)}
+nav a.active{box-shadow:0 0 18px var(--glow)}
+.state-card:hover,.svc:hover{box-shadow:0 0 22px var(--glow-soft)}
+#obol-rain,#obol-scanlines,#obol-gridwash{position:fixed;inset:0;z-index:-1;pointer-events:none}
+#obol-rain{opacity:0;transition:opacity .45s ease}
+html[data-skin="matrix"].obol-fx #obol-rain{opacity:.5}
+#obol-scanlines{opacity:0;transition:opacity .4s ease;background:repeating-linear-gradient(0deg,rgba(0,0,0,.30) 0,rgba(0,0,0,.30) 1px,transparent 2px,transparent 3px)}
+html[data-skin="crt"] #obol-scanlines{opacity:.55}
+#obol-gridwash{background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:44px 44px}
+#obol-sweep{position:fixed;inset:0;z-index:60;pointer-events:none;opacity:0;background:linear-gradient(90deg,transparent,var(--accent),transparent);mix-blend-mode:screen}
+html.obol-fx #obol-sweep.go{animation:obol-sweep .5s ease-out}
+@keyframes obol-sweep{0%{opacity:0;transform:translateX(-100%)}18%{opacity:.45}100%{opacity:0;transform:translateX(100%)}}
+@keyframes obol-scanroll{from{background-position:0 0}to{background-position:0 3px}}
+@keyframes obol-crtflicker{0%,100%{opacity:1}92%{opacity:1}93%{opacity:.9}94%{opacity:1}97%{opacity:.95}}
+@keyframes obol-neonpulse{0%,100%{box-shadow:0 0 10px var(--glow-soft)}50%{box-shadow:0 0 22px var(--glow)}}
+@keyframes obol-neontext{0%,100%{text-shadow:0 0 12px var(--glow-soft)}50%{text-shadow:0 0 22px var(--glow)}}
+@keyframes obol-wire{0%,100%{opacity:1}50%{opacity:.82}}
+html.obol-fx[data-skin="crt"] #obol-scanlines{animation:obol-scanroll .5s steps(3) infinite}
+html.obol-fx[data-skin="crt"] header{animation:obol-crtflicker 6s linear infinite}
+html.obol-fx[data-skin="neon"] .timer{animation:obol-neonpulse 2.6s ease-in-out infinite}
+html.obol-fx[data-skin="neon"] .brand h1,html.obol-fx[data-skin="neon"] .coin{animation:obol-neontext 2.6s ease-in-out infinite}
+html.obol-fx[data-skin="matrix"] .coin{animation:obol-wire 1.8s ease-in-out infinite}
+#obol-skin{position:relative;display:flex;align-items:center}
+#obol-skin-btn{display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--panel2);color:var(--dim);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font:600 12px/1 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.4px}
+#obol-skin-btn:hover{color:var(--fg);border-color:var(--accent)}
+#obol-skin-btn .sw{width:26px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.16);background:linear-gradient(90deg,var(--pv1,#161b22) 0 40%,var(--pv2,#58d68d) 40% 70%,var(--pv3,#e8b54a) 70% 100%)}
+#obol-skin-btn .caret{font-size:9px;opacity:.7}
+#obol-skin-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:80;min-width:210px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:0 12px 34px rgba(0,0,0,.5)}
+#obol-skin-menu[hidden]{display:none}
+.obol-skin-opt{display:flex;align-items:center;gap:9px;width:100%;cursor:pointer;text-align:left;background:transparent;color:var(--dim);border:1px solid transparent;border-radius:7px;padding:7px 9px;font:600 12.5px/1.1 -apple-system,'Segoe UI',Roboto,sans-serif}
+.obol-skin-opt:hover{color:var(--fg);background:var(--panel2)}
+.obol-skin-opt[aria-checked="true"]{color:var(--fg);border-color:var(--accent)}
+.obol-skin-opt .sw{width:30px;height:13px;border-radius:3px;flex-shrink:0;border:1px solid rgba(255,255,255,.16)}
+.obol-skin-sep{height:1px;background:var(--border);margin:6px 4px}
+.obol-fx-row{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:7px 9px;font:600 11px/1 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim)}
+#obol-fx-toggle{display:inline-flex;align-items:center;gap:7px;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:999px;padding:3px 9px;color:inherit;font:inherit}
+#obol-fx-toggle .led{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+#obol-fx-toggle[aria-pressed="true"]{color:var(--fg);border-color:var(--accent)}
+#obol-fx-toggle[aria-pressed="true"] .led{background:var(--accent);box-shadow:0 0 9px var(--glow)}
+@media (prefers-reduced-motion:reduce){#obol-rain{display:none}}
+</style>
+<!-- Command palette (Build 2): supersedes the nav-only Ctrl+K palette with command search + copy-with-variables. Inlined for zero added requests; theme-aware via obol's tokens. -->
+<style id="obol-palette">
+#obol-pal{position:fixed;inset:0;z-index:1000;display:none;justify-content:center;align-items:flex-start;
+  padding:10vh 16px 16px;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)}
+#obol-pal.open{display:flex}
+#obol-pal-panel{display:flex;flex-direction:column;width:min(680px,100%);max-height:min(72vh,calc(100dvh - 96px));
+  background:var(--panel,#161b22);color:var(--fg,#d7e0ea);border:1px solid var(--border,#2d3646);
+  border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.55),0 0 0 1px var(--glow-soft,transparent);overflow:hidden}
+#obol-pal-input{width:100%;flex:0 0 auto;background:var(--bg,#0d1117);color:var(--fg,#d7e0ea);
+  border:0;border-bottom:1px solid var(--border,#2d3646);padding:15px 18px;font:500 15px/1.3 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.2px}
+#obol-pal-input:focus{outline:none;border-bottom-color:var(--accent,#58d68d)}
+#obol-pal-input::placeholder{color:var(--dim,#8b98a9)}
+#obol-pal-list{overflow-y:auto;overscroll-behavior:contain;padding:6px;min-height:0}
+.obol-pal-grp{font-family:var(--mono,monospace);font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--dim,#8b98a9);padding:10px 12px 5px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+#obol-pal-clear-hist{margin-left:auto;font-family:var(--mono,monospace);font-size:10px;letter-spacing:1px;
+  color:var(--dim,#8b98a9);background:transparent;border:1px solid var(--border,#2d3646);border-radius:999px;padding:2px 9px;cursor:pointer}
+#obol-pal-clear-hist:hover{color:var(--fg,#d7e0ea);border-color:var(--danger,#e05c5c)}
+.obol-pal-row{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:8px;cursor:pointer;border:1px solid transparent}
+.obol-pal-row[aria-selected="true"]{background:var(--panel2,#1c2330);border-color:var(--accent,#58d68d)}
+.obol-pal-kind{flex:0 0 auto;font-family:var(--mono,monospace);font-size:9px;letter-spacing:1px;text-transform:uppercase;
+  padding:2px 7px;border-radius:999px;border:1px solid currentColor}
+.obol-pal-kind.go{color:var(--info,#5ca8e0)}
+.obol-pal-kind.cmd{color:var(--accent,#58d68d)}
+.obol-pal-main{min-width:0;flex:1 1 auto}
+.obol-pal-title{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.obol-pal-title mark{background:transparent;color:var(--accent2,#e8b54a);font-weight:700}
+.obol-pal-sub{font-family:var(--mono,monospace);font-size:11px;color:var(--dim,#8b98a9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.obol-pal-hint{flex:0 0 auto;font-family:var(--mono,monospace);font-size:10px;color:var(--dim,#8b98a9);opacity:0;transition:opacity .1s}
+.obol-pal-row[aria-selected="true"] .obol-pal-hint{opacity:1}
+.obol-pal-add{flex:0 0 auto;width:22px;height:22px;border-radius:6px;border:1px solid var(--border,#2d3646);background:transparent;color:var(--dim,#8b98a9);font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;opacity:.5;transition:opacity .1s,color .1s,border-color .1s}
+.obol-pal-row:hover .obol-pal-add,.obol-pal-row[aria-selected="true"] .obol-pal-add{opacity:1}
+.obol-pal-add:hover{color:var(--fg,#d7e0ea);border-color:var(--accent,#58d68d);opacity:1}
+.obol-pal-star{flex:0 0 auto;width:22px;height:22px;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--dim,#8b98a9);font-size:14px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;opacity:.5;transition:opacity .1s,color .1s}
+.obol-pal-row:hover .obol-pal-star,.obol-pal-row[aria-selected="true"] .obol-pal-star{opacity:1}
+.obol-pal-star[aria-pressed="true"]{color:var(--accent2,#e8b54a);opacity:1}
+.obol-pal-star:hover{color:var(--accent2,#e8b54a);opacity:1}
+.obol-pal-empty{padding:22px 16px;text-align:center;color:var(--dim,#8b98a9);font-size:13px}
+#obol-pal-foot{flex:0 0 auto;display:flex;gap:14px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid var(--border,#2d3646);
+  font-family:var(--mono,monospace);font-size:10px;color:var(--dim,#8b98a9)}
+#obol-pal-foot kbd{border:1px solid var(--border,#2d3646);border-radius:4px;padding:0 5px;color:var(--fg,#d7e0ea)}
+#obol-pal-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(10px);z-index:1001;
+  background:var(--panel,#161b22);color:var(--fg,#d7e0ea);border:1px solid var(--accent,#58d68d);
+  border-radius:8px;padding:9px 15px;font:600 12.5px/1 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.3px;
+  box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 18px var(--glow-soft,transparent);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+#obol-pal-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(max-width:520px){
+  #obol-pal{padding:16px 12px}
+  #obol-pal-panel{max-height:calc(100dvh - 32px)}
+  #obol-pal-foot{display:none}
+}
+@media(prefers-reduced-motion:reduce){#obol-pal-toast{transition:none}}
+</style>
+<!-- Playbook Builder (Build 3): chain commands from any surface into a runnable, logged .sh. Inlined for zero added requests; theme-aware via obol's tokens; per-engagement persistence. -->
+<style id="obol-playbook">
+#obol-pb-btn{display:flex;align-items:center;gap:7px;cursor:pointer;background:var(--panel2);color:var(--dim);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font:600 12px/1 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.4px}
+#obol-pb-btn:hover{color:var(--fg);border-color:var(--accent)}
+#obol-pb-btn .ic{font-size:13px;line-height:1}
+#obol-pb-btn .ct{min-width:16px;text-align:center;font-family:var(--mono,monospace);font-size:10px;padding:1px 5px;border-radius:999px;background:var(--bg);border:1px solid var(--border);color:var(--dim)}
+#obol-pb-btn[data-count]:not([data-count="0"]) .ct{color:var(--accent);border-color:var(--accent);box-shadow:0 0 8px var(--glow-soft)}
+#obol-pb{position:fixed;inset:0;z-index:900;display:none}
+#obol-pb.open{display:block}
+#obol-pb-scrim{position:absolute;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px)}
+#obol-pb-panel{position:absolute;top:0;right:0;height:100%;width:min(460px,100%);display:flex;flex-direction:column;background:var(--panel);color:var(--fg);border-left:1px solid var(--border);box-shadow:-18px 0 50px rgba(0,0,0,.5);transform:translateX(100%);transition:transform .22s ease}
+#obol-pb.open #obol-pb-panel{transform:translateX(0)}
+#obol-pb-head{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border)}
+#obol-pb-head .sub{font-family:var(--mono,monospace);font-size:10px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase}
+#obol-pb-head h2{margin:0;font:700 15px/1.1 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.3px;flex:1 1 auto}
+#obol-pb-close{cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--dim);padding:4px 9px;font-size:14px;line-height:1}
+#obol-pb-close:hover{color:var(--fg);border-color:var(--accent)}
+#obol-pb-steps{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;padding:10px 12px;min-height:0}
+.obol-pb-step{display:flex;gap:9px;align-items:flex-start;background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:9px 10px;margin-bottom:8px}
+.obol-pb-num{flex:0 0 auto;font-family:var(--mono,monospace);font-size:11px;color:var(--accent);padding-top:2px;min-width:18px}
+.obol-pb-body{flex:1 1 auto;min-width:0}
+.obol-pb-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.obol-pb-cmd{font-family:var(--mono,monospace);font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+.obol-pb-ctrls{flex:0 0 auto;display:flex;flex-direction:column;gap:3px}
+.obol-pb-ctrls button{cursor:pointer;background:transparent;border:1px solid transparent;border-radius:5px;color:var(--dim);font-size:11px;line-height:1;padding:2px 5px}
+.obol-pb-ctrls button:hover:not(:disabled){color:var(--fg);border-color:var(--accent)}
+.obol-pb-ctrls button:disabled{opacity:.3;cursor:default}
+.obol-pb-ctrls .rm:hover{color:var(--danger);border-color:var(--danger)}
+.obol-pb-empty{text-align:center;color:var(--dim);font-size:13px;padding:34px 18px;line-height:1.6}
+.obol-pb-empty kbd{border:1px solid var(--border);border-radius:4px;padding:0 5px;font-family:var(--mono,monospace);color:var(--fg)}
+#obol-pb-preview-wrap{flex:0 0 auto;border-top:1px solid var(--border);display:flex;flex-direction:column;max-height:38%}
+#obol-pb-preview-head{display:flex;align-items:center;padding:8px 14px 2px}
+#obol-pb-preview-head .lbl{font-family:var(--mono,monospace);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim)}
+#obol-pb-preview{margin:0;overflow:auto;overscroll-behavior:contain;padding:4px 14px 10px;font-family:var(--mono,monospace);font-size:11px;line-height:1.45;color:var(--fg);white-space:pre;min-height:0}
+#obol-pb-foot{flex:0 0 auto;display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--border)}
+.obol-pb-act{cursor:pointer;background:var(--panel2);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font:600 12px/1 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.3px}
+.obol-pb-act:hover:not(:disabled){border-color:var(--accent)}
+.obol-pb-act.primary{border-color:var(--accent);box-shadow:0 0 14px var(--glow-soft)}
+.obol-pb-act:disabled{opacity:.4;cursor:default}
+.obol-pb-act.clear{margin-left:auto}
+.obol-pb-act.clear:hover:not(:disabled){border-color:var(--danger);color:var(--danger)}
+#obol-pb-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(10px);z-index:1001;background:var(--panel);color:var(--fg);border:1px solid var(--accent);border-radius:8px;padding:9px 15px;font:600 12.5px/1 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.3px;box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 18px var(--glow-soft);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+#obol-pb-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(max-width:620px){
+  /* The narrow (<=980px) header is an intentional single-row nowrap operator bar. Collapse
+     the Playbook button to an icon with a floating count bubble so it adds minimal width and
+     never pushes the row past the viewport. */
+  #obol-pb-btn{position:relative;padding:5px 7px;gap:0}
+  #obol-pb-btn .lbl{display:none}
+  #obol-pb-btn .ic{font-size:12px}
+  #obol-pb-btn .ct{position:absolute;top:-5px;right:-4px;min-width:0;height:14px;padding:0 4px;font-size:9px;line-height:14px}
+  #obol-pb-btn[data-count="0"] .ct{display:none}
+}
+@media(max-width:520px){
+  #obol-pb-panel{width:100%}
+  #obol-pb-preview-wrap{max-height:32%}
+}
+@media(prefers-reduced-motion:reduce){
+  #obol-pb-panel{transition:none}
+  #obol-pb-toast{transition:none}
+}
+</style>
+<!-- Cred Reuse Matrix (Build 4): credentials × hosts grid (✓/ADM/✗/·) with one-click retarget. Inlined for zero added requests; theme-aware via obol's tokens; reads the live workspace, retargets via the app's own sidebar inputs. -->
+<style id="obol-credmatrix">
+#obol-cm-btn{display:flex;align-items:center;gap:7px;cursor:pointer;background:var(--panel2);color:var(--dim);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font:600 12px/1 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.4px}
+#obol-cm-btn:hover{color:var(--fg);border-color:var(--accent)}
+#obol-cm-btn .ic{font-size:13px;line-height:1}
+#obol-cm-btn .ct{min-width:16px;text-align:center;font-family:var(--mono,monospace);font-size:10px;padding:1px 5px;border-radius:999px;background:var(--bg);border:1px solid var(--border);color:var(--dim)}
+#obol-cm-btn[data-count]:not([data-count="0"]) .ct{color:var(--accent);border-color:var(--accent);box-shadow:0 0 8px var(--glow-soft)}
+#obol-cm{position:fixed;inset:0;z-index:950;display:none;justify-content:center;align-items:flex-start;padding:8vh 16px 16px;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)}
+#obol-cm.open{display:flex}
+#obol-cm-panel{display:flex;flex-direction:column;width:min(920px,100%);max-height:min(80vh,calc(100dvh - 96px));background:var(--panel,#161b22);color:var(--fg,#d7e0ea);border:1px solid var(--border,#2d3646);border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.55),0 0 0 1px var(--glow-soft,transparent);overflow:hidden}
+#obol-cm-head{flex:0 0 auto;display:flex;align-items:flex-start;gap:10px;padding:14px 16px 10px;border-bottom:1px solid var(--border)}
+#obol-cm-head .sub{font-family:var(--mono,monospace);font-size:10px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase}
+#obol-cm-head h2{margin:2px 0 0;font:700 15px/1.15 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.3px}
+#obol-cm-head .desc{margin:3px 0 0;font-size:11.5px;color:var(--dim);line-height:1.45;max-width:60ch}
+#obol-cm-head-main{flex:1 1 auto;min-width:0}
+#obol-cm-close{flex:0 0 auto;cursor:pointer;background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--dim);padding:4px 9px;font-size:14px;line-height:1}
+#obol-cm-close:hover{color:var(--fg);border-color:var(--accent)}
+#obol-cm-legend{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px 14px;padding:9px 16px;border-bottom:1px solid var(--border);font-family:var(--mono,monospace);font-size:10.5px;color:var(--dim)}
+#obol-cm-legend .lg{display:inline-flex;align-items:center;gap:6px}
+#obol-cm-legend .chip{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:18px;padding:0 5px;border-radius:5px;font-weight:700;font-size:10px;border:1px solid currentColor}
+.obol-cm-chip.st-adm,#obol-cm-legend .chip.st-adm{color:var(--accent2,#e8b54a)}
+.obol-cm-chip.st-ok,#obol-cm-legend .chip.st-ok{color:var(--accent,#58d68d)}
+.obol-cm-chip.st-no,#obol-cm-legend .chip.st-no{color:var(--danger,#e05c5c)}
+.obol-cm-chip.st-untested,#obol-cm-legend .chip.st-untested{color:var(--dim,#8b98a9)}
+#obol-cm-gridwrap{flex:1 1 auto;overflow:auto;overscroll-behavior:contain;min-height:0;padding:2px}
+table.obol-cm-table{border-collapse:separate;border-spacing:0;width:auto;min-width:100%;font-size:12px}
+table.obol-cm-table th,table.obol-cm-table td{border-bottom:1px solid var(--border);border-right:1px solid var(--border);padding:0;white-space:nowrap}
+table.obol-cm-table thead th{position:sticky;top:0;z-index:3;background:var(--panel2,#1c2330)}
+table.obol-cm-table th.obol-cm-corner{left:0;z-index:5;background:var(--panel2,#1c2330);font-family:var(--mono,monospace);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);padding:8px 12px;text-align:left;min-width:150px}
+table.obol-cm-table tbody th.obol-cm-rowh{position:sticky;left:0;z-index:2;background:var(--panel,#161b22);text-align:left;min-width:150px;max-width:260px}
+.obol-cm-host{display:block;width:100%;cursor:pointer;background:transparent;border:0;color:var(--fg);font:600 11.5px/1.2 -apple-system,'Segoe UI',Roboto,sans-serif;padding:8px 12px;text-align:left}
+.obol-cm-host .ip{display:block;font-family:var(--mono,monospace);font-size:9.5px;color:var(--dim);font-weight:400;margin-top:2px;white-space:nowrap}
+.obol-cm-cred{display:flex;align-items:center;gap:8px;width:100%;cursor:pointer;background:transparent;border:0;color:var(--fg);padding:8px 12px;text-align:left;font:inherit}
+.obol-cm-cred .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:12px}
+.obol-cm-cred .ty{flex:0 0 auto;font-family:var(--mono,monospace);font-size:8.5px;letter-spacing:.5px;padding:1px 5px;border-radius:999px;border:1px solid var(--border);color:var(--dim)}
+.obol-cm-host:hover,.obol-cm-cred:hover{color:var(--accent)}
+td.obol-cm-cell{text-align:center;padding:0}
+.obol-cm-chip{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:34px;cursor:pointer;background:transparent;border:0;color:inherit;font-family:var(--mono,monospace);font-weight:700;font-size:12px;padding:6px 10px}
+td.obol-cm-cell.st-adm{background:color-mix(in srgb,var(--accent2,#e8b54a) 16%,transparent)}
+td.obol-cm-cell.st-ok{background:color-mix(in srgb,var(--accent,#58d68d) 12%,transparent)}
+td.obol-cm-cell.st-adm .obol-cm-chip{color:var(--accent2,#e8b54a)}
+td.obol-cm-cell.st-ok .obol-cm-chip{color:var(--accent,#58d68d)}
+td.obol-cm-cell.st-no .obol-cm-chip{color:var(--danger,#e05c5c)}
+td.obol-cm-cell.st-untested .obol-cm-chip{color:var(--dim,#8b98a9);font-weight:400}
+.obol-cm-host:focus-visible,.obol-cm-cred:focus-visible,.obol-cm-chip:focus-visible{outline:2px solid var(--accent,#58d68d);outline-offset:-2px}
+.obol-cm-empty{padding:34px 20px;text-align:center;color:var(--dim);font-size:13px;line-height:1.6}
+.obol-cm-empty code{font-family:var(--mono,monospace);color:var(--fg)}
+#obol-cm-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(10px);z-index:1001;background:var(--panel);color:var(--fg);border:1px solid var(--accent);border-radius:8px;padding:9px 15px;font:600 12.5px/1 -apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.3px;box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 18px var(--glow-soft,transparent);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+#obol-cm-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(max-width:620px){
+  #obol-cm-btn{position:relative;padding:5px 7px;gap:0}
+  #obol-cm-btn .lbl{display:none}
+  #obol-cm-btn .ic{font-size:12px}
+  #obol-cm-btn .ct{position:absolute;top:-5px;right:-4px;min-width:0;height:14px;padding:0 4px;font-size:9px;line-height:14px}
+  #obol-cm-btn[data-count="0"] .ct{display:none}
+}
+@media(max-width:520px){
+  #obol-cm{padding:16px 10px}
+  #obol-cm-panel{max-height:calc(100dvh - 32px)}
+  table.obol-cm-table th.obol-cm-corner,table.obol-cm-table tbody th.obol-cm-rowh{min-width:120px}
+}
+@media(prefers-reduced-motion:reduce){#obol-cm-toast{transition:none}}
+</style>
+<style id="obol-killchain">
+/* Build 5 — Kill-Chain Milestone Spine. A slim, always-visible strip under the header that
+   reads the live engagement facts and lights up milestones as the operator climbs the chain.
+   Additive, theme-aware via obol tokens, zero added requests. */
+#obol-kc{display:flex;align-items:center;width:100%;box-sizing:border-box;padding:5px 14px;background:var(--panel2,#1c2330);border-bottom:1px solid var(--border,#2d3646);overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+#obol-kc::-webkit-scrollbar{height:5px}
+#obol-kc::-webkit-scrollbar-thumb{background:var(--border,#2d3646);border-radius:3px}
+#obol-kc .obol-kc-strip{display:flex;align-items:center;gap:0;text-decoration:none;color:inherit;min-width:max-content;border-radius:6px}
+#obol-kc .obol-kc-strip:focus-visible{outline:2px solid var(--accent,#58d68d);outline-offset:2px}
+#obol-kc .obol-kc-title{font-family:var(--mono,monospace);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim,#8b98a9);margin-right:8px;flex:0 0 auto}
+#obol-kc .obol-kc-count{font-family:var(--mono,monospace);font-size:10px;color:var(--accent,#58d68d);border:1px solid var(--accent,#58d68d);border-radius:999px;padding:1px 7px;margin-right:10px;flex:0 0 auto}
+#obol-kc .obol-kc-nodes{display:flex;align-items:center;gap:0}
+.obol-kc-node{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;border:1px solid transparent;font:600 11px/1 -apple-system,'Segoe UI',Roboto,sans-serif;white-space:nowrap;color:var(--dim,#8b98a9);flex:0 0 auto;transition:color .2s ease,border-color .2s ease,background .2s ease}
+.obol-kc-node .ic{font-size:12px;line-height:1;filter:grayscale(1);opacity:.55;transition:filter .2s ease,opacity .2s ease}
+.obol-kc-node.done{color:var(--accent,#58d68d)}
+.obol-kc-node.done .ic{filter:none;opacity:1}
+.obol-kc-node.next{color:var(--fg,#d7e0ea);border-color:var(--accent,#58d68d);background:color-mix(in srgb,var(--accent,#58d68d) 12%,transparent);box-shadow:0 0 8px var(--glow-soft,transparent)}
+.obol-kc-node.next .ic{opacity:.9}
+#obol-kc .obol-kc-strip:hover .obol-kc-title{color:var(--fg,#d7e0ea)}
+#obol-kc .obol-kc-strip:hover .obol-kc-node.done{color:var(--accent,#58d68d);filter:brightness(1.12)}
+.obol-kc-sep{width:14px;height:2px;background:var(--border,#2d3646);flex:0 0 auto;border-radius:2px;margin:0 1px;transition:background .2s ease}
+.obol-kc-sep.done{background:var(--accent,#58d68d)}
+@keyframes obol-kc-pop{0%{transform:scale(1)}35%{transform:scale(1.2)}100%{transform:scale(1)}}
+.obol-kc-node.just-done{animation:obol-kc-pop .5s ease}
+.obol-kc-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+@media(max-width:640px){
+  #obol-kc{padding:5px 10px}
+  #obol-kc .obol-kc-title{display:none}
+  .obol-kc-node .nm{display:none}
+  .obol-kc-node{padding:3px 6px}
+  .obol-kc-node.next .nm{display:inline}
+  .obol-kc-sep{width:9px}
+}
+@media(prefers-reduced-motion:reduce){.obol-kc-node.just-done{animation:none}.obol-kc-node,.obol-kc-node .ic,.obol-kc-sep{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="coin">◉</span><div><h1>OBOL</h1><p class="tagline">Offensive Box Operations Ledger · v10.24</p></div></div>
+  <nav><a href="#/home" data-nav="home">Home</a><a href="#/boxes" data-nav="boxes">Targets</a><a href="#/intake" data-nav="intake">Evidence</a><a href="#/path" data-nav="path">Next Steps</a><a href="#/report" data-nav="report">Report</a></nav>
+  <div class="progress-pill" id="progress" title="Explicit card marks for the active context">0 tried · 0 succeeded</div><div class="timer" id="timer" title="Exam timer — click to set">--:--:--</div>
+</header>
+<div id="banner" class="hidden"></div><div class="layout"><aside id="sidebar"><details id="side-details" open><summary>Context details</summary><h3>Parameters</h3><div id="params"></div><div id="artifacts-line" style="margin:10px 0 2px"></div><h3>Facts</h3><div id="facts-panel"><div id="facts-list"></div><input id="fact-input" placeholder="add fact, e.g. port:445"></div></details></aside><main id="view" tabindex="-1"></main></div><div id="modal-backdrop" class="hidden"><div id="modal"></div></div><div id="toast" class="hidden"></div>
+<script>window.OBOL_RUNTIME_LOADER.armBootGuard();window.OBOL_RUNTIME_LOADER.writeScripts();</script>
+<!-- Skin engine behavior: inlined (zero extra requests) so it applies at first paint and can never block boot. -->
+<script id="obol-themes-js">
+'use strict';
+(function(root){
+var doc=root.document;
+if(!doc)return;
+var SKINS=[
+ {id:'obol',   label:'Obol Classic',  pv:['#161b22','#58d68d','#e8b54a']},
+ {id:'matrix', label:'Ghostwire',     pv:['#000502','#00ff66','#ff2d2d']},
+ {id:'crt',    label:'Amber Phosphor',pv:['#160f02','#ffb000','#ffe6b0']},
+ {id:'neon',   label:'Neon Noir',     pv:['#160c2a','#ff2fb9','#21e6ff']},
+ {id:'recon',  label:'Recon Daylight',pv:['#ffffff','#0f7a52','#b3630b']}
+];
+var LS_SKIN='obol-skin', LS_FX='obol-fx';
+var reduceMq=root.matchMedia?root.matchMedia('(prefers-reduced-motion:reduce)'):{matches:false,addEventListener:function(){}};
+var el=doc.documentElement;
+var state={skin:'obol', fx:true};
+function lsGet(k){try{return root.localStorage.getItem(k);}catch(e){return null;}}
+function lsSet(k,v){try{root.localStorage.setItem(k,v);}catch(e){}}
+function skinById(id){for(var i=0;i<SKINS.length;i++)if(SKINS[i].id===id)return SKINS[i];return SKINS[0];}
+function idxOf(id){for(var i=0;i<SKINS.length;i++)if(SKINS[i].id===id)return i;return 0;}
+function fxActive(){return state.fx && !reduceMq.matches;}
+(function bootstrap(){
+ var savedSkin=lsGet(LS_SKIN); if(savedSkin&&idxOf(savedSkin)>=0)state.skin=savedSkin;
+ if(lsGet(LS_FX)==='0')state.fx=false;
+ el.setAttribute('data-skin',state.skin);
+ el.classList.toggle('obol-fx',fxActive());
+})();
+var rain=(function(){
+ var cv=null,cx=null,on=false,raf=null,cols=0,drops=[],
+     glyphs='アカサタナハマヤラワｱｲｳｴｵｶｷｸ0123456789<>/#$%'.split('');
+ function ensure(){ if(cv)return; cv=doc.getElementById('obol-rain'); if(!cv)return; cx=cv.getContext('2d'); }
+ function size(){ if(!cv)return; cv.width=root.innerWidth; cv.height=root.innerHeight;
+  cols=Math.max(1,Math.floor(cv.width/16)); drops=[]; for(var i=0;i<cols;i++)drops[i]=Math.random()*cv.height/16; }
+ function frame(){
+  if(!on||!cx)return;
+  cx.fillStyle='rgba(0,5,2,0.09)'; cx.fillRect(0,0,cv.width,cv.height);
+  cx.font='15px monospace';
+  for(var i=0;i<cols;i++){
+   var g=glyphs[(Math.random()*glyphs.length)|0], x=i*16, y=drops[i]*16;
+   cx.fillStyle=Math.random()>0.975?'#ffffff':'#00ff66';
+   cx.fillText(g,x,y);
+   if(y>cv.height&&Math.random()>0.975)drops[i]=0;
+   drops[i]++;
+  }
+  raf=root.requestAnimationFrame(frame);
+ }
+ return {
+  toggle:function(want){ ensure();
+   if(want&&!on){ if(!cv)return; on=true; size(); frame(); }
+   else if(!want&&on){ on=false; if(raf)root.cancelAnimationFrame(raf); raf=null; if(cx)cx.clearRect(0,0,cv.width,cv.height); }
+  },
+  resize:function(){ if(on)size(); }
+ };
+})();
+function syncRain(){ rain.toggle(state.skin==='matrix' && fxActive()); }
+function fireSweep(){ if(!fxActive())return; var s=doc.getElementById('obol-sweep'); if(!s)return;
+ s.classList.remove('go'); void s.offsetWidth; s.classList.add('go'); }
+var menuOpen=false, menuEl=null, fxBtn=null;
+function swatchStyle(pv){return 'background:linear-gradient(90deg,'+pv[0]+' 0 40%,'+pv[1]+' 40% 70%,'+pv[2]+' 70% 100%)';}
+function buildPicker(){
+ var header=doc.querySelector('header'); if(!header||doc.getElementById('obol-skin'))return;
+ var cur=skinById(state.skin);
+ var wrap=doc.createElement('div'); wrap.id='obol-skin';
+ var btn=doc.createElement('button');
+ btn.id='obol-skin-btn'; btn.type='button';
+ btn.setAttribute('aria-haspopup','true'); btn.setAttribute('aria-expanded','false'); btn.setAttribute('title','Change skin');
+ btn.innerHTML='<span class="sw"></span><span class="lbl">Skin</span><span class="caret">▼</span>';
+ btn.style.setProperty('--pv1',cur.pv[0]); btn.style.setProperty('--pv2',cur.pv[1]); btn.style.setProperty('--pv3',cur.pv[2]);
+ var menu=doc.createElement('div'); menu.id='obol-skin-menu'; menu.setAttribute('role','menu'); menu.hidden=true;
+ SKINS.forEach(function(s){
+  var o=doc.createElement('button');
+  o.type='button'; o.className='obol-skin-opt'; o.setAttribute('role','menuitemradio');
+  o.dataset.skin=s.id; o.setAttribute('aria-checked', s.id===state.skin?'true':'false');
+  o.innerHTML='<span class="sw" style="'+swatchStyle(s.pv)+'"></span>'+s.label;
+  o.addEventListener('click',function(){ setSkin(s.id); closeMenu(); btn.focus(); });
+  menu.appendChild(o);
+ });
+ var sep=doc.createElement('div'); sep.className='obol-skin-sep'; menu.appendChild(sep);
+ var fxRow=doc.createElement('div'); fxRow.className='obol-fx-row'; fxRow.innerHTML='<span>Motion FX</span>';
+ fxBtn=doc.createElement('button'); fxBtn.id='obol-fx-toggle'; fxBtn.type='button';
+ fxBtn.setAttribute('aria-pressed', state.fx?'true':'false');
+ fxBtn.innerHTML='<span class="led"></span><span class="fxlbl">'+(state.fx?'On':'Off')+'</span>';
+ fxBtn.addEventListener('click',function(){ setFx(!state.fx); });
+ fxRow.appendChild(fxBtn); menu.appendChild(fxRow);
+ menuEl=menu;
+ btn.addEventListener('click',function(e){ e.stopPropagation(); menuOpen?closeMenu():openMenu(); });
+ wrap.appendChild(btn); wrap.appendChild(menu); header.appendChild(wrap);
+ doc.addEventListener('click',function(e){ if(menuOpen&&!wrap.contains(e.target))closeMenu(); });
+}
+function openMenu(){ if(!menuEl)return; menuEl.hidden=false; menuOpen=true;
+ var b=doc.getElementById('obol-skin-btn'); if(b)b.setAttribute('aria-expanded','true'); }
+function closeMenu(){ if(!menuEl)return; menuEl.hidden=true; menuOpen=false;
+ var b=doc.getElementById('obol-skin-btn'); if(b)b.setAttribute('aria-expanded','false'); }
+function refreshUI(){
+ var cur=skinById(state.skin);
+ var b=doc.getElementById('obol-skin-btn');
+ if(b){ b.style.setProperty('--pv1',cur.pv[0]); b.style.setProperty('--pv2',cur.pv[1]); b.style.setProperty('--pv3',cur.pv[2]); }
+ if(menuEl)menuEl.querySelectorAll('.obol-skin-opt').forEach(function(o){ o.setAttribute('aria-checked', o.dataset.skin===state.skin?'true':'false'); });
+ if(fxBtn){ fxBtn.setAttribute('aria-pressed', state.fx?'true':'false'); var l=fxBtn.querySelector('.fxlbl'); if(l)l.textContent=state.fx?'On':'Off'; }
+}
+function setSkin(id){
+ if(idxOf(id)<0)id='obol';
+ state.skin=id; el.setAttribute('data-skin',id); lsSet(LS_SKIN,id);
+ el.classList.toggle('obol-fx',fxActive());
+ syncRain(); fireSweep(); refreshUI();
+}
+function setFx(v){
+ state.fx=!!v; lsSet(LS_FX, state.fx?'1':'0');
+ el.classList.toggle('obol-fx',fxActive());
+ syncRain(); refreshUI();
+}
+function cycle(delta){ setSkin(SKINS[(idxOf(state.skin)+delta+SKINS.length)%SKINS.length].id); }
+doc.addEventListener('keydown',function(e){
+ if(e.ctrlKey||e.metaKey||e.altKey)return;
+ var t=e.target, tag=(t&&t.tagName||'').toLowerCase();
+ if(tag==='input'||tag==='textarea'||tag==='select'||(t&&t.isContentEditable))return;
+ if(e.key>='1'&&e.key<='5')setSkin(SKINS[+e.key-1].id);
+ else if(e.key===']')cycle(1);
+ else if(e.key==='[')cycle(-1);
+ else if(e.key==='0')setFx(!state.fx);
+ else if(e.key==='Escape'&&menuOpen)closeMenu();
+});
+if(reduceMq.addEventListener)reduceMq.addEventListener('change',function(){ el.classList.toggle('obol-fx',fxActive()); syncRain(); });
+root.addEventListener('resize',rain.resize);
+doc.addEventListener('visibilitychange',function(){ if(doc.hidden)rain.toggle(false); else syncRain(); });
+function injectLayers(){
+ if(!doc.body||doc.getElementById('obol-rain'))return;
+ var ids=['obol-gridwash','obol-scanlines','obol-rain','obol-sweep'];
+ var frag=doc.createDocumentFragment();
+ ids.forEach(function(id){ var node=doc.createElement(id==='obol-rain'?'canvas':'div'); node.id=id; node.setAttribute('aria-hidden','true'); frag.appendChild(node); });
+ doc.body.insertBefore(frag,doc.body.firstChild);
+}
+function install(){ try{ injectLayers(); buildPicker(); refreshUI(); syncRain(); }catch(e){} }
+if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',install,{once:true});
+else install();
+root.OBOL_THEMES=Object.freeze({ skins:SKINS.map(function(s){return s.id;}), get:function(){return {skin:state.skin,fx:state.fx};}, set:setSkin, setFx:setFx });
+})(window);
+</script>
+<!-- Command palette behavior (Build 2): inlined for zero added requests. -->
+<script id="obol-pal-js">
+'use strict';
+(function(root){
+var doc=root.document; if(!doc) return;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+var el=null,input=null,list=null,toastEl=null,ITEMS=[],active=0,lastFocus=null,scriptsRequested=false;
+
+/* ---- data sources (stable runtime globals + live sidebar inputs) ---- */
+function navEntries(){
+ var out=[],seen={};
+ doc.querySelectorAll('header nav a[href^="#"]').forEach(function(a){
+  var href=a.getAttribute('href'),label=(a.textContent||'').trim();
+  if(!href||!label||seen[href])return; seen[href]=1;
+  out.push({kind:'nav',label:label,sub:href,run:null,text:(label+' '+href).toLowerCase()});
+ });
+ return out;
+}
+function cmdEntries(){
+ var out=[];
+ try{ (root.OBOL_LANES||[]).forEach(function(lane){
+  (lane&&lane.cards||[]).forEach(function(card){
+   (card&&card.commands||[]).forEach(function(cmd){
+    if(!cmd||!cmd.run)return;
+    out.push({kind:'cmd',label:card.title||cmd.tool||'command',sub:cmd.tool||'',run:cmd.run,
+      text:((card.title||'')+' '+(cmd.tool||'')+' '+cmd.run+' '+(cmd.note||'')).toLowerCase()});
+   });
+  });
+ }); }catch(e){}
+ try{ (root.OBOL_SCRIPTS||[]).forEach(function(s){
+  if(!s||!s.code)return;
+  out.push({kind:'cmd',label:s.name||s.id||'script',sub:s.cat||s.lang||'script',run:s.code,
+    text:((s.name||'')+' '+(s.cat||'')+' '+(s.desc||'')+' '+(s.lang||'')).toLowerCase()});
+ }); }catch(e){}
+ return out;
+}
+function paramMap(){
+ var m={};
+ doc.querySelectorAll('[data-param]').forEach(function(i){var k=(i.getAttribute('data-param')||'').toLowerCase();if(k)m[k]=i.value||'';});
+ return m;
+}
+function fill(run){
+ var m=paramMap();
+ return String(run).replace(/{{(\w+)}}/g,function(match,k){var v=m[k.toLowerCase()];return (v!=null&&v!=='')?v:match;});
+}
+
+/* ---- Build 6: favorites + copy history (localStorage read-models, engagement-independent) ---- */
+var LS_FAV='obol-fav-cmds', LS_HIST='obol-cmd-history', HIST_MAX=15;
+function sig(item){ return (item&&item.run)?String(item.run):''; }
+function readJSON(k,dflt){ try{ var raw=root.localStorage.getItem(k); return raw?JSON.parse(raw):dflt; }catch(e){ return dflt; } }
+function writeJSON(k,v){ try{ root.localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function favMap(){ var m=readJSON(LS_FAV,{}); return (m&&typeof m==='object'&&!Array.isArray(m))?m:{}; }
+function isFav(item){ var s=sig(item); return !!(s&&favMap()[s]); }
+function toggleFav(item){ if(!item||item.kind!=='cmd')return false; var s=sig(item); if(!s)return false;
+ var m=favMap(); if(m[s]){ delete m[s]; } else { m[s]={run:item.run,label:item.label,sub:item.sub||''}; } writeJSON(LS_FAV,m); return !!m[s]; }
+function toEntry(e){ return {kind:'cmd',label:e.label||'command',sub:e.sub||'',run:e.run,
+ text:((e.label||'')+' '+(e.sub||'')+' '+(e.run||'')).toLowerCase()}; }
+function favEntries(){ var m=favMap(),out=[]; for(var s in m){ if(Object.prototype.hasOwnProperty.call(m,s)&&m[s]&&m[s].run){ var it=toEntry(m[s]); it.fav=true; out.push(it); } } return out; }
+function histList(){ var a=readJSON(LS_HIST,[]); return Array.isArray(a)?a.filter(function(e){return e&&e.run;}):[]; }
+function histEntries(){ return histList().map(toEntry); }
+function recordHistory(item){ if(!item||item.kind!=='cmd'||!item.run)return;
+ var a=histList().filter(function(e){return e.run!==item.run;}); a.unshift({run:item.run,label:item.label,sub:item.sub||''});
+ if(a.length>HIST_MAX)a.length=HIST_MAX; writeJSON(LS_HIST,a); }
+function clearHistory(){ writeJSON(LS_HIST,[]); }
+
+/* ---- scoring: all query tokens must appear; prefix + earliness bonus ---- */
+function score(text,tokens){
+ if(!tokens.length)return 0;
+ var total=0;
+ for(var i=0;i<tokens.length;i++){var idx=text.indexOf(tokens[i]);if(idx<0)return -Infinity;total+=idx;}
+ var prefix=text.indexOf(tokens[0])===0?500:0; /* higher score = better match */
+ return 1000-total+prefix;
+}
+
+/* ---- render ---- */
+function firstLine(s){var t=String(s).split('\n')[0];return t.length>90?t.slice(0,90)+'…':t;}
+function rowHtml(item,flatIdx){
+ var kindLabel=item.kind==='nav'?'go':'cmd';
+ var sub=item.kind==='nav'?item.sub:(item.sub+(item.run?'  ·  '+firstLine(item.run):''));
+ var hint=item.kind==='nav'?'go →':'copy';
+ var starOn=item.kind==='cmd'&&isFav(item);
+ var starBtn=item.kind==='cmd'?'<button class="obol-pal-star" type="button" data-star="'+flatIdx+'" aria-pressed="'+(starOn?'true':'false')+'" title="'+(starOn?'Unfavorite':'Favorite')+'" aria-label="Toggle favorite">'+(starOn?'★':'☆')+'</button>':'';
+ var addBtn=item.kind==='cmd'?'<button class="obol-pal-add" type="button" data-add="'+flatIdx+'" title="Add to playbook" aria-label="Add to playbook">+</button>':'';
+ return '<div class="obol-pal-row" role="option" data-i="'+flatIdx+'" aria-selected="false">'+
+  '<span class="obol-pal-kind '+kindLabel+'">'+kindLabel+'</span>'+
+  '<span class="obol-pal-main"><span class="obol-pal-title">'+esc(item.label)+'</span>'+
+  '<span class="obol-pal-sub">'+esc(sub)+'</span></span>'+
+  starBtn+addBtn+'<span class="obol-pal-hint">'+hint+'</span></div>';
+}
+function render(q){
+ q=(q||'').trim().toLowerCase();
+ var tokens=q?q.split(/\s+/):[];
+ function rank(entries,cap,boostFav){
+  var scored=[];
+  for(var i=0;i<entries.length;i++){var sc=score(entries[i].text,tokens);if(!isFinite(sc))continue;if(boostFav&&entries[i].fav)sc+=2000;scored.push({e:entries[i],sc:sc,i:i});}
+  scored.sort(function(a,b){return b.sc-a.sc || a.i-b.i;});
+  return scored.slice(0,cap).map(function(x){return x.e;});
+ }
+ /* Build the group list. Favorites + Recent lead on an empty query; a query folds
+    favorites up via a score boost. Commands are marked fav-state for the boost + star. */
+ var groups=[];
+ if(!q){
+  var favs=favEntries(); if(favs.length)groups.push({label:'★ Favorites',items:favs.slice(0,12)});
+  var recents=histEntries(); if(recents.length)groups.push({label:'Recent',items:recents});
+ }
+ var navs=rank(navEntries(),8);
+ if(navs.length)groups.push({label:'Go to',items:navs});
+ var allCmds=cmdEntries();
+ if(q){ var fm=favMap(); allCmds.forEach(function(c){ if(c.run&&fm[c.run])c.fav=true; }); }
+ var cmds=rank(allCmds, q?60:10, true);
+ if(cmds.length)groups.push({label:'Commands'+(q?'':' · start typing to search all'),items:cmds});
+
+ /* flatten with cross-group de-dup (a command shows once, in its highest group) */
+ ITEMS=[]; var html='',flat=0,any=false,seen={};
+ groups.forEach(function(g){
+  var items=g.items.filter(function(it){ if(it.kind!=='cmd')return true; if(seen[it.run])return false; seen[it.run]=1; return true; });
+  if(!items.length)return; any=true;
+  html+='<div class="obol-pal-grp"><span>'+esc(g.label)+'</span></div>';
+  items.forEach(function(it){ ITEMS.push(it); html+=rowHtml(it,flat++); });
+ });
+ if(!any){ list.innerHTML='<div class="obol-pal-empty">No matches for “'+esc(q)+'”.</div>'; active=-1; return; }
+ list.innerHTML=html;
+ list.querySelectorAll('.obol-pal-row').forEach(function(r){
+  r.addEventListener('mousemove',function(){setActive(+r.dataset.i);});
+  r.addEventListener('click',function(){activate(+r.dataset.i);});
+ });
+ list.querySelectorAll('.obol-pal-add').forEach(function(b){
+  b.addEventListener('mousedown',function(e){e.stopPropagation();});
+  b.addEventListener('click',function(e){e.stopPropagation();addToPlaybook(+b.dataset.add);});
+ });
+ list.querySelectorAll('.obol-pal-star').forEach(function(b){
+  b.addEventListener('mousedown',function(e){e.stopPropagation();});
+  b.addEventListener('click',function(e){ e.stopPropagation(); var it=ITEMS[+b.dataset.star]; if(!it)return;
+   var on=toggleFav(it); it.fav=on; b.setAttribute('aria-pressed',on?'true':'false'); b.textContent=on?'★':'☆'; b.title=on?'Unfavorite':'Favorite';
+   toast(on?'Favorited: '+firstLine(it.label):'Unfavorited: '+firstLine(it.label)); });
+ });
+ var ch=doc.getElementById('obol-pal-clear-hist'); if(ch)ch.hidden=!histList().length;
+ active=0; paint();
+}
+function paint(){
+ var rows=list.querySelectorAll('.obol-pal-row');
+ rows.forEach(function(r){var on=+r.dataset.i===active;r.setAttribute('aria-selected',on?'true':'false');if(on)r.scrollIntoView({block:'nearest'});});
+}
+function setActive(i){active=i;paint();}
+function move(d){ if(!ITEMS.length)return; active=(active+d+ITEMS.length)%ITEMS.length; paint(); }
+
+/* ---- actions ---- */
+function toast(msg){
+ if(!toastEl)return;
+ toastEl.textContent=msg; toastEl.classList.add('show');
+ root.clearTimeout(toast._t); toast._t=root.setTimeout(function(){toastEl.classList.remove('show');},1600);
+}
+function activate(i){
+ var item=ITEMS[i]; if(!item)return;
+ if(item.kind==='nav'){ close(); root.location.hash=item.sub; return; }
+ var text=fill(item.run);
+ try{ (root.navigator.clipboard&&root.navigator.clipboard.writeText(text)); }catch(e){}
+ recordHistory(item);
+ close(); toast('Copied: '+firstLine(text));
+}
+function addToPlaybook(i){
+ var item=ITEMS[i]; if(!item)return;
+ if(item.kind!=='cmd'){ toast('Only commands add to the playbook — “'+firstLine(item.label)+'” is a section'); return; }
+ var ok=false; try{ ok=!!(root.OBOL_PLAYBOOK&&root.OBOL_PLAYBOOK.add(item.run,item.label)); }catch(e){}
+ if(ok)recordHistory(item);
+ toast(ok?'Added to playbook: '+firstLine(item.label):'Playbook unavailable');
+}
+
+/* ---- open / close ---- */
+function ensureScripts(){
+ if(root.OBOL_SCRIPTS||scriptsRequested)return; scriptsRequested=true;
+ try{ var L=root.OBOL_RUNTIME_LOADER; if(L&&typeof L.loadGroup==='function'){ var p=L.loadGroup('toolReferenceData'); if(p&&p.then)p.then(function(){ if(isOpen())render(input.value); }); } }catch(e){}
+}
+function isOpen(){return el&&el.classList.contains('open');}
+function open(){
+ if(!el)build(); if(isOpen())return;
+ lastFocus=doc.activeElement;
+ el.classList.add('open'); input.value=''; ensureScripts(); render('');
+ root.setTimeout(function(){input.focus();},0);
+}
+function close(){
+ if(!isOpen())return; el.classList.remove('open');
+ if(lastFocus&&doc.contains(lastFocus))try{lastFocus.focus();}catch(e){}
+}
+function toggle(){ isOpen()?close():open(); }
+
+/* ---- build DOM ---- */
+function build(){
+ if(doc.getElementById('obol-pal'))return;
+ el=doc.createElement('div'); el.id='obol-pal'; el.setAttribute('role','dialog'); el.setAttribute('aria-modal','true'); el.setAttribute('aria-label','Command palette');
+ el.innerHTML='<div id="obol-pal-panel">'+
+  '<input id="obol-pal-input" role="combobox" aria-controls="obol-pal-list" aria-expanded="true" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search commands, or jump to a section…">'+
+  '<div id="obol-pal-list" role="listbox" aria-label="Results"></div>'+
+  '<div id="obol-pal-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> copy / go</span><span><kbd>⇧↵</kbd> playbook</span><span><kbd>☆</kbd> favorite</span><span><kbd>esc</kbd> close</span><button id="obol-pal-clear-hist" type="button" title="Clear recent commands" hidden>clear recent</button></div>'+
+ '</div>';
+ doc.body.appendChild(el);
+ toastEl=doc.createElement('div'); toastEl.id='obol-pal-toast'; toastEl.setAttribute('role','status'); toastEl.setAttribute('aria-live','polite'); doc.body.appendChild(toastEl);
+ input=doc.getElementById('obol-pal-input'); list=doc.getElementById('obol-pal-list');
+ input.addEventListener('input',function(){render(input.value);});
+ var ch=doc.getElementById('obol-pal-clear-hist');
+ if(ch)ch.addEventListener('click',function(e){ e.preventDefault(); clearHistory(); render(input.value); toast('Recent cleared'); input.focus(); });
+ el.addEventListener('mousedown',function(e){ if(e.target===el)close(); });
+ el.addEventListener('keydown',function(e){
+  /* let the row's ★/+/clear buttons handle their own activation keys */
+  var onBtn=e.target&&e.target.tagName==='BUTTON';
+  if(onBtn&&(e.key==='Enter'||e.key===' '||e.key==='Spacebar')){ return; }
+  if(e.key==='ArrowDown'){e.preventDefault();move(1);}
+  else if(e.key==='ArrowUp'){e.preventDefault();move(-1);}
+  else if(e.key==='Enter'){e.preventDefault();if(active>=0){e.shiftKey?addToPlaybook(active):activate(active);}}
+  else if(e.key==='Escape'){e.preventDefault();close();}
+ });
+}
+
+/* ---- key + trigger interception (capture phase beats the v30 handler) ---- */
+root.addEventListener('keydown',function(e){
+ if((e.ctrlKey||e.metaKey)&&!e.altKey&&(e.key==='k'||e.key==='K')){ e.preventDefault(); e.stopImmediatePropagation(); toggle(); }
+},true);
+doc.addEventListener('click',function(e){
+ var t=e.target&&e.target.closest&&e.target.closest('#quick-open30,#home-search30');
+ if(t){ e.preventDefault(); e.stopImmediatePropagation(); open(); }
+},true);
+
+root.OBOL_PALETTE=Object.freeze({open:open,close:close,toggle:toggle,
+ favorites:function(){return favMap();}, history:function(){return histList();}, clearHistory:clearHistory});
+})(window);
+</script>
+<!-- Playbook Builder behavior (Build 3): inlined for zero added requests. Chains commands into a runnable, logged .sh; persists per engagement. -->
+<script id="obol-pb-js">
+'use strict';
+(function(root){
+var doc=root.document; if(!doc) return;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function firstLine(s){var t=String(s).split('\n')[0];return t.length>120?t.slice(0,120)+'…':t;}
+
+var LS_STATE='obol-state-v2';
+var steps=[], key=null, el=null, stepsEl=null, previewEl=null, btnEl=null, toastEl=null, lastFocus=null;
+
+/* ---- engagement-scoped persistence (keyed by the workspace createdAt) ---- */
+function readWorkspace(){ try{ var raw=root.localStorage.getItem(LS_STATE); return raw?JSON.parse(raw):null; }catch(e){ return null; } }
+function engagementKey(){ var ws=readWorkspace(); var id=(ws&&ws.createdAt)||'default'; return 'obol-playbook::'+id; }
+function isStep(s){ return s&&typeof s==='object'&&typeof s.cmd==='string'; }
+function loadFrom(k){ try{ var raw=root.localStorage.getItem(k); var arr=raw?JSON.parse(raw):[]; steps=Array.isArray(arr)?arr.filter(isStep):[]; }catch(e){ steps=[]; } }
+function load(){
+ var desired=engagementKey();
+ // The workspace only persists its createdAt after the app's first save. Carry any
+ // steps added before that (the "::default" bucket) forward into the real engagement
+ // key once it appears, so nothing is orphaned when the workspace is first saved.
+ if(key && key!==desired && /::default$/.test(key)){
+  try{ var cur=root.localStorage.getItem(key); if(cur&&!root.localStorage.getItem(desired))root.localStorage.setItem(desired,cur); root.localStorage.removeItem(key); }catch(e){}
+ }
+ key=desired; loadFrom(key);
+}
+function persist(){ try{ root.localStorage.setItem(key,JSON.stringify(steps)); }catch(e){} }
+
+/* ---- params: live sidebar inputs win, fall back to saved workspace params ---- */
+function params(){
+ var m={}, ws=readWorkspace();
+ if(ws&&ws.params&&typeof ws.params==='object')for(var k in ws.params){ if(Object.prototype.hasOwnProperty.call(ws.params,k))m[k.toLowerCase()]=ws.params[k]||''; }
+ doc.querySelectorAll('[data-param]').forEach(function(i){ var p=(i.getAttribute('data-param')||'').toLowerCase(); if(p)m[p]=i.value||''; });
+ if((!m.base_dn)&&m.domain)m.base_dn=m.domain.split('.').map(function(x){return 'DC='+x;}).join(',');
+ return m;
+}
+function refVars(text){ var out=[],seen={},re=/\{\{(\w+)\}\}/g,x; while((x=re.exec(text))){ if(!seen[x[1]]){seen[x[1]]=1;out.push(x[1]);} } return out; }
+function allVars(){ var set=[],seen={}; steps.forEach(function(s){ refVars(s.cmd).forEach(function(v){ if(!seen[v]){seen[v]=1;set.push(v);} }); }); return set; }
+function subst(cmd){ return String(cmd).replace(/"?\{\{(\w+)\}\}"?/g,function(_m,k){ return '"$'+k+'"'; }); }
+function shQuote(v){ return '"'+String(v).replace(/(["\\$`])/g,'\\$1')+'"'; }
+
+/* ---- build the runnable, logged .sh (preview == export) ---- */
+function buildScript(){
+ var p=params(), vars=allVars(), L=[];
+ L.push('#!/usr/bin/env bash');
+ L.push('#');
+ L.push('# Obol Playbook — exported '+new Date().toISOString());
+ L.push('# Review every command before running. Authorized engagements only.');
+ L.push('# Nothing runs until you execute this file; each step is logged.');
+ L.push('#');
+ L.push('set -o pipefail');
+ L.push('');
+ if(vars.length){
+  L.push('# \u2500\u2500 Variables (from engagement params \u2014 fill any marked TODO) \u2500\u2500');
+  vars.forEach(function(v){ var val=p[v];
+   if(val!=null&&val!=='')L.push(v+'='+shQuote(val));
+   else L.push(v+'=""            # TODO: set '+v+' before running');
+  });
+  L.push('');
+ }
+ L.push('# \u2500\u2500 Logging: tee all output to a timestamped log \u2500\u2500');
+ L.push('LOG="obol-playbook-$(date +%Y%m%d-%H%M%S).log"');
+ L.push('exec > >(tee -a "$LOG") 2>&1');
+ L.push('set -x');
+ L.push('');
+ steps.forEach(function(s,i){
+  L.push('# \u2500\u2500 ['+(i+1)+'] '+String(s.label||'step').replace(/\n/g,' ')+' \u2500\u2500');
+  L.push(subst(s.cmd));
+  L.push('');
+ });
+ L.push('set +x');
+ L.push('echo "Playbook complete ('+steps.length+' step'+(steps.length===1?'':'s')+'). Log: $LOG"');
+ return L.join('\n')+'\n';
+}
+
+/* ---- render ---- */
+function renderSteps(){
+ if(!stepsEl)return;
+ if(!steps.length){
+  stepsEl.innerHTML='<div class="obol-pb-empty">No steps yet.<br>Open the command palette with <kbd>Ctrl/\u2318 K</kbd>, find a command, then press <kbd>\u21e7\u21b5</kbd> or click <b>+</b> to add it here.</div>';
+ } else {
+  var h='';
+  steps.forEach(function(s,i){
+   h+='<div class="obol-pb-step" role="listitem">'
+    + '<span class="obol-pb-num">'+(i+1)+'</span>'
+    + '<div class="obol-pb-body"><div class="obol-pb-title">'+esc(s.label||'step')+'</div>'
+    +   '<div class="obol-pb-cmd">'+esc(firstLine(subst(s.cmd)))+'</div></div>'
+    + '<div class="obol-pb-ctrls">'
+    +   '<button class="up" type="button" aria-label="Move step '+(i+1)+' up" data-i="'+i+'"'+(i===0?' disabled':'')+'>\u25b2</button>'
+    +   '<button class="dn" type="button" aria-label="Move step '+(i+1)+' down" data-i="'+i+'"'+(i===steps.length-1?' disabled':'')+'>\u25bc</button>'
+    +   '<button class="rm" type="button" aria-label="Remove step '+(i+1)+'" data-i="'+i+'">\u2715</button>'
+    + '</div></div>';
+  });
+  stepsEl.innerHTML=h;
+  stepsEl.querySelectorAll('.up').forEach(function(b){b.addEventListener('click',function(){move(+b.dataset.i,-1);});});
+  stepsEl.querySelectorAll('.dn').forEach(function(b){b.addEventListener('click',function(){move(+b.dataset.i,1);});});
+  stepsEl.querySelectorAll('.rm').forEach(function(b){b.addEventListener('click',function(){remove(+b.dataset.i);});});
+ }
+ if(previewEl)previewEl.textContent=steps.length?buildScript():'# Add commands to build a runnable .sh playbook.';
+ syncActions();
+}
+function syncActions(){ var has=steps.length>0; ['obol-pb-export','obol-pb-copy','obol-pb-clear'].forEach(function(id){var b=doc.getElementById(id);if(b)b.disabled=!has;}); }
+function updateBadge(){ if(!btnEl)btnEl=doc.getElementById('obol-pb-btn'); if(!btnEl)return; var n=steps.length;
+ btnEl.setAttribute('data-count',String(n)); var ct=btnEl.querySelector('.ct'); if(ct)ct.textContent=n;
+ btnEl.setAttribute('aria-label','Playbook \u2014 '+n+' step'+(n===1?'':'s')); }
+
+/* ---- operations (always target the current engagement) ---- */
+function changed(){ persist(); updateBadge(); if(isOpen())renderSteps(); }
+function add(cmd,label){ if(!cmd)return false; load();
+ steps.push({id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),cmd:String(cmd),label:(String(label||'command').trim())||'command'});
+ changed(); return true; }
+function move(i,d){ var j=i+d; if(i<0||i>=steps.length||j<0||j>=steps.length)return; var t=steps[i];steps[i]=steps[j];steps[j]=t; changed(); }
+function remove(i){ if(i<0||i>=steps.length)return; steps.splice(i,1); changed(); }
+function clearAll(){ if(!steps.length)return; if(!root.confirm('Clear all '+steps.length+' playbook step'+(steps.length===1?'':'s')+'?'))return; steps=[]; changed(); toast('Playbook cleared'); }
+
+/* ---- export / copy ---- */
+function scriptName(){ return 'obol-playbook-'+new Date().toISOString().slice(0,10)+'.sh'; }
+function exportSh(){ if(!steps.length)return; var txt=buildScript(), name=scriptName();
+ try{
+  if(root.OBOL_REPORT_V2&&typeof root.OBOL_REPORT_V2.download==='function'){ root.OBOL_REPORT_V2.download(name,txt); }
+  else { var blob=new Blob([txt],{type:'text/x-shellscript;charset=utf-8'}); var a=doc.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); root.setTimeout(function(){URL.revokeObjectURL(a.href);},1500); }
+  toast('Exported '+name);
+ }catch(e){ toast('Export failed'); }
+}
+function copyScript(){ if(!steps.length)return; try{ root.navigator.clipboard&&root.navigator.clipboard.writeText(buildScript()); toast('Script copied'); }catch(e){} }
+
+/* ---- toast ---- */
+function toast(msg){ if(!toastEl)return; toastEl.textContent=msg; toastEl.classList.add('show');
+ root.clearTimeout(toast._t); toast._t=root.setTimeout(function(){toastEl.classList.remove('show');},1600); }
+
+/* ---- open / close ---- */
+function isOpen(){return el&&el.classList.contains('open');}
+function open(){ if(!el)build(); load(); updateBadge(); renderSteps(); if(isOpen())return;
+ lastFocus=doc.activeElement; el.classList.add('open');
+ root.setTimeout(function(){var c=doc.getElementById('obol-pb-close');if(c)c.focus();},0); }
+function close(){ if(!isOpen())return; el.classList.remove('open'); if(lastFocus&&doc.contains(lastFocus))try{lastFocus.focus();}catch(e){} }
+function toggle(){ isOpen()?close():open(); }
+
+/* ---- build DOM ---- */
+function build(){
+ if(doc.getElementById('obol-pb'))return;
+ el=doc.createElement('div'); el.id='obol-pb'; el.setAttribute('role','dialog'); el.setAttribute('aria-modal','true'); el.setAttribute('aria-label','Playbook builder');
+ el.innerHTML=''
+  +'<div id="obol-pb-scrim"></div>'
+  +'<div id="obol-pb-panel">'
+  + '<div id="obol-pb-head"><span class="sub">\u26d3 Playbook</span><h2 id="obol-pb-title">Command chain</h2>'
+  +   '<button id="obol-pb-close" type="button" aria-label="Close playbook">\u2715</button></div>'
+  + '<div id="obol-pb-steps" role="list"></div>'
+  + '<div id="obol-pb-preview-wrap"><div id="obol-pb-preview-head"><span class="lbl">Preview \u00b7 runnable .sh</span></div>'
+  +   '<pre id="obol-pb-preview" tabindex="0" aria-label="Script preview"></pre></div>'
+  + '<div id="obol-pb-foot">'
+  +   '<button class="obol-pb-act primary" id="obol-pb-export" type="button">\u2b07 Export .sh</button>'
+  +   '<button class="obol-pb-act" id="obol-pb-copy" type="button">Copy</button>'
+  +   '<button class="obol-pb-act clear" id="obol-pb-clear" type="button">Clear</button>'
+  + '</div>'
+  +'</div>';
+ doc.body.appendChild(el);
+ toastEl=doc.createElement('div'); toastEl.id='obol-pb-toast'; toastEl.setAttribute('role','status'); toastEl.setAttribute('aria-live','polite'); doc.body.appendChild(toastEl);
+ stepsEl=doc.getElementById('obol-pb-steps'); previewEl=doc.getElementById('obol-pb-preview');
+ doc.getElementById('obol-pb-close').addEventListener('click',close);
+ doc.getElementById('obol-pb-scrim').addEventListener('click',close);
+ doc.getElementById('obol-pb-export').addEventListener('click',exportSh);
+ doc.getElementById('obol-pb-copy').addEventListener('click',copyScript);
+ doc.getElementById('obol-pb-clear').addEventListener('click',clearAll);
+ el.addEventListener('keydown',function(e){ if(e.key==='Escape'){e.preventDefault();close();} });
+}
+function buildButton(){
+ var header=doc.querySelector('header'); if(!header||doc.getElementById('obol-pb-btn'))return;
+ btnEl=doc.createElement('button'); btnEl.id='obol-pb-btn'; btnEl.type='button';
+ btnEl.setAttribute('title','Playbook \u2014 chain commands into a runnable .sh');
+ btnEl.innerHTML='<span class="ic" aria-hidden="true">\u26d3</span><span class="lbl">Playbook</span><span class="ct">0</span>';
+ btnEl.addEventListener('click',toggle);
+ header.appendChild(btnEl); updateBadge();
+}
+function install(){ try{ load(); buildButton(); }catch(e){} }
+if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',install,{once:true}); else install();
+root.OBOL_PLAYBOOK=Object.freeze({ add:add, open:open, close:close, toggle:toggle, clear:clearAll, list:function(){return steps.slice();} });
+})(window);
+</script>
+<!-- Cred Reuse Matrix behavior (Build 4): inlined for zero added requests. Builds a credentials × hosts grid from the live workspace and one-click retargets the console via the app's own sidebar inputs. -->
+<script id="obol-cm-js">
+'use strict';
+(function(root){
+var doc=root.document; if(!doc) return;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+var LS_STATE='obol-state-v2';
+var el=null, wrapEl=null, btnEl=null, toastEl=null, lastFocus=null;
+
+/* ---- read the live workspace (never mutate it directly; retarget via the app's inputs) ---- */
+function readState(){ try{ var raw=root.localStorage.getItem(LS_STATE); return raw?JSON.parse(raw):null; }catch(e){ return null; } }
+function detectType(secret){ secret=String(secret||''); if(/^[0-9a-f]{32}$/i.test(secret))return'ntlm'; if(/\$krb5/i.test(secret))return'kerberos'; if(/^[A-Za-z0-9+/=]{40,}$/.test(secret))return'token'; return'password'; }
+var TYPE_CHIP={password:'PW',ntlm:'NT',kerberos:'KRB',token:'TOK'};
+
+/* ---- credentials: merge the rich model with legacy artifacts.creds strings ---- */
+function creds(st){
+ var out=[], seen={}, richUS={};
+ function add(c){
+  var user=String(c.username==null?c.user:c.username||'').replace(/^.*\\/,'').trim(); if(!user)return;
+  var secret=String(c.secret||''); if(!secret)return;
+  var domain=String(c.domain||'').toLowerCase();
+  var type=c.secretType||detectType(secret);
+  var k=domain+' '+user.toLowerCase()+' '+secret+' '+type;
+  if(seen[k])return; seen[k]=1;
+  out.push({username:user,domain:domain,secret:secret,secretType:type,privilege:String(c.privilege||''),validations:Array.isArray(c.validations)?c.validations:[],key:k});
+ }
+ (st&&st.credentials||[]).forEach(function(c){ add(c); richUS[String(c.username||'').replace(/^.*\\/,'').toLowerCase()+' '+String(c.secret||'')]=1; });
+ ((st&&st.artifacts&&st.artifacts.creds)||[]).forEach(function(raw){
+  var s=String(raw||''), user, secret, m=s.match(/^(\S+)\s+\((?:NT:\s*)?([0-9a-f]{32})\)$/i);
+  if(m){ user=m[1]; secret=m[2]; }
+  else { var i=s.indexOf(':'); if(i<0)return; user=s.slice(0,i); secret=s.slice(i+1); }
+  if(richUS[String(user||'').replace(/^.*\\/,'').toLowerCase()+' '+secret])return; // already covered by the rich model
+  add({username:user,secret:secret});
+ });
+ return out;
+}
+function hosts(st){ return ((st&&st.hosts)||[]).filter(function(h){ return h&&(h.ip||h.name||h.hostname); }); }
+function credLabel(c){ return (c.domain?c.domain+'\\':'')+c.username; }
+function hostLabel(h){ return h.name||h.hostname||h.ip||'host'; }
+
+/* ---- cell status: adm > ok > no > untested, from validations + host signals ---- */
+function adminHint(cred,host,val){
+ var pv=(cred.privilege||'').toLowerCase();
+ if(/admin|system|domain admin|enterprise|\bda\b|\broot\b/.test(pv))return true;
+ if(val){ var ev=((val.evidence||'')+' '+(val.service||'')).toLowerCase(); if(/pwn3d|local admin|\badmin\b|system|nt authority/.test(ev))return true; }
+ var pw=String(host.pwned||'').toLowerCase(), un=(cred.username||'').toLowerCase();
+ if(pw&&un&&pw.indexOf(un)>=0)return true;
+ return false;
+}
+function hostCredMatch(cred,host){
+ if(!Array.isArray(host.creds))return false;
+ var un=(cred.username||'').toLowerCase(); if(!un)return false;
+ return host.creds.some(function(hc){ var s=String(hc==null?'':(hc.username||hc.user||hc)).replace(/^.*\\/,'').toLowerCase(); return s&&(s===un||s.split(':')[0]===un); });
+}
+function cellStatus(cred,host){
+ var key='host:'+host.id, vals=cred.validations.filter(function(v){return v&&v.contextKey===key;});
+ var succ=vals.filter(function(v){return v.result==='success';}), fail=vals.filter(function(v){return v.result&&v.result!=='success';});
+ if(succ.length||hostCredMatch(cred,host)){
+  return (succ.some(function(v){return adminHint(cred,host,v);})||adminHint(cred,host,null))?'adm':'ok';
+ }
+ if(fail.length)return 'no';
+ return 'untested';
+}
+var GLYPH={adm:'ADM',ok:'✓',no:'✗',untested:'·'};
+var STLABEL={adm:'admin',ok:'valid',no:'failed',untested:'untested'};
+function statusRank(s){return s==='adm'?3:s==='ok'?2:s==='no'?1:0;}
+
+/* ---- retarget the console through the app's own inputs (persists + re-renders) ---- */
+function setParam(k,v){ var inp=doc.querySelector('[data-param="'+k+'"]'); if(!inp)return false; inp.value=(v==null?'':v); try{inp.dispatchEvent(new root.Event('input',{bubbles:true}));}catch(e){} return true; }
+function retargetCredParams(cred){
+ setParam('user',cred.username);
+ if(cred.domain)setParam('domain',cred.domain);
+ if(cred.secretType==='ntlm'||cred.secretType==='kerberos')setParam('hash',cred.secret);
+ else if(cred.secretType==='token')setParam('token',cred.secret);
+ else setParam('password',cred.secret);
+}
+function retargetHost(host){
+ var sel=doc.getElementById('ctx-select');
+ if(sel){ var val='host:'+host.id;
+  for(var i=0;i<sel.options.length;i++){ if(sel.options[i].value===val){ sel.value=val; try{sel.dispatchEvent(new root.Event('change',{bubbles:true}));}catch(e){} return true; } }
+ }
+ if(host.ip)setParam('target',host.ip); // fallback when the option is not present
+ return false;
+}
+function afterRetarget(msg){ close(); toast(msg); }
+function onCred(cred){ retargetCredParams(cred); afterRetarget('Retargeted console to '+credLabel(cred)); }
+function onHost(host){ retargetHost(host); afterRetarget('Retargeted to host '+hostLabel(host)); }
+function onCell(cred,host){ retargetHost(host); retargetCredParams(cred); afterRetarget(credLabel(cred)+'  →  '+hostLabel(host)); }
+
+/* ---- roving-tabindex keyboard grid: focusables carry data-r / data-c ---- */
+function focusableAt(r,c){ return wrapEl?wrapEl.querySelector('[data-r="'+r+'"][data-c="'+c+'"]'):null; }
+function setRoving(target){
+ if(!wrapEl)return;
+ wrapEl.querySelectorAll('[data-r]').forEach(function(x){x.tabIndex=-1;});
+ if(target){ target.tabIndex=0; }
+}
+function onGridKey(e){
+ var t=e.target; if(!t||t.getAttribute('data-r')==null)return;
+ var r=+t.getAttribute('data-r'), c=+t.getAttribute('data-c'), nr=r, nc=c;
+ if(e.key==='ArrowRight')nc=c+1; else if(e.key==='ArrowLeft')nc=c-1;
+ else if(e.key==='ArrowDown')nr=r+1; else if(e.key==='ArrowUp')nr=r-1;
+ else if(e.key==='Home')nc=0; else if(e.key==='End')nc=9999;
+ else return;
+ e.preventDefault();
+ var next=focusableAt(nr,nc);
+ if(!next&&(e.key==='End')){ // walk left to the last existing cell in the row
+  for(var cc=200;cc>=0&&!next;cc--)next=focusableAt(nr,cc);
+ }
+ if(next){ setRoving(next); next.focus(); }
+}
+
+/* ---- render ---- */
+function render(){
+ if(!wrapEl)return;
+ var st=readState(), CR=creds(st), HS=hosts(st);
+ if(!CR.length&&!HS.length){
+  wrapEl.innerHTML='<div class="obol-cm-empty">No credentials or hosts logged yet.<br>Ingest tool output (<code>nxc</code>, <code>secretsdump</code>, <code>hydra</code>…) on the Evidence tab, or add a host on Targets, to populate the reuse matrix.</div>';
+  return;
+ }
+ // rank creds by their strongest cell so validated/admin creds float up
+ var rows=CR.map(function(c){ var cells=HS.map(function(h){return cellStatus(c,h);}); var best=cells.reduce(function(m,s){return Math.max(m,statusRank(s));},0); return {c:c,cells:cells,best:best}; });
+ rows.sort(function(a,b){ return b.best-a.best || credLabel(a.c).localeCompare(credLabel(b.c)); });
+
+ var h='<table class="obol-cm-table" role="grid" aria-label="Credential reuse matrix"><thead><tr role="row">';
+ h+='<th class="obol-cm-corner" scope="col">cred ↓ / host →</th>';
+ HS.forEach(function(host,ci){
+  h+='<th scope="col" role="columnheader"><button type="button" class="obol-cm-host" data-r="0" data-c="'+(ci+1)+'" data-host="'+ci+'" title="Retarget console to '+esc(hostLabel(host))+'" aria-label="Retarget console to host '+esc(hostLabel(host))+(host.ip?', '+esc(host.ip):'')+'"><span class="nm">'+esc(hostLabel(host))+'</span>'+(host.ip&&host.ip!==hostLabel(host)?'<span class="ip">'+esc(host.ip)+'</span>':'')+'</button></th>';
+ });
+ h+='</tr></thead><tbody>';
+ if(!rows.length){
+  h+='<tr role="row"><th class="obol-cm-rowh" scope="row"><span style="display:block;padding:8px 12px;color:var(--dim);font-size:11.5px">No credentials yet</span></th>'+HS.map(function(){return '<td class="obol-cm-cell st-untested"><span class="obol-cm-chip st-untested">·</span></td>';}).join('')+'</tr>';
+ }
+ rows.forEach(function(row,ri){
+  var c=row.c;
+  h+='<tr role="row"><th class="obol-cm-rowh" scope="row" role="rowheader"><button type="button" class="obol-cm-cred" data-r="'+(ri+1)+'" data-c="0" data-cred="'+ri+'" title="Fill USER / PASS / HASH / DOMAIN with '+esc(credLabel(c))+'" aria-label="Retarget console to credential '+esc(credLabel(c))+'"><span class="nm">'+esc(credLabel(c))+'</span><span class="ty">'+esc(TYPE_CHIP[c.secretType]||'PW')+'</span></button></th>';
+  if(!HS.length){ h+='<td class="obol-cm-cell st-untested"><span style="display:block;padding:8px 12px;color:var(--dim);font-size:11px;white-space:normal">Add a host on the Targets tab to test reuse</span></td>'; }
+  else HS.forEach(function(host,ci){
+   var s=row.cells[ci];
+   h+='<td class="obol-cm-cell st-'+s+'"><button type="button" class="obol-cm-chip st-'+s+'" data-r="'+(ri+1)+'" data-c="'+(ci+1)+'" data-cred="'+ri+'" data-host="'+ci+'" title="'+esc(credLabel(c))+' on '+esc(hostLabel(host))+' — '+STLABEL[s]+'. Retarget here." aria-label="'+esc(credLabel(c))+' on '+esc(hostLabel(host))+', '+STLABEL[s]+'. Activate to retarget the console here.">'+GLYPH[s]+'</button></td>';
+  });
+  h+='</tr>';
+ });
+ h+='</tbody></table>';
+ wrapEl.innerHTML=h;
+
+ // wire actions off the ranked/rendered lists
+ var ORDER=rows.map(function(x){return x.c;});
+ wrapEl.querySelectorAll('.obol-cm-host').forEach(function(b){ b.addEventListener('click',function(){onHost(HS[+b.dataset.host]);}); });
+ wrapEl.querySelectorAll('.obol-cm-cred').forEach(function(b){ b.addEventListener('click',function(){onCred(ORDER[+b.dataset.cred]);}); });
+ wrapEl.querySelectorAll('.obol-cm-chip[data-cred]').forEach(function(b){ b.addEventListener('click',function(){ if(b.dataset.host!=null)onCell(ORDER[+b.dataset.cred],HS[+b.dataset.host]); }); });
+ // roving tabindex: first focusable owns the tab stop
+ var first=wrapEl.querySelector('[data-r="1"][data-c="0"]')||wrapEl.querySelector('[data-r]');
+ setRoving(first);
+}
+
+/* ---- toast ---- */
+function toast(msg){ if(!toastEl)return; toastEl.textContent=msg; toastEl.classList.add('show'); root.clearTimeout(toast._t); toast._t=root.setTimeout(function(){toastEl.classList.remove('show');},1800); }
+
+/* ---- open / close ---- */
+function isOpen(){return el&&el.classList.contains('open');}
+function open(){ if(!el)build(); updateBadge(); render(); if(isOpen())return; lastFocus=doc.activeElement; el.classList.add('open');
+ root.setTimeout(function(){ var f=wrapEl&&wrapEl.querySelector('[data-r][tabindex="0"]'); (f||doc.getElementById('obol-cm-close')||el).focus(); },0); }
+function close(){ if(!isOpen())return; el.classList.remove('open'); if(lastFocus&&doc.contains(lastFocus))try{lastFocus.focus();}catch(e){} }
+function toggle(){ isOpen()?close():open(); }
+
+/* ---- build DOM ---- */
+function build(){
+ if(doc.getElementById('obol-cm'))return;
+ el=doc.createElement('div'); el.id='obol-cm'; el.setAttribute('role','dialog'); el.setAttribute('aria-modal','true'); el.setAttribute('aria-label','Credential reuse matrix');
+ el.innerHTML=''
+  +'<div id="obol-cm-panel">'
+  + '<div id="obol-cm-head"><div id="obol-cm-head-main"><div class="sub">🔑 Cred Reuse</div><h2 id="obol-cm-title">Credential × host matrix</h2>'
+  +   '<p class="desc">Where each looted credential has been validated. Click a host or credential to retarget the console; click a cell to aim a credential at a host.</p></div>'
+  +   '<button id="obol-cm-close" type="button" aria-label="Close credential matrix">✕</button></div>'
+  + '<div id="obol-cm-legend" aria-hidden="true">'
+  +   '<span class="lg"><span class="chip st-adm">ADM</span> admin</span>'
+  +   '<span class="lg"><span class="chip st-ok">✓</span> valid</span>'
+  +   '<span class="lg"><span class="chip st-no">✗</span> rejected</span>'
+  +   '<span class="lg"><span class="chip st-untested">·</span> untested</span>'
+  + '</div>'
+  + '<div id="obol-cm-gridwrap"></div>'
+  +'</div>';
+ doc.body.appendChild(el);
+ toastEl=doc.createElement('div'); toastEl.id='obol-cm-toast'; toastEl.setAttribute('role','status'); toastEl.setAttribute('aria-live','polite'); doc.body.appendChild(toastEl);
+ wrapEl=doc.getElementById('obol-cm-gridwrap');
+ doc.getElementById('obol-cm-close').addEventListener('click',close);
+ el.addEventListener('mousedown',function(e){ if(e.target===el)close(); });
+ el.addEventListener('keydown',function(e){ if(e.key==='Escape'){e.preventDefault();close();} });
+ wrapEl.addEventListener('keydown',onGridKey);
+}
+function buildButton(){
+ var header=doc.querySelector('header'); if(!header||doc.getElementById('obol-cm-btn'))return;
+ btnEl=doc.createElement('button'); btnEl.id='obol-cm-btn'; btnEl.type='button';
+ btnEl.setAttribute('title','Cred Reuse Matrix — credentials × hosts, one-click retarget');
+ btnEl.innerHTML='<span class="ic" aria-hidden="true">🔑</span><span class="lbl">Creds</span><span class="ct">0</span>';
+ btnEl.addEventListener('click',toggle);
+ header.appendChild(btnEl); updateBadge();
+}
+function updateBadge(){ if(!btnEl)btnEl=doc.getElementById('obol-cm-btn'); if(!btnEl)return;
+ var n=creds(readState()).length; btnEl.setAttribute('data-count',String(n)); var ct=btnEl.querySelector('.ct'); if(ct)ct.textContent=n;
+ btnEl.setAttribute('aria-label','Cred reuse matrix — '+n+' credential'+(n===1?'':'s')); }
+function install(){ try{ buildButton(); }catch(e){} }
+if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',install,{once:true}); else install();
+try{ root.addEventListener('storage',function(e){ if(e&&e.key===LS_STATE)updateBadge(); }); }catch(e){}
+root.OBOL_CRED_MATRIX=Object.freeze({ open:open, close:close, toggle:toggle, refresh:function(){updateBadge();if(isOpen())render();}, retargetCred:onCred, retargetHost:onHost });
+})(window);
+</script>
+<!-- Build 5 — Kill-Chain Milestone Spine behavior. Reads the live engagement facts
+     (via OBOL_CORE_V2 when present, raw fact ids otherwise) and advances a header-anchored
+     progress spine as milestones are reached. IIFE-wrapped so it can never block boot. -->
+<script id="obol-kc-js">
+'use strict';
+(function(root){
+var doc=root.document; if(!doc) return;
+var LS_STATE='obol-state-v2';
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+/* Ordered kill-chain milestones. Each `facts` list is any-of; `state` is a fallback signal read
+   from the raw workspace. Every fact id below is a real id produced by obol's methodology/intake. */
+var MILES=[
+ {key:'target',    ic:'🎯', label:'Target',       hint:'A scope or working host is defined.',                         facts:['scope.defined'], state:function(st){return !!(st&&((st.hosts&&st.hosts.length)||(st.params&&st.params.target)));}},
+ {key:'recon',     ic:'📡', label:'Recon',        hint:'Initial scanning / service enumeration has landed.',          facts:['scan.initial']},
+ {key:'creds',     ic:'🔑', label:'Creds',        hint:'Credential material has been captured or validated.',         facts:['credential.available','credential.plaintext','credential.ntlm_hash','credential.certificate','credential.candidate'], state:function(st){return !!(st&&st.credentials&&st.credentials.length);}},
+ {key:'foothold',  ic:'🐚', label:'Foothold',     hint:'A shell (Linux, Windows, or web) has been established.',      facts:['foothold.linux','foothold.windows','foothold.webshell']},
+ {key:'localadmin',ic:'🛡', label:'Local Admin',  hint:'Local admin / root / SYSTEM on a host.',                      facts:['access.admin','access.root','access.system','access.web_admin']},
+ {key:'da',        ic:'🏰', label:'Domain Admin', hint:'Domain Admin, DCSync rights, or NTDS reached.',               facts:['objective.domain_admin','ad.dcsync_rights_or_replication_observed','loot.ntds']},
+ {key:'loot',      ic:'💎', label:'Loot',         hint:'Secrets / files collected (NTDS, LSASS, files).',             facts:['loot.ntds','loot.lsass','loot.files']},
+ {key:'report',    ic:'📄', label:'Report',       hint:'Report readiness checks pass.',                               facts:['report.ready']}
+];
+
+function readState(){ try{ var raw=root.localStorage.getItem(LS_STATE); return raw?JSON.parse(raw):null; }catch(e){ return null; } }
+/* Prefer context-scoped facts via core; fall back to raw engagement-wide fact ids. */
+function factSet(st){
+ var C=root.OBOL_CORE_V2;
+ if(C&&typeof C.effectiveFacts==='function'&&st){
+  try{
+   var ctx=(typeof C.normalizeContext==='function')?C.normalizeContext(st,st.activeContext):st.activeContext;
+   var s=C.effectiveFacts(st,ctx);
+   if(s&&typeof s.has==='function')return s;
+  }catch(e){}
+ }
+ try{ return new Set((st&&st.facts||[]).map(function(r){return r&&r.id;})); }catch(e){ return new Set(); }
+}
+function met(m,fs,st){
+ if(m.facts&&m.facts.some(function(f){return fs.has(f);}))return true;
+ if(m.state){ try{ if(m.state(st))return true; }catch(e){} }
+ return false;
+}
+
+var prevDone=null; // null until the first render; used to detect newly-reached milestones for the pulse
+function render(){
+ var strip=doc.getElementById('obol-kc'); if(!strip)return;
+ var nodesEl=strip.querySelector('.obol-kc-nodes'), countEl=strip.querySelector('.obol-kc-count'), linkEl=strip.querySelector('.obol-kc-strip'), liveEl=doc.getElementById('obol-kc-live');
+ if(!nodesEl||!countEl||!linkEl)return;
+ var st=readState(), fs=factSet(st);
+ var done=MILES.map(function(m){return met(m,fs,st);});
+ var count=0,lastDone=-1; done.forEach(function(d,i){ if(d){count++;lastDone=i;} });
+ var nextIdx=done.indexOf(false); // nearest unmet milestone
+ var firstRender=(prevDone===null);
+ var newlyReached=-1;
+
+ var html='';
+ MILES.forEach(function(m,i){
+  if(i)html+='<span class="obol-kc-sep'+(done[i-1]?' done':'')+'"></span>';
+  var isNew=done[i]&&!firstRender&&prevDone&&!prevDone[i];
+  if(isNew&&newlyReached<0)newlyReached=i;
+  var cls='obol-kc-node'+(done[i]?' done':'')+(i===nextIdx?' next':'')+(isNew?' just-done':'');
+  html+='<span class="'+cls+'" data-key="'+m.key+'" title="'+esc(m.label+' — '+m.hint)+'"><span class="ic" aria-hidden="true">'+m.ic+'</span><span class="nm">'+esc(m.label)+'</span></span>';
+ });
+ nodesEl.innerHTML=html;
+ countEl.textContent=count+'/'+MILES.length;
+
+ var reached=lastDone>=0?MILES[lastDone].label:'none yet';
+ var nextLabel=nextIdx<0?'chain complete':MILES[nextIdx].label;
+ linkEl.setAttribute('aria-label','Engagement kill chain: '+count+' of '+MILES.length+' milestones reached'
+   +(lastDone>=0?', furthest reached '+reached:'')
+   +(nextIdx>=0?', next up '+nextLabel:', chain complete')+'. Open Next Steps.');
+
+ if(newlyReached>=0&&liveEl)liveEl.textContent='Milestone reached: '+MILES[newlyReached].label;
+ prevDone=done;
+}
+
+function build(){
+ if(doc.getElementById('obol-kc'))return true;
+ var header=doc.querySelector('header'); if(!header)return false;
+ var bar=doc.createElement('div'); bar.id='obol-kc'; bar.setAttribute('role','navigation'); bar.setAttribute('aria-label','Engagement kill chain');
+ bar.innerHTML='<a class="obol-kc-strip" href="#/path"><span class="obol-kc-title">Kill chain</span><span class="obol-kc-count">0/'+MILES.length+'</span><span class="obol-kc-nodes"></span></a><span id="obol-kc-live" class="obol-kc-sr" aria-live="polite"></span>';
+ header.parentNode.insertBefore(bar, header.nextSibling);
+ return true;
+}
+
+function debounce(fn,ms){ var t; return function(){ root.clearTimeout(t); t=root.setTimeout(fn,ms); }; }
+
+function install(){
+ try{
+  if(!build())return;
+  prevDone=null; render(); // seed prevDone from the current state without pulsing
+  var deb=debounce(render,120);
+  // route() rewrites #view on every fact/outcome/parse mutation, so observing it catches
+  // in-tab evidence changes without a manual refresh.
+  var view=doc.getElementById('view');
+  if(view&&root.MutationObserver){ try{ new root.MutationObserver(deb).observe(view,{childList:true,subtree:true}); }catch(e){} }
+  var facts=doc.getElementById('facts-list');
+  if(facts&&root.MutationObserver){ try{ new root.MutationObserver(deb).observe(facts,{childList:true,subtree:true}); }catch(e){} }
+  try{ root.addEventListener('hashchange',deb); }catch(e){}
+  try{ root.addEventListener('storage',function(e){ if(e&&e.key===LS_STATE)deb(); }); }catch(e){}
+ }catch(e){}
+}
+if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',install,{once:true}); else install();
+root.OBOL_KILLCHAIN=Object.freeze({ refresh:render, milestones:MILES.map(function(m){return m.key;}) });
+})(window);
+</script>
+</body>
+</html>

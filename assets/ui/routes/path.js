@@ -1,0 +1,162 @@
+/*!
+ * obol ui — routes/path.js — THE COACH (Next Path).
+ * A pure proof-gated coach: ranked next moves from the engine, each with its *why*, its
+ * copy-ready command variant(s), its *does-not-prove* honesty line, and what it *produces*.
+ * NO toggles/switches here — command *building* lives in the Tools route. Blocked moves are
+ * listed with their unmet-prereq reason; adding the unlocking fact promotes them live.
+ */
+(function (root) {
+  'use strict';
+  var OBOL = root.OBOL = root.OBOL || {};
+  var U = OBOL.util;
+
+  function esc(s) { return U.esc(s); }
+
+  function phaseChip(phase) {
+    return '<span class="ph-chip ph-' + esc(phase) + '">' + esc(phase) + '</span>';
+  }
+
+  function producesChips(action) {
+    if (!action.produces.length) return '';
+    var chips = action.produces.map(function (k) {
+      return '<span class="fact-chip" title="' + esc(k) + '">' + esc(OBOL.pack.friendly(k)) + '</span>';
+    }).join('');
+    return '<div class="move-produces"><span class="mini-label">proves</span>' + chips + '</div>';
+  }
+
+  function commandsBlock(action, facts, params) {
+    var filled = OBOL.command.fillAll(action, facts, { params: params });
+    return filled.map(function (v, i) {
+      var unfilled = OBOL.command.unfilledTokens(v.filled);
+      var warn = unfilled.length
+        ? '<div class="cmd-needs">needs: ' + unfilled.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(', ') + '</div>'
+        : '';
+      var note = v.note ? '<div class="cmd-note">' + esc(v.note) + '</div>' : '';
+      var label = action.sequence ? ('step ' + (i + 1)) : (i === 0 ? 'preferred' : 'alt ' + i);
+      return '<div class="cmd">'
+        + '<div class="cmd-head"><span class="cmd-tag">' + esc(v.tool || action.tool || 'cmd') + '</span>'
+        + '<span class="cmd-variant">' + label + '</span>'
+        + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '" title="Copy command">copy</button></div>'
+        + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
+        + note + warn + '</div>';
+    }).join('');
+  }
+
+  function moveCard(action, facts, params, opts) {
+    opts = opts || {};
+    var why = U.firstSentence(action.hypothesis || action.proves || action.title);
+    var dnp = action.does_not_prove
+      ? '<div class="move-dnp"><span class="mini-label">does not prove</span>' + esc(action.does_not_prove) + '</div>'
+      : '';
+    var toolLink = (action.tool || (action.tools && action.tools[0]))
+      ? '<a class="btn-ghost" href="#/tools/' + esc(action.tool || action.tools[0]) + '">Build in Tools ↗</a>'
+      : '';
+    return '<article class="move' + (opts.primary ? ' move-primary' : '') + '" data-action="' + esc(action.id) + '">'
+      + '<header class="move-head">' + phaseChip(OBOL.phases.phaseOfAction(action))
+      + '<h3 class="move-title">' + esc(action.title) + '</h3></header>'
+      + '<p class="move-why">' + esc(why) + '</p>'
+      + commandsBlock(action, facts, params)
+      + producesChips(action) + dnp
+      + '<footer class="move-actions">'
+      + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '">Paste result ↴</button>'
+      + toolLink
+      + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark done</button>'
+      + (action.refs && action.refs.length ? '<span class="move-refs">' + action.refs.length + ' ref' + (action.refs.length > 1 ? 's' : '') + '</span>' : '')
+      + '</footer></article>';
+  }
+
+  function blockedRow(pair) {
+    var a = pair.action;
+    return '<li class="blocked-row"><span class="blocked-title">' + esc(a.title) + '</span>'
+      + phaseChip(OBOL.phases.phaseOfAction(a))
+      + '<span class="blocked-reason">' + esc(pair.reason) + '</span></li>';
+  }
+
+  function render(ctx) {
+    var eng = OBOL.store.active();
+    var facts = OBOL.store.factSet();
+    var params = (eng && eng.params) || {};
+    var pack = OBOL.packs.actions();
+    var doneIds = {};
+    Object.keys((eng && eng.checklist) || {}).forEach(function (k) { if (eng.checklist[k] === 'done') doneIds[k] = true; });
+
+    var ranked = OBOL.pack.nextActions(facts, pack, { doneIds: doneIds });
+    var frontier = OBOL.phases.frontierIndex(facts);
+    var onFlow = [], comingUp = [];
+    ranked.forEach(function (a) {
+      if (OBOL.phases.prematurity(a, facts) === 0) onFlow.push(a); else comingUp.push(a);
+    });
+    var locked = OBOL.pack.lockedActions(facts, pack);
+
+    var factCount = Object.keys(facts.kinds()).length;
+    var phaseName = OBOL.phases.PHASES[frontier] || 'recon';
+
+    var html = '<section class="coach">';
+    // hero
+    html += '<div class="coach-hero">'
+      + '<div class="coach-hero-main">'
+      + '<div class="coach-kicker">Next move · frontier: <strong>' + esc(phaseName) + '</strong></div>'
+      + '<h1 class="coach-h1">' + (onFlow.length ? esc(onFlow[0].title) : 'Log evidence to unlock moves') + '</h1>'
+      + '<p class="coach-sub">' + (onFlow.length ? esc(U.firstSentence(onFlow[0].hypothesis || '')) : 'Paste tool output on the Evidence route (or add a fact) and the coach ranks your next commands.') + '</p>'
+      + '</div>'
+      + '<div class="coach-metrics">'
+      + '<div class="metric"><span class="metric-n">' + onFlow.length + '</span><span class="metric-l">ready</span></div>'
+      + '<div class="metric"><span class="metric-n">' + comingUp.length + '</span><span class="metric-l">coming up</span></div>'
+      + '<div class="metric"><span class="metric-n">' + locked.length + '</span><span class="metric-l">blocked</span></div>'
+      + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">facts</span></div>'
+      + '</div></div>';
+
+    // ready (on-flow) moves
+    if (onFlow.length) {
+      html += '<div class="coach-section"><h2 class="coach-sec-h">Ready now</h2>';
+      onFlow.forEach(function (a, i) { html += moveCard(a, facts, params, { primary: i === 0 }); });
+      html += '</div>';
+    } else {
+      html += '<div class="coach-empty">No on-flow moves yet. Start with a scan on the Evidence route, or add a target fact.</div>';
+    }
+
+    // coming up (premature but eligible)
+    if (comingUp.length) {
+      html += '<details class="coach-section coach-comingup"><summary class="coach-sec-h">Coming up — eligible but ahead of your frontier (' + comingUp.length + ')</summary>';
+      comingUp.forEach(function (a) { html += moveCard(a, facts, params, {}); });
+      html += '</details>';
+    }
+
+    // blocked with reasons
+    if (locked.length) {
+      html += '<details class="coach-section coach-blocked"><summary class="coach-sec-h">Blocked — unlocks when you prove a prerequisite (' + locked.length + ')</summary>'
+        + '<ul class="blocked-list">';
+      locked.slice(0, 60).forEach(function (p) { html += blockedRow(p); });
+      html += '</ul>';
+      if (locked.length > 60) html += '<div class="blocked-more">…and ' + (locked.length - 60) + ' more</div>';
+      html += '</details>';
+    }
+
+    html += '</section>';
+    return html;
+  }
+
+  function mounted(ctx) {
+    var mount = ctx.mount;
+    // copy buttons
+    U.on(mount, 'click', '.btn-copy', function (e, t) {
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    // mark done
+    U.on(mount, 'click', '.btn-done', function (e, t) {
+      var id = t.getAttribute('data-action');
+      OBOL.store.update(function (eng) { eng.checklist = eng.checklist || {}; eng.checklist[id] = 'done'; }, 'done');
+      U.toast('Marked done — recomputing');
+      OBOL.router.render();
+    });
+    // paste-back: jump to evidence route pinned to this action
+    U.on(mount, 'click', '.btn-pasteback', function (e, t) {
+      var id = t.getAttribute('data-action');
+      try { sessionStorage.setItem('obol-pasteback-action', id); } catch (err) {}
+      OBOL.router.go('evidence/' + id);
+    });
+  }
+
+  OBOL.routes = OBOL.routes || {};
+  OBOL.routes.path = { render: render, mounted: mounted };
+})(typeof globalThis !== 'undefined' ? globalThis : this);

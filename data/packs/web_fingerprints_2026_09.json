@@ -1,0 +1,42 @@
+{
+ "_comment": "Web component fingerprints (ROADMAP §21 detection-coverage). DATA the check-web-components parser applies to a fetched page (response headers + body) to record web.tech {name, version} facts — the exact input the findings CVE catalog matches on (findings.py). Each row detects one component; when a version is captured the component's version-gated CVEs can fire (candidate), otherwise the name still scopes that component's findings in the library. Rules are conservative (prefer no match over a wrong one) and read-only. `tech` names match the catalog's match.tech. `where`: body | header | cookie. `pattern` group 1 is the version (omit for name-only). Adding a component is adding a row — no code change. NOTE: log4j and struts are Java server internals with no cheap HTTP version signature; they are intentionally absent and surface in the coverage report as 'no fingerprint path'.",
+ "fingerprints": [
+  {"tech": "jquery", "where": "body", "pattern": "jquery[/-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)(?:\\.slim)?(?:\\.min)?\\.js", "note": "jquery-3.5.1.min.js / cdn /jquery/3.5.1/"},
+  {"tech": "jquery-ui", "where": "body", "pattern": "jquery-ui[/-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "jquery-ui-1.12.1.js"},
+  {"tech": "bootstrap", "where": "body", "pattern": "bootstrap[/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)(?:\\.min)?\\.(?:js|css)", "note": "bootstrap.min.js under a versioned path / bootstrap-4.3.1.js"},
+  {"tech": "angularjs", "where": "body", "pattern": "angular(?:js)?[/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)(?:\\.min)?\\.js", "note": "angular.js 1.x"},
+  {"tech": "react", "where": "body", "pattern": "react(?:\\.production|\\.development)?[@/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "react@17.0.2 / react-17.0.2"},
+  {"tech": "vue", "where": "body", "pattern": "vue[@/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)(?:\\.min)?\\.js", "note": "vue@2.6.12 / vue-2.6.12.js"},
+  {"tech": "lodash", "where": "body", "pattern": "lodash[@/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "lodash@4.17.20"},
+  {"tech": "handlebars", "where": "body", "pattern": "handlebars[@/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "handlebars-4.7.6.js"},
+  {"tech": "dojo", "where": "body", "pattern": "dojo[/-](?:release-)?(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "dojo/1.14.1/"},
+  {"tech": "ember", "where": "body", "pattern": "ember[/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)(?:\\.min)?\\.js", "note": "ember-3.20.0.js"},
+  {"tech": "prototypejs", "where": "body", "pattern": "prototype(?:js)?[/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)(?:\\.min)?\\.js", "note": "prototype-1.7.js"},
+  {"tech": "mootools", "where": "body", "pattern": "mootools[a-z.\\-]*?[/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)(?:\\.min)?\\.js", "note": "mootools-core-1.6.0.js"},
+  {"tech": "dompurify", "where": "body", "pattern": "(?:dompurify|purify)[@/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)(?:\\.min)?\\.js", "note": "purify.min.js under a versioned path"},
+  {"tech": "ckeditor", "where": "body", "pattern": "ckeditor[a-z0-9/.\\-]*?[/-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "ckeditor/4.16.0/"},
+  {"tech": "tinymce", "where": "body", "pattern": "tinymce[a-z0-9/.\\-]*?[/-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "tinymce/5.7.0/"},
+  {"tech": "knockout", "where": "body", "pattern": "knockout[/.-](?:v)?(\\d+\\.\\d+(?:\\.\\d+)?)(?:\\.min)?\\.js", "note": "knockout-3.5.1.js"},
+
+  {"tech": "wordpress", "where": "body", "pattern": "<meta[^>]+name=[\"']generator[\"'][^>]+content=[\"']WordPress\\s+(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "WP generator meta tag"},
+  {"tech": "drupal", "where": "header", "header": "x-generator", "pattern": "Drupal\\s+(\\d+(?:\\.\\d+)?)", "note": "Drupal sets X-Generator on many installs"},
+  {"tech": "drupal", "where": "body", "pattern": "<meta[^>]+name=[\"']generator[\"'][^>]+content=[\"']Drupal\\s+(\\d+(?:\\.\\d+)?)", "note": "Drupal generator meta (often major only)"},
+  {"tech": "joomla", "where": "body", "pattern": "<meta[^>]+name=[\"']generator[\"'][^>]+content=[\"']Joomla!", "note": "Joomla generator meta — name only (version not exposed)"},
+  {"tech": "typo3", "where": "cookie", "cookie": "fe_typo_user", "note": "TYPO3 frontend session cookie — name only (root page)"},
+  {"tech": "symfony", "where": "header", "header": "x-debug-token-link", "note": "Symfony web profiler header (debug) — name only (root page)"},
+  {"tech": "laravel", "where": "cookie", "cookie": "laravel_session", "note": "Laravel session cookie — name only (root page)"},
+
+  {"tech": "drupal", "where": "body", "pattern": "\\bDrupal\\s+(\\d+\\.\\d+)(?:,|\\s|<)", "note": "CHANGELOG.txt first line 'Drupal 7.58, 2018-...' (deep version check) — full version"},
+  {"tech": "typo3", "where": "body", "pattern": "typo3/cms[\\w-]*\"[^}]{0,60}?version\"\\s*:\\s*\"v?(\\d+\\.\\d+\\.\\d+)", "note": "composer.lock typo3/cms-core version (deep version check)"},
+  {"tech": "symfony", "where": "body", "pattern": "symfony/[a-z-]+\"[^}]{0,60}?version\"\\s*:\\s*\"v?(\\d+\\.\\d+\\.\\d+)", "note": "composer.lock symfony/* package version (deep version check)"},
+  {"tech": "laravel", "where": "body", "pattern": "laravel/framework\"[^}]{0,60}?version\"\\s*:\\s*\"v?(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "composer.lock laravel/framework version (deep version check)"},
+  {"tech": "joomla", "where": "body", "pattern": "<version>\\s*(\\d+\\.\\d+\\.\\d+)\\s*</version>", "note": "administrator/manifests/files/joomla.xml <version> (deep version check)"},
+  {"tech": "wordpress", "where": "body", "pattern": "(?:readme|wordpress)[^\\n]{0,40}?[Vv]ersion\\s+(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "readme.html 'Version 5.8.1' (deep version check) — complements the generator meta"},
+  {"tech": "struts", "where": "body", "pattern": "[\\w./-]+\\.action\\b", "note": "Struts .action endpoint in links — name only (no cheap version signal)"},
+
+  {"tech": "apache", "where": "header", "header": "server", "pattern": "Apache/(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "Server: Apache/2.4.49"},
+  {"tech": "nginx", "where": "header", "header": "server", "pattern": "nginx/(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "Server: nginx/1.20.1"},
+  {"tech": "iis", "where": "header", "header": "server", "pattern": "IIS/(\\d+\\.\\d+)", "note": "Server: Microsoft-IIS/10.0"},
+  {"tech": "php", "where": "header", "header": "x-powered-by", "pattern": "PHP/(\\d+\\.\\d+(?:\\.\\d+)?)", "note": "X-Powered-By: PHP/7.4.3"}
+ ]
+}

