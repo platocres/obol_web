@@ -485,3 +485,43 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .em-legend-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .em-legend-item { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
 .em-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid var(--line-hot); display: inline-block; }
+
+/* ---- ⌘K command palette ---- */
+.pal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: flex-start; justify-content: center; z-index: 200; padding-top: 12vh; }
+.pal-overlay.show { display: flex; }
+.pal-box { width: min(680px, 92vw); background: var(--bg1); border: 1px solid var(--line-hot); border-radius: 12px; box-shadow: 0 20px 60px -20px #000; overflow: hidden; }
+.pal-input { width: 100%; box-sizing: border-box; background: var(--bg2); color: var(--text); border: none; border-bottom: 1px solid var(--line); padding: 14px 16px; font: 15px var(--sans); outline: none; }
+.pal-list { list-style: none; margin: 0; padding: 6px; max-height: 52vh; overflow-y: auto; }
+.pal-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.pal-item.sel, .pal-item:hover { background: var(--accent-soft); }
+.pal-label { flex-shrink: 0; font-weight: 600; }
+.pal-run { flex: 1; font-family: var(--mono); font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-go { margin-left: auto; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.pal-navtag { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border: 1px solid var(--line); border-radius: 20px; padding: 1px 7px; }
+.pal-empty { padding: 16px; color: var(--muted); text-align: center; }
+.pal-foot { padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+
+/* ---- proof screenshots ---- */
+.ev-shots { margin-top: 20px; }
+.ev-shot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 12px; margin-top: 10px; }
+.ev-shot { margin: 0; background: var(--surf2); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.ev-shot img { width: 100%; height: 110px; object-fit: cover; display: block; background: var(--bg); }
+.ev-shot figcaption { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-2); }
+.ev-shot-del { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; }
+.ev-shot-del:hover { color: var(--red); }
+
+/* ---- findings roll-up ---- */
+.sev-count { font-size: 12px; padding: 2px 9px; border-radius: 20px; margin-right: 6px; }
+.finding { background: var(--surf2); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 9px; padding: 12px 14px; margin-bottom: 10px; }
+.finding.sev-critical { border-left-color: var(--critical); } .finding.sev-high { border-left-color: var(--high); }
+.finding.sev-medium { border-left-color: var(--medium); } .finding.sev-low { border-left-color: var(--low); } .finding.sev-info { border-left-color: var(--info); }
+.finding-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.finding-title { font-weight: 700; } .finding-cat { color: var(--muted); font-size: 12px; margin-left: auto; }
+.finding-ev, .finding-fix { margin-top: 6px; font-size: 12.5px; color: var(--text-2); }
+.finding-refs { margin-top: 4px; font-family: var(--mono); font-size: 11px; color: var(--accent-2); }
+.sev-chip { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; padding: 2px 8px; border-radius: 20px; color: #0a0e18; }
+.sev-chip.sev-critical, .sev-count.sev-critical { background: var(--critical); color: #fff; }
+.sev-chip.sev-high, .sev-count.sev-high { background: var(--high); }
+.sev-chip.sev-medium, .sev-count.sev-medium { background: var(--medium); }
+.sev-chip.sev-low, .sev-count.sev-low { background: var(--low); color:#fff; }
+.sev-chip.sev-info, .sev-count.sev-info { background: var(--info); color:#fff; }

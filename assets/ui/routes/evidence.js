@@ -18,6 +18,22 @@
     return OBOL.packs.actions().find(function (a) { return a.id === id; }) || null;
   }
 
+  function shotsSection() {
+    var eng = OBOL.store.active();
+    var shots = (eng && eng.screenshots) || [];
+    var grid = shots.length ? shots.map(function (s) {
+      return '<figure class="ev-shot"><img src="' + U.attr(s.data_uri) + '" alt="' + U.attr(s.caption || 'proof') + '">'
+        + '<figcaption>' + esc(s.caption || '(no caption)') + (s.slot ? ' · <span class="pill">' + esc(s.slot) + '</span>' : '')
+        + '<button class="ev-shot-del" data-shot="' + esc(s.id) + '" title="Remove">×</button></figcaption></figure>';
+    }).join('') : '<div class="ev-hint">No screenshots yet.</div>';
+    return '<div class="ev-shots"><h2 class="coach-sec-h">Proof screenshots</h2>'
+      + '<p class="ev-hint">Attach PNGs (for OSCP: the flag <em>and</em> a host-identity command like <code>ip a</code>/<code>hostname</code> in one frame). They embed into your exported report.</p>'
+      + '<div class="ev-row"><input type="file" id="ss-file" accept="image/*" multiple>'
+      + '<input id="ss-cap" class="ev-cmd" placeholder="caption (e.g. proof.txt on 10.10.10.161)">'
+      + '<select id="ss-slot" class="ev-cmd"><option value="">slot…</option><option value="local">local</option><option value="root">root</option><option value="other">other</option></select></div>'
+      + '<div class="ev-shot-grid">' + grid + '</div></div>';
+  }
+
   function render(ctx) {
     var pin = pinnedAction(ctx);
     var parsersReady = !!(OBOL.parsers && OBOL.parsers.parseActionOutput);
@@ -42,6 +58,7 @@
       + '</div>'
       + '<div id="ev-result" class="ev-result"></div>'
       + '</div>'
+      + shotsSection()
       + '<details class="ev-manual"><summary>Add a fact manually</summary>'
       + '<div class="ev-row"><input id="ev-mkind" class="ev-cmd" placeholder="fact kind, e.g. smb.reachable">'
       + '<button id="ev-madd" class="btn-ghost">Add fact</button></div>'
@@ -95,6 +112,34 @@
     }
     var parseBtn = document.getElementById('ev-parse');
     if (parseBtn) parseBtn.addEventListener('click', function () { runParse(mount); });
+    // screenshots: attach (readAsDataURL, stored inline for report embedding) + remove
+    var ssFile = document.getElementById('ss-file');
+    if (ssFile) ssFile.addEventListener('change', function () {
+      var cap = (document.getElementById('ss-cap') || {}).value || '';
+      var slot = (document.getElementById('ss-slot') || {}).value || '';
+      var tgt = (OBOL.store.active().params || {}).target || '';
+      var files = Array.prototype.slice.call(ssFile.files || []);
+      var pending = files.length;
+      if (!pending) return;
+      files.forEach(function (f) {
+        var r = new FileReader();
+        r.onload = function () {
+          OBOL.store.update(function (eng) {
+            eng.screenshots = eng.screenshots || [];
+            eng.screenshots.push({ id: 'ss-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), data_uri: r.result, caption: cap, slot: slot, target: tgt, at: Date.now() });
+          }, 'screenshots');
+          if (--pending === 0) { U.toast('Screenshot(s) attached'); OBOL.router.render(); }
+        };
+        r.onerror = function () { if (--pending === 0) OBOL.router.render(); };
+        r.readAsDataURL(f);
+      });
+    });
+    U.on(mount, 'click', '.ev-shot-del', function (e, t) {
+      var id = t.getAttribute('data-shot');
+      OBOL.store.update(function (eng) { eng.screenshots = (eng.screenshots || []).filter(function (s) { return s.id !== id; }); }, 'screenshots');
+      OBOL.router.render();
+    });
+
     var maddBtn = document.getElementById('ev-madd');
     if (maddBtn) maddBtn.addEventListener('click', function () {
       var kind = ((document.getElementById('ev-mkind') || {}).value || '').trim();

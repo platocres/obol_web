@@ -136,6 +136,7 @@
       renderSidebar();
       wireShell();
       registerRoutes();
+      if (OBOL.palette) OBOL.palette.init();
       OBOL.router.start();
       document.documentElement.classList.remove('obol-booting');
       document.documentElement.setAttribute('data-obol-boot', 'ready');

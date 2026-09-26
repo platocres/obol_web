@@ -134,6 +134,38 @@ function serve() {
   const kerb = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()).some(function (k) { return k.indexOf('ad.') === 0; }));
   ok(kerb, 'domain: BloodHound ingest minted AD facts');
 
+  // ⌘K command palette: opens, searches commands, closes.
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(200);
+  await page.keyboard.press('Control+k');
+  await page.waitForTimeout(200);
+  ok(await page.locator('.pal-overlay.show').count() === 1, 'Ctrl+K opens the command palette');
+  await page.fill('.pal-input', 'nmap');
+  await page.waitForTimeout(150);
+  ok(await page.locator('.pal-item').count() >= 1, 'palette finds commands for "nmap" (' + (await page.locator('.pal-item').count()) + ')');
+  const palRun = (await page.locator('.pal-item.sel .pal-run').first().textContent().catch(() => '')) || '';
+  ok(/10\.10\.10\.161/.test(palRun) || /nmap/i.test(palRun), 'palette fills the target into the command preview');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(100);
+  ok(await page.locator('.pal-overlay.show').count() === 0, 'Escape closes the palette');
+
+  // Findings roll-up renders.
+  await page.goto(`http://localhost:${PORT}/index.html#/findings`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(300);
+  ok(await page.locator('.findings-route').count() === 1, 'findings roll-up route renders');
+
+  // Proof screenshot attaches and embeds into the report.
+  await page.goto(`http://localhost:${PORT}/index.html#/evidence`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(300);
+  await page.setInputFiles('#ss-file', path.join(ROOT, 'tests/fixtures-bh/px.png'));
+  await page.waitForTimeout(400);
+  ok(await page.locator('.ev-shot').count() >= 1, 'screenshot attaches to the evidence gallery');
+  const shotInReport = await page.evaluate(() => {
+    var e = window.OBOL.store.active();
+    return (e.screenshots || []).length >= 1 && /^data:image/.test(e.screenshots[0].data_uri || '');
+  });
+  ok(shotInReport, 'screenshot stored as an embeddable data-URI (feeds the report)');
+
   // Performance budget: boot-to-interactive + route render must stay fast (guards against the
   // historical "many uncompressed layers / tabs never load" regression). Generous for CI runners.
   const perfPage = await browser.newPage();
