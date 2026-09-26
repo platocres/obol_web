@@ -627,6 +627,9 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .kali-term .kt-u { color: #79c0ff; font-weight: 700; }
 .kali-term .kt-c { color: #ffffff; font-weight: 600; }
 .kali-term .kt-o { color: #b7c2b7; }
+/* on-target shell prompt: amber prompt + no-glyph single line, to read distinctly from the Kali box */
+.kali-term.term-target { border-left-color: #e0a458; }
+.kali-term.term-target .kt-u { color: #f0a35e; }
 .rep-notes { margin: 0 0 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surf1); padding: 4px 14px; }
 .rep-notes > summary { cursor: pointer; color: var(--text-2); font-weight: 600; padding: 10px 0; }
 .rep-note { margin: 10px 0 14px; }
@@ -650,6 +653,7 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
   .rep-out table.data th, .rep-out table.data td, .rep-out table.kv th, .rep-out table.kv td { border: 1px solid #999; padding: 4px 8px; color: #000; }
   .rep-out pre, .rep-out pre.lang-terminal, .rep-out .kali-term { background: #f6f6f6 !important; color: #111 !important; border: 1px solid #ccc !important; white-space: pre-wrap; }
   .rep-out .kali-term .kt-b { color: #1a5fb4 !important; } .rep-out .kali-term .kt-u { color: #0b4a9e !important; } .rep-out .kali-term .kt-c { color: #000 !important; } .rep-out .kali-term .kt-o { color: #222 !important; }
+  .rep-out .kali-term.term-target { border-left-color: #b5651d !important; } .rep-out .kali-term.term-target .kt-u { color: #9a5a12 !important; }
   .rep-out .callout { border: 1px solid #ccc; color: #000; }
   .rep-out img.shot { max-width: 100%; }
   .page-break { break-after: page; page-break-after: always; }

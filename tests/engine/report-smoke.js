@@ -136,5 +136,32 @@ const html = R.toHtml(R.document('oscp', ctx));
 ok(/<h1[^>]*>OSCP Exam Report<\/h1>/.test(html), 'HTML renderer emits the report title heading');
 ok(html.indexOf(SECRET) === -1, 'HTML report also honors redaction by default');
 
+// ── 7) target shell prompt in the command transcript ────────────────────────
+// HOST_A has foothold.linux → post-exploitation commands render with the box's own prompt,
+// while recon/exploitation launched from Kali keeps the kali@kali prompt.
+const termActs = [
+  { tool: 'nmap', command: 'nmap -sC -sV ' + HOST_A, at: 1, target: HOST_A, scope: 'host:' + HOST_A, stdout: 'PORT   STATE\n22/tcp open ssh' },
+  { tool: 'id', command: 'id', at: 2, target: HOST_A, scope: 'host:' + HOST_A, stdout: 'uid=1000(svc) gid=1000(svc) groups=1000(svc)' },
+  { tool: 'sudo', command: 'sudo -l', at: 3, target: HOST_A, scope: 'host:' + HOST_A, stdout: '(root) NOPASSWD: /usr/bin/find' },
+];
+const termCtx = R.buildContext({ facts: factset, targets, activities: termActs, credentials, params: { name: 'exam', platform: 'oscp' }, includeSecrets: true });
+const termMd = R.toMarkdown(R.document('oscp', termCtx));
+const termHtml = R.toHtml(R.document('oscp', termCtx));
+ok(/┌──\(kali@kali\)-\[~\]\n└─\$ nmap /.test(termMd), 'transcript keeps the kali@kali prompt for the nmap recon command');
+ok(/svc@alpha:~\$ id\b/.test(termMd), 'transcript renders on-target commands with the box prompt (svc@alpha:~$)');
+ok(/svc@alpha:~\$ sudo -l\b/.test(termMd), 'sudo -l is treated as an on-target command');
+ok(/kali-term term-target/.test(termHtml), 'HTML marks the on-target terminal block with .term-target');
+ok(termMd.indexOf('www-data') === -1, 'no invented shell user (only the id-derived svc user is shown)');
+// Windows target: whoami/type run in the box render C:\> ; nxc stays on Kali.
+const winFacts = new F.FactSet([mk('foothold.windows', 'host:' + HOST_B, {}, 'nxc', 1), mk('access.system', 'host:' + HOST_B, {}, 'nxc', 2)]);
+const winActs = [
+  { tool: 'nxc', command: 'nxc smb ' + HOST_B, at: 1, target: HOST_B, scope: 'host:' + HOST_B, stdout: 'SMB ...' },
+  { tool: 'whoami', command: 'whoami', at: 2, target: HOST_B, scope: 'host:' + HOST_B, stdout: 'nt authority\\system' },
+];
+const winCtx = R.buildContext({ facts: winFacts, targets: [{ host: HOST_B, hostname: 'BRAVO', os: 'windows' }], activities: winActs, params: { name: 'w' }, includeSecrets: true });
+const winMd = R.toMarkdown(R.document('oscp', winCtx));
+ok(/└─\$ nxc smb /.test(winMd), 'Windows: nxc recon stays on the Kali prompt');
+ok(/C:\\> whoami\b/.test(winMd), 'Windows: whoami inside the shell renders the C:\\> prompt');
+
 console.log(fail ? ('\nREPORT SMOKE: ' + fail + ' FAILURES') : '\nREPORT SMOKE: all passed');
 process.exit(fail ? 1 : 0);

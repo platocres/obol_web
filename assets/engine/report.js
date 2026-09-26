@@ -291,9 +291,32 @@
   function KVB(pairs) { return { t: 'kv', pairs: pairs || [] }; }
   function TBL(headers, rows, caption) { return { t: 'table', headers: headers || [], rows: rows || [], caption: caption || '' }; }
   function CODE(text, lang) { return { t: 'code', text: text || '', lang: lang || '' }; }
-  // A Kali-style terminal block: an emulation of what the operator's terminal looked like
-  // (kali@kali prompt glyphs) for the command + its output, so the report reads like the steps.
-  function TERM(o) { o = o || {}; return { t: 'terminal', command: o.command || '', output: o.output || '', user: o.user || 'kali@kali', dir: o.dir || '~' }; }
+  // A terminal block: an emulation of what the operator's terminal looked like for a
+  // command + its output, so the report reads like the steps. Two styles:
+  //   • 'kali'   — the attacker box (recon/exploitation launched from Kali): ┌──(kali@kali)-[~] / └─$
+  //   • 'target' — a shell *on the compromised host* (post-exploitation): user@host:~$ / #  (or C:\> on Windows)
+  function TERM(o) {
+    o = o || {};
+    var style = o.style || 'kali';
+    return {
+      t: 'terminal', command: o.command || '', output: o.output || '',
+      style: style, os: (o.os || 'linux'),
+      user: o.user || (style === 'target' ? '' : 'kali@kali'),
+      host: o.host || '', dir: o.dir || (o.os === 'windows' ? 'C:\\' : '~'), root: !!o.root,
+    };
+  }
+  // Compose the shell prompt string for a terminal block (shared by every serializer).
+  function termPrompt(b) {
+    if (b.style !== 'target') return null; // kali uses the two-line glyph prompt, rendered inline
+    if ((b.os || 'linux') === 'windows') {
+      var wd = (b.dir && b.dir !== '~') ? b.dir : 'C:\\';
+      return wd + '>';
+    }
+    var sym = b.root ? '#' : '$';
+    var uh = (b.user && b.host) ? (b.user + '@' + b.host) : (b.host || b.user || '');
+    var d = b.dir || '~';
+    return (uh ? (uh + ':' + d) : d) + sym;
+  }
   function CALL(text, kind) { return { t: 'callout', text: text || '', kind: kind || 'note' }; }
   function PROOF(o) {
     return { t: 'proof', label: o.label || '', flag: o.flag || '', path: o.path || '', command: o.command || '',
@@ -341,8 +364,9 @@
           out.push('```' + b.lang); out.push(String(b.text).replace(/\n+$/, '')); out.push('```'); out.push(''); break;
         case 'terminal': {
           out.push('```console');
-          out.push('┌──(' + b.user + ')-[' + b.dir + ']');
-          out.push('└─$ ' + b.command);
+          var tp = termPrompt(b);
+          if (tp) { out.push(tp + ' ' + b.command); }
+          else { out.push('┌──(' + b.user + ')-[' + b.dir + ']'); out.push('└─$ ' + b.command); }
           if (b.output) out.push(String(b.output).replace(/\n+$/, ''));
           out.push('```'); out.push(''); break;
         }
@@ -417,10 +441,16 @@
         }
         case 'code': out.push('<pre' + (b.lang ? ' class="lang-' + esc(b.lang) + '"' : '') + '><code>' + esc(b.text) + '</code></pre>'); break;
         case 'terminal': {
-          var pTop = '<span class="kt-b">┌──(</span><span class="kt-u">' + esc(b.user) + '</span><span class="kt-b">)-[' + esc(b.dir) + ']</span>';
-          var pCmd = '<span class="kt-b">└─$</span> <span class="kt-c">' + esc(b.command) + '</span>';
+          var htp = termPrompt(b);
           var oHtml = b.output ? ('\n<span class="kt-o">' + esc(String(b.output).replace(/\n+$/, '')) + '</span>') : '';
-          out.push('<pre class="kali-term">' + pTop + '\n' + pCmd + oHtml + '</pre>');
+          if (htp) {
+            var pr = '<span class="kt-u">' + esc(htp) + '</span> <span class="kt-c">' + esc(b.command) + '</span>';
+            out.push('<pre class="kali-term term-target">' + pr + oHtml + '</pre>');
+          } else {
+            var pTop = '<span class="kt-b">┌──(</span><span class="kt-u">' + esc(b.user) + '</span><span class="kt-b">)-[' + esc(b.dir) + ']</span>';
+            var pCmd = '<span class="kt-b">└─$</span> <span class="kt-c">' + esc(b.command) + '</span>';
+            out.push('<pre class="kali-term">' + pTop + '\n' + pCmd + oHtml + '</pre>');
+          }
           break;
         }
         case 'callout': out.push('<div class="callout ' + esc(b.kind) + '">' + mdInline(b.text) + '</div>'); break;
@@ -869,18 +899,82 @@
     });
   }
 
+  // Tools that only ever run from the attacker box (never inside the victim's shell) — these
+  // always render with the Kali prompt even after a foothold is proven.
+  var KALI_TOOL_RE = /^(?:sudo\s+)?(?:nmap|rustscan|masscan|naabu|netexec|nxc|crackmapexec|cme|smbclient|smbmap|rpcclient|enum4linux[\w-]*|ldapsearch|kerbrute|impacket[\w.-]*|Get(?:NPUsers|UserSPNs)[\w.]*|secretsdump[\w.]*|evil-winrm|ffuf|feroxbuster|gobuster|wfuzz|nikto|whatweb|sqlmap|hydra|john|hashcat|responder|bloodhound[\w.-]*|sharphound[\w.-]*|dig|snmpwalk|msfvenom|msfconsole|searchsploit|ssh|scp|ftp|curl|wget|nc|ncat|socat)\b/i;
+  // Post-exploitation commands typically executed *inside a shell on the target*.
+  var ON_TARGET_RE = /^(?:sudo(?:\s+-\w+\b|\s+\S+)?|whoami\b|id\b|hostname\b|uname\b|groups\b|pwd\b|cat\s+\S|type\s+\S|more\s+\S|systeminfo\b|ipconfig\b|ifconfig\b|ip\s+a(?:ddr)?\b|arp\b|route\b|net\s+(?:user|localgroup|group|use|share|session)\b|getcap\b|crontab\b|find\s+\/|ss\b|netstat\b|tasklist\b|ps\s|reg\s+query\b|wmic\b|schtasks\b|sc\s+query\b|ls\b|ll\b|dir\b|cd\s|history\b|su\b|python[0-9]?\s+-c|script\s+-qc|powershell\b|gwmi\b|get-\w|cmdkey\b|klist\b)/i;
+  function runsOnTarget(cmd) {
+    var c = String(cmd || '').trim();
+    if (!c || KALI_TOOL_RE.test(c)) return false;
+    return ON_TARGET_RE.test(c);
+  }
+  var WIN_CMD_RE = /^(?:type\s|dir\b|systeminfo\b|ipconfig\b|net\s|tasklist\b|reg\s+query\b|wmic\b|schtasks\b|sc\s+query\b|powershell\b|gwmi\b|get-\w|cmdkey\b|klist\b|whoami\s+\/)/i;
+
+  // Learn the compromised-shell identity for a host from its proven access facts + the transcript
+  // (the first whoami/id output reveals the shell user; nothing is invented if the output is absent).
+  function targetShellProfile(ctx, host, rows) {
+    var tgt = (ctx.targets || []).filter(function (t) { return t.host === host; })[0] || {};
+    var hostFacts = (ctx.facts || []).filter(function (f) { return f.scope === 'host:' + host; });
+    function has(kind) { return hostFacts.some(function (f) { return f.kind === kind; }); }
+    var compromised = has('foothold.linux') || has('foothold.windows') || has('access.shell')
+      || has('access.admin') || has('access.system') || has('winrm.authenticated');
+    var root = has('access.admin') || has('access.system');
+    var os = String(tgt.os || '').toLowerCase();
+    if (os.indexOf('win') !== -1) os = 'windows';
+    else if (os.indexOf('lin') !== -1 || os.indexOf('nix') !== -1) os = 'linux';
+    else if (has('foothold.windows')) os = 'windows';
+    else if (has('foothold.linux')) os = 'linux';
+    else os = '';
+    // derive the shell user from a whoami / id in the transcript
+    var user = '';
+    for (var i = 0; i < rows.length && !user; i++) {
+      var c = String(rows[i].command || '').trim().toLowerCase();
+      var o = String(rows[i].stdout || '');
+      if (/^whoami\b/.test(c) && !/\s+\//.test(c)) {
+        var first = o.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean)[0] || '';
+        if (first && first.length < 64 && !/\s/.test(first)) user = first;
+      } else if (/^id\b/.test(c)) {
+        var m = o.match(/uid=\d+\(([^)]+)\)/);
+        if (m) user = m[1];
+      }
+    }
+    // The prompt symbol must match the user actually shown: a derived www-data keeps `$` even
+    // once admin is proven later; only fall back to the access-fact privilege when no user is known.
+    if (user) root = /^(?:root|.*\\(?:administrator|system))$/i.test(user);
+    return {
+      compromised: compromised, os: os, root: root,
+      host: tgt.hostname || host, user: user,
+    };
+  }
+
   // per-host verbatim command+output transcript (the operator's pasted terminal), terminal-styled.
+  // Recon/exploitation commands render with the Kali prompt; post-exploitation commands run inside a
+  // proven shell on the box render with a target prompt (user@host:~$ / #, or C:\> on Windows).
   function hostTranscript(ctx, host) {
     var rows = (ctx.timeline || []).filter(function (r) { return (r.target === host) || (r.scope === 'host:' + host); });
     if (!rows.length) return [];
+    rows = rows.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+    var prof = targetShellProfile(ctx, host, rows);
     var blocks = [H('Command Transcript', 4),
-      P('The exact commands run against this host and their output, as pasted into Evidence (secrets redacted).')];
+      P('The exact commands run against this host and their output, as pasted into Evidence (secrets redacted). '
+        + 'Commands run from Kali carry the ' + '`kali@kali`' + ' prompt; commands run inside a shell on the target carry the box\'s own prompt.')];
     var any = false;
-    rows.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (r) {
+    rows.forEach(function (r) {
       var cmd = r.command || '', output = r.stdout || '';
       if (!cmd && !output.trim()) return;
       any = true;
-      blocks.push(TERM({ command: cmd, output: output }));   // Kali-style terminal emulation
+      if (prof.compromised && runsOnTarget(cmd)) {
+        var win = prof.os === 'windows' || (prof.os === '' && WIN_CMD_RE.test(cmd));
+        blocks.push(TERM({
+          command: cmd, output: output, style: 'target',
+          os: win ? 'windows' : 'linux',
+          user: prof.user || (win ? '' : (prof.root ? 'root' : 'user')),
+          host: prof.host, root: prof.root,
+        }));
+      } else {
+        blocks.push(TERM({ command: cmd, output: output }));   // Kali-style attacker box
+      }
     });
     return any ? blocks : [];
   }
@@ -1708,10 +1802,15 @@
     return drawing + (b.caption ? dPara(dRun(dStrip(b.caption), { i: true, color: '666666', sz: 18 })) : '');
   }
   function docxTerminal(b) {
-    var lines = [
-      dPara(dRun('┌──(' + b.user + ')-[' + b.dir + ']', { mono: true, sz: 18, color: '2E7D32' })),
-      dPara(dRun('└─$ ', { mono: true, sz: 18, color: '2E7D32' }) + dRun(b.command, { mono: true, sz: 18, b: true })),
-    ];
+    var tp = termPrompt(b);
+    var lines = tp
+      // on-target shell: single amber prompt line, e.g. www-data@host:~$ command
+      ? [dPara(dRun(tp + ' ', { mono: true, sz: 18, color: 'B8860B' }) + dRun(b.command, { mono: true, sz: 18, b: true }))]
+      // attacker box: two-line Kali glyph prompt
+      : [
+        dPara(dRun('┌──(' + b.user + ')-[' + b.dir + ']', { mono: true, sz: 18, color: '2E7D32' })),
+        dPara(dRun('└─$ ', { mono: true, sz: 18, color: '2E7D32' }) + dRun(b.command, { mono: true, sz: 18, b: true })),
+      ];
     String(b.output || '').split(/\r?\n/).forEach(function (ln) { lines.push(dPara(dRun(ln || ' ', { mono: true, sz: 18 }))); });
     return lines.join('');
   }

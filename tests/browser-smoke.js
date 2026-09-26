@@ -216,6 +216,26 @@ function serve() {
   ok(docx.size > 400, 'report builds a non-empty .docx (' + docx.size + ' bytes)');
   ok(docx.media >= 1 && docx.hasDrawing, 'the .docx embeds the proof screenshot as an image');
 
+  // Target shell prompt: post-exploitation commands on a compromised host render with the box's
+  // own prompt (not kali@kali). Built through the live engine so the feature is exercised end-to-end.
+  const termPrompt = await page.evaluate(() => {
+    var R = window.OBOL.report;
+    var F = window.OBOL.facts;
+    var host = '10.10.10.77';
+    var fs = new F.FactSet([F.makeFact({ kind: 'foothold.linux', scope: 'host:' + host, source: 'ssh' })]);
+    var c = R.buildContext({
+      facts: fs, targets: [{ host: host, hostname: 'boxy', os: 'linux' }],
+      activities: [
+        { tool: 'nmap', command: 'nmap -sC -sV ' + host, at: 1, target: host, scope: 'host:' + host, stdout: 'PORT STATE\n22/tcp open ssh' },
+        { tool: 'whoami', command: 'whoami', at: 2, target: host, scope: 'host:' + host, stdout: 'svc' },
+      ], includeSecrets: true, name: 't',
+    });
+    var html = R.toHtml(R.document('oscp', c));
+    return { hasTarget: /kali-term term-target/.test(html), hasBoxPrompt: html.indexOf('svc@boxy:~$') !== -1, hasKali: html.indexOf('kali@kali') !== -1 };
+  });
+  ok(termPrompt.hasTarget && termPrompt.hasBoxPrompt, 'on-target command renders the box shell prompt (svc@boxy:~$)');
+  ok(termPrompt.hasKali, 'recon command keeps the kali@kali prompt alongside it');
+
   // Performance budget: boot-to-interactive + route render must stay fast (guards against the
   // historical "many uncompressed layers / tabs never load" regression). Generous for CI runners.
   const perfPage = await browser.newPage();
