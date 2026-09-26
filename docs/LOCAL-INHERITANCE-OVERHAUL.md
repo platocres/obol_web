@@ -350,3 +350,60 @@ single-render router, route-lazy bundles, perf budget enforced in CI.
 **Ergonomics/parity also shipped:** ⌘K command palette (fuzzy search every command, copy with
 tokens filled), proof-screenshot gallery on Evidence (PNGs embed into the report), and a
 cross-host **Findings** roll-up surface.
+
+---
+
+## 10 · The obol web ↔ obol-local split (where the editions deliberately diverge)
+
+Parity with obol-local is the north star, but the two editions run in different worlds, and a few
+places **must** differ. The root cause is one line: **obol-local is on the box and can read a
+command's output off disk; obol web is a static page that never executes anything, so a human has
+to get that output in by hand.** Everything below follows from that. When porting from obol-local,
+keep parity of *methodology and data*, and apply these web-specific adaptations to the *intake and
+presentation* — never the reverse (obol-local's mined data stays the source of truth).
+
+1. **No execution, ever.** obol web builds commands for the operator to review and run in their own
+   terminal; it never runs them, spawns processes, or phones home. (This is the non-negotiable
+   product contract in §1 — restated here because it is the source of the whole split.)
+
+2. **Evidence intake is the fundamental divergence.** obol-local reads stdout/files directly; obol
+   web takes evidence two ways, both on the client:
+   - **Paste** — the operator pastes their whole terminal into Evidence; conservative parsers mint
+     only proven facts.
+   - **File-attach** — for firehose output too large to paste (`bloodyAD`, a full `ldapsearch`
+     subtree, wide `nxc`/gobuster sweeps), the operator redirects to a file (`… | tee out.txt`) and
+     attaches it. It is read locally via `FileReader` (no upload), parsed through the *same*
+     pipeline as a paste, and stored **capped** (a sample + line count, never the whole dump).
+   Bulk AD collection stays file-based too: SharpHound → the **Domain tab** ZIP/JSON upload.
+
+3. **Web-suited commands (`web` / `web_note`).** Because a human copies/attaches output by hand, some
+   suggested commands are tuned differently than obol-local's on-box form. A pack action may carry
+   an optional `web` command variant and a `web_note`; `command.js` prefers them on the web build.
+   These fields are **additive and web-only** — obol-local's mined `command`/`commands[].run` are
+   untouched, so re-mining from local never clobbers them. First use: the AD firehose actions
+   suggest a tee-to-file form with a note pointing at the attach control. The scoped queries the
+   packs already lead with keep the normal paste path small.
+
+4. **Report terminal is emulated, not captured.** obol-local can capture the real session; obol web
+   reconstructs a Kali-style prompt (and a target shell prompt for post-exploitation commands) from
+   the pasted transcript. It renders the *look* of the steps; it never invents facts the output
+   didn't show, and the shell user is derived from the transcript's own `whoami`/`id`.
+
+5. **It must work on phones, tablets, and PCs at any resolution.** obol-local is terminal-first on
+   the box; obol web is a public URL opened on anything. So the web edition carries an app shell
+   obol-local has no concept of: a bottom tab bar + engagement drawer + command-palette search on
+   narrow screens, safe-area insets, and a no-horizontal-scroll layout down to ~320px.
+
+6. **First-run onboarding for anonymous visitors.** obol-local is invoked by an operator who already
+   set up their engagement; obol web greets first-time visitors with no context. So it shows a
+   getting-started guide (not a confusing pre-configured "Untitled Run" phase bar) until a run is
+   actually set up, ships a plain default skin, and never seeds a prior visitor's data.
+
+7. **Per-viewer, browser-local, portable.** State lives in the viewer's browser (IndexedDB +
+   tiny localStorage prefs), with no backend and no telemetry. Portability is by explicit
+   **export/import** of an engagement or the whole workspace (⚙ panel), not a synced account.
+
+**Rule of thumb for future ports:** if obol-local's behavior assumes it can *run* a command or
+*read a file it wrote*, that is exactly the seam where obol web needs a paste/attach/`web`-command
+adaptation. Port the action and its methodology verbatim; adapt only how its output gets in and how
+the command is presented to a hands-on operator.
