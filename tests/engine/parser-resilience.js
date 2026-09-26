@@ -5,7 +5,7 @@ var ENGINE = path.join(__dirname, '..', '..', 'assets', 'engine');
 var ctx = { console: { log: function () {}, warn: function () {} } }; ctx.globalThis = ctx; vm.createContext(ctx);
 function load(f) { vm.runInContext(fs.readFileSync(f, 'utf8'), ctx, { filename: f }); }
 load(path.join(ENGINE, 'facts.js'));
-load(path.join(ENGINE, 'parsers', '_common.js'));
+load(path.join(ENGINE, 'parsers', 'common.js'));
 ['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource'].forEach(function (m) { load(path.join(ENGINE, 'parsers', m + '.js')); });
 load(path.join(ENGINE, 'parsers', 'index.js'));
 var OBOL = ctx.OBOL, C = OBOL._parserCommon;

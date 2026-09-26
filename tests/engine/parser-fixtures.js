@@ -30,7 +30,7 @@ function load(file) {
   vm.runInContext(code, ctx, { filename: file });
 }
 load(path.join(ENGINE, 'facts.js'));
-load(path.join(ENGINE, 'parsers', '_common.js'));
+load(path.join(ENGINE, 'parsers', 'common.js'));
 ['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource'].forEach(function (m) {
   load(path.join(ENGINE, 'parsers', m + '.js'));
 });

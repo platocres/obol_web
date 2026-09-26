@@ -1,5 +1,5 @@
 /*!
- * obol engine — parsers/_common.js
+ * obol engine — parsers/common.js  (was _common.js — renamed; GitHub Pages/Jekyll drops underscore-prefixed files)
  * Shared compiled regexes, scoping/validation helpers, and the `_add` dedup primitive.
  * Faithful JS port of obol-local/obol/parsers/_common.py.
  *
