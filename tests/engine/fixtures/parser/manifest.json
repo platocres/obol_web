@@ -1270,7 +1270,7 @@
       "expected_supported_kinds": [
         "hash.tgs"
       ],
-      "domain": "htb.local"
+      "domain": "corp.local"
     },
     {
       "id": "ad_rubeus_asrep",
@@ -1389,12 +1389,12 @@
       "id": "ad_psexec_system",
       "tool": "psexec.py",
       "action_id": "psexec",
-      "command": "psexec.py htb.local/a:p@10.10.10.10",
+      "command": "psexec.py corp.local/a:p@10.10.10.10",
       "stdout": "outputs/ad_psexec_system.txt",
       "expected_supported_kinds": [
         "access.system"
       ],
-      "domain": "htb.local",
+      "domain": "corp.local",
       "allow_default_forbidden_supported_kinds": [
         "access.system",
         "foothold.windows"
@@ -1409,7 +1409,7 @@
       "expected_supported_kinds": [
         "winrm.authenticated"
       ],
-      "domain": "htb.local",
+      "domain": "corp.local",
       "allow_default_forbidden_supported_kinds": [
         "foothold.windows"
       ]
@@ -1425,7 +1425,7 @@
         "access.system",
         "access.desktop"
       ],
-      "domain": "htb.local"
+      "domain": "corp.local"
     },
     {
       "id": "crack_hashcat_ntlm",

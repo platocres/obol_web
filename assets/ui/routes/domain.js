@@ -33,7 +33,7 @@
       var view = OBOL.bloodhound.domainView(summary, owned);
       html += '<div class="bh-summary-head"><h2 class="coach-sec-h">' + esc(summary.domain || 'domain')
         + ' — ' + (summary.users ? summary.users.length : 0) + ' users, ' + (summary.computers ? summary.computers.length : 0) + ' computers</h2>'
-        + '<div class="ev-row"><input id="bh-owned" class="ev-cmd" placeholder="owned principals (comma-separated), e.g. SVC-ALFRESCO@HTB.LOCAL" value="' + U.attr(owned.join(', ')) + '">'
+        + '<div class="ev-row"><input id="bh-owned" class="ev-cmd" placeholder="owned principals (comma-separated), e.g. ADMINISTRATOR@CORP.LOCAL" value="' + U.attr(owned.join(', ')) + '">'
         + '<button id="bh-recompute" class="btn-ghost">Recompute paths</button>'
         + '<button id="bh-report" class="btn-primary">Open report</button></div></div>';
 

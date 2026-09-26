@@ -5,24 +5,45 @@
  * vocabulary), tokenized so skins are cheap. Dark by default; a light skin re-declares tokens.
  */
 
+/* ---- self-hosted fonts (offline-safe; no external CDN) ----
+   Nunito Sans = UI/prose/headings (Hack The Box's platform typeface). JetBrains Mono = commands/data/code. */
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/jetbrains-mono-400.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('../fonts/jetbrains-mono-500.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 700; font-display: swap; src: url('../fonts/jetbrains-mono-700.woff2') format('woff2'); }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/nunito-sans-400.woff2') format('woff2'); }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('../fonts/nunito-sans-600.woff2') format('woff2'); }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('../fonts/nunito-sans-700.woff2') format('woff2'); }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 800; font-display: swap; src: url('../fonts/nunito-sans-800.woff2') format('woff2'); }
+
 /* ---- tokens ---- */
 :root {
-  --bg: #0A0E18;
-  --bg1: #0D1220; --bg2: #121829; --bg3: #182036; --bg4: #1F2A42;
+  /* Default "obol" skin: a terminal-dark, OLED-black operator console with an emerald-green
+     signature accent and monospace-forward type — the direction the ui-ux-pro-max generator
+     recommended for a security/hacker tool (and the HTB lens). Replaces the old default indigo. */
+  --bg: #020617;
+  --bg1: #0B1120; --bg2: #121A2E; --bg3: #1B2540; --bg4: #26314c;
   --surface-alpha: 1;
-  --surf1: var(--bg1); --surf2: var(--bg2); --surf3: var(--bg3);
-  --line: #232c44; --line-hot: #33406b;
-  --accent: #6366F1; --accent-2: #818CF8; --accent-soft: rgba(99,102,241,0.14);
-  --text: #E6EAF2; --text-2: #B0B8C9; --muted: #6B7591;
+  /* alpha-aware surfaces: cards/rails paint with these so the ⚙ block-opacity slider can fade
+     them and let the motion background show through. --surface-alpha is driven by settings.js. */
+  --surf1: color-mix(in srgb, var(--bg1) calc(var(--surface-alpha, 1) * 100%), transparent);
+  --surf2: color-mix(in srgb, var(--bg2) calc(var(--surface-alpha, 1) * 100%), transparent);
+  --surf3: color-mix(in srgb, var(--bg3) calc(var(--surface-alpha, 1) * 100%), transparent);
+  --line: #26304c; --line-hot: #3a4870;
+  --accent: #22C55E; --accent-2: #4ADE80; --accent-soft: rgba(34,197,94,0.14);
+  --text: #F1F5FB; --text-2: #94A3B8; --muted: #5f6f88;
   --green: #10B981; --red: #EF4444; --orange: #F97316; --yellow: #EAB308; --teal: #14B8A6; --purple: #A855F7;
   --critical: #E11D48; --high: #F97316; --medium: #EAB308; --low: #3B82F6; --info: #6B7591;
   --ph-recon: #38BDF8; --ph-enum: #818CF8; --ph-creds: #F59E0B; --ph-access: #34D399; --ph-escalate: #F472B6; --ph-loot: #A855F7;
   --radius: 11px;
-  --mono: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "Nunito Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 /* Skins: re-declare tokens only. */
-:root[data-skin="ghostwire"] { --bg:#000502; --bg1:#031008; --bg2:#04160b; --bg3:#062012; --accent:#00ff66; --accent-2:#7dffb0; --accent-soft:rgba(0,255,102,0.14); --line:#0c3a22; --line-hot:#12built; --line-hot:#125a34; }
+/* Indigo — the original obol deep-navy/indigo scheme, kept as a first-class option. */
+:root[data-skin="indigo"] { --bg:#0A0E18; --bg1:#0D1220; --bg2:#121829; --bg3:#182036; --bg4:#1F2A42; --line:#232c44; --line-hot:#33406b; --accent:#6366F1; --accent-2:#818CF8; --accent-soft:rgba(99,102,241,0.14); --text:#E6EAF2; --text-2:#B0B8C9; --muted:#6B7591; }
+/* HTB — Hack The Box's dark navy + signature chartreuse green. */
+:root[data-skin="htb"] { --bg:#111927; --bg1:#182233; --bg2:#1f2b40; --bg3:#293a54; --bg4:#33455f; --line:#2b3a52; --line-hot:#42597a; --accent:#9FEF00; --accent-2:#c3ff5c; --accent-soft:rgba(159,239,0,0.13); --text:#E7ECF3; --text-2:#A4B1CD; --muted:#69789a; }
+:root[data-skin="ghostwire"] { --bg:#000502; --bg1:#031008; --bg2:#04160b; --bg3:#062012; --accent:#00ff66; --accent-2:#7dffb0; --accent-soft:rgba(0,255,102,0.14); --line:#0c3a22; --line-hot:#125a34; }
 :root[data-skin="amber"] { --bg:#0a0700; --bg1:#120c00; --bg2:#1a1200; --bg3:#241900; --accent:#ffb000; --accent-2:#ffe6b0; --accent-soft:rgba(255,176,0,0.14); --line:#3a2c08; --line-hot:#5a4410; --text:#ffe9c2; }
 :root[data-skin="neon"] { --bg:#0a0616; --bg1:#0f0a1f; --bg2:#160f2b; --bg3:#1f1638; --accent:#ff2fb9; --accent-2:#21e6ff; --accent-soft:rgba(255,47,185,0.14); --line:#2a2050; --line-hot:#3a2d70; }
 :root[data-skin="daylight"] { --bg:#e9edf1; --bg1:#f4f6f9; --bg2:#ffffff; --bg3:#eef1f5; --surf1:#fff; --surf2:#fff; --surf3:#f4f6f9; --line:#d3dae2; --line-hot:#b9c4d0; --accent:#0f7a52; --accent-2:#0b6b8f; --accent-soft:rgba(15,122,82,0.12); --text:#12202b; --text-2:#3a4a58; --muted:#6b7885; }
@@ -31,16 +52,21 @@
 html.obol-booting body { visibility: hidden; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font: 14px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+/* html holds the solid base colour as a backstop; body is transparent so the fixed motion
+   canvas (#obolth-bg, z-index -1) shows through layout gutters and faded surfaces. */
+html { background: var(--bg); }
+body { background: transparent; color: var(--text); font: 14px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
 a { color: var(--accent-2); text-decoration: none; }
 code, pre, .mono { font-family: var(--mono); }
 ::selection { background: var(--accent-soft); }
 
 /* ---- app shell ---- */
 #app { display: grid; grid-template-columns: 264px 1fr; grid-template-rows: auto 1fr; grid-template-areas: "head head" "side main"; min-height: 100vh; }
-header.appbar { grid-area: head; display: flex; align-items: center; gap: 18px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--bg1), var(--bg)); position: sticky; top: 0; z-index: 20; }
+header.appbar { grid-area: head; display: flex; align-items: center; gap: 18px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--surf1), var(--surf2)); backdrop-filter: blur(6px); position: sticky; top: 0; z-index: 20; }
 .brand { display: flex; align-items: center; gap: 10px; }
-.brand .coin { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, var(--accent-2), var(--accent)); box-shadow: 0 0 0 2px var(--bg2), 0 0 14px var(--accent-soft); }
+/* The brand mark is an *obol* — a struck gold coin (inline SVG), the same gold as the coin-burst.
+   It stays gold across every skin rather than tracking the UI accent (which made it read purple). */
+.brand .coin { display: block; width: 27px; height: 27px; filter: drop-shadow(0 0 10px rgba(232,181,62,.32)); }
 .brand h1 { font-size: 16px; letter-spacing: .14em; margin: 0; font-weight: 800; }
 .brand .tagline { color: var(--muted); font-size: 11px; letter-spacing: .04em; }
 nav.mainnav { display: flex; gap: 4px; margin-left: 8px; flex: 1; }
@@ -50,7 +76,7 @@ nav.mainnav a.active { background: var(--accent-soft); color: var(--accent-2); }
 .appbar-right { display: flex; align-items: center; gap: 8px; }
 .appbar-right select { background: var(--surf2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: 12px var(--sans); }
 
-aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background: var(--bg1); padding: 14px; overflow-y: auto; }
+aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background: var(--surf1); backdrop-filter: blur(6px); padding: 14px; overflow-y: auto; }
 .side-h { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 14px 0 8px; }
 .side-h:first-child { margin-top: 0; }
 .eng-row { display: flex; gap: 6px; }
@@ -70,7 +96,7 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 .fact-add-row { display: flex; gap: 6px; margin-top: 8px; }
 .fact-add-row input { flex: 1; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; font: 12px var(--mono); }
 
-main#view { grid-area: main; padding: 22px 26px; overflow-y: auto; max-width: 1100px; }
+main#view { grid-area: main; padding: 22px 30px; overflow-y: auto; max-width: 1720px; }
 .route-h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .01em; }
 .route-sub { color: var(--text-2); margin: 0 0 20px; max-width: 70ch; }
 
@@ -119,11 +145,17 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .btn-ghost:hover { border-color: var(--accent); color: var(--text); }
 .move-refs { margin-left: auto; color: var(--muted); font-size: 11px; }
 
-.blocked-list { list-style: none; margin: 0; padding: 0; }
-.blocked-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
-.blocked-title { flex: 1; color: var(--text-2); }
-.blocked-reason { color: var(--muted); font-size: 12px; font-style: italic; }
-.blocked-more { color: var(--muted); font-size: 12px; padding-top: 8px; }
+/* blocked moves, grouped by the prerequisite that unlocks them */
+.blocked-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+.blocked-group { background: var(--surf1); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.blocked-group-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--surf2); border-bottom: 1px solid var(--line); }
+.blocked-unlock { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-2); white-space: nowrap; }
+.blocked-reason { flex: 1; color: var(--text); font-size: 12.5px; }
+.blocked-count { font-size: 11px; font-weight: 700; color: var(--text-2); background: var(--bg2); border: 1px solid var(--line); border-radius: 20px; padding: 1px 8px; }
+.blocked-items { list-style: none; margin: 0; padding: 6px 12px 10px; }
+.blocked-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.blocked-item .blocked-title { flex: 1; color: var(--text-2); font-size: 12.5px; }
+.blocked-more { color: var(--muted); font-size: 11.5px; padding-top: 4px; list-style: none; }
 
 /* ---- buttons ---- */
 .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
@@ -132,12 +164,14 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 
 /* ---- home ---- */
 .home-spine { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 16px 0 24px; }
-.spine-node { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 4px 12px; border-radius: 20px; border: 1px solid var(--line); color: var(--muted); }
-.spine-node.reached { color: #0a0e18; border: none; }
+.spine-node { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; padding: 5px 13px; border-radius: 20px; border: 1px solid var(--line); color: var(--text-2); background: var(--surf1); }
+.spine-node.reached { color: #0a0e18; border-color: transparent; font-weight: 700; }
 .spine-node.reached.ph-recon { background: var(--ph-recon); } .spine-node.reached.ph-enum { background: var(--ph-enum); }
 .spine-node.reached.ph-creds { background: var(--ph-creds); } .spine-node.reached.ph-access { background: var(--ph-access); }
 .spine-node.reached.ph-escalate { background: var(--ph-escalate); } .spine-node.reached.ph-loot { background: var(--ph-loot); }
-.spine-node.frontier { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* the frontier node must read clearly whether or not it's reached (was muted + a thin outline) */
+.spine-node.frontier { color: var(--text); border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); font-weight: 700; }
+.spine-node.frontier:not(.reached) { background: var(--accent-soft); }
 .spine-sep { color: var(--muted); }
 .home-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 24px; }
 .hc { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; text-align: center; }
@@ -525,3 +559,74 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .sev-chip.sev-medium, .sev-count.sev-medium { background: var(--medium); }
 .sev-chip.sev-low, .sev-count.sev-low { background: var(--low); color:#fff; }
 .sev-chip.sev-info, .sev-count.sev-info { background: var(--info); color:#fff; }
+
+/* ---- motion background canvas (backdrop.js) ---- */
+#obolth-bg { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; pointer-events: none; display: none; }
+
+/* ---- tools: category jump chips + live option descriptions ---- */
+.tools-nav .pill.tools-jump { cursor: pointer; background: var(--surf2); font: inherit; font-size: 12px; }
+.tools-nav .pill.tools-jump:hover { border-color: var(--accent); color: var(--text); }
+.tb-optdesc { display: block; margin-top: 4px; color: var(--text-2); font-size: 11.5px; line-height: 1.45; }
+
+/* ---- bottom-right ⚙ appearance settings ---- */
+.obol-settings-toggle { position: fixed; right: 16px; bottom: 16px; z-index: 90; width: 42px; height: 42px; border-radius: 50%;
+  background: var(--surf2); color: var(--text-2); border: 1px solid var(--line-hot); font-size: 19px; cursor: pointer;
+  box-shadow: 0 8px 24px -8px #000; transition: transform .15s, color .15s, border-color .15s; }
+.obol-settings-toggle:hover { color: var(--accent-2); border-color: var(--accent); transform: rotate(30deg); }
+.obol-settings-panel { position: fixed; right: 16px; bottom: 66px; z-index: 91; width: 260px; background: var(--surf1);
+  border: 1px solid var(--line-hot); border-radius: 12px; padding: 12px; box-shadow: 0 20px 60px -18px #000; backdrop-filter: blur(8px); }
+.obol-settings-panel[hidden] { display: none; }
+.obol-set-h { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 10px 0 6px; }
+.obol-set-h:first-child { margin-top: 0; }
+.obol-set-skins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.obol-set-skin, .obol-set-btn { background: var(--surf2); color: var(--text-2); border: 1px solid var(--line); border-radius: 7px;
+  padding: 6px 8px; font-size: 11.5px; cursor: pointer; text-align: center; transition: border-color .12s, color .12s; }
+.obol-set-skin:hover, .obol-set-btn:hover { border-color: var(--accent); color: var(--text); }
+.obol-set-skin.active, .obol-set-btn.active { border-color: var(--accent); color: var(--accent-2); background: var(--accent-soft); }
+.obol-set-row { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.obol-set-opacity input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+.obol-set-oplabel { font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+
+/* Respect reduced motion: the canvas stays put; JS also paints only a static gradient. */
+@media (prefers-reduced-motion: reduce) { .obol-settings-toggle:hover { transform: none; } }
+
+/* ---- report: terminal transcript blocks + per-host notes editor ---- */
+.rep-out pre.lang-terminal { background: #080d09; border: 1px solid var(--line); border-left: 3px solid var(--green);
+  border-radius: 8px; padding: 10px 12px; color: #cfe8cf; overflow-x: auto; font: 12px/1.5 var(--mono); }
+.rep-out pre.lang-terminal code { color: inherit; }
+.rep-notes { margin: 0 0 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surf1); padding: 4px 14px; }
+.rep-notes > summary { cursor: pointer; color: var(--text-2); font-weight: 600; padding: 10px 0; }
+.rep-note { margin: 10px 0 14px; }
+.rep-note-h { font: 12px var(--mono); color: var(--accent-2); margin-bottom: 6px; }
+.rep-note-fld { width: 100%; box-sizing: border-box; background: var(--bg2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; font: 12px var(--sans); margin-bottom: 6px; min-height: 46px; resize: vertical; }
+.rep-note-fld:focus { outline: none; border-color: var(--accent); }
+
+/* ---- palette/type pass (ui-ux-pro-max → terminal-dark + emerald + mono) ---- */
+/* a11y checklist: a crisp, always-visible keyboard focus ring */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* minimal terminal glow on the identity marks (generator: text-shadow 0 0 10px) */
+.brand h1 { text-shadow: 0 0 12px rgba(34,197,94,0.22); }
+nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
+.coach-h1 { text-shadow: 0 0 14px rgba(34,197,94,0.12); }
+/* headings a touch tighter now that everything is monospace */
+.route-h1, .coach-h1, .tools-cat-h { letter-spacing: -0.01em; }
+
+/* ---- live context rail (wide screens): fills the dead right column on the coach/target pages ---- */
+.withrail { display: block; }
+.context-rail { display: none; }
+@media (min-width: 1500px) {
+  .withrail { display: grid; grid-template-columns: minmax(0, 1fr) 316px; gap: 22px; align-items: start; }
+  .context-rail { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 74px; }
+}
+.rail-card { background: var(--surf1); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.rail-h { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
+.rail-access { font-weight: 800; font-size: 15px; }
+.ra-sys, .ra-adm { color: var(--red); } .ra-fh { color: var(--orange); } .ra-cred { color: var(--yellow); } .ra-recon { color: var(--text-2); }
+.rail-move { font-size: 13px; color: var(--text); line-height: 1.4; }
+.rail-empty { font-size: 12px; color: var(--muted); }
+.rail-list { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.rail-list li { padding: 4px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rail-list li:last-child { border-bottom: none; }
+.rail-acts code { font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
+.rail-produced { color: var(--muted); font-size: 11px; white-space: nowrap; }

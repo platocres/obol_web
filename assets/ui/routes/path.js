@@ -65,12 +65,48 @@
       + '</footer></article>';
   }
 
-  function blockedRow(pair) {
-    var a = pair.action;
-    return '<li class="blocked-row"><span class="blocked-title">' + esc(a.title) + '</span>'
-      + phaseChip(OBOL.phases.phaseOfAction(a))
-      + '<span class="blocked-reason">' + esc(pair.reason) + '</span></li>';
+  // A cluster of blocked moves that share one unlocking prerequisite: "prove X → these open".
+  function blockedGroup(g) {
+    var cap = 12;
+    var reason = String(g.reason || '').replace(/^blocked until\s*/i, '');
+    var items = g.actions.slice(0, cap).map(function (a) {
+      return '<li class="blocked-item">' + phaseChip(OBOL.phases.phaseOfAction(a))
+        + '<span class="blocked-title">' + esc(a.title) + '</span></li>';
+    }).join('');
+    var more = g.actions.length > cap ? '<li class="blocked-more">…and ' + (g.actions.length - cap) + ' more</li>' : '';
+    return '<section class="blocked-group">'
+      + '<div class="blocked-group-head"><span class="blocked-unlock">unlock →</span>'
+      + '<span class="blocked-reason">' + esc(reason) + '</span>'
+      + '<span class="blocked-count">' + g.actions.length + '</span></div>'
+      + '<ul class="blocked-items">' + items + more + '</ul></section>';
   }
+
+  // The live context rail (wide screens): access level, next move, flags, creds, recent evidence.
+  // Shared with the per-target page via OBOL.rail.html.
+  function railCard(title, inner) { return '<div class="rail-card"><div class="rail-h">' + esc(title) + '</div>' + inner + '</div>'; }
+  function buildRail(eng, facts, topMove) {
+    var access = facts.has('access.system') ? ['SYSTEM', 'sys'] : facts.has('access.admin') ? ['Admin / root', 'adm']
+      : (facts.has('foothold.windows') || facts.has('foothold.linux') || facts.has('access.shell')) ? ['Foothold', 'fh']
+      : facts.has('credential.available') ? ['Credentialed', 'cred'] : ['Recon', 'recon'];
+    var flags = (facts.facts || []).filter(function (f) { return String(f.kind).indexOf('objective.') === 0 && f.state !== 'refuted'; });
+    var creds = [];
+    try { creds = facts.values('credential.available') || []; } catch (e) { creds = []; }
+    var acts = (eng && eng.activities || []).slice(0, 4);
+    return '<aside class="context-rail" aria-label="Live context">'
+      + railCard('Access', '<div class="rail-access ra-' + access[1] + '">' + esc(access[0]) + '</div>')
+      + railCard('Next move', topMove ? ('<div class="rail-move">' + esc(topMove.title) + '</div>') : '<div class="rail-empty">Log evidence to unlock moves.</div>')
+      + railCard('Flags (' + flags.length + ')', flags.length
+        ? '<ul class="rail-list">' + flags.map(function (f) { var v = f.value || {}; return '<li><span>' + esc(v.slot || f.kind.split('.').pop()) + '</span>' + (v.name ? '<span class="rail-produced">' + esc(v.name) + '</span>' : '') + '</li>'; }).join('') + '</ul>'
+        : '<div class="rail-empty">None captured yet.</div>')
+      + railCard('Credentials (' + creds.length + ')', creds.length
+        ? '<ul class="rail-list">' + creds.slice(0, 6).map(function (c) { return '<li><span>' + esc(c.user || c.username || 'user') + (c.domain ? '@' + esc(c.domain) : '') + '</span></li>'; }).join('') + '</ul>'
+        : '<div class="rail-empty">None validated yet.</div>')
+      + railCard('Recent evidence', acts.length
+        ? '<ul class="rail-list rail-acts">' + acts.map(function (a) { var c = a.command || 'paste'; return '<li title="' + U.attr(c) + '"><code>' + esc(c.length > 30 ? c.slice(0, 30) + '…' : c) + '</code><span class="rail-produced">' + ((a.produced || []).length) + '</span></li>'; }).join('') + '</ul>'
+        : '<div class="rail-empty">Paste tool output on Evidence.</div>')
+      + '</aside>';
+  }
+  OBOL.rail = { html: buildRail };
 
   function render(ctx) {
     var eng = OBOL.store.active();
@@ -92,7 +128,7 @@
     var factCount = Object.keys(facts.kinds()).length;
     var phaseName = OBOL.phases.PHASES[frontier] || 'recon';
 
-    var html = '<section class="coach">';
+    var html = '<div class="withrail"><section class="coach">';
     // hero
     html += '<div class="coach-hero">'
       + '<div class="coach-hero-main">'
@@ -125,15 +161,20 @@
 
     // blocked with reasons
     if (locked.length) {
-      html += '<details class="coach-section coach-blocked"><summary class="coach-sec-h">Blocked — unlocks when you prove a prerequisite (' + locked.length + ')</summary>'
-        + '<ul class="blocked-list">';
-      locked.slice(0, 60).forEach(function (p) { html += blockedRow(p); });
-      html += '</ul>';
-      if (locked.length > 60) html += '<div class="blocked-more">…and ' + (locked.length - 60) + ' more</div>';
-      html += '</details>';
+      // Group by the prerequisite that unlocks them, most-unlocking first: one "prove X" can
+      // open many moves, so the operator sees what to hunt for instead of a flat 60-row wall.
+      var groups = {};
+      locked.forEach(function (p) { (groups[p.reason] = groups[p.reason] || []).push(p.action); });
+      var groupList = Object.keys(groups).map(function (r) { return { reason: r, actions: groups[r] }; })
+        .sort(function (a, b) { return b.actions.length - a.actions.length; });
+      html += '<details class="coach-section coach-blocked"><summary class="coach-sec-h">Blocked — grouped by what unlocks them ('
+        + locked.length + ' moves · ' + groupList.length + ' prerequisite' + (groupList.length === 1 ? '' : 's') + ')</summary>'
+        + '<div class="blocked-groups">';
+      groupList.forEach(function (g) { html += blockedGroup(g); });
+      html += '</div></details>';
     }
 
-    html += '</section>';
+    html += '</section>' + buildRail(eng, facts, onFlow[0]) + '</div>';
     return html;
   }
 

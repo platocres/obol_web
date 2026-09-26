@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = 8791;
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png' };
 
 function serve() {
   return http.createServer((req, res) => {
@@ -40,6 +40,13 @@ function serve() {
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
 
+  // presentation modules loaded (motion background, coin bursts, ⚙ settings)
+  ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.backdrop && window.OBOL.coins)), 'backdrop + coin modules attached');
+  ok(await page.locator('#obol-settings-toggle').count() === 1, 'bottom-right settings button rendered');
+  ok(await page.locator('#skin-select').count() === 0, 'legacy appbar skin select removed (moved into settings)');
+  const brandCoin = await page.locator('.brand svg.coin').count();
+  ok(brandCoin === 1, 'brand mark is the gold coin SVG');
+
   // engine present + packs loaded
   const actionCount = await page.evaluate(() => window.OBOL && window.OBOL.packs ? window.OBOL.packs.actions().length : 0);
   ok(actionCount === 157, 'packs loaded in browser (157 actions, got ' + actionCount + ')');
@@ -50,7 +57,7 @@ function serve() {
   ok(await page.locator('.pf-card').count() >= 6, 'engagement screen shows platform profiles (' + (await page.locator('.pf-card').count()) + ')');
   await page.locator('.pf-card:has(input[value="oscp"])').click();
   await page.fill('#eng-name', 'OSCP Exam');
-  await page.fill('#eng-scope', '10.10.10.161 junk 10.10.10.0/24');
+  await page.fill('#eng-scope', '10.10.10.10 junk 10.10.10.0/24');
   await page.click('#eng-launch');
   await page.waitForTimeout(500);
   ok(page.url().indexOf('#/path') >= 0, 'launch lands on the coach');
@@ -69,6 +76,10 @@ function serve() {
   // Blocked list present
   ok(await page.locator('.coach-blocked').count() >= 1, 'blocked-with-reasons section present');
 
+  // Live context rail is present on the coach (shown at >=1500px; element always rendered).
+  ok(await page.locator('.withrail .context-rail').count() === 1, 'coach live context rail rendered');
+  ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.rail && window.OBOL.rail.html)), 'rail module exposed for reuse');
+
   // Evidence route loads + lazy-loads parsers (if built)
   await page.goto(`http://localhost:${PORT}/index.html#/evidence`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(400);
@@ -78,7 +89,7 @@ function serve() {
   await page.waitForFunction(() => window.OBOL && window.OBOL.parsers && window.OBOL.parsers.parseActionOutput, { timeout: 8000 }).catch(() => {});
   const factsBefore = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()).length);
   const nmapOut = [
-    'Nmap scan report for 10.10.10.161',
+    'Nmap scan report for 10.10.10.10',
     'Host is up (0.021s latency).',
     'PORT     STATE SERVICE',
     '53/tcp   open  domain',
@@ -87,7 +98,7 @@ function serve() {
     '445/tcp  open  microsoft-ds',
   ].join('\n');
   await page.fill('#ev-text', nmapOut);
-  await page.fill('#ev-cmd', 'nmap -Pn -sC -sV 10.10.10.161');
+  await page.fill('#ev-cmd', 'nmap -Pn -sC -sV 10.10.10.10');
   await page.click('#ev-parse');
   await page.waitForTimeout(400);
   const factsAfter = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()).length);
@@ -101,8 +112,8 @@ function serve() {
   ok(await page.locator('.move').count() >= 2, 'coach recomputed: more moves unlocked after evidence (' + (await page.locator('.move').count()) + ')');
 
   // Per-target attack-path page (scoped to the launched target's facts).
-  await page.goto(`http://localhost:${PORT}/index.html#/target/10.10.10.161`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(500);
+  await page.goto(`http://localhost:${PORT}/index.html#/target/10.10.10.10`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.target-chain .spine-node', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.target-chain .spine-node').count() === 6, 'target page shows the attack-chain bar');
   ok(await page.locator('.target-route svg.obol-graph').count() >= 1, 'target page renders the attack-path graph');
   ok(await page.locator('.acc-pill').count() === 1, 'target page shows an access level');
@@ -110,13 +121,13 @@ function serve() {
 
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(400);
+  await page.waitForSelector('.pb-card', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.pb-card').count() >= 1, 'playbooks route renders playbook cards (' + (await page.locator('.pb-card').count()) + ')');
   await page.goto(`http://localhost:${PORT}/index.html#/map`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(400);
+  await page.waitForSelector('.engmap-route, svg.obol-engmap, .em-target', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.engmap-route, svg.obol-engmap, .em-target').count() >= 1, 'engagement map route renders');
   await page.goto(`http://localhost:${PORT}/index.html#/scoreboard`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(300);
+  await page.waitForSelector('.score-total', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.score-total').count() === 1, 'scoreboard renders with the OSCP score line');
 
   // BloodHound: ingest a small SharpHound-CE collection and confirm the interactive graph draws.
@@ -144,14 +155,14 @@ function serve() {
   await page.waitForTimeout(150);
   ok(await page.locator('.pal-item').count() >= 1, 'palette finds commands for "nmap" (' + (await page.locator('.pal-item').count()) + ')');
   const palRun = (await page.locator('.pal-item.sel .pal-run').first().textContent().catch(() => '')) || '';
-  ok(/10\.10\.10\.161/.test(palRun) || /nmap/i.test(palRun), 'palette fills the target into the command preview');
+  ok(/10\.10\.10\.10/.test(palRun) || /nmap/i.test(palRun), 'palette fills the target into the command preview');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(100);
   ok(await page.locator('.pal-overlay.show').count() === 0, 'Escape closes the palette');
 
-  // Findings roll-up renders.
+  // Findings roll-up renders (lazy route — wait for the element, not a fixed sleep).
   await page.goto(`http://localhost:${PORT}/index.html#/findings`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(300);
+  await page.waitForSelector('.findings-route', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.findings-route').count() === 1, 'findings roll-up route renders');
 
   // Proof screenshot attaches and embeds into the report.
@@ -165,6 +176,17 @@ function serve() {
     return (e.screenshots || []).length >= 1 && /^data:image/.test(e.screenshots[0].data_uri || '');
   });
   ok(shotInReport, 'screenshot stored as an embeddable data-URI (feeds the report)');
+
+  // Report renders the verbatim command+output transcript (from the nmap paste) + the notes editor.
+  await page.goto(`http://localhost:${PORT}/index.html#/report`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(400);
+  ok(await page.locator('.rep-out pre.lang-terminal').count() >= 1, 'report renders the pasted terminal transcript');
+  ok(await page.locator('.rep-notes .rep-note-fld').count() >= 1, 'report shows the per-host notes editor');
+  const transcriptHasCmd = await page.evaluate(() => {
+    var pre = document.querySelector('.rep-out pre.lang-terminal');
+    return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1;
+  });
+  ok(transcriptHasCmd, 'transcript contains the command and its output');
 
   // Performance budget: boot-to-interactive + route render must stay fast (guards against the
   // historical "many uncompressed layers / tabs never load" regression). Generous for CI runners.

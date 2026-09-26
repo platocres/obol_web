@@ -26,7 +26,7 @@
     return '<section class="targets">'
       + '<h1 class="route-h1">Targets</h1>'
       + '<div class="ev-row targets-add">'
-      + '<input id="t-ip" class="ev-cmd" placeholder="IP or CIDR, e.g. 10.10.10.161">'
+      + '<input id="t-ip" class="ev-cmd" placeholder="IP or CIDR, e.g. 10.10.10.10">'
       + '<input id="t-host" class="ev-cmd" placeholder="hostname (optional)">'
       + '<button id="t-add" class="btn-primary">Add target</button>'
       + '</div>'

@@ -26,7 +26,7 @@
   // One proven/refuted/inconclusive claim about a target, tied to the evidence that
   // established it.
   //   kind    e.g. "ldap.reachable", "ad.user", "credential.available"
-  //   scope   "host:10.10.10.161" | "domain:htb.local"
+  //   scope   "host:10.10.10.10" | "domain:corp.local"
   //   value   kind-specific payload (object)
   //   state   ProofState
   //   source  the command / run that produced it (lineage)

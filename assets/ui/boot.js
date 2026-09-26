@@ -10,8 +10,8 @@
 
   var PARAM_FIELDS = [
     { key: 'target', label: 'Target', ph: '10.10.10.10' },
-    { key: 'domain', label: 'Domain', ph: 'htb.local' },
-    { key: 'username', label: 'User', ph: 'svc-alfresco' },
+    { key: 'domain', label: 'Domain', ph: 'corp.local' },
+    { key: 'username', label: 'User', ph: 'administrator' },
     { key: 'password', label: 'Password', ph: '', secret: true },
     { key: 'nthash', label: 'NT hash', ph: '', secret: true },
     { key: 'lhost', label: 'LHOST', ph: '10.10.14.2' },
@@ -66,7 +66,7 @@
     if (engSel) engSel.addEventListener('change', function () { OBOL.store.setActive(engSel.value).then(function () { OBOL.router.render(); }); });
     var engNew = document.getElementById('eng-new');
     if (engNew) engNew.addEventListener('click', function () {
-      var name = prompt('New engagement name:', 'HTB / Lab');
+      var name = prompt('New engagement name:', 'New run');
       if (name) OBOL.store.createEngagement(name).then(function () { renderSidebar(); OBOL.router.render(); });
     });
 
@@ -103,15 +103,7 @@
       renderSidebar(); OBOL.router.render();
     });
 
-    // skin picker
-    var skinSel = document.getElementById('skin-select');
-    if (skinSel) {
-      skinSel.value = OBOL.store.pref().skin || 'obol';
-      skinSel.addEventListener('change', function () {
-        document.documentElement.setAttribute('data-skin', skinSel.value);
-        OBOL.store.setPref('skin', skinSel.value);
-      });
-    }
+    // (skin/motion/opacity live in the bottom-right ⚙ settings panel — see settings.js)
 
     // re-render sidebar whenever state changes
     OBOL.store.onChange(function () { renderSidebar(); });
