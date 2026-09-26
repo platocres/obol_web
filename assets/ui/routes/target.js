@@ -57,14 +57,17 @@
       if (facts.has(k)) flags.push(k.split('.').pop().replace('_', ' '));
     });
 
-    // storyline: proven facts grouped by phase (what's been established, in order)
-    var proven = facts.facts.filter(function (x) { return x.state === 'supported'; });
-    var byPhase = {}; OBOL.phases.PHASES.forEach(function (p) { byPhase[p] = []; });
-    proven.forEach(function (x) { var ph = OBOL.phases.phaseOfKind(x.kind); (byPhase[ph] = byPhase[ph] || []).push(x.kind); });
-    var story = OBOL.phases.PHASES.filter(function (p) { return byPhase[p] && byPhase[p].length; }).map(function (p) {
-      var uniq = byPhase[p].filter(function (v, i, a) { return a.indexOf(v) === i; });
-      return '<li class="story-row"><span class="ph-chip ph-' + p + '">' + p + '</span>'
-        + '<span class="story-facts">' + uniq.map(function (k) { return esc(OBOL.pack.friendly(k)); }).join(', ') + '</span></li>';
+    // compromise chain: the ordered, causal path actually walked (what led to what → the flags),
+    // reconstructed from the run ledger + prereq graph. Replaces the old flat "what's proven" list.
+    var steps = OBOL.chain.build({ facts: facts, activities: eng.activities || [], actions: pack, host: ip });
+    var story = steps.map(function (s, i) {
+      var from = s.enabledBy.length ? '<div class="chain-from">← from ' + s.enabledBy.map(function (k) { return esc(OBOL.pack.friendly(k)); }).join(', ') + '</div>' : '';
+      var via = s.command ? '<code class="chain-via">' + esc(s.command.length > 68 ? s.command.slice(0, 66) + '…' : s.command) + '</code>' : '';
+      return '<li class="chain-step ph-' + esc(s.phase) + (s.isFlag ? ' chain-flag' : '') + '">'
+        + '<span class="chain-dot"></span>'
+        + '<div class="chain-body"><div class="chain-head"><span class="ph-chip ph-' + esc(s.phase) + '">' + esc(s.phase) + '</span>'
+        + '<span class="chain-label">' + (s.isFlag ? '🚩 ' : '') + esc(s.label) + '</span></div>'
+        + from + via + '</div></li>';
     }).join('');
 
     // top scoped moves (compact, copy-ready)
@@ -92,8 +95,8 @@
       + '<div class="target-col">'
       + '<h2 class="coach-sec-h">Attack path</h2>'
       + '<div class="graph-scroll">' + svg + '</div>'
-      + '<h2 class="coach-sec-h">Storyline — what\'s proven</h2>'
-      + (story ? '<ul class="story-list">' + story + '</ul>' : '<div class="coach-empty">Nothing proven yet — run the recon move.</div>')
+      + '<h2 class="coach-sec-h">Compromise Chain — What Led to What</h2>'
+      + (story ? '<ul class="chain-list">' + story + '</ul>' : '<div class="coach-empty">Nothing proven yet — run the recon move.</div>')
       + '</div>'
       + '<div class="target-col">'
       + '<h2 class="coach-sec-h">Next moves for this target</h2>'

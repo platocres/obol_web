@@ -169,6 +169,9 @@ function serve() {
   ok(await page.locator('.target-route svg.obol-graph').count() >= 1, 'target page renders the attack-path graph');
   ok(await page.locator('.acc-pill').count() === 1, 'target page shows an access level');
   ok(await page.locator('.tmove').count() >= 1, 'target page shows scoped next moves');
+  // compromise chain: ordered causal steps (this target has recon facts from the earlier nmap paste)
+  ok(await page.locator('.chain-list .chain-step').count() >= 1, 'target page shows the compromise chain (' + (await page.locator('.chain-list .chain-step').count()) + ' steps)');
+  ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Compromise Chain') !== -1; }), 'compromise chain heading is Title Case');
 
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });

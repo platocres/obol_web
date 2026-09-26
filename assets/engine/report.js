@@ -670,6 +670,19 @@
     });
 
     // per-target rollup
+    // the ordered compromise chain per host (what led to what → the flags), redacted like everything else.
+    function hostChain(host) {
+      if (!(OBOL.chain && opts.actions)) return [];
+      var steps;
+      try { steps = OBOL.chain.build({ facts: factset, activities: activities, actions: opts.actions, host: host }); }
+      catch (e) { return []; }
+      return steps.map(function (s) {
+        return { label: s.label, phase: s.phase, isFlag: !!s.isFlag,
+          enabledBy: (s.enabledBy || []).map(function (k) { return friendly(k); }),
+          command: redactCommand(s.command || '', { includeSecrets: includeSecrets, secrets: secrets }) };
+      });
+    }
+
     var targetsOut = targets.map(function (t) {
       var host = t.host;
       var tfacts = (factset.facts || []).filter(function (f) { return f.scope === 'host:' + host; });
@@ -696,6 +709,7 @@
             evidence: redactCommand(f.source || 'manual/seeded workspace evidence', { includeSecrets: includeSecrets, secrets: secrets }),
             origin: (f.value && f.value.origin) || 'obol', at: f.created_at };
         }),
+        chain: hostChain(host),
         evidence: evidence.filter(function (e) { return e.target === host; }),
       };
     });
@@ -1433,11 +1447,23 @@
     var blocks = [H('Attack Narrative', 2), P('The path to each objective, derived from the fact ledger (any methodology). Everything else was enumeration/noise.')];
     owned.forEach(function (t) {
       blocks.push(H((t.label || t.host) + ' (' + t.host + ')', 3));
+      // Compromise Chain — the ordered, causal path actually walked (what led to what → the flags).
+      var ch = t.chain || [];
+      if (ch.length) {
+        blocks.push(H('Compromise Chain', 4));
+        blocks.push(UL(ch.map(function (s) {
+          var lead = (s.isFlag ? '🚩 ' : '') + '**' + s.label + '**';
+          var from = (s.enabledBy && s.enabledBy.length) ? ' _(from ' + s.enabledBy.join(', ') + ')_' : '';
+          var via = s.command ? ' — `' + s.command + '`' : '';
+          return lead + from + via;
+        }), true));
+      }
       var cmds = commandsFor(t);
       if (cmds.length) {
+        blocks.push(H('Key Commands', 4));
         var rows = cmds.map(function (c, i) { return [String(i + 1), '—', (c.split(/\s+/)[0] || ''), c]; });
         blocks.push(TBL(['#', 'Technique', 'Tool', 'Command'], rows));
-      } else {
+      } else if (!ch.length) {
         blocks.push(P('_No copy-pasteable commands were recorded for this host (facts were seeded/ingested)._'));
       }
     });

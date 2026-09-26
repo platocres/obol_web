@@ -12,6 +12,9 @@
 // reportmeta.js targets `window`; shim it so the real finding backing loads unchanged.
 globalThis.window = globalThis;
 require('../../assets/engine/facts.js');
+require('../../assets/engine/phases.js');
+require('../../assets/engine/pack.js');
+require('../../assets/engine/chain.js');
 require('../../data/reportmeta.js');   // sets window.OBOL_REPORTMETA (the finding backing we keep)
 require('../../assets/engine/report.js');
 const OBOL = globalThis.OBOL;
@@ -61,9 +64,15 @@ const credentials = [{ user: 'admin', secret: SECRET, source: 'nxc', validated: 
 
 ok(globalThis.OBOL_REPORTMETA && globalThis.OBOL_REPORTMETA.cards['smb-anon-enum'], 'reportmeta finding backing loaded (kept from obol_web)');
 
+const CHAIN_ACTIONS = (function () {
+  var fs = require('fs'), path = require('path');
+  var dir = path.join(__dirname, '..', '..', 'data', 'packs');
+  return OBOL.pack.loadPacks(['recon_2026_09', 'ad_2026_09', 'credential_access_2026_09', 'shells_2026_09']
+    .map((n) => JSON.parse(fs.readFileSync(path.join(dir, n + '.json'), 'utf8'))));
+})();
 function ctxWith(includeSecrets, params) {
   return R.buildContext({
-    facts: factset, targets, activities, credentials,
+    facts: factset, targets, activities, credentials, actions: CHAIN_ACTIONS,
     params: Object.assign({ name: 'exam', scope: [HOST_A, HOST_B], platform: 'oscp' }, params || {}),
     screenshots: [], reportmeta: globalThis.OBOL_REPORTMETA, includeSecrets,
   });
@@ -162,6 +171,14 @@ const winCtx = R.buildContext({ facts: winFacts, targets: [{ host: HOST_B, hostn
 const winMd = R.toMarkdown(R.document('oscp', winCtx));
 ok(/└─\$ nxc smb /.test(winMd), 'Windows: nxc recon stays on the Kali prompt');
 ok(/C:\\> whoami\b/.test(winMd), 'Windows: whoami inside the shell renders the C:\\> prompt');
+
+// ── 8) compromise chain woven into the attack narrative ─────────────────────
+const chainCtx = ctxWith(true);
+const chainMd = R.toMarkdown(R.document('oscp', chainCtx));
+ok(/#### Compromise Chain/.test(chainMd), 'report renders a "Compromise Chain" heading in the attack narrative');
+const hostA = (chainCtx.targets || []).find((t) => t.host === HOST_A);
+ok(hostA && hostA.chain && hostA.chain.length >= 2 && hostA.chain[hostA.chain.length - 1].isFlag,
+  'the host chain is built and ends at the captured flag');
 
 console.log(fail ? ('\nREPORT SMOKE: ' + fail + ' FAILURES') : '\nREPORT SMOKE: all passed');
 process.exit(fail ? 1 : 0);

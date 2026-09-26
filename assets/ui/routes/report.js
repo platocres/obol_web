@@ -13,6 +13,7 @@
     var eng = OBOL.store.active();
     return OBOL.report.buildContext({
       facts: OBOL.store.factSet(),
+      actions: (OBOL.packs && OBOL.packs.actions) ? OBOL.packs.actions() : [],
       // engagement targets carry `ip`; the report engine keys on `host`.
       targets: (eng.targets || []).map(function (t) { return Object.assign({}, t, { host: t.host || t.ip }); }),
       activities: eng.activities || [],
