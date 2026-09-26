@@ -28,6 +28,15 @@ ok(W.scaffold(eng) === 'mkdir -p /home/kali/ctf/boxy/{scans,loot,exploit,www,pro
   'scaffold builds a one-line mkdir + cd');
 ok(W.isConfigured(eng) === true && W.isConfigured({ name: 'y' }) === false, 'isConfigured tracks whether a root is set');
 
+// sanitizeRoot: shell metacharacters in a typed/pasted working directory never reach a command
+ok(W.sanitizeRoot('~/CTF/HTB/boxes/Windows/forest]') === '~/CTF/HTB/boxes/Windows/forest', 'a stray ] in the workdir is stripped');
+ok(W.sanitizeRoot('~/lab; rm -rf ~').indexOf(';') === -1 && W.sanitizeRoot('~/lab; rm -rf ~').indexOf(' ') === -1, 'shell-injection chars + spaces are stripped from the workdir');
+ok(W.sanitizeRoot('~/box $(whoami)/`id`').indexOf('$') === -1 && W.sanitizeRoot('~/box $(whoami)/`id`').indexOf('`') === -1, 'command-substitution characters are stripped');
+ok(W.sanitizeRoot('~/ok_dir-1.2/proof') === '~/ok_dir-1.2/proof', 'ordinary POSIX path characters are preserved');
+// a root saved with junk auto-heals when read (an existing broken engagement fixes itself)
+ok(W.rootFor({ workspace: { root: '~/a]/b' } }) === '~/a/b' && W.tokens({ workspace: { root: '~/a]/b' } }).scandir === '~/a/b/scans',
+  'a previously-saved unsafe root is sanitized on read (auto-heal)');
+
 // command fill: {{scandir}} resolves from opts.workspace; falls back to a relative dir with none
 const nmap = { commands: [{ tool: 'nmap', run: 'nmap -oN {{scandir}}/nmap.txt {{target}}' }] };
 const withWs = C.fillCommand(nmap, new OBOL.facts.FactSet([]), { params: { target: '10.0.0.5' }, workspace: t }, 0);
