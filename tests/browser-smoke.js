@@ -108,6 +108,32 @@ function serve() {
   ok(await page.locator('.acc-pill').count() === 1, 'target page shows an access level');
   ok(await page.locator('.tmove').count() >= 1, 'target page shows scoped next moves');
 
+  // New parity surfaces render without errors.
+  await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(400);
+  ok(await page.locator('.pb-card').count() >= 1, 'playbooks route renders playbook cards (' + (await page.locator('.pb-card').count()) + ')');
+  await page.goto(`http://localhost:${PORT}/index.html#/map`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(400);
+  ok(await page.locator('.engmap-route, svg.obol-engmap, .em-target').count() >= 1, 'engagement map route renders');
+  await page.goto(`http://localhost:${PORT}/index.html#/scoreboard`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(300);
+  ok(await page.locator('.score-total').count() === 1, 'scoreboard renders with the OSCP score line');
+
+  // BloodHound: ingest a small SharpHound-CE collection and confirm the interactive graph draws.
+  await page.evaluate(() => { window.OBOL.store.update(function (e) { e.params = e.params || {}; e.params.username = 'JEFF'; }, 'seed'); });
+  await page.goto(`http://localhost:${PORT}/index.html#/domain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(400);
+  await page.setInputFiles('#bh-file', [
+    path.join(ROOT, 'tests/fixtures-bh/domains.json'),
+    path.join(ROOT, 'tests/fixtures-bh/users.json'),
+    path.join(ROOT, 'tests/fixtures-bh/groups.json'),
+  ]);
+  await page.waitForTimeout(900);
+  ok(await page.locator('.bh-card').count() >= 3, 'domain: PlumHound-style query cards rendered (' + (await page.locator('.bh-card').count()) + ')');
+  ok(await page.locator('svg.bh-graph .bh-node').count() >= 2, 'domain: interactive attack-path graph drew nodes (' + (await page.locator('svg.bh-graph .bh-node').count()) + ')');
+  const kerb = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()).some(function (k) { return k.indexOf('ad.') === 0; }));
+  ok(kerb, 'domain: BloodHound ingest minted AD facts');
+
   // Performance budget: boot-to-interactive + route render must stay fast (guards against the
   // historical "many uncompressed layers / tabs never load" regression). Generous for CI runners.
   const perfPage = await browser.newPage();

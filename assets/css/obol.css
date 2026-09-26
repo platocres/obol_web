@@ -407,3 +407,81 @@ a.tcard-main:hover .tcard-ip { color: var(--accent-2); }
 .pb-step.approval { border-left-color: var(--danger); }
 .map-scroll { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 8px; }
 .map-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-2); }
+
+/* ---- bloodhound interactive attack-path graph ---- */
+.bh-graph-host { margin-bottom: 18px; }
+.bh-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.bh-chip { background: var(--bg2); border: 1px solid var(--line); color: var(--text-2); border-radius: 20px; padding: 3px 12px; font-size: 12px; cursor: pointer; }
+.bh-chip.active { background: var(--accent-soft); color: var(--accent-2); border-color: var(--accent); }
+.bh-graph-wrap { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); height: 460px; }
+svg.bh-graph { width: 100%; height: 100%; touch-action: none; cursor: grab; }
+svg.bh-graph:active { cursor: grabbing; }
+.bh-node rect { fill: var(--bg3); stroke: var(--line-hot); stroke-width: 1.5; cursor: grab; }
+.bh-node text { fill: var(--text); font-size: 12px; pointer-events: none; }
+.bh-type-user rect { stroke: var(--ph-recon); } .bh-type-group rect { stroke: var(--ph-creds); }
+.bh-type-computer rect { stroke: var(--accent-2); } .bh-type-domain rect { stroke: var(--critical); }
+.bh-node.goal rect { fill: color-mix(in srgb, var(--critical) 24%, transparent); stroke: var(--critical); stroke-width: 2; }
+.bh-node.owned rect { fill: color-mix(in srgb, var(--green) 20%, transparent); stroke: var(--green); }
+.bh-node.dim { opacity: .25; } .bh-edge.dim { opacity: .12; }
+.bh-node.hot rect { stroke-width: 2.5; }
+.bh-edge path { fill: none; stroke: var(--line-hot); stroke-width: 1.5; }
+.bh-edge-member path { stroke: var(--muted); stroke-dasharray: 4 4; opacity: .6; }
+.bh-edge-abuse path { stroke: var(--danger); stroke-width: 2; }
+.bh-edge-label { fill: var(--danger); font-size: 10px; pointer-events: none; }
+.bh-arrowhead { fill: var(--line-hot); }
+.bh-edge-abuse .bh-arrowhead { fill: var(--danger); }
+.bh-hint { color: var(--muted); font-size: 11px; margin-top: 6px; }
+.bh-cash { color: var(--accent-2); font-size: 12px; margin-top: 6px; }
+.bh-cmds { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.bh-cmd { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+.bh-cmd code { font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+/* ---- playbooks ---- */
+.pb-list { list-style: none; margin: 0; padding: 0; }
+.pb-card { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); padding: 0; margin-bottom: 12px; overflow: hidden; }
+.pb-card.pb-applicable { border-color: var(--accent); }
+.pb-summary { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; }
+.pb-title { font-weight: 700; } .pb-count { color: var(--muted); font-size: 12px; }
+.pb-body { padding: 0 16px 14px; } .pb-desc { color: var(--text-2); margin: 0 0 10px; }
+.pb-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+.btn-export { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer; }
+.pb-steps { list-style: none; margin: 0; padding: 0; }
+.pb-step { border-left: 2px solid var(--line); padding: 8px 0 8px 12px; margin: 8px 0; }
+.pb-step-missing { border-left-color: var(--danger); opacity: .7; }
+.pb-step-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.pb-step-n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.pb-step-label { font-weight: 600; } .pb-step-aid { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+.pill-ok { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); font-size: 10px; padding: 2px 8px; border-radius: 20px; }
+.pill-warn { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); font-size: 10px; padding: 2px 8px; border-radius: 20px; }
+
+/* ---- engagement map ---- */
+svg.obol-engmap { font-family: system-ui, sans-serif; }
+svg.obol-engmap .em-edge { fill: none; stroke: var(--line-hot); stroke-width: 1.5; }
+svg.obol-engmap .em-edge-in-scope { stroke: var(--line); stroke-dasharray: 4 4; }
+svg.obol-engmap .em-edge-exposes { stroke: var(--ph-recon); }
+svg.obol-engmap .em-edge-domain-controller, svg.obol-engmap .em-edge-domain-service { stroke: var(--accent-2); }
+svg.obol-engmap .em-edge-credential, svg.obol-engmap .em-edge-authenticates { stroke: var(--ph-creds); }
+svg.obol-engmap .em-edge-controls { stroke: var(--danger); stroke-width: 2; }
+svg.obol-engmap .em-node rect { stroke-width: 1.5; }
+svg.obol-engmap .em-label { fill: var(--text); font-size: 12px; }
+svg.obol-engmap .em-sub { fill: var(--muted); font-size: 10px; }
+svg.obol-engmap .em-tier-label { fill: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+svg.obol-engmap .em-empty { fill: var(--muted); }
+svg.obol-engmap .em-scope rect { fill: var(--bg2); stroke: var(--line); }
+svg.obol-engmap .em-domain rect { fill: color-mix(in srgb, var(--accent) 16%, transparent); stroke: var(--accent); }
+svg.obol-engmap .em-service rect { fill: var(--bg3); stroke: var(--ph-recon); }
+svg.obol-engmap .em-credential rect { fill: var(--bg3); stroke: var(--ph-creds); }
+svg.obol-engmap .em-highvalue rect { fill: color-mix(in srgb, var(--critical) 16%, transparent); stroke: var(--critical); }
+svg.obol-engmap .em-roastable rect, svg.obol-engmap .em-attackpath rect { fill: var(--bg3); stroke: var(--orange); }
+svg.obol-engmap .em-target { cursor: pointer; }
+svg.obol-engmap .em-target rect { fill: var(--bg3); stroke: var(--line-hot); }
+svg.obol-engmap .em-acc-discovered rect { stroke: var(--muted); }
+svg.obol-engmap .em-acc-enumerated rect { stroke: var(--ph-recon); }
+svg.obol-engmap .em-acc-credentialed rect { stroke: var(--ph-creds); }
+svg.obol-engmap .em-acc-foothold rect { stroke: var(--ph-access); }
+svg.obol-engmap .em-acc-privileged rect { fill: color-mix(in srgb, var(--critical) 20%, transparent); stroke: var(--critical); }
+svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
+.em-legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; }
+.em-legend-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.em-legend-item { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
+.em-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid var(--line-hot); display: inline-block; }

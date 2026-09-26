@@ -37,31 +37,31 @@
         + '<button id="bh-recompute" class="btn-ghost">Recompute paths</button>'
         + '<button id="bh-report" class="btn-primary">Open report</button></div></div>';
 
-      html += '<div class="bh-census">';
+      // Interactive attack-path graph (parity with obol-local's draggable domain graph).
+      html += '<h2 class="coach-sec-h">Attack-path graph</h2>'
+        + '<div id="bh-graph" class="bh-graph-host">'
+        + (owned.length ? '' : '<div class="coach-empty">Enter an owned principal above to derive and graph owned→Domain-Admin paths.</div>')
+        + '</div>';
+
+      // PlumHound-style query board: one card per high-value query with matched principals + the
+      // exact commands obol would run against it.
+      html += '<h2 class="coach-sec-h">High-value queries (PlumHound-style)</h2><div class="bh-census">';
       (view.sections || []).forEach(function (s) {
         var n = (s.principals && s.principals.length) || s.count || 0;
         var cls = /admin|dcsync|unconstrained|domain admin|enterprise/i.test(s.title) ? 'crit' : (/kerberoast|as-?rep|roast/i.test(s.title) ? 'warn' : '');
+        var cmds = (s.commands || []).slice(0, 3).map(function (c) {
+          var line = typeof c === 'string' ? c : (c.run || c.cmd || c.command || '');
+          return line ? '<div class="bh-cmd"><code>' + esc(line) + '</code><button class="btn-copy" data-copy="' + U.attr(line) + '">copy</button></div>' : '';
+        }).join('');
         html += '<div class="bh-card"><h3>' + esc(s.title) + '</h3>'
           + '<div class="bh-count ' + cls + '">' + n + '</div>'
           + (s.hint ? '<div class="bh-hint">' + esc(s.hint) + '</div>' : '')
+          + (s.cash ? '<div class="bh-cash">' + esc(s.cash) + '</div>' : '')
           + (s.principals && s.principals.length ? '<div class="bh-princ">' + s.principals.slice(0, 8).map(esc).join(', ') + (s.principals.length > 8 ? ' …' : '') + '</div>' : '')
+          + (cmds ? '<div class="bh-cmds">' + cmds + '</div>' : '')
           + '</div>';
       });
       html += '</div>';
-
-      var paths = OBOL.bloodhound.ownedPaths(summary, owned);
-      if (paths && paths.paths && paths.paths.length) {
-        html += '<h2 class="coach-sec-h">Owned → Domain Admin paths (' + paths.paths.length + ')</h2><ul class="blocked-list">';
-        paths.paths.slice(0, 12).forEach(function (p) {
-          var chain = (p.chain || p).map(function (h) { return esc(h.name || h); }).join(' → ');
-          html += '<li class="blocked-row"><span class="blocked-title mono">' + chain + '</span></li>';
-        });
-        html += '</ul>';
-      } else if (owned.length) {
-        html += '<div class="coach-empty">No owned→DA path found from ' + esc(owned.join(', ')) + ' in this collection.</div>';
-      } else {
-        html += '<div class="coach-empty">Enter an owned principal above to derive owned→Domain-Admin attack paths.</div>';
-      }
       html += '<div id="bh-report-slot"></div>';
     }
     html += '</section>';
@@ -87,7 +87,9 @@
       var owned = ownedFromEngagement();
       var paths = OBOL.bloodhound.ownedPaths(summary, owned);
       var facts = OBOL.bloodhound.toFacts(summary, paths, 'domain:' + (summary.domain || 'domain'));
-      if (OBOL.bloodhound.dropGraph) OBOL.bloodhound.dropGraph(summary);
+      // Keep the transient _graph on the persisted summary so the interactive graph + census can
+      // be re-derived (and owned-principal recompute works) after reload — obol-local drops it only
+      // because its server keeps a lean SQLite store; the browser's IndexedDB can hold it.
       OBOL.store.update(function (eng) { eng.bloodhound = summary; }, 'bloodhound');
       OBOL.store.addFacts(facts, 'bloodhound');
       OBOL.app.renderSidebar();
@@ -116,6 +118,22 @@
       OBOL.store.update(function (eng) { eng.params = eng.params || {}; if (owned[0]) eng.params.username = owned[0]; }, 'params');
       OBOL.router.render();
     });
+    // render the interactive attack-path graph
+    var eng0 = OBOL.store.active();
+    if (eng0 && eng0.bloodhound && OBOL.bhgraph) {
+      var owned0 = ownedFromEngagement();
+      var view0 = OBOL.bloodhound.domainView(eng0.bloodhound, owned0);
+      var host = document.getElementById('bh-graph');
+      var g = view0.analysis && view0.analysis.graph;
+      if (host && g && g.nodes && g.nodes.length) {
+        OBOL.bhgraph.renderInto(host, g, { onNodeClick: function (id) { U.toast(id); } });
+      }
+    }
+    // copy buttons on the query cards
+    U.on(mount, 'click', '.btn-copy', function (e, b) {
+      var v = b.getAttribute('data-copy'); if (v) U.copy(v).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+
     var rep = document.getElementById('bh-report');
     if (rep) rep.addEventListener('click', function () {
       var eng = OBOL.store.active();

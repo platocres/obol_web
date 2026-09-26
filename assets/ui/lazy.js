@@ -19,7 +19,7 @@
       'assets/engine/parsers/index.js',
     ],
     graph: ['assets/engine/graph.js', 'assets/ui/routes/graph.js'],
-    domain: ['assets/jszip.min.js', 'assets/engine/bloodhound.js', 'assets/ui/routes/domain.js'],
+    domain: ['assets/jszip.min.js', 'assets/engine/bloodhound.js', 'assets/ui/bhgraph.js', 'assets/ui/routes/domain.js'],
     report: ['data/reportmeta.js', 'assets/engine/report.js', 'assets/ui/routes/report.js'],
     tools: ['assets/engine/toolbuilder.js', 'data/toolset.js', 'assets/ui/routes/tools.js'],
     checklist: ['assets/ui/routes/checklist.js'],
