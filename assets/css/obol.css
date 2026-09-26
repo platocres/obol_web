@@ -5,6 +5,15 @@
  * vocabulary), tokenized so skins are cheap. Dark by default; a light skin re-declares tokens.
  */
 
+/* ---- self-hosted fonts (offline-safe; no external CDN) ----
+   Space Grotesk = UI/prose/headings (techy grotesk, distinctive). JetBrains Mono = commands/data/code. */
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/jetbrains-mono-400.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('../fonts/jetbrains-mono-500.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 700; font-display: swap; src: url('../fonts/jetbrains-mono-700.woff2') format('woff2'); }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/space-grotesk-400.woff2') format('woff2'); }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 500; font-display: swap; src: url('../fonts/space-grotesk-500.woff2') format('woff2'); }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 700; font-display: swap; src: url('../fonts/space-grotesk-700.woff2') format('woff2'); }
+
 /* ---- tokens ---- */
 :root {
   /* Default "obol" skin: a terminal-dark, OLED-black operator console with an emerald-green
@@ -26,7 +35,7 @@
   --ph-recon: #38BDF8; --ph-enum: #818CF8; --ph-creds: #F59E0B; --ph-access: #34D399; --ph-escalate: #F472B6; --ph-loot: #A855F7;
   --radius: 11px;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: "JetBrains Mono", ui-monospace, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --sans: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 /* Skins: re-declare tokens only. */
 :root[data-skin="ghostwire"] { --bg:#000502; --bg1:#031008; --bg2:#04160b; --bg3:#062012; --accent:#00ff66; --accent-2:#7dffb0; --accent-soft:rgba(0,255,102,0.14); --line:#0c3a22; --line-hot:#125a34; }
