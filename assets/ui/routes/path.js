@@ -43,6 +43,45 @@
     }).join('');
   }
 
+  // "Set up the file this move reads" — obol proved the user list / hashes, so it hands back a
+  // copy-paste heredoc that writes the exact file {{userlist}}/{{hashfile}} now points at. This is
+  // the browser stand-in for obol-local materializing loot/users.txt on disk: obol can't write the
+  // operator's box, so it gives them the one command that does, with the names it already parsed.
+  function prepStep(tag, variant, cmd, note) {
+    return '<div class="cmd cmd-prep">'
+      + '<div class="cmd-head"><span class="cmd-tag">' + esc(tag) + '</span>'
+      + '<span class="cmd-variant">' + esc(variant) + '</span>'
+      + '<button class="btn-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button></div>'
+      + '<pre class="cmd-run"><code>' + esc(cmd) + '</code></pre>'
+      + (note ? '<div class="cmd-note">' + esc(note) + '</div>' : '') + '</div>';
+  }
+
+  function prepBlock(action, facts, dirs) {
+    if (!OBOL.loot) return '';
+    var steps = '';
+    // {{userlist}} — the move reads it and obol has proven users to write into it.
+    if (OBOL.loot.actionUsesToken(action, 'userlist')) {
+      var users = OBOL.loot.usernames(facts);
+      var ulCmd = OBOL.loot.userlistCommand(facts, dirs);
+      if (users.length && ulCmd) {
+        steps += prepStep('write', 'creates ' + OBOL.loot.userlistPath(dirs),
+          ulCmd, 'Run once — the ' + users.length + ' users obol proved, written where every command below reads them.');
+      }
+    }
+    // {{hashfile}} as an INPUT (a crack move) — obol holds the roasted hashes as facts but no file
+    // was written (a stdout roast), so give the operator the line that lays them down for cracking.
+    var reqs = [].concat(action.requires_all || []);
+    var cracksHashes = reqs.some(function (r) { return /^hash\./.test(r); });
+    if (cracksHashes && OBOL.loot.actionUsesToken(action, 'hashfile')) {
+      var hfCmd = OBOL.loot.hashfileCommand(facts, action, dirs);
+      if (hfCmd) {
+        steps += prepStep('write', 'creates ' + OBOL.loot.hashfilePath(dirs, action),
+          hfCmd, 'Lay the roasted hashes obol captured into the file the crack reads.');
+      }
+    }
+    return steps ? '<div class="move-prep"><span class="mini-label">set up first</span>' + steps + '</div>' : '';
+  }
+
   function moveCard(action, facts, params, opts) {
     opts = opts || {};
     var why = U.firstSentence(action.hypothesis || action.proves || action.title);
@@ -52,7 +91,8 @@
     var toolLink = (action.tool || (action.tools && action.tools[0]))
       ? '<a class="btn-ghost" href="#/tools/' + esc(action.tool || action.tools[0]) + '">Build in Tools ↗</a>'
       : '';
-    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+    var dirs = OBOL.workspace.tokens(OBOL.store.active());
+    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: dirs });
     var prefCmd = (filled[0] && filled[0].filled) || action.command || '';
     // Inline ingestion: paste this move's output right here — the coach mints facts and advances,
     // so a first-timer never has to guess where the output goes. Big dumps still go to Evidence.
@@ -66,6 +106,7 @@
       + '<h3 class="move-title">' + esc(action.title) + '</h3></header>'
       + '<p class="move-why">' + esc(why) + '</p>'
       + commandsBlock(action, filled)
+      + prepBlock(action, facts, dirs)
       + producesChips(action) + dnp
       + '<footer class="move-actions">'
       + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output ↴</button>'
