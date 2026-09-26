@@ -1,8 +1,7 @@
-# Obol development
+# Obol web
 
-Read and follow [AGENTS.md](AGENTS.md), then its linked workflow documents.
-The same contract applies to Claude and ChatGPT; do not maintain a second queue
-or a model-specific copy of the build instructions here.
+Read and follow [AGENTS.md](AGENTS.md), then [README.md](README.md) and
+[docs/LOCAL-INHERITANCE-OVERHAUL.md](docs/LOCAL-INHERITANCE-OVERHAUL.md).
 
-The Claude UX plan in `docs/EXPERIENCE-REVAMP.md` applies only when the user
-explicitly selects that work. Otherwise follow the README Product Build Next.
+Obol web is the static-site edition of obol-local. The same contract applies to Claude and
+any other coding agent — no separate, model-specific build instructions.

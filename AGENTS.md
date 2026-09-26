@@ -1,22 +1,26 @@
-# Shared agent entrypoint
+# Agent entrypoint
 
-Read [README.md](README.md), [docs/AGENT-WORKFLOW.md](docs/AGENT-WORKFLOW.md),
-and [BUILDING.md](BUILDING.md) before editing. They own the task loop, release
-policy, and validation rules; this file is a discovery pointer for coding agents.
+Obol web is the **static-site edition of obol-local** — a browser-local, no-backend OSCP
+operator tool. Read [README.md](README.md) for the surfaces and architecture, and
+[docs/LOCAL-INHERITANCE-OVERHAUL.md](docs/LOCAL-INHERITANCE-OVERHAUL.md) for the overhaul plan
+and the obol-local → obol_web source-of-truth map.
 
-- Follow the user's current task. For ordinary continuation, the generated
-  Product Build Next block in README is the queue authority. Read the owner docs
-  it names. Side-lane plans do not override that queue unless the user selects them.
-- Check open PRs and continue the active release/product-hardening PR when one
-  exists. Keep one coherent ownership area in one normal, non-draft PR.
-- Record the goal, acceptance criteria, authored owners, generated outputs,
-  validation plan, and scope boundary before implementation. Update the same PR
-  with a factual handoff when work pauses or changes models.
-- Edit authored sources and regenerate their projections. Review the generated
-  diff; do not patch compiled bundles or create release-specific runtime layers.
-- Preserve browser-local workspace compatibility and conservative Evidence
-  boundaries. Obol does not execute commands. Keep private source material private.
-- Use focused local checks while editing. Every PR still needs the complete
-  regression and browser gates on its final head before it is merge-ready.
+## Contract
 
-Use [docs/TEST-GOVERNANCE.md](docs/TEST-GOVERNANCE.md) for the live CI contract.
+- **No backend, no build step to run, no telemetry, and no command execution.** Commands are
+  generated for a human to run externally. Conservative Evidence / proof boundaries hold:
+  parsers never invent a fact; a run is not a win.
+- **The engine is pure and shared.** `assets/engine/*` runs in the window, a Web Worker, and
+  Node, and is ported faithfully from obol-local (`facts`/`phases`/`pack`/`command`/`graph`/
+  `bloodhound`/`report`/`toolbuilder`/`profile`/`parsers`). Keep behavior parity with the
+  Python source; the test suites encode it.
+- **Source stays directly runnable** — open `index.html`. Keep the critical boot path tiny and
+  lazy-load surfaces (`assets/ui/lazy.js`). State is in IndexedDB (`assets/ui/store.js`).
+
+## Working rules
+
+- Methodology packs are generated into `data/packs-bundle.js` from `data/packs/*.json` via
+  `node tools/build-packs.js` — regenerate after editing packs (CI checks it is in sync).
+- Prove changes: run `node tests/engine/*.js` and `node tests/browser-smoke.js` (needs
+  Playwright + Chromium). CI (`.github/workflows/ci.yml`) runs both.
+- The router renders each route **once** — never reintroduce timed double-paints.

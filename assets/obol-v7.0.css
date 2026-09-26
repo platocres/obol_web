@@ -1,8 +1,0 @@
-.wave70{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;margin:14px 0;padding:16px 18px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(135deg,rgba(77,208,225,.08),rgba(255,255,255,.02));box-shadow:0 10px 30px rgba(0,0,0,.12)}
-.wave70 span{display:block;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.wave70 h3{margin:4px 0 6px;font-size:1.05rem}
-.wave70 p{margin:0;color:var(--muted);line-height:1.5}
-.wave-score70{min-width:108px;text-align:center;padding:10px 12px;border-left:1px solid var(--border)}
-.wave-score70 b{display:block;font-size:1.8rem;line-height:1.05}
-.wave-score70 span{margin-top:4px;letter-spacing:0;text-transform:none}
-@media(max-width:720px){.wave70{grid-template-columns:1fr}.wave-score70{border-left:0;border-top:1px solid var(--border);padding-top:14px}}

@@ -1,6 +1,0 @@
-'use strict';
-(function(root){
-const base=root.OBOL_PRODUCT_HARDENING_TEST_CONTRACTS;if(!base||!base.contracts)throw new Error('Base Product Hardening item-test contracts must load before v9.50 contract extensions');
-base.contracts['notes-packet-linux-privesc']={acceptance:['The Linux privilege-escalation packet is complete only after substantive private-source review, terminal accounting of the curated eight-source subject set, public-safe guidance for enumeration triage, privileged process/service observation, user-trail secret hunting, cron execution preconditions, sudo authorization, SUID/capability proof, and kernel-exploit compatibility/risk, explicit guidance-only decisions for every newly modeled source, no raw private course material, synchronized current notes progress, and item-specific regression proof.'],validationCommands:['node tools/validate-note-integration.js','node tools/validate-notes-impact.js','node tools/sync-product-build-next.js --check','node tests/run-v9.50-tests.js'],proofFiles:['data/product-hardening/note-progress-current.js','assets/field-notes.js','data/product-hardening/notes-impact-current.js','data/product-hardening/item-test-contracts-v9.50.js','tests/run-v9.50-tests.js','docs/v9.50.md']};
-base.version='9.50.0';
-})(typeof window!=='undefined'?window:globalThis);
