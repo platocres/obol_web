@@ -39,6 +39,11 @@ function serve() {
 
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
+  // a first-time visitor lands on the neon (synthwave sunset) skin, in a clean untitled run — never
+  // an "Imported engagement" with a stale seed target.
+  ok(await page.getAttribute('html', 'data-skin') === 'neon', 'default skin is neon for a fresh visitor');
+  const firstEng = await page.evaluate(() => { var e = window.OBOL.store.active(); return { name: e && e.name, target: (e && e.params && e.params.target) || '' }; });
+  ok(firstEng.name !== 'Imported engagement' && firstEng.target !== '10.129.85.48', 'fresh engagement is not the legacy import (' + JSON.stringify(firstEng) + ')');
 
   // presentation modules loaded (motion background, coin bursts, ⚙ settings)
   ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.backdrop && window.OBOL.coins)), 'backdrop + coin modules attached');

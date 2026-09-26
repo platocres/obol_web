@@ -97,6 +97,21 @@
     try { var p = readPrefs(); p[key] = val; localStorage.setItem(LS_PREFS, JSON.stringify(p)); } catch (e) {}
   }
 
+  // A record left behind by the removed legacy auto-migration. Matches either the internal
+  // `migratedFrom` marker, or — for a marker-less straggler — the unmistakable legacy fingerprint:
+  // the exact "Imported engagement" name, the old seed target, and zero user work (no facts,
+  // activities, or credentials). Anything a person actually built is never touched.
+  function isLegacyImport(e) {
+    if (!e || typeof e !== 'object') return false;
+    if (e.migratedFrom) return true;
+    var name = String(e.name || '').trim().toLowerCase();
+    if (name !== 'imported engagement') return false;
+    var untouched = !(e.facts && e.facts.length) && !(e.activities && e.activities.length)
+      && !(e.credentials && e.credentials.length);
+    var seeded = !!(e.params && e.params.target === '10.129.85.48');
+    return untouched && seeded;
+  }
+
   // ---- engagement shape ----
   function newEngagement(name) {
     return {
@@ -160,10 +175,11 @@
         } catch (e2) {}
       }
       // One-time cleanup: the removed legacy auto-migration left auto-imported engagements in
-      // some browsers (a `migratedFrom` marker, never user-created). Purge them so a stale
-      // "Imported engagement" stops loading; user-created engagements are untouched.
+      // some browsers (never user-created). A first-time visitor should never land in an
+      // "Imported engagement" — we don't import anything by default. Purge them so a fresh,
+      // empty run is what loads. User-created engagements are untouched.
       Object.keys(_mem.engagements).forEach(function (id) {
-        if (_mem.engagements[id] && _mem.engagements[id].migratedFrom) {
+        if (isLegacyImport(_mem.engagements[id])) {
           delete _mem.engagements[id];
           if (_useIDB && _db) idbDelete('engagements', id).catch(function () {});
           if (_activeId === id) _activeId = null;
@@ -172,7 +188,7 @@
 
       // ensure at least one (clean, empty) engagement exists as a starting point
       if (!Object.keys(_mem.engagements).length) {
-        var eng = newEngagement('Untitled run');
+        var eng = newEngagement('Untitled Run');
         _mem.engagements[eng.id] = eng;
         _activeId = eng.id;
         await this._persistEngagement(eng);

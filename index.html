@@ -11,7 +11,8 @@
     (function () {
       try {
         var p = JSON.parse(localStorage.getItem('obol-prefs') || '{}');
-        if (p && p.skin) document.documentElement.setAttribute('data-skin', p.skin);
+        /* Neon (synthwave sunset) is the out-of-the-box skin; a stored choice always wins. */
+        document.documentElement.setAttribute('data-skin', (p && p.skin) || 'neon');
         var a = parseFloat(localStorage.getItem('obol.surface-alpha'));
         if (isNaN(a)) a = 0.3; /* default: fade surfaces so the motion background shows through */
         if (a >= 0 && a <= 1) document.documentElement.style.setProperty('--surface-alpha', String(a));
