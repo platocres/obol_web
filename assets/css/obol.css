@@ -30,6 +30,9 @@
   --surf3: color-mix(in srgb, var(--bg3) calc(var(--surface-alpha, 1) * 100%), transparent);
   --line: #26304c; --line-hot: #3a4870;
   --accent: #22C55E; --accent-2: #4ADE80; --accent-soft: rgba(34,197,94,0.14);
+  /* text to place ON an accent-coloured fill (buttons). Dark by default so it stays legible on the
+     bright accents (emerald, HTB chartreuse, amber, ghostwire); skins with a dark accent set it to white. */
+  --on-accent: #08120a;
   --text: #F1F5FB; --text-2: #94A3B8; --muted: #5f6f88;
   --green: #10B981; --red: #EF4444; --orange: #F97316; --yellow: #EAB308; --teal: #14B8A6; --purple: #A855F7;
   --critical: #E11D48; --high: #F97316; --medium: #EAB308; --low: #3B82F6; --info: #6B7591;
@@ -40,13 +43,13 @@
 }
 /* Skins: re-declare tokens only. */
 /* Indigo — the original obol deep-navy/indigo scheme, kept as a first-class option. */
-:root[data-skin="indigo"] { --bg:#0A0E18; --bg1:#0D1220; --bg2:#121829; --bg3:#182036; --bg4:#1F2A42; --line:#232c44; --line-hot:#33406b; --accent:#6366F1; --accent-2:#818CF8; --accent-soft:rgba(99,102,241,0.14); --text:#E6EAF2; --text-2:#B0B8C9; --muted:#6B7591; }
+:root[data-skin="indigo"] { --bg:#0A0E18; --bg1:#0D1220; --bg2:#121829; --bg3:#182036; --bg4:#1F2A42; --line:#232c44; --line-hot:#33406b; --accent:#6366F1; --accent-2:#818CF8; --accent-soft:rgba(99,102,241,0.14); --on-accent:#ffffff; --text:#E6EAF2; --text-2:#B0B8C9; --muted:#6B7591; }
 /* HTB — Hack The Box's dark navy + signature chartreuse green. */
 :root[data-skin="htb"] { --bg:#111927; --bg1:#182233; --bg2:#1f2b40; --bg3:#293a54; --bg4:#33455f; --line:#2b3a52; --line-hot:#42597a; --accent:#9FEF00; --accent-2:#c3ff5c; --accent-soft:rgba(159,239,0,0.13); --text:#E7ECF3; --text-2:#A4B1CD; --muted:#69789a; }
 :root[data-skin="ghostwire"] { --bg:#000502; --bg1:#031008; --bg2:#04160b; --bg3:#062012; --accent:#00ff66; --accent-2:#7dffb0; --accent-soft:rgba(0,255,102,0.14); --line:#0c3a22; --line-hot:#125a34; }
 :root[data-skin="amber"] { --bg:#0a0700; --bg1:#120c00; --bg2:#1a1200; --bg3:#241900; --accent:#ffb000; --accent-2:#ffe6b0; --accent-soft:rgba(255,176,0,0.14); --line:#3a2c08; --line-hot:#5a4410; --text:#ffe9c2; }
-:root[data-skin="neon"] { --bg:#0a0616; --bg1:#0f0a1f; --bg2:#160f2b; --bg3:#1f1638; --accent:#ff2fb9; --accent-2:#21e6ff; --accent-soft:rgba(255,47,185,0.14); --line:#2a2050; --line-hot:#3a2d70; }
-:root[data-skin="daylight"] { --bg:#e9edf1; --bg1:#f4f6f9; --bg2:#ffffff; --bg3:#eef1f5; --surf1:#fff; --surf2:#fff; --surf3:#f4f6f9; --line:#d3dae2; --line-hot:#b9c4d0; --accent:#0f7a52; --accent-2:#0b6b8f; --accent-soft:rgba(15,122,82,0.12); --text:#12202b; --text-2:#3a4a58; --muted:#6b7885; }
+:root[data-skin="neon"] { --bg:#0a0616; --bg1:#0f0a1f; --bg2:#160f2b; --bg3:#1f1638; --accent:#ff2fb9; --accent-2:#21e6ff; --accent-soft:rgba(255,47,185,0.14); --on-accent:#ffffff; --line:#2a2050; --line-hot:#3a2d70; }
+:root[data-skin="daylight"] { --bg:#e9edf1; --bg1:#f4f6f9; --bg2:#ffffff; --bg3:#eef1f5; --surf1:#fff; --surf2:#fff; --surf3:#f4f6f9; --line:#d3dae2; --line-hot:#b9c4d0; --accent:#0f7a52; --accent-2:#0b6b8f; --accent-soft:rgba(15,122,82,0.12); --on-accent:#ffffff; --text:#12202b; --text-2:#3a4a58; --muted:#6b7885; }
 
 /* ---- boot gate ---- */
 html.obol-booting body { visibility: hidden; }
@@ -61,7 +64,9 @@ code, pre, .mono { font-family: var(--mono); }
 ::selection { background: var(--accent-soft); }
 
 /* ---- app shell ---- */
-#app { display: grid; grid-template-columns: 264px 1fr; grid-template-rows: auto 1fr; grid-template-areas: "head head" "side main"; min-height: 100vh; }
+/* minmax(0, 1fr) — not a bare 1fr — so the main column never grows to its content's width
+   (wide nav rows, tables, <pre>), which would blow the whole grid past the viewport. */
+#app { display: grid; grid-template-columns: 264px minmax(0, 1fr); grid-template-rows: auto 1fr; grid-template-areas: "head head" "side main"; min-height: 100vh; }
 header.appbar { grid-area: head; display: flex; align-items: center; gap: 18px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--surf1), var(--surf2)); backdrop-filter: blur(6px); position: sticky; top: 0; z-index: 20; }
 .brand { display: flex; align-items: center; gap: 10px; perspective: 360px; }
 /* the obol coin flips slowly like a spinning coin (edge-on rotateY) — full-motion only */
@@ -148,6 +153,7 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .cmd-run { margin: 0; padding: 10px 12px; overflow-x: auto; }
 .cmd-run code { font-size: 12.5px; color: var(--text); white-space: pre; }
 .cmd-note { padding: 0 12px 8px; color: var(--muted); font-size: 12px; }
+.cmd-webnote { margin: 0 10px 8px; padding: 6px 10px; border-left: 2px solid var(--accent-2); background: color-mix(in srgb, var(--accent-2) 8%, transparent); color: var(--text-2); font-size: 12px; border-radius: 0 6px 6px 0; }
 .cmd-needs { padding: 0 12px 8px; color: var(--yellow); font-size: 12px; }
 .cmd-needs code { color: var(--yellow); }
 .move-produces, .move-dnp { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; margin-top: 8px; }
@@ -172,7 +178,7 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .blocked-more { color: var(--muted); font-size: 11.5px; padding-top: 4px; list-style: none; }
 
 /* ---- buttons ---- */
-.btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+.btn-primary { background: var(--accent); color: var(--on-accent); border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
 .btn-primary:hover { background: var(--accent-2); }
 .btn-primary[disabled] { opacity: .5; cursor: default; }
 
@@ -216,6 +222,11 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .ev-textarea { width: 100%; min-height: 180px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: 12.5px var(--mono); resize: vertical; }
 .ev-row { display: flex; gap: 8px; margin-top: 10px; }
 .ev-cmd { flex: 1; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 12px var(--mono); }
+.ev-file-row { align-items: center; }
+.ev-filebtn { flex: none; cursor: pointer; background: var(--bg2); color: var(--text-2); border: 1px dashed var(--line-hot); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.ev-filebtn:hover { color: var(--text); border-color: var(--accent); }
+.ev-file-hint { color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.ev-file-hint code { background: var(--bg2); padding: 1px 5px; border-radius: 4px; }
 .ev-result { margin-top: 14px; }
 .ev-added { color: var(--green); font-weight: 600; margin-bottom: 8px; }
 .ev-none { color: var(--muted); font-style: italic; }
@@ -239,12 +250,92 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .obol-toast.err { border-color: var(--red); }
 
 /* ---- responsive ---- */
+/* the mobile chrome (hamburger, drawer scrim, search, bottom tab bar, More sheet) is desktop-hidden */
+.nav-toggle, .nav-scrim, .nav-search, .tabbar, .more-sheet { display: none; }
+
+/* Phones + portrait tablets: a native-app shell. A compact appbar (hamburger · brand · search),
+   the sidebar as an off-canvas engagement drawer, and a fixed bottom tab bar for the primary
+   sections with a slide-up More sheet for the rest. Everything works down to ~320px wide. */
 @media (max-width: 860px) {
-  #app { grid-template-columns: 1fr; grid-template-areas: "head" "main" "side"; }
-  aside#sidebar { border-right: none; border-top: 1px solid var(--line); }
-  nav.mainnav { overflow-x: auto; }
-  main#view { padding: 16px; }
+  #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "main"; }
+  header.appbar { min-width: 0; gap: 10px; padding: 8px 14px; }
+  .brand .tagline { display: none; }
+  .brand h1 { font-size: 15px; }
+  nav.mainnav { display: none; } /* replaced by the bottom tab bar */
+
+  /* appbar controls */
+  .nav-toggle { display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 40px; height: 40px; padding: 0; background: transparent; border: 1px solid var(--line);
+    border-radius: 10px; cursor: pointer; }
+  .nav-toggle-bars { position: relative; display: block; width: 18px; height: 2px; background: var(--text-2); border-radius: 2px; }
+  .nav-toggle-bars::before, .nav-toggle-bars::after { content: ""; position: absolute; left: 0; width: 18px; height: 2px; background: var(--text-2); border-radius: 2px; }
+  .nav-toggle-bars::before { top: -6px; } .nav-toggle-bars::after { top: 6px; }
+  :root.drawer-open .nav-toggle { border-color: var(--accent); }
+  .nav-search { display: inline-flex; align-items: center; justify-content: center; flex: none; margin-left: auto;
+    width: 40px; height: 40px; padding: 0; color: var(--text-2); background: transparent; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  .nav-search:active { color: var(--accent-2); border-color: var(--accent); }
+
+  /* engagement drawer */
+  aside#sidebar {
+    position: fixed; top: 0; left: 0; z-index: 80;
+    width: min(86vw, 320px); height: 100vh; height: 100dvh;
+    border-right: 1px solid var(--line); border-top: none;
+    transform: translateX(-100%); transition: transform .22s ease;
+    box-shadow: 0 0 40px -8px #000; overscroll-behavior: contain;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  :root.drawer-open aside#sidebar { transform: none; }
+  .nav-scrim { display: block; position: fixed; inset: 0; z-index: 78; background: rgba(0,0,0,.55); backdrop-filter: blur(1px); }
+  .nav-scrim[hidden] { display: none; }
+
+  /* bottom tab bar */
+  .tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
+    background: var(--bg1); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -8px 24px -16px #000; }
+  .tabbar .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 8px 2px 6px; min-height: 52px; color: var(--muted); font-size: 10px; font-weight: 700;
+    letter-spacing: .02em; text-decoration: none; background: none; border: none; cursor: pointer; }
+  .tabbar .tab svg { width: 23px; height: 23px; }
+  .tabbar .tab.active { color: var(--accent-2); }
+  .tabbar .tab:active { color: var(--text); }
+
+  /* More sheet */
+  .more-sheet { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+    background: var(--bg1); border-top: 1px solid var(--line-hot);
+    border-top-left-radius: 16px; border-top-right-radius: 16px;
+    padding: 8px 16px calc(18px + env(safe-area-inset-bottom));
+    transform: translateY(110%); transition: transform .24s ease; box-shadow: 0 -24px 60px -24px #000; }
+  :root.sheet-open .more-sheet { transform: none; }
+  .more-grip { width: 38px; height: 4px; border-radius: 2px; background: var(--line-hot); margin: 2px auto 10px; }
+  .more-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .09em; margin: 0 2px 10px; }
+  .more-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .more-grid a { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 56px;
+    padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surf1);
+    color: var(--text); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+  .more-grid a:active { background: var(--surf2); border-color: var(--accent); }
+
+  /* content clears the fixed tab bar; the settings gear floats above it */
+  main#view { padding: 16px; min-width: 0; padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .obol-settings-toggle { bottom: calc(72px + env(safe-area-inset-bottom)); }
   .coach-hero { flex-direction: column; align-items: stretch; }
+}
+
+/* Small phones: single-column grids, tap-sized controls, and wide tables/pre that scroll rather
+   than push the page sideways. */
+@media (max-width: 640px) {
+  main#view { padding: 14px; }
+  .route-h1 { font-size: 20px; }
+  .blocked-groups, .bh-census, .tgrid, .eng-row2, .pf-grid, .home-cards, .ev-shot-grid,
+  .target-grid, .tools-grid, .tb-group-body { grid-template-columns: 1fr; }
+  .obol-set-skins { grid-template-columns: repeat(2, 1fr); }
+  .rep-out table, table.data, table.kv { display: block; overflow-x: auto; white-space: nowrap; max-width: 100%; }
+  main#view pre { max-width: 100%; overflow-x: auto; }
+  .btn-primary, .btn-ghost, .btn-mini, .move-actions button, .rep-actions button { min-height: 40px; }
+  .rep-controls, .rep-actions, .rep-opts { flex-wrap: wrap; }
+  .obol-settings-panel { width: min(260px, calc(100vw - 24px)); right: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  aside#sidebar { transition: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
@@ -374,6 +465,29 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 @media (max-width: 620px) { .tools-grid { grid-template-columns: 1fr; } .tb-group-body { grid-template-columns: 1fr; } }
 
 /* ---- engagement screen ---- */
+/* first-run guidance (shown until an engagement is actually set up) */
+.eng-welcome { background: linear-gradient(135deg, var(--accent-soft), transparent 60%), var(--surf1); border: 1px solid var(--line-hot); border-radius: var(--radius); padding: 20px 22px; margin-bottom: 22px; }
+.eng-welcome-h { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
+.eng-welcome-sub { color: var(--text-2); margin: 0 0 16px; max-width: 64ch; }
+.eng-steps { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 12px; }
+.eng-steps li { display: flex; gap: 12px; align-items: flex-start; }
+.eng-steps li > div { display: flex; flex-direction: column; gap: 1px; }
+.eng-steps li b { font-size: 14px; font-weight: 700; }
+.eng-steps li span:not(.eng-step-n) { color: var(--text-2); font-size: 13px; }
+.eng-step-n { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-2);
+  font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
+.eng-jump { border: none; }
+.eng-field-opt { color: var(--muted); font-weight: 400; }
+.eng-field-hint { color: var(--muted); font-size: 12px; margin: -6px 0 4px; }
+.eng-field-hint code, .ws-banner-note code, .ws-banner-h code { background: var(--bg2); padding: 1px 5px; border-radius: 4px; }
+
+/* one-time workspace scaffold banner on the coach */
+.ws-banner { border: 1px solid var(--line-hot); border-left: 3px solid var(--accent); border-radius: var(--radius); background: var(--surf1); padding: 12px 14px; margin: 0 0 18px; }
+.ws-banner-h { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; }
+.ws-banner .cmd-run { margin: 0 0 8px; }
+.ws-banner-actions { display: flex; gap: 8px; align-items: center; }
+.ws-banner-note { color: var(--text-2); font-size: 12px; margin-top: 8px; }
+
 .eng-active { background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surf2); border: 1px solid var(--accent); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; }
 .eng-active-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .eng-active-name { font-size: 18px; font-weight: 800; }
@@ -504,7 +618,7 @@ svg.bh-graph:active { cursor: grabbing; }
 .pb-title { font-weight: 700; } .pb-count { color: var(--muted); font-size: 12px; }
 .pb-body { padding: 0 16px 14px; } .pb-desc { color: var(--text-2); margin: 0 0 10px; }
 .pb-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
-.btn-export { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer; }
+.btn-export { background: var(--accent); color: var(--on-accent); border: none; border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer; }
 .pb-steps { list-style: none; margin: 0; padding: 0; }
 .pb-step { border-left: 2px solid var(--line); padding: 8px 0 8px 12px; margin: 8px 0; }
 .pb-step-missing { border-left-color: var(--danger); opacity: .7; }

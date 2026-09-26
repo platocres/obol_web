@@ -1,3 +1,35 @@
+## v11.2 — Hands-on evidence, mobile app mode, first-run onboarding, and theme polish (PR #273, in progress)
+
+- **Evidence file-attach.** Alongside the paste box, attach a tool's output file (`… | tee out.txt`) that is too big to paste. It is read locally via `FileReader` (no upload), parsed through the exact same conservative pipeline as a paste, and stored **capped** (a sample + line count, never the whole dump) — fixing the firehose (`bloodyAD`, a full `ldapsearch` subtree, wide `nxc`/gobuster sweeps) for every tool at once.
+- **Web-suited commands.** An optional `web` command variant + `web_note` on a pack action, preferred by the web build (`command.js`), for commands tuned to a hands-on operator instead of a terminal reading output off disk. Additive and web-only — obol-local's mined data is untouched. The AD firehose actions now suggest a tee-to-file form with a note pointing at the attach control.
+- **Mobile app mode.** A native-style shell on phones/tablets: a fixed bottom tab bar (Home · Coach · Evidence · Tools) with a slide-up **More** sheet, a compact appbar (hamburger opens the engagement drawer, search opens the command palette), safe-area insets, and no horizontal scroll down to ~320px. Fixed a grid-blowout overflow (`minmax(0,1fr)` on the app grid).
+- **Theme.** Default skin returned to plain **Obol** (Neon/HTB/others stay selectable in ⚙). A new `--on-accent` token fixes unreadable buttons on light-accent skins (HTB chartreuse, amber, ghostwire) — dark text on bright fills, white on dark-accent skins.
+- **Workspace directory model.** An engagement can carry a **working directory** (box-centric on labs, engagement-centric on exams; your own path or a sensible default, remembered between runs). obol never touches the filesystem — it uses the model to fill concrete output paths (`{{scandir}}` etc.) into commands, offer a one-time **scaffold command** on the coach (`mkdir -p <root>/{scans,loot,exploit,www,proof} && cd <root>`), and point the Evidence attach hint at `scans/`. Tools with native output prefer their own writes (`nmap -oN {{scandir}}/…`) — cleaner to parse — with `tee` as the fallback for the rest.
+- **First-run onboarding.** A getting-started guide replaces the confusing "Untitled Run" phase bar until a run is actually set up; launching configures the default run in place (no stray empty engagement).
+- **Report.** Proof screenshots embed into the `.docx` (OOXML inline pictures); Kali-style terminal emulation in the transcript, with a **target shell prompt** (`user@host:~$` / `C:\>`) for post-exploitation commands and `kali@kali` for recon.
+- **Backdrop / copy.** The neon synthwave sun is styled as a giant OBOL coin (opt-in skin); the phase spine no longer pre-lights RECON/ENUM on an empty run; cleaner platform-profile names (Hack The Box CPTS, OffSec OSCP, OffSec Labs, OffSec OSWP).
+- Documented the obol web ↔ obol-local split in `docs/LOCAL-INHERITANCE-OVERHAUL.md` §10.
+
+## v11.1 — Follow-up live-review polish (PR #272)
+
+- Block opacity defaults to 30% so the motion background shows through (adjustable in ⚙).
+- Purged the stale auto-migrated "Imported engagement" (`10.129.85.48`) so a fresh visitor gets a clean run, never a prior visitor's session.
+- Restored **workspace export/import** (⚙ panel): per-engagement and whole-workspace JSON; import assigns fresh ids and never clobbers.
+- Checklist commands fill from facts + params + profile exactly like the coach, with a ready/needs state and copy-on-click.
+- Fixed Tools card/badge spacing and uniformity (equal-height cards, tag row pinned, consistent pills).
+- Report renders as clean paper with **Print / PDF** (print stylesheet) and a real **`.docx`** export (OOXML built in the engine, zipped with vendored JSZip); `.md` / `.html` kept.
+- The OBOL coin spins slowly in the top-left (full-motion only, reduced-motion safe).
+- Redesigned the raw "add a fact" field into a guided fact picker; self-hosted HTB-style fonts; skin options including HTB and the original indigo scheme.
+
+## v11.0 — Local-Inheritance Overhaul: obol web becomes the static-site edition of obol-local (PR #269)
+
+- Rebuilt obol web around obol-local's proven engine, packs, parsers, reporting, BloodHound analysis, checklist, and operator aesthetic over shared DNA — see `docs/LOCAL-INHERITANCE-OVERHAUL.md`. Not a port across foreign systems; a reunion over a 1:1 schema.
+- **Engine (pure JS):** `facts`, `phases`, `pack` (planner), `command`, `graph`, `bloodhound`, `report`, `toolbuilder`, `profile`, `packs`, `parsers/*`, `playbooks`, `engmap` — verified against 157 real actions and the 79-case parser fixture corpus.
+- **Surfaces (all live, route-lazy):** Engagements front door (platform profiles, scope paste, launch → seeds facts → coach); proof-gated **Next Steps** coach; **Evidence** intake; **Targets** + per-target attack-path graph; 36 **Tool Builders**; **Playbooks**; **Domain** (client-side SharpHound ingest → high-value census, interactive draggable attack-path graph, PlumHound-style query cards, printable report); **Map**; **Creds**; **Checklist**; **Scoreboard**; **Report** (OSCP/exec/technical profiles with redaction).
+- IndexedDB store + deterministic single-render router + route-lazy bundles; boot-to-interactive ~200ms; perf budget enforced in CI. New CI (`.github/workflows/ci.yml`): engine node tests + headless browser smoke; old workflows removed.
+- ⌘K command palette, proof-screenshot gallery on Evidence, cross-host Findings roll-up. Baggage purge trimmed the repo 24M → 11M.
+- Scrubbed HTB-Forest box specifics (kept generic AD "forest" terminology); packs/playbooks are project-authored and public-safe (no raw course text, targets, flags, credentials, or private replay steps).
+
 ## v10.24 — Completes the AD/SMB/remote-access Tool Builder family repair with schema-owned surfaces, GUI command-control proof, Evidence ingestion, and corrected audit classification
 
 - Added `data/product-hardening/ad-smb-remote-guidance-current.js` as the current owner for the AD/SMB/remote-access operator-surface repair.

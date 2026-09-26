@@ -39,9 +39,9 @@ function serve() {
 
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
-  // a first-time visitor lands on the neon (synthwave sunset) skin, in a clean untitled run — never
-  // an "Imported engagement" with a stale seed target.
-  ok(await page.getAttribute('html', 'data-skin') === 'neon', 'default skin is neon for a fresh visitor');
+  // a first-time visitor lands on the plain Obol skin, in a clean untitled run — never an
+  // "Imported engagement" with a stale seed target. (Neon and the rest stay selectable in ⚙.)
+  ok(await page.getAttribute('html', 'data-skin') === 'obol', 'default skin is obol for a fresh visitor');
   const firstEng = await page.evaluate(() => { var e = window.OBOL.store.active(); return { name: e && e.name, target: (e && e.params && e.params.target) || '' }; });
   ok(firstEng.name !== 'Imported engagement' && firstEng.target !== '10.129.85.48', 'fresh engagement is not the legacy import (' + JSON.stringify(firstEng) + ')');
 
@@ -60,14 +60,29 @@ function serve() {
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(200);
   ok(await page.locator('.pf-card').count() >= 6, 'engagement screen shows platform profiles (' + (await page.locator('.pf-card').count()) + ')');
+  // A fresh visitor gets the getting-started guide, not a confusing "Untitled Run" phase bar.
+  ok(await page.locator('.eng-welcome').count() === 1 && await page.locator('.home-spine').count() === 0,
+    'fresh engagement shows the getting-started guide, no phase bar');
+  ok(await page.locator('#eng-workdir').count() === 1, 'setup form has a working-directory field');
   await page.locator('.pf-card:has(input[value="oscp"])').click();
   await page.fill('#eng-name', 'OSCP Exam');
   await page.fill('#eng-scope', '10.10.10.10 junk 10.10.10.0/24');
+  await page.fill('#eng-workdir', '/home/kali/lab/box');
   await page.click('#eng-launch');
   await page.waitForTimeout(500);
   ok(page.url().indexOf('#/path') >= 0, 'launch lands on the coach');
   const launchedPlatform = await page.evaluate(() => window.OBOL.store.active().profile.platform);
   ok(launchedPlatform === 'oscp', 'launched engagement carries the OSCP profile (' + launchedPlatform + ')');
+  // workspace: saved on the engagement, drives command output paths, and shows the scaffold banner
+  const wsRoot = await page.evaluate(() => (window.OBOL.store.active().workspace || {}).root);
+  ok(wsRoot === '/home/kali/lab/box', 'launch saved the working directory (' + wsRoot + ')');
+  ok(await page.locator('.ws-banner').count() === 1 && (await page.locator('.ws-banner .cmd-run code').first().textContent() || '').indexOf('mkdir -p /home/kali/lab/box/{') === 0,
+    'coach shows the one-time workspace scaffold command');
+  const cmdHasScandir = await page.evaluate(() => Array.prototype.some.call(document.querySelectorAll('.move .cmd-run code'), function (c) { return c.textContent.indexOf('/home/kali/lab/box/scans/') !== -1; }));
+  ok(cmdHasScandir, 'coach commands write into the workspace scans/ directory');
+  // launching configured the default in place (no stray second run) and the home panel now shows it
+  const engCount = await page.evaluate(() => window.OBOL.store.listEngagements().length);
+  ok(engCount === 1, 'launch configured the default run in place, no stray empty engagement (' + engCount + ')');
   const scopedTargets = await page.evaluate(() => window.OBOL.store.active().targets.length);
   ok(scopedTargets === 1, 'scope paste kept the bare IP as a target, filtered junk+CIDR (' + scopedTargets + ')');
   await page.waitForTimeout(200);
@@ -77,6 +92,13 @@ function serve() {
   ok(/nmap/i.test(firstMove), 'top coach move is nmap recon ("' + firstMove.trim() + '")');
   ok(await page.locator('.move .cmd-run code').count() >= 1, 'move shows a copy-ready command (no toggles)');
   ok(await page.locator('.move input, .move select').count() === 0, 'coach move has NO form toggles/switches');
+  // now that the run is configured, the home panel shows the active run + phase bar (not the guide)
+  await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(200);
+  ok(await page.locator('.eng-active').count() === 1 && await page.locator('.home-spine').count() === 1 && await page.locator('.eng-welcome').count() === 0,
+    'a configured engagement shows the active panel with the phase bar (not the getting-started guide)');
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(200);
 
   // Blocked list present
   ok(await page.locator('.coach-blocked').count() >= 1, 'blocked-with-reasons section present');
@@ -119,6 +141,21 @@ function serve() {
   ok(factsAfter > factsBefore, 'parsing nmap output minted new facts (' + factsBefore + ' -> ' + factsAfter + ')');
   const kinds = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()));
   ok(kinds.indexOf('ldap.reachable') >= 0 || kinds.indexOf('port:389') >= 0, 'nmap parse produced AD-service facts (ldap.reachable/port:389)');
+
+  // File-ingest: a firehose output (too big to paste — e.g. bloodyAD / full ldapsearch) is attached
+  // as a file, parsed through the same pipeline, and stored CAPPED (never the whole 200k chars).
+  const bigDump = ['# firehose output, attached as a file instead of pasted', 'PORT     STATE SERVICE', '5985/tcp open  wsman']
+    .concat(Array.from({ length: 5000 }, (_, i) => 'noise line ' + i + ' :: nothing the parser recognizes here')).join('\n');
+  await page.fill('#ev-cmd', 'nmap -p- 10.10.10.10');
+  await page.setInputFiles('#ev-file', { name: 'nmap-full.txt', mimeType: 'text/plain', buffer: Buffer.from(bigDump) });
+  await page.waitForTimeout(400);
+  const fileIngest = await page.evaluate(() => {
+    var a = window.OBOL.store.active().activities[0] || {};
+    var res = (document.getElementById('ev-result') || {}).textContent || '';
+    return { source: a.source, file: a.file, capped: (a.stdout || '').indexOf('truncated') !== -1, resHasName: res.indexOf('nmap-full.txt') !== -1 };
+  });
+  ok(fileIngest.source === 'file' && fileIngest.file === 'nmap-full.txt', 'attached output file ingested through the evidence pipeline');
+  ok(fileIngest.capped, 'a huge attached dump is stored capped, not whole');
 
   // The coach should now surface more moves than before parsing.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
@@ -260,6 +297,25 @@ function serve() {
   const toolsMs = Date.now() - t2;
   ok(toolsMs < 3500, 'lazy Tools route render under budget (' + toolsMs + 'ms < 3500)');
   await perfPage.close();
+
+  // Mobile mode: at phone width the layout must not scroll sideways, the hamburger shows, and it
+  // opens the engagement drawer. Guards the grid-blowout / off-canvas regressions.
+  const mob = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true });
+  await mob.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
+  await mob.waitForFunction(() => document.documentElement.getAttribute('data-obol-boot') === 'ready', { timeout: 8000 }).catch(() => {});
+  await mob.waitForTimeout(300);
+  const hOverflow = await mob.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  ok(hOverflow <= 1, 'no horizontal page scroll at 390px (overflow ' + hOverflow + 'px)');
+  ok(await mob.locator('#nav-toggle').isVisible(), 'hamburger shows at phone width');
+  await mob.click('#nav-toggle');
+  await mob.waitForTimeout(300);
+  const drawer = await mob.evaluate(() => {
+    var open = document.documentElement.classList.contains('drawer-open');
+    var r = document.getElementById('sidebar').getBoundingClientRect();
+    return open && r.left >= -1 && r.width > 0 && r.right <= window.innerWidth + 1;
+  });
+  ok(drawer, 'hamburger opens the engagement drawer on-screen');
+  await mob.close();
 
   ok(errors.length === 0, 'no console errors (' + errors.length + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : '') + ')');
 

@@ -161,20 +161,31 @@
     ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
-  // The iconic retro sun: warm→hot vertical gradient disk with horizontal scan-gaps near the
-  // waterline, wrapped in a soft magenta halo. Sits centered on the horizon.
+  // The setting sun, styled as a giant OBOL — the struck gold coin from the brand mark: a gold
+  // radial face (highlight up-left), a dark-gold rim + faint inner ring, and the obol diamond at
+  // its centre. A little retro scan-banding on the lower face keeps the sunset signature. Rides a
+  // touch above the horizon so the coin's face reads before the ground line covers its base.
   function drawRetroSun(cx, horizon, R) {
-    var halo = ctx.createRadialGradient(cx, horizon, R * 0.25, cx, horizon, R * 2.3);
-    halo.addColorStop(0, "rgba(255,120,180,0.34)"); halo.addColorStop(0.5, "rgba(255,90,150,0.12)"); halo.addColorStop(1, "rgba(255,90,150,0)");
-    ctx.fillStyle = halo; ctx.fillRect(cx - R * 2.3, horizon - R * 2.3, R * 4.6, R * 2.3);
+    var cy = horizon - R * 0.38;
+    var halo = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, R * 2.2);
+    halo.addColorStop(0, "rgba(255,210,90,0.36)"); halo.addColorStop(0.5, "rgba(240,170,30,0.12)"); halo.addColorStop(1, "rgba(240,170,30,0)");
+    ctx.fillStyle = halo; ctx.fillRect(cx - R * 2.2, cy - R * 2.2, R * 4.4, R * 4.4);
     ctx.save();
-    ctx.beginPath(); ctx.arc(cx, horizon, R, 0, TAU); ctx.clip();
-    var sg = ctx.createLinearGradient(0, horizon - R, 0, horizon + R);
-    sg.addColorStop(0, "#FFE24B"); sg.addColorStop(0.4, "#FF9A3D"); sg.addColorStop(0.7, "#FF4D8D"); sg.addColorStop(1, "#C724B1");
-    ctx.fillStyle = sg; ctx.fillRect(cx - R, horizon - R, R * 2, R * 2);
-    ctx.fillStyle = "#2f0b48"; // scan-gaps read as the sky showing through the sun
-    for (var gi = 0; gi < 7; gi++) { var gy = horizon - R * 0.05 + gi * (R * 0.135); ctx.fillRect(cx - R, gy, R * 2, 2 + gi * 1.5); }
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.clip();
+    var g = ctx.createRadialGradient(cx - R * 0.24, cy - R * 0.32, R * 0.1, cx, cy, R * 1.1); // coin highlight up-left
+    g.addColorStop(0, "#FFF1A8"); g.addColorStop(0.55, "#FFD34D"); g.addColorStop(1, "#E6A21C");
+    ctx.fillStyle = g; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+    ctx.fillStyle = "rgba(120,70,10,0.20)"; // faint scan-gaps low on the face → setting-sun feel
+    for (var gi = 0; gi < 5; gi++) { ctx.fillRect(cx - R, cy + R * 0.2 + gi * (R * 0.16), R * 2, 1.5 + gi * 1.2); }
     ctx.restore();
+    // the coin's two struck rings (outer rim + inner circle), echoing the brand SVG
+    ctx.strokeStyle = "#B9770E"; ctx.lineWidth = Math.max(2, R * 0.06);
+    ctx.beginPath(); ctx.arc(cx, cy, R - ctx.lineWidth * 0.5, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 0.5; ctx.lineWidth = Math.max(1, R * 0.03);
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.72, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
+    // the obol mark — a filled diamond at the coin's centre (same rhombus as the SVG)
+    ctx.fillStyle = "#B9770E"; ctx.beginPath();
+    ctx.moveTo(cx, cy - R * 0.5); ctx.lineTo(cx + R * 0.42, cy); ctx.lineTo(cx, cy + R * 0.5); ctx.lineTo(cx - R * 0.42, cy); ctx.closePath(); ctx.fill();
   }
   // A stylized neon palm: curved trunk + a crown of drooping fronds, drawn as glowing strokes.
   function drawPalm(x, baseY, h, col, alpha) {
