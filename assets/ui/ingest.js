@@ -41,10 +41,11 @@
     var eng = OBOL.store.active();
     var params = (eng && eng.params) || {};
     var scope = 'host:' + (params.target || 'target');
-    var res;
+    var res, parseError = '';
     try {
       res = OBOL.parsers.parseActionOutput({ command: cmd, stdout: text, source: opts.fileName || cmd || 'paste', scope: scope, domain: params.domain || '' });
-    } catch (e) { return { ok: false, reason: 'error', error: e && e.message }; }
+    } catch (e) { res = { facts: [] }; parseError = (e && e.message) || 'parse failed'; }
+    if (res && res.error) parseError = res.error; // a sub-parser threw but earlier facts survived
     var facts = (res && res.facts) || [];
     var added = OBOL.store.addFacts(facts, 'evidence');
     var CAP = 24000;
@@ -59,7 +60,7 @@
         produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
     }, 'activity');
     if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
-    return { ok: true, added: added, facts: facts, cmd: cmd, lines: lines, fileName: opts.fileName || '' };
+    return { ok: true, added: added, facts: facts, cmd: cmd, lines: lines, fileName: opts.fileName || '', parseError: parseError };
   }
 
   OBOL.ingest = { run: run, deriveCommand: deriveCommand, ensureParsers: ensureParsers, ready: ready };

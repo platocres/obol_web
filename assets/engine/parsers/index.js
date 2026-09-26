@@ -56,6 +56,12 @@
     var domainHint = C._domain_from_text(text);
     var actObj = { id: actionId };
 
+    // The dispatch fans one paste out to many independent sub-parsers. A single fragile parser must
+    // never lose the whole paste (and the facts already collected before it) — so the run is wrapped:
+    // on an unexpected throw we log the culprit and return the facts gathered so far. Facts are never
+    // invented, only possibly under-collected. (nmap runs first, so a scan paste still yields ports.)
+    try {
+
     if (lc.indexOf('nmap ') >= 0 || lc.indexOf('nmap ') === 0) {
       if (has('_parse_nmap')) C._parse_nmap(text, ws, source, facts, actionId);
     }
@@ -170,6 +176,11 @@
     // §33 content-gated OSWE parsers (only the ported ones run)
     if (has('_has_product_signature') && C._has_product_signature(text)) C._parse_product_signature(text, ws, command, source, facts);
     if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) C._parse_sqli_oracle(text, ws, command, source, facts);
+
+    } catch (e) {
+      try { if (typeof console !== 'undefined' && console.warn) console.warn('obol parser: a sub-parser failed — keeping the ' + facts.length + ' fact(s) already recognized. Command: ' + command + ' — ' + (e && e.message)); } catch (_e) {}
+      return { facts: facts, unmatched: facts.length === 0, error: (e && e.message) || String(e) };
+    }
 
     return { facts: facts, unmatched: facts.length === 0 };
   }
