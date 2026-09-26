@@ -13,11 +13,13 @@
     var eng = OBOL.store.active();
     return OBOL.report.buildContext({
       facts: OBOL.store.factSet(),
-      targets: eng.targets || [],
+      // engagement targets carry `ip`; the report engine keys on `host`.
+      targets: (eng.targets || []).map(function (t) { return Object.assign({}, t, { host: t.host || t.ip }); }),
       activities: eng.activities || [],
       credentials: eng.credentials || [],
       params: eng.params || {},
       screenshots: eng.screenshots || [],
+      notes: eng.reportNotes || {},
       reportmeta: (root.OBOL_REPORTMETA || root.OBOL && root.OBOL.reportmeta) || null,
       includeSecrets: !!includeSecrets,
       name: eng.name,
@@ -25,6 +27,20 @@
       candidate: (eng.profile || {}).candidate || '',
       osid: (eng.profile || {}).osid || '',
     });
+  }
+
+  function notesEditor() {
+    var eng = OBOL.store.active();
+    var targets = eng.targets || [];
+    var notes = eng.reportNotes || {};
+    if (!targets.length) return '';
+    return '<details class="rep-notes"><summary>Report notes — per-host summary &amp; exploitation steps (woven into the walkthrough)</summary>'
+      + targets.map(function (t) {
+        var ip = t.ip || t.host; var n = notes[ip] || {};
+        return '<div class="rep-note" data-host="' + esc(ip) + '"><div class="rep-note-h">' + esc(t.hostname || ip) + ' · ' + esc(ip) + '</div>'
+          + '<textarea class="rep-note-fld rep-note-summary" data-host="' + esc(ip) + '" placeholder="One-paragraph summary: how this host was compromised…">' + esc(n.summary || '') + '</textarea>'
+          + '<textarea class="rep-note-fld rep-note-steps" data-host="' + esc(ip) + '" placeholder="Exploitation steps, one per line (rendered as a numbered list)…">' + esc(n.steps || '') + '</textarea></div>';
+      }).join('') + '</details>';
   }
 
   function render() {
@@ -50,6 +66,7 @@
       + '<button id="rep-html" class="btn-primary">Download .html</button>'
       + '</div>'
       + (gaps.length ? ('<div class="rep-gaps">Readiness gaps:<ul>' + gaps.map(function (g) { return '<li>' + esc(g.message || g) + '</li>'; }).join('') + '</ul></div>') : '')
+      + notesEditor()
       + '<div class="rep-out" id="rep-out">' + bodyHtml + '</div>'
       + '</section>';
   }
@@ -64,6 +81,25 @@
 
   function mounted(ctx) {
     var eng = OBOL.store.active();
+
+    // per-host report notes: persist on input, refresh the preview on blur.
+    var notesWrap = document.querySelector('.rep-notes');
+    if (notesWrap) {
+      notesWrap.addEventListener('input', function (e) {
+        var ta = e.target; if (!ta.classList || !ta.classList.contains('rep-note-fld')) return;
+        var host = ta.getAttribute('data-host'); if (!host) return;
+        var field = ta.classList.contains('rep-note-steps') ? 'steps' : 'summary';
+        OBOL.store.update(function (en) {
+          en.reportNotes = en.reportNotes || {};
+          en.reportNotes[host] = en.reportNotes[host] || {};
+          en.reportNotes[host][field] = ta.value;
+        }, 'reportNotes');
+      });
+      notesWrap.addEventListener('change', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('rep-note-fld')) OBOL.router.render();
+      });
+    }
+
     var prof = document.getElementById('rep-profile');
     if (prof) prof.addEventListener('change', function () {
       OBOL.store.update(function (e) { e.ui = e.ui || {}; e.ui.reportProfile = prof.value; }, 'ui');

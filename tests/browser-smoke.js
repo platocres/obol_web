@@ -173,6 +173,17 @@ function serve() {
   });
   ok(shotInReport, 'screenshot stored as an embeddable data-URI (feeds the report)');
 
+  // Report renders the verbatim command+output transcript (from the nmap paste) + the notes editor.
+  await page.goto(`http://localhost:${PORT}/index.html#/report`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(400);
+  ok(await page.locator('.rep-out pre.lang-terminal').count() >= 1, 'report renders the pasted terminal transcript');
+  ok(await page.locator('.rep-notes .rep-note-fld').count() >= 1, 'report shows the per-host notes editor');
+  const transcriptHasCmd = await page.evaluate(() => {
+    var pre = document.querySelector('.rep-out pre.lang-terminal');
+    return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1;
+  });
+  ok(transcriptHasCmd, 'transcript contains the command and its output');
+
   // Performance budget: boot-to-interactive + route render must stay fast (guards against the
   // historical "many uncompressed layers / tabs never load" regression). Generous for CI runners.
   const perfPage = await browser.newPage();

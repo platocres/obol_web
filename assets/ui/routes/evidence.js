@@ -101,8 +101,9 @@
     var stored = text.length > CAP ? (text.slice(0, CAP) + '\n… [' + (text.length - CAP) + ' more chars truncated]') : text;
     OBOL.store.update(function (eng) {
       eng.activities = eng.activities || [];
-      eng.activities.unshift({ at: Date.now(), command: cmd, source: 'paste', target: params.target || '', scope: scope,
-        produced: facts.map(function (f) { return f.kind; }), output: stored, sample: text.slice(0, 400) });
+      eng.activities.unshift({ at: Date.now(), command: cmd, source: 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
+        target: params.target || '', scope: scope,
+        produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
     }, 'activity');
     var resEl = document.getElementById('ev-result');
     if (resEl) {

@@ -572,3 +572,15 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 
 /* Respect reduced motion: the canvas stays put; JS also paints only a static gradient. */
 @media (prefers-reduced-motion: reduce) { .obol-settings-toggle:hover { transform: none; } }
+
+/* ---- report: terminal transcript blocks + per-host notes editor ---- */
+.rep-out pre.lang-terminal { background: #080d09; border: 1px solid var(--line); border-left: 3px solid var(--green);
+  border-radius: 8px; padding: 10px 12px; color: #cfe8cf; overflow-x: auto; font: 12px/1.5 var(--mono); }
+.rep-out pre.lang-terminal code { color: inherit; }
+.rep-notes { margin: 0 0 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surf1); padding: 4px 14px; }
+.rep-notes > summary { cursor: pointer; color: var(--text-2); font-weight: 600; padding: 10px 0; }
+.rep-note { margin: 10px 0 14px; }
+.rep-note-h { font: 12px var(--mono); color: var(--accent-2); margin-bottom: 6px; }
+.rep-note-fld { width: 100%; box-sizing: border-box; background: var(--bg2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; font: 12px var(--sans); margin-bottom: 6px; min-height: 46px; resize: vertical; }
+.rep-note-fld:focus { outline: none; border-color: var(--accent); }

@@ -405,7 +405,7 @@
           out.push("<table class='data'>" + cap + '<thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>');
           break;
         }
-        case 'code': out.push('<pre><code>' + esc(b.text) + '</code></pre>'); break;
+        case 'code': out.push('<pre' + (b.lang ? ' class="lang-' + esc(b.lang) + '"' : '') + '><code>' + esc(b.text) + '</code></pre>'); break;
         case 'callout': out.push('<div class="callout ' + esc(b.kind) + '">' + mdInline(b.text) + '</div>'); break;
         case 'proof': {
           var rws = [];
@@ -578,6 +578,7 @@
     var activities = opts.activities || [];
     var credentials = opts.credentials || [];
     var params = opts.params || {};
+    var notes = opts.notes || {};   // per-host operator narrative: { '<ip>': { summary, steps } }
     var screensRaw = opts.screenshots || [];
     var reportmeta = opts.reportmeta || root.OBOL_REPORTMETA || { cards: {}, laneDefaults: {}, references: { cards: {}, lanes: {} }, cveHints: [] };
     var secrets = knownSecrets(factset, credentials);
@@ -608,14 +609,16 @@
       };
     });
 
-    // timeline (run ledger)
+    // timeline (run ledger). Carries target/scope so the walkthrough can render each host's
+    // verbatim command+output transcript; stdout is redacted with the same secret set as commands.
     var timeline = activities.map(function (row, i) {
       return {
         index: i + 1, tool: row.tool || 'tool',
         command: redactCommand(row.command || '', { includeSecrets: includeSecrets, secrets: secrets }),
         status: runStatus(row), produced: (row.produced || []).slice(), duration_ms: row.duration_ms,
         at: row.at, at_display: stamp(row.at), action_id: row.action_id, playbook: row.playbook,
-        stdout: row.stdout || '', stderr: row.stderr || '',
+        target: row.target || '', scope: row.scope || '',
+        stdout: redactCommand(row.stdout || '', { includeSecrets: includeSecrets, secrets: secrets }), stderr: row.stderr || '',
       };
     });
 
@@ -706,6 +709,7 @@
       severity_counts: counts,
       facts: factsOut,
       timeline: timeline,
+      notes: notes,
       next_actions: params.nextActions || [],
       proof_candidates: scanManualProof(activities, factset),
       _secrets: secrets,
@@ -846,6 +850,33 @@
       var caption = label ? humanizeCaption(e.caption, label) : e.caption;
       return IMG({ caption: caption, data_uri: e.data_uri, path: e.path, question: e.question, is_render: e.kind === 'render' });
     });
+  }
+
+  // per-host verbatim command+output transcript (the operator's pasted terminal), terminal-styled.
+  function hostTranscript(ctx, host) {
+    var rows = (ctx.timeline || []).filter(function (r) { return (r.target === host) || (r.scope === 'host:' + host); });
+    if (!rows.length) return [];
+    var blocks = [H('Command Transcript', 4),
+      P('The exact commands run against this host and their output, as pasted into Evidence (secrets redacted).')];
+    var any = false;
+    rows.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (r) {
+      var body = (r.command ? '$ ' + r.command + '\n' : '') + (r.stdout || '');
+      if (!body.trim()) return;
+      any = true;
+      blocks.push(CODE(body, 'terminal'));
+    });
+    return any ? blocks : [];
+  }
+  // per-host operator narrative slot (summary + exploitation steps) from ctx.notes.
+  function hostNarrative(ctx, host) {
+    var n = (ctx.notes || {})[host] || {};
+    var blocks = [];
+    if (n.summary && String(n.summary).trim()) blocks.push(P(String(n.summary).trim()));
+    if (n.steps && String(n.steps).trim()) {
+      blocks.push(P('**Exploitation steps:**'));
+      blocks.push(UL(String(n.steps).split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean), true));
+    }
+    return blocks;
   }
 
   // ── cover / toc ──
@@ -1239,6 +1270,7 @@
         ['IP', host], ['Hostname', t.hostname || '—'], ['FQDN', fqdn], ['Domain', t.domain || '—'],
         ['OS', t.os || '—'], ['Privilege reached', oscpPriv(t)],
       ]));
+      blocks = blocks.concat(hostNarrative(ctx, host));   // operator summary / exploitation steps
       var findings = hostFindings(ctx, host);
       var phases = phaseBuckets(t, findings);
       var split = splitFindingsByPhase(findings);
@@ -1270,6 +1302,7 @@
       blocks = blocks.concat(proofScreenshotBlocks(t, 'root', ctx, host, 'proof.txt Proof Screenshot'));
       blocks = blocks.concat(flagContentsBlock(t, 'root', includeSecrets, 'proof.txt Contents'));
       blocks = blocks.concat(screenshotBlocks(ctx, 'commands', host, 'Command output'));
+      blocks = blocks.concat(hostTranscript(ctx, host));   // verbatim pasted terminal for this host
     });
     return blocks;
   }
