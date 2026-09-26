@@ -161,6 +161,7 @@
   var Store = {
     async init() {
       try {
+        try { if (_db) _db.close(); } catch (e0) {} // never leak a prior connection (would block a reset)
         _db = await openDB();
         _useIDB = true;
         var list = await idbGetAll('engagements');
@@ -230,6 +231,37 @@
       if (_useIDB && _db) await idbDelete('engagements', id).catch(function () {});
       if (_activeId === id) _activeId = Object.keys(_mem.engagements)[0] || null;
       emit('active');
+    },
+    // Delete every engagement (keeps appearance prefs). The caller reloads; init() then seeds a
+    // fresh, empty "Untitled Run".
+    async clearEngagements() {
+      var ids = Object.keys(_mem.engagements);
+      _mem.engagements = {}; _mem.blobs = {}; _activeId = null;
+      if (_useIDB && _db) {
+        for (var i = 0; i < ids.length; i++) await idbDelete('engagements', ids[i]).catch(function () {});
+        await this.setSetting('activeEngagement', null).catch(function () {});
+      } else { snapshotFallback(); }
+      emit('active');
+    },
+    // Full factory reset: erase ALL obol data in this browser — the IndexedDB database (engagements,
+    // blobs, settings) plus every obol localStorage/sessionStorage key. The caller reloads afterward.
+    async resetAll() {
+      _mem = { engagements: {}, blobs: {}, settings: {} }; _activeId = null;
+      try {
+        for (var i = localStorage.length - 1; i >= 0; i--) {
+          var k = localStorage.key(i);
+          if (k && (/^obol/i.test(k) || k === LS_PREFS || k === LS_SNAPSHOT)) localStorage.removeItem(k);
+        }
+      } catch (e) {}
+      try { sessionStorage.clear(); } catch (e2) {}
+      try { if (_db) { _db.close(); _db = null; } } catch (e3) {}
+      await new Promise(function (resolve) {
+        try {
+          if (typeof indexedDB === 'undefined') { resolve(); return; }
+          var req = indexedDB.deleteDatabase(DB_NAME);
+          req.onsuccess = req.onerror = req.onblocked = function () { resolve(); };
+        } catch (e4) { resolve(); }
+      });
     },
     async _persistEngagement(eng) {
       if (_useIDB && _db) { try { await idbPut('engagements', eng); return; } catch (e) {} }

@@ -147,7 +147,17 @@
       + '<h1 class="route-h1">Engagements</h1>'
       + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.</p>'
       + (configured ? activePanel() : gettingStarted())
-      + '<div class="eng-create" id="eng-setup"><h2 class="coach-sec-h">' + (configured ? 'New engagement' : 'Set up your run') + '</h2>'
+      + '<div class="eng-library"><div class="eng-library-head"><h2 class="coach-sec-h">Engagement Library</h2>'
+      + '<details class="eng-danger-toggle"><summary>Manage / Reset</summary>'
+      + '<div class="eng-danger"><div class="eng-danger-item"><div class="eng-danger-txt"><strong>Delete All Engagements</strong>'
+      + '<span>Remove every saved run and its evidence. Keeps your skin &amp; appearance settings.</span></div>'
+      + '<button class="btn-danger" id="eng-clear">Delete All Engagements</button></div>'
+      + '<div class="eng-danger-item"><div class="eng-danger-txt"><strong>Full Reset</strong>'
+      + '<span>Erase <em>everything</em> obol saved in this browser — engagements, screenshots, and settings — and start completely fresh. A hard refresh (Ctrl+F5) does not do this.</span></div>'
+      + '<button class="btn-danger btn-danger-strong" id="eng-reset">Full Reset — Erase All Data</button></div>'
+      + '</div></details></div>'
+      + libraryList() + '</div>'
+      + '<div class="eng-create" id="eng-setup"><h2 class="coach-sec-h">' + (configured ? 'New Engagement' : 'Set up your run') + '</h2>'
       + '<label class="eng-field"><span>Name</span><input id="eng-name" placeholder="Name this run — e.g. “OSCP prep” or “Lab night 3”" autocomplete="off"></label>'
       + '<div class="eng-field"><span>Platform profile</span><div class="pf-grid" id="pf-grid">' + platformCards(sel) + '</div></div>'
       + '<div class="eng-row2">'
@@ -162,7 +172,6 @@
       + '<div class="eng-field-hint">obol fills output paths from this (<code>scans/</code>, <code>loot/</code>, <code>proof/</code>…) and gives you a one-line setup command. Leave blank for a sensible default.</div>'
       + '<button id="eng-launch" class="btn-primary">Create &amp; Launch Run →</button>'
       + '</div>'
-      + '<div class="eng-library"><h2 class="coach-sec-h">Engagement library</h2>' + libraryList() + '</div>'
       + '</section>';
   }
 
@@ -199,6 +208,16 @@
     U.on(mount, 'click', '.lib-del', function (e, t) {
       if (!confirm('Delete this engagement? This cannot be undone.')) return;
       OBOL.store.deleteEngagement(t.getAttribute('data-eng')).then(function () { OBOL.app.renderSidebar(); OBOL.router.render(); });
+    });
+
+    // danger zone: delete all engagements (keeps prefs) / full reset (erase all browser data)
+    U.on(mount, 'click', '#eng-clear', function () {
+      if (!confirm('Delete ALL engagements and their evidence?\n\nThis cannot be undone. Your appearance settings are kept.')) return;
+      OBOL.store.clearEngagements().then(function () { try { U.toast('All engagements deleted — reloading'); } catch (e) {} setTimeout(function () { location.reload(); }, 150); });
+    });
+    U.on(mount, 'click', '#eng-reset', function () {
+      if (!confirm('FULL RESET\n\nErase everything obol saved in this browser — every engagement, screenshot, and setting — and start completely fresh.\n\nThis cannot be undone. Continue?')) return;
+      OBOL.store.resetAll().then(function () { try { U.toast('All data cleared — reloading fresh'); } catch (e) {} setTimeout(function () { location.reload(); }, 200); });
     });
 
     // create & launch
