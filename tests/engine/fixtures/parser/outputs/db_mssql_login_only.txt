@@ -1,0 +1,20 @@
+$ impacket-mssqlclient CORP/svc_sql:'Sql_Server_2019!'@10.10.14.40 -windows-auth
+Impacket v0.11.0 - Copyright 2023 Fortra
+
+[*] Encryption required, switching to TLS
+[*] ENVCHANGE(DATABASE): Old Value: master, New Value: master
+[*] ENVCHANGE(LANGUAGE): Old Value: , New Value: us_english
+[*] ENVCHANGE(PACKETSIZE): Old Value: 4096, New Value: 16192
+[*] INFO(DB01\SQLEXPRESS): Line 1: Changed database context to 'master'.
+[*] INFO(DB01\SQLEXPRESS): Line 1: Changed language setting to us_english.
+[*] ACK: Result: 1 - Microsoft SQL Server (150 7208)
+[!] Press help for extra shell commands
+SQL> SELECT @@version;
+
+--------------------------------------------------------------------------------------------------------------------------------
+Microsoft SQL Server 2019 (RTM-CU18) (KB5017593) - 15.0.4261.1 (X64)
+	Sep  1 2022 22:07:07
+	Copyright (C) 2019 Microsoft Corporation
+	Standard Edition (64-bit) on Windows Server 2019 Standard 10.0 <X64> (Build 17763: ) (Hypervisor)
+
+SQL>

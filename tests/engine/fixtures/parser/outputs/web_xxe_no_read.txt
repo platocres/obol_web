@@ -1,0 +1,27 @@
+$ curl -i -s 'http://blog.acme.internal/api/xml/parse' \
+  -H 'Content-Type: application/xml' \
+  --data-binary @- <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
+<data><value>&xxe;</value></data>
+EOF
+HTTP/1.1 400 Bad Request
+Date: Wed, 17 Sep 2026 12:31:09 GMT
+Server: nginx/1.24.0
+Content-Type: application/json; charset=utf-8
+Content-Length: 137
+Connection: close
+
+{"error":"XML parse failed","detail":"DOCTYPE is not allowed. Set FEATURE_SECURE_PROCESSING=true (DTD disallowed by policy)","value":null}
+
+$ curl -i -s 'http://blog.acme.internal/api/xml/parse' \
+  -H 'Content-Type: application/xml' \
+  --data-binary '<data><value>&xxe;</value></data>'
+HTTP/1.1 200 OK
+Date: Wed, 17 Sep 2026 12:31:44 GMT
+Server: nginx/1.24.0
+Content-Type: application/json; charset=utf-8
+Content-Length: 46
+Connection: close
+
+{"parsed":true,"value":"","entities_resolved":0}

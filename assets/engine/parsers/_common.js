@@ -248,12 +248,25 @@
   }
   C.uniqueSortedCI = uniqueSortedCI;
 
+  var _B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function _b64_manual(tok) {
+    var clean = tok.replace(/=+$/, '');
+    var out = '', buffer = 0, bits = 0;
+    for (var i = 0; i < clean.length; i++) {
+      var idx = _B64_ALPHABET.indexOf(clean[i]);
+      if (idx < 0) return '';
+      buffer = (buffer << 6) | idx;
+      bits += 6;
+      if (bits >= 8) { bits -= 8; out += String.fromCharCode((buffer >> bits) & 0xff); }
+    }
+    return out;
+  }
   function b64decode(tok) {
     try {
-      if (typeof Buffer !== 'undefined') return Buffer.from(tok, 'base64').toString('binary');
       if (typeof atob !== 'undefined') return atob(tok);
+      if (typeof Buffer !== 'undefined') return Buffer.from(tok, 'base64').toString('binary');
     } catch (e) { /* ignore */ }
-    return '';
+    return _b64_manual(tok);
   }
   C.b64decode = b64decode;
 

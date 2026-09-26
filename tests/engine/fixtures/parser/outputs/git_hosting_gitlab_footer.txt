@@ -1,0 +1,8 @@
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+
+<html><head>
+  <meta content="GitLab" property="og:site_name">
+</head><body>
+  <footer class="footer">GitLab Community Edition 15.6.0 | About GitLab | Help | Terms</footer>
+</body></html>

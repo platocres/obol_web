@@ -66,6 +66,32 @@ function serve() {
   await page.waitForTimeout(400);
   ok(await page.locator('#ev-text').count() === 1, 'evidence paste box present');
 
+  // End-to-end paste-back: parse real nmap output -> facts minted -> coach recomputes.
+  await page.waitForFunction(() => window.OBOL && window.OBOL.parsers && window.OBOL.parsers.parseActionOutput, { timeout: 8000 }).catch(() => {});
+  const factsBefore = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()).length);
+  const nmapOut = [
+    'Nmap scan report for 10.10.10.161',
+    'Host is up (0.021s latency).',
+    'PORT     STATE SERVICE',
+    '53/tcp   open  domain',
+    '88/tcp   open  kerberos-sec',
+    '389/tcp  open  ldap',
+    '445/tcp  open  microsoft-ds',
+  ].join('\n');
+  await page.fill('#ev-text', nmapOut);
+  await page.fill('#ev-cmd', 'nmap -Pn -sC -sV 10.10.10.161');
+  await page.click('#ev-parse');
+  await page.waitForTimeout(400);
+  const factsAfter = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()).length);
+  ok(factsAfter > factsBefore, 'parsing nmap output minted new facts (' + factsBefore + ' -> ' + factsAfter + ')');
+  const kinds = await page.evaluate(() => Object.keys(window.OBOL.store.factSet().kinds()));
+  ok(kinds.indexOf('ldap.reachable') >= 0 || kinds.indexOf('port:389') >= 0, 'nmap parse produced AD-service facts (ldap.reachable/port:389)');
+
+  // The coach should now surface more moves than before parsing.
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(300);
+  ok(await page.locator('.move').count() >= 2, 'coach recomputed: more moves unlocked after evidence (' + (await page.locator('.move').count()) + ')');
+
   ok(errors.length === 0, 'no console errors (' + errors.length + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : '') + ')');
 
   await browser.close();

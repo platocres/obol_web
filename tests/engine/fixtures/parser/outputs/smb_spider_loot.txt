@@ -1,0 +1,86 @@
+SMB         172.16.8.15      445    SRV-APP03        [*] Windows Server 2016 Build 14393 x64 (name:SRV-APP03) (domain:globex.corp) (signing:True) (SMBv1:False)
+SMB         172.16.8.15      445    SRV-APP03        [+] globex.corp\m.tanaka:Pa$$w0rd2024
+SPIDER_PLUS 172.16.8.15      445    SRV-APP03        [*] Started module spidering_plus with the following options:
+SPIDER_PLUS 172.16.8.15      445    SRV-APP03        [*]  DOWNLOAD_FLAG: False
+SPIDER_PLUS 172.16.8.15      445    SRV-APP03        [*]     STATS_FLAG: True
+SPIDER_PLUS 172.16.8.15      445    SRV-APP03        [*] EXCLUDE_FILTER: ['print$', 'ipc$']
+SPIDER_PLUS 172.16.8.15      445    SRV-APP03        [*]   EXCLUDE_EXTS: ['ico', 'lnk']
+SPIDER_PLUS 172.16.8.15      445    SRV-APP03        [*]  MAX_FILE_SIZE: 50 KB
+SPIDER_PLUS 172.16.8.15      445    SRV-APP03        [*]   OUTPUT_FOLDER: /tmp/nxc_hosted/nxc_spider_plus
+SMB         172.16.8.15      445    SRV-APP03        [+] Saved share-file metadata to "/tmp/nxc_hosted/nxc_spider_plus/172.16.8.15.json".
+SMB         172.16.8.15      445    SRV-APP03        [*] SMB Shares:           9 (ADMIN$, C$, Departments, IPC$, NETLOGON, Profiles$, SYSVOL, Transfer, print$)
+SMB         172.16.8.15      445    SRV-APP03        [*] SMB Readable Shares:  5 (Departments, IPC$, NETLOGON, Profiles$, SYSVOL, Transfer)
+SMB         172.16.8.15      445    SRV-APP03        [*] SMB Filtered Shares:  2 (IPC$, print$)
+SMB         172.16.8.15      445    SRV-APP03        [*] Total folders found:  14
+SMB         172.16.8.15      445    SRV-APP03        [*] Total files found:    27
+SMB         172.16.8.15      445    SRV-APP03        [*] File size average:    12.44 KB
+SMB         172.16.8.15      445    SRV-APP03        [*] File size min:        142 B
+SMB         172.16.8.15      445    SRV-APP03        [*] File size max:        48.90 KB
+{
+    "Departments": {
+        "IT/network-diagram.vsdx": {
+            "atime_epoch": "2024-02-11 13:22:41",
+            "ctime_epoch": "2024-01-05 09:01:12",
+            "mtime_epoch": "2024-02-11 13:22:41",
+            "size": "41.20 KB"
+        },
+        "IT/passwords.txt": {
+            "atime_epoch": "2024-03-04 08:44:19",
+            "ctime_epoch": "2024-01-05 09:03:55",
+            "mtime_epoch": "2024-03-04 08:44:19",
+            "size": "612 B"
+        },
+        "IT/vpn-config-backup.zip": {
+            "atime_epoch": "2024-02-28 16:10:07",
+            "ctime_epoch": "2024-02-28 16:10:07",
+            "mtime_epoch": "2024-02-28 16:10:07",
+            "size": "48.90 KB"
+        },
+        "Finance/invoice-template.xlsx": {
+            "atime_epoch": "2024-01-19 11:33:02",
+            "ctime_epoch": "2024-01-19 11:33:02",
+            "mtime_epoch": "2024-01-19 11:33:02",
+            "size": "22.05 KB"
+        },
+        "Finance/vendor-list-2024.csv": {
+            "atime_epoch": "2024-03-01 10:15:44",
+            "ctime_epoch": "2024-02-01 09:00:00",
+            "mtime_epoch": "2024-03-01 10:15:44",
+            "size": "8.77 KB"
+        }
+    },
+    "Profiles$": {
+        "m.tanaka/Documents/notes.txt": {
+            "atime_epoch": "2024-03-05 07:59:31",
+            "ctime_epoch": "2024-01-08 12:20:10",
+            "mtime_epoch": "2024-03-05 07:59:31",
+            "size": "1.42 KB"
+        },
+        "a.rossi/Desktop/todo.txt": {
+            "atime_epoch": "2024-02-20 14:05:18",
+            "ctime_epoch": "2024-02-20 14:05:18",
+            "mtime_epoch": "2024-02-20 14:05:18",
+            "size": "890 B"
+        }
+    },
+    "Transfer": {
+        "backup/web01-web.config.bak": {
+            "atime_epoch": "2024-02-25 22:14:09",
+            "ctime_epoch": "2024-02-25 22:14:09",
+            "mtime_epoch": "2024-02-25 22:14:09",
+            "size": "4.63 KB"
+        },
+        "backup/db-connection-strings.txt": {
+            "atime_epoch": "2024-02-25 22:15:33",
+            "ctime_epoch": "2024-02-25 22:15:33",
+            "mtime_epoch": "2024-02-25 22:15:33",
+            "size": "1.10 KB"
+        },
+        "install-notes.md": {
+            "atime_epoch": "2024-01-30 09:41:26",
+            "ctime_epoch": "2024-01-30 09:41:26",
+            "mtime_epoch": "2024-01-30 09:41:26",
+            "size": "3.28 KB"
+        }
+    }
+}

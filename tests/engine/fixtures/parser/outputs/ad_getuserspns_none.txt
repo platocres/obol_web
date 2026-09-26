@@ -1,0 +1,7 @@
+Impacket v0.12.0 - Copyright Fortra, LLC and its affiliated companies
+
+[*] Getting machine hostname
+ServicePrincipalName  Name  MemberOf  PasswordLastSet  LastLogon  Delegation
+--------------------  ----  --------  ---------------  ---------  ----------
+
+[-] No entries found!

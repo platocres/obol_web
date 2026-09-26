@@ -1,0 +1,2 @@
+SMB         192.168.56.30   445    WIN10-DEV        [*] Windows 10 / Server 2019 Build 19041 x64 (name:WIN10-DEV) (domain:lab.internal) (signing:False) (SMBv1:False)
+SMB         192.168.56.30   445    WIN10-DEV        [-] lab.internal\svc_backup:Winter2023! STATUS_LOGON_FAILURE

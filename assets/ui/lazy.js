@@ -10,7 +10,14 @@
 
   // Files per group, in load order. Populated as bundles are built; tolerant of absent files.
   var GROUPS = {
-    parsers: ['assets/engine/parsers/index.js'],
+    parsers: [
+      'assets/engine/parsers/_common.js',
+      'assets/engine/parsers/nmap.js', 'assets/engine/parsers/ad.js',
+      'assets/engine/parsers/creds.js', 'assets/engine/parsers/host.js',
+      'assets/engine/parsers/services.js', 'assets/engine/parsers/database.js',
+      'assets/engine/parsers/web.js', 'assets/engine/parsers/websource.js',
+      'assets/engine/parsers/index.js',
+    ],
     graph: ['assets/engine/graph.js', 'assets/ui/routes/graph.js'],
     domain: ['assets/jszip.min.js', 'assets/engine/bloodhound.js', 'assets/ui/routes/domain.js'],
     report: ['data/reportmeta.js', 'assets/engine/report.js', 'assets/ui/routes/report.js'],

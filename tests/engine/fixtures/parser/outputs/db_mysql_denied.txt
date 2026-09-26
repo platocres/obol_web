@@ -1,0 +1,5 @@
+$ mysql -h 10.10.14.32 -u root -p'toor'
+ERROR 1045 (28000): Access denied for user 'root'@'10.10.14.9' (using password: YES)
+
+$ mysql -h 10.10.14.32 -u admin -p'admin'
+ERROR 1045 (28000): Access denied for user 'admin'@'10.10.14.9' (using password: YES)

