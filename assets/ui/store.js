@@ -106,6 +106,7 @@
       createdAt: Date.now(),
       updatedAt: Date.now(),
       schema: 3,
+      profile: { platform: 'custom', machine_type: '', candidate: '', osid: '', scope: [] }, // engagement profile
       params: {},          // target/domain/username/password/lhost/…
       targets: [],         // [{id, ip, hostname, os, ...}]
       credentials: [],     // [{user, secret, secretType, ...}]
@@ -217,8 +218,12 @@
     async setActive(id) {
       if (_mem.engagements[id]) { _activeId = id; await this.setSetting('activeEngagement', id); emit('active'); }
     },
-    async createEngagement(name) {
+    async createEngagement(name, profile) {
       var eng = newEngagement(name);
+      if (profile && typeof profile === 'object') {
+        eng.profile = Object.assign(eng.profile, profile);
+        if (profile.platform) eng.params.platform = profile.platform;
+      }
       _mem.engagements[eng.id] = eng;
       _activeId = eng.id;
       await this._persistEngagement(eng);

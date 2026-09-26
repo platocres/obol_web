@@ -125,7 +125,7 @@
     });
     // Lazy routes (tools, domain, checklist, report, graph) register themselves when loaded.
     if (OBOL.lazy) OBOL.lazy.registerLazyRoutes(R);
-    R.setDefault('path');
+    R.setDefault('home');
   }
 
   function boot() {

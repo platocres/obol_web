@@ -44,13 +44,21 @@ function serve() {
   const actionCount = await page.evaluate(() => window.OBOL && window.OBOL.packs ? window.OBOL.packs.actions().length : 0);
   ok(actionCount === 157, 'packs loaded in browser (157 actions, got ' + actionCount + ')');
 
-  // Add a target -> coach should surface an nmap-first move
-  await page.goto(`http://localhost:${PORT}/index.html#/targets`, { waitUntil: 'networkidle' });
-  await page.fill('#t-ip', '10.10.10.161');
-  await page.click('#t-add');
-  await page.waitForTimeout(300);
-  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(300);
+  // Engagement screen is the default landing; launch an OSCP run with a scoped target.
+  await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(200);
+  ok(await page.locator('.pf-card').count() >= 6, 'engagement screen shows platform profiles (' + (await page.locator('.pf-card').count()) + ')');
+  await page.locator('.pf-card:has(input[value="oscp"])').click();
+  await page.fill('#eng-name', 'OSCP Exam');
+  await page.fill('#eng-scope', '10.10.10.161 junk 10.10.10.0/24');
+  await page.click('#eng-launch');
+  await page.waitForTimeout(500);
+  ok(page.url().indexOf('#/path') >= 0, 'launch lands on the coach');
+  const launchedPlatform = await page.evaluate(() => window.OBOL.store.active().profile.platform);
+  ok(launchedPlatform === 'oscp', 'launched engagement carries the OSCP profile (' + launchedPlatform + ')');
+  const scopedTargets = await page.evaluate(() => window.OBOL.store.active().targets.length);
+  ok(scopedTargets === 1, 'scope paste kept the bare IP as a target, filtered junk+CIDR (' + scopedTargets + ')');
+  await page.waitForTimeout(200);
   const moveCount = await page.locator('.move').count();
   ok(moveCount >= 1, 'coach renders at least one move after adding a target (' + moveCount + ')');
   const firstMove = (await page.locator('.move-title').first().textContent()) || '';

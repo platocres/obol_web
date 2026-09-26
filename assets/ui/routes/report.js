@@ -21,6 +21,9 @@
       reportmeta: (root.OBOL_REPORTMETA || root.OBOL && root.OBOL.reportmeta) || null,
       includeSecrets: !!includeSecrets,
       name: eng.name,
+      platform: (eng.profile || {}).platform || (eng.params || {}).platform || '',
+      candidate: (eng.profile || {}).candidate || '',
+      osid: (eng.profile || {}).osid || '',
     });
   }
 

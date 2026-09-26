@@ -25,7 +25,7 @@
   }
 
   function commandsBlock(action, facts, params) {
-    var filled = OBOL.command.fillAll(action, facts, { params: params });
+    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile });
     return filled.map(function (v, i) {
       var unfilled = OBOL.command.unfilledTokens(v.filled);
       var warn = unfilled.length
@@ -80,7 +80,8 @@
     var doneIds = {};
     Object.keys((eng && eng.checklist) || {}).forEach(function (k) { if (eng.checklist[k] === 'done') doneIds[k] = true; });
 
-    var ranked = OBOL.pack.nextActions(facts, pack, { doneIds: doneIds });
+    var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
+    var ranked = OBOL.pack.nextActions(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
     var frontier = OBOL.phases.frontierIndex(facts);
     var onFlow = [], comingUp = [];
     ranked.forEach(function (a) {

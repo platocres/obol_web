@@ -312,3 +312,34 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .tb-proof .tb-hint { margin: 6px 0; font-size: 11.5px; }
 .tb-foot { font-size: 11px; color: var(--muted); margin: 10px 0 0; line-height: 1.5; }
 @media (max-width: 620px) { .tools-grid { grid-template-columns: 1fr; } .tb-group-body { grid-template-columns: 1fr; } }
+
+/* ---- engagement screen ---- */
+.eng-active { background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surf2); border: 1px solid var(--accent); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; }
+.eng-active-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.eng-active-name { font-size: 18px; font-weight: 800; }
+.eng-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.eng-nextmove { margin-top: 10px; color: var(--text-2); }
+.pf-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+.pf-badge.exam { background: var(--critical); color: #fff; } .pf-badge.lab { background: var(--accent-soft); color: var(--accent-2); }
+.eng-create { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; margin-bottom: 22px; }
+.eng-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.eng-field > span { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.eng-field input, .eng-field select { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 13px var(--sans); }
+.eng-row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.pf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.pf-card { position: relative; display: flex; flex-direction: column; gap: 3px; background: var(--bg2); border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; cursor: pointer; }
+.pf-card:hover { border-color: var(--line-hot); }
+.pf-card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft); }
+.pf-card input { position: absolute; opacity: 0; pointer-events: none; }
+.pf-card .pf-name { font-weight: 700; font-size: 13px; }
+.pf-card .pf-badge { align-self: flex-start; }
+.pf-card .pf-flags { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.eng-library .lib-list { list-style: none; margin: 0; padding: 0; }
+.lib-row { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--line); }
+.lib-row.active .lib-name { color: var(--accent-2); }
+.lib-open { flex: 1; display: flex; align-items: center; gap: 10px; background: none; border: none; color: var(--text); padding: 9px 4px; cursor: pointer; text-align: left; }
+.lib-open:hover { color: var(--accent-2); }
+.lib-name { font-weight: 600; }
+.lib-meta { margin-left: auto; color: var(--muted); font-size: 12px; }
+.lib-del { background: none; border: none; color: var(--muted); font-size: 17px; cursor: pointer; }
+.lib-del:hover { color: var(--red); }

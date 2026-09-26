@@ -161,6 +161,13 @@
       }
     }
 
+    // flag-hunt tokens from the engagement profile (which flag names the hunt searches)
+    if (OBOL.profile) {
+      var fc = OBOL.profile.resolveFlagConfig(opts.profile || {});
+      if (!ctx.flag_inames_linux) ctx.flag_inames_linux = OBOL.profile.linuxInameExpr(fc.names);
+      if (!ctx.flag_names_windows) ctx.flag_names_windows = OBOL.profile.windowsNameList(fc.names);
+    }
+
     // extra wins
     Object.keys(extra).forEach(function (k) {
       var v = extra[k];
