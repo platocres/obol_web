@@ -48,7 +48,9 @@
   C._NXC_PROTO_REACHABLE_RE = /^(?<proto>LDAP|SMB|WINRM|RDP|SSH|FTP)\s+\S+\s+\d+\s+\S+/im;
   C._SAM_RE = /\bsAMAccountName:\s*([^\s,;]+)/i;
   C._UPN_RE = /\buserPrincipalName:\s*([^\s,;@]+)(?:@[^\s,;]+)?/i;
-  C._NXC_USER_ROW_RE = /^(?:LDAP|SMB)\s+\S+\s+\d+\s+\S+\s+(?!\[[^\]]+\])(?<user>[A-Za-z0-9._$-]{2,})\b/im;
+  // Column 5 is the sAMAccountName. Require an alnum/$ first char so the '-Username-' header row and
+  // other dash-led artifacts never match as a user (a real account never starts with '-' or '.').
+  C._NXC_USER_ROW_RE = /^(?:LDAP|SMB)\s+\S+\s+\d+\s+\S+\s+(?!\[[^\]]+\])(?<user>[A-Za-z0-9$][A-Za-z0-9._$-]+)\b/im;
   C._NXC_RID_USER_RE = /^(?:SMB|RPC)\s+\S+\s+\d+\s+\S+\s+(?:0x[0-9a-f]+|\d+):\s+(?:[^\\\s]+\\)?(?<user>[A-Za-z0-9._$-]{2,})\s+\(SidTypeUser\)/im;
   C._RPC_USER_RE = /\buser:\[(?<user>[^\]]+)\]\s+rid:\[[^\]]+\]/i;
   C._BASE_DN_RE = /\b(?:namingContexts|defaultNamingContext|rootDomainNamingContext):\s*([A-Za-z0-9_=,.-]+)/i;
@@ -347,6 +349,9 @@
     if (!user) return false;
     if (C._NOISE_USERS.has(user.toLowerCase())) return false;
     if (!allowMachine && user.endsWith('$')) return false;
+    // A real sAMAccountName never starts with '-' or '.'. A leading dash is the tell of a column
+    // header ('-Username-') or a flag token that leaked out of tabular tool output — never an account.
+    if (/^[-.]/.test(user)) return false;
     return /^[A-Za-z0-9._$-]{2,}$/.test(user);
   }
   C._valid_username = _valid_username;
