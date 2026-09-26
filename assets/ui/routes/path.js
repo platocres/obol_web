@@ -60,9 +60,9 @@
       + commandsBlock(action, facts, params)
       + producesChips(action) + dnp
       + '<footer class="move-actions">'
-      + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '">Paste result ↴</button>'
+      + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '">Paste Result ↴</button>'
       + toolLink
-      + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark done</button>'
+      + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
       + (action.refs && action.refs.length ? '<span class="move-refs">' + action.refs.length + ' ref' + (action.refs.length > 1 ? 's' : '') + '</span>' : '')
       + '</footer></article>';
   }
@@ -154,7 +154,7 @@
         + '<div class="ws-banner-h">📁 Set up your working directory — run this once on your Kali box:</div>'
         + '<pre class="cmd-run"><code>' + esc(scaffold) + '</code></pre>'
         + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(scaffold) + '">copy</button>'
-        + '<button class="btn-ghost ws-done">Got it</button></div>'
+        + '<button class="btn-ghost ws-done">Got It</button></div>'
         + '<div class="ws-banner-note">Commands below write into <code>' + esc(scandir) + '</code> — run one, then attach its output file in Evidence.</div>'
         + '</div>';
     }

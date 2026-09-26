@@ -34,8 +34,8 @@
       html += '<div class="bh-summary-head"><h2 class="coach-sec-h">' + esc(summary.domain || 'domain')
         + ' — ' + (summary.users ? summary.users.length : 0) + ' users, ' + (summary.computers ? summary.computers.length : 0) + ' computers</h2>'
         + '<div class="ev-row"><input id="bh-owned" class="ev-cmd" placeholder="owned principals (comma-separated), e.g. ADMINISTRATOR@CORP.LOCAL" value="' + U.attr(owned.join(', ')) + '">'
-        + '<button id="bh-recompute" class="btn-ghost">Recompute paths</button>'
-        + '<button id="bh-report" class="btn-primary">Open report</button></div></div>';
+        + '<button id="bh-recompute" class="btn-ghost">Recompute Paths</button>'
+        + '<button id="bh-report" class="btn-primary">Open Report</button></div></div>';
 
       // Interactive attack-path graph (parity with obol-local's draggable domain graph).
       html += '<h2 class="coach-sec-h">Attack-path graph</h2>'

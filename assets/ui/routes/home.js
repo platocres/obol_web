@@ -73,7 +73,7 @@
       + '<li><span class="eng-step-n">2</span><div><b>Set your scope</b><span>Paste the target IPs / CIDRs for the box or lab (junk is filtered).</span></div></li>'
       + '<li><span class="eng-step-n">3</span><div><b>Launch</b><span>obol opens the coach and ranks your first commands. The phase bar lights up as you collect facts.</span></div></li>'
       + '</ol>'
-      + '<button type="button" class="btn-primary eng-jump">Set it up below ↓</button>'
+      + '<button type="button" class="btn-primary eng-jump">Set It Up Below ↓</button>'
       + '</div>';
   }
 
@@ -152,7 +152,7 @@
       + '<label class="eng-field"><span>Working directory <span class="eng-field-opt">(on your Kali box — optional)</span></span>'
       + '<input id="eng-workdir" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
       + '<div class="eng-field-hint">obol fills output paths from this (<code>scans/</code>, <code>loot/</code>, <code>proof/</code>…) and gives you a one-line setup command. Leave blank for a sensible default.</div>'
-      + '<button id="eng-launch" class="btn-primary">Create &amp; launch run →</button>'
+      + '<button id="eng-launch" class="btn-primary">Create &amp; Launch Run →</button>'
       + '</div>'
       + '<div class="eng-library"><h2 class="coach-sec-h">Engagement library</h2>' + libraryList() + '</div>'
       + '</section>';

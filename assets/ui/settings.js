@@ -94,11 +94,11 @@
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     }
-    wsWrap.appendChild(mkBtn("⭳ Export engagement", function () {
+    wsWrap.appendChild(mkBtn("⭳ Export Engagement", function () {
       var eng = OBOL.store.active(); download("obol-" + slugify(eng && eng.name), OBOL.store.exportEngagement());
     }));
-    wsWrap.appendChild(mkBtn("⭳ Export all", function () { download("obol-workspace-" + dstamp(), OBOL.store.exportAll()); }));
-    wsWrap.appendChild(mkBtn("⭱ Import file…", function () { fileInput.click(); }));
+    wsWrap.appendChild(mkBtn("⭳ Export All", function () { download("obol-workspace-" + dstamp(), OBOL.store.exportAll()); }));
+    wsWrap.appendChild(mkBtn("⭱ Import File…", function () { fileInput.click(); }));
     fileInput.addEventListener("change", function () {
       var f = fileInput.files && fileInput.files[0]; if (!f) return;
       var r = new FileReader();

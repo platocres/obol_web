@@ -65,12 +65,12 @@
       + '<textarea id="ev-text" class="ev-textarea" placeholder="Select your whole terminal and paste it here — prompt, command, and all output. e.g.&#10;&#10;$ nmap -sC -sV -oN nmap/full 10.10.10.10&#10;Starting Nmap 7.94 ...&#10;PORT     STATE SERVICE&#10;53/tcp   open  domain&#10;88/tcp   open  kerberos-sec&#10;389/tcp  open  ldap&#10;..." spellcheck="false"></textarea>'
       + '<div class="ev-row">'
       + '<input id="ev-cmd" class="ev-cmd" placeholder="command (auto-detected from your paste — only set this if the paste is output-only)" value="' + (pin ? U.attr(pin.command) : '') + '">'
-      + '<button id="ev-parse" class="btn-primary"' + (parsersReady ? '' : ' disabled') + '>' + (parsersReady ? 'Parse → facts' : 'Loading parsers…') + '</button>'
+      + '<button id="ev-parse" class="btn-primary"' + (parsersReady ? '' : ' disabled') + '>' + (parsersReady ? 'Parse → Facts' : 'Loading parsers…') + '</button>'
       + '</div>'
       // Attach an output file for firehose tools too big to paste (bloodyAD, full ldapsearch,
       // wide nxc/gobuster sweeps). Read locally, parsed the same way, stored capped. Nothing uploaded.
       + '<div class="ev-row ev-file-row">'
-      + '<label class="ev-filebtn" for="ev-file">⭱ Attach output file…</label>'
+      + '<label class="ev-filebtn" for="ev-file">⭱ Attach Output File…</label>'
       + '<input type="file" id="ev-file" class="ev-file" accept=".txt,.log,.out,.json,.ldif,.csv,.tsv,text/plain" hidden>'
       + '<span class="ev-file-hint">Too big to paste? Attach the tool\'s output file' + fileHintPath() + ' — parsed on your machine, only a sample is kept. Set the command above if the file is output-only.</span>'
       + '</div>'
@@ -139,7 +139,7 @@
           + '<ul class="ev-factlist">' + facts.map(function (f) {
             return '<li class="' + esc(f.state) + '"><code>' + esc(f.kind) + '</code> <span class="ev-fscope">' + esc(f.scope) + '</span></li>';
           }).join('') + '</ul>'
-          + '<a class="btn-primary" href="#/path">See updated coach →</a>';
+          + '<a class="btn-primary" href="#/path">See Updated Coach →</a>';
       }
     }
     OBOL.app.renderSidebar();
@@ -169,7 +169,7 @@
     if (!(OBOL.parsers && OBOL.parsers.parseActionOutput) && OBOL.lazy) {
       OBOL.lazy.loadGroup('parsers').then(function () {
         var b = document.getElementById('ev-parse');
-        if (b) { b.disabled = false; b.textContent = 'Parse → facts'; }
+        if (b) { b.disabled = false; b.textContent = 'Parse → Facts'; }
       }).catch(function () {});
     }
     var parseBtn = document.getElementById('ev-parse');

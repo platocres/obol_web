@@ -35,7 +35,7 @@
     var ip = ctx.args[0];
     var eng = OBOL.store.active();
     var t = findTarget(ip);
-    if (!t) return '<section class="target-route"><h1 class="route-h1">Target ' + esc(ip) + '</h1><div class="coach-empty">No such target in this engagement. <a href="#/targets">Back to targets</a></div></section>';
+    if (!t) return '<section class="target-route"><h1 class="route-h1">Target ' + esc(ip) + '</h1><div class="coach-empty">No such target in this engagement. <a href="#/targets">Back to Targets</a></div></section>';
     ip = t.ip || ip;
 
     var facts = OBOL.store.factSetForTarget(ip);
@@ -98,7 +98,7 @@
       + '<div class="target-col">'
       + '<h2 class="coach-sec-h">Next moves for this target</h2>'
       + (moveHtml || '<div class="coach-empty">No moves — paste evidence to unlock.</div>')
-      + '<a class="btn-ghost" href="#/path">Full coach →</a>'
+      + '<a class="btn-ghost" href="#/path">Full Coach →</a>'
       + '</div>'
       + '</div>'
       + '</section>';
