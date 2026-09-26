@@ -60,6 +60,9 @@ function serve() {
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(200);
   ok(await page.locator('.pf-card').count() >= 6, 'engagement screen shows platform profiles (' + (await page.locator('.pf-card').count()) + ')');
+  // A fresh visitor gets the getting-started guide, not a confusing "Untitled Run" phase bar.
+  ok(await page.locator('.eng-welcome').count() === 1 && await page.locator('.home-spine').count() === 0,
+    'fresh engagement shows the getting-started guide, no phase bar');
   await page.locator('.pf-card:has(input[value="oscp"])').click();
   await page.fill('#eng-name', 'OSCP Exam');
   await page.fill('#eng-scope', '10.10.10.10 junk 10.10.10.0/24');
@@ -68,6 +71,9 @@ function serve() {
   ok(page.url().indexOf('#/path') >= 0, 'launch lands on the coach');
   const launchedPlatform = await page.evaluate(() => window.OBOL.store.active().profile.platform);
   ok(launchedPlatform === 'oscp', 'launched engagement carries the OSCP profile (' + launchedPlatform + ')');
+  // launching configured the default in place (no stray second run) and the home panel now shows it
+  const engCount = await page.evaluate(() => window.OBOL.store.listEngagements().length);
+  ok(engCount === 1, 'launch configured the default run in place, no stray empty engagement (' + engCount + ')');
   const scopedTargets = await page.evaluate(() => window.OBOL.store.active().targets.length);
   ok(scopedTargets === 1, 'scope paste kept the bare IP as a target, filtered junk+CIDR (' + scopedTargets + ')');
   await page.waitForTimeout(200);
@@ -77,6 +83,13 @@ function serve() {
   ok(/nmap/i.test(firstMove), 'top coach move is nmap recon ("' + firstMove.trim() + '")');
   ok(await page.locator('.move .cmd-run code').count() >= 1, 'move shows a copy-ready command (no toggles)');
   ok(await page.locator('.move input, .move select').count() === 0, 'coach move has NO form toggles/switches');
+  // now that the run is configured, the home panel shows the active run + phase bar (not the guide)
+  await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(200);
+  ok(await page.locator('.eng-active').count() === 1 && await page.locator('.home-spine').count() === 1 && await page.locator('.eng-welcome').count() === 0,
+    'a configured engagement shows the active panel with the phase bar (not the getting-started guide)');
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(200);
 
   // Blocked list present
   ok(await page.locator('.coach-blocked').count() >= 1, 'blocked-with-reasons section present');

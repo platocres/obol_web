@@ -465,6 +465,19 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 @media (max-width: 620px) { .tools-grid { grid-template-columns: 1fr; } .tb-group-body { grid-template-columns: 1fr; } }
 
 /* ---- engagement screen ---- */
+/* first-run guidance (shown until an engagement is actually set up) */
+.eng-welcome { background: linear-gradient(135deg, var(--accent-soft), transparent 60%), var(--surf1); border: 1px solid var(--line-hot); border-radius: var(--radius); padding: 20px 22px; margin-bottom: 22px; }
+.eng-welcome-h { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
+.eng-welcome-sub { color: var(--text-2); margin: 0 0 16px; max-width: 64ch; }
+.eng-steps { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 12px; }
+.eng-steps li { display: flex; gap: 12px; align-items: flex-start; }
+.eng-steps li > div { display: flex; flex-direction: column; gap: 1px; }
+.eng-steps li b { font-size: 14px; font-weight: 700; }
+.eng-steps li span:not(.eng-step-n) { color: var(--text-2); font-size: 13px; }
+.eng-step-n { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-2);
+  font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
+.eng-jump { border: none; }
+
 .eng-active { background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surf2); border: 1px solid var(--accent); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; }
 .eng-active-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .eng-active-name { font-size: 18px; font-weight: 800; }

@@ -42,6 +42,34 @@
     }).join('');
   }
 
+  // An engagement is "set up" once the operator has actually done something with it: chosen a real
+  // platform, scoped a target, or collected a fact. A brand-new default run (custom platform, no
+  // targets, no facts, still called "Untitled Run") is NOT set up — we greet it with guidance
+  // instead of a confusing phase bar.
+  function isConfigured(eng, factCount) {
+    if (!eng) return false;
+    var prof = eng.profile || {};
+    var realPlatform = prof.platform && prof.platform !== 'custom';
+    var targets = (eng.targets || []).length > 0;
+    var scoped = !!(eng.params && (eng.params.scope_defined || eng.params.target));
+    var named = !!eng.name && !/^(untitled run|new engagement)$/i.test(String(eng.name).trim());
+    return realPlatform || targets || scoped || (factCount || 0) > 0 || named;
+  }
+
+  // First-run guidance shown in place of the active-run panel until the engagement is set up.
+  function gettingStarted() {
+    return '<div class="eng-welcome">'
+      + '<div class="eng-welcome-h">Set up your first engagement</div>'
+      + '<p class="eng-welcome-sub">obol coaches your next move from the evidence you collect — no run is configured yet. Set one up below and the coach takes over from there.</p>'
+      + '<ol class="eng-steps">'
+      + '<li><span class="eng-step-n">1</span><div><b>Pick a platform</b><span>Hack The Box, OffSec OSCP, CTF… it decides the flags, proof rules, and report shape.</span></div></li>'
+      + '<li><span class="eng-step-n">2</span><div><b>Set your scope</b><span>Paste the target IPs / CIDRs for the box or lab (junk is filtered).</span></div></li>'
+      + '<li><span class="eng-step-n">3</span><div><b>Launch</b><span>obol opens the coach and ranks your first commands. The phase bar lights up as you collect facts.</span></div></li>'
+      + '</ol>'
+      + '<button type="button" class="btn-primary eng-jump">Set it up below ↓</button>'
+      + '</div>';
+  }
+
   function activePanel() {
     var eng = OBOL.store.active();
     if (!eng) return '';
@@ -95,13 +123,16 @@
   }
 
   function render() {
-    var prof = (OBOL.store.active() || {}).profile || {};
+    var active = OBOL.store.active();
+    var prof = (active || {}).profile || {};
     var sel = prof.platform || 'custom';
+    var factCount = Object.keys(OBOL.store.factSet().kinds()).length;
+    var configured = isConfigured(active, factCount);
     return '<section class="engscreen">'
       + '<h1 class="route-h1">Engagements</h1>'
       + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.</p>'
-      + activePanel()
-      + '<div class="eng-create"><h2 class="coach-sec-h">New engagement</h2>'
+      + (configured ? activePanel() : gettingStarted())
+      + '<div class="eng-create" id="eng-setup"><h2 class="coach-sec-h">' + (configured ? 'New engagement' : 'Set up your run') + '</h2>'
       + '<label class="eng-field"><span>Name</span><input id="eng-name" placeholder="Name this run — e.g. “OSCP prep” or “Lab night 3”" autocomplete="off"></label>'
       + '<div class="eng-field"><span>Platform profile</span><div class="pf-grid" id="pf-grid">' + platformCards(sel) + '</div></div>'
       + '<div class="eng-row2">'
@@ -135,6 +166,14 @@
     });
     syncOsidVisibility();
 
+    // getting-started CTA: scroll to the setup form and focus the name field
+    U.on(mount, 'click', '.eng-jump', function () {
+      var form = document.getElementById('eng-setup');
+      if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      var nm = document.getElementById('eng-name');
+      if (nm) setTimeout(function () { try { nm.focus(); } catch (e) {} }, 300);
+    });
+
     // library: open / delete
     U.on(mount, 'click', '.lib-open', function (e, t) {
       OBOL.store.setActive(t.getAttribute('data-eng')).then(function () { OBOL.app.renderSidebar(); OBOL.router.render(); });
@@ -156,11 +195,21 @@
       var scope = extractScope(scopeText);
       if (!name) { name = (OBOL.profile.PRESETS[platform] || {}).name || 'Engagement'; }
 
-      OBOL.store.createEngagement(name, { platform: platform, machine_type: mt, osid: osid.trim(), candidate: cand.trim(), scope: scope }).then(function (eng) {
+      // If the active engagement is still the untouched default, configure it in place rather than
+      // spawning a second, empty run behind it. Otherwise create a fresh engagement as before.
+      var active = OBOL.store.active();
+      var reuse = active && !isConfigured(active, Object.keys(OBOL.store.factSet().kinds()).length);
+
+      var seed = function () {
         // seed targets from bare IPs; keep CIDRs as authorized scope only.
         var hosts = scope.filter(function (s) { return !isCidr(s); });
         var facts = [];
         OBOL.store.update(function (e) {
+          if (reuse) {
+            e.name = name;
+            e.profile = Object.assign(e.profile || {}, { platform: platform, machine_type: mt, osid: osid.trim(), candidate: cand.trim(), scope: scope });
+            e.params = e.params || {}; e.params.platform = platform;
+          }
           e.targets = [];
           hosts.forEach(function (ip, i) {
             e.targets.push({ id: 't' + i + '-' + Date.now().toString(36), ip: ip, hostname: '', os: '' });
@@ -174,7 +223,10 @@
         OBOL.app.renderSidebar();
         U.toast(hosts.length ? ('Launched — ' + hosts.length + ' target(s) scoped') : 'Engagement created — add targets to begin');
         OBOL.router.go('path');
-      });
+      };
+
+      if (reuse) { seed(); }
+      else { OBOL.store.createEngagement(name, { platform: platform, machine_type: mt, osid: osid.trim(), candidate: cand.trim(), scope: scope }).then(seed); }
     });
   }
 
