@@ -312,3 +312,40 @@ human-run command behavior. Delete only with a green replacement owner in place.
   parser fixtures, redaction, bloodhound census). Keep a browser smoke check green.
 - **No execution, ever.** The Tool Builder schema already forbids `execute/exec/spawn/
   runCommand/autoRun`; keep that invariant everywhere.
+
+---
+
+## 9 · Status — as built (2026-09-26)
+
+The overhaul shipped on branch `claude/obol-web-overhaul-local-59ttbx` (PR #269). Repo trimmed
+24M → 11M by the baggage purge. All engine suites (`tests/engine/*.js`) + the headless browser
+smoke (`tests/browser-smoke.js`) are green; boot-to-interactive ~200ms.
+
+**Engine (pure JS, ported from obol-local):** `facts`, `phases`, `pack` (planner), `command`,
+`graph`, `bloodhound`, `report`, `toolbuilder`, `profile`, `packs`, `parsers/*`, `playbooks`,
+`engmap`. Verified against 157 real actions + the 79-case parser fixture corpus.
+
+**Surfaces (all live, route-lazy):**
+- **Engagements** (home/front door) — platform profiles (HTB/OSCP/PWK/THM/CPTS/CTF/OSWP/custom),
+  machine type, scope paste, launch → seeds facts → coach.
+- **Next Steps** — the proof-gated coach (frontier-ranked, many copy-ready commands, no toggles,
+  blocked-with-reasons). **Evidence** — paste → parsers mint facts → recompute.
+- **Targets** + **per-target page** (`#/target/<ip>`) — attack-chain bar, scoped attack-path
+  graph, access level, scoped moves, flags, proven-fact storyline.
+- **Tools** — 36 robust builders scoped to obol-local's equipped set (the only place commands
+  are built). **Playbooks** — 5 ordered sequences, filled + exportable `.sh`.
+- **Domain** — client-side SharpHound ingest → high-value census, **interactive draggable
+  attack-path graph** (drag/zoom/pan, MemberOf vs control edges, path chips), **PlumHound-style
+  query cards** (principals + commands), and a self-contained printable report.
+- **Map** — engagement-wide overview graph. **Creds** — reuse matrix + one-click retarget.
+- **Checklist** — full methodology, tickable. **Scoreboard** — flags + OSCP scoring.
+- **Report** — obol-local profile/redaction/HTML pipeline (OSCP/exec/technical), auto-selected
+  by the engagement profile.
+
+**Storage/perf:** IndexedDB store (engagement library, legacy migration), deterministic
+single-render router, route-lazy bundles, perf budget enforced in CI.
+
+**CI:** `.github/workflows/ci.yml` (engine node tests + browser smoke). Old workflows removed.
+
+**Remaining ideas (not yet built):** ⌘K command palette, evidence-screenshot gallery feeding the
+report, cross-host findings roll-up surface.
