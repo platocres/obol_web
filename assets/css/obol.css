@@ -61,7 +61,9 @@ code, pre, .mono { font-family: var(--mono); }
 ::selection { background: var(--accent-soft); }
 
 /* ---- app shell ---- */
-#app { display: grid; grid-template-columns: 264px 1fr; grid-template-rows: auto 1fr; grid-template-areas: "head head" "side main"; min-height: 100vh; }
+/* minmax(0, 1fr) — not a bare 1fr — so the main column never grows to its content's width
+   (wide nav rows, tables, <pre>), which would blow the whole grid past the viewport. */
+#app { display: grid; grid-template-columns: 264px minmax(0, 1fr); grid-template-rows: auto 1fr; grid-template-areas: "head head" "side main"; min-height: 100vh; }
 header.appbar { grid-area: head; display: flex; align-items: center; gap: 18px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--surf1), var(--surf2)); backdrop-filter: blur(6px); position: sticky; top: 0; z-index: 20; }
 .brand { display: flex; align-items: center; gap: 10px; perspective: 360px; }
 /* the obol coin flips slowly like a spinning coin (edge-on rotateY) — full-motion only */
@@ -245,12 +247,62 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .obol-toast.err { border-color: var(--red); }
 
 /* ---- responsive ---- */
+/* the hamburger + drawer scrim exist only on narrow screens */
+.nav-toggle { display: none; }
+.nav-scrim { display: none; }
+
+/* Phones + portrait tablets: the sidebar becomes an off-canvas drawer, and the route nav drops to
+   its own full-width, horizontally-scrollable row so every screen works down to ~320px wide. */
 @media (max-width: 860px) {
-  #app { grid-template-columns: 1fr; grid-template-areas: "head" "main" "side"; }
-  aside#sidebar { border-right: none; border-top: 1px solid var(--line); }
-  nav.mainnav { overflow-x: auto; }
-  main#view { padding: 16px; }
+  #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "main"; }
+  header.appbar { min-width: 0; }
+  aside#sidebar {
+    position: fixed; top: 0; left: 0; z-index: 60;
+    width: min(86vw, 320px); height: 100vh; height: 100dvh;
+    border-right: 1px solid var(--line); border-top: none;
+    transform: translateX(-100%); transition: transform .22s ease;
+    box-shadow: 0 0 40px -8px #000; overscroll-behavior: contain;
+  }
+  :root.drawer-open aside#sidebar { transform: none; }
+  .nav-scrim { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.5); }
+  .nav-scrim[hidden] { display: none; }
+
+  .nav-toggle { display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 40px; height: 40px; padding: 0; background: transparent; border: 1px solid var(--line);
+    border-radius: 8px; cursor: pointer; }
+  .nav-toggle-bars { position: relative; display: block; width: 18px; height: 2px; background: var(--text-2); border-radius: 2px; }
+  .nav-toggle-bars::before, .nav-toggle-bars::after { content: ""; position: absolute; left: 0; width: 18px; height: 2px; background: var(--text-2); border-radius: 2px; }
+  .nav-toggle-bars::before { top: -6px; }
+  .nav-toggle-bars::after { top: 6px; }
+  :root.drawer-open .nav-toggle { border-color: var(--accent); }
+
+  header.appbar { flex-wrap: wrap; gap: 8px 12px; padding: 8px 14px; }
+  .brand .tagline { display: none; }
+  nav.mainnav { order: 5; flex-basis: 100%; min-width: 0; max-width: 100%; margin-left: 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    gap: 2px; padding-bottom: 2px; scrollbar-width: none; }
+  nav.mainnav::-webkit-scrollbar { display: none; }
+  nav.mainnav a { white-space: nowrap; padding: 8px 12px; }
+
+  main#view { padding: 16px; min-width: 0; }
   .coach-hero { flex-direction: column; align-items: stretch; }
+}
+
+/* Small phones: single-column grids, tap-sized controls, and wide tables/pre that scroll rather
+   than push the page sideways. */
+@media (max-width: 640px) {
+  main#view { padding: 14px; }
+  .route-h1 { font-size: 20px; }
+  .blocked-groups, .bh-census, .tgrid, .eng-row2, .pf-grid, .home-cards, .ev-shot-grid,
+  .target-grid, .tools-grid, .tb-group-body { grid-template-columns: 1fr; }
+  .obol-set-skins { grid-template-columns: repeat(2, 1fr); }
+  .rep-out table, table.data, table.kv { display: block; overflow-x: auto; white-space: nowrap; max-width: 100%; }
+  main#view pre { max-width: 100%; overflow-x: auto; }
+  .btn-primary, .btn-ghost, .btn-mini, .move-actions button, .rep-actions button { min-height: 40px; }
+  .rep-controls, .rep-actions, .rep-opts { flex-wrap: wrap; }
+  .obol-settings-panel { width: min(260px, calc(100vw - 24px)); right: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  aside#sidebar { transition: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

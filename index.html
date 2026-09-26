@@ -30,6 +30,9 @@
 <body>
   <div id="app">
     <header class="appbar">
+      <button id="nav-toggle" class="nav-toggle" type="button" aria-label="Open engagement panel" aria-controls="sidebar" aria-expanded="false">
+        <span class="nav-toggle-bars" aria-hidden="true"></span>
+      </button>
       <div class="brand"><svg class="coin" viewBox="0 0 24 24" width="27" height="27" aria-hidden="true">
           <defs><radialGradient id="obolCoin" cx="38%" cy="34%" r="72%">
             <stop offset="0" stop-color="#FFF1A8"/><stop offset="55%" stop-color="#FFD34D"/><stop offset="100%" stop-color="#E6A21C"/>
@@ -74,6 +77,7 @@
 
     <main id="view" role="main"><!-- routes render here (once per navigation) --></main>
   </div>
+  <div id="nav-scrim" class="nav-scrim" hidden></div>
 
   <!-- Critical path only. Everything else is route-lazy (assets/ui/lazy.js). -->
   <script defer src="assets/engine/facts.js"></script>
@@ -84,6 +88,7 @@
   <script defer src="data/packs-bundle.js"></script>
   <script defer src="assets/engine/packs.js"></script>
   <script defer src="assets/ui/util.js"></script>
+  <script defer src="assets/ui/mobile.js"></script>
   <script defer src="assets/ui/factpick.js"></script>
   <script defer src="assets/ui/store.js"></script>
   <script defer src="assets/ui/router.js"></script>

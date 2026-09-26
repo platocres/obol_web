@@ -276,6 +276,25 @@ function serve() {
   ok(toolsMs < 3500, 'lazy Tools route render under budget (' + toolsMs + 'ms < 3500)');
   await perfPage.close();
 
+  // Mobile mode: at phone width the layout must not scroll sideways, the hamburger shows, and it
+  // opens the engagement drawer. Guards the grid-blowout / off-canvas regressions.
+  const mob = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true });
+  await mob.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
+  await mob.waitForFunction(() => document.documentElement.getAttribute('data-obol-boot') === 'ready', { timeout: 8000 }).catch(() => {});
+  await mob.waitForTimeout(300);
+  const hOverflow = await mob.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  ok(hOverflow <= 1, 'no horizontal page scroll at 390px (overflow ' + hOverflow + 'px)');
+  ok(await mob.locator('#nav-toggle').isVisible(), 'hamburger shows at phone width');
+  await mob.click('#nav-toggle');
+  await mob.waitForTimeout(300);
+  const drawer = await mob.evaluate(() => {
+    var open = document.documentElement.classList.contains('drawer-open');
+    var r = document.getElementById('sidebar').getBoundingClientRect();
+    return open && r.left >= -1 && r.width > 0 && r.right <= window.innerWidth + 1;
+  });
+  ok(drawer, 'hamburger opens the engagement drawer on-screen');
+  await mob.close();
+
   ok(errors.length === 0, 'no console errors (' + errors.length + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : '') + ')');
 
   await browser.close();
