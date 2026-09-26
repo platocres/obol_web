@@ -1,12 +1,9 @@
 name: Obol regression tests
 
+# RETIRED: regression tests for the pre-overhaul architecture. Superseded by ci.yml.
+# Manual-only pending physical removal in the baggage-purge follow-up.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '17 8 * * *'
-  push:
-    branches:
-      - main
 
 concurrency:
   group: obol-ci-${{ github.workflow }}-${{ github.ref }}

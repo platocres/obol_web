@@ -1,8 +1,9 @@
 name: Obol PR full regression suite
 
+# RETIRED: historical-contract regression for the pre-overhaul architecture.
+# Superseded by ci.yml; manual-only pending physical removal in the baggage-purge follow-up.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 concurrency:
   group: obol-pr-full-regression-${{ github.event.pull_request.number || github.ref }}

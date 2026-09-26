@@ -1,14 +1,9 @@
 name: Obol browser smoke
 
+# RETIRED: this suite tested the pre-overhaul architecture. Superseded by ci.yml.
+# Triggers reduced to manual-only pending physical removal in the baggage-purge follow-up.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '42 8 * * *'
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches:
-      - main
 
 permissions:
   contents: read

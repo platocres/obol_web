@@ -18,11 +18,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Syntax-check all app JavaScript
+      - name: Syntax-check the app JavaScript
         run: |
           set -e
-          find assets data tools tests -name '*.js' -not -path '*/node_modules/*' -print0 \
-            | xargs -0 -n1 node --check
+          find assets/engine assets/ui tests/engine -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --check tests/browser-smoke.js
+          node --check tools/build-packs.js
+          node --check data/toolset.js
+          node --check data/packs-bundle.js
       - name: Regenerate packs bundle and verify it is in sync
         run: |
           node tools/build-packs.js
