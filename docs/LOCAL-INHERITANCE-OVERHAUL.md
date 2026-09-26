@@ -347,5 +347,6 @@ single-render router, route-lazy bundles, perf budget enforced in CI.
 
 **CI:** `.github/workflows/ci.yml` (engine node tests + browser smoke). Old workflows removed.
 
-**Remaining ideas (not yet built):** ⌘K command palette, evidence-screenshot gallery feeding the
-report, cross-host findings roll-up surface.
+**Ergonomics/parity also shipped:** ⌘K command palette (fuzzy search every command, copy with
+tokens filled), proof-screenshot gallery on Evidence (PNGs embed into the report), and a
+cross-host **Findings** roll-up surface.

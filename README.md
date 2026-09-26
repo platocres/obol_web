@@ -72,7 +72,7 @@ When you're done, **Report** exports an OSCP-style writeup (secrets redacted by 
 |---|---|
 | **Engagements** | Start/switch a run; pick your platform; set your scope. |
 | **Targets** | Your boxes. Click one for its personal attack-path page. |
-| **Evidence** | Paste tool output here → Obol turns it into proven facts. |
+| **Evidence** | Paste tool output here → Obol turns it into proven facts. Also attach **proof screenshots** that embed into your report. |
 | **Next Steps** | The coach: your ranked, copy-ready next commands. |
 | **Playbooks** | Ready-made command sequences (e.g. AD recon) for common flows. |
 | **Tools** | Build a specific tool's command with every flag, presets, and your values filled in. |
@@ -80,10 +80,13 @@ When you're done, **Report** exports an OSCP-style writeup (secrets redacted by 
 | **Domain** | Upload a SharpHound zip → who's Kerberoastable, paths to Domain Admin, a printable report. |
 | **Creds** | Which credential works on which host; one-click retarget. |
 | **Checklist** | The full methodology, tickable, so nothing gets missed. |
+| **Findings** | Every catalogued finding across all your hosts, by severity, with remediation. |
 | **Scoreboard** | Flags captured and OSCP points vs. the pass threshold. |
 | **Report** | Your exportable OSCP/CTF report, with proof discipline and redaction. |
 
-There's also a **skin picker** (top-right) if you like your console matrix-green or amber. 🙂
+**Pro tip:** hit **⌘K / Ctrl+K** anywhere to fuzzy-search every command — Enter copies it with
+your target and creds already filled in. And there's a **skin picker** (top-right) if you like
+your console matrix-green or amber. 🙂
 
 ---
 
