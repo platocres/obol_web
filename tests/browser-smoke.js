@@ -76,6 +76,10 @@ function serve() {
   // Blocked list present
   ok(await page.locator('.coach-blocked').count() >= 1, 'blocked-with-reasons section present');
 
+  // Live context rail is present on the coach (shown at >=1500px; element always rendered).
+  ok(await page.locator('.withrail .context-rail').count() === 1, 'coach live context rail rendered');
+  ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.rail && window.OBOL.rail.html)), 'rail module exposed for reuse');
+
   // Evidence route loads + lazy-loads parsers (if built)
   await page.goto(`http://localhost:${PORT}/index.html#/evidence`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(400);

@@ -584,3 +584,22 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .rep-note-fld { width: 100%; box-sizing: border-box; background: var(--bg2); color: var(--text); border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 10px; font: 12px var(--sans); margin-bottom: 6px; min-height: 46px; resize: vertical; }
 .rep-note-fld:focus { outline: none; border-color: var(--accent); }
+
+/* ---- live context rail (wide screens): fills the dead right column on the coach/target pages ---- */
+.withrail { display: block; }
+.context-rail { display: none; }
+@media (min-width: 1500px) {
+  .withrail { display: grid; grid-template-columns: minmax(0, 1fr) 316px; gap: 22px; align-items: start; }
+  .context-rail { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 74px; }
+}
+.rail-card { background: var(--surf1); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.rail-h { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
+.rail-access { font-weight: 800; font-size: 15px; }
+.ra-sys, .ra-adm { color: var(--red); } .ra-fh { color: var(--orange); } .ra-cred { color: var(--yellow); } .ra-recon { color: var(--text-2); }
+.rail-move { font-size: 13px; color: var(--text); line-height: 1.4; }
+.rail-empty { font-size: 12px; color: var(--muted); }
+.rail-list { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.rail-list li { padding: 4px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rail-list li:last-child { border-bottom: none; }
+.rail-acts code { font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
+.rail-produced { color: var(--muted); font-size: 11px; white-space: nowrap; }
