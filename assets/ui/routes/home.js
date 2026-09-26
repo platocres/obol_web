@@ -73,7 +73,7 @@
       + '<span class="pill">' + nt + ' target' + (nt === 1 ? '' : 's') + '</span>'
       + '<span class="pill">' + nf + ' fact' + (nf === 1 ? '' : 's') + '</span>'
       + '</div></div>'
-      + '<a class="btn-primary" href="#/path">Open coach →</a>'
+      + '<a class="btn-primary" href="#/path">Open Coach →</a>'
       + '</div>'
       + '<div class="home-spine">' + spine + '</div>'
       + (ranked.length ? ('<div class="eng-nextmove"><span class="mini-label">next move</span> ' + esc(ranked[0].title) + '</div>') : '')

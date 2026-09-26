@@ -30,6 +30,9 @@
   --surf3: color-mix(in srgb, var(--bg3) calc(var(--surface-alpha, 1) * 100%), transparent);
   --line: #26304c; --line-hot: #3a4870;
   --accent: #22C55E; --accent-2: #4ADE80; --accent-soft: rgba(34,197,94,0.14);
+  /* text to place ON an accent-coloured fill (buttons). Dark by default so it stays legible on the
+     bright accents (emerald, HTB chartreuse, amber, ghostwire); skins with a dark accent set it to white. */
+  --on-accent: #08120a;
   --text: #F1F5FB; --text-2: #94A3B8; --muted: #5f6f88;
   --green: #10B981; --red: #EF4444; --orange: #F97316; --yellow: #EAB308; --teal: #14B8A6; --purple: #A855F7;
   --critical: #E11D48; --high: #F97316; --medium: #EAB308; --low: #3B82F6; --info: #6B7591;
@@ -40,13 +43,13 @@
 }
 /* Skins: re-declare tokens only. */
 /* Indigo — the original obol deep-navy/indigo scheme, kept as a first-class option. */
-:root[data-skin="indigo"] { --bg:#0A0E18; --bg1:#0D1220; --bg2:#121829; --bg3:#182036; --bg4:#1F2A42; --line:#232c44; --line-hot:#33406b; --accent:#6366F1; --accent-2:#818CF8; --accent-soft:rgba(99,102,241,0.14); --text:#E6EAF2; --text-2:#B0B8C9; --muted:#6B7591; }
+:root[data-skin="indigo"] { --bg:#0A0E18; --bg1:#0D1220; --bg2:#121829; --bg3:#182036; --bg4:#1F2A42; --line:#232c44; --line-hot:#33406b; --accent:#6366F1; --accent-2:#818CF8; --accent-soft:rgba(99,102,241,0.14); --on-accent:#ffffff; --text:#E6EAF2; --text-2:#B0B8C9; --muted:#6B7591; }
 /* HTB — Hack The Box's dark navy + signature chartreuse green. */
 :root[data-skin="htb"] { --bg:#111927; --bg1:#182233; --bg2:#1f2b40; --bg3:#293a54; --bg4:#33455f; --line:#2b3a52; --line-hot:#42597a; --accent:#9FEF00; --accent-2:#c3ff5c; --accent-soft:rgba(159,239,0,0.13); --text:#E7ECF3; --text-2:#A4B1CD; --muted:#69789a; }
 :root[data-skin="ghostwire"] { --bg:#000502; --bg1:#031008; --bg2:#04160b; --bg3:#062012; --accent:#00ff66; --accent-2:#7dffb0; --accent-soft:rgba(0,255,102,0.14); --line:#0c3a22; --line-hot:#125a34; }
 :root[data-skin="amber"] { --bg:#0a0700; --bg1:#120c00; --bg2:#1a1200; --bg3:#241900; --accent:#ffb000; --accent-2:#ffe6b0; --accent-soft:rgba(255,176,0,0.14); --line:#3a2c08; --line-hot:#5a4410; --text:#ffe9c2; }
-:root[data-skin="neon"] { --bg:#0a0616; --bg1:#0f0a1f; --bg2:#160f2b; --bg3:#1f1638; --accent:#ff2fb9; --accent-2:#21e6ff; --accent-soft:rgba(255,47,185,0.14); --line:#2a2050; --line-hot:#3a2d70; }
-:root[data-skin="daylight"] { --bg:#e9edf1; --bg1:#f4f6f9; --bg2:#ffffff; --bg3:#eef1f5; --surf1:#fff; --surf2:#fff; --surf3:#f4f6f9; --line:#d3dae2; --line-hot:#b9c4d0; --accent:#0f7a52; --accent-2:#0b6b8f; --accent-soft:rgba(15,122,82,0.12); --text:#12202b; --text-2:#3a4a58; --muted:#6b7885; }
+:root[data-skin="neon"] { --bg:#0a0616; --bg1:#0f0a1f; --bg2:#160f2b; --bg3:#1f1638; --accent:#ff2fb9; --accent-2:#21e6ff; --accent-soft:rgba(255,47,185,0.14); --on-accent:#ffffff; --line:#2a2050; --line-hot:#3a2d70; }
+:root[data-skin="daylight"] { --bg:#e9edf1; --bg1:#f4f6f9; --bg2:#ffffff; --bg3:#eef1f5; --surf1:#fff; --surf2:#fff; --surf3:#f4f6f9; --line:#d3dae2; --line-hot:#b9c4d0; --accent:#0f7a52; --accent-2:#0b6b8f; --accent-soft:rgba(15,122,82,0.12); --on-accent:#ffffff; --text:#12202b; --text-2:#3a4a58; --muted:#6b7885; }
 
 /* ---- boot gate ---- */
 html.obol-booting body { visibility: hidden; }
@@ -175,7 +178,7 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .blocked-more { color: var(--muted); font-size: 11.5px; padding-top: 4px; list-style: none; }
 
 /* ---- buttons ---- */
-.btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+.btn-primary { background: var(--accent); color: var(--on-accent); border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
 .btn-primary:hover { background: var(--accent-2); }
 .btn-primary[disabled] { opacity: .5; cursor: default; }
 
@@ -247,43 +250,73 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .obol-toast.err { border-color: var(--red); }
 
 /* ---- responsive ---- */
-/* the hamburger + drawer scrim exist only on narrow screens */
-.nav-toggle { display: none; }
-.nav-scrim { display: none; }
+/* the mobile chrome (hamburger, drawer scrim, search, bottom tab bar, More sheet) is desktop-hidden */
+.nav-toggle, .nav-scrim, .nav-search, .tabbar, .more-sheet { display: none; }
 
-/* Phones + portrait tablets: the sidebar becomes an off-canvas drawer, and the route nav drops to
-   its own full-width, horizontally-scrollable row so every screen works down to ~320px wide. */
+/* Phones + portrait tablets: a native-app shell. A compact appbar (hamburger · brand · search),
+   the sidebar as an off-canvas engagement drawer, and a fixed bottom tab bar for the primary
+   sections with a slide-up More sheet for the rest. Everything works down to ~320px wide. */
 @media (max-width: 860px) {
   #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "main"; }
-  header.appbar { min-width: 0; }
+  header.appbar { min-width: 0; gap: 10px; padding: 8px 14px; }
+  .brand .tagline { display: none; }
+  .brand h1 { font-size: 15px; }
+  nav.mainnav { display: none; } /* replaced by the bottom tab bar */
+
+  /* appbar controls */
+  .nav-toggle { display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 40px; height: 40px; padding: 0; background: transparent; border: 1px solid var(--line);
+    border-radius: 10px; cursor: pointer; }
+  .nav-toggle-bars { position: relative; display: block; width: 18px; height: 2px; background: var(--text-2); border-radius: 2px; }
+  .nav-toggle-bars::before, .nav-toggle-bars::after { content: ""; position: absolute; left: 0; width: 18px; height: 2px; background: var(--text-2); border-radius: 2px; }
+  .nav-toggle-bars::before { top: -6px; } .nav-toggle-bars::after { top: 6px; }
+  :root.drawer-open .nav-toggle { border-color: var(--accent); }
+  .nav-search { display: inline-flex; align-items: center; justify-content: center; flex: none; margin-left: auto;
+    width: 40px; height: 40px; padding: 0; color: var(--text-2); background: transparent; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  .nav-search:active { color: var(--accent-2); border-color: var(--accent); }
+
+  /* engagement drawer */
   aside#sidebar {
-    position: fixed; top: 0; left: 0; z-index: 60;
+    position: fixed; top: 0; left: 0; z-index: 80;
     width: min(86vw, 320px); height: 100vh; height: 100dvh;
     border-right: 1px solid var(--line); border-top: none;
     transform: translateX(-100%); transition: transform .22s ease;
     box-shadow: 0 0 40px -8px #000; overscroll-behavior: contain;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
   }
   :root.drawer-open aside#sidebar { transform: none; }
-  .nav-scrim { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.5); }
+  .nav-scrim { display: block; position: fixed; inset: 0; z-index: 78; background: rgba(0,0,0,.55); backdrop-filter: blur(1px); }
   .nav-scrim[hidden] { display: none; }
 
-  .nav-toggle { display: inline-flex; align-items: center; justify-content: center; flex: none;
-    width: 40px; height: 40px; padding: 0; background: transparent; border: 1px solid var(--line);
-    border-radius: 8px; cursor: pointer; }
-  .nav-toggle-bars { position: relative; display: block; width: 18px; height: 2px; background: var(--text-2); border-radius: 2px; }
-  .nav-toggle-bars::before, .nav-toggle-bars::after { content: ""; position: absolute; left: 0; width: 18px; height: 2px; background: var(--text-2); border-radius: 2px; }
-  .nav-toggle-bars::before { top: -6px; }
-  .nav-toggle-bars::after { top: 6px; }
-  :root.drawer-open .nav-toggle { border-color: var(--accent); }
+  /* bottom tab bar */
+  .tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
+    background: var(--bg1); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -8px 24px -16px #000; }
+  .tabbar .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 8px 2px 6px; min-height: 52px; color: var(--muted); font-size: 10px; font-weight: 700;
+    letter-spacing: .02em; text-decoration: none; background: none; border: none; cursor: pointer; }
+  .tabbar .tab svg { width: 23px; height: 23px; }
+  .tabbar .tab.active { color: var(--accent-2); }
+  .tabbar .tab:active { color: var(--text); }
 
-  header.appbar { flex-wrap: wrap; gap: 8px 12px; padding: 8px 14px; }
-  .brand .tagline { display: none; }
-  nav.mainnav { order: 5; flex-basis: 100%; min-width: 0; max-width: 100%; margin-left: 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
-    gap: 2px; padding-bottom: 2px; scrollbar-width: none; }
-  nav.mainnav::-webkit-scrollbar { display: none; }
-  nav.mainnav a { white-space: nowrap; padding: 8px 12px; }
+  /* More sheet */
+  .more-sheet { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+    background: var(--bg1); border-top: 1px solid var(--line-hot);
+    border-top-left-radius: 16px; border-top-right-radius: 16px;
+    padding: 8px 16px calc(18px + env(safe-area-inset-bottom));
+    transform: translateY(110%); transition: transform .24s ease; box-shadow: 0 -24px 60px -24px #000; }
+  :root.sheet-open .more-sheet { transform: none; }
+  .more-grip { width: 38px; height: 4px; border-radius: 2px; background: var(--line-hot); margin: 2px auto 10px; }
+  .more-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .09em; margin: 0 2px 10px; }
+  .more-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .more-grid a { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 56px;
+    padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surf1);
+    color: var(--text); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+  .more-grid a:active { background: var(--surf2); border-color: var(--accent); }
 
-  main#view { padding: 16px; min-width: 0; }
+  /* content clears the fixed tab bar; the settings gear floats above it */
+  main#view { padding: 16px; min-width: 0; padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .obol-settings-toggle { bottom: calc(72px + env(safe-area-inset-bottom)); }
   .coach-hero { flex-direction: column; align-items: stretch; }
 }
 
@@ -562,7 +595,7 @@ svg.bh-graph:active { cursor: grabbing; }
 .pb-title { font-weight: 700; } .pb-count { color: var(--muted); font-size: 12px; }
 .pb-body { padding: 0 16px 14px; } .pb-desc { color: var(--text-2); margin: 0 0 10px; }
 .pb-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
-.btn-export { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer; }
+.btn-export { background: var(--accent); color: var(--on-accent); border: none; border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer; }
 .pb-steps { list-style: none; margin: 0; padding: 0; }
 .pb-step { border-left: 2px solid var(--line); padding: 8px 0 8px 12px; margin: 8px 0; }
 .pb-step-missing { border-left-color: var(--danger); opacity: .7; }

@@ -39,9 +39,9 @@ function serve() {
 
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
-  // a first-time visitor lands on the neon (synthwave sunset) skin, in a clean untitled run — never
-  // an "Imported engagement" with a stale seed target.
-  ok(await page.getAttribute('html', 'data-skin') === 'neon', 'default skin is neon for a fresh visitor');
+  // a first-time visitor lands on the plain Obol skin, in a clean untitled run — never an
+  // "Imported engagement" with a stale seed target. (Neon and the rest stay selectable in ⚙.)
+  ok(await page.getAttribute('html', 'data-skin') === 'obol', 'default skin is obol for a fresh visitor');
   const firstEng = await page.evaluate(() => { var e = window.OBOL.store.active(); return { name: e && e.name, target: (e && e.params && e.params.target) || '' }; });
   ok(firstEng.name !== 'Imported engagement' && firstEng.target !== '10.129.85.48', 'fresh engagement is not the legacy import (' + JSON.stringify(firstEng) + ')');
 
