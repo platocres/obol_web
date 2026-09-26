@@ -314,9 +314,8 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
     color: var(--text); font-size: 12.5px; font-weight: 600; text-decoration: none; }
   .more-grid a:active { background: var(--surf2); border-color: var(--accent); }
 
-  /* content clears the fixed tab bar; the settings gear floats above it */
+  /* content clears the fixed tab bar (the settings gear is repositioned below, after its base rule) */
   main#view { padding: 16px; min-width: 0; padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
-  .obol-settings-toggle { bottom: calc(72px + env(safe-area-inset-bottom)); }
   .coach-hero { flex-direction: column; align-items: stretch; }
 }
 
@@ -332,7 +331,6 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
   main#view pre { max-width: 100%; overflow-x: auto; }
   .btn-primary, .btn-ghost, .btn-mini, .move-actions button, .rep-actions button { min-height: 40px; }
   .rep-controls, .rep-actions, .rep-opts { flex-wrap: wrap; }
-  .obol-settings-panel { width: min(260px, calc(100vw - 24px)); right: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   aside#sidebar { transition: none; }
@@ -717,6 +715,12 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .obol-settings-panel { position: fixed; right: 16px; bottom: 66px; z-index: 91; width: 260px; background: var(--surf1);
   border: 1px solid var(--line-hot); border-radius: 12px; padding: 12px; box-shadow: 0 20px 60px -18px #000; backdrop-filter: blur(8px); }
 .obol-settings-panel[hidden] { display: none; }
+/* On phones the fixed gear/panel must clear the bottom tab bar — placed AFTER the base rules so
+   it wins (media queries add no specificity, so source order decides). */
+@media (max-width: 860px) {
+  .obol-settings-toggle { right: 12px; bottom: calc(74px + env(safe-area-inset-bottom)); }
+  .obol-settings-panel { right: 12px; bottom: calc(126px + env(safe-area-inset-bottom)); width: min(260px, calc(100vw - 24px)); }
+}
 .obol-set-h { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 10px 0 6px; }
 .obol-set-h:first-child { margin-top: 0; }
 .obol-set-skins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
