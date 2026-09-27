@@ -202,7 +202,9 @@
     // Scan-profile markers, now that we can also read the CONTENT: a scan that returned service
     // versions or NSE script output IS a version/script scan, whatever command it was tagged with.
     var hasVersionInfo = !!scriptText.trim() || Object.keys(openPorts).some(function (k) { return openPorts[k].version; });
-    if (actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || cmdL.indexOf('-p-') >= 0) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
+    // ANY nmap scan that returned open ports has done the port discovery — mark it so the coach stops
+    // offering a basic port scan after a targeted -p <list> or -sV scan (which never carries -p-).
+    if (summary.length || actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || cmdL.indexOf('-p-') >= 0) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
     if (actionId.indexOf('version') >= 0 || cmdL.indexOf('-sc') >= 0 || cmdL.indexOf('-sv') >= 0 || hasVersionInfo) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
     if (actionId.indexOf('udp') >= 0 || cmdL.indexOf(' -su') >= 0) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
 
@@ -260,7 +262,9 @@
     var asCmd = (/^#\s*Nmap\b.*?\bas:\s*(.+)$/im.exec(text) || [])[1] || '';
     var cmdL = (source + ' ' + asCmd).toLowerCase();
     var hasVersionInfo = Object.keys(openPorts).some(function (k) { return openPorts[k].version; }) || /^\|[_ ]/m.test(text);
-    if (scanSeen && (actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || cmdL.indexOf('-p-') >= 0)) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
+    // any scan that found open ports IS port discovery (see XML path) — so a targeted -p/-sV paste
+    // still retires the basic-port-scan move instead of leaving it in "ready now".
+    if (scanSeen && (Object.keys(openPorts).length > 0 || actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || cmdL.indexOf('-p-') >= 0)) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
     if (scanSeen && (actionId.indexOf('version') >= 0 || cmdL.indexOf('-sc') >= 0 || cmdL.indexOf('-sv') >= 0 || hasVersionInfo)) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
     if (scanSeen && (actionId.indexOf('udp') >= 0 || cmdL.indexOf(' -su') >= 0)) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
     if (scanSeen && (actionId.indexOf('vuln') >= 0 || srcL.indexOf('--script vuln') >= 0 || srcL.indexOf('-script vuln') >= 0)) _add(facts, mkFact('scan.nmap.vuln', h, { profile: 'nse-vuln' }, S, source));

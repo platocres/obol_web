@@ -173,7 +173,13 @@
         ? '<ul class="rail-list">' + flags.map(function (f) { var v = f.value || {}; return '<li><span>' + esc(v.slot || f.kind.split('.').pop()) + '</span>' + (v.name ? '<span class="rail-produced">' + esc(v.name) + '</span>' : '') + '</li>'; }).join('') + '</ul>'
         : '<div class="rail-empty">None captured yet.</div>')
       + railCard('Credentials (' + creds.length + ')', creds.length
-        ? '<ul class="rail-list">' + creds.slice(0, 6).map(function (c) { return '<li><span>' + esc(c.user || c.username || 'user') + (c.domain ? '@' + esc(c.domain) : '') + '</span></li>'; }).join('') + '</ul>'
+        ? '<ul class="rail-list">' + creds.slice(0, 6).map(function (c) {
+            var secret = c.password || c.nthash || c.hash || '';
+            var redact = !!((eng || {}).ui || {}).reportRedact;
+            var shown = !secret ? '' : (redact ? '••••••••' : (secret.length > 22 ? secret.slice(0, 22) + '…' : secret));
+            return '<li><span>' + esc(c.user || c.username || 'user') + (c.domain ? '@' + esc(c.domain) : '') + '</span>'
+              + (shown ? '<span class="rail-secret"' + (redact ? '' : ' title="' + U.attr(secret) + '"') + '>' + esc(shown) + '</span>' : '') + '</li>';
+          }).join('') + '</ul>'
         : '<div class="rail-empty">None validated yet.</div>')
       + railCard('Recent evidence', acts.length
         ? '<ul class="rail-list rail-acts">' + acts.map(function (a) { var c = a.command || 'paste'; return '<li title="' + U.attr(c) + '"><code>' + esc(c.length > 30 ? c.slice(0, 30) + '…' : c) + '</code><span class="rail-produced">' + ((a.produced || []).length) + '</span></li>'; }).join('') + '</ul>'

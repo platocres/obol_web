@@ -51,5 +51,18 @@ var bk = kindsOf(bare);
 ok(bk.indexOf('scan.nmap.quick') >= 0, 'a bare -p- sweep still proves the quick marker');
 ok(bk.indexOf('scan.nmap.version') === -1, 'a bare sweep with no versions does NOT over-claim scan.nmap.version');
 
+// A TARGETED version scan (-sV -p <list>, no -p-) with NO action tag must still prove the quick
+// marker — any scan that returned open ports IS port discovery, so the basic-port-scan move retires.
+var targeted = OBOL.parsers.parseActionOutput({
+  actionId: '', command: 'nmap -Pn -sC -sV -p 53,389,445 -oX - 10.129.95.210',
+  stdout: versionScan, source: 'nmap', scope: 'host:10.129.95.210', domain: '',
+});
+var gk = kindsOf(targeted);
+ok(gk.indexOf('scan.nmap.quick') >= 0 && gk.indexOf('scan.nmap.version') >= 0,
+  'a targeted -sV -p<list> scan (no -p-, no action tag) proves BOTH markers — the fast-scan move retires');
+// but a scan that found NO open ports does not claim port discovery
+var empty = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -Pn -p 9999 10.129.95.210', stdout: 'Nmap scan report for 10.129.95.210\nHost is up.\nAll 1 scanned ports are closed\nNmap done', source: 'nmap', scope: 'host:10.129.95.210', domain: '' });
+ok(kindsOf(empty).indexOf('scan.nmap.quick') === -1, 'a scan with no open ports does NOT claim port discovery');
+
 console.log(fail ? ('\nNMAP MARKERS: ' + fail + ' FAILURES') : '\nNMAP MARKERS: all passed');
 process.exit(fail ? 1 : 0);

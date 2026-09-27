@@ -145,6 +145,10 @@
       if ((lc.indexOf('certipy auth') >= 0 || lc.indexOf('certipy shadow') >= 0 || lc.indexOf('shadow auto') >= 0 || actionId === 'cert-authenticate') && has('_parse_certipy_auth')) C._parse_certipy_auth(text, ws, command, source, facts);
     }
     if (C._is_ad_abuse_command(command) || C._AD_ABUSE_ACTION_IDS.has(actionId)) C._parse_ad_abuse_output(actionId, text, ws, command, source, facts);
+    // Content-sniff fallback: a bloodyAD `get writable` dump is often ATTACHED as a file with no command
+    // set, so the ad-abuse gate above never fires. Recognize it from the output itself (the ad-abuse path
+    // already covered the command/action case; facts dedupe, so a double hit is harmless).
+    else if (has('_parse_bloodyad_writable') && C._looks_like_bloodyad_writable(text)) C._parse_bloodyad_writable(text, ws, command, source, facts);
     if (isNxc || ['ldapsearch', 'bloodyad', 'get-adcomputer', 'get-adserviceaccount', 'getaduser', ' ldap '].some(function (k) { return lc.indexOf(k) >= 0; })) C._parse_ad_delegation_surface(text, ws, command, source, facts);
 
     if (lc.indexOf('ffuf') >= 0 && has('_parse_ffuf_json')) C._parse_ffuf_json(text, ws, source, facts);
