@@ -64,6 +64,11 @@ function serve() {
   ok(await page.locator('.eng-welcome').count() === 1 && await page.locator('.home-spine').count() === 0,
     'fresh engagement shows the getting-started guide, no phase bar');
   ok(await page.locator('#eng-workdir').count() === 1, 'setup form has a working-directory field');
+  // The working-dir placeholder is a GENERIC example — a remembered machine-specific base must not leak in.
+  await page.evaluate(() => { try { window.OBOL.store.setPref('workspaceBase', '~/CTF/HTB/boxes/Windows/forest'); } catch (e) {} window.OBOL.router.render(); });
+  await page.waitForTimeout(80);
+  const wdPh = (await page.getAttribute('#eng-workdir', 'placeholder')) || '';
+  ok(wdPh.indexOf('forest') === -1 && wdPh.indexOf('engagements') !== -1, 'the working-dir placeholder stays a generic example, ignoring a remembered machine-specific base (got "' + wdPh + '")');
   await page.locator('.pf-card:has(input[value="oscp"])').click();
   await page.fill('#eng-name', 'OSCP Exam');
   await page.fill('#eng-scope', '10.10.10.10 junk 10.10.10.0/24');
