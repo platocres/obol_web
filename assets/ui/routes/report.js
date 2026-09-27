@@ -65,6 +65,10 @@
       + '<div class="rep-controls">'
       + '<div class="rep-opts">'
       + '<label class="rep-opt">Profile <select id="rep-profile">' + profOpts + '</select></label>'
+      + (OBOL.report.isExamProfile(profile)
+        ? '<label class="rep-opt">Candidate <input type="text" id="rep-candidate" value="' + U.attr((eng.profile || {}).candidate || '') + '" placeholder="Your name" autocomplete="off" spellcheck="false"></label>'
+          + '<label class="rep-opt">OSID <input type="text" id="rep-osid" value="' + U.attr((eng.profile || {}).osid || '') + '" placeholder="OS-XXXXX" autocomplete="off" spellcheck="false"></label>'
+        : '')
       + '<label class="rep-opt"><input type="checkbox" id="rep-redact"' + (redact ? ' checked' : '') + '> Redact Secrets <span class="rep-opt-note">(off — full detail shown)</span></label>'
       + '</div>'
       + '<div class="rep-actions">'
@@ -119,6 +123,23 @@
       OBOL.store.update(function (e) { e.ui = e.ui || {}; e.ui.reportRedact = red.checked; }, 'ui');
       OBOL.router.render();
     });
+    // Candidate name + OSID for OffSec exam reports: fill them right here. Rebuild only the report
+    // BODY on each keystroke (not the whole route) so the input keeps focus while the cover updates.
+    function refreshBody() {
+      var e2 = OBOL.store.active(), ui2 = e2.ui || {};
+      var p2 = ui2.reportProfile || OBOL.report.defaultFor(ctxOf(true)) || 'oscp';
+      var out = document.getElementById('rep-out');
+      if (out) out.innerHTML = OBOL.report.toHtml(OBOL.report.document(p2, ctxOf(!ui2.reportRedact)));
+    }
+    function bindProfileField(id, key) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('input', function () {
+        OBOL.store.update(function (e) { e.profile = e.profile || {}; e.profile[key] = el.value; }, 'profile');
+        refreshBody();
+      });
+    }
+    bindProfileField('rep-candidate', 'candidate');
+    bindProfileField('rep-osid', 'osid');
     function currentProfile() { return (OBOL.store.active().ui || {}).reportProfile || 'oscp'; }
     var md = document.getElementById('rep-md');
     if (md) md.addEventListener('click', function () {

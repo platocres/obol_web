@@ -455,6 +455,14 @@ function serve() {
   ok(paper && paper.bright > 230, 'the report preview renders on white paper (bg brightness ' + (paper && Math.round(paper.bright)) + ')');
   // the "Generated" timestamp is a sane year, not a ms×1000 blowup (was rendering year 58707)
   ok(paper && !/\b(?:[3-9]\d{3,}|\d{5,})-\d\d-\d\d/.test(paper.text), 'the Generated date is a sane year (no ms-as-seconds blowup)');
+  // OSCP exam report: candidate name + OSID are fillable right on the report page and land on the cover.
+  ok(await page.locator('#rep-candidate').count() === 1 && await page.locator('#rep-osid').count() === 1, 'the report page exposes Candidate + OSID fields for an OSCP-style profile');
+  await page.fill('#rep-candidate', 'Jordan Pace');
+  await page.fill('#rep-osid', 'OS-98765');
+  await page.waitForTimeout(120);
+  const coverText = await page.evaluate(() => (document.getElementById('rep-out') || {}).textContent || '');
+  ok(coverText.indexOf('Jordan Pace') !== -1 && coverText.indexOf('OS-98765') !== -1, 'the typed candidate + OSID appear on the report cover');
+  ok(await page.evaluate(() => { const p = window.OBOL.store.active().profile || {}; return p.candidate === 'Jordan Pace' && p.osid === 'OS-98765'; }), 'candidate + OSID persist onto the engagement profile');
   // Export controls present + .docx builds with an embedded screenshot (JSZip loaded with the report bundle).
   ok(await page.locator('#rep-print').count() === 1 && await page.locator('#rep-docx').count() === 1, 'report has Print/PDF + .docx buttons');
   const docx = await page.evaluate(async () => {
