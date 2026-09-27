@@ -176,8 +176,10 @@
       : (facts.has('foothold.windows') || facts.has('foothold.linux') || facts.has('access.shell')) ? ['Foothold', 'fh']
       : facts.has('credential.available') ? ['Credentialed', 'cred'] : ['Recon', 'recon'];
     var flags = (facts.facts || []).filter(function (f) { return String(f.kind).indexOf('objective.') === 0 && f.state !== 'refuted'; });
+    // Use the same deduped gather as the left switcher, so one recovered credential proven on two scopes
+    // (e.g. host:10.x and host:10.y) shows ONCE here, not twice.
     var creds = [];
-    try { creds = facts.values('credential.available') || []; } catch (e) { creds = []; }
+    try { creds = (OBOL.creds && OBOL.creds.gather) ? OBOL.creds.gather(eng, facts) : (facts.values('credential.available') || []); } catch (e) { creds = []; }
     var acts = (eng && eng.activities || []).slice(0, 4);
     return '<aside class="context-rail" aria-label="Live context">'
       + railCard('Access', '<div class="rail-access ra-' + access[1] + '">' + esc(access[0]) + '</div>')
@@ -187,7 +189,7 @@
         : '<div class="rail-empty">None captured yet.</div>')
       + railCard('Credentials (' + creds.length + ')', creds.length
         ? '<ul class="rail-list">' + creds.slice(0, 6).map(function (c) {
-            var secret = c.password || c.nthash || c.hash || '';
+            var secret = c.secret || c.password || c.nthash || c.hash || '';
             var redact = !!((eng || {}).ui || {}).reportRedact;
             var shown = !secret ? '' : (redact ? '••••••••' : (secret.length > 22 ? secret.slice(0, 22) + '…' : secret));
             return '<li><span>' + esc(c.user || c.username || 'user') + (c.domain ? '@' + esc(c.domain) : '') + '</span>'
