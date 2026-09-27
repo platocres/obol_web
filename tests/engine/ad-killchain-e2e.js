@@ -105,12 +105,23 @@ ok(endgame && (endgame.commands || []).some(function (c) { return /-H \{\{nthash
 // The clutter test: owning the domain retires the credential-harvest + this-domain escalation routes, but
 // KEEPS shell access, persistence, cross-domain and mapping moves (useful in a larger lab).
 var readyIds = {}; ready.forEach(function (a) { readyIds[a.id] = 1; });
-['kerberoast', 'asrep-roast', 'gpp-passwords', 'shadow-credentials', 'adcs-esc', 'nxc-arsenal', 'bloodyad-acl', 'zerologon-check', 'password-spray', 'gmsa-read'].forEach(function (id) {
+// closed routes to THIS domain's DA — retired the moment you hold every hash
+['kerberoast', 'asrep-roast', 'shadow-credentials', 'adcs-esc', 'nxc-arsenal', 'bloodyad-acl', 'zerologon-check', 'password-spray', 'coerce-auth', 'wsus-abuse'].forEach(function (id) {
   ok(!readyIds[id], 'retired after domain-owned: ' + id + ' no longer clutters the coach');
 });
 ['own-domain-pth', 'lateral-exec'].forEach(function (id) {
   ok(readyIds[id], 'kept after domain-owned (still useful): ' + id);
 });
+// CROSS-BOX LOOT stays available even after domain compromise — it yields material (SYSVOL/GPP creds,
+// gMSA/LAPS local-admin passwords not in the domain NTDS, SCCM NAA creds, readable shares) reusable on
+// OTHER boxes. These must NOT be obsoleted by owning this domain.
+function byId(id) { return pack.filter(function (a) { return a.id === id; })[0]; }
+['gpp-passwords', 'gmsa-read', 'laps-read', 'sccm-enum', 'smb-share-inventory'].forEach(function (id) {
+  var a = byId(id);
+  ok(a && !a.obsolete(facts), 'cross-box loot kept after domain-owned: ' + id + ' is not retired');
+});
+// …and the still-gated ones only surface when the avenue is actually open (based on what's possible):
+ok(byId('gmsa-read') && !byId('gmsa-read').eligible(facts), 'gmsa-read stays hidden with no gMSA indicator (ad.gmsa) — gated on what is possible');
 
 // Flag capture uses the EXISTING, already-profile-aware flag-hunt move (obol-local heritage) — not a
 // reinvented reader. It must offer a pass-the-hash form so the Administrator hash from a DCSync can read the

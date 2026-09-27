@@ -563,9 +563,6 @@
     "smb.reachable",
     "port:445"
    ],
-   "obsoleted_by": [
-    "loot.ntds"
-   ],
    "produces": [
     "credential.candidate",
     "config.review"
@@ -1625,9 +1622,6 @@
    "requires_any": [
     "credential.available"
    ],
-   "obsoleted_by": [
-    "loot.ntds"
-   ],
    "produces": [
     "credential.candidate",
     "ad.attack_paths"
@@ -1942,9 +1936,6 @@
    "requires_any": [
     "ad.gmsa"
    ],
-   "obsoleted_by": [
-    "loot.ntds"
-   ],
    "produces": [
     "credential.ntlm_hash",
     "credential.candidate"
@@ -1990,9 +1981,6 @@
    "requires_any": [
     "ldap.reachable",
     "ad.control_paths"
-   ],
-   "obsoleted_by": [
-    "loot.ntds"
    ],
    "produces": [
     "credential.candidate"
