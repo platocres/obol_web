@@ -415,6 +415,31 @@ function serve() {
   await page.waitForTimeout(100);
   ok(await page.locator('.pal-overlay.show').count() === 0, 'Escape closes the palette');
 
+  // Engagement map: the legend swatches double as filters — clicking one hides that class of node.
+  await page.goto(`http://localhost:${PORT}/index.html#/map`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('svg.obol-engmap .em-node', { timeout: 6000 }).catch(() => {});
+  const pick = await page.evaluate(() => {
+    const svg = document.querySelector('svg.obol-engmap');
+    if (!svg) return null;
+    for (const it of Array.from(document.querySelectorAll('.em-legend-item'))) {
+      const cls = it.getAttribute('data-filter');
+      if (svg.querySelector('.em-node.' + cls)) return { cls, count: svg.querySelectorAll('.em-node.' + cls).length };
+    }
+    return null;
+  });
+  ok(!!pick, 'the map legend has a swatch matching a rendered node' + (pick ? ' (' + pick.cls + ' ×' + pick.count + ')' : ''));
+  if (pick) {
+    const chip = page.locator('.em-legend-item[data-filter="' + pick.cls + '"]');
+    await chip.click();
+    await page.waitForTimeout(80);
+    ok(await page.evaluate((c) => Array.from(document.querySelectorAll('.em-node.' + c)).every((n) => n.style.display === 'none'), pick.cls),
+      'clicking a map legend swatch filters out that class of node');
+    await chip.click();
+    await page.waitForTimeout(80);
+    ok(await page.evaluate((c) => Array.from(document.querySelectorAll('.em-node.' + c)).every((n) => n.style.display !== 'none'), pick.cls),
+      'clicking the swatch again restores the nodes');
+  }
+
   // Findings roll-up renders (lazy route — wait for the element, not a fixed sleep).
   await page.goto(`http://localhost:${PORT}/index.html#/findings`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.findings-route', { timeout: 6000 }).catch(() => {});

@@ -420,7 +420,7 @@
         d = 'M' + x1 + ',' + y1 + ' C' + x1 + ',' + my + ' ' + x2 + ',' + my + ' ' + x2 + ',' + y2;
       }
       var cls = 'em-edge' + (e.kind ? ' em-edge-' + slug(e.kind) : '');
-      return '<path d="' + d + '" fill="none" class="' + cls + '"/>';
+      return '<path d="' + d + '" fill="none" class="' + cls + '" data-from="' + esc(e.from) + '" data-to="' + esc(e.to) + '"/>';
     }).join('');
 
     // nodes
@@ -447,7 +447,7 @@
         sub = '<text x="' + cx + '" y="' + (m.y + NH / 2 + 12) + '" text-anchor="middle" class="em-sub" font-size="9">'
           + esc(tag) + '</text>';
       }
-      return '<g class="' + cls + '"' + extra + '>'
+      return '<g class="' + cls + '" data-node-id="' + esc(n.id) + '"' + extra + '>'
         + '<rect x="' + m.x + '" y="' + m.y + '" width="' + NW + '" height="' + NH + '" rx="' + rx + '"/>'
         + main + sub + '</g>';
     }).join('');

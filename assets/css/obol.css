@@ -791,7 +791,11 @@ svg.obol-engmap .em-acc-privileged rect { fill: color-mix(in srgb, var(--critica
 svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .em-legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; }
 .em-legend-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.em-legend-item { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
+.em-legend-item { display: inline-flex; align-items: center; gap: 5px; color: var(--text-2); background: none; border: none; cursor: pointer; font: inherit; padding: 2px 4px; border-radius: 6px; }
+.em-legend-item:hover { background: var(--surf3); color: var(--text); }
+.em-legend-item[aria-checked="false"] { color: var(--muted); opacity: .55; text-decoration: line-through; }
+.em-legend-item[aria-checked="false"] .em-swatch { filter: grayscale(1); opacity: .5; }
+.em-legend-hint { color: var(--muted); font-size: 11px; align-self: center; }
 .em-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid var(--line-hot); display: inline-block; }
 
 /* ---- ⌘K command palette ---- */
