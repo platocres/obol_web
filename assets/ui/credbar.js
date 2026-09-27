@@ -84,10 +84,17 @@
 
   function typeLabel(t) { return t === 'NT' ? 'nthash' : (t === 'PW' ? 'password' : (t === 'OT' ? 'secret' : 'no secret')); }
   function typeClass(t) { return t === 'NT' ? 'ct-nt' : (t === 'OT' ? 'ct-ot' : 'ct-pw'); }
-  function maskSecret(c) {
+  // Redaction is opt-in (the report's per-engagement Redact Secrets toggle). Off by default, so the
+  // switcher shows the credential you actually recovered rather than dots.
+  function redactOn() { try { return !!(OBOL.store.active().ui || {}).reportRedact; } catch (e) { return false; } }
+  function maskSecret(c, redact) {
     var s = c.secret || c.nthash || '';
     if (!s) return '—';
-    return (c.type === 'NT' || c.type === 'OT') ? (s.slice(0, 8) + (s.length > 8 ? '…' : '')) : '••••••••';
+    if (redact) return (c.type === 'NT' || c.type === 'OT') ? (s.slice(0, 8) + (s.length > 8 ? '…' : '')) : '••••••••';
+    // Not redacting: show the real secret. A long hash is truncated ONLY for the narrow sidebar —
+    // never masked — with the full value in the row's title tooltip and the copy button.
+    if ((c.type === 'NT' || c.type === 'OT') && s.length > 14) return s.slice(0, 14) + '…';
+    return s.length > 20 ? (s.slice(0, 20) + '…') : s;
   }
 
   var addOpen = false;
@@ -111,6 +118,7 @@
     var creds = gather();
     render._creds = creds;
     var active = activeKey();
+    var redact = redactOn();
     var rows = creds.map(function (c, i) {
       var on = keyOf(c) === active;
       var secret = c.secret || c.nthash || '';
@@ -125,7 +133,7 @@
         + '</div>'
         + '<div class="cred-sub">'
         + (c.domain ? '<span class="cred-dom">' + esc(c.domain) + '\\</span>' : '')
-        + '<span class="cred-secret">' + esc(maskSecret(c)) + '</span>'
+        + '<span class="cred-secret"' + (!redact && secret ? ' title="' + U.attr(secret) + '"' : '') + '>' + esc(maskSecret(c, redact)) + '</span>'
         + '</div>'
         + '</div>';
     }).join('');

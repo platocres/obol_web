@@ -188,6 +188,16 @@ function serve() {
     window.OBOL.app.renderSidebar();
   });
   ok(await page.locator('#cred-switch .cred-row').count() >= 2, 'credential switcher lists collected creds (' + (await page.locator('#cred-switch .cred-row').count()) + ')');
+  // Redaction is opt-in: a recovered password shows in cleartext by default (not dots).
+  const aliceSecret = (await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-secret').textContent()) || '';
+  ok(aliceSecret.indexOf('S3cret!') !== -1 && aliceSecret.indexOf('•') === -1, 'the credential switcher shows the real password by default (redaction is opt-in), got "' + aliceSecret + '"');
+  // …and the report's Redact Secrets toggle masks it here too.
+  await page.evaluate(() => { window.OBOL.store.update((e) => { e.ui = e.ui || {}; e.ui.reportRedact = true; }, 'ui'); window.OBOL.app.renderSidebar(); });
+  await page.waitForTimeout(80);
+  const aliceRedacted = (await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-secret').textContent()) || '';
+  ok(aliceRedacted.indexOf('•') !== -1 && aliceRedacted.indexOf('S3cret!') === -1, 'turning Redact Secrets ON masks the password in the switcher');
+  await page.evaluate(() => { window.OBOL.store.update((e) => { e.ui = e.ui || {}; e.ui.reportRedact = false; }, 'ui'); window.OBOL.app.renderSidebar(); });
+  await page.waitForTimeout(80);
   const bobRow = page.locator('#cred-switch .cred-row', { hasText: 'bob' });
   await bobRow.click();
   const swapped = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'bob' && p.nthash === 'aabbccddeeff00112233445566778899'; });
