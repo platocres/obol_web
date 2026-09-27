@@ -36,11 +36,12 @@
     }).join('');
   }
 
-  // Placeholder for the working-directory field: the remembered base + a box/exam hint.
+  // Placeholder for the working-directory field: a GENERIC example, never the operator's remembered path —
+  // a previous run's machine-specific dir (e.g. a box name) leaking into the hint reads as stale/wrong on a
+  // fresh box. The remembered base still applies as the real default when the field is left blank.
   function workdirHint() {
-    var base = (OBOL.store.pref && OBOL.store.pref().workspaceBase) || OBOL.workspace.DEFAULT_BASE;
     var sel = ((OBOL.store.active() || {}).profile || {}).platform || 'custom';
-    return OBOL.workspace.join(base, OBOL.profile.isExamPlatform(sel) ? 'exam' : 'box');
+    return OBOL.workspace.join(OBOL.workspace.DEFAULT_BASE, OBOL.profile.isExamPlatform(sel) ? 'exam' : 'box');
   }
 
   function machineOptions(selected) {

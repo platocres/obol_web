@@ -285,6 +285,10 @@
   // Bare words that are shell scaffolding or output plumbing, never an action.
   var _NOISE_WORDS = { 'for': 1, 'in': 1, 'do': 1, 'done': 1, 'then': 1, 'fi': 1, 'else': 1, 'echo': 1,
     'sudo': 1, 'while': 1, 'tee': 1, 'cat': 1 };
+  // Short flags that DEFINE the action and must be kept — `-x`/`-X` (execute a command) is the whole
+  // difference between `nxc smb …` (validate the credential) and `nxc smb … -x '<cmd>'` (run a command),
+  // so dropping it made running the validator wrongly mark the exec command as already run.
+  var _ACTION_SHORT_FLAGS = { x: 1 };
   function _actionSig(cmd, params) {
     // Process the WHOLE pipeline (do NOT stop at the first pipe): the transform after a `|` — awk / grep /
     // sort in a HANDOFF — is exactly what distinguishes `nxc … --users | tee` from `… | awk | grep | sort`,
@@ -304,10 +308,13 @@
       var t = raw.replace(/^["']+|["']+$/g, '');                  // strip surrounding quotes
       if (!t || t.indexOf('{{') >= 0) continue;                   // empty, or an unfilled template value slot
 
-      if (t.charAt(0) === '-') {                                  // KEEP action long flags (--users/--asreproast),
-        if (t.charAt(1) === '-' && t.length > 3) {                // drop short flags (-u/-p) and plumbing long flags
+      if (t.charAt(0) === '-') {
+        if (t.charAt(1) === '-' && t.length > 3) {                // long flag: keep action ones (--users), drop plumbing
           var lf = t.replace(/^--/, '').toLowerCase();
           if (!vals[lf] && !_PLUMBING_FLAGS[lf]) out[lf] = 1;
+        } else {                                                  // short flag: drop plumbing (-u/-p/-d), keep action (-x)
+          var sf = t.replace(/^-+/, '').toLowerCase();
+          if (_ACTION_SHORT_FLAGS[sf]) out[sf] = 1;
         }
         continue;
       }
