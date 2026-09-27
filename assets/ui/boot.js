@@ -35,11 +35,17 @@
     // params
     var paramsEl = document.getElementById('params');
     if (paramsEl) {
+      // Redaction is opt-in across obol: a secret you recovered shows in cleartext by default so you can
+      // read the password you just selected, and is masked (type=password) only when the report's Redact
+      // Secrets toggle is on. This matches the credential switcher and the coach rail — no field hides a
+      // value you own unless you asked it to.
+      var redact = !!(eng.ui || {}).reportRedact;
       paramsEl.innerHTML = PARAM_FIELDS.map(function (f) {
         var v = params[f.key] || '';
         return '<label class="param"><span>' + esc(f.label) + '</span>'
-          + '<input data-param="' + esc(f.key) + '" type="' + (f.secret ? 'password' : 'text') + '" '
-          + 'value="' + U.attr(v) + '" placeholder="' + esc(f.ph) + '" autocomplete="off" spellcheck="false"></label>';
+          + '<input data-param="' + esc(f.key) + '" type="' + (f.secret && redact ? 'password' : 'text') + '" '
+          + 'value="' + U.attr(v) + '" placeholder="' + esc(f.ph) + '" autocomplete="off" spellcheck="false"'
+          + (f.secret ? ' data-secret="1"' : '') + '></label>';
       }).join('');
     }
 

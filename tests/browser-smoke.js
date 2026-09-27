@@ -229,6 +229,13 @@ function serve() {
   await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).click();
   ok(await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'alice' && p.password === 'S3cret!' && !p.nthash; }), 'selecting a password credential fills USER + PASSWORD and clears NT hash');
   ok((await page.evaluate(() => document.querySelector('#params [data-param=password]').value)) === 'S3cret!', 'the PASSWORD parameter field is populated on select');
+  ok((await page.evaluate(() => document.querySelector('#params [data-param=password]').type)) === 'text', 'the PASSWORD field shows cleartext by default (redaction is opt-in) — not masked dots');
+  // turning Redact Secrets on masks the param field too
+  await page.evaluate(() => { window.OBOL.store.update((e) => { e.ui = e.ui || {}; e.ui.reportRedact = true; }, 'ui'); window.OBOL.app.renderSidebar(); });
+  await page.waitForTimeout(60);
+  ok((await page.evaluate(() => document.querySelector('#params [data-param=password]').type)) === 'password', 'turning Redact Secrets ON masks the PASSWORD field');
+  await page.evaluate(() => { window.OBOL.store.update((e) => { e.ui = e.ui || {}; e.ui.reportRedact = false; }, 'ui'); window.OBOL.app.renderSidebar(); });
+  await page.waitForTimeout(60);
   // each value has its own copy control (username vs secret)
   ok(await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-copy-user').count() === 1, 'the credential row has a copy-username button');
   ok(await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-copy-secret').count() === 1, 'the credential row has a separate copy-secret button');
