@@ -180,6 +180,10 @@
 
     if (lc.indexOf('hydra') >= 0 && has('_parse_hydra')) C._parse_hydra(text, ws, command, source, facts);
 
+    // Flag capture (content-gated inside): a `===FLAG:path::value` marker from the flag-hunt move, or a
+    // direct `type/cat …proof.txt` read, mints objective.<slot>_flag so the read flag reaches the report.
+    if (has('_parse_flags')) C._parse_flags(text, ws, command, source, facts);
+
     // §33 content-gated OSWE parsers (only the ported ones run)
     if (has('_has_product_signature') && C._has_product_signature(text)) C._parse_product_signature(text, ws, command, source, facts);
     if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) C._parse_sqli_oracle(text, ws, command, source, facts);

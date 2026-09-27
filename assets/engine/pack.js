@@ -317,13 +317,17 @@
       return 0;
     }
 
+    // The machine-type focus is a NUDGE, not an override: it adds a modest bonus so a matching move edges
+    // ahead of a comparable one, but it must never bury a much higher-priority move — e.g. the priority-99
+    // domain-compromise cash-in (produces access.admin) must not sit below a priority-40 AD enum just because
+    // a "DC" focus matches ad.* but not access.*. Rank within a phase bucket by priority + focus bonus.
+    var FOCUS_BONUS = 8;
+    function score(a) { return a.priority + (onType(a) === -1 ? FOCUS_BONUS : 0); }
     return live.slice().sort(function (a, b) {
       var pa = Math.max(0, P.phaseIndex(P.phaseOfAction(a)) - frontier);
       var pb = Math.max(0, P.phaseIndex(P.phaseOfAction(b)) - frontier);
       if (pa !== pb) return pa - pb;
-      var ta = onType(a), tb = onType(b);
-      if (ta !== tb) return ta - tb;
-      return b.priority - a.priority;
+      return score(b) - score(a);
     });
   }
 
