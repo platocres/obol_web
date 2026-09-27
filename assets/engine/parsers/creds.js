@@ -111,7 +111,7 @@
   C._parse_cracked_credentials = _parse_cracked_credentials;
 
   function _parse_ntlm_dump(text, ws, command, source, facts) {
-    var entries = [], seen = {}, krbtgtNt = '';
+    var entries = [], seen = {}, krbtgtNt = '', domCounts = {};
     reAll(C._NTDS_HASH_RE, text).forEach(function (m) {
       var user = C._clean_username(m.groups.user);
       if (!user) return;
@@ -119,14 +119,23 @@
       var key = user.toLowerCase() + '|' + nt;
       if (seen[key]) return;
       seen[key] = true;
-      entries.push({ user: user, rid: parseInt(m.groups.rid, 10), nthash: nt });
+      // The dump lines carry the domain themselves (`htb.local\Administrator:500:…`); tally it so the loot
+      // is scoped to the REAL domain even when the engagement never had one typed in — otherwise the facts
+      // land under a placeholder scope (`domain:domain`) and the Administrator cred won't dedupe with the
+      // one an nxc -H validation mints under the real domain.
+      var edom = (m.groups.domain || '').trim();
+      entries.push({ user: user, rid: parseInt(m.groups.rid, 10), nthash: nt, domain: edom });
+      if (edom && edom.indexOf('.') >= 0) domCounts[edom] = (domCounts[edom] || 0) + 1;
       if (user.toLowerCase() === 'krbtgt') krbtgtNt = nt;
     });
     if (!entries.length) return;
     var lowered = text.toLowerCase(), lc = command.toLowerCase();
     var ntdsContext = !!krbtgtNt || lc.indexOf('--ntds') >= 0 || lc.indexOf('-just-dc') >= 0 ||
       ['ntds.dit', 'drsuapi', 'dumping domain credentials'].some(function (mk) { return lowered.indexOf(mk) >= 0; });
-    var scope = C._scope_for_domain(ws);
+    // Prefer a domain proven by earlier facts; else the most common domain the dump lines themselves name.
+    var dumpDomain = Object.keys(domCounts).sort(function (a, b) { return domCounts[b] - domCounts[a]; })[0] || '';
+    var domainName = C._domain_from_facts(ws) || dumpDomain || '';
+    var scope = domainName ? ('domain:' + domainName) : C._scope_for_domain(ws);
     _add(facts, mkFact('hash.ntlm', scope, { count: entries.length, entries: entries }, S, source));
     _add(facts, mkFact('credential.candidate', scope, { kind: 'ntlm_hash', count: entries.length }, S, source));
     if (krbtgtNt) _add(facts, mkFact('hash.krbtgt', scope, { nthash: krbtgtNt }, S, source));
@@ -135,12 +144,12 @@
       // The dump hands you every account's NT hash — surface the built-in Administrator (RID 500) as a
       // ready-to-use credential so it lands on the credential cards and pass-the-hash commands fill from it.
       // This is the one that owns the domain; the full set stays in hash.ntlm for the report.
-      var domainName = C._domain_from_facts(ws) || '';
       var admin = entries.filter(function (e) { return e.rid === 500; })[0]
         || entries.filter(function (e) { return e.user.toLowerCase() === 'administrator'; })[0];
       if (admin && admin.nthash && admin.nthash !== '31d6cfe0d16ae931b73c59d7e0c089c0') {
         var av = { user: admin.user, nthash: admin.nthash, method: 'dcsync', hash_type: 'ntlm' };
-        if (domainName) av.domain = domainName;
+        var adom = admin.domain || domainName;
+        if (adom) av.domain = adom;
         _add(facts, mkFact('credential.available', scope, av, S, source));
       }
     }
@@ -160,5 +169,41 @@
     _add(facts, mkFact('credential.netntlm', 'host:' + ws.target, value, S, source));
   }
   C._parse_responder = _parse_responder;
+
+  // Flag capture → objective.<slot>_flag, so a read flag lands in the report. Two shapes are recognized,
+  // both PROOF-bound (a proof-file path must be present, so a stray 32-hex like an NT hash is never a flag):
+  //   1. `===FLAG:<path>::<contents>` markers the flag-hunt move prints (one per file it read);
+  //   2. a direct read of a named flag file — `type …\proof.txt`, `cat …/local.txt` — with a flag-shaped
+  //      value in the output.
+  // Slot is decided by the file name: proof.txt/root.txt = root, local.txt/user.txt = local, else generic.
+  var _FLAG_MARK_RE = /===FLAG:\s*(?<path>[^\r\n]*?)::(?<body>[^\r\n]*)/g;
+  var _FLAG_VALUE_RE = /\b[0-9a-fA-F]{32}\b|\b[0-9a-fA-F]{64}\b|\{[0-9A-Za-z_@!#%.:\-]{3,}\}|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/;
+  var _FLAG_FILE_IN_CMD_RE = /(?:\btype\b|\bcat\b|Get-Content|\bgc\b)\s+[^\r\n|]*?(?<file>(?:local|proof|user|root|flag\d?)\.txt)/i;
+  function _slot_for_flagfile(name) {
+    var n = (name || '').toLowerCase();
+    if (/proof\.txt|root\.txt/.test(n)) return 'root';
+    if (/local\.txt|user\.txt/.test(n)) return 'local';
+    return 'flag';
+  }
+  function _flag_kind(slot) { return slot === 'root' ? 'objective.root_flag' : (slot === 'local' ? 'objective.local_flag' : 'objective.flag'); }
+  function _parse_flags(text, ws, command, source, facts) {
+    var scope = 'host:' + ws.target, seen = {};
+    function emit(path, body, slotHint) {
+      body = (body || '').trim(); if (!body) return;
+      var vm = _FLAG_VALUE_RE.exec(body);
+      var flag = vm ? vm[0] : ((/^\S+$/.test(body) && body.length <= 64) ? body : '');
+      if (!flag || seen[flag]) return;
+      seen[flag] = 1;
+      var base = String(path || '').split(/[\\/]/).pop() || '';
+      var slot = slotHint || _slot_for_flagfile(base);
+      _add(facts, mkFact(_flag_kind(slot), scope, { flag: flag, slot: slot, name: base, path: path || '' }, S, source));
+    }
+    var m; _FLAG_MARK_RE.lastIndex = 0;
+    while ((m = _FLAG_MARK_RE.exec(text))) { emit(m.groups.path, m.groups.body); }
+    // a plain `type …\proof.txt` read (no marker): pull the flag from the output, slot from the command's file
+    var fm = _FLAG_FILE_IN_CMD_RE.exec(command || '');
+    if (fm) emit(fm.groups.file, text, _slot_for_flagfile(fm.groups.file));
+  }
+  C._parse_flags = _parse_flags;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);
