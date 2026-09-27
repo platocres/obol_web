@@ -24,22 +24,44 @@
     return '<div class="move-produces"><span class="mini-label">proves</span>' + chips + '</div>';
   }
 
+  // Tokens that come from proven facts, the engagement params, or the workspace — the operator fills
+  // these on the sidebar or by pasting evidence, so they stay a "needs:" hint, not a text box.
+  var DERIVED_TOKENS = {
+    target: 1, domain: 1, basedn: 1, dc: 1, user: 1, password: 1, nthash: 1, lhost: 1,
+    userlist: 1, hashfile: 1, wordlist: 1, dc_netbios: 1, dc_account: 1, domain_sid: 1,
+    target_sam: 1, group: 1, ca_name: 1, template: 1, pfx: 1, nmap_ports: 1,
+  };
+  // Ad-hoc, operator-supplied free-text tokens get an inline fill box right on the card (the coach
+  // stays a builder-free surface — this only completes a placeholder, no toggles). Nice labels/hints:
+  var FILL_LABEL = { command: 'run on host', cmd: 'command', lport: 'listener port', rport: 'remote port', payload: 'payload', outfile: 'output file', url: 'URL', share: 'share', file: 'file', listener: 'listener' };
+  var FILL_PH = { command: 'e.g. whoami /all', cmd: 'e.g. id', lport: '4444', payload: 'windows/x64/…', outfile: 'out.txt', url: 'http://…', share: 'C$', file: 'C:\\path\\file' };
+
   function commandsBlock(action, filled) {
     return filled.map(function (v, i) {
       var unfilled = OBOL.command.unfilledTokens(v.filled);
-      var warn = unfilled.length
-        ? '<div class="cmd-needs">needs: ' + unfilled.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(', ') + '</div>'
+      var derived = unfilled.filter(function (t) { return DERIVED_TOKENS[t]; });
+      var fillable = unfilled.filter(function (t) { return !DERIVED_TOKENS[t]; });
+      var warn = derived.length
+        ? '<div class="cmd-needs">needs: ' + derived.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(', ') + '</div>'
+        : '';
+      // an inline input per ad-hoc token; typing substitutes live into the command + copy button.
+      var fillRow = fillable.length
+        ? '<div class="cmd-fill-row">' + fillable.map(function (t) {
+            return '<label class="cmd-fill-lbl"><span>' + esc(FILL_LABEL[t] || t) + '</span>'
+              + '<input class="cmd-fill" data-tok="' + esc(t) + '" placeholder="' + esc(FILL_PH[t] || ('value for ' + t)) + '" autocomplete="off" spellcheck="false"></label>';
+          }).join('') + '</div>'
         : '';
       var note = v.note ? '<div class="cmd-note">' + esc(v.note) + '</div>' : '';
       // hands-on guidance for obol web: big output → tee to a file and attach it in Evidence.
       var webNote = v.webNote ? '<div class="cmd-webnote">✋ ' + esc(v.webNote) + '</div>' : '';
       var label = action.sequence ? ('step ' + (i + 1)) : (i === 0 ? 'preferred' : 'alt ' + i);
-      return '<div class="cmd">'
+      return '<div class="cmd' + (fillable.length ? ' cmd-fillable' : '') + '"'
+        + (fillable.length ? ' data-tmpl="' + U.attr(v.filled) + '"' : '') + '>'
         + '<div class="cmd-head"><span class="cmd-tag">' + esc(v.tool || action.tool || 'cmd') + '</span>'
         + '<span class="cmd-variant">' + label + '</span>'
         + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '" title="Copy command">copy</button></div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
-        + note + webNote + warn + '</div>';
+        + fillRow + note + webNote + warn + '</div>';
     }).join('');
   }
 
@@ -253,6 +275,17 @@
     // copy buttons
     U.on(mount, 'click', '.btn-copy', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    // inline free-text token fill ({{command}} etc.): substitute live into the command + copy button.
+    U.on(mount, 'input', '.cmd-fill', function (e, t) {
+      var cmd = t.closest('.cmd'); if (!cmd) return;
+      var out = cmd.getAttribute('data-tmpl') || '';
+      Array.prototype.forEach.call(cmd.querySelectorAll('.cmd-fill'), function (inp) {
+        var val = (inp.value || '').trim();
+        if (val) out = out.split('{{' + inp.getAttribute('data-tok') + '}}').join(val);
+      });
+      var code = cmd.querySelector('.cmd-run code'); if (code) code.textContent = out;
+      var copy = cmd.querySelector('.btn-copy'); if (copy) copy.setAttribute('data-copy', out);
     });
     // mark done
     U.on(mount, 'click', '.btn-done', function (e, t) {

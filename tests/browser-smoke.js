@@ -332,6 +332,21 @@ function serve() {
   ok(await dupRows.count() === 1, 'the facts sidebar collapses two same-claim observations into ONE row (' + (await dupRows.count()) + ')');
   ok(await dupRows.locator('.fact-count').count() === 1 && (await dupRows.locator('.fact-count').textContent() || '').indexOf('2') !== -1, 'the collapsed row shows an ×N observation count');
 
+  // Inline free-text token fill: an exec move's {{command}} placeholder gets a text box that
+  // substitutes into the shown command (and the copy button) live — no trip to Tools required.
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(250);
+  const cmdFill = page.locator('.coach .cmd-fillable .cmd-fill[data-tok="command"]').first();
+  ok(await cmdFill.count() >= 1, 'an exec move with a {{command}} placeholder offers an inline fill box on the coach');
+  await cmdFill.fill('whoami /all');
+  await page.waitForTimeout(60);
+  const filledCmd = await cmdFill.evaluate((inp) => {
+    const cmd = inp.closest('.cmd');
+    return { code: cmd.querySelector('.cmd-run code').textContent, copy: cmd.querySelector('.btn-copy').getAttribute('data-copy') };
+  });
+  ok(filledCmd.code.indexOf('whoami /all') !== -1 && filledCmd.code.indexOf('{{command}}') === -1, 'typing fills {{command}} into the shown command live');
+  ok(filledCmd.copy.indexOf('whoami /all') !== -1, 'the copy button now yields the filled command');
+
   // The + (new engagement) routes to the full setup form (profile, machine type, working directory),
   // not a name-only prompt that skips every option.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
