@@ -9,7 +9,7 @@
   var OBOL = root.OBOL = root.OBOL || {};
 
   // Derive the command line from a full-terminal paste when the operator didn't type one.
-  var TOOL_HEAD = /^(sudo\s+)?(nmap|rustscan|masscan|netexec|nxc|crackmapexec|cme|smbclient|smbmap|rpcclient|enum4linux[\w-]*|ldapsearch|kerbrute|impacket[\w.-]*|GetNPUsers[\w.]*|GetUserSPNs[\w.]*|secretsdump[\w.]*|evil-winrm|ffuf|feroxbuster|gobuster|wfuzz|nikto|whatweb|curl|wget|sqlmap|hydra|john|hashcat|responder|bloodhound[\w.-]*|sharphound[\w.-]*|dig|host|snmpwalk|ssh|ftp)\b/i;
+  var TOOL_HEAD = /^(sudo\s+)?(nmap|rustscan|masscan|netexec|nxc|crackmapexec|cme|smbclient|smbmap|rpcclient|enum4linux[\w-]*|ldapsearch|kerbrute|impacket[\w.-]*|GetNPUsers[\w.]*|GetUserSPNs[\w.]*|secretsdump[\w.]*|evil-winrm|ffuf|feroxbuster|gobuster|wfuzz|nikto|whatweb|curl|wget|sqlmap|hydra|john|hashcat|responder|bloodhound[\w.-]*|sharphound[\w.-]*|bloodyad|dacledit|certipy[\w-]*|rubeus[\w.]*|pywhisker[\w.]*|sccmhunter[\w.]*|sharpsccm|wmiexec[\w.]*|psexec[\w.]*|smbexec[\w.]*|atexec[\w.]*|dcomexec[\w.]*|getst[\w.]*|gettgt[\w.]*|lookupsid[\w.]*|addcomputer[\w.]*|gpp-decrypt|getnpusers[\w.]*|getuserspns[\w.]*|dig|host|snmpwalk|ssh|ftp)\b/i;
   function deriveCommand(text) {
     var lines = String(text || '').split(/\r?\n/);
     for (var i = 0; i < lines.length && i < 40; i++) {
@@ -87,6 +87,23 @@
     return cmd ? (cmd + '  ' + recovered) : recovered;
   }
 
+  // Did this paste come from a tool obol recognizes actually RUNNING (vs. junk or an unrelated blob)?
+  // The move's own command names the tool; failing that, the paste's own signatures do. Used to tell a
+  // "the tool ran and simply found nothing" result apart from "you pasted something unparseable".
+  function firstToolToken(cmd) {
+    return (String(cmd || '').trim().split(/\s+/)[0] || '').split('/').pop().toLowerCase().replace(/\.(py|exe)$/, '');
+  }
+  function recognizesTool(cmd, text) {
+    var f = firstToolToken(cmd);
+    if (f && TOOL_HINTS[f]) return true;
+    return !!(sniffCommand(text) || contentSignatures(text));
+  }
+  // Markers that mean the command did NOT complete cleanly (a usage/error/auth/network failure), so an
+  // empty result is "it broke", not "it ran and found nothing" — obol must not retire the move on these.
+  // Kept specific so a benign "Container not found" / "No results found" is NOT read as an error.
+  var ERR_MARKERS = /\busage:|\btraceback\b|command not found|no such file|unrecognized option|invalid option|\bmissing option\b|permission denied|access is denied|\bunauthorized\b|logon failure|connection refused|could not connect|connection reset|name or service not known|\berror:/i;
+  function looksLikeError(text) { return ERR_MARKERS.test(String(text || '')); }
+
   function ready() { return !!(OBOL.parsers && OBOL.parsers.parseActionOutput); }
   // Resolve to true once the (lazily-loaded) parser group is available.
   function ensureParsers() {
@@ -135,9 +152,13 @@
         produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
     }, 'activity');
     if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
-    return { ok: true, added: added, facts: facts, cmd: cmd, lines: lines, fileName: opts.fileName || '', parseError: parseError };
+    // Signals for the caller's "this move ran but proved nothing" decision: did a tool obol knows about
+    // actually run (recognized), and did it fail rather than simply come up empty (looksError)?
+    return { ok: true, added: added, facts: facts, cmd: cmd, lines: lines, fileName: opts.fileName || '',
+      parseError: parseError, recognizedTool: recognizesTool(cmd, text), looksError: looksLikeError(text) };
   }
 
   OBOL.ingest = { run: run, deriveCommand: deriveCommand, sniffCommand: sniffCommand,
-    contentSignatures: contentSignatures, dispatchLabel: dispatchLabel, ensureParsers: ensureParsers, ready: ready };
+    contentSignatures: contentSignatures, dispatchLabel: dispatchLabel, recognizesTool: recognizesTool,
+    looksLikeError: looksLikeError, ensureParsers: ensureParsers, ready: ready };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

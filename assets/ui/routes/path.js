@@ -194,7 +194,9 @@
     var params = (eng && eng.params) || {};
     var pack = OBOL.packs.actions();
     var doneIds = {};
-    Object.keys((eng && eng.checklist) || {}).forEach(function (k) { if (eng.checklist[k] === 'done') doneIds[k] = true; });
+    // 'done' = the operator ticked it; 'empty' = its tool ran and proved nothing here (a clean negative,
+    // e.g. no SCCM in the environment) — both retire the move from the ready list so it stops re-suggesting.
+    Object.keys((eng && eng.checklist) || {}).forEach(function (k) { if (eng.checklist[k] === 'done' || eng.checklist[k] === 'empty') doneIds[k] = true; });
 
     var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
     var ranked = OBOL.pack.nextActions(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
@@ -331,14 +333,26 @@
           U.toast('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + ' — recomputing');
           OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
         } else {
+          var aid = box.getAttribute('data-action') || '';
+          var toolNm = ((box.getAttribute('data-cmd') || '').trim().split(/\s+/)[0] || '').split('/').pop().replace(/\.(py|exe)$/, '') || 'the tool';
+          var bodyLines = text.trim().split(/\r?\n/).filter(function (l) { return l.trim(); }).length;
+          // The move's tool ran to completion and proved nothing HERE (a clean negative — e.g. no SCCM in
+          // the environment): acknowledge it and retire the move from the coach instead of re-suggesting a
+          // command the operator already ran. Guarded so a junk paste or a broken/denied run does NOT retire.
+          if (aid && !r.parseError && r.recognizedTool && !r.looksError && bodyLines >= 2) {
+            OBOL.store.update(function (engg) { engg.checklist = engg.checklist || {}; engg.checklist[aid] = 'empty'; }, 'done');
+            U.toast(toolNm + ' ran — nothing found here. Retired from the coach.');
+            OBOL.router.render();
+            return;
+          }
           t.disabled = false;
           if (out) {
             // The output is always saved as evidence; only fact extraction may come up empty.
             out.innerHTML = r.parseError
-              ? ('Output saved — the parser skipped part of it, no new facts. <a href="#/evidence/' + esc(box.getAttribute('data-action') || '') + '">Open in Evidence ↗</a>')
+              ? ('Output saved — the parser skipped part of it, no new facts. <a href="#/evidence/' + esc(aid) + '">Open in Evidence ↗</a>')
               : r.facts.length
                 ? ('Recognized ' + r.facts.length + ', nothing new (already known).')
-                : 'No facts recognized (output saved). <a href="#/evidence/' + esc(box.getAttribute('data-action') || '') + '">Set the command in Evidence ↗</a>';
+                : 'No facts recognized (output saved). <a href="#/evidence/' + esc(aid) + '">Set the command in Evidence ↗</a>';
           }
         }
       });
