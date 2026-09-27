@@ -53,12 +53,32 @@
       if (!fs.facts.length) {
         factsEl.innerHTML = '<li class="facts-empty">No facts yet. Add one below, or paste tool output on Evidence.</li>';
       } else {
-        factsEl.innerHTML = fs.facts.slice().sort(function (a, b) { return b.created_at - a.created_at; }).map(function (f) {
-          var cls = f.state === 'refuted' ? 'refuted' : (f.state === 'inconclusive' ? 'incon' : 'ok');
-          return '<li class="fact-item ' + cls + '" title="' + esc(f.scope) + '">'
-            + '<code>' + esc(f.kind) + '</code>'
-            + '<button class="fact-del" data-fact-kind="' + esc(f.kind) + '" data-fact-scope="' + esc(f.scope) + '" title="Remove">×</button></li>';
-        }).join('');
+        // Collapse by (kind, scope): several facts can share a claim but differ in an incidental
+        // value — ldap.reachable proven by nmap AND nxc, or service.msrpc seen on six high ports —
+        // so one row per claim (with an ×N count) reads far cleaner than a pile of identical labels.
+        var groups = {}, order = [];
+        fs.facts.forEach(function (f) {
+          var key = f.kind + '\x00' + f.scope;
+          if (!groups[key]) { groups[key] = { kind: f.kind, scope: f.scope, facts: [], newest: f.created_at }; order.push(key); }
+          var g = groups[key];
+          g.facts.push(f);
+          if (f.created_at > g.newest) g.newest = f.created_at;
+        });
+        factsEl.innerHTML = order.map(function (k) { return groups[k]; })
+          .sort(function (a, b) { return b.newest - a.newest; })
+          .map(function (g) {
+            var newest = g.facts.slice().sort(function (a, b) { return b.created_at - a.created_at; })[0];
+            var cls = newest.state === 'refuted' ? 'refuted' : (newest.state === 'inconclusive' ? 'incon' : 'ok');
+            // distinct ports (or other small ids) across the group, for the tooltip
+            var ports = g.facts.map(function (f) { return (f.value || {}).port; }).filter(function (p) { return p != null; });
+            var uports = ports.filter(function (p, i) { return ports.indexOf(p) === i; }).sort(function (a, b) { return a - b; });
+            var count = g.facts.length;
+            var title = g.scope + (uports.length ? ' · ports ' + uports.join(', ') : '') + (count > 1 ? ' · ' + count + ' observations' : '');
+            return '<li class="fact-item ' + cls + '" title="' + esc(title) + '">'
+              + '<code>' + esc(g.kind) + '</code>'
+              + (count > 1 ? '<span class="fact-count" aria-label="' + count + ' observations">×' + count + '</span>' : '')
+              + '<button class="fact-del" data-fact-kind="' + esc(g.kind) + '" data-fact-scope="' + esc(g.scope) + '" title="Remove">×</button></li>';
+          }).join('');
       }
     }
   }

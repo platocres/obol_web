@@ -317,6 +317,21 @@ function serve() {
   ok(anywhere.cmd.indexOf('nxc ldap') === 0, 'ingest routes on the paste\'s own kali-prompt command line, not the move\'s (' + anywhere.cmd + ')');
   ok(anywhere.kinds.indexOf('ad.user_list') !== -1, 'nxc --users pasted onto the NMAP move still mints ad.user_list (paste-anywhere routing)');
 
+  // Facts sidebar collapses same-claim facts (kind+scope) — e.g. smb.reachable proven by nmap AND
+  // nxc — into ONE row with an ×N count, instead of a pile of identical labels.
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([
+      F.makeFact({ kind: 'zz.collapsetest', scope: 'host:10.10.10.90', value: { tool: 'nmap' }, state: F.ProofState.SUPPORTED, source: 'test' }),
+      F.makeFact({ kind: 'zz.collapsetest', scope: 'host:10.10.10.90', value: { tool: 'nxc' }, state: F.ProofState.SUPPORTED, source: 'test' }),
+    ], 'test');
+    window.OBOL.app.renderSidebar();
+  });
+  await page.waitForTimeout(80);
+  const dupRows = page.locator('#facts-list .fact-item', { hasText: 'zz.collapsetest' });
+  ok(await dupRows.count() === 1, 'the facts sidebar collapses two same-claim observations into ONE row (' + (await dupRows.count()) + ')');
+  ok(await dupRows.locator('.fact-count').count() === 1 && (await dupRows.locator('.fact-count').textContent() || '').indexOf('2') !== -1, 'the collapsed row shows an ×N observation count');
+
   // The + (new engagement) routes to the full setup form (profile, machine type, working directory),
   // not a name-only prompt that skips every option.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });

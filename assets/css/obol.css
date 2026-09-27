@@ -99,6 +99,7 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 .fact-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: var(--bg2); border: 1px solid var(--line); border-left: 3px solid var(--green); border-radius: 6px; padding: 4px 6px; }
 .fact-item.refuted { border-left-color: var(--red); } .fact-item.incon { border-left-color: var(--yellow); }
 .fact-item code { font-size: 11px; color: var(--text); word-break: break-all; }
+.fact-count { margin-left: auto; font-size: 10px; font-weight: 700; color: var(--muted); background: var(--surf3); border-radius: 8px; padding: 1px 6px; letter-spacing: .02em; }
 .fact-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; }
 .fact-del:hover { color: var(--red); }
 .facts-empty { color: var(--muted); font-size: 12px; font-style: italic; }

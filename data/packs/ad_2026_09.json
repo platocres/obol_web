@@ -1556,13 +1556,13 @@
    "commands": [
     {
      "tool": "sccmhunter",
-     "run": "sccmhunter.py find -u {{user}}@{{domain}} -p '{{password}}' -dc-ip {{target}}",
-     "note": "Find SCCM site servers and management points via LDAP."
+     "run": "sccmhunter.py find -u {{user}} -p '{{password}}' -d {{domain}} -dc-ip {{target}}",
+     "note": "Find SCCM site servers and management points via LDAP. sccmhunter takes the bare username in -u and the domain separately in -d (it errors 'Missing option -d' otherwise). No SCCM in the environment? This simply finds nothing — it is not a foothold on every box."
     },
     {
      "tool": "sccmhunter",
-     "run": "sccmhunter.py smb -u {{user}}@{{domain}} -p '{{password}}' -dc-ip {{target}}",
-     "note": "Enumerate the SCCM shares — this is where task sequences and scripts with embedded credentials reside."
+     "run": "sccmhunter.py smb -u {{user}} -p '{{password}}' -d {{domain}} -dc-ip {{target}}",
+     "note": "Enumerate the SCCM shares — this is where task sequences and scripts with embedded credentials reside. Bare username in -u, domain in -d."
     }
    ]
   },
