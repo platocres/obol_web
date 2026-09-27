@@ -107,16 +107,29 @@
     // configured VM interface, defaulting to tun0 — the VPN adapter for HTB/OSCP-style labs.
     if (!ctx.iface) ctx.iface = params.lhost_iface || 'tun0';
 
-    // credentials: prefer credential.available then credential.plaintext
+    // credentials: prefer credential.available then credential.plaintext. IDENTITY-COHERENT fill — never
+    // pair one credential's username with another's secret. `-u svc-alfresco -H <administrator-hash>` just
+    // fails auth; the user and the secret must come from the SAME credential. When params already pin a
+    // user, fill that same user's secret; otherwise adopt the first credential wholesale.
     var creds = facts.values('credential.available');
     if (!creds.length) creds = facts.values('credential.plaintext');
-    if (creds.length) {
-      if (creds[0].user && !ctx.user) ctx.user = creds[0].user;
-      if (creds[0].password && !ctx.password) ctx.password = creds[0].password;
-    }
-    for (var c = 0; c < creds.length; c++) {
-      var nt = creds[c].nthash || creds[c].hash;
-      if (nt) { ctx.nthash = nt; break; }
+    function _lc(x) { return String(x == null ? '' : x).toLowerCase(); }
+    if (ctx.user) {
+      for (var c = 0; c < creds.length; c++) {
+        if (_lc(creds[c].user) !== _lc(ctx.user)) continue;
+        if (!ctx.password && creds[c].password) ctx.password = creds[c].password;
+        var nhm = creds[c].nthash || creds[c].hash;
+        if (!ctx.nthash && nhm) ctx.nthash = nhm;
+        if (!ctx.domain && creds[c].domain) ctx.domain = creds[c].domain;
+        break;
+      }
+    } else if (creds.length) {
+      var c0 = creds[0];
+      if (c0.user) ctx.user = c0.user;
+      if (c0.password && !ctx.password) ctx.password = c0.password;
+      var nh0 = c0.nthash || c0.hash;
+      if (nh0 && !ctx.nthash) ctx.nthash = nh0;
+      if (c0.domain && !ctx.domain) ctx.domain = c0.domain;
     }
 
     // ADCS ca/template/pfx

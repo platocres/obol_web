@@ -41,6 +41,7 @@
     this.requires_all = (d.requires_all || []).slice();
     this.requires_any = (d.requires_any || []).slice();
     this.obsoleted_by = (d.obsoleted_by || []).slice();
+    this.deprioritize_when = (d.deprioritize_when || []).slice();
     this.produces = (d.produces || []).slice();
     this.hypothesis = d.hypothesis || '';
     this.tools = (d.tools || []).slice();
@@ -69,6 +70,16 @@
     // the blocked list alike, so the coach stops steering you toward a means to an end you already hold.
     for (var i = 0; i < this.obsoleted_by.length; i++) { if (facts.has(this.obsoleted_by[i])) return true; }
     return false;
+  };
+
+  var DEPRIORITIZE_PENALTY = 40;
+  Action.prototype.effectivePriority = function (facts) {
+    // Base priority, minus a penalty once a fact makes this move a side-quest rather than the point — e.g.
+    // post-domain-admin persistence / path-mapping / pivots sink below the objective (flag capture) and the
+    // cross-box loot once you already hold loot.ntds. The move stays AVAILABLE, just no longer up top.
+    var p = this.priority;
+    for (var i = 0; i < this.deprioritize_when.length; i++) { if (facts.has(this.deprioritize_when[i])) { p -= DEPRIORITIZE_PENALTY; break; } }
+    return p;
   };
 
   Action.prototype.eligible = function (facts) {
@@ -320,9 +331,10 @@
     // The machine-type focus is a NUDGE, not an override: it adds a modest bonus so a matching move edges
     // ahead of a comparable one, but it must never bury a much higher-priority move — e.g. the priority-99
     // domain-compromise cash-in (produces access.admin) must not sit below a priority-40 AD enum just because
-    // a "DC" focus matches ad.* but not access.*. Rank within a phase bucket by priority + focus bonus.
+    // a "DC" focus matches ad.* but not access.*. Rank within a phase bucket by effective priority + focus
+    // bonus (effective priority applies the deprioritize-when penalty for side-quest moves).
     var FOCUS_BONUS = 8;
-    function score(a) { return a.priority + (onType(a) === -1 ? FOCUS_BONUS : 0); }
+    function score(a) { return a.effectivePriority(facts) + (onType(a) === -1 ? FOCUS_BONUS : 0); }
     return live.slice().sort(function (a, b) {
       var pa = Math.max(0, P.phaseIndex(P.phaseOfAction(a)) - frontier);
       var pb = Math.max(0, P.phaseIndex(P.phaseOfAction(b)) - frontier);

@@ -68,6 +68,9 @@
     "ports.open"
    ],
    "requires_any": [],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "scan.nmap.version"
    ],
@@ -113,6 +116,9 @@
     "scan.nmap.version"
    ],
    "requires_any": [],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "scan.nmap.vuln"
    ],
@@ -148,6 +154,9 @@
     "host.up"
    ],
    "requires_any": [],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "scan.nmap.udp"
    ],
@@ -788,6 +797,9 @@
     "credential.available"
    ],
    "requires_any": [],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "ad.graph.collected",
     "ad.attack_paths"
@@ -882,6 +894,9 @@
    "requires_any": [
     "credential.available",
     "foothold.windows"
+   ],
+   "deprioritize_when": [
+    "loot.ntds"
    ],
    "produces": [
     "ad.attack_paths",
@@ -1407,6 +1422,9 @@
    "requires_any": [
     "ad.computer_added"
    ],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "ad.computer_added",
     "kerberos.tickets",
@@ -1453,6 +1471,9 @@
    "requires_any": [
     "hash.krbtgt"
    ],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "persistence.domain"
    ],
@@ -1491,6 +1512,9 @@
    "requires_any": [
     "credential.available",
     "ad.graph.collected"
+   ],
+   "deprioritize_when": [
+    "loot.ntds"
    ],
    "produces": [
     "ad.trusts"
@@ -1749,6 +1773,9 @@
     "kerberos.reachable",
     "ad.dc_candidate"
    ],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "kerberos.tickets"
    ],
@@ -1886,6 +1913,9 @@
    "requires_all": [],
    "requires_any": [
     "ad.computer_added"
+   ],
+   "deprioritize_when": [
+    "loot.ntds"
    ],
    "produces": [
     "kerberos.tickets",
@@ -2027,6 +2057,9 @@
     "credential.ntlm_hash",
     "hash.ntlm"
    ],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "access.admin",
     "lateral.movement"
@@ -2073,6 +2106,9 @@
    "requires_all": [],
    "requires_any": [
     "foothold.windows"
+   ],
+   "deprioritize_when": [
+    "loot.ntds"
    ],
    "produces": [
     "ad.attack_paths",
@@ -2154,6 +2190,9 @@
     "foothold.windows",
     "access.desktop"
    ],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "ad.user_list",
     "ad.attack_paths"
@@ -2214,6 +2253,9 @@
    "requires_any": [
     "foothold.windows",
     "access.desktop"
+   ],
+   "deprioritize_when": [
+    "loot.ntds"
    ],
    "produces": [
     "ad.user_list",
@@ -2473,6 +2515,9 @@
     "ad.coerced_auth",
     "ad.unconstrained"
    ],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "kerberos.tickets",
     "access.admin"
@@ -2519,6 +2564,9 @@
     "hash.ntlm",
     "loot.ntds"
    ],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "kerberos.tickets",
     "access.admin"
@@ -2563,6 +2611,9 @@
    "requires_all": [],
    "requires_any": [
     "hash.krbtgt"
+   ],
+   "deprioritize_when": [
+    "loot.ntds"
    ],
    "produces": [
     "kerberos.tickets",
@@ -2704,6 +2755,9 @@
    "requires_any": [
     "hash.krbtgt",
     "ad.trusts"
+   ],
+   "deprioritize_when": [
+    "loot.ntds"
    ],
    "produces": [
     "ad.sid_history",

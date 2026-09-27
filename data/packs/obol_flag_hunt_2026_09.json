@@ -11,7 +11,7 @@
       "id": "flag-hunt-linux",
       "title": "Hunt for flags (Linux)",
       "tool": "sshpass",
-      "priority": 82,
+      "priority": 97,
       "requires_all": [
         "credential.available",
         "foothold.linux"
@@ -44,7 +44,7 @@
       "id": "flag-hunt-windows",
       "title": "Hunt for flags (Windows)",
       "tool": "nxc",
-      "priority": 82,
+      "priority": 97,
       "requires_all": [
         "credential.available"
       ],

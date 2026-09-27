@@ -315,6 +315,39 @@
     return segs.map(function (s) { return { command: s.command, stdout: s.stdout.join('\n').replace(/^\n+|\n+$/g, ''), ts: s.ts }; });
   }
 
+  // The credential a command authenticated WITH — its -u / -H / -p (and -d). Used to activate the identity
+  // you actually escalated with, rather than hardcoding "Administrator" or guessing at the first credential.
+  function credFromCommand(cmd) {
+    cmd = String(cmd || '');
+    var u = /(?:^|\s)-u\s+'([^']*)'|(?:^|\s)-u\s+"([^"]*)"|(?:^|\s)-u\s+(\S+)/.exec(cmd);
+    var user = u ? (u[1] !== undefined ? u[1] : (u[2] !== undefined ? u[2] : u[3])) : '';
+    if (!user || user === "''" || user === '""') return null;   // an empty (null-session) user is not a credential
+    var h = /(?:^|\s)-H\s+'?"?([0-9a-fA-F]{32}(?::[0-9a-fA-F]{32})?)/.exec(cmd);
+    var p = /(?:^|\s)-p\s+'([^']*)'|(?:^|\s)-p\s+"([^"]*)"|(?:^|\s)-p\s+(\S+)/.exec(cmd);
+    var d = /(?:^|\s)-d\s+'([^']*)'|(?:^|\s)-d\s+"([^"]*)"|(?:^|\s)-d\s+(\S+)/.exec(cmd);
+    var out = { user: user };
+    if (h) { var hh = h[1]; out.nthash = hh.indexOf(':') >= 0 ? hh.split(':').pop() : hh; }
+    else if (p) { var pw = p[1] !== undefined ? p[1] : (p[2] !== undefined ? p[2] : p[3]); if (pw === '' ) return null; out.password = pw; }
+    else return null;                                            // -u with no secret is not usable
+    if (d) { var dm = d[1] !== undefined ? d[1] : (d[2] !== undefined ? d[2] : d[3]); if (dm) out.domain = dm; }
+    return out;
+  }
+  // The strongest access an activity's command proved (most-recent first), and its credential — so import
+  // can make the escalated identity active. Tiers: admin/foothold > authenticated session.
+  function escalationCred(activities) {
+    var tiers = [['access.admin', 'access.system', 'foothold.windows', 'foothold.linux', 'winrm.authenticated', 'rdp.authenticated'],
+      ['smb.authenticated', 'ldap.authenticated']];
+    for (var t = 0; t < tiers.length; t++) {
+      for (var i = 0; i < (activities || []).length; i++) {
+        var a = activities[i];
+        if (!a || !a.produced || !a.produced.some(function (k) { return tiers[t].indexOf(k) >= 0; })) continue;
+        var c = credFromCommand(a.command);
+        if (c) return c;
+      }
+    }
+    return null;
+  }
+
   // Known engagement target IPs (to bias auto-routing toward real hosts).
   function _knownTargets(eng) {
     return ((eng && eng.targets) || []).map(function (t) { return t && t.ip; }).filter(Boolean);
@@ -429,6 +462,19 @@
       }
     });
     var merged = reconcileTargets();
+    // Make active the identity you actually escalated with — the strongest validated command's own
+    // credential — so the next commands (flag hunt, PtH exec) fill with what works, not the first cred or a
+    // hardcoded name. Only when nothing is active yet, so a manual selection is never overridden.
+    var act = OBOL.store.active() || {}, ap = act.params || {};
+    if (!ap.username) {
+      var esc = escalationCred(act.activities || []);
+      if (esc) OBOL.store.update(function (e) {
+        e.params = e.params || {};
+        e.params.username = esc.user;
+        if (esc.nthash) e.params.nthash = esc.nthash; else if (esc.password !== undefined) e.params.password = esc.password;
+        if (esc.domain) e.params.domain = esc.domain;
+      }, 'params');
+    }
     if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
     return { ok: true, commands: all.length, imported: imported, dupes: dupes, added: added,
       tools: Object.keys(ranTools), hosts: Object.keys(hosts), merged: merged, remapped: remapped };
@@ -438,5 +484,6 @@
     contentSignatures: contentSignatures, dispatchLabel: dispatchLabel, recognizesTool: recognizesTool,
     looksLikeError: looksLikeError, detectLhost: detectLhost, detectTarget: detectTarget,
     remapIps: remapIps, splitSession: splitSession, importSession: importSession,
+    credFromCommand: credFromCommand, escalationCred: escalationCred,
     ensureParsers: ensureParsers, ready: ready };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

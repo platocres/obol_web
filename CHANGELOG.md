@@ -1,3 +1,11 @@
+## v11.5 — Declutter the endgame, coherent credentials, activate the identity you escalated with
+
+- **Cap "Ready now."** At a late-game frontier the whole pack is technically ready, so the coach was dumping ~30 moves — persistence, path-mapping, pivots, even a recon nmap — on top of the actual next step. Ready now is now capped to the top 6; the rest fold into a collapsed "More ready moves."
+- **Demote post-domain side-quests.** New `deprioritize_when` on pack actions: once you hold `loot.ntds`, persistence (golden/silver/diamond tickets, ticket reuse), attack-path mapping (manual/PowerView/BloodHound), cross-domain/trust, delegation, and stale recon drop below the objective and the cross-box loot. They stay available (larger labs), just no longer up top.
+- **Flag capture leads.** `flag-hunt` priority raised so that, once you have a foothold/admin, capturing the flag is the #1 move — not a buried afterthought.
+- **Coherent credentials.** A command never again pairs one credential's username with another's secret (the old `-u svc-alfresco -H <administrator-hash>` that couldn't authenticate). The user and the secret always come from the same credential.
+- **Activate the identity you escalated with.** After importing a run, obol makes active the credential from the strongest validated command (e.g. the `nxc smb -u administrator -H … (Pwn3d!)` you just ran) — read from the command itself, never hardcoded — so the next commands fill with what actually works.
+
 ## v11.4 — Live-run fixes: rank the win, dedupe the admin cred, capture flags into the report
 
 - **The cash-in ranks first.** The machine-type focus was a hard sort key ahead of priority, so on a DC-profiled box a priority-40 AD enum (matching the `ad.*` focus) buried the priority-99 "Own the Domain — Pass-the-Hash" move (which produces `access.admin`, outside the focus). Focus is now a **bonus**, not an override — it nudges comparable moves without ever sinking a much higher-priority one.

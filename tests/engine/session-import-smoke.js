@@ -253,5 +253,34 @@ ok(!ranked.some(function (a) { return a.id === 'coerce-auth'; }), 'coercion is r
 // everything routed to the CURRENT target (remapped), not the stale one
 ok(OBOL.store._e.activities.every(function (a) { return a.target === '10.0.0.9'; }) && !OBOL.store._e.targets.some(function (t) { return t.ip === '10.0.0.5'; }), 'all evidence routed to the current target; the stale IP never became a host');
 
+// ── 10. Activate the credential we escalated WITH (not a hardcoded name, not the first cred) ───────────
+ok(JSON.stringify(OBOL.ingest.credFromCommand('nxc smb 10.0.0.5 -u administrator -H 32693b11e6aa90eb43d32c72a07ceea6')) === JSON.stringify({ user: 'administrator', nthash: '32693b11e6aa90eb43d32c72a07ceea6' }), 'credFromCommand pulls -u + -H from a pass-the-hash command');
+ok((OBOL.ingest.credFromCommand("nxc smb 10.0.0.5 -u svc -p 's3rvice' -d htb.local") || {}).password === 's3rvice', 'credFromCommand pulls -u + -p + -d from a password command');
+ok(OBOL.ingest.credFromCommand("nxc smb 10.0.0.5 -u '' -p ''") === null, 'a null-session command is not a credential');
+ok(OBOL.ingest.credFromCommand('nmap -Pn 10.0.0.5') === null, 'a command with no -u/secret yields no credential');
+// escalationCred prefers the admin-validated command over a lesser one
+var acts = [
+  { command: "nxc smb 10.0.0.5 -u svc -p 's3rvice'", produced: ['smb.authenticated'] },
+  { command: 'nxc smb 10.0.0.5 -u administrator -H 32693b11e6aa90eb43d32c72a07ceea6', produced: ['access.admin', 'smb.authenticated'] },
+];
+ok((OBOL.ingest.escalationCred(acts) || {}).user === 'administrator', 'escalationCred picks the ADMIN-validated command\'s identity, not the first one');
+
+// end-to-end: importing a run that ends in an admin pass-the-hash validation activates administrator+hash
+OBOL.store = (function () {
+  var eng = { params: { domain: 'corp.local', target: '10.0.0.5' }, targets: [{ id: 't1', ip: '10.0.0.5' }], activities: [], facts: [] };
+  var fs2 = new OBOL.facts.FactSet([]);
+  return { active: function () { return eng; }, update: function (fn) { fn(eng); },
+    addFacts: function (facts) { var n = 0; (facts || []).forEach(function (f) { if (fs2.add(OBOL.facts.factFromJson(OBOL.facts.factToJson(f)))) n++; }); return n; },
+    factSet: function () { return fs2; }, _e: eng };
+})();
+var pwnCap = [
+  '└─$ nxc smb 10.0.0.5 -u administrator -H 32693b11e6aa90eb43d32c72a07ceea6',
+  'SMB 10.0.0.5 445 DC01 [*] Windows Server 2016 Build 14393 x64 (name:DC01) (domain:corp.local) (signing:True)',
+  'SMB 10.0.0.5 445 DC01 [+] corp.local\\administrator:32693b11e6aa90eb43d32c72a07ceea6 (Pwn3d!)',
+].join('\n');
+OBOL.ingest.importSession(pwnCap);
+ok(OBOL.store._e.params.username === 'administrator' && OBOL.store._e.params.nthash === '32693b11e6aa90eb43d32c72a07ceea6',
+  'importing an admin pass-the-hash validation activates that identity (username + hash) for downstream fills');
+
 console.log(fail ? ('\nSESSION IMPORT: ' + fail + ' FAILURES') : '\nSESSION IMPORT: all passed');
 process.exit(fail ? 1 : 0);
