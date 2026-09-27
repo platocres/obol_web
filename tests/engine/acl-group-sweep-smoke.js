@@ -97,6 +97,14 @@ ok(OBOL.command.commandWasRun("bloodyAD -d {{domain}} --host {{target}} -u {{use
 // them into the signature, so it would (wrongly) fail to match the clean recovered dispatch.
 ok(OBOL.command.commandWasRun("bloodyAD -d htb.local --host 10.129.94.251 -u svc-alfresco -p 's3rvice' get writable --detail", attachedActs, {}) === false, 'a FILLED command leaks lab values into the signature when params are empty (documents why the coach matches on the template)');
 
+// REGRESSION: running the credential VALIDATION (`nxc smb …`, no -x) must NOT mark the EXEC command
+// (`nxc smb … -x '<cmd>'`) as already run — they differ only by the execute flag, which the signature
+// must keep. This is the "selecting a cred flipped the exec command to ✓ ran" bug.
+var nxcP = { target: '10.129.95.9', username: 'svc-alfresco', password: 's3rvice', domain: 'htb.local' };
+var validationRan = [{ command: "nxc smb 10.129.95.9 -u svc-alfresco -p 's3rvice'" }];
+ok(OBOL.command.commandWasRun("nxc smb {{target}} -u {{user}} -p '{{password}}'", validationRan, nxcP) === true, 'the credential-validation nxc smb you ran is marked run');
+ok(OBOL.command.commandWasRun("nxc smb {{target}} -u {{user}} -p '{{password}}' -x '{{command}}'", validationRan, nxcP) === false, 'the EXEC nxc smb (-x) is NOT marked run just because the validation nxc smb was');
+
 // the win flag flows through fillCommand so the coach can render the "Pwn This Target" badge
 var winAct = { commands: [{ tool: 'x', run: 'x pwn', win: true }, { tool: 'y', run: 'y go' }] };
 var fa = OBOL.command.fillAll(winAct, new OBOL.facts.FactSet([]), {});
