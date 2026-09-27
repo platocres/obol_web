@@ -172,6 +172,14 @@
       + '<label class="eng-field"><span>Working directory <span class="eng-field-opt">(on your Kali box — optional)</span></span>'
       + '<input id="eng-workdir" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
       + '<div class="eng-field-hint">obol fills output paths from this (<code>scans/</code>, <code>loot/</code>, <code>proof/</code>…) and gives you a one-line setup command. Leave blank for a sensible default.</div>'
+      + '<div class="eng-row2">'
+      + '<label class="eng-field"><span>Your VM IP <span class="eng-field-opt">(attacker box — optional)</span></span>'
+      + '<input id="eng-lhost" autocomplete="off" spellcheck="false" inputmode="decimal" placeholder="e.g. 10.10.14.9"></label>'
+      + '<label class="eng-field"><span>Interface</span><select id="eng-iface">'
+      + ['tun0', 'tun1', 'tap0', 'eth0', 'wlan0', 'vpn0', 'wg0'].map(function (i) { return '<option value="' + i + '"' + (i === 'tun0' ? ' selected' : '') + '>' + i + '</option>'; }).join('')
+      + '<option value="">other / none</option></select></label>'
+      + '</div>'
+      + '<div class="eng-field-hint">obol fills <code>{{lhost}}</code> in coercion, relay and reverse-shell commands from this, and never mistakes your own box for a target on import. Leave blank and obol learns it from a pasted <code>[tun0:IP]</code> prompt.</div>'
       + '<button id="eng-launch" class="btn-primary">Create &amp; Launch Run →</button>'
       + '</div>'
       + '</section>';
@@ -232,6 +240,11 @@
       var cand = (document.getElementById('eng-cand') || {}).value || '';
       var scopeText = (document.getElementById('eng-scope').value || '');
       var scope = extractScope(scopeText);
+      // The operator's own attack box: IP + interface. Feeds {{lhost}} and the import self-IP guard.
+      var lhostRaw = ((document.getElementById('eng-lhost') || {}).value || '').trim();
+      var lhost = /^(\d{1,3}\.){3}\d{1,3}$/.test(lhostRaw) ? lhostRaw : '';
+      var iface = ((document.getElementById('eng-iface') || {}).value || '').trim();
+      if (lhostRaw && !lhost) { U.toast('That VM IP doesn\'t look like an IPv4 address — ignoring it', 'err'); }
       if (!name) { name = (OBOL.profile.PRESETS[platform] || {}).name || 'Engagement'; }
 
       // If the active engagement is still the untouched default, configure it in place rather than
@@ -268,6 +281,7 @@
           if (!e.params) e.params = {};
           if (hosts[0]) e.params.target = hosts[0];
           if (scope.length) e.params.scope_defined = true;
+          if (lhost) { e.params.lhost = lhost; if (iface) e.params.lhost_iface = iface; }
         }, 'launch');
         if (facts.length) OBOL.store.addFacts(facts, 'launch');
         OBOL.app.renderSidebar();

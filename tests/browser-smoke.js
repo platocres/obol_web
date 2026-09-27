@@ -73,9 +73,15 @@ function serve() {
   await page.fill('#eng-name', 'OSCP Exam');
   await page.fill('#eng-scope', '10.10.10.10 junk 10.10.10.0/24');
   await page.fill('#eng-workdir', '/home/kali/lab/box');
+  // the attacker-box IP + interface field
+  ok(await page.locator('#eng-lhost').count() === 1 && await page.locator('#eng-iface').count() === 1, 'setup form has a VM IP + interface field');
+  await page.fill('#eng-lhost', '10.10.14.9');
+  await page.selectOption('#eng-iface', 'tun0');
   await page.click('#eng-launch');
   await page.waitForTimeout(500);
   ok(page.url().indexOf('#/path') >= 0, 'launch lands on the coach');
+  const savedLhost = await page.evaluate(() => (window.OBOL.store.active().params || {}).lhost);
+  ok(savedLhost === '10.10.14.9', 'launch saved the attacker VM IP as {{lhost}} (' + savedLhost + ')');
   const launchedPlatform = await page.evaluate(() => window.OBOL.store.active().profile.platform);
   ok(launchedPlatform === 'oscp', 'launched engagement carries the OSCP profile (' + launchedPlatform + ')');
   // workspace: saved on the engagement, drives command output paths, and shows the scaffold banner
@@ -693,7 +699,7 @@ function serve() {
     lhostIsTarget: (window.OBOL.store.active().targets || []).some((t) => t.ip === '10.10.14.9'),
   }));
   ok(imp.acts - impCountBefore === 2, 'importing a 2-command session records exactly 2 activities (' + (imp.acts - impCountBefore) + ')');
-  ok(imp.lhost === '10.10.14.9', 'session import learns {{lhost}} from the [tun0:IP] stamp');
+  ok(imp.lhost === '10.10.14.9', 'the configured attacker VM IP is in force as {{lhost}} during import');
   ok(/Imported 2 command/.test(imp.res), 'the import summary reports the commands imported');
   ok(/2 hosts/.test(imp.res), 'the import summary reports facts landed across 2 hosts');
   ok(imp.newTarget, 'auto-route registered the newly-touched host 10.10.10.55 as a target');
