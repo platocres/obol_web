@@ -273,6 +273,42 @@
     return commands.map(function (c, i) { return fillCommand(action, facts, opts, i); });
   }
 
+  // The distinctive ACTION tokens of a command — the verbs/subcommands that say WHAT it does, with the
+  // tool name, flags, param values (target/domain/user/secret/…), paths, numbers and shell scaffolding
+  // stripped out. Two commands with the same action tokens are "the same move" regardless of which host or
+  // credential filled them, so this is how obol tells that a suggested command is one you already ran.
+  function _actionSig(cmd, params) {
+    var head = String(cmd || '').split(/\||;|&&|>/)[0];          // drop pipe/redirect/tee/`; done` tails
+    var toks = head.trim().split(/\s+/);
+    var vals = {};
+    ['target', 'domain', 'username', 'user', 'password', 'nthash', 'lhost', 'lport', 'rhost'].forEach(function (k) {
+      var v = params && params[k]; if (v) vals[String(v).toLowerCase()] = 1;
+    });
+    var NOISE = { 'for': 1, 'in': 1, 'do': 1, 'done': 1, 'then': 1, 'fi': 1, 'echo': 1, 'sudo': 1, 'while': 1 };
+    var out = {};
+    for (var i = 1; i < toks.length; i++) {                       // skip the tool token itself
+      var t = toks[i].replace(/^["']+|["']+$/g, '');
+      if (!t || t.charAt(0) === '-') continue;                    // flags
+      var lt = t.toLowerCase();
+      if (vals[lt] || NOISE[lt]) continue;                        // a param value or shell keyword
+      if (/[\/@\\=$]/.test(t) || /^\d+$/.test(t) || lt.length < 2) continue; // paths/values/$g/numbers/single chars
+      out[lt] = 1;
+    }
+    return out;
+  }
+  // Has a command with these same action tokens already been run (is it in the activity ledger)? Used by
+  // the coach to demote a suggested variant you have already executed, so it stops re-offering it.
+  function commandWasRun(filledCmd, activities, params) {
+    var sig = _actionSig(filledCmd, params), keys = Object.keys(sig);
+    if (!keys.length) return false;
+    for (var a = 0; a < (activities || []).length; a++) {
+      var asig = _actionSig(activities[a] && activities[a].command, params), all = true;
+      for (var k = 0; k < keys.length; k++) { if (!asig[keys[k]]) { all = false; break; } }
+      if (all) return true;
+    }
+    return false;
+  }
+
   // Which {{tokens}} in a template are still unfilled (dependencies the operator must supply).
   function unfilledTokens(filledText) {
     var out = [], re = /\{\{([a-zA-Z0-9_]+)\}\}/g, m;
@@ -287,6 +323,7 @@
     fillTemplate: fillTemplate,
     fillCommand: fillCommand,
     fillAll: fillAll,
+    commandWasRun: commandWasRun,
     unfilledTokens: unfilledTokens,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -432,7 +432,12 @@
     // A group sweep (`for g in …; do add groupMember "$g" …`) prints a success line for every group that
     // stuck AND a failure line for every group that did not — the failures must NOT suppress the wins, so
     // an explicit join line counts as success on its own, independent of the generic error gate.
-    var hasJoinLine = operation === 'group_member_write' && /(?:\badded to\b|^\s*\[\+\]\s*joined:)/im.test(text);
+    // "already a member" is not a failure — it CONFIRMS the membership (a prior add, e.g. the group sweep,
+    // already put you in). bloodyAD/LDAP say entryAlreadyExists / ERROR_MEMBER_IN_ALIAS / "already a member
+    // of the group". Treat it as a join so the coach advances to the DCSync cash-in instead of re-offering
+    // an add that will only re-error.
+    var alreadyMemberRe = /already a member|entryalreadyexists|member_in_alias/i;
+    var hasJoinLine = operation === 'group_member_write' && (/(?:\badded to\b|^\s*\[\+\]\s*joined:)/im.test(text) || alreadyMemberRe.test(text));
     var success = hasJoinLine || evidence.length > 0 || !!reSearch(C._AD_CONTROL_SUCCESS_RE, text) || (!!operation && !!text.trim() && !opError);
     if (!success) return;
 
@@ -449,7 +454,11 @@
         var body = line.replace(/^\[\d[\d:]*\]\s*(?:INFO|WARN(?:ING)?|DEBUG|ERROR)?\s*/i, '').replace(/^\[[-*+!]\]\s*/, '');
         var g = '', principal = '', mj = /^joined:\s*(.+)$/i.exec(body);
         if (mj) { g = mj[1].trim(); }
-        else { var ma = /^(.+?)\s+added to (?:group\s+)?(.+?)\.?$/i.exec(body); if (ma) { principal = ma[1].trim(); g = ma[2].trim(); } }
+        else {
+          var ma = /^(.+?)\s+added to (?:group\s+)?(.+?)\.?$/i.exec(body);
+          if (ma) { principal = ma[1].trim(); g = ma[2].trim(); }
+          else { var me = /entryalreadyexists for cn=([^,\n]+)/i.exec(body); if (me) g = me[1].trim(); } // already a member = you ARE in it
+        }
         if (!g || g.indexOf('$') >= 0) return;
         var key = g.toLowerCase(); if (seenJ[key]) return; seenJ[key] = true;
         joins.push({ group: C.stripChars(g, "'\""), principal: C.stripChars(principal, "'\""), line: line.slice(0, 220) });
@@ -459,7 +468,9 @@
         // literal $g), and only on a clean run with no error.
         var m = /groupmember\s+(?:'([^']+)'|"([^"]+)"|(\S+))/i.exec(command);
         var cg = m ? (m[1] || m[2] || m[3] || '') : '';
-        if (cg && cg.indexOf('$') < 0 && !opError) {
+        // "already a member" overrides the traceback noise (opError): the add failed only because the
+        // membership is already yours, so the command's group IS a confirmed join.
+        if (cg && cg.indexOf('$') < 0 && (!opError || alreadyMemberRe.test(text))) {
           var toks = command.split(/\s+/);
           joins.push({ group: C.stripChars(cg, "'\""), principal: toks.length ? C.stripChars(toks[toks.length - 1], "'\"") : '', line: (evidence[0] || defaultEvidence[0] || '') });
         }

@@ -37,7 +37,17 @@
   var FILL_PH = { command: 'e.g. whoami /all', cmd: 'e.g. id', lport: '4444', payload: 'windows/x64/…', outfile: 'out.txt', url: 'http://…', share: 'C$', file: 'C:\\path\\file' };
 
   function commandsBlock(action, filled) {
-    return filled.map(function (v, i) {
+    // Coach awareness: mark each variant obol has already seen you run (from the activity ledger) and, for
+    // a non-sequenced move, float the un-run variants up so "preferred" is the next thing left to do — a
+    // command you already ran (or one whose effect is already proven) stops being re-suggested at the top.
+    var eng = OBOL.store.active() || {};
+    var acts = eng.activities || [], params = eng.params || {};
+    var items = filled.map(function (v, i) { return { v: v, i: i, ran: OBOL.command.commandWasRun(v.filled, acts, params) }; });
+    if (!action.sequence) items = items.filter(function (x) { return !x.ran; }).concat(items.filter(function (x) { return x.ran; }));
+    var firstUnrun = -1;
+    for (var fu = 0; fu < items.length; fu++) { if (!items[fu].ran) { firstUnrun = fu; break; } }
+    return items.map(function (x, pos) {
+      var v = x.v, i = x.i;
       var unfilled = OBOL.command.unfilledTokens(v.filled);
       var derived = unfilled.filter(function (t) { return DERIVED_TOKENS[t]; });
       var fillable = unfilled.filter(function (t) { return !DERIVED_TOKENS[t]; });
@@ -54,11 +64,14 @@
       var note = v.note ? '<div class="cmd-note">' + esc(v.note) + '</div>' : '';
       // hands-on guidance for obol web: big output → tee to a file and attach it in Evidence.
       var webNote = v.webNote ? '<div class="cmd-webnote">✋ ' + esc(v.webNote) + '</div>' : '';
-      var label = action.sequence ? ('step ' + (i + 1)) : (i === 0 ? 'preferred' : 'alt ' + i);
-      return '<div class="cmd' + (fillable.length ? ' cmd-fillable' : '') + '"'
+      var label = action.sequence ? ('step ' + (i + 1))
+        : (x.ran ? 'already run' : (pos === firstUnrun ? 'preferred' : 'alt ' + pos));
+      var ranTag = (x.ran && !action.sequence)
+        ? '<span class="cmd-ran" title="obol saw this command in your run ledger — run the next one instead">✓ ran</span>' : '';
+      return '<div class="cmd' + (x.ran ? ' cmd-ran-done' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
         + (fillable.length ? ' data-tmpl="' + U.attr(v.filled) + '"' : '') + '>'
         + '<div class="cmd-head"><span class="cmd-tag">' + esc(v.tool || action.tool || 'cmd') + '</span>'
-        + '<span class="cmd-variant">' + label + '</span>'
+        + '<span class="cmd-variant">' + label + '</span>' + ranTag
         + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '" title="Copy command">copy</button></div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
         + fillRow + note + webNote + warn + '</div>';
