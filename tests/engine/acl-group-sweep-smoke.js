@@ -60,5 +60,21 @@ ok(jg.filter(function (g) { return g === 'exchange windows permissions'; }).leng
 // a get-writable label that ALSO carries an abuse verb (paste recovery) still parses the join
 ok(joinedGroups("bloodyAD ... get writable --detail  bloodyAD ... add groupMember \"DnsAdmins\" svc", '[+] svc added to DnsAdmins').indexOf('dnsadmins') >= 0, 'an abuse verb is parsed even when the widened label also contains "get writable"');
 
+// ---- "already a member" is confirmation, not failure (a prior sweep already joined the group) ----
+var alreadyOut = ['Traceback (most recent call last):', '  File ".../bloodyAD", line 6, in <module>',
+  'badldap.commons.exceptions.LDAPModifyException: entryAlreadyExists for CN=Exchange Windows Permissions,OU=Microsoft Exchange Security Groups,DC=corp,DC=local (Attr) - Reason:(ERROR_MEMBER_IN_ALIAS) The specified account name is already a member of the group.'].join('\n');
+var am = joinedGroups('bloodyAD -d corp.local --host 10.0.0.5 -u svc -p \'pw\' add groupMember "Exchange Windows Permissions" svc', alreadyOut);
+ok(am.indexOf('exchange windows permissions') >= 0, '"already a member" (entryAlreadyExists / MEMBER_IN_ALIAS) records the membership instead of failing');
+
+// ---- commandWasRun: obol knows a suggested command is one you already ran ----
+var params = { domain: 'corp.local', target: '10.0.0.5', username: 'svc', password: 'pw' };
+var acts = [{ command: "bloodyAD -d corp.local --host 10.0.0.5 -u svc -p 'pw' get writable --detail" }];
+ok(OBOL.command.commandWasRun("bloodyAD -d corp.local --host 10.0.0.5 -u svc -p 'pw' get writable --detail", acts, params) === true, 'a variant matching a ledger command is recognized as already run');
+ok(OBOL.command.commandWasRun("bloodyAD -d corp.local --host 10.0.0.5 -u svc -p 'pw' add dcsync svc", acts, params) === false, 'a distinct command (add dcsync) is NOT marked run just because get-writable was');
+// the single add you already ran is recognized even though its group came from the ledger, not the template
+var acts2 = [{ command: 'bloodyAD ... add groupMember "Exchange Windows Permissions" svc' }];
+ok(OBOL.command.commandWasRun('bloodyAD -d corp.local --host 10.0.0.5 -u svc -p \'pw\' add groupMember "Exchange Windows Permissions" svc', acts2, params) === true, 'the exact add you ran (Exchange Windows Permissions) is marked already run');
+ok(OBOL.command.commandWasRun('bloodyAD ... add groupMember "DnsAdmins" svc', acts2, params) === false, 'an add for a DIFFERENT group is not marked run');
+
 console.log(fail ? ('\nACL GROUP SWEEP: ' + fail + ' FAILURES') : '\nACL GROUP SWEEP: all passed');
 process.exit(fail ? 1 : 0);
