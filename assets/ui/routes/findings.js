@@ -16,12 +16,17 @@
   function gather() {
     var facts = OBOL.store.factSet();
     var meta = root.OBOL_REPORTMETA || null;
-    var out = [];
+    var out = [], seen = {};
+    function push(fnd) {
+      var key = fnd.title.toLowerCase() + '|' + fnd.host;
+      if (seen[key]) return; seen[key] = 1; out.push(fnd);
+    }
+    // 1) catalogued finding.* facts (web-check parsers), enriched from reportmeta when loaded.
     facts.facts.forEach(function (f) {
       if (f.state !== 'supported' || f.kind.indexOf('finding.') !== 0) return;
       var v = f.value || {};
       var enrich = (meta && (v.card || v.lane) && meta.cards) ? (meta.cards[v.card] || {}) : {};
-      out.push({
+      push({
         title: v.title || v.name || f.kind.split('.').slice(1).join('.'),
         category: v.category || f.kind.split('.')[1] || 'finding',
         severity: normSev(v.severity),
@@ -31,6 +36,26 @@
         refs: v.cve || enrich.cve || '',
       });
     });
+    // 2) derive findings from what the operator actually RAN and PROVED: an activity whose action
+    // carries a report block and that minted at least one fact IS a finding (no over-claim — it's
+    // tied to real evidence). This is what fills the roll-up on AD/host boxes with no web checks.
+    var eng = OBOL.store.active() || {};
+    var actions = (OBOL.packs && OBOL.packs.actions) ? OBOL.packs.actions() : [];
+    var byId = {}; actions.forEach(function (a) { byId[a.id] = a; });
+    (eng.activities || []).forEach(function (act) {
+      if (!act || !act.action_id || !(act.produced || []).length) return;
+      var a = byId[act.action_id]; if (!a || !a.report || !a.report.finding) return;
+      var sev = normSev(a.report.severity);
+      if (sev === 'info') return; // skip informational-only recon notes
+      push({
+        title: a.report.finding,
+        category: (a.produces && a.produces[0] ? a.produces[0].split('.')[0] : 'finding'),
+        severity: sev,
+        host: (act.scope || '').replace(/^host:/, '').replace(/^domain:/, '') || act.target || 'engagement',
+        evidence: act.command || '',
+        remediation: '', refs: '',
+      });
+    });
     return out;
   }
 
@@ -38,7 +63,7 @@
     var findings = gather();
     if (!findings.length) {
       return '<section class="findings-route"><h1 class="route-h1">Findings</h1>'
-        + '<p class="route-sub">No findings yet. Run the findings-check moves (HTTP headers, TLS, methods, CORS, DNS email, component CVEs…) and paste the output on Evidence — catalogued findings roll up here across every host.</p></section>';
+        + '<p class="route-sub">No findings yet. Run coach moves and paste the output on Evidence — every move that carries a report finding (anonymous bind, AS-REP roastable, weak password, exposed shares, HTTP/TLS checks…) rolls up here across every host once it is proven.</p></section>';
     }
     var bySev = {}; SEV_ORDER.forEach(function (s) { bySev[s] = []; });
     findings.forEach(function (f) { (bySev[f.severity] = bySev[f.severity] || []).push(f); });

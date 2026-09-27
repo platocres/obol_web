@@ -440,10 +440,20 @@ function serve() {
       'clicking the swatch again restores the nodes');
   }
 
-  // Findings roll-up renders (lazy route — wait for the element, not a fixed sleep).
+  // Findings roll-up: a move the operator RAN that carries a report finding rolls up here, even with
+  // no web-check finding.* facts (the AD case that used to leave this page empty).
+  await page.evaluate(() => {
+    window.OBOL.store.update((e) => {
+      e.activities = e.activities || [];
+      e.activities.unshift({ at: Date.now(), command: "nxc ldap 10.10.10.10 -u '' -p '' --users", source: 'paste',
+        tool: 'nxc', target: '10.10.10.10', scope: 'host:10.10.10.10', action_id: 'ad-anon-ldap-enum', produced: ['ad.anonymous_bind', 'ad.user_list'] });
+    }, 'seed');
+  });
   await page.goto(`http://localhost:${PORT}/index.html#/findings`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.findings-route', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.findings-route').count() === 1, 'findings roll-up route renders');
+  ok(await page.locator('.finding').count() >= 1, 'a run move with a report finding rolls up (' + (await page.locator('.finding').count()) + ')');
+  ok((await page.locator('.findings-route').textContent() || '').indexOf('Anonymous LDAP Bind Permitted') !== -1, 'the derived finding names the issue (Anonymous LDAP Bind Permitted)');
 
   // Proof screenshot attaches and embeds into the report.
   await page.goto(`http://localhost:${PORT}/index.html#/evidence`, { waitUntil: 'networkidle' });
