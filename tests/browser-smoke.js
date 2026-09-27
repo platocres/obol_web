@@ -203,6 +203,11 @@ function serve() {
   // Redaction is opt-in: a recovered password shows in cleartext by default (not dots).
   const aliceSecret = (await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-secret').textContent()) || '';
   ok(aliceSecret.indexOf('S3cret!') !== -1 && aliceSecret.indexOf('•') === -1, 'the credential switcher shows the real password by default (redaction is opt-in), got "' + aliceSecret + '"');
+  // the live context RAIL's Credentials card also shows the recovered secret (not just user@domain).
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(150);
+  const railSecret = (await page.locator('.context-rail .rail-secret').first().textContent().catch(() => '')) || '';
+  ok(railSecret.indexOf('S3cret!') !== -1, 'the coach rail Credentials card shows the recovered password, got "' + railSecret + '"');
   // …and the report's Redact Secrets toggle masks it here too.
   await page.evaluate(() => { window.OBOL.store.update((e) => { e.ui = e.ui || {}; e.ui.reportRedact = true; }, 'ui'); window.OBOL.app.renderSidebar(); });
   await page.waitForTimeout(80);
