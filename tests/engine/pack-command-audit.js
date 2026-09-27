@@ -34,5 +34,21 @@ names.forEach(function (fname) {
 });
 
 if (!fail) console.log('  ok  : ' + checked + ' pack commands, none match the broken-command denylist');
+
+// Ordering: on the ACL-abuse move the DCSync GRANT (add dcsync) must come before the tangential
+// set-owner / genericAll edges, so once you have joined a WriteDACL group the coach promotes the grant
+// (the real cash-in) as the next step — not an unrelated WriteOwner primitive.
+(function () {
+  var adPack = JSON.parse(fs.readFileSync(path.join(PACKS, 'ad_2026_09.json'), 'utf8'));
+  var acl = (adPack.actions || []).filter(function (a) { return a.id === 'bloodyad-acl'; })[0];
+  if (!acl) { bad('bloodyad-acl move not found'); return; }
+  var runs = (acl.commands || []).map(function (c) { return c.run || ''; });
+  function idxOf(sub) { for (var i = 0; i < runs.length; i++) if (runs[i].indexOf(sub) >= 0) return i; return -1; }
+  var dcsync = idxOf('add dcsync'), owner = idxOf('set owner'), generic = idxOf('add genericAll');
+  if (dcsync < 0) bad('bloodyad-acl: no `add dcsync` grant command');
+  else if (owner >= 0 && dcsync > owner) bad('bloodyad-acl: `add dcsync` (the DCSync cash-in) must be ordered BEFORE `set owner`');
+  else if (generic >= 0 && dcsync > generic) bad('bloodyad-acl: `add dcsync` must be ordered BEFORE `add genericAll`');
+  else console.log('  ok  : ACL-abuse move promotes the DCSync grant ahead of the tangential owner/genericAll edges');
+})();
 console.log(fail ? ('\nPACK COMMAND AUDIT: ' + fail + ' FAILURES') : '\nPACK COMMAND AUDIT: all passed');
 process.exit(fail ? 1 : 0);
