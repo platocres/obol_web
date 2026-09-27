@@ -158,6 +158,8 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-width: 1720px; }
 .route-h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .01em; }
 .route-sub { color: var(--text-2); margin: 0 0 20px; max-width: 70ch; }
+.kbd-hint { display: inline-block; margin-left: 6px; color: var(--muted); font-size: 12.5px; }
+.kbd-hint kbd { font: 11px var(--mono); background: var(--bg2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; color: var(--text); }
 
 /* ---- coach ---- */
 .coach-hero { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; padding: 18px 20px; background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 22px; }
