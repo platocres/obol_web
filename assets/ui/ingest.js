@@ -27,6 +27,66 @@
     return '';
   }
 
+  // The parser dispatch keys on the command that produced the output — which tool ran, with which
+  // flags. When the operator pastes raw output with NO command (a redirected file, a screenshot's text,
+  // any tool run out of obol's suggested order, or a paste dropped on a move whose tool it isn't),
+  // recover a routing hint from the paste itself: every command-ish line (a shell-prompt line, OR a line
+  // that leads with a tool obol parses) plus content signatures for output that names its own tool. What
+  // is recovered is only ADDED to the dispatch label — never to lineage — and every parser stays
+  // content/proof-bound, so a recovered token can ENABLE the right parser but can never manufacture a
+  // fact the output doesn't support. Ported from obol-local's _sniff_command / _content_signatures.
+  var TOOL_HINTS = {};
+  ('nmap rustscan masscan nxc netexec crackmapexec cme ldapsearch smbclient smbmap rpcclient '
+    + 'enum4linux enum4linux-ng gpp-decrypt wpscan kerbrute getnpusers getnpusers.py getuserspns '
+    + 'getuserspns.py secretsdump secretsdump.py certipy certipy-ad bloodyad bloodhound '
+    + 'bloodhound-python sharphound evil-winrm hashcat john responder ntlmrelayx ntlmrelayx.py getst '
+    + 'getst.py gettgt gettgt.py wmiexec wmiexec.py psexec psexec.py smbexec atexec dcomexec lookupsid '
+    + 'lookupsid.py rubeus pywhisker sccmhunter sharpsccm impacket-secretsdump impacket-getuserspns '
+    + 'impacket-getnpusers nikto nuclei feroxbuster ffuf gobuster dirb whatweb httpx curl wget sqlmap '
+    + 'hydra dig host fierce dnsrecon volatility vol.py git-dumper ike-scan penelope ftp lftp snmpwalk '
+    + 'onesixtyone showmount rpcinfo id whoami sudo uname hostname ipconfig ifconfig systeminfo net '
+    + 'wevtutil').split(' ').forEach(function (t) { TOOL_HINTS[t] = 1; });
+  var PROMPT_SIGIL_RE = /[#$][ \t]+(\S.*\S|\S)\s*$/;
+  function sniffCommand(text) {
+    var lines = String(text || '').split(/\r?\n/), hits = [], seen = {};
+    for (var i = 0; i < lines.length && i < 600 && hits.length < 12; i++) {
+      var raw = lines[i], line = raw.trim();
+      if (!line) continue;
+      var m = PROMPT_SIGIL_RE.exec(raw), cand = '';
+      if (m) { cand = m[1].trim(); }
+      else {
+        var first = line.split(/\s+/)[0], base = first.split('/').pop().toLowerCase();
+        if (TOOL_HINTS[base] || TOOL_HINTS[first.toLowerCase()]) cand = line;
+      }
+      if (!cand || seen[cand]) continue;
+      var tok = cand.split(/\s+/)[0].split('/').pop().toLowerCase();
+      if (m || TOOL_HINTS[tok] || TOOL_HINTS[tok.replace(/\.py$/, '')]) { seen[cand] = 1; hits.push(cand); }
+    }
+    return hits.join('  ');
+  }
+  // Each pattern is specific enough that a match means "this really is that tool's output". The token is
+  // shaped to the dispatcher's gate (nmap/nxc gates require a trailing space, so tokens carry one).
+  var CONTENT_SIGNATURES = [
+    [/Nmap scan report for|Starting Nmap|^PORT\s+STATE\s+SERVICE/im, 'nmap scan'],
+    [/^(?:SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+\s+\S+\s+\[[-*+]\]/m, 'nxc smb'],
+    [/^\S+:\d+:[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::/m, 'secretsdump'],
+    [/\$krb5tgs\$/, 'getuserspns'],
+    [/\$krb5asrep\$/, 'getnpusers'],
+    [/SCCMHunter|NetworkAccess(?:Username|Password|Account)\s*[:=]/i, 'sccmhunter'],
+  ];
+  function contentSignatures(text) {
+    var body = String(text || ''), out = [];
+    for (var i = 0; i < CONTENT_SIGNATURES.length; i++) if (CONTENT_SIGNATURES[i][0].test(body)) out.push(CONTENT_SIGNATURES[i][1]);
+    return out.join('  ');
+  }
+  // The command actually passed to the dispatch: the honest command, widened with anything the paste
+  // reveals about which tool(s) it came from. Never narrows, only adds.
+  function dispatchLabel(cmd, text) {
+    var recovered = [sniffCommand(text), contentSignatures(text)].filter(Boolean).join('  ');
+    if (!recovered) return cmd;
+    return cmd ? (cmd + '  ' + recovered) : recovered;
+  }
+
   function ready() { return !!(OBOL.parsers && OBOL.parsers.parseActionOutput); }
   // Resolve to true once the (lazily-loaded) parser group is available.
   function ensureParsers() {
@@ -50,12 +110,15 @@
     // (e.g. raw redirected output); nmap XML still self-identifies from its <nmaprun args>.
     var derived = deriveCommand(text);
     var cmd = derived || (opts.command && opts.command.trim()) || '';
+    // Widen the DISPATCH label with whatever the paste reveals about its tool, so output-only pastes and
+    // out-of-order evidence still reach the right parser. Lineage/tool below stay the honest `cmd`.
+    var dispatchCmd = dispatchLabel(cmd, text);
     var eng = OBOL.store.active();
     var params = (eng && eng.params) || {};
     var scope = 'host:' + (params.target || 'target');
     var res, parseError = '';
     try {
-      res = OBOL.parsers.parseActionOutput({ command: cmd, stdout: text, source: opts.fileName || cmd || 'paste', scope: scope, domain: params.domain || '' });
+      res = OBOL.parsers.parseActionOutput({ command: dispatchCmd, stdout: text, source: opts.fileName || cmd || 'paste', scope: scope, domain: params.domain || '' });
     } catch (e) { res = { facts: [] }; parseError = (e && e.message) || 'parse failed'; }
     if (res && res.error) parseError = res.error; // a sub-parser threw but earlier facts survived
     var facts = (res && res.facts) || [];
@@ -75,5 +138,6 @@
     return { ok: true, added: added, facts: facts, cmd: cmd, lines: lines, fileName: opts.fileName || '', parseError: parseError };
   }
 
-  OBOL.ingest = { run: run, deriveCommand: deriveCommand, ensureParsers: ensureParsers, ready: ready };
+  OBOL.ingest = { run: run, deriveCommand: deriveCommand, sniffCommand: sniffCommand,
+    contentSignatures: contentSignatures, dispatchLabel: dispatchLabel, ensureParsers: ensureParsers, ready: ready };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
