@@ -601,6 +601,20 @@ function serve() {
 
   ok(errors.length === 0, 'no console errors (' + errors.length + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : '') + ')');
 
+  // Boot must NOT hang when indexedDB.open is BLOCKED (another obol tab holding the DB, or a pending
+  // Full-Reset delete) — openDB fires onblocked and never success/error. Stub that and assert the app
+  // still boots (falls back to the localStorage snapshot + default seed) instead of the 2-min blank page.
+  const blocked = await browser.newPage();
+  await blocked.addInitScript(() => {
+    indexedDB.open = function () { var req = {}; setTimeout(function () { if (req.onblocked) req.onblocked({}); }, 10); return req; };
+  });
+  await blocked.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'domcontentloaded' });
+  const bootedBlocked = await blocked.waitForFunction(
+    () => document.documentElement.getAttribute('data-obol-boot') === 'ready' && ((document.getElementById('view') || {}).innerHTML || '').length > 50,
+    { timeout: 6000 }).then(() => true).catch(() => false);
+  ok(bootedBlocked, 'boot completes via fallback when IndexedDB.open is blocked (no infinite hang)');
+  await blocked.close();
+
   await browser.close();
   server.close();
   console.log(fail ? ('\nBROWSER SMOKE: ' + fail + ' FAILURES') : '\nBROWSER SMOKE: all passed');

@@ -33,15 +33,31 @@
   function openDB() {
     return new Promise(function (resolve, reject) {
       if (typeof indexedDB === 'undefined') { reject(new Error('no-indexeddb')); return; }
-      var req = indexedDB.open(DB_NAME, DB_VERSION);
+      var settled = false;
+      function done(fn, arg) { if (!settled) { settled = true; fn(arg); } }
+      var req;
+      try { req = indexedDB.open(DB_NAME, DB_VERSION); } catch (e) { reject(e); return; }
+      // Another obol tab holding an older DB version open — or a pending deleteDatabase from a Full
+      // Reset — BLOCKS this open, which then fires onblocked and NEVER fires success/error. Without a
+      // handler the boot Promise hangs forever (the 2-minute blank page). Bail so init() falls back to
+      // the localStorage snapshot and the app still boots; closing the other tab + reload restores IDB.
+      req.onblocked = function () { done(reject, new Error('idb-open-blocked')); };
       req.onupgradeneeded = function (e) {
         var db = e.target.result;
         if (!db.objectStoreNames.contains('engagements')) db.createObjectStore('engagements', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('blobs')) db.createObjectStore('blobs', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
       };
-      req.onsuccess = function () { resolve(req.result); };
-      req.onerror = function () { reject(req.error || new Error('idb-open-failed')); };
+      req.onsuccess = function () {
+        var db = req.result;
+        // Never be the tab that blocks ANOTHER tab's upgrade/reset — close this connection on demand.
+        try { db.onversionchange = function () { try { db.close(); } catch (e) {} }; } catch (e2) {}
+        done(resolve, db);
+      };
+      req.onerror = function () { done(reject, req.error || new Error('idb-open-failed')); };
+      // Hard safety net: if IndexedDB fires nothing at all (some private-mode/locked states), don't
+      // hang boot — reject after a bounded wait so the snapshot fallback + default seed still run.
+      setTimeout(function () { done(reject, new Error('idb-open-timeout')); }, 8000);
     });
   }
 
