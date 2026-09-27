@@ -277,21 +277,40 @@
   // tool name, flags, param values (target/domain/user/secret/…), paths, numbers and shell scaffolding
   // stripped out. Two commands with the same action tokens are "the same move" regardless of which host or
   // credential filled them, so this is how obol tells that a suggested command is one you already ran.
+  // Long flags that only say WHERE/HOW to connect, not what the move does — dropped so `--host`/`--dc-ip`
+  // don't drown out the real action, and so a run with `--detail` matches one without it.
+  var _PLUMBING_FLAGS = { host: 1, 'dc-ip': 1, 'dc-host': 1, dns: 1, domain: 1, port: 1, timeout: 1, detail: 1,
+    json: 1, threads: 1, jitter: 1, nameserver: 1, 'no-pass': 1, gc: 1, 'min-rate': 1 };
+  // Bare words that are shell scaffolding or output plumbing, never an action.
+  var _NOISE_WORDS = { 'for': 1, 'in': 1, 'do': 1, 'done': 1, 'then': 1, 'fi': 1, 'else': 1, 'echo': 1,
+    'sudo': 1, 'while': 1, 'tee': 1, 'cat': 1 };
   function _actionSig(cmd, params) {
-    var head = String(cmd || '').split(/\||;|&&|>/)[0];          // drop pipe/redirect/tee/`; done` tails
-    var toks = head.trim().split(/\s+/);
+    // Process the WHOLE pipeline (do NOT stop at the first pipe): the transform after a `|` — awk / grep /
+    // sort in a HANDOFF — is exactly what distinguishes `nxc … --users | tee` from `… | awk | grep | sort`,
+    // so two commands that share a prefix but differ downstream must NOT collapse to the same signature.
+    var toks = String(cmd || '').trim().split(/\s+/);
     var vals = {};
     ['target', 'domain', 'username', 'user', 'password', 'nthash', 'lhost', 'lport', 'rhost'].forEach(function (k) {
       var v = params && params[k]; if (v) vals[String(v).toLowerCase()] = 1;
     });
-    var NOISE = { 'for': 1, 'in': 1, 'do': 1, 'done': 1, 'then': 1, 'fi': 1, 'echo': 1, 'sudo': 1, 'while': 1 };
     var out = {};
-    for (var i = 1; i < toks.length; i++) {                       // skip the tool token itself
-      var t = toks[i].replace(/^["']+|["']+$/g, '');
-      if (!t || t.charAt(0) === '-') continue;                    // flags
+    for (var i = 1; i < toks.length; i++) {                       // skip the leading tool token only
+      var raw = toks[i];
+      if (/^(?:\||\|\||&&|;|>|>>|<)$/.test(raw)) continue;        // shell operators
+      var t = raw.replace(/^["']+|["']+$/g, '');                  // strip surrounding quotes
+      if (!t) continue;
+      if (t.charAt(0) === '-') {                                  // KEEP action long flags (--users/--asreproast),
+        if (t.charAt(1) === '-' && t.length > 3) {                // drop short flags (-u/-p) and plumbing long flags
+          var lf = t.replace(/^--/, '').toLowerCase();
+          if (!vals[lf] && !_PLUMBING_FLAGS[lf]) out[lf] = 1;
+        }
+        continue;
+      }
       var lt = t.toLowerCase();
-      if (vals[lt] || NOISE[lt]) continue;                        // a param value or shell keyword
-      if (/[\/@\\=$]/.test(t) || /^\d+$/.test(t) || lt.length < 2) continue; // paths/values/$g/numbers/single chars
+      if (vals[lt] || _NOISE_WORDS[lt]) continue;                 // param value or shell/plumbing word
+      if (/^\d+$/.test(t) || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(t)) continue; // number or IP
+      if (/[\/@\\=]/.test(t) || t.indexOf('$') >= 0) continue;    // path/email/kv or shell var ($g)
+      if (lt.length < 2) continue;
       out[lt] = 1;
     }
     return out;

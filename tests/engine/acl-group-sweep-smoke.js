@@ -76,5 +76,14 @@ var acts2 = [{ command: 'bloodyAD ... add groupMember "Exchange Windows Permissi
 ok(OBOL.command.commandWasRun('bloodyAD -d corp.local --host 10.0.0.5 -u svc -p \'pw\' add groupMember "Exchange Windows Permissions" svc', acts2, params) === true, 'the exact add you ran (Exchange Windows Permissions) is marked already run');
 ok(OBOL.command.commandWasRun('bloodyAD ... add groupMember "DnsAdmins" svc', acts2, params) === false, 'an add for a DIFFERENT group is not marked run');
 
+// REGRESSION: two commands sharing an `nxc … --users` prefix but differing AFTER the pipe (a plain tee
+// vs. an awk|grep|sort HANDOFF) must NOT collapse — running the plain enum must not tag the HANDOFF run.
+var lp = { target: '10.129.95.210', domain: 'htb.local' };
+var ranActs = [{ command: "nxc ldap 10.129.95.210 -u '' -p '' --users | tee ~/CTF/HTB/boxes/Windows/forest/scans/ldap-users.txt" }];
+ok(OBOL.command.commandWasRun("nxc ldap 10.129.95.210 -u '' -p '' --users | tee ~/CTF/HTB/boxes/Windows/forest/scans/ldap-users.txt", ranActs, lp) === true, 'the exact nxc --users enum you ran is marked run');
+ok(OBOL.command.commandWasRun("nxc ldap 10.129.95.210 -u '' -p '' --users | awk '{print $5}' | grep -vE '^-Username|^\\[|^SM_' | sort -u | tee ~/CTF/HTB/boxes/Windows/forest/scans/loot/users.txt", ranActs, lp) === false, 'the awk|grep|sort HANDOFF is NOT marked run just because the nxc enum before its pipe was');
+// and a genuinely different nxc action (--asreproast) is not confused with --users
+ok(OBOL.command.commandWasRun("nxc ldap 10.129.95.210 -u user -p pass --asreproast out.txt", ranActs, lp) === false, 'a different nxc action (--asreproast) is not marked run from a --users run');
+
 console.log(fail ? ('\nACL GROUP SWEEP: ' + fail + ' FAILURES') : '\nACL GROUP SWEEP: all passed');
 process.exit(fail ? 1 : 0);
