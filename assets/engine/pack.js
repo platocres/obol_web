@@ -40,6 +40,7 @@
     this.autonomy = d.autonomy || '';
     this.requires_all = (d.requires_all || []).slice();
     this.requires_any = (d.requires_any || []).slice();
+    this.obsoleted_by = (d.obsoleted_by || []).slice();
     this.produces = (d.produces || []).slice();
     this.hypothesis = d.hypothesis || '';
     this.tools = (d.tools || []).slice();
@@ -60,6 +61,14 @@
     var have = facts.kinds();
     for (var i = 0; i < pk.length; i++) { if (!have[pk[i]]) return false; }
     return true;
+  };
+
+  Action.prototype.obsolete = function (facts) {
+    // True once a later achievement makes this move pointless — e.g. the coercion→relay lane is moot
+    // after a completed DCSync (loot.ntds). Retired like a settled move: dropped from the ready list and
+    // the blocked list alike, so the coach stops steering you toward a means to an end you already hold.
+    for (var i = 0; i < this.obsoleted_by.length; i++) { if (facts.has(this.obsoleted_by[i])) return true; }
+    return false;
   };
 
   Action.prototype.eligible = function (facts) {
@@ -294,7 +303,7 @@
     var doneIds = opts.doneIds || {};
     var focus = opts.focusPrefixes || [];
     var live = pack.filter(function (a) {
-      return a.eligible(facts) && !a.settled(facts) && !doneIds[a.id];
+      return a.eligible(facts) && !a.settled(facts) && !a.obsolete(facts) && !doneIds[a.id];
     });
     var frontier = P.frontierIndex(facts);
 
@@ -324,7 +333,7 @@
     var frontier = P.frontierIndex(facts);
     var out = [];
     pack.forEach(function (a) {
-      if (a.eligible(facts) || a.settled(facts)) return;
+      if (a.eligible(facts) || a.settled(facts) || a.obsolete(facts)) return;
       if (!osCompatible(facts, a.os)) return;
       out.push({ action: a, reason: a.unmet(facts) });
     });
@@ -338,7 +347,7 @@
   }
 
   function blockedActions(facts, pack) {
-    var blocked = pack.filter(function (a) { return !a.eligible(facts) && !a.settled(facts); });
+    var blocked = pack.filter(function (a) { return !a.eligible(facts) && !a.settled(facts) && !a.obsolete(facts); });
     return blocked.slice().sort(function (a, b) { return b.priority - a.priority; });
   }
 

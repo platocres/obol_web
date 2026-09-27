@@ -130,7 +130,20 @@
     _add(facts, mkFact('hash.ntlm', scope, { count: entries.length, entries: entries }, S, source));
     _add(facts, mkFact('credential.candidate', scope, { kind: 'ntlm_hash', count: entries.length }, S, source));
     if (krbtgtNt) _add(facts, mkFact('hash.krbtgt', scope, { nthash: krbtgtNt }, S, source));
-    if (ntdsContext) _add(facts, mkFact('loot.ntds', scope, { count: entries.length, method: 'credential-dump' }, S, source));
+    if (ntdsContext) {
+      _add(facts, mkFact('loot.ntds', scope, { count: entries.length, method: 'credential-dump' }, S, source));
+      // The dump hands you every account's NT hash — surface the built-in Administrator (RID 500) as a
+      // ready-to-use credential so it lands on the credential cards and pass-the-hash commands fill from it.
+      // This is the one that owns the domain; the full set stays in hash.ntlm for the report.
+      var domainName = C._domain_from_facts(ws) || '';
+      var admin = entries.filter(function (e) { return e.rid === 500; })[0]
+        || entries.filter(function (e) { return e.user.toLowerCase() === 'administrator'; })[0];
+      if (admin && admin.nthash && admin.nthash !== '31d6cfe0d16ae931b73c59d7e0c089c0') {
+        var av = { user: admin.user, nthash: admin.nthash, method: 'dcsync', hash_type: 'ntlm' };
+        if (domainName) av.domain = domainName;
+        _add(facts, mkFact('credential.available', scope, av, S, source));
+      }
+    }
   }
   C._parse_ntlm_dump = _parse_ntlm_dump;
 

