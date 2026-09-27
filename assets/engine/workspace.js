@@ -77,8 +77,26 @@
     '}',
     'precmd_functions+=(obol_stamp)',
   ].join('\n');
+  // Pin the stamp to a specific interface when the operator has told obol which one their VM uses (from the
+  // engagement setup). It reads that adapter's address directly and labels the stamp with its name — which
+  // ingest.detectLhost keys on. Falls back to the auto-detecting default when no interface is configured.
+  function promptStamp(iface) {
+    if (!iface || !/^[a-z][a-z0-9.:_-]{0,14}$/i.test(iface)) return PROMPT_STAMP_ZSH;
+    return [
+      '# obol: stamp each prompt with the UTC time + ' + iface + ' IP (keeps your existing prompt).',
+      'obol_stamp() {',
+      '  local ip',
+      '  ip=$(ip -4 -o addr show ' + iface + ' 2>/dev/null | awk \'{split($4,a,"/"); print a[1]; exit}\')',
+      '  print -P "%F{244}[$(date -u \'+%Y-%m-%d %H:%M:%S UTC\')]${ip:+ [' + iface + ':$ip]}%f"',
+      '}',
+      'precmd_functions+=(obol_stamp)',
+    ].join('\n');
+  }
   // Append it to ~/.zshrc and reload — idempotent (the guard skips a second append).
-  var PROMPT_STAMP_INSTALL = "grep -q obol_stamp ~/.zshrc || cat >> ~/.zshrc <<'OBOL_ZSH'\n" + PROMPT_STAMP_ZSH + "\nOBOL_ZSH\nsource ~/.zshrc";
+  function promptStampInstall(iface) {
+    return "grep -q obol_stamp ~/.zshrc || cat >> ~/.zshrc <<'OBOL_ZSH'\n" + promptStamp(iface) + "\nOBOL_ZSH\nsource ~/.zshrc";
+  }
+  var PROMPT_STAMP_INSTALL = promptStampInstall('');
   // Capture a whole session to a file to import in one go (portable: works without the prompt tweak, but
   // timestamps come out best WITH it). `script` records everything you run + its output, timing included.
   function captureCmd(eng) {
@@ -89,6 +107,7 @@
   OBOL.workspace = {
     LAYOUT: LAYOUT, DEFAULT_BASE: DEFAULT_BASE,
     PROMPT_STAMP_ZSH: PROMPT_STAMP_ZSH, PROMPT_STAMP_INSTALL: PROMPT_STAMP_INSTALL,
+    promptStamp: promptStamp, promptStampInstall: promptStampInstall,
     slugify: slugify, sanitizeRoot: sanitizeRoot, join: join, slugFor: slugFor, defaultRoot: defaultRoot,
     rootFor: rootFor, isConfigured: isConfigured, dirs: dirs, tokens: tokens, scaffold: scaffold,
     captureCmd: captureCmd,

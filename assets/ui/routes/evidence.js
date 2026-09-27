@@ -34,8 +34,9 @@
   // each through the same parsers. Collapsed by default so the single-command flow above stays primary.
   function importSection() {
     var ws = OBOL.workspace || {};
-    var stamp = ws.PROMPT_STAMP_ZSH || '';
     var eng = OBOL.store.active();
+    var iface = (eng && eng.params && eng.params.lhost_iface) || '';
+    var stamp = ws.promptStamp ? ws.promptStamp(iface) : (ws.PROMPT_STAMP_ZSH || '');
     var capture = ws.captureCmd ? ws.captureCmd(eng) : 'script -q -f session.log';
     var targets = (eng && eng.targets) || [];
     var tOpts = '<option value="auto">Auto-route by IP (recommended)</option>'

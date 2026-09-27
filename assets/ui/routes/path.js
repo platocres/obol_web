@@ -262,7 +262,7 @@
     if (OBOL.workspace.isConfigured(eng) && !((eng.ui || {}).wsScaffoldDone) && factCount < 3) {
       var scaffold = OBOL.workspace.scaffold(eng);
       var scandir = OBOL.workspace.tokens(eng).scandir;
-      var stamp = OBOL.workspace.PROMPT_STAMP_ZSH || '';
+      var stamp = OBOL.workspace.promptStamp ? OBOL.workspace.promptStamp((params || {}).lhost_iface || '') : (OBOL.workspace.PROMPT_STAMP_ZSH || '');
       html += '<div class="ws-banner">'
         + '<div class="ws-banner-h">📁 Set up your working directory — run this once on your Kali box:</div>'
         + '<pre class="cmd-run"><code>' + esc(scaffold) + '</code></pre>'

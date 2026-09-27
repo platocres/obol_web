@@ -103,6 +103,9 @@
       var lo = firstVal(facts, 'listener.open');
       if (lo && lo.lhost) ctx.lhost = lo.lhost;
     }
+    // iface: the operator's attacker interface (responder -I, mitm6 -i, …). Pinned from the engagement's
+    // configured VM interface, defaulting to tun0 — the VPN adapter for HTB/OSCP-style labs.
+    if (!ctx.iface) ctx.iface = params.lhost_iface || 'tun0';
 
     // credentials: prefer credential.available then credential.plaintext
     var creds = facts.values('credential.available');

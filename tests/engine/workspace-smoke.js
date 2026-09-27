@@ -60,6 +60,21 @@ ok(seg.length === 1 && seg[0].command === 'id' && seg[0].ts === Date.parse('2026
 ok(typeof W.captureCmd({ workspace: { root: '/h/k/box' } }) === 'string' && /^script /.test(W.captureCmd({ workspace: { root: '/h/k/box' } })),
   'captureCmd offers a `script` session-recording command');
 
+// the prompt stamp pins to a configured interface (reading that adapter directly, labelling with its name)
+const pinned = W.promptStamp('eth0');
+ok(/ip -4 -o addr show eth0\b/.test(pinned) && /\[eth0:\$ip\]/.test(pinned), 'promptStamp(iface) pins to the operator\'s configured interface');
+ok(W.promptStamp('') === W.PROMPT_STAMP_ZSH, 'promptStamp() with no interface falls back to auto-detect');
+ok(W.promptStamp('tun0; rm -rf ~') === W.PROMPT_STAMP_ZSH, 'a junk interface value is rejected (no shell injection into the snippet)');
+// the pinned stamp's emitted line must round-trip through ingest.detectLhost (obol reads back its own snippet)
+ok(ing.detectLhost('[2026-09-27 17:17:38 UTC] [eth0:10.0.2.15]') === '10.0.2.15', 'a pinned-interface stamp line is still read back as the operator LHOST');
+
+// {{iface}} command token: pinned from the engagement interface, else defaults to tun0
+const resp = { commands: [{ tool: 'responder', run: 'sudo responder -I {{iface}} -wv' }] };
+ok(C.fillCommand(resp, new OBOL.facts.FactSet([]), { params: { lhost_iface: 'eth0' } }, 0).filled === 'sudo responder -I eth0 -wv',
+  '{{iface}} fills from the engagement\'s configured interface');
+ok(C.fillCommand(resp, new OBOL.facts.FactSet([]), { params: {} }, 0).filled === 'sudo responder -I tun0 -wv',
+  '{{iface}} defaults to tun0 when no interface is configured (matches the old hardcoded value)');
+
 // the real AD pack's nmap discovery action now writes native output into {{scandir}}
 const PACKS_DIR = require('path').join(__dirname, '..', '..', 'data', 'packs');
 const ad = JSON.parse(require('fs').readFileSync(require('path').join(PACKS_DIR, 'ad_2026_09.json'), 'utf8'));
