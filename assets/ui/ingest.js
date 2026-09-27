@@ -66,9 +66,13 @@
   }
   // Each pattern is specific enough that a match means "this really is that tool's output". The token is
   // shaped to the dispatcher's gate (nmap/nxc gates require a trailing space, so tokens carry one).
+  // A token is a string, OR a function of the regex match returning the token — so a signature can carry
+  // through what it captured (the nxc PROTOCOL) instead of guessing. Emitting a fixed 'nxc smb' for every
+  // protocol banner was the bug: `nxc ldap` output wrongly recovered as `nxc smb`, which then marked the
+  // unrun `nxc smb` credential-check as ✓ ran.
   var CONTENT_SIGNATURES = [
     [/Nmap scan report for|Starting Nmap|^PORT\s+STATE\s+SERVICE/im, 'nmap scan'],
-    [/^(?:SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+\s+\S+\s+\[[-*+]\]/m, 'nxc smb'],
+    [/^(SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+\s+\S+\s+\[[-*+]\]/m, function (m) { return 'nxc ' + m[1].toLowerCase(); }],
     [/^\S+:\d+:[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::/m, 'secretsdump'],
     [/\$krb5tgs\$/, 'getuserspns'],
     [/\$krb5asrep\$/, 'getnpusers'],
@@ -79,7 +83,10 @@
   ];
   function contentSignatures(text) {
     var body = String(text || ''), out = [];
-    for (var i = 0; i < CONTENT_SIGNATURES.length; i++) if (CONTENT_SIGNATURES[i][0].test(body)) out.push(CONTENT_SIGNATURES[i][1]);
+    for (var i = 0; i < CONTENT_SIGNATURES.length; i++) {
+      var m = CONTENT_SIGNATURES[i][0].exec(body);
+      if (m) { var tok = CONTENT_SIGNATURES[i][1]; out.push(typeof tok === 'function' ? tok(m) : tok); }
+    }
     return out.join('  ');
   }
   // The command actually passed to the dispatch: the honest command, widened with anything the paste

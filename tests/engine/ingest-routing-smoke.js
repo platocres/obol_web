@@ -39,6 +39,11 @@ ok(kindsFromOutputOnly('$krb5asrep$23$user@CORP:aabbcc$ddeeff').kinds.indexOf('c
 // nxc SMB login banner, output only (no `nxc …` line)
 var nxc = kindsFromOutputOnly('SMB   10.0.0.5   445   DC01   [+] corp.local\\svc:Password1 (Pwn3d!)');
 ok(nxc.label.indexOf('nxc ') >= 0, 'an nxc SMB banner is recognized from content (routes to the nxc parsers)');
+// REGRESSION: the nxc content signature must recover the ACTUAL protocol, not a fixed `nxc smb`. Submitting
+// `nxc ldap` output used to recover `nxc smb`, which then falsely marked an UNRUN `nxc smb` check as ✓ ran.
+ok(OBOL.ingest.contentSignatures('LDAP   10.0.0.5   389   DC01   [+] corp.local\\:') === 'nxc ldap', 'nxc ldap output recovers `nxc ldap`, never `nxc smb`');
+ok(OBOL.ingest.contentSignatures('WINRM  10.0.0.5   5985  DC01   [+] corp.local\\svc:pw (Pwn3d!)') === 'nxc winrm', 'nxc winrm output recovers `nxc winrm`');
+ok(OBOL.ingest.contentSignatures('SMB    10.0.0.5   445   DC01   [+] corp.local\\svc:pw') === 'nxc smb', 'nxc smb output still recovers `nxc smb`');
 
 // sccmhunter NAA, output only
 var sccm = kindsFromOutputOnly(['[+] Recovered SCCM secrets', 'NetworkAccessUsername: CORP\\sccm_svc', 'NetworkAccessPassword: S3cret'].join('\n'));
