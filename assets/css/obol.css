@@ -121,9 +121,12 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 .cred-sub { display: flex; align-items: baseline; gap: 4px; padding-left: 13px; min-width: 0; }
 .cred-dom { font: 10.5px var(--mono); color: var(--muted); flex: 0 0 auto; }
 .cred-secret { font: 10.5px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.cred-copy { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; flex: 0 0 auto; }
-.cred-copy:hover { color: var(--accent); }
-.cred-copy-secret { margin-left: auto; align-self: center; font-size: 12px; }
+.cred-actions { display: flex; gap: 6px; padding-left: 13px; margin-top: 3px; }
+.cred-copy { display: inline-flex; align-items: center; gap: 4px; background: var(--bg3); border: 1px solid var(--line);
+  color: var(--text-2); cursor: pointer; font: 600 10.5px var(--sans); letter-spacing: .02em; padding: 2px 9px;
+  border-radius: 999px; line-height: 1.35; }
+.cred-copy:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.cred-copy .cc-ico { font-size: 11px; line-height: 1; }
 .cred-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 1px; flex: 0 0 auto; }
 .cred-del:hover { color: var(--red); }
 .cred-add-btn { width: 100%; background: none; border: 1px dashed var(--line); color: var(--muted); border-radius: 6px;

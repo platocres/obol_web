@@ -122,19 +122,25 @@
     var rows = creds.map(function (c, i) {
       var on = keyOf(c) === active;
       var secret = c.secret || c.nthash || '';
+      var secretLabel = c.type === 'NT' ? 'hash' : (c.type === 'OT' ? 'secret' : 'password');
+      // Layout: the two value rows read cleanly (name, then domain\secret), and a dedicated action row
+      // carries two LABELLED copy buttons so it is obvious which one lifts the username vs. the secret —
+      // no more two bare icons stacked in the corner. Clicking the card body still selects the credential.
       return '<div class="cred-row' + (on ? ' active' : '') + '" data-cred="' + i + '" role="button" tabindex="0"'
-        + ' aria-pressed="' + (on ? 'true' : 'false') + '" title="Fill commands with ' + esc(c.user) + '">'
+        + ' aria-pressed="' + (on ? 'true' : 'false') + '" title="Click to fill commands with ' + esc(c.user) + '">'
         + '<div class="cred-top">'
         + '<span class="cred-dot" aria-hidden="true"></span>'
         + '<span class="cred-user">' + esc(c.user) + '</span>'
         + '<span class="cred-type ' + typeClass(c.type) + '">' + esc(typeLabel(c.type)) + '</span>'
-        + (c.user ? '<button class="cred-copy cred-copy-user" type="button" data-copy="' + U.attr(c.user) + '" data-what="Username" title="Copy username" aria-label="Copy username">⧉</button>' : '')
         + (c.source === 'logged' ? '<button class="cred-del" type="button" data-cred="' + i + '" title="Remove credential" aria-label="Remove credential">×</button>' : '')
         + '</div>'
         + '<div class="cred-sub">'
         + (c.domain ? '<span class="cred-dom">' + esc(c.domain) + '\\</span>' : '')
         + '<span class="cred-secret"' + (!redact && secret ? ' title="' + U.attr(secret) + '"' : '') + '>' + esc(maskSecret(c, redact)) + '</span>'
-        + (secret ? '<button class="cred-copy cred-copy-secret" type="button" data-copy="' + U.attr(secret) + '" data-what="Secret" title="Copy secret" aria-label="Copy secret">⧉</button>' : '')
+        + '</div>'
+        + '<div class="cred-actions">'
+        + (c.user ? '<button class="cred-copy cred-copy-user" type="button" data-copy="' + U.attr(c.user) + '" data-what="Username" title="Copy username"><span class="cc-ico" aria-hidden="true">⧉</span> user</button>' : '')
+        + (secret ? '<button class="cred-copy cred-copy-secret" type="button" data-copy="' + U.attr(secret) + '" data-what="Secret" title="Copy ' + secretLabel + '"><span class="cc-ico" aria-hidden="true">⧉</span> ' + secretLabel + '</button>' : '')
         + '</div>'
         + '</div>';
     }).join('');
