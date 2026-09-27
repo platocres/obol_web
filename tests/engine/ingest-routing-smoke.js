@@ -56,5 +56,14 @@ var prose = 'The target was compromised through a series of steps. We enumerated
 ok(OBOL.ingest.dispatchLabel('', prose) === '', 'plain prose recovers no dispatch label (no misrouting)');
 ok(kindsFromOutputOnly(prose).kinds.length === 0, 'plain prose mints no facts');
 
+// ---- "ran but proved nothing" classification (drives retiring a move from the coach) ----
+var sccmFind = "sccmhunter.py find -u svc -p 'x' -d corp.local -dc-ip 10.0.0.5";
+var sccmEmpty = ['[02:01:11] INFO [*] Checking for System Management Container.', '[02:01:11] INFO [-] System Management Container not found.', '[02:01:12] INFO [-] No results found.'].join('\n');
+ok(OBOL.ingest.recognizesTool(sccmFind, sccmEmpty) === true, 'a real sccmhunter run is recognized as a tool that actually ran');
+ok(OBOL.ingest.looksLikeError(sccmEmpty) === false, 'a clean "No results found" is NOT read as an error (so the move can retire)');
+ok(OBOL.ingest.looksLikeError('bloodyAD: error: unrecognized arguments: svc-alfresco') === true, 'a usage/arg error IS an error (the move must NOT be retired — the operator will retry)');
+ok(OBOL.ingest.looksLikeError('LDAPModifyException: insufficientAccessRights ... Access is denied.') === true, 'an access-denied failure IS an error (not a clean negative)');
+ok(OBOL.ingest.recognizesTool('', 'the quick brown fox jumped over the lazy dog') === false, 'unrelated prose is not recognized as a tool run (never retires a move)');
+
 console.log(fail ? ('\nINGEST ROUTING: ' + fail + ' FAILURES') : '\nINGEST ROUTING: all passed');
 process.exit(fail ? 1 : 0);

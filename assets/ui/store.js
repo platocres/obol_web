@@ -349,6 +349,29 @@
       });
       return new OBOL.facts.FactSet(sel.map(OBOL.facts.factFromJson));
     },
+    // The identity of a target at a glance: IP + the hostname and AD domain obol has proven for it (or
+    // the domain the operator scoped). Both the target page and the engagement Attack Path render this,
+    // so "Hostname: FOREST / Domain: corp.local" fills in the moment the fact is captured. Empty strings
+    // for anything not yet known — the caller decides whether to show the slot or hide it.
+    targetIdentity(ip) {
+      var eng = this.active() || {};
+      var params = eng.params || {};
+      var tgt = (eng.targets || []).find(function (t) { return t.ip === ip || t.id === ip; }) || {};
+      var realIp = tgt.ip || ip;
+      var fs = this.factSetForTarget(realIp);
+      function first(kind, keys) {
+        var vals = fs.values(kind) || [];
+        for (var i = 0; i < vals.length; i++) {
+          for (var k = 0; k < keys.length; k++) { var v = vals[i] && vals[i][keys[k]]; if (v) return String(v).trim(); }
+        }
+        return '';
+      }
+      var fqdn = first('host.fqdn', ['fqdn', 'name']);
+      var hostname = (tgt.hostname || first('host.hostname', ['name']) || (fqdn ? fqdn.split('.')[0] : '')).trim();
+      var domain = (first('host.domain', ['domain']) || first('ad.domain_known', ['name']) || (params.domain || '')).trim();
+      if (!fqdn && hostname && domain) fqdn = hostname + '.' + domain;
+      return { ip: realIp, hostname: hostname, domain: domain, fqdn: fqdn };
+    },
     addFacts(facts, reason) {
       // facts: array of OBOL.facts (or serialized). Returns count actually added (deduped).
       var eng = this.active();

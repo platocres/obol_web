@@ -160,24 +160,35 @@
         break;
       }
     }
-    // …and, when BloodHound wasn't run, from a bloodyAD `get writable` lead (ad.acl_lead): point the
-    // ACL-abuse command at a real writable object instead of leaving {{group}} a placeholder. Prefer a
-    // membership-escalation group (Exchange Windows Permissions, DnsAdmins, …) over a bare object.
-    if (ctx.group === undefined || ctx.target_sam === undefined) {
-      var ABUSE_GROUPS = { 'exchange windows permissions': 1, 'organization management': 1, 'account operators': 1,
-        'dnsadmins': 1, 'backup operators': 1, 'server operators': 1, 'print operators': 1,
-        'domain admins': 1, 'enterprise admins': 1, 'administrators': 1 };
-      var bestGroup = '', firstTarget = '';
+    // …and, when BloodHound wasn't run, from a bloodyAD `get writable` lead (ad.acl_lead). obol does NOT
+    // guess which single group is the winner (that would hard-code one lab's path): it ranks the abusable
+    // groups the lead actually shows and lets the operator try them until one unlocks with evidence.
+    //   {{group}}                — the top-ranked candidate to try first (a starting point, not the answer)
+    //   {{abuse_groups_quoted}}  — every reasonable candidate, quoted & space-joined, for a ONE-SHOT sweep
+    //                              (`for g in {{abuse_groups_quoted}}; do add groupMember "$g" …`)
+    // Ranking is try-order only; whichever add actually sticks (and then unlocks DCSync) is the real path.
+    if (ctx.group === undefined || ctx.target_sam === undefined || ctx.abuse_groups_quoted === undefined) {
+      // The standard high-value AD groups, in the order worth trying: direct-DA first, then the groups
+      // whose membership yields domain control (WriteDACL→DCSync, SeBackup, service install, DLL-on-DC).
+      var ABUSE_PRIORITY = ['domain admins', 'enterprise admins', 'administrators',
+        'exchange windows permissions', 'account operators', 'organization management',
+        'backup operators', 'server operators', 'dnsadmins', 'print operators',
+        'group policy creator owners', 'key admins', 'enterprise key admins'];
+      var leadTargets = [];
       facts.values('ad.acl_lead').forEach(function (v) {
-        (v.targets || []).forEach(function (tgt) {
-          firstTarget = firstTarget || tgt;
-          if (!bestGroup && ABUSE_GROUPS[String(tgt).toLowerCase()]) bestGroup = tgt;
-        });
+        (v.targets || []).forEach(function (tgt) { if (tgt && leadTargets.indexOf(tgt) < 0) leadTargets.push(tgt); });
       });
-      if (firstTarget) {
-        if (ctx.group === undefined) ctx.group = bestGroup || firstTarget;
-        if (ctx.target_sam === undefined) ctx.target_sam = firstTarget;
-      }
+      // Candidates = the reasonable, known-abusable groups the lead shows, in priority order. When the
+      // lead names none of them (or there is no lead yet), fall back to the usual suspects so the sweep
+      // still tries every group worth trying rather than forming an empty loop.
+      var lowerSet = {};
+      leadTargets.forEach(function (t) { lowerSet[String(t).toLowerCase()] = t; });
+      var candidates = [];
+      ABUSE_PRIORITY.forEach(function (g) { if (lowerSet[g]) candidates.push(lowerSet[g]); });
+      if (!candidates.length) candidates = ABUSE_PRIORITY.map(function (g) { return g.replace(/\b\w/g, function (c) { return c.toUpperCase(); }); });
+      if (ctx.group === undefined) ctx.group = candidates[0] || leadTargets[0] || '';
+      if (ctx.target_sam === undefined) ctx.target_sam = candidates[0] || leadTargets[0] || '';
+      if (ctx.abuse_groups_quoted === undefined) ctx.abuse_groups_quoted = candidates.map(function (g) { return '"' + String(g).replace(/(["\\$`])/g, '\\$1') + '"'; }).join(' ');
     }
 
     // flag-hunt tokens from the engagement profile (which flag names the hunt searches)
