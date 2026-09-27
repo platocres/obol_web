@@ -198,6 +198,8 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
   background: var(--accent-soft); border-radius: 10px; padding: 1px 7px; }
 .cmd-ran-done { opacity: .55; }
 .cmd-ran-done:hover { opacity: 1; }
+.cmd-win { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; font-weight: 800; color: #fff;
+  background: var(--critical, #e0245e); border-radius: 10px; padding: 1px 8px; box-shadow: 0 0 0 1px rgba(255,255,255,.08); }
 .btn-copy { margin-left: auto; background: var(--surf3); color: var(--text-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font-size: 11px; cursor: pointer; }
 .btn-copy:hover { color: var(--text); border-color: var(--accent); }
 .cmd-run { margin: 0; padding: 10px 12px; overflow-x: auto; }

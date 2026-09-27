@@ -76,6 +76,7 @@
         + (fillable.length ? ' data-tmpl="' + U.attr(v.filled) + '"' : '') + '>'
         + '<div class="cmd-head"><span class="cmd-tag">' + esc(v.tool || action.tool || 'cmd') + '</span>'
         + '<span class="cmd-variant">' + label + '</span>' + ranTag
+        + (v.win && !x.ran ? '<span class="cmd-win">☠ Pwn This Target</span>' : '')
         + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '" title="Copy command">copy</button></div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
         + fillRow + note + webNote + warn + '</div>';

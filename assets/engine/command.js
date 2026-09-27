@@ -261,6 +261,7 @@
       tool: c.tool || action.tool || '',
       note: c.note || '',
       webNote: c.web_note || action.web_note || '',
+      win: !!c.win,   // a box-ending move — the coach flags it "PWN THIS TARGET"
       run: run,
       // thread the action so the loot glue can resolve {{userlist}}/{{hashfile}} for THIS move.
       filled: fillTemplate(run, facts, opts.action === action ? opts : Object.assign({}, opts, { action: action })),

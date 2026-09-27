@@ -97,6 +97,11 @@ ok(OBOL.command.commandWasRun("bloodyAD -d {{domain}} --host {{target}} -u {{use
 // them into the signature, so it would (wrongly) fail to match the clean recovered dispatch.
 ok(OBOL.command.commandWasRun("bloodyAD -d htb.local --host 10.129.94.251 -u svc-alfresco -p 's3rvice' get writable --detail", attachedActs, {}) === false, 'a FILLED command leaks lab values into the signature when params are empty (documents why the coach matches on the template)');
 
+// the win flag flows through fillCommand so the coach can render the "Pwn This Target" badge
+var winAct = { commands: [{ tool: 'x', run: 'x pwn', win: true }, { tool: 'y', run: 'y go' }] };
+var fa = OBOL.command.fillAll(winAct, new OBOL.facts.FactSet([]), {});
+ok(fa[0].win === true && fa[1].win === false, 'fillCommand passes the win flag through (drives the Pwn This Target badge)');
+
 // REGRESSION: two DIFFERENT tools that share a `find` subcommand must not be confused — running
 // sccmhunter find must NOT tag certipy find as already run (the tool is part of the signature now).
 var findActs = [{ command: "sccmhunter.py find -u svc-alfresco -p 's3rvice' -d htb.local -dc-ip 10.129.94.251" }];

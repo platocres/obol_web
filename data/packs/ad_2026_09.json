@@ -1757,8 +1757,9 @@
     },
     {
      "tool": "bloodyad",
+     "win": true,
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}",
-     "note": "THE CASH-IN — run this next, right after you joined a group that holds WriteDACL over the domain (e.g. Exchange Windows Permissions). It writes the two DS-Replication ACEs (GetChanges + GetChangesAll) onto the domain object for your account, so you can DCSync. RE-AUTHENTICATE first if you just joined the group, then run this, then the `dcsync` card (impacket-secretsdump) below. Skipping this is why secretsdump returns rpc_s_access_denied / DRSR ERROR_DS_DRA_BAD_DN — you must grant the rights before you can replicate. Name any principal you control in place of {{user}}."
+     "note": "Run this next, right after you joined a group that holds WriteDACL over the domain (e.g. Exchange Windows Permissions). It writes the two DS-Replication ACEs (GetChanges + GetChangesAll) onto the domain object for your account — which lets you DCSync every hash in the domain and own it. RE-AUTHENTICATE first if you just joined the group, then run this, then the `dcsync` card (impacket-secretsdump) below. Skipping this is why secretsdump returns rpc_s_access_denied / DRSR ERROR_DS_DRA_BAD_DN — you must grant the rights before you can replicate. Name any principal you control in place of {{user}}."
     },
     {
      "tool": "impacket-dacledit",

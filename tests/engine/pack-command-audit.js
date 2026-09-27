@@ -45,6 +45,8 @@ if (!fail) console.log('  ok  : ' + checked + ' pack commands, none match the br
   var runs = (acl.commands || []).map(function (c) { return c.run || ''; });
   function idxOf(sub) { for (var i = 0; i < runs.length; i++) if (runs[i].indexOf(sub) >= 0) return i; return -1; }
   var dcsync = idxOf('add dcsync'), owner = idxOf('set owner'), generic = idxOf('add genericAll');
+  var dcsyncCmd = (acl.commands || []).filter(function (c) { return (c.run || '').indexOf('add dcsync') >= 0; })[0];
+  if (!dcsyncCmd || dcsyncCmd.win !== true) bad('bloodyad-acl: the `add dcsync` grant should carry win:true (the Pwn This Target flag)');
   if (dcsync < 0) bad('bloodyad-acl: no `add dcsync` grant command');
   else if (owner >= 0 && dcsync > owner) bad('bloodyad-acl: `add dcsync` (the DCSync cash-in) must be ordered BEFORE `set owner`');
   else if (generic >= 0 && dcsync > generic) bad('bloodyad-acl: `add dcsync` must be ordered BEFORE `add genericAll`');
