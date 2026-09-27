@@ -102,5 +102,27 @@ var endgame = pack.filter(function (a) { return a.id === 'own-domain-pth'; })[0]
 ok(endgame && (endgame.commands || []).some(function (c) { return c.win && /evil-winrm/.test(c.run); }), 'the endgame move flags a win (☠ Pwn This Target) command');
 ok(endgame && (endgame.commands || []).some(function (c) { return /-H \{\{nthash\}\}|:\{\{nthash\}\}/.test(c.run); }), 'the endgame commands pass the NT hash (fills from the surfaced Administrator credential)');
 
+// The clutter test: owning the domain retires the credential-harvest + this-domain escalation routes, but
+// KEEPS shell access, persistence, cross-domain and mapping moves (useful in a larger lab).
+var readyIds = {}; ready.forEach(function (a) { readyIds[a.id] = 1; });
+['kerberoast', 'asrep-roast', 'gpp-passwords', 'shadow-credentials', 'adcs-esc', 'nxc-arsenal', 'bloodyad-acl', 'zerologon-check', 'password-spray', 'gmsa-read'].forEach(function (id) {
+  ok(!readyIds[id], 'retired after domain-owned: ' + id + ' no longer clutters the coach');
+});
+['own-domain-pth', 'lateral-exec'].forEach(function (id) {
+  ok(readyIds[id], 'kept after domain-owned (still useful): ' + id);
+});
+
+// Flag capture uses the EXISTING, already-profile-aware flag-hunt move (obol-local heritage) — not a
+// reinvented reader. It must offer a pass-the-hash form so the Administrator hash from a DCSync can read the
+// flags with no plaintext, and it must fill the platform's own flag names.
+var flagHunt = pack.filter(function (a) { return a.id === 'flag-hunt-windows'; })[0];
+ok(flagHunt, 'the dedicated flag-hunt move exists (not reinvented on the endgame move)');
+ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /-H \{\{nthash\}\}/.test(c.run); }), 'flag-hunt has a pass-the-hash variant (reads flags with the dumped Administrator hash, no password)');
+ok(flagHunt && (flagHunt.commands || []).every(function (c) { return /\{\{flag_names_windows\}\}/.test(c.run); }), 'flag-hunt searches the profile-configured flag names ({{flag_names_windows}})');
+// and the platform token itself resolves per profile (HTB vs OffSec) through the existing helper
+var htbNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'htb' }).names);
+var oscpNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'oscp' }).names);
+ok(/root\.txt/.test(htbNames) && /proof\.txt/.test(oscpNames), 'the flag-name token resolves to the platform proof files (HTB root.txt, OffSec proof.txt)');
+
 console.log(fail ? ('\nAD KILL CHAIN E2E: ' + fail + ' FAILURES') : '\nAD KILL CHAIN E2E: all passed — recon → domain compromise → land the plane, no dead ends');
 process.exit(fail ? 1 : 0);

@@ -386,6 +386,9 @@
     "ad.dc_candidate",
     "port:88"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "hash.asrep",
     "credential.candidate"
@@ -456,6 +459,9 @@
     "hash.asrep"
    ],
    "requires_any": [],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "credential.available"
    ],
@@ -504,6 +510,9 @@
     "hash.tgs"
    ],
    "requires_any": [],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "credential.available"
    ],
@@ -553,6 +562,9 @@
    "requires_any": [
     "smb.reachable",
     "port:445"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "credential.candidate",
@@ -652,6 +664,9 @@
     "kerberos.reachable",
     "port:88"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "hash.tgs",
     "credential.candidate"
@@ -717,6 +732,9 @@
     "ad.user_list"
    ],
    "requires_any": [],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "credential.available"
    ],
@@ -1118,7 +1136,7 @@
      "tool": "evil-winrm",
      "run": "evil-winrm -i {{target}} -u administrator -H {{nthash}}",
      "win": true,
-     "note": "Interactive shell as Administrator over WinRM — pure pass-the-hash, no plaintext. Then read the flags: type C:\\Users\\Administrator\\Desktop\\root.txt and the user's Desktop for user.txt. If 5985/WinRM is closed, use the psexec/wmiexec variants below."
+     "note": "Interactive shell as Administrator over WinRM — pure pass-the-hash, no plaintext. Paste the session banner back so obol marks the WinRM foothold; the 'Hunt for flags (Windows)' move then reads the proof files your lab/exam profile grades on. If 5985/WinRM is closed, use the psexec/wmiexec variants below."
     },
     {
      "tool": "impacket-psexec",
@@ -1229,6 +1247,9 @@
     "credential.available"
    ],
    "requires_any": [],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "adcs.vulnerable",
     "credential.certificate"
@@ -1289,6 +1310,9 @@
     "credential.certificate"
    ],
    "requires_any": [],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "credential.available",
     "hash.ntlm"
@@ -1337,6 +1361,9 @@
    "requires_all": [],
    "requires_any": [
     "ad.control_paths"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "credential.certificate"
@@ -1512,6 +1539,9 @@
    "requires_any": [
     "ad.dc_candidate"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "exploit.candidate",
     "ad.zerologon"
@@ -1548,6 +1578,9 @@
    "requires_all": [],
    "requires_any": [
     "access.admin"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "access.system",
@@ -1591,6 +1624,9 @@
    "requires_all": [],
    "requires_any": [
     "credential.available"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "credential.candidate",
@@ -1636,6 +1672,9 @@
    "requires_any": [
     "smb.reachable",
     "port:445"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "enum.deep",
@@ -1775,6 +1814,9 @@
     "credential.available",
     "ad.attack_paths"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "ad.control_paths",
     "credential.candidate"
@@ -1900,6 +1942,9 @@
    "requires_any": [
     "ad.gmsa"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "credential.ntlm_hash",
     "credential.candidate"
@@ -1945,6 +1990,9 @@
    "requires_any": [
     "ldap.reachable",
     "ad.control_paths"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "credential.candidate"
@@ -2246,6 +2294,9 @@
     "foothold.windows",
     "ad.attack_paths"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "ad.control_paths",
     "access.admin"
@@ -2311,6 +2362,9 @@
    "requires_all": [],
    "requires_any": [
     "ad.zerologon"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "loot.ntds",
@@ -2563,6 +2617,9 @@
    "requires_any": [
     "ad.gpo_writable"
    ],
+   "obsoleted_by": [
+    "loot.ntds"
+   ],
    "produces": [
     "ad.gpo_control",
     "access.system"
@@ -2609,6 +2666,9 @@
    "requires_any": [
     "ad.control_paths",
     "ad.attack_paths"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "access.system",
