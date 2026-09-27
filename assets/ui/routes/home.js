@@ -145,7 +145,8 @@
     var configured = isConfigured(active, factCount);
     return '<section class="engscreen">'
       + '<h1 class="route-h1">Engagements</h1>'
-      + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.</p>'
+      + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.'
+      + ' <span class="kbd-hint">Tip: press <kbd>' + (navigator.platform && /mac/i.test(navigator.platform) ? '⌘' : 'Ctrl') + '</kbd>+<kbd>K</kbd> anywhere to search commands.</span></p>'
       + (configured ? activePanel() : gettingStarted())
       + '<div class="eng-library"><div class="eng-library-head"><h2 class="coach-sec-h">Engagement Library</h2>'
       + '<details class="eng-danger-toggle"><summary>Manage / Reset</summary>'

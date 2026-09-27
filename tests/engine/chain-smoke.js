@@ -20,12 +20,13 @@ function mk(k, v, s, at) { return F.makeFact({ kind: k, scope: 'host:' + host, v
 const facts = new F.FactSet([
   mk('target.configured', {}, 'engagement', 1), mk('host.up', {}, 'nmap', 2), mk('ldap.reachable', {}, 'nmap', 3),
   mk('host.hostname', { hostname: 'DC' }, 'nmap', 3), mk('port:389', {}, 'nmap', 3),
+  mk('service.ldap', { port: 389 }, 'nmap', 3), mk('scan.nmap.version', {}, 'nmap', 3),
   mk('hash.asrep', {}, 'GetNPUsers', 5), mk('credential.available', { user: 'svc' }, 'john', 6),
   mk('foothold.windows', {}, 'evil-winrm', 7), mk('access.admin', {}, 'secretsdump', 9),
   mk('objective.root_flag', { slot: 'root', flag: 'x', path: 'C:/x/root.txt' }, 'type', 10),
 ]);
 const activities = [
-  { tool: 'nmap', command: 'nmap -sC -sV 10.10.10.5', target: host, scope: 'host:' + host, at: 3, produced: ['host.up', 'ldap.reachable', 'host.hostname', 'port:389'] },
+  { tool: 'nmap', command: 'nmap -sC -sV 10.10.10.5', target: host, scope: 'host:' + host, at: 3, produced: ['host.up', 'ldap.reachable', 'host.hostname', 'port:389', 'service.ldap', 'scan.nmap.version'] },
   { tool: 'GetNPUsers', command: 'impacket-GetNPUsers corp/ -no-pass', target: host, scope: 'host:' + host, at: 5, produced: ['hash.asrep'] },
   { tool: 'john', command: 'john hash -w rockyou.txt', target: host, scope: 'host:' + host, at: 6, produced: ['credential.available'] },
   { tool: 'evil-winrm', command: 'evil-winrm -i 10.10.10.5 -u svc -p x', target: host, scope: 'host:' + host, at: 7, produced: ['foothold.windows'] },
@@ -40,6 +41,8 @@ ok(chain.length >= 6, 'chain has the walked milestones (' + chain.length + ' ste
 ok(kinds[0] === 'target.configured', 'chain is rooted at recon (a configured target)');
 ok(kinds[kinds.length - 1] === 'objective.root_flag' && chain[chain.length - 1].isFlag, 'chain ends at the captured flag');
 ok(kinds.indexOf('host.hostname') === -1 && kinds.indexOf('port:389') === -1, 'enumeration noise (hostname / individual port) is filtered out');
+ok(kinds.indexOf('service.ldap') === -1 && kinds.indexOf('scan.nmap.version') === -1 && kinds.indexOf('ldap.reachable') === -1,
+  'per-service evidence, scan markers, and reachability are filtered — only milestones tell the story');
 // ledger order is preserved: hash → credential → foothold → admin → flag
 function before(a, b) { return kinds.indexOf(a) !== -1 && kinds.indexOf(b) !== -1 && kinds.indexOf(a) < kinds.indexOf(b); }
 ok(before('hash.asrep', 'credential.available') && before('credential.available', 'foothold.windows') && before('foothold.windows', 'access.admin') && before('access.admin', 'objective.root_flag'),

@@ -13,10 +13,16 @@
   function deriveCommand(text) {
     var lines = String(text || '').split(/\r?\n/);
     for (var i = 0; i < lines.length && i < 40; i++) {
-      var ln = lines[i];
-      var m = ln.match(/^\s*(?:\$|#|>|PS[^>]*>|[\w.-]+@[\w.-]+:[^$#]*[$#])\s*(.+\S)\s*$/);
-      if (m && TOOL_HEAD.test(m[1].trim())) return m[1].trim();
-      if (TOOL_HEAD.test(ln.trim())) return ln.trim();
+      var raw = lines[i], t = raw.trim();
+      // Derive ONLY from a prompt-anchored line — a genuine terminal paste always carries the prompt,
+      // and requiring it is what keeps tool OUTPUT (nmap's "Nmap scan report for 10.x", "Host is up
+      // …") from being mistaken for a command. Handles the kali two-line prompt (└─$ / └─#),
+      // user@host:cwd$/#, a bare $/#, and PowerShell (PS …>). No prompt → '' (caller keeps its own
+      // command). The sigil must actually be stripped (pm/ps differ from the trimmed line).
+      var pm = raw.replace(/^.*?[$#]\s+/, '').trim();       // after "…$ " / "…# "
+      if (pm !== t && TOOL_HEAD.test(pm)) return pm;
+      var ps = raw.replace(/^\s*PS[^>]*>\s+/i, '').trim();  // PowerShell "PS …> "
+      if (ps !== t && TOOL_HEAD.test(ps)) return ps;
     }
     return '';
   }
@@ -37,7 +43,13 @@
     var text = opts.text || '';
     if (!text.trim()) return { ok: false, reason: 'empty' };
     if (!ready()) return { ok: false, reason: 'parsers' };
-    var cmd = (opts.command && opts.command.trim()) ? opts.command.trim() : deriveCommand(text);
+    // Route on what the paste ACTUALLY shows (its prompt/command line) over the move's canned
+    // command, so pasting any tool's output into any move's box still reaches the right parser and
+    // mints its facts — the coach is proof-gated, so out-of-order evidence just unlocks the right
+    // moves. Fall back to the caller's command only when the paste carries no command line of its own
+    // (e.g. raw redirected output); nmap XML still self-identifies from its <nmaprun args>.
+    var derived = deriveCommand(text);
+    var cmd = derived || (opts.command && opts.command.trim()) || '';
     var eng = OBOL.store.active();
     var params = (eng && eng.params) || {};
     var scope = 'host:' + (params.target || 'target');

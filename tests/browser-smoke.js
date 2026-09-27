@@ -177,6 +177,18 @@ function serve() {
   ok(await page.locator('.apath-flow .apath-block').count() >= 1, 'target page shows the attack-path ribbon (' + (await page.locator('.apath-flow .apath-block').count()) + ' blocks)');
   ok(await page.locator('.apath-block .ph-chip').count() >= 1, 'attack-path blocks carry a phase category chip');
   ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Attack Path — What Led to What') !== -1; }), 'attack-path heading is Title Case');
+  // A proven hostname is reflected onto the target record and shown alongside the IP in the header.
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([F.makeFact({ kind: 'host.hostname', scope: 'host:10.10.10.10', value: { name: 'BOXY' }, state: F.ProofState.SUPPORTED, source: 'test' })], 'test');
+  });
+  // re-render the target route in-app (no full reload → engagement already loaded)
+  await page.evaluate(() => window.OBOL.router.go('home'));
+  await page.waitForTimeout(60);
+  await page.evaluate(() => window.OBOL.router.go('target/10.10.10.10'));
+  await page.waitForSelector('.target-head .thost', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.target-head .thost').textContent().catch(() => '') || '').indexOf('BOXY') !== -1, 'the target header shows the proven hostname alongside the IP');
+  ok(await page.evaluate(() => ((window.OBOL.store.active().targets.find((t) => t.ip === '10.10.10.10') || {}).hostname)) === 'BOXY', 'the proven hostname is synced onto the target record');
 
   // Credential switcher: collected creds appear in the sidebar; clicking one fills the params.
   await page.evaluate(() => {
@@ -188,6 +200,16 @@ function serve() {
     window.OBOL.app.renderSidebar();
   });
   ok(await page.locator('#cred-switch .cred-row').count() >= 2, 'credential switcher lists collected creds (' + (await page.locator('#cred-switch .cred-row').count()) + ')');
+  // Redaction is opt-in: a recovered password shows in cleartext by default (not dots).
+  const aliceSecret = (await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-secret').textContent()) || '';
+  ok(aliceSecret.indexOf('S3cret!') !== -1 && aliceSecret.indexOf('•') === -1, 'the credential switcher shows the real password by default (redaction is opt-in), got "' + aliceSecret + '"');
+  // …and the report's Redact Secrets toggle masks it here too.
+  await page.evaluate(() => { window.OBOL.store.update((e) => { e.ui = e.ui || {}; e.ui.reportRedact = true; }, 'ui'); window.OBOL.app.renderSidebar(); });
+  await page.waitForTimeout(80);
+  const aliceRedacted = (await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-secret').textContent()) || '';
+  ok(aliceRedacted.indexOf('•') !== -1 && aliceRedacted.indexOf('S3cret!') === -1, 'turning Redact Secrets ON masks the password in the switcher');
+  await page.evaluate(() => { window.OBOL.store.update((e) => { e.ui = e.ui || {}; e.ui.reportRedact = false; }, 'ui'); window.OBOL.app.renderSidebar(); });
+  await page.waitForTimeout(80);
   const bobRow = page.locator('#cred-switch .cred-row', { hasText: 'bob' });
   await bobRow.click();
   const swapped = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'bob' && p.nthash === 'aabbccddeeff00112233445566778899'; });
@@ -238,6 +260,11 @@ function serve() {
   const prepCmd = (await prep.locator('.cmd-run code').first().textContent()) || '';
   ok(prepCmd.indexOf("cat > /home/kali/lab/box/loot/users.txt <<'EOF'") === 0, 'the materialize command is a heredoc writing the canonical users.txt');
   ok(prepCmd.indexOf('Administrator') !== -1 && prepCmd.indexOf('svc-web') !== -1, 'the heredoc body carries the exact proven usernames');
+  const prepBeforeCmds = await roast.evaluate((el) => {
+    const prep = el.querySelector('.move-prep'), cmd = el.querySelector('.cmd:not(.cmd-prep)');
+    return !!(prep && cmd && (prep.compareDocumentPosition(cmd) & Node.DOCUMENT_POSITION_FOLLOWING));
+  });
+  ok(prepBeforeCmds, 'the "set up first" block renders ABOVE the roast commands it must precede');
 
   // Inline per-command ingestion on the coach: open a move's paste box, ingest its output in place.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
@@ -271,6 +298,81 @@ function serve() {
     return (r.facts || []).map((f) => f.kind);
   });
   ok(xmlFacts.indexOf('port:389') !== -1 && xmlFacts.indexOf('service.ldap') !== -1 && xmlFacts.indexOf('ldap.reachable') !== -1, 'nmap XML (-oX -) parses ports/services despite its <!DOCTYPE nmaprun> (' + xmlFacts.length + ' facts)');
+
+  // Reported case: a -sC -sV scan pasted onto the FAST move (tagged with the fast command) must
+  // still prove BOTH scan markers — from the XML args + content — so the coach doesn't re-suggest a
+  // scan already run (the double-paste friction).
+  const scanMarkers = await page.evaluate(async () => {
+    await window.OBOL.ingest.ensureParsers();
+    const xml = '<?xml version="1.0"?>\n<!DOCTYPE nmaprun>\n<nmaprun scanner="nmap" args="nmap -Pn -sC -sV -p 53,389,445 -oX - 10.129.95.210" version="7.95">\n'
+      + '<host><status state="up"/><address addr="10.129.95.210" addrtype="ipv4"/><ports>'
+      + '<port protocol="tcp" portid="389"><state state="open"/><service name="ldap" product="Microsoft Windows Active Directory LDAP"/></port>'
+      + '</ports></host><runstats><finished summary="Nmap done"/></runstats></nmaprun>';
+    const r = window.OBOL.parsers.parseActionOutput({ actionId: 'nmap-fast-open-ports', command: 'nmap -Pn -p- --min-rate 5000 --open -oN scans/allports.txt 10.129.95.210', stdout: xml, source: 'nmap', scope: 'host:10.129.95.210', domain: '' });
+    return (r.facts || []).map((f) => f.kind);
+  });
+  ok(scanMarkers.indexOf('scan.nmap.quick') !== -1 && scanMarkers.indexOf('scan.nmap.version') !== -1,
+    'a -sC -sV scan pasted on the fast move proves BOTH scan markers in one paste (no re-suggest)');
+
+  // Paste-anywhere: a full-terminal paste routes on its OWN prompt/command line (kali └─$ …), not the
+  // move's canned command — so any tool's output mints its facts from any box (coach is proof-gated).
+  const anywhere = await page.evaluate(async () => {
+    await window.OBOL.ingest.ensureParsers();
+    const paste = '┌──(kali㉿kali)-[~/x]\n'
+      + "└─$ nxc ldap 10.10.10.9 -u '' -p '' --users\n"
+      + 'LDAP 10.10.10.9 389 DC01 zoe.quinn 2020-01-01 0\n'
+      + 'LDAP 10.10.10.9 389 DC01 tom.baker 2020-01-01 0\n';
+    // opts.command is an UNRELATED move command (nmap) — the derived nxc command must win.
+    const r = window.OBOL.ingest.run({ text: paste, command: 'nmap -Pn -p- --min-rate 5000 10.10.10.9', actionId: 'nmap-fast-open-ports', source: 'paste' });
+    return { cmd: r.cmd, kinds: (r.facts || []).map((f) => f.kind) };
+  });
+  ok(anywhere.cmd.indexOf('nxc ldap') === 0, 'ingest routes on the paste\'s own kali-prompt command line, not the move\'s (' + anywhere.cmd + ')');
+  ok(anywhere.kinds.indexOf('ad.user_list') !== -1, 'nxc --users pasted onto the NMAP move still mints ad.user_list (paste-anywhere routing)');
+
+  // Facts sidebar collapses same-claim facts (kind+scope) — e.g. smb.reachable proven by nmap AND
+  // nxc — into ONE row with an ×N count, instead of a pile of identical labels.
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([
+      F.makeFact({ kind: 'zz.collapsetest', scope: 'host:10.10.10.90', value: { tool: 'nmap' }, state: F.ProofState.SUPPORTED, source: 'test' }),
+      F.makeFact({ kind: 'zz.collapsetest', scope: 'host:10.10.10.90', value: { tool: 'nxc' }, state: F.ProofState.SUPPORTED, source: 'test' }),
+    ], 'test');
+    window.OBOL.app.renderSidebar();
+  });
+  await page.waitForTimeout(80);
+  const dupRows = page.locator('#facts-list .fact-item', { hasText: 'zz.collapsetest' });
+  ok(await dupRows.count() === 1, 'the facts sidebar collapses two same-claim observations into ONE row (' + (await dupRows.count()) + ')');
+  ok(await dupRows.locator('.fact-count').count() === 1 && (await dupRows.locator('.fact-count').textContent() || '').indexOf('2') !== -1, 'the collapsed row shows an ×N observation count');
+
+  // Inline free-text token fill: an exec move's {{command}} placeholder gets a text box that
+  // substitutes into the shown command (and the copy button) live — no trip to Tools required.
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(250);
+  const cmdFill = page.locator('.coach .cmd-fillable .cmd-fill[data-tok="command"]').first();
+  ok(await cmdFill.count() >= 1, 'an exec move with a {{command}} placeholder offers an inline fill box on the coach');
+  await cmdFill.fill('whoami /all');
+  await page.waitForTimeout(60);
+  const filledCmd = await cmdFill.evaluate((inp) => {
+    const cmd = inp.closest('.cmd');
+    return { code: cmd.querySelector('.cmd-run code').textContent, copy: cmd.querySelector('.btn-copy').getAttribute('data-copy') };
+  });
+  ok(filledCmd.code.indexOf('whoami /all') !== -1 && filledCmd.code.indexOf('{{command}}') === -1, 'typing fills {{command}} into the shown command live');
+  ok(filledCmd.copy.indexOf('whoami /all') !== -1, 'the copy button now yields the filled command');
+
+  // The + (new engagement) routes to the full setup form (profile, machine type, working directory),
+  // not a name-only prompt that skips every option.
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.locator('#eng-new').click();
+  await page.waitForTimeout(250);
+  ok(page.url().indexOf('#/home') !== -1, 'the + button routes to the home setup surface');
+  const setup = await page.evaluate(() => ({
+    hasSetup: !!document.getElementById('eng-setup'),
+    hasMt: !!document.getElementById('eng-mt'),
+    hasWorkdir: !!document.getElementById('eng-workdir'),
+    nameFocused: document.activeElement === document.getElementById('eng-name'),
+  }));
+  ok(setup.hasSetup && setup.hasMt && setup.hasWorkdir, 'the setup form exposes the profile, machine-type and Kali working-directory options');
+  ok(setup.nameFocused, 'the new-run name field is focused so the operator can start typing');
 
   // New parity surfaces render without errors.
   await page.goto(`http://localhost:${PORT}/index.html#/playbooks`, { waitUntil: 'networkidle' });
@@ -313,10 +415,45 @@ function serve() {
   await page.waitForTimeout(100);
   ok(await page.locator('.pal-overlay.show').count() === 0, 'Escape closes the palette');
 
-  // Findings roll-up renders (lazy route — wait for the element, not a fixed sleep).
+  // Engagement map: the legend swatches double as filters — clicking one hides that class of node.
+  await page.goto(`http://localhost:${PORT}/index.html#/map`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('svg.obol-engmap .em-node', { timeout: 6000 }).catch(() => {});
+  const pick = await page.evaluate(() => {
+    const svg = document.querySelector('svg.obol-engmap');
+    if (!svg) return null;
+    for (const it of Array.from(document.querySelectorAll('.em-legend-item'))) {
+      const cls = it.getAttribute('data-filter');
+      if (svg.querySelector('.em-node.' + cls)) return { cls, count: svg.querySelectorAll('.em-node.' + cls).length };
+    }
+    return null;
+  });
+  ok(!!pick, 'the map legend has a swatch matching a rendered node' + (pick ? ' (' + pick.cls + ' ×' + pick.count + ')' : ''));
+  if (pick) {
+    const chip = page.locator('.em-legend-item[data-filter="' + pick.cls + '"]');
+    await chip.click();
+    await page.waitForTimeout(80);
+    ok(await page.evaluate((c) => Array.from(document.querySelectorAll('.em-node.' + c)).every((n) => n.style.display === 'none'), pick.cls),
+      'clicking a map legend swatch filters out that class of node');
+    await chip.click();
+    await page.waitForTimeout(80);
+    ok(await page.evaluate((c) => Array.from(document.querySelectorAll('.em-node.' + c)).every((n) => n.style.display !== 'none'), pick.cls),
+      'clicking the swatch again restores the nodes');
+  }
+
+  // Findings roll-up: a move the operator RAN that carries a report finding rolls up here, even with
+  // no web-check finding.* facts (the AD case that used to leave this page empty).
+  await page.evaluate(() => {
+    window.OBOL.store.update((e) => {
+      e.activities = e.activities || [];
+      e.activities.unshift({ at: Date.now(), command: "nxc ldap 10.10.10.10 -u '' -p '' --users", source: 'paste',
+        tool: 'nxc', target: '10.10.10.10', scope: 'host:10.10.10.10', action_id: 'ad-anon-ldap-enum', produced: ['ad.anonymous_bind', 'ad.user_list'] });
+    }, 'seed');
+  });
   await page.goto(`http://localhost:${PORT}/index.html#/findings`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.findings-route', { timeout: 6000 }).catch(() => {});
   ok(await page.locator('.findings-route').count() === 1, 'findings roll-up route renders');
+  ok(await page.locator('.finding').count() >= 1, 'a run move with a report finding rolls up (' + (await page.locator('.finding').count()) + ')');
+  ok((await page.locator('.findings-route').textContent() || '').indexOf('Anonymous LDAP Bind Permitted') !== -1, 'the derived finding names the issue (Anonymous LDAP Bind Permitted)');
 
   // Proof screenshot attaches and embeds into the report.
   await page.goto(`http://localhost:${PORT}/index.html#/evidence`, { waitUntil: 'networkidle' });
@@ -343,6 +480,24 @@ function serve() {
     return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1 && pre.textContent.indexOf('kali@kali') !== -1;
   });
   ok(transcriptHasCmd, 'transcript contains the prompt, command and output');
+  // the on-screen report renders as white paper (black on white), like the printed output
+  const paper = await page.evaluate(() => {
+    const el = document.getElementById('rep-out'); if (!el) return null;
+    const bg = getComputedStyle(el).backgroundColor;
+    const m = bg.match(/\d+/g) || [0, 0, 0];
+    return { bright: (Number(m[0]) + Number(m[1]) + Number(m[2])) / 3, text: el.textContent || '' };
+  });
+  ok(paper && paper.bright > 230, 'the report preview renders on white paper (bg brightness ' + (paper && Math.round(paper.bright)) + ')');
+  // the "Generated" timestamp is a sane year, not a ms×1000 blowup (was rendering year 58707)
+  ok(paper && !/\b(?:[3-9]\d{3,}|\d{5,})-\d\d-\d\d/.test(paper.text), 'the Generated date is a sane year (no ms-as-seconds blowup)');
+  // OSCP exam report: candidate name + OSID are fillable right on the report page and land on the cover.
+  ok(await page.locator('#rep-candidate').count() === 1 && await page.locator('#rep-osid').count() === 1, 'the report page exposes Candidate + OSID fields for an OSCP-style profile');
+  await page.fill('#rep-candidate', 'Jordan Pace');
+  await page.fill('#rep-osid', 'OS-98765');
+  await page.waitForTimeout(120);
+  const coverText = await page.evaluate(() => (document.getElementById('rep-out') || {}).textContent || '');
+  ok(coverText.indexOf('Jordan Pace') !== -1 && coverText.indexOf('OS-98765') !== -1, 'the typed candidate + OSID appear on the report cover');
+  ok(await page.evaluate(() => { const p = window.OBOL.store.active().profile || {}; return p.candidate === 'Jordan Pace' && p.osid === 'OS-98765'; }), 'candidate + OSID persist onto the engagement profile');
   // Export controls present + .docx builds with an embedded screenshot (JSZip loaded with the report bundle).
   ok(await page.locator('#rep-print').count() === 1 && await page.locator('#rep-docx').count() === 1, 'report has Print/PDF + .docx buttons');
   const docx = await page.evaluate(async () => {
@@ -412,12 +567,15 @@ function serve() {
   ok(hOverflow <= 1, 'no horizontal page scroll at 390px (overflow ' + hOverflow + 'px)');
   ok(await mob.locator('#nav-toggle').isVisible(), 'hamburger shows at phone width');
   await mob.click('#nav-toggle');
-  await mob.waitForTimeout(300);
-  const drawer = await mob.evaluate(() => {
+  // Wait for the slide-in transition to actually finish rather than a fixed sleep — under CI load the
+  // drawer can still be mid-animation (left < 0) at a fixed 300ms, which flaked this assertion.
+  const drawer = await mob.waitForFunction(() => {
     var open = document.documentElement.classList.contains('drawer-open');
-    var r = document.getElementById('sidebar').getBoundingClientRect();
-    return open && r.left >= -1 && r.width > 0 && r.right <= window.innerWidth + 1;
-  });
+    var el = document.getElementById('sidebar');
+    if (!open || !el) return false;
+    var r = el.getBoundingClientRect();
+    return r.left >= -1 && r.width > 0 && r.right <= window.innerWidth + 1;
+  }, { timeout: 3000 }).then(() => true).catch(() => false);
   ok(drawer, 'hamburger opens the engagement drawer on-screen');
   await mob.close();
 

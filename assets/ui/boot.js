@@ -53,12 +53,32 @@
       if (!fs.facts.length) {
         factsEl.innerHTML = '<li class="facts-empty">No facts yet. Add one below, or paste tool output on Evidence.</li>';
       } else {
-        factsEl.innerHTML = fs.facts.slice().sort(function (a, b) { return b.created_at - a.created_at; }).map(function (f) {
-          var cls = f.state === 'refuted' ? 'refuted' : (f.state === 'inconclusive' ? 'incon' : 'ok');
-          return '<li class="fact-item ' + cls + '" title="' + esc(f.scope) + '">'
-            + '<code>' + esc(f.kind) + '</code>'
-            + '<button class="fact-del" data-fact-kind="' + esc(f.kind) + '" data-fact-scope="' + esc(f.scope) + '" title="Remove">×</button></li>';
-        }).join('');
+        // Collapse by (kind, scope): several facts can share a claim but differ in an incidental
+        // value — ldap.reachable proven by nmap AND nxc, or service.msrpc seen on six high ports —
+        // so one row per claim (with an ×N count) reads far cleaner than a pile of identical labels.
+        var groups = {}, order = [];
+        fs.facts.forEach(function (f) {
+          var key = f.kind + '\x00' + f.scope;
+          if (!groups[key]) { groups[key] = { kind: f.kind, scope: f.scope, facts: [], newest: f.created_at }; order.push(key); }
+          var g = groups[key];
+          g.facts.push(f);
+          if (f.created_at > g.newest) g.newest = f.created_at;
+        });
+        factsEl.innerHTML = order.map(function (k) { return groups[k]; })
+          .sort(function (a, b) { return b.newest - a.newest; })
+          .map(function (g) {
+            var newest = g.facts.slice().sort(function (a, b) { return b.created_at - a.created_at; })[0];
+            var cls = newest.state === 'refuted' ? 'refuted' : (newest.state === 'inconclusive' ? 'incon' : 'ok');
+            // distinct ports (or other small ids) across the group, for the tooltip
+            var ports = g.facts.map(function (f) { return (f.value || {}).port; }).filter(function (p) { return p != null; });
+            var uports = ports.filter(function (p, i) { return ports.indexOf(p) === i; }).sort(function (a, b) { return a - b; });
+            var count = g.facts.length;
+            var title = g.scope + (uports.length ? ' · ports ' + uports.join(', ') : '') + (count > 1 ? ' · ' + count + ' observations' : '');
+            return '<li class="fact-item ' + cls + '" title="' + esc(title) + '">'
+              + '<code>' + esc(g.kind) + '</code>'
+              + (count > 1 ? '<span class="fact-count" aria-label="' + count + ' observations">×' + count + '</span>' : '')
+              + '<button class="fact-del" data-fact-kind="' + esc(g.kind) + '" data-fact-scope="' + esc(g.scope) + '" title="Remove">×</button></li>';
+          }).join('');
       }
     }
   }
@@ -69,8 +89,21 @@
     if (engSel) engSel.addEventListener('change', function () { OBOL.store.setActive(engSel.value).then(function () { OBOL.router.render(); }); });
     var engNew = document.getElementById('eng-new');
     if (engNew) engNew.addEventListener('click', function () {
-      var name = prompt('New engagement name:', 'New run');
-      if (name) OBOL.store.createEngagement(name).then(function () { renderSidebar(); OBOL.router.render(); });
+      // The full new-run setup (platform profile, machine type, scope, Kali working directory) lives
+      // in the home screen's "New Engagement" form. Route there and focus it rather than spawning a
+      // name-only engagement that skips every option. The form's Create & Launch makes a fresh run
+      // when one is already configured, so nothing here is destroyed.
+      OBOL.router.go('home');
+      var tries = 0;
+      (function focusSetup() {
+        var setup = document.getElementById('eng-setup');
+        if (!setup) { if (tries++ < 20) return void setTimeout(focusSetup, 30); return; }
+        setup.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var nameEl = document.getElementById('eng-name');
+        if (nameEl) { try { nameEl.focus({ preventScroll: true }); } catch (e) { try { nameEl.focus(); } catch (e2) {} } }
+        setup.classList.add('eng-setup-flash');
+        setTimeout(function () { setup.classList.remove('eng-setup-flash'); }, 1400);
+      })();
     });
 
     // params (input -> store)

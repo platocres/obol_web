@@ -26,15 +26,15 @@
     { cls: 'em-dc', label: 'Domain controller' },
   ];
 
+  // Legend items double as filters: each is a checkbox that toggles nodes of that class on the map.
+  function item(l) {
+    return '<button type="button" class="em-legend-item" role="checkbox" aria-checked="true" data-filter="' + esc(l.cls) + '" title="Toggle ' + esc(l.label) + '">'
+      + '<span class="em-swatch ' + l.cls + '"></span>' + esc(l.label) + '</button>';
+  }
   function legend() {
-    var acc = LEGEND.map(function (l) {
-      return '<span class="em-legend-item"><span class="em-swatch ' + l.cls + '"></span>' + esc(l.label) + '</span>';
-    }).join('');
-    var types = TYPES.map(function (l) {
-      return '<span class="em-legend-item"><span class="em-swatch ' + l.cls + '"></span>' + esc(l.label) + '</span>';
-    }).join('');
-    return '<div class="em-legend"><span class="em-legend-group">access</span>' + acc
-      + '<span class="em-legend-group">nodes</span>' + types + '</div>';
+    return '<div class="em-legend"><span class="em-legend-group">access</span>' + LEGEND.map(item).join('')
+      + '<span class="em-legend-group">nodes</span>' + TYPES.map(item).join('')
+      + '<span class="em-legend-hint">click a swatch to filter</span></div>';
   }
 
   function render() {
@@ -57,9 +57,35 @@
   }
 
   function mounted(ctx) {
-    U.on(ctx.mount, 'click', '.em-target', function (e, g) {
+    // Bind on the route's own section (recreated each render), not the persistent #view — a lazy
+    // route renders twice (stub, then real), so binding on #view would stack the handlers and a
+    // click would toggle an even number of times, netting to a no-op.
+    var mount = ctx.mount.querySelector('.engmap-route') || ctx.mount;
+    U.on(mount, 'click', '.em-target', function (e, g) {
       var ip = g.getAttribute('data-ip');
       if (ip) OBOL.router.go('target/' + ip);
+    });
+    // Legend = filter: toggle a swatch to hide/show that class of node (and edges touching it).
+    function applyFilters() {
+      var svg = mount.querySelector('svg.obol-engmap'); if (!svg) return;
+      var hidden = {};
+      Array.prototype.forEach.call(mount.querySelectorAll('.em-legend-item[aria-checked="false"]'), function (b) {
+        hidden[b.getAttribute('data-filter')] = true;
+      });
+      var hiddenIds = {};
+      Array.prototype.forEach.call(svg.querySelectorAll('.em-node'), function (n) {
+        var off = Array.prototype.some.call(n.classList, function (c) { return hidden[c]; });
+        n.style.display = off ? 'none' : '';
+        if (off) hiddenIds[n.getAttribute('data-node-id')] = true;
+      });
+      Array.prototype.forEach.call(svg.querySelectorAll('.em-edge'), function (ed) {
+        var off = hiddenIds[ed.getAttribute('data-from')] || hiddenIds[ed.getAttribute('data-to')];
+        ed.style.display = off ? 'none' : '';
+      });
+    }
+    U.on(mount, 'click', '.em-legend-item', function (e, b) {
+      b.setAttribute('aria-checked', b.getAttribute('aria-checked') === 'false' ? 'true' : 'false');
+      applyFilters();
     });
   }
 

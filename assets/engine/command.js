@@ -160,6 +160,25 @@
         break;
       }
     }
+    // …and, when BloodHound wasn't run, from a bloodyAD `get writable` lead (ad.acl_lead): point the
+    // ACL-abuse command at a real writable object instead of leaving {{group}} a placeholder. Prefer a
+    // membership-escalation group (Exchange Windows Permissions, DnsAdmins, …) over a bare object.
+    if (ctx.group === undefined || ctx.target_sam === undefined) {
+      var ABUSE_GROUPS = { 'exchange windows permissions': 1, 'organization management': 1, 'account operators': 1,
+        'dnsadmins': 1, 'backup operators': 1, 'server operators': 1, 'print operators': 1,
+        'domain admins': 1, 'enterprise admins': 1, 'administrators': 1 };
+      var bestGroup = '', firstTarget = '';
+      facts.values('ad.acl_lead').forEach(function (v) {
+        (v.targets || []).forEach(function (tgt) {
+          firstTarget = firstTarget || tgt;
+          if (!bestGroup && ABUSE_GROUPS[String(tgt).toLowerCase()]) bestGroup = tgt;
+        });
+      });
+      if (firstTarget) {
+        if (ctx.group === undefined) ctx.group = bestGroup || firstTarget;
+        if (ctx.target_sam === undefined) ctx.target_sam = firstTarget;
+      }
+    }
 
     // flag-hunt tokens from the engagement profile (which flag names the hunt searches)
     if (OBOL.profile) {

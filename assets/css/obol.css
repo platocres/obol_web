@@ -99,6 +99,7 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 .fact-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: var(--bg2); border: 1px solid var(--line); border-left: 3px solid var(--green); border-radius: 6px; padding: 4px 6px; }
 .fact-item.refuted { border-left-color: var(--red); } .fact-item.incon { border-left-color: var(--yellow); }
 .fact-item code { font-size: 11px; color: var(--text); word-break: break-all; }
+.fact-count { margin-left: auto; font-size: 10px; font-weight: 700; color: var(--muted); background: var(--surf3); border-radius: 8px; padding: 1px 6px; letter-spacing: .02em; }
 .fact-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; }
 .fact-del:hover { color: var(--red); }
 .facts-empty { color: var(--muted); font-size: 12px; font-style: italic; }
@@ -157,6 +158,8 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-width: 1720px; }
 .route-h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .01em; }
 .route-sub { color: var(--text-2); margin: 0 0 20px; max-width: 70ch; }
+.kbd-hint { display: inline-block; margin-left: 6px; color: var(--muted); font-size: 12.5px; }
+.kbd-hint kbd { font: 11px var(--mono); background: var(--bg2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; color: var(--text); }
 
 /* ---- coach ---- */
 .coach-hero { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; padding: 18px 20px; background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 22px; }
@@ -195,6 +198,12 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .cmd-webnote { margin: 0 10px 8px; padding: 6px 10px; border-left: 2px solid var(--accent-2); background: color-mix(in srgb, var(--accent-2) 8%, transparent); color: var(--text-2); font-size: 12px; border-radius: 0 6px 6px 0; }
 .cmd-needs { padding: 0 12px 8px; color: var(--yellow); font-size: 12px; }
 .cmd-needs code { color: var(--yellow); }
+/* inline free-text token fill ({{command}} etc.) — type a value, the command + copy update live */
+.cmd-fill-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 12px 10px; border-top: 1px dashed var(--line); }
+.cmd-fill-lbl { display: flex; flex-direction: column; gap: 3px; flex: 1 1 180px; }
+.cmd-fill-lbl > span { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent-2); }
+.cmd-fill { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font: 12.5px var(--mono); }
+.cmd-fill:focus { outline: none; border-color: var(--accent); }
 /* "set up first" — obol hands the operator the command that writes the file this move reads. */
 .move-prep { margin: 10px 0; padding: 8px 10px 4px; border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .move-prep .mini-label { display: block; margin-bottom: 6px; color: var(--accent); }
@@ -445,12 +454,26 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .rep-controls { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 16px; }
 .rep-opts { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .rep-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
-.rep-opt select { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; font: 12px var(--mono); }
+.rep-opt select, .rep-opt input[type="text"] { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; font: 12px var(--mono); }
+.rep-opt input[type="text"] { width: 12ch; }
+.rep-opt input[type="text"]:focus { outline: none; border-color: var(--accent); }
 .rep-opt-note { color: var(--muted); font-size: 11.5px; }
 .rep-actions { display: flex; gap: 8px; align-items: center; }
 .rep-actions .btn-ghost, .rep-actions .btn-primary { padding: 7px 13px; font-size: 12.5px; }
-.rep-out { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 16px; max-height: 70vh; overflow: auto; }
-.rep-out.md pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; color: var(--text); margin: 0; }
+/* On-screen the report renders as PAPER — black on white, like the printed/PDF output — so the
+   preview matches what you hand in. Embedded Kali terminal captures stay dark (see .lang-terminal). */
+.rep-out { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: #16181d;
+  padding: 26px 30px; max-height: 72vh; overflow: auto; box-shadow: 0 2px 14px rgba(0, 0, 0, .35); }
+.rep-out h1, .rep-out h2, .rep-out h3, .rep-out h4, .rep-out strong, .rep-out b, .rep-out th { color: #0b0d10; }
+.rep-out h2 { border-bottom: 1px solid #dfe3ea; padding-bottom: 4px; }
+.rep-out a { color: #0b4fd0; }
+.rep-out p, .rep-out li, .rep-out td, .rep-out dt, .rep-out dd { color: #16181d; }
+.rep-out table { border-collapse: collapse; }
+.rep-out th, .rep-out td { border: 1px solid #dfe3ea; padding: 5px 9px; }
+.rep-out th { background: #f2f4f8; }
+.rep-out :not(pre) > code { background: #f0f2f6; color: #b02a5b; padding: 1px 5px; border-radius: 4px; }
+.rep-out hr { border: none; border-top: 1px solid #dfe3ea; }
+.rep-out.md pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; color: #16181d; margin: 0; }
 .rep-gaps { color: var(--yellow); font-size: 13px; margin: 10px 0; }
 .rep-gaps ul { margin: 6px 0; }
 
@@ -530,6 +553,12 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
   font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
 .eng-jump { border: none; }
 #eng-setup { scroll-margin-top: 18px; } /* breathing room when the getting-started CTA scrolls here */
+/* brief highlight when the + (new engagement) routes here, so it's obvious where you landed */
+.eng-setup-flash { animation: engSetupFlash 1.4s ease-out; }
+@keyframes engSetupFlash {
+  0%, 15% { box-shadow: 0 0 0 2px var(--accent), 0 0 22px color-mix(in srgb, var(--accent) 40%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
 .eng-field-opt { color: var(--muted); font-weight: 400; }
 .eng-field-hint { color: var(--muted); font-size: 12px; margin: -6px 0 4px; }
 .eng-field-hint code, .ws-banner-note code, .ws-banner-h code { background: var(--bg2); padding: 1px 5px; border-radius: 4px; }
@@ -604,6 +633,10 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .flag-pill { background: var(--accent-soft); color: var(--accent-2); }
 .target-chain { margin: 8px 0 20px; }
 .target-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 22px; }
+/* grid items default to min-width:auto, so a wide attack-path ribbon in the left column would
+   refuse to shrink and shove the "Next moves" column off-screen — min-width:0 lets both tracks
+   stay inside the viewport and the ribbon wrap within its own column. */
+.target-col { min-width: 0; }
 @media (max-width: 900px) { .target-grid { grid-template-columns: 1fr; } }
 .story-list { list-style: none; margin: 0; padding: 0; }
 .story-row { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }
@@ -760,7 +793,11 @@ svg.obol-engmap .em-acc-privileged rect { fill: color-mix(in srgb, var(--critica
 svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .em-legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; }
 .em-legend-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.em-legend-item { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
+.em-legend-item { display: inline-flex; align-items: center; gap: 5px; color: var(--text-2); background: none; border: none; cursor: pointer; font: inherit; padding: 2px 4px; border-radius: 6px; }
+.em-legend-item:hover { background: var(--surf3); color: var(--text); }
+.em-legend-item[aria-checked="false"] { color: var(--muted); opacity: .55; text-decoration: line-through; }
+.em-legend-item[aria-checked="false"] .em-swatch { filter: grayscale(1); opacity: .5; }
+.em-legend-hint { color: var(--muted); font-size: 11px; align-self: center; }
 .em-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid var(--line-hot); display: inline-block; }
 
 /* ---- ⌘K command palette ---- */

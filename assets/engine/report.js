@@ -90,7 +90,11 @@
   function stamp(ts) {
     if (!ts) return 'unknown time';
     try {
-      var d = new Date(Number(ts) * 1000);
+      // Fact created_at is epoch SECONDS (~1.7e9); an activity's `at` is Date.now() MILLISECONDS
+      // (~1.7e12). Detect which so a ms value isn't multiplied into the year 58707.
+      var ms = Number(ts);
+      if (ms < 1e11) ms *= 1000;
+      var d = new Date(ms);
       if (isNaN(d.getTime())) return 'unknown time';
       // YYYY-MM-DD HH:MM:SS (local, mirrors datetime.fromtimestamp().strftime)
       var p = function (n) { return String(n).padStart(2, '0'); };
@@ -745,15 +749,18 @@
     });
 
     var meta = {
-      name: params.name || params.workspace || 'engagement',
+      // prefer the top-level opts the caller passes (engagement name, exam candidate/OSID from the
+      // profile) over engagement params, which rarely carry them — else the cover falls back to
+      // "engagement"/«your name»/OS-XXXXX even after they're set.
+      name: opts.name || params.name || params.workspace || 'engagement',
       target: params.target || '',
       scope: params.scope || (params.target ? [params.target] : []),
       domain: (domain[0] && domain[0].name) || params.domain || '',
       generated_at: stamp(activities.length ? Math.max.apply(null, activities.map(function (r) { return r.at || 0; })) : null),
       include_secrets: includeSecrets,
-      osid: params.osid || '',
-      candidate: params.candidate || '',
-      platform: params.platform || '',
+      osid: opts.osid || params.osid || '',
+      candidate: opts.candidate || params.candidate || '',
+      platform: opts.platform || params.platform || '',
     };
 
     var ctx = {
@@ -1035,11 +1042,15 @@
   }
 
   // ── cover / toc ──
+  // An OffSec exam profile (OSCP, OSWP, …) — its filename is keyed on the OSID and its cover carries
+  // the candidate name + OSID that OffSec requires. Detected by shape so new exam profiles inherit it.
+  function isExamProfileObj(profile) { return /\{osid\}/.test((profile && profile.filename_pattern) || ''); }
+
   function cover(ctx, profile) {
     var meta = ctx.meta || {};
     var cfg = profile.config || {};
     var pairs = [];
-    if (profile.id === 'oscp') {
+    if (isExamProfileObj(profile)) {
       pairs.push(['Candidate', cfg.candidate || '«your name»']);
       pairs.push(['OSID', cfg.osid || 'OS-XXXXX']);
     }
@@ -1945,6 +1956,8 @@
     toHtml: toHtml,
     validate: validate,
     filenameStem: filenameStem,
+    // true for an OffSec exam profile (OSCP/OSWP) whose cover needs a candidate name + OSID
+    isExamProfile: function (id) { return isExamProfileObj(PROFILES[String(id || '').toLowerCase()]); },
     // redaction (two-layer, default ON)
     redact: redactCommand,
     redactValue: redactValue,
