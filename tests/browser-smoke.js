@@ -659,6 +659,38 @@ function serve() {
   ok(drawer, 'hamburger opens the engagement drawer on-screen');
   await mob.close();
 
+  // Whole-session import panel: paste a multi-command capture (with obol's prompt stamp), import it in one
+  // pass, and confirm the segments run through the same pipeline (facts minted, LHOST learned, summary shown).
+  // Placed late so its unshifted activities / minted hostname don't perturb the earlier ordered assertions.
+  await page.goto(`http://localhost:${PORT}/index.html#/evidence`, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => window.OBOL && window.OBOL.parsers && window.OBOL.parsers.parseActionOutput, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(200);
+  ok(await page.locator('.ev-import summary').count() >= 1, 'Evidence route shows the "Import a Full Session" panel');
+  await page.evaluate(() => { document.querySelectorAll('.ev-import, .ev-import-setup').forEach(function (d) { d.open = true; }); });
+  const stampShown = await page.evaluate(() => (document.getElementById('ev-stamp-code') || {}).textContent || '');
+  ok(/precmd_functions\+=\(/.test(stampShown), 'the import panel surfaces the non-destructive zsh prompt-stamp snippet');
+  const impCountBefore = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
+  const sessionCap = [
+    '[2026-09-27 18:00:01 UTC] [tun0:10.10.14.9]',
+    '┌──(kali㉿kali)-[~/lab]', '└─$ nxc smb 10.10.10.10',
+    'SMB 10.10.10.10 445 DC01 [*] Windows Server 2016 Build 14393 x64 (name:DC01) (domain:corp.local) (signing:True) (SMBv1:False)',
+    '[2026-09-27 18:02:30 UTC] [tun0:10.10.14.9]',
+    '┌──(kali㉿kali)-[~/lab]', "└─$ nxc ldap 10.10.10.10 -u '' -p '' --users",
+    'LDAP 10.10.10.10 389 DC01 [*] (domain:corp.local)',
+    'LDAP 10.10.10.10 389 DC01 jdoe', 'LDAP 10.10.10.10 389 DC01 svc-web',
+  ].join('\n');
+  await page.fill('#ev-imp-text', sessionCap);
+  await page.click('#ev-imp-go');
+  await page.waitForTimeout(400);
+  const imp = await page.evaluate(() => ({
+    lhost: (window.OBOL.store.active().params || {}).lhost || '',
+    acts: (window.OBOL.store.active().activities || []).length,
+    res: (document.getElementById('ev-imp-result') || {}).textContent || '',
+  }));
+  ok(imp.acts - impCountBefore === 2, 'importing a 2-command session records exactly 2 activities (' + (imp.acts - impCountBefore) + ')');
+  ok(imp.lhost === '10.10.14.9', 'session import learns {{lhost}} from the [tun0:IP] stamp');
+  ok(/Imported 2 command/.test(imp.res), 'the import summary reports the commands imported');
+
   // Data reset controls: management sits near the top of Engagements; the store methods wipe cleanly.
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.eng-library', { timeout: 5000 });

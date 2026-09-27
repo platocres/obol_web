@@ -175,19 +175,96 @@
       // `command` stays the honest lineage (may be empty for an attached file); `dispatch` is the widened
       // routing label obol recovered from the content — the coach's "already run" check reads it so an
       // ATTACHED dump (no typed command) still marks the command that produced it ✓ ran.
-      e.activities.unshift({ at: Date.now(), command: cmd, dispatch: (dispatchCmd !== cmd ? dispatchCmd : ''),
+      e.activities.unshift({ at: opts.at || Date.now(), command: cmd, dispatch: (dispatchCmd !== cmd ? dispatchCmd : ''),
         source: opts.source || 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
         target: params.target || '', scope: scope, file: opts.fileName || '', action_id: opts.actionId || '',
         produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
     }, 'activity');
-    if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+    // `quiet` — a batch session import re-renders ONCE at the end instead of per command.
+    if (!opts.quiet && OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
     // Signals for the caller's "this move ran but proved nothing" decision: did a tool obol knows about
     // actually run (recognized), and did it fail rather than simply come up empty (looksError)?
     return { ok: true, added: added, facts: facts, cmd: cmd, lines: lines, fileName: opts.fileName || '',
       parseError: parseError, recognizedTool: recognizesTool(cmd, text), looksError: looksLikeError(text) };
   }
 
+  // ── Whole-session import ────────────────────────────────────────────────────────────────────────
+  // Split a full terminal capture (many commands + their output) into per-command segments, so obol can
+  // catch up on an entire box at once — the "get me un-stuck" path. A segment begins at a prompt/command
+  // line and runs until the next one; the timestamp on a Kali prompt (`[2026-09-27 17:17:38 UTC]`) is
+  // captured so multiple tabs/files can be stitched into one chronological history.
+  var _PROMPT_LINE = [
+    /^\s*(?:┌──.*)?└─[#$]\s+(\S.*)$/,                                   // Kali two-line prompt (cmd on └─$)
+    /^[\w.\-]+@[\w.\-]+:[^\s#$]*\s*[#$]\s+(\S.*)$/,                      // user@host:cwd$ cmd
+    /^PS\s+[A-Za-z]:[^>]*>\s+(\S.*)$/,                                   // PowerShell PS C:\...> cmd
+  ];
+  var _BARE_PROMPT = /^\s*[#$]\s+(\S.*)$/;                              // bare "$ cmd" / "# cmd" (last resort)
+  var _TS_RE = /\[(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/;          // a prompt timestamp → epoch ms
+  function _promptCmd(raw) {
+    for (var i = 0; i < _PROMPT_LINE.length; i++) { var m = _PROMPT_LINE[i].exec(raw); if (m) return m[1].trim(); }
+    return null;
+  }
+  function _ts(line) {
+    var m = _TS_RE.exec(line || ''); if (!m) return null;
+    var t = Date.parse(m[1] + 'T' + m[2] + 'Z'); return isNaN(t) ? null : t;
+  }
+  // Segment one capture into [{command, stdout, ts}], newest-of-the-block timestamp carried from its prompt
+  // (or the line just above it, where the Kali prompt prints the time). Heredocs (cat > f <<'EOF' … EOF)
+  // are swallowed into their command's block so their body is not mistaken for more commands.
+  function splitSession(text) {
+    var lines = String(text || '').split(/\r?\n/), segs = [], cur = null, prev = '', prev2 = '', heredoc = null;
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i];
+      if (heredoc !== null) { if (cur) cur.stdout.push(raw); if (raw.trim() === heredoc) heredoc = null; prev2 = prev; prev = raw; continue; }
+      var cmd = _promptCmd(raw);
+      // A bare "$ cmd" / "# cmd" is a weak signal — tool output is full of lines that start with "# "
+      // (config/comment dumps) or "$ " — so accept one only when what follows leads with a tool obol
+      // knows. Strong prompts (Kali └─$, user@host, PS …>) are matched above with no such gate.
+      if (cmd == null) { var bm = _BARE_PROMPT.exec(raw); if (bm && TOOL_HINTS[firstToolToken(bm[1])]) cmd = bm[1].trim(); }
+      if (cmd != null) {
+        if (cur) segs.push(cur);
+        // the stamp may be inline on the prompt (Kali), or on a stamp line 1–2 rows above (obol's precmd tweak)
+        cur = { command: cmd, stdout: [], ts: _ts(raw) || _ts(prev) || _ts(prev2) };
+        var hd = /<<-?\s*['"]?([A-Za-z_][\w]*)['"]?/.exec(cmd); if (hd) heredoc = hd[1];
+      } else if (cur) { cur.stdout.push(raw); }
+      prev2 = prev; prev = raw;
+    }
+    if (cur) segs.push(cur);
+    return segs.map(function (s) { return { command: s.command, stdout: s.stdout.join('\n').replace(/^\n+|\n+$/g, ''), ts: s.ts }; });
+  }
+
+  // Import one or more captures. Segments are stitched chronologically by prompt timestamp (null carries the
+  // previous one so a tab's order is kept), de-duplicated (the same command+output pasted twice is ignored),
+  // and each is run through the normal ingest pipeline. Returns a summary for the UI.
+  function importSession(inputs, opts) {
+    opts = opts || {};
+    if (!ready()) return { ok: false, reason: 'parsers' };
+    var texts = Array.isArray(inputs) ? inputs : [inputs];
+    var all = [];
+    texts.forEach(function (t, fi) {
+      var segs = splitSession(t), carry = null;
+      segs.forEach(function (s, li) {
+        if (s.ts == null) s.ts = carry; else carry = s.ts;
+        all.push({ command: s.command, stdout: s.stdout, ts: s.ts, ord: fi * 100000 + li });
+      });
+    });
+    // chronological where timestamps exist; stable on original order otherwise
+    all.sort(function (a, b) { var at = a.ts == null ? a.ord : a.ts, bt = b.ts == null ? b.ord : b.ts; return at === bt ? a.ord - b.ord : at - bt; });
+    var seen = {}, ranTools = {}, imported = 0, dupes = 0, added = 0, first = null;
+    all.forEach(function (s) {
+      var firstOut = (s.stdout.split(/\r?\n/).find(function (l) { return l.trim(); }) || '').slice(0, 120);
+      var key = s.command.replace(/\s+/g, ' ').trim() + '|' + firstOut;
+      if (seen[key]) { dupes++; return; }
+      seen[key] = 1;
+      var r = run({ text: s.stdout, command: s.command, source: 'session', at: s.ts || undefined, quiet: true, fileName: opts.fileName || '' });
+      if (r && r.ok) { imported++; added += (r.added || 0); ranTools[(s.command.split(/\s+/)[0] || '').toLowerCase()] = 1; if (!first) first = s.command; }
+    });
+    if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+    return { ok: true, commands: all.length, imported: imported, dupes: dupes, added: added, tools: Object.keys(ranTools) };
+  }
+
   OBOL.ingest = { run: run, deriveCommand: deriveCommand, sniffCommand: sniffCommand,
     contentSignatures: contentSignatures, dispatchLabel: dispatchLabel, recognizesTool: recognizesTool,
-    looksLikeError: looksLikeError, detectLhost: detectLhost, ensureParsers: ensureParsers, ready: ready };
+    looksLikeError: looksLikeError, detectLhost: detectLhost, splitSession: splitSession, importSession: importSession,
+    ensureParsers: ensureParsers, ready: ready };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

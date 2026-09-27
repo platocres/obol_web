@@ -44,6 +44,22 @@ ok(withWs.filled === 'nmap -oN /home/kali/ctf/boxy/scans/nmap.txt 10.0.0.5', 'co
 const noWs = C.fillCommand(nmap, new OBOL.facts.FactSet([]), { params: { target: '10.0.0.5' } }, 0);
 ok(noWs.filled === 'nmap -oN scans/nmap.txt 10.0.0.5', 'command still forms with a relative scans/ dir when no workspace is set');
 
+// the non-destructive zsh prompt-stamp tweak: it must be a real precmd hook, and CRUCIALLY the line it
+// prints must be one obol's own ingest can read back (the [UTC time] and [dev:IP] the splitter/LHOST
+// detector key on). We simulate the line the snippet would emit and round-trip it through ingest.
+const stamp = W.PROMPT_STAMP_ZSH;
+ok(/precmd_functions\+=\(/.test(stamp), 'prompt-stamp appends a precmd hook (non-destructive — keeps the operator prompt)');
+ok(/date -u/.test(stamp) && /tun\|tap\|wg/.test(stamp), 'prompt-stamp prints a UTC time and auto-detects the VPN device');
+require('../../assets/ui/ingest.js'); // IIFE — attaches OBOL.ingest to globalThis.OBOL
+const ing = OBOL.ingest;
+const emitted = '[2026-09-27 17:17:38 UTC] [tun0:10.10.14.191]';
+ok(ing.detectLhost(emitted) === '10.10.14.191', 'the stamp line the snippet emits yields the operator LHOST');
+const seg = ing.splitSession(emitted + '\n┌──(kali㉿kali)-[~]\n└─$ id\nuid=0(root)');
+ok(seg.length === 1 && seg[0].command === 'id' && seg[0].ts === Date.parse('2026-09-27T17:17:38Z'),
+  'the stamp line the snippet emits is picked up as the timestamp for the command below it');
+ok(typeof W.captureCmd({ workspace: { root: '/h/k/box' } }) === 'string' && /^script /.test(W.captureCmd({ workspace: { root: '/h/k/box' } })),
+  'captureCmd offers a `script` session-recording command');
+
 // the real AD pack's nmap discovery action now writes native output into {{scandir}}
 const PACKS_DIR = require('path').join(__dirname, '..', '..', 'data', 'packs');
 const ad = JSON.parse(require('fs').readFileSync(require('path').join(PACKS_DIR, 'ad_2026_09.json'), 'utf8'));

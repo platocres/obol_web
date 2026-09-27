@@ -62,9 +62,35 @@
     return r ? ('mkdir -p ' + r + '/{' + subs + '} && cd ' + r) : ('mkdir -p {' + subs + '}');
   }
 
+  // A NON-DESTRUCTIVE zsh tweak: print a dim line with the UTC time + VPN address before every prompt,
+  // WITHOUT replacing the operator's own PROMPT (precmd_functions+=() appends a hook, so it composes with
+  // oh-my-zsh / powerlevel10k / a plain prompt alike). Two payoffs feed the whole-session import:
+  //   • every command gets a timestamp, so obol can stitch captures from several tabs into one timeline;
+  //   • the tun/tap/wg address is surfaced, so obol reads the operator's {{lhost}} straight from a paste.
+  // The device name is auto-detected (tun0/tap0/wg0…) and printed verbatim, matching ingest.detectLhost.
+  var PROMPT_STAMP_ZSH = [
+    '# obol: stamp each prompt with the UTC time + VPN IP (keeps your existing prompt).',
+    'obol_stamp() {',
+    '  local dev ip',
+    '  read -r dev ip <<< "$(ip -4 -o addr show 2>/dev/null | awk \'$2 ~ /^(tun|tap|wg)/ {split($4,a,\"/\"); print $2, a[1]; exit}\')"',
+    '  print -P "%F{244}[$(date -u \'+%Y-%m-%d %H:%M:%S UTC\')]${ip:+ [$dev:$ip]}%f"',
+    '}',
+    'precmd_functions+=(obol_stamp)',
+  ].join('\n');
+  // Append it to ~/.zshrc and reload — idempotent (the guard skips a second append).
+  var PROMPT_STAMP_INSTALL = "grep -q obol_stamp ~/.zshrc || cat >> ~/.zshrc <<'OBOL_ZSH'\n" + PROMPT_STAMP_ZSH + "\nOBOL_ZSH\nsource ~/.zshrc";
+  // Capture a whole session to a file to import in one go (portable: works without the prompt tweak, but
+  // timestamps come out best WITH it). `script` records everything you run + its output, timing included.
+  function captureCmd(eng) {
+    var d = dirs(eng);
+    return 'script -q -f ' + join(d.loot || 'loot', 'session-$(date -u +%Y%m%d-%H%M%S).log');
+  }
+
   OBOL.workspace = {
     LAYOUT: LAYOUT, DEFAULT_BASE: DEFAULT_BASE,
+    PROMPT_STAMP_ZSH: PROMPT_STAMP_ZSH, PROMPT_STAMP_INSTALL: PROMPT_STAMP_INSTALL,
     slugify: slugify, sanitizeRoot: sanitizeRoot, join: join, slugFor: slugFor, defaultRoot: defaultRoot,
     rootFor: rootFor, isConfigured: isConfigured, dirs: dirs, tokens: tokens, scaffold: scaffold,
+    captureCmd: captureCmd,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -262,12 +262,20 @@
     if (OBOL.workspace.isConfigured(eng) && !((eng.ui || {}).wsScaffoldDone) && factCount < 3) {
       var scaffold = OBOL.workspace.scaffold(eng);
       var scandir = OBOL.workspace.tokens(eng).scandir;
+      var stamp = OBOL.workspace.PROMPT_STAMP_ZSH || '';
       html += '<div class="ws-banner">'
         + '<div class="ws-banner-h">📁 Set up your working directory — run this once on your Kali box:</div>'
         + '<pre class="cmd-run"><code>' + esc(scaffold) + '</code></pre>'
         + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(scaffold) + '">copy</button>'
         + '<button class="btn-ghost ws-done">Got It</button></div>'
         + '<div class="ws-banner-note">Commands below write into <code>' + esc(scandir) + '</code> — run one, then attach its output file in Evidence.</div>'
+        + (stamp
+          ? ('<details class="ws-stamp"><summary>Optional: stamp your prompt with the time + VPN IP <span class="ev-import-tag">recommended</span></summary>'
+            + '<div class="ws-banner-note">Paste this into <code>~/.zshrc</code> once. It prints a dim <code>[UTC time] [tun0:IP]</code> line before each prompt (your prompt is untouched), so later you can paste your <strong>whole session</strong> into Evidence and obol orders it correctly and auto-fills your <code>{{lhost}}</code>.</div>'
+            + '<pre class="cmd-run"><code>' + esc(stamp) + '</code></pre>'
+            + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(stamp) + '">copy</button></div>'
+            + '</details>')
+          : '')
         + '</div>';
     }
 
