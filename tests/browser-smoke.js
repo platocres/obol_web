@@ -302,6 +302,21 @@ function serve() {
   ok(scanMarkers.indexOf('scan.nmap.quick') !== -1 && scanMarkers.indexOf('scan.nmap.version') !== -1,
     'a -sC -sV scan pasted on the fast move proves BOTH scan markers in one paste (no re-suggest)');
 
+  // Paste-anywhere: a full-terminal paste routes on its OWN prompt/command line (kali └─$ …), not the
+  // move's canned command — so any tool's output mints its facts from any box (coach is proof-gated).
+  const anywhere = await page.evaluate(async () => {
+    await window.OBOL.ingest.ensureParsers();
+    const paste = '┌──(kali㉿kali)-[~/x]\n'
+      + "└─$ nxc ldap 10.10.10.9 -u '' -p '' --users\n"
+      + 'LDAP 10.10.10.9 389 DC01 zoe.quinn 2020-01-01 0\n'
+      + 'LDAP 10.10.10.9 389 DC01 tom.baker 2020-01-01 0\n';
+    // opts.command is an UNRELATED move command (nmap) — the derived nxc command must win.
+    const r = window.OBOL.ingest.run({ text: paste, command: 'nmap -Pn -p- --min-rate 5000 10.10.10.9', actionId: 'nmap-fast-open-ports', source: 'paste' });
+    return { cmd: r.cmd, kinds: (r.facts || []).map((f) => f.kind) };
+  });
+  ok(anywhere.cmd.indexOf('nxc ldap') === 0, 'ingest routes on the paste\'s own kali-prompt command line, not the move\'s (' + anywhere.cmd + ')');
+  ok(anywhere.kinds.indexOf('ad.user_list') !== -1, 'nxc --users pasted onto the NMAP move still mints ad.user_list (paste-anywhere routing)');
+
   // The + (new engagement) routes to the full setup form (profile, machine type, working directory),
   // not a name-only prompt that skips every option.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
