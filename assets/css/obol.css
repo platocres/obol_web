@@ -456,8 +456,20 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .rep-opt-note { color: var(--muted); font-size: 11.5px; }
 .rep-actions { display: flex; gap: 8px; align-items: center; }
 .rep-actions .btn-ghost, .rep-actions .btn-primary { padding: 7px 13px; font-size: 12.5px; }
-.rep-out { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 16px; max-height: 70vh; overflow: auto; }
-.rep-out.md pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; color: var(--text); margin: 0; }
+/* On-screen the report renders as PAPER — black on white, like the printed/PDF output — so the
+   preview matches what you hand in. Embedded Kali terminal captures stay dark (see .lang-terminal). */
+.rep-out { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: #16181d;
+  padding: 26px 30px; max-height: 72vh; overflow: auto; box-shadow: 0 2px 14px rgba(0, 0, 0, .35); }
+.rep-out h1, .rep-out h2, .rep-out h3, .rep-out h4, .rep-out strong, .rep-out b, .rep-out th { color: #0b0d10; }
+.rep-out h2 { border-bottom: 1px solid #dfe3ea; padding-bottom: 4px; }
+.rep-out a { color: #0b4fd0; }
+.rep-out p, .rep-out li, .rep-out td, .rep-out dt, .rep-out dd { color: #16181d; }
+.rep-out table { border-collapse: collapse; }
+.rep-out th, .rep-out td { border: 1px solid #dfe3ea; padding: 5px 9px; }
+.rep-out th { background: #f2f4f8; }
+.rep-out :not(pre) > code { background: #f0f2f6; color: #b02a5b; padding: 1px 5px; border-radius: 4px; }
+.rep-out hr { border: none; border-top: 1px solid #dfe3ea; }
+.rep-out.md pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; color: #16181d; margin: 0; }
 .rep-gaps { color: var(--yellow); font-size: 13px; margin: 10px 0; }
 .rep-gaps ul { margin: 6px 0; }
 

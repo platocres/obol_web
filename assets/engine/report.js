@@ -90,7 +90,11 @@
   function stamp(ts) {
     if (!ts) return 'unknown time';
     try {
-      var d = new Date(Number(ts) * 1000);
+      // Fact created_at is epoch SECONDS (~1.7e9); an activity's `at` is Date.now() MILLISECONDS
+      // (~1.7e12). Detect which so a ms value isn't multiplied into the year 58707.
+      var ms = Number(ts);
+      if (ms < 1e11) ms *= 1000;
+      var d = new Date(ms);
       if (isNaN(d.getTime())) return 'unknown time';
       // YYYY-MM-DD HH:MM:SS (local, mirrors datetime.fromtimestamp().strftime)
       var p = function (n) { return String(n).padStart(2, '0'); };

@@ -445,6 +445,16 @@ function serve() {
     return !!pre && pre.textContent.indexOf('nmap') !== -1 && pre.textContent.indexOf('kerberos') !== -1 && pre.textContent.indexOf('kali@kali') !== -1;
   });
   ok(transcriptHasCmd, 'transcript contains the prompt, command and output');
+  // the on-screen report renders as white paper (black on white), like the printed output
+  const paper = await page.evaluate(() => {
+    const el = document.getElementById('rep-out'); if (!el) return null;
+    const bg = getComputedStyle(el).backgroundColor;
+    const m = bg.match(/\d+/g) || [0, 0, 0];
+    return { bright: (Number(m[0]) + Number(m[1]) + Number(m[2])) / 3, text: el.textContent || '' };
+  });
+  ok(paper && paper.bright > 230, 'the report preview renders on white paper (bg brightness ' + (paper && Math.round(paper.bright)) + ')');
+  // the "Generated" timestamp is a sane year, not a ms×1000 blowup (was rendering year 58707)
+  ok(paper && !/\b(?:[3-9]\d{3,}|\d{5,})-\d\d-\d\d/.test(paper.text), 'the Generated date is a sane year (no ms-as-seconds blowup)');
   // Export controls present + .docx builds with an embedded screenshot (JSZip loaded with the report bundle).
   ok(await page.locator('#rep-print').count() === 1 && await page.locator('#rep-docx').count() === 1, 'report has Print/PDF + .docx buttons');
   const docx = await page.evaluate(async () => {
