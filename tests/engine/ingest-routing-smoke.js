@@ -65,5 +65,14 @@ ok(OBOL.ingest.looksLikeError('bloodyAD: error: unrecognized arguments: svc-alfr
 ok(OBOL.ingest.looksLikeError('LDAPModifyException: insufficientAccessRights ... Access is denied.') === true, 'an access-denied failure IS an error (not a clean negative)');
 ok(OBOL.ingest.recognizesTool('', 'the quick brown fox jumped over the lazy dog') === false, 'unrelated prose is not recognized as a tool run (never retires a move)');
 
+// an ATTACHED bloodyAD get-writable dump (no command line) → the dispatch label recovers "get writable"
+var bloodyDump = ['distinguishedName: CN=Exchange Windows Permissions,CN=Users,DC=corp,DC=local', 'member: WRITE', 'nTSecurityDescriptor: WRITE', '', 'distinguishedName: CN=DnsAdmins,CN=Users,DC=corp,DC=local', 'member: WRITE'].join('\n');
+ok(/get writable/.test(OBOL.ingest.dispatchLabel('', bloodyDump)), 'an attached bloodyAD get-writable dump is recovered into the dispatch label (so the coach can mark it ran)');
+
+// obol learns the operator's LHOST from the terminal prompt in a paste (`[tun0:10.10.14.191]`)
+ok(OBOL.ingest.detectLhost('┌──(kali㉿kali)-[~/CTF] [2026-09-27 00:14:34 UTC] [tun0:10.10.14.191]\n└─$ nmap -Pn 10.129.94.251') === '10.10.14.191', 'the operator LHOST is read from the [tun0:IP] prompt');
+ok(OBOL.ingest.detectLhost('[tap0:10.8.0.5]') === '10.8.0.5', 'a tap adapter address is recognized too');
+ok(OBOL.ingest.detectLhost('Nmap scan report for 10.129.94.251\nHost is up.') === '', 'a target IP in tool output is NOT mistaken for the operator LHOST');
+
 console.log(fail ? ('\nINGEST ROUTING: ' + fail + ' FAILURES') : '\nINGEST ROUTING: all passed');
 process.exit(fail ? 1 : 0);

@@ -73,6 +73,9 @@
     [/\$krb5tgs\$/, 'getuserspns'],
     [/\$krb5asrep\$/, 'getnpusers'],
     [/SCCMHunter|NetworkAccess(?:Username|Password|Account)\s*[:=]/i, 'sccmhunter'],
+    // bloodyAD `get writable` dump — a distinguishedName block followed by a bare WRITE/CREATE_CHILD attr.
+    // Recovering it lets the coach mark the get-writable enumeration ✓ ran once you attach its 50k-line file.
+    [/distinguishedName:[\s\S]{0,4000}?\n[A-Za-z][\w-]*:[ \t]*(?:WRITE|CREATE_CHILD)[ \t]*(?:\r?\n|$)/i, 'bloodyad get writable'],
   ];
   function contentSignatures(text) {
     var body = String(text || ''), out = [];
@@ -104,6 +107,15 @@
   var ERR_MARKERS = /\busage:|\btraceback\b|command not found|no such file|unrecognized option|invalid option|\bmissing option\b|permission denied|access is denied|\bunauthorized\b|logon failure|connection refused|could not connect|connection reset|name or service not known|\berror:/i;
   function looksLikeError(text) { return ERR_MARKERS.test(String(text || '')); }
 
+  // The operator's own attacker IP, read from a terminal prompt like the Kali/HTB `[tun0:10.10.14.191]`
+  // (also tap/vpn/wg/eth). This is YOUR listener/LHOST — obol fills {{lhost}} with it so coercion, relay
+  // and reverse-shell commands form without hand-typing your VPN address on every box.
+  var _LHOST_RE = /\[(?:tun|tap|vpn|wg|eth|wlan)\d*[:\/ ]\s*(\d{1,3}(?:\.\d{1,3}){3})\]/i;
+  function detectLhost(text) {
+    var m = _LHOST_RE.exec(String(text || ''));
+    return m ? m[1] : '';
+  }
+
   function ready() { return !!(OBOL.parsers && OBOL.parsers.parseActionOutput); }
   // Resolve to true once the (lazily-loaded) parser group is available.
   function ensureParsers() {
@@ -132,6 +144,12 @@
     var dispatchCmd = dispatchLabel(cmd, text);
     var eng = OBOL.store.active();
     var params = (eng && eng.params) || {};
+    // Learn the operator's LHOST from the paste's own prompt (`[tun0:10.10.14.191]`) when not already set,
+    // so {{lhost}} stops reading "needs: lhost" the moment a real terminal capture goes through.
+    if (!params.lhost) {
+      var lh = detectLhost(text);
+      if (lh) { OBOL.store.update(function (e) { e.params = e.params || {}; e.params.lhost = lh; }, 'params'); params = (OBOL.store.active() || {}).params || params; }
+    }
     var scope = 'host:' + (params.target || 'target');
     var res, parseError = '';
     try {
@@ -147,7 +165,11 @@
       : text;
     OBOL.store.update(function (e) {
       e.activities = e.activities || [];
-      e.activities.unshift({ at: Date.now(), command: cmd, source: opts.source || 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
+      // `command` stays the honest lineage (may be empty for an attached file); `dispatch` is the widened
+      // routing label obol recovered from the content — the coach's "already run" check reads it so an
+      // ATTACHED dump (no typed command) still marks the command that produced it ✓ ran.
+      e.activities.unshift({ at: Date.now(), command: cmd, dispatch: (dispatchCmd !== cmd ? dispatchCmd : ''),
+        source: opts.source || 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
         target: params.target || '', scope: scope, file: opts.fileName || '', action_id: opts.actionId || '',
         produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
     }, 'activity');
@@ -160,5 +182,5 @@
 
   OBOL.ingest = { run: run, deriveCommand: deriveCommand, sniffCommand: sniffCommand,
     contentSignatures: contentSignatures, dispatchLabel: dispatchLabel, recognizesTool: recognizesTool,
-    looksLikeError: looksLikeError, ensureParsers: ensureParsers, ready: ready };
+    looksLikeError: looksLikeError, detectLhost: detectLhost, ensureParsers: ensureParsers, ready: ready };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

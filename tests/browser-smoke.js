@@ -225,6 +225,47 @@ function serve() {
   const swapped = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'bob' && p.nthash === 'aabbccddeeff00112233445566778899'; });
   ok(swapped, 'clicking a credential fills the engagement params (bob + NT hash)');
   ok(await page.locator('#cred-switch .cred-row.active', { hasText: 'bob' }).count() === 1, 'the chosen credential is marked active');
+  // The right-rail Credentials card dedupes: one credential proven on two scopes must show ONCE, not twice.
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([F.makeFact({ kind: 'credential.available', scope: 'host:10.10.10.7', value: { user: 'alice', domain: 'corp.local', password: 'S3cret!' }, state: F.ProofState.SUPPORTED, source: 'test2' })], 'test');
+  });
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(150);
+  ok((await page.locator('.context-rail .rail-list li', { hasText: 'alice@corp.local' }).count()) === 1, 'the coach rail lists a credential proven on two scopes only once (deduped)');
+
+  // Un-retire: a move retired as "empty" whose produced fact is now proven must RE-APPEAR — re-pasting
+  // good evidence (0 new facts) must never bury a move you still need to finish the chain.
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.update((e) => { e.checklist = e.checklist || {}; e.checklist['bloodyad-acl'] = 'empty'; }, 'done');
+    S.addFacts([F.makeFact({ kind: 'host.os_hint', scope: 'host:10.10.10.9', value: { os: 'windows' }, state: F.ProofState.SUPPORTED, source: 'test' })], 'test');
+    window.OBOL.router.render();
+  });
+  await page.waitForTimeout(120);
+  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) === 0, 'a move retired as empty (no produced fact yet) stays out of the coach');
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([F.makeFact({ kind: 'ad.control_paths', scope: 'domain:corp.local', value: { rights: ['DCSync'] }, state: F.ProofState.SUPPORTED, source: 'test' })], 'test');
+    window.OBOL.router.render();
+  });
+  await page.waitForTimeout(120);
+  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) >= 1, 'the retired move RE-APPEARS once its produced fact is proven (un-retired — the chain is recoverable)');
+
+  // Run Log: every command run is recorded and reviewable (with a filter), not just the attack-path moves.
+  await page.evaluate(() => {
+    window.OBOL.store.update((e) => {
+      e.activities = e.activities || [];
+      e.activities.unshift({ at: Date.now(), command: "nxc smb 10.10.10.9 -u alice -p S3cret!", produced: ['smb.authenticated'], stdout: 'SMB 10.10.10.9 445 BOXY [+] corp.local\\alice:S3cret! (Pwn3d!)', target: '10.10.10.9', scope: 'host:10.10.10.9', action_id: 'nxc-arsenal' });
+    }, 'activity');
+  });
+  await page.goto(`http://localhost:${PORT}/index.html#/history`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.history-route .hl-row', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.history-route .hl-row').count()) >= 1, 'the Run Log lists commands run on the engagement');
+  ok(((await page.locator('.history-route .hl-cmd').first().textContent().catch(() => '')) || '').indexOf('nxc smb') !== -1, 'the Run Log shows the command text');
+  await page.locator('.hl-filter').fill('zzz-no-such-command');
+  await page.waitForTimeout(80);
+  ok((await page.locator('.history-route .hl-row:not([hidden])').count()) === 0, 'the Run Log filter hides non-matching rows');
   // selecting a credential fills the matching parameter FIELDS (secret lands in the right field)
   await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).click();
   ok(await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'alice' && p.password === 'S3cret!' && !p.nthash; }), 'selecting a password credential fills USER + PASSWORD and clears NT hash');

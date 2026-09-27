@@ -176,8 +176,10 @@
       : (facts.has('foothold.windows') || facts.has('foothold.linux') || facts.has('access.shell')) ? ['Foothold', 'fh']
       : facts.has('credential.available') ? ['Credentialed', 'cred'] : ['Recon', 'recon'];
     var flags = (facts.facts || []).filter(function (f) { return String(f.kind).indexOf('objective.') === 0 && f.state !== 'refuted'; });
+    // Use the same deduped gather as the left switcher, so one recovered credential proven on two scopes
+    // (e.g. host:10.x and host:10.y) shows ONCE here, not twice.
     var creds = [];
-    try { creds = facts.values('credential.available') || []; } catch (e) { creds = []; }
+    try { creds = (OBOL.creds && OBOL.creds.gather) ? OBOL.creds.gather(eng, facts) : (facts.values('credential.available') || []); } catch (e) { creds = []; }
     var acts = (eng && eng.activities || []).slice(0, 4);
     return '<aside class="context-rail" aria-label="Live context">'
       + railCard('Access', '<div class="rail-access ra-' + access[1] + '">' + esc(access[0]) + '</div>')
@@ -187,16 +189,17 @@
         : '<div class="rail-empty">None captured yet.</div>')
       + railCard('Credentials (' + creds.length + ')', creds.length
         ? '<ul class="rail-list">' + creds.slice(0, 6).map(function (c) {
-            var secret = c.password || c.nthash || c.hash || '';
+            var secret = c.secret || c.password || c.nthash || c.hash || '';
             var redact = !!((eng || {}).ui || {}).reportRedact;
             var shown = !secret ? '' : (redact ? '••••••••' : (secret.length > 22 ? secret.slice(0, 22) + '…' : secret));
             return '<li><span>' + esc(c.user || c.username || 'user') + (c.domain ? '@' + esc(c.domain) : '') + '</span>'
               + (shown ? '<span class="rail-secret"' + (redact ? '' : ' title="' + U.attr(secret) + '"') + '>' + esc(shown) + '</span>' : '') + '</li>';
           }).join('') + '</ul>'
         : '<div class="rail-empty">None validated yet.</div>')
-      + railCard('Recent evidence', acts.length
-        ? '<ul class="rail-list rail-acts">' + acts.map(function (a) { var c = a.command || 'paste'; return '<li title="' + U.attr(c) + '"><code>' + esc(c.length > 30 ? c.slice(0, 30) + '…' : c) + '</code><span class="rail-produced">' + ((a.produced || []).length) + '</span></li>'; }).join('') + '</ul>'
+      + railCard('Recent evidence', (acts.length
+        ? '<ul class="rail-list rail-acts">' + acts.map(function (a) { var c = a.command || (a.file ? a.file : 'pasted output'); return '<li title="' + U.attr(c) + '"><code>' + esc(c.length > 30 ? c.slice(0, 30) + '…' : c) + '</code><span class="rail-produced">' + ((a.produced || []).length) + '</span></li>'; }).join('') + '</ul>'
         : '<div class="rail-empty">Paste tool output on Evidence.</div>')
+        + '<a class="rail-link" href="#/history">View full Run Log →</a>')
       + '</aside>';
   }
   OBOL.rail = { html: buildRail };
@@ -208,8 +211,20 @@
     var pack = OBOL.packs.actions();
     var doneIds = {};
     // 'done' = the operator ticked it; 'empty' = its tool ran and proved nothing here (a clean negative,
-    // e.g. no SCCM in the environment) — both retire the move from the ready list so it stops re-suggesting.
-    Object.keys((eng && eng.checklist) || {}).forEach(function (k) { if (eng.checklist[k] === 'done' || eng.checklist[k] === 'empty') doneIds[k] = true; });
+    // e.g. no SCCM). Both retire the move — EXCEPT an 'empty' move whose own produced facts are now present
+    // is UN-retired: re-pasting known-good evidence (0 new facts) must never bury a move that already paid
+    // off. This both prevents the bad retire and recovers a move wrongly retired by an earlier re-paste.
+    function producedAny(action) {
+      return !!(action && (action.produces || []).some(function (kind) { return facts.has(kind); }));
+    }
+    Object.keys((eng && eng.checklist) || {}).forEach(function (k) {
+      var st = eng.checklist[k];
+      if (st === 'done') { doneIds[k] = true; return; }
+      if (st === 'empty') {
+        var act = pack.filter(function (a) { return a.id === k; })[0];
+        if (!producedAny(act)) doneIds[k] = true;   // truly empty → stay retired; produced facts → un-retire
+      }
+    });
 
     var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
     var ranked = OBOL.pack.nextActions(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
@@ -351,8 +366,13 @@
           var bodyLines = text.trim().split(/\r?\n/).filter(function (l) { return l.trim(); }).length;
           // The move's tool ran to completion and proved nothing HERE (a clean negative — e.g. no SCCM in
           // the environment): acknowledge it and retire the move from the coach instead of re-suggesting a
-          // command the operator already ran. Guarded so a junk paste or a broken/denied run does NOT retire.
-          if (aid && !r.parseError && r.recognizedTool && !r.looksError && bodyLines >= 2) {
+          // command the operator already ran. Guarded so a junk paste or a broken/denied run does NOT retire
+          // — and, critically, so RE-PASTING evidence that already paid off (0 new facts, but this move's
+          // facts are already proven) never retires a move you still need.
+          var aidAct = aid ? (OBOL.packs.actions().filter(function (a) { return a.id === aid; })[0]) : null;
+          var factsNow = OBOL.store.factSet();
+          var alreadyProduced = !!(aidAct && (aidAct.produces || []).some(function (kind) { return factsNow.has(kind); }));
+          if (aid && !alreadyProduced && !r.parseError && r.recognizedTool && !r.looksError && bodyLines >= 2) {
             OBOL.store.update(function (engg) { engg.checklist = engg.checklist || {}; engg.checklist[aid] = 'empty'; }, 'done');
             U.toast(toolNm + ' ran — nothing found here. Retired from the coach.');
             OBOL.router.render();
