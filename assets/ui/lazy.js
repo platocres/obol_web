@@ -29,6 +29,7 @@
     playbooks: ['data/playbooks-bundle.js', 'assets/engine/playbooks.js', 'assets/ui/routes/playbooks.js'],
     map: ['assets/engine/engmap.js', 'assets/ui/routes/map.js'],
     findings: ['assets/ui/routes/findings.js'],
+    history: ['assets/ui/routes/history.js'],
   };
 
   var _loaded = {};   // group -> Promise
@@ -63,7 +64,7 @@
 
   // Register placeholder routes that lazy-load their group then delegate to the real route.
   function registerLazyRoutes(R) {
-    ['tools', 'domain', 'report', 'checklist', 'graph', 'target', 'creds', 'scoreboard', 'playbooks', 'map', 'findings'].forEach(function (name) {
+    ['tools', 'domain', 'report', 'checklist', 'graph', 'target', 'creds', 'scoreboard', 'playbooks', 'map', 'findings', 'history'].forEach(function (name) {
       R.register(name, {
         ensure: function () { return loadGroup(name); },
         render: function (ctx) {

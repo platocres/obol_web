@@ -196,9 +196,10 @@
               + (shown ? '<span class="rail-secret"' + (redact ? '' : ' title="' + U.attr(secret) + '"') + '>' + esc(shown) + '</span>' : '') + '</li>';
           }).join('') + '</ul>'
         : '<div class="rail-empty">None validated yet.</div>')
-      + railCard('Recent evidence', acts.length
-        ? '<ul class="rail-list rail-acts">' + acts.map(function (a) { var c = a.command || 'paste'; return '<li title="' + U.attr(c) + '"><code>' + esc(c.length > 30 ? c.slice(0, 30) + '…' : c) + '</code><span class="rail-produced">' + ((a.produced || []).length) + '</span></li>'; }).join('') + '</ul>'
+      + railCard('Recent evidence', (acts.length
+        ? '<ul class="rail-list rail-acts">' + acts.map(function (a) { var c = a.command || (a.file ? a.file : 'pasted output'); return '<li title="' + U.attr(c) + '"><code>' + esc(c.length > 30 ? c.slice(0, 30) + '…' : c) + '</code><span class="rail-produced">' + ((a.produced || []).length) + '</span></li>'; }).join('') + '</ul>'
         : '<div class="rail-empty">Paste tool output on Evidence.</div>')
+        + '<a class="rail-link" href="#/history">View full Run Log →</a>')
       + '</aside>';
   }
   OBOL.rail = { html: buildRail };

@@ -974,3 +974,29 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .rail-acts code { font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
 .rail-produced { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .rail-secret { color: var(--accent-2); font-family: var(--mono); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 12ch; }
+.rail-link { display: inline-block; margin-top: 8px; font-size: 11.5px; color: var(--accent-2); text-decoration: none; }
+.rail-link:hover { text-decoration: underline; }
+
+/* Run Log — the full command history for the engagement */
+.hl-filter { width: 100%; box-sizing: border-box; margin: 0 0 16px; padding: 9px 12px; background: var(--surf2);
+  border: 1px solid var(--line); border-radius: var(--radius); color: var(--text); font-size: 13px; }
+.hl-filter:focus { outline: none; border-color: var(--accent); }
+.hl-list { display: flex; flex-direction: column; gap: 10px; }
+.hl-row { background: var(--surf1); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.hl-row[hidden] { display: none; }
+.hl-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.hl-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hl-tgt { font-size: 10px; }
+.hl-move { font-size: 10px; color: var(--text-2); font-family: var(--mono); background: var(--bg3); border-radius: 6px; padding: 1px 6px; }
+.hl-copy { margin-left: auto; }
+.hl-cmd { margin: 0; padding: 8px 10px; background: var(--bg1); border-radius: 6px; overflow-x: auto; }
+.hl-cmd code { font-family: var(--mono); font-size: 12px; color: var(--text); white-space: pre; }
+.hl-facts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.hl-fact { font-size: 10px; font-family: var(--mono); color: var(--accent-2); background: var(--accent-soft); border-radius: 10px; padding: 1px 7px; }
+.hl-fact.hl-more { color: var(--muted); background: var(--bg3); }
+.hl-nofact { font-size: 10.5px; color: var(--muted); font-style: italic; }
+.hl-out { margin-top: 8px; }
+.hl-out summary { cursor: pointer; font-size: 11.5px; color: var(--text-2); }
+.hl-out summary:hover { color: var(--accent-2); }
+.hl-pre { margin: 6px 0 0; padding: 10px 12px; background: var(--bg1); border-radius: 6px; overflow-x: auto;
+  max-height: 380px; overflow-y: auto; font-family: var(--mono); font-size: 11.5px; color: var(--text-2); white-space: pre; }
