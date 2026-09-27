@@ -128,12 +128,13 @@
         + '<span class="cred-dot" aria-hidden="true"></span>'
         + '<span class="cred-user">' + esc(c.user) + '</span>'
         + '<span class="cred-type ' + typeClass(c.type) + '">' + esc(typeLabel(c.type)) + '</span>'
-        + (secret ? '<button class="cred-copy" type="button" data-copy="' + U.attr(secret) + '" title="Copy secret" aria-label="Copy secret">⧉</button>' : '')
+        + (c.user ? '<button class="cred-copy cred-copy-user" type="button" data-copy="' + U.attr(c.user) + '" data-what="Username" title="Copy username" aria-label="Copy username">⧉</button>' : '')
         + (c.source === 'logged' ? '<button class="cred-del" type="button" data-cred="' + i + '" title="Remove credential" aria-label="Remove credential">×</button>' : '')
         + '</div>'
         + '<div class="cred-sub">'
         + (c.domain ? '<span class="cred-dom">' + esc(c.domain) + '\\</span>' : '')
         + '<span class="cred-secret"' + (!redact && secret ? ' title="' + U.attr(secret) + '"' : '') + '>' + esc(maskSecret(c, redact)) + '</span>'
+        + (secret ? '<button class="cred-copy cred-copy-secret" type="button" data-copy="' + U.attr(secret) + '" data-what="Secret" title="Copy secret" aria-label="Copy secret">⧉</button>' : '')
         + '</div>'
         + '</div>';
     }).join('');
@@ -150,7 +151,8 @@
     el._wired = true;
     U.on(el, 'click', '.cred-copy', function (e, t) {
       if (e.stopPropagation) e.stopPropagation();
-      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Secret copied' : 'Copy failed', ok ? '' : 'err'); });
+      var what = t.getAttribute('data-what') || 'Value';
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? (what + ' copied') : 'Copy failed', ok ? '' : 'err'); });
     });
     U.on(el, 'click', '.cred-del', function (e, t) {
       if (e.stopPropagation) e.stopPropagation();

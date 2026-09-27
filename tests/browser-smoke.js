@@ -225,6 +225,13 @@ function serve() {
   const swapped = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'bob' && p.nthash === 'aabbccddeeff00112233445566778899'; });
   ok(swapped, 'clicking a credential fills the engagement params (bob + NT hash)');
   ok(await page.locator('#cred-switch .cred-row.active', { hasText: 'bob' }).count() === 1, 'the chosen credential is marked active');
+  // selecting a credential fills the matching parameter FIELDS (secret lands in the right field)
+  await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).click();
+  ok(await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'alice' && p.password === 'S3cret!' && !p.nthash; }), 'selecting a password credential fills USER + PASSWORD and clears NT hash');
+  ok((await page.evaluate(() => document.querySelector('#params [data-param=password]').value)) === 'S3cret!', 'the PASSWORD parameter field is populated on select');
+  // each value has its own copy control (username vs secret)
+  ok(await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-copy-user').count() === 1, 'the credential row has a copy-username button');
+  ok(await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-copy-secret').count() === 1, 'the credential row has a separate copy-secret button');
   // manually add any kind of credential (an NT hash) and use it
   const credsBefore = await page.locator('#cred-switch .cred-row').count();
   await page.locator('.cred-add-btn').click();
