@@ -180,14 +180,19 @@ function serve() {
   // A proven hostname is reflected onto the target record and shown alongside the IP in the header.
   await page.evaluate(() => {
     const S = window.OBOL.store, F = window.OBOL.facts;
-    S.addFacts([F.makeFact({ kind: 'host.hostname', scope: 'host:10.10.10.10', value: { name: 'BOXY' }, state: F.ProofState.SUPPORTED, source: 'test' })], 'test');
+    S.addFacts([
+      F.makeFact({ kind: 'host.hostname', scope: 'host:10.10.10.10', value: { name: 'BOXY' }, state: F.ProofState.SUPPORTED, source: 'test' }),
+      F.makeFact({ kind: 'host.domain', scope: 'host:10.10.10.10', value: { domain: 'corp.local' }, state: F.ProofState.SUPPORTED, source: 'test' }),
+    ], 'test');
   });
   // re-render the target route in-app (no full reload → engagement already loaded)
   await page.evaluate(() => window.OBOL.router.go('home'));
   await page.waitForTimeout(60);
   await page.evaluate(() => window.OBOL.router.go('target/10.10.10.10'));
-  await page.waitForSelector('.target-head .thost', { timeout: 6000 }).catch(() => {});
-  ok((await page.locator('.target-head .thost').textContent().catch(() => '') || '').indexOf('BOXY') !== -1, 'the target header shows the proven hostname alongside the IP');
+  await page.waitForSelector('.target-ident .ident-host', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.target-ident .ident-host').textContent().catch(() => '') || '').indexOf('BOXY') !== -1, 'the target identity block shows the proven hostname in its labelled Hostname row');
+  ok((await page.locator('.target-ident .ident-ip').textContent().catch(() => '') || '').indexOf('10.10.10.10') !== -1, 'the identity block shows the IP in its labelled IP row');
+  ok((await page.locator('.target-ident .ident-dom').textContent().catch(() => '') || '').indexOf('corp.local') !== -1, 'the identity block fills the Domain row once the domain is proven');
   ok(await page.evaluate(() => ((window.OBOL.store.active().targets.find((t) => t.ip === '10.10.10.10') || {}).hostname)) === 'BOXY', 'the proven hostname is synced onto the target record');
 
   // Credential switcher: collected creds appear in the sidebar; clicking one fills the params.

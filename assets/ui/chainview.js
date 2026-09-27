@@ -48,12 +48,15 @@
     var flows = (eng.targets || []).map(function (t) {
       var ip = t.ip || t.host; if (!ip) return null;
       var flow = hostFlow(ip, acts);
-      return flow ? { ip: ip, hostname: t.hostname || '', flow: flow } : null;
+      return flow ? { ip: ip, flow: flow } : null;
     }).filter(Boolean);
     if (!flows.length) return '';
     return flows.map(function (f) {
-      return '<div class="apath-host"><div class="apath-host-h">' + esc(f.ip)
-        + (f.hostname ? ' <span class="apath-host-name">' + esc(f.hostname) + '</span>' : '') + '</div>' + f.flow + '</div>';
+      // Labelled identity strip — IP always, hostname/domain as obol proves them (a glanceable anchor).
+      var idn = (OBOL.store && OBOL.store.targetIdentity) ? OBOL.store.targetIdentity(f.ip) : { ip: f.ip, hostname: '', domain: '' };
+      function chip(k, v, cls) { return '<span class="ident-inline"><span class="ii-k">' + k + '</span><span class="ii-v ' + (cls || '') + '">' + esc(v) + '</span></span>'; }
+      var strip = chip('IP', idn.ip, '') + (idn.hostname ? chip('Hostname', idn.hostname, 'ident-host') : '') + (idn.domain ? chip('Domain', idn.domain, '') : '');
+      return '<div class="apath-host"><div class="apath-host-h ident-strip">' + strip + '</div>' + f.flow + '</div>';
     }).join('');
   }
 

@@ -78,11 +78,24 @@
     var svg = OBOL.graph ? OBOL.graph.buildGraphSvg(facts, pack, false) : '<div class="coach-empty">graph loading…</div>';
 
     var acc = ACCESS[lvl];
+    // Identity at a glance — IP / Hostname / Domain, each labelled, the hostname brighter. The hostname
+    // and domain fill in the moment obol proves them; until then the slot reads "not captured yet".
+    var idn = OBOL.store.targetIdentity(ip);
+    function identRow(label, val, cls, title) {
+      return '<div class="ident-row"><dt>' + label + '</dt>'
+        + '<dd class="' + cls + (val ? '' : ' ident-empty') + '"' + (title ? ' title="' + U.attr(title) + '"' : '') + '>'
+        + (val ? esc(val) : 'not captured yet') + '</dd></div>';
+    }
     return '<section class="target-route">'
-      + '<div class="target-head"><a class="crumb" href="#/targets">Targets</a> / '
-      + '<h1 class="route-h1 inline">' + esc(ip) + (t.hostname ? ' <span class="thost">' + esc(t.hostname) + '</span>' : '') + '</h1>'
+      + '<div class="target-head">'
+      + '<div class="target-crumbs"><a class="crumb" href="#/targets">Targets</a>'
       + '<span class="acc-pill ' + acc.cls + '">' + acc.label + '</span>'
       + (flags.length ? '<span class="pill flag-pill">🚩 ' + flags.map(esc).join(', ') + '</span>' : '') + '</div>'
+      + '<dl class="ident target-ident">'
+      + '<div class="ident-row"><dt>IP</dt><dd class="ident-ip"><h1 class="route-h1 inline">' + esc(idn.ip) + '</h1></dd></div>'
+      + identRow('Hostname', idn.hostname, 'ident-host', idn.hostname && idn.fqdn !== idn.hostname ? idn.fqdn : '')
+      + identRow('Domain', idn.domain, 'ident-dom', '')
+      + '</dl></div>'
       + '<div class="home-spine target-chain">' + chain + '</div>'
 
       + '<div class="target-grid">'
