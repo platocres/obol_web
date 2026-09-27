@@ -617,6 +617,10 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .flag-pill { background: var(--accent-soft); color: var(--accent-2); }
 .target-chain { margin: 8px 0 20px; }
 .target-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 22px; }
+/* grid items default to min-width:auto, so a wide attack-path ribbon in the left column would
+   refuse to shrink and shove the "Next moves" column off-screen — min-width:0 lets both tracks
+   stay inside the viewport and the ribbon wrap within its own column. */
+.target-col { min-width: 0; }
 @media (max-width: 900px) { .target-grid { grid-template-columns: 1fr; } }
 .story-list { list-style: none; margin: 0; padding: 0; }
 .story-row { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }

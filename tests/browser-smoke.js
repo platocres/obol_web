@@ -177,6 +177,18 @@ function serve() {
   ok(await page.locator('.apath-flow .apath-block').count() >= 1, 'target page shows the attack-path ribbon (' + (await page.locator('.apath-flow .apath-block').count()) + ' blocks)');
   ok(await page.locator('.apath-block .ph-chip').count() >= 1, 'attack-path blocks carry a phase category chip');
   ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Attack Path — What Led to What') !== -1; }), 'attack-path heading is Title Case');
+  // A proven hostname is reflected onto the target record and shown alongside the IP in the header.
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([F.makeFact({ kind: 'host.hostname', scope: 'host:10.10.10.10', value: { name: 'BOXY' }, state: F.ProofState.SUPPORTED, source: 'test' })], 'test');
+  });
+  // re-render the target route in-app (no full reload → engagement already loaded)
+  await page.evaluate(() => window.OBOL.router.go('home'));
+  await page.waitForTimeout(60);
+  await page.evaluate(() => window.OBOL.router.go('target/10.10.10.10'));
+  await page.waitForSelector('.target-head .thost', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.target-head .thost').textContent().catch(() => '') || '').indexOf('BOXY') !== -1, 'the target header shows the proven hostname alongside the IP');
+  ok(await page.evaluate(() => ((window.OBOL.store.active().targets.find((t) => t.ip === '10.10.10.10') || {}).hostname)) === 'BOXY', 'the proven hostname is synced onto the target record');
 
   // Credential switcher: collected creds appear in the sidebar; clicking one fills the params.
   await page.evaluate(() => {

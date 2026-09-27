@@ -343,6 +343,19 @@
         var fact = f.kind ? (f.state ? f : OBOL.facts.factFromJson(f)) : null;
         if (fact && fs.add(fact)) { added++; addedKinds.push(fact.kind); }
       });
+      // Reflect a proven hostname onto its target record, so the UI can show "IP · HOSTNAME"
+      // (the header/list already render target.hostname when set; nothing populated it before).
+      if (added) {
+        var SUP = OBOL.facts.ProofState.SUPPORTED;
+        fs.facts.forEach(function (f) {
+          if ((f.kind === 'host.hostname' || f.kind === 'host.fqdn') && f.state === SUP && String(f.scope).indexOf('host:') === 0) {
+            var ip = f.scope.slice(5), v = f.value || {};
+            var name = String(v.name || v.hostname || v.fqdn || '').split('.')[0];
+            if (!name) return;
+            (eng.targets || []).forEach(function (tg) { if (tg.ip === ip && !tg.hostname) tg.hostname = name; });
+          }
+        });
+      }
       if (added || (facts && facts.length)) {
         eng.facts = fs.facts.map(OBOL.facts.factToJson);
         scheduleSave();

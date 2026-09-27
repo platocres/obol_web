@@ -94,10 +94,21 @@
     if (!hostFacts.length) return [];
     var proven = {}; hostFacts.forEach(function (f) { if (!proven[f.kind]) proven[f.kind] = f; });
 
-    // Noise: identity/enumeration detail that isn't a milestone in the walked path.
+    // Noise: enumeration / identity / posture detail that isn't a milestone in the walked path. The
+    // attack-path ribbon and the report narrative both derive from these steps, so this is the single
+    // definition of "what tells the compromise story" — kept in lockstep with the report's own noise
+    // prefixes (port:/service./scan.) plus reachability, whose UNLOCKED OUTCOME (a bind, a user list,
+    // a foothold) is the real milestone. Generic across labs: it filters by shape, not box specifics.
     function isNoise(kind) {
-      if (/^port:\d+$/.test(kind)) return true;
-      return { 'host.hostname': 1, 'host.domain': 1, 'host.fqdn': 1, 'host.os_family': 1, 'host.os_hint': 1, nav: 1, cmd: 1 }[kind] === 1;
+      if (/^port:\d+$/.test(kind)) return true;   // individual open ports (ports.open is the anchor)
+      if (/^service\./.test(kind)) return true;    // per-service enumeration evidence (dns/ldap/msrpc/…)
+      if (/^scan\./.test(kind)) return true;       // nmap scan-profile markers (quick/version/vuln/udp)
+      if (/\.reachable$/.test(kind)) return true;  // reachability — the outcome it unlocks is the milestone
+      return {
+        'host.hostname': 1, 'host.domain': 1, 'host.fqdn': 1, 'host.os_family': 1, 'host.os_hint': 1,
+        'smb.signing': 1, 'smb.smbv1': 1, 'smb.guest_session': 1, 'smb.null_session': 1,
+        'ad.base_dn': 1, nav: 1, cmd: 1,
+      }[kind] === 1;
     }
 
     // the action most likely responsible for a proven kind — its prereqs give the causal backlink.
