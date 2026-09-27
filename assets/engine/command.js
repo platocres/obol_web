@@ -294,7 +294,10 @@
       var v = params && params[k]; if (v) vals[String(v).toLowerCase()] = 1;
     });
     var out = {};
-    for (var i = 1; i < toks.length; i++) {                       // skip the leading tool token only
+    // Include the leading tool token too (i=0): the tool IS distinctive — `certipy find` and
+    // `sccmhunter find` share the `find` subcommand but are NOT the same move, so dropping the tool made
+    // one wrongly match the other. Shell keywords (`for`/`while`/`sudo`) fall out via the noise filter.
+    for (var i = 0; i < toks.length; i++) {
       var raw = toks[i];
       if (/^(?:\||\|\||&&|;|>|>>|<)$/.test(raw)) continue;        // shell operators
       var t = raw.replace(/^["']+|["']+$/g, '');                  // strip surrounding quotes

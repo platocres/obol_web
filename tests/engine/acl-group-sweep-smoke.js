@@ -91,5 +91,12 @@ var attachedActs = [{ command: '', dispatch: 'bloodyad get writable' }];
 ok(OBOL.command.commandWasRun("bloodyAD -d htb.local --host 10.129.94.251 -u svc-alfresco -p 's3rvice' get writable --detail | tee ~/CTF/scans/bloodyad-writable.txt", attachedActs, { target: '10.129.94.251', domain: 'htb.local', username: 'svc-alfresco', password: 's3rvice' }) === true, 'get-writable is marked run from the recovered dispatch of an attached dump (no typed command)');
 ok(OBOL.command.commandWasRun("bloodyAD -d htb.local --host 10.129.94.251 -u svc-alfresco -p 's3rvice' add dcsync svc-alfresco", attachedActs, { target: '10.129.94.251', domain: 'htb.local', username: 'svc-alfresco', password: 's3rvice' }) === false, 'the dcsync cash-in is NOT marked run by a get-writable dispatch');
 
+// REGRESSION: two DIFFERENT tools that share a `find` subcommand must not be confused — running
+// sccmhunter find must NOT tag certipy find as already run (the tool is part of the signature now).
+var findActs = [{ command: "sccmhunter.py find -u svc-alfresco -p 's3rvice' -d htb.local -dc-ip 10.129.94.251" }];
+var cp = { target: '10.129.94.251', domain: 'htb.local', username: 'svc-alfresco', password: 's3rvice' };
+ok(OBOL.command.commandWasRun("certipy find -u svc-alfresco@htb.local -p 's3rvice' -dc-ip 10.129.94.251 -vulnerable", findActs, cp) === false, 'certipy find is NOT marked run just because sccmhunter find was (tool is distinctive)');
+ok(OBOL.command.commandWasRun("sccmhunter.py find -u svc-alfresco -p 's3rvice' -d htb.local -dc-ip 10.129.94.251", findActs, cp) === true, 'the sccmhunter find you actually ran is still marked run');
+
 console.log(fail ? ('\nACL GROUP SWEEP: ' + fail + ' FAILURES') : '\nACL GROUP SWEEP: all passed');
 process.exit(fail ? 1 : 0);

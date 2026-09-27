@@ -107,6 +107,15 @@
   var ERR_MARKERS = /\busage:|\btraceback\b|command not found|no such file|unrecognized option|invalid option|\bmissing option\b|permission denied|access is denied|\bunauthorized\b|logon failure|connection refused|could not connect|connection reset|name or service not known|\berror:/i;
   function looksLikeError(text) { return ERR_MARKERS.test(String(text || '')); }
 
+  // The operator's own attacker IP, read from a terminal prompt like the Kali/HTB `[tun0:10.10.14.191]`
+  // (also tap/vpn/wg/eth). This is YOUR listener/LHOST — obol fills {{lhost}} with it so coercion, relay
+  // and reverse-shell commands form without hand-typing your VPN address on every box.
+  var _LHOST_RE = /\[(?:tun|tap|vpn|wg|eth|wlan)\d*[:\/ ]\s*(\d{1,3}(?:\.\d{1,3}){3})\]/i;
+  function detectLhost(text) {
+    var m = _LHOST_RE.exec(String(text || ''));
+    return m ? m[1] : '';
+  }
+
   function ready() { return !!(OBOL.parsers && OBOL.parsers.parseActionOutput); }
   // Resolve to true once the (lazily-loaded) parser group is available.
   function ensureParsers() {
@@ -135,6 +144,12 @@
     var dispatchCmd = dispatchLabel(cmd, text);
     var eng = OBOL.store.active();
     var params = (eng && eng.params) || {};
+    // Learn the operator's LHOST from the paste's own prompt (`[tun0:10.10.14.191]`) when not already set,
+    // so {{lhost}} stops reading "needs: lhost" the moment a real terminal capture goes through.
+    if (!params.lhost) {
+      var lh = detectLhost(text);
+      if (lh) { OBOL.store.update(function (e) { e.params = e.params || {}; e.params.lhost = lh; }, 'params'); params = (OBOL.store.active() || {}).params || params; }
+    }
     var scope = 'host:' + (params.target || 'target');
     var res, parseError = '';
     try {
@@ -167,5 +182,5 @@
 
   OBOL.ingest = { run: run, deriveCommand: deriveCommand, sniffCommand: sniffCommand,
     contentSignatures: contentSignatures, dispatchLabel: dispatchLabel, recognizesTool: recognizesTool,
-    looksLikeError: looksLikeError, ensureParsers: ensureParsers, ready: ready };
+    looksLikeError: looksLikeError, detectLhost: detectLhost, ensureParsers: ensureParsers, ready: ready };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

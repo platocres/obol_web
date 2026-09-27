@@ -233,6 +233,24 @@ function serve() {
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(150);
   ok((await page.locator('.context-rail .rail-list li', { hasText: 'alice@corp.local' }).count()) === 1, 'the coach rail lists a credential proven on two scopes only once (deduped)');
+
+  // Un-retire: a move retired as "empty" whose produced fact is now proven must RE-APPEAR — re-pasting
+  // good evidence (0 new facts) must never bury a move you still need to finish the chain.
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.update((e) => { e.checklist = e.checklist || {}; e.checklist['bloodyad-acl'] = 'empty'; }, 'done');
+    S.addFacts([F.makeFact({ kind: 'host.os_hint', scope: 'host:10.10.10.9', value: { os: 'windows' }, state: F.ProofState.SUPPORTED, source: 'test' })], 'test');
+    window.OBOL.router.render();
+  });
+  await page.waitForTimeout(120);
+  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) === 0, 'a move retired as empty (no produced fact yet) stays out of the coach');
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([F.makeFact({ kind: 'ad.control_paths', scope: 'domain:corp.local', value: { rights: ['DCSync'] }, state: F.ProofState.SUPPORTED, source: 'test' })], 'test');
+    window.OBOL.router.render();
+  });
+  await page.waitForTimeout(120);
+  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) >= 1, 'the retired move RE-APPEARS once its produced fact is proven (un-retired — the chain is recoverable)');
   // selecting a credential fills the matching parameter FIELDS (secret lands in the right field)
   await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).click();
   ok(await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'alice' && p.password === 'S3cret!' && !p.nthash; }), 'selecting a password credential fills USER + PASSWORD and clears NT hash');
