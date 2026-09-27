@@ -88,8 +88,19 @@ ok(OBOL.command.commandWasRun("nxc ldap 10.129.95.210 -u user -p pass --asreproa
 // An ATTACHED dump has no typed command — obol matches on the recovered `dispatch` label instead, so the
 // get-writable enumeration is marked run once its 50k-line file is attached as evidence.
 var attachedActs = [{ command: '', dispatch: 'bloodyad get writable' }];
-ok(OBOL.command.commandWasRun("bloodyAD -d htb.local --host 10.129.94.251 -u svc-alfresco -p 's3rvice' get writable --detail | tee ~/CTF/scans/bloodyad-writable.txt", attachedActs, { target: '10.129.94.251', domain: 'htb.local', username: 'svc-alfresco', password: 's3rvice' }) === true, 'get-writable is marked run from the recovered dispatch of an attached dump (no typed command)');
-ok(OBOL.command.commandWasRun("bloodyAD -d htb.local --host 10.129.94.251 -u svc-alfresco -p 's3rvice' add dcsync svc-alfresco", attachedActs, { target: '10.129.94.251', domain: 'htb.local', username: 'svc-alfresco', password: 's3rvice' }) === false, 'the dcsync cash-in is NOT marked run by a get-writable dispatch');
+// The coach matches on the TEMPLATE (values still {{tokens}}), because a filled command carries the real
+// domain/user/password/target from facts+creds that params may NOT hold. With EMPTY params, the template
+// still matches the recovered dispatch — the real-world attached-dump case.
+ok(OBOL.command.commandWasRun("bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt", attachedActs, {}) === true, 'the get-writable TEMPLATE matches the recovered dispatch of an attached dump even when params lack the lab values');
+ok(OBOL.command.commandWasRun("bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}", attachedActs, {}) === false, 'the dcsync cash-in TEMPLATE is NOT marked run by a get-writable dispatch');
+// Why the template and not the filled command: a filled command whose values are absent from params leaks
+// them into the signature, so it would (wrongly) fail to match the clean recovered dispatch.
+ok(OBOL.command.commandWasRun("bloodyAD -d htb.local --host 10.129.94.251 -u svc-alfresco -p 's3rvice' get writable --detail", attachedActs, {}) === false, 'a FILLED command leaks lab values into the signature when params are empty (documents why the coach matches on the template)');
+
+// the win flag flows through fillCommand so the coach can render the "Pwn This Target" badge
+var winAct = { commands: [{ tool: 'x', run: 'x pwn', win: true }, { tool: 'y', run: 'y go' }] };
+var fa = OBOL.command.fillAll(winAct, new OBOL.facts.FactSet([]), {});
+ok(fa[0].win === true && fa[1].win === false, 'fillCommand passes the win flag through (drives the Pwn This Target badge)');
 
 // REGRESSION: two DIFFERENT tools that share a `find` subcommand must not be confused — running
 // sccmhunter find must NOT tag certipy find as already run (the tool is part of the signature now).

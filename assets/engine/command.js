@@ -261,6 +261,7 @@
       tool: c.tool || action.tool || '',
       note: c.note || '',
       webNote: c.web_note || action.web_note || '',
+      win: !!c.win,   // a box-ending move — the coach flags it "PWN THIS TARGET"
       run: run,
       // thread the action so the loot glue can resolve {{userlist}}/{{hashfile}} for THIS move.
       filled: fillTemplate(run, facts, opts.action === action ? opts : Object.assign({}, opts, { action: action })),
@@ -301,7 +302,8 @@
       var raw = toks[i];
       if (/^(?:\||\|\||&&|;|>|>>|<)$/.test(raw)) continue;        // shell operators
       var t = raw.replace(/^["']+|["']+$/g, '');                  // strip surrounding quotes
-      if (!t) continue;
+      if (!t || t.indexOf('{{') >= 0) continue;                   // empty, or an unfilled template value slot
+
       if (t.charAt(0) === '-') {                                  // KEEP action long flags (--users/--asreproast),
         if (t.charAt(1) === '-' && t.length > 3) {                // drop short flags (-u/-p) and plumbing long flags
           var lf = t.replace(/^--/, '').toLowerCase();
