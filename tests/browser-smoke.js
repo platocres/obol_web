@@ -284,8 +284,10 @@ function serve() {
   await page.waitForTimeout(500);
   const actsAfter = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
   ok(actsAfter === actsBefore + 1, 'inline ingestion records exactly ONE activity — no duplicate from re-bound listeners (' + actsBefore + '→' + actsAfter + ')');
-  // After the ingest re-rendered the coach, Paste Output must still toggle open (guards the
-  // stacked-delegated-listener regression where the toggle netted to a no-op).
+  // Paste Output must still TOGGLE OPEN after the ingest (guards the stacked-delegated-listener
+  // regression where a click nets to a no-op). Force a known-closed state first — the ingest may or
+  // may not have re-rendered depending on whether the pasted output minted facts for the top move.
+  await page.evaluate(() => { document.querySelectorAll('.coach .move .move-ingest:not([hidden])').forEach(function (b) { b.setAttribute('hidden', ''); }); });
   await page.locator('.coach .move .btn-pasteback').first().click();
   await page.waitForTimeout(120);
   ok(await page.locator('.coach .move .move-ingest:not([hidden])').count() >= 1, 'Paste Output still opens the box after a re-render (no listener stacking)');
