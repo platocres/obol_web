@@ -567,12 +567,15 @@ function serve() {
   ok(hOverflow <= 1, 'no horizontal page scroll at 390px (overflow ' + hOverflow + 'px)');
   ok(await mob.locator('#nav-toggle').isVisible(), 'hamburger shows at phone width');
   await mob.click('#nav-toggle');
-  await mob.waitForTimeout(300);
-  const drawer = await mob.evaluate(() => {
+  // Wait for the slide-in transition to actually finish rather than a fixed sleep — under CI load the
+  // drawer can still be mid-animation (left < 0) at a fixed 300ms, which flaked this assertion.
+  const drawer = await mob.waitForFunction(() => {
     var open = document.documentElement.classList.contains('drawer-open');
-    var r = document.getElementById('sidebar').getBoundingClientRect();
-    return open && r.left >= -1 && r.width > 0 && r.right <= window.innerWidth + 1;
-  });
+    var el = document.getElementById('sidebar');
+    if (!open || !el) return false;
+    var r = el.getBoundingClientRect();
+    return r.left >= -1 && r.width > 0 && r.right <= window.innerWidth + 1;
+  }, { timeout: 3000 }).then(() => true).catch(() => false);
   ok(drawer, 'hamburger opens the engagement drawer on-screen');
   await mob.close();
 
