@@ -29,6 +29,46 @@
     return ' (redirect it there with <code>… | tee out.txt</code>)';
   }
 
+  // Whole-session import — the "catch me up on the entire box" panel. Paste a full terminal capture (or
+  // attach several), obol splits it into per-command segments, stitches them chronologically, and runs
+  // each through the same parsers. Collapsed by default so the single-command flow above stays primary.
+  function importSection() {
+    var ws = OBOL.workspace || {};
+    var eng = OBOL.store.active();
+    var iface = (eng && eng.params && eng.params.lhost_iface) || '';
+    var stamp = ws.promptStamp ? ws.promptStamp(iface) : (ws.PROMPT_STAMP_ZSH || '');
+    var capture = ws.captureCmd ? ws.captureCmd(eng) : 'script -q -f session.log';
+    var targets = (eng && eng.targets) || [];
+    var tOpts = '<option value="auto">Auto-route by IP (recommended)</option>'
+      + targets.map(function (t) {
+        var ip = t.ip || t.hostname; if (!ip) return '';
+        return '<option value="' + U.attr(ip) + '">' + esc(ip) + (t.hostname && t.ip ? (' · ' + t.hostname) : '') + '</option>';
+      }).join('');
+    return '<details class="ev-import"><summary>Import a Full Session <span class="ev-import-tag">catch up on the whole box</span></summary>'
+      + '<p class="ev-hint">Already deep into a box? Paste (or attach) your <strong>entire terminal</strong> from this run — every command and its output. obol splits it into per-command segments, orders them by time, skips duplicates, and mints facts from all of them at once, so the coach jumps straight to your real frontier.</p>'
+      + '<textarea id="ev-imp-text" class="ev-textarea" placeholder="Paste your whole session — many commands and all their output. obol finds each command by its prompt line." spellcheck="false"></textarea>'
+      + '<label class="ev-imp-route"><span>Route facts to</span><select id="ev-imp-target" class="ev-cmd">' + tOpts + '</select></label>'
+      + '<div class="ev-hint ev-imp-route-hint">Auto-route reads the target IP from each command (<code>nxc smb 10.0.0.5</code>, <code>--host 10.0.0.5</code>…) and files its facts under that host — your VPN/<code>tun0</code> address is never treated as a target. New hosts you touch are added automatically. Pick a specific target to force everything onto one host.</div>'
+      + '<div class="ev-row">'
+      + '<label class="ev-filebtn" for="ev-imp-file">⭱ Attach Session File(s)…</label>'
+      + '<input type="file" id="ev-imp-file" class="ev-file" accept=".txt,.log,.out,text/plain" multiple hidden>'
+      + '<button id="ev-imp-go" class="btn-primary">Import Session</button>'
+      + '</div>'
+      + '<div id="ev-imp-result" class="ev-result"></div>'
+      + '<details class="ev-import-setup"><summary>Set your terminal up like this (recommended, one-time)</summary>'
+      + '<p class="ev-hint">These are optional, but they make imports far more accurate — obol reads a UTC timestamp to stitch tabs in order, and your VPN IP to auto-fill <code>{{lhost}}</code> for coercion/relay/reverse-shell commands.</p>'
+      + '<div class="ev-setup-step"><div class="ev-setup-lbl">1 · Stamp every prompt with the time + VPN IP <span class="ev-import-tag">non-destructive — keeps your prompt</span></div>'
+      + '<pre class="cmd-run"><code id="ev-stamp-code">' + esc(stamp) + '</code></pre>'
+      + '<button class="ev-copy" data-copy="ev-stamp-code">Copy zsh Snippet</button>'
+      + '<span class="ev-file-hint">Append to <code>~/.zshrc</code> and run <code>source ~/.zshrc</code>. Appends a hook — it composes with oh-my-zsh / powerlevel10k and leaves your existing prompt alone.</span></div>'
+      + '<div class="ev-setup-step"><div class="ev-setup-lbl">2 · Record a whole session to a file (optional)</div>'
+      + '<pre class="cmd-run"><code id="ev-capture-code">' + esc(capture) + '</code></pre>'
+      + '<button class="ev-copy" data-copy="ev-capture-code">Copy Capture Command</button>'
+      + '<span class="ev-file-hint"><code>script</code> logs everything you run and its output. When you\'re done, <kbd>Ctrl-D</kbd> to stop, then attach the <code>.log</code> above. Works with or without the prompt tweak — timestamps just come out cleaner with it.</span></div>'
+      + '</details>'
+      + '</details>';
+  }
+
   function shotsSection() {
     var eng = OBOL.store.active();
     var shots = (eng && eng.screenshots) || [];
@@ -77,6 +117,7 @@
       + '<div class="ev-hint ev-paste-hint">Tip: paste the full output even if it looks noisy — the parser ignores what it doesn\'t recognize, and the extra context makes your report\'s evidence blocks complete.</div>'
       + '<div id="ev-result" class="ev-result"></div>'
       + '</div>'
+      + importSection()
       + shotsSection()
       + '<details class="ev-manual"><summary>Add a fact manually</summary>'
       + '<p class="ev-hint">Pick what you\'ve confirmed and the coach advances — use this when you did something obol\'s parsers can\'t read (a manual exploit, an unsupported tool).</p>'
@@ -131,8 +172,53 @@
     r.readAsText(file);
   }
 
+  // The coach's current top move, named for the post-import summary. Mirrors path.js's frontier
+  // computation (retired 'done'/'empty' moves excluded, machine focus applied) so the summary points at
+  // the same move the coach will show. Best-effort — returns '' if anything is unavailable.
+  function topNextMove() {
+    try {
+      var eng = OBOL.store.active(), facts = OBOL.store.factSet(), pack = OBOL.packs.actions();
+      var doneIds = {};
+      function moveEverProduced(id) { return (eng.activities || []).some(function (a) { return a && a.action_id === id && (a.produced || []).length > 0; }); }
+      Object.keys((eng && eng.checklist) || {}).forEach(function (k) {
+        var st = eng.checklist[k];
+        if (st === 'done' || (st === 'empty' && !moveEverProduced(k))) doneIds[k] = true;
+      });
+      var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
+      var ranked = OBOL.pack.nextActions(facts, pack, { doneIds: doneIds, focusPrefixes: focus }) || [];
+      var top = ranked.find(function (a) { return OBOL.phases.prematurity(a, facts) === 0; }) || ranked[0];
+      return top ? top.title : '';
+    } catch (e) { return ''; }
+  }
+
+  // Run the whole-session import: paste text + any attached files, all through OBOL.ingest.importSession.
+  function runImport() {
+    var resEl = document.getElementById('ev-imp-result');
+    var pasted = (document.getElementById('ev-imp-text') || {}).value || '';
+    var inputs = window._obolImpFiles ? window._obolImpFiles.slice() : [];
+    if (pasted.trim()) inputs.push(pasted);
+    if (!inputs.length) { U.toast('Paste a session or attach a file first'); return; }
+    if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers still loading — try again in a second'); return; }
+    var routeTo = (document.getElementById('ev-imp-target') || {}).value || 'auto';
+    var r = OBOL.ingest.importSession(inputs, { source: 'session', target: routeTo });
+    if (!r || !r.ok) { U.toast('Could not import that session'); return; }
+    var next = topNextMove();
+    if (resEl) {
+      resEl.innerHTML = '<div class="ev-added">Imported ' + r.imported + ' command' + (r.imported === 1 ? '' : 's')
+        + ' → minted ' + r.added + ' new fact' + (r.added === 1 ? '' : 's')
+        + (r.hosts && r.hosts.length > 1 ? (' across ' + r.hosts.length + ' hosts') : '')
+        + (r.dupes ? (' · skipped ' + r.dupes + ' duplicate' + (r.dupes === 1 ? '' : 's')) : '') + '.'
+        + (r.hosts && r.hosts.length ? ('<div class="ev-imp-tools">Hosts: ' + r.hosts.map(function (h) { return '<code>' + esc(h) + '</code>'; }).join(' ') + '</div>') : '')
+        + (r.tools && r.tools.length ? ('<div class="ev-imp-tools">Tools seen: ' + r.tools.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(' ') + '</div>') : '')
+        + (next ? ('<div class="ev-imp-next">Next move: <strong>' + esc(next) + '</strong></div>') : '')
+        + '</div><a class="btn-primary" href="#/path">See Updated Coach →</a>';
+    }
+    U.toast(r.added ? ('Imported ' + r.imported + ' commands · ' + r.added + ' new facts') : ('Imported ' + r.imported + ' commands · no new facts'));
+  }
+
   function mounted(ctx) {
     var mount = ctx.mount;
+    window._obolImpFiles = [];
     // Lazy-load parsers if not present, then enable the button.
     if (!(OBOL.parsers && OBOL.parsers.parseActionOutput) && OBOL.lazy) {
       OBOL.lazy.loadGroup('parsers').then(function () {
@@ -149,6 +235,36 @@
       ingestFile(f);
       fileEl.value = ''; // allow re-attaching the same file
     });
+    // ── whole-session import ──────────────────────────────────────────────────────────────────────
+    var impFileEl = document.getElementById('ev-imp-file');
+    if (impFileEl) impFileEl.addEventListener('change', function () {
+      var files = Array.prototype.slice.call(impFileEl.files || []);
+      if (!files.length) return;
+      var over = files.filter(function (f) { return f.size > FILE_MAX; });
+      if (over.length) { U.toast('Skipping ' + over.length + ' file(s) over 25 MB — attach the relevant portion', 'err'); }
+      files = files.filter(function (f) { return f.size <= FILE_MAX; });
+      var pending = files.length, names = [];
+      if (!pending) { impFileEl.value = ''; return; }
+      files.forEach(function (f) {
+        var r = new FileReader();
+        r.onload = function () { window._obolImpFiles.push(String(r.result || '')); names.push(f.name); if (--pending === 0) done(); };
+        r.onerror = function () { if (--pending === 0) done(); };
+        r.readAsText(f);
+      });
+      function done() {
+        var el = document.getElementById('ev-imp-result');
+        if (el) el.innerHTML = '<div class="ev-hint">Attached ' + window._obolImpFiles.length + ' file(s): ' + names.map(esc).join(', ') + '. Add a paste too if you like, then <strong>Import Session</strong>.</div>';
+        impFileEl.value = '';
+      }
+    });
+    var impGo = document.getElementById('ev-imp-go');
+    if (impGo) impGo.addEventListener('click', function () { runImport(); });
+    U.on(mount, 'click', '.ev-copy', function (e, t) {
+      var el = document.getElementById(t.getAttribute('data-copy'));
+      if (!el) return;
+      U.copy(el.textContent).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+
     // screenshots: attach (readAsDataURL, stored inline for report embedding) + remove
     var ssFile = document.getElementById('ss-file');
     if (ssFile) ssFile.addEventListener('change', function () {

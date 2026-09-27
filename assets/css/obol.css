@@ -315,6 +315,28 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .ev-manual summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
 .ev-hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
 
+/* whole-session import */
+.ev-import { margin-top: 20px; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; background: var(--surf2); }
+.ev-import > summary { cursor: pointer; color: var(--text); font-size: 13.5px; font-weight: 700; }
+.ev-import[open] > summary { margin-bottom: 8px; }
+.ev-import-tag { display: inline-block; margin-left: 8px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border: 1px solid var(--line-hot); border-radius: 999px; padding: 1px 8px; vertical-align: middle; }
+.ev-import .ev-textarea { min-height: 140px; margin-top: 4px; }
+.ev-imp-route { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--text-2); }
+.ev-imp-route > span { flex: none; font-weight: 600; }
+.ev-imp-route select { flex: 1; max-width: 340px; }
+.ev-imp-route-hint { margin-top: 6px; }
+.ev-imp-route-hint code { background: var(--bg2); padding: 1px 5px; border-radius: 4px; }
+.ev-imp-tools { margin-top: 6px; font-size: 11.5px; color: var(--text-2); }
+.ev-imp-tools code, .ev-setup-lbl code { background: var(--bg2); padding: 1px 5px; border-radius: 4px; }
+.ev-imp-next { margin-top: 6px; font-size: 12.5px; color: var(--text); }
+.ev-import-setup { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.ev-import-setup > summary { cursor: pointer; color: var(--text-2); font-size: 12.5px; }
+.ev-setup-step { margin-top: 12px; }
+.ev-setup-lbl { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.ev-copy { margin-top: 6px; cursor: pointer; background: var(--bg2); color: var(--text-2); border: 1px solid var(--line-hot); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; }
+.ev-copy:hover { color: var(--text); border-color: var(--accent); }
+.ev-import-setup kbd { background: var(--bg2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 11px; }
+
 /* ---- misc ---- */
 .route-stub { padding: 20px 0; }
 .boot-error { color: var(--red); padding: 20px; font-family: var(--mono); }
@@ -579,6 +601,10 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .ws-banner .cmd-run { margin: 0 0 8px; }
 .ws-banner-actions { display: flex; gap: 8px; align-items: center; }
 .ws-banner-note { color: var(--text-2); font-size: 12px; margin-top: 8px; }
+.ws-stamp { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.ws-stamp > summary { cursor: pointer; color: var(--text-2); font-size: 12.5px; }
+.ws-stamp[open] > summary { color: var(--text); margin-bottom: 6px; }
+.ws-stamp .cmd-run { margin: 6px 0 8px; }
 
 .eng-active { background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surf2); border: 1px solid var(--accent); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; }
 .eng-active-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }

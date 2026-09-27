@@ -103,6 +103,9 @@
       var lo = firstVal(facts, 'listener.open');
       if (lo && lo.lhost) ctx.lhost = lo.lhost;
     }
+    // iface: the operator's attacker interface (responder -I, mitm6 -i, …). Pinned from the engagement's
+    // configured VM interface, defaulting to tun0 — the VPN adapter for HTB/OSCP-style labs.
+    if (!ctx.iface) ctx.iface = params.lhost_iface || 'tun0';
 
     // credentials: prefer credential.available then credential.plaintext
     var creds = facts.values('credential.available');
@@ -331,7 +334,13 @@
   // the coach to demote a suggested variant you have already executed, so it stops re-offering it.
   function commandWasRun(filledCmd, activities, params) {
     var sig = _actionSig(filledCmd, params), keys = Object.keys(sig);
-    if (!keys.length) return false;
+    // Only DISTINCTIVE commands are confidently "already run": a verb+object enumeration or grant has 3+
+    // action tokens (`bloodyad get writable`, `nxc ldap --users`, `bloodyad add dcsync`). A generic
+    // tool+mode invocation — `nxc smb` (validate), `evil-winrm`, `impacket-psexec`, `certipy find` — is a
+    // re-runnable check/shell that recurs across many moves; marking it run is high-confusion, low-value,
+    // and is exactly what wrongly flagged an UNRUN `nxc smb` as ✓ ran. Bias to under-marking: re-suggesting
+    // a command is a mild annoyance, wrongly hiding one you still need is the failure that keeps biting.
+    if (keys.length < 3) return false;
     function covers(cmd) {
       if (!cmd) return false;
       var asig = _actionSig(cmd, params);

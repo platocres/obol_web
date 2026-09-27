@@ -101,21 +101,27 @@ ok(OBOL.command.commandWasRun("bloodyAD -d htb.local --host 10.129.94.251 -u svc
 // (`nxc smb … -x '<cmd>'`) as already run — they differ only by the execute flag, which the signature
 // must keep. This is the "selecting a cred flipped the exec command to ✓ ran" bug.
 var nxcP = { target: '10.129.95.9', username: 'svc-alfresco', password: 's3rvice', domain: 'htb.local' };
+// A bare `nxc smb` (tool + mode, 2 tokens) is a generic re-runnable check — NEVER confidently "already
+// run", even when an nxc smb WAS run: it recurs across moves and mis-marking it as ran is what kept
+// hiding commands the operator still needed. Under-marking (re-suggest) is the safe direction.
 var validationRan = [{ command: "nxc smb 10.129.95.9 -u svc-alfresco -p 's3rvice'" }];
-ok(OBOL.command.commandWasRun("nxc smb {{target}} -u {{user}} -p '{{password}}'", validationRan, nxcP) === true, 'the credential-validation nxc smb you ran is marked run');
-ok(OBOL.command.commandWasRun("nxc smb {{target}} -u {{user}} -p '{{password}}' -x '{{command}}'", validationRan, nxcP) === false, 'the EXEC nxc smb (-x) is NOT marked run just because the validation nxc smb was');
+ok(OBOL.command.commandWasRun("nxc smb {{target}} -u {{user}} -p '{{password}}'", validationRan, nxcP) === false, 'a generic `nxc smb` credential-check is NOT marked run (too generic — the coach keeps offering it)');
+ok(OBOL.command.commandWasRun("nxc smb {{target}} -u {{user}} -p '{{password}}' -x '{{command}}'", validationRan, nxcP) === false, 'the EXEC nxc smb is not marked run either');
+// but the DISTINCTIVE nxc enum (3 tokens, --users) IS still marked when actually run
+ok(OBOL.command.commandWasRun("nxc ldap {{target}} -u '' -p '' --users", [{ command: "nxc ldap 10.129.95.9 -u '' -p '' --users | tee ldap-users.txt" }], nxcP) === true, 'a distinctive nxc ldap --users you ran is still marked run');
 
 // the win flag flows through fillCommand so the coach can render the "Pwn This Target" badge
 var winAct = { commands: [{ tool: 'x', run: 'x pwn', win: true }, { tool: 'y', run: 'y go' }] };
 var fa = OBOL.command.fillAll(winAct, new OBOL.facts.FactSet([]), {});
 ok(fa[0].win === true && fa[1].win === false, 'fillCommand passes the win flag through (drives the Pwn This Target badge)');
 
-// REGRESSION: two DIFFERENT tools that share a `find` subcommand must not be confused — running
-// sccmhunter find must NOT tag certipy find as already run (the tool is part of the signature now).
+// Two DIFFERENT tools sharing a `find` subcommand must never be confused — and, more strongly, a bare
+// tool+`find` is only 2 tokens (generic), so neither is marked run at all: the coach keeps offering them
+// rather than risk hiding one. (sccmhunter's own "found nothing → retire" path handles that case.)
 var findActs = [{ command: "sccmhunter.py find -u svc-alfresco -p 's3rvice' -d htb.local -dc-ip 10.129.94.251" }];
 var cp = { target: '10.129.94.251', domain: 'htb.local', username: 'svc-alfresco', password: 's3rvice' };
-ok(OBOL.command.commandWasRun("certipy find -u svc-alfresco@htb.local -p 's3rvice' -dc-ip 10.129.94.251 -vulnerable", findActs, cp) === false, 'certipy find is NOT marked run just because sccmhunter find was (tool is distinctive)');
-ok(OBOL.command.commandWasRun("sccmhunter.py find -u svc-alfresco -p 's3rvice' -d htb.local -dc-ip 10.129.94.251", findActs, cp) === true, 'the sccmhunter find you actually ran is still marked run');
+ok(OBOL.command.commandWasRun("certipy find -u svc-alfresco@htb.local -p 's3rvice' -dc-ip 10.129.94.251 -vulnerable", findActs, cp) === false, 'certipy find is NOT marked run from an sccmhunter find (different tool, and too generic anyway)');
+ok(OBOL.command.commandWasRun("sccmhunter.py find -u svc-alfresco -p 's3rvice' -d htb.local -dc-ip 10.129.94.251", findActs, cp) === false, 'a bare tool+find (2 tokens) is not confidently marked run — the safe, under-marking direction');
 
 console.log(fail ? ('\nACL GROUP SWEEP: ' + fail + ' FAILURES') : '\nACL GROUP SWEEP: all passed');
 process.exit(fail ? 1 : 0);

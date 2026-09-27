@@ -73,9 +73,15 @@ function serve() {
   await page.fill('#eng-name', 'OSCP Exam');
   await page.fill('#eng-scope', '10.10.10.10 junk 10.10.10.0/24');
   await page.fill('#eng-workdir', '/home/kali/lab/box');
+  // the attacker-box IP + interface field
+  ok(await page.locator('#eng-lhost').count() === 1 && await page.locator('#eng-iface').count() === 1, 'setup form has a VM IP + interface field');
+  await page.fill('#eng-lhost', '10.10.14.9');
+  await page.selectOption('#eng-iface', 'tun0');
   await page.click('#eng-launch');
   await page.waitForTimeout(500);
   ok(page.url().indexOf('#/path') >= 0, 'launch lands on the coach');
+  const savedLhost = await page.evaluate(() => (window.OBOL.store.active().params || {}).lhost);
+  ok(savedLhost === '10.10.14.9', 'launch saved the attacker VM IP as {{lhost}} (' + savedLhost + ')');
   const launchedPlatform = await page.evaluate(() => window.OBOL.store.active().profile.platform);
   ok(launchedPlatform === 'oscp', 'launched engagement carries the OSCP profile (' + launchedPlatform + ')');
   // workspace: saved on the engagement, drives command output paths, and shows the scaffold banner
@@ -658,6 +664,46 @@ function serve() {
   }, { timeout: 3000 }).then(() => true).catch(() => false);
   ok(drawer, 'hamburger opens the engagement drawer on-screen');
   await mob.close();
+
+  // Whole-session import panel: paste a multi-command capture (with obol's prompt stamp), import it in one
+  // pass, and confirm the segments run through the same pipeline (facts minted, LHOST learned, summary shown).
+  // Placed late so its unshifted activities / minted hostname don't perturb the earlier ordered assertions.
+  await page.goto(`http://localhost:${PORT}/index.html#/evidence`, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => window.OBOL && window.OBOL.parsers && window.OBOL.parsers.parseActionOutput, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(200);
+  ok(await page.locator('.ev-import summary').count() >= 1, 'Evidence route shows the "Import a Full Session" panel');
+  await page.evaluate(() => { document.querySelectorAll('.ev-import, .ev-import-setup').forEach(function (d) { d.open = true; }); });
+  const stampShown = await page.evaluate(() => (document.getElementById('ev-stamp-code') || {}).textContent || '');
+  ok(/precmd_functions\+=\(/.test(stampShown), 'the import panel surfaces the non-destructive zsh prompt-stamp snippet');
+  // the route selector defaults to auto-route and lists the engagement's targets
+  ok(await page.locator('#ev-imp-target').count() === 1, 'the import panel has a "Route facts to" target selector');
+  ok((await page.evaluate(() => (document.getElementById('ev-imp-target') || {}).value)) === 'auto', 'the selector defaults to Auto-route by IP');
+  const impCountBefore = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
+  // A capture that touches TWO hosts: the launched target (10.10.10.10) and a NEW host (10.10.10.55).
+  const sessionCap = [
+    '[2026-09-27 18:00:01 UTC] [tun0:10.10.14.9]',
+    '┌──(kali㉿kali)-[~/lab]', '└─$ nxc smb 10.10.10.10',
+    'SMB 10.10.10.10 445 DC01 [*] Windows Server 2016 Build 14393 x64 (name:DC01) (domain:corp.local) (signing:True) (SMBv1:False)',
+    '[2026-09-27 18:02:30 UTC] [tun0:10.10.14.9]',
+    '┌──(kali㉿kali)-[~/lab]', '└─$ nmap -Pn -p- 10.10.10.55',
+    'Nmap scan report for 10.10.10.55', 'Host is up.', 'PORT STATE SERVICE', '445/tcp open microsoft-ds', 'Nmap done',
+  ].join('\n');
+  await page.fill('#ev-imp-text', sessionCap);
+  await page.click('#ev-imp-go');
+  await page.waitForTimeout(400);
+  const imp = await page.evaluate(() => ({
+    lhost: (window.OBOL.store.active().params || {}).lhost || '',
+    acts: (window.OBOL.store.active().activities || []).length,
+    res: (document.getElementById('ev-imp-result') || {}).textContent || '',
+    newTarget: (window.OBOL.store.active().targets || []).some((t) => t.ip === '10.10.10.55'),
+    lhostIsTarget: (window.OBOL.store.active().targets || []).some((t) => t.ip === '10.10.14.9'),
+  }));
+  ok(imp.acts - impCountBefore === 2, 'importing a 2-command session records exactly 2 activities (' + (imp.acts - impCountBefore) + ')');
+  ok(imp.lhost === '10.10.14.9', 'the configured attacker VM IP is in force as {{lhost}} during import');
+  ok(/Imported 2 command/.test(imp.res), 'the import summary reports the commands imported');
+  ok(/2 hosts/.test(imp.res), 'the import summary reports facts landed across 2 hosts');
+  ok(imp.newTarget, 'auto-route registered the newly-touched host 10.10.10.55 as a target');
+  ok(!imp.lhostIsTarget, 'the operator LHOST (10.10.14.9) was never added as a target');
 
   // Data reset controls: management sits near the top of Engagements; the store methods wipe cleanly.
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
