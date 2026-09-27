@@ -188,6 +188,20 @@
   }
   var _LHOST_G = /\[(?:tun|tap|vpn|wg|eth|wlan)\d*[:\/ ]\s*(\d{1,3}(?:\.\d{1,3}){3})\]/gi;
 
+  // Rewrite one IP to another throughout a capture — for a reverted lab whose target IP changed. The match
+  // is bounded so 10.129.95.6 never rewrites inside 10.129.95.66, and only whole dotted-quads are touched.
+  // pairs: [{from, to}]. Returns { text, count } so the UI can confirm how many occurrences were remapped.
+  function remapIps(text, pairs) {
+    var body = String(text || ''), total = 0;
+    (pairs || []).forEach(function (p) {
+      if (!p || !p.from || !p.to || p.from === p.to) return;
+      if (!_isRoutableIp(p.from) && !/^(\d{1,3}\.){3}\d{1,3}$/.test(p.from)) return;
+      var re = new RegExp('(?<![\\d.])' + p.from.replace(/\./g, '\\.') + '(?![\\d.])', 'g');
+      body = body.replace(re, function () { total++; return p.to; });
+    });
+    return { text: body, count: total };
+  }
+
   function ready() { return !!(OBOL.parsers && OBOL.parsers.parseActionOutput); }
   // Resolve to true once the (lazily-loaded) parser group is available.
   function ensureParsers() {
@@ -360,12 +374,19 @@
   // Import one or more captures. Segments are stitched chronologically by prompt timestamp (null carries the
   // previous one so a tab's order is kept), de-duplicated (the same command+output pasted twice is ignored),
   // and each is run through the normal ingest pipeline. Returns a summary for the UI.
-  //   opts = { fileName?, target? }  target: 'auto' (default) routes each command to the host it names, and
-  //   registers any new host it lands facts on; a specific IP forces every command onto that host.
+  //   opts = { fileName?, target?, remap? }  target: 'auto' (default) routes each command to the host it
+  //   names, and registers any new host it lands facts on; a specific IP forces every command onto that
+  //   host. remap: [{from,to}] rewrites an old IP to the current one first (a reverted lab's target changed).
   function importSession(inputs, opts) {
     opts = opts || {};
     if (!ready()) return { ok: false, reason: 'parsers' };
     var texts = Array.isArray(inputs) ? inputs : [inputs];
+    // Reverted-box remap: rewrite the old target IP to the new one across every capture BEFORE anything else,
+    // so routing, facts and the recorded evidence all land on the host the operator is actually on now.
+    var remapped = 0;
+    if (opts.remap && opts.remap.length) {
+      texts = texts.map(function (t) { var r = remapIps(t, opts.remap); remapped += r.count; return r.text; });
+    }
     var eng = OBOL.store.active();
     var params = (eng && eng.params) || {};
     var routeMode = opts.target || 'auto';
@@ -410,12 +431,12 @@
     var merged = reconcileTargets();
     if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
     return { ok: true, commands: all.length, imported: imported, dupes: dupes, added: added,
-      tools: Object.keys(ranTools), hosts: Object.keys(hosts), merged: merged };
+      tools: Object.keys(ranTools), hosts: Object.keys(hosts), merged: merged, remapped: remapped };
   }
 
   OBOL.ingest = { run: run, deriveCommand: deriveCommand, sniffCommand: sniffCommand,
     contentSignatures: contentSignatures, dispatchLabel: dispatchLabel, recognizesTool: recognizesTool,
     looksLikeError: looksLikeError, detectLhost: detectLhost, detectTarget: detectTarget,
-    splitSession: splitSession, importSession: importSession,
+    remapIps: remapIps, splitSession: splitSession, importSession: importSession,
     ensureParsers: ensureParsers, ready: ready };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

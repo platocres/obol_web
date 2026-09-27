@@ -49,6 +49,12 @@
       + '<textarea id="ev-imp-text" class="ev-textarea" placeholder="Paste your whole session — many commands and all their output. obol finds each command by its prompt line." spellcheck="false"></textarea>'
       + '<label class="ev-imp-route"><span>Route facts to</span><select id="ev-imp-target" class="ev-cmd">' + tOpts + '</select></label>'
       + '<div class="ev-hint ev-imp-route-hint">Auto-route reads the target IP from each command (<code>nxc smb 10.0.0.5</code>, <code>--host 10.0.0.5</code>…) and files its facts under that host — your VPN/<code>tun0</code> address is never treated as a target. New hosts you touch are added automatically. Pick a specific target to force everything onto one host.</div>'
+      + '<details class="ev-imp-remap"><summary>Box got reverted? Remap an old IP</summary>'
+      + '<div class="ev-imp-remap-row"><input id="ev-imp-oldip" class="ev-cmd" placeholder="old IP in your capture (e.g. 10.129.95.9)" autocomplete="off" spellcheck="false" inputmode="decimal">'
+      + '<span class="ev-imp-arrow">→</span>'
+      + '<input id="ev-imp-newip" class="ev-cmd" placeholder="' + esc((eng && eng.params && eng.params.target) || 'current target IP') + '" value="' + U.attr((eng && eng.params && eng.params.target) || '') + '" autocomplete="off" spellcheck="false" inputmode="decimal"></div>'
+      + '<div class="ev-hint">If the lab reset and the target IP changed, obol rewrites the old IP to the new one across the whole capture before parsing — so you don\'t have to hand-edit your log. New IP defaults to your current target.</div>'
+      + '</details>'
       + '<div class="ev-row">'
       + '<label class="ev-filebtn" for="ev-imp-file">⭱ Attach Session File(s)…</label>'
       + '<input type="file" id="ev-imp-file" class="ev-file" accept=".txt,.log,.out,text/plain" multiple hidden>'
@@ -200,14 +206,20 @@
     if (!inputs.length) { U.toast('Paste a session or attach a file first'); return; }
     if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers still loading — try again in a second'); return; }
     var routeTo = (document.getElementById('ev-imp-target') || {}).value || 'auto';
-    var r = OBOL.ingest.importSession(inputs, { source: 'session', target: routeTo });
+    var oldIp = ((document.getElementById('ev-imp-oldip') || {}).value || '').trim();
+    var newIp = ((document.getElementById('ev-imp-newip') || {}).value || '').trim();
+    var IPRE = /^(\d{1,3}\.){3}\d{1,3}$/;
+    var remap = (oldIp && newIp && IPRE.test(oldIp) && IPRE.test(newIp) && oldIp !== newIp) ? [{ from: oldIp, to: newIp }] : null;
+    if (oldIp && !remap) { U.toast('Remap needs two different valid IPs — ignoring it', 'err'); }
+    var r = OBOL.ingest.importSession(inputs, { source: 'session', target: routeTo, remap: remap });
     if (!r || !r.ok) { U.toast('Could not import that session'); return; }
     var next = topNextMove();
     if (resEl) {
       resEl.innerHTML = '<div class="ev-added">Imported ' + r.imported + ' command' + (r.imported === 1 ? '' : 's')
         + ' → minted ' + r.added + ' new fact' + (r.added === 1 ? '' : 's')
         + (r.hosts && r.hosts.length > 1 ? (' across ' + r.hosts.length + ' hosts') : '')
-        + (r.dupes ? (' · skipped ' + r.dupes + ' duplicate' + (r.dupes === 1 ? '' : 's')) : '') + '.'
+        + (r.dupes ? (' · skipped ' + r.dupes + ' duplicate' + (r.dupes === 1 ? '' : 's')) : '')
+        + (r.remapped ? (' · remapped ' + r.remapped + ' IP occurrence' + (r.remapped === 1 ? '' : 's')) : '') + '.'
         + (r.hosts && r.hosts.length ? ('<div class="ev-imp-tools">Hosts: ' + r.hosts.map(function (h) { return '<code>' + esc(h) + '</code>'; }).join(' ') + '</div>') : '')
         + (r.tools && r.tools.length ? ('<div class="ev-imp-tools">Tools seen: ' + r.tools.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(' ') + '</div>') : '')
         + (next ? ('<div class="ev-imp-next">Next move: <strong>' + esc(next) + '</strong></div>') : '')

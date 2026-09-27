@@ -54,7 +54,7 @@ function serve() {
 
   // engine present + packs loaded
   const actionCount = await page.evaluate(() => window.OBOL && window.OBOL.packs ? window.OBOL.packs.actions().length : 0);
-  ok(actionCount === 157, 'packs loaded in browser (157 actions, got ' + actionCount + ')');
+  ok(actionCount === 158, 'packs loaded in browser (158 actions, got ' + actionCount + ')');
 
   // Engagement screen is the default landing; launch an OSCP run with a scoped target.
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
@@ -678,6 +678,7 @@ function serve() {
   // the route selector defaults to auto-route and lists the engagement's targets
   ok(await page.locator('#ev-imp-target').count() === 1, 'the import panel has a "Route facts to" target selector');
   ok((await page.evaluate(() => (document.getElementById('ev-imp-target') || {}).value)) === 'auto', 'the selector defaults to Auto-route by IP');
+  ok(await page.locator('#ev-imp-oldip').count() === 1 && await page.locator('#ev-imp-newip').count() === 1, 'the import panel offers an old-IP → new-IP remap for reverted labs');
   const impCountBefore = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
   // A capture that touches TWO hosts: the launched target (10.10.10.10) and a NEW host (10.10.10.55).
   const sessionCap = [
