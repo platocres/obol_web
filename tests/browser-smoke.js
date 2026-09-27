@@ -234,8 +234,7 @@ function serve() {
   await page.waitForTimeout(150);
   ok((await page.locator('.context-rail .rail-list li', { hasText: 'alice@corp.local' }).count()) === 1, 'the coach rail lists a credential proven on two scopes only once (deduped)');
 
-  // Un-retire: a move retired as "empty" whose produced fact is now proven must RE-APPEAR — re-pasting
-  // good evidence (0 new facts) must never bury a move you still need to finish the chain.
+  // Retire/un-retire is judged PER MOVE (its own runs), not per fact-kind.
   await page.evaluate(() => {
     const S = window.OBOL.store, F = window.OBOL.facts;
     S.update((e) => { e.checklist = e.checklist || {}; e.checklist['bloodyad-acl'] = 'empty'; }, 'done');
@@ -243,14 +242,23 @@ function serve() {
     window.OBOL.router.render();
   });
   await page.waitForTimeout(120);
-  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) === 0, 'a move retired as empty (no produced fact yet) stays out of the coach');
+  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) === 0, 'a move retired empty (none of its own runs produced a fact) stays out of the coach');
+  // The sccm bug: a fact-KIND this move produces (credential.candidate) exists from an UNRELATED source —
+  // that must NOT un-retire it.
   await page.evaluate(() => {
     const S = window.OBOL.store, F = window.OBOL.facts;
-    S.addFacts([F.makeFact({ kind: 'ad.control_paths', scope: 'domain:corp.local', value: { rights: ['DCSync'] }, state: F.ProofState.SUPPORTED, source: 'test' })], 'test');
+    S.addFacts([F.makeFact({ kind: 'credential.candidate', scope: 'domain:corp.local', value: { kind: 'asrep_hash', count: 1 }, state: F.ProofState.SUPPORTED, source: 'asrep-crack' })], 'test');
     window.OBOL.router.render();
   });
   await page.waitForTimeout(120);
-  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) >= 1, 'the retired move RE-APPEARS once its produced fact is proven (un-retired — the chain is recoverable)');
+  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) === 0, 'a produced fact-kind from an UNRELATED move does not un-retire (the sccm regression)');
+  // New evidence: a run attributed to THIS move produces a fact → un-retire (the chain is recoverable).
+  await page.evaluate(() => {
+    window.OBOL.store.update((e) => { e.activities = e.activities || []; e.activities.unshift({ at: Date.now(), action_id: 'bloodyad-acl', produced: ['ad.acl_lead'], command: "bloodyAD -d corp.local --host 10.10.10.9 -u alice -p x get writable" }); }, 'activity');
+    window.OBOL.router.render();
+  });
+  await page.waitForTimeout(120);
+  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) >= 1, 'the move RE-APPEARS once one of ITS OWN runs produced a fact (un-retired)');
 
   // Run Log: every command run is recorded and reviewable (with a filter), not just the attack-path moves.
   await page.evaluate(() => {

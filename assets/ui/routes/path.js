@@ -42,7 +42,11 @@
     // command you already ran (or one whose effect is already proven) stops being re-suggested at the top.
     var eng = OBOL.store.active() || {};
     var acts = eng.activities || [], params = eng.params || {};
-    var items = filled.map(function (v, i) { return { v: v, i: i, ran: OBOL.command.commandWasRun(v.filled, acts, params) }; });
+    // Match on the TEMPLATE (v.run), not the filled command: a filled command carries the real domain /
+    // user / password / target (pulled from facts and the active credential, which params may not hold), and
+    // those lab-specific values would never appear in the recovered dispatch of an attached dump. The
+    // template keeps them as {{tokens}} — stripped from the signature — so only the true action verbs remain.
+    var items = filled.map(function (v, i) { return { v: v, i: i, ran: OBOL.command.commandWasRun(v.run || v.filled, acts, params) }; });
     if (!action.sequence) items = items.filter(function (x) { return !x.ran; }).concat(items.filter(function (x) { return x.ran; }));
     var firstUnrun = -1;
     for (var fu = 0; fu < items.length; fu++) { if (!items[fu].ran) { firstUnrun = fu; break; } }
@@ -210,20 +214,19 @@
     var params = (eng && eng.params) || {};
     var pack = OBOL.packs.actions();
     var doneIds = {};
-    // 'done' = the operator ticked it; 'empty' = its tool ran and proved nothing here (a clean negative,
-    // e.g. no SCCM). Both retire the move — EXCEPT an 'empty' move whose own produced facts are now present
-    // is UN-retired: re-pasting known-good evidence (0 new facts) must never bury a move that already paid
-    // off. This both prevents the bad retire and recovers a move wrongly retired by an earlier re-paste.
-    function producedAny(action) {
-      return !!(action && (action.produces || []).some(function (kind) { return facts.has(kind); }));
+    // 'done' = the operator ticked it; 'empty' = its tool ran and proved nothing (a useless path RIGHT NOW,
+    // e.g. no SCCM in this environment). Both retire the move from the ready list. The un-retire test is per
+    // MOVE, not per fact-KIND: a move stays retired only while NONE of its OWN runs ever produced a fact,
+    // and comes back the moment a run attributed to it produces one (new evidence revealing it is no longer
+    // a dead end). Checking the fact kind globally was wrong — sccm-enum "produces" credential.candidate,
+    // which you already hold from an unrelated AS-REP crack, so it never retired.
+    function moveEverProduced(actionId) {
+      return (eng.activities || []).some(function (a) { return a && a.action_id === actionId && (a.produced || []).length > 0; });
     }
     Object.keys((eng && eng.checklist) || {}).forEach(function (k) {
       var st = eng.checklist[k];
       if (st === 'done') { doneIds[k] = true; return; }
-      if (st === 'empty') {
-        var act = pack.filter(function (a) { return a.id === k; })[0];
-        if (!producedAny(act)) doneIds[k] = true;   // truly empty → stay retired; produced facts → un-retire
-      }
+      if (st === 'empty' && !moveEverProduced(k)) doneIds[k] = true; // never paid off → stay retired
     });
 
     var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
@@ -364,15 +367,15 @@
           var aid = box.getAttribute('data-action') || '';
           var toolNm = ((box.getAttribute('data-cmd') || '').trim().split(/\s+/)[0] || '').split('/').pop().replace(/\.(py|exe)$/, '') || 'the tool';
           var bodyLines = text.trim().split(/\r?\n/).filter(function (l) { return l.trim(); }).length;
-          // The move's tool ran to completion and proved nothing HERE (a clean negative — e.g. no SCCM in
-          // the environment): acknowledge it and retire the move from the coach instead of re-suggesting a
-          // command the operator already ran. Guarded so a junk paste or a broken/denied run does NOT retire
-          // — and, critically, so RE-PASTING evidence that already paid off (0 new facts, but this move's
-          // facts are already proven) never retires a move you still need.
-          var aidAct = aid ? (OBOL.packs.actions().filter(function (a) { return a.id === aid; })[0]) : null;
-          var factsNow = OBOL.store.factSet();
-          var alreadyProduced = !!(aidAct && (aidAct.produces || []).some(function (kind) { return factsNow.has(kind); }));
-          if (aid && !alreadyProduced && !r.parseError && r.recognizedTool && !r.looksError && bodyLines >= 2) {
+          // The move's tool ran to completion and proved nothing HERE (a useless path right now — e.g. no
+          // SCCM in the environment): acknowledge it and retire the move from the coach instead of
+          // re-suggesting a command already run. Guarded so a junk paste or a broken/denied run does NOT
+          // retire — and so RE-PASTING evidence that already paid off (this MOVE produced facts on an
+          // earlier run) never buries a move you still need. Judged per move (its own activities), not by a
+          // fact-kind that some unrelated move may have produced.
+          var eng2 = OBOL.store.active() || {};
+          var moveEverPaid = (eng2.activities || []).some(function (a) { return a && a.action_id === aid && (a.produced || []).length > 0; });
+          if (aid && !moveEverPaid && !r.parseError && r.recognizedTool && !r.looksError && bodyLines >= 2) {
             OBOL.store.update(function (engg) { engg.checklist = engg.checklist || {}; engg.checklist[aid] = 'empty'; }, 'done');
             U.toast(toolNm + ' ran — nothing found here. Retired from the coach.');
             OBOL.router.render();
