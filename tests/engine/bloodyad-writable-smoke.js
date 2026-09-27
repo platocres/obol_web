@@ -45,6 +45,22 @@ ok((v.targets || []).indexOf('Domain Guests') === -1, 'a non-privileged group (D
 ok((v.rights || []).indexOf('WriteMembers') !== -1, 'the right is recorded (WriteMembers = add-self-to-group)');
 ok(/Exchange Windows Permissions/.test(v.note || ''), 'the note names the concrete DCSync cash-in');
 
+// The reported failure: the operator ATTACHES the (multi-thousand-line) dump as a file, so ingest has
+// NO command and NO action tag. Content-sniffing must still recognize it — this is the case that was
+// dropping every fact on the floor.
+var attached = OBOL.parsers.parseActionOutput({
+  actionId: '', command: '', stdout: out, source: 'bloodyad-writable.txt', scope: 'host:10.0.0.5', domain: 'corp.local',
+});
+var al = (attached.facts || []).filter(function (f) { return f.kind === 'ad.acl_lead'; });
+ok(al.length === 1, 'a bloodyAD dump ATTACHED with no command/action tag is still recognized (the reported bug)');
+ok(((al[0] || {}).value || {}).targets.indexOf('Exchange Windows Permissions') !== -1, 'the file-attach path surfaces the same DCSync lead');
+
+// A plain LDAP/LDIF dump has `distinguishedName:` too, but its attribute values are DATA, not the bare
+// WRITE / CREATE_CHILD permission tokens — it must NOT be mistaken for bloodyAD writable output.
+var ldif = ['distinguishedName: CN=Bob,CN=Users,DC=corp,DC=local', 'memberOf: CN=Domain Users,CN=Users,DC=corp,DC=local', 'description: helpdesk operator', 'userAccountControl: 512'].join('\n');
+var mis = OBOL.parsers.parseActionOutput({ actionId: '', command: '', stdout: ldif, source: 'ldap.txt', scope: 'host:10.0.0.5', domain: 'corp.local' });
+ok(!(mis.facts || []).some(function (f) { return f.kind === 'ad.acl_lead'; }), 'a plain LDAP/LDIF dump is NOT mis-sniffed as bloodyAD writable output');
+
 // no bloodyAD writable output → no invented lead
 var none = OBOL.parsers.parseActionOutput({ actionId: 'bloodyad-acl', command: "bloodyAD ... get writable", stdout: 'No writable object found.', source: 'bloodyad', scope: 'host:10.0.0.5', domain: 'corp.local' });
 ok(!(none.facts || []).some(function (f) { return f.kind === 'ad.acl_lead'; }), 'no writable objects → no ad.acl_lead invented');

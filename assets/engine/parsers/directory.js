@@ -593,8 +593,23 @@
     return head.indexOf('=') >= 0 ? head.split('=').slice(1).join('=').trim() : head.trim();
   }
 
+  // bloodyAD `get writable` output is recognizable from CONTENT alone: `distinguishedName:` blocks whose
+  // attribute lines carry a bare permission token (only WRITE / CREATE_CHILD are ever emitted). Sniffing it
+  // lets the parser fire when the operator ATTACHES the output file with no command set (the common case for
+  // this multi-thousand-line dump) rather than pasting a prompt-anchored `bloodyAD ... get writable` line.
+  var _BLOODY_WRITABLE_PERM_RE = /^[A-Za-z][\w-]*:[ \t]*(?:WRITE|CREATE_CHILD)[ \t]*$/;
+  function _looks_like_bloodyad_writable(text) {
+    if (!text || text.toLowerCase().indexOf('distinguishedname:') < 0) return false;
+    var lines = text.split(/\r?\n/), hits = 0;
+    for (var i = 0; i < lines.length; i++) {
+      if (_BLOODY_WRITABLE_PERM_RE.test(lines[i].trim()) && ++hits >= 2) return true;
+    }
+    return false;
+  }
+  C._looks_like_bloodyad_writable = _looks_like_bloodyad_writable;
+
   function _parse_bloodyad_writable(text, ws, command, source, facts) {
-    if (command.toLowerCase().indexOf('get writable') < 0) return;
+    if (command.toLowerCase().indexOf('get writable') < 0 && !_looks_like_bloodyad_writable(text)) return;
     var memberT = [], daclT = [], ownerT = [], gpoT = [], rights = {}, notes = [];
     text.split(/\n[ \t]*\n/).forEach(function (block) {
       var lines = block.split(/\r?\n/).map(function (l) { return l.replace(/\s+$/, ''); }).filter(function (l) { return l.trim(); });
@@ -642,6 +657,24 @@
     }, S, source));
   }
   C._parse_bloodyad_writable = _parse_bloodyad_writable;
+
+  // sccmhunter / SharpSCCM. Site-server and management-point discovery proves nothing on its own and
+  // earns no fact — only a recovered Network Access Account credential (a secret to try) does, and it is
+  // candidate material, not validated access. A run that finds no SCCM (`No results found` — the common
+  // case, since most boxes run no SCCM) correctly mints nothing: that is the honest outcome, not a
+  // parse failure. Ported from obol-local's conservative _parse_sccm.
+  var _SCCM_NAA_USER_RE = /NetworkAccess(?:Username|Account)\s*[:=]\s*\S/i;
+  var _SCCM_NAA_PASS_RE = /NetworkAccessPassword\s*[:=]\s*\S/i;
+  var _SCCM_NAA_GENERIC_RE = /\bNAA\b.*(?:cred|password|username)/i;
+  function _parse_sccm(text, ws, source, facts) {
+    var users = reAll(_SCCM_NAA_USER_RE, text);
+    var hasPass = !!reSearch(_SCCM_NAA_PASS_RE, text);
+    var generic = !!reSearch(_SCCM_NAA_GENERIC_RE, text);
+    if (!((users.length && hasPass) || (generic && hasPass))) return;
+    _add(facts, mkFact('credential.candidate', C._scope_for_domain(ws),
+      { kind: 'sccm_naa', count: Math.max(users.length, 1) }, S, source));
+  }
+  C._parse_sccm = _parse_sccm;
 
   function _parse_ad_abuse_output(actionId, text, ws, command, source, facts) {
     if (!(_is_ad_abuse_command(command) || C._AD_ABUSE_ACTION_IDS.has(actionId))) return;
