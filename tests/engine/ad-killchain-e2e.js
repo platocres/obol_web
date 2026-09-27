@@ -163,5 +163,30 @@ var adminFacts = new OBOL.facts.FactSet([
 ]);
 ok(flagHunt.eligible(adminFacts), 'flag-hunt becomes reachable from an SMB pass-the-hash (access.admin), not only WinRM');
 
+// Endgame ranking: once you're admin, CAPTURING THE FLAG leads, and post-domain persistence / path-mapping
+// are demoted below the objective and the cross-box loot — the coach stops dumping the encyclopedia.
+facts.add(OBOL.facts.makeFact({ kind: 'access.admin', scope: SCOPE, source: 't' }));
+facts.add(OBOL.facts.makeFact({ kind: 'host.os_family', scope: SCOPE, value: { family: 'windows' }, source: 't' }));
+var endRanked = OBOL.pack.nextActions(facts, pack, {});
+var ids = endRanked.map(function (a) { return a.id; });
+function rank(id) { var i = ids.indexOf(id); return i < 0 ? 999 : i; }
+ok(ids[0] === 'flag-hunt-windows', 'after domain compromise the #1 move is capturing the flag (id=' + ids[0] + ')');
+ok(rank('flag-hunt-windows') < rank('golden-ticket'), 'flag capture outranks post-DA persistence (golden ticket)');
+ok(rank('smb-share-inventory') < rank('golden-ticket') && rank('smb-share-inventory') < rank('ad-path-manual'), 'cross-box loot outranks persistence + path-mapping');
+ok(rank('golden-ticket') > 5 && rank('ad-path-manual') > 5 && rank('bloodhound-collect') > 5, 'the demoted side-quests fall out of the top-6 "Ready now" band');
+// the demotion is a nudge, not removal — the moves are still present, just lower
+ok(rank('golden-ticket') < 999 && rank('ad-path-manual') < 999, 'demoted moves are still available (kept for larger labs), just no longer up top');
+
+// Identity-coherent credential fill: a PtH command must NEVER pair one user's name with another's secret.
+var mixFacts = new OBOL.facts.FactSet([
+  OBOL.facts.makeFact({ kind: 'credential.available', scope: 'domain:corp.local', value: { user: 'svc-web', password: 'Password1' }, source: 't' }),
+  OBOL.facts.makeFact({ kind: 'credential.available', scope: 'domain:corp.local', value: { user: 'Administrator', nthash: '32693b11e6aa90eb43d32c72a07ceea6' }, source: 't' }),
+]);
+var pthCmd = { commands: [{ tool: 'nxc', run: 'nxc winrm {{target}} -u {{user}} -H {{nthash}}' }] };
+var asAdmin = OBOL.command.fillCommand(pthCmd, mixFacts, { params: { target: '10.0.0.5', username: 'Administrator' } }, 0).filled;
+ok(/-u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6/.test(asAdmin), 'PtH fills Administrator + Administrator\'s hash (coherent): ' + asAdmin);
+var asSvc = OBOL.command.fillCommand(pthCmd, mixFacts, { params: { target: '10.0.0.5', username: 'svc-web' } }, 0).filled;
+ok(asSvc.indexOf('32693b11e6aa90eb43d32c72a07ceea6') < 0, 'with svc-web active, the command does NOT borrow Administrator\'s hash (no mismatched identity): ' + asSvc);
+
 console.log(fail ? ('\nAD KILL CHAIN E2E: ' + fail + ' FAILURES') : '\nAD KILL CHAIN E2E: all passed — recon → domain compromise → land the plane, no dead ends');
 process.exit(fail ? 1 : 0);

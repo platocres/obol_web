@@ -279,11 +279,20 @@
         + '</div>';
     }
 
-    // ready (on-flow) moves
+    // ready (on-flow) moves — cap the visible list to the top few so a late-game frontier (where the whole
+    // pack is technically "ready") doesn't bury the actual next move under an encyclopedia. The rest fold
+    // into a collapsed "More ready moves" so nothing is lost, just quieted.
+    var READY_CAP = 6;
     if (onFlow.length) {
+      var top = onFlow.slice(0, READY_CAP), rest = onFlow.slice(READY_CAP);
       html += '<div class="coach-section"><h2 class="coach-sec-h">Ready now</h2>';
-      onFlow.forEach(function (a, i) { html += moveCard(a, facts, params, { primary: i === 0 }); });
+      top.forEach(function (a, i) { html += moveCard(a, facts, params, { primary: i === 0 }); });
       html += '</div>';
+      if (rest.length) {
+        html += '<details class="coach-section coach-more"><summary class="coach-sec-h">More ready moves — lower priority right now (' + rest.length + ')</summary>';
+        rest.forEach(function (a) { html += moveCard(a, facts, params, {}); });
+        html += '</details>';
+      }
     } else {
       html += '<div class="coach-empty">No on-flow moves yet. Start with a scan on the Evidence route, or add a target fact.</div>';
     }
