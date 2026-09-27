@@ -111,5 +111,48 @@ ok(multi.dupes === 1, 'multi-file: the duplicate nmap run is detected and droppe
 ok(multi.imported === 2, 'multi-file: exactly 2 unique commands imported');
 ok(OBOL.store._e.activities.length === 2, 'multi-file: 2 activities recorded (no duplicate)');
 
+// ── 4. detectTarget: route each command to the host it names, never the operator LHOST ───────────────
+ok(OBOL.ingest.detectTarget('nxc smb 10.0.0.5 -u svc -p x', '', { lhost: '10.10.14.5' }) === '10.0.0.5', 'detectTarget reads the RHOST from an nxc command');
+ok(OBOL.ingest.detectTarget("bloodyAD -d corp.local --host 10.0.0.9 -u svc -p x get writable", '', {}) === '10.0.0.9', 'detectTarget reads the --host argument');
+ok(OBOL.ingest.detectTarget("impacket-secretsdump 'corp/svc:pw'@10.0.0.7", '', {}) === '10.0.0.7', 'detectTarget reads the impacket user:pass@host target');
+ok(OBOL.ingest.detectTarget('coercer -t 10.0.0.5 -l 10.10.14.5', '', { lhost: '10.10.14.5' }) === '10.0.0.5', 'detectTarget picks the -t target, never the -l listener');
+ok(OBOL.ingest.detectTarget('nc -lvnp 4444', '', { lhost: '10.10.14.5' }) === '', 'a listener command with no target routes nowhere (not the LHOST)');
+ok(OBOL.ingest.detectTarget('', 'Nmap scan report for 10.0.0.8\nHost is up.', {}) === '10.0.0.8', 'detectTarget falls back to the host nmap names in its output');
+ok(OBOL.ingest.detectTarget('some notes', 'nothing routable here', { lhost: '10.10.14.5' }) === '', 'detectTarget returns empty when no host is named');
+
+// ── 5. importSession auto-routes a multi-host capture to the right hosts (and registers new ones) ─────
+OBOL.store = (function () {
+  var eng = { params: { domain: 'corp.local', target: '10.0.0.5', lhost: '10.10.14.5' }, targets: [{ id: 't1', ip: '10.0.0.5' }], activities: [], facts: [] };
+  var byScope = {};
+  function fs(scope) { return byScope[scope] || (byScope[scope] = new OBOL.facts.FactSet([])); }
+  return {
+    active: function () { return eng; }, update: function (fn) { fn(eng); },
+    addFacts: function (facts) { var n = 0; (facts || []).forEach(function (f) { if (fs(f.scope).add(OBOL.facts.factFromJson(OBOL.facts.factToJson(f)))) n++; }); return n; },
+    factSet: function () { return fs('host:' + eng.params.target); },
+    _scoped: byScope, _e: eng,
+  };
+})();
+var twoHost = [
+  '[2026-09-27 10:00:00 UTC] [tun0:10.10.14.5]', '└─$ nxc smb 10.0.0.5',
+  'SMB 10.0.0.5 445 DC01 [*] Windows Server 2016 Build 14393 x64 (name:DC01) (domain:corp.local) (signing:True) (SMBv1:False)',
+  '[2026-09-27 10:05:00 UTC] [tun0:10.10.14.5]', '└─$ nmap -Pn -p- 10.0.0.20',
+  'Nmap scan report for 10.0.0.20', 'Host is up.', 'PORT STATE SERVICE', '445/tcp open microsoft-ds', 'Nmap done',
+].join('\n');
+var routed = OBOL.ingest.importSession(twoHost);
+ok(routed.ok && routed.imported === 2, 'auto-route imports both commands');
+ok(routed.hosts.indexOf('10.0.0.5') >= 0 && routed.hosts.indexOf('10.0.0.20') >= 0, 'auto-route reports facts landed on BOTH hosts');
+ok(routed.hosts.indexOf('10.10.14.5') < 0, 'the operator LHOST is never reported as a host');
+ok(OBOL.store._scoped['host:10.0.0.5'] && OBOL.store._scoped['host:10.0.0.5'].has('host.hostname'), 'the nxc host facts filed under 10.0.0.5');
+ok(OBOL.store._scoped['host:10.0.0.20'] && OBOL.store._scoped['host:10.0.0.20'].has('ports.open'), 'the nmap facts filed under 10.0.0.20');
+ok(!OBOL.store._scoped['host:10.10.14.5'], 'no facts were ever filed under the LHOST scope');
+ok(OBOL.store._e.targets.some(function (t) { return t.ip === '10.0.0.20' && t.source === 'import'; }), 'the newly-touched host 10.0.0.20 was registered as a target');
+
+// a FIXED target forces every command onto one host regardless of the IPs in the commands
+OBOL.store._scoped['host:10.0.0.99'] = undefined;
+var forced = OBOL.ingest.importSession(twoHost, { target: '10.0.0.99' });
+ok(forced.hosts.length === 1 && forced.hosts[0] === '10.0.0.99', 'a fixed target routes every command to that one host');
+ok(OBOL.store._scoped['host:10.0.0.99'] && OBOL.store._scoped['host:10.0.0.99'].has('ports.open') && OBOL.store._scoped['host:10.0.0.99'].has('host.hostname'),
+  'with a fixed target, both commands\' facts file under the chosen host');
+
 console.log(fail ? ('\nSESSION IMPORT: ' + fail + ' FAILURES') : '\nSESSION IMPORT: all passed');
 process.exit(fail ? 1 : 0);

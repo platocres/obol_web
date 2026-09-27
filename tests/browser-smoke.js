@@ -669,15 +669,18 @@ function serve() {
   await page.evaluate(() => { document.querySelectorAll('.ev-import, .ev-import-setup').forEach(function (d) { d.open = true; }); });
   const stampShown = await page.evaluate(() => (document.getElementById('ev-stamp-code') || {}).textContent || '');
   ok(/precmd_functions\+=\(/.test(stampShown), 'the import panel surfaces the non-destructive zsh prompt-stamp snippet');
+  // the route selector defaults to auto-route and lists the engagement's targets
+  ok(await page.locator('#ev-imp-target').count() === 1, 'the import panel has a "Route facts to" target selector');
+  ok((await page.evaluate(() => (document.getElementById('ev-imp-target') || {}).value)) === 'auto', 'the selector defaults to Auto-route by IP');
   const impCountBefore = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
+  // A capture that touches TWO hosts: the launched target (10.10.10.10) and a NEW host (10.10.10.55).
   const sessionCap = [
     '[2026-09-27 18:00:01 UTC] [tun0:10.10.14.9]',
     '┌──(kali㉿kali)-[~/lab]', '└─$ nxc smb 10.10.10.10',
     'SMB 10.10.10.10 445 DC01 [*] Windows Server 2016 Build 14393 x64 (name:DC01) (domain:corp.local) (signing:True) (SMBv1:False)',
     '[2026-09-27 18:02:30 UTC] [tun0:10.10.14.9]',
-    '┌──(kali㉿kali)-[~/lab]', "└─$ nxc ldap 10.10.10.10 -u '' -p '' --users",
-    'LDAP 10.10.10.10 389 DC01 [*] (domain:corp.local)',
-    'LDAP 10.10.10.10 389 DC01 jdoe', 'LDAP 10.10.10.10 389 DC01 svc-web',
+    '┌──(kali㉿kali)-[~/lab]', '└─$ nmap -Pn -p- 10.10.10.55',
+    'Nmap scan report for 10.10.10.55', 'Host is up.', 'PORT STATE SERVICE', '445/tcp open microsoft-ds', 'Nmap done',
   ].join('\n');
   await page.fill('#ev-imp-text', sessionCap);
   await page.click('#ev-imp-go');
@@ -686,10 +689,15 @@ function serve() {
     lhost: (window.OBOL.store.active().params || {}).lhost || '',
     acts: (window.OBOL.store.active().activities || []).length,
     res: (document.getElementById('ev-imp-result') || {}).textContent || '',
+    newTarget: (window.OBOL.store.active().targets || []).some((t) => t.ip === '10.10.10.55'),
+    lhostIsTarget: (window.OBOL.store.active().targets || []).some((t) => t.ip === '10.10.14.9'),
   }));
   ok(imp.acts - impCountBefore === 2, 'importing a 2-command session records exactly 2 activities (' + (imp.acts - impCountBefore) + ')');
   ok(imp.lhost === '10.10.14.9', 'session import learns {{lhost}} from the [tun0:IP] stamp');
   ok(/Imported 2 command/.test(imp.res), 'the import summary reports the commands imported');
+  ok(/2 hosts/.test(imp.res), 'the import summary reports facts landed across 2 hosts');
+  ok(imp.newTarget, 'auto-route registered the newly-touched host 10.10.10.55 as a target');
+  ok(!imp.lhostIsTarget, 'the operator LHOST (10.10.14.9) was never added as a target');
 
   // Data reset controls: management sits near the top of Engagements; the store methods wipe cleanly.
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });

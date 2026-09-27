@@ -123,6 +123,41 @@
     return m ? m[1] : '';
   }
 
+  // Which HOST a command/output is about — so a whole-session import can route each command's facts to the
+  // right target instead of dumping them all on the active one. The RHOST is almost always a positional
+  // argument of the command (`nxc smb 10.0.0.5`, `bloodyAD --host 10.0.0.5`, `secretsdump …@10.0.0.5`); we
+  // fall back to the host the tool NAMES in its output (`Nmap scan report for X`, an `SMB X 445 …` banner).
+  // The operator's own LHOST (from the [tun0:…] stamp) and any IP sitting in a listener/interface flag are
+  // excluded, so your VPN address is never mistaken for a target. Returns '' when nothing routable is found.
+  var _IPV4_G = /(?:\d{1,3}\.){3}\d{1,3}/g;
+  var _LISTENER_FLAG = /^(?:-l|--lhost|-lh|lhost|--listener|--interface-ip|--local-ip|--lip)$/i;
+  var _OUT_HOST_RE = [
+    /Nmap scan report for (?:\S+ \()?(\d{1,3}(?:\.\d{1,3}){3})/i,   // nmap: "…report for host (10.0.0.5)"
+    /^(?:SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+\d+/im,  // nxc/cme banner
+  ];
+  function _isRoutableIp(ip) {
+    var o = ip.split('.'); if (o.length !== 4) return false;
+    for (var i = 0; i < 4; i++) { var n = +o[i]; if (!(n >= 0 && n <= 255)) return false; }
+    return ip !== '0.0.0.0' && ip !== '255.255.255.255' && ip !== '127.0.0.1';
+  }
+  function detectTarget(command, stdout, opts) {
+    opts = opts || {};
+    var known = opts.known || [], excl = {};
+    if (opts.lhost) excl[opts.lhost] = 1;
+    var cmd = String(command || '');
+    // exclude any IP that sits right after a listener/interface flag (coercer -l <ip>, etc.)
+    var toks = cmd.split(/[\s=]+/);
+    for (var i = 0; i < toks.length - 1; i++) { if (_LISTENER_FLAG.test(toks[i]) && _isRoutableIp(toks[i + 1] || '')) excl[toks[i + 1]] = 1; }
+    var cip = (cmd.match(_IPV4_G) || []).filter(function (ip) { return _isRoutableIp(ip) && !excl[ip]; });
+    // prefer a command IP that is already a known engagement target (strongest signal it's a real host)
+    for (var k = 0; k < cip.length; k++) { if (known.indexOf(cip[k]) >= 0) return cip[k]; }
+    if (cip.length) return cip[0];
+    // no target in the command — trust only the host the tool explicitly names in its output
+    var out = String(stdout || '');
+    for (var r = 0; r < _OUT_HOST_RE.length; r++) { var m = _OUT_HOST_RE[r].exec(out); if (m && _isRoutableIp(m[1]) && !excl[m[1]]) return m[1]; }
+    return '';
+  }
+
   function ready() { return !!(OBOL.parsers && OBOL.parsers.parseActionOutput); }
   // Resolve to true once the (lazily-loaded) parser group is available.
   function ensureParsers() {
@@ -157,7 +192,10 @@
       var lh = detectLhost(text);
       if (lh) { OBOL.store.update(function (e) { e.params = e.params || {}; e.params.lhost = lh; }, 'params'); params = (OBOL.store.active() || {}).params || params; }
     }
-    var scope = 'host:' + (params.target || 'target');
+    // Scope the facts to a specific host. A whole-session import passes the per-command host it auto-routed
+    // to (opts.scope); a normal paste falls back to the engagement's active target.
+    var scope = opts.scope || ('host:' + (params.target || 'target'));
+    var scopeIp = scope.indexOf('host:') === 0 ? scope.slice(5) : (params.target || '');
     var res, parseError = '';
     try {
       res = OBOL.parsers.parseActionOutput({ command: dispatchCmd, stdout: text, source: opts.fileName || cmd || 'paste', scope: scope, domain: params.domain || '' });
@@ -177,7 +215,7 @@
       // ATTACHED dump (no typed command) still marks the command that produced it ✓ ran.
       e.activities.unshift({ at: opts.at || Date.now(), command: cmd, dispatch: (dispatchCmd !== cmd ? dispatchCmd : ''),
         source: opts.source || 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
-        target: params.target || '', scope: scope, file: opts.fileName || '', action_id: opts.actionId || '',
+        target: scopeIp || params.target || '', scope: scope, file: opts.fileName || '', action_id: opts.actionId || '',
         produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
     }, 'activity');
     // `quiet` — a batch session import re-renders ONCE at the end instead of per command.
@@ -233,13 +271,44 @@
     return segs.map(function (s) { return { command: s.command, stdout: s.stdout.join('\n').replace(/^\n+|\n+$/g, ''), ts: s.ts }; });
   }
 
+  // Known engagement target IPs (to bias auto-routing toward real hosts).
+  function _knownTargets(eng) {
+    return ((eng && eng.targets) || []).map(function (t) { return t && t.ip; }).filter(Boolean);
+  }
+  // Make sure a routed-to host has a target record + a target.configured fact, so its facts show up on a
+  // target card / the scoreboard instead of landing on a host the operator never added. Only called for a
+  // host obol positively routed evidence to during import.
+  function _ensureTarget(ip) {
+    if (!ip) return;
+    var eng = OBOL.store.active();
+    if (((eng && eng.targets) || []).some(function (t) { return t && t.ip === ip; })) return;
+    OBOL.store.update(function (e) {
+      e.targets = e.targets || [];
+      if (!e.targets.some(function (t) { return t && t.ip === ip; })) e.targets.push({ id: 't-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), ip: ip, hostname: '', os: '', source: 'import' });
+      if (!e.params) e.params = {};
+      if (!e.params.target) e.params.target = ip;
+    }, 'targets');
+    if (OBOL.facts && OBOL.store.addFacts) OBOL.store.addFacts([OBOL.facts.makeFact({ kind: 'target.configured', scope: 'host:' + ip, source: 'import' })], 'facts');
+  }
+
   // Import one or more captures. Segments are stitched chronologically by prompt timestamp (null carries the
   // previous one so a tab's order is kept), de-duplicated (the same command+output pasted twice is ignored),
   // and each is run through the normal ingest pipeline. Returns a summary for the UI.
+  //   opts = { fileName?, target? }  target: 'auto' (default) routes each command to the host it names, and
+  //   registers any new host it lands facts on; a specific IP forces every command onto that host.
   function importSession(inputs, opts) {
     opts = opts || {};
     if (!ready()) return { ok: false, reason: 'parsers' };
     var texts = Array.isArray(inputs) ? inputs : [inputs];
+    var eng = OBOL.store.active();
+    var params = (eng && eng.params) || {};
+    var routeMode = opts.target || 'auto';
+    var fixed = (routeMode !== 'auto' && routeMode) ? String(routeMode) : '';
+    // Learn the operator's LHOST up front (from any capture's [tun0:…] stamp) so it is excluded from
+    // target auto-routing even on the very first command — before run() gets a chance to persist it.
+    var lhost = params.lhost || '';
+    if (!lhost) { for (var ti = 0; ti < texts.length && !lhost; ti++) lhost = detectLhost(texts[ti]); }
+    var known = _knownTargets(eng);
     var all = [];
     texts.forEach(function (t, fi) {
       var segs = splitSession(t), carry = null;
@@ -250,21 +319,32 @@
     });
     // chronological where timestamps exist; stable on original order otherwise
     all.sort(function (a, b) { var at = a.ts == null ? a.ord : a.ts, bt = b.ts == null ? b.ord : b.ts; return at === bt ? a.ord - b.ord : at - bt; });
-    var seen = {}, ranTools = {}, imported = 0, dupes = 0, added = 0, first = null;
+    var seen = {}, ranTools = {}, hosts = {}, imported = 0, dupes = 0, added = 0, first = null;
     all.forEach(function (s) {
       var firstOut = (s.stdout.split(/\r?\n/).find(function (l) { return l.trim(); }) || '').slice(0, 120);
       var key = s.command.replace(/\s+/g, ' ').trim() + '|' + firstOut;
       if (seen[key]) { dupes++; return; }
       seen[key] = 1;
-      var r = run({ text: s.stdout, command: s.command, source: 'session', at: s.ts || undefined, quiet: true, fileName: opts.fileName || '' });
-      if (r && r.ok) { imported++; added += (r.added || 0); ranTools[(s.command.split(/\s+/)[0] || '').toLowerCase()] = 1; if (!first) first = s.command; }
+      // Route this command to a host: the fixed target, else the one it names, else the active target.
+      var tip = fixed || detectTarget(s.command, s.stdout, { lhost: lhost, known: known }) || params.target || '';
+      var scope = tip ? ('host:' + tip) : undefined;
+      var r = run({ text: s.stdout, command: s.command, source: 'session', at: s.ts || undefined, quiet: true, fileName: opts.fileName || '', scope: scope });
+      if (r && r.ok) {
+        imported++; added += (r.added || 0); ranTools[(s.command.split(/\s+/)[0] || '').toLowerCase()] = 1;
+        if (!first) first = s.command;
+        // register a host only once we actually attributed proven facts to it in auto mode
+        if (tip && r.facts && r.facts.length) { hosts[tip] = 1; if (!fixed && known.indexOf(tip) < 0) { _ensureTarget(tip); known.push(tip); } }
+        else if (tip && fixed) hosts[tip] = 1;
+      }
     });
     if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
-    return { ok: true, commands: all.length, imported: imported, dupes: dupes, added: added, tools: Object.keys(ranTools) };
+    return { ok: true, commands: all.length, imported: imported, dupes: dupes, added: added,
+      tools: Object.keys(ranTools), hosts: Object.keys(hosts) };
   }
 
   OBOL.ingest = { run: run, deriveCommand: deriveCommand, sniffCommand: sniffCommand,
     contentSignatures: contentSignatures, dispatchLabel: dispatchLabel, recognizesTool: recognizesTool,
-    looksLikeError: looksLikeError, detectLhost: detectLhost, splitSession: splitSession, importSession: importSession,
+    looksLikeError: looksLikeError, detectLhost: detectLhost, detectTarget: detectTarget,
+    splitSession: splitSession, importSession: importSession,
     ensureParsers: ensureParsers, ready: ready };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

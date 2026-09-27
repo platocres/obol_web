@@ -37,9 +37,17 @@
     var stamp = ws.PROMPT_STAMP_ZSH || '';
     var eng = OBOL.store.active();
     var capture = ws.captureCmd ? ws.captureCmd(eng) : 'script -q -f session.log';
+    var targets = (eng && eng.targets) || [];
+    var tOpts = '<option value="auto">Auto-route by IP (recommended)</option>'
+      + targets.map(function (t) {
+        var ip = t.ip || t.hostname; if (!ip) return '';
+        return '<option value="' + U.attr(ip) + '">' + esc(ip) + (t.hostname && t.ip ? (' · ' + t.hostname) : '') + '</option>';
+      }).join('');
     return '<details class="ev-import"><summary>Import a Full Session <span class="ev-import-tag">catch up on the whole box</span></summary>'
       + '<p class="ev-hint">Already deep into a box? Paste (or attach) your <strong>entire terminal</strong> from this run — every command and its output. obol splits it into per-command segments, orders them by time, skips duplicates, and mints facts from all of them at once, so the coach jumps straight to your real frontier.</p>'
       + '<textarea id="ev-imp-text" class="ev-textarea" placeholder="Paste your whole session — many commands and all their output. obol finds each command by its prompt line." spellcheck="false"></textarea>'
+      + '<label class="ev-imp-route"><span>Route facts to</span><select id="ev-imp-target" class="ev-cmd">' + tOpts + '</select></label>'
+      + '<div class="ev-hint ev-imp-route-hint">Auto-route reads the target IP from each command (<code>nxc smb 10.0.0.5</code>, <code>--host 10.0.0.5</code>…) and files its facts under that host — your VPN/<code>tun0</code> address is never treated as a target. New hosts you touch are added automatically. Pick a specific target to force everything onto one host.</div>'
       + '<div class="ev-row">'
       + '<label class="ev-filebtn" for="ev-imp-file">⭱ Attach Session File(s)…</label>'
       + '<input type="file" id="ev-imp-file" class="ev-file" accept=".txt,.log,.out,text/plain" multiple hidden>'
@@ -190,13 +198,16 @@
     if (pasted.trim()) inputs.push(pasted);
     if (!inputs.length) { U.toast('Paste a session or attach a file first'); return; }
     if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers still loading — try again in a second'); return; }
-    var r = OBOL.ingest.importSession(inputs, { source: 'session' });
+    var routeTo = (document.getElementById('ev-imp-target') || {}).value || 'auto';
+    var r = OBOL.ingest.importSession(inputs, { source: 'session', target: routeTo });
     if (!r || !r.ok) { U.toast('Could not import that session'); return; }
     var next = topNextMove();
     if (resEl) {
       resEl.innerHTML = '<div class="ev-added">Imported ' + r.imported + ' command' + (r.imported === 1 ? '' : 's')
         + ' → minted ' + r.added + ' new fact' + (r.added === 1 ? '' : 's')
+        + (r.hosts && r.hosts.length > 1 ? (' across ' + r.hosts.length + ' hosts') : '')
         + (r.dupes ? (' · skipped ' + r.dupes + ' duplicate' + (r.dupes === 1 ? '' : 's')) : '') + '.'
+        + (r.hosts && r.hosts.length ? ('<div class="ev-imp-tools">Hosts: ' + r.hosts.map(function (h) { return '<code>' + esc(h) + '</code>'; }).join(' ') + '</div>') : '')
         + (r.tools && r.tools.length ? ('<div class="ev-imp-tools">Tools seen: ' + r.tools.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(' ') + '</div>') : '')
         + (next ? ('<div class="ev-imp-next">Next move: <strong>' + esc(next) + '</strong></div>') : '')
         + '</div><a class="btn-primary" href="#/path">See Updated Coach →</a>';
