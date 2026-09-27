@@ -565,9 +565,81 @@
   }
   C._parse_ad_delegation_surface = _parse_ad_delegation_surface;
 
+  // bloodyAD `get writable [--detail]` prints, per object, a `distinguishedName:` line then a run of
+  // `<attribute>: <PERMISSION>` lines (WRITE / CREATE_CHILD). These attributes are escalation primitives.
+  var _BLOODY_WRITABLE_ATTR_RIGHT = {
+    member: 'WriteMembers',                                 // add yourself to the group
+    ntsecuritydescriptor: 'WriteDACL',                      // rewrite the DACL → grant yourself anything
+    owner: 'WriteOwner',
+    'msds-allowedtoactonbehalfofotheridentity': 'RBCD',     // resource-based constrained delegation
+  };
+  // Membership in these groups is itself privilege escalation, so "you can add yourself to X" is a lead
+  // worth surfacing (adding yourself to Guests is not). Exchange Windows Permissions holds WriteDacl over
+  // the domain object → grant DCSync → dump the Administrator hash.
+  var _ABUSABLE_GROUP_CN = {
+    'exchange windows permissions': 1, 'organization management': 1,
+    'account operators': 1, 'backup operators': 1, 'server operators': 1, 'print operators': 1,
+    'dnsadmins': 1, 'administrators': 1, 'domain admins': 1, 'enterprise admins': 1, 'schema admins': 1,
+    'group policy creator owners': 1, 'key admins': 1, 'enterprise key admins': 1,
+    'remote management users': 1, 'distributed com users': 1,
+  };
+  var _ACL_LEAD_NOTES = {
+    'exchange windows permissions':
+      'you can add yourself to Exchange Windows Permissions, which holds WriteDacl over the domain '
+      + '→ grant yourself DCSync (getchanges/getchangesall) → secretsdump the Administrator hash',
+  };
+  function _cn_from_dn(dn) {
+    var head = (dn || '').split(',')[0];
+    return head.indexOf('=') >= 0 ? head.split('=').slice(1).join('=').trim() : head.trim();
+  }
+
   function _parse_bloodyad_writable(text, ws, command, source, facts) {
-    // fixtures never exercise `get writable`; keep the guard so nothing fires elsewhere.
     if (command.toLowerCase().indexOf('get writable') < 0) return;
+    var memberT = [], daclT = [], ownerT = [], gpoT = [], rights = {}, notes = [];
+    text.split(/\n[ \t]*\n/).forEach(function (block) {
+      var lines = block.split(/\r?\n/).map(function (l) { return l.replace(/\s+$/, ''); }).filter(function (l) { return l.trim(); });
+      if (!lines.length || lines[0].toLowerCase().indexOf('distinguishedname:') !== 0) return;
+      var dn = lines[0].split(':').slice(1).join(':').trim();
+      var cn = _cn_from_dn(dn), cnl = cn.toLowerCase(), attrs = {};
+      for (var i = 1; i < lines.length; i++) {
+        var ln = lines[i];
+        if (ln.indexOf(':') >= 0) attrs[ln.split(':')[0].trim().toLowerCase()] = ln.split(':').slice(1).join(':').trim().toUpperCase();
+      }
+      var isDomainRoot = !!dn && dn.split(',').every(function (p) { return p.trim().toLowerCase().indexOf('dc=') === 0; });
+      var isComputer = cn.charAt(cn.length - 1) === '$' || dn.indexOf(',CN=Computers,') >= 0;
+      // A writable Group Policy Container (under CN=Policies,CN=System) is the gpo-abuse sink.
+      if (dn.toLowerCase().indexOf('cn=policies,cn=system') >= 0
+          && Object.keys(attrs).some(function (a) { return attrs[a].indexOf('WRITE') >= 0 || attrs[a].indexOf('CREATE') >= 0; })) {
+        gpoT.push(cn);
+      }
+      Object.keys(_BLOODY_WRITABLE_ATTR_RIGHT).forEach(function (attr) {
+        var right = _BLOODY_WRITABLE_ATTR_RIGHT[attr], perm = attrs[attr] || '';
+        if (perm.indexOf('WRITE') < 0 && perm.indexOf('CREATE') < 0) return;
+        if (right === 'WriteMembers') {
+          if (_ABUSABLE_GROUP_CN[cnl]) {
+            rights[right] = 1; memberT.push(cn);
+            var note = _ACL_LEAD_NOTES[cnl];
+            if (note && notes.indexOf(note) < 0) notes.push(note);
+          }
+        } else if (right === 'RBCD') {
+          if (isComputer) { rights[right] = 1; ownerT.push(cn); }
+        } else if (isDomainRoot || isComputer || _ABUSABLE_GROUP_CN[cnl]) {
+          rights[right] = 1;
+          (right === 'WriteDACL' ? daclT : ownerT).push(isDomainRoot ? 'the domain object' : cn);
+        }
+      });
+    });
+    var seenG = {};
+    gpoT.forEach(function (g) { if (!seenG[g]) { seenG[g] = 1; _add(facts, mkFact('ad.gpo_writable', C._scope_for_domain(ws), { gpo: g, method: 'bloodyad' }, S, source)); } });
+    var seenT = {}, targets = [];
+    memberT.concat(daclT, ownerT).forEach(function (t) { if (!seenT[t]) { seenT[t] = 1; targets.push(t); } });
+    var rightList = Object.keys(rights);
+    if (!(rightList.length && targets.length)) return;
+    if (!notes.length) notes.push('enumerated control right (lead) — cash it in with the ACL-abuse move; not a granted control path yet');
+    _add(facts, mkFact('ad.acl_lead', C._scope_for_domain(ws), {
+      rights: rightList.sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : 1; }),
+      targets: targets.slice(0, 10), method: 'bloodyad', note: notes.join(' · '),
+    }, S, source));
   }
   C._parse_bloodyad_writable = _parse_bloodyad_writable;
 
