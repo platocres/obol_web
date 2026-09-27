@@ -320,10 +320,17 @@
   function commandWasRun(filledCmd, activities, params) {
     var sig = _actionSig(filledCmd, params), keys = Object.keys(sig);
     if (!keys.length) return false;
+    function covers(cmd) {
+      if (!cmd) return false;
+      var asig = _actionSig(cmd, params);
+      for (var k = 0; k < keys.length; k++) { if (!asig[keys[k]]) return false; }
+      return true;
+    }
     for (var a = 0; a < (activities || []).length; a++) {
-      var asig = _actionSig(activities[a] && activities[a].command, params), all = true;
-      for (var k = 0; k < keys.length; k++) { if (!asig[keys[k]]) { all = false; break; } }
-      if (all) return true;
+      var act = activities[a] || {};
+      // Match the honest command OR the recovered dispatch label — an ATTACHED dump has no typed command,
+      // so obol's recovered routing signature is the only record of what actually ran.
+      if (covers(act.command) || covers(act.dispatch)) return true;
     }
     return false;
   }

@@ -85,5 +85,11 @@ ok(OBOL.command.commandWasRun("nxc ldap 10.129.95.210 -u '' -p '' --users | awk 
 // and a genuinely different nxc action (--asreproast) is not confused with --users
 ok(OBOL.command.commandWasRun("nxc ldap 10.129.95.210 -u user -p pass --asreproast out.txt", ranActs, lp) === false, 'a different nxc action (--asreproast) is not marked run from a --users run');
 
+// An ATTACHED dump has no typed command — obol matches on the recovered `dispatch` label instead, so the
+// get-writable enumeration is marked run once its 50k-line file is attached as evidence.
+var attachedActs = [{ command: '', dispatch: 'bloodyad get writable' }];
+ok(OBOL.command.commandWasRun("bloodyAD -d htb.local --host 10.129.94.251 -u svc-alfresco -p 's3rvice' get writable --detail | tee ~/CTF/scans/bloodyad-writable.txt", attachedActs, { target: '10.129.94.251', domain: 'htb.local', username: 'svc-alfresco', password: 's3rvice' }) === true, 'get-writable is marked run from the recovered dispatch of an attached dump (no typed command)');
+ok(OBOL.command.commandWasRun("bloodyAD -d htb.local --host 10.129.94.251 -u svc-alfresco -p 's3rvice' add dcsync svc-alfresco", attachedActs, { target: '10.129.94.251', domain: 'htb.local', username: 'svc-alfresco', password: 's3rvice' }) === false, 'the dcsync cash-in is NOT marked run by a get-writable dispatch');
+
 console.log(fail ? ('\nACL GROUP SWEEP: ' + fail + ' FAILURES') : '\nACL GROUP SWEEP: all passed');
 process.exit(fail ? 1 : 0);

@@ -65,5 +65,9 @@ ok(OBOL.ingest.looksLikeError('bloodyAD: error: unrecognized arguments: svc-alfr
 ok(OBOL.ingest.looksLikeError('LDAPModifyException: insufficientAccessRights ... Access is denied.') === true, 'an access-denied failure IS an error (not a clean negative)');
 ok(OBOL.ingest.recognizesTool('', 'the quick brown fox jumped over the lazy dog') === false, 'unrelated prose is not recognized as a tool run (never retires a move)');
 
+// an ATTACHED bloodyAD get-writable dump (no command line) → the dispatch label recovers "get writable"
+var bloodyDump = ['distinguishedName: CN=Exchange Windows Permissions,CN=Users,DC=corp,DC=local', 'member: WRITE', 'nTSecurityDescriptor: WRITE', '', 'distinguishedName: CN=DnsAdmins,CN=Users,DC=corp,DC=local', 'member: WRITE'].join('\n');
+ok(/get writable/.test(OBOL.ingest.dispatchLabel('', bloodyDump)), 'an attached bloodyAD get-writable dump is recovered into the dispatch label (so the coach can mark it ran)');
+
 console.log(fail ? ('\nINGEST ROUTING: ' + fail + ' FAILURES') : '\nINGEST ROUTING: all passed');
 process.exit(fail ? 1 : 0);

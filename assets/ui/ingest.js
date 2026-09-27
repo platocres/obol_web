@@ -73,6 +73,9 @@
     [/\$krb5tgs\$/, 'getuserspns'],
     [/\$krb5asrep\$/, 'getnpusers'],
     [/SCCMHunter|NetworkAccess(?:Username|Password|Account)\s*[:=]/i, 'sccmhunter'],
+    // bloodyAD `get writable` dump — a distinguishedName block followed by a bare WRITE/CREATE_CHILD attr.
+    // Recovering it lets the coach mark the get-writable enumeration ✓ ran once you attach its 50k-line file.
+    [/distinguishedName:[\s\S]{0,4000}?\n[A-Za-z][\w-]*:[ \t]*(?:WRITE|CREATE_CHILD)[ \t]*(?:\r?\n|$)/i, 'bloodyad get writable'],
   ];
   function contentSignatures(text) {
     var body = String(text || ''), out = [];
@@ -147,7 +150,11 @@
       : text;
     OBOL.store.update(function (e) {
       e.activities = e.activities || [];
-      e.activities.unshift({ at: Date.now(), command: cmd, source: opts.source || 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
+      // `command` stays the honest lineage (may be empty for an attached file); `dispatch` is the widened
+      // routing label obol recovered from the content — the coach's "already run" check reads it so an
+      // ATTACHED dump (no typed command) still marks the command that produced it ✓ ran.
+      e.activities.unshift({ at: Date.now(), command: cmd, dispatch: (dispatchCmd !== cmd ? dispatchCmd : ''),
+        source: opts.source || 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
         target: params.target || '', scope: scope, file: opts.fileName || '', action_id: opts.actionId || '',
         produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
     }, 'activity');
