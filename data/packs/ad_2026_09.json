@@ -1646,6 +1646,9 @@
    "requires_any": [
     "credential.available"
    ],
+   "deprioritize_when": [
+    "loot.ntds"
+   ],
    "produces": [
     "credential.candidate",
     "ad.attack_paths"

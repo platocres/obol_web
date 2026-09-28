@@ -19,6 +19,10 @@
    "requires_any": [
     "foothold.windows"
    ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
+   ],
    "produces": [
     "privesc.leads",
     "host.kernel",
@@ -68,6 +72,10 @@
    "requires_any": [
     "privesc.windows_privilege"
    ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
+   ],
    "produces": [
     "access.system"
    ],
@@ -116,6 +124,10 @@
    "requires_any": [
     "privesc.unquoted_service_path"
    ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
+   ],
    "produces": [
     "access.system"
    ],
@@ -157,6 +169,10 @@
    "requires_all": [],
    "requires_any": [
     "privesc.weak_service_permission"
+   ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
    ],
    "produces": [
     "access.system"
@@ -204,6 +220,10 @@
    "requires_all": [],
    "requires_any": [
     "privesc.always_install_elevated"
+   ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
    ],
    "produces": [
     "access.system"
@@ -360,6 +380,10 @@
    "requires_all": [],
    "requires_any": [
     "foothold.windows"
+   ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
    ],
    "produces": [
     "exploit.candidate",

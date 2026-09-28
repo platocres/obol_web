@@ -177,8 +177,20 @@
   //      value in the output.
   // Slot is decided by the file name: proof.txt/root.txt = root, local.txt/user.txt = local, else generic.
   var _FLAG_MARK_RE = /===FLAG:\s*(?<path>[^\r\n]*?)::(?<body>[^\r\n]*)/g;
-  var _FLAG_VALUE_RE = /\b[0-9a-fA-F]{32}\b|\b[0-9a-fA-F]{64}\b|\{[0-9A-Za-z_@!#%.:\-]{3,}\}|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/;
-  var _FLAG_FILE_IN_CMD_RE = /(?:\btype\b|\bcat\b|Get-Content|\bgc\b)\s+[^\r\n|]*?(?<file>(?:local|proof|user|root|flag\d?)\.txt)/i;
+  // A flag value is the WHOLE token: a 32/64-hex, a {braced} CTF flag, or a UUID — anchored so it can only
+  // match a value that stands on its own, never a hex substring lifted out of a bigger line. This is the
+  // guard that stops an NT hash inside an auth banner (`…\Administrator:32693…deadbeef (Pwn3d!)`) from ever
+  // being recorded as a captured flag.
+  var _FLAG_TOKEN = '(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{64}|\\{[0-9A-Za-z_@!#%.:\\-]{3,}\\}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
+  var _FLAG_VALUE_ANCHORED = new RegExp('^' + _FLAG_TOKEN + '$');
+  var _FLAG_FILE_IN_CMD_RE = /(?:\btype\b|\bcat\b|\bmore\b|Get-Content|\bgc\b)\s+[^\r\n|]*?(?<file>(?:local|proof|user|root|flag\d?)\.txt)/i;
+  // A read is REMOTE (a one-liner run FROM the operator box) when it leads with a transport/exec tool:
+  // nxc/impacket/wmiexec/psexec/smbclient (non-interactive), or an ssh/evil-winrm/rdp ONE-LINER. OffSec
+  // scores a flag read this way ZERO — the report proof must come from an interactive shell ON the target.
+  // So a remote read only LOCATES a flag (records where it is + its value as intel); it never counts as
+  // captured. A BARE read (`type …\root.txt`, `cat …/root.txt`) has no transport lead — you typed it inside
+  // the interactive session, so THAT is the capture that reaches the report.
+  var _REMOTE_LEAD_RE = /^\s*(?:(?:sudo|command|exec|proxychains\d?|stdbuf|timeout|doas)\s+(?:-\S+\s+|\S+=\S+\s+)*|\w+=\S+\s+)*(?:nxc|netexec|crackmapexec|cme|impacket-[\w.]+|wmiexec(?:\.py)?|smbexec(?:\.py)?|atexec(?:\.py)?|dcomexec(?:\.py)?|psexec(?:\.py)?|smbclient|smbmap|winrs|evil-winrm|ssh|sshpass|plink|xfreerdp|rdesktop|rpcclient)\b/i;
   function _slot_for_flagfile(name) {
     var n = (name || '').toLowerCase();
     if (/proof\.txt|root\.txt/.test(n)) return 'root';
@@ -188,21 +200,30 @@
   function _flag_kind(slot) { return slot === 'root' ? 'objective.root_flag' : (slot === 'local' ? 'objective.local_flag' : 'objective.flag'); }
   function _parse_flags(text, ws, command, source, facts) {
     var scope = 'host:' + ws.target, seen = {};
-    function emit(path, body, slotHint) {
-      body = (body || '').trim(); if (!body) return;
-      var vm = _FLAG_VALUE_RE.exec(body);
-      var flag = vm ? vm[0] : ((/^\S+$/.test(body) && body.length <= 64) ? body : '');
+    // On-host ⟺ a bare read (no remote transport leading the command). A remote/one-liner read is locate-only.
+    var onHost = !!(command && String(command).trim()) && !_REMOTE_LEAD_RE.test(command);
+    function mint(path, flag, slotHint) {
       if (!flag || seen[flag]) return;
       seen[flag] = 1;
       var base = String(path || '').split(/[\\/]/).pop() || '';
       var slot = slotHint || _slot_for_flagfile(base);
-      _add(facts, mkFact(_flag_kind(slot), scope, { flag: flag, slot: slot, name: base, path: path || '' }, S, source));
+      // On-host bare read → the captured objective that reaches the report. Remote read → located intel only
+      // (`objective.flag_located`): obol knows where the flag is and its value, but you must read it from an
+      // interactive shell on the target for it to count.
+      var kind = onHost ? _flag_kind(slot) : 'objective.flag_located';
+      _add(facts, mkFact(kind, scope, { flag: flag, slot: slot, name: base, path: path || '' }, S, source));
     }
+    // 1) `===FLAG:path::value` markers — mint only when the value IS a clean flag token (the file's whole
+    //    contents), never a marker whose body is tool text (a failed hunt that printed no real flag).
     var m; _FLAG_MARK_RE.lastIndex = 0;
-    while ((m = _FLAG_MARK_RE.exec(text))) { emit(m.groups.path, m.groups.body); }
-    // a plain `type …\proof.txt` read (no marker): pull the flag from the output, slot from the command's file
+    while ((m = _FLAG_MARK_RE.exec(text))) { var body = (m.groups.body || '').trim(); if (_FLAG_VALUE_ANCHORED.test(body)) mint(m.groups.path, body); }
+    // 2) a direct read of a named flag file (`type …\proof.txt`) — the flag must stand ALONE on its own
+    //    output line, so a 32-hex embedded in an auth banner or a hash-dump line is never taken for a flag.
     var fm = _FLAG_FILE_IN_CMD_RE.exec(command || '');
-    if (fm) emit(fm.groups.file, text, _slot_for_flagfile(fm.groups.file));
+    if (fm) {
+      var slot = _slot_for_flagfile(fm.groups.file);
+      String(text || '').split(/\r?\n/).forEach(function (l) { var t = l.trim(); if (_FLAG_VALUE_ANCHORED.test(t)) mint(fm.groups.file, t, slot); });
+    }
   }
   C._parse_flags = _parse_flags;
 

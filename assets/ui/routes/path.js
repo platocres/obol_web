@@ -180,7 +180,12 @@
     var access = facts.has('access.system') ? ['SYSTEM', 'sys'] : facts.has('access.admin') ? ['Admin / root', 'adm']
       : (facts.has('foothold.windows') || facts.has('foothold.linux') || facts.has('access.shell')) ? ['Foothold', 'fh']
       : facts.has('credential.available') ? ['Credentialed', 'cred'] : ['Recon', 'recon'];
-    var flags = (facts.facts || []).filter(function (f) { return String(f.kind).indexOf('objective.') === 0 && f.state !== 'refuted'; });
+    var objFacts = (facts.facts || []).filter(function (f) { return String(f.kind).indexOf('objective.') === 0 && f.state !== 'refuted'; });
+    var flags = objFacts.filter(function (f) { return f.kind !== 'objective.flag_located'; });
+    // Located-but-not-captured: found remotely (nxc/smb), still to be read from an on-host shell for the
+    // report. Hide any whose value we have already captured on-host.
+    var capturedVals = {}; flags.forEach(function (f) { if (f.value && f.value.flag) capturedVals[f.value.flag] = 1; });
+    var located = objFacts.filter(function (f) { return f.kind === 'objective.flag_located' && !(f.value && capturedVals[f.value.flag]); });
     // Use the same deduped gather as the left switcher, so one recovered credential proven on two scopes
     // (e.g. host:10.x and host:10.y) shows ONCE here, not twice.
     var creds = [];
@@ -189,8 +194,21 @@
     return '<aside class="context-rail" aria-label="Live context">'
       + railCard('Access', '<div class="rail-access ra-' + access[1] + '">' + esc(access[0]) + '</div>')
       + railCard('Next move', topMove ? ('<div class="rail-move">' + esc(topMove.title) + '</div>') : '<div class="rail-empty">Log evidence to unlock moves.</div>')
-      + railCard('Flags (' + flags.length + ')', flags.length
-        ? '<ul class="rail-list">' + flags.map(function (f) { var v = f.value || {}; return '<li><span>' + esc(v.slot || f.kind.split('.').pop()) + '</span>' + (v.name ? '<span class="rail-produced">' + esc(v.name) + '</span>' : '') + '</li>'; }).join('') + '</ul>'
+      + railCard('Flags (' + flags.length + ')', (flags.length || located.length)
+        ? '<ul class="rail-list rail-flags">' + flags.map(function (f) {
+            var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
+            var label = SL[v.slot] || (f.kind.split('.').pop().replace('_', ' '));
+            var val = v.flag || '';
+            var shown = val && val.length > 18 ? val.slice(0, 18) + '…' : val;
+            return '<li title="' + U.attr((v.path || v.name || '') + (val ? '  =  ' + val : '')) + '"><span>🚩 ' + esc(label) + '</span>'
+              + (shown ? '<span class="rail-secret rail-flagval">' + esc(shown) + '</span>' : (v.name ? '<span class="rail-produced">' + esc(v.name) + '</span>' : '')) + '</li>';
+          }).join('')
+          + located.map(function (f) {
+            var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
+            var label = SL[v.slot] || 'Flag';
+            return '<li class="rail-located" title="' + U.attr('located remotely at ' + (v.path || v.name || '') + ' — read it from an on-host shell for the report') + '"><span>📍 ' + esc(label) + ' <em>located</em></span><span class="rail-produced">capture on-host</span></li>';
+          }).join('')
+          + '</ul>' + (located.length ? '<div class="rail-note">📍 located remotely — read on the host (interactive shell) so it counts for the report.</div>' : '')
         : '<div class="rail-empty">None captured yet.</div>')
       + railCard('Credentials (' + creds.length + ')', creds.length
         ? '<ul class="rail-list">' + creds.slice(0, 6).map(function (c) {
