@@ -72,14 +72,24 @@
       if ((v.flag && capturedVals[v.flag]) || (v.slot && capturedSlots[v.slot])) return false;
       var key = v.path || v.flag || v.slot || ''; if (locSeen[key]) return false; locSeen[key] = 1; return true;
     });
+    var shotsForSlot = function (slot) {
+      return (eng.screenshots || []).filter(function (s) { return s.target === ip && (s.slot === slot || (slot === 'local' && s.slot === 'user')); });
+    };
     var flagCard = (flagFacts.length || locatedFacts.length)
-      ? '<h2 class="coach-sec-h">Captured Flags</h2><ul class="flag-cards">' + flagFacts.map(function (e) {
+      ? '<h2 class="coach-sec-h">Captured Flags</h2><input type="file" id="flag-ss-file" accept="image/*" hidden><ul class="flag-cards">' + flagFacts.map(function (e) {
           var v = e.value || {}; var val = v.flag || '';
+          var slot = v.slot === 'user' ? 'local' : (v.slot || 'flag');
+          var shots = shotsForSlot(slot);
           return '<li class="flag-card flag-' + esc(v.slot || 'flag') + '">'
             + '<div class="flag-card-h"><span class="flag-slot">🚩 ' + esc(flagLabel(e)) + '</span>'
             + (v.name ? '<span class="flag-file" title="' + U.attr(v.path || v.name) + '">' + esc(v.name) + '</span>' : '') + '</div>'
             + (val ? '<code class="flag-val" title="' + U.attr(val) + '">' + esc(val) + '</code><button class="btn-copy flag-copy" data-copy="' + U.attr(val) + '">copy</button>' : '')
-            + '</li>';
+            + '<div class="flag-proof">' + (shots.length
+              ? shots.map(function (s) { return '<span class="flag-shot-wrap"><img class="flag-shot" src="' + esc(s.data_uri) + '" alt="proof screenshot"><button class="flag-shot-rm" data-rm="' + esc(s.id) + '" title="Remove">✕</button></span>'; }).join('')
+                + '<span class="flag-proof-ok">✓ proof screenshot attached</span>'
+              : '<button class="flag-attach" data-slot="' + esc(slot) + '">📎 Attach proof screenshot</button>'
+                + '<span class="flag-proof-note">flag + ipconfig in one interactive-shell frame — OffSec requires the image</span>')
+            + '</div></li>';
         }).join('')
         + locatedFacts.map(function (v) {
           v = v || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
@@ -151,9 +161,44 @@
   }
 
   function mounted(ctx) {
-    if (OBOL.graphview) OBOL.graphview.attach(ctx.mount || document);
-    U.on(ctx.mount, 'click', '.btn-copy', function (e, b) {
+    var mount = ctx.mount || document;
+    if (OBOL.graphview) OBOL.graphview.attach(mount);
+    if (OBOL.graphtip && OBOL.graph && OBOL.graph.buildNodeInfo) {
+      var eng = OBOL.store.active();
+      var ip = (location.hash.split('/')[2] || (eng.params || {}).target || '');
+      var facts = OBOL.store.factSetForTarget ? OBOL.store.factSetForTarget(ip) : OBOL.store.factSet();
+      var dirs = (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(eng) : {};
+      var info = OBOL.graph.buildNodeInfo(facts, OBOL.packs.actions(), { params: eng.params, profile: eng.profile, workspace: dirs });
+      OBOL.graphtip.attach(mount, info);
+    }
+    U.on(mount, 'click', '.btn-copy', function (e, b) {
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    // per-flag proof screenshot: attach (bound to the flag's slot + this host) / remove.
+    var tgtIp = location.hash.split('/')[2] || (OBOL.store.active().params || {}).target || '';
+    var ssInput = mount.querySelector('#flag-ss-file');
+    var pendingSlot = '';
+    U.on(mount, 'click', '.flag-attach', function (e, b) { pendingSlot = b.getAttribute('data-slot') || ''; if (ssInput) ssInput.click(); });
+    if (ssInput) ssInput.addEventListener('change', function () {
+      var files = Array.prototype.slice.call(ssInput.files || []); var pending = files.length; if (!pending) return;
+      files.forEach(function (f) {
+        var r = new FileReader();
+        r.onload = function () {
+          OBOL.store.update(function (eng) {
+            eng.screenshots = eng.screenshots || [];
+            eng.screenshots.push({ id: 'ss-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), data_uri: r.result, caption: '', slot: pendingSlot, target: tgtIp, at: Date.now() });
+          }, 'screenshots');
+          if (--pending === 0) { U.toast('Proof screenshot attached'); OBOL.router.render(); }
+        };
+        r.onerror = function () { if (--pending === 0) OBOL.router.render(); };
+        r.readAsDataURL(f);
+      });
+      ssInput.value = '';
+    });
+    U.on(mount, 'click', '.flag-shot-rm', function (e, b) {
+      var id = b.getAttribute('data-rm');
+      OBOL.store.update(function (eng) { eng.screenshots = (eng.screenshots || []).filter(function (s) { return s.id !== id; }); }, 'screenshots');
+      OBOL.router.render();
     });
   }
 

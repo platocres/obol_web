@@ -57,15 +57,37 @@
   // casing like AS-REP, WinRM, NTDS, GTFOBins, BloodHound — and (b) literal tokens that carry a
   // path/command/config shape (a '/', '_' or '.'), so "/etc/passwd", "xp_cmdshell" and
   // "no_root_squash" survive verbatim. Apostrophe-s is not capitalized ("host's" → "Host's").
+  // Security/AD acronyms and proper spellings kept in their canonical case (SMB, LDAP, DCSync, WinRM…),
+  // so a lowercased fact label ("smb authenticated") title-cases to "SMB Authenticated", not "Smb …".
+  var TC_WORDS = {
+    smb: 'SMB', smbv1: 'SMBv1', smbv2: 'SMBv2', smbv3: 'SMBv3', ldap: 'LDAP', ldaps: 'LDAPS', ad: 'AD', dc: 'DC',
+    dns: 'DNS', rdp: 'RDP', ntds: 'NTDS', ntlm: 'NTLM', uac: 'UAC', rid: 'RID', sid: 'SID', acl: 'ACL', acls: 'ACLs',
+    spn: 'SPN', spns: 'SPNs', tgs: 'TGS', tgt: 'TGT', gpo: 'GPO', gpp: 'GPP', adcs: 'ADCS', krbtgt: 'krbtgt',
+    kdc: 'KDC', ca: 'CA', ip: 'IP', tcp: 'TCP', udp: 'UDP', http: 'HTTP', https: 'HTTPS', ftp: 'FTP', ssh: 'SSH',
+    winrm: 'WinRM', os: 'OS', cve: 'CVE', poc: 'PoC', url: 'URL', api: 'API', sql: 'SQL', sqli: 'SQLi', xss: 'XSS',
+    ssrf: 'SSRF', xxe: 'XXE', lfi: 'LFI', rfi: 'RFI', ssti: 'SSTI', jwt: 'JWT', cors: 'CORS', smtp: 'SMTP',
+    snmp: 'SNMP', vnc: 'VNC', wmi: 'WMI', dcom: 'DCOM', sccm: 'SCCM', gmsa: 'gMSA', laps: 'LAPS', sam: 'SAM',
+    dcsync: 'DCSync', bloodhound: 'BloodHound', netexec: 'NetExec', 'as-rep': 'AS-REP', asrep: 'AS-REP',
+    pth: 'PtH', nfs: 'NFS', suid: 'SUID', sgid: 'SGID', gtfobins: 'GTFOBins', lxd: 'LXD', mssql: 'MSSQL',
+    tls: 'TLS', ssl: 'SSL', vpn: 'VPN', dacl: 'DACL', mfa: 'MFA', rce: 'RCE', idor: 'IDOR',
+  };
+  var TC_SMALL = { of: 1, the: 1, a: 1, an: 1, to: 1, in: 1, on: 1, for: 1, and: 1, or: 1, with: 1, via: 1, per: 1 };
   function titleCase(s) {
-    function cap(p) {
-      if (/^[^A-Za-z]*[A-Z]/.test(p)) return p;       // already starts capitalized (acronym/proper)
-      return p.replace(/^([^A-Za-z]*)([a-z])/, function (_, pre, c) { return pre + c.toUpperCase(); });
+    var seen = 0;
+    function word(w, isPathPart, isFirst) {
+      if (!/[A-Za-z]/.test(w)) return w;
+      var lw = w.toLowerCase();
+      if (TC_WORDS[lw]) return TC_WORDS[lw];
+      if (!isPathPart && !isFirst && TC_SMALL[lw]) return lw;      // connector word (not first) → lowercase
+      if (/^[^A-Za-z]*[A-Z]/.test(w)) return w;                    // already starts capitalized (proper/acronym)
+      return w.replace(/^([^A-Za-z]*)([a-z])/, function (_, pre, c) { return pre + c.toUpperCase(); });
     }
     return String(s == null ? '' : s).split(/(\s+|-)/).map(function (w) {
-      if (/^\//.test(w) || /[_.]/.test(w)) return w;  // absolute path / command / config key → literal
-      // a "word/word" compound (not a path) has each part capitalized (root/proof → Root/Proof)
-      return w.indexOf('/') !== -1 ? w.split(/(\/)/).map(cap).join('') : cap(w);
+      if (/^\s+$/.test(w) || w === '-') return w;
+      if (/^\//.test(w) || /[_.]/.test(w)) return w;               // absolute path / command / config key → literal
+      var isFirst = seen === 0; seen++;
+      if (w.indexOf('/') !== -1) return w.split(/(\/)/).map(function (p, i) { return p === '/' ? p : word(p, true, isFirst && i === 0); }).join('');
+      return word(w, false, isFirst);
     }).join('');
   }
 
