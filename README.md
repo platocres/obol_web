@@ -12,6 +12,10 @@ the hacking in your own terminal — Obol is the calm voice next to you that say
 next command to try, and here's why,"* keeps track of what you've actually proven about a box,
 and quietly assembles your report as you go.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/9494289d-84bf-4169-86eb-86ad1362e5d9" alt="Obol running in the browser — the coach, live context rail, and attack path" width="100%">
+</p>
+
 No install. No login. No backend. Nothing you type ever leaves your browser. Open the page and
 start.
 
@@ -44,6 +48,41 @@ and panicking about screenshots the night before the exam. Obol takes that load 
 > Obol **never runs commands for you** — it builds them so *you* can review and run them in an
 > authorized lab or exam. That's on purpose: you stay in control, and every command lands in your
 > own terminal history as evidence.
+
+---
+
+## A look inside
+
+**The coach — your ranked, copy-ready next moves**
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/3ab788be-066e-4b31-bed6-6ab2f87e33bc" alt="The coach ranking the next moves for a target, each with a copy button and a one-line why" width="92%">
+</p>
+
+**Proof-gated — Obol only records what your output actually shows**
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b85ed760-afb8-4b2e-ae40-e26951d59e47" alt="Evidence view turning pasted tool output into proven facts" width="92%">
+</p>
+
+**Everything tracked — hosts, services, credentials, and domain**
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/68b70b94-7450-4ca7-a1d6-58b3d8208c3e" alt="The engagement map of hosts, services, credentials and domain" width="92%">
+</p>
+
+<table>
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <b>The attack-path graph</b><br><br>
+      <img src="https://github.com/user-attachments/assets/044370ca-e4ad-4404-9bad-2f398c9a576c" alt="Attack-path graph with technique-named nodes, a filter legend, and hover cards" width="100%">
+    </td>
+    <td width="50%" valign="top" align="center">
+      <b>OSCP report export</b><br><br>
+      <img src="https://github.com/user-attachments/assets/bde12604-c628-4950-b96d-ee3b1f255d09" alt="An exported OSCP-style report with terminal transcript and redacted secrets" width="100%">
+    </td>
+  </tr>
+</table>
 
 ---
 
