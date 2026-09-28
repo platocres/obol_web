@@ -55,6 +55,35 @@ ok(captured(parse('nxc smb 10.0.0.5 -u administrator -H aaaa --spider C$', spide
 ok(sp.some(function (f) { return f.value.slot === 'root' && f.value.path === 'C:\\Users\\Administrator\\Desktop\\root.txt'; }), 'spider locates root.txt with its exact Windows path');
 ok(sp.some(function (f) { return f.value.slot === 'local' && f.value.path === 'C:\\Users\\svc-user\\Desktop\\user.txt'; }), 'spider locates user.txt (local slot) at the right user Desktop');
 
+// 1d. PASTED INTERACTIVE FRAME: the operator pastes a whole evil-winrm frame — the prompt echoes the read
+// and the paste box may attach a DIFFERENT command (the spider) or none. The read + on-host verdict must be
+// recovered from the echoed prompt line, so the flag is captured and the ipconfig noise is not.
+var frame = [
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> hostname; ipconfig; type C:\\Users\\svc-user\\Desktop\\user.txt',
+  'DC01', '', 'Windows IP Configuration', '',
+  '   IPv6 Address. . . . . . . . . . . : dead:beef::5887:1f95:91e0:1ab0',
+  '   IPv4 Address. . . . . . . . . . . : 10.0.0.5',
+  '480c594d4c140ae84a74a3168cc0d46e',
+].join('\n');
+// paste box attached the spider command (not the read) — still captured from the echoed prompt line
+var frSpider = captured(parse('nxc smb 10.0.0.5 -u administrator -H aaaa --spider C$', frame));
+ok(frSpider.length === 1 && frSpider[0].kind === 'objective.local_flag' && frSpider[0].value.flag === '480c594d4c140ae84a74a3168cc0d46e', 'a pasted on-host frame captures the flag even when the box attached the spider command');
+// paste box attached NO command — same result
+var frNone = captured(parse('', frame));
+ok(frNone.length === 1 && frNone[0].value.flag === '480c594d4c140ae84a74a3168cc0d46e', 'a pasted on-host frame captures the flag even with no command attached');
+ok(located(parse('', frame)).length === 0, 'the on-host frame is a capture, not a locate');
+
+// 1e. INVERSE: a Kali frame that echoes a REMOTE read (nxc -x type) after the kali prompt only LOCATES it —
+// the echoed transport lead is honored, so a remote read pasted whole never counts as captured.
+var kaliFrame = [
+  '┌──(kali㉿kali)-[~]',
+  '└─$ nxc smb 10.0.0.5 -u administrator -H aaaa -x "type C:\\Users\\svc-user\\Desktop\\user.txt"',
+  'SMB 10.0.0.5 445 DC01 [+] corp.local\\administrator:aaaa (Pwn3d!)',
+  '480c594d4c140ae84a74a3168cc0d46e',
+].join('\n');
+ok(captured(parse('', kaliFrame)).length === 0, 'a pasted Kali frame echoing a remote read captures NOTHING');
+ok(located(parse('', kaliFrame)).some(function (f) { return f.value.flag === '480c594d4c140ae84a74a3168cc0d46e'; }), 'the echoed remote read only LOCATES the flag');
+
 // 2. A plain on-host `type …\proof.txt` read captures, slot from the file in the command.
 var t = captured(parse('type C:\\Users\\Administrator\\Desktop\\proof.txt', 'ba0987654321fedcba0987654321fed0\n'));
 ok(t.some(function (f) { return f.kind === 'objective.root_flag' && f.value.flag === 'ba0987654321fedcba0987654321fed0'; }), 'a direct on-host `type proof.txt` read captures the root flag');
