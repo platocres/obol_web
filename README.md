@@ -25,7 +25,7 @@ start.
 
 ## What to expect
 
-Studying for the OSCP (or grinding HTB / TryHackMe / CPTS) is really an exercise in *not getting
+Studying for the OSCP (or grinding HTB / TryHackMe) is really an exercise in *not getting
 lost*: you're staring at an open port wondering what to run, forgetting which creds worked where,
 and panicking about screenshots the night before the exam. Obol takes that load off you:
 
