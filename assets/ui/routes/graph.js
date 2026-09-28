@@ -21,7 +21,15 @@
   }
 
   function mounted(ctx) {
-    if (OBOL.graphview) OBOL.graphview.attach(ctx && ctx.mount ? ctx.mount : document);
+    var mount = (ctx && ctx.mount) || document;
+    if (OBOL.graphview) OBOL.graphview.attach(mount);
+    if (OBOL.graphtip && OBOL.graph.buildNodeInfo) {
+      var eng = OBOL.store.active();
+      var dirs = (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(eng) : {};
+      var info = OBOL.graph.buildNodeInfo(OBOL.store.factSet(), OBOL.packs.actions(),
+        { params: eng.params, profile: eng.profile, workspace: dirs, includeAll: (eng.ui || {}).graphAll });
+      OBOL.graphtip.attach(mount, info);
+    }
     var cb = document.getElementById('g-all');
     if (cb) cb.addEventListener('change', function () {
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.graphAll = cb.checked; }, 'ui');

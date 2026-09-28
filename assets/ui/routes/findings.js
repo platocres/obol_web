@@ -13,6 +13,22 @@
   var SEV_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
   function normSev(s) { s = String(s || '').toLowerCase(); return SEV_ORDER.indexOf(s) >= 0 ? s : 'info'; }
 
+  // Attribute a catalog finding to a host: the first host-scoped fact of one of the kinds that
+  // triggered the match (host:<ip> → ip). If it matched only on domain-/engagement-scoped facts
+  // (or on flag/header/tech observations with no trigger kinds), fall back to the primary target.
+  function hostForFinding(facts, triggerKinds, primary) {
+    if (triggerKinds && triggerKinds.length) {
+      var tk = {}; triggerKinds.forEach(function (k) { tk[k] = 1; });
+      for (var i = 0; i < facts.facts.length; i++) {
+        var f = facts.facts[i];
+        if (f.state === 'supported' && tk[f.kind] && String(f.scope).indexOf('host:') === 0) {
+          return f.scope.slice(5);
+        }
+      }
+    }
+    return primary;
+  }
+
   function gather() {
     var facts = OBOL.store.factSet();
     var meta = root.OBOL_REPORTMETA || null;
@@ -56,6 +72,22 @@
         remediation: '', refs: '',
       });
     });
+    // 3) fact-driven catalog findings: the ported match engine (assets/engine/findings.js) matched
+    // against the cross-host fact ledger. Each is attributed to the host whose facts triggered it.
+    if (OBOL.findings && OBOL.findings.assess) {
+      var primary = (eng.targets && eng.targets[0] && eng.targets[0].ip) || 'engagement';
+      OBOL.findings.assess(facts).forEach(function (v) {
+        push({
+          title: v.title,
+          category: v.category || 'finding',
+          severity: normSev(v.severity),
+          host: hostForFinding(facts, v.trigger_kinds, primary),
+          evidence: v.evidence || '',
+          remediation: v.remediation || '',
+          refs: v.cve || (v.refs && v.refs.length ? v.refs[0] : '') || '',
+        });
+      });
+    }
     return out;
   }
 

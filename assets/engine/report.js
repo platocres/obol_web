@@ -299,11 +299,31 @@
   // command + its output, so the report reads like the steps. Two styles:
   //   • 'kali'   — the attacker box (recon/exploitation launched from Kali): ┌──(kali@kali)-[~] / └─$
   //   • 'target' — a shell *on the compromised host* (post-exploitation): user@host:~$ / #  (or C:\> on Windows)
+  // Cap a command's output so a firehose (a 50k-line BloodHound/bloodyAD dump, a full ldapsearch subtree,
+  // a wide nxc sweep) never floods the report: keep the head + tail with an omission marker, and hard-cap
+  // total bytes so one enormous line can't blow the page either. Short outputs pass through untouched.
+  var _OUT_CAP = { maxLines: 40, head: 26, tail: 8, maxChars: 6000 };
+  function capOutput(text, opt) {
+    text = String(text == null ? '' : text);
+    opt = opt || _OUT_CAP;
+    var lines = text.split(/\r?\n/);
+    if (lines.length > opt.maxLines) {
+      var omitted = lines.length - opt.head - opt.tail;
+      lines = lines.slice(0, opt.head)
+        .concat(['', '        … ' + omitted + ' lines omitted (' + lines.length + ' total) …', ''])
+        .concat(lines.slice(lines.length - opt.tail));
+    }
+    var out = lines.join('\n');
+    if (out.length > opt.maxChars) {
+      out = out.slice(0, opt.maxChars) + '\n        … output truncated (' + text.length + ' bytes total) …';
+    }
+    return out;
+  }
   function TERM(o) {
     o = o || {};
     var style = o.style || 'kali';
     return {
-      t: 'terminal', command: o.command || '', output: o.output || '',
+      t: 'terminal', command: o.command || '', output: capOutput(o.output || ''),
       style: style, os: (o.os || 'linux'),
       user: o.user || (style === 'target' ? '' : 'kali@kali'),
       host: o.host || '', dir: o.dir || (o.os === 'windows' ? 'C:\\' : '~'), root: !!o.root,
@@ -593,6 +613,107 @@
     });
   }
 
+  // ── catalog findings (fact-driven, from OBOL.findings.assess) + technique narratives ──────────────
+  // The findings catalog matches proven facts to report-worthy weaknesses (AS-REP roasting, DCSync,
+  // ACL abuse, SUID, SQLi, …); OBOL.narratives supplies each technique's write-up prose. Together they
+  // turn the walkthrough from boilerplate into the real, named, reproducible chain.
+  function narrativeFor(key) { return (root.OBOL && root.OBOL.narratives && root.OBOL.narratives[key]) || null; }
+  function fillTokens(str, subs) {
+    return String(str || '').replace(/\{\{(\w+)\}\}/g, function (m, k) { return (subs[k] != null && subs[k] !== '') ? subs[k] : (k === 'subject' ? 'the affected account' : (k === 'domain' ? 'the domain' : m)); });
+  }
+  // A host's facts for catalog matching: its own host-scoped facts, plus domain-wide facts (ad.*, loot.*,
+  // krbtgt) when this host is the domain's DC / the primary target — so domain compromise is reported once.
+  function hostFactSubset(factset, host, isPrimary) {
+    var facts = (factset.facts || []).filter(function (f) {
+      if (f.state !== SUPPORTED) return false;
+      var sc = f.scope || '';
+      if (sc === 'host:' + host) return true;
+      if (isPrimary && (sc.indexOf('domain:') === 0 || sc === '' || sc === 'engagement')) return true;
+      return false;
+    });
+    return new FACTS.FactSet(facts);
+  }
+  // Best-effort human subject for a technique: an account / service / group from its trigger facts, else
+  // parsed from the command that produced them (impacket `dom/user:pw@host`, `-u user`, `@user`).
+  function subjectFromCommand(cmd) {
+    cmd = String(cmd || '');
+    var m = cmd.match(/(?:^|\s)['"]?[\w.-]+\/([\w.$-]+):[^@\s]*@/); // impacket domain/user:pass@host
+    if (m) return m[1];
+    m = cmd.match(/\s-u\s+['"]?([\w.$@-]+)/); if (m) return m[1].replace(/@.*$/, '');
+    m = cmd.match(/add\s+dcsync\s+([\w.$-]+)/i); if (m) return m[1]; // bloodyAD add dcsync <user>
+    return '';
+  }
+  function findingSubject(factset, host, trigKinds, cmds) {
+    var want = {}; (trigKinds || []).forEach(function (k) { want[k] = 1; });
+    var facts = (factset.facts || []);
+    for (var i = 0; i < facts.length; i++) {
+      var f = facts[i]; if (!want[f.kind]) continue;
+      var v = f.value || {};
+      var s = v.user || v.account || v.principal || v.sam || v.service || v.group || v.name || '';
+      if (s) return String(s);
+    }
+    for (var j = 0; j < (cmds || []).length; j++) { var sc = subjectFromCommand(cmds[j].command); if (sc) return sc; }
+    return '';
+  }
+  // Evidence commands (from the ledger) that produced any of the technique's trigger facts, in run order.
+  function findingEvidenceCommands(ctx, host, trigKinds) {
+    var want = {}; (trigKinds || []).forEach(function (k) { want[k] = 1; });
+    var acts = (ctx.activities || []).slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+    var out = [], seen = {}, firstAt = 0;
+    acts.forEach(function (a) {
+      var prod = a.produced || a.facts || [];
+      if (!prod.some || !prod.some(function (k) { return want[k]; })) return;
+      if (!firstAt) firstAt = a.at || 0;
+      var cmd = (a.command || '').trim();
+      if (cmd && !seen[cmd]) { seen[cmd] = 1; out.push({ command: cmd, output: a.stdout || '' }); }
+    });
+    out.firstAt = firstAt;
+    return out;
+  }
+  // The foothold identity: the first non-privileged authenticated/recovered account for the host — the
+  // subject most foothold/credential techniques concern, used when the trigger fact names no principal.
+  function footholdUser(factset, host) {
+    var facts = (factset.facts || []);
+    var order = ['credential.plaintext', 'credential.available', 'smb.authenticated', 'winrm.authenticated', 'foothold.windows', 'foothold.linux'];
+    for (var oi = 0; oi < order.length; oi++) {
+      for (var i = 0; i < facts.length; i++) {
+        var f = facts[i]; if (f.kind !== order[oi]) continue;
+        var u = (f.value && (f.value.user || f.value.username)) || '';
+        if (u && !/^(administrator|admin|system|root|nt authority)/i.test(String(u))) return String(u);
+      }
+    }
+    return '';
+  }
+  function catalogFindingsForHost(ctx, factset, host, isPrimary, secrets, includeSecrets) {
+    if (!(root.OBOL && root.OBOL.findings && root.OBOL.findings.assess)) return [];
+    var hostFS, matched;
+    try { hostFS = hostFactSubset(factset, host, isPrimary); matched = root.OBOL.findings.assess(hostFS) || []; }
+    catch (e) { return []; }
+    var foothold = footholdUser(factset, host);
+    var subs0 = { target: host, domain: (ctx.meta && ctx.meta.domain) || '', lhost: (ctx.meta && ctx.meta.lhost) || '' };
+    return matched.map(function (m) {
+      var narr = narrativeFor(m.key) || {};
+      var evc = findingEvidenceCommands(ctx, host, m.trigger_kinds);
+      var subj = findingSubject(factset, host, m.trigger_kinds, evc) || foothold || '';
+      var subs = Object.assign({}, subs0, { subject: subj });
+      return {
+        kind: 'finding.' + m.key, key: m.key, label: m.title, title: m.title,
+        category: m.category, severity: m.severity, remediation: m.remediation, refs: m.refs || [],
+        cwe: m.cwe, attack: m.attack, nist: m.nist, trigger_kinds: m.trigger_kinds || [],
+        phase_label: narr.phase_label ? fillTokens(narr.phase_label, subs) : '',
+        first_at: evc.firstAt || 0,
+        evidence: (evc[0] && evc[0].command) || '',
+        evidence_cmds: evc.map(function (e) { return { command: redactCommand(e.command, { includeSecrets: includeSecrets, secrets: secrets }), output: e.output }; }),
+        writeup: {
+          description: narr.explanation ? fillTokens(narr.explanation, subs) : '',
+          impact: narr.impact ? fillTokens(narr.impact, subs) : '',
+          remediation: m.remediation || '',
+        },
+        origin: 'catalog', from_catalog: true,
+      };
+    });
+  }
+
   function metaEnrich(reportmeta, card, lane) {
     var rm = reportmeta || {};
     var cards = rm.cards || {}, laneDefaults = rm.laneDefaults || {};
@@ -721,17 +842,25 @@
       };
     });
 
-    // catalogued findings context (backed by reportmeta) + severity tally
+    // catalogued findings context: fact-driven catalog matches (the robust library) + any finding.* facts
+    // (web-check parsers), deduped by title, severity-sorted, with per-technique narrative write-ups.
+    var domName = params.domain || '';
+    try { var _dv = factset.values('ad.domain_known') || []; if (_dv[0]) domName = _dv[0].domain || _dv[0].name || domName; } catch (e) {}
+    var ctxMeta = { activities: activities, meta: { domain: domName, lhost: params.lhost || '' } };
     var perTarget = [], counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }, total = 0;
-    targetsOut.forEach(function (t) {
-      var fs = findingFactsForHost(factset, t.host).map(function (f) { return toFinding(f, t.host, reportmeta, includeSecrets); });
-      if (!fs.length) return;
-      var rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
-      fs.sort(function (a, b) { return (rank[a.severity] != null ? rank[a.severity] : 9) - (rank[b.severity] != null ? rank[b.severity] : 9); });
-      fs.forEach(function (r) {
-        counts[r.severity] = (counts[r.severity] || 0) + 1; total++;
-        r.writeup = { description: r.description || '', remediation: r.remediation || '' };
+    var rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+    targetsOut.forEach(function (t, ti) {
+      var factFs = findingFactsForHost(factset, t.host).map(function (f) { return toFinding(f, t.host, reportmeta, includeSecrets); });
+      factFs.forEach(function (r) { r.writeup = { description: r.description || '', remediation: r.remediation || '' }; });
+      var catFs = catalogFindingsForHost(ctxMeta, factset, t.host, ti === 0, secrets, includeSecrets);
+      var fs = [], seenTitle = {};
+      factFs.concat(catFs).forEach(function (r) {
+        var key = String(r.title || r.label || r.kind).toLowerCase();
+        if (seenTitle[key]) return; seenTitle[key] = 1; fs.push(r);
       });
+      if (!fs.length) return;
+      fs.sort(function (a, b) { return (rank[a.severity] != null ? rank[a.severity] : 9) - (rank[b.severity] != null ? rank[b.severity] : 9); });
+      fs.forEach(function (r) { counts[r.severity] = (counts[r.severity] || 0) + 1; total++; });
       perTarget.push({ host: t.host, label: t.label, findings: fs });
     });
     var findingsCtx = { targets: perTarget, counts: counts, total: total };
@@ -1231,6 +1360,14 @@
 
   // ── finding phase classification ──
   function findingIsPrivesc(f) {
+    // A catalog technique's narrative phase_label is the authoritative bucket (Initial/Credential Access →
+    // foothold; Privilege Escalation / Lateral Movement → privesc).
+    if (f.from_catalog && f.phase_label) {
+      if (/privilege escalation|lateral movement/i.test(f.phase_label)) return true;
+      if (/initial access/i.test(f.phase_label)) return false;
+      // "Credential Access" and the rest fall through to the AD_PRIVESC_KEYS/category logic below, so a
+      // domain-compromise technique (DCSync, ACL abuse, PtH) is filed under Privilege Escalation.
+    }
     var cat = (f.category || '').toLowerCase();
     var key = (f.key || '').toLowerCase();
     if (cat === 'privesc') return true;
@@ -1341,7 +1478,65 @@
   var GENERIC_PRIVESC_FIX = 'Apply least-privilege principles, patch the local privilege-escalation vector, and remove or constrain the abused rights, credentials, or misconfiguration.';
   function labeledField(label, value) { return P('**' + label + ':** ' + value); }
 
+  function capFirst(s) { return String(s || '').replace(/^\w/, function (c) { return c.toUpperCase(); }); }
+  // A single technique's report write-up: the named heading, severity, the catalog+narrative vulnerability
+  // explanation, the REAL steps (the ledger commands that produced this technique's facts), the decisive
+  // output (capped), impact, remediation, and references. This is what makes the walkthrough reproducible.
+  function techniqueWriteup(t, f) {
+    var w = f.writeup || {};
+    var blocks = [H(f.phase_label || (capFirst(f.title || 'Technique')), 5)];
+    blocks.push(labeledField('Severity', capFirst(f.severity || 'info')));
+    if (w.description) blocks.push(labeledField('Vulnerability', w.description));
+    var cmds = f.evidence_cmds || [];
+    if (cmds.length) {
+      blocks.push(P('**Steps to reproduce:**'));
+      blocks.push(UL(cmds.map(function (c) { return '`' + c.command + '`'; }), true));
+      var keyc = cmds[cmds.length - 1];
+      if (keyc && String(keyc.output || '').trim()) blocks.push(TERM({ command: keyc.command, output: keyc.output }));
+    }
+    if (w.impact) blocks.push(labeledField('Impact', w.impact));
+    if (w.remediation || f.remediation) blocks.push(labeledField('Remediation', w.remediation || f.remediation));
+    if ((f.refs || []).length) blocks.push(P('**References:** ' + f.refs.slice(0, 4).join(' · ')));
+    return blocks;
+  }
+  // Some catalog findings are CAPABILITIES the compromise merely made possible (a Golden Ticket becomes
+  // possible once krbtgt is known; spraying once a user list exists; PtH once a hash exists) — not steps
+  // that were actually run. They stay in the Findings section, but a walkthrough STEP requires an evidence
+  // command that matches the technique's own verb; without a map entry a technique is taken as performed.
+  var _WALK_VERB = {
+    'golden-ticket': /ticketer|golden|kerberos::golden|mimikatz/i,
+    'password-spraying': /spray|--continue-on-success|kerbrute\s+password|--pass-pol/i,
+    'pass-the-hash': /\s-H\s|-hashes|--hashes\b|\bpth-|overpass/i,
+    'kerberoasting': /kerberoast|getuserspns/i,
+    'zerologon': /zerologon|cve-2020-1472/i,
+  };
+  function techniquePerformed(f) {
+    var re = _WALK_VERB[f.key]; if (!re) return true;
+    return (f.evidence_cmds || []).some(function (c) { return re.test(c.command); });
+  }
   function vulnBlock(t, phase, phaseFacts, findings) {
+    var cand = (findings || []).filter(function (f) {
+      return f.from_catalog && f.writeup && f.writeup.description && (f.evidence_cmds || []).length && techniquePerformed(f);
+    });
+    // Dedupe by evidence-command set: a technique whose commands are all already shown by a higher-ranked
+    // technique (e.g. a hash whose only evidence is the same secretsdump that proved DCSync) is not a
+    // separate step. `findings` arrive severity-sorted, so the most significant technique keeps the command.
+    var kept = [], usedCmds = {};
+    cand.forEach(function (f) {
+      var cmds = (f.evidence_cmds || []).map(function (c) { return c.command; });
+      if (cmds.length && cmds.every(function (c) { return usedCmds[c]; })) return;
+      kept.push(f); cmds.forEach(function (c) { usedCmds[c] = 1; });
+    });
+    // Read the phase chronologically (the order the operator actually ran the techniques).
+    kept.sort(function (a, b) { return (a.first_at || 0) - (b.first_at || 0); });
+    if (kept.length) {
+      var out = [];
+      kept.forEach(function (f) { out = out.concat(techniqueWriteup(t, f)); });
+      return out;
+    }
+    return genericVulnBlock(t, phase, phaseFacts, findings);
+  }
+  function genericVulnBlock(t, phase, phaseFacts, findings) {
     var host = t.host;
     var finding = findings.length ? findings[0] : null;
     var writeup = (finding && finding.writeup) || {};
@@ -1402,6 +1597,23 @@
     slotted.sort(function (a, b) { return (a.order || 0) - (b.order || 0) || (a.added_at || 0) - (b.added_at || 0); });
     return slotted.map(function (e) { return IMG({ caption: humanizeCaption(e.caption, label), data_uri: e.data_uri, path: e.path, is_render: true }); });
   }
+  // The on-host capture frame for a flag slot: a BARE read (type/cat …flag.txt) run inside a shell ON the
+  // target (no remote-exec lead) — ideally beside hostname/ipconfig. This is exactly what the operator must
+  // screenshot, so the report renders it as the proof-frame guide when no image has been attached yet.
+  function onHostCaptureFrame(ctx, host, slot) {
+    var names = slot === 'root' ? /(root|proof)\.txt/i : /(user|local)\.txt/i;
+    var remoteLead = /^\s*(?:sudo\s+|proxychains\d?\s+)?(?:nxc|netexec|crackmapexec|cme|impacket-[\w.]+|wmiexec|psexec|smbexec|atexec|smbclient|winrs|evil-winrm|ssh|sshpass|plink)\b/i;
+    var acts = (ctx.activities || []).slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+    var best = null;
+    acts.forEach(function (a) {
+      var cmd = a.command || '';
+      if (!/\b(?:type|cat|more|Get-Content|gc)\b/i.test(cmd) || !names.test(cmd)) return;
+      if (remoteLead.test(cmd.trim())) return;
+      var hasId = /\b(?:ipconfig|ifconfig|ip\s+a(?:ddr)?|hostname|whoami|id)\b/i.test(cmd + ' ' + (a.stdout || ''));
+      if (!best || (hasId && !best.hasId)) best = { command: cmd, output: a.stdout || '', hasId: hasId };
+    });
+    return best;
+  }
   function proofScreenshotBlocks(t, slot, ctx, host, label) {
     var out = [P('**' + label + '**')];
     var imgs = [];
@@ -1409,8 +1621,15 @@
       if (s.data_uri || s.path) imgs.push(IMG({ caption: humanizeCaption(s.caption, label), data_uri: s.data_uri, path: s.path }));
     });
     imgs = imgs.concat(proofRenderImages(ctx, host, slot, label));
-    if (imgs.length) out = out.concat(imgs);
-    else out.push(P('_No proof screenshot was captured for this slot. Read the flag file in an interactive shell with the target IP visible for a compliant proof._'));
+    if (imgs.length) { out = out.concat(imgs); return out; }
+    var frame = onHostCaptureFrame(ctx, host, slot);
+    if (frame) {
+      out.push(P('_Captured on-host (below). **Attach a screenshot of this exact terminal frame** — the flag and the target IP together in one interactive shell — on the Evidence tab under Proof screenshots (tagged ' + (slot === 'root' ? 'root' : 'local') + '); OffSec requires the image, not text._'));
+      var win = /\\|ipconfig|C:/i.test(frame.command + ' ' + frame.output);
+      out.push(TERM({ command: frame.command, output: frame.output, style: 'target', os: win ? 'windows' : 'linux', host: (t.hostname || host), root: slot === 'root' }));
+    } else {
+      out.push(P('_No proof screenshot captured. Read the flag from an **interactive shell on the target** with `type`/`cat`, beside `ipconfig`/`ip addr`, then attach that screenshot on the Evidence tab (Proof screenshots, tagged ' + (slot === 'root' ? 'root' : 'local') + ') — OffSec awards zero without it._'));
+    }
     return out;
   }
   function flagContentsBlock(t, slot, includeSecrets, label) {
@@ -1882,18 +2101,32 @@
       + '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
     return drawing + (b.caption ? dPara(dRun(dStrip(b.caption), { i: true, color: '666666', sz: 18 })) : '');
   }
+  // A terminal renders as ONE shaded, bordered, monospace block (a code box) with tight line spacing —
+  // not a run of spaced paragraphs. Prompt lines keep their colour; output is dark on a light-gray fill.
+  function dTermLine(inner) {
+    return '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>' + (inner || '') + '</w:p>';
+  }
+  // Wrap monospace paragraphs in ONE shaded, bordered single-cell box (a code/terminal block).
+  function dShadedBlock(paras) {
+    var edges = ['top', 'left', 'bottom', 'right'].map(function (s) { return '<w:' + s + ' w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'; }).join('');
+    var cell = '<w:tc><w:tcPr><w:tcW w:w="5000" w:type="pct"/><w:tcBorders>' + edges + '</w:tcBorders>'
+      + '<w:shd w:val="clear" w:color="auto" w:fill="F4F4F4"/>'
+      + '<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="110" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="110" w:type="dxa"/></w:tcMar></w:tcPr>'
+      + paras.join('') + '</w:tc>';
+    return '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders>' + edges + '</w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr>'
+      + '<w:tr>' + cell + '</w:tr></w:tbl>' + dPara('');
+  }
   function docxTerminal(b) {
     var tp = termPrompt(b);
-    var lines = tp
-      // on-target shell: single amber prompt line, e.g. www-data@host:~$ command
-      ? [dPara(dRun(tp + ' ', { mono: true, sz: 18, color: 'B8860B' }) + dRun(b.command, { mono: true, sz: 18, b: true }))]
-      // attacker box: two-line Kali glyph prompt
-      : [
-        dPara(dRun('┌──(' + b.user + ')-[' + b.dir + ']', { mono: true, sz: 18, color: '2E7D32' })),
-        dPara(dRun('└─$ ', { mono: true, sz: 18, color: '2E7D32' }) + dRun(b.command, { mono: true, sz: 18, b: true })),
-      ];
-    String(b.output || '').split(/\r?\n/).forEach(function (ln) { lines.push(dPara(dRun(ln || ' ', { mono: true, sz: 18 }))); });
-    return lines.join('');
+    var paras = [];
+    if (tp) {
+      paras.push(dTermLine(dRun(tp + ' ', { mono: true, sz: 18, color: 'B8860B' }) + dRun(b.command, { mono: true, sz: 18, b: true })));
+    } else {
+      paras.push(dTermLine(dRun('┌──(' + b.user + ')-[' + b.dir + ']', { mono: true, sz: 18, color: '2E7D32' })));
+      paras.push(dTermLine(dRun('└─$ ', { mono: true, sz: 18, color: '2E7D32' }) + dRun(b.command, { mono: true, sz: 18, b: true })));
+    }
+    String(b.output || '').split(/\r?\n/).forEach(function (ln) { paras.push(dTermLine(dRun(ln || ' ', { mono: true, sz: 18, color: '1A1A1A' }))); });
+    return dShadedBlock(paras);
   }
   function blockToDocx(b, images) {
     switch (b.t) {
@@ -1902,7 +2135,7 @@
       case 'bullets': return (b.items || []).map(function (it, i) { return dPara(dRun((b.ordered ? (i + 1) + '. ' : '• ') + dStrip(it))); }).join('');
       case 'kv': return (b.pairs || []).map(function (kv) { return dPara(dRun(kv[0] + ': ', { b: true }) + dRun(dStrip(kv[1]))); }).join('');
       case 'table': return dTable(b.headers, b.rows);
-      case 'code': return String(b.text).split(/\r?\n/).map(function (ln) { return dPara(dRun(ln || ' ', { mono: true, sz: 18 })); }).join('');
+      case 'code': return dShadedBlock(String(b.text).split(/\r?\n/).map(function (ln) { return dTermLine(dRun(ln || ' ', { mono: true, sz: 18, color: '1A1A1A' })); }));
       case 'terminal': return docxTerminal(b);
       case 'callout': return dPara(dRun(dStrip(b.text), { i: true }));
       case 'proof': {
