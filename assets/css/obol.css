@@ -509,8 +509,15 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .rep-opt input[type="text"] { width: 12ch; }
 .rep-opt input[type="text"]:focus { outline: none; border-color: var(--accent); }
 .rep-opt-note { color: var(--muted); font-size: 11.5px; }
-.rep-actions { display: flex; gap: 8px; align-items: center; }
-.rep-actions .btn-ghost, .rep-actions .btn-primary { padding: 7px 13px; font-size: 12.5px; }
+.rep-actions { display: flex; gap: 0; align-items: center; }
+.rep-export-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 10px; }
+/* One cohesive segmented control for all four download formats — same size, weight, and treatment. */
+.rep-exp { padding: 7px 14px; font: 600 12.5px var(--mono); color: var(--text-2); background: var(--surf2);
+  border: 1px solid var(--line); border-right-width: 0; cursor: pointer; }
+.rep-exp:first-of-type { border-radius: 8px 0 0 8px; }
+.rep-exp:last-of-type { border-radius: 0 8px 8px 0; border-right-width: 1px; }
+.rep-exp:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); position: relative; z-index: 1; }
+.rep-exp:active { transform: translateY(1px); }
 /* On-screen the report renders as PAPER — black on white, like the printed/PDF output — so the
    preview matches what you hand in. Embedded Kali terminal captures stay dark (see .lang-terminal). */
 .rep-out { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: #16181d;
@@ -1004,10 +1011,14 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 /* ---- print / paper view (Print → Save as PDF) ---- */
 @media print {
   html, body { background: #fff !important; color: #000 !important; }
-  header.appbar, aside#sidebar, .rep-controls, .rep-notes, .rep-gaps,
+  /* Hide every scrap of app chrome. The mobile shell turns on at max-width:860px, and a printed page box
+     (~816px) matches that query — so the fixed bottom tab bar and the "More sections" sheet would otherwise
+     overlay the report on every page. Hide them (and the desktop nav/controls) explicitly. */
+  header.appbar, aside#sidebar, nav.mainnav, .rep-controls, .rep-notes, .rep-gaps,
+  .tabbar, .more-sheet, .nav-toggle, .nav-scrim, .nav-search,
   .obol-settings-toggle, .obol-settings-panel, #obolth-bg, #obolcoin-fx, .obol-toast { display: none !important; }
   #app { display: block !important; }
-  main#view { max-width: none !important; padding: 0 !important; overflow: visible !important; }
+  main#view { max-width: none !important; padding: 0 !important; margin: 0 !important; overflow: visible !important; }
   .route-h1 { display: none; }
   .rep-out { border: none !important; background: #fff !important; color: #000 !important; padding: 0 !important; max-height: none !important; overflow: visible !important; box-shadow: none !important; }
   .rep-out h1, .rep-out h2, .rep-out h3, .rep-out h4 { color: #000 !important; }
