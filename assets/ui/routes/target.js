@@ -51,11 +51,28 @@
       return '<span class="spine-node ph-' + p + (i <= reached ? ' reached' : '') + (i === frontier ? ' frontier' : '') + '">' + p + '</span>';
     }).join('<span class="spine-sep">›</span>');
 
-    // captured flags
-    var flags = [];
+    // captured flags — rich entries (slot label, file, value) so the operator can confirm each capture
+    // at a glance (a real flag, not a stray hash) and knows which flag came from where.
+    var SLOT_LABEL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
+    var flagFacts = [];
     ['objective.root_flag', 'objective.local_flag', 'objective.flag'].forEach(function (k) {
-      if (facts.has(k)) flags.push(k.split('.').pop().replace('_', ' '));
+      facts.values(k).forEach(function (v) { flagFacts.push({ kind: k, value: v || {} }); });
     });
+    function flagLabel(e) {
+      var v = e.value || {};
+      return SLOT_LABEL[v.slot] || (e.kind.split('.').pop().replace('_flag', '').replace('flag', 'flag').replace(/^\w/, function (c) { return c.toUpperCase(); }) + ' flag');
+    }
+    var flags = flagFacts.map(flagLabel);
+    var flagCard = flagFacts.length
+      ? '<h2 class="coach-sec-h">Captured Flags</h2><ul class="flag-cards">' + flagFacts.map(function (e) {
+          var v = e.value || {}; var val = v.flag || '';
+          return '<li class="flag-card flag-' + esc(v.slot || 'flag') + '">'
+            + '<div class="flag-card-h"><span class="flag-slot">🚩 ' + esc(flagLabel(e)) + '</span>'
+            + (v.name ? '<span class="flag-file" title="' + U.attr(v.path || v.name) + '">' + esc(v.name) + '</span>' : '') + '</div>'
+            + (val ? '<code class="flag-val" title="' + U.attr(val) + '">' + esc(val) + '</code><button class="btn-copy flag-copy" data-copy="' + U.attr(val) + '">copy</button>' : '')
+            + '</li>';
+        }).join('') + '</ul>'
+      : '';
 
     // Attack Path bar: the ordered, causal path actually walked (what led to what → the flags),
     // reconstructed from the run ledger + prereq graph, rendered as a dense horizontal block ribbon.
@@ -106,6 +123,7 @@
       + '<div class="graph-scroll">' + svg + '</div>'
       + '</div>'
       + '<div class="target-col">'
+      + flagCard
       + '<h2 class="coach-sec-h">Next moves for this target</h2>'
       + (moveHtml || '<div class="coach-empty">No moves — paste evidence to unlock.</div>')
       + '<a class="btn-ghost" href="#/path">Full Coach →</a>'

@@ -50,6 +50,34 @@ ok(flags(parse("impacket-secretsdump 'htb.local/svc:pw'@10.0.0.5", dump)).length
 // 5. NEGATIVE: an ordinary command with a 32-hex value but no flag-file path mints nothing.
 ok(flags(parse('nxc smb 10.0.0.5 -u svc -p pw', 'SMB 10.0.0.5 445 DC [*] deadbeefdeadbeefdeadbeefdeadbeef')).length === 0, 'a bare 32-hex in unrelated output is not a flag');
 
+// 6. REGRESSION (the reported bug): a flag-hunt that FAILED (nxc winrm -X zip bug — no ===FLAG output, just
+// an auth banner carrying the Administrator NT hash) must capture NOTHING. The hash is not a flag.
+var failedHunt = ['WINRM 10.0.0.5 5985 DC01 [*] Windows Server 2016 Build 14393 (name:DC01) (domain:corp.local)',
+  'WINRM 10.0.0.5 5985 DC01 [+] corp.local\\Administrator:32693b11e6aa90eb43d32c72a07ceea6 (Pwn3d!)',
+  'WINRM 10.0.0.5 5985 DC01 [-] corp.local\\Administrator:32693b11e6aa90eb43d32c72a07ceea6 zip() argument 2 is longer than argument 1'].join('\n');
+var fh = flags(parse('nxc winrm 10.0.0.5 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6 -X "Get-ChildItem -Path C:\\Users -Recurse -Force -Include user.txt,root.txt -File | ForEach-Object { Write-Output (\'===FLAG:\'+$_.FullName+\'::\'+(Get-Content -Raw $_.FullName)) }"', failedHunt));
+ok(fh.length === 0, 'a FAILED flag hunt (no ===FLAG output, only an NT-hash auth banner) captures NO flag — the hash is not a flag');
+
+// 6b. STEP-2 SMB read (nxc smb -x wmiexec) — the reliable path that dodges the nxc `winrm -X` zip() bug.
+// Command is `... -x "hostname & ipconfig & type C:\...\root.txt"`; output is the identity block then the
+// flag alone on its own line. The direct-read path captures it (root slot from the file in the command),
+// and neither the ipconfig lines nor the (Pwn3d!) hash banner is mistaken for a flag.
+var smbRead = [
+  'SMB 10.0.0.5 445 DC01 [+] corp.local\\Administrator:32693b11e6aa90eb43d32c72a07ceea6 (Pwn3d!)',
+  'DC01',
+  'Windows IP Configuration',
+  '   IPv4 Address. . . . . . . . . . . : 10.0.0.5',
+  'deadc0dedeadc0dedeadc0dedeadc0de',
+].join('\n');
+var sr = flags(parse('nxc smb 10.0.0.5 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6 -x "hostname & ipconfig & type C:\\Users\\Administrator\\Desktop\\root.txt"', smbRead));
+ok(sr.length === 1 && sr[0].kind === 'objective.root_flag' && sr[0].value.flag === 'deadc0dedeadc0dedeadc0dedeadc0de', 'the SMB step-2 `type` read captures the flag (root slot); ipconfig + hash banner are not flags');
+
+// 7. A real read whose output ALSO carries a hash banner: only the flag (alone on its own line) is taken.
+var mixed = ['SMB 10.0.0.5 445 DC01 [+] corp.local\\Administrator:32693b11e6aa90eb43d32c72a07ceea6 (Pwn3d!)',
+  'deadbeef00112233445566778899aabb'].join('\n');
+var mx = flags(parse('nxc smb 10.0.0.5 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6 -x "type C:\\Users\\Administrator\\Desktop\\root.txt"', mixed));
+ok(mx.length === 1 && mx[0].value.flag === 'deadbeef00112233445566778899aabb', 'the flag on its own line is captured; the hash in the (Pwn3d!) banner is NOT');
+
 // 6. The report renders a captured flag (end-to-end into the objectives table).
 load(path.join(ENG, 'phases.js')); load(path.join(ENG, 'pack.js')); load(path.join(ENG, 'profile.js'));
 try { load(path.join(ENG, 'report.js')); } catch (e) {}

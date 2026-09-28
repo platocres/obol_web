@@ -19,6 +19,10 @@
    "requires_any": [
     "foothold.linux"
    ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
+   ],
    "produces": [
     "privesc.leads",
     "host.kernel",
@@ -68,6 +72,10 @@
    "requires_any": [
     "privesc.sudo_rights"
    ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
+   ],
    "produces": [
     "access.admin"
    ],
@@ -108,6 +116,10 @@
    "requires_all": [],
    "requires_any": [
     "privesc.passwd_writable"
+   ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
    ],
    "produces": [
     "access.admin"
@@ -155,6 +167,10 @@
     "privesc.nfs_no_root_squash",
     "port:2049"
    ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
+   ],
    "produces": [
     "access.admin"
    ],
@@ -198,6 +214,10 @@
    "requires_all": [],
    "requires_any": [
     "privesc.lxd_group"
+   ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
    ],
    "produces": [
     "access.admin"
@@ -255,6 +275,10 @@
    "requires_any": [
     "privesc.docker_group"
    ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
+   ],
    "produces": [
     "access.admin"
    ],
@@ -298,6 +322,10 @@
    "requires_all": [],
    "requires_any": [
     "privesc.suid_candidate"
+   ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
    ],
    "produces": [
     "access.admin",
@@ -385,6 +413,10 @@
     "privesc.cron_writable",
     "privesc.process_lead"
    ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
+   ],
    "produces": [
     "access.admin"
    ],
@@ -430,6 +462,10 @@
    "requires_all": [],
    "requires_any": [
     "privesc.capability"
+   ],
+   "deprioritize_when": [
+    "access.admin",
+    "access.system"
    ],
    "produces": [
     "access.admin",

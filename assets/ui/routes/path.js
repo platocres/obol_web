@@ -190,7 +190,14 @@
       + railCard('Access', '<div class="rail-access ra-' + access[1] + '">' + esc(access[0]) + '</div>')
       + railCard('Next move', topMove ? ('<div class="rail-move">' + esc(topMove.title) + '</div>') : '<div class="rail-empty">Log evidence to unlock moves.</div>')
       + railCard('Flags (' + flags.length + ')', flags.length
-        ? '<ul class="rail-list">' + flags.map(function (f) { var v = f.value || {}; return '<li><span>' + esc(v.slot || f.kind.split('.').pop()) + '</span>' + (v.name ? '<span class="rail-produced">' + esc(v.name) + '</span>' : '') + '</li>'; }).join('') + '</ul>'
+        ? '<ul class="rail-list rail-flags">' + flags.map(function (f) {
+            var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
+            var label = SL[v.slot] || (f.kind.split('.').pop().replace('_', ' '));
+            var val = v.flag || '';
+            var shown = val && val.length > 18 ? val.slice(0, 18) + '…' : val;
+            return '<li title="' + U.attr((v.path || v.name || '') + (val ? '  =  ' + val : '')) + '"><span>🚩 ' + esc(label) + '</span>'
+              + (shown ? '<span class="rail-secret rail-flagval">' + esc(shown) + '</span>' : (v.name ? '<span class="rail-produced">' + esc(v.name) + '</span>' : '')) + '</li>';
+          }).join('') + '</ul>'
         : '<div class="rail-empty">None captured yet.</div>')
       + railCard('Credentials (' + creds.length + ')', creds.length
         ? '<ul class="rail-list">' + creds.slice(0, 6).map(function (c) {
