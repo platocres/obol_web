@@ -34,15 +34,12 @@
     return parts.join('/').replace(/([^:])\/{2,}/g, '$1/').replace(/\/+$/, '') || '/';
   }
   // Lab runs are box-centric (a dir per box); exams are engagement-centric (one dir for the exam).
-  function slugFor(eng, isExam) {
-    if (!eng) return 'run';
-    if (!isExam) {
-      var t = (eng.targets || [])[0];
-      if (t && (t.hostname || t.ip)) return slugify(t.hostname || t.ip);
-    }
-    return slugify(eng.name);
+  // Default leaf folder for an engagement: the engagement's own name — neutral and stable, never the
+  // target IP (a box-centric folder was surprising when the operator had named the run).
+  function slugFor(eng) {
+    return eng ? slugify(eng.name) : 'run'; // slugify falls back to 'run' for an empty name
   }
-  function defaultRoot(base, eng, isExam) { return join(base || DEFAULT_BASE, slugFor(eng, isExam)); }
+  function defaultRoot(base, eng) { return join(base || DEFAULT_BASE, slugFor(eng)); }
   function rootFor(eng) { return (eng && eng.workspace && eng.workspace.root) ? sanitizeRoot(eng.workspace.root) : ''; }
   function isConfigured(eng) { return !!rootFor(eng); }
 

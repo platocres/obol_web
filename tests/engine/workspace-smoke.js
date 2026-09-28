@@ -12,13 +12,13 @@ const W = OBOL.workspace, C = OBOL.command;
 let fail = 0;
 function ok(cond, msg) { if (!cond) { console.error('  FAIL:', msg); fail++; } else { console.log('  ok  :', msg); } }
 
-// default root: box-centric on labs (uses the target), engagement-centric on exams (uses the name)
-ok(W.defaultRoot('~/htb', { name: 'Lab night', targets: [{ hostname: 'boxy', ip: '10.0.0.5' }] }, false) === '~/htb/boxy',
-  'lab default root is box-centric (target hostname)');
-ok(W.defaultRoot('~/exams', { name: 'OSCP Prep', targets: [{ ip: '10.0.0.9' }] }, true) === '~/exams/oscp-prep',
-  'exam default root is engagement-centric (slugified name)');
-ok(W.defaultRoot('~/htb', { name: 'n', targets: [{ ip: '10.0.0.5' }] }, false) === '~/htb/10.0.0.5',
-  'lab default root falls back to the target IP when no hostname');
+// default root: engagement-centric everywhere — the slugified engagement name, never the target IP
+ok(W.defaultRoot('~/htb', { name: 'Lab night', targets: [{ hostname: 'boxy', ip: '10.0.0.5' }] }) === '~/htb/lab-night',
+  'default root uses the engagement name, not the target');
+ok(W.defaultRoot('~/exams', { name: 'OSCP Prep', targets: [{ ip: '10.0.0.9' }] }) === '~/exams/oscp-prep',
+  'default root is the slugified engagement name');
+ok(W.defaultRoot('~/htb', { name: '', targets: [{ ip: '10.0.0.5' }] }) === '~/htb/run',
+  'default root falls back to a neutral slug when unnamed, never the target IP');
 
 const eng = { name: 'x', workspace: { root: '/home/kali/ctf/boxy' } };
 const t = W.tokens(eng);
