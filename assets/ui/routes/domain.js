@@ -28,7 +28,7 @@
       var facts = OBOL.store.factSet();
       var dcf = (facts.values && facts.values('ad.dc_candidate')) || [];
       if (dcf[0] && dcf[0].host) dc = dcf[0].host;
-      var ctxOut = { dc: dc || params.target || null, host: params.target || null, lhost: params.lhost || null, secret: null };
+      var ctxOut = { dc: dc || params.target || null, host: params.target || null, lhost: params.lhost || null, secret: null, pw: null, nt: null };
       if (includeSecret && owned && owned.length) {
         var firstUser = String(owned[0]).split('@')[0].toLowerCase();
         var creds = [];
@@ -37,8 +37,10 @@
         var c = creds.filter(function (x) { return x && x.user && String(x.user).toLowerCase() === firstUser; })[0];
         if (c) {
           var h = c.nthash || c.hash, pw = c.password || c.plaintext || c.secret;
-          if (h && /^[a-fA-F0-9]{32}$/.test(String(h))) ctxOut.secret = '-H ' + h;
-          else if (pw) ctxOut.secret = "-p '" + pw + "'";
+          // carry the RAW secret parts too, so per-tool auth syntax (evil-winrm -H, xfreerdp /pth,
+          // impacket -hashes) is built correctly for a hash-only identity — not a blank -p ''.
+          if (h && /^[a-fA-F0-9]{32}$/.test(String(h))) { ctxOut.secret = '-H ' + h; ctxOut.nt = h; }
+          else if (pw) { ctxOut.secret = "-p '" + pw + "'"; ctxOut.pw = pw; }
         }
       }
       return ctxOut;

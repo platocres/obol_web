@@ -100,6 +100,26 @@
    ]
   },
   {
+   "id": "param-discovery",
+   "title": "Parameter Discovery (arjun)",
+   "hypothesis": "A form or endpoint often accepts far more parameters than its HTML reveals — and the hidden one is frequently the injectable one. Fuzzing a known parameter dictionary against the endpoint (arjun) surfaces the accepted GET/POST parameters, so the injection probes have a concrete parameter to test instead of a guess.",
+   "tool": "arjun",
+   "tools": ["arjun"],
+   "os": [],
+   "requires_all": [],
+   "requires_any": ["http.reachable", "web.parameterized", "web.content_map"],
+   "produces": ["web.param_candidate"],
+   "priority": 78,
+   "proves": "surfaces the request parameters an endpoint actually accepts",
+   "does_not_prove": "only attack surface — an accepted parameter is not a vulnerability until a probe confirms it injectable",
+   "report": {"finding": "Hidden Request Parameters Discovered", "severity": "info"},
+   "refs": ["https://github.com/s0md3v/Arjun"],
+   "commands": [
+    {"tool": "arjun", "run": "arjun -u http://{{target}}/ -m GET,POST", "note": "Fuzzes GET and POST parameter names against the endpoint. Point -u at the specific handler (e.g. /search) once content discovery has found one; each accepted name becomes a probe target."},
+    {"tool": "arjun", "run": "arjun -u http://{{target}}/ -m GET -w /usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt", "note": "A wider sweep with a bigger parameter wordlist when the default set finds nothing."}
+   ]
+  },
+  {
    "id": "lfi-probe",
    "title": "Local File Inclusion Probe",
    "hypothesis": "Parameters that pull in content by its name (page=, file=, include=) are prime LFI suspects. A traversal string settles it: when ../../../../etc/passwd hands back the passwd file, arbitrary local reads are possible — and that spirals into source disclosure, lifting credentials out of config files, and now and then RCE via log poisoning or wrappers.",

@@ -132,6 +132,13 @@
       if (c0.domain && !ctx.domain) ctx.domain = c0.domain;
     }
 
+    // krbtgt key for golden-ticket forging — the DEDICATED krbtgt NT hash from a DCSync/NTDS dump, NEVER
+    // the first credential's hash (forging with the wrong key silently produces an unusable ticket).
+    if (!ctx.krbtgt_hash) {
+      var kt = firstVal(facts, 'hash.krbtgt');
+      if (kt && kt.nthash) ctx.krbtgt_hash = kt.nthash;
+    }
+
     // ADCS ca/template/pfx
     var adcs = firstVal(facts, 'adcs.vulnerable');
     if (adcs) {

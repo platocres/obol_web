@@ -311,7 +311,7 @@
     if (weakService.length) _add_host_privesc_fact(facts, ws, source, 'privesc.weak_service_permission', { evidence: C.uniqueSortedCI(weakService).slice(0, 30) }, leadKinds);
 
     var stored = [];
-    [['Target:', 'cmdkey'], ['DefaultPassword', 'autologon'], ['unattend.xml', 'unattend'], ['sysprep', 'sysprep'], ['confCons.xml', 'mRemoteNG'], ['.rdp', 'rdp_file']].forEach(function (pair) {
+    [['Target:', 'cmdkey'], ['DefaultPassword', 'autologon'], ['unattend.xml', 'unattend'], ['sysprep', 'sysprep'], ['confCons.xml', 'mRemoteNG'], ['.rdp', 'rdp_file'], ['simontatham', 'putty'], ['winscp', 'winscp'], ['vncpassword', 'vnc']].forEach(function (pair) {
       if (lowered.indexOf(pair[0].toLowerCase()) >= 0) stored.push(pair[1]);
     });
     if (stored.length) {
@@ -371,6 +371,132 @@
     }
   }
   C._parse_script_sinks = _parse_script_sinks;
+
+  // ── Windows cleartext-cred idioms + PuTTY/plink/WinSCP stored creds (§33) ──────────
+  // Cleartext credentials typed into a script/history/config, plus PuTTY's plaintext registry proxy
+  // credential and a saved plink `-pw` command line → credential.candidate MATERIAL to try (never
+  // access.* — §34 validates it into credential.available). A login the same transcript shows was
+  // DENIED right after is skipped, so a failed `mysql -p'wrong'` never becomes a lead.
+  var _WIN_CRED_RES = [
+    ['net-use', /net\s+use\s+\\\\\S+\s+\/user:(?<user>\S+)\s+(?<pw>\S+)/gi],
+    ['net-use', /net\s+use\s+\\\\\S+\s+(?<pw>\S+)\s+\/user:(?<user>\S+)/gi],
+    ['cmdkey', /cmdkey\s+\/(?:add|generic):\S+\s+\/user:(?<user>\S+)\s+\/pass:(?<pw>\S+)/gi],
+    ['psexec', /psexec\S*\s.*?-u\s+(?<user>\S+)\s+-p\s+(?<pw>\S+)/gi],
+    ['sqlcmd', /sqlcmd\s.*?-U\s+(?<user>\S+)\s+-P\s+(?<pw>\S+)/gi],
+    ['mysql', /mysql\s.*?-u\s*(?<user>\S+)\s+-p(?<pw>\S+)/gi],
+    ['createprocesswithlogonw', /CreateProcessWithLogonW\s*\(\s*['"](?<user>[^'"]+)['"]\s*,\s*['"][^'"]*['"]\s*,\s*['"](?<pw>[^'"]+)['"]/gi],
+    ['runas', /runas\s+\/user:(?<user>\S+)\s+.*?\/(?:savecred|smartcard)?.*?['"](?<pw>[^'"]+)['"]/gi],
+    // A saved PuTTY/plink command line carries the password inline before the user@host.
+    ['plink', /plink(?:\.exe)?['")\s].*?-pw\s+['"]?(?<pw>[^'"\s]+)['"]?\s+(?<user>[^@\s'"]+)@(?<host>[^\s'"]+)/gi],
+  ];
+  var _PS_SECURESTRING_RE = /ConvertTo-SecureString\s+['"](?<pw>[^'"]+)['"]\s+-AsPlainText/gi;
+  // PuTTY stores a session proxy credential in plaintext in the registry
+  // (HKCU\Software\SimonTatham\PuTTY\Sessions\<name>): ProxyUsername/ProxyPassword REG_SZ values.
+  var _PUTTY_PROXYPW_RE = /ProxyPassword\s+REG_SZ\s+(?<pw>\S.*\S|\S)\s*$/im;
+  var _PUTTY_PROXYUSER_RE = /ProxyUsername\s+REG_SZ\s+(?<user>\S+)/i;
+  var _LOGIN_DENIED_RE = /access denied|authentication fail|logon failure|login failed|ERROR 1045/i;
+
+  function _has_windows_creds(text) {
+    text = text || '';
+    if (reSearch(_PS_SECURESTRING_RE, text) || reSearch(_PUTTY_PROXYPW_RE, text)) return true;
+    return _WIN_CRED_RES.some(function (pair) { return reSearch(pair[1], text); });
+  }
+  C._has_windows_creds = _has_windows_creds;
+
+  function _parse_windows_creds(text, ws, command, source, facts) {
+    text = text || '';
+    var h = 'host:' + ws.target, seen = {};
+    _WIN_CRED_RES.forEach(function (pair) {
+      var idiom = pair[0], rx = pair[1];
+      reAll(rx, text).forEach(function (m) {
+        var user = m.groups.user, pw = m.groups.pw;
+        // skip a credential whose login the transcript shows was rejected right after it
+        var tail = text.slice(m.index + m[0].length, m.index + m[0].length + 120);
+        if (reSearch(_LOGIN_DENIED_RE, tail)) return;
+        if (!user || !pw) return;
+        var key = user + '|' + pw;
+        if (seen[key]) return;
+        seen[key] = true;
+        _add(facts, mkFact('credential.candidate', h, { user: user, password: C.stripChars(pw, "'\""), via: idiom }, S, source));
+      });
+    });
+    reAll(_PS_SECURESTRING_RE, text).forEach(function (m) {
+      var pw = m.groups.pw, key = '|' + pw;
+      if (seen[key]) return;
+      seen[key] = true;
+      _add(facts, mkFact('credential.candidate', h, { password: pw, via: 'convertto-securestring' }, S, source));
+    });
+    // PuTTY stored proxy credential — pair the ProxyPassword value with the nearest ProxyUsername.
+    var pwm = reSearch(_PUTTY_PROXYPW_RE, text);
+    if (pwm) {
+      var pw2 = C.stripChars(pwm.groups.pw.trim(), "'\"");
+      var um = reSearch(_PUTTY_PROXYUSER_RE, text);
+      var user2 = um ? um.groups.user : '';
+      var key2 = user2 + '|' + pw2;
+      if (pw2 && pw2 !== '0' && !seen[key2]) {
+        seen[key2] = true;
+        var val = { password: pw2, via: 'putty_registry' };
+        if (user2) val.user = user2;
+        _add(facts, mkFact('credential.candidate', h, val, S, source));
+      }
+    }
+  }
+  C._parse_windows_creds = _parse_windows_creds;
+
+  // ── Notable local programs ("unblock a stuck box") → host.notable_program ─────────
+  // A bespoke executable/script in a user-controllable location, or whose NAME suggests it holds/uses
+  // secrets. A lead to inspect ("run this and read what it leaks"), never access on its own.
+  var _NOTABLE_NAME_RE = /admin|tool(?:kit)?|connect|console|backup|restore|cred(?:ential)?|passw|secret|vault|keepass|manage(?:r|ment)?|deploy|launch(?:er)?|updat(?:e|er)|agent|helper|remote|vpn|token|keychain|setup|install(?:er)?|\bsvc\b|service|runner|automat/i;
+  var _NOTABLE_EXE_RE = /(?<name>[\w.\-]{1,60}\.(?:exe|bat|cmd|ps1|vbs|sh|py|pl|rb|jar|bin|run|elf))\b/gi;
+  var _NOTABLE_DIRHDR_RE = /Directory of\s+(?<d>[A-Za-z]:\\[^\r\n]+?)\s*$/im;
+  var _NOTABLE_LDIR_RE = /^(?<d>\/[^\r\n:]+):\s*$/;
+  var _NOTABLE_IGNORE_RE = /\\Windows\\(?:System32|SysWOW64|WinSxS|servicing|Microsoft\.NET)\\|\/usr\/(?:bin|sbin|lib)\/|(?:^|[\\/])(?:s?bin)\/|python\d|\bpip\d?\b|winpeas|linpeas|pspy|mimikatz|rubeus|powerview|seatbelt|sharphound|godpotato|printspoofer|\.dll$|conhost|svchost|dllhost|taskhostw?|msedge|chrome|firefox|OneDrive|Teams\.exe/i;
+  var _NOTABLE_USER_LOC_RE = /[A-Za-z]:\\Users\\[^\\\r\n]+\\(?:Desktop|Documents|Downloads|Public|Scripts)|\/home\/[^/\r\n]+\/|\/root\/|\/opt\/|\/tmp\/|\/srv\/|\/usr\/local\//i;
+  var _NOTABLE_WIN_EXT_RE = /\.(?:exe|bat|cmd|ps1|vbs)$/i;
+
+  function _re_escape(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  function _has_notable_programs(text) { return !!(text && reSearch(_NOTABLE_EXE_RE, text)); }
+  C._has_notable_programs = _has_notable_programs;
+
+  function _parse_notable_programs(text, ws, source, facts) {
+    var seen = {}, currentDir = '', h = 'host:' + ws.target;
+    var lines = String(text || '').split(/\r?\n/);
+    for (var li = 0; li < lines.length; li++) {
+      var line = lines[li];
+      var dm = reSearch(_NOTABLE_DIRHDR_RE, line);
+      if (dm) { currentDir = dm.groups.d.trim(); continue; }
+      var lm = _NOTABLE_LDIR_RE.exec(line);
+      if (lm) { currentDir = lm.groups.d.trim(); continue; }
+      var exeMatches = reAll(_NOTABLE_EXE_RE, line);
+      for (var ei = 0; ei < exeMatches.length; ei++) {
+        var name = exeMatches[ei].groups.name.trim();
+        if (!name) continue;
+        // resolve the file's path: a full path on this line, else the current directory context
+        var full = new RegExp("(?:[A-Za-z]:\\\\[^\\s\"'|<>]+|/[^\\s\"'|<>]+)?" + _re_escape(name)).exec(line);
+        var token = full ? full[0] : name;
+        var path;
+        if (token.indexOf('\\') >= 0 || token.indexOf('/') >= 0) path = token;
+        else if (currentDir) {
+          var sep = currentDir.indexOf('\\') >= 0 ? '\\' : '/';
+          path = C.stripChars(currentDir, '\\/') + sep + name;
+        } else path = name;
+        if (reSearch(_NOTABLE_IGNORE_RE, path)) continue;
+        var suggestive = !!reSearch(_NOTABLE_NAME_RE, name);
+        var userLoc = !!reSearch(_NOTABLE_USER_LOC_RE, path);
+        if (!(suggestive || userLoc)) continue;
+        var key = path.toLowerCase();
+        if (seen[key]) continue;
+        seen[key] = true;
+        var reason = (suggestive && userLoc) ? 'suggestive name in a user location'
+          : suggestive ? 'suggestive name' : 'bespoke program in a user location';
+        var win = !!(reSearch(_NOTABLE_WIN_EXT_RE, name) || path.indexOf('\\') >= 0);
+        _add(facts, mkFact('host.notable_program', h, { name: name, path: path, reason: reason, os: win ? 'windows' : 'linux' }, S, source));
+        if (Object.keys(seen).length >= 15) return;
+      }
+    }
+  }
+  C._parse_notable_programs = _parse_notable_programs;
 
   var _SHADOW_LINE_RE = /^(?<u>[a-z_][\w.-]{0,31}):\$(?:1|2[aby]|5|6|y)\$[^\s:]+/im;
   function _parse_shadow_file(text, command, ws, source, facts) {

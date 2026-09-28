@@ -70,7 +70,7 @@
       "tool": "snmpwalk",
       "tools": ["onesixtyone", "snmpwalk", "snmp-check"],
       "requires_any": ["snmp.reachable", "port:161", "scan.nmap.udp"],
-      "produces": ["snmp.community", "snmp.info"],
+      "produces": ["snmp.community", "snmp.info", "ad.user_list", "credential.candidate"],
       "priority": 64,
       "phase": "enum",
       "proves": "a readable SNMP community string and the system information it exposes",

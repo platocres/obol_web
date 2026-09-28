@@ -711,20 +711,78 @@
   var _SCCM_NAA_USER_RE = /NetworkAccess(?:Username|Account)\s*[:=]\s*\S/i;
   var _SCCM_NAA_PASS_RE = /NetworkAccessPassword\s*[:=]\s*\S/i;
   var _SCCM_NAA_GENERIC_RE = /\bNAA\b.*(?:cred|password|username)/i;
+  // A clean sccmhunter/SharpSCCM run: the banner, plus the lines that settle whether SCCM/MECM exists.
+  var _SCCM_BANNER_RE = /SCCMHunter\s+v[\d.]+|SharpSCCM/i;
+  var _SCCM_ABSENT_RE = /System Management Container not found|No results found|\bno sccm\b|not vulnerable to sccm/i;
+  // A real POSITIVE finding, not a query DESCRIPTION line. Anchor on the success marker / "Found …" so
+  // a negative run's "[*] Querying LDAP …" / "Searching … for 'SCCM'" lines never read as a hit.
+  var _SCCM_PRESENT_RE = /\[\+\]|System Management Container found|\bFound\b[^\r\n]{0,60}(?:management point|distribution point|site (?:server|system|code)|SMS Provider)|\bprimary site code\b/i;
+
   function _parse_sccm(text, ws, source, facts) {
     var users = reAll(_SCCM_NAA_USER_RE, text);
     var hasPass = !!reSearch(_SCCM_NAA_PASS_RE, text);
     var generic = !!reSearch(_SCCM_NAA_GENERIC_RE, text);
-    if (!((users.length && hasPass) || (generic && hasPass))) return;
-    _add(facts, mkFact('credential.candidate', C._scope_for_domain(ws),
-      { kind: 'sccm_naa', count: Math.max(users.length, 1) }, S, source));
+    if ((users.length && hasPass) || (generic && hasPass)) {
+      _add(facts, mkFact('credential.candidate', C._scope_for_domain(ws),
+        { kind: 'sccm_naa', count: Math.max(users.length, 1) }, S, source));
+      return;
+    }
+    // No NAA secret. Record the enumeration outcome so the move settles and the report is honest, but
+    // only when the output is genuinely an sccmhunter/SharpSCCM run with a decisive result line.
+    var present = !!reSearch(_SCCM_PRESENT_RE, text);
+    var absent = !!reSearch(_SCCM_ABSENT_RE, text);
+    if (!(reSearch(_SCCM_BANNER_RE, text) && (present || absent))) return;
+    _add(facts, mkFact('sccm.enumerated', 'host:' + ws.target,
+      { present: present, method: 'sccmhunter' }, S, source));
   }
   C._parse_sccm = _parse_sccm;
+
+  // §R2 A1 domain-control proof. From a DACL read of the DOMAIN object
+  // (`bloodyAD get object 'DC=…' --resolve-sd`), record an ad.domain_control {principal, right} for
+  // every principal that holds a domain-control right on the domain root. EARNED evidence that a group
+  // grants domain takeover. Self-gating: only a --resolve-sd read whose target DN is the domain root,
+  // and only control rights, are recorded.
+  var _DC_RIGHT_RE = /(WriteDacl|WRITE_DACL|GenericAll|GENERIC_ALL|WriteOwner|WRITE_OWNER|\bOwns\b|GetChangesAll|Get-Changes-All|AllExtendedRights)/i;
+  var _TRUSTEE_LABEL_RE = /(?:trustee|principal|identity|account)\s*[:=]\s*(.+?)\s*$/i;
+  var _DC_ROOT_DN_RE = /get object\s+['"]?(?:dc=[^,'" ]+)(?:\s*,\s*dc=[^,'" ]+)+/i;
+  var _INLINE_TRUSTEE_RE = /([A-Za-z0-9.\-]+\\[A-Za-z0-9.\-_$ ]+?)\s*$/;
+
+  function _normalize_trustee(raw) {
+    var s = C.stripChars((raw || '').trim(), "'\"");
+    if (s.indexOf('\\') >= 0) s = s.split('\\').pop();
+    if (s.indexOf('@') >= 0) s = s.split('@')[0];
+    return s.trim();
+  }
+  C._normalize_trustee = _normalize_trustee;
+
+  function _parse_bloodyad_domain_control(text, ws, command, source, facts) {
+    var low = (command || '').toLowerCase();
+    if (low.indexOf('get object') < 0 || low.replace(/_/g, '-').indexOf('resolve-sd') < 0) return;
+    if (!reSearch(_DC_ROOT_DN_RE, low)) return;
+    var current = '';
+    text.split(/\r?\n/).forEach(function (raw) {
+      var line = raw.trim();
+      if (!line) return;
+      var lab = reSearch(_TRUSTEE_LABEL_RE, line);
+      if (lab && !reSearch(_DC_RIGHT_RE, lab[1])) current = _normalize_trustee(lab[1]);
+      var rt = reSearch(_DC_RIGHT_RE, line);
+      if (!rt) return;
+      var principal = current;
+      var inline = line.slice(0, rt.index);
+      var bs = reSearch(_INLINE_TRUSTEE_RE, inline);
+      if (bs) principal = _normalize_trustee(bs[1]);
+      if (!principal) return;
+      _add(facts, mkFact('ad.domain_control', C._scope_for_domain(ws),
+        { principal: principal, right: rt[1], object: 'domain' }, S, source));
+    });
+  }
+  C._parse_bloodyad_domain_control = _parse_bloodyad_domain_control;
 
   function _parse_ad_abuse_output(actionId, text, ws, command, source, facts) {
     if (!(_is_ad_abuse_command(command) || C._AD_ABUSE_ACTION_IDS.has(actionId))) return;
     _parse_ad_control_paths(text, ws, command, source, facts);
     _parse_bloodyad_writable(text, ws, command, source, facts);
+    _parse_bloodyad_domain_control(text, ws, command, source, facts);
     _parse_added_computer(text, ws, command, source, facts);
     _parse_kerberos_ticket_material(text, ws, command, source, facts);
     _parse_gmsa_material(text, ws, command, source, facts);

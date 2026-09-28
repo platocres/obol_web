@@ -29,7 +29,7 @@
   var DERIVED_TOKENS = {
     target: 1, domain: 1, basedn: 1, dc: 1, user: 1, password: 1, nthash: 1, lhost: 1,
     userlist: 1, hashfile: 1, wordlist: 1, dc_netbios: 1, dc_account: 1, domain_sid: 1,
-    target_sam: 1, group: 1, ca_name: 1, template: 1, pfx: 1, nmap_ports: 1,
+    target_sam: 1, group: 1, ca_name: 1, template: 1, pfx: 1, nmap_ports: 1, krbtgt_hash: 1,
   };
   // Ad-hoc, operator-supplied free-text tokens get an inline fill box right on the card (the coach
   // stays a builder-free surface — this only completes a placeholder, no toggles). Nice labels/hints:

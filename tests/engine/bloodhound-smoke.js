@@ -168,6 +168,21 @@ BH.parse(files).then(function (summary) {
   const bareWinrm = bare.sections.find(function (s) { return s.id === 'winrm'; });
   ok(bareWinrm && bareWinrm.commands[0].indexOf('<HOST>') !== -1, 'without ctx, <HOST> placeholder is preserved');
 
+  // ── C-2: a hash-only identity gets pass-the-hash auth, never a blank -p '' (except the intentional
+  // passwordnotreqd check). A password identity gets -p 'pw'//p:'pw'. ─────────────────────────────
+  const nt = 'a'.repeat(32);
+  const hOnly = BH.domainActionCommands(summary, ['SVC'], { dc: '10.0.0.5', host: '10.0.0.6', lhost: '10.0.0.9', secret: '-H ' + nt, nt: nt, pw: null });
+  ok(hOnly.winrm[1] === 'evil-winrm -i 10.0.0.6 -u SVC -H ' + nt, 'hash-only: evil-winrm uses -H, not -p');
+  ok(hOnly.rdp[1].indexOf('/pth:' + nt) !== -1, 'hash-only: xfreerdp uses /pth, not /p:');
+  ok(hOnly.dcsync[0].indexOf('-hashes :' + nt) !== -1 && hOnly.dcsync[0].indexOf('-just-dc') !== -1, 'hash-only: impacket dcsync carries -hashes and -just-dc');
+  ok(hOnly.esc[0].indexOf('-hashes :' + nt) !== -1, 'hash-only: certipy find carries -hashes');
+  ok(hOnly.unconstrained[0].indexOf('-hashes :' + nt) !== -1, 'hash-only: printerbug uses the -hashes form');
+  // the ONLY blank -p '' allowed is the passwordnotreqd blank-auth probe
+  const blanks = Object.keys(hOnly).filter(function (k) { return k !== 'passwordnotreqd' && hOnly[k].some(function (c) { return c.indexOf("-p ''") !== -1 || c.indexOf("/p:''") !== -1; }); });
+  ok(blanks.length === 0, 'hash-only: no accidental blank -p ///p: outside the passwordnotreqd probe');
+  const pOnly = BH.domainActionCommands(summary, ['BOB'], { dc: '10.0.0.5', host: '10.0.0.6', secret: "-p 'pw'", pw: 'pw', nt: null });
+  ok(pOnly.winrm[1].indexOf("-p 'pw'") !== -1 && pOnly.rdp[1].indexOf("/p:'pw'") !== -1, 'password identity: evil-winrm -p and xfreerdp /p carry the password');
+
   // ── toFacts: conservative fact minting ─────────────────────────────────────────────────────
   const facts = BH.toFacts(summary, owned, 'domain:CORP.LOCAL');
   const kinds = facts.map(function (f) { return f.kind; });
