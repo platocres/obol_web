@@ -414,16 +414,19 @@
           : f.unknown ? 'on disk' : f.manual ? 'added' : f.confirmed ? 'on disk' : 'expected';
         var head = '<div class="ws-pv-head"><span class="ws-pv-name">' + esc(f.name) + '</span><span class="ws-pv-tag ws-pv-' + esc(tag.replace(/\s+/g, '')) + '">' + esc(tag) + '</span></div>'
           + '<div class="ws-pv-desc">' + esc(OBOL.vfs.describe(f)) + '</div>';
+        // the capture bridge: a clear, clickable pointer to paste the file's CONTENTS on Evidence — the
+        // only way a file's facts get minted (a directory sync confirms existence, never contents).
+        var cta = '<a class="ws-pv-cta" href="' + captureHref(f) + '">Paste Its Contents on Evidence →</a>';
         var body;
         if (f.image) body = '<img class="ws-pv-img" src="' + esc(f.image) + '" alt="">';
         else if (f.status === 'captured' && f.output) {
           var lines = String(f.output).replace(/\s+$/, '').split(/\n/);
           var shown = lines.slice(0, 16).join('\n') + (lines.length > 16 ? '\n… ' + (lines.length - 16) + ' more line' + (lines.length - 16 === 1 ? '' : 's') : '');
           body = '<pre class="ws-pv-term">' + esc(shown) + '</pre>';
-        } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the coach — run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '');
-        else if (f.unknown) body = '<div class="ws-pv-note">Found on your disk by a sync. Paste its contents on Evidence to read it.</div>';
-        else if (f.manual) body = '<div class="ws-pv-note">Added by hand. Paste its contents to mint any facts it proves.</div>';
-        else body = '<div class="ws-pv-note">obol expects this file but hasn\'t received its output yet.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '');
+        } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the coach — run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
+        else if (f.unknown) body = '<div class="ws-pv-note">Found on your disk by a sync. obol knows it exists but not what\'s inside.</div>' + cta;
+        else if (f.manual) body = '<div class="ws-pv-note">Added by hand. Syncing only confirms it exists — to mint facts, paste what\'s inside.</div>' + cta;
+        else body = '<div class="ws-pv-note">obol expects this file but hasn\'t received its output yet.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
         return head + body;
       }
       function place(row) {
