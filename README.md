@@ -1,5 +1,12 @@
 # Obol — your OSCP prep companion, in the browser
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)](LICENSE)
+![Backend: none](https://img.shields.io/badge/backend-none-informational?style=flat-square)
+![Dependencies: none](https://img.shields.io/badge/dependencies-none-2ea44f?style=flat-square)
+![Offline: ready](https://img.shields.io/badge/offline-ready-2ea44f?style=flat-square)
+![Runs in: browser](https://img.shields.io/badge/runs%20in-browser-8a2be2?style=flat-square)
+[![Live demo](https://img.shields.io/badge/live-demo-0aa0ff?style=flat-square)](https://platocres.github.io/obol/)
+
 **Obol is a free, browser-based sidekick for hacking practice boxes and exams.** You still do
 the hacking in your own terminal — Obol is the calm voice next to you that says *"here's the
 next command to try, and here's why,"* keeps track of what you've actually proven about a box,
