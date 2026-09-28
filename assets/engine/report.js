@@ -948,8 +948,8 @@
         var veng = { id: opts.engId || '', activities: activities, screenshots: screensRaw, workspace: opts.workspace };
         var vt = OBOL.vfs.build(veng, { suggested: [], facts: factset });
         var STATE = function (f) {
-          return f.status === 'captured' ? 'Captured' : (f.synced || f.unknown) ? 'On disk (synced)'
-            : f.manual ? 'Added by hand' : f.confirmed ? 'On disk' : 'Expected';
+          return f.status === 'captured' ? 'Captured' : (f.synced || f.unknown) ? 'On Disk (Synced)'
+            : f.manual ? 'Added by Hand' : f.confirmed ? 'On Disk' : 'Expected';
         };
         var wfolders = (vt.folders || []).filter(function (fo) { return fo.files.length; }).map(function (fo) {
           return { label: fo.label, files: fo.files.map(function (f) {
@@ -1934,7 +1934,7 @@
     return [
       H('Appendix: Working Directory', 3),
       P('Files gathered under `' + w.root + '` during this engagement (' + w.captured + ' captured of ' + w.total + ' tracked).'),
-      TBL(['Path', 'State', 'What it is'], rows),
+      TBL(['Path', 'State', 'What It Is'], rows),
     ];
   }
 

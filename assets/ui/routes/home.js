@@ -200,7 +200,7 @@
   function syncBlock(eng) {
     var cmd = (OBOL.workspace && OBOL.workspace.snapshotCmd) ? OBOL.workspace.snapshotCmd(eng) : '';
     if (!cmd) return '';
-    return '<details class="ws-sync"><summary>Sync from your disk <span class="ws-sync-tag">bulk-match the whole folder</span></summary>'
+    return '<details class="ws-sync"><summary>Sync From Your Disk <span class="ws-sync-tag">bulk-match the whole folder</span></summary>'
       + '<p class="ws-sync-hint">Run this in your working directory and paste the output back. obol confirms the files it predicted and adopts any it didn\'t know about (you can then paste their contents to mint facts). Nothing is executed here.</p>'
       + '<div class="ws-sync-cmd"><code id="ws-snap-code">' + esc(cmd) + '</code>'
       + '<button type="button" class="btn-copy ws-snap-copy" data-copy="ws-snap-code">copy</button></div>'
@@ -231,7 +231,7 @@
         + '<div class="ws-folder-h"><span class="ws-folder-name">' + esc(fo.label) + '</span>'
         + '<span class="ws-folder-count">' + (fo.files.length || '') + '</span>'
         + '<button type="button" class="ws-add" data-folder="' + U.attr(fo.key) + '" title="Add a file to ' + esc(fo.label) + '" aria-label="Add a file to ' + esc(fo.label) + '">+</button></div>'
-        + (files || '<div class="ws-folder-empty">empty</div>') + '</div>';
+        + (files || '<div class="ws-folder-empty">Empty</div>') + '</div>';
     }).join('');
     var footer = hidden ? ('<div class="ws-foot"><button type="button" class="ws-restore" data-x>' + hidden + ' hidden · restore</button></div>') : '';
     return '<aside class="ws-panel">' + head + rootLine + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
