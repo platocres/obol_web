@@ -131,7 +131,12 @@ ok(flagHunt, 'the dedicated flag-hunt move exists (not reinvented on the endgame
 ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /-H \{\{nthash\}\}/.test(c.run); }), 'flag-hunt has a pass-the-hash variant (uses the dumped Administrator hash, no password)');
 ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /nxc smb/.test(c.run) && /--spider/.test(c.run); }), 'flag-hunt LOCATES the flags remotely first (SMB spider)');
 ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /evil-winrm/.test(c.run); }), 'flag-hunt gets ON the host interactively (evil-winrm) — the report proof must be a shell on the target');
-ok(flagHunt && (flagHunt.commands || []).some(function (c) { var r = c.run || ''; return /ipconfig/.test(r) && /\btype\b\s+C:\\/i.test(r) && !/^\s*(?:nxc|evil-winrm|ssh|sshpass|impacket|wmiexec|psexec|smbclient|winrs)\b/i.test(r.trim()); }), 'flag-hunt captures each flag ON-HOST (a bare `type …\\flag.txt` beside ipconfig — not wrapped in a remote exec, so it counts for OSCP)');
+ok(flagHunt && (flagHunt.commands || []).some(function (c) { var r = c.run || ''; return /ipconfig/.test(r) && /\btype\b\s+\{\{flag_path_(?:local|root)\}\}/i.test(r) && !/^\s*(?:nxc|evil-winrm|ssh|sshpass|impacket|wmiexec|psexec|smbclient|winrs)\b/i.test(r.trim()); }), 'flag-hunt captures each flag ON-HOST (a bare `type {{flag_path_*}}` beside ipconfig — not wrapped in a remote exec, so it counts for OSCP)');
+// and the on-host capture path FILLS from a located flag (the spider result), not a placeholder
+var locFacts = new OBOL.facts.FactSet(facts.facts.slice());
+locFacts.add(OBOL.facts.makeFact({ kind: 'objective.flag_located', scope: 'host:10.0.0.5', value: { slot: 'root', name: 'root.txt', path: 'C:\\Users\\Administrator\\Desktop\\root.txt' }, source: 'spider' }));
+var capFilled = (flagHunt.commands || []).map(function (c, i) { return OBOL.command.fillCommand(flagHunt, locFacts, { params: { target: '10.0.0.5' }, profile: { platform: 'htb' } }, i).filled; });
+ok(capFilled.some(function (r) { return r.indexOf('C:\\Users\\Administrator\\Desktop\\root.txt') >= 0; }), 'the on-host capture fills the LOCATED root path from the spider result');
 // and the platform token itself resolves per profile (HTB vs OffSec) through the existing helper
 var htbNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'htb' }).names);
 var oscpNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'oscp' }).names);

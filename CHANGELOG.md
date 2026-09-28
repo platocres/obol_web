@@ -1,3 +1,9 @@
+## v11.7 — Paste the locate, and the capture command fills its own path
+
+- **The locate feeds the capture.** The step-1 SMB spider prints each flag file's path (`//host/C$/Users/…/root.txt`). Paste that output back and obol now records where each flag is (`objective.flag_located` with the exact path + slot) and **fills that path straight into the on-host capture command** — so step 3 becomes `hostname; ipconfig; type C:\Users\<foothold-user>\Desktop\user.txt` and step 4 `… type C:\Users\Administrator\Desktop\root.txt`, the real Desktops and the platform's own names, no `<user>` placeholder left to edit. Linux mirrors it.
+- **Profile-aware defaults when you skip the locate.** New `{{flag_path_local}}` / `{{flag_path_root}}` command tokens resolve to a located path first, else a sensible default for the engagement's platform — HTB `user.txt`/`root.txt`, OffSec `local.txt`/`proof.txt` — so the capture command is never wrong for the box you're on.
+- **Located flags fold into captured.** The right-rail and per-target flag cards show a 📍 *located* entry until you read the flag on-host; once the captured flag lands (same slot), the located placeholder drops so you never see both.
+
 ## v11.6 — A flag counts only when read on the host; locate → get-on-host → capture; SCCM steps aside
 
 - **A flag counts for the report only when you read it ON the target.** OSCP requires the flag in a screenshot of an interactive shell on the host (with `ipconfig`/`ip a`). So a **remote** read — `nxc`/`impacket`/`smbclient`, or an `ssh`/`evil-winrm` one-liner run from your box — now only **locates** the flag (records where it is + its value as intel, `objective.flag_located`); it never lands in the report as captured. A **bare on-host read** you type inside the interactive session (`type …\proof.txt`, `cat /root/root.txt`) is what obol records as the captured flag. This also kills the last way a stray hash could reach the report.

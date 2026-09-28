@@ -43,6 +43,18 @@ var onhost = parse('hostname; ipconfig; type C:\\Users\\Administrator\\Desktop\\
 ].join('\n'));
 ok(captured(onhost).length === 1 && captured(onhost)[0].kind === 'objective.root_flag' && captured(onhost)[0].value.flag === 'f6e5d4c3b2a1098766554433221100ff', 'a bare on-host `type proof.txt` (with ipconfig) captures the root flag for the report');
 
+// 1c. LOCATE via SMB spider: the listing prints flag-file PATHS (no value). obol records each as
+// objective.flag_located with the exact Windows path + slot, so the on-host capture can fill the real path.
+var spider = [
+  'SMB 10.0.0.5 445 DC01 [+] corp.local\\administrator:aaaa (Pwn3d!)',
+  "SMB 10.0.0.5 445 DC01 //10.0.0.5/C$/Users/Administrator/Desktop/root.txt [lastm:'2026-09-27 22:28' size:34]",
+  "SMB 10.0.0.5 445 DC01 //10.0.0.5/C$/Users/svc-user/Desktop/user.txt [lastm:'2026-09-27 22:28' size:34]",
+].join('\n');
+var sp = located(parse('nxc smb 10.0.0.5 -u administrator -H aaaa --spider C$ --regex "(local|proof|user|root|flag)\\.txt"', spider));
+ok(captured(parse('nxc smb 10.0.0.5 -u administrator -H aaaa --spider C$', spider)).length === 0, 'a spider listing captures NOTHING (it reads no value)');
+ok(sp.some(function (f) { return f.value.slot === 'root' && f.value.path === 'C:\\Users\\Administrator\\Desktop\\root.txt'; }), 'spider locates root.txt with its exact Windows path');
+ok(sp.some(function (f) { return f.value.slot === 'local' && f.value.path === 'C:\\Users\\svc-user\\Desktop\\user.txt'; }), 'spider locates user.txt (local slot) at the right user Desktop');
+
 // 2. A plain on-host `type …\proof.txt` read captures, slot from the file in the command.
 var t = captured(parse('type C:\\Users\\Administrator\\Desktop\\proof.txt', 'ba0987654321fedcba0987654321fed0\n'));
 ok(t.some(function (f) { return f.kind === 'objective.root_flag' && f.value.flag === 'ba0987654321fedcba0987654321fed0'; }), 'a direct on-host `type proof.txt` read captures the root flag');

@@ -64,8 +64,14 @@
     }
     var flags = flagFacts.map(flagLabel);
     // Located-but-not-captured: found remotely (nxc/smb), still to be read on-host for the report.
-    var capturedVals = {}; flagFacts.forEach(function (e) { if (e.value && e.value.flag) capturedVals[e.value.flag] = 1; });
-    var locatedFacts = facts.values('objective.flag_located').filter(function (v) { return !(v && capturedVals[v.flag]); });
+    var capturedVals = {}, capturedSlots = {};
+    flagFacts.forEach(function (e) { var v = e.value || {}; if (v.flag) capturedVals[v.flag] = 1; if (v.slot) capturedSlots[v.slot] = 1; });
+    var locSeen = {};
+    var locatedFacts = facts.values('objective.flag_located').filter(function (v) {
+      v = v || {};
+      if ((v.flag && capturedVals[v.flag]) || (v.slot && capturedSlots[v.slot])) return false;
+      var key = v.path || v.flag || v.slot || ''; if (locSeen[key]) return false; locSeen[key] = 1; return true;
+    });
     var flagCard = (flagFacts.length || locatedFacts.length)
       ? '<h2 class="coach-sec-h">Captured Flags</h2><ul class="flag-cards">' + flagFacts.map(function (e) {
           var v = e.value || {}; var val = v.flag || '';

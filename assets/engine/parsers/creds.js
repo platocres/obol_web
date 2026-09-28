@@ -198,8 +198,12 @@
     return 'flag';
   }
   function _flag_kind(slot) { return slot === 'root' ? 'objective.root_flag' : (slot === 'local' ? 'objective.local_flag' : 'objective.flag'); }
+  // A spidered/listed flag-file PATH — nxc/smbmap `--spider` prints `//host/C$/Users/.../root.txt [lastm:… size:…]`,
+  // smbclient/dir print a UNC/Windows path. This LOCATES a flag (records where it is) without reading its value,
+  // so the operator can read it on-host next; the exact path also fills the on-host capture command.
+  var _SPIDER_PATH_RE = /(?:\/\/|\\\\)[^\s/\\]+[/\\]([A-Za-z])\$[/\\]([^\s\[\]"']*?(?:local|proof|user|root|flag\d?)\.txt)\b/gi;
   function _parse_flags(text, ws, command, source, facts) {
-    var scope = 'host:' + ws.target, seen = {};
+    var scope = 'host:' + ws.target, seen = {}, seenPath = {};
     // On-host ⟺ a bare read (no remote transport leading the command). A remote/one-liner read is locate-only.
     var onHost = !!(command && String(command).trim()) && !_REMOTE_LEAD_RE.test(command);
     function mint(path, flag, slotHint) {
@@ -213,6 +217,14 @@
       var kind = onHost ? _flag_kind(slot) : 'objective.flag_located';
       _add(facts, mkFact(kind, scope, { flag: flag, slot: slot, name: base, path: path || '' }, S, source));
     }
+    // A located PATH with no value yet (a spider/dir listing) — record where the flag is, so the on-host
+    // capture step can fill the real path. Never a captured objective (no value = nothing read).
+    function mintPath(path, slot) {
+      if (!path || seenPath[path]) return;
+      seenPath[path] = 1;
+      var base = String(path).split(/[\\/]/).pop() || '';
+      _add(facts, mkFact('objective.flag_located', scope, { slot: slot || _slot_for_flagfile(base), name: base, path: path }, S, source));
+    }
     // 1) `===FLAG:path::value` markers — mint only when the value IS a clean flag token (the file's whole
     //    contents), never a marker whose body is tool text (a failed hunt that printed no real flag).
     var m; _FLAG_MARK_RE.lastIndex = 0;
@@ -223,6 +235,13 @@
     if (fm) {
       var slot = _slot_for_flagfile(fm.groups.file);
       String(text || '').split(/\r?\n/).forEach(function (l) { var t = l.trim(); if (_FLAG_VALUE_ANCHORED.test(t)) mint(fm.groups.file, t, slot); });
+    }
+    // 3) LOCATE: a spider/dir listing of flag-file paths (no value) → record each location + its exact path.
+    var sp; _SPIDER_PATH_RE.lastIndex = 0;
+    while ((sp = _SPIDER_PATH_RE.exec(text))) {
+      var winPath = sp[1].toUpperCase() + ':\\' + String(sp[2]).replace(/[/\\]+/g, '\\');
+      var pbase = winPath.split(/[\\/]/).pop() || '';
+      mintPath(winPath, _slot_for_flagfile(pbase));
     }
   }
   C._parse_flags = _parse_flags;
