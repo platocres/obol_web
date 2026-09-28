@@ -946,7 +946,7 @@
     try {
       if (OBOL.vfs && OBOL.vfs.build && opts.workspace && OBOL.workspace && OBOL.workspace.isConfigured(opts.workspace.root ? { workspace: opts.workspace } : {})) {
         var veng = { id: opts.engId || '', activities: activities, screenshots: screensRaw, workspace: opts.workspace };
-        var vt = OBOL.vfs.build(veng, { suggested: [] });
+        var vt = OBOL.vfs.build(veng, { suggested: [], facts: factset });
         var STATE = function (f) {
           return f.status === 'captured' ? 'Captured' : (f.synced || f.unknown) ? 'On disk (synced)'
             : f.manual ? 'Added by hand' : f.confirmed ? 'On disk' : 'Expected';

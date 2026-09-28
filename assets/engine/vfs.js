@@ -54,7 +54,9 @@
   // the flag-hunt spider, or an unresolved {{flag_path_*}} token. These are the OSCP objective files —
   // obol tells the operator to read them, assumes they are creating/saving them, and confirms the flag
   // from the paste that follows. Returns canonical proof-folder paths.
-  var FLAG_TOKEN = /(?:^|[\/\\])((?:local|proof|user|root)(?:[\w.-]*)?\.txt)$/i;
+  // ONLY the exact objective filenames (optionally a digit, e.g. local1.txt) — never `users.txt`,
+  // `rootkit.txt` or a generic list that merely starts with one of these words.
+  var FLAG_TOKEN = /(?:^|[\/\\])((?:local|proof|user|root|flag)\d*\.txt)$/i;
   function flagPaths(cmd) {
     cmd = String(cmd || '');
     var out = [];
@@ -120,6 +122,26 @@
     } catch (e) { return []; }
   }
 
+  // The FactSet to read values from: whatever the caller passed, else the live active engagement's
+  // (values are only meaningful for the engagement currently loaded in the store).
+  function activeFactset(eng) {
+    try { if (OBOL.store && OBOL.store.activeId && OBOL.store.activeId() === eng.id && OBOL.store.factSet) return OBOL.store.factSet(); } catch (e) {}
+    return null;
+  }
+  // Index a FactSet (or a raw fact array) by kind → [{scope, value, at}], SUPPORTED facts only.
+  function indexFacts(factset) {
+    var idx = {};
+    if (!factset) return idx;
+    var arr = factset.facts ? factset.facts : (Array.isArray(factset) ? factset : []);
+    var SUP = (OBOL.facts && OBOL.facts.ProofState && OBOL.facts.ProofState.SUPPORTED);
+    arr.forEach(function (f) {
+      if (!f || !f.kind) return;
+      if (SUP != null && f.state != null && f.state !== SUP) return;
+      (idx[f.kind] = idx[f.kind] || []).push({ scope: f.scope || '', value: f.value || {}, at: f.created_at || 0 });
+    });
+    return idx;
+  }
+
   // Build the virtual workspace model for an engagement.
   function build(eng, opts) {
     eng = eng || {}; opts = opts || {};
@@ -130,7 +152,7 @@
     function file(path, patch) {
       var f = byPath[path] || (byPath[path] = { path: path, name: baseName(path), folder: folderOf(path),
         status: 'expected', origin: 'ran', confirmed: false, flag: false, manual: false, synced: false, unknown: false,
-        actionId: '', size: 0, mtime: '', at: 0, facts: [], tool: '', output: '', image: null, command: '', title: '' });
+        actionId: '', size: 0, mtime: '', at: 0, facts: [], valMap: null, tool: '', output: '', image: null, command: '', title: '' });
       if (patch) for (var k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) f[k] = patch[k];
       return f;
     }
@@ -142,6 +164,30 @@
 
     var flagCaptured = false; // did any paste actually prove a flag? then anticipated flag files are real.
     var referenced = {};      // basenames any activity command touched — used to CONFIRM expected files.
+
+    // Fact VALUES, so a file can state what it actually proved ("5 open ports", "NTDS: 15 accounts").
+    // Pull the active FactSet (or one the caller passed) and index it by kind; matched to a file by the
+    // producing activity's kinds + scope + time. Absent → files fall back to generic counts, never guesses.
+    var factset = opts.facts || activeFactset(eng);
+    var factIdx = indexFacts(factset);
+    // best value for a produced kind on a given scope near a time: prefer scope match, then time proximity.
+    function valueFor(kind, scope, at) {
+      var cands = factIdx[kind]; if (!cands || !cands.length) return null;
+      var best = null, bestScore = -1;
+      cands.forEach(function (c) {
+        var score = (scope && c.scope === scope) ? 1000 : (c.scope && scope && c.scope.split(':')[0] === scope.split(':')[0]) ? 100 : 0;
+        score -= Math.min(999, Math.abs((c.at || 0) - (at || 0)) / 1000); // nearer in time wins the tie
+        if (score > bestScore) { bestScore = score; best = c; }
+      });
+      return best ? best.value : null;
+    }
+    function attachValues(f, a) {
+      (a.produced || []).forEach(function (k) {
+        if (f.valMap && f.valMap[k]) return;
+        var v = valueFor(k, a.scope || (a.target ? ('host:' + a.target) : ''), a.at);
+        if (v && typeof v === 'object') { f.valMap = f.valMap || {}; f.valMap[k] = v; }
+      });
+    }
 
     // 1) files implied by the commands the operator actually ran (the activity ledger).
     (eng.activities || []).forEach(function (a) {
@@ -161,6 +207,7 @@
         produced.forEach(function (k) { if (f.facts.indexOf(k) === -1) f.facts.push(k); });
         if (content) { f.status = 'captured'; if (content.length > f.output.length) f.output = content; }
         else if (a.file) { f.status = 'captured'; }
+        attachValues(f, a);
       });
       flagPaths(a.command).forEach(function (nm) {
         var f = flagFile(nm);
@@ -280,9 +327,38 @@
     var ext = (f.name.split('.').pop() || '').toLowerCase();
     return EXT_PURPOSE[ext] || (f.tool ? (f.tool + ' Output') : 'File');
   }
+  // Count with an EXPLICIT plural so no word is mangled ("3 NTLM hashes", never "3 NTLM hashs").
+  // Metric words stay lowercase; acronyms keep their exact stylization (NTLM, NTDS, AS-REP, gMSA…).
+  function cnt(n, sing, plur) { return n + ' ' + (n === 1 ? sing : plur); }
+  // credential.candidate value.kind → [singular, plural], all cased deliberately.
+  var CAND_LABEL = {
+    ntlm_hash: ['NTLM hash', 'NTLM hashes'], asrep_hash: ['AS-REP hash', 'AS-REP hashes'],
+    tgs_hash: ['TGS hash', 'TGS hashes'], gpp_cpassword: ['GPP password', 'GPP passwords'],
+    gmsa_ntlm_hash: ['gMSA hash', 'gMSA hashes'], source_secret: ['source secret', 'source secrets'],
+    database_dump_secret: ['database secret', 'database secrets'], machine_account: ['machine account', 'machine accounts'],
+  };
+  // The richest honest metric obol can state from the PARSED VALUES a file proved — the real "5 open
+  // ports (22, 80, 445)", "NTDS: 15 accounts", "3 NTLM hashes". Values come straight from the FactSet,
+  // never inferred from the filename. Returns '' when no value-bearing fact is linked to the file.
+  function richMetric(vm) {
+    if (!vm) return '';
+    var v;
+    if ((v = vm['ports.open']) && (v.ports || []).length) {
+      var ps = v.ports.slice(0, 6).join(', ');
+      return cnt(v.ports.length, 'open port', 'open ports') + ' (' + ps + (v.ports.length > 6 ? ', …' : '') + ')';
+    }
+    if ((v = vm['loot.ntds'])) { var na = v.count || (v.entries || []).length; return na ? ('NTDS: ' + cnt(na, 'account', 'accounts')) : 'NTDS dump'; }
+    if ((v = vm['hash.ntlm'])) { var nh = v.count || (v.entries || []).length; return nh ? cnt(nh, 'NTLM hash', 'NTLM hashes') : 'NTLM hashes'; }
+    if ((v = vm['ad.user_list'])) { var nu = v.count || (v.users || []).length; return nu ? cnt(nu, 'username', 'usernames') : 'usernames'; }
+    if ((v = vm['credential.candidate'])) { var lbl = CAND_LABEL[v.kind]; var nc = v.count || 1; return lbl ? cnt(nc, lbl[0], lbl[1]) : cnt(nc, 'credential lead', 'credential leads'); }
+    if ((v = vm['credential.available'])) { var who = v.user ? (v.user + (v.domain ? ('@' + v.domain) : '')) : ''; return who ? ('credential: ' + who) : 'validated credential'; }
+    if ((v = vm['ad.control_paths'])) { return 'domain control path'; }
+    return '';
+  }
   function metricOf(f) {
-    if (f.facts && f.facts.length) return f.facts.length + ' fact' + (f.facts.length === 1 ? '' : 's');
-    if (f.output) { var n = String(f.output).replace(/\s+$/, '').split(/\n/).length; return n + ' line' + (n === 1 ? '' : 's'); }
+    var rich = richMetric(f.valMap); if (rich) return rich;
+    if (f.facts && f.facts.length) return cnt(f.facts.length, 'fact', 'facts');
+    if (f.output) { var n = String(f.output).replace(/\s+$/, '').split(/\n/).length; return cnt(n, 'line', 'lines'); }
     if (f.size) { var b = f.size; return b < 1024 ? (b + ' B') : b < 1048576 ? ((b / 1024).toFixed(1) + ' kB') : ((b / 1048576).toFixed(1) + ' MB'); }
     return '';
   }

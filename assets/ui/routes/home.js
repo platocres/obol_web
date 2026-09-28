@@ -193,7 +193,7 @@
       + (f.at ? '<span class="ws-when">' + esc(ago(f.at)) + '</span>' : '')
       + '<button type="button" class="ws-rm" data-rel="' + U.attr(rel) + '" title="Remove from workspace" aria-label="Remove ' + U.attr(f.name) + '">×</button>'
       + '</summary>'
-      + '<div class="ws-file-body">' + body + '</div></details>';
+      + '<div class="ws-file-body">' + desc + body + '</div></details>';
   }
   // The "Sync from your disk" block: a one-shot snapshot command to run, and a box to paste its listing
   // back. obol reconciles — confirming files it predicted, adopting files it didn't know about.
