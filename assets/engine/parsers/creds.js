@@ -202,11 +202,23 @@
   // smbclient/dir print a UNC/Windows path. This LOCATES a flag (records where it is) without reading its value,
   // so the operator can read it on-host next; the exact path also fills the on-host capture command.
   var _SPIDER_PATH_RE = /(?:\/\/|\\\\)[^\s/\\]+[/\\]([A-Za-z])\$[/\\]([^\s\[\]"']*?(?:local|proof|user|root|flag\d?)\.txt)\b/gi;
+  // Strip a leading shell prompt so a pasted interactive frame's echoed command can be read: an on-host
+  // capture is pasted whole — `*Evil-WinRM* PS C:\Users\…> hostname; ipconfig; type C:\…\user.txt` — and the
+  // read (and whether it was on-host) has to come from that echoed line, since the paste box may attach a
+  // different command (the spider that located the flag) or none at all.
+  function _strip_prompt(line) {
+    return String(line)
+      .replace(/^\s*\*?Evil-WinRM\*?\s*PS\s+[A-Za-z]:\\[^>\r\n]*>\s*/i, '') // *Evil-WinRM* PS C:\...>
+      .replace(/^\s*PS\s+[A-Za-z]:\\[^>\r\n]*>\s*/i, '')                    // PS C:\...>
+      .replace(/^\s*[A-Za-z]:\\[^>\r\n]*>\s*/, '')                          // C:\...>
+      .replace(/^\s*[└├]─?[$#]\s*/, '')                                     // kali └─$ / └─#
+      .replace(/^\s*[\w.-]+@[\w.-]+:[^$#\r\n]*[$#]\s*/, '')                 // user@host:~$ / #
+      .replace(/^\s*[$#]\s+/, '');                                          // bare $ / #
+  }
   function _parse_flags(text, ws, command, source, facts) {
     var scope = 'host:' + ws.target, seen = {}, seenPath = {};
-    // On-host ⟺ a bare read (no remote transport leading the command). A remote/one-liner read is locate-only.
-    var onHost = !!(command && String(command).trim()) && !_REMOTE_LEAD_RE.test(command);
-    function mint(path, flag, slotHint) {
+    var cmdRemote = !!(command && String(command).trim()) && _REMOTE_LEAD_RE.test(command);
+    function mint(path, flag, slotHint, onHost) {
       if (!flag || seen[flag]) return;
       seen[flag] = 1;
       var base = String(path || '').split(/[\\/]/).pop() || '';
@@ -227,14 +239,26 @@
     }
     // 1) `===FLAG:path::value` markers — mint only when the value IS a clean flag token (the file's whole
     //    contents), never a marker whose body is tool text (a failed hunt that printed no real flag).
+    var markerOnHost = !!(command && String(command).trim()) && !cmdRemote;
     var m; _FLAG_MARK_RE.lastIndex = 0;
-    while ((m = _FLAG_MARK_RE.exec(text))) { var body = (m.groups.body || '').trim(); if (_FLAG_VALUE_ANCHORED.test(body)) mint(m.groups.path, body); }
-    // 2) a direct read of a named flag file (`type …\proof.txt`) — the flag must stand ALONE on its own
-    //    output line, so a 32-hex embedded in an auth banner or a hash-dump line is never taken for a flag.
+    while ((m = _FLAG_MARK_RE.exec(text))) { var body = (m.groups.body || '').trim(); if (_FLAG_VALUE_ANCHORED.test(body)) mint(m.groups.path, body, null, markerOnHost); }
+    // 2) a direct read of a named flag file (`type …\proof.txt`, `cat …/root.txt`) — from the attached
+    //    command, else from the read echoed after a shell prompt in the pasted frame. The flag must stand
+    //    ALONE on its own output line, so a 32-hex in an auth banner or a hash-dump line is never a flag.
+    var readFile = null, readOnHost = false;
     var fm = _FLAG_FILE_IN_CMD_RE.exec(command || '');
-    if (fm) {
-      var slot = _slot_for_flagfile(fm.groups.file);
-      String(text || '').split(/\r?\n/).forEach(function (l) { var t = l.trim(); if (_FLAG_VALUE_ANCHORED.test(t)) mint(fm.groups.file, t, slot); });
+    if (fm) { readFile = fm.groups.file; readOnHost = !cmdRemote; }
+    else {
+      var ls = String(text || '').split(/\r?\n/);
+      for (var li = 0; li < ls.length; li++) {
+        var bare = _strip_prompt(ls[li]);
+        var fx = _FLAG_FILE_IN_CMD_RE.exec(bare);
+        if (fx) { readFile = fx.groups.file; readOnHost = !_REMOTE_LEAD_RE.test(bare); break; }
+      }
+    }
+    if (readFile) {
+      var slot = _slot_for_flagfile(readFile);
+      String(text || '').split(/\r?\n/).forEach(function (l) { var t = l.trim(); if (_FLAG_VALUE_ANCHORED.test(t)) mint(readFile, t, slot, readOnHost); });
     }
     // 3) LOCATE: a spider/dir listing of flag-file paths (no value) → record each location + its exact path.
     var sp; _SPIDER_PATH_RE.lastIndex = 0;
