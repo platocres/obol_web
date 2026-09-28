@@ -223,6 +223,7 @@
     'cloud.aws_access': 'AWS cloud access', 'exploit.candidate': 'a candidate exploit',
     'objective.flag': 'a captured flag', 'objective.local_flag': 'a captured local flag',
     'objective.root_flag': 'a captured root/proof flag', 'objective.swept': 'a completed post-Domain-Admin flag sweep',
+    'objective.flag_located': 'a located flag',
     'phish.prepared': 'a prepared client-side (library-ms/WebDAV) attack',
     'host.domain': "the host's AD domain", 'host.fqdn': "the host's fully-qualified name",
     'host.hostname': "the host's computer name", 'smb.signing': 'SMB signing posture',

@@ -395,7 +395,7 @@
           out.push('```'); out.push(''); break;
         }
         case 'callout': {
-          var prefix = { warn: '⚠️ ', gap: '🔴 ', ok: '✅ ', note: '> ' }[b.kind] || '> ';
+          var prefix = { warn: 'Note: ', gap: 'Proof gap: ', ok: '', note: '' }[b.kind] || '';
           out.push(b.kind !== 'note' ? ('> ' + prefix + b.text) : ('> ' + b.text));
           out.push(''); break;
         }
@@ -409,8 +409,8 @@
             out.push(''); out.push('_' + (b.block_label || 'obol-captured command output') + ':_');
             out.push('```'); out.push(String(b.block).replace(/\n+$/, '')); out.push('```');
           }
-          if (b.gap) out.push('- 🔴 **proof gap:** ' + b.gap);
-          else if (b.compliant) out.push('- ✅ OSCP-compliant (interactive shell, target IP visible)');
+          if (b.gap) out.push('- **Proof gap:** ' + b.gap);
+          else if (b.compliant) out.push('- OSCP-compliant (interactive shell, target IP visible)');
           out.push(''); break;
         case 'image':
           out.push('![' + (b.caption || 'screenshot') + '](' + (b.path || b.data_uri) + ')');
@@ -510,6 +510,53 @@
       }
     });
     return out.join('\n');
+  }
+
+  // Self-contained stylesheet for the DOWNLOADED .html report — the on-screen paper styling lives in
+  // obol.css, which a standalone file cannot see, so without this the export renders as browser-default
+  // serif at full page width (i.e. "awful"). Kept in sync with the print/paper look: centred paper column,
+  // sans body, bordered tables with shaded headers, and the shaded terminal boxes with muted prompts.
+  var STANDALONE_CSS = [
+    ':root{color-scheme:light}*{box-sizing:border-box}',
+    'body{margin:0;background:#eef0f3;color:#16181d;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}',
+    '.rep-doc{max-width:820px;margin:32px auto;background:#fff;padding:44px 54px;border:1px solid #e2e5ea;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.06)}',
+    'h1,h2,h3,h4,h5,h6{line-height:1.25;color:#12161c}',
+    'h1{font-size:26px;margin:0 0 18px;padding-bottom:10px;border-bottom:2px solid #1f2a37}',
+    'h2{font-size:20px;margin:32px 0 10px;padding-bottom:5px;border-bottom:1px solid #dfe3ea}',
+    'h3{font-size:16.5px;margin:24px 0 8px}h4{font-size:14px;margin:18px 0 6px;color:#2b3440}',
+    'h5{font-size:12.5px;margin:16px 0 5px;text-transform:uppercase;letter-spacing:.05em;color:#5a6572}',
+    'p{margin:9px 0}ul,ol{padding-left:22px;margin:9px 0}li{margin:3px 0}',
+    'a{color:#0b5cad;word-break:break-word}',
+    'table{border-collapse:collapse;width:100%;margin:11px 0;font-size:13.5px}',
+    'th,td{border:1px solid #d7dce3;padding:6px 9px;text-align:left;vertical-align:top}',
+    'th{background:#eef1f5;font-weight:700}table.kv th{width:170px;white-space:nowrap}',
+    'caption{caption-side:top;text-align:left;font-size:12px;color:#5a6572;margin-bottom:4px}',
+    'code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}',
+    ':not(pre)>code{background:#eef1f5;color:#1f2a37;padding:1px 5px;border-radius:4px;word-break:break-word}',
+    'pre{background:#f0f1f3;border:1px solid #ccc;border-left:3px solid #9aa4b0;border-radius:4px;padding:10px 12px;margin:10px 0;',
+    'font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#14181d;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}',
+    '.kali-term .kt-b{color:#2e7d32}.kali-term .kt-u{color:#2e7d32;font-weight:700}',
+    '.kali-term .kt-c{color:#000;font-weight:700}.kali-term .kt-o{color:#1a1a1a}',
+    '.kali-term.term-target{border-left-color:#b5651d}.kali-term.term-target .kt-u{color:#9a5a12}',
+    '.callout{border:1px solid #d7dce3;border-left:4px solid #9aa4b0;background:#f7f8fa;padding:9px 13px;margin:12px 0;border-radius:4px}',
+    '.callout.gap{border-left-color:#c2410c;background:#fdf3ee}.callout.warn{border-left-color:#b7791f;background:#fdf8ee}',
+    '.callout.ok{border-left-color:#2e7d32;background:#eef7ee}.callout.note{border-left-color:#5a6572}',
+    '.proof-item{margin:14px 0}.prooflabel{font-size:12px;color:#5a6572;margin:8px 0 3px}',
+    'img.shot{max-width:100%;height:auto;border:1px solid #d7dce3;border-radius:4px}',
+    'figure{margin:12px 0}figcaption{font-size:12px;color:#5a6572;margin-top:4px}',
+    'hr{border:none;border-top:1px solid #dfe3ea;margin:22px 0}nav.toc{display:none}',
+    '@media print{html,body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}',
+    '.rep-doc{max-width:none;margin:0;padding:0;border:none;border-radius:0;box-shadow:none}',
+    '.page-break{break-after:page;page-break-after:always}}',
+    '@media (max-width:720px){.rep-doc{padding:24px 18px;margin:0;border-radius:0}}',
+  ].join('');
+
+  // Wrap rendered report HTML in a full, self-contained document for download/print.
+  function htmlDocument(bodyHtml, title) {
+    return '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+      + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+      + '<title>' + esc(title || 'Report') + '</title><style>' + STANDALONE_CSS + '</style></head>'
+      + '<body><main class="rep-doc">' + bodyHtml + '</main></body></html>';
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1022,7 +1069,7 @@
     if (flags.local || foothold) return 'User';
     return 'None proven';
   }
-  function yn(v) { return v ? '✅ yes' : '— no'; }
+  function yn(v) { return v ? 'Yes' : 'No'; }
   function targetFlagSlots(t) { var s = {}; (t.flags || []).forEach(function (f) { s[f.slot] = 1; }); return s; }
   function compromisedTargets(ctx) { return (ctx.targets || []).filter(function (t) { return oscpPriv(t) !== 'None proven'; }); }
 
@@ -1206,7 +1253,7 @@
       var needReview = (slots.local || slots.root) && !anyProven && !(proof.screenshots || []).length;
       rows.push([
         (t.label || t.host) + ' (' + t.host + ')',
-        yn(!!slots.local), yn(!!slots.root), oscpPriv(t), ev, needReview ? '⚠ review' : 'ok',
+        yn(!!slots.local), yn(!!slots.root), oscpPriv(t), ev, needReview ? 'Review' : 'Complete',
       ]);
     });
     var blocks = [H('Exam Objective Summary', 2)];
@@ -1713,7 +1760,7 @@
       if (ch.length) {
         blocks.push(H('Attack Path', 4));
         blocks.push(UL(ch.map(function (s) {
-          var lead = (s.isFlag ? '🚩 ' : '') + '**' + s.label + '**';
+          var lead = '**' + s.label + '**';
           var det = s.detail ? ' — ' + s.detail : '';
           var tech = s.technique ? '  ·  _' + s.technique + '_' : '';
           var from = (s.enabledBy && s.enabledBy.length) ? '  ·  _(from ' + s.enabledBy.join(', ') + ')_' : '';
@@ -2192,6 +2239,7 @@
     document: document,
     toMarkdown: toMarkdown,
     toHtml: toHtml,
+    htmlDocument: htmlDocument,
     validate: validate,
     filenameStem: filenameStem,
     // true for an OffSec exam profile (OSCP/OSWP) whose cover needs a candidate name + OSID

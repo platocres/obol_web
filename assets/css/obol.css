@@ -37,6 +37,15 @@
   --green: #10B981; --red: #EF4444; --orange: #F97316; --yellow: #EAB308; --teal: #14B8A6; --purple: #A855F7;
   --critical: #E11D48; --high: #F97316; --medium: #EAB308; --low: #3B82F6; --info: #6B7591;
   --ph-recon: #38BDF8; --ph-enum: #818CF8; --ph-creds: #F59E0B; --ph-access: #34D399; --ph-escalate: #F472B6; --ph-loot: #A855F7;
+  /* Path-graph node states — five distinct treatments (see the graph legend). Solid hues carry the
+     "acted / reached" states (gold = do next, green = proven, blue = done); hollow dashed outlines
+     carry the "not yet" states (green outline = pending goal, slate outline = blocked). Kept as
+     dedicated tokens so the SVG nodes and the legend swatches never drift apart. */
+  --g-next: #F5A623; --g-next-line: #B9770E; --g-next-ink: #1c1400;
+  --g-proven: #16A34A; --g-proven-line: #0B5D2A;
+  --g-done: #3E7BC4; --g-done-line: #24507F;
+  --g-goal-line: #34D399; --g-goal-ink: #6EE7B7;
+  --g-locked-line: #64748B; --g-locked-ink: #7C8AA3;
   --radius: 11px;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --sans: "Nunito Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -443,6 +452,37 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .graph-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .graph-toggle { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
 .graph-scroll { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 8px; }
+/* Path-graph legend — sits above the pan/zoom viewport and keys the five node states by colour/shape. */
+.gv-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 10px; padding: 8px 11px; margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); font-size: 11.5px; color: var(--text-2); }
+.gv-legend-h { text-transform: uppercase; letter-spacing: .09em; font-size: 9.5px; font-weight: 700; color: var(--muted); margin-right: 2px; }
+/* Each chip is a filter toggle: on by default, ringed in its category colour; off → dimmed + greyed. */
+.gv-lg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; font: inherit; font-size: 11.5px;
+  color: var(--text-2); background: var(--surf2); border: 1.5px solid var(--line); border-radius: 20px; padding: 3px 10px 3px 8px;
+  transition: opacity .12s ease, border-color .12s ease; }
+.gv-lg:hover { color: var(--text); }
+.gv-lg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gv-lg i { width: 15px; height: 11px; border-radius: 3px; box-sizing: border-box; flex: none; }
+.gv-lg-next { border-color: var(--g-next); } .gv-lg-next i { background: var(--g-next); border: 1px solid var(--g-next-line); }
+.gv-lg-proven { border-color: var(--g-proven); } .gv-lg-proven i { background: var(--g-proven); border: 1px solid var(--g-proven-line); border-radius: 6px; }
+.gv-lg-done { border-color: var(--g-done); } .gv-lg-done i { background: var(--g-done); border: 1px solid var(--g-done-line); }
+.gv-lg-goal { border-color: var(--g-goal-line); } .gv-lg-goal i { background: none; border: 1.5px dashed var(--g-goal-line); border-radius: 6px; }
+.gv-lg-locked { border-color: var(--g-locked-line); } .gv-lg-locked i { background: none; border: 1.5px dashed var(--g-locked-line); }
+/* Off state — chip dimmed to signal its category is hidden from the graph. */
+.gv-lg.off { opacity: .42; border-color: var(--line) !important; }
+.gv-lg.off i { filter: grayscale(1); }
+/* Category filters: a gv-off-<cat> class on the viewport hides that category's nodes and any edge
+   whose either endpoint is in it. */
+.graphview.gv-off-next svg.obol-graph .gcat-next,
+.graphview.gv-off-next svg.obol-graph .gedge-from-next, .graphview.gv-off-next svg.obol-graph .gedge-to-next,
+.graphview.gv-off-proven svg.obol-graph .gcat-proven,
+.graphview.gv-off-proven svg.obol-graph .gedge-from-proven, .graphview.gv-off-proven svg.obol-graph .gedge-to-proven,
+.graphview.gv-off-done svg.obol-graph .gcat-done,
+.graphview.gv-off-done svg.obol-graph .gedge-from-done, .graphview.gv-off-done svg.obol-graph .gedge-to-done,
+.graphview.gv-off-goal svg.obol-graph .gcat-goal,
+.graphview.gv-off-goal svg.obol-graph .gedge-from-goal, .graphview.gv-off-goal svg.obol-graph .gedge-to-goal,
+.graphview.gv-off-locked svg.obol-graph .gcat-locked,
+.graphview.gv-off-locked svg.obol-graph .gedge-from-locked, .graphview.gv-off-locked svg.obol-graph .gedge-to-locked { display: none; }
 /* Pan/zoom viewport for the path graph: fixed-height window, the SVG moved by a transform. */
 .graphview { position: relative; overflow: hidden; height: 460px; border: 1px solid var(--line);
   border-radius: var(--radius); background: var(--bg1); cursor: grab; touch-action: none; user-select: none;
@@ -496,13 +536,16 @@ svg.obol-graph .g-node:focus { outline: none; }
 .flag-shot { max-height: 54px; border: 1px solid var(--line); border-radius: 6px; display: block; }
 .flag-shot-rm { position: absolute; top: -7px; right: -7px; width: 18px; height: 18px; border-radius: 50%; border: none;
   background: var(--critical); color: #fff; font-size: 11px; line-height: 1; cursor: pointer; }
-svg.obol-graph .g-fact-proven rect { fill: var(--green); stroke: #0d3b0d; }
-svg.obol-graph .g-fact-future rect { fill: var(--bg3); stroke: var(--line); stroke-dasharray: 3 2; }
-svg.obol-graph .g-fact-future text { fill: var(--muted); }
-svg.obol-graph .g-action-done rect { fill: #2b5d8a; stroke: #173952; }
-svg.obol-graph .g-action-next rect { fill: var(--accent); stroke: var(--accent-2); }
-svg.obol-graph .g-action-locked rect { fill: var(--bg3); stroke: var(--line); stroke-dasharray: 3 2; }
-svg.obol-graph .g-action-locked text { fill: var(--muted); }
+/* Node states — see the graph legend (.gv-legend). Distinct hues + solid/hollow so proven-green and
+   do-next no longer read as "two greens": do-next is gold, done is blue, blocked/pending are hollow. */
+svg.obol-graph .g-fact-proven rect { fill: var(--g-proven); stroke: var(--g-proven-line); }
+svg.obol-graph .g-fact-future rect { fill: none; stroke: var(--g-goal-line); stroke-width: 1.5; stroke-dasharray: 4 3; }
+svg.obol-graph .g-fact-future text { fill: var(--g-goal-ink); }
+svg.obol-graph .g-action-done rect { fill: var(--g-done); stroke: var(--g-done-line); }
+svg.obol-graph .g-action-next rect { fill: var(--g-next); stroke: var(--g-next-line); }
+svg.obol-graph .g-action-next text { fill: var(--g-next-ink); font-weight: 700; }
+svg.obol-graph .g-action-locked rect { fill: none; stroke: var(--g-locked-line); stroke-width: 1.5; stroke-dasharray: 4 3; }
+svg.obol-graph .g-action-locked text { fill: var(--g-locked-ink); }
 svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .ph-text-recon { fill: var(--ph-recon); } .ph-text-enum { fill: var(--ph-enum); } .ph-text-creds { fill: var(--ph-creds); }
 .ph-text-access { fill: var(--ph-access); } .ph-text-escalate { fill: var(--ph-escalate); } .ph-text-loot { fill: var(--ph-loot); }
@@ -563,7 +606,9 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .rep-out table { border-collapse: collapse; }
 .rep-out th, .rep-out td { border: 1px solid #dfe3ea; padding: 5px 9px; }
 .rep-out th { background: #f2f4f8; }
-.rep-out :not(pre) > code { background: #f0f2f6; color: #b02a5b; padding: 1px 5px; border-radius: 4px; }
+/* Inline code in the report reads as a command, not a highlight — subdued slate ink on a faint tint,
+   never the magenta that made Steps-to-reproduce look informal (and unprofessional in the PDF). */
+.rep-out :not(pre) > code { background: #eef1f5; color: #1f2a37; padding: 1px 5px; border-radius: 4px; }
 .rep-out hr { border: none; border-top: 1px solid #dfe3ea; }
 .rep-out.md pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; color: #16181d; margin: 0; }
 .rep-gaps { color: var(--yellow); font-size: 13px; margin: 10px 0; }
@@ -983,6 +1028,24 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .sev-chip.sev-medium, .sev-count.sev-medium { background: var(--medium); }
 .sev-chip.sev-low, .sev-count.sev-low { background: var(--low); color:#fff; }
 .sev-chip.sev-info, .sev-count.sev-info { background: var(--info); color:#fff; }
+/* Findings: group-by toggle, plus the IP+hostname anchor on each finding (so a severity-sorted list
+   still says which box). */
+.findings-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.findings-sort { display: inline-flex; align-items: center; gap: 4px; }
+.findings-sort .mini-label { margin-right: 4px; }
+.fsort-btn { font: inherit; font-size: 12px; background: var(--surf2); color: var(--text-2); border: 1px solid var(--line);
+  border-radius: 7px; padding: 4px 11px; cursor: pointer; }
+.fsort-btn:hover { border-color: var(--accent); color: var(--text); }
+.fsort-btn.active { background: var(--accent-soft); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.finding-host { display: inline-flex; align-items: baseline; gap: 6px; font-family: var(--mono); }
+.finding-hostname { color: var(--accent-2); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 10px; }
+.finding-host-group { margin-bottom: 20px; }
+.finding-host-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 4px 0 9px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.fhh-ip { font-family: var(--mono); font-weight: 700; color: var(--text); font-size: 14px; }
+.fhh-name { font-family: var(--mono); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent-2); }
+.fhh-count { font-size: 11.5px; color: var(--muted); }
+.fhh-sevs { margin-left: auto; display: inline-flex; gap: 0; }
 
 /* ---- motion background canvas (backdrop.js) ---- */
 #obolth-bg { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; pointer-events: none; display: none; }
@@ -1044,7 +1107,11 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 
 /* ---- print / paper view (Print → Save as PDF) ---- */
 @media print {
-  html, body { background: #fff !important; color: #000 !important; }
+  /* Chrome's "Save as PDF" drops every background fill unless the page asks to keep them. Without this,
+     the terminal/code boxes and table shading print pure snow-white (border only). print-color-adjust is
+     inherited, so setting it on the root makes the whole report honour its greys in the PDF. */
+  html, body { background: #fff !important; color: #000 !important;
+    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   /* Hide every scrap of app chrome. The mobile shell turns on at max-width:860px, and a printed page box
      (~816px) matches that query — so the fixed bottom tab bar and the "More sections" sheet would otherwise
      overlay the report on every page. Hide them (and the desktop nav/controls) explicitly. */
@@ -1059,14 +1126,20 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
   .rep-out a { color: #000 !important; text-decoration: underline; }
   .rep-out table { border-collapse: collapse; width: 100%; }
   .rep-out table.data th, .rep-out table.data td, .rep-out table.kv th, .rep-out table.kv td { border: 1px solid #999; padding: 4px 8px; color: #000; }
+  /* Terminal/code blocks — the shaded box aesthetic the .docx export uses (light grey fill, thin grey
+     rule all round, muted prompt ink), so the PDF reads as a real transcript instead of white-on-white. */
   .rep-out pre, .rep-out pre.lang-terminal, .rep-out .kali-term {
-    background: #f6f6f6 !important; color: #111 !important; border: 1px solid #ccc !important; border-left: 3px solid #888 !important;
+    background: #f0f1f3 !important; color: #14181d !important; border: 1px solid #ccc !important; border-left: 3px solid #9aa4b0 !important;
     border-radius: 4px !important; padding: 8px 11px !important; margin: 8px 0 !important;
     font: 10.5px/1.45 var(--mono) !important; white-space: pre-wrap !important;
     word-break: break-word !important; overflow-wrap: anywhere !important; overflow: hidden !important; max-width: 100% !important; }
   .rep-out .kali-term.term-target { border-left-color: #b5651d !important; }
-  .rep-out .kali-term .kt-b { color: #1a5fb4 !important; } .rep-out .kali-term .kt-u { color: #0b4a9e !important; } .rep-out .kali-term .kt-c { color: #000 !important; } .rep-out .kali-term .kt-o { color: #222 !important; }
-  .rep-out .kali-term.term-target { border-left-color: #b5651d !important; } .rep-out .kali-term.term-target .kt-u { color: #9a5a12 !important; }
+  /* Muted, professional prompt colours (green Kali prompt / amber on-target), matching the docx. */
+  .rep-out .kali-term .kt-b { color: #2e7d32 !important; } .rep-out .kali-term .kt-u { color: #2e7d32 !important; font-weight: 700 !important; }
+  .rep-out .kali-term .kt-c { color: #000 !important; font-weight: 700 !important; } .rep-out .kali-term .kt-o { color: #1a1a1a !important; }
+  .rep-out .kali-term.term-target .kt-u { color: #9a5a12 !important; }
+  .rep-out :not(pre) > code { background: #eef1f5 !important; color: #1f2a37 !important; }
+  .rep-out th { background: #eef1f5 !important; }
   .rep-out .callout { border: 1px solid #ccc; color: #000; }
   .rep-out img.shot { max-width: 100%; }
   .page-break { break-after: page; page-break-after: always; }
