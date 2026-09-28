@@ -53,7 +53,7 @@ and panicking about screenshots the night before the exam. Obol takes that load 
 
 ## A look inside
 
-**The coach — your ranked, copy-ready next moves**
+**The coach (the site's "Next Steps" tab) — your ranked, copy-ready next moves**
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/3ab788be-066e-4b31-bed6-6ab2f87e33bc" alt="The coach ranking the next moves for a target, each with a copy button and a one-line why" width="92%">
@@ -96,8 +96,9 @@ and panicking about screenshots the night before the exam. Obol takes that load 
 
 Obol watches one thing: **proof**. You run a command, paste the output, and Obol's parsers mint
 *facts* — but only for what the output genuinely demonstrates. Those facts drive everything else:
-the next-move coach, the attack-path graph, the findings list, and the report all recompute the
-instant a new fact lands. Nothing is asserted without evidence, and nothing is executed for you.
+the next-move coach (the **Next Steps** tab), the attack-path graph, the findings list, and the
+report all recompute the instant a new fact lands. Nothing is asserted without evidence, and
+nothing is executed for you.
 
 ```mermaid
 flowchart LR
