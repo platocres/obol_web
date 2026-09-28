@@ -103,6 +103,14 @@
     var d = dirs(eng);
     return 'script -q -f ' + join(d.loot || 'loot', 'session-$(date -u +%Y%m%d-%H%M%S).log');
   }
+  // A one-shot snapshot of the working directory: list every file (path + size + mtime), wrapped in
+  // markers so obol can find the block in a larger paste. The operator runs it and pastes the output
+  // back to fully synchronize the virtual workspace — obol confirms the files it predicted and adopts
+  // any it didn't know about. GNU find (Kali); hidden files skipped so ~/.zshrc etc. stay out.
+  function snapshotCmd(eng) {
+    var r = rootFor(eng) || '.';
+    return 'cd ' + r + " 2>/dev/null && { echo '### OBOL-WS-SNAPSHOT'; find . -type f -not -path '*/.*' -printf '%P\\t%s\\t%TY-%Tm-%TdT%TH:%TM\\n' 2>/dev/null | sort; echo '### END'; }";
+  }
 
   OBOL.workspace = {
     LAYOUT: LAYOUT, DEFAULT_BASE: DEFAULT_BASE,
@@ -110,6 +118,6 @@
     promptStamp: promptStamp, promptStampInstall: promptStampInstall,
     slugify: slugify, sanitizeRoot: sanitizeRoot, join: join, slugFor: slugFor, defaultRoot: defaultRoot,
     rootFor: rootFor, isConfigured: isConfigured, dirs: dirs, tokens: tokens, scaffold: scaffold,
-    captureCmd: captureCmd,
+    captureCmd: captureCmd, snapshotCmd: snapshotCmd,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
