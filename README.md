@@ -1,4 +1,4 @@
-# Obol: your OSCP prep companion in the browser
+# Obol: Your OSCP prep companion in the browser
 
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-2ea44f?style=flat-square)](LICENSE)
 ![Backend: none](https://img.shields.io/badge/backend-none-informational?style=flat-square)
@@ -9,7 +9,7 @@
 
 **Obol is a free, browser-based sidekick for hacking practice boxes and exams.** You still do
 the hacking in your own terminal. Obol is the calm voice next to you that says *"here's the
-next command to try, and here's why,"* keeps track of what you've actually proven about a box,
+next command to try, and here's why,"* as it keeps track of what you've actually proven about a box,
 and quietly assembles your report as you go.
 
 <p align="center">
@@ -23,7 +23,7 @@ start.
 
 ---
 
-## What to expect
+## What To Expect
 
 Studying for the OSCP (or grinding HTB / TryHackMe) is really an exercise in *not getting
 lost*: you're staring at an open port wondering what to run, forgetting which creds worked where,
@@ -51,21 +51,27 @@ and panicking about screenshots the night before the exam. Obol takes that load 
 
 ---
 
-## A look inside
+## A Look Inside
 
-**The coach (the site's "Next Steps" tab): your ranked, copy-ready next moves**
+**Next Steps: Your ranked, copy-ready next moves**
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/3ab788be-066e-4b31-bed6-6ab2f87e33bc" alt="The coach ranking the next moves for a target, each with a copy button and a one-line why" width="92%">
 </p>
 
-**Proof-gated: Obol only records what your output actually shows**
+**Feeding Obol: paste your whole terminal, and only the proven facts are minted.**
+
+<p align="center">
+  <img src="screenshots/evidence.png" alt="The Evidence page: paste a command and its full output, and conservative parsers mint only the facts the output proves" width="92%">
+</p>
+
+**Proof-Gated: Obol only records what your output actually shows**
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/b85ed760-afb8-4b2e-ae40-e26951d59e47" alt="Evidence view turning pasted tool output into proven facts" width="92%">
 </p>
 
-**Everything tracked: hosts, services, credentials, and domain**
+**Everything Tracked: Hosts, services, credentials, and domain**
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/68b70b94-7450-4ca7-a1d6-58b3d8208c3e" alt="The engagement map of hosts, services, credentials and domain" width="92%">
@@ -77,18 +83,12 @@ and panicking about screenshots the night before the exam. Obol takes that load 
   <img src="screenshots/findings.png" alt="The Findings view listing catalogued findings with severity, evidence, and remediation" width="92%">
 </p>
 
-<table>
-  <tr>
-    <td width="50%" valign="top" align="center">
-      <b>The attack-path graph</b><br><br>
-      <img src="https://github.com/user-attachments/assets/044370ca-e4ad-4404-9bad-2f398c9a576c" alt="Attack-path graph with technique-named nodes, a filter legend, and hover cards" width="100%">
-    </td>
-    <td width="50%" valign="top" align="center">
-      <b>OSCP report export</b><br><br>
-      <img src="https://github.com/user-attachments/assets/bde12604-c628-4950-b96d-ee3b1f255d09" alt="An exported OSCP-style report with terminal transcript and redacted secrets" width="100%">
-    </td>
-  </tr>
-</table>
+**The Attack-Path Graph: The Next Steps and per-target pages render a live attack-path graph, projected from your facts
+and the methodology packs:**
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/044370ca-e4ad-4404-9bad-2f398c9a576c" alt="Attack-path graph with technique-named nodes, a filter legend, and hover cards" width="75%">
+</p>
 
 ---
 
@@ -115,15 +115,9 @@ The loop is deliberately tight: **run, paste, get the next move**, over and over
 is rooted. Findings and flags accumulate as you go, so the report is essentially finished the
 moment you are.
 
-**Feeding Obol: paste your whole terminal, and only the proven facts are minted.**
-
-<p align="center">
-  <img src="screenshots/evidence.png" alt="The Evidence page: paste a command and its full output, and conservative parsers mint only the facts the output proves" width="92%">
-</p>
-
 ---
 
-## A quick walkthrough
+## A Quick Walkthrough
 
 1. **Start an engagement.** On the **Engagements** screen, pick the platform you're working on:
    HTB, OffSec/OSCP, OffSec Labs (PWK), TryHackMe, HTB CPTS, CTF, or OSWP. Your choice tunes Obol
@@ -142,6 +136,10 @@ moment you are.
    instant attack-path analysis; and track where each credential works on **Creds**.
 6. **Capture flags and report.** The **Scoreboard** tracks your local/root flags and OSCP points.
    When you're done, **Report** exports an OSCP-style writeup (secrets redacted by default).
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/bde12604-c628-4950-b96d-ee3b1f255d09" alt="An exported OSCP-style report with terminal transcript and redacted secrets" width="70%">
+</p>
 
 ---
 
@@ -169,22 +167,7 @@ the console green, amber, or several other themes.
 
 ---
 
-## The attack-path graph
-
-The **Next Steps** and per-target pages render a live attack-path graph, projected from your facts
-and the methodology packs:
-
-- **Nodes are named for techniques**, not raw fact keys: a milestone reads *DCSync Replication
-  Abuse*, not `loot.ntds`.
-- **A colour legend doubles as filters.** Each of the five node states (do-next, proven, done,
-  pending goal, blocked) is a toggle; click one to hide that category and focus the view.
-- **Hover any node** for a card explaining what it is, why it matters, and the exact command to run,
-  with a one-click copy button.
-- **Pan, zoom, and fit** for large domains, and toggle the whole methodology on to see every branch.
-
----
-
-## BloodHound domain analysis
+## BloodHound Domain Analysis
 
 Drop a SharpHound `.zip` (or BloodHound-CE `.json` files) on the **Domain** tab and Obol parses the
 whole collection in your browser, with nothing uploaded anywhere. From that one export it does two
@@ -197,7 +180,7 @@ edges it can abuse, so a chain like *Exchange Windows Permissions holds WriteDac
 reads at a glance.
 
 <p align="center">
-  <img src="screenshots/bloodhound-graph.png" alt="BloodHound attack-path graph with a hover card showing a group's full name and its abusable relationships" width="100%">
+  <img width="2072" height="884" alt="image" src="https://github.com/user-attachments/assets/3ed9ce5c-0fcf-441e-9151-503e7d35a1a4" />
 </p>
 
 Second, it answers a board of **PlumHound-style high-value queries** from the same data: who can
@@ -207,7 +190,7 @@ count, expands to the exact principals behind it, and hands you copy-ready comma
 your target (and your credentials when you hold them).
 
 <p align="center">
-  <img src="screenshots/bloodhound-queries.png" alt="PlumHound-style query board with counts, expandable principal lists, and copy-ready commands" width="100%">
+  <img width="2072" height="3070" alt="image" src="https://github.com/user-attachments/assets/5d1646c6-5ebd-49d8-98aa-8ebc38f902bc" />
 </p>
 
 ---
@@ -273,7 +256,7 @@ Tests live in `tests/` (a pure-Node engine suite and a headless-browser smoke of
 
 ---
 
-## Status and direction
+## Status and Direction
 
 Obol is under active development, a growing companion rather than a finished product. The methodology
 packs, parsers, and coaching keep improving, and you should expect the occasional rough edge in the
@@ -293,7 +276,7 @@ engagement.
 
 ---
 
-## Legal and ethics
+## Legal and Ethics
 
 Obol is for **authorized** labs, training, CTFs, exam preparation, and engagements where you have
 explicit permission to test. Don't point it at anything you're not allowed to touch.
