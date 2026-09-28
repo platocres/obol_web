@@ -138,7 +138,7 @@
       + '<h2 class="coach-sec-h">Attack Path — What Led to What</h2>'
       + (story ? '<div class="apath-flow">' + story + '</div>' : '<div class="coach-empty">Nothing proven yet — run the recon move.</div>')
       + '<h2 class="coach-sec-h">Path Graph</h2>'
-      + '<div class="graph-scroll">' + svg + '</div>'
+      + (OBOL.graphview ? OBOL.graphview.html(svg) : '<div class="graph-scroll">' + svg + '</div>')
       + '</div>'
       + '<div class="target-col">'
       + flagCard
@@ -151,6 +151,7 @@
   }
 
   function mounted(ctx) {
+    if (OBOL.graphview) OBOL.graphview.attach(ctx.mount || document);
     U.on(ctx.mount, 'click', '.btn-copy', function (e, b) {
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });

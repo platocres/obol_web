@@ -71,11 +71,11 @@
         : '')
       + '<label class="rep-opt"><input type="checkbox" id="rep-redact"' + (redact ? ' checked' : '') + '> Redact Secrets <span class="rep-opt-note">(off — full detail shown)</span></label>'
       + '</div>'
-      + '<div class="rep-actions">'
-      + '<button id="rep-print" class="btn-ghost" title="Paper view — choose “Save as PDF” in the print dialog">Print / PDF</button>'
-      + '<button id="rep-md" class="btn-ghost">.md</button>'
-      + '<button id="rep-html" class="btn-ghost">.html</button>'
-      + '<button id="rep-docx" class="btn-primary">.docx</button>'
+      + '<div class="rep-actions"><span class="rep-export-lbl">Download</span>'
+      + '<button id="rep-print" class="rep-exp" title="Paper view — choose “Save as PDF” in the print dialog">PDF</button>'
+      + '<button id="rep-md" class="rep-exp" title="Markdown">.md</button>'
+      + '<button id="rep-html" class="rep-exp" title="Self-contained HTML">.html</button>'
+      + '<button id="rep-docx" class="rep-exp" title="Word document">.docx</button>'
       + '</div>'
       + '</div>'
       + (gaps.length ? ('<div class="rep-gaps">Readiness gaps:<ul>' + gaps.map(function (g) { return '<li>' + esc(g.message || g) + '</li>'; }).join('') + '</ul></div>') : '')
@@ -141,18 +141,24 @@
     bindProfileField('rep-candidate', 'candidate');
     bindProfileField('rep-osid', 'osid');
     function currentProfile() { return (OBOL.store.active().ui || {}).reportProfile || 'oscp'; }
+    function stemFor(p, c) {
+      try { return OBOL.report.filenameStem(p, c) || ('obol-report-' + p); } catch (e) { return 'obol-report-' + p; }
+    }
     var md = document.getElementById('rep-md');
     if (md) md.addEventListener('click', function () {
-      var p = currentProfile(), c = ctxOf(!(OBOL.store.active().ui || {}).reportRedact);
-      var stem = (OBOL.report.filenameStem && OBOL.report.filenameStem(p, c)) || ('obol-report-' + p);
-      download(stem + '.md', OBOL.report.toMarkdown(OBOL.report.document(p, c)), 'text/markdown');
+      try {
+        var p = currentProfile(), c = ctxOf(!(OBOL.store.active().ui || {}).reportRedact);
+        download(stemFor(p, c) + '.md', OBOL.report.toMarkdown(OBOL.report.document(p, c)), 'text/markdown');
+      } catch (e) { U.toast('Could not build .md', 'err'); }
     });
     var htmlBtn = document.getElementById('rep-html');
     if (htmlBtn) htmlBtn.addEventListener('click', function () {
-      var p = currentProfile(), c = ctxOf(!(OBOL.store.active().ui || {}).reportRedact);
-      var stem = (OBOL.report.filenameStem && OBOL.report.filenameStem(p, c)) || ('obol-report-' + p);
-      var doc = '<!doctype html><meta charset="utf-8"><title>' + esc(stem) + '</title>' + OBOL.report.toHtml(OBOL.report.document(p, c));
-      download(stem + '.html', doc, 'text/html');
+      try {
+        var p = currentProfile(), c = ctxOf(!(OBOL.store.active().ui || {}).reportRedact);
+        var stem = stemFor(p, c);
+        var doc = '<!doctype html><meta charset="utf-8"><title>' + esc(stem) + '</title>' + OBOL.report.toHtml(OBOL.report.document(p, c));
+        download(stem + '.html', doc, 'text/html');
+      } catch (e) { U.toast('Could not build .html', 'err'); }
     });
     // Paper view + PDF via the browser print dialog (print CSS styles the report as paper).
     var printBtn = document.getElementById('rep-print');
@@ -163,7 +169,7 @@
       var JSZip = root.JSZip;
       if (!JSZip || !OBOL.report.docxFiles) { U.toast('Still loading — try again in a second', 'err'); return; }
       var p = currentProfile(), c = ctxOf(!(OBOL.store.active().ui || {}).reportRedact);
-      var stem = (OBOL.report.filenameStem && OBOL.report.filenameStem(p, c)) || ('obol-report-' + p);
+      var stem = stemFor(p, c);
       try {
         var files = OBOL.report.docxFiles(OBOL.report.document(p, c));
         var zip = new JSZip();

@@ -1752,10 +1752,15 @@
   }
 
   function filenameStem(profile, ctx) {
+    // Accept either a resolved profile object (from validate) or a profile NAME (from the report route's
+    // download buttons) — resolving a bare string here is what keeps .md/.html/.docx from throwing on
+    // `undefined.filename_pattern`. Guard the pattern too, so a profile without one still yields a name.
+    if (!profile || typeof profile === 'string') profile = resolve(profile, ctx);
     var meta = (ctx && ctx.meta) || {};
     var osid = (profile.config && profile.config.osid) || 'OS-XXXXX';
     var name = String(meta.name || 'obol').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'obol';
-    return profile.filename_pattern.replace('{osid}', osid).replace('{name}', name);
+    var pattern = profile.filename_pattern || '{name}-obol-report';
+    return pattern.replace('{osid}', osid).replace('{name}', name);
   }
 
   // ─────────────────────────────────────────────────────────────────────────

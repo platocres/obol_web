@@ -78,6 +78,16 @@ function ctxWith(includeSecrets, params) {
   });
 }
 
+// ── 0) filenameStem accepts a profile NAME (what the .md/.html/.docx buttons pass) without throwing.
+// Regression: it used to assume a resolved profile object and threw on `undefined.filename_pattern`,
+// which silently killed every download button except Print/PDF.
+const ctx0 = ctxWith(true);
+let stemOk = true, stemGen = '', stemOscp = '';
+try { stemGen = R.filenameStem('generic', ctx0); stemOscp = R.filenameStem('oscp', ctx0); } catch (e) { stemOk = false; }
+ok(stemOk, 'filenameStem(<name string>, ctx) does not throw (download buttons pass a profile name)');
+ok(typeof stemGen === 'string' && stemGen.length > 0, 'filenameStem resolves a generic-profile name to a non-empty stem (' + stemGen + ')');
+ok(typeof stemOscp === 'string' && stemOscp.length > 0, 'filenameStem resolves an oscp-profile name to a non-empty stem (' + stemOscp + ')');
+
 // ── 1) OSCP section order in markdown ───────────────────────────────────────
 const ctx = ctxWith(false);
 const md = R.toMarkdown(R.document('oscp', ctx));

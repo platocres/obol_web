@@ -443,6 +443,20 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .graph-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .graph-toggle { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
 .graph-scroll { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 8px; }
+/* Pan/zoom viewport for the path graph: fixed-height window, the SVG moved by a transform. */
+.graphview { position: relative; overflow: hidden; height: 460px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--bg1); cursor: grab; touch-action: none; user-select: none;
+  background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 22px 22px; }
+.graphview.gv-grabbing { cursor: grabbing; }
+.graphview > svg.obol-graph { position: absolute; top: 0; left: 0; max-width: none; }
+.gv-toolbar { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px; z-index: 3; }
+.gv-btn { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); background: color-mix(in srgb, var(--surf2) 88%, transparent);
+  color: var(--text); border-radius: 7px; font-size: 17px; line-height: 1; cursor: pointer; backdrop-filter: blur(3px); }
+.gv-btn:hover { border-color: var(--accent); color: var(--accent); }
+.gv-hint { position: absolute; left: 12px; bottom: 12px; z-index: 3; font-size: 10.5px; color: var(--muted);
+  pointer-events: none; background: color-mix(in srgb, var(--bg1) 70%, transparent); padding: 2px 6px; border-radius: 5px; }
+@media (max-width: 640px) { .graphview { height: 340px; } }
 svg.obol-graph .g-empty { fill: var(--muted); }
 svg.obol-graph .g-edge { stroke: var(--line-hot); stroke-width: 1.5; }
 svg.obol-graph .g-edge-future { stroke: var(--line); stroke-dasharray: 4 4; }
@@ -495,8 +509,15 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .rep-opt input[type="text"] { width: 12ch; }
 .rep-opt input[type="text"]:focus { outline: none; border-color: var(--accent); }
 .rep-opt-note { color: var(--muted); font-size: 11.5px; }
-.rep-actions { display: flex; gap: 8px; align-items: center; }
-.rep-actions .btn-ghost, .rep-actions .btn-primary { padding: 7px 13px; font-size: 12.5px; }
+.rep-actions { display: flex; gap: 0; align-items: center; }
+.rep-export-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 10px; }
+/* One cohesive segmented control for all four download formats — same size, weight, and treatment. */
+.rep-exp { padding: 7px 14px; font: 600 12.5px var(--mono); color: var(--text-2); background: var(--surf2);
+  border: 1px solid var(--line); border-right-width: 0; cursor: pointer; }
+.rep-exp:first-of-type { border-radius: 8px 0 0 8px; }
+.rep-exp:last-of-type { border-radius: 0 8px 8px 0; border-right-width: 1px; }
+.rep-exp:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); position: relative; z-index: 1; }
+.rep-exp:active { transform: translateY(1px); }
 /* On-screen the report renders as PAPER — black on white, like the printed/PDF output — so the
    preview matches what you hand in. Embedded Kali terminal captures stay dark (see .lang-terminal). */
 .rep-out { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: #16181d;
@@ -688,6 +709,13 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .flag-val { font-family: var(--mono); font-size: 12px; color: var(--accent-2); word-break: break-all; user-select: all; }
 .flag-copy { justify-self: start; }
 .rail-flagval { color: var(--accent-2); }
+/* Captured flag on the rail — the whole value, wrapped and click-to-copy (it's the deliverable). */
+.rail-list li.rail-flag { display: block; }
+.rail-flag-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.rail-flag-file { font-family: var(--mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 12ch; }
+.rail-flag-val { display: block; margin-top: 3px; font-family: var(--mono); font-size: 11px; line-height: 1.3;
+  color: var(--accent-2); word-break: break-all; user-select: all; cursor: pointer; }
+.rail-flag-val:hover { color: var(--accent); text-decoration: underline; }
 /* Located-but-not-captured: found remotely, still to be read on-host for the report. Muted, dashed. */
 .flag-card.flag-located { border-left-color: var(--muted); border-left-style: dashed; background: var(--surf2); }
 .flag-card.flag-located .flag-slot { color: var(--text-2); font-weight: 600; }
@@ -983,10 +1011,14 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 /* ---- print / paper view (Print → Save as PDF) ---- */
 @media print {
   html, body { background: #fff !important; color: #000 !important; }
-  header.appbar, aside#sidebar, .rep-controls, .rep-notes, .rep-gaps,
+  /* Hide every scrap of app chrome. The mobile shell turns on at max-width:860px, and a printed page box
+     (~816px) matches that query — so the fixed bottom tab bar and the "More sections" sheet would otherwise
+     overlay the report on every page. Hide them (and the desktop nav/controls) explicitly. */
+  header.appbar, aside#sidebar, nav.mainnav, .rep-controls, .rep-notes, .rep-gaps,
+  .tabbar, .more-sheet, .nav-toggle, .nav-scrim, .nav-search,
   .obol-settings-toggle, .obol-settings-panel, #obolth-bg, #obolcoin-fx, .obol-toast { display: none !important; }
   #app { display: block !important; }
-  main#view { max-width: none !important; padding: 0 !important; overflow: visible !important; }
+  main#view { max-width: none !important; padding: 0 !important; margin: 0 !important; overflow: visible !important; }
   .route-h1 { display: none; }
   .rep-out { border: none !important; background: #fff !important; color: #000 !important; padding: 0 !important; max-height: none !important; overflow: visible !important; box-shadow: none !important; }
   .rep-out h1, .rep-out h2, .rep-out h3, .rep-out h4 { color: #000 !important; }

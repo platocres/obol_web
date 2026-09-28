@@ -206,9 +206,10 @@
             var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
             var label = SL[v.slot] || (f.kind.split('.').pop().replace('_', ' '));
             var val = v.flag || '';
-            var shown = val && val.length > 18 ? val.slice(0, 18) + '…' : val;
-            return '<li title="' + U.attr((v.path || v.name || '') + (val ? '  =  ' + val : '')) + '"><span>🚩 ' + esc(label) + '</span>'
-              + (shown ? '<span class="rail-secret rail-flagval">' + esc(shown) + '</span>' : (v.name ? '<span class="rail-produced">' + esc(v.name) + '</span>' : '')) + '</li>';
+            // Show the WHOLE flag (wrapped, selectable, click-to-copy) — a captured flag is the deliverable.
+            return '<li class="rail-flag"><div class="rail-flag-h"><span>🚩 ' + esc(label) + '</span>'
+              + (v.name ? '<span class="rail-flag-file" title="' + U.attr(v.path || v.name) + '">' + esc(v.name) + '</span>' : '') + '</div>'
+              + (val ? '<code class="rail-flag-val" data-copy="' + U.attr(val) + '" title="Click to copy">' + esc(val) + '</code>' : '') + '</li>';
           }).join('')
           + located.map(function (f) {
             var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
@@ -355,6 +356,9 @@
     // own container instead: it's recreated on each render, so its listeners die with the old DOM.
     var mount = ctx.mount.querySelector('.withrail') || ctx.mount;
     // copy buttons
+    U.on(mount, 'click', '.rail-flag-val', function (e, t) {
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Flag copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
     U.on(mount, 'click', '.btn-copy', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
