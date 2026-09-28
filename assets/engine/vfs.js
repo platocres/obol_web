@@ -248,6 +248,51 @@
     };
   }
 
+  // A human one-liner for a file — its PURPOSE (from the tool / kind / extension) plus one honest
+  // metric (facts proved, lines captured, or measured size). Never fabricates a fact from a name; it
+  // only names what obol can already see. Feeds the hover preview and the report's workspace appendix.
+  var TOOL_PURPOSE = [
+    [/^(nmap|rustscan|masscan)/i, 'Port & service scan'],
+    [/^(gobuster|feroxbuster|ffuf|dirb|dirsearch|wfuzz)/i, 'Content discovery'],
+    [/^(nikto|nuclei|whatweb|wpscan|httpx)/i, 'Web vuln scan'],
+    [/secretsdump/i, 'Credential / NTDS dump'],
+    [/getnpusers|asrep/i, 'AS-REP roast'],
+    [/getuserspns|kerberoast/i, 'Kerberoast'],
+    [/certipy/i, 'ADCS enumeration'],
+    [/(bloodhound|sharphound)/i, 'BloodHound collection'],
+    [/^(nxc|netexec|crackmapexec|cme)/i, 'SMB / LDAP sweep'],
+    [/^(smbclient|smbmap|rpcclient|enum4linux)/i, 'SMB share / RPC enum'],
+    [/ldapsearch|bloodyad/i, 'LDAP / directory dump'],
+    [/^(hashcat|john)/i, 'Hash cracking'],
+    [/^(hydra|medusa)/i, 'Credential brute force'],
+    [/snmpwalk|onesixtyone/i, 'SNMP enumeration'],
+    [/^screenshot$/i, 'Proof screenshot'],
+  ];
+  var EXT_PURPOSE = { xml: 'XML output', json: 'JSON output', csv: 'CSV output', py: 'Python script', sh: 'Shell script',
+    ps1: 'PowerShell script', txt: 'Text output', log: 'Session log', pcap: 'Packet capture', pcapng: 'Packet capture',
+    dit: 'NTDS database', ntds: 'NTDS database', kirbi: 'Kerberos ticket', ccache: 'Kerberos ticket', pfx: 'Certificate (PFX)',
+    zip: 'Archive', gz: 'Archive', tar: 'Archive', png: 'Image', jpg: 'Image', jpeg: 'Image', gif: 'Image' };
+  function purposeOf(f) {
+    if (f.flag) return 'Flag / proof file';
+    var t = f.tool || '';
+    for (var i = 0; i < TOOL_PURPOSE.length; i++) if (TOOL_PURPOSE[i][0].test(t)) return TOOL_PURPOSE[i][1];
+    if (!f.tool && f.command) { var lead = String(f.command).trim().split(/\s+/)[0] || ''; for (var j = 0; j < TOOL_PURPOSE.length; j++) if (TOOL_PURPOSE[j][0].test(lead)) return TOOL_PURPOSE[j][1]; }
+    var ext = (f.name.split('.').pop() || '').toLowerCase();
+    return EXT_PURPOSE[ext] || (f.tool ? (f.tool + ' output') : 'File');
+  }
+  function metricOf(f) {
+    if (f.facts && f.facts.length) return f.facts.length + ' fact' + (f.facts.length === 1 ? '' : 's');
+    if (f.output) { var n = String(f.output).replace(/\s+$/, '').split(/\n/).length; return n + ' line' + (n === 1 ? '' : 's'); }
+    if (f.size) { var b = f.size; return b < 1024 ? (b + ' B') : b < 1048576 ? ((b / 1024).toFixed(1) + ' kB') : ((b / 1048576).toFixed(1) + ' MB'); }
+    return '';
+  }
+  function describe(f) {
+    f = f || {};
+    var parts = [purposeOf(f)];
+    var m = metricOf(f); if (m) parts.push(m);
+    return parts.join(' · ');
+  }
+
   // Parse a pasted `find` manifest (the snapshotCmd output) into [{path,size,mtime}]. Tolerant: skips the
   // marker lines and any shell prompt, accepts a bare path or a tab/whitespace-separated path+size+mtime,
   // and ignores directory-only or junk lines. Paths come back relative, leading ./ stripped.
@@ -309,5 +354,5 @@
     return { overrides: overrides, confirmed: confirmed, adopted: adopted, missing: missing, total: (entries || []).length };
   }
 
-  OBOL.vfs = { build: build, outputPaths: outputPaths, flagPaths: flagPaths, folderOf: folderOf, relOf: relOf, parseSnapshot: parseSnapshot, reconcile: reconcile };
+  OBOL.vfs = { build: build, outputPaths: outputPaths, flagPaths: flagPaths, folderOf: folderOf, relOf: relOf, describe: describe, parseSnapshot: parseSnapshot, reconcile: reconcile };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

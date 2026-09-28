@@ -185,9 +185,10 @@
         + cmdBlock
         + '<a class="ws-file-link" href="' + captureHref(f) + '">Paste its output on Evidence to capture it →</a>';
     }
+    var desc = OBOL.vfs.describe ? ('<div class="ws-file-desc">' + esc(OBOL.vfs.describe(f)) + '</div>') : '';
     var cls = 'ws-file ws-' + f.status + (suggested ? ' ws-suggested' : '') + (f.confirmed ? ' ws-confirmed' : '')
       + (f.unknown ? ' ws-unknown' : '') + (f.manual ? ' ws-manual' : '') + (f.flag ? ' ws-flag' : '');
-    return '<details class="' + cls + '">'
+    return '<details class="' + cls + '" data-rel="' + U.attr(rel) + '">'
       + '<summary><span class="ws-dot"></span><span class="ws-file-name">' + esc(f.name) + '</span>' + tag + badge
       + (f.at ? '<span class="ws-when">' + esc(ago(f.at)) + '</span>' : '')
       + '<button type="button" class="ws-rm" data-rel="' + U.attr(rel) + '" title="Remove from workspace" aria-label="Remove ' + U.attr(f.name) + '">×</button>'
@@ -395,6 +396,55 @@
       var el = document.getElementById(t.getAttribute('data-copy'));
       if (el) U.copy(el.textContent).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
+    // ── hover preview card: peek at a file's contents / purpose without expanding the row ──
+    (function wireWorkspacePreview() {
+      if (!OBOL.vfs || matchMedia('(hover: none)').matches) return; // touch devices use click-to-expand
+      var byRel = {};
+      try { var vt = OBOL.vfs.build(OBOL.store.active()); (vt.files || []).forEach(function (f) { byRel[OBOL.vfs.relOf(f.path, vt.root)] = f; }); } catch (e) { return; }
+      var card = document.getElementById('ws-preview'), fresh = false;
+      if (!card) { card = document.createElement('div'); card.id = 'ws-preview'; card.className = 'ws-preview'; card.hidden = true; document.body.appendChild(card); fresh = true; }
+      function previewHtml(f) {
+        var tag = f.status === 'captured' ? 'captured' : f.origin === 'suggested' ? 'suggested'
+          : f.unknown ? 'on disk' : f.manual ? 'added' : f.confirmed ? 'on disk' : 'expected';
+        var head = '<div class="ws-pv-head"><span class="ws-pv-name">' + esc(f.name) + '</span><span class="ws-pv-tag ws-pv-' + esc(tag.replace(/\s+/g, '')) + '">' + esc(tag) + '</span></div>'
+          + '<div class="ws-pv-desc">' + esc(OBOL.vfs.describe(f)) + '</div>';
+        var body;
+        if (f.image) body = '<img class="ws-pv-img" src="' + esc(f.image) + '" alt="">';
+        else if (f.status === 'captured' && f.output) {
+          var lines = String(f.output).replace(/\s+$/, '').split(/\n/);
+          var shown = lines.slice(0, 16).join('\n') + (lines.length > 16 ? '\n… ' + (lines.length - 16) + ' more line' + (lines.length - 16 === 1 ? '' : 's') : '');
+          body = '<pre class="ws-pv-term">' + esc(shown) + '</pre>';
+        } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the coach — run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '');
+        else if (f.unknown) body = '<div class="ws-pv-note">Found on your disk by a sync. Paste its contents on Evidence to read it.</div>';
+        else if (f.manual) body = '<div class="ws-pv-note">Added by hand. Paste its contents to mint any facts it proves.</div>';
+        else body = '<div class="ws-pv-note">obol expects this file but hasn\'t received its output yet.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '');
+        return head + body;
+      }
+      function place(row) {
+        var r = row.getBoundingClientRect();
+        card.style.visibility = 'hidden'; card.hidden = false;
+        var cw = card.offsetWidth, ch = card.offsetHeight;
+        var left = r.left - cw - 12;                 // prefer left of the right-rail row
+        if (left < 8) left = Math.min(r.right + 12, window.innerWidth - cw - 8);
+        var top = Math.min(Math.max(8, r.top), window.innerHeight - ch - 8);
+        card.style.left = Math.max(8, left) + 'px'; card.style.top = top + 'px';
+        card.style.visibility = '';
+      }
+      function show(row) {
+        var rel = row.getAttribute('data-rel'); var f = byRel[rel];
+        if (!f) return;
+        clearTimeout(card._hideT);
+        card.innerHTML = previewHtml(f);
+        place(row);
+      }
+      U.on(mount, 'mouseover', '.ws-file > summary', function (e, t) { show(t.closest('.ws-file')); });
+      U.on(mount, 'mouseout', '.ws-file > summary', function () { card._hideT = setTimeout(function () { card.hidden = true; }, 90); });
+      if (fresh) {
+        card.addEventListener('mouseenter', function () { clearTimeout(card._hideT); });
+        card.addEventListener('mouseleave', function () { card.hidden = true; });
+      }
+    })();
+
     // paste-back sync: reconcile a find manifest against the model.
     U.on(mount, 'click', '.ws-sync-run', function () {
       var ta = document.getElementById('ws-sync-paste');

@@ -939,10 +939,32 @@
       platform: opts.platform || params.platform || '',
     };
 
+    // working-directory tree for the appendix: the REAL files (runs, screenshots, hand-added, disk-synced)
+    // — never the coach's anticipated/suggested files, which are guesses, not evidence. describe() is
+    // redaction-safe (purpose + fact/line/size counts, no secrets); we keep no raw output or command here.
+    var workspaceCtx = null;
+    try {
+      if (OBOL.vfs && OBOL.vfs.build && opts.workspace && OBOL.workspace && OBOL.workspace.isConfigured(opts.workspace.root ? { workspace: opts.workspace } : {})) {
+        var veng = { id: opts.engId || '', activities: activities, screenshots: screensRaw, workspace: opts.workspace };
+        var vt = OBOL.vfs.build(veng, { suggested: [] });
+        var STATE = function (f) {
+          return f.status === 'captured' ? 'Captured' : (f.synced || f.unknown) ? 'On disk (synced)'
+            : f.manual ? 'Added by hand' : f.confirmed ? 'On disk' : 'Expected';
+        };
+        var wfolders = (vt.folders || []).filter(function (fo) { return fo.files.length; }).map(function (fo) {
+          return { label: fo.label, files: fo.files.map(function (f) {
+            return { rel: OBOL.vfs.relOf(f.path, vt.root), name: f.name, state: STATE(f), desc: OBOL.vfs.describe(f) };
+          }) };
+        });
+        if (vt.total) workspaceCtx = { root: vt.root, folders: wfolders, captured: vt.captured, total: vt.total };
+      }
+    } catch (e) { workspaceCtx = null; }
+
     var ctx = {
       meta: meta,
       targets: targetsOut,
       evidence: evidence,
+      workspace: workspaceCtx,
       bloodhound: params.bloodhound || {},
       tiles: {
         facts: (factset.facts || []).filter(function (f) { return f.state === SUPPORTED; }).length,
@@ -1899,6 +1921,23 @@
     if (!rows.length) return [];
     return [H('Appendix: Proof and Local Contents', 3), TBL(['IP (Hostname)', 'local.txt', 'proof.txt'], rows)];
   }
+  // Appendix: the engagement's working directory — a snapshot of every real artifact obol accounted
+  // for, so a reader can map each claim to the file it came from. Rows are path · state · what it is.
+  function workspaceAppendix(ctx) {
+    var w = ctx.workspace;
+    if (!w || !w.total) return [];
+    var rows = [];
+    (w.folders || []).forEach(function (fo) {
+      fo.files.forEach(function (f) { rows.push([f.rel, f.state, f.desc]); });
+    });
+    if (!rows.length) return [];
+    return [
+      H('Appendix: Working Directory', 3),
+      P('Files gathered under `' + w.root + '` during this engagement (' + w.captured + ' captured of ' + w.total + ' tracked).'),
+      TBL(['Path', 'State', 'What it is'], rows),
+    ];
+  }
+
   function appendix(ctx, profile) {
     var blocks = [PB(), H('Appendix: Key Commands & Evidence', 2)];
     var seen = {}, rows = [];
@@ -1914,6 +1953,7 @@
       blocks.push(UL(ev.map(function (e) { return '`' + (e.stored || e.id) + '` — ' + (e.caption || e.phase || e.kind || 'evidence'); })));
     }
     blocks = blocks.concat(screenshotBlocks(ctx, 'appendix', '', 'Appendix evidence'));
+    blocks = blocks.concat(workspaceAppendix(ctx));
     blocks = blocks.concat(proofAndLocalTable(ctx));
     if (profile && profile.id === 'oscp') {
       var usedMsf = (ctx.timeline || []).some(function (r) { var c = (r.command || '').toLowerCase(); return c.indexOf('metasploit') !== -1 || c.indexOf('meterpreter') !== -1 || c.indexOf('msfconsole') !== -1; });

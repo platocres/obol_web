@@ -809,6 +809,25 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
   padding: 8px 10px; font: 11px var(--mono); resize: vertical; margin-bottom: 8px; }
 .ws-sync-paste:focus { outline: none; border-color: var(--accent); }
 .ws-sync .btn-primary { font-size: 12px; padding: 6px 14px; }
+.ws-file-desc { font-size: 11px; color: var(--muted); margin-bottom: 5px; font-style: italic; }
+/* floating hover preview card (desktop) */
+.ws-preview { position: fixed; z-index: 60; width: 320px; max-width: 92vw; background: var(--bg1, var(--bg2)); border: 1px solid var(--line-hot, var(--line));
+  border-radius: 9px; box-shadow: 0 10px 34px rgba(0,0,0,.5); padding: 10px 12px; pointer-events: auto; }
+.ws-preview[hidden] { display: none; }
+.ws-pv-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ws-pv-name { font-family: var(--mono); font-size: 12.5px; color: var(--text); font-weight: 700; word-break: break-all; }
+.ws-pv-tag { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; border-radius: 8px; padding: 0 6px; white-space: nowrap; margin-left: auto; border: 1px solid transparent; }
+.ws-pv-captured { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.ws-pv-suggested { color: var(--g-next, #F5A623); border-color: color-mix(in srgb, var(--g-next, #F5A623) 45%, transparent); }
+.ws-pv-ondisk { color: var(--g-done, #3E7BC4); border-color: color-mix(in srgb, var(--g-done, #3E7BC4) 45%, transparent); }
+.ws-pv-added { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 40%, transparent); }
+.ws-pv-expected { color: var(--orange); border-color: color-mix(in srgb, var(--orange) 40%, transparent); }
+.ws-pv-desc { font-size: 11px; color: var(--text-2); margin-bottom: 6px; }
+.ws-pv-term { background: #080d09; border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; margin: 0;
+  font: 10.5px/1.5 var(--mono); color: #cfe8cf; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.ws-pv-img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+.ws-pv-note { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.ws-pv-cmd { display: block; margin-top: 6px; font: 10.5px var(--mono); color: var(--accent-2); word-break: break-all; }
 
 .eng-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
 .eng-field > span { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); }

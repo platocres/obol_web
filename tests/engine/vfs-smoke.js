@@ -61,5 +61,11 @@ m = V.build(eng);
 ok(m.files.some(f => f.name === 'creds.txt' && f.unknown === true && f.synced === true), 'the adopted file is flagged synced+unknown');
 ok(m.files.find(f => f.name === 'tcp.txt').confirmed === true, 'the predicted file is now confirmed on disk');
 
+// ── describe(): purpose + honest metric, no fabricated facts ──
+ok(V.describe({ name: 'tcp.txt', tool: 'nmap', facts: ['ports.open', 'x'], output: 'a\nb' }) === 'Port & service scan · 2 facts', 'describe: nmap purpose + fact count');
+ok(V.describe({ name: 'x.py', tool: '', size: 400 }) === 'Python script · 400 B', 'describe: unknown file by extension + size');
+ok(V.describe({ name: 'local.txt', flag: true, facts: [] }) === 'Flag / proof file', 'describe: flag file, no metric when nothing measured');
+ok(/Credential/.test(V.describe({ name: 'ntds', tool: 'impacket-secretsdump', facts: ['loot.ntds'] })), 'describe: secretsdump reads as a credential dump');
+
 if (fail) { console.error('\nVFS SMOKE: ' + fail + ' FAILED'); process.exit(1); }
 console.log('\nVFS SMOKE: all passed');
