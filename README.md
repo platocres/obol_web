@@ -1,6 +1,6 @@
 # Obol — your OSCP prep companion, in the browser
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-2ea44f?style=flat-square)](LICENSE)
 ![Backend: none](https://img.shields.io/badge/backend-none-informational?style=flat-square)
 ![Dependencies: none](https://img.shields.io/badge/dependencies-none-2ea44f?style=flat-square)
 ![Offline: ready](https://img.shields.io/badge/offline-ready-2ea44f?style=flat-square)
@@ -272,4 +272,9 @@ explicit permission to test. Don't point it at anything you're not allowed to to
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Copyright (C) 2026 platocres.
+
+Obol is free software, released under the [GNU Affero General Public License v3.0](LICENSE). You may
+use, study, modify, and share it under those terms; any distributed or network-served derivative must
+remain open under the same license. See [CONTRIBUTING.md](CONTRIBUTING.md) for how contributions are
+licensed.
