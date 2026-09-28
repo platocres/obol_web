@@ -443,6 +443,20 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .graph-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .graph-toggle { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
 .graph-scroll { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 8px; }
+/* Pan/zoom viewport for the path graph: fixed-height window, the SVG moved by a transform. */
+.graphview { position: relative; overflow: hidden; height: 460px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--bg1); cursor: grab; touch-action: none; user-select: none;
+  background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 22px 22px; }
+.graphview.gv-grabbing { cursor: grabbing; }
+.graphview > svg.obol-graph { position: absolute; top: 0; left: 0; max-width: none; }
+.gv-toolbar { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px; z-index: 3; }
+.gv-btn { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); background: color-mix(in srgb, var(--surf2) 88%, transparent);
+  color: var(--text); border-radius: 7px; font-size: 17px; line-height: 1; cursor: pointer; backdrop-filter: blur(3px); }
+.gv-btn:hover { border-color: var(--accent); color: var(--accent); }
+.gv-hint { position: absolute; left: 12px; bottom: 12px; z-index: 3; font-size: 10.5px; color: var(--muted);
+  pointer-events: none; background: color-mix(in srgb, var(--bg1) 70%, transparent); padding: 2px 6px; border-radius: 5px; }
+@media (max-width: 640px) { .graphview { height: 340px; } }
 svg.obol-graph .g-empty { fill: var(--muted); }
 svg.obol-graph .g-edge { stroke: var(--line-hot); stroke-width: 1.5; }
 svg.obol-graph .g-edge-future { stroke: var(--line); stroke-dasharray: 4 4; }
@@ -688,6 +702,13 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .flag-val { font-family: var(--mono); font-size: 12px; color: var(--accent-2); word-break: break-all; user-select: all; }
 .flag-copy { justify-self: start; }
 .rail-flagval { color: var(--accent-2); }
+/* Captured flag on the rail — the whole value, wrapped and click-to-copy (it's the deliverable). */
+.rail-list li.rail-flag { display: block; }
+.rail-flag-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.rail-flag-file { font-family: var(--mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 12ch; }
+.rail-flag-val { display: block; margin-top: 3px; font-family: var(--mono); font-size: 11px; line-height: 1.3;
+  color: var(--accent-2); word-break: break-all; user-select: all; cursor: pointer; }
+.rail-flag-val:hover { color: var(--accent); text-decoration: underline; }
 /* Located-but-not-captured: found remotely, still to be read on-host for the report. Muted, dashed. */
 .flag-card.flag-located { border-left-color: var(--muted); border-left-style: dashed; background: var(--surf2); }
 .flag-card.flag-located .flag-slot { color: var(--text-2); font-weight: 600; }
