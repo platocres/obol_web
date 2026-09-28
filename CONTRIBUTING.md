@@ -28,7 +28,7 @@ this file).
 
 ## Contribution license and relicensing grant
 
-By submitting a contribution — a pull request, patch, or any other material — you agree that:
+By submitting a contribution (a pull request, patch, or any other material) you agree that:
 
 1. Your contribution is licensed to the project and its users under the **GNU AGPL v3.0**, the same
    license as the project; **and**
@@ -38,7 +38,7 @@ By submitting a contribution — a pull request, patch, or any other material �
    in addition to the AGPL.
 
 This lets the maintainer keep Obol free and open under the AGPL while also offering the project (or a
-related edition) under separate terms. You retain the copyright to your contribution — you are simply
+related edition) under separate terms. You retain the copyright to your contribution; you are simply
 granting these licenses.
 
 Please do **not** submit code you do not have the right to license this way, and do **not** include
