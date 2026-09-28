@@ -154,6 +154,20 @@ BH.parse(files).then(function (summary) {
   ok(kerbSec && kerbSec.count >= 1, 'domainView kerberoast section is populated');
   ok(kerbSec && kerbSec.commands.length >= 1, 'domainView section carries copy-paste commands');
 
+  // ── ctx fill: DC/host/lhost/secret from the engagement replace the operator placeholders ─────
+  const filled = BH.domainView(summary, ['ADMINISTRATOR'],
+    { dc: '10.0.0.5', host: '10.0.0.5', lhost: '10.0.0.9', secret: '-H ' + 'f'.repeat(32) });
+  const winrm = filled.sections.find(function (s) { return s.id === 'winrm'; });
+  ok(winrm && winrm.commands[0].indexOf('nxc winrm 10.0.0.5 ') === 0, 'ctx fills the DC/host into a query command');
+  ok(winrm && winrm.commands[0].indexOf('-H ' + 'f'.repeat(32)) !== -1, 'ctx fills the owned secret (-H hash)');
+  ok(winrm && winrm.commands.every(function (c) { return c.indexOf('<HOST>') === -1; }), 'no <HOST> placeholder survives when a host is known');
+  const uncon = filled.sections.find(function (s) { return s.id === 'unconstrained'; });
+  ok(!uncon || uncon.commands.every(function (c) { return c.indexOf('<YOUR_IP>') === -1; }), 'ctx fills <YOUR_IP> from lhost');
+  // without ctx, placeholders remain for the operator to fill
+  const bare = BH.domainView(summary, ['ADMINISTRATOR']);
+  const bareWinrm = bare.sections.find(function (s) { return s.id === 'winrm'; });
+  ok(bareWinrm && bareWinrm.commands[0].indexOf('<HOST>') !== -1, 'without ctx, <HOST> placeholder is preserved');
+
   // ── toFacts: conservative fact minting ─────────────────────────────────────────────────────
   const facts = BH.toFacts(summary, owned, 'domain:CORP.LOCAL');
   const kinds = facts.map(function (f) { return f.kind; });

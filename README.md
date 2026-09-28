@@ -184,6 +184,34 @@ and the methodology packs:
 
 ---
 
+## BloodHound domain analysis
+
+Drop a SharpHound `.zip` (or BloodHound-CE `.json` files) on the **Domain** tab and Obol parses the
+whole collection in your browser, with nothing uploaded anywhere. From that one export it does two
+things a raw BloodHound dump does not.
+
+First, it derives and draws the **owned-to-Domain-Admin attack paths** as an interactive graph you
+can pan, zoom, and rearrange. Hover any node for a card that gives you the full name (even when the
+label is truncated on the canvas), what the object is, how many paths run through it, and the exact
+edges it can abuse, so a chain like *Exchange Windows Permissions holds WriteDacl over the domain*
+reads at a glance.
+
+<p align="center">
+  <img src="screenshots/bloodhound-graph.png" alt="BloodHound attack-path graph with a hover card showing a group's full name and its abusable relationships" width="100%">
+</p>
+
+Second, it answers a board of **PlumHound-style high-value queries** from the same data: who can
+DCSync, who is Kerberoastable or AS-REP roastable, unconstrained delegation, local-admin and shell
+reach, vulnerable certificate templates, blank-password accounts, and more. Each card shows the
+count, expands to the exact principals behind it, and hands you copy-ready commands pre-filled with
+your target (and your credentials when you hold them).
+
+<p align="center">
+  <img src="screenshots/bloodhound-queries.png" alt="PlumHound-style query board with counts, expandable principal lists, and copy-ready commands" width="100%">
+</p>
+
+---
+
 ## A note for exam day
 
 Obol models the OSCP scoring rules: local + proof flags per machine, the 70-point pass threshold,

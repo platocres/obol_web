@@ -19,7 +19,7 @@
       'assets/engine/parsers/index.js?v=5bd56991',
     ],
     graph: ['assets/engine/graph.js?v=97e4f668', 'assets/ui/routes/graph.js?v=f509cf3e'],
-    domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=57e37dff', 'assets/ui/bhgraph.js?v=715f8264', 'assets/ui/routes/domain.js?v=6b1a39e5'],
+    domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=28bb7c00', 'assets/ui/bhgraph.js?v=ed34873b', 'assets/ui/routes/domain.js?v=c8d8f93d'],
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=9ad71876', 'assets/engine/report.js?v=d69bd94e', 'assets/ui/routes/report.js?v=9045801c'],
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=f27f51ef', 'assets/ui/routes/tools.js?v=7d043fd0'],
     checklist: ['assets/ui/routes/checklist.js?v=4d68a1b2'],

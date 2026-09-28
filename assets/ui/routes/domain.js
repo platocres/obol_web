@@ -18,6 +18,33 @@
     return owned.filter(function (v, i, a) { return v && a.indexOf(v) === i; });
   }
 
+  // Fill the query-card commands from what this engagement already knows: the DC/target host, the
+  // operator's listener IP, and (on-screen only) the owned account's secret. includeSecret is false
+  // for the exportable report so hashes/passwords never land in a shareable document.
+  function cmdCtx(owned, includeSecret) {
+    var eng = OBOL.store.active() || {}, params = eng.params || {};
+    var dc = null;
+    try {
+      var facts = OBOL.store.factSet();
+      var dcf = (facts.values && facts.values('ad.dc_candidate')) || [];
+      if (dcf[0] && dcf[0].host) dc = dcf[0].host;
+      var ctxOut = { dc: dc || params.target || null, host: params.target || null, lhost: params.lhost || null, secret: null };
+      if (includeSecret && owned && owned.length) {
+        var firstUser = String(owned[0]).split('@')[0].toLowerCase();
+        var creds = [];
+        try { creds = (OBOL.creds && OBOL.creds.gather) ? OBOL.creds.gather(eng, facts) : (eng.credentials || []); }
+        catch (e) { creds = eng.credentials || []; }
+        var c = creds.filter(function (x) { return x && x.user && String(x.user).toLowerCase() === firstUser; })[0];
+        if (c) {
+          var h = c.nthash || c.hash, pw = c.password || c.plaintext || c.secret;
+          if (h && /^[a-fA-F0-9]{32}$/.test(String(h))) ctxOut.secret = '-H ' + h;
+          else if (pw) ctxOut.secret = "-p '" + pw + "'";
+        }
+      }
+      return ctxOut;
+    } catch (e) { return { dc: params.target || null, host: params.target || null, lhost: params.lhost || null, secret: null }; }
+  }
+
   function render() {
     var eng = OBOL.store.active();
     var summary = eng && eng.bloodhound;
@@ -30,7 +57,7 @@
 
     if (summary) {
       var owned = ownedFromEngagement();
-      var view = OBOL.bloodhound.domainView(summary, owned);
+      var view = OBOL.bloodhound.domainView(summary, owned, cmdCtx(owned, true));
       html += '<div class="bh-summary-head"><h2 class="coach-sec-h">' + esc(summary.domain || 'domain')
         + ' — ' + (summary.users ? summary.users.length : 0) + ' users, ' + (summary.computers ? summary.computers.length : 0) + ' computers</h2>'
         + '<div class="ev-row"><input id="bh-owned" class="ev-cmd" placeholder="owned principals (comma-separated), e.g. ADMINISTRATOR@CORP.LOCAL" value="' + U.attr(owned.join(', ')) + '">'
@@ -47,17 +74,23 @@
       // exact commands obol would run against it.
       html += '<h2 class="coach-sec-h">High-value queries (PlumHound-style)</h2><div class="bh-census">';
       (view.sections || []).forEach(function (s) {
-        var n = (s.principals && s.principals.length) || s.count || 0;
+        var items = s.items || s.principals || [];
+        var n = items.length || s.count || 0;
         var cls = /admin|dcsync|unconstrained|domain admin|enterprise/i.test(s.title) ? 'crit' : (/kerberoast|as-?rep|roast/i.test(s.title) ? 'warn' : '');
         var cmds = (s.commands || []).slice(0, 3).map(function (c) {
           var line = typeof c === 'string' ? c : (c.run || c.cmd || c.command || '');
           return line ? '<div class="bh-cmd"><code>' + esc(line) + '</code><button class="btn-copy" data-copy="' + U.attr(line) + '">copy</button></div>' : '';
         }).join('');
+        // Expandable detail: the matched accounts/hosts behind the count (e.g. the five DCSync principals).
+        var detail = items.length
+          ? '<details class="bh-detail"><summary>' + items.length + ' ' + (items.length === 1 ? 'match' : 'matches') + '</summary>'
+            + '<ul class="bh-princ">' + items.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul></details>'
+          : '';
         html += '<div class="bh-card"><h3>' + esc(s.title) + '</h3>'
           + '<div class="bh-count ' + cls + '">' + n + '</div>'
           + (s.hint ? '<div class="bh-hint">' + esc(s.hint) + '</div>' : '')
           + (s.cash ? '<div class="bh-cash">' + esc(s.cash) + '</div>' : '')
-          + (s.principals && s.principals.length ? '<div class="bh-princ">' + s.principals.slice(0, 8).map(esc).join(', ') + (s.principals.length > 8 ? ' …' : '') + '</div>' : '')
+          + detail
           + (cmds ? '<div class="bh-cmds">' + cmds + '</div>' : '')
           + '</div>';
       });
@@ -139,7 +172,7 @@
       var eng = OBOL.store.active();
       if (!eng.bloodhound) return;
       var owned = ownedFromEngagement();
-      var view = OBOL.bloodhound.domainView(eng.bloodhound, owned);
+      var view = OBOL.bloodhound.domainView(eng.bloodhound, owned, cmdCtx(owned, false));
       var htmlDoc = OBOL.bloodhound.domainReportHtml(eng.bloodhound, view);
       var slot = document.getElementById('bh-report-slot');
       if (slot) slot.innerHTML = '<h2 class="coach-sec-h">Domain report</h2><iframe class="bh-report-frame" id="bh-frame"></iframe>';
