@@ -164,8 +164,8 @@ moment you are.
 | **Report** | Your exportable OSCP/CTF report, with proof discipline and redaction. |
 
 **Pro tip:** press **⌘K / Ctrl+K** anywhere to fuzzy-search every command — Enter copies it with
-your target and creds already filled in. A skin picker (top-right) lets you set the console green,
-amber, or several other themes.
+your target and creds already filled in. A skin picker in the settings menu (bottom-right) lets you set
+the console green, amber, or several other themes.
 
 ---
 
