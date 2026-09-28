@@ -19,9 +19,11 @@ let fail = 0;
 function ok(cond, msg) { if (!cond) { console.error('  FAIL:', msg); fail++; } else { console.log('  ok  :', msg); } }
 const F = OBOL.facts;
 
-// A fully domain-owned Windows DC: creds in hand, NTDS dumped, admin + WinRM proven.
+// A fully domain-owned Windows DC as a realistic IMPORT leaves it: recon already ran (scan.nmap.quick, so
+// the opening nmap has SETTLED and dropped), creds in hand, NTDS dumped, admin + WinRM proven. This mirrors
+// what the operator sees after pasting a run.txt that reached Domain Admin.
 const set = new OBOL.facts.FactSet([]);
-['target.configured', 'host.up', 'ports.open', 'port:445', 'port:389', 'port:88',
+['target.configured', 'host.up', 'ports.open', 'scan.nmap.quick', 'port:445', 'port:389', 'port:88',
  'os.windows', 'foothold.windows', 'credential.available', 'winrm.authenticated',
  'access.admin', 'loot.ntds'].forEach((k) =>
   set.add(F.makeFact({ kind: k, scope: 'host:10.0.0.5', state: F.ProofState.SUPPORTED })));
@@ -31,8 +33,9 @@ const ids = ranked.map((a) => a.id);
 function rank(id) { const i = ids.indexOf(id); return i < 0 ? Infinity : i; }
 console.log('  top 6:', ids.slice(0, 6).join(', '));
 
-// The flag hunt must be live and lead over the closed-avenue side-quests.
-ok(rank('flag-hunt-windows') < Infinity, 'the Windows flag hunt is a live move once we hold access');
+// The flag hunt must LEAD after import — it is the objective, and it surfaces at the very top of Ready now,
+// not buried under recon or side-quests. (This is the "make the flag commands surface at the top" contract.)
+ok(rank('flag-hunt-windows') === 0, 'the Windows flag hunt is the #1 Ready-now move after a domain-compromise import (id[0]=' + ids[0] + ')');
 ok(rank('flag-hunt-windows') < rank('sccm-enum'), 'flag hunt outranks SCCM enumeration after loot.ntds');
 ok(rank('flag-hunt-windows') < rank('windows-enum'), 'flag hunt outranks the local privesc sweep once admin');
 ok(rank('flag-hunt-windows') < rank('seimpersonate'), 'flag hunt outranks SeImpersonate once admin');

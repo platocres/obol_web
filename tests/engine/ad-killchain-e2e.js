@@ -124,13 +124,14 @@ function byId(id) { return pack.filter(function (a) { return a.id === id; })[0];
 ok(byId('gmsa-read') && !byId('gmsa-read').eligible(facts), 'gmsa-read stays hidden with no gMSA indicator (ad.gmsa) — gated on what is possible');
 
 // Flag capture uses the EXISTING, already-profile-aware flag-hunt move (obol-local heritage) — not a
-// reinvented reader. It must offer a pass-the-hash form so the Administrator hash from a DCSync can read the
-// flags with no plaintext, and it must fill the platform's own flag names.
+// reinvented reader. It follows the OSCP-honest flow: LOCATE remotely (pass-the-hash, no plaintext), GET ON
+// THE HOST interactively, then CAPTURE each flag on-host beside its identity (the report screenshot).
 var flagHunt = pack.filter(function (a) { return a.id === 'flag-hunt-windows'; })[0];
 ok(flagHunt, 'the dedicated flag-hunt move exists (not reinvented on the endgame move)');
-ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /-H \{\{nthash\}\}/.test(c.run); }), 'flag-hunt has a pass-the-hash variant (reads flags with the dumped Administrator hash, no password)');
-ok(flagHunt && (flagHunt.commands || []).filter(function (c) { return /\{\{flag_names_windows\}\}/.test(c.run); }).length >= 2, 'flag-hunt capture commands search the profile-configured flag names ({{flag_names_windows}})');
-ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /ipconfig/.test(c.run) && /===FLAG:/.test(c.run); }), 'flag-hunt prints each flag next to its own ipconfig + a parseable ===FLAG marker (OffSec screenshot)');
+ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /-H \{\{nthash\}\}/.test(c.run); }), 'flag-hunt has a pass-the-hash variant (uses the dumped Administrator hash, no password)');
+ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /nxc smb/.test(c.run) && /--spider/.test(c.run); }), 'flag-hunt LOCATES the flags remotely first (SMB spider)');
+ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /evil-winrm/.test(c.run); }), 'flag-hunt gets ON the host interactively (evil-winrm) — the report proof must be a shell on the target');
+ok(flagHunt && (flagHunt.commands || []).some(function (c) { var r = c.run || ''; return /ipconfig/.test(r) && /\btype\b\s+C:\\/i.test(r) && !/^\s*(?:nxc|evil-winrm|ssh|sshpass|impacket|wmiexec|psexec|smbclient|winrs)\b/i.test(r.trim()); }), 'flag-hunt captures each flag ON-HOST (a bare `type …\\flag.txt` beside ipconfig — not wrapped in a remote exec, so it counts for OSCP)');
 // and the platform token itself resolves per profile (HTB vs OffSec) through the existing helper
 var htbNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'htb' }).names);
 var oscpNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'oscp' }).names);

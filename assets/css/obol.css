@@ -688,6 +688,14 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .flag-val { font-family: var(--mono); font-size: 12px; color: var(--accent-2); word-break: break-all; user-select: all; }
 .flag-copy { justify-self: start; }
 .rail-flagval { color: var(--accent-2); }
+/* Located-but-not-captured: found remotely, still to be read on-host for the report. Muted, dashed. */
+.flag-card.flag-located { border-left-color: var(--muted); border-left-style: dashed; background: var(--surf2); }
+.flag-card.flag-located .flag-slot { color: var(--text-2); font-weight: 600; }
+.flag-card.flag-located .flag-slot em { color: var(--muted); font-style: normal; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.flag-locnote { color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.rail-list .rail-located span:first-child { color: var(--text-2); }
+.rail-list .rail-located em { color: var(--muted); font-style: normal; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.rail-note { color: var(--muted); font-size: 11px; line-height: 1.35; margin-top: 6px; }
 
 /* Identity at a glance — IP / Hostname / Domain, each labelled; the hostname brighter. Fills in as obol
    proves each fact. Used on the target page (stacked) and the engagement Attack Path (inline strip). */

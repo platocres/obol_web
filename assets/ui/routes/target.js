@@ -63,13 +63,25 @@
       return SLOT_LABEL[v.slot] || (e.kind.split('.').pop().replace('_flag', '').replace('flag', 'flag').replace(/^\w/, function (c) { return c.toUpperCase(); }) + ' flag');
     }
     var flags = flagFacts.map(flagLabel);
-    var flagCard = flagFacts.length
+    // Located-but-not-captured: found remotely (nxc/smb), still to be read on-host for the report.
+    var capturedVals = {}; flagFacts.forEach(function (e) { if (e.value && e.value.flag) capturedVals[e.value.flag] = 1; });
+    var locatedFacts = facts.values('objective.flag_located').filter(function (v) { return !(v && capturedVals[v.flag]); });
+    var flagCard = (flagFacts.length || locatedFacts.length)
       ? '<h2 class="coach-sec-h">Captured Flags</h2><ul class="flag-cards">' + flagFacts.map(function (e) {
           var v = e.value || {}; var val = v.flag || '';
           return '<li class="flag-card flag-' + esc(v.slot || 'flag') + '">'
             + '<div class="flag-card-h"><span class="flag-slot">🚩 ' + esc(flagLabel(e)) + '</span>'
             + (v.name ? '<span class="flag-file" title="' + U.attr(v.path || v.name) + '">' + esc(v.name) + '</span>' : '') + '</div>'
             + (val ? '<code class="flag-val" title="' + U.attr(val) + '">' + esc(val) + '</code><button class="btn-copy flag-copy" data-copy="' + U.attr(val) + '">copy</button>' : '')
+            + '</li>';
+        }).join('')
+        + locatedFacts.map(function (v) {
+          v = v || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
+          var label = SL[v.slot] || 'Flag';
+          return '<li class="flag-card flag-located">'
+            + '<div class="flag-card-h"><span class="flag-slot">📍 ' + esc(label) + ' <em>located</em></span>'
+            + (v.name ? '<span class="flag-file" title="' + U.attr(v.path || v.name) + '">' + esc(v.path || v.name) + '</span>' : '') + '</div>'
+            + '<div class="flag-locnote">Found remotely — read it from an interactive shell on this host so it counts for the report (OffSec scores a remote read zero).</div>'
             + '</li>';
         }).join('') + '</ul>'
       : '';
