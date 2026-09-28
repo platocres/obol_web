@@ -184,8 +184,15 @@
     var flags = objFacts.filter(function (f) { return f.kind !== 'objective.flag_located'; });
     // Located-but-not-captured: found remotely (nxc/smb), still to be read from an on-host shell for the
     // report. Hide any whose value we have already captured on-host.
-    var capturedVals = {}; flags.forEach(function (f) { if (f.value && f.value.flag) capturedVals[f.value.flag] = 1; });
-    var located = objFacts.filter(function (f) { return f.kind === 'objective.flag_located' && !(f.value && capturedVals[f.value.flag]); });
+    var capturedVals = {}, capturedSlots = {};
+    flags.forEach(function (f) { var v = f.value || {}; if (v.flag) capturedVals[v.flag] = 1; if (v.slot) capturedSlots[v.slot] = 1; });
+    var locSeen = {};
+    var located = objFacts.filter(function (f) {
+      if (f.kind !== 'objective.flag_located') return false;
+      var v = f.value || {};
+      if ((v.flag && capturedVals[v.flag]) || (v.slot && capturedSlots[v.slot])) return false; // already captured on-host
+      var key = v.path || v.flag || v.slot || ''; if (locSeen[key]) return false; locSeen[key] = 1; return true;
+    });
     // Use the same deduped gather as the left switcher, so one recovered credential proven on two scopes
     // (e.g. host:10.x and host:10.y) shows ONCE here, not twice.
     var creds = [];

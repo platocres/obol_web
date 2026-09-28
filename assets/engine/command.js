@@ -212,6 +212,35 @@
       var fc = OBOL.profile.resolveFlagConfig(opts.profile || {});
       if (!ctx.flag_inames_linux) ctx.flag_inames_linux = OBOL.profile.linuxInameExpr(fc.names);
       if (!ctx.flag_names_windows) ctx.flag_names_windows = OBOL.profile.windowsNameList(fc.names);
+
+      // Per-slot flag file PATHS for the on-host capture step. Prefer a path obol actually LOCATED (a
+      // nxc/smb spider, or a prior read) so step 3/4 fill with the real file — the user's Desktop, the
+      // platform's own name — instead of a guessed placeholder; else a profile-aware default.
+      var _flagName = function (slot) {
+        var ns = fc.names || [];
+        for (var i = 0; i < ns.length; i++) if ((fc.slots || {})[ns[i]] === slot) return ns[i];
+        return slot === 'root' ? 'root.txt' : 'user.txt';
+      };
+      var _locatedPath = function (slot) {
+        var kinds = ['objective.flag_located', slot === 'root' ? 'objective.root_flag' : 'objective.local_flag'];
+        for (var k = 0; k < kinds.length; k++) {
+          var vs = (facts && facts.values) ? (facts.values(kinds[k]) || []) : [];
+          for (var i = 0; i < vs.length; i++) if (vs[i] && vs[i].path && vs[i].slot === slot) return vs[i].path;
+        }
+        return '';
+      };
+      var _isLinux = facts && facts.has && (facts.has('foothold.linux') || facts.has('access.shell') || facts.has('os.linux'))
+        && !facts.has('foothold.windows') && !facts.has('os.windows');
+      if (ctx.flag_path_local === undefined) {
+        ctx.flag_path_local = _locatedPath('local') || (_isLinux
+          ? ('/home/' + (ctx.user || '<user>') + '/' + _flagName('local'))
+          : ('C:\\Users\\' + (ctx.user || '<user>') + '\\Desktop\\' + _flagName('local')));
+      }
+      if (ctx.flag_path_root === undefined) {
+        ctx.flag_path_root = _locatedPath('root') || (_isLinux
+          ? ('/root/' + _flagName('root'))
+          : ('C:\\Users\\Administrator\\Desktop\\' + _flagName('root')));
+      }
     }
 
     // workspace output-directory tokens ({{scandir}} etc.) — from opts.workspace when the caller
