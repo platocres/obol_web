@@ -1025,7 +1025,12 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
   .rep-out a { color: #000 !important; text-decoration: underline; }
   .rep-out table { border-collapse: collapse; width: 100%; }
   .rep-out table.data th, .rep-out table.data td, .rep-out table.kv th, .rep-out table.kv td { border: 1px solid #999; padding: 4px 8px; color: #000; }
-  .rep-out pre, .rep-out pre.lang-terminal, .rep-out .kali-term { background: #f6f6f6 !important; color: #111 !important; border: 1px solid #ccc !important; white-space: pre-wrap; }
+  .rep-out pre, .rep-out pre.lang-terminal, .rep-out .kali-term {
+    background: #f6f6f6 !important; color: #111 !important; border: 1px solid #ccc !important; border-left: 3px solid #888 !important;
+    border-radius: 4px !important; padding: 8px 11px !important; margin: 8px 0 !important;
+    font: 10.5px/1.45 var(--mono) !important; white-space: pre-wrap !important;
+    word-break: break-word !important; overflow-wrap: anywhere !important; overflow: hidden !important; max-width: 100% !important; }
+  .rep-out .kali-term.term-target { border-left-color: #b5651d !important; }
   .rep-out .kali-term .kt-b { color: #1a5fb4 !important; } .rep-out .kali-term .kt-u { color: #0b4a9e !important; } .rep-out .kali-term .kt-c { color: #000 !important; } .rep-out .kali-term .kt-o { color: #222 !important; }
   .rep-out .kali-term.term-target { border-left-color: #b5651d !important; } .rep-out .kali-term.term-target .kt-u { color: #9a5a12 !important; }
   .rep-out .callout { border: 1px solid #ccc; color: #000; }
