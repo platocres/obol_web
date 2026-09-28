@@ -16,11 +16,14 @@
     ['goal', 'Goal', 'A milestone the next move is meant to prove'],
     ['locked', 'Blocked', 'A move whose prerequisites are not proven yet'],
   ];
+  // Legend doubles as a filter: every category on by default; clicking a chip dims it and drops that
+  // category's nodes (and any edge touching them) from the graph. aria-pressed carries the on/off state.
   function legend() {
-    return '<div class="gv-legend" role="group" aria-label="Path graph legend">'
-      + '<span class="gv-legend-h">Legend</span>'
+    return '<div class="gv-legend" role="group" aria-label="Filter path graph by node type">'
+      + '<span class="gv-legend-h">Legend · click to filter</span>'
       + LEGEND.map(function (it) {
-        return '<span class="gv-lg gv-lg-' + it[0] + '" title="' + it[2] + '"><i aria-hidden="true"></i>' + it[1] + '</span>';
+        return '<button type="button" class="gv-lg gv-lg-' + it[0] + '" data-gvfilter="' + it[0] + '" aria-pressed="true" title="' + it[2] + ' — click to hide">'
+          + '<i aria-hidden="true"></i>' + it[1] + '</button>';
       }).join('')
       + '</div>';
   }
@@ -47,8 +50,26 @@
     Array.prototype.forEach.call(views, function (v) { if (!v._gvWired) wire(v); });
   }
 
+  // Wire the legend chips (sibling of the viewport) to filter node categories: toggling a chip flips
+  // aria-pressed and a `gv-off-<cat>` class on the viewport, which CSS uses to hide that category.
+  function wireLegend(view) {
+    var wrap = view.closest ? view.closest('.gv-wrap') : null;
+    var legendEl = wrap && wrap.querySelector('.gv-legend');
+    if (!legendEl || legendEl._gvWired) return;
+    legendEl._gvWired = true;
+    legendEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-gvfilter]'); if (!btn) return;
+      var cat = btn.getAttribute('data-gvfilter');
+      var on = btn.getAttribute('aria-pressed') !== 'false';
+      btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+      btn.classList.toggle('off', on);
+      view.classList.toggle('gv-off-' + cat, on);
+    });
+  }
+
   function wire(view) {
     view._gvWired = true;
+    wireLegend(view);
     var svg = view.querySelector('svg');
     if (!svg) return;
 

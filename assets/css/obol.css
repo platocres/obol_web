@@ -453,16 +453,36 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .graph-toggle { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
 .graph-scroll { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); padding: 8px; }
 /* Path-graph legend — sits above the pan/zoom viewport and keys the five node states by colour/shape. */
-.gv-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 11px; margin-bottom: 8px;
+.gv-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 10px; padding: 8px 11px; margin-bottom: 8px;
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); font-size: 11.5px; color: var(--text-2); }
 .gv-legend-h { text-transform: uppercase; letter-spacing: .09em; font-size: 9.5px; font-weight: 700; color: var(--muted); margin-right: 2px; }
-.gv-lg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+/* Each chip is a filter toggle: on by default, ringed in its category colour; off → dimmed + greyed. */
+.gv-lg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; font: inherit; font-size: 11.5px;
+  color: var(--text-2); background: var(--surf2); border: 1.5px solid var(--line); border-radius: 20px; padding: 3px 10px 3px 8px;
+  transition: opacity .12s ease, border-color .12s ease; }
+.gv-lg:hover { color: var(--text); }
+.gv-lg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .gv-lg i { width: 15px; height: 11px; border-radius: 3px; box-sizing: border-box; flex: none; }
-.gv-lg-next i { background: var(--g-next); border: 1px solid var(--g-next-line); }
-.gv-lg-proven i { background: var(--g-proven); border: 1px solid var(--g-proven-line); border-radius: 6px; }
-.gv-lg-done i { background: var(--g-done); border: 1px solid var(--g-done-line); }
-.gv-lg-goal i { background: none; border: 1.5px dashed var(--g-goal-line); border-radius: 6px; }
-.gv-lg-locked i { background: none; border: 1.5px dashed var(--g-locked-line); }
+.gv-lg-next { border-color: var(--g-next); } .gv-lg-next i { background: var(--g-next); border: 1px solid var(--g-next-line); }
+.gv-lg-proven { border-color: var(--g-proven); } .gv-lg-proven i { background: var(--g-proven); border: 1px solid var(--g-proven-line); border-radius: 6px; }
+.gv-lg-done { border-color: var(--g-done); } .gv-lg-done i { background: var(--g-done); border: 1px solid var(--g-done-line); }
+.gv-lg-goal { border-color: var(--g-goal-line); } .gv-lg-goal i { background: none; border: 1.5px dashed var(--g-goal-line); border-radius: 6px; }
+.gv-lg-locked { border-color: var(--g-locked-line); } .gv-lg-locked i { background: none; border: 1.5px dashed var(--g-locked-line); }
+/* Off state — chip dimmed to signal its category is hidden from the graph. */
+.gv-lg.off { opacity: .42; border-color: var(--line) !important; }
+.gv-lg.off i { filter: grayscale(1); }
+/* Category filters: a gv-off-<cat> class on the viewport hides that category's nodes and any edge
+   whose either endpoint is in it. */
+.graphview.gv-off-next svg.obol-graph .gcat-next,
+.graphview.gv-off-next svg.obol-graph .gedge-from-next, .graphview.gv-off-next svg.obol-graph .gedge-to-next,
+.graphview.gv-off-proven svg.obol-graph .gcat-proven,
+.graphview.gv-off-proven svg.obol-graph .gedge-from-proven, .graphview.gv-off-proven svg.obol-graph .gedge-to-proven,
+.graphview.gv-off-done svg.obol-graph .gcat-done,
+.graphview.gv-off-done svg.obol-graph .gedge-from-done, .graphview.gv-off-done svg.obol-graph .gedge-to-done,
+.graphview.gv-off-goal svg.obol-graph .gcat-goal,
+.graphview.gv-off-goal svg.obol-graph .gedge-from-goal, .graphview.gv-off-goal svg.obol-graph .gedge-to-goal,
+.graphview.gv-off-locked svg.obol-graph .gcat-locked,
+.graphview.gv-off-locked svg.obol-graph .gedge-from-locked, .graphview.gv-off-locked svg.obol-graph .gedge-to-locked { display: none; }
 /* Pan/zoom viewport for the path graph: fixed-height window, the SVG moved by a transform. */
 .graphview { position: relative; overflow: hidden; height: 460px; border: 1px solid var(--line);
   border-radius: var(--radius); background: var(--bg1); cursor: grab; touch-action: none; user-select: none;

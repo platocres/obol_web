@@ -57,6 +57,10 @@
     return { phases: P.PHASES.slice(), nodes: nodes, edges: edges };
   }
 
+  // The legend/filter category a node belongs to (matches the five legend swatches): proven|goal for
+  // facts, done|next|locked for actions. Used to tag nodes and their edges so the legend can filter them.
+  function catOfNode(n) { return n.type === 'fact' ? (n.state === 'proven' ? 'proven' : 'goal') : n.state; }
+
   var NW = 178, NH = 42, COLW = 214, ROW = 56, PADX = 22, PADY = 46;
 
   function trunc(label, limit) {
@@ -86,8 +90,10 @@
       if (!a || !b) return '';
       var x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2, mx = (x1 + x2) / 2;
       var future = b.node.type === 'fact' && b.node.state === 'future';
+      // Tag with both endpoints' categories so a legend filter hides an edge when either end is hidden.
+      var ecls = 'g-edge' + (future ? ' g-edge-future' : '') + ' gedge-from-' + catOfNode(a.node) + ' gedge-to-' + catOfNode(b.node);
       return '<path d="M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2 + '" '
-        + 'fill="none" class="g-edge' + (future ? ' g-edge-future' : '') + '"/>';
+        + 'fill="none" class="' + ecls + '"/>';
     }).join('');
 
     var headers = cols.map(function (p, ci) {
@@ -102,7 +108,7 @@
     var tc = (OBOL.util && OBOL.util.titleCase) ? OBOL.util.titleCase : function (x) { return x; };
     var nodeSvg = Object.keys(pos).map(function (id) {
       var m = pos[id], n = m.node, rx = n.type === 'fact' ? 16 : 6;
-      var cls = 'g-node g-' + n.type + '-' + n.state, lbl = tc(n.label);
+      var cls = 'g-node g-' + n.type + '-' + n.state + ' gcat-' + catOfNode(n), lbl = tc(n.label);
       return '<g class="' + cls + '" data-nid="' + attr(id) + '" tabindex="0" role="button">'
         + '<rect x="' + m.x + '" y="' + m.y + '" width="' + NW + '" height="' + NH + '" rx="' + rx + '"/>'
         + '<text x="' + (m.x + NW / 2) + '" y="' + (m.y + NH / 2 + 4) + '" text-anchor="middle" font-size="12">'
