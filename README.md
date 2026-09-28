@@ -71,6 +71,12 @@ and panicking about screenshots the night before the exam. Obol takes that load 
   <img src="https://github.com/user-attachments/assets/68b70b94-7450-4ca7-a1d6-58b3d8208c3e" alt="The engagement map of hosts, services, credentials and domain" width="92%">
 </p>
 
+**Findings — catalogued and proof-bound, grouped by severity or target**
+
+<p align="center">
+  <img src="screenshots/findings.png" alt="The Findings view listing catalogued findings with severity, evidence, and remediation" width="92%">
+</p>
+
 <table>
   <tr>
     <td width="50%" valign="top" align="center">
