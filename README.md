@@ -245,6 +245,26 @@ Tests live in `tests/` (a pure-Node engine suite and a headless-browser smoke of
 
 ---
 
+## Status and direction
+
+Obol is under active development — a growing companion, not a finished product. The methodology
+packs, parsers, and coaching keep improving, and you should expect the occasional rough edge in the
+meantime.
+
+One thing won't change: **Obol will never pwn a box for you.** It doesn't run exploits, and it can't
+guarantee an end-to-end path to root on every machine — by design. It's a coach that keeps you
+oriented, honest, and organized while *you* do the hacking, which is exactly the skill the OSCP is
+testing. Where Obol doesn't yet have a move for some niche service or unusual chain, it won't invent
+one; it points you at the next reasonable step and stays out of your way.
+
+The long-term goal is to map **every attribute of a quality penetration test** into Obol's workflow —
+disciplined enumeration, proof-gated findings, the full attack-path methodology, credential and pivot
+tracking, and exam-grade reporting — so that working a box in Obol mirrors how a strong operator
+actually thinks and documents. That target keeps expanding, and the tool grows toward it with every
+engagement.
+
+---
+
 ## Legal and ethics
 
 Obol is for **authorized** labs, training, CTFs, exam preparation, and engagements where you have
