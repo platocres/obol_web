@@ -114,6 +114,14 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 .facts-empty { color: var(--muted); font-size: 12px; font-style: italic; }
 /* credential switcher (sidebar) — collected creds, click one to fill every command with it */
 .side-h-note { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 10px; color: var(--muted); opacity: .8; }
+/* Gold sidebar accents — ONLY on the default obol skin (OLED + emerald); other skins keep their own palette. */
+/* Section headers get the same glowing gold pill treatment as a SUGGESTED workspace badge. */
+:root[data-skin="obol"] .side-h { display: inline-block; color: var(--g-next, #F5A623);
+  background: color-mix(in srgb, var(--g-next, #F5A623) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-next, #F5A623) 42%, transparent);
+  border-radius: 20px; padding: 3px 11px; box-shadow: 0 0 10px -3px color-mix(in srgb, var(--g-next, #F5A623) 40%, transparent); }
+:root[data-skin="obol"] .param span { color: color-mix(in srgb, var(--g-next, #F5A623) 60%, #ffffff); font-weight: 600; }
+:root[data-skin="obol"] .side-h-note { color: var(--text-2); opacity: 1; margin-left: 7px; vertical-align: middle; }
 .cred-switch { display: flex; flex-direction: column; gap: 5px; }
 .cred-empty { color: var(--muted); font-size: 11.5px; font-style: italic; line-height: 1.35; }
 .cred-row { display: flex; flex-direction: column; gap: 3px; background: var(--bg2); border: 1px solid var(--line);
@@ -733,7 +741,7 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 @media (max-width: 1000px) { .eng-top { grid-template-columns: 1fr; } }
 .ws-panel { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
 .ws-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.ws-panel-head h2 { margin: 0; }
+.ws-panel-head h2 { margin: 0; color: var(--text); }
 .ws-counts { font-size: 11.5px; color: var(--text-2); white-space: nowrap; font-weight: 600; }
 .ws-c-cap { color: var(--accent-2); } .ws-c-exp { color: var(--orange); }
 .ws-root { margin: 4px 0 8px; }
@@ -763,7 +771,9 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
   font: 11px/1.5 var(--mono); color: #cfe8cf; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
 .ws-file-facts { font-size: 11.5px; color: var(--text-2); margin: 4px 0; }
 .ws-file-note { font-size: 11.5px; color: var(--text-2); margin-bottom: 5px; }
-.ws-file-link { font-size: 11.5px; color: var(--accent-2); display: inline-block; margin-top: 3px; }
+.ws-file-link { font-size: 12px; font-weight: 600; color: var(--accent-2); display: inline-block; margin-top: 6px;
+  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 20px; padding: 3px 11px; }
+.ws-file-link:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .ws-shot { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; margin-top: 4px; }
 /* state dots + one-word tags for the anticipated / on-disk / adopted / hand-added files */
 .ws-suggested .ws-dot { background: var(--g-next, #F5A623); }
@@ -783,14 +793,14 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 @keyframes ws-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--g-next, #F5A623) 60%, transparent); opacity: .9; } 50% { box-shadow: 0 0 0 4px transparent; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .ws-suggested > summary .ws-dot { animation: none; } }
 /* per-file remove + per-folder add controls */
-.ws-rm { margin-left: 6px; flex: none; width: 17px; height: 17px; line-height: 15px; text-align: center; border-radius: 5px;
-  border: 1px solid transparent; background: none; color: var(--muted); font-size: 14px; cursor: pointer; opacity: 0; transition: opacity .12s, color .12s, background .12s; }
+.ws-rm { margin-left: 6px; flex: none; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
+  border: 1px solid transparent; background: none; color: var(--text-2); font-size: 13px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .12s, color .12s, background .12s; }
 .ws-file > summary:hover .ws-rm, .ws-rm:focus-visible { opacity: 1; }
 .ws-rm:hover { color: #fff; background: var(--danger, #c0392b); }
 .ws-when + .ws-rm { margin-left: 6px; }
 .ws-file > summary:not(:has(.ws-when)) .ws-rm { margin-left: auto; }
-.ws-add { margin-left: auto; flex: none; width: 20px; height: 20px; line-height: 18px; text-align: center; border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: var(--accent-soft); color: var(--accent-2); font-size: 14px; font-weight: 700; cursor: pointer; transition: background .12s, transform .08s; }
+.ws-add { margin-left: auto; flex: none; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: var(--accent-soft); color: var(--accent-2); font-size: 14px; line-height: 1; font-weight: 700; cursor: pointer; transition: background .12s, transform .08s; }
 .ws-add:hover { background: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent-2); transform: scale(1.08); }
 .ws-synced-at { margin-left: 8px; font-size: 10px; color: var(--accent-2); font-weight: 600; }
 .ws-foot { margin-top: 8px; }
@@ -827,8 +837,11 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .ws-pv-term { background: #080d09; border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; margin: 0;
   font: 10.5px/1.5 var(--mono); color: #cfe8cf; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
 .ws-pv-img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; }
-.ws-pv-note { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.ws-pv-note { font-size: 12px; color: var(--text-2); line-height: 1.5; }
 .ws-pv-cmd { display: block; margin-top: 6px; font: 10.5px var(--mono); color: var(--accent-2); word-break: break-all; }
+.ws-pv-cta { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: var(--accent-2);
+  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent); border-radius: 20px; padding: 4px 12px; }
+.ws-pv-cta:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
 
 .eng-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
 .eng-field > span { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); }
