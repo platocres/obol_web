@@ -21,6 +21,8 @@
       params: eng.params || {},
       screenshots: eng.screenshots || [],
       notes: eng.reportNotes || {},
+      workspace: eng.workspace || {},
+      engId: eng.id,
       reportmeta: (root.OBOL_REPORTMETA || root.OBOL && root.OBOL.reportmeta) || null,
       includeSecrets: !!includeSecrets,
       name: eng.name,

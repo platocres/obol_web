@@ -100,6 +100,18 @@
         }
       }
 
+      // john's LIVE cracking output (a normal run, not --show) prints each recovered secret as
+      // `<plaintext>        (<label>)`. Gated on john's "Loaded N password hash" preamble. The
+      // plaintext is a candidate secret; the parenthesized label names what it unlocks.
+      if (lc.indexOf('john') >= 0 && reSearch(C._JOHN_LOADED_RE, text)) {
+        var lm = C._JOHN_CRACKED_LIVE_RE.exec(line);
+        if (lm && lm.groups.pw.indexOf(':') < 0 && C._valid_password(lm.groups.pw.trim())) {
+          _add(facts, mkFact('credential.candidate', 'host:' + ws.target,
+            { kind: 'cracked_secret', password: lm.groups.pw.trim(), label: lm.groups.label.trim(), via: 'john' }, S, source));
+          return;
+        }
+      }
+
       if (lc.indexOf('john') < 0) return;
       if (lc.indexOf('--show') < 0 && !reSearch(C._JOHN_CRACKED_FOOTER_RE, text)) return;
       var sm = C._JOHN_SHOW_RE.exec(line);

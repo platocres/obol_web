@@ -110,8 +110,8 @@
       + '<span class="finding-title">' + esc(f.title) + '</span>'
       + (showHost ? hostPill(f.host) : '')
       + '<span class="finding-cat">' + esc(f.category) + '</span></div>'
-      + (f.evidence ? '<div class="finding-ev"><span class="mini-label">evidence</span> ' + esc(String(f.evidence).slice(0, 300)) + '</div>' : '')
-      + (f.remediation ? '<div class="finding-fix"><span class="mini-label">fix</span> ' + esc(f.remediation) + '</div>' : '')
+      + (f.evidence ? '<div class="finding-ev"><span class="mini-label">Evidence</span> ' + esc(String(f.evidence).slice(0, 300)) + '</div>' : '')
+      + (f.remediation ? '<div class="finding-fix"><span class="mini-label">Fix</span> ' + esc(f.remediation) + '</div>' : '')
       + (f.refs ? '<div class="finding-refs">' + esc(f.refs) + '</div>' : '')
       + '</article>';
   }
@@ -165,7 +165,7 @@
     var sort = ((OBOL.store.active() || {}).ui || {}).findingsSort === 'target' ? 'target' : 'severity';
     var toggle = hostCount > 1
       ? '<div class="findings-sort" role="group" aria-label="Group findings by">'
-        + '<span class="mini-label">group by</span>'
+        + '<span class="mini-label">Group by</span>'
         + '<button type="button" class="fsort-btn' + (sort === 'severity' ? ' active' : '') + '" data-fsort="severity">Severity</button>'
         + '<button type="button" class="fsort-btn' + (sort === 'target' ? ' active' : '') + '" data-fsort="target">Target</button>'
         + '</div>'

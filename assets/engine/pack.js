@@ -246,6 +246,18 @@
     'wifi.handshake_captured': 'a captured WPA handshake', 'wifi.pmkid_captured': 'a captured PMKID',
     'wifi.psk_cracked': 'a cracked Wi-Fi PSK', 'wifi.associated': 'an associated (on-network) wireless link',
     'wifi.eap_creds': 'captured WPA-Enterprise EAP credentials',
+    'sccm.enumerated': 'SCCM/MECM enumeration outcome (present/absent)',
+    'mssql.reachable': 'MSSQL is reachable', 'mssql.authenticated': 'an authenticated MSSQL session',
+    'access.root': 'root access', 'privesc.script_sink': 'an injectable sink in a sudo-allowed script',
+    'host.notable_program': 'a bespoke local program worth investigating (a run-this-and-read-it lead)',
+    'host.program_inspected': 'a notable local program obol has already inspected',
+    'lead.stalled': 'a promising move that didn\'t land for a technical reason (worth another look)',
+    'ad.domain_control': 'a DACL control right over the domain root',
+    'web.exposed_artifact': 'an exposed credential-bearing artifact (db/git/archive/config) to fetch and read',
+    'web.artifact_looted': 'an exposed artifact obol has already fetched and read',
+    'web.param_candidate': 'a discovered request parameter', 'web.params_discovered': 'parameter fuzzing completed for an endpoint',
+    'web.param_probed': 'an injection probe tried against a parameter', 'web.injectable_param': 'a confirmed injectable parameter',
+    'web.param_exploited': 'an injectable parameter handed off for exploitation',
   };
 
   function friendly(kind) {

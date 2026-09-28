@@ -81,6 +81,12 @@
   C._LAPS_USER_RE = /\b(?:User|Username|Account)\s*[:=]\s*(?<user>[A-Za-z0-9._$-]+)/i;
   C._JOHN_SHOW_RE = /^(?<user>[A-Za-z0-9._$-]{2,}):(?<password>[^:\s][^:\r\n]*)(?::.*)?$/;
   C._JOHN_CRACKED_FOOTER_RE = /\b\d+\s+password\s+hash(?:es)?\s+cracked\b/i;
+  // "Loaded N password hash" preamble — gates the LIVE-cracked-line parser so an ordinary
+  // `text  (aside)` line elsewhere never trips it.
+  C._JOHN_LOADED_RE = /Loaded\s+\d+\s+password\s+hash/i;
+  // john's LIVE cracking output (a normal run, not --show) prints each recovered secret as
+  // `<plaintext>        (<label>)` — e.g. an archive password `codeblue        (backup.zip)`.
+  C._JOHN_CRACKED_LIVE_RE = /^(?<pw>\S.*?)\s{2,}\((?<label>[^)]+)\)\s*$/;
   C._CPASSWORD_RE = /\bcpassword\s*=\s*["']?([^"'\s<>]+)/i;
   C._GPP_FILE_RE = /\b(?:Groups|ScheduledTasks|Services|DataSources|Printers|Drives)\.xml\b/i;
   C._NMAP_OPEN_RE = /^(?<port>\d+)\/(?:tcp|udp)\s+open(?:\|\w+)?\s+(?<service>\S+)?(?:\s+(?<version>.*?))?\s*$/im;

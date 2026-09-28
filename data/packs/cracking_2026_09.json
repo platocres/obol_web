@@ -105,6 +105,25 @@
       ]
     },
     {
+      "id": "crack-archive",
+      "title": "Crack a Password-Protected Archive (zip/rar/7z)",
+      "hypothesis": "A password-protected backup/export archive found in loot usually hides config files or credentials. Extract its hash with the matching *2john and crack it offline; then unpack it on your box and paste anything credential-like from inside back on Evidence.",
+      "tool": "john",
+      "tools": ["zip2john", "rar2john", "7z2john", "john", "hashcat"],
+      "requires_any": ["loot.material"],
+      "produces": ["credential.candidate"],
+      "priority": 60,
+      "autonomy": "auto",
+      "proves": "the archive password (a candidate secret until it unlocks the archive and its contents are read back)",
+      "does_not_prove": "any access — the password only unlocks the file; what's inside must still be extracted and validated",
+      "commands": [
+        {"tool": "zip2john", "run": "zip2john archive.zip > archive.hash", "note": "for a .zip — use the archive obol flagged as loot.material"},
+        {"tool": "rar2john", "run": "rar2john archive.rar > archive.hash", "note": "for a .rar"},
+        {"tool": "7z2john", "run": "7z2john archive.7z > archive.hash", "note": "for a .7z (needs the john-jumbo build)"},
+        {"tool": "john", "run": "john --wordlist=/usr/share/wordlists/rockyou.txt archive.hash", "note": "john auto-detects the *2john format; unzip with the cracked password, then paste any creds/config from inside on Evidence."}
+      ]
+    },
+    {
       "id": "online-brute-ssh",
       "title": "Online password brute over SSH (hydra)",
       "hypothesis": "When SSH is reachable and no working credential is known yet, a targeted hydra run against an enumerated user list can recover a login — a noisy, lockout-risky attack, so it is approve-tier and never auto-fires in a normal cruise.",

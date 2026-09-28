@@ -39,7 +39,43 @@
   }
   C._parse_wpscan = _parse_wpscan;
 
-  function _parse_web_content(text, ws, source, facts) {
+  // A discovered path that leaks a credential-bearing artifact obol can fetch + read: an app SQLite
+  // store, an exposed VCS dir, a backup archive, or a config/env/dump. Order matters (git/archive/
+  // config win over the liberal sqlite `…/db` catch).
+  var _ARTIFACT_SQLITE_RE = /\.(?:db|sqlite3?|s3db)$|\/(?:db|database|data)$/i;
+  var _ARTIFACT_GIT_RE = /\/\.git(?:\/|$)|\/\.svn(?:\/|$)/i;
+  var _ARTIFACT_ARCHIVE_RE = /\.(?:zip|rar|7z|tar|tar\.gz|tgz|tar\.bz2)$/i;
+  var _ARTIFACT_CONFIG_RE = /\.(?:env|config|conf|cfg|ini|ya?ml|json|xml|properties|sql|bak|old|save|swp|inc)$|(?:config|configuration|settings|wp-config|web\.config|\.env)(?:\.php|\.inc)?$/i;
+  var _BASE_URL_RE = /(?<base>https?:\/\/[^/\s"']+)/i;
+
+  function _classify_artifact(path) {
+    if (reSearch(_ARTIFACT_GIT_RE, path)) return 'git';
+    if (reSearch(_ARTIFACT_ARCHIVE_RE, path)) return 'archive';
+    if (reSearch(_ARTIFACT_CONFIG_RE, path)) return 'config';
+    if (reSearch(_ARTIFACT_SQLITE_RE, path)) return 'sqlite';
+    return '';
+  }
+  C._classify_artifact = _classify_artifact;
+
+  function _exposed_artifacts(paths, command, ws, source, facts) {
+    var m = reSearch(_BASE_URL_RE, command || '');
+    var base = m ? m.groups.base : '';
+    var seen = {}, count = 0;
+    for (var i = 0; i < paths.length; i++) {
+      var path = paths[i];
+      var kind = _classify_artifact(path);
+      if (!kind) continue;
+      var url = (base && path.charAt(0) === '/') ? (base + path) : (base ? base + '/' + path : path);
+      if (seen[url]) continue;
+      seen[url] = true;
+      count++;
+      _add(facts, mkFact('web.exposed_artifact', 'host:' + ws.target, { url: url, path: path, kind: kind }, S, source));
+      if (count >= 15) break;
+    }
+  }
+  C._exposed_artifacts = _exposed_artifacts;
+
+  function _parse_web_content(text, ws, source, facts, command) {
     var paths = {};
     reAll(C._WEB_GOBUSTER_RE, text).forEach(function (m) { if (m.groups.code !== '404') paths[m.groups.path] = true; });
     reAll(C._WEB_FEROX_RE, text).forEach(function (m) { if (m.groups.code !== '404') paths[C._url_path(m.groups.url)] = true; });
@@ -61,8 +97,39 @@
     var interesting = ordered.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
     if (interesting.length) value.interesting = interesting.slice(0, 20);
     _add(facts, mkFact('web.content_map', 'host:' + ws.target, value, S, source));
+    _exposed_artifacts(ordered, command || '', ws, source, facts);
   }
   C._parse_web_content = _parse_web_content;
+
+  // arjun (HTTP parameter discovery) → web.param_candidate. The endpoint is the URL arjun was
+  // pointed at (`-u`); the parameters are the names it reports finding. Attack surface (a parameter
+  // that exists), never a vulnerability — the probe loop is what proves any of them injectable.
+  var _ARJUN_URL_RE = /-u\s+['"]?(?<url>https?:\/\/[^\s'"]+)/i;
+  var _ARJUN_FOUND_RE = /parameters?\s+found\s*[:\-]?\s*(?<names>[A-Za-z0-9_,\s.\-]+)/gi;
+  var _ARJUN_FUZZ_RE = /[?&](?<name>[A-Za-z_][\w.\-]*)=FUZZ/gi;
+  var _ARJUN_NAME_RE = /^[A-Za-z_][\w.\-]{0,63}$/;
+
+  function _parse_arjun(text, ws, command, source, facts) {
+    var m = reSearch(_ARJUN_URL_RE, command || '');
+    var url = m ? m.groups.url : '';
+    var names = [];
+    reAll(_ARJUN_FOUND_RE, text).forEach(function (hit) {
+      hit.groups.names.replace(/\n/g, ',').split(',').forEach(function (raw) {
+        var name = raw.trim();
+        if (_ARJUN_NAME_RE.test(name) && name.toLowerCase() !== 'found') names.push(name);
+      });
+    });
+    reAll(_ARJUN_FUZZ_RE, text).forEach(function (hit) { names.push(hit.groups.name); });
+    var seen = {}, count = 0;
+    for (var i = 0; i < names.length; i++) {
+      var name = names[i];
+      if (seen[name]) continue;
+      seen[name] = true;
+      _add(facts, mkFact('web.param_candidate', 'host:' + ws.target, { url: url, param: name, method: 'GET' }, S, source));
+      if (++count >= 40) break;
+    }
+  }
+  C._parse_arjun = _parse_arjun;
 
   var _PARAM_URL_RE = /[?&][A-Za-z_][\w.]*=/;
   var _FORM_INPUT_RE = /<input\b[^>]*\bname\s*=/i;

@@ -54,7 +54,7 @@ function serve() {
 
   // engine present + packs loaded
   const actionCount = await page.evaluate(() => window.OBOL && window.OBOL.packs ? window.OBOL.packs.actions().length : 0);
-  ok(actionCount === 158, 'packs loaded in browser (158 actions, got ' + actionCount + ')');
+  ok(actionCount === 161, 'packs loaded in browser (161 actions, got ' + actionCount + ')');
 
   // Engagement screen is the default landing; launch an OSCP run with a scoped target.
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });

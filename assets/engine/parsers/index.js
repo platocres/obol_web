@@ -156,7 +156,8 @@
     if (lc.indexOf('httpx') >= 0 && has('_parse_httpx_json')) C._parse_httpx_json(text, ws, source, facts);
     if (lc.indexOf('nuclei') >= 0 && has('_parse_nuclei_json')) C._parse_nuclei_json(text, ws, source, facts);
     if (C._is_web_vhost_command(command)) { if (has('_parse_web_vhosts')) C._parse_web_vhosts(text, ws, source, facts); }
-    else if (C._is_web_content_command(command)) C._parse_web_content(text, ws, source, facts);
+    else if (C._is_web_content_command(command)) C._parse_web_content(text, ws, source, facts, command);
+    if (lc.indexOf('arjun') >= 0 && has('_parse_arjun')) C._parse_arjun(text, ws, command, source, facts);
     if (lc.indexOf('sqlmap') >= 0) C._parse_sqlmap(text, ws, source, facts);
     if (lc.indexOf('git-dumper') >= 0 || lc.indexOf('/.git/') >= 0 || C._GIT_HEAD_RE.test(text)) C._parse_git_source(text, ws, command, source, facts);
     if (lc.indexOf('nikto') >= 0 && has('_parse_nikto')) C._parse_nikto(text, ws, source, facts);
@@ -165,6 +166,8 @@
     if (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'katana', 'hakrawler'].some(function (w) { return lc.indexOf(w) >= 0; })) C._parse_web_surface(text, ws, command, source, facts);
     if (['snmpwalk', 'snmp-check', 'onesixtyone'].some(function (t) { return lc.indexOf(t) >= 0; })) C._parse_snmp_output(text, ws, command, source, facts);
     if (['mysql', 'mssqlclient', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli'].some(function (t) { return lc.indexOf(t) >= 0; })) C._parse_database_output(text, ws, command, source, facts);
+    if (lc.indexOf('sqlite3') >= 0 && has('_parse_sqlite_dump')) C._parse_sqlite_dump(text, ws, source, facts);
+    if (has('_has_notable_programs') && C._has_notable_programs(text)) C._parse_notable_programs(text, ws, source, facts);
     if ((' ' + lc + ' ').indexOf('ftp ') >= 0 || lc.indexOf('lftp') >= 0) C._parse_ftp_output(text, ws, command, source, facts);
     if (C._SSH_BANNER_RE.test(text)) C._parse_ssh_banner(text, ws, source, facts);
     if (((' ' + lc + ' ').indexOf(' 21') >= 0 || lc.indexOf('ftp') >= 0) && C._FTP_BANNER_RE.test(text)) C._parse_ftp_output(text, ws, command, source, facts);
@@ -185,6 +188,8 @@
     if (has('_parse_flags')) C._parse_flags(text, ws, command, source, facts);
 
     // §33 content-gated OSWE parsers (only the ported ones run)
+    if (has('_has_source_secret') && C._has_source_secret(text)) C._parse_source_secret(text, ws, command, source, facts);
+    if (has('_has_windows_creds') && C._has_windows_creds(text)) C._parse_windows_creds(text, ws, command, source, facts);
     if (has('_has_product_signature') && C._has_product_signature(text)) C._parse_product_signature(text, ws, command, source, facts);
     if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) C._parse_sqli_oracle(text, ws, command, source, facts);
 
