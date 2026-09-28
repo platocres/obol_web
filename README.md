@@ -114,6 +114,12 @@ The loop is deliberately tight: **run → paste → get the next move**, over an
 is rooted. Findings and flags accumulate as you go, so the report is essentially finished the
 moment you are.
 
+**Feeding Obol — paste your whole terminal, and only the proven facts are minted:**
+
+<p align="center">
+  <img src="screenshots/evidence.png" alt="The Evidence page: paste a command and its full output, and conservative parsers mint only the facts the output proves" width="92%">
+</p>
+
 ---
 
 ## A quick walkthrough
