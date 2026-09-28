@@ -252,33 +252,33 @@
   // metric (facts proved, lines captured, or measured size). Never fabricates a fact from a name; it
   // only names what obol can already see. Feeds the hover preview and the report's workspace appendix.
   var TOOL_PURPOSE = [
-    [/^(nmap|rustscan|masscan)/i, 'Port & service scan'],
-    [/^(gobuster|feroxbuster|ffuf|dirb|dirsearch|wfuzz)/i, 'Content discovery'],
-    [/^(nikto|nuclei|whatweb|wpscan|httpx)/i, 'Web vuln scan'],
-    [/secretsdump/i, 'Credential / NTDS dump'],
-    [/getnpusers|asrep/i, 'AS-REP roast'],
+    [/^(nmap|rustscan|masscan)/i, 'Port & Service Scan'],
+    [/^(gobuster|feroxbuster|ffuf|dirb|dirsearch|wfuzz)/i, 'Content Discovery'],
+    [/^(nikto|nuclei|whatweb|wpscan|httpx)/i, 'Web Vuln Scan'],
+    [/secretsdump/i, 'Credential / NTDS Dump'],
+    [/getnpusers|asrep/i, 'AS-REP Roast'],
     [/getuserspns|kerberoast/i, 'Kerberoast'],
-    [/certipy/i, 'ADCS enumeration'],
-    [/(bloodhound|sharphound)/i, 'BloodHound collection'],
-    [/^(nxc|netexec|crackmapexec|cme)/i, 'SMB / LDAP sweep'],
-    [/^(smbclient|smbmap|rpcclient|enum4linux)/i, 'SMB share / RPC enum'],
-    [/ldapsearch|bloodyad/i, 'LDAP / directory dump'],
-    [/^(hashcat|john)/i, 'Hash cracking'],
-    [/^(hydra|medusa)/i, 'Credential brute force'],
-    [/snmpwalk|onesixtyone/i, 'SNMP enumeration'],
-    [/^screenshot$/i, 'Proof screenshot'],
+    [/certipy/i, 'ADCS Enumeration'],
+    [/(bloodhound|sharphound)/i, 'BloodHound Collection'],
+    [/^(nxc|netexec|crackmapexec|cme)/i, 'SMB / LDAP Sweep'],
+    [/^(smbclient|smbmap|rpcclient|enum4linux)/i, 'SMB Share / RPC Enum'],
+    [/ldapsearch|bloodyad/i, 'LDAP / Directory Dump'],
+    [/^(hashcat|john)/i, 'Hash Cracking'],
+    [/^(hydra|medusa)/i, 'Credential Brute Force'],
+    [/snmpwalk|onesixtyone/i, 'SNMP Enumeration'],
+    [/^screenshot$/i, 'Proof Screenshot'],
   ];
-  var EXT_PURPOSE = { xml: 'XML output', json: 'JSON output', csv: 'CSV output', py: 'Python script', sh: 'Shell script',
-    ps1: 'PowerShell script', txt: 'Text output', log: 'Session log', pcap: 'Packet capture', pcapng: 'Packet capture',
-    dit: 'NTDS database', ntds: 'NTDS database', kirbi: 'Kerberos ticket', ccache: 'Kerberos ticket', pfx: 'Certificate (PFX)',
+  var EXT_PURPOSE = { xml: 'XML Output', json: 'JSON Output', csv: 'CSV Output', py: 'Python Script', sh: 'Shell Script',
+    ps1: 'PowerShell Script', txt: 'Text Output', log: 'Session Log', pcap: 'Packet Capture', pcapng: 'Packet Capture',
+    dit: 'NTDS Database', ntds: 'NTDS Database', kirbi: 'Kerberos Ticket', ccache: 'Kerberos Ticket', pfx: 'Certificate (PFX)',
     zip: 'Archive', gz: 'Archive', tar: 'Archive', png: 'Image', jpg: 'Image', jpeg: 'Image', gif: 'Image' };
   function purposeOf(f) {
-    if (f.flag) return 'Flag / proof file';
+    if (f.flag) return 'Flag / Proof File';
     var t = f.tool || '';
     for (var i = 0; i < TOOL_PURPOSE.length; i++) if (TOOL_PURPOSE[i][0].test(t)) return TOOL_PURPOSE[i][1];
     if (!f.tool && f.command) { var lead = String(f.command).trim().split(/\s+/)[0] || ''; for (var j = 0; j < TOOL_PURPOSE.length; j++) if (TOOL_PURPOSE[j][0].test(lead)) return TOOL_PURPOSE[j][1]; }
     var ext = (f.name.split('.').pop() || '').toLowerCase();
-    return EXT_PURPOSE[ext] || (f.tool ? (f.tool + ' output') : 'File');
+    return EXT_PURPOSE[ext] || (f.tool ? (f.tool + ' Output') : 'File');
   }
   function metricOf(f) {
     if (f.facts && f.facts.length) return f.facts.length + ' fact' + (f.facts.length === 1 ? '' : 's');
