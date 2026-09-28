@@ -91,6 +91,65 @@
     return out;
   }
 
+  // Resolve a host key (an IP, or "engagement"/"domain:…") to its proven identity so a finding can carry
+  // both the IP and the hostname — the anchor a severity-sorted list needs to say *which box* it is on.
+  function identity(host) {
+    if (!host || /[^0-9.]/.test(host)) return { ip: host, hostname: '' };
+    try { return (OBOL.store && OBOL.store.targetIdentity) ? OBOL.store.targetIdentity(host) : { ip: host, hostname: '' }; }
+    catch (e) { return { ip: host, hostname: '' }; }
+  }
+  function hostPill(host) {
+    var id = identity(host), hn = id && id.hostname ? id.hostname : '';
+    return '<span class="pill finding-host"' + (hn ? ' title="' + U.attr(host + ' — ' + hn) + '"' : '') + '>'
+      + esc(host) + (hn ? '<span class="finding-hostname">' + esc(hn) + '</span>' : '') + '</span>';
+  }
+
+  function findingCard(f, showHost) {
+    return '<article class="finding sev-' + f.severity + '"><div class="finding-head">'
+      + '<span class="sev-chip sev-' + f.severity + '">' + f.severity + '</span>'
+      + '<span class="finding-title">' + esc(f.title) + '</span>'
+      + (showHost ? hostPill(f.host) : '')
+      + '<span class="finding-cat">' + esc(f.category) + '</span></div>'
+      + (f.evidence ? '<div class="finding-ev"><span class="mini-label">evidence</span> ' + esc(String(f.evidence).slice(0, 300)) + '</div>' : '')
+      + (f.remediation ? '<div class="finding-fix"><span class="mini-label">fix</span> ' + esc(f.remediation) + '</div>' : '')
+      + (f.refs ? '<div class="finding-refs">' + esc(f.refs) + '</div>' : '')
+      + '</article>';
+  }
+  function sevRank(s) { var i = SEV_ORDER.indexOf(s); return i < 0 ? SEV_ORDER.length : i; }
+
+  // Grouped by severity (worst first); each finding names its host+hostname so the roll-up doubles as
+  // the report's severity-ordered finding list.
+  function bySeverity(findings) {
+    var bySev = {}; SEV_ORDER.forEach(function (s) { bySev[s] = []; });
+    findings.forEach(function (f) { (bySev[f.severity] = bySev[f.severity] || []).push(f); });
+    return SEV_ORDER.filter(function (s) { return bySev[s].length; }).map(function (s) {
+      return '<div class="finding-group">' + bySev[s].map(function (f) { return findingCard(f, true); }).join('') + '</div>';
+    }).join('');
+  }
+  // Grouped by target (each box's worst severity first); within a host, findings are severity-ordered.
+  function byTarget(findings) {
+    var byHost = {}, order = [];
+    findings.forEach(function (f) { if (!byHost[f.host]) { byHost[f.host] = []; order.push(f.host); } byHost[f.host].push(f); });
+    order.sort(function (a, b) {
+      var wa = Math.min.apply(null, byHost[a].map(function (f) { return sevRank(f.severity); }));
+      var wb = Math.min.apply(null, byHost[b].map(function (f) { return sevRank(f.severity); }));
+      return wa - wb || byHost[b].length - byHost[a].length || String(a).localeCompare(String(b));
+    });
+    return order.map(function (host) {
+      var group = byHost[host].slice().sort(function (a, b) { return sevRank(a.severity) - sevRank(b.severity); });
+      var id = identity(host), hn = id && id.hostname ? id.hostname : '';
+      var breakdown = SEV_ORDER.filter(function (s) { return group.some(function (f) { return f.severity === s; }); })
+        .map(function (s) { var n = group.filter(function (f) { return f.severity === s; }).length;
+          return '<span class="sev-count sev-' + s + '">' + n + ' ' + s + '</span>'; }).join('');
+      return '<div class="finding-host-group">'
+        + '<div class="finding-host-h"><span class="fhh-ip">' + esc(host) + '</span>'
+        + (hn ? '<span class="fhh-name">' + esc(hn) + '</span>' : '')
+        + '<span class="fhh-count">' + group.length + ' finding' + (group.length === 1 ? '' : 's') + '</span>'
+        + '<span class="fhh-sevs">' + breakdown + '</span></div>'
+        + '<div class="finding-group">' + group.map(function (f) { return findingCard(f, false); }).join('') + '</div></div>';
+    }).join('');
+  }
+
   function render() {
     var findings = gather();
     if (!findings.length) {
@@ -99,30 +158,35 @@
     }
     var bySev = {}; SEV_ORDER.forEach(function (s) { bySev[s] = []; });
     findings.forEach(function (f) { (bySev[f.severity] = bySev[f.severity] || []).push(f); });
-
     var counts = SEV_ORDER.filter(function (s) { return bySev[s].length; })
       .map(function (s) { return '<span class="sev-count sev-' + s + '">' + bySev[s].length + ' ' + s + '</span>'; }).join('');
 
-    var body = SEV_ORDER.filter(function (s) { return bySev[s].length; }).map(function (s) {
-      var rows = bySev[s].map(function (f) {
-        return '<article class="finding sev-' + s + '"><div class="finding-head">'
-          + '<span class="sev-chip sev-' + s + '">' + s + '</span>'
-          + '<span class="finding-title">' + esc(f.title) + '</span>'
-          + '<span class="pill">' + esc(f.host) + '</span>'
-          + '<span class="finding-cat">' + esc(f.category) + '</span></div>'
-          + (f.evidence ? '<div class="finding-ev"><span class="mini-label">evidence</span> ' + esc(String(f.evidence).slice(0, 300)) + '</div>' : '')
-          + (f.remediation ? '<div class="finding-fix"><span class="mini-label">fix</span> ' + esc(f.remediation) + '</div>' : '')
-          + (f.refs ? '<div class="finding-refs">' + esc(f.refs) + '</div>' : '')
-          + '</article>';
-      }).join('');
-      return '<div class="finding-group">' + rows + '</div>';
-    }).join('');
+    var hostCount = (function () { var h = {}; findings.forEach(function (f) { h[f.host] = 1; }); return Object.keys(h).length; })();
+    var sort = ((OBOL.store.active() || {}).ui || {}).findingsSort === 'target' ? 'target' : 'severity';
+    var toggle = hostCount > 1
+      ? '<div class="findings-sort" role="group" aria-label="Group findings by">'
+        + '<span class="mini-label">group by</span>'
+        + '<button type="button" class="fsort-btn' + (sort === 'severity' ? ' active' : '') + '" data-fsort="severity">Severity</button>'
+        + '<button type="button" class="fsort-btn' + (sort === 'target' ? ' active' : '') + '" data-fsort="target">Target</button>'
+        + '</div>'
+      : '';
+    var body = (sort === 'target' && hostCount > 1) ? byTarget(findings) : bySeverity(findings);
 
-    return '<section class="findings-route"><h1 class="route-h1">Findings</h1>'
-      + '<p class="route-sub">Catalogued, proof-bound findings across all hosts (' + findings.length + '). ' + counts + '</p>'
+    return '<section class="findings-route"><div class="findings-head"><h1 class="route-h1">Findings</h1>' + toggle + '</div>'
+      + '<p class="route-sub">Catalogued, proof-bound findings across ' + hostCount + ' host' + (hostCount === 1 ? '' : 's')
+      + ' (' + findings.length + '). ' + counts + '</p>'
       + body + '</section>';
   }
 
+  function mounted(ctx) {
+    var mount = (ctx && ctx.mount) || document;
+    U.on(mount, 'click', '.fsort-btn', function (e, t) {
+      var v = t.getAttribute('data-fsort') === 'target' ? 'target' : 'severity';
+      OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.findingsSort = v; }, 'ui');
+      OBOL.router.render();
+    });
+  }
+
   OBOL.routes = OBOL.routes || {};
-  OBOL.routes.findings = { render: render };
+  OBOL.routes.findings = { render: render, mounted: mounted };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -7,9 +7,29 @@
   'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
 
-  // Wrap an SVG string in the pan/zoom viewport markup. attach() then wires it.
+  // The five node states, in reading order (act → reached → not-yet). Each swatch class mirrors the
+  // node fill/stroke in obol.css so the legend and the graph can never drift apart.
+  var LEGEND = [
+    ['next', 'Do next', 'A move that is ready to run now'],
+    ['proven', 'Proven', 'A milestone you have already reached'],
+    ['done', 'Done', 'A move you have already run'],
+    ['goal', 'Goal', 'A milestone the next move is meant to prove'],
+    ['locked', 'Blocked', 'A move whose prerequisites are not proven yet'],
+  ];
+  function legend() {
+    return '<div class="gv-legend" role="group" aria-label="Path graph legend">'
+      + '<span class="gv-legend-h">Legend</span>'
+      + LEGEND.map(function (it) {
+        return '<span class="gv-lg gv-lg-' + it[0] + '" title="' + it[2] + '"><i aria-hidden="true"></i>' + it[1] + '</span>';
+      }).join('')
+      + '</div>';
+  }
+
+  // Wrap an SVG string in the pan/zoom viewport markup (with a state legend above it). attach() wires it.
   function html(svg) {
-    return '<div class="graphview" data-graphview>'
+    return '<div class="gv-wrap">'
+      + legend()
+      + '<div class="graphview" data-graphview>'
       + svg
       + '<div class="gv-toolbar" role="group" aria-label="Graph zoom">'
       + '<button type="button" class="gv-btn" data-gv="out" title="Zoom out" aria-label="Zoom out">−</button>'
@@ -17,6 +37,7 @@
       + '<button type="button" class="gv-btn" data-gv="in" title="Zoom in" aria-label="Zoom in">+</button>'
       + '</div>'
       + '<div class="gv-hint">drag to pan · scroll to zoom</div>'
+      + '</div>'
       + '</div>';
   }
 

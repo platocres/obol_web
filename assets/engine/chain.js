@@ -41,6 +41,7 @@
     }
     if (kind === 'ad.control_paths') return ((v.rights || []).join('/') + ' on ' + (v.target || 'the domain')).trim();
     if (kind === 'adcs.vulnerable') return v.template || '';
+    if (kind === 'objective.flag_located') return v.path || v.name || 'located remotely — read on-host';
     if (/^objective\./.test(kind)) return v.flag || v.value || 'captured';
     if (kind === 'access.admin' || kind === 'access.system' || kind === 'foothold.windows' || kind === 'foothold.linux') {
       return v.user || v.via || v.method || '';

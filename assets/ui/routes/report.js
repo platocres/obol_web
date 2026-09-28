@@ -156,7 +156,7 @@
       try {
         var p = currentProfile(), c = ctxOf(!(OBOL.store.active().ui || {}).reportRedact);
         var stem = stemFor(p, c);
-        var doc = '<!doctype html><meta charset="utf-8"><title>' + esc(stem) + '</title>' + OBOL.report.toHtml(OBOL.report.document(p, c));
+        var doc = OBOL.report.htmlDocument(OBOL.report.toHtml(OBOL.report.document(p, c)), stem);
         download(stem + '.html', doc, 'text/html');
       } catch (e) { U.toast('Could not build .html', 'err'); }
     });
