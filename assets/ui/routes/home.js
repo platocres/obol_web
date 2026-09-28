@@ -36,9 +36,8 @@
     }).join('');
   }
 
-  // Placeholder for the working-directory field: a GENERIC example, never the operator's remembered path —
-  // a previous run's machine-specific dir (e.g. a box name) leaking into the hint reads as stale/wrong on a
-  // fresh box. The remembered base still applies as the real default when the field is left blank.
+  // Placeholder for the working-directory field: a GENERIC example, never the operator's own path. Left
+  // blank, the real default is a neutral ~/engagements/<engagement-name> (see the launch handler).
   function workdirHint() {
     var sel = ((OBOL.store.active() || {}).profile || {}).platform || 'custom';
     return OBOL.workspace.join(OBOL.workspace.DEFAULT_BASE, OBOL.profile.isExamPlatform(sel) ? 'exam' : 'box');
@@ -106,8 +105,8 @@
       + (isCustom ? '' : '<span class="pf-badge ' + (exam ? 'exam' : 'lab') + '">' + esc(preset.name) + (exam ? ' · exam' : '') + '</span>')
       + (mt ? '<span class="pill">' + esc(mt) + '</span>' : '')
       + (prof.osid ? '<span class="pill">OSID ' + esc(prof.osid) + '</span>' : '')
-      + '<span class="pill">' + nt + ' target' + (nt === 1 ? '' : 's') + '</span>'
-      + '<span class="pill">' + nf + ' fact' + (nf === 1 ? '' : 's') + '</span>'
+      + '<span class="pill">' + nt + ' Target' + (nt === 1 ? '' : 's') + '</span>'
+      + '<span class="pill">' + nf + ' Fact' + (nf === 1 ? '' : 's') + '</span>'
       + '</div></div>'
       + '<a class="btn-primary" href="#/path">Open Coach →</a>'
       + '</div>'
@@ -140,7 +139,7 @@
 
   function fileRow(f, root) {
     var rel = OBOL.vfs.relOf(f.path, root);
-    var badge = f.facts.length ? ('<span class="ws-badge">' + f.facts.length + ' fact' + (f.facts.length === 1 ? '' : 's') + '</span>') : '';
+    var badge = f.facts.length ? ('<span class="ws-badge">' + f.facts.length + ' Fact' + (f.facts.length === 1 ? '' : 's') + '</span>') : '';
     var suggested = f.status === 'expected' && f.origin === 'suggested';
     // a one-word state tag so the tree reads at a glance without expanding a row.
     var tag = f.status === 'captured' ? '' : suggested ? '<span class="ws-tag ws-tag-sugg">suggested</span>'
@@ -212,24 +211,31 @@
   function workspacePanel() {
     var eng = OBOL.store.active();
     if (!eng || !OBOL.vfs) return '';
-    var vfs = OBOL.vfs.build(eng);
     var ov = (eng.workspace && eng.workspace.overrides) || {};
+    // Until the operator has actually done something (run/pasted a command, added or synced a file), keep
+    // the workspace a clean, empty skeleton — a lone pencilled-in "suggested" file on a brand-new run reads
+    // as cryptic. Once there is real activity, obol resumes pencilling in what the next moves will create.
+    var started = (eng.activities || []).length > 0 || (eng.screenshots || []).length > 0 || ((ov.added || []).length > 0);
+    var vfs = OBOL.vfs.build(eng, started ? {} : { suggested: [] });
     var hidden = Object.keys(ov.removed || {}).length;
     var head = '<div class="ws-panel-head"><h2 class="coach-sec-h">Workspace</h2>'
-      + (vfs.total ? ('<span class="ws-counts"><span class="ws-c-cap">' + vfs.captured + ' Captured</span>'
+      + (vfs.total ? ('<span class="ws-counts"><span class="ws-c-cap">' + vfs.captured + ' File' + (vfs.captured === 1 ? '' : 's') + ' Captured</span>'
           + (vfs.expected ? ' · <span class="ws-c-exp">' + vfs.expected + ' Pending</span>' : '') + '</span>') : '')
       + '</div>';
     var rootLine = '<div class="ws-root"><code>' + esc(vfs.root) + '</code>'
       + (ov.syncedAt ? '<span class="ws-synced-at">Synced ' + esc(ago(ov.syncedAt)) + '</span>' : '') + '</div>';
-    var invite = '<p class="ws-invite">A live picture of your Kali working directory. It fills out as you go: obol pencils in the files'
-      + ' the coach\'s next moves will create, then confirms each one once you run it and paste the output on'
-      + ' <a href="#/evidence">Evidence</a>. You can add or remove files by hand, or sync the whole folder below. Pop back to'
-      + ' the <strong>Engagements</strong> tab any time to review what you\'ve gathered.</p>';
+    var invite = started
+      ? '<p class="ws-invite">A live picture of your Kali working directory. obol pencils in the files the coach\'s next moves'
+        + ' will create, then confirms each one once you run it and paste the output on <a href="#/evidence">Evidence</a>.'
+        + ' Add or remove files by hand, or sync the whole folder below.</p>'
+      : '<p class="ws-invite">This mirrors your Kali working directory. It\'s empty until you start: run a move from'
+        + ' <a href="#/path">Next Steps</a> and paste its output on <a href="#/evidence">Evidence</a>, and the files you'
+        + ' generate show up here as you go.</p>';
     var tree = vfs.folders.map(function (fo) {
       var files = fo.files.map(function (f) { return fileRow(f, vfs.root); }).join('');
       return '<div class="ws-folder' + (fo.files.length ? '' : ' ws-empty') + '">'
         + '<div class="ws-folder-h"><span class="ws-folder-name">' + esc(fo.label) + '</span>'
-        + '<span class="ws-folder-count">' + (fo.files.length || '') + '</span>'
+        + (fo.files.length ? '<span class="ws-folder-count">' + fo.files.length + '</span>' : '')
         + '<button type="button" class="ws-add" data-folder="' + U.attr(fo.key) + '" title="Add a file to ' + esc(fo.label) + '" aria-label="Add a file to ' + esc(fo.label) + '">+</button></div>'
         + (files || '<div class="ws-folder-empty">Empty</div>') + '</div>';
     }).join('');
@@ -252,7 +258,7 @@
       return '<li class="lib-row' + (active ? ' active' : '') + '">'
         + '<button class="lib-open" data-eng="' + esc(e.id) + '"><span class="lib-name">' + esc(e.name) + '</span>'
         + '<span class="pill">' + esc(preset.name) + '</span>'
-        + '<span class="lib-meta">' + (e.targets || []).length + ' targets · ' + (e.facts || []).length + ' facts</span></button>'
+        + '<span class="lib-meta">' + (e.targets || []).length + ' Targets · ' + (e.facts || []).length + ' Facts</span></button>'
         + '<button class="lib-del" data-eng="' + esc(e.id) + '" title="Delete">×</button></li>';
     }).join('');
     return '<ul class="lib-list">' + rows + '</ul>';
@@ -478,15 +484,10 @@
       var active = OBOL.store.active();
       var reuse = active && !isConfigured(active, Object.keys(OBOL.store.factSet().kinds()).length);
 
-      // Working directory: use what the operator typed, else a box/exam-centric default from their
-      // remembered base. Remember the base (its parent) so the next run prefills from it.
-      var hostsPre = scope.filter(function (s) { return !isCidr(s); });
-      var isExam = OBOL.profile.isExamPlatform(platform);
-      var base = (OBOL.store.pref && OBOL.store.pref().workspaceBase) || OBOL.workspace.DEFAULT_BASE;
+      // Working directory: what the operator typed, else a NEUTRAL default under ~/engagements named
+      // after the engagement itself — not the target IP, and not a deep path remembered from a past run.
       var typed = OBOL.workspace.sanitizeRoot((document.getElementById('eng-workdir') || {}).value || '');
-      var slug = OBOL.workspace.slugify(isExam ? name : (hostsPre[0] || name));
-      var root = typed || OBOL.workspace.join(base, slug);
-      try { OBOL.store.setPref('workspaceBase', root.replace(/\/+[^/]*\/*$/, '') || base); } catch (e) {}
+      var root = typed || OBOL.workspace.join(OBOL.workspace.DEFAULT_BASE, OBOL.workspace.slugify(name) || 'engagement');
 
       var seed = function () {
         // seed targets from bare IPs; keep CIDRs as authorized scope only.

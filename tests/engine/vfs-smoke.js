@@ -62,16 +62,16 @@ ok(m.files.some(f => f.name === 'creds.txt' && f.unknown === true && f.synced ==
 ok(m.files.find(f => f.name === 'tcp.txt').confirmed === true, 'the predicted file is now confirmed on disk');
 
 // ── describe(): purpose + honest metric, no fabricated facts ──
-ok(V.describe({ name: 'tcp.txt', tool: 'nmap', facts: ['ports.open', 'x'], output: 'a\nb' }) === 'Port & Service Scan · 2 facts', 'describe: nmap purpose + fact count');
+ok(V.describe({ name: 'tcp.txt', tool: 'nmap', facts: ['ports.open', 'x'], output: 'a\nb' }) === 'Port & Service Scan · 2 Facts', 'describe: nmap purpose + fact count');
 ok(V.describe({ name: 'x.py', tool: '', size: 400 }) === 'Python Script · 400 B', 'describe: unknown file by extension + size');
 ok(V.describe({ name: 'local.txt', flag: true, facts: [] }) === 'Flag / Proof File', 'describe: flag file, no metric when nothing measured');
 ok(/Credential/.test(V.describe({ name: 'ntds', tool: 'impacket-secretsdump', facts: ['loot.ntds'] })), 'describe: secretsdump reads as a credential dump');
 // value-derived metrics (parsed values, never the filename) with exact casing + explicit plurals
-ok(V.describe({ name: 's', tool: 'nmap', valMap: { 'ports.open': { ports: [22, 80, 445, 3389, 5985, 8080, 9090] } } }) === 'Port & Service Scan · 7 open ports (22, 80, 445, 3389, 5985, 8080, …)', 'describe: rich open-ports metric with overflow');
-ok(V.describe({ name: 's', tool: 'nmap', valMap: { 'ports.open': { ports: [22] } } }) === 'Port & Service Scan · 1 open port (22)', 'describe: singular "1 open port"');
-ok(V.describe({ name: 'd', tool: 'impacket-secretsdump', valMap: { 'loot.ntds': { count: 15 } } }) === 'Credential / NTDS Dump · NTDS: 15 accounts', 'describe: NTDS account count');
-ok(V.describe({ name: 'h', tool: 'impacket-secretsdump', valMap: { 'hash.ntlm': { count: 1 } } }) === 'Credential / NTDS Dump · 1 NTLM hash', 'describe: singular "1 NTLM hash" (not hashs)');
-ok(V.describe({ name: 'a', tool: 'GetNPUsers', valMap: { 'credential.candidate': { kind: 'asrep_hash', count: 3 } } }) === 'AS-REP Roast · 3 AS-REP hashes', 'describe: AS-REP hash count with acronym casing');
+ok(V.describe({ name: 's', tool: 'nmap', valMap: { 'ports.open': { ports: [22, 80, 445, 3389, 5985, 8080, 9090] } } }) === 'Port & Service Scan · 7 Open Ports (22, 80, 445, 3389, 5985, 8080, …)', 'describe: rich open-ports metric with overflow');
+ok(V.describe({ name: 's', tool: 'nmap', valMap: { 'ports.open': { ports: [22] } } }) === 'Port & Service Scan · 1 Open Port (22)', 'describe: singular "1 open port"');
+ok(V.describe({ name: 'd', tool: 'impacket-secretsdump', valMap: { 'loot.ntds': { count: 15 } } }) === 'Credential / NTDS Dump · NTDS: 15 Accounts', 'describe: NTDS account count');
+ok(V.describe({ name: 'h', tool: 'impacket-secretsdump', valMap: { 'hash.ntlm': { count: 1 } } }) === 'Credential / NTDS Dump · 1 NTLM Hash', 'describe: singular "1 NTLM hash" (not hashs)');
+ok(V.describe({ name: 'a', tool: 'GetNPUsers', valMap: { 'credential.candidate': { kind: 'asrep_hash', count: 3 } } }) === 'AS-REP Roast · 3 AS-REP Hashes', 'describe: AS-REP hash count with acronym casing');
 // the flag detector must not swallow a userlist or a rootkit note
 ok(V.flagPaths('nxc smb x --users | tee loot/users.txt').length === 0, 'flagPaths: users.txt is NOT a flag file');
 ok(V.flagPaths('cat rootkit.txt').length === 0, 'flagPaths: rootkit.txt is NOT a flag file');

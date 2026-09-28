@@ -327,15 +327,15 @@
     var ext = (f.name.split('.').pop() || '').toLowerCase();
     return EXT_PURPOSE[ext] || (f.tool ? (f.tool + ' Output') : 'File');
   }
-  // Count with an EXPLICIT plural so no word is mangled ("3 NTLM hashes", never "3 NTLM hashs").
-  // Metric words stay lowercase; acronyms keep their exact stylization (NTLM, NTDS, AS-REP, gMSA…).
+  // Count with an EXPLICIT plural so no word is mangled ("3 NTLM Hashes", never "3 NTLM Hashs").
+  // These read as labels, so they are Title Case; acronyms keep their exact stylization (NTLM, AS-REP, gMSA…).
   function cnt(n, sing, plur) { return n + ' ' + (n === 1 ? sing : plur); }
   // credential.candidate value.kind → [singular, plural], all cased deliberately.
   var CAND_LABEL = {
-    ntlm_hash: ['NTLM hash', 'NTLM hashes'], asrep_hash: ['AS-REP hash', 'AS-REP hashes'],
-    tgs_hash: ['TGS hash', 'TGS hashes'], gpp_cpassword: ['GPP password', 'GPP passwords'],
-    gmsa_ntlm_hash: ['gMSA hash', 'gMSA hashes'], source_secret: ['source secret', 'source secrets'],
-    database_dump_secret: ['database secret', 'database secrets'], machine_account: ['machine account', 'machine accounts'],
+    ntlm_hash: ['NTLM Hash', 'NTLM Hashes'], asrep_hash: ['AS-REP Hash', 'AS-REP Hashes'],
+    tgs_hash: ['TGS Hash', 'TGS Hashes'], gpp_cpassword: ['GPP Password', 'GPP Passwords'],
+    gmsa_ntlm_hash: ['gMSA Hash', 'gMSA Hashes'], source_secret: ['Source Secret', 'Source Secrets'],
+    database_dump_secret: ['Database Secret', 'Database Secrets'], machine_account: ['Machine Account', 'Machine Accounts'],
   };
   // The richest honest metric obol can state from the PARSED VALUES a file proved — the real "5 open
   // ports (22, 80, 445)", "NTDS: 15 accounts", "3 NTLM hashes". Values come straight from the FactSet,
@@ -345,20 +345,20 @@
     var v;
     if ((v = vm['ports.open']) && (v.ports || []).length) {
       var ps = v.ports.slice(0, 6).join(', ');
-      return cnt(v.ports.length, 'open port', 'open ports') + ' (' + ps + (v.ports.length > 6 ? ', …' : '') + ')';
+      return cnt(v.ports.length, 'Open Port', 'Open Ports') + ' (' + ps + (v.ports.length > 6 ? ', …' : '') + ')';
     }
-    if ((v = vm['loot.ntds'])) { var na = v.count || (v.entries || []).length; return na ? ('NTDS: ' + cnt(na, 'account', 'accounts')) : 'NTDS dump'; }
-    if ((v = vm['hash.ntlm'])) { var nh = v.count || (v.entries || []).length; return nh ? cnt(nh, 'NTLM hash', 'NTLM hashes') : 'NTLM hashes'; }
-    if ((v = vm['ad.user_list'])) { var nu = v.count || (v.users || []).length; return nu ? cnt(nu, 'username', 'usernames') : 'usernames'; }
-    if ((v = vm['credential.candidate'])) { var lbl = CAND_LABEL[v.kind]; var nc = v.count || 1; return lbl ? cnt(nc, lbl[0], lbl[1]) : cnt(nc, 'credential lead', 'credential leads'); }
-    if ((v = vm['credential.available'])) { var who = v.user ? (v.user + (v.domain ? ('@' + v.domain) : '')) : ''; return who ? ('credential: ' + who) : 'validated credential'; }
-    if ((v = vm['ad.control_paths'])) { return 'domain control path'; }
+    if ((v = vm['loot.ntds'])) { var na = v.count || (v.entries || []).length; return na ? ('NTDS: ' + cnt(na, 'Account', 'Accounts')) : 'NTDS Dump'; }
+    if ((v = vm['hash.ntlm'])) { var nh = v.count || (v.entries || []).length; return nh ? cnt(nh, 'NTLM Hash', 'NTLM Hashes') : 'NTLM Hashes'; }
+    if ((v = vm['ad.user_list'])) { var nu = v.count || (v.users || []).length; return nu ? cnt(nu, 'Username', 'Usernames') : 'Usernames'; }
+    if ((v = vm['credential.candidate'])) { var lbl = CAND_LABEL[v.kind]; var nc = v.count || 1; return lbl ? cnt(nc, lbl[0], lbl[1]) : cnt(nc, 'Credential Lead', 'Credential Leads'); }
+    if ((v = vm['credential.available'])) { var who = v.user ? (v.user + (v.domain ? ('@' + v.domain) : '')) : ''; return who ? ('Credential: ' + who) : 'Validated Credential'; }
+    if ((v = vm['ad.control_paths'])) { return 'Domain Control Path'; }
     return '';
   }
   function metricOf(f) {
     var rich = richMetric(f.valMap); if (rich) return rich;
-    if (f.facts && f.facts.length) return cnt(f.facts.length, 'fact', 'facts');
-    if (f.output) { var n = String(f.output).replace(/\s+$/, '').split(/\n/).length; return cnt(n, 'line', 'lines'); }
+    if (f.facts && f.facts.length) return cnt(f.facts.length, 'Fact', 'Facts');
+    if (f.output) { var n = String(f.output).replace(/\s+$/, '').split(/\n/).length; return cnt(n, 'Line', 'Lines'); }
     if (f.size) { var b = f.size; return b < 1024 ? (b + ' B') : b < 1048576 ? ((b / 1024).toFixed(1) + ' kB') : ((b / 1048576).toFixed(1) + ' MB'); }
     return '';
   }
