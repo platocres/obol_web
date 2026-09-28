@@ -22,13 +22,13 @@
     domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=e54f7903', 'assets/ui/bhgraph.js?v=ed34873b', 'assets/ui/routes/domain.js?v=e0d3fe25'],
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=9ad71876', 'assets/engine/report.js?v=60a4b750', 'assets/ui/routes/report.js?v=a57c0597'],
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=f27f51ef', 'assets/ui/routes/tools.js?v=7d043fd0'],
-    checklist: ['assets/ui/routes/checklist.js?v=4d68a1b2'],
+    checklist: ['assets/ui/routes/checklist.js?v=116058c6'],
     target: ['assets/engine/graph.js?v=97e4f668', 'assets/ui/routes/target.js?v=72f3be6c'],
     creds: ['assets/ui/routes/creds.js?v=6935aeca'],
     scoreboard: ['assets/ui/routes/scoreboard.js?v=1d235ab7'],
     playbooks: ['data/playbooks-bundle.js?v=4294252f', 'assets/engine/playbooks.js?v=be235b11', 'assets/ui/routes/playbooks.js?v=0d08af7e'],
     map: ['assets/engine/engmap.js?v=274fcc29', 'assets/ui/routes/map.js?v=c92643bb'],
-    findings: ['assets/ui/routes/findings.js?v=18e1ccbe'],
+    findings: ['assets/ui/routes/findings.js?v=ce4b0fe2'],
     history: ['assets/ui/routes/history.js?v=65925c29'],
   };
 

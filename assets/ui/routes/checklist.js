@@ -28,7 +28,7 @@
       var items = (byPhase[p] || []).slice().sort(function (a, b) { return b.priority - a.priority; });
       if (!items.length) return;
       html += '<div class="chk-phase"><div class="chk-phase-h"><span class="ph-chip ph-' + p + '">' + p + '</span>'
-        + '<span class="mini-label">' + items.length + ' actions</span></div>';
+        + '<span class="mini-label">' + items.length + ' Actions</span></div>';
       items.forEach(function (a) {
         // Fill exactly like the coach (facts + params + profile) so commands become copy-ready
         // as facts are collected; unfilled {{tokens}} are flagged with what would complete them.

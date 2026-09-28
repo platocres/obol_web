@@ -21,7 +21,7 @@
     var chips = action.produces.map(function (k) {
       return '<span class="fact-chip" title="' + esc(k) + '">' + esc(OBOL.util.titleCase(OBOL.pack.friendly(k))) + '</span>';
     }).join('');
-    return '<div class="move-produces"><span class="mini-label">proves</span>' + chips + '</div>';
+    return '<div class="move-produces"><span class="mini-label">Proves</span>' + chips + '</div>';
   }
 
   // Tokens that come from proven facts, the engagement params, or the workspace — the operator fills
@@ -119,14 +119,14 @@
           hfCmd, 'Lay the roasted hashes obol captured into the file the crack reads.');
       }
     }
-    return steps ? '<div class="move-prep"><span class="mini-label">set up first</span>' + steps + '</div>' : '';
+    return steps ? '<div class="move-prep"><span class="mini-label">Set Up First</span>' + steps + '</div>' : '';
   }
 
   function moveCard(action, facts, params, opts) {
     opts = opts || {};
     var why = U.firstSentence(action.hypothesis || action.proves || action.title);
     var dnp = action.does_not_prove
-      ? '<div class="move-dnp"><span class="mini-label">does not prove</span>' + esc(action.does_not_prove) + '</div>'
+      ? '<div class="move-dnp"><span class="mini-label">Does Not Prove</span>' + esc(action.does_not_prove) + '</div>'
       : '';
     var toolLink = (action.tool || (action.tools && action.tools[0]))
       ? '<a class="btn-ghost" href="#/tools/' + esc(action.tool || action.tools[0]) + '">Build in Tools ↗</a>'
@@ -277,10 +277,10 @@
       + '<p class="coach-sub">' + (onFlow.length ? esc(U.firstSentence(onFlow[0].hypothesis || '')) : 'Paste tool output on the Evidence route (or add a fact) and the coach ranks your next commands.') + '</p>'
       + '</div>'
       + '<div class="coach-metrics">'
-      + '<div class="metric"><span class="metric-n">' + onFlow.length + '</span><span class="metric-l">ready</span></div>'
-      + '<div class="metric"><span class="metric-n">' + comingUp.length + '</span><span class="metric-l">coming up</span></div>'
-      + '<div class="metric"><span class="metric-n">' + locked.length + '</span><span class="metric-l">blocked</span></div>'
-      + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">facts</span></div>'
+      + '<div class="metric"><span class="metric-n">' + onFlow.length + '</span><span class="metric-l">Ready</span></div>'
+      + '<div class="metric"><span class="metric-n">' + comingUp.length + '</span><span class="metric-l">Coming Up</span></div>'
+      + '<div class="metric"><span class="metric-n">' + locked.length + '</span><span class="metric-l">Blocked</span></div>'
+      + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">Facts</span></div>'
       + '</div></div>';
 
     // one-time workspace scaffold: create the output tree once, then every command below writes

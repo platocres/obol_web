@@ -112,7 +112,7 @@
       + '<a class="btn-primary" href="#/path">Open Coach →</a>'
       + '</div>'
       + '<div class="home-spine">' + spine + '</div>'
-      + (ranked.length ? ('<div class="eng-nextmove"><span class="mini-label">next move</span> ' + esc(ranked[0].title) + '</div>') : '')
+      + (ranked.length ? ('<div class="eng-nextmove"><span class="mini-label">Next Move</span> ' + esc(ranked[0].title) + '</div>') : '')
       + engagementPath()
       + '</div>';
   }
@@ -129,7 +129,7 @@
   function factLine(kinds) {
     if (!kinds || !kinds.length) return '';
     var names = kinds.slice(0, 6).map(function (k) { return esc(U.titleCase(OBOL.pack.friendly(k))); });
-    return '<div class="ws-file-facts"><span class="mini-label">proved</span>' + names.join(', ')
+    return '<div class="ws-file-facts"><span class="mini-label">Proved</span>' + names.join(', ')
       + (kinds.length > 6 ? ' +' + (kinds.length - 6) : '') + '</div>';
   }
   // human file size, e.g. 5.0 kB — only shown for files a disk-sync measured.
@@ -147,7 +147,7 @@
       : f.unknown ? '<span class="ws-tag ws-tag-unk">on disk</span>'
       : f.manual ? '<span class="ws-tag ws-tag-man">added</span>'
       : f.confirmed ? '<span class="ws-tag ws-tag-conf">on disk</span>' : '<span class="ws-tag ws-tag-exp">expected</span>';
-    var cmdBlock = f.command ? '<div class="ws-file-cmd"><span class="mini-label">command</span><code>' + esc(f.command) + '</code></div>' : '';
+    var cmdBlock = f.command ? '<div class="ws-file-cmd"><span class="mini-label">Command</span><code>' + esc(f.command) + '</code></div>' : '';
     var body;
     if (f.image) {
       body = '<img class="ws-shot" src="' + esc(f.image) + '" alt="proof screenshot">';
@@ -216,11 +216,11 @@
     var ov = (eng.workspace && eng.workspace.overrides) || {};
     var hidden = Object.keys(ov.removed || {}).length;
     var head = '<div class="ws-panel-head"><h2 class="coach-sec-h">Workspace</h2>'
-      + (vfs.total ? ('<span class="ws-counts"><span class="ws-c-cap">' + vfs.captured + ' captured</span>'
-          + (vfs.expected ? ' · <span class="ws-c-exp">' + vfs.expected + ' pending</span>' : '') + '</span>') : '')
+      + (vfs.total ? ('<span class="ws-counts"><span class="ws-c-cap">' + vfs.captured + ' Captured</span>'
+          + (vfs.expected ? ' · <span class="ws-c-exp">' + vfs.expected + ' Pending</span>' : '') + '</span>') : '')
       + '</div>';
     var rootLine = '<div class="ws-root"><code>' + esc(vfs.root) + '</code>'
-      + (ov.syncedAt ? '<span class="ws-synced-at">synced ' + esc(ago(ov.syncedAt)) + '</span>' : '') + '</div>';
+      + (ov.syncedAt ? '<span class="ws-synced-at">Synced ' + esc(ago(ov.syncedAt)) + '</span>' : '') + '</div>';
     var invite = '<p class="ws-invite">A live picture of your Kali working directory. It fills out as you go: obol pencils in the files'
       + ' the coach\'s next moves will create, then confirms each one once you run it and paste the output on'
       + ' <a href="#/evidence">Evidence</a>. You can add or remove files by hand, or sync the whole folder below. Pop back to'
@@ -233,7 +233,7 @@
         + '<button type="button" class="ws-add" data-folder="' + U.attr(fo.key) + '" title="Add a file to ' + esc(fo.label) + '" aria-label="Add a file to ' + esc(fo.label) + '">+</button></div>'
         + (files || '<div class="ws-folder-empty">Empty</div>') + '</div>';
     }).join('');
-    var footer = hidden ? ('<div class="ws-foot"><button type="button" class="ws-restore" data-x>' + hidden + ' hidden · restore</button></div>') : '';
+    var footer = hidden ? ('<div class="ws-foot"><button type="button" class="ws-restore" data-x>' + hidden + ' Hidden · Restore</button></div>') : '';
     return '<aside class="ws-panel">' + head + rootLine + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
   }
 
