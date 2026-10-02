@@ -380,6 +380,153 @@
     return blocked.slice().sort(function (a, b) { return b.priority - a.priority; });
   }
 
+  // ---------------------------------------------------- goal-directed planner (v2) --
+  // Ranks unlocked actions by the operator's PROVEN frontier first, goal-direction as the
+  // tie-breaker. Primary signal is recency: the move your latest evidence just unlocked is almost
+  // always the right next step ("I just got X, so now I can do Y"). Goal distance only orders
+  // among genuinely-indicated moves and sinks pure side-quests; speculative "try-if-vulnerable"
+  // moves (exploit checks, coercion/relay) are capped unless their own indicator fact is present,
+  // so they never bury the evidenced next step. Pure function of facts (+ fact timestamps).
+  var V2_INF = 1e6;
+  var V2_GOALS = ['objective.flag', 'access.admin', 'access.system', 'access.root', 'loot.ntds'];
+  // Specific EARNED control/loot/credential facts: a move gated on one of these is a deterministic
+  // cash-in (DCSync given control paths, a crack given a hash), not a gamble — full reliability.
+  var V2_SPECIFIC = {
+    'ad.control_paths': 1, 'ad.gpo_control': 1, 'ad.gpo_writable': 1, 'hash.krbtgt': 1,
+    'hash.asrep': 1, 'hash.tgs': 1, 'hash.ntlm': 1, 'loot.ntds': 1, 'ad.zerologon': 1,
+    'adcs.vulnerable': 1, 'credential.certificate': 1, 'ad.sid_history': 1, 'ad.coerced_auth': 1,
+    'ad.unconstrained': 1, 'privesc.sudo_rights': 1, 'privesc.windows_privilege': 1,
+    'db.session': 1, 'ad.gmsa': 1, 'kerberos.tickets': 1,
+  };
+  var V2_PRIV = { 'access.admin': 1, 'access.system': 1, 'access.root': 1, 'loot.ntds': 1, 'objective.flag': 1 };
+  var V2_SPEC_RE = /check$|coerce|relay|responder|mitm|zerologon|printnight|nopac/;
+
+  function v2Speculative(a) {
+    if (V2_SPEC_RE.test(a.id)) return true;
+    for (var i = 0; i < a.produces.length; i++) {
+      var k = a.produces[i];
+      if (k === 'exploit.candidate' || k === 'ad.coerced_auth' || k === 'credential.netntlm') return true;
+    }
+    return false;
+  }
+  // Minimal steps from a set of held fact-kinds to any goal, through the produce/require graph:
+  // AND over a move's requirements, OR over a fact's producers. Memoized, cycle-guarded.
+  function v2GoalDistance(haveObj, producers) {
+    var memoF = {}, memoM = {};
+    function fc(f, stack) {
+      if (haveObj[f]) return 0;
+      if (memoF[f] !== undefined) return memoF[f];
+      if (stack[f]) return V2_INF;
+      stack[f] = 1; var best = V2_INF, ms = producers[f] || [];
+      for (var i = 0; i < ms.length; i++) best = Math.min(best, mc(ms[i], stack));
+      delete stack[f]; memoF[f] = best; return best;
+    }
+    function mc(m, stack) {
+      if (memoM[m.id] !== undefined) return memoM[m.id];
+      var c = 1, j;
+      for (j = 0; j < m.requires_all.length; j++) c += fc(m.requires_all[j], stack);
+      if (m.requires_any.length) {
+        var mn = V2_INF;
+        for (j = 0; j < m.requires_any.length; j++) mn = Math.min(mn, fc(m.requires_any[j], stack));
+        c += mn;
+      }
+      c = Math.min(c, V2_INF); memoM[m.id] = c; return c;
+    }
+    var d = V2_INF;
+    for (var g = 0; g < V2_GOALS.length; g++) d = Math.min(d, fc(V2_GOALS[g], {}));
+    return d;
+  }
+  function v2ProgressFrom(d0, haveObj, produces, producers) {
+    var h2 = {}, k;
+    for (k in haveObj) h2[k] = 1;
+    for (var i = 0; i < produces.length; i++) h2[produces[i]] = 1;
+    var d1 = v2GoalDistance(h2, producers);
+    if (d0 >= V2_INF) return d1 >= V2_INF ? 0 : 5;
+    return Math.max(0, d0 - d1);
+  }
+  function v2EligAgainst(a, kindsObj) {
+    var i;
+    for (i = 0; i < a.requires_all.length; i++) if (!kindsObj[a.requires_all[i]]) return false;
+    if (a.requires_any.length) {
+      var any = false;
+      for (i = 0; i < a.requires_any.length; i++) if (kindsObj[a.requires_any[i]]) { any = true; break; }
+      if (!any) return false;
+    }
+    return true;
+  }
+  function v2Reliability(a, haveObj) {
+    var gates = a.requires_all.concat(a.requires_any), i;
+    for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) return 1.0;
+    if (v2Speculative(a)) return 0.25;
+    for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return 0.3;
+    return 0.8;
+  }
+  // Recency: the fact-kinds from the operator's latest ingest batch (within 2s of the newest fact),
+  // and the set proven before it. opts.recentKinds / opts.beforeKinds override (tests / known deltas).
+  function v2Recency(facts, opts) {
+    if (opts && opts.recentKinds) return { recent: opts.recentKinds, before: opts.beforeKinds || {} };
+    var SUPP = OBOL.facts.ProofState.SUPPORTED, maxT = 0, i, f;
+    for (i = 0; i < facts.facts.length; i++) { f = facts.facts[i]; if (f.state === SUPP && f.created_at > maxT) maxT = f.created_at; }
+    var cut = maxT - 2000, recent = {}, before = {};
+    for (i = 0; i < facts.facts.length; i++) {
+      f = facts.facts[i];
+      if (f.state !== SUPP) continue;
+      if (f.created_at >= cut) recent[f.kind] = 1; else before[f.kind] = 1;
+    }
+    return { recent: recent, before: before };
+  }
+
+  function nextActionsV2(facts, pack, opts) {
+    opts = opts || {};
+    var doneIds = opts.doneIds || {}, focus = opts.focusPrefixes || [];
+    var live = pack.filter(function (a) { return a.eligible(facts) && !a.settled(facts) && !a.obsolete(facts) && !doneIds[a.id]; });
+    var haveObj = facts.kinds();
+    var producers = {};
+    pack.forEach(function (a) { a.produces.forEach(function (k) { (producers[k] = producers[k] || []).push(a); }); });
+    var rec = v2Recency(facts, opts);
+    var d0 = v2GoalDistance(haveObj, producers);
+
+    function onType(a) {
+      if (!focus.length) return 0;
+      for (var i = 0; i < a.produces.length; i++) for (var j = 0; j < focus.length; j++) if (String(a.produces[i]).indexOf(focus[j]) === 0) return -1;
+      return 0;
+    }
+
+    var scored = live.map(function (a) {
+      var gates = a.requires_all.concat(a.requires_any), indicated = false, i;
+      for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) { indicated = true; break; }
+      var spec = v2Speculative(a);
+      var fresh = v2EligAgainst(a, haveObj) && !v2EligAgainst(a, rec.before);
+      var tier = (spec && !indicated) ? -1 : (fresh ? 2 : (indicated ? 1 : 0));
+      var h2 = {}, k;
+      for (k in haveObj) h2[k] = 1;
+      a.produces.forEach(function (p) { h2[p] = 1; });
+      var dH2 = v2GoalDistance(h2, producers);
+      var progA = d0 >= V2_INF ? (dH2 >= V2_INF ? 0 : 5) : Math.max(0, d0 - dH2);
+      // enablement: best tempered value among moves newly-eligible after doing a (1-step lookahead).
+      var enable = 0;
+      pack.forEach(function (b) {
+        if (b.id === a.id || v2EligAgainst(b, haveObj) || !v2EligAgainst(b, h2)) return;
+        enable = Math.max(enable, v2Reliability(b, h2) * v2ProgressFrom(dH2, h2, b.produces, producers));
+      });
+      var score = v2Reliability(a, haveObj) * (progA + 0.6 * enable) + (onType(a) === -1 ? 0.5 : 0);
+      return { a: a, tier: tier, score: score };
+    });
+    scored.sort(function (x, y) {
+      if (y.tier !== x.tier) return y.tier - x.tier;
+      if (y.score !== x.score) return y.score - x.score;
+      if (y.a.priority !== x.a.priority) return y.a.priority - x.a.priority;
+      return x.a.id < y.a.id ? -1 : (x.a.id > y.a.id ? 1 : 0);
+    });
+    return scored.map(function (s) { return s.a; });
+  }
+
+  // The coach's ranker. Goal-directed v2 by default; set OBOL.pack.ranker = 'v1' for the legacy
+  // phase/priority planner (kept for comparison + fallback).
+  function rankActions(facts, pack, opts) {
+    return (OBOL.pack && OBOL.pack.ranker === 'v1') ? nextActions(facts, pack, opts) : nextActionsV2(facts, pack, opts);
+  }
+
   OBOL.pack = {
     DEFAULT_PACK: DEFAULT_PACK,
     PACK_NAMES: PACK_NAMES,
@@ -392,6 +539,9 @@
     actionsFromPackData: actionsFromPackData,
     loadPacks: loadPacks,
     nextActions: nextActions,
+    nextActionsV2: nextActionsV2,
+    rankActions: rankActions,
+    ranker: 'v2',
     lockedActions: lockedActions,
     blockedActions: blockedActions,
   };

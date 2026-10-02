@@ -257,7 +257,7 @@
     });
 
     var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
-    var ranked = OBOL.pack.nextActions(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
+    var ranked = (OBOL.pack.rankActions || OBOL.pack.nextActions)(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
     var frontier = OBOL.phases.frontierIndex(facts);
     var onFlow = [], comingUp = [];
     ranked.forEach(function (a) {
