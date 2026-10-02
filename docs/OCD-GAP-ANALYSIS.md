@@ -1,117 +1,85 @@
-# OCD-Mindmaps → obol: OSCP-scoped gap analysis
+# obol coverage & gap analysis (OSCP-scoped)
 
-*Working build plan. Source: `Orange-Cyberdefense/ocd-mindmaps` (GPL-3.0; AGPLv3-compatible).
-Cross-checked against all 161 obol moves across 19 packs + a parser-signature scan.*
+*Working build plan. Sources: `Orange-Cyberdefense/ocd-mindmaps` (GPL-3.0, AGPLv3-compatible) for the
+AD lane; obol's own 19 packs for everything else.*
 
-## 0. Headline findings (read this first)
+> **Methodology note (read first).** An earlier version of this doc used a signature `grep` scan and
+> was **wrong in both directions** (an `\|`-in-ERE bug produced false zeros; and finding a handler
+> string in a file does not mean it is *dispatched* for a given input). Parser coverage below is now
+> established the only reliable way: **running representative pasted output through obol's actual
+> parser engine** (`OBOL.parsers.parseActionOutput`) and recording the facts it mints. Harness:
+> `scratchpad/ptest.js` / `ptest2.js`.
 
-1. **OCD's machine-readable source is Active Directory only.** `excalimap/mindmap/` contains
-   just the AD maps; the old broad recon/web/privesc "pentest mindmap" exists here only as images.
-   So this diff is an **AD-lane** diff. Non-AD breadth comes from obol's own packs + other sources.
+## 0. Headline (engine-verified)
 
-2. **obol's OSCP *move* coverage is already strong.** Judged only against the 48 AD moves, the AD
-   map looked full of gaps — but most are already shipped in other packs: `seimpersonate` (Potato),
-   `windows-enum` (winPEAS), `dpapi-secrets`, `crack-ntlm`/`crack-netntlmv2`, `mssql-login`/
-   `mssql-xp-cmdshell`, `responder-poison`, `ntlm-relay-attack`, `mitm6`, `recon-dns` (zone transfer),
-   Tomcat deploy. The move library is **not** the main gap.
+- **Remote output is well parsed.** `nxc`/NetExec alone mints 12+ fact kinds (`access.admin` from
+  `Pwn3d!`, `smb.shares`, `credential.available`, DC/domain/OS facts…). The same dispatcher covers
+  ldapsearch, smbclient/smbmap, impacket `secretsdump`, BloodHound, kerbrute, and more. The
+  **remote-first path** obol's methodology prefers is in good shape.
+- **On-host / interactive output is almost entirely unparsed.** This is the real gap, and it is
+  exactly the surface obol-local structurally could never ingest. obol-web *can* (paste), but the
+  parsers don't exist yet.
+- Net: the move library + the remote parsers are solid; **the work is the on-host/interactive
+  ingestion layer**, bounded to the moves we approve.
 
-3. **The dominant real gap is the ingestion layer — parsers, not moves.** Moves exist; the parsers
-   that mint facts from their pasted output mostly don't — especially the post-foothold / interactive
-   Windows surface obol-local structurally never could ingest. Several chains are **fully wired except
-   the parser**:
-   - `whoami /priv` → `privesc.windows_privilege` → already gates **`seimpersonate`**  *(parser missing)*
-   - `sudo -l` → `privesc.sudo_rights` → already gates **`sudo-abuse`**  *(parser missing)*
-   - `nxc …` output → shares/users/admin/creds → feeds **`nxc-arsenal`** + others  *(parser missing)*
+## 1. Governing principles (unchanged — these held up)
 
-4. So the work is **"audit each approved move for its parser; fill the gaps,"** plus a short list of
-   genuinely-absent moves — not a 40-move import.
+- **Bounded parse surface.** obol parses the output of the moves it *approves*; the ingestion surface
+  is the union of approved moves' parsers. Each move's "definition of done" = gate · `produces` ·
+  **parser** · weight · teaching metadata (`proves`/`does_not_prove`) · scope tag.
+- **Remote-first ranking.** Every move carries a locus — `R` (remote from Kali), `F` (one-shot
+  code-exec), `I` (interactive on-host). The coach prefers the lowest-friction locus for an objective.
+  On-host parsers are a safety net for when you're legitimately on the box — never a nudge to go there.
+- **obol-web vs obol-local.** Same remote-first, proof-gated core. New *option*: parse on-host/
+  interactive paste (this gap list). New *limitation*: paste-based, no live host-watching.
 
-## 1. Governing principles (how to rank the work)
+## 2. Engine-verified parser gaps (the build list)
 
-- **Bounded parse surface.** obol parses the output of the moves it *approves*, nothing more. The
-  ingestion surface = the union of approved moves' parsers. Bounded, testable, per-move.
-- **Remote-first ranking.** In a timed lab you stay off the host until you must. Every move carries a
-  **locus**; the coach prefers lower-friction loci for the same objective:
-  - `R` — remote from Kali, no foothold (nmap, nxc, impacket, bloodhound-python, ldapsearch). *Preferred.*
-  - `F` — needs code-exec but one-shot / non-interactive (`nxc -x`, wmiexec one-liners).
-  - `I` — interactive on-host session (evil-winrm, RDP, running winPEAS/PowerView live). *Last resort.*
-- **obol-web vs obol-local.** Same remote-first, proof-gated core. New *option*: can parse on-host /
-  interactive output (paste), which obol-local couldn't. New *limitation*: paste-based, no live host
-  watching. On-host parsers are a safety net for when you're genuinely there — never a nudge to go there.
-- **Definition of done (every approved move):** gate (`requires_*`) · `produces` facts · **parser** ·
-  weight/priority · teaching metadata (`proves` / `does_not_prove`) · scope tag (OSCP / OSCP+ / beyond).
+Each ran through the real engine and minted **nothing** today unless noted. Facts named are the
+*proposed* producers; several already exist as gate conditions waiting for a producer.
 
-## 2. Axis A — parser / ingestion gaps  *(PRIORITY — move exists, output unparsed)*
-
-> Signature-scan based; confirm each before building. The P0 items (whoami/priv, nxc, PowerView, net)
-> are near-certain. Locus shown because it sets ranking, not whether to build the parser.
-
-| # | Pasted output to parse | Mint fact(s) | Completes move(s) | Locus | Status | Pri |
+| # | Pasted output | Should mint | Unlocks / feeds | Locus | Engine result | Effort |
 |---|---|---|---|---|---|---|
-| A1 | `nxc`/netexec (smb/ldap/winrm/mssql) output | `smb.shares`, `ad.user_list`, `credential.candidate`, `access.admin`, `enum.deep` | `nxc-arsenal`, share/user enum, spray results | **R** | missing | **P0** |
-| A2 | `whoami /priv` (+ `/all`, `/groups`) | **`privesc.windows_privilege`**, group membership | **`seimpersonate`** (already gated on it) | F/I | missing | **P0** |
-| A3 | winPEAS / PrivescCheck.ps1 | `privesc.leads`, `privesc.stored_credentials`, `privesc.windows_privilege` | `windows-enum` | I | missing | **P0** |
-| A4 | `sudo -l` | **`privesc.sudo_rights`** | **`sudo-abuse`** (already gated on it) | F/I | missing | **P0** |
-| A5 | PowerView / `Get-ADUser`/`Get-DomainUser` | `ad.user_list`, `ad.control_paths`, `ad.attack_paths` | `powerview-enum`, `ad-legacy-enum` | I | missing | P1 |
-| A6 | mimikatz `sekurlsa::logonpasswords` / `lsadump::sam`/`lsa` | `credential.plaintext`, `hash.ntlm`, `loot.ntds` | `lsass-dump-onbox`, `dump-secrets` | I | thin | P1 |
-| A7 | `net user` / `net localgroup` / `net group /domain` | `ad.user_list`, local-admin membership | on-host enum | F/I | missing | P1 |
-| A8 | linPEAS | `privesc.leads` | `linux-enum` | I | thin | P2 |
-| A9 | `klist` / `.kirbi` / `.ccache` references | `kerberos.tickets` | `ticket-reuse`, `kerberos-tickets` | F/I | thin | P2 |
+| 1 | mimikatz `sekurlsa::logonpasswords` | `credential.plaintext`, `hash.ntlm` | credentials, PtH | I | NO FACTS | parser |
+| 2 | mimikatz `lsadump::sam` / `lsadump::lsa` | `hash.ntlm`, `loot.ntds` | PtH, cracking | I | NO FACTS | parser |
+| 3 | `whoami /priv` | `privesc.windows_privilege` | **already gates `seimpersonate`** | F/I | NO FACTS | **dispatch only** — minter exists in `host.js` |
+| 4 | `sudo -l` | `privesc.sudo_rights` | **already gates `sudo-abuse`** | F/I | NO FACTS | **dispatch only** — minter exists in `host.js` |
+| 5 | winPEAS / PrivescCheck | `privesc.leads`, `privesc.windows_privilege`, `privesc.stored_credentials` | `windows-enum` | I | NO FACTS | parser |
+| 6 | PowerView `Get-NetUser`/`Get-DomainUser` | `ad.user_list`, `ad.control_paths` | `powerview-enum` | I | NO FACTS | parser |
+| 7 | `net user` / `net localgroup`/`net group` | `ad.user_list`, local-admin membership | enum, admin discovery | F/I | NO FACTS | parser |
+| 8 | `schtasks /query /v` | `privesc.leads` | `windows-enum` | F/I | NO FACTS | parser |
+| 9 | `reg query` (autologon / stored creds) | `credential.candidate`, `privesc.stored_credentials` | cred reuse | F/I | NO FACTS | parser |
+| 10 | `klist` | `kerberos.tickets` | `ticket-reuse` | F/I | NO FACTS | parser |
+| 11 | `icacls` / `accesschk` | `privesc.leads` (writable service/path) | `windows-enum` | F/I | partial — only `host.notable_program` | enhance |
 
-**Note the ranking consequence:** A1 (`nxc`, locus R) is the highest-leverage parser because it
-serves the *remote-first* path and lights up many moves at once. A2–A4 (on-host) are P0 for a
-different reason — they complete already-wired chains with a single parser each — but they fire only
-once you're legitimately on the box.
+**Priority order (remote-first + leverage):**
+- **Batch 1 — the two dispatch-only wins (tiny, high symbolism):** #3 `whoami /priv`, #4 `sudo -l`.
+  Each completes an already-gated chain by wiring the existing minter to the command. Flagship proof
+  that the gate *earns* its unlock from evidence.
+- **Batch 2 — credential dumps:** #1/#2 mimikatz. Highest loot value once you're admin on a host.
+- **Batch 3 — on-host enumeration:** #5 winPEAS, #7 `net *`, #6 PowerView, #8 schtasks, #9 reg,
+  #10 klist, #11 icacls.
 
-## 3. Axis B — genuine move gaps  *(OSCP-scoped, after full cross-check)*
+## 3. Move gaps — DEFERRED, prior list retracted
 
-### CORE-OSCP
-| Move | Gate (proposed) | Produces | Parser hook | Locus | Notes |
-|---|---|---|---|---|---|
-| **EternalBlue (MS17-010) exploit** | `scan.nmap.vuln?` (or a new `ms17010.vulnerable`) | `foothold.windows`, `access.system` | msf/exploit console output → `access.system` | R | detection exists (`nmap-vuln-scripts`); no exploit move |
-| **RID-brute / null-session user enum** | `smb.reachable?`, `port:445?` (no creds) | `ad.user_list` | `nxc --rid-brute` / `lookupsid.py` output | R | PARTIAL of `ad-user-enum` (that one is kerbrute/pre-auth style) |
+The earlier grep-based move-gap list (noPac / PrintNightmare / EternalBlue / RID-brute / zone
+transfer / password-policy as "missing") is **retracted** — it came from the same broken scan, and
+spot-checks already show several are present (`recon-dns` does zone transfer; `nxc` paths cover
+RID-brute and `--pass-pol`). Move existence must be re-established from the authoritative pack
+inventory (`actions[].id/title`) and, where relevant, the engine — not grep. Candidates that the
+reliable move-inventory (`id`/`title` across packs) shows no dedicated move for, pending confirmation:
+**MS14-068**, **MSCache2 (DCC2) crack**. Everything else: verify before claiming.
 
-### OSCP+-EDGE
-| Move | Gate (proposed) | Produces | Parser hook | Locus | Notes |
-|---|---|---|---|---|---|
-| **noPac** (CVE-2021-42278/42287) | `credential.available`, `ad.dc_candidate?` | `loot.ntds`, `access.admin` | tool output → ntds/admin | R | add to known-exploits |
-| **PrintNightmare** (1675/34527) | `credential.available` | `access.system` | PoC output | R/F | |
-| **MS14-068** (forged PAC) | `credential.available`, `ad.dc_candidate?` | `kerberos.tickets`, `access.admin` | goldenPac output | R | legacy DCs |
-| **Blind Kerberoasting** (no-preauth) | `ad.user_list` (SPN user) | `hash.tgs` | reuse `kerberoast` parser | R | variant of `kerberoast` |
-| **Targeted Kerberoasting** (ACL add-SPN) | `ad.control_paths?` | `hash.tgs` | reuse `kerberoast` parser | R | variant; chains off ACL |
-| **Password-policy / lockout enum** | `credential.available?` | `ad.pass_policy` (new) | `nxc --pass-pol` output | R | feeds safe-spray threshold before `password-spray` |
-| **Crack MSCache2 (DCC2)** | `hash.mscache?` (new, from `dump-secrets`) | `credential.candidate` | hashcat `-m 2100` | R | add to `cracking` pack |
+## 4. Small engine additions implied
 
-### Deliberately deferred (BEYOND-OSCP — build later for the all-in-one vision; gated so they never
-surface in an OSCP-shaped engagement): full ADCS ESC chains (ESC2/3/4/5/6/7/9–15), NTLM/Kerberos
-relay *delivery* chains, SCCM takeover, cross-forest trust escalation, golden/silver/diamond-ticket
-*persistence*, DSRM/Skeleton-Key/SSP, DPAPI domain-backup-key, Shadow/Sapphire-ticket variants.
-obol already has recon/finder stubs for most of these (`adcs-esc`, `trust-enum`, `sccm-enum`,
-`golden-ticket`, …); the deferred work is the deeper chains, not net-new lanes.
-
-## 4. Ranked build order (portions, OSCP-first)
-
-- **Batch 1 — the remote-first parser backbone (P0).** A1 `nxc` output parser (highest leverage,
-  locus R). Pairs with: confirm the spray/enum facts it should mint. *One parser, many moves lit.*
-- **Batch 2 — the "already-wired chain" parsers (P0).** A2 `whoami /priv` → `privesc.windows_privilege`
-  (flagship: completes `seimpersonate`), A4 `sudo -l` → `privesc.sudo_rights` (completes `sudo-abuse`),
-  A3 winPEAS/PrivescCheck. These are tiny, high-value, and make the proof-gate *demonstrably* teach.
-- **Batch 3 — remote enumeration parity parsers (P1).** A5 PowerView/AD-PS output, A7 `net *`,
-  A6 mimikatz dump output.
-- **Batch 4 — CORE-OSCP move gaps.** EternalBlue exploit move; RID-brute enum variant.
-- **Batch 5 — OSCP+-EDGE move gaps.** noPac / PrintNightmare / MS14-068; blind & targeted Kerberoast;
-  password-policy enum; MSCache2 crack.
-- **Later — beyond-OSCP** (the deferred list), gated to stay invisible in OSCP context.
-
-## 5. Two small engine additions this implies
-
-- **New fact kinds:** `privesc.windows_privilege`*(already referenced by `seimpersonate`'s gate —
-  just needs a producer)*, `privesc.sudo_rights` *(same, for `sudo-abuse`)*, `ad.pass_policy`,
-  `hash.mscache`, optionally `ms17010.vulnerable`.
-- **A `locus` field on moves** (`R`/`F`/`I`) so the coach can enforce remote-first ranking, and a
-  **scope tag** (`oscp` / `oscp+` / `beyond`) so the all-in-one breadth stays newcomer-safe via an
-  optional lens — not deletion.
+- **Dispatch wiring** for bare on-host commands (`whoami /priv`, `sudo -l`, `net *`, `schtasks`,
+  `reg query`, `klist`, mimikatz) in `parsers/index.js`.
+- **Producers** for facts already referenced as gates but unminted from these inputs
+  (`privesc.windows_privilege`, `privesc.sudo_rights` — minters exist, just unrouted).
+- **A `locus` field** (`R`/`F`/`I`) + **scope tag** (`oscp`/`oscp+`/`beyond`) on moves, for remote-first
+  ranking and a newcomer-safe scope lens.
 
 ---
-*Method caveat: parser statuses are from a signature scan; confirm per-item before building. Move
-cross-check is exhaustive across all 19 packs.*
+*OCD scoping reality: OCD's machine-readable source is AD-only, so it informs the AD move lane; the
+non-AD breadth and all parser work above come from obol's own surface. Parser findings are
+engine-verified; move findings are pending the same rigor.*
