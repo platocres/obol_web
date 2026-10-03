@@ -61,6 +61,21 @@
       + '<span class="lo-strip-txt">' + esc(txt) + '</span><span class="lo-strip-go">Loadout →</span></a>';
   }
 
+  // When defense-enum has proven endpoint controls, warn the operator (remote-first) rather than nudging
+  // them onto a monitored host. Detection only — obol surfaces the posture, it does not evade anything.
+  function defenseAdvisory(facts) {
+    if (!facts.has('defense.control')) return '';
+    var v = {}; try { v = (facts.values('defense.control') || [])[0] || {}; } catch (e) {}
+    var bits = [];
+    if (v.clm) bits.push('Constrained Language Mode');
+    if (v.applocker) bits.push('AppLocker enforced');
+    if (v.defender) bits.push('Defender real-time on');
+    if (v.exclusion_count) bits.push(v.exclusion_count + ' Defender exclusion' + (v.exclusion_count === 1 ? '' : 's'));
+    var what = bits.length ? bits.join(' · ') : 'endpoint controls active';
+    return '<div class="coach-defense"><span class="coach-defense-ico">🛡</span>'
+      + '<span>Endpoint defenses detected — <strong>' + esc(what) + '</strong>. Prefer remote-first moves; on-host tooling may be seen.</span></div>';
+  }
+
   function producesChips(action) {
     if (!action.produces.length) return '';
     var chips = action.produces.map(function (k) {
@@ -340,6 +355,7 @@
       + '</div></div>';
 
     html += arsenalStrip();
+    html += defenseAdvisory(facts);
 
     // Scope lens control: a newcomer-safe syllabus filter. OSCP (core only) · OSCP+ (adds modern AD) ·
     // All (the full arsenal, edge CVEs included). The hidden-count hint keeps it honest.

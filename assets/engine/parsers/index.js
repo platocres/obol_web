@@ -169,6 +169,10 @@
     if ((lc.indexOf('reg query') >= 0 || (has('_looks_like_reg_query') && C._looks_like_reg_query(text))) && has('_parse_reg_query')) C._parse_reg_query(text, ws, command, source, facts);
     if ((lc.indexOf('klist') >= 0 || (has('_looks_like_klist') && C._looks_like_klist(text))) && has('_parse_klist')) C._parse_klist(text, ws, command, source, facts);
     if ((lc.indexOf('icacls') >= 0 || lc.indexOf('accesschk') >= 0 || (has('_looks_like_icacls_accesschk') && C._looks_like_icacls_accesschk(text))) && has('_parse_icacls_accesschk')) C._parse_icacls_accesschk(text, ws, command, source, facts);
+
+    // endpoint defensive posture (read-only): languagemode / Get-MpComputerStatus / Get-MpPreference /
+    // Get-AppLockerPolicy → defense.control, so the coach can prefer remote-first and warn before on-host runs.
+    if ((lc.indexOf('get-mpcomputerstatus') >= 0 || lc.indexOf('get-applockerpolicy') >= 0 || lc.indexOf('languagemode') >= 0 || lc.indexOf('get-mppreference') >= 0 || (has('_looks_like_defense_enum') && C._looks_like_defense_enum(text))) && has('_parse_defense_enum')) C._parse_defense_enum(text, ws, command, source, facts);
     if (has('_parse_script_sinks')) C._parse_script_sinks(text, command, ws, source, facts);
     if (has('_parse_shadow_file')) C._parse_shadow_file(text, command, ws, source, facts);
 

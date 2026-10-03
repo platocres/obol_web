@@ -245,6 +245,13 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .lo-strip-stale { border-color: color-mix(in srgb, var(--yellow, #d7a21a) 40%, transparent); background: color-mix(in srgb, var(--yellow, #d7a21a) 9%, transparent); }
 .lo-strip-stale .lo-strip-ico { color: var(--yellow, #d7a21a); }
 
+/* coach endpoint-defense advisory (detection only — warn, never bypass) */
+.coach-defense { display: flex; align-items: center; gap: 9px; padding: 8px 14px; margin: 0 0 16px; font-size: 13px; line-height: 1.45;
+  border: 1px solid color-mix(in srgb, var(--yellow, #d7a21a) 38%, transparent); border-radius: 10px;
+  background: color-mix(in srgb, var(--yellow, #d7a21a) 10%, transparent); color: var(--text-2); }
+.coach-defense-ico { flex: 0 0 auto; }
+.coach-defense strong { color: var(--text); }
+
 /* Workspace → Loadout insight (per-engagement panel shows what the global box provides) */
 .ws-lo { margin: 8px 0 4px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surf2); }
 .ws-lo-h { display: inline-block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; color: var(--accent-2); margin-bottom: 6px; }

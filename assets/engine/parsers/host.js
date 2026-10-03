@@ -833,4 +833,37 @@
   }
   C._parse_shadow_file = _parse_shadow_file;
 
+  // ── endpoint defensive posture (read-only detection) ───────────────────────────────
+  // Records which controls are ACTIVE from read-only enumeration output — PowerShell language mode,
+  // Microsoft Defender real-time state + configured exclusion paths, and whether an AppLocker policy is
+  // applied. Mints defense.control purely as situational awareness so the coach can prefer remote-first
+  // and warn before on-host tooling; it detects posture only and asserts nothing about evading any control.
+  function _looks_like_defense_enum(text) {
+    if (!text) return false;
+    return /\b(ConstrainedLanguage|FullLanguage)\b/.test(text) || /AMServiceEnabled|RealTimeProtectionEnabled/i.test(text)
+      || /<AppLockerPolicy\b/i.test(text) || /\bExclusionPath\b/i.test(text);
+  }
+  C._looks_like_defense_enum = _looks_like_defense_enum;
+
+  function _parse_defense_enum(text, ws, command, source, facts) {
+    if (!_looks_like_defense_enum(text)) return;
+    text = text.replace(C._ANSI_RE, '');
+    var val = {}, any = false;
+    var lm = text.match(/\b(ConstrainedLanguage|FullLanguage)\b/);
+    if (lm) { val.language_mode = lm[1]; if (lm[1] === 'ConstrainedLanguage') val.clm = true; any = true; }
+    var rtp = text.match(/RealTimeProtectionEnabled\s*[:=]\s*(True|False)/i);
+    var amsvc = text.match(/AMServiceEnabled\s*[:=]\s*(True|False)/i);
+    if (rtp || amsvc) { val.defender = !!((rtp && /true/i.test(rtp[1])) || (amsvc && /true/i.test(amsvc[1]))); any = true; }
+    if (/<AppLockerPolicy\b/i.test(text)) { val.applocker = true; any = true; }
+    if (/\bExclusionPath\b/i.test(text)) {
+      var excl = [];
+      text.split(/\r?\n/).forEach(function (line) { var t = line.trim(); if (/^[A-Za-z]:\\[^\r\n]+$/.test(t)) excl.push(t); });
+      if (excl.length) { val.exclusions = excl.slice(0, 20); val.exclusion_count = excl.length; }
+      any = true;
+    }
+    if (!any) return;
+    _add(facts, mkFact('defense.control', 'host:' + ws.target, val, S, source));
+  }
+  C._parse_defense_enum = _parse_defense_enum;
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

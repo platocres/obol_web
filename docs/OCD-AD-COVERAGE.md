@@ -244,7 +244,8 @@ a reference entry) · ⬜ missing. **OSCP scope:** `oscp` (exam-core) · `oscp+`
 | SMBGhost (CVE-2020-0796) | `known_exploits` (reference) | 🟡 | oscp+ | catalog entry, no executable privesc move. |
 | WebDAV → HTTP coerce | `coerce-auth` | 🟡 | oscp+ | coerce covered; local WebClient-enable chain not. |
 | **UAC bypass (Fodhelper/wsreset/msdt)** | — | ⬜ | **oscp** | **CORE-OSCP Windows escalation, no move.** |
-| AppLocker bypass (installutil/mshta/msbuild) | — | ⬜ | oscp+ | |
+| Endpoint-defense posture (AMSI / AppLocker / CLM / Defender) | `defense-enum` | ✅ | oscp+ | read-only detector → `defense.control`; the coach warns + stays remote-first |
+| AppLocker / AMSI / CLM bypass (installutil/mshta/msbuild, etc.) | — | ⬜ | oscp+ | bypass moves deferred (platform safety); posture is detected by `defense-enum` above |
 | HiveNightmare / SeriousSAM (CVE-2021-36934) | — | ⬜ | oscp+ | SAM via volume shadow copy. |
 | Kerberos Relay (KrbRelayUp) | — | ⬜ | beyond | |
 
