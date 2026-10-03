@@ -1049,7 +1049,16 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .ws-proof-note { font-size: 11px; color: var(--text-2); line-height: 1.5; margin-top: 4px; }
 .ws-proof-note .ws-file-link { margin-top: 4px; }
 /* WS3: www/ serve + stage helpers. */
-.ws-www { display: flex; flex-direction: column; gap: 5px; margin: 6px 0 2px 18px; padding: 7px 10px;
+.ws-www { margin: 5px 0 2px 18px; }
+.ws-www-sum { display: flex; align-items: baseline; gap: 8px; cursor: pointer; list-style: none;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text-3);
+  padding: 3px 2px; user-select: none; transition: color .12s ease; }
+.ws-www-sum::-webkit-details-marker { display: none; }
+.ws-www-sum::before { content: '▸'; font-size: 9px; color: var(--text-3); transition: transform .12s ease; }
+.ws-www[open] .ws-www-sum::before { transform: rotate(90deg); }
+.ws-www-sum:hover { color: var(--accent-2); }
+.ws-www-hint { font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-3); opacity: .8; }
+.ws-www-body { display: flex; flex-direction: column; gap: 5px; margin: 4px 0 2px; padding: 7px 10px;
   border-left: 2px solid var(--accent-2); background: color-mix(in srgb, var(--accent-2) 7%, transparent); border-radius: 0 7px 7px 0; }
 .ws-www-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .ws-www-l { font-size: 10.5px; font-weight: 700; color: var(--text-2); min-width: 118px; }

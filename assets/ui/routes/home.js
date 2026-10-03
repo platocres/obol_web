@@ -271,14 +271,18 @@
     // WS3: www/ is the serve directory — give it a one-click serve command + a "stage your Loadout payloads
     // into www/" copy, closing the Loadout → serve → deliver loop in the place you actually serve from.
     var wwwDir = (vfs.root && vfs.root !== '.') ? (vfs.root.replace(/\/+$/, '') + '/www') : 'www';
-    function wwwHelper() {
+    function wwwHelper(hasFiles) {
       var serveCmd = 'cd ' + wwwDir + ' && python3 -m http.server 80';
       var stageCmd = 'cp ~/.obol/arsenal/win/* ' + wwwDir + '/ 2>/dev/null';
-      return '<div class="ws-www">'
-        + '<div class="ws-www-row"><span class="ws-www-l">Serve to targets</span>'
+      // Collapsed by default: at the start of a run there's nothing to serve, so keep it out of the way;
+      // when you reach delivery, the summary tells you it's here and one click reveals the commands.
+      return '<details class="ws-www"' + (hasFiles ? ' open' : '') + '>'
+        + '<summary class="ws-www-sum">Serve to targets <span class="ws-www-hint">host &amp; stage payloads</span></summary>'
+        + '<div class="ws-www-body">'
+        + '<div class="ws-www-row"><span class="ws-www-l">Start server</span>'
         + '<code class="ws-copyval" data-copy="' + U.attr(serveCmd) + '" title="Click to copy">' + esc(serveCmd) + '</code></div>'
         + '<div class="ws-www-row"><span class="ws-www-l">Stage Loadout payloads</span>'
-        + '<code class="ws-copyval" data-copy="' + U.attr(stageCmd) + '" title="Click to copy">' + esc(stageCmd) + '</code></div></div>';
+        + '<code class="ws-copyval" data-copy="' + U.attr(stageCmd) + '" title="Click to copy">' + esc(stageCmd) + '</code></div></div></details>';
     }
     var tree = vfs.folders.map(function (fo) {
       var files = fo.files.map(function (f) { return fileRow(f, vfs.root); }).join('');
@@ -288,7 +292,7 @@
         + (fo.files.length ? '<span class="ws-folder-count">' + fo.files.length + '</span>' : '')
         + '<button type="button" class="ws-add" data-folder="' + U.attr(fo.key) + '" title="Add a file to ' + esc(fo.label) + '" aria-label="Add a file to ' + esc(fo.label) + '">+</button></div>'
         + (files || '<div class="ws-folder-empty">' + esc(emptyHint) + '</div>')
-        + (fo.key === 'www' ? wwwHelper() : '') + '</div>';
+        + (fo.key === 'www' ? wwwHelper(fo.files.length) : '') + '</div>';
     }).join('');
     var footer = hidden ? ('<div class="ws-foot"><button type="button" class="ws-restore" data-x>' + hidden + ' Hidden · Restore</button></div>') : '';
     return '<aside class="ws-panel">' + head + rootLine + proofStrip + loInsight + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
