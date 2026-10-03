@@ -102,7 +102,7 @@
   [['rustscan', 'rustscan'], ['mitm6', 'mitm6'], ['enum4linux-ng', 'enum4linux-ng'], ['arjun', 'arjun'],
    ['name-that-hash', 'name-that-hash'], ['sprayhound', 'sprayhound'], ['penelope', 'penelope'],
    ['sshpass', 'sshpass'], ['sshuttle', 'sshuttle'], ['ncat', 'ncat'], ['rlwrap', 'rlwrap'],
-   ['ntpdate', 'ntpdate'], ['kinit', 'krb5-user'], ['klist', 'krb5-user']].forEach(function (r) {
+   ['kinit', 'krb5-user'], ['klist', 'krb5-user']].forEach(function (r) {
     reclass(r[0], { class: 'apt', on_kali: false, install: 'sudo apt install -y ' + r[1], bins: [r[0]], source: 'kali/' + r[1] });
   });
   reclass('name-that-hash', { bins: ['name-that-hash', 'nth'], variants: ['name-that-hash', 'nth'] });
@@ -245,8 +245,9 @@
 
   // a few remaining referenced tools
   A.psexec = A.psexec || A['impacket-psexec'];                 // bare `psexec` → impacket
-  A.ntpdate = A.ntpdate || { key: 'ntpdate', label: 'ntpdate', category: 'Support', os: 'linux', class: 'kali',
-    on_kali: true, install: '', canonical: 'ntpdate', variants: ['ntpdate'], source: '', license: '', purpose: 'clock sync before Kerberos (KRB_AP_ERR_SKEW)' };
+  // Debian dropped the standalone `ntpdate` package; the command now ships in `ntpsec-ntpdate`. Install-if-missing.
+  A.ntpdate = A.ntpdate || { key: 'ntpdate', label: 'ntpdate', category: 'Support', os: 'linux', class: 'apt',
+    on_kali: false, install: 'sudo apt install -y ntpsec-ntpdate', bins: ['ntpdate'], canonical: 'ntpdate', variants: ['ntpdate'], source: 'kali/ntpsec-ntpdate', license: '', purpose: 'clock sync before Kerberos (KRB_AP_ERR_SKEW)' };
   A['autoblue-ms17-010'] = A['autoblue-ms17-010'] || { key: 'autoblue-ms17-010', label: 'AutoBlue-MS17-010', category: 'Exploitation', os: 'linux', class: 'git', on_kali: false,
     install: 'git clone https://github.com/3ndG4me/AutoBlue-MS17-010 ~/tools/AutoBlue-MS17-010', canonical: 'autoblue-ms17-010', variants: ['autoblue-ms17-010'], source: '3ndG4me/AutoBlue-MS17-010', license: 'see upstream', purpose: 'EternalBlue (MS17-010) exploit chain' };
   // the Zerologon exploit restore helpers live in the same SecuraBV repo as the tester

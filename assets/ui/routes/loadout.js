@@ -129,7 +129,7 @@
     var r = { ready: [], alt: [], fetchMissing: [], installFailed: [], manualMissing: [], kaliMissing: [] };
     Object.keys(A).forEach(function (k) {
       var e = A[k]; if (!e || seen[e.key]) return; seen[e.key] = 1;
-      if (e.class === 'builtin') return;
+      if (e.class === 'builtin') { r.ready.push(e); return; }   // shell/coreutils/target-side commands — always available
       if (isPresent(e, prof)) {
         r.ready.push(e);
         var t = (prof.tools || {})[e.key];
@@ -262,8 +262,8 @@
   function countSummary(prof) {
     var A = OBOL.ARSENAL || {}, seen = {}, n = 0;
     Object.keys(A).forEach(function (k) {
-      var e = A[k]; if (!e || seen[e.key] || e.class === 'builtin') return; seen[e.key] = 1;
-      if (isPresent(e, prof)) n++;
+      var e = A[k]; if (!e || seen[e.key]) return; seen[e.key] = 1;
+      if (e.class === 'builtin' || isPresent(e, prof)) n++;   // builtins (shells/coreutils/target cmds) are always available
     });
     return n;
   }
