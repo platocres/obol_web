@@ -20,6 +20,20 @@
   function catSlug(c) { return String(c || 'support').toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
 
   var _hideKali = true;   // "to fetch" view by default — the tools Kali doesn't already ship
+  var _boxLens = 'fs';    // "Your Box" grouping: 'fs' (where it lives) | 'cap' (what it's for)
+
+  // Kill-chain phases for the readiness bar: an engagement's rough progression, each fed by one or more
+  // tool categories. Coverage = how many of a phase's tools are actually on the box.
+  var PHASES = [
+    { name: 'Recon', cats: ['Recon'] },
+    { name: 'Web', cats: ['Web'] },
+    { name: 'AD / Domain', cats: ['AD', 'MITM', 'Credentials'] },
+    { name: 'Access', cats: ['Lateral', 'Database'] },
+    { name: 'Cracking', cats: ['Cracking'] },
+    { name: 'Pivot', cats: ['Tunnel'] },
+    { name: 'Privesc', cats: ['Linux enum', 'Linux privesc', 'Windows enum', 'Windows privesc'] },
+    { name: 'Exploit', cats: ['Exploitation'] },
+  ];
 
   // Prompt-stamp opt-in (persisted). Default ON but always shown + explained before download, so the
   // shell change is never a surprise — the operator sees exactly what it does and can untick it.
@@ -226,7 +240,7 @@
     // a tool chip: a category-colored dot + name, with the hover card tucked inside (hover/focus reveals it).
     function chip(it) {
       var cat = it.e ? (it.e.category || 'Support') : '';
-      return '<span class="lo-ti' + (it.e ? '' : ' lo-ti-plain') + '"' + (it.e ? ' tabindex="0"' : '') + '>'
+      return '<span class="lo-ti' + (it.e ? '' : ' lo-ti-plain') + (it.missing ? ' lo-ti-miss' : '') + '"' + (it.e ? ' tabindex="0"' : '') + '>'
         + '<span class="lo-ti-dot lo-catc-' + catSlug(cat) + '"></span>'
         + '<span class="lo-ti-label">' + esc(it.label) + '</span>'
         + card(it.e, it.inv, it.path) + '</span>';
@@ -247,16 +261,65 @@
     function winItem(f) { var e = byDest[f]; return { label: f, e: e, inv: (e && e.canonical) || '', path: '~/.obol/arsenal/win/' + f }; }
     function keyItem(k, path) { var e = A[k]; return { label: (e && e.label) || k, e: e, inv: (tools[k] && tools[k].invocation) || (e && e.canonical) || k, path: path }; }
     var winNames = staged.length ? staged : winCache.map(function (k) { return (A[k] && A[k].dest) || k; });
-    var rows = node('~/.obol/arsenal/win', winNames.map(winItem))
+    var fsRows = node('~/.obol/arsenal/win', winNames.map(winItem))
       + node('~/.obol/arsenal', linCache.map(function (k) { return keyItem(k, '~/.obol/arsenal/' + ((A[k] && A[k].dest) || k)); }))
       + node('~/.local/bin', pipx.map(function (k) { return keyItem(k, (tools[k] && tools[k].path) || ''); }))
       + node('~/tools', cloned.map(function (k) { return keyItem(k, (prof.cloned && prof.cloned[k]) || (tools[k] && tools[k].path) || ''); }))
       + node('/usr/share/wordlists', Object.keys(wl).map(function (n) { return { label: n, e: null, inv: '', path: wl[n] }; }));
-    return '<div class="lo-block"><div class="lo-sec-head"><h2 class="lo-h2">Your Box</h2>'
+
+    // "What it's for" lens: every tool obol uses, grouped by capability. Present = solid, missing = dimmed.
+    function locOf(e, rec) {
+      if (rec && rec.path) return rec.path;
+      if (prof.cloned && prof.cloned[e.key]) return prof.cloned[e.key];
+      if (e.dest) return '~/.obol/arsenal/' + (e.class === 'stage-win' ? 'win/' : '') + e.dest;
+      return '';
+    }
+    function capRows() {
+      var cats = byCategory(), keys = catOrder(cats);
+      return keys.map(function (cat) {
+        var list = (cats[cat] || []).filter(function (e) { return e.class !== 'builtin'; });   // shells/coreutils aren't "kit"
+        if (!list.length) return '';
+        var items = list.map(function (e) {
+          var pres = isPresent(e, prof), rec = tools[e.key] || {};
+          return { label: e.label || e.key, e: e, inv: rec.invocation || e.canonical || e.key, path: pres ? locOf(e, rec) : '', missing: !pres };
+        });
+        items.sort(function (a, b) { return (a.missing ? 1 : 0) - (b.missing ? 1 : 0) || (a.label < b.label ? -1 : 1); });
+        var readyN = items.filter(function (it) { return !it.missing; }).length;
+        return '<details class="lo-fs-node"><summary class="lo-fs-row">'
+          + '<span class="lo-cap-name lo-catc-' + catSlug(cat) + '">' + esc(titleCase(cat)) + '</span>'
+          + '<span class="lo-fs-n">' + readyN + '/' + list.length + '</span>'
+          + '<span class="lo-nd-dots"><span class="lo-nd-dot lo-catc-' + catSlug(cat) + '"></span></span></summary>'
+          + '<div class="lo-fs-items">' + items.map(chip).join('') + '</div></details>';
+      }).join('');
+    }
+
+    // kill-chain readiness bar: coverage per engagement phase.
+    function readinessBar() {
+      var cats = byCategory();
+      var segs = PHASES.map(function (ph) {
+        var tot = 0, rdy = 0;
+        ph.cats.forEach(function (c) { (cats[c] || []).forEach(function (e) { tot++; if (isPresent(e, prof)) rdy++; }); });
+        if (!tot) return '';
+        var cls = rdy >= tot ? 'lo-kc-full' : (rdy > 0 ? 'lo-kc-part' : 'lo-kc-none');
+        return '<div class="lo-kc ' + cls + '" title="' + U.attr(ph.name + ': ' + rdy + ' of ' + tot + ' tools ready') + '">'
+          + '<span class="lo-kc-n">' + esc(ph.name) + '</span><span class="lo-kc-v">' + rdy + '/' + tot + '</span></div>';
+      }).join('');
+      return '<div class="lo-kcbar" aria-label="Kill-chain readiness">' + segs + '</div>';
+    }
+
+    var lensToggle = '<div class="lo-lens2" role="tablist">'
+      + '<button class="lo-lens2-opt' + (_boxLens === 'fs' ? ' on' : '') + '" data-lens="fs" type="button">Where it lives</button>'
+      + '<button class="lo-lens2-opt' + (_boxLens === 'cap' ? ' on' : '') + '" data-lens="cap" type="button">What it\'s for</button></div>';
+    var body = _boxLens === 'cap' ? capRows() : fsRows;
+    var cap = _boxLens === 'cap'
+      ? 'Your kit by capability — solid = on your box, <span class="lo-dim">dimmed = not yet</span>. Hover a tool to see what it does.'
+      : 'Where the script put things — expand a path, then hover a tool to see what it does.';
+    return '<div class="lo-block"><div class="lo-sec-head"><h2 class="lo-h2">Your Box</h2>' + lensToggle
       + '<span class="lo-synced-chip"><span class="lo-synced-dot"></span> synced ' + esc(timeAgo(prof.savedAt)) + '</span></div>'
       + reconBand(prof)
-      + '<p class="lo-fs-cap">Where the script put things — expand a path, then hover a tool to see what it does.</p>'
-      + '<div class="lo-fs">' + (rows || '<div class="lo-fs-empty">Nothing staged yet — run the setup script.</div>') + '</div></div>';
+      + readinessBar()
+      + '<p class="lo-fs-cap">' + cap + '</p>'
+      + '<div class="lo-fs">' + (body || '<div class="lo-fs-empty">Nothing staged yet — run the setup script.</div>') + '</div></div>';
   }
 
   function quickstart(prof) {
@@ -343,6 +406,7 @@
     U.on(mount, 'click', '.lo-download', function () { doDownload(mount); });
     U.on(mount, 'change', '.lo-stamp-opt', function (e, t) { stampSet(!!t.checked); });
     U.on(mount, 'change', '#lo-hidekali', function (e, t) { _hideKali = !!t.checked; OBOL.router.render(); });
+    U.on(mount, 'click', '.lo-lens2-opt', function (e, t) { _boxLens = t.getAttribute('data-lens') || 'fs'; OBOL.router.render(); });
     U.on(mount, 'click', '.lo-ingest', function (e, t) {
       var box = mount.querySelector('.lo-paste'), msg = mount.querySelector('.lo-paste-msg');
       var text = (box && box.value) || '';

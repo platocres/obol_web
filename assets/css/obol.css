@@ -398,6 +398,28 @@ details.lo-fs-node[open] > summary::after { transform: rotate(-90deg); }
 .lo-ti-inv { font-size: 11px; color: var(--accent-2); }
 .lo-ti-path { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 
+/* lens toggle (Where it lives / What it's for) in the Your Box header. */
+.lo-lens2 { display: inline-flex; gap: 2px; background: var(--bg2); border: 1px solid var(--line); border-radius: 999px; padding: 2px; margin-right: auto; margin-left: 12px; }
+.lo-lens2-opt { font-size: 11.5px; font-weight: 600; color: var(--text-2); background: transparent; border: 0; border-radius: 999px; padding: 4px 12px; cursor: pointer; white-space: nowrap; }
+.lo-lens2-opt.on { background: var(--accent-soft); color: var(--accent); }
+.lo-lens2-opt:hover:not(.on) { color: var(--text); }
+
+/* kill-chain readiness bar: one segment per phase, colored by coverage. */
+.lo-kcbar { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 2px; }
+.lo-kc { flex: 1 1 auto; min-width: 92px; display: flex; flex-direction: column; gap: 1px; padding: 6px 10px; border-radius: 8px;
+  border: 1px solid var(--line); border-top: 3px solid var(--kc, var(--muted)); background: color-mix(in srgb, var(--kc, var(--muted)) 7%, var(--bg2)); }
+.lo-kc-n { font-size: 11px; font-weight: 700; color: var(--text); }
+.lo-kc-v { font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.lo-kc-full { --kc: var(--accent); }
+.lo-kc-part { --kc: #d79a2b; }
+.lo-kc-none { --kc: #d7574e; opacity: .82; }
+
+/* capability-lens category header + dimmed (not-installed) chips. */
+.lo-cap-name { font-size: 13px; font-weight: 700; color: var(--cat, var(--text)); flex: 0 0 auto; min-width: 150px; }
+.lo-ti-miss { opacity: .48; border-style: dashed; }
+.lo-ti-miss .lo-ti-dot { box-shadow: none; opacity: .7; }
+.lo-dim { color: var(--muted); }
+
 /* category palette (dark-skin tuned); --cat drives dots, chip accents, and badges. */
 .lo-catc-ad { --cat: #c678dd; } .lo-catc-recon { --cat: #56b6c2; } .lo-catc-web { --cat: #61afef; }
 .lo-catc-cracking { --cat: #e5c07b; } .lo-catc-credentials { --cat: #e06c75; } .lo-catc-lateral { --cat: #98c379; }
