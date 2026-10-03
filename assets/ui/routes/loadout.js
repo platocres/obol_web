@@ -15,6 +15,9 @@
   var U = OBOL.util;
   function esc(s) { return U.esc(s); }
   function titleCase(s) { return String(s || '').replace(/\w\S*/g, function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }); }
+  function cap1(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+  // category → CSS color-class slug (lo-catc-<slug>); the colors live in obol.css so they follow the skin.
+  function catSlug(c) { return String(c || 'support').toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
 
   var _hideKali = true;   // "to fetch" view by default — the tools Kali doesn't already ship
 
@@ -205,32 +208,53 @@
     var pipx = present.filter(function (k) { return A[k] && A[k].class === 'pipx'; });
     var cloned = Object.keys(prof.cloned || {});
     if (!cloned.length) cloned = present.filter(function (k) { return A[k] && A[k].class === 'git'; });
-    function lbl(k) { return (A[k] && A[k].label) || k; }
-    // each node is an expander: a glanceable summary (count + first few) that opens to the full contents.
+    // resolve a staged filename → its ARSENAL entry (via dest), so a chip knows its category + description.
+    var byDest = {}; Object.keys(A).forEach(function (k) { var e = A[k]; if (e && e.dest && !byDest[e.dest]) byDest[e.dest] = e; });
+
+    // hover card for a tool chip: name, colored category, what-it-is/for, invocation + where it lives.
+    function card(e, inv, path) {
+      if (!e) return '';
+      var cat = e.category || 'Support';
+      return '<span class="lo-ti-card" role="tooltip">'
+        + '<span class="lo-ti-card-h"><span class="lo-ti-name">' + esc(e.label || e.key) + '</span>'
+        + '<span class="lo-cat-badge lo-catc-' + catSlug(cat) + '">' + esc(titleCase(cat)) + '</span></span>'
+        + (e.purpose ? '<span class="lo-ti-why">' + esc(cap1(e.purpose)) + '</span>' : '')
+        + '<span class="lo-ti-meta">' + (inv ? '<code class="lo-ti-inv">' + esc(inv) + '</code>' : '')
+        + (path ? '<code class="lo-ti-path">' + esc(path) + '</code>' : '') + '</span></span>';
+    }
+    // a tool chip: a category-colored dot + name, with the hover card tucked inside (hover/focus reveals it).
+    function chip(it) {
+      var cat = it.e ? (it.e.category || 'Support') : '';
+      return '<span class="lo-ti' + (it.e ? '' : ' lo-ti-plain') + '"' + (it.e ? ' tabindex="0"' : '') + '>'
+        + '<span class="lo-ti-dot lo-catc-' + catSlug(cat) + '"></span>'
+        + '<span class="lo-ti-label">' + esc(it.label) + '</span>'
+        + card(it.e, it.inv, it.path) + '</span>';
+    }
+    // node: collapsed summary = path + count + the distinct category colors inside (no name echo). Open → chips.
     function node(path, items) {
       if (!items.length) return '';
-      var chips = items.slice(0, 6).map(function (it) { return '<span class="lo-chip">' + esc(it.label) + '</span>'; }).join('')
-        + (items.length > 6 ? '<span class="lo-chip lo-chip-more">+' + (items.length - 6) + ' more</span>' : '');
-      var full = items.map(function (it) {
-        return '<div class="lo-fs-item"><span class="lo-fs-item-n">' + esc(it.label) + '</span>'
-          + (it.sub ? '<code class="lo-fs-item-p" title="' + U.attr(it.sub) + '">' + esc(it.sub) + '</code>' : '') + '</div>';
+      var seenCat = {};
+      items.forEach(function (it) { if (it.e) seenCat[it.e.category || 'Support'] = 1; });
+      var dots = Object.keys(seenCat).sort().map(function (c) {
+        return '<span class="lo-nd-dot lo-catc-' + catSlug(c) + '" title="' + U.attr(titleCase(c)) + '"></span>';
       }).join('');
+      var body = items.map(chip).join('');
       return '<details class="lo-fs-node"><summary class="lo-fs-row"><code class="lo-fs-path">' + esc(path) + '</code>'
-        + '<span class="lo-fs-n">' + items.length + '</span><div class="lo-fs-chips">' + chips + '</div></summary>'
-        + '<div class="lo-fs-items">' + full + '</div></details>';
+        + '<span class="lo-fs-n">' + items.length + '</span><span class="lo-nd-dots">' + dots + '</span></summary>'
+        + '<div class="lo-fs-items">' + body + '</div></details>';
     }
-    function fromFiles(arr) { return arr.map(function (f) { return { label: f }; }); }
-    function fromKeys(arr, subFn) { return arr.map(function (k) { return { label: lbl(k), sub: subFn ? subFn(k) : '' }; }); }
-    var winItems = staged.length ? fromFiles(staged) : fromKeys(winCache, function (k) { return A[k] && A[k].dest; });
-    var rows = node('~/.obol/arsenal/win', winItems)
-      + node('~/.obol/arsenal', fromKeys(linCache, function (k) { return (A[k] && A[k].dest) || k; }))
-      + node('~/.local/bin', fromKeys(pipx, function (k) { return (tools[k] && tools[k].path) || ''; }))
-      + node('~/tools', fromKeys(cloned, function (k) { return (prof.cloned && prof.cloned[k]) || (tools[k] && tools[k].path) || ''; }))
-      + node('/usr/share/wordlists', Object.keys(wl).map(function (n) { return { label: n, sub: wl[n] }; }));
+    function winItem(f) { var e = byDest[f]; return { label: f, e: e, inv: (e && e.canonical) || '', path: '~/.obol/arsenal/win/' + f }; }
+    function keyItem(k, path) { var e = A[k]; return { label: (e && e.label) || k, e: e, inv: (tools[k] && tools[k].invocation) || (e && e.canonical) || k, path: path }; }
+    var winNames = staged.length ? staged : winCache.map(function (k) { return (A[k] && A[k].dest) || k; });
+    var rows = node('~/.obol/arsenal/win', winNames.map(winItem))
+      + node('~/.obol/arsenal', linCache.map(function (k) { return keyItem(k, '~/.obol/arsenal/' + ((A[k] && A[k].dest) || k)); }))
+      + node('~/.local/bin', pipx.map(function (k) { return keyItem(k, (tools[k] && tools[k].path) || ''); }))
+      + node('~/tools', cloned.map(function (k) { return keyItem(k, (prof.cloned && prof.cloned[k]) || (tools[k] && tools[k].path) || ''); }))
+      + node('/usr/share/wordlists', Object.keys(wl).map(function (n) { return { label: n, e: null, inv: '', path: wl[n] }; }));
     return '<div class="lo-block"><div class="lo-sec-head"><h2 class="lo-h2">Your Box</h2>'
       + '<span class="lo-synced-chip"><span class="lo-synced-dot"></span> synced ' + esc(timeAgo(prof.savedAt)) + '</span></div>'
       + reconBand(prof)
-      + '<p class="lo-fs-cap">Where the script put things — expand a path to see everything in it.</p>'
+      + '<p class="lo-fs-cap">Where the script put things — expand a path, then hover a tool to see what it does.</p>'
       + '<div class="lo-fs">' + (rows || '<div class="lo-fs-empty">Nothing staged yet — run the setup script.</div>') + '</div></div>';
   }
 

@@ -363,11 +363,44 @@ details.lo-fs-node > summary.lo-fs-row { cursor: pointer; list-style: none; }
 details.lo-fs-node > summary.lo-fs-row::-webkit-details-marker { display: none; }
 details.lo-fs-node > summary::after { content: '›'; margin-left: auto; opacity: .55; transform: rotate(90deg); flex: 0 0 auto; }
 details.lo-fs-node[open] > summary::after { transform: rotate(-90deg); }
-.lo-fs-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px 16px;
-  padding: 4px 0 10px 12px; margin-left: 4px; border-left: 2px solid var(--line); }
-.lo-fs-item { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 2px 0; }
-.lo-fs-item-n { font-size: 12.5px; color: var(--text); flex: 0 0 auto; }
-.lo-fs-item-p { font-size: 11px; color: var(--muted); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* collapsed summary: count + the distinct category colors inside (replaces the old name-echo chips). */
+.lo-nd-dots { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; }
+.lo-nd-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cat, var(--muted)); flex: 0 0 auto; }
+
+/* expanded body: a wrap of category-colored tool chips, each hiding a hover card. */
+.lo-fs-items { display: flex; flex-wrap: wrap; gap: 6px 7px; padding: 8px 0 12px 12px; margin-left: 4px; border-left: 2px solid var(--line); }
+.lo-ti { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  padding: 3px 9px 3px 7px; border-radius: 999px; background: var(--surf3); border: 1px solid var(--line);
+  color: var(--text); cursor: default; max-width: 100%; }
+.lo-ti[tabindex] { cursor: help; }
+.lo-ti:hover, .lo-ti:focus-within { border-color: var(--cat, var(--accent)); background: color-mix(in srgb, var(--cat, var(--accent)) 12%, var(--surf3)); }
+.lo-ti-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cat, var(--muted)); flex: 0 0 auto; box-shadow: 0 0 0 2px color-mix(in srgb, var(--cat, var(--muted)) 22%, transparent); }
+.lo-ti-label { font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lo-ti-plain { opacity: .85; }
+
+/* the hover card (sibling inside .lo-ti); revealed on hover/focus of its chip. */
+.lo-ti-card { position: absolute; left: 0; top: calc(100% + 6px); z-index: 60; width: 274px; max-width: 78vw;
+  display: none; flex-direction: column; gap: 6px; padding: 11px 12px; border-radius: 10px;
+  background: var(--bg2); border: 1px solid var(--cat, var(--line));
+  box-shadow: 0 12px 30px rgba(0,0,0,.42); text-align: left; white-space: normal; cursor: default;
+  border-top: 3px solid var(--cat, var(--accent)); }
+.lo-ti:hover > .lo-ti-card, .lo-ti:focus-within > .lo-ti-card { display: flex; }
+.lo-ti-card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lo-ti-name { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text); }
+.lo-cat-badge { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; white-space: nowrap;
+  padding: 2px 7px; border-radius: 20px; color: var(--cat, var(--text-2));
+  background: color-mix(in srgb, var(--cat, var(--muted)) 16%, transparent); border: 1px solid color-mix(in srgb, var(--cat, var(--muted)) 40%, transparent); }
+.lo-ti-why { font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.lo-ti-meta { display: flex; flex-direction: column; gap: 3px; margin-top: 1px; }
+.lo-ti-inv { font-size: 11px; color: var(--accent-2); }
+.lo-ti-path { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+
+/* category palette (dark-skin tuned); --cat drives dots, chip accents, and badges. */
+.lo-catc-ad { --cat: #c678dd; } .lo-catc-recon { --cat: #56b6c2; } .lo-catc-web { --cat: #61afef; }
+.lo-catc-cracking { --cat: #e5c07b; } .lo-catc-credentials { --cat: #e06c75; } .lo-catc-lateral { --cat: #98c379; }
+.lo-catc-tunnel { --cat: #d19a66; } .lo-catc-mitm { --cat: #ff7eb6; } .lo-catc-database { --cat: #4ec9b0; }
+.lo-catc-exploitation { --cat: #f07178; } .lo-catc-linux-enum { --cat: #89ca78; } .lo-catc-linux-privesc { --cat: #b5cea8; }
+.lo-catc-windows-enum { --cat: #7aa2f7; } .lo-catc-windows-privesc { --cat: #9d7cd8; } .lo-catc-support { --cat: #8a919e; }
 .move-why { color: var(--text-2); margin: 0 0 12px; }
 .ph-chip { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; padding: 2px 8px; border-radius: 20px; color: #0a0e18; }
 .ph-recon { background: var(--ph-recon); } .ph-enum { background: var(--ph-enum); } .ph-creds { background: var(--ph-creds); }
