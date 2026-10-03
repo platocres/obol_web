@@ -52,7 +52,8 @@
       'rec(){ printf "%s %s %s\\n" "$1" "$2" "$3" >> "$REC"; }',
       'obol_apt(){ have "$2" && { skip "$2"; return; }; say "apt $1"; $SUDO apt-get install -y "$1" >/dev/null 2>&1 || warn "apt $1 failed"; }',
       'obol_pipx(){ have "$2" && { skip "$2"; return; }; say "pipx $1"; pipx install "$1" >/dev/null 2>&1 || pipx install --force "$1" >/dev/null 2>&1 || warn "pipx $1 failed (try: pipx install $1)"; }',
-      'obol_git(){ local d="$TOOLDIR/$2"; [ -d "$d" ] && { skip "$2"; return; }; say "git $2"; git clone --depth 1 "$1" "$d" >/dev/null 2>&1 || warn "clone $2 failed"; }',
+      // records the clone (key git <dir>) so the inventory probe counts run-from-repo tools that are NOT on PATH.
+      'obol_git(){ local d="$TOOLDIR/$2"; if [ -d "$d" ]; then skip "$2"; else say "git $2"; git clone --depth 1 "$1" "$d" >/dev/null 2>&1 || { warn "clone $2 failed"; return; }; fi; rec "$2" git "$d"; }',
       '# obol_fetch <key> <url> <dest> [sha256]',
       'obol_fetch(){ local k="$1" u="$2" d="$3" pin="${4:-}" out="$CACHE/$3"; ',
       '  [ -s "$out" ] || { say "fetch $k"; curl -fsSL "$u" -o "$out" || { warn "fetch $k failed"; return; }; }; ',
@@ -141,6 +142,10 @@
       out.push('say "added obol prompt stamp to ~/.zshrc — open a new terminal (or: source ~/.zshrc) to see it"; fi');
       out.push('');
     }
+    // wordlists: Kali ships rockyou GZIPPED — gunzip it (keeping the .gz) so cracking moves have the path.
+    out.push('echo "[wordlists] prep"');
+    out.push('if [ -f /usr/share/wordlists/rockyou.txt.gz ] && [ ! -f /usr/share/wordlists/rockyou.txt ]; then say "gunzip rockyou"; $SUDO gunzip -k /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || $SUDO gunzip /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || warn "could not gunzip rockyou — run: sudo gunzip -k /usr/share/wordlists/rockyou.txt.gz"; else skip "rockyou"; fi');
+    out.push('');
     // the paste-back block: a single OBOL-ARSENAL v1 line obol-web ingests to learn this box.
     out.push('# ---- paste the block below back into obol-web (Loadout) ----');
     out.push('emit(){ printf "%s" "$1"; }');
@@ -161,16 +166,20 @@
     out.push('staged=[]');
     out.push('if os.path.isdir(www):');
     out.push('    staged=[f for f in os.listdir(www) if os.path.isfile(os.path.join(www,f))]');
-    out.push('digests={}');
+    out.push('digests={}; cloned={}');
     out.push('try:');
     out.push('    for line in open(rec):');
     out.push('        parts=line.split()');
-    out.push('        if len(parts)>=2: digests[parts[0]]=parts[1]');
+    out.push('        if len(parts)>=3 and parts[1]=="git": cloned[parts[0]]=parts[2]');
+    out.push('        elif len(parts)>=2: digests[parts[0]]=parts[1]');
     out.push('except FileNotFoundError: pass');
+    out.push('# run-from-repo tools cloned to ~/tools are installed but not on PATH — mark them present at their dir.');
+    out.push('for k,d in cloned.items():');
+    out.push('    if not tools.get(k,{}).get("present"): tools[k]={"present":True,"invocation":k,"path":d,"via":"cloned"}');
     out.push('wl={}');
     out.push('for name,path in {"rockyou":"/usr/share/wordlists/rockyou.txt","seclists":"/usr/share/seclists","rockyou-gz":"/usr/share/wordlists/rockyou.txt.gz"}.items():');
     out.push('    if os.path.exists(path): wl[name]=path');
-    out.push('print(json.dumps({"v":1,"tools":tools,"staged":staged,"wwwdir":www,"digests":digests,"wordlists":wl}))');
+    out.push('print(json.dumps({"v":1,"tools":tools,"staged":staged,"wwwdir":www,"digests":digests,"cloned":cloned,"wordlists":wl}))');
     out.push('PY');
     out.push(')');
     out.push('printf "\\n\\033[1;36mOBOL-ARSENAL v1\\033[0m\\n%s\\n" "$INV"');

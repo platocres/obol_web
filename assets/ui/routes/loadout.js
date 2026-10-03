@@ -121,21 +121,27 @@
     var staged = prof.staged || [];
     var wl = prof.wordlists || {};
     var tools = prof.tools || {};
-    var installed = Object.keys(tools).filter(function (k) { return tools[k] && tools[k].present; });
+    var present = Object.keys(tools).filter(function (k) { return tools[k] && tools[k].present; });
+    // pipx tools live on ~/.local/bin; git run-from-repo tools live in ~/tools (reported via `cloned`, or
+    // inferred by class for older profiles). Kali-default tools live on the system PATH — the hero's
+    // "ready" count already covers those, so the map shows only what the script actually PUT on the box.
+    var pipx = present.filter(function (k) { return A[k] && A[k].class === 'pipx'; });
+    var cloned = Object.keys(prof.cloned || {});
+    if (!cloned.length) cloned = present.filter(function (k) { return A[k] && A[k].class === 'git'; });
     function chips(arr, n) {
       var head = arr.slice(0, n || 6).map(function (x) { return '<span class="lo-chip">' + esc(x) + '</span>'; }).join('');
       return head + (arr.length > (n || 6) ? '<span class="lo-chip lo-chip-more">+' + (arr.length - (n || 6)) + '</span>' : '');
     }
-    function node(path, label, arr) {
+    function node(path, arr) {
       if (!arr.length) return '';
       return '<div class="lo-fs-row"><code class="lo-fs-path">' + esc(path) + '</code>'
         + '<span class="lo-fs-n">' + arr.length + '</span><div class="lo-fs-chips">' + chips(arr) + '</div></div>';
     }
-    var wlArr = Object.keys(wl).map(function (k) { return k + ' → ' + wl[k]; });
-    var rows = node('~/.obol/arsenal/win', 'staged Windows binaries', staged.length ? staged : winCache)
-      + node('~/.obol/arsenal', 'Linux materials', linCache)
-      + node('~/tools', 'installed CLI tools', installed)
-      + (wlArr.length ? '<div class="lo-fs-row"><code class="lo-fs-path">/usr/share/wordlists</code><span class="lo-fs-n">' + wlArr.length + '</span><div class="lo-fs-chips">' + chips(Object.keys(wl)) + '</div></div>' : '');
+    var rows = node('~/.obol/arsenal/win', staged.length ? staged : winCache)
+      + node('~/.obol/arsenal', linCache)
+      + node('~/.local/bin', pipx)
+      + node('~/tools', cloned)
+      + node('/usr/share/wordlists', Object.keys(wl));
     return '<div class="lo-block"><div class="lo-sec-head"><h2 class="lo-h2">Your Box</h2>'
       + '<span class="lo-synced-chip"><span class="lo-synced-dot"></span> synced ' + esc(timeAgo(prof.savedAt)) + '</span></div>'
       + '<div class="lo-fs">' + (rows || '<div class="lo-fs-empty">Nothing staged yet — run the setup script.</div>') + '</div></div>';
