@@ -769,7 +769,7 @@ function serve() {
     document.querySelector('.lo-ingest').click();
   });
   await page.waitForTimeout(150);
-  ok((await page.locator('.lo-route .lo-synced').count()) === 1, 'pasting the OBOL-ARSENAL block flips Loadout to the synced face');
+  ok((await page.locator('.lo-route .lo-synced-chip').count()) === 1 && (await page.locator('.lo-route .lo-fs').count()) === 1, 'pasting the OBOL-ARSENAL block flips Loadout to the synced "Your Box" face');
   ok(await page.evaluate(() => { try { return !!JSON.parse(localStorage.getItem('obol.arsenal-profile')).savedAt; } catch (e) { return false; } }), 'the machine profile is persisted per-browser');
   // a synced tool shows its resolved invocation when it differs from the canonical form.
   // impacket ships on Kali so it's under the "hide Kali-defaults" fold — untick to reveal (also exercises the toggle).

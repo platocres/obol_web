@@ -1,119 +1,163 @@
 /*!
  * obol ui — routes/loadout.js — THE LOADOUT (step zero: set up your attack box).
- * Leftmost tab. Two faces from one route:
- *   - no machine profile yet  -> a guided quickstart (download the script, run it, paste the result back)
- *   - profile present          -> the live inventory (what's installed / staged / cached on your box)
- * Plus the Arsenal catalog (every tool obol covers, with install/stage recipes) and the Workspace
- * scaffold. Never a gate: everything here is optional; skip it and every command still works canonical.
- * The browser only GENERATES a setup script and READS the pasted-back inventory — it never executes.
+ * Leftmost tab, GLOBAL (per-browser), not per-engagement — it describes the operator's Kali box.
+ * Two faces from one route:
+ *   - no machine profile yet → a guided quickstart (download the script, run it, paste the result back)
+ *   - profile present         → "Your Box": a map of where everything lives, plus the live Arsenal state
+ * The Arsenal is collapsed into per-category rows with at-a-glance summaries so the page stays short.
+ * Never a gate: skip it and every command still works canonical. The browser only GENERATES a setup
+ * script and READS the pasted-back inventory — it never fetches or executes anything.
+ * (Workspace is per-engagement and lives on the Engagements screen, not here.)
  */
 (function (root) {
   'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
   var U = OBOL.util;
   function esc(s) { return U.esc(s); }
+  function titleCase(s) { return String(s || '').replace(/\w\S*/g, function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }); }
 
-  var _hideKali = true;   // "not on Kali" default view (toggle persists for the session)
+  var _hideKali = true;   // "to fetch" view by default — the tools Kali doesn't already ship
 
   var CLASS_LABEL = {
-    kali: 'on Kali', builtin: 'built-in', apt: 'apt', pipx: 'pipx', git: 'git clone',
-    go: 'go', material: 'fetch', 'stage-win': 'stage → www/', 'stage-lin': 'stage',
+    kali: 'on Kali', builtin: 'built-in', apt: 'apt', pipx: 'pipx', git: 'git', go: 'go',
+    material: 'fetched', 'stage-lin': 'staged', 'stage-win': 'staged → www/',
   };
+  // category display order (most-reached-for first); unknown categories fall to the end.
+  var CAT_ORDER = ['AD', 'Credentials', 'Recon', 'Web', 'Windows enum', 'Windows privesc',
+    'Linux enum', 'Linux privesc', 'Lateral', 'Cracking', 'Tunnel', 'MITM', 'Database',
+    'Exploitation', 'Support', 'Built-in'];
+
   function classBadge(e) {
-    var on = e.on_kali ? ' lo-badge-ok' : '';
-    return '<span class="lo-badge' + on + '">' + esc(CLASS_LABEL[e.class] || e.class) + '</span>';
+    return '<span class="lo-badge' + (e.on_kali ? ' lo-badge-ok' : '') + '">' + esc(CLASS_LABEL[e.class] || e.class) + '</span>';
   }
-  // per-tool live state from the pasted-back profile (or null when unsynced)
+  function needsFetch(e) { return !(e.class === 'kali' || e.class === 'builtin'); }
+  function isPresent(e, prof) {
+    if (!prof) return false;
+    var t = (prof.tools || {})[e.key];
+    if (t && t.present) return true;
+    return (prof.staged || []).indexOf(e.dest || '') >= 0 || !!((prof.digests || {})[e.key]);
+  }
   function toolState(e, prof) {
     if (!prof) return '';
-    var t = (prof.tools || {})[e.key];
-    var stagedHit = (prof.staged || []).indexOf(e.dest || '') >= 0;
-    if (t && t.present) {
-      var inv = t.invocation && t.invocation !== e.canonical ? ' as <code>' + esc(t.invocation) + '</code>' : '';
-      return '<span class="lo-state lo-have">✓ installed' + inv + '</span>';
+    if (isPresent(e, prof)) {
+      var t = (prof.tools || {})[e.key];
+      var inv = t && t.invocation && t.invocation !== e.canonical ? ' as <code>' + esc(t.invocation) + '</code>' : '';
+      return '<span class="lo-state lo-have">✓ ready' + inv + '</span>';
     }
-    if (stagedHit) return '<span class="lo-state lo-have">✓ staged</span>';
-    if (e.class === 'kali' || e.class === 'builtin') return '<span class="lo-state lo-miss">not found — unusual on Kali</span>';
-    return '<span class="lo-state lo-miss">not yet — run the script</span>';
+    if (needsFetch(e)) return '<span class="lo-state lo-todo">run the script</span>';
+    return '<span class="lo-state lo-miss">not found</span>';
   }
 
   function toolCard(e, prof) {
     var recipe = e.install
-      ? '<div class="lo-recipe"><code>' + esc(e.install) + '</code><button class="btn-copy" data-copy="' + U.attr(e.install) + '">copy</button></div>'
-      : (e.class === 'stage-win' || e.class === 'material' || e.class === 'stage-lin')
-        ? '<div class="lo-recipe lo-fetch">fetched + staged by <code>download-arsenal.sh</code></div>' : '';
-    var prov = e.source ? '<span class="lo-src">' + esc(e.source) + (e.license ? ' · ' + esc(e.license) : '') + '</span>' : '';
+      ? '<div class="lo-recipe"><code>' + esc(e.install) + '</code><button class="btn-copy" data-copy="' + U.attr(e.install) + '">Copy</button></div>'
+      : needsFetch(e) ? '<div class="lo-recipe lo-fetch">Fetched &amp; staged by the setup script.</div>' : '';
     var av = e.av_note ? '<div class="lo-av">⚠ ' + esc(e.av_note) + '</div>' : '';
+    var prov = e.source ? '<div class="lo-tool-foot"><span class="lo-src">' + esc(e.source) + (e.license ? ' · ' + esc(e.license) : '') + '</span></div>' : '';
     return '<article class="lo-tool">'
       + '<div class="lo-tool-h"><span class="lo-tool-name">' + esc(e.label || e.key) + '</span>' + classBadge(e) + toolState(e, prof) + '</div>'
       + (e.purpose ? '<div class="lo-tool-why">' + esc(e.purpose) + '</div>' : '')
-      + recipe + av
-      + (prov ? '<div class="lo-tool-foot">' + prov + '</div>' : '')
-      + '</article>';
+      + recipe + av + prov + '</article>';
   }
 
-  // group the arsenal for display: action-needed classes first, Kali-defaults last (collapsible)
-  var ORDER = ['pipx', 'git', 'go', 'apt', 'material', 'stage-lin', 'stage-win', 'kali', 'builtin'];
-  function arsenalSection(prof) {
-    var A = OBOL.ARSENAL || {}, seen = {}, groups = {};
+  // group arsenal entries by category, de-duped
+  function byCategory() {
+    var A = OBOL.ARSENAL || {}, seen = {}, cats = {};
     Object.keys(A).sort().forEach(function (k) {
       var e = A[k]; if (!e || seen[e.key]) return; seen[e.key] = 1;
-      (groups[e.class] = groups[e.class] || []).push(e);
+      (cats[e.category || 'Support'] = cats[e.category || 'Support'] || []).push(e);
     });
-    var html = '<div class="coach-section"><div class="lo-sec-head"><h2 class="coach-sec-h">Arsenal</h2>'
-      + '<label class="lo-toggle"><input type="checkbox" id="lo-hidekali"' + (_hideKali ? ' checked' : '') + '> hide tools Kali already ships</label></div>';
-    ORDER.forEach(function (cls) {
-      var list = groups[cls]; if (!list || !list.length) return;
-      if (_hideKali && (cls === 'kali' || cls === 'builtin')) return;
-      html += '<div class="lo-group"><div class="lo-group-h">' + esc(CLASS_LABEL[cls] || cls)
-        + ' <span class="lo-group-n">' + list.length + '</span></div><div class="lo-grid">'
-        + list.map(function (e) { return toolCard(e, prof); }).join('') + '</div></div>';
+    return cats;
+  }
+  function catOrder(cats) {
+    var keys = Object.keys(cats);
+    keys.sort(function (a, b) {
+      var ia = CAT_ORDER.indexOf(a), ib = CAT_ORDER.indexOf(b);
+      if (ia < 0) ia = 99; if (ib < 0) ib = 99;
+      return ia - ib || (a < b ? -1 : 1);
     });
-    if (_hideKali) {
-      var kaliN = (groups.kali || []).length + (groups.builtin || []).length;
-      html += '<div class="lo-kali-note">' + kaliN + ' more tools ship with Kali — nothing to do. Untick above to list them.</div>';
+    return keys;
+  }
+
+  function arsenalSection(prof) {
+    var cats = byCategory(), keys = catOrder(cats);
+    var head = '<div class="lo-sec-head"><h2 class="lo-h2">Arsenal</h2>'
+      + '<div class="lo-sec-tools"><span class="lo-find" title="Press ⌘K / Ctrl-K">⌘K to find a tool</span>'
+      + '<label class="lo-toggle"><input type="checkbox" id="lo-hidekali"' + (_hideKali ? ' checked' : '') + '> Hide tools Kali ships</label></div></div>';
+    var rows = keys.map(function (cat) {
+      var list = cats[cat];
+      var shown = _hideKali ? list.filter(needsFetch) : list;
+      var fetchN = list.filter(needsFetch).length;
+      var haveN = prof ? list.filter(function (e) { return isPresent(e, prof); }).length : 0;
+      var kaliN = list.length - fetchN;
+      // a category with nothing to fetch, in "hide Kali" mode → a thin satisfied row, not an expander
+      if (_hideKali && !shown.length) {
+        return '<div class="lo-cat lo-cat-flat"><span class="lo-cat-name">' + esc(titleCase(cat)) + '</span>'
+          + '<span class="lo-cat-sum">' + list.length + ' ship with Kali ✓</span></div>';
+      }
+      var summary = [];
+      if (prof) summary.push(haveN + ' ready');
+      summary.push(fetchN + ' to fetch');
+      if (!_hideKali && kaliN) summary.push(kaliN + ' on Kali');
+      return '<details class="lo-cat"><summary class="lo-cat-h"><span class="lo-cat-name">' + esc(titleCase(cat)) + '</span>'
+        + '<span class="lo-cat-sum">' + summary.join(' · ') + '</span></summary>'
+        + '<div class="lo-grid">' + shown.map(function (e) { return toolCard(e, prof); }).join('') + '</div></details>';
+    }).join('');
+    return '<div class="lo-block">' + head + rows + '</div>';
+  }
+
+  // "Your Box": a compact map of where the arsenal lives on the host (synced face only).
+  function hostMap(prof) {
+    var A = OBOL.ARSENAL || {};
+    var cache = Object.keys(prof.digests || {});
+    var winCache = cache.filter(function (k) { return A[k] && (A[k].class === 'stage-win'); });
+    var linCache = cache.filter(function (k) { return A[k] && (A[k].class === 'material' || A[k].class === 'stage-lin'); });
+    var staged = prof.staged || [];
+    var wl = prof.wordlists || {};
+    var tools = prof.tools || {};
+    var installed = Object.keys(tools).filter(function (k) { return tools[k] && tools[k].present; });
+    function chips(arr, n) {
+      var head = arr.slice(0, n || 6).map(function (x) { return '<span class="lo-chip">' + esc(x) + '</span>'; }).join('');
+      return head + (arr.length > (n || 6) ? '<span class="lo-chip lo-chip-more">+' + (arr.length - (n || 6)) + '</span>' : '');
     }
-    return html + '</div>';
+    function node(path, label, arr) {
+      if (!arr.length) return '';
+      return '<div class="lo-fs-row"><code class="lo-fs-path">' + esc(path) + '</code>'
+        + '<span class="lo-fs-n">' + arr.length + '</span><div class="lo-fs-chips">' + chips(arr) + '</div></div>';
+    }
+    var wlArr = Object.keys(wl).map(function (k) { return k + ' → ' + wl[k]; });
+    var rows = node('~/.obol/arsenal/win', 'staged Windows binaries', staged.length ? staged : winCache)
+      + node('~/.obol/arsenal', 'Linux materials', linCache)
+      + node('~/tools', 'installed CLI tools', installed)
+      + (wlArr.length ? '<div class="lo-fs-row"><code class="lo-fs-path">/usr/share/wordlists</code><span class="lo-fs-n">' + wlArr.length + '</span><div class="lo-fs-chips">' + chips(Object.keys(wl)) + '</div></div>' : '');
+    return '<div class="lo-block"><div class="lo-sec-head"><h2 class="lo-h2">Your Box</h2>'
+      + '<span class="lo-synced-chip"><span class="lo-synced-dot"></span> synced ' + esc(timeAgo(prof.savedAt)) + '</span></div>'
+      + '<div class="lo-fs">' + (rows || '<div class="lo-fs-empty">Nothing staged yet — run the setup script.</div>') + '</div></div>';
   }
 
   function quickstart(prof) {
     var synced = !!prof;
-    var when = synced ? timeAgo(prof.savedAt) : '';
-    var head = synced
-      ? '<div class="lo-synced"><span class="lo-synced-dot"></span> Loadout synced <strong>' + esc(when) + '</strong> — '
-        + countSummary(prof) + ' <button class="btn-ghost lo-resync">Re-sync</button></div>'
-      : '';
     var steps = '<ol class="lo-steps">'
-      + '<li><span class="lo-step-n">1</span><div><strong>Download the setup script</strong><div class="lo-step-sub">One file; fetches every tool obol uses that Kali doesn\'t ship, and stages the Windows binaries.</div>'
+      + '<li><span class="lo-step-n">1</span><div><div class="lo-step-t">Download The Setup Script</div>'
+      + '<div class="lo-step-sub">One file. Fetches every tool obol uses that Kali doesn\'t ship, and stages the Windows binaries — a fresh box to ready in one run.</div>'
       + '<button class="btn-primary lo-download">Download download-arsenal.sh</button></div></li>'
-      + '<li><span class="lo-step-n">2</span><div><strong>Run it on your Kali box</strong><div class="lo-step-sub">Safe to re-run — it only does the missing work.</div>'
-      + '<div class="lo-recipe"><code>chmod +x download-arsenal.sh &amp;&amp; ./download-arsenal.sh</code><button class="btn-copy" data-copy="chmod +x download-arsenal.sh &amp;&amp; ./download-arsenal.sh">copy</button></div></div></li>'
-      + '<li><span class="lo-step-n">3</span><div><strong>Paste the result back</strong><div class="lo-step-sub">The script ends by printing an <code>OBOL-ARSENAL</code> block — paste the whole thing here and obol learns your box.</div>'
+      + '<li><span class="lo-step-n">2</span><div><div class="lo-step-t">Run It On Your Kali Box</div>'
+      + '<div class="lo-step-sub">Safe to re-run — it only does the missing work.</div>'
+      + '<div class="lo-recipe"><code>chmod +x download-arsenal.sh &amp;&amp; ./download-arsenal.sh</code><button class="btn-copy" data-copy="chmod +x download-arsenal.sh &amp;&amp; ./download-arsenal.sh">Copy</button></div></div></li>'
+      + '<li><span class="lo-step-n">3</span><div><div class="lo-step-t">Paste The Result Back</div>'
+      + '<div class="lo-step-sub">The script ends by printing an <code>OBOL-ARSENAL</code> block — paste the whole thing here and obol learns your box.</div>'
       + '<textarea class="lo-paste" placeholder="Paste the OBOL-ARSENAL block (or the whole script output) here…" spellcheck="false"></textarea>'
-      + '<div class="lo-paste-row"><button class="btn-primary lo-ingest">Stock my Loadout</button><span class="lo-paste-msg" role="status"></span></div></div></li>'
+      + '<div class="lo-paste-row"><button class="btn-primary lo-ingest">Stock My Loadout</button><span class="lo-paste-msg" role="status"></span></div></div></li>'
       + '</ol>';
-    return '<div class="lo-quick' + (synced ? ' lo-quick-done' : '') + '">' + head
-      + (synced ? '<details class="lo-redetails"><summary>Set up again / on another box</summary>' + steps + '</details>' : steps)
-      + '</div>';
-  }
-
-  function workspaceSection() {
-    var eng = OBOL.store.active();
-    if (!OBOL.workspace || !eng) return '';
-    var scaffold = OBOL.workspace.scaffold(eng);
-    var scandir = OBOL.workspace.tokens(eng).scandir;
-    return '<div class="coach-section"><h2 class="coach-sec-h">Workspace</h2>'
-      + '<p class="route-sub">Your on-box working tree. Run this once; every coach command writes into it.</p>'
-      + '<pre class="cmd-run"><code>' + esc(scaffold) + '</code></pre>'
-      + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(scaffold) + '">copy</button></div>'
-      + '<div class="ws-banner-note">Commands below write into <code>' + esc(scandir) + '</code>. Staged Windows binaries land in your <code>www/</code> to serve to targets.</div>'
-      + '</div>';
+    if (!synced) {
+      return '<div class="lo-block"><h2 class="lo-h2">Set Up — One Time, ~2 Minutes</h2>' + steps + '</div>';
+    }
+    return '<details class="lo-block lo-setup-done"><summary class="lo-h2 lo-setup-sum">Set Up Again / On Another Box</summary>' + steps + '</details>';
   }
 
   function countSummary(prof) {
     var present = 0; Object.keys(prof.tools || {}).forEach(function (k) { if (prof.tools[k] && prof.tools[k].present) present++; });
-    var wl = Object.keys(prof.wordlists || {}).length;
-    return present + ' tools · ' + (prof.staged || []).length + ' staged' + (wl ? ' · ' + wl + ' wordlist' + (wl === 1 ? '' : 's') : '');
+    return present;
   }
   function timeAgo(t) {
     if (!t) return 'just now';
@@ -126,30 +170,29 @@
 
   function render() {
     var prof = OBOL.arsenal ? OBOL.arsenal.profileGet() : null;
-    var A = OBOL.ARSENAL || {};
-    var total = 0, seen = {}; Object.keys(A).forEach(function (k) { if (A[k] && !seen[A[k].key]) { seen[A[k].key] = 1; total++; } });
+    var A = OBOL.ARSENAL || {}, total = 0, seen = {};
+    Object.keys(A).forEach(function (k) { if (A[k] && !seen[A[k].key]) { seen[A[k].key] = 1; total++; } });
     var html = '<section class="coach lo-route">'
       + '<div class="coach-hero"><div class="coach-hero-main">'
-      + '<div class="coach-kicker">Step zero · <strong>your attack box</strong></div>'
+      + '<div class="coach-kicker">Step Zero · <strong>Your Attack Box</strong></div>'
       + '<h1 class="coach-h1">Loadout</h1>'
       + '<p class="coach-sub">' + (prof
           ? 'obol knows your box and tailors every command to the tools you actually have.'
           : 'Set up your Kali box once — obol generates the script, you run it, paste the result back. Optional: skip it and every command still works.')
       + '</p></div>'
-      + '<div class="coach-metrics"><div class="metric"><span class="metric-n">' + total + '</span><span class="metric-l">Tools obol uses</span></div>'
-      + (prof ? '<div class="metric"><span class="metric-n">' + countSummary(prof).split(' ')[0] + '</span><span class="metric-l">On your box</span></div>' : '')
+      + '<div class="coach-metrics"><div class="metric"><span class="metric-n">' + total + '</span><span class="metric-l">Tools Obol Uses</span></div>'
+      + (prof ? '<div class="metric"><span class="metric-n">' + countSummary(prof) + '</span><span class="metric-l">Ready On Your Box</span></div>' : '')
       + '</div></div>';
-    if (!prof) html += '<p class="lo-skip">New here? Do this first. Or <a href="#/home">skip to Engagements →</a> — nothing here blocks you.</p>';
+    if (!prof) html += '<p class="lo-skip">New here? Do this first — or <a href="#/home">skip to Engagements →</a>. Nothing here blocks you.</p>';
     html += quickstart(prof);
+    if (prof) html += hostMap(prof);
     html += arsenalSection(prof);
-    html += workspaceSection();
     return html + '</section>';
   }
 
   function doDownload() {
     if (!OBOL.arsenal || !OBOL.arsenal.buildScript) { U.toast('Arsenal module still loading — try again', 'err'); return; }
-    var text = OBOL.arsenal.buildScript();
-    var blob = new Blob([text], { type: 'text/x-shellscript' });
+    var blob = new Blob([OBOL.arsenal.buildScript()], { type: 'text/x-shellscript' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'download-arsenal.sh';
     document.body.appendChild(a); a.click();
@@ -164,11 +207,6 @@
     });
     U.on(mount, 'click', '.lo-download', function () { doDownload(); });
     U.on(mount, 'change', '#lo-hidekali', function (e, t) { _hideKali = !!t.checked; OBOL.router.render(); });
-    U.on(mount, 'click', '.lo-resync', function () {
-      var ta = mount.querySelector('.lo-paste'); var det = mount.querySelector('.lo-redetails');
-      if (det) det.open = true;
-      if (ta) { ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); ta.focus(); }
-    });
     U.on(mount, 'click', '.lo-ingest', function (e, t) {
       var box = mount.querySelector('.lo-paste'), msg = mount.querySelector('.lo-paste-msg');
       var text = (box && box.value) || '';
@@ -176,7 +214,7 @@
       var r = OBOL.arsenal.ingestInventory(text);
       if (!r.ok) { if (msg) { msg.textContent = r.reason; msg.className = 'lo-paste-msg err'; } return; }
       U.toast('Loadout stocked — ' + r.present + ' tools, ' + r.staged + ' staged');
-      OBOL.router.render();  // flip to the synced face
+      OBOL.router.render();
     });
   }
 
