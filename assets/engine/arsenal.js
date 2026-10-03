@@ -149,5 +149,53 @@
     return names;
   }
 
-  OBOL.arsenal = { buildScript: buildScript, inventoryNames: inventoryNames };
+  // ── paste-back: read the OBOL-ARSENAL block the script prints, into a machine profile ──
+  // The profile describes the OPERATOR'S BOX, not an engagement, so it lives per-browser (localStorage),
+  // persisting across engagements. Reads are wrapped (a private window / blocked storage just means
+  // "no profile yet"). parseInventory tolerates the whole terminal paste — it finds the marker + JSON.
+  var PROFILE_KEY = 'obol.arsenal-profile';
+  function parseInventory(text) {
+    if (!text) return null;
+    text = String(text);
+    var i = text.indexOf('OBOL-ARSENAL');
+    var scan = i >= 0 ? text.slice(i) : text;         // allow a bare JSON paste too
+    // find the first balanced {...} after the marker
+    var start = scan.indexOf('{');
+    if (start < 0) return null;
+    var depth = 0, inStr = false, esc = false, end = -1;
+    for (var p = start; p < scan.length; p++) {
+      var c = scan[p];
+      if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if (c === '{') depth++;
+      else if (c === '}') { depth--; if (depth === 0) { end = p + 1; break; } }
+    }
+    if (end < 0) return null;
+    var obj;
+    try { obj = JSON.parse(scan.slice(start, end)); } catch (e) { return null; }
+    if (!obj || typeof obj !== 'object' || !obj.tools) return null;
+    return obj;
+  }
+  function profileGet() { try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null'); } catch (e) { return null; } }
+  function profileSet(inv) {
+    if (!inv) return null;
+    inv.savedAt = Date.now();
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(inv)); } catch (e) {}
+    return inv;
+  }
+  function profileClear() { try { localStorage.removeItem(PROFILE_KEY); } catch (e) {} }
+  // Ingest a raw paste → store it as the profile. Returns {ok, present, staged, reason}.
+  function ingestInventory(text) {
+    var inv = parseInventory(text);
+    if (!inv) return { ok: false, reason: 'no OBOL-ARSENAL block found in that paste' };
+    profileSet(inv);
+    var present = 0; Object.keys(inv.tools || {}).forEach(function (k) { if (inv.tools[k] && inv.tools[k].present) present++; });
+    return { ok: true, present: present, staged: (inv.staged || []).length, wordlists: Object.keys(inv.wordlists || {}).length };
+  }
+
+  OBOL.arsenal = {
+    buildScript: buildScript, inventoryNames: inventoryNames,
+    parseInventory: parseInventory, ingestInventory: ingestInventory,
+    profileGet: profileGet, profileSet: profileSet, profileClear: profileClear,
+  };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

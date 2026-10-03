@@ -746,6 +746,38 @@ function serve() {
   ok(bootedBlocked, 'boot completes via fallback when IndexedDB.open is blocked (no infinite hang)');
   await blocked.close();
 
+  // Loadout (step-zero tab): the leftmost nav item, the quickstart face, the Arsenal catalog, and the
+  // paste-back round-trip that flips the page to the synced inventory face.
+  ok((await page.locator('header.appbar .mainnav a[href="#/loadout"]').count()) === 1, 'Loadout is a primary nav item');
+  ok(await page.evaluate(() => {
+    var links = Array.from(document.querySelectorAll('header.appbar .mainnav a[data-nav]'));
+    return links.length && (links[0].getAttribute('href') === '#/loadout');
+  }), 'Loadout is the LEFTMOST nav item (step zero)');
+  await page.goto(`http://localhost:${PORT}/index.html#/loadout`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.lo-route', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.lo-route .lo-steps .lo-download').count()) === 1, 'Loadout empty-state shows the guided quickstart with a download button');
+  ok((await page.locator('.lo-route .lo-paste').count()) === 1, 'Loadout quickstart has the paste-back textarea');
+  ok((await page.locator('.lo-route .lo-tool').count()) >= 10, 'Loadout renders the Arsenal catalog (' + (await page.locator('.lo-route .lo-tool').count()) + ' tool cards)');
+  ok(await page.evaluate(() => !!(window.OBOL.ARSENAL && window.OBOL.arsenal && typeof window.OBOL.arsenal.buildScript === 'function')), 'ARSENAL data + arsenal.js loaded with the route');
+  // the generated script is non-trivial and bash-shaped
+  const scriptLen = await page.evaluate(() => (window.OBOL.arsenal.buildScript() || '').length);
+  ok(scriptLen > 3000, 'buildScript() produces a substantial setup script (' + scriptLen + ' bytes)');
+  // paste-back round-trip: feed an OBOL-ARSENAL block, ingest, and confirm the synced face appears
+  await page.evaluate(() => {
+    var inv = { v: 1, tools: { nxc: { present: true, invocation: 'nxc', path: '/usr/bin/nxc' }, 'impacket-psexec': { present: true, invocation: 'psexec.py', path: '/usr/bin/psexec.py' } }, staged: ['mimikatz.exe', 'Rubeus.exe'], wwwdir: '/home/kali/.obol/arsenal/www', digests: {}, wordlists: { rockyou: '/usr/share/wordlists/rockyou.txt' } };
+    var ta = document.querySelector('.lo-paste'); ta.value = 'noise\nOBOL-ARSENAL v1\n' + JSON.stringify(inv) + '\n$ ';
+    document.querySelector('.lo-ingest').click();
+  });
+  await page.waitForTimeout(150);
+  ok((await page.locator('.lo-route .lo-synced').count()) === 1, 'pasting the OBOL-ARSENAL block flips Loadout to the synced face');
+  ok(await page.evaluate(() => { try { return !!JSON.parse(localStorage.getItem('obol.arsenal-profile')).savedAt; } catch (e) { return false; } }), 'the machine profile is persisted per-browser');
+  // a synced tool shows its resolved invocation when it differs from the canonical form.
+  // impacket ships on Kali so it's under the "hide Kali-defaults" fold — untick to reveal (also exercises the toggle).
+  await page.locator('.lo-route #lo-hidekali').uncheck();
+  await page.waitForTimeout(100);
+  ok(((await page.locator('.lo-route .lo-tool', { hasText: 'impacket-psexec' }).first().textContent().catch(() => '')) || '').indexOf('psexec.py') !== -1, 'a synced tool reflects the box\'s actual invocation (psexec.py)');
+  await page.evaluate(() => { try { localStorage.removeItem('obol.arsenal-profile'); } catch (e) {} });
+
   await browser.close();
   server.close();
   console.log(fail ? ('\nBROWSER SMOKE: ' + fail + ' FAILURES') : '\nBROWSER SMOKE: all passed');
