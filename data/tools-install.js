@@ -208,8 +208,10 @@
     // SharpWSUS publishes NO GitHub releases (the release API 404s) — there is nothing to auto-fetch, so
     // flag it manual: the setup script skips it (no doomed download) and the Loadout card tells the operator
     // where to get it. Keeping the entry preserves the methodology/card for the WSUS lateral-movement lane.
-    { key: 'sharpwsus', label: 'SharpWSUS', category: 'AD', os: 'windows', class: 'stage-win', manual: true,
-      manual_url: 'https://github.com/nettitude/SharpWSUS', dest: 'SharpWSUS.exe', bins: ['SharpWSUS.exe'], source: 'nettitude/SharpWSUS', license: 'BSD-3-Clause', purpose: 'WSUS admin → lateral movement', av_note: AV },
+    // nettitude/SharpWSUS publishes no GitHub release, but Flangvik/SharpCollection tracks a compiled build
+    // (same precompiled-binary mirror pattern as the Ghostpack tools) — fetch from there so it stages like the rest.
+    { key: 'sharpwsus', label: 'SharpWSUS', category: 'AD', os: 'windows', class: 'stage-win',
+      url: 'https://raw.githubusercontent.com/Flangvik/SharpCollection/master/NetFramework_4.7_Any/SharpWSUS.exe', dest: 'SharpWSUS.exe', bins: ['SharpWSUS.exe'], source: 'nettitude/SharpWSUS (build: Flangvik/SharpCollection)', license: 'BSD-3-Clause', purpose: 'WSUS admin → lateral movement', av_note: AV },
     // SharpSCCM attaches the compiled .exe (and a merged build) directly to each release — not a .zip — so
     // match either; the fetch helper's default case moves a bare .exe straight to dest.
     { key: 'sharpsccm', label: 'SharpSCCM', category: 'AD', os: 'windows', class: 'stage-win',
