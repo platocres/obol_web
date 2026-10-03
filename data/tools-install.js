@@ -60,16 +60,31 @@
   });
 
   // The whole impacket example suite ships on Kali as `impacket-<tool>`; pip installs expose `<tool>.py`.
-  // One entry per tool obol references, each with its invocation variants for command-rewrite.
+  // Linux is case-sensitive and SIX impacket scripts are CamelCase (GetNPUsers.py → impacket-GetNPUsers),
+  // so the probe must look for the real case or it reports core AD tools (Kerberoast/AS-REP/S4U) missing
+  // on a box that actually ships them. IMP_CASE maps the lowercase key suffix to its true on-disk case.
+  var IMP_CASE = { getnpusers: 'GetNPUsers', getuserspns: 'GetUserSPNs', getst: 'getST',
+    gettgt: 'getTGT', raisechild: 'raiseChild', goldenpac: 'goldenPac' };
+  // One entry per tool obol references, each with its invocation variants for command-rewrite + probe.
   [['psexec', 'Lateral'], ['wmiexec', 'Lateral'], ['dcomexec', 'Lateral'], ['secretsdump', 'Credentials'],
    ['getnpusers', 'AD'], ['getuserspns', 'AD'], ['getst', 'AD'], ['gettgt', 'AD'], ['ticketer', 'AD'],
    ['addcomputer', 'AD'], ['rbcd', 'AD'], ['dacledit', 'AD'], ['lookupsid', 'AD'], ['raisechild', 'AD'],
    ['goldenpac', 'AD'], ['smbserver', 'Support'], ['dpapi', 'Credentials']].forEach(function (row) {
-    var t = row[0], k = 'impacket-' + t;
+    var t = row[0], k = 'impacket-' + t, real = IMP_CASE[t] || t;   // real = the Kali wrapper / script case
     A[k] = { key: k, label: k, category: row[1], os: 'linux', class: 'kali', on_kali: true, install: '',
-      canonical: k, variants: [k, t + '.py', 'impacket-' + t, 'python3 /usr/share/doc/python3-impacket/examples/' + t + '.py'],
-      source: 'fortra/impacket', license: 'Apache-2.0', purpose: 'impacket ' + t };
+      canonical: 'impacket-' + real,
+      variants: ['impacket-' + real, real + '.py', 'impacket-' + t, t + '.py',
+        'python3 /usr/share/doc/python3-impacket/examples/' + real + '.py'],
+      source: 'fortra/impacket', license: 'Apache-2.0', purpose: 'impacket ' + real };
   });
+  // ntlmrelayx also ships on Kali as `impacket-ntlmrelayx` (the bare name is never on PATH), so probe
+  // for the wrapper or a fully-provisioned box reports obol's most-used relay tool as missing.
+  if (A.ntlmrelayx) {
+    A.ntlmrelayx.canonical = 'impacket-ntlmrelayx';
+    A.ntlmrelayx.variants = ['impacket-ntlmrelayx', 'ntlmrelayx', 'ntlmrelayx.py',
+      'python3 /usr/share/doc/python3-impacket/examples/ntlmrelayx.py'];
+    A.ntlmrelayx.source = 'fortra/impacket'; A.ntlmrelayx.license = 'Apache-2.0';
+  }
   // nxc / NetExec: the same tool under several historical names.
   A.nxc.variants = ['nxc', 'netexec', 'crackmapexec', 'cme'];
   A.nxc.source = 'Pennyw0rth/NetExec'; A.nxc.license = 'BSD-2-Clause';
@@ -158,10 +173,15 @@
       install: 'pipx install pypykatz', dest: '', bins: ['pypykatz'], source: 'skelsec/pypykatz', license: 'MIT', purpose: 'pure-python LSASS/registry secrets parser' },
     { key: 'sharphound', label: 'SharpHound', category: 'AD', os: 'windows', class: 'stage-win',
       gh_repo: 'BloodHoundAD/SharpHound', gh_asset: 'SharpHound.*\\.zip$', extract_member: 'SharpHound\\.exe$', dest: 'SharpHound.exe', bins: ['SharpHound.exe'], source: 'BloodHoundAD/SharpHound', license: 'GPL-3.0', purpose: 'BloodHound collection from a Windows foothold', av_note: AV },
-    { key: 'sharpwsus', label: 'SharpWSUS', category: 'AD', os: 'windows', class: 'stage-win',
-      gh_repo: 'nettitude/SharpWSUS', gh_asset: 'SharpWSUS.*\\.zip$', extract_member: 'SharpWSUS\\.exe$', dest: 'SharpWSUS.exe', bins: ['SharpWSUS.exe'], source: 'nettitude/SharpWSUS', license: 'BSD-3-Clause', purpose: 'WSUS admin → lateral movement', av_note: AV },
+    // SharpWSUS publishes NO GitHub releases (the release API 404s) — there is nothing to auto-fetch, so
+    // flag it manual: the setup script skips it (no doomed download) and the Loadout card tells the operator
+    // where to get it. Keeping the entry preserves the methodology/card for the WSUS lateral-movement lane.
+    { key: 'sharpwsus', label: 'SharpWSUS', category: 'AD', os: 'windows', class: 'stage-win', manual: true,
+      manual_url: 'https://github.com/nettitude/SharpWSUS', dest: 'SharpWSUS.exe', bins: ['SharpWSUS.exe'], source: 'nettitude/SharpWSUS', license: 'BSD-3-Clause', purpose: 'WSUS admin → lateral movement', av_note: AV },
+    // SharpSCCM attaches the compiled .exe (and a merged build) directly to each release — not a .zip — so
+    // match either; the fetch helper's default case moves a bare .exe straight to dest.
     { key: 'sharpsccm', label: 'SharpSCCM', category: 'AD', os: 'windows', class: 'stage-win',
-      gh_repo: 'Mayyhem/SharpSCCM', gh_asset: 'SharpSCCM.*\\.zip$', extract_member: 'SharpSCCM\\.exe$', dest: 'SharpSCCM.exe', bins: ['SharpSCCM.exe'], source: 'Mayyhem/SharpSCCM', license: 'BSD-3-Clause', purpose: 'SCCM client-push / policy creds', av_note: AV },
+      gh_repo: 'Mayyhem/SharpSCCM', gh_asset: 'SharpSCCM.*\\.(zip|exe)$', extract_member: 'SharpSCCM\\.exe$', dest: 'SharpSCCM.exe', bins: ['SharpSCCM.exe'], source: 'Mayyhem/SharpSCCM', license: 'BSD-3-Clause', purpose: 'SCCM client-push / policy creds', av_note: AV },
     { key: 'wesng', label: 'WES-NG', category: 'Windows privesc', os: 'linux', class: 'pipx',
       install: 'pipx install wesng', dest: '', bins: ['wes.py', 'wes'], source: 'bitsadmin/wesng', license: 'BSD-3-Clause', purpose: 'Windows missing-patch suggester (offline, from systeminfo)' },
     { key: 'nc.exe', label: 'nc64.exe', category: 'Tunnel', os: 'windows', class: 'stage-win',
@@ -170,7 +190,7 @@
     { key: 'chisel', label: 'chisel', category: 'Tunnel', os: 'multi', class: 'material',
       gh_repo: 'jpillora/chisel', gh_asset: 'chisel_.*_linux_amd64\\.gz$', dest: 'chisel', bins: ['chisel'], source: 'jpillora/chisel', license: 'MIT', purpose: 'reverse SOCKS / port-forward pivoting' },
     { key: 'ligolo-ng', label: 'ligolo-ng', category: 'Tunnel', os: 'multi', class: 'material',
-      gh_repo: 'nicocha30/ligolo-ng', gh_asset: 'ligolo-ng_proxy_.*linux_amd64.*\\.tar\\.gz$', extract_member: '(?:^|/)proxy$', dest: 'ligolo-proxy', bins: ['proxy', 'ligolo-proxy', 'ligolo-ng'], source: 'nicocha30/ligolo-ng', license: 'GPL-3.0', purpose: 'route-backed pivoting (proxy on Kali, agent on target)' },
+      gh_repo: 'nicocha30/ligolo-ng', gh_asset: 'ligolo-ng_proxy_.*linux_amd64.*\\.tar\\.gz$', extract_member: '(^|/)proxy$', dest: 'ligolo-proxy', bins: ['proxy', 'ligolo-proxy', 'ligolo-ng'], source: 'nicocha30/ligolo-ng', license: 'GPL-3.0', purpose: 'route-backed pivoting (proxy on Kali, agent on target)' },
   ];
   MAT.forEach(function (e) {
     if (e.on_kali === undefined) e.on_kali = false;

@@ -50,12 +50,15 @@
       var inv = t && t.invocation && t.invocation !== e.canonical ? ' as <code>' + esc(t.invocation) + '</code>' : '';
       return '<span class="lo-state lo-have">✓ ready' + inv + '</span>';
     }
+    if (e.manual) return '<span class="lo-state lo-todo">manual fetch</span>';
     if (needsFetch(e)) return '<span class="lo-state lo-todo">run the script</span>';
     return '<span class="lo-state lo-miss">not found</span>';
   }
 
   function toolCard(e, prof) {
-    var recipe = e.install
+    var recipe = e.manual
+      ? '<div class="lo-recipe lo-fetch">No published release — grab it from <a href="' + U.attr(e.manual_url || '#') + '" target="_blank" rel="noopener">' + esc(e.source || 'upstream') + ' ↗</a> and drop it in <code>~/.obol/arsenal/win</code>.</div>'
+      : e.install
       ? '<div class="lo-recipe"><code>' + esc(e.install) + '</code><button class="btn-copy" data-copy="' + U.attr(e.install) + '">Copy</button></div>'
       : needsFetch(e) ? '<div class="lo-recipe lo-fetch">Fetched &amp; staged by the setup script.</div>' : '';
     var av = e.av_note ? '<div class="lo-av">⚠ ' + esc(e.av_note) + '</div>' : '';
@@ -112,7 +115,69 @@
     return '<div class="lo-block">' + head + rows + '</div>';
   }
 
-  // "Your Box": a compact map of where the arsenal lives on the host (synced face only).
+  // Reconcile the pasted-back inventory against what obol EXPECTS: this is the operator's self-check that
+  // "everything I think I installed actually installed, and everything I think ships with Kali is really here".
+  // Buckets (de-duped, builtins excluded — shell/coreutils are never probed):
+  //   ready         present (on PATH, cloned, or staged+digested)
+  //   alt           present but under a non-canonical name (informational — command-rewrite handles it)
+  //   fetchMissing  the script fetches/installs it, but it's not on the box (install didn't run or failed)
+  //   manualMissing no published artifact to auto-fetch — needs a manual grab
+  //   kaliMissing   obol assumed Kali ships it, but a default install didn't (metapackage gap / misflag)
+  function reconcile(prof) {
+    var A = OBOL.ARSENAL || {}, seen = {};
+    var r = { ready: [], alt: [], fetchMissing: [], manualMissing: [], kaliMissing: [] };
+    Object.keys(A).forEach(function (k) {
+      var e = A[k]; if (!e || seen[e.key]) return; seen[e.key] = 1;
+      if (e.class === 'builtin') return;
+      if (isPresent(e, prof)) {
+        r.ready.push(e);
+        var t = (prof.tools || {})[e.key];
+        if (t && t.present && t.invocation && t.invocation !== e.canonical) r.alt.push(e);
+        return;
+      }
+      if (e.manual) r.manualMissing.push(e);
+      else if (needsFetch(e)) r.fetchMissing.push(e);
+      else if (e.os !== 'windows') r.kaliMissing.push(e);   // a Windows command absent from Kali is expected, not a gap
+    });
+    return r;
+  }
+
+  function reconList(arr, mode, prof) {
+    return '<ul class="lo-recon-list">' + arr.slice().sort(function (a, b) {
+      return (a.label || a.key) < (b.label || b.key) ? -1 : 1;
+    }).map(function (e) {
+      var extra = '';
+      if (mode === 'manual' && e.manual_url) extra = ' — <a href="' + U.attr(e.manual_url) + '" target="_blank" rel="noopener">get it ↗</a>';
+      else if (mode === 'install' && e.install) extra = ' — <code>' + esc(e.install) + '</code>';
+      else if (mode === 'alt') { var t = (prof.tools || {})[e.key] || {}; extra = ' — present as <code>' + esc(t.invocation || '') + '</code>'; }
+      return '<li>' + esc(e.label || e.key) + extra + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function reconBand(prof) {
+    var r = reconcile(prof);
+    function pill(arr, cls, label, note, body) {
+      if (!arr.length) return '';
+      return '<details class="lo-recon-d"><summary class="lo-recon-pill ' + cls + '">' + arr.length + ' ' + label + '</summary>'
+        + '<div class="lo-recon-body">' + (note ? '<p class="lo-recon-note">' + note + '</p>' : '') + body + '</div></details>';
+    }
+    var band = '<span class="lo-recon-pill lo-rp-ok" title="Accounted for on your box">' + r.ready.length + ' ready</span>'
+      + pill(r.fetchMissing, 'lo-rp-warn', 'to install',
+          'obol\'s setup script fetches these — they\'re not on your box yet. Re-run Step 2 (<code>./download-arsenal.sh</code>) and paste back.',
+          reconList(r.fetchMissing, 'install', prof))
+      + pill(r.manualMissing, 'lo-rp-warn', 'manual',
+          'No published release to auto-fetch — grab these by hand, then drop them in <code>~/.obol/arsenal/win</code>.',
+          reconList(r.manualMissing, 'manual', prof))
+      + pill(r.kaliMissing, 'lo-rp-bad', 'expected on Kali, missing',
+          'obol assumed a Kali default install ships these, but yours didn\'t — likely a larger-metapackage tool (<code>apt install &lt;name&gt;</code>) or a flag to fix. Flag it to me if a core one shows here.',
+          reconList(r.kaliMissing, 'plain', prof))
+      + pill(r.alt, 'lo-rp-info', 'aliased',
+          'Present under a different name than the canonical one — obol\'s command-rewrite already adapts to these.',
+          reconList(r.alt, 'alt', prof));
+    return '<div class="lo-recon">' + band + '</div>';
+  }
+
+  // "Your Box": a reconciliation band + a map of where the arsenal lives on the host (synced face only).
   function hostMap(prof) {
     var A = OBOL.ARSENAL || {};
     var cache = Object.keys(prof.digests || {});
@@ -128,22 +193,32 @@
     var pipx = present.filter(function (k) { return A[k] && A[k].class === 'pipx'; });
     var cloned = Object.keys(prof.cloned || {});
     if (!cloned.length) cloned = present.filter(function (k) { return A[k] && A[k].class === 'git'; });
-    function chips(arr, n) {
-      var head = arr.slice(0, n || 6).map(function (x) { return '<span class="lo-chip">' + esc(x) + '</span>'; }).join('');
-      return head + (arr.length > (n || 6) ? '<span class="lo-chip lo-chip-more">+' + (arr.length - (n || 6)) + '</span>' : '');
+    function lbl(k) { return (A[k] && A[k].label) || k; }
+    // each node is an expander: a glanceable summary (count + first few) that opens to the full contents.
+    function node(path, items) {
+      if (!items.length) return '';
+      var chips = items.slice(0, 6).map(function (it) { return '<span class="lo-chip">' + esc(it.label) + '</span>'; }).join('')
+        + (items.length > 6 ? '<span class="lo-chip lo-chip-more">+' + (items.length - 6) + ' more</span>' : '');
+      var full = items.map(function (it) {
+        return '<div class="lo-fs-item"><span class="lo-fs-item-n">' + esc(it.label) + '</span>'
+          + (it.sub ? '<code class="lo-fs-item-p" title="' + U.attr(it.sub) + '">' + esc(it.sub) + '</code>' : '') + '</div>';
+      }).join('');
+      return '<details class="lo-fs-node"><summary class="lo-fs-row"><code class="lo-fs-path">' + esc(path) + '</code>'
+        + '<span class="lo-fs-n">' + items.length + '</span><div class="lo-fs-chips">' + chips + '</div></summary>'
+        + '<div class="lo-fs-items">' + full + '</div></details>';
     }
-    function node(path, arr) {
-      if (!arr.length) return '';
-      return '<div class="lo-fs-row"><code class="lo-fs-path">' + esc(path) + '</code>'
-        + '<span class="lo-fs-n">' + arr.length + '</span><div class="lo-fs-chips">' + chips(arr) + '</div></div>';
-    }
-    var rows = node('~/.obol/arsenal/win', staged.length ? staged : winCache)
-      + node('~/.obol/arsenal', linCache)
-      + node('~/.local/bin', pipx)
-      + node('~/tools', cloned)
-      + node('/usr/share/wordlists', Object.keys(wl));
+    function fromFiles(arr) { return arr.map(function (f) { return { label: f }; }); }
+    function fromKeys(arr, subFn) { return arr.map(function (k) { return { label: lbl(k), sub: subFn ? subFn(k) : '' }; }); }
+    var winItems = staged.length ? fromFiles(staged) : fromKeys(winCache, function (k) { return A[k] && A[k].dest; });
+    var rows = node('~/.obol/arsenal/win', winItems)
+      + node('~/.obol/arsenal', fromKeys(linCache, function (k) { return (A[k] && A[k].dest) || k; }))
+      + node('~/.local/bin', fromKeys(pipx, function (k) { return (tools[k] && tools[k].path) || ''; }))
+      + node('~/tools', fromKeys(cloned, function (k) { return (prof.cloned && prof.cloned[k]) || (tools[k] && tools[k].path) || ''; }))
+      + node('/usr/share/wordlists', Object.keys(wl).map(function (n) { return { label: n, sub: wl[n] }; }));
     return '<div class="lo-block"><div class="lo-sec-head"><h2 class="lo-h2">Your Box</h2>'
       + '<span class="lo-synced-chip"><span class="lo-synced-dot"></span> synced ' + esc(timeAgo(prof.savedAt)) + '</span></div>'
+      + reconBand(prof)
+      + '<p class="lo-fs-cap">Where the script put things — expand a path to see everything in it.</p>'
       + '<div class="lo-fs">' + (rows || '<div class="lo-fs-empty">Nothing staged yet — run the setup script.</div>') + '</div></div>';
   }
 
@@ -169,9 +244,16 @@
     return '<details class="lo-block lo-setup-done"><summary class="lo-h2 lo-setup-sum">Set Up Again / On Another Box</summary>' + steps + '</details>';
   }
 
+  // "Ready on your box" = how many of the tools obol uses are actually present — on PATH, cloned to ~/tools,
+  // staged to serve, or cached as a material. Counts the same way the reconciliation band does (isPresent over
+  // the registry) so the hero number and "Your Box" agree instead of showing two different "ready" totals.
   function countSummary(prof) {
-    var present = 0; Object.keys(prof.tools || {}).forEach(function (k) { if (prof.tools[k] && prof.tools[k].present) present++; });
-    return present;
+    var A = OBOL.ARSENAL || {}, seen = {}, n = 0;
+    Object.keys(A).forEach(function (k) {
+      var e = A[k]; if (!e || seen[e.key] || e.class === 'builtin') return; seen[e.key] = 1;
+      if (isPresent(e, prof)) n++;
+    });
+    return n;
   }
   function timeAgo(t) {
     if (!t) return 'just now';

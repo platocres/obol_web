@@ -68,8 +68,8 @@
       '  [ -n "$url" ] || { warn "$k: no asset matched /$re/"; return; }; ',
       '  local tmp; tmp=$(mktemp); curl -fsSL "$url" -o "$tmp" || { warn "fetch $k failed"; return; }; ',
       '  case "$url" in ',
-      '    *.zip) if [ -n "$mem" ]; then (cd "$CACHE" && unzip -o -j "$tmp" >/dev/null 2>&1); local f; f=$(cd "$CACHE" && find . -type f | grep -E "$mem" | head -n1); [ -n "$f" ] && mv "$CACHE/$f" "$out"; else unzip -o -j "$tmp" -d "$CACHE" >/dev/null 2>&1; fi ;; ',
-      '    *.tar.gz|*.tgz) tar -xzf "$tmp" -C "$CACHE" >/dev/null 2>&1; if [ -n "$mem" ]; then local f; f=$(cd "$CACHE" && find . -type f | grep -E "$mem" | head -n1); [ -n "$f" ] && mv "$CACHE/$f" "$out"; fi ;; ',
+      '    *.zip) if [ -n "$mem" ]; then (cd "$CACHE" && unzip -o -j "$tmp" >/dev/null 2>&1); local f; f=$(cd "$CACHE" && find . -type f | grep -E "$mem" | head -n1); f="${f#./}"; [ -n "$f" ] && [ ! "$CACHE/$f" -ef "$out" ] && mv "$CACHE/$f" "$out"; else unzip -o -j "$tmp" -d "$CACHE" >/dev/null 2>&1; fi ;; ',
+      '    *.tar.gz|*.tgz) tar -xzf "$tmp" -C "$CACHE" >/dev/null 2>&1; if [ -n "$mem" ]; then local f; f=$(cd "$CACHE" && find . -type f | grep -E "$mem" | head -n1); f="${f#./}"; [ -n "$f" ] && [ ! "$CACHE/$f" -ef "$out" ] && mv "$CACHE/$f" "$out"; fi ;; ',
       '    *.gz) gunzip -c "$tmp" > "$out" 2>/dev/null ;; ',
       '    *) mv "$tmp" "$out" ;; ',
       '  esac; rm -f "$tmp"; ',
@@ -90,6 +90,7 @@
       var e = A[k];
       if (!e || seen[e.key]) return; seen[e.key] = 1;
       if (e.class === 'kali' || e.class === 'builtin') return;    // assumed present on Kali
+      if (e.manual) return;    // no published artifact to fetch (e.g. no GitHub release) — card explains where to get it
       if (e.class === 'apt') apt.push('obol_apt "' + sh(e.install.replace(/^.*install\s+-y\s+/, '')) + '" "' + (e.bins && e.bins[0] || e.key) + '"');
       else if (e.class === 'pipx') pipx.push('obol_pipx "' + sh((e.install || '').replace(/^pipx install\s+/, '')) + '" "' + (e.bins && e.bins[0] || e.canonical || e.key) + '"');
       else if (e.class === 'git') git.push('obol_git "' + sh((e.install || '').replace(/^git clone\s+/, '').replace(/\s+\S+\/tools\/.*$/, '')) + '" "' + e.key + '"');
