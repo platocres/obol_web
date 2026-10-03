@@ -41,9 +41,11 @@
       'export PATH="$HOME/.local/bin:$PATH"',
       'export PIP_BREAK_SYSTEM_PACKAGES=1',   // PEP 668: tolerate pip on externally-managed Kali/Debian
       // CRITICAL: apt output is suppressed, so any debconf prompt (e.g. krb5-user asking for the default realm)
-      // would hang invisibly forever. Force non-interactive + keep existing configs so apt never blocks on input.
+      // would hang invisibly forever. sudo RESETS the environment, so exporting DEBIAN_FRONTEND is not enough —
+      // it must be passed THROUGH sudo via `env`. APT_RUN wraps every apt-get so debconf always takes defaults.
       'export DEBIAN_FRONTEND=noninteractive',
       'APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)',
+      'APT_RUN(){ $SUDO env DEBIAN_FRONTEND=noninteractive apt-get "$@"; }',
       // optional: a GitHub token lifts the 60/hr anonymous API limit used to resolve release assets.
       'GH_AUTH=(); [ -n "${GITHUB_TOKEN:-}" ] && GH_AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")',
       'SUDO=""; if [ "$(id -u)" -ne 0 ]; then command -v sudo >/dev/null 2>&1 && SUDO="sudo"; fi',
@@ -54,7 +56,7 @@
       '# record "<key> <sha256> <path>" into a flat sidecar the paste-back block reads.',
       'REC="$CACHE/.records"; : > "$REC"',
       'rec(){ printf "%s %s %s\\n" "$1" "$2" "$3" >> "$REC"; }',
-      'obol_apt(){ have "$2" && { skip "$2"; return; }; say "apt $1"; $SUDO apt-get install "${APT_OPTS[@]}" "$1" >/dev/null 2>&1 || warn "apt $1 failed"; }',
+      'obol_apt(){ have "$2" && { skip "$2"; return; }; say "apt $1"; APT_RUN install "${APT_OPTS[@]}" "$1" >/dev/null 2>&1 || warn "apt $1 failed"; }',
       'obol_pipx(){ have "$2" && { skip "$2"; return; }; say "pipx $1"; pipx install "$1" >/dev/null 2>&1 || pipx install --force "$1" >/dev/null 2>&1 || warn "pipx $1 failed (try: pipx install $1)"; }',
       // records the clone (key git <dir>) so the inventory probe counts run-from-repo tools that are NOT on PATH.
       'obol_git(){ local d="$TOOLDIR/$2"; if [ -d "$d" ]; then skip "$2"; else say "git $2"; git clone --depth 1 "$1" "$d" >/dev/null 2>&1 || { warn "clone $2 failed"; return; }; fi; rec "$2" git "$d"; }',
@@ -120,10 +122,10 @@
     // bootstrap: a fresh Kali may lack curl/git/unzip or pipx; take it 0→ready (PEP 668-safe, older-tolerant).
     out.push('echo "[prep] base packages + pipx"');
     out.push('APT_READY=0');
-    out.push('ensure_apt(){ [ "$APT_READY" = "1" ] || { $SUDO apt-get update -y >/dev/null 2>&1; APT_READY=1; }; }');
-    out.push('for b in curl git unzip tar; do have "$b" || { ensure_apt; say "apt $b"; $SUDO apt-get install "${APT_OPTS[@]}" "$b" >/dev/null 2>&1 || warn "apt $b failed"; }; done');
+    out.push('ensure_apt(){ [ "$APT_READY" = "1" ] || { APT_RUN update -y >/dev/null 2>&1; APT_READY=1; }; }');
+    out.push('for b in curl git unzip tar; do have "$b" || { ensure_apt; say "apt $b"; APT_RUN install "${APT_OPTS[@]}" "$b" >/dev/null 2>&1 || warn "apt $b failed"; }; done');
     out.push('if ! have pipx; then ensure_apt; say "installing pipx";');
-    out.push('  $SUDO apt-get install "${APT_OPTS[@]}" pipx >/dev/null 2>&1 || python3 -m pip install --user pipx >/dev/null 2>&1 || warn "pipx bootstrap failed — install it and re-run";');
+    out.push('  APT_RUN install "${APT_OPTS[@]}" pipx >/dev/null 2>&1 || python3 -m pip install --user pipx >/dev/null 2>&1 || warn "pipx bootstrap failed — install it and re-run";');
     out.push('  pipx ensurepath >/dev/null 2>&1 || true; export PATH="$HOME/.local/bin:$PATH";');
     out.push('fi');
     out.push('');
