@@ -145,6 +145,7 @@
     'ad.attack_paths': 'attack paths', 'ad.control_paths': 'object-control paths',
     'ad.trusts': 'domain trusts', 'ad.computer_added': 'an added computer account',
     'ad.acl_lead': 'an abusable ACL (control lead)',
+    'ad.group_list': 'a list of domain groups', 'ad.computer_list': 'a list of domain computers',
     'ad.zerologon': 'a confirmed Zerologon-vulnerable DC (CVE-2020-1472)',
     'ad.coerced_auth': 'a coercible authentication (PetitPotam/PrinterBug/DFSCoerce)',
     'ad.gpo_control': 'write control over a Group Policy Object',

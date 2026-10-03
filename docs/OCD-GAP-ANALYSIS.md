@@ -38,37 +38,47 @@ AD lane; obol's own 19 packs for everything else.*
 Each ran through the real engine and minted **nothing** today unless noted. Facts named are the
 *proposed* producers; several already exist as gate conditions waiting for a producer.
 
-| # | Pasted output | Should mint | Unlocks / feeds | Locus | Engine result | Effort |
-|---|---|---|---|---|---|---|
-| 1 | mimikatz `sekurlsa::logonpasswords` | `credential.plaintext`, `hash.ntlm` | credentials, PtH | I | NO FACTS | parser |
-| 2 | mimikatz `lsadump::sam` / `lsadump::lsa` | `hash.ntlm`, `loot.ntds` | PtH, cracking | I | NO FACTS | parser |
-| 3 | `whoami /priv` | `privesc.windows_privilege` | **already gates `seimpersonate`** | F/I | NO FACTS | **dispatch only** — minter exists in `host.js` |
-| 4 | `sudo -l` | `privesc.sudo_rights` | **already gates `sudo-abuse`** | F/I | NO FACTS | **dispatch only** — minter exists in `host.js` |
-| 5 | winPEAS / PrivescCheck | `privesc.leads`, `privesc.windows_privilege`, `privesc.stored_credentials` | `windows-enum` | I | NO FACTS | parser |
-| 6 | PowerView `Get-NetUser`/`Get-DomainUser` | `ad.user_list`, `ad.control_paths` | `powerview-enum` | I | NO FACTS | parser |
-| 7 | `net user` / `net localgroup`/`net group` | `ad.user_list`, local-admin membership | enum, admin discovery | F/I | NO FACTS | parser |
-| 8 | `schtasks /query /v` | `privesc.leads` | `windows-enum` | F/I | NO FACTS | parser |
-| 9 | `reg query` (autologon / stored creds) | `credential.candidate`, `privesc.stored_credentials` | cred reuse | F/I | NO FACTS | parser |
-| 10 | `klist` | `kerberos.tickets` | `ticket-reuse` | F/I | NO FACTS | parser |
-| 11 | `icacls` / `accesschk` | `privesc.leads` (writable service/path) | `windows-enum` | F/I | partial — only `host.notable_program` | enhance |
+| # | Pasted output | Should mint | Unlocks / feeds | Locus | Status |
+|---|---|---|---|---|---|
+| 1 | mimikatz `sekurlsa::logonpasswords` | `credential.plaintext`, `hash.ntlm` | credentials, PtH | I | ✅ **shipped** |
+| 2 | mimikatz `lsadump::sam` / `lsadump::lsa` | `hash.ntlm`, `loot.ntds` | PtH, cracking | I | ✅ **shipped** |
+| 3 | `whoami /priv` | `privesc.windows_privilege` | gates `seimpersonate` | F/I | ✅ **shipped** |
+| 4 | `sudo -l` | `privesc.sudo_rights` | gates `sudo-abuse` | F/I | ✅ **shipped** |
+| 5 | winPEAS / PrivescCheck | `privesc.windows_privilege`, `privesc.stored_credentials`, `privesc.leads` | `windows-enum` | I | ✅ **shipped** |
+| 6 | PowerView `Get-NetUser`/`Get-DomainUser`/`Get-ADUser` | `ad.user_list`, `ad.acl_lead`→(ACL moves), `ad.group_list`, `ad.computer_list` | `powerview-enum`, ACL abuse | I | ✅ **shipped** |
+| 7 | `net user` / `net localgroup`/`net group` | `ad.user_list`, `config.review` (local admins) | enum, admin discovery | F/I | ✅ **shipped** |
+| 8 | `schtasks /query /v` | `privesc.leads` | `windows-enum` | F/I | ⬜ Batch B |
+| 9 | `reg query` (autologon / stored creds) | `credential.candidate`, `privesc.stored_credentials` | cred reuse | F/I | ⬜ Batch B |
+| 10 | `klist` | `kerberos.tickets` | `ticket-reuse` | F/I | ⬜ Batch B |
+| 11 | `icacls` / `accesschk` | `privesc.leads` (writable service/path) | `windows-enum` | F/I | ⬜ Batch B (enhance; today only `host.notable_program`) |
+
+**Note (shipped work):** wiring `whoami /priv`/`sudo -l` only needed dispatch (the `host.js` minters existed).
+The ACL path got a bonus fix: `ad.acl_lead` (from PowerView *and* bloodyAD) was produced but consumed by
+no move — now wired into `ad-acl-abuse` / `bloodyad-acl` / `ad-path-manual`'s gates, so ACL enumeration is
+actionable. `nxc`/netexec output was already parsed (not a gap — an earlier grep false alarm, corrected).
 
 **Priority order (remote-first + leverage):**
-- **Batch 1 — the two dispatch-only wins (tiny, high symbolism):** #3 `whoami /priv`, #4 `sudo -l`.
-  Each completes an already-gated chain by wiring the existing minter to the command. Flagship proof
-  that the gate *earns* its unlock from evidence.
-- **Batch 2 — credential dumps:** #1/#2 mimikatz. Highest loot value once you're admin on a host.
-- **Batch 3 — on-host enumeration:** #5 winPEAS, #7 `net *`, #6 PowerView, #8 schtasks, #9 reg,
-  #10 klist, #11 icacls.
+- **Batch 1 (shipped):** `whoami /priv`, `sudo -l` — dispatch-only wins completing already-gated chains.
+- **Batch A (shipped):** mimikatz dumps (#1/#2), winPEAS (#5), PowerView (#6), `net *` (#7), plus the
+  `ad.acl_lead` gate wiring.
+- **Batch B (remaining):** `schtasks` (#8), `reg query` (#9), `klist` (#10), `icacls` enhance (#11).
 
-## 3. Move gaps — DEFERRED, prior list retracted
+## 3. Move gaps — CONFIRMED (structured field search, not grep)
 
-The earlier grep-based move-gap list (noPac / PrintNightmare / EternalBlue / RID-brute / zone
-transfer / password-policy as "missing") is **retracted** — it came from the same broken scan, and
-spot-checks already show several are present (`recon-dns` does zone transfer; `nxc` paths cover
-RID-brute and `--pass-pol`). Move existence must be re-established from the authoritative pack
-inventory (`actions[].id/title`) and, where relevant, the engine — not grep. Candidates that the
-reliable move-inventory (`id`/`title` across packs) shows no dedicated move for, pending confirmation:
-**MS14-068**, **MSCache2 (DCC2) crack**. Everything else: verify before claiming.
+Re-established by loading every pack and searching `id`/`title`/`tool`/`commands`/`refs` per action
+(not the broken grep). The earlier grep list was wrong; several it flagged are present (`recon-dns`
+does zone transfer; `nxc` covers RID-brute and `--pass-pol`). What is **genuinely** missing:
+
+| Technique | Scope | State | Add |
+|---|---|---|---|
+| **EternalBlue (MS17-010)** | CORE-OSCP | mention only (detected by `nmap-vuln-scripts`, no exploit move) | an exploit move |
+| noPac (CVE-2021-42278/42287) | OSCP+-edge | GAP | AD CVE move |
+| PrintNightmare (1675/34527) | OSCP+-edge | GAP | AD CVE move |
+| MS14-068 (PAC forge) | OSCP+-edge | GAP | legacy AD CVE move |
+| MSCache2 / DCC2 crack | OSCP+-edge | GAP | add to `cracking` pack |
+
+EternalBlue is the one CORE-OSCP gap (we only *detect* it). The four edge moves are for pushing past
+OSCP scope. All are small, data-only pack additions with the usual gate/produces/parser treatment.
 
 ## 4. Small engine additions implied
 

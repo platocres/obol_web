@@ -903,8 +903,9 @@
    "requires_all": [],
    "requires_any": [
     "credential.available",
-    "foothold.windows"
-   ],
+    "foothold.windows",
+    "ad.acl_lead"
+    ],
    "deprioritize_when": [
     "loot.ntds"
    ],
@@ -1847,8 +1848,9 @@
    "requires_all": [],
    "requires_any": [
     "credential.available",
-    "ad.attack_paths"
-   ],
+    "ad.attack_paths",
+    "ad.acl_lead"
+    ],
    "obsoleted_by": [
     "loot.ntds"
    ],
@@ -2336,8 +2338,9 @@
    "requires_all": [],
    "requires_any": [
     "foothold.windows",
-    "ad.attack_paths"
-   ],
+    "ad.attack_paths",
+    "ad.acl_lead"
+    ],
    "obsoleted_by": [
     "loot.ntds"
    ],

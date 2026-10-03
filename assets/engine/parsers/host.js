@@ -375,6 +375,109 @@
   }
   C._parse_sudo_l = _parse_sudo_l;
 
+  // ── net user / net localgroup / net group (Windows account enumeration) ────────────
+  // A `net localgroup administrators` members list → config.review (local_admins) so the admin set reaches
+  // the report. A `net user <name> /domain` showing domain-group membership (Global Group memberships
+  // *Domain Users/*Domain Admins), or a `net group … /domain` members listing, CLEARLY names domain
+  // accounts → ad.user_list. A purely-local `net user` grid (`User accounts for \\HOST`) → config.review
+  // (local_users): a local-users signal only, NEVER a domain user list (no over-claiming).
+  var _NET_USER_NAME_RE = /^\s*User name\s+(?<user>\S+)/im;
+  var _NET_LOCALGROUP_HDR_RE = /^\s*Alias name\s+(?<group>\S.*?)\s*$/im;
+  var _NET_DOMAIN_MEMBERSHIP_RE = /Global Group memberships[^\r\n]*\bDomain (?:Users|Admins|Computers)\b/i;
+  var _NET_LOCAL_ACCOUNTS_HDR_RE = /^\s*User accounts for\b/im;
+  var _NET_COMPLETED_RE = /The command completed/i;
+
+  function _looks_like_net_output(text) {
+    var t = text || '';
+    return !!(reSearch(_NET_LOCALGROUP_HDR_RE, t) || reSearch(_NET_USER_NAME_RE, t) ||
+              reSearch(_NET_LOCAL_ACCOUNTS_HDR_RE, t) || reSearch(_NET_DOMAIN_MEMBERSHIP_RE, t));
+  }
+  C._looks_like_net_output = _looks_like_net_output;
+
+  // the rows between the dashed separator line and "The command completed", trimmed & non-empty
+  function _net_block_lines(text) {
+    var lines = String(text || '').split(/\r?\n/), out = [], started = false;
+    for (var i = 0; i < lines.length; i++) {
+      if (/^-{5,}\s*$/.test(lines[i].trim())) { started = true; continue; }
+      if (!started) continue;
+      if (_NET_COMPLETED_RE.test(lines[i])) break;
+      var t = lines[i].trim();
+      if (t) out.push(t);
+    }
+    return out;
+  }
+  function _net_accounts_from_rows(rows) {
+    var out = [];
+    rows.forEach(function (row) {
+      row.split(/\s{2,}|\t+/).forEach(function (tok) {
+        var u = C._clean_username(C.stripChars(tok, '*'));
+        if (C._valid_username(u, false)) out.push(u);
+      });
+    });
+    return C.uniqueSortedCI(out);
+  }
+
+  function _parse_net_accounts(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    var h = 'host:' + ws.target, lc = (command || '').toLowerCase();
+    // 1) net localgroup administrators → local admin members (config.review lead)
+    var lg = reSearch(_NET_LOCALGROUP_HDR_RE, text);
+    var isAdminGroup = lc.indexOf('localgroup') >= 0 && lc.indexOf('admin') >= 0;
+    if (lg || isAdminGroup) {
+      var group = lg ? lg.groups.group.trim() : 'administrators';
+      if (/admin/i.test(group) || isAdminGroup) {
+        var members = C.uniqueSortedCI(_net_block_lines(text).filter(function (m) { return !/^Members$/i.test(m); })).slice(0, 50);
+        if (members.length) _add(facts, mkFact('config.review', h, { kind: 'local_admins', group: group, members: members }, S, source));
+      }
+    }
+    // 2) net user <name> /domain showing domain-group membership → ad.user_list (the named account)
+    var domainMembership = reSearch(_NET_DOMAIN_MEMBERSHIP_RE, text);
+    var nm = reSearch(_NET_USER_NAME_RE, text);
+    if (nm && domainMembership) {
+      var user = C._clean_username(nm.groups.user);
+      if (C._valid_username(user, false)) {
+        var domain = C._domain_from_facts(ws);
+        _add(facts, mkFact('ad.user_list', C._scope_for_domain(ws, domain), { users: [user], count: 1, method: 'net' }, S, source));
+      }
+    }
+    // 3) net group "<name>" /domain members listing → ad.user_list (domain group members)
+    if (lc.indexOf('net group') >= 0 && lc.indexOf('/domain') >= 0) {
+      var gmembers = _net_accounts_from_rows(_net_block_lines(text));
+      if (gmembers.length) _add(facts, mkFact('ad.user_list', C._scope_for_domain(ws, C._domain_from_facts(ws)), { users: gmembers, count: gmembers.length, method: 'net' }, S, source));
+    }
+    // 4) purely-local `net user` grid (User accounts for \\HOST) → local-users signal (NOT a domain list)
+    if (reSearch(_NET_LOCAL_ACCOUNTS_HDR_RE, text) && !domainMembership) {
+      var locals = _net_accounts_from_rows(_net_block_lines(text));
+      if (locals.length) _add(facts, mkFact('config.review', h, { kind: 'local_users', users: locals.slice(0, 50) }, S, source));
+    }
+  }
+  C._parse_net_accounts = _parse_net_accounts;
+
+  // ── winPEAS / PrivescCheck.ps1 → the existing Windows local-privesc logic ──────────
+  // winPEAS/PrivescCheck print section banners + findings (SeImpersonatePrivilege: Enabled,
+  // AlwaysInstallElevated, unquoted service paths, weak service ACLs, credentials-in-files). Route the
+  // whole paste through _parse_windows_privesc_output so it mints privesc.windows_privilege / privesc.leads
+  // (and privesc.stored_credentials where creds-in-files show). winPEAS writes privileges in the COLON
+  // form `SeXxxPrivilege: Enabled`, which the whoami-style _WIN_PRIV_RE (name · description · state) misses,
+  // so normalize that one idiom to the space form (with a filler token) before the shared parser runs.
+  function _looks_like_winpeas(text) {
+    var t = text || '';
+    if (/winpeas|privesccheck|peass-ng|\bPEASS\b/i.test(t)) return true;
+    if (/Checking (?:Token privileges|Credentials in files|AlwaysInstallElevated|Unquoted|Service)/i.test(t)) return true;
+    return /^\s*Se[A-Za-z0-9]+Privilege\s*:\s*(?:Enabled|Disabled)\s*$/im.test(t);
+  }
+  C._looks_like_winpeas = _looks_like_winpeas;
+
+  function _parse_winpeas(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    var norm = text.replace(/^(\s*)(Se[A-Za-z0-9]+Privilege)\s*:\s*(Enabled|Disabled)\b/gim, '$1$2  state  $3');
+    var leadKinds = {};
+    _parse_windows_privesc_output(norm, ws, command, source, facts, leadKinds);
+    _add_privesc_leads(facts, ws, source, leadKinds);
+  }
+  C._parse_winpeas = _parse_winpeas;
+
   // sudo-allowed script read → injectable sink lead
   var _SCRIPT_SINKS = [
     ['gitpython_ext', /\.clone_from\s*\(|git\.Repo\.clone|from\s+git\s+import/i, 'CVE-2022-24439'],
