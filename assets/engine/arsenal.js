@@ -98,6 +98,10 @@
 
     var out = [preamble()];
     out.push('printf "\\n\\033[1mobol arsenal\\033[0m — stocking your box (cache: $CACHE)\\n\\n"');
+    // Sudo is used ONLY for apt (base packages + the pipx bootstrap); pipx/git/fetch/stamp all run as you.
+    // Prime it once up front so the password is asked now, not mid-download, and keep the ticket warm.
+    out.push('if [ -n "$SUDO" ]; then printf "  apt packages need sudo — you may be prompted for your password once.\\n"; $SUDO -v || warn "sudo unavailable — apt + pipx-bootstrap steps will be skipped (install those tools manually)"; ( while true; do $SUDO -n true 2>/dev/null; sleep 50; done ) & SUDO_KEEPALIVE=$!; trap \'kill "$SUDO_KEEPALIVE" 2>/dev/null\' EXIT; fi');
+    out.push('');
     // bootstrap: a fresh Kali may lack curl/git/unzip or pipx; take it 0→ready (PEP 668-safe, older-tolerant).
     out.push('echo "[prep] base packages + pipx"');
     out.push('APT_READY=0');
@@ -118,6 +122,23 @@
       out.push('cp -f "$CACHE"/*.exe "$CACHE"/*.bat "$CACHE"/*.ps1 "$WWW"/ 2>/dev/null || true');
       out.push('');
     }
+    // shell setup: the obol prompt stamp (UTC time + VPN IP before each prompt). Additive + idempotent —
+    // it appends a precmd hook to ~/.zshrc, never replacing your prompt. Powers whole-session import
+    // (timeline ordering + auto {{lhost}}). Written to the invoking user's ~/.zshrc, so run this as yourself.
+    out.push('echo "[shell] obol prompt stamp (UTC + VPN IP)"');
+    out.push('ZRC="$HOME/.zshrc"');
+    out.push('if grep -q obol_stamp "$ZRC" 2>/dev/null; then skip "obol prompt stamp"; else');
+    out.push('cat >> "$ZRC" <<\'OBOL_ZSH\'');
+    out.push('# obol: stamp each prompt with the UTC time + VPN IP (keeps your existing prompt).');
+    out.push('obol_stamp() {');
+    out.push('  local dev ip');
+    out.push('  read -r dev ip <<< "$(ip -4 -o addr show 2>/dev/null | awk \'$2 ~ /^(tun|tap|wg)/ {split($4,a,\"/\"); print $2, a[1]; exit}\')"');
+    out.push('  print -P "%F{244}[$(date -u \'+%Y-%m-%d %H:%M:%S UTC\')]${ip:+ [$dev:$ip]}%f"');
+    out.push('}');
+    out.push('precmd_functions+=(obol_stamp)');
+    out.push('OBOL_ZSH');
+    out.push('say "added obol prompt stamp to ~/.zshrc — open a new terminal (or: source ~/.zshrc) to see it"; fi');
+    out.push('');
     // the paste-back block: a single OBOL-ARSENAL v1 line obol-web ingests to learn this box.
     out.push('# ---- paste the block below back into obol-web (Loadout) ----');
     out.push('emit(){ printf "%s" "$1"; }');

@@ -139,7 +139,7 @@
     var synced = !!prof;
     var steps = '<ol class="lo-steps">'
       + '<li><span class="lo-step-n">1</span><div><div class="lo-step-t">Download The Setup Script</div>'
-      + '<div class="lo-step-sub">One file. Fetches every tool obol uses that Kali doesn\'t ship, and stages the Windows binaries — a fresh box to ready in one run.</div>'
+      + '<div class="lo-step-sub">One file. Fetches every tool obol uses that Kali doesn\'t ship, stages the Windows binaries, and sets up your prompt (UTC + VPN IP) — a fresh box to ready in one run.</div>'
       + '<button class="btn-primary lo-download">Download download-arsenal.sh</button></div></li>'
       + '<li><span class="lo-step-n">2</span><div><div class="lo-step-t">Run It On Your Kali Box</div>'
       + '<div class="lo-step-sub">Safe to re-run — it only does the missing work.</div>'

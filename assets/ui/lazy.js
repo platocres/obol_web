@@ -22,7 +22,7 @@
     domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=e54f7903', 'assets/ui/bhgraph.js?v=ed34873b', 'assets/ui/routes/domain.js?v=e0d3fe25'],
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=9ad71876', 'assets/engine/report.js?v=60a4b750', 'assets/ui/routes/report.js?v=a57c0597'],
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=f27f51ef', 'assets/ui/routes/tools.js?v=7d043fd0'],
-    loadout: ['assets/engine/arsenal.js?v=2ed89847', 'assets/ui/routes/loadout.js?v=aefcb60c'],
+    loadout: ['assets/engine/arsenal.js?v=bcf310d6', 'assets/ui/routes/loadout.js?v=e87e8d5a'],
     checklist: ['assets/ui/routes/checklist.js?v=116058c6'],
     target: ['assets/engine/graph.js?v=97e4f668', 'assets/ui/routes/target.js?v=72f3be6c'],
     creds: ['assets/ui/routes/creds.js?v=6935aeca'],

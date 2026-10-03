@@ -765,8 +765,10 @@ function serve() {
   ok((await page.locator('.lo-route .lo-tool').count()) >= 10, 'Loadout renders the Arsenal catalog (' + (await page.locator('.lo-route .lo-tool').count()) + ' tool cards)');
   ok(await page.evaluate(() => !!(window.OBOL.ARSENAL && window.OBOL.arsenal && typeof window.OBOL.arsenal.buildScript === 'function')), 'ARSENAL data + arsenal.js loaded with the route');
   // the generated script is non-trivial and bash-shaped
-  const scriptLen = await page.evaluate(() => (window.OBOL.arsenal.buildScript() || '').length);
-  ok(scriptLen > 3000, 'buildScript() produces a substantial setup script (' + scriptLen + ' bytes)');
+  const script = await page.evaluate(() => window.OBOL.arsenal.buildScript() || '');
+  ok(script.length > 3000, 'buildScript() produces a substantial setup script (' + script.length + ' bytes)');
+  ok(script.indexOf('obol_stamp') >= 0 && script.indexOf('precmd_functions') >= 0, 'the setup script installs the obol prompt stamp (UTC + VPN IP)');
+  ok(script.indexOf('$SUDO -v') >= 0, 'the setup script primes sudo once up front');
   // paste-back round-trip: feed an OBOL-ARSENAL block, ingest, and confirm the synced face appears
   await page.evaluate(() => {
     var inv = { v: 1, tools: { nxc: { present: true, invocation: 'nxc', path: '/usr/bin/nxc' }, 'impacket-psexec': { present: true, invocation: 'psexec.py', path: '/usr/bin/psexec.py' } }, staged: ['mimikatz.exe', 'Rubeus.exe'], wwwdir: '/home/kali/.obol/arsenal/www', digests: {}, wordlists: { rockyou: '/usr/share/wordlists/rockyou.txt' } };
