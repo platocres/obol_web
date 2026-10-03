@@ -39,6 +39,9 @@ function serve() {
 
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
+  // First-run routing: a brand-new visitor (no synced Loadout + only the untouched seed engagement)
+  // lands on Loadout (step zero), not on the empty engagement.
+  ok(page.url().indexOf('#/loadout') >= 0, 'first-run lands on Loadout (got ' + page.url().split('#')[1] + ')');
   // a first-time visitor lands on the plain Obol skin, in a clean untitled run — never an
   // "Imported engagement" with a stale seed target. (Neon and the rest stay selectable in ⚙.)
   ok(await page.getAttribute('html', 'data-skin') === 'obol', 'default skin is obol for a fresh visitor');
