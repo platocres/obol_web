@@ -27,7 +27,7 @@
   var PHASES = [
     { name: 'Recon', cats: ['Recon'] },
     { name: 'Web', cats: ['Web'] },
-    { name: 'AD / Domain', cats: ['AD', 'MITM', 'Credentials'] },
+    { name: 'AD', cats: ['AD', 'MITM', 'Credentials'] },
     { name: 'Access', cats: ['Lateral', 'Database'] },
     { name: 'Cracking', cats: ['Cracking'] },
     { name: 'Pivot', cats: ['Tunnel'] },

@@ -409,15 +409,16 @@ details.lo-fs-node[open] > summary::before { transform: rotate(90deg); }
 .lo-lens2-opt.on { background: var(--accent-soft); color: var(--accent); }
 .lo-lens2-opt:hover:not(.on) { color: var(--text); }
 
-/* kill-chain readiness bar: one segment per phase, colored by coverage. */
-.lo-kcbar { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 2px; }
-.lo-kc { flex: 1 1 auto; min-width: 92px; display: flex; flex-direction: column; gap: 1px; padding: 6px 10px; border-radius: 8px;
-  border: 1px solid var(--line); border-top: 3px solid var(--kc, var(--muted)); background: color-mix(in srgb, var(--kc, var(--muted)) 7%, var(--bg2)); }
-.lo-kc-n { font-size: 11px; font-weight: 700; color: var(--text); }
-.lo-kc-v { font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--text-2); }
+/* kill-chain readiness: a slim, even row of status pills (dot + phase + count). */
+.lo-kcbar { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 6px; margin: 4px 0 10px; }
+.lo-kc { display: flex; align-items: center; gap: 7px; padding: 5px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg2); }
+.lo-kc::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--kc, var(--muted)); flex: 0 0 auto;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--kc, var(--muted)) 20%, transparent); }
+.lo-kc-n { font-size: 11px; font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lo-kc-v { font-size: 10px; margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
 .lo-kc-full { --kc: var(--accent); }
 .lo-kc-part { --kc: #d79a2b; }
-.lo-kc-none { --kc: #d7574e; opacity: .82; }
+.lo-kc-none { --kc: #d7574e; }
 
 /* capability-lens category header + dimmed (not-installed) chips. */
 .lo-cap-name { font-size: 13px; font-weight: 700; color: var(--cat, var(--text)); flex: 0 0 auto; min-width: 150px; }
