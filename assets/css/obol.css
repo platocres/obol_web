@@ -1030,6 +1030,31 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
   background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 20px; padding: 3px 11px; }
 .ws-file-link:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .ws-shot { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; margin-top: 4px; }
+.ws-file-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.ws-file-links .ws-file-link { margin-top: 6px; }
+/* WS1: the move that creates a pending file, shown right in the row. */
+.ws-from { font-size: 10px; color: var(--g-next, #F5A623); background: color-mix(in srgb, var(--g-next, #F5A623) 12%, transparent);
+  border-radius: 5px; padding: 1px 6px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* WS5: copy-path button in the file summary. */
+.ws-copy-path { background: none; border: 0; color: var(--text-2); cursor: pointer; font-size: 13px; padding: 0 4px; line-height: 1; opacity: .6; }
+.ws-copy-path:hover { opacity: 1; color: var(--accent); }
+/* WS2: proof / exam-readiness strip. */
+.ws-proof { border-radius: 9px; padding: 9px 11px; margin: 0 0 12px; border: 1px solid var(--line); }
+.ws-proof-ok { border-left: 3px solid var(--accent); background: var(--accent-soft); }
+.ws-proof-warn { border-left: 3px solid #d7574e; background: color-mix(in srgb, #d7574e 10%, transparent); }
+.ws-proof-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ws-proof-h { font-size: 12px; font-weight: 700; color: var(--text); }
+.ws-proof-ok .ws-proof-h { color: var(--accent); } .ws-proof-warn .ws-proof-h { color: #e0756c; }
+.ws-proof-v { font-size: 10.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ws-proof-note { font-size: 11px; color: var(--text-2); line-height: 1.5; margin-top: 4px; }
+.ws-proof-note .ws-file-link { margin-top: 4px; }
+/* WS3: www/ serve + stage helpers. */
+.ws-www { display: flex; flex-direction: column; gap: 5px; margin: 6px 0 2px 18px; padding: 7px 10px;
+  border-left: 2px solid var(--accent-2); background: color-mix(in srgb, var(--accent-2) 7%, transparent); border-radius: 0 7px 7px 0; }
+.ws-www-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.ws-www-l { font-size: 10.5px; font-weight: 700; color: var(--text-2); min-width: 118px; }
+.ws-copyval { font-size: 11px; color: var(--accent); background: var(--surf3); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; cursor: pointer; word-break: break-all; }
+.ws-copyval:hover { border-color: var(--accent); }
 /* state dots + one-word tags for the anticipated / on-disk / adopted / hand-added files */
 .ws-suggested .ws-dot { background: var(--g-next, #F5A623); }
 .ws-confirmed:not(.ws-captured) .ws-dot { background: var(--g-done, #3E7BC4); }
