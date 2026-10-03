@@ -224,6 +224,16 @@
     if (!cloned.length) cloned = present.filter(function (k) { return A[k] && A[k].class === 'git'; });
     // resolve a staged filename → its ARSENAL entry (via dest), so a chip knows its category + description.
     var byDest = {}; Object.keys(A).forEach(function (k) { var e = A[k]; if (e && e.dest && !byDest[e.dest]) byDest[e.dest] = e; });
+    // secondary files that ship INSIDE a tool's archive (no registry entry of their own) — give them a card too.
+    var EXTRA = {
+      'SharpHound.ps1': { label: 'SharpHound.ps1', category: 'AD', canonical: 'SharpHound.ps1',
+        desc: 'The PowerShell build of the SharpHound collector — same BloodHound data collection as the .exe, for when you can run PowerShell but not drop a binary.',
+        example: '. .\\SharpHound.ps1; Invoke-BloodHound -CollectionMethod All' },
+      'mimilove.exe': { label: 'mimilove.exe', category: 'Credentials', canonical: 'mimilove.exe',
+        desc: 'A mimikatz companion for very old Windows (2000/XP) where mimikatz itself won\'t run. Ships alongside mimikatz; rarely needed on modern boxes.',
+        example: 'mimilove.exe' },
+    };
+    function resolveDest(f) { return byDest[f] || EXTRA[f] || null; }
 
     // hover card for a tool chip: name, colored category, what-it-is/for, invocation + where it lives.
     function card(e, inv, path) {
@@ -258,7 +268,7 @@
         + '<span class="lo-fs-n">' + items.length + '</span><span class="lo-nd-dots">' + dots + '</span></summary>'
         + '<div class="lo-fs-items">' + body + '</div></details>';
     }
-    function winItem(f) { var e = byDest[f]; return { label: f, e: e, inv: (e && e.canonical) || '', path: '~/.obol/arsenal/win/' + f }; }
+    function winItem(f) { var e = resolveDest(f); return { label: f, e: e, inv: (e && e.canonical) || '', path: '~/.obol/arsenal/win/' + f }; }
     function keyItem(k, path) { var e = A[k]; return { label: (e && e.label) || k, e: e, inv: (tools[k] && tools[k].invocation) || (e && e.canonical) || k, path: path }; }
     var winNames = staged.length ? staged : winCache.map(function (k) { return (A[k] && A[k].dest) || k; });
     var fsRows = node('~/.obol/arsenal/win', winNames.map(winItem))

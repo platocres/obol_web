@@ -115,6 +115,9 @@
   // release binary → ~/.local/bin (Go tool, no Kali package)
   reclass('kerbrute', { class: 'release-bin', on_kali: false, gh_repo: 'ropnop/kerbrute', gh_asset: 'kerbrute_linux_amd64$',
     bins: ['kerbrute'], canonical: 'kerbrute', dest: 'kerbrute', install: '', source: 'ropnop/kerbrute', license: 'Apache-2.0' });
+  // nltest runs on the TARGET (a Windows domain command), never on your Kali box — class it builtin like the
+  // other target-side commands (cmd/powershell/wmic/reg) so it isn't probed and doesn't drag "ready" to 154/155.
+  reclass('nltest', { class: 'builtin' });
   // name-only fixes — genuinely present on a default Kali, obol just probed the wrong name
   reclass('metasploit', { canonical: 'msfconsole', variants: ['msfconsole', 'msfvenom'] });        // metasploit-framework ships msfconsole
   reclass('mssqlclient.py', { canonical: 'impacket-mssqlclient', variants: ['impacket-mssqlclient', 'mssqlclient.py'] });  // alias of the impacket wrapper
