@@ -38,6 +38,29 @@
     return '<span class="ph-chip ph-' + esc(phase) + '">' + esc(phase) + '</span>';
   }
 
+  // A slim one-line status strip linking to the global Loadout: not-set-up CTA, or a synced summary that
+  // nudges a re-sync once the box snapshot is stale. Reads the per-browser profile straight from
+  // localStorage (no dependency on the lazy arsenal.js), so it renders on the coach without loading it.
+  var ARSENAL_STALE_DAYS = 21;
+  function arsenalProfile() { try { return JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { return null; } }
+  function arsenalStrip() {
+    var p = arsenalProfile();
+    if (!p) {
+      return '<a class="lo-strip lo-strip-cta" href="#/loadout"><span class="lo-strip-ico">⚙</span>'
+        + '<span class="lo-strip-txt">Set up your attack box — obol tailors every command to the tools you have</span>'
+        + '<span class="lo-strip-go">Loadout →</span></a>';
+    }
+    var present = 0; try { Object.keys(p.tools || {}).forEach(function (k) { if (p.tools[k] && p.tools[k].present) present++; }); } catch (e) {}
+    var ageDays = p.savedAt ? (Date.now() - p.savedAt) / 86400000 : 0;
+    var stale = ageDays > ARSENAL_STALE_DAYS;
+    var txt = stale
+      ? ('Loadout synced ' + Math.round(ageDays) + 'd ago — re-sync your box?')
+      : ('Loadout: ' + present + ' tools · ' + (p.staged || []).length + ' staged ready');
+    return '<a class="lo-strip ' + (stale ? 'lo-strip-stale' : 'lo-strip-ok') + '" href="#/loadout">'
+      + '<span class="lo-strip-ico">' + (stale ? '⚠' : '✓') + '</span>'
+      + '<span class="lo-strip-txt">' + esc(txt) + '</span><span class="lo-strip-go">Loadout →</span></a>';
+  }
+
   function producesChips(action) {
     if (!action.produces.length) return '';
     var chips = action.produces.map(function (k) {
@@ -315,6 +338,8 @@
       + '<div class="metric"><span class="metric-n">' + locked.length + '</span><span class="metric-l">Blocked</span></div>'
       + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">Facts</span></div>'
       + '</div></div>';
+
+    html += arsenalStrip();
 
     // Scope lens control: a newcomer-safe syllabus filter. OSCP (core only) · OSCP+ (adds modern AD) ·
     // All (the full arsenal, edge CVEs included). The hidden-count hint keeps it honest.

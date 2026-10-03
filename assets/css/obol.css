@@ -233,6 +233,25 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .coach-lens-hint { font-size: 11px; color: var(--muted); margin-left: 4px; }
 .coach-lens-hint strong { color: var(--accent-2); }
 
+/* coach → Loadout status strip (slim, one line) */
+.lo-strip { display: flex; align-items: center; gap: 10px; padding: 8px 14px; margin: 0 0 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surf2); font-size: 13px; color: var(--text-2); }
+.lo-strip:hover { border-color: var(--line-hot); }
+.lo-strip-ico { flex: 0 0 auto; font-size: 13px; }
+.lo-strip-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lo-strip-go { flex: 0 0 auto; font-weight: 700; color: var(--accent-2); }
+.lo-strip-cta { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 36%, transparent); background: var(--accent-soft); color: var(--text); }
+.lo-strip-cta .lo-strip-ico { color: var(--accent-2); }
+.lo-strip-ok .lo-strip-ico { color: var(--accent-2); }
+.lo-strip-stale { border-color: color-mix(in srgb, var(--yellow, #d7a21a) 40%, transparent); background: color-mix(in srgb, var(--yellow, #d7a21a) 9%, transparent); }
+.lo-strip-stale .lo-strip-ico { color: var(--yellow, #d7a21a); }
+
+/* Workspace → Loadout insight (per-engagement panel shows what the global box provides) */
+.ws-lo { margin: 8px 0 4px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surf2); }
+.ws-lo-h { display: inline-block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; color: var(--accent-2); margin-bottom: 6px; }
+.ws-lo-grp { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 5px; }
+.ws-lo-lbl { font-size: 11px; color: var(--muted); margin-right: 4px; }
+.ws-lo-chip { font-size: 11px; font-family: var(--mono); color: var(--text-2); background: var(--surf3); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; }
+
 /* ── Loadout (step-zero: set up your attack box) ── */
 .lo-route .coach-sub { font-size: 14px; }
 .lo-skip { font-size: 13.5px; color: var(--text-2); margin: -6px 0 18px; }

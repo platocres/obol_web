@@ -119,6 +119,8 @@ function serve() {
 
   // Scope lens: the newcomer-safe syllabus filter renders with its three levels and a default selection.
   ok(await page.locator('.coach-lens .lens-opt').count() === 3, 'scope lens renders OSCP / OSCP+ / All');
+  // coach → Loadout status strip: with no synced profile it shows the set-up CTA linking to Loadout
+  ok(await page.locator('.coach .lo-strip-cta[href="#/loadout"]').count() === 1, 'coach shows the Loadout set-up CTA strip when no box is synced');
   ok(await page.locator('.coach-lens .lens-opt.on').count() === 1, 'scope lens has exactly one active level');
 
   // Live context rail is present on the coach (shown at >=1500px; element always rendered).

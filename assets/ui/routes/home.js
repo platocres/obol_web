@@ -224,6 +224,7 @@
       + '</div>';
     var rootLine = '<div class="ws-root"><code>' + esc(vfs.root) + '</code>'
       + (ov.syncedAt ? '<span class="ws-synced-at">Synced ' + esc(ago(ov.syncedAt)) + '</span>' : '') + '</div>';
+    var loInsight = loadoutInsight();
     var invite = started
       ? '<p class="ws-invite">A live picture of your Kali working directory. obol pencils in the files the coach\'s next moves'
         + ' will create, then confirms each one once you run it and paste the output on <a href="#/evidence">Evidence</a>.'
@@ -240,7 +241,22 @@
         + (files || '<div class="ws-folder-empty">Empty</div>') + '</div>';
     }).join('');
     var footer = hidden ? ('<div class="ws-foot"><button type="button" class="ws-restore" data-x>' + hidden + ' Hidden · Restore</button></div>') : '';
-    return '<aside class="ws-panel">' + head + rootLine + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
+    return '<aside class="ws-panel">' + head + rootLine + loInsight + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
+  }
+
+  // Per-engagement Workspace, enriched with GLOBAL Loadout insight: what your synced box can drop into
+  // this engagement's www/ (staged binaries) and which wordlists are on disk. Read-only, from the
+  // per-browser arsenal profile; absent until the operator syncs a box on the Loadout tab.
+  function loadoutInsight() {
+    var p; try { p = JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { p = null; }
+    if (!p) return '';
+    var staged = (p.staged || []).slice(0, 10), wl = Object.keys(p.wordlists || {});
+    if (!staged.length && !wl.length) return '';
+    var chips = staged.map(function (f) { return '<span class="ws-lo-chip">' + esc(f) + '</span>'; }).join('');
+    return '<div class="ws-lo"><a class="ws-lo-h" href="#/loadout">From your Loadout ↗</a>'
+      + (staged.length ? '<div class="ws-lo-grp"><span class="ws-lo-lbl">Staged, ready to serve</span>' + chips + '</div>' : '')
+      + (wl.length ? '<div class="ws-lo-grp"><span class="ws-lo-lbl">Wordlists</span>' + wl.map(function (w) { return '<span class="ws-lo-chip">' + esc(w) + '</span>'; }).join('') + '</div>' : '')
+      + '</div>';
   }
 
   // The engagement-wide Attack Path ribbon (identical to a single target's when scope is one host).
