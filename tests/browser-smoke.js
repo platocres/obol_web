@@ -767,8 +767,12 @@ function serve() {
   // the generated script is non-trivial and bash-shaped
   const script = await page.evaluate(() => window.OBOL.arsenal.buildScript() || '');
   ok(script.length > 3000, 'buildScript() produces a substantial setup script (' + script.length + ' bytes)');
-  ok(script.indexOf('obol_stamp') >= 0 && script.indexOf('precmd_functions') >= 0, 'the setup script installs the obol prompt stamp (UTC + VPN IP)');
+  ok(script.indexOf('obol_stamp') >= 0 && script.indexOf('precmd_functions') >= 0, 'the setup script installs the obol prompt stamp when opted in (default)');
   ok(script.indexOf('$SUDO -v') >= 0, 'the setup script primes sudo once up front');
+  // the prompt-stamp is an explained opt-in, shown before download and honored by the generator
+  ok(await page.locator('.lo-route .lo-stamp-opt').count() === 1, 'Loadout shows the prompt-stamp opt-in checkbox before download');
+  const scriptNoStamp = await page.evaluate(() => window.OBOL.arsenal.buildScript({ promptStamp: false }) || '');
+  ok(scriptNoStamp.indexOf('obol_stamp') < 0, 'unticking the opt-in omits the prompt stamp from the script');
   // paste-back round-trip: feed an OBOL-ARSENAL block, ingest, and confirm the synced face appears
   await page.evaluate(() => {
     var inv = { v: 1, tools: { nxc: { present: true, invocation: 'nxc', path: '/usr/bin/nxc' }, 'impacket-psexec': { present: true, invocation: 'psexec.py', path: '/usr/bin/psexec.py' } }, staged: ['mimikatz.exe', 'Rubeus.exe'], wwwdir: '/home/kali/.obol/arsenal/www', digests: {}, wordlists: { rockyou: '/usr/share/wordlists/rockyou.txt' } };

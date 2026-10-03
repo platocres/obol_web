@@ -122,23 +122,25 @@
       out.push('cp -f "$CACHE"/*.exe "$CACHE"/*.bat "$CACHE"/*.ps1 "$WWW"/ 2>/dev/null || true');
       out.push('');
     }
-    // shell setup: the obol prompt stamp (UTC time + VPN IP before each prompt). Additive + idempotent —
-    // it appends a precmd hook to ~/.zshrc, never replacing your prompt. Powers whole-session import
-    // (timeline ordering + auto {{lhost}}). Written to the invoking user's ~/.zshrc, so run this as yourself.
-    out.push('echo "[shell] obol prompt stamp (UTC + VPN IP)"');
-    out.push('ZRC="$HOME/.zshrc"');
-    out.push('if grep -q obol_stamp "$ZRC" 2>/dev/null; then skip "obol prompt stamp"; else');
-    out.push('cat >> "$ZRC" <<\'OBOL_ZSH\'');
-    out.push('# obol: stamp each prompt with the UTC time + VPN IP (keeps your existing prompt).');
-    out.push('obol_stamp() {');
-    out.push('  local dev ip');
-    out.push('  read -r dev ip <<< "$(ip -4 -o addr show 2>/dev/null | awk \'$2 ~ /^(tun|tap|wg)/ {split($4,a,\"/\"); print $2, a[1]; exit}\')"');
-    out.push('  print -P "%F{244}[$(date -u \'+%Y-%m-%d %H:%M:%S UTC\')]${ip:+ [$dev:$ip]}%f"');
-    out.push('}');
-    out.push('precmd_functions+=(obol_stamp)');
-    out.push('OBOL_ZSH');
-    out.push('say "added obol prompt stamp to ~/.zshrc — open a new terminal (or: source ~/.zshrc) to see it"; fi');
-    out.push('');
+    // shell setup: the obol prompt stamp (UTC time + VPN IP before each prompt). OPT-IN — only when the
+    // operator ticked it on the Loadout tab (opts.promptStamp). Additive + idempotent: appends a precmd
+    // hook to ~/.zshrc, never replacing the prompt. Powers whole-session import (timeline + auto {{lhost}}).
+    if (opts.promptStamp !== false) {
+      out.push('echo "[shell] obol prompt stamp (UTC + VPN IP)"');
+      out.push('ZRC="$HOME/.zshrc"');
+      out.push('if grep -q obol_stamp "$ZRC" 2>/dev/null; then skip "obol prompt stamp"; else');
+      out.push('cat >> "$ZRC" <<\'OBOL_ZSH\'');
+      out.push('# obol: stamp each prompt with the UTC time + VPN IP (keeps your existing prompt).');
+      out.push('obol_stamp() {');
+      out.push('  local dev ip');
+      out.push('  read -r dev ip <<< "$(ip -4 -o addr show 2>/dev/null | awk \'$2 ~ /^(tun|tap|wg)/ {split($4,a,\"/\"); print $2, a[1]; exit}\')"');
+      out.push('  print -P "%F{244}[$(date -u \'+%Y-%m-%d %H:%M:%S UTC\')]${ip:+ [$dev:$ip]}%f"');
+      out.push('}');
+      out.push('precmd_functions+=(obol_stamp)');
+      out.push('OBOL_ZSH');
+      out.push('say "added obol prompt stamp to ~/.zshrc — open a new terminal (or: source ~/.zshrc) to see it"; fi');
+      out.push('');
+    }
     // the paste-back block: a single OBOL-ARSENAL v1 line obol-web ingests to learn this box.
     out.push('# ---- paste the block below back into obol-web (Loadout) ----');
     out.push('emit(){ printf "%s" "$1"; }');

@@ -18,6 +18,12 @@
 
   var _hideKali = true;   // "to fetch" view by default — the tools Kali doesn't already ship
 
+  // Prompt-stamp opt-in (persisted). Default ON but always shown + explained before download, so the
+  // shell change is never a surprise — the operator sees exactly what it does and can untick it.
+  var STAMP_KEY = 'obol.arsenal-promptstamp';
+  function stampOn() { try { return localStorage.getItem(STAMP_KEY) !== '0'; } catch (e) { return true; } }
+  function stampSet(on) { try { localStorage.setItem(STAMP_KEY, on ? '1' : '0'); } catch (e) {} }
+
   var CLASS_LABEL = {
     kali: 'on Kali', builtin: 'built-in', apt: 'apt', pipx: 'pipx', git: 'git', go: 'go',
     material: 'fetched', 'stage-lin': 'staged', 'stage-win': 'staged → www/',
@@ -139,7 +145,9 @@
     var synced = !!prof;
     var steps = '<ol class="lo-steps">'
       + '<li><span class="lo-step-n">1</span><div><div class="lo-step-t">Download The Setup Script</div>'
-      + '<div class="lo-step-sub">One file. Fetches every tool obol uses that Kali doesn\'t ship, stages the Windows binaries, and sets up your prompt (UTC + VPN IP) — a fresh box to ready in one run.</div>'
+      + '<div class="lo-step-sub">One file. Fetches every tool obol uses that Kali doesn\'t ship and stages the Windows binaries — a fresh box to ready in one run.</div>'
+      + '<label class="lo-optin"><input type="checkbox" class="lo-stamp-opt"' + (stampOn() ? ' checked' : '') + '> Also format my terminal prompt <span class="lo-optin-rec">recommended</span></label>'
+      + '<div class="lo-optin-why">Prepends a dim <code>[UTC time · tun0 IP]</code> line before each prompt — <strong>your prompt itself is untouched</strong>. obol reads it to stitch a pasted whole-session into a correct timeline and auto-fill your VPN IP (<code>{{lhost}}</code>). It\'s additive and reversible (one block in <code>~/.zshrc</code>); untick to skip — everything else works the same.</div>'
       + '<button class="btn-primary lo-download">Download download-arsenal.sh</button></div></li>'
       + '<li><span class="lo-step-n">2</span><div><div class="lo-step-t">Run It On Your Kali Box</div>'
       + '<div class="lo-step-sub">Safe to re-run — it only does the missing work.</div>'
@@ -190,9 +198,11 @@
     return html + '</section>';
   }
 
-  function doDownload() {
+  function doDownload(mount) {
     if (!OBOL.arsenal || !OBOL.arsenal.buildScript) { U.toast('Arsenal module still loading — try again', 'err'); return; }
-    var blob = new Blob([OBOL.arsenal.buildScript()], { type: 'text/x-shellscript' });
+    var cb = mount && mount.querySelector('.lo-stamp-opt');
+    var promptStamp = cb ? !!cb.checked : stampOn();
+    var blob = new Blob([OBOL.arsenal.buildScript({ promptStamp: promptStamp })], { type: 'text/x-shellscript' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'download-arsenal.sh';
     document.body.appendChild(a); a.click();
@@ -205,7 +215,8 @@
     U.on(mount, 'click', '.btn-copy', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
     });
-    U.on(mount, 'click', '.lo-download', function () { doDownload(); });
+    U.on(mount, 'click', '.lo-download', function () { doDownload(mount); });
+    U.on(mount, 'change', '.lo-stamp-opt', function (e, t) { stampSet(!!t.checked); });
     U.on(mount, 'change', '#lo-hidekali', function (e, t) { _hideKali = !!t.checked; OBOL.router.render(); });
     U.on(mount, 'click', '.lo-ingest', function (e, t) {
       var box = mount.querySelector('.lo-paste'), msg = mount.querySelector('.lo-paste-msg');
