@@ -114,6 +114,10 @@ function serve() {
   // Blocked list present
   ok(await page.locator('.coach-blocked').count() >= 1, 'blocked-with-reasons section present');
 
+  // Scope lens: the newcomer-safe syllabus filter renders with its three levels and a default selection.
+  ok(await page.locator('.coach-lens .lens-opt').count() === 3, 'scope lens renders OSCP / OSCP+ / All');
+  ok(await page.locator('.coach-lens .lens-opt.on').count() === 1, 'scope lens has exactly one active level');
+
   // Live context rail is present on the coach (shown at >=1500px; element always rendered).
   ok(await page.locator('.withrail .context-rail').count() === 1, 'coach live context rail rendered');
   ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.rail && window.OBOL.rail.html)), 'rail module exposed for reuse');

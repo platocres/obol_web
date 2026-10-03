@@ -12,6 +12,28 @@
 
   function esc(s) { return U.esc(s); }
 
+  // Scope lens (teaching filter, orthogonal to fact-gating): narrow the visible moves to a syllabus level
+  // so a newcomer isn't handed the whole arsenal at once. Default 'oscp+' hides only the handful of
+  // genuinely out-of-scope edge CVEs (zerologon/noPac/PrintNightmare/MS14-068/SCCM/WSUS); the operator
+  // flips it any time. Persisted per-browser; a read in a private window simply falls back to the default.
+  var LENS_KEY = 'obol.scope-lens', LENS_ORDER = { oscp: 0, 'oscp+': 1, beyond: 2, all: 2 };
+  function lensGet() { try { var v = localStorage.getItem(LENS_KEY); return (v === 'oscp' || v === 'oscp+' || v === 'all') ? v : 'oscp+'; } catch (e) { return 'oscp+'; } }
+  function lensSet(v) { try { localStorage.setItem(LENS_KEY, v); } catch (e) {} }
+  function scopeAllowed(scope, lens) { if (lens === 'all') return true; return LENS_ORDER[scope || 'oscp'] <= LENS_ORDER[lens]; }
+
+  // Small badges on each move: locus (where you operate) + scope (syllabus level). Both are derived in the
+  // engine; the scope badge appears only above core so it reads as "heads-up, this is advanced", not noise.
+  var LOCUS_LABEL = { R: ['remote', 'off-host from Kali'], F: ['on-host', 'one-shot command on the box'], I: ['interactive', 'interactive session on the box'] };
+  function locusBadge(a) {
+    var m = LOCUS_LABEL[a.locus] || LOCUS_LABEL.R;
+    return '<span class="move-locus locus-' + esc(a.locus || 'R') + '" title="' + esc(m[1]) + '">' + esc(m[0]) + '</span>';
+  }
+  function scopeBadge(a) {
+    if (!a.scope || a.scope === 'oscp') return '';
+    var lbl = a.scope === 'beyond' ? 'beyond OSCP' : 'OSCP+';
+    return '<span class="move-scope scope-' + esc(a.scope === 'beyond' ? 'beyond' : 'plus') + '" title="syllabus level: ' + esc(a.scope) + '">' + esc(lbl) + '</span>';
+  }
+
   function phaseChip(phase) {
     return '<span class="ph-chip ph-' + esc(phase) + '">' + esc(phase) + '</span>';
   }
@@ -143,6 +165,7 @@
       + '<span class="mi-result" role="status"></span></div></div>';
     return '<article class="move' + (opts.primary ? ' move-primary' : '') + '" data-action="' + esc(action.id) + '">'
       + '<header class="move-head">' + phaseChip(OBOL.phases.phaseOfAction(action))
+      + locusBadge(action) + scopeBadge(action)
       + '<h3 class="move-title">' + esc(action.title) + '</h3></header>'
       + '<p class="move-why">' + esc(why) + '</p>'
       + prepBlock(action, facts, dirs)
@@ -265,6 +288,16 @@
     });
     var locked = OBOL.pack.lockedActions(facts, pack);
 
+    // Scope lens: filter the visible moves to the chosen syllabus level. Count what the lens hides so the
+    // operator always knows there's more one click away (never a silent disappearance).
+    var lens = lensGet();
+    function inLens(a) { return scopeAllowed(a.scope, lens); }
+    var hiddenBy = 0;
+    function applyLens(arr) { var kept = arr.filter(inLens); hiddenBy += arr.length - kept.length; return kept; }
+    onFlow = applyLens(onFlow);
+    comingUp = applyLens(comingUp);
+    locked = locked.filter(function (p) { if (inLens(p.action)) return true; hiddenBy++; return false; });
+
     var factCount = Object.keys(facts.kinds()).length;
     var phaseName = OBOL.phases.PHASES[frontier] || 'recon';
 
@@ -282,6 +315,18 @@
       + '<div class="metric"><span class="metric-n">' + locked.length + '</span><span class="metric-l">Blocked</span></div>'
       + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">Facts</span></div>'
       + '</div></div>';
+
+    // Scope lens control: a newcomer-safe syllabus filter. OSCP (core only) · OSCP+ (adds modern AD) ·
+    // All (the full arsenal, edge CVEs included). The hidden-count hint keeps it honest.
+    html += '<div class="coach-lens" role="group" aria-label="Syllabus scope filter">'
+      + '<span class="coach-lens-label">Scope</span>'
+      + ['oscp', 'oscp+', 'all'].map(function (v) {
+          var txt = v === 'oscp' ? 'OSCP' : (v === 'oscp+' ? 'OSCP+' : 'All');
+          return '<button type="button" class="lens-opt' + (lens === v ? ' on' : '') + '" data-lens="' + v + '"'
+            + ' aria-pressed="' + (lens === v ? 'true' : 'false') + '">' + txt + '</button>';
+        }).join('')
+      + (hiddenBy ? '<span class="coach-lens-hint">' + hiddenBy + ' move' + (hiddenBy === 1 ? '' : 's') + ' above this level — tap <strong>All</strong> to show</span>' : '')
+      + '</div>';
 
     // Planned route to the objective: the planner's lowest-cost dependable path from what's proven to
     // the goal. Re-planned on every render as evidence accrues. A plausible route, not a promise — the
@@ -389,6 +434,12 @@
       });
       var code = cmd.querySelector('.cmd-run code'); if (code) code.textContent = out;
       var copy = cmd.querySelector('.btn-copy'); if (copy) copy.setAttribute('data-copy', out);
+    });
+    // scope lens: persist the choice and re-render the coach at the new syllabus level
+    U.on(mount, 'click', '.lens-opt', function (e, t) {
+      var v = t.getAttribute('data-lens'); if (!v) return;
+      lensSet(v);
+      OBOL.router.render();
     });
     // mark done
     U.on(mount, 'click', '.btn-done', function (e, t) {

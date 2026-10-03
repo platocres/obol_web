@@ -25,6 +25,88 @@
     'cracking_2026_09', 'pivoting_2026_09', 'shells_2026_09',
   ];
 
+  // ------------------------------------------------------- locus & scope (derived) --
+  // Two teaching/ranking dimensions every move carries. Both honor an explicit pack field when present
+  // (d.locus / d.scope) and otherwise DERIVE from the move's tool + gates, so new moves get a sensible
+  // default with zero data churn and the handful of judgment calls can be pinned in the override maps.
+  //
+  // locus — where you operate relative to the target host, lowest-friction first:
+  //   'R' remote/offline from Kali · 'F' one-shot code-exec on the box · 'I' interactive on-host session.
+  // The coach prefers R, then F, then I: staying off-host is faster and safer in a timed lab, and the
+  // on-host parsers are a safety net for when you are legitimately on the box, never a nudge to go there.
+  var LOCUS_REMOTE = { // run from Kali against the target, or offline on Kali — off-host either way
+    nmap: 1, rustscan: 1, masscan: 1, dig: 1, nslookup: 1, ffuf: 1, gobuster: 1, feroxbuster: 1, dirb: 1,
+    curl: 1, wget: 1, nikto: 1, wpscan: 1, whatweb: 1, 'gobuster-vhost': 1,
+    nxc: 1, netexec: 1, crackmapexec: 1, cme: 1, ldapsearch: 1, windapsearch: 1, smbmap: 1, smbclient: 1,
+    rpcclient: 1, enum4linux: 1, 'enum4linux-ng': 1, bloodyad: 1, showmount: 1, mount: 1,
+    kerbrute: 1, sprayhound: 1, targetedkerberoast: 1, certipy: 1, pywhisker: 1, kinit: 1, 'gpp-decrypt': 1,
+    'zerologon-scan': 1, sccmhunter: 1, pygpoabuse: 1,
+    ntlmrelayx: 1, responder: 1, coercer: 1, mitm6: 1,
+    hydra: 1, medusa: 1, sshpass: 1, ssh: 1, xfreerdp: 1, rdesktop: 1, mysql: 1, 'evil-winrm': 1,
+    hashcat: 1, john: 1, openssl: 1, 'bloodhound-python': 1, bloodhound: 1, msfvenom: 1, metasploit: 1,
+    nc: 1, ncat: 1, ntpdate: 1,
+  };
+  var LOCUS_ONHOST_INTERACTIVE = { // need a live session on the box (a .NET/PS tool, a dumper, a PEAS run)
+    mimikatz: 1, rubeus: 1, powerview: 1, sharphound: 1, sharpwsus: 1, sharpsccm: 1,
+    winpeas: 1, linpeas: 1, 'privesccheck': 1, powerup: 1, seatbelt: 1, 'les.sh': 1,
+  };
+  var LOCUS_ONHOST_ONESHOT = { // a single command you can fire through limited exec, no interactive shell
+    cmd: 1, sh: 1, bash: 1, powershell: 1, pwsh: 1, nltest: 1, klist: 1, whoami: 1, net: 1,
+  };
+  var LOCUS_ONHOST_FACTS = { // a gate that can only be satisfied once you already hold the box
+    'foothold.windows': 1, 'foothold.linux': 1, 'foothold.webshell': 1, 'access.shell': 1,
+    'access.system': 1, 'access.admin': 1, 'access.desktop': 1, 'access.root': 1,
+  };
+  var LOCUS_OVERRIDE = {
+    // impacket psexec/wmiexec/etc. and *.py coercers are launched FROM Kali even when they land a shell.
+    // These are caught by the impacket-/.py rules below; pin only genuine exceptions here, by move id.
+  };
+  function deriveLocus(d) {
+    if (d.locus) return d.locus;
+    if (LOCUS_OVERRIDE[d.id]) return LOCUS_OVERRIDE[d.id];
+    var tl = (d.tools && d.tools.length ? d.tools : [d.tool || '']).map(function (t) { return String(t || '').toLowerCase(); });
+    var anyRemote = tl.some(function (t) { return LOCUS_REMOTE[t] || t.indexOf('impacket-') === 0 || /\.py$/.test(t); });
+    if (anyRemote) return 'R';
+    if (tl.some(function (t) { return LOCUS_ONHOST_INTERACTIVE[t]; })) return 'I';
+    if (tl.some(function (t) { return LOCUS_ONHOST_ONESHOT[t]; })) return 'F';
+    // Tool unknown: fall back to the gates. A move that can only run once you hold the box is on-host.
+    var gates = (d.requires_all || []).concat(d.requires_any || []);
+    for (var i = 0; i < gates.length; i++) if (LOCUS_ONHOST_FACTS[gates[i]]) return 'F';
+    return 'R'; // default: the remote-first assumption
+  }
+
+  // scope — where a technique sits in the OSCP syllabus, for a newcomer-safe lens:
+  //   'oscp' core exam material · 'oscp+' modern AD past the core · 'beyond' exotic / legacy / edge CVEs.
+  // Default is 'oscp'; a move escalates only when its id, tool, or an earned gate fact matches a curated
+  // signal. Curated (not auto-derived) because syllabus placement is a judgment call, overridable via d.scope.
+  var SCOPE_BEYOND_IDS = { 'nopac': 1, 'printnightmare': 1, 'ms14-068': 1, 'zerologon': 1, 'zerologon-exploit': 1 };
+  var SCOPE_BEYOND_TOOLS = { 'zerologon-scan': 1, sharpwsus: 1, sharpsccm: 1, sccmhunter: 1 };
+  var SCOPE_BEYOND_FACTS = { 'ad.zerologon': 1, 'ad.sid_history': 1 };
+  var SCOPE_PLUS_TOOLS = { certipy: 1, pywhisker: 1, ntlmrelayx: 1, responder: 1, coercer: 1, mitm6: 1,
+    'impacket-ticketer': 1, 'impacket-rbcd': 1, 'impacket-dacledit': 1, 'impacket-getst': 1, bloodyad: 1,
+    'petitpotam.py': 1, 'printerbug.py': 1, 'dfscoerce.py': 1, pygpoabuse: 1, targetedkerberoast: 1 };
+  // Note: credential.certificate is deliberately NOT a plus-fact — it is overloaded (an ADCS cert in AD,
+  // but also a bare SSH key for ssh-key-login, which is core). ADCS is caught by the certipy tool + the
+  // adcs.vulnerable gate instead. Likewise the id regex uses `shadow-cred`, not a bare `shadow`, so that
+  // crack-shadow (cracking /etc/shadow — core OSCP) is not mistaken for the shadow-credentials attack.
+  var SCOPE_PLUS_FACTS = { 'adcs.vulnerable': 1, 'ad.coerced_auth': 1, 'ad.unconstrained': 1,
+    'ad.gpo_control': 1, 'ad.gpo_writable': 1, 'ad.gmsa': 1, 'hash.krbtgt': 1, 'ad.control_paths': 1, 'relay.success': 1 };
+  var SCOPE_PLUS_ID_RE = /deleg|shadow-cred|rbcd|dacl|golden|silver|gpo|relay|coerce|unconstrained|constrained/;
+  function deriveScope(d) {
+    if (d.scope) return d.scope;
+    var id = String(d.id || '').toLowerCase();
+    // Key the tool signal on the PRIMARY tool only — a secondary tool in the array (e.g. targetedKerberoast
+    // listed alongside the standard GetUserSPNs Kerberoast) must not escalate an otherwise-core move.
+    var primary = String((d.tool || (d.tools && d.tools[0]) || '')).toLowerCase();
+    var gates = (d.requires_all || []).concat(d.requires_any || []);
+    if (SCOPE_BEYOND_IDS[id] || SCOPE_BEYOND_TOOLS[primary] ||
+        gates.some(function (g) { return SCOPE_BEYOND_FACTS[g]; })) return 'beyond';
+    if (SCOPE_PLUS_ID_RE.test(id) || SCOPE_PLUS_TOOLS[primary] ||
+        gates.some(function (g) { return SCOPE_PLUS_FACTS[g]; })) return 'oscp+';
+    return 'oscp';
+  }
+  function locusRank(l) { return l === 'R' ? 0 : (l === 'F' ? 1 : 2); }
+
   // ------------------------------------------------------------------ Action --
   function Action(d) {
     d = d || {};
@@ -51,6 +133,8 @@
     this.commands = cmds.slice();
     this.sequence = !!d.sequence;
     this.timeout = parseInt(d.timeout || 0, 10) || 0;
+    this.locus = deriveLocus(d);   // 'R' remote/offline · 'F' one-shot on-host · 'I' interactive on-host
+    this.scope = deriveScope(d);   // 'oscp' · 'oscp+' · 'beyond' (newcomer-safe lens)
   }
 
   Action.prototype.producedKinds = function () { return new Set(this.produces); };
@@ -520,6 +604,12 @@
       if (y.tier !== x.tier) return y.tier - x.tier;
       if (y.score !== x.score) return y.score - x.score;
       if (y.a.priority !== x.a.priority) return y.a.priority - x.a.priority;
+      // Remote-first: among moves equal on goal-progress AND hand-tuned priority, prefer the lowest-friction
+      // locus (R < F < I) so the coach never nudges you onto the box when an off-host move reaches the same
+      // objective. Placed below priority so it only decides genuine twins — it never overrides a move the
+      // pack deliberately ranked higher.
+      var lx = locusRank(x.a.locus), ly = locusRank(y.a.locus);
+      if (lx !== ly) return lx - ly;
       return x.a.id < y.a.id ? -1 : (x.a.id > y.a.id ? 1 : 0);
     });
     return scored.map(function (s) { return s.a; });
@@ -616,6 +706,9 @@
     DEFAULT_PACK: DEFAULT_PACK,
     PACK_NAMES: PACK_NAMES,
     Action: Action,
+    deriveLocus: deriveLocus,
+    deriveScope: deriveScope,
+    locusRank: locusRank,
     friendly: friendly,
     FRIENDLY: FRIENDLY,
     hostOsFamily: hostOsFamily,

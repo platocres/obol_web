@@ -213,8 +213,25 @@ details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .move { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; transition: border-color .15s; }
 .move:hover { border-color: var(--line-hot); }
 .move-primary { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 24px -12px var(--accent); }
-.move-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.move-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .move-title { font-size: 16px; margin: 0; }
+
+/* locus + scope badges (derived teaching dimensions) */
+.move-locus { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.move-locus.locus-R { color: var(--accent-2); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+.move-locus.locus-F, .move-locus.locus-I { color: var(--yellow, #d7a21a); background: color-mix(in srgb, var(--yellow, #d7a21a) 12%, transparent); border-color: color-mix(in srgb, var(--yellow, #d7a21a) 32%, transparent); }
+.move-scope { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 800; padding: 1px 7px; border-radius: 10px; }
+.move-scope.scope-plus { color: var(--accent-2); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.move-scope.scope-beyond { color: #fff; background: var(--critical, #e0245e); border: 1px solid rgba(255,255,255,.1); }
+
+/* scope lens control */
+.coach-lens { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: -8px 0 20px; }
+.coach-lens-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--muted); margin-right: 2px; }
+.lens-opt { font-size: 11px; font-weight: 700; padding: 3px 12px; border-radius: 20px; cursor: pointer; background: var(--surf3); color: var(--text-2); border: 1px solid var(--line); }
+.lens-opt:hover { border-color: var(--accent); color: var(--text); }
+.lens-opt.on { background: var(--accent-soft); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.coach-lens-hint { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.coach-lens-hint strong { color: var(--accent-2); }
 .move-why { color: var(--text-2); margin: 0 0 12px; }
 .ph-chip { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; padding: 2px 8px; border-radius: 20px; color: #0a0e18; }
 .ph-recon { background: var(--ph-recon); } .ph-enum { background: var(--ph-enum); } .ph-creds { background: var(--ph-creds); }
