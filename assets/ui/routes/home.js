@@ -222,8 +222,13 @@
       + (vfs.total ? ('<span class="ws-counts"><span class="ws-c-cap">' + vfs.captured + ' File' + (vfs.captured === 1 ? '' : 's') + ' Captured</span>'
           + (vfs.expected ? ' · <span class="ws-c-exp">' + vfs.expected + ' Pending</span>' : '') + '</span>') : '')
       + '</div>';
-    var rootLine = '<div class="ws-root"><code>' + esc(vfs.root) + '</code>'
-      + (ov.syncedAt ? '<span class="ws-synced-at">Synced ' + esc(ago(ov.syncedAt)) + '</span>' : '') + '</div>';
+    // Only show the root path when it's a real directory — an unconfigured run defaults to ".", which rendered
+    // as a lone stray dot. When there's nothing to show, drop the line entirely (keep a synced-at stamp if any).
+    var rootStr = (vfs.root && vfs.root !== '.') ? vfs.root : '';
+    var syncedStamp = ov.syncedAt ? '<span class="ws-synced-at">Synced ' + esc(ago(ov.syncedAt)) + '</span>' : '';
+    var rootLine = (rootStr || syncedStamp)
+      ? '<div class="ws-root">' + (rootStr ? '<code>' + esc(rootStr) + '</code>' : '') + syncedStamp + '</div>'
+      : '';
     var loInsight = loadoutInsight();
     var invite = started
       ? '<p class="ws-invite">A live picture of your Kali working directory. obol pencils in the files the coach\'s next moves'
@@ -232,13 +237,23 @@
       : '<p class="ws-invite">This mirrors your Kali working directory. It\'s empty until you start: run a move from'
         + ' <a href="#/path">Next Steps</a> and paste its output on <a href="#/evidence">Evidence</a>, and the files you'
         + ' generate show up here as you go.</p>';
+    // what each skeleton folder is for — shown in place of a bare "Empty" so an empty workspace still teaches.
+    var WS_PURPOSE = {
+      scans: 'Scan + enumeration output (nmap, gobuster, enum4linux…)',
+      loot: 'Creds, hashes, and files pulled off targets',
+      exploit: 'Exploit code + payloads you build or fetch',
+      www: 'Files you host and serve to targets',
+      proof: 'Flags + proof screenshots for the report',
+      other: 'Anything else in your working directory',
+    };
     var tree = vfs.folders.map(function (fo) {
       var files = fo.files.map(function (f) { return fileRow(f, vfs.root); }).join('');
+      var emptyHint = WS_PURPOSE[fo.key] || 'Empty';
       return '<div class="ws-folder' + (fo.files.length ? '' : ' ws-empty') + '">'
         + '<div class="ws-folder-h"><span class="ws-folder-name">' + esc(fo.label) + '</span>'
         + (fo.files.length ? '<span class="ws-folder-count">' + fo.files.length + '</span>' : '')
         + '<button type="button" class="ws-add" data-folder="' + U.attr(fo.key) + '" title="Add a file to ' + esc(fo.label) + '" aria-label="Add a file to ' + esc(fo.label) + '">+</button></div>'
-        + (files || '<div class="ws-folder-empty">Empty</div>') + '</div>';
+        + (files || '<div class="ws-folder-empty">' + esc(emptyHint) + '</div>') + '</div>';
     }).join('');
     var footer = hidden ? ('<div class="ws-foot"><button type="button" class="ws-restore" data-x>' + hidden + ' Hidden · Restore</button></div>') : '';
     return '<aside class="ws-panel">' + head + rootLine + loInsight + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';

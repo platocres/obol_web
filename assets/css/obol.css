@@ -449,7 +449,7 @@ details.lo-fs-node[open] > summary::before { transform: rotate(90deg); }
 .lo-catc-cracking { --cat: #e5c07b; } .lo-catc-credentials { --cat: #e06c75; } .lo-catc-lateral { --cat: #98c379; }
 .lo-catc-tunnel { --cat: #d19a66; } .lo-catc-mitm { --cat: #ff7eb6; } .lo-catc-database { --cat: #4ec9b0; }
 .lo-catc-exploitation { --cat: #f07178; } .lo-catc-linux-enum { --cat: #89ca78; } .lo-catc-linux-privesc { --cat: #b5cea8; }
-.lo-catc-windows-enum { --cat: #7aa2f7; } .lo-catc-windows-privesc { --cat: #9d7cd8; } .lo-catc-support { --cat: #8a919e; }
+.lo-catc-windows-enum { --cat: #7aa2f7; } .lo-catc-windows-privesc { --cat: #9d7cd8; } .lo-catc-support { --cat: #8b93c9; }
 .move-why { color: var(--text-2); margin: 0 0 12px; }
 .ph-chip { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; padding: 2px 8px; border-radius: 20px; color: #0a0e18; }
 .ph-recon { background: var(--ph-recon); } .ph-enum { background: var(--ph-enum); } .ph-creds { background: var(--ph-creds); }
