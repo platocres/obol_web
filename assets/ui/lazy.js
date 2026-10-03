@@ -12,16 +12,17 @@
   var GROUPS = {
     parsers: [
       'assets/engine/parsers/common.js?v=28ba0970',
-      'assets/engine/parsers/nmap.js?v=6c9b4446', 'assets/engine/parsers/directory.js?v=c1ebd49d',
-      'assets/engine/parsers/creds.js?v=d9f89aeb', 'assets/engine/parsers/host.js?v=1fae0beb',
+      'assets/engine/parsers/nmap.js?v=c3b834f5', 'assets/engine/parsers/directory.js?v=5ac36d12',
+      'assets/engine/parsers/creds.js?v=22662bce', 'assets/engine/parsers/host.js?v=dbfd0eba',
       'assets/engine/parsers/services.js?v=6808bcc2', 'assets/engine/parsers/database.js?v=3dfc40c5',
       'assets/engine/parsers/web.js?v=fbb0e904', 'assets/engine/parsers/websource.js?v=d7ad840b',
-      'assets/engine/parsers/index.js?v=f45ebdbd',
+      'assets/engine/parsers/index.js?v=84120e8f',
     ],
     graph: ['assets/engine/graph.js?v=97e4f668', 'assets/ui/routes/graph.js?v=f509cf3e'],
     domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=e54f7903', 'assets/ui/bhgraph.js?v=ed34873b', 'assets/ui/routes/domain.js?v=e0d3fe25'],
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=9ad71876', 'assets/engine/report.js?v=60a4b750', 'assets/ui/routes/report.js?v=a57c0597'],
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=f27f51ef', 'assets/ui/routes/tools.js?v=7d043fd0'],
+    loadout: ['assets/engine/arsenal.js?v=88353a90', 'assets/ui/routes/loadout.js?v=b449616c'],
     checklist: ['assets/ui/routes/checklist.js?v=116058c6'],
     target: ['assets/engine/graph.js?v=97e4f668', 'assets/ui/routes/target.js?v=72f3be6c'],
     creds: ['assets/ui/routes/creds.js?v=6935aeca'],
@@ -64,7 +65,7 @@
 
   // Register placeholder routes that lazy-load their group then delegate to the real route.
   function registerLazyRoutes(R) {
-    ['tools', 'domain', 'report', 'checklist', 'graph', 'target', 'creds', 'scoreboard', 'playbooks', 'map', 'findings', 'history'].forEach(function (name) {
+    ['loadout', 'tools', 'domain', 'report', 'checklist', 'graph', 'target', 'creds', 'scoreboard', 'playbooks', 'map', 'findings', 'history'].forEach(function (name) {
       R.register(name, {
         ensure: function () { return loadGroup(name); },
         render: function (ctx) {

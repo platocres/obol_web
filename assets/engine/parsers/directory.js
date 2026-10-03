@@ -77,6 +77,112 @@
   }
   C._parse_user_list = _parse_user_list;
 
+  // ── PowerView / AD PowerShell object listings (from a Windows foothold) ───────────
+  // PowerView emits PowerShell "Name : Value" objects with PADDED spaces before the colon, which the
+  // LDAP `sAMAccountName:` regex misses — so Get-NetUser/Get-DomainUser/Get-ADUser enum minted NOTHING.
+  // Parse ONLY user-query output into ad.user_list; Get-NetGroup/Get-NetComputer put NON-account values
+  // under cn/dnshostname, so a command gate keeps those out (a group name must never be a user).
+  var _PV_SAM_RE = /^\s*samaccountname\s*:\s*(?<v>[^\s,;]+)\s*$/im;
+  var _PV_CN_RE = /^\s*cn\s*:\s*(?<v>[^\s,;]+)\s*$/im;
+  var _PV_USER_QUERY_RE = /get-(?:net|domain|ad)user/i;
+  var _PV_OTHER_QUERY_RE = /get-(?:net|domain)(?:group|computer)/i;
+
+  function _parse_powerview(text, ws, command, source, facts, opts) {
+    opts = opts || {};
+    if (!reSearch(_PV_USER_QUERY_RE, command)) return;
+    var usersSet = {};
+    reAll(_PV_SAM_RE, text).forEach(function (m) {
+      var u = C._clean_username(m.groups.v);
+      if (C._valid_username(u)) usersSet[u.toLowerCase()] = u;
+    });
+    // samAccountName is authoritative; fall back to cn only on a PURE user query (no group/computer
+    // query in the same one-liner), since a user object's cn is often a display name.
+    if (!Object.keys(usersSet).length && !reSearch(_PV_OTHER_QUERY_RE, command)) {
+      reAll(_PV_CN_RE, text).forEach(function (m) {
+        var u = C._clean_username(m.groups.v);
+        if (C._valid_username(u)) usersSet[u.toLowerCase()] = u;
+      });
+    }
+    var users = C.uniqueSortedCI(Object.keys(usersSet).map(function (k) { return usersSet[k]; }));
+    if (!users.length) return;
+    var domain = opts.domain_hint || C._domain_from_facts(ws);
+    _add(facts, mkFact('ad.user_list', C._scope_for_domain(ws, domain), { users: users, count: users.length, method: 'powerview' }, S, source));
+  }
+  C._parse_powerview = _parse_powerview;
+
+  // PowerView GROUP / COMPUTER / ACL object shapes → ad.group_list / ad.computer_list / ad.acl_lead.
+  // Group names carry spaces ("Domain Admins"), so these capture the FULL line value. Command-gated per
+  // object type so a combined one-liner can't cross-pollute. The ACL lead is INFORMATIONAL (an enumerated
+  // control right) and never false-opens the DCSync gate — distinct from the ad.control_paths a write earns.
+  var _PV_GROUP_QUERY_RE = /get-(?:net|domain)group/i;
+  var _PV_COMPUTER_QUERY_RE = /get-(?:net|domain)computer/i;
+  var _PV_ACL_QUERY_RE = /get-(?:net|domain)?\w*objectacl|get-acl\b|get-domainobjectacl/i;
+  var _PV_SAM_FULL_RE = /^\s*samaccountname\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_NAME_FULL_RE = /^\s*name\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_CN_FULL_RE = /^\s*cn\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_DNSHOST_RE = /^\s*dnshostname\s*:\s*(?<v>[^\s,;]+)\s*$/im;
+  var _PV_OS_RE = /^\s*operatingsystem\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_ADRIGHTS_RE = /^\s*activedirectoryrights\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_ACL_TARGET_RE = /^\s*(?:objectdn|objectidentity|objectname)\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_ACL_ID_RE = /^\s*(?:securityidentifier|identityreference|identitysid)\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_ABUSABLE_RIGHT_RE = /^(?:GenericAll|GenericWrite|WriteDacl|WriteOwner|WriteProperty|AllExtendedRights|ForceChangePassword|Self|WriteMembers|ExtendedRight)$/i;
+
+  // The values for the FIRST of `regexes` that matches anything, deduped case-insensitively in
+  // first-seen order — so a group list prefers samaccountname, falling back to name/cn.
+  function _pv_values(text) {
+    for (var i = 1; i < arguments.length; i++) {
+      var rx = arguments[i], seen = {}, out = [];
+      reAll(rx, text).forEach(function (m) {
+        var v = (m.groups.v || '').trim();
+        if (v && !seen[v.toLowerCase()] && v.charAt(0) !== '{') { seen[v.toLowerCase()] = true; out.push(v); } // skip GUID/SDDL blobs
+      });
+      if (out.length) return out;
+    }
+    return [];
+  }
+
+  function _parse_powerview_objects(text, ws, command, source, facts, opts) {
+    opts = opts || {};
+    var lc = command.toLowerCase();
+    var domain = opts.domain_hint || C._domain_from_facts(ws);
+    var scope = C._scope_for_domain(ws, domain);
+    if (reSearch(_PV_GROUP_QUERY_RE, lc)) {
+      var groups = _pv_values(text, _PV_SAM_FULL_RE, _PV_NAME_FULL_RE, _PV_CN_FULL_RE);
+      if (groups.length) _add(facts, mkFact('ad.group_list', scope, { groups: groups, count: groups.length, method: 'powerview' }, S, source));
+    }
+    if (reSearch(_PV_COMPUTER_QUERY_RE, lc)) {
+      var comps = _pv_values(text, _PV_DNSHOST_RE, _PV_SAM_FULL_RE, _PV_NAME_FULL_RE);
+      if (comps.length) {
+        var value = { computers: comps, count: comps.length, method: 'powerview' };
+        var oses = _pv_values(text, _PV_OS_RE);
+        if (oses.length) value.operating_systems = oses;
+        _add(facts, mkFact('ad.computer_list', scope, value, S, source));
+      }
+    }
+    if (reSearch(_PV_ACL_QUERY_RE, lc)) {
+      var rightsSet = {};
+      text.split(/\r?\n/).forEach(function (line) {
+        reAll(_PV_ADRIGHTS_RE, line).forEach(function (m) {
+          m.groups.v.split(/[,\s]+/).forEach(function (r) {
+            r = r.trim();
+            if (r && _PV_ABUSABLE_RIGHT_RE.test(r)) rightsSet[r] = true;
+          });
+        });
+      });
+      var rights = C.uniqueSortedCI(Object.keys(rightsSet));
+      if (rights.length) {
+        _add(facts, mkFact('ad.acl_lead', scope, {
+          rights: rights,
+          targets: _pv_values(text, _PV_ACL_TARGET_RE).slice(0, 8),
+          principals: _pv_values(text, _PV_ACL_ID_RE).slice(0, 8),
+          method: 'powerview',
+          note: 'enumerated control right (lead) — cash it in with the ACL-abuse move; not a granted control path yet',
+        }, S, source));
+      }
+    }
+  }
+  C._parse_powerview_objects = _parse_powerview_objects;
+
   var _KERBRUTE_USER_RE = /\[\+\]\s+VALID USERNAME:\s*(?<u>[A-Za-z0-9._-]+)(?:@(?<dom>[A-Za-z0-9.-]+))?/;
   var _KERBRUTE_LOGIN_RE = /\[\+\]\s+VALID LOGIN:\s*(?<u>[A-Za-z0-9._-]+)(?:@(?<dom>[A-Za-z0-9.-]+))?:(?<p>\S.*?)\s*$/m;
 
@@ -789,5 +895,45 @@
     _parse_laps_material(text, ws, command, source, facts);
   }
   C._parse_ad_abuse_output = _parse_ad_abuse_output;
+
+  // ── klist → kerberos.tickets (cached ticket inventory from a Windows/MIT foothold) ──
+  // Windows `klist` prints `Cached Tickets: (N)` then per-ticket `Client:`/`Server:` lines; MIT
+  // `klist` prints `Default principal:` then a `krbtgt/REALM` service-principal column. A krbtgt
+  // ticket means a usable TGT. The command-/action-gated _parse_kerberos_ticket_material only fires
+  // on a `Default principal:` klist; this covers the Windows cached-ticket form (and an attached
+  // paste with no command). Content-gated so only genuine ticket output mints.
+  var _KLIST_CACHED_RE = /Cached Tickets:\s*\((?<n>\d+)\)/i;
+  var _KLIST_CLIENT_RE = /^\s*(?:#\d+>\s*)?Client:\s*(?<user>\S+)\s*@\s*(?<realm>\S+)/im;
+  var _KLIST_SERVER_RE = /^\s*Server:\s*(?<spn>\S+)\s*@\s*(?<realm>\S+)/im;
+  var _KLIST_DEFAULT_PRINCIPAL_RE = /Default principal:\s*(?<user>[^@\s]+)(?:@(?<realm>\S+))?/i;
+
+  function _looks_like_klist(text) {
+    var t = text || '';
+    if (reSearch(_KLIST_CACHED_RE, t)) return true;
+    if (/^\s*Server:\s*krbtgt\//im.test(t)) return true;
+    if (reSearch(_KLIST_DEFAULT_PRINCIPAL_RE, t) && /krbtgt\//i.test(t)) return true;
+    return false;
+  }
+  C._looks_like_klist = _looks_like_klist;
+
+  function _parse_klist(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    if (!_looks_like_klist(text)) return;
+    var value = { tool: 'klist' }, realm = '';
+    var cm = reSearch(_KLIST_CLIENT_RE, text) || reSearch(_KLIST_DEFAULT_PRINCIPAL_RE, text);
+    if (cm) {
+      var u = C._clean_username(cm.groups.user || '');
+      if (u) value.principal = u;
+      if (cm.groups.realm) realm = cm.groups.realm.toLowerCase().replace(/\.$/, '');
+    }
+    var cnt = reSearch(_KLIST_CACHED_RE, text);
+    if (cnt) value.count = parseInt(cnt.groups.n, 10);
+    var servers = C.uniqueSortedCI(reAll(_KLIST_SERVER_RE, text).map(function (m) { return m.groups.spn; }));
+    if (servers.length) value.services = servers.slice(0, 20);
+    if (/krbtgt\//i.test(text)) value.tgt = true;
+    _add(facts, mkFact('kerberos.tickets', C._scope_for_domain(ws, realm), value, S, source));
+  }
+  C._parse_klist = _parse_klist;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

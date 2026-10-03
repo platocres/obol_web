@@ -141,6 +141,9 @@
     var rel = OBOL.vfs.relOf(f.path, root);
     var badge = f.facts.length ? ('<span class="ws-badge">' + f.facts.length + ' Fact' + (f.facts.length === 1 ? '' : 's') + '</span>') : '';
     var suggested = f.status === 'expected' && f.origin === 'suggested';
+    // WS4: a captured file that proved credential/hash facts flows straight into the Creds tracker.
+    var credsLink = (f.facts || []).some(function (k) { return /^(credential\.|hash\.)/.test(k); })
+      ? '<a class="ws-file-link" href="#/creds">Use these in Creds →</a>' : '';
     // a one-word state tag so the tree reads at a glance without expanding a row.
     var tag = f.status === 'captured' ? '' : suggested ? '<span class="ws-tag ws-tag-sugg">suggested</span>'
       : f.unknown ? '<span class="ws-tag ws-tag-unk">on disk</span>'
@@ -157,14 +160,15 @@
       body = cmdBlock
         + (capped ? '<pre class="ws-mini-term">' + esc(capped) + '</pre>' : '<div class="ws-file-note">Captured — no text body.</div>')
         + factLine(f.facts)
-        + '<a class="ws-file-link" href="#/history">Review in the Run Log →</a>';
+        + '<div class="ws-file-links"><a class="ws-file-link" href="#/history">Review in the Run Log →</a>' + credsLink + '</div>';
     } else if (suggested) {
       // anticipated: the coach is recommending a move that writes this file. obol assumes you are
       // probably about to create it and pencils it in — it becomes real once you run and paste it.
       body = '<div class="ws-file-note">The coach is suggesting a move that creates this file'
         + (f.title ? ' (<strong>' + esc(f.title) + '</strong>)' : '') + '. Pencilled in — run it, then paste the output to capture it.</div>'
         + cmdBlock
-        + '<a class="ws-file-link" href="' + captureHref(f) + '">Run it, then capture it here →</a>';
+        + '<div class="ws-file-links"><a class="ws-file-link" href="#/path">Open the move in Next Steps →</a>'
+        + '<a class="ws-file-link" href="' + captureHref(f) + '">Capture its output →</a></div>';
     } else if (f.unknown) {
       // a disk-sync turned this up but obol has no move that made it — stay on the same page, invite it.
       body = '<div class="ws-file-note">Found on your disk by a workspace sync. obol doesn\'t know this one yet'
@@ -187,9 +191,14 @@
     var desc = OBOL.vfs.describe ? ('<div class="ws-file-desc">' + esc(OBOL.vfs.describe(f)) + '</div>') : '';
     var cls = 'ws-file ws-' + f.status + (suggested ? ' ws-suggested' : '') + (f.confirmed ? ' ws-confirmed' : '')
       + (f.unknown ? ' ws-unknown' : '') + (f.manual ? ' ws-manual' : '') + (f.flag ? ' ws-flag' : '');
+    // WS1: a suggested file reads as a to-do — show the move that creates it right in the row.
+    var fromTag = (suggested && f.title) ? '<span class="ws-from" title="' + U.attr('Created by: ' + f.title) + '">↪ ' + esc(f.title) + '</span>' : '';
+    // WS5: copy the file's full path without expanding.
+    var copyPath = '<button type="button" class="ws-copy-path" data-copy="' + U.attr(f.path || rel) + '" title="Copy path">⧉</button>';
     return '<details class="' + cls + '" data-rel="' + U.attr(rel) + '">'
-      + '<summary><span class="ws-dot"></span><span class="ws-file-name">' + esc(f.name) + '</span>' + tag + badge
+      + '<summary><span class="ws-dot"></span><span class="ws-file-name">' + esc(f.name) + '</span>' + tag + badge + fromTag
       + (f.at ? '<span class="ws-when">' + esc(ago(f.at)) + '</span>' : '')
+      + copyPath
       + '<button type="button" class="ws-rm" data-rel="' + U.attr(rel) + '" title="Remove from workspace" aria-label="Remove ' + U.attr(f.name) + '">×</button>'
       + '</summary>'
       + '<div class="ws-file-body">' + desc + body + '</div></details>';
@@ -222,8 +231,27 @@
       + (vfs.total ? ('<span class="ws-counts"><span class="ws-c-cap">' + vfs.captured + ' File' + (vfs.captured === 1 ? '' : 's') + ' Captured</span>'
           + (vfs.expected ? ' · <span class="ws-c-exp">' + vfs.expected + ' Pending</span>' : '') + '</span>') : '')
       + '</div>';
-    var rootLine = '<div class="ws-root"><code>' + esc(vfs.root) + '</code>'
-      + (ov.syncedAt ? '<span class="ws-synced-at">Synced ' + esc(ago(ov.syncedAt)) + '</span>' : '') + '</div>';
+    // Only show the root path when it's a real directory — an unconfigured run defaults to ".", which rendered
+    // as a lone stray dot. When there's nothing to show, drop the line entirely (keep a synced-at stamp if any).
+    var rootStr = (vfs.root && vfs.root !== '.') ? vfs.root : '';
+    var syncedStamp = ov.syncedAt ? '<span class="ws-synced-at">Synced ' + esc(ago(ov.syncedAt)) + '</span>' : '';
+    var rootLine = (rootStr || syncedStamp)
+      ? '<div class="ws-root">' + (rootStr ? '<code>' + esc(rootStr) + '</code>' : '') + syncedStamp + '</div>'
+      : '';
+    var loInsight = loadoutInsight();
+    // WS2: exam-readiness — the report scores ZERO without proof, so surface proof coverage up front.
+    var proofFiles = 0;
+    vfs.folders.forEach(function (fo) { fo.files.forEach(function (f) { if (f.flag && f.status === 'captured') proofFiles++; }); });
+    var shots = (eng.screenshots || []).length;
+    var nTargets = (eng.targets || []).length;
+    var proofN = proofFiles + shots;
+    var proofStrip = nTargets ? ('<div class="ws-proof ' + (proofN ? 'ws-proof-ok' : 'ws-proof-warn') + '">'
+      + '<div class="ws-proof-top"><span class="ws-proof-h">' + (proofN ? '✓ Report proof' : '⚠ Report proof') + '</span>'
+      + '<span class="ws-proof-v">' + shots + ' shot' + (shots === 1 ? '' : 's') + ' · ' + proofFiles + ' flag file' + (proofFiles === 1 ? '' : 's') + ' · ' + nTargets + ' target' + (nTargets === 1 ? '' : 's') + '</span></div>'
+      + '<div class="ws-proof-note">' + (proofN
+          ? 'Every owned target needs a flag file + an interactive screenshot showing the flag AND your IP, or the report scores it zero.'
+          : 'No proof captured yet — the OSCP report scores zero without a flag + an interactive screenshot per target.')
+      + ' <a class="ws-file-link" href="#/report">Open Report →</a></div></div>') : '';
     var invite = started
       ? '<p class="ws-invite">A live picture of your Kali working directory. obol pencils in the files the coach\'s next moves'
         + ' will create, then confirms each one once you run it and paste the output on <a href="#/evidence">Evidence</a>.'
@@ -231,16 +259,58 @@
       : '<p class="ws-invite">This mirrors your Kali working directory. It\'s empty until you start: run a move from'
         + ' <a href="#/path">Next Steps</a> and paste its output on <a href="#/evidence">Evidence</a>, and the files you'
         + ' generate show up here as you go.</p>';
+    // what each skeleton folder is for — shown in place of a bare "Empty" so an empty workspace still teaches.
+    var WS_PURPOSE = {
+      scans: 'Scan + enumeration output (nmap, gobuster, enum4linux…)',
+      loot: 'Creds, hashes, and files pulled off targets',
+      exploit: 'Exploit code + payloads you build or fetch',
+      www: 'Files you host and serve to targets',
+      proof: 'Flags + proof screenshots for the report',
+      other: 'Anything else in your working directory',
+    };
+    // WS3: www/ is the serve directory — give it a one-click serve command + a "stage your Loadout payloads
+    // into www/" copy, closing the Loadout → serve → deliver loop in the place you actually serve from.
+    var wwwDir = (vfs.root && vfs.root !== '.') ? (vfs.root.replace(/\/+$/, '') + '/www') : 'www';
+    function wwwHelper(hasFiles) {
+      var serveCmd = 'cd ' + wwwDir + ' && python3 -m http.server 80';
+      var stageCmd = 'cp ~/.obol/arsenal/win/* ' + wwwDir + '/ 2>/dev/null';
+      // Collapsed by default: at the start of a run there's nothing to serve, so keep it out of the way;
+      // when you reach delivery, the summary tells you it's here and one click reveals the commands.
+      return '<details class="ws-www"' + (hasFiles ? ' open' : '') + '>'
+        + '<summary class="ws-www-sum">Serve to targets <span class="ws-www-hint">host &amp; stage payloads</span></summary>'
+        + '<div class="ws-www-body">'
+        + '<div class="ws-www-row"><span class="ws-www-l">Start server</span>'
+        + '<code class="ws-copyval" data-copy="' + U.attr(serveCmd) + '" title="Click to copy">' + esc(serveCmd) + '</code></div>'
+        + '<div class="ws-www-row"><span class="ws-www-l">Stage Loadout payloads</span>'
+        + '<code class="ws-copyval" data-copy="' + U.attr(stageCmd) + '" title="Click to copy">' + esc(stageCmd) + '</code></div></div></details>';
+    }
     var tree = vfs.folders.map(function (fo) {
       var files = fo.files.map(function (f) { return fileRow(f, vfs.root); }).join('');
+      var emptyHint = WS_PURPOSE[fo.key] || 'Empty';
       return '<div class="ws-folder' + (fo.files.length ? '' : ' ws-empty') + '">'
         + '<div class="ws-folder-h"><span class="ws-folder-name">' + esc(fo.label) + '</span>'
         + (fo.files.length ? '<span class="ws-folder-count">' + fo.files.length + '</span>' : '')
         + '<button type="button" class="ws-add" data-folder="' + U.attr(fo.key) + '" title="Add a file to ' + esc(fo.label) + '" aria-label="Add a file to ' + esc(fo.label) + '">+</button></div>'
-        + (files || '<div class="ws-folder-empty">Empty</div>') + '</div>';
+        + (files || '<div class="ws-folder-empty">' + esc(emptyHint) + '</div>')
+        + (fo.key === 'www' ? wwwHelper(fo.files.length) : '') + '</div>';
     }).join('');
     var footer = hidden ? ('<div class="ws-foot"><button type="button" class="ws-restore" data-x>' + hidden + ' Hidden · Restore</button></div>') : '';
-    return '<aside class="ws-panel">' + head + rootLine + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
+    return '<aside class="ws-panel">' + head + rootLine + proofStrip + loInsight + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
+  }
+
+  // Per-engagement Workspace, enriched with GLOBAL Loadout insight: what your synced box can drop into
+  // this engagement's www/ (staged binaries) and which wordlists are on disk. Read-only, from the
+  // per-browser arsenal profile; absent until the operator syncs a box on the Loadout tab.
+  function loadoutInsight() {
+    var p; try { p = JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { p = null; }
+    if (!p) return '';
+    var staged = (p.staged || []).slice(0, 10), wl = Object.keys(p.wordlists || {});
+    if (!staged.length && !wl.length) return '';
+    var chips = staged.map(function (f) { return '<span class="ws-lo-chip">' + esc(f) + '</span>'; }).join('');
+    return '<div class="ws-lo"><a class="ws-lo-h" href="#/loadout">From your Loadout ↗</a>'
+      + (staged.length ? '<div class="ws-lo-grp"><span class="ws-lo-lbl">Staged, ready to serve</span>' + chips + '</div>' : '')
+      + (wl.length ? '<div class="ws-lo-grp"><span class="ws-lo-lbl">Wordlists</span>' + wl.map(function (w) { return '<span class="ws-lo-chip">' + esc(w) + '</span>'; }).join('') + '</div>' : '')
+      + '</div>';
   }
 
   // The engagement-wide Attack Path ribbon (identical to a single target's when scope is one host).
@@ -398,6 +468,11 @@
       updateOverrides(function (ov) { ov.removed = {}; }, 'ws-restore');
     });
     // copy the snapshot command.
+    U.on(mount, 'click', '.ws-copyval, .ws-copy-path', function (e, t) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (e && e.stopPropagation) e.stopPropagation();
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
     U.on(mount, 'click', '.ws-snap-copy', function (e, t) {
       var el = document.getElementById(t.getAttribute('data-copy'));
       if (el) U.copy(el.textContent).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });

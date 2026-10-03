@@ -168,6 +168,103 @@
   }
   C._parse_ntlm_dump = _parse_ntlm_dump;
 
+  // ── mimikatz credential dumps ────────────────────────────────────────────────────
+  // sekurlsa::logonpasswords blocks (`* Username : X` / `* NTLM : <32hex>` / `* Password : <clear>`)
+  // and lsadump::sam / lsadump::lsa output (`RID : … (nnn)` + `User : X` + `Hash NTLM: <32hex>` /
+  // `* NTLM : <hash>`). Mint hash.ntlm for every recovered NT hash and credential.plaintext for every
+  // cleartext password present; a full SAM/LSA/DCSync dump also earns loot.ntds. Conservative: a hash
+  // is recorded only when an accompanying username line set the current account, and `(null)` is skipped.
+  var _MIMI_SIG_RE = /sekurlsa::|lsadump::|crypto::capi|mimikatz\s+#|pypykatz|^Hash NTLM:/im;
+  var _MIMI_USERNAME_RE = /^\s*\*\s*Username\s*:\s*(?<user>.+?)\s*$/i;   // sekurlsa section user
+  var _MIMI_LSA_USER_RE = /^\s*User\s*:\s*(?<user>.+?)\s*$/i;            // lsadump RID-block user (not "User Name :")
+  var _MIMI_DOMAIN_RE = /^\s*\*\s*Domain\s*:\s*(?<dom>.+?)\s*$/i;
+  var _MIMI_RID_RE = /^\s*RID\s*:\s*[0-9a-fA-F]+\s*\((?<rid>\d+)\)/i;
+  var _MIMI_NTLM_RE = /^\s*(?:\*\s*)?(?:Hash\s+)?NTLM\s*:\s*(?<nt>[0-9a-fA-F]{32})\b/i;
+  var _MIMI_PASSWORD_RE = /^\s*\*\s*Password\s*:\s*(?<pw>.+?)\s*$/i;
+
+  function _looks_like_mimikatz(text) { return !!reSearch(_MIMI_SIG_RE, text || ''); }
+  C._looks_like_mimikatz = _looks_like_mimikatz;
+
+  function _parse_mimikatz(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    var h = 'host:' + ws.target, lc = (command || '').toLowerCase(), lowered = text.toLowerCase();
+    var entries = [], seen = {}, plainSeen = {}, curUser = '', curDomain = '', curRid = null;
+    text.split(/\r?\n/).forEach(function (raw) {
+      var um = _MIMI_USERNAME_RE.exec(raw) || _MIMI_LSA_USER_RE.exec(raw);
+      if (um) {
+        var u = um.groups.user.trim();
+        if (u.indexOf('\\') >= 0) curDomain = u.split('\\')[0].trim(); // lsadump `User : HTB\bob`
+        curUser = C._clean_username(u);
+        return;
+      }
+      var dm = _MIMI_DOMAIN_RE.exec(raw);
+      if (dm) { curDomain = dm.groups.dom.trim(); return; }
+      var rm = _MIMI_RID_RE.exec(raw);
+      if (rm) { curRid = parseInt(rm.groups.rid, 10); return; }
+      var nm = _MIMI_NTLM_RE.exec(raw);
+      if (nm && curUser && C._valid_username(curUser)) {
+        var nt = nm.groups.nt.toLowerCase(), key = curUser.toLowerCase() + '|' + nt;
+        if (!seen[key]) {
+          seen[key] = true;
+          var e = { user: curUser, nthash: nt };
+          if (curRid !== null) e.rid = curRid;
+          if (curDomain && curDomain !== '(null)') e.domain = curDomain;
+          entries.push(e);
+        }
+        return;
+      }
+      var pm = _MIMI_PASSWORD_RE.exec(raw);
+      if (pm && curUser && C._valid_username(curUser)) {
+        var pw = pm.groups.pw.trim();
+        if (pw && pw !== '(null)' && C._valid_password(pw)) {
+          var pk = curUser.toLowerCase() + '|' + pw;
+          if (!plainSeen[pk]) {
+            plainSeen[pk] = true;
+            var dom = (curDomain && curDomain.indexOf('.') >= 0) ? curDomain : '';
+            _add_plaintext_credential(facts, ws, source, curUser, pw, dom, 'mimikatz', '');
+          }
+        }
+      }
+    });
+    if (!entries.length) return;
+    _add(facts, mkFact('hash.ntlm', h, { count: entries.length, entries: entries, via: 'mimikatz' }, S, source));
+    _add(facts, mkFact('credential.candidate', h, { kind: 'ntlm_hash', count: entries.length, via: 'mimikatz' }, S, source));
+    // A full SAM/LSA/DCSync dump hands you every local/domain account hash — surface it as loot.ntds.
+    if (lc.indexOf('lsadump') >= 0 || lowered.indexOf('lsadump::') >= 0) {
+      _add(facts, mkFact('loot.ntds', h, { count: entries.length, method: 'lsadump' }, S, source));
+    }
+  }
+  C._parse_mimikatz = _parse_mimikatz;
+
+  // ── MSCache2 / DCC2 cached domain-logon hashes ───────────────────────────────────
+  // secretsdump `-o`/cached output and mimikatz `lsadump::cache` surface domain creds that were cached
+  // for offline logon as `$DCC2$<iters>#<user>#<32hex>` (hashcat mode 2100). These crack offline only
+  // (no PtH), so they unlock the crack-mscache2 move rather than a direct login. Conservative: require
+  // the literal `$DCC2$` token with its well-formed `#user#hash` tail — we never mint from a bare mention.
+  var _DCC2_RE = /\$DCC2\$\d+#([^#\s:]+)#([0-9a-fA-F]{32})\b/g;
+  function _looks_like_mscache(text) { return !!text && text.indexOf('$DCC2$') >= 0; }
+  C._looks_like_mscache = _looks_like_mscache;
+
+  function _parse_mscache(text, ws, command, source, facts) {
+    if (!text || text.indexOf('$DCC2$') < 0) return;
+    text = text.replace(C._ANSI_RE, '');
+    var h = 'host:' + ws.target, entries = [], seen = {}, m;
+    _DCC2_RE.lastIndex = 0;
+    while ((m = _DCC2_RE.exec(text)) !== null) {
+      var user = C._clean_username(m[1]), hash = m[2].toLowerCase();
+      if (!C._valid_username(user, false)) continue;
+      var key = user.toLowerCase() + '|' + hash;
+      if (seen[key]) continue;
+      seen[key] = true;
+      entries.push({ user: user, mscache: m[0] });
+    }
+    if (!entries.length) return;
+    _add(facts, mkFact('hash.mscache', h, { count: entries.length, entries: entries, mode: 2100, via: 'cache-dump' }, S, source));
+    _add(facts, mkFact('credential.candidate', h, { kind: 'mscache2', count: entries.length }, S, source));
+  }
+  C._parse_mscache = _parse_mscache;
+
   var _RESPONDER_HASH_RE = /NTLMv2-SSP Hash\s*:\s*(?<hash>(?<user>[^:\s]+)::[^\s]+:[0-9A-Fa-f]{16,}:[0-9A-Fa-f]+:[0-9A-Fa-f]+)/;
 
   function _parse_responder(text, ws, source, facts) {

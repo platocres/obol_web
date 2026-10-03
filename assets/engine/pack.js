@@ -25,6 +25,88 @@
     'cracking_2026_09', 'pivoting_2026_09', 'shells_2026_09',
   ];
 
+  // ------------------------------------------------------- locus & scope (derived) --
+  // Two teaching/ranking dimensions every move carries. Both honor an explicit pack field when present
+  // (d.locus / d.scope) and otherwise DERIVE from the move's tool + gates, so new moves get a sensible
+  // default with zero data churn and the handful of judgment calls can be pinned in the override maps.
+  //
+  // locus — where you operate relative to the target host, lowest-friction first:
+  //   'R' remote/offline from Kali · 'F' one-shot code-exec on the box · 'I' interactive on-host session.
+  // The coach prefers R, then F, then I: staying off-host is faster and safer in a timed lab, and the
+  // on-host parsers are a safety net for when you are legitimately on the box, never a nudge to go there.
+  var LOCUS_REMOTE = { // run from Kali against the target, or offline on Kali — off-host either way
+    nmap: 1, rustscan: 1, masscan: 1, dig: 1, nslookup: 1, ffuf: 1, gobuster: 1, feroxbuster: 1, dirb: 1,
+    curl: 1, wget: 1, nikto: 1, wpscan: 1, whatweb: 1, 'gobuster-vhost': 1,
+    nxc: 1, netexec: 1, crackmapexec: 1, cme: 1, ldapsearch: 1, windapsearch: 1, smbmap: 1, smbclient: 1,
+    rpcclient: 1, enum4linux: 1, 'enum4linux-ng': 1, bloodyad: 1, showmount: 1, mount: 1,
+    kerbrute: 1, sprayhound: 1, targetedkerberoast: 1, certipy: 1, pywhisker: 1, kinit: 1, 'gpp-decrypt': 1,
+    'zerologon-scan': 1, sccmhunter: 1, pygpoabuse: 1,
+    ntlmrelayx: 1, responder: 1, coercer: 1, mitm6: 1,
+    hydra: 1, medusa: 1, sshpass: 1, ssh: 1, xfreerdp: 1, rdesktop: 1, mysql: 1, 'evil-winrm': 1,
+    hashcat: 1, john: 1, openssl: 1, 'bloodhound-python': 1, bloodhound: 1, msfvenom: 1, metasploit: 1,
+    nc: 1, ncat: 1, ntpdate: 1,
+  };
+  var LOCUS_ONHOST_INTERACTIVE = { // need a live session on the box (a .NET/PS tool, a dumper, a PEAS run)
+    mimikatz: 1, rubeus: 1, powerview: 1, sharphound: 1, sharpwsus: 1, sharpsccm: 1,
+    winpeas: 1, linpeas: 1, 'privesccheck': 1, powerup: 1, seatbelt: 1, 'les.sh': 1,
+  };
+  var LOCUS_ONHOST_ONESHOT = { // a single command you can fire through limited exec, no interactive shell
+    cmd: 1, sh: 1, bash: 1, powershell: 1, pwsh: 1, nltest: 1, klist: 1, whoami: 1, net: 1,
+  };
+  var LOCUS_ONHOST_FACTS = { // a gate that can only be satisfied once you already hold the box
+    'foothold.windows': 1, 'foothold.linux': 1, 'foothold.webshell': 1, 'access.shell': 1,
+    'access.system': 1, 'access.admin': 1, 'access.desktop': 1, 'access.root': 1,
+  };
+  var LOCUS_OVERRIDE = {
+    // impacket psexec/wmiexec/etc. and *.py coercers are launched FROM Kali even when they land a shell.
+    // These are caught by the impacket-/.py rules below; pin only genuine exceptions here, by move id.
+  };
+  function deriveLocus(d) {
+    if (d.locus) return d.locus;
+    if (LOCUS_OVERRIDE[d.id]) return LOCUS_OVERRIDE[d.id];
+    var tl = (d.tools && d.tools.length ? d.tools : [d.tool || '']).map(function (t) { return String(t || '').toLowerCase(); });
+    var anyRemote = tl.some(function (t) { return LOCUS_REMOTE[t] || t.indexOf('impacket-') === 0 || /\.py$/.test(t); });
+    if (anyRemote) return 'R';
+    if (tl.some(function (t) { return LOCUS_ONHOST_INTERACTIVE[t]; })) return 'I';
+    if (tl.some(function (t) { return LOCUS_ONHOST_ONESHOT[t]; })) return 'F';
+    // Tool unknown: fall back to the gates. A move that can only run once you hold the box is on-host.
+    var gates = (d.requires_all || []).concat(d.requires_any || []);
+    for (var i = 0; i < gates.length; i++) if (LOCUS_ONHOST_FACTS[gates[i]]) return 'F';
+    return 'R'; // default: the remote-first assumption
+  }
+
+  // scope — where a technique sits in the OSCP syllabus, for a newcomer-safe lens:
+  //   'oscp' core exam material · 'oscp+' modern AD past the core · 'beyond' exotic / legacy / edge CVEs.
+  // Default is 'oscp'; a move escalates only when its id, tool, or an earned gate fact matches a curated
+  // signal. Curated (not auto-derived) because syllabus placement is a judgment call, overridable via d.scope.
+  var SCOPE_BEYOND_IDS = { 'nopac': 1, 'printnightmare': 1, 'ms14-068': 1, 'zerologon': 1, 'zerologon-exploit': 1 };
+  var SCOPE_BEYOND_TOOLS = { 'zerologon-scan': 1, sharpwsus: 1, sharpsccm: 1, sccmhunter: 1 };
+  var SCOPE_BEYOND_FACTS = { 'ad.zerologon': 1, 'ad.sid_history': 1 };
+  var SCOPE_PLUS_TOOLS = { certipy: 1, pywhisker: 1, ntlmrelayx: 1, responder: 1, coercer: 1, mitm6: 1,
+    'impacket-ticketer': 1, 'impacket-rbcd': 1, 'impacket-dacledit': 1, 'impacket-getst': 1, bloodyad: 1,
+    'petitpotam.py': 1, 'printerbug.py': 1, 'dfscoerce.py': 1, pygpoabuse: 1, targetedkerberoast: 1 };
+  // Note: credential.certificate is deliberately NOT a plus-fact — it is overloaded (an ADCS cert in AD,
+  // but also a bare SSH key for ssh-key-login, which is core). ADCS is caught by the certipy tool + the
+  // adcs.vulnerable gate instead. Likewise the id regex uses `shadow-cred`, not a bare `shadow`, so that
+  // crack-shadow (cracking /etc/shadow — core OSCP) is not mistaken for the shadow-credentials attack.
+  var SCOPE_PLUS_FACTS = { 'adcs.vulnerable': 1, 'ad.coerced_auth': 1, 'ad.unconstrained': 1,
+    'ad.gpo_control': 1, 'ad.gpo_writable': 1, 'ad.gmsa': 1, 'hash.krbtgt': 1, 'ad.control_paths': 1, 'relay.success': 1 };
+  var SCOPE_PLUS_ID_RE = /deleg|shadow-cred|rbcd|dacl|golden|silver|gpo|relay|coerce|unconstrained|constrained/;
+  function deriveScope(d) {
+    if (d.scope) return d.scope;
+    var id = String(d.id || '').toLowerCase();
+    // Key the tool signal on the PRIMARY tool only — a secondary tool in the array (e.g. targetedKerberoast
+    // listed alongside the standard GetUserSPNs Kerberoast) must not escalate an otherwise-core move.
+    var primary = String((d.tool || (d.tools && d.tools[0]) || '')).toLowerCase();
+    var gates = (d.requires_all || []).concat(d.requires_any || []);
+    if (SCOPE_BEYOND_IDS[id] || SCOPE_BEYOND_TOOLS[primary] ||
+        gates.some(function (g) { return SCOPE_BEYOND_FACTS[g]; })) return 'beyond';
+    if (SCOPE_PLUS_ID_RE.test(id) || SCOPE_PLUS_TOOLS[primary] ||
+        gates.some(function (g) { return SCOPE_PLUS_FACTS[g]; })) return 'oscp+';
+    return 'oscp';
+  }
+  function locusRank(l) { return l === 'R' ? 0 : (l === 'F' ? 1 : 2); }
+
   // ------------------------------------------------------------------ Action --
   function Action(d) {
     d = d || {};
@@ -51,6 +133,8 @@
     this.commands = cmds.slice();
     this.sequence = !!d.sequence;
     this.timeout = parseInt(d.timeout || 0, 10) || 0;
+    this.locus = deriveLocus(d);   // 'R' remote/offline · 'F' one-shot on-host · 'I' interactive on-host
+    this.scope = deriveScope(d);   // 'oscp' · 'oscp+' · 'beyond' (newcomer-safe lens)
   }
 
   Action.prototype.producedKinds = function () { return new Set(this.produces); };
@@ -145,6 +229,7 @@
     'ad.attack_paths': 'attack paths', 'ad.control_paths': 'object-control paths',
     'ad.trusts': 'domain trusts', 'ad.computer_added': 'an added computer account',
     'ad.acl_lead': 'an abusable ACL (control lead)',
+    'ad.group_list': 'a list of domain groups', 'ad.computer_list': 'a list of domain computers',
     'ad.zerologon': 'a confirmed Zerologon-vulnerable DC (CVE-2020-1472)',
     'ad.coerced_auth': 'a coercible authentication (PetitPotam/PrinterBug/DFSCoerce)',
     'ad.gpo_control': 'write control over a Group Policy Object',
@@ -164,7 +249,8 @@
     'ldap.reachable': 'LDAP is reachable', 'ldap.authenticated': 'authenticated LDAP access',
     'smb.reachable': 'SMB is reachable', 'smb.authenticated': 'authenticated SMB access',
     'smb.null_session': 'SMB null session', 'smb.guest_session': 'SMB guest session',
-    'smb.shares': 'SMB shares', 'winrm.authenticated': 'authenticated WinRM access',
+    'smb.shares': 'SMB shares', 'smb.ms17_010': 'an MS17-010/EternalBlue-vulnerable SMB host (CVE-2017-0144)',
+    'winrm.authenticated': 'authenticated WinRM access',
     'winrm.reachable': 'WinRM is reachable', 'rdp.reachable': 'RDP is reachable',
     'rdp.authenticated': 'authenticated RDP access', 'ssh.reachable': 'SSH is reachable',
     'ssh.authenticated': 'authenticated SSH access', 'ssh.banner': 'an SSH banner',
@@ -184,12 +270,14 @@
     'host.kernel': 'host kernel/version', 'host.arch': 'host architecture',
     'host.firewall': 'host firewall rules (egress/pivot intel)',
     'hash.type': 'an identified hash type + cracking mode',
+    'hash.mscache': 'a cached domain-logon hash (MSCache2/DCC2)',
     'defense.control': 'an endpoint defensive control (AMSI/AppLocker/CLM)',
     'privesc.leads': 'local privilege escalation leads',
     'privesc.sudo_rights': 'sudo rights lead',
     'privesc.sudo_binary': 'a sudo-allowed binary with a GTFOBins escalation',
     'privesc.suid_candidate': 'SUID/SGID candidate', 'privesc.capability': 'dangerous Linux capability',
     'privesc.cron_writable': 'writable scheduled task or cron lead',
+    'privesc.scheduled_task': 'a privileged scheduled-task privesc lead',
     'privesc.process_lead': 'process-monitoring privesc lead',
     'privesc.passwd_writable': 'writable /etc/passwd lead',
     'privesc.nfs_no_root_squash': 'NFS no_root_squash lead',
@@ -380,10 +468,247 @@
     return blocked.slice().sort(function (a, b) { return b.priority - a.priority; });
   }
 
+  // ---------------------------------------------------- goal-directed planner (v2) --
+  // Ranks unlocked actions by the operator's PROVEN frontier first, goal-direction as the
+  // tie-breaker. Primary signal is recency: the move your latest evidence just unlocked is almost
+  // always the right next step ("I just got X, so now I can do Y"). Goal distance only orders
+  // among genuinely-indicated moves and sinks pure side-quests; speculative "try-if-vulnerable"
+  // moves (exploit checks, coercion/relay) are capped unless their own indicator fact is present,
+  // so they never bury the evidenced next step. Pure function of facts (+ fact timestamps).
+  var V2_INF = 1e6;
+  var V2_GOALS = ['objective.flag', 'access.admin', 'access.system', 'access.root', 'loot.ntds'];
+  // Specific EARNED control/loot/credential facts: a move gated on one of these is a deterministic
+  // cash-in (DCSync given control paths, a crack given a hash), not a gamble — full reliability.
+  var V2_SPECIFIC = {
+    'ad.control_paths': 1, 'ad.gpo_control': 1, 'ad.gpo_writable': 1, 'hash.krbtgt': 1,
+    'hash.asrep': 1, 'hash.tgs': 1, 'hash.ntlm': 1, 'loot.ntds': 1, 'ad.zerologon': 1,
+    'adcs.vulnerable': 1, 'credential.certificate': 1, 'ad.sid_history': 1, 'ad.coerced_auth': 1,
+    'ad.unconstrained': 1, 'privesc.sudo_rights': 1, 'privesc.windows_privilege': 1,
+    'db.session': 1, 'ad.gmsa': 1, 'kerberos.tickets': 1, 'smb.ms17_010': 1, 'hash.mscache': 1,
+  };
+  var V2_PRIV = { 'access.admin': 1, 'access.system': 1, 'access.root': 1, 'loot.ntds': 1, 'objective.flag': 1 };
+  var V2_SPEC_RE = /check$|coerce|relay|responder|mitm|zerologon|printnight|nopac|ms14-068/;
+
+  function v2Speculative(a) {
+    if (V2_SPEC_RE.test(a.id)) return true;
+    for (var i = 0; i < a.produces.length; i++) {
+      var k = a.produces[i];
+      if (k === 'exploit.candidate' || k === 'ad.coerced_auth' || k === 'credential.netntlm') return true;
+    }
+    return false;
+  }
+  // Minimal steps from a set of held fact-kinds to any goal, through the produce/require graph:
+  // AND over a move's requirements, OR over a fact's producers. Memoized, cycle-guarded.
+  function v2GoalDistance(haveObj, producers) {
+    var memoF = {}, memoM = {};
+    function fc(f, stack) {
+      if (haveObj[f]) return 0;
+      if (memoF[f] !== undefined) return memoF[f];
+      if (stack[f]) return V2_INF;
+      stack[f] = 1; var best = V2_INF, ms = producers[f] || [];
+      for (var i = 0; i < ms.length; i++) best = Math.min(best, mc(ms[i], stack));
+      delete stack[f]; memoF[f] = best; return best;
+    }
+    function mc(m, stack) {
+      if (memoM[m.id] !== undefined) return memoM[m.id];
+      var c = 1, j;
+      for (j = 0; j < m.requires_all.length; j++) c += fc(m.requires_all[j], stack);
+      if (m.requires_any.length) {
+        var mn = V2_INF;
+        for (j = 0; j < m.requires_any.length; j++) mn = Math.min(mn, fc(m.requires_any[j], stack));
+        c += mn;
+      }
+      c = Math.min(c, V2_INF); memoM[m.id] = c; return c;
+    }
+    var d = V2_INF;
+    for (var g = 0; g < V2_GOALS.length; g++) d = Math.min(d, fc(V2_GOALS[g], {}));
+    return d;
+  }
+  function v2ProgressFrom(d0, haveObj, produces, producers) {
+    var h2 = {}, k;
+    for (k in haveObj) h2[k] = 1;
+    for (var i = 0; i < produces.length; i++) h2[produces[i]] = 1;
+    var d1 = v2GoalDistance(h2, producers);
+    if (d0 >= V2_INF) return d1 >= V2_INF ? 0 : 5;
+    return Math.max(0, d0 - d1);
+  }
+  function v2EligAgainst(a, kindsObj) {
+    var i;
+    for (i = 0; i < a.requires_all.length; i++) if (!kindsObj[a.requires_all[i]]) return false;
+    if (a.requires_any.length) {
+      var any = false;
+      for (i = 0; i < a.requires_any.length; i++) if (kindsObj[a.requires_any[i]]) { any = true; break; }
+      if (!any) return false;
+    }
+    return true;
+  }
+  function v2Reliability(a, haveObj) {
+    var gates = a.requires_all.concat(a.requires_any), i;
+    for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) return 1.0;
+    if (v2Speculative(a)) return 0.25;
+    for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return 0.3;
+    return 0.8;
+  }
+  // Recency: the fact-kinds from the operator's latest ingest batch (within 2s of the newest fact),
+  // and the set proven before it. opts.recentKinds / opts.beforeKinds override (tests / known deltas).
+  function v2Recency(facts, opts) {
+    if (opts && opts.recentKinds) return { recent: opts.recentKinds, before: opts.beforeKinds || {} };
+    var SUPP = OBOL.facts.ProofState.SUPPORTED, maxT = 0, i, f;
+    for (i = 0; i < facts.facts.length; i++) { f = facts.facts[i]; if (f.state === SUPP && f.created_at > maxT) maxT = f.created_at; }
+    var cut = maxT - 2000, recent = {}, before = {};
+    for (i = 0; i < facts.facts.length; i++) {
+      f = facts.facts[i];
+      if (f.state !== SUPP) continue;
+      if (f.created_at >= cut) recent[f.kind] = 1; else before[f.kind] = 1;
+    }
+    return { recent: recent, before: before };
+  }
+
+  function nextActionsV2(facts, pack, opts) {
+    opts = opts || {};
+    var doneIds = opts.doneIds || {}, focus = opts.focusPrefixes || [];
+    var live = pack.filter(function (a) { return a.eligible(facts) && !a.settled(facts) && !a.obsolete(facts) && !doneIds[a.id]; });
+    var haveObj = facts.kinds();
+    var producers = {};
+    pack.forEach(function (a) { a.produces.forEach(function (k) { (producers[k] = producers[k] || []).push(a); }); });
+    var rec = v2Recency(facts, opts);
+    var d0 = v2GoalDistance(haveObj, producers);
+
+    function onType(a) {
+      if (!focus.length) return 0;
+      for (var i = 0; i < a.produces.length; i++) for (var j = 0; j < focus.length; j++) if (String(a.produces[i]).indexOf(focus[j]) === 0) return -1;
+      return 0;
+    }
+
+    var scored = live.map(function (a) {
+      var gates = a.requires_all.concat(a.requires_any), indicated = false, i;
+      for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) { indicated = true; break; }
+      var spec = v2Speculative(a);
+      var fresh = v2EligAgainst(a, haveObj) && !v2EligAgainst(a, rec.before);
+      var tier = (spec && !indicated) ? -1 : (fresh ? 2 : (indicated ? 1 : 0));
+      var h2 = {}, k;
+      for (k in haveObj) h2[k] = 1;
+      a.produces.forEach(function (p) { h2[p] = 1; });
+      var dH2 = v2GoalDistance(h2, producers);
+      var progA = d0 >= V2_INF ? (dH2 >= V2_INF ? 0 : 5) : Math.max(0, d0 - dH2);
+      // enablement: best tempered value among moves newly-eligible after doing a (1-step lookahead).
+      var enable = 0;
+      pack.forEach(function (b) {
+        if (b.id === a.id || v2EligAgainst(b, haveObj) || !v2EligAgainst(b, h2)) return;
+        enable = Math.max(enable, v2Reliability(b, h2) * v2ProgressFrom(dH2, h2, b.produces, producers));
+      });
+      var score = v2Reliability(a, haveObj) * (progA + 0.6 * enable) + (onType(a) === -1 ? 0.5 : 0);
+      return { a: a, tier: tier, score: score };
+    });
+    scored.sort(function (x, y) {
+      if (y.tier !== x.tier) return y.tier - x.tier;
+      if (y.score !== x.score) return y.score - x.score;
+      if (y.a.priority !== x.a.priority) return y.a.priority - x.a.priority;
+      // Remote-first: among moves equal on goal-progress AND hand-tuned priority, prefer the lowest-friction
+      // locus (R < F < I) so the coach never nudges you onto the box when an off-host move reaches the same
+      // objective. Placed below priority so it only decides genuine twins — it never overrides a move the
+      // pack deliberately ranked higher.
+      var lx = locusRank(x.a.locus), ly = locusRank(y.a.locus);
+      if (lx !== ly) return lx - ly;
+      return x.a.id < y.a.id ? -1 : (x.a.id > y.a.id ? 1 : 0);
+    });
+    return scored.map(function (s) { return s.a; });
+  }
+
+  // The coach's ranker. Goal-directed v2 by default; set OBOL.pack.ranker = 'v1' for the legacy
+  // phase/priority planner (kept for comparison + fallback).
+  function rankActions(facts, pack, opts) {
+    return (OBOL.pack && OBOL.pack.ranker === 'v1') ? nextActions(facts, pack, opts) : nextActionsV2(facts, pack, opts);
+  }
+
+  // --------------------------------------------------------------- full-route planner --
+  // The lowest-cost sequence of moves from the current facts to any goal. Action cost encodes
+  // reliability: a cash-in earned off specific evidence is cheap (1), an ordinary enumeration step
+  // 1.5, a generic privilege shortcut 8, a speculative "try-if-vulnerable" move 12 — so the plan
+  // prefers dependable routes and only resorts to speculation when nothing else reaches the goal.
+  // A* with the step-distance heuristic (admissible: every step costs >= 1). Exact + instant for a
+  // lab-sized graph. Returns { path:[actionId,...], cost, reachable }; reachable:false is an honest
+  // "no route from here with the current move library", not a guess. OS is fixed per engagement, so
+  // os-compatibility is judged once against the live facts.
+  function v2ActionCost(a, haveObj) {
+    var gates = a.requires_all.concat(a.requires_any), i, earned = false;
+    for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) { earned = true; break; }
+    if (v2Speculative(a) && !earned) return 12;
+    if (earned) return 1;
+    for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return 8;
+    return 1.5;
+  }
+  function planPath(facts, pack, opts) {
+    opts = opts || {};
+    var goals = opts.goals || V2_GOALS;
+    var producers = {}, relevant = {}, i;
+    pack.forEach(function (a) {
+      a.produces.forEach(function (k) { (producers[k] = producers[k] || []).push(a); });
+      a.requires_all.concat(a.requires_any).forEach(function (k) { relevant[k] = 1; });
+    });
+    for (i = 0; i < goals.length; i++) relevant[goals[i]] = 1;
+
+    // OS is fixed per box but may only be learned partway in: honor a known family from the live facts,
+    // else infer it from footholds as the plan accrues them, so a Linux foothold rules out Windows moves.
+    var startFam = hostOsFamily(facts);
+    function famOf(st) {
+      if (startFam) return startFam;
+      if (st['foothold.windows'] || st['winrm.authenticated'] || st['rdp.authenticated']) return 'windows';
+      if (st['foothold.linux']) return 'linux';
+      return '';
+    }
+    function osOkIn(a, st) {
+      var al = a.os || [];
+      if (!al.length) return true;
+      var f = famOf(st);
+      if (!f) return true;
+      for (var j = 0; j < al.length; j++) if (normalizeOsName(al[j]) === f) return true;
+      return false;
+    }
+
+    function sig(st) { var ks = [], k; for (k in st) if (relevant[k]) ks.push(k); return ks.sort().join('|'); }
+    function isGoal(st) { for (var g = 0; g < goals.length; g++) if (st[goals[g]]) return true; return false; }
+    function applic(a, st) {
+      if (!osOkIn(a, st)) return false;
+      for (var j = 0; j < a.requires_all.length; j++) if (!st[a.requires_all[j]]) return false;
+      if (a.requires_any.length) { var any = false; for (j = 0; j < a.requires_any.length; j++) if (st[a.requires_any[j]]) { any = true; break; } if (!any) return false; }
+      return true;
+    }
+    var start = {}, have = facts.kinds(), k;
+    for (k in have) start[k] = 1;
+    var gScore = {}, came = {}, open = [{ st: start, gc: 0, f: v2GoalDistance(start, producers) }];
+    gScore[sig(start)] = 0;
+    var exp = 0, MAXEXP = 60000;
+    while (open.length) {
+      var bi = 0;
+      for (i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+      var cur = open.splice(bi, 1)[0], cs = sig(cur.st);
+      if (++exp > MAXEXP) break;
+      if (isGoal(cur.st)) { var pathIds = [], s = cs; while (came[s]) { pathIds.unshift(came[s].move); s = came[s].prev; } return { path: pathIds, cost: cur.gc, reachable: true }; }
+      if (cur.gc > gScore[cs]) continue;
+      for (var ai = 0; ai < pack.length; ai++) {
+        var a = pack[ai];
+        if (!applic(a, cur.st)) continue;
+        var addsRelevant = false, pk;
+        for (var pi = 0; pi < a.produces.length; pi++) { pk = a.produces[pi]; if (relevant[pk] && !cur.st[pk]) { addsRelevant = true; break; } }
+        if (!addsRelevant) continue;
+        var ns = {}, kk;
+        for (kk in cur.st) ns[kk] = 1;
+        a.produces.forEach(function (p) { ns[p] = 1; });
+        var nsig = sig(ns), ng = cur.gc + v2ActionCost(a, cur.st);
+        if (gScore[nsig] === undefined || ng < gScore[nsig]) { gScore[nsig] = ng; came[nsig] = { prev: cs, move: a.id }; open.push({ st: ns, gc: ng, f: ng + v2GoalDistance(ns, producers) }); }
+      }
+    }
+    return { path: null, cost: Infinity, reachable: false };
+  }
+
   OBOL.pack = {
     DEFAULT_PACK: DEFAULT_PACK,
     PACK_NAMES: PACK_NAMES,
     Action: Action,
+    deriveLocus: deriveLocus,
+    deriveScope: deriveScope,
+    locusRank: locusRank,
     friendly: friendly,
     FRIENDLY: FRIENDLY,
     hostOsFamily: hostOsFamily,
@@ -392,6 +717,10 @@
     actionsFromPackData: actionsFromPackData,
     loadPacks: loadPacks,
     nextActions: nextActions,
+    nextActionsV2: nextActionsV2,
+    rankActions: rankActions,
+    planPath: planPath,
+    ranker: 'v2',
     lockedActions: lockedActions,
     blockedActions: blockedActions,
   };

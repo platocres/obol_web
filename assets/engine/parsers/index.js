@@ -108,7 +108,7 @@
     if ((actionId === 'trust-enum' || lc.indexOf('domain_trusts') >= 0 || lc.indexOf('domaintrust') >= 0 || lc.indexOf('lookupsid') >= 0) && has('_parse_domain_trusts')) C._parse_domain_trusts(text, ws, source, facts);
     if ((actionId === 'zerologon-check' || lc.indexOf('zerologon') >= 0) && has('_parse_zerologon_scan')) C._parse_zerologon_scan(text, ws, source, facts);
 
-    if ((actionId === 'powerview-enum' || lc.indexOf('get-netuser') >= 0 || lc.indexOf('get-domainuser') >= 0) && has('_parse_powerview')) C._parse_powerview(text, ws, command, source, facts, { domain_hint: domainHint });
+    if ((actionId === 'powerview-enum' || lc.indexOf('get-netuser') >= 0 || lc.indexOf('get-domainuser') >= 0 || lc.indexOf('get-aduser') >= 0) && has('_parse_powerview')) C._parse_powerview(text, ws, command, source, facts, { domain_hint: domainHint });
     if (['get-netgroup', 'get-domaingroup', 'get-netcomputer', 'get-domaincomputer', 'objectacl', 'get-acl'].some(function (k) { return lc.indexOf(k) >= 0; }) && has('_parse_powerview_objects')) C._parse_powerview_objects(text, ws, command, source, facts, { domain_hint: domainHint });
 
     if (lc.indexOf('kerbrute') >= 0) C._parse_kerbrute(text, ws, source, facts, { domain_hint: domainHint });
@@ -119,6 +119,15 @@
     if (lc.indexOf('secretsdump') >= 0 || lc.indexOf('hashdump') >= 0 || (lc.indexOf('volatility') >= 0 && lc.indexOf('dump') >= 0) || (isNxc && ['--ntds', '--sam', '--lsa'].some(function (f) { return lc.indexOf(f) >= 0; }))) {
       C._parse_ntlm_dump(text, ws, command, source, facts);
     }
+
+    // mimikatz / pypykatz credential dumps: sekurlsa::logonpasswords → hash.ntlm (+ credential.plaintext
+    // when a cleartext is present), lsadump::sam/lsa → hash.ntlm (+ loot.ntds for a full dump). Routed on
+    // the command OR a content signature so an attached dump file with no command line still mints.
+    if ((lc.indexOf('mimikatz') >= 0 || lc.indexOf('sekurlsa') >= 0 || lc.indexOf('lsadump') >= 0 || lc.indexOf('pypykatz') >= 0 || (has('_looks_like_mimikatz') && C._looks_like_mimikatz(text))) && has('_parse_mimikatz')) C._parse_mimikatz(text, ws, command, source, facts);
+
+    // MSCache2/DCC2 cached domain hashes ($DCC2$…) from secretsdump cached output or lsadump::cache.
+    // Routed on the content token so a pasted cache dump mints even without a recognizable command line.
+    if (has('_looks_like_mscache') && C._looks_like_mscache(text)) C._parse_mscache(text, ws, command, source, facts);
 
     if (lc.indexOf('bloodhound-python') >= 0 || lc.indexOf('sharphound') >= 0) C._parse_bloodhound_collection(text, ws, source, facts);
     if (lc.indexOf('bloodhound') >= 0) C._parse_bloodhound_analysis(text, ws, source, facts);
@@ -137,6 +146,33 @@
     if (lc.indexOf('penelope') >= 0) C._parse_penelope(text, ws, source, facts);
 
     if (C._PRIVESC_ACTION_IDS && C._PRIVESC_ACTION_IDS.has(actionId)) C._parse_privesc_output(actionId, text, ws, command, source, facts);
+    // A bare `whoami /priv` / `whoami /all` or `sudo -l` / `sudo --list` paste carries no privesc
+    // action-id, so the gate above skips it. Route on the command OR a conservative content signature
+    // (a dangerous Enabled Se*Privilege line; a sudo rights listing) so an attached paste with no
+    // command line still mints its lead, while unrelated output (an ls, a config dump) never does.
+    if ((lc.indexOf('whoami /priv') >= 0 || lc.indexOf('whoami /all') >= 0 || (has('_looks_like_whoami_priv') && C._looks_like_whoami_priv(text))) && has('_parse_whoami_priv')) C._parse_whoami_priv(text, ws, command, source, facts);
+    if ((lc.indexOf('sudo -l') >= 0 || lc.indexOf('sudo --list') >= 0 || (has('_looks_like_sudo_l') && C._looks_like_sudo_l(text))) && has('_parse_sudo_l')) C._parse_sudo_l(text, ws, command, source, facts);
+    // net user / net localgroup / net group account enumeration, and winPEAS/PrivescCheck privesc dumps —
+    // both arrive as operator-ingest with no action-id, so route on the command OR a conservative content
+    // signature. The parsers are content-gated (a domain-group membership → ad.user_list, a local-admin
+    // members list → config.review; a dangerous Enabled privilege → privesc.windows_privilege), so an
+    // unrelated paste mints nothing.
+    if ((lc.indexOf('net user') >= 0 || lc.indexOf('net localgroup') >= 0 || lc.indexOf('net group') >= 0 || (has('_looks_like_net_output') && C._looks_like_net_output(text))) && has('_parse_net_accounts')) C._parse_net_accounts(text, ws, command, source, facts);
+    if ((lc.indexOf('winpeas') >= 0 || lc.indexOf('privesccheck') >= 0 || (has('_looks_like_winpeas') && C._looks_like_winpeas(text))) && has('_parse_winpeas')) C._parse_winpeas(text, ws, command, source, facts);
+    // schtasks /query /v → scheduled-task privesc lead (SYSTEM/admin run-as pointing at a path);
+    // reg query → Winlogon autologon + stored creds (VNC/PuTTY/SNMP); icacls/accesschk → a writable
+    // service/path ACE for a low-priv principal. All arrive as operator-ingest with no action-id, so
+    // route on the command OR a conservative content signature; each parser is content-gated (only a
+    // privileged task with a path, a credential-ish reg value, or a writable program-path ACE mints),
+    // so an unrelated paste — an ls, a harmless reg dump, a read-only ACE — mints nothing.
+    if ((lc.indexOf('schtasks') >= 0 || (has('_looks_like_schtasks') && C._looks_like_schtasks(text))) && has('_parse_schtasks')) C._parse_schtasks(text, ws, command, source, facts);
+    if ((lc.indexOf('reg query') >= 0 || (has('_looks_like_reg_query') && C._looks_like_reg_query(text))) && has('_parse_reg_query')) C._parse_reg_query(text, ws, command, source, facts);
+    if ((lc.indexOf('klist') >= 0 || (has('_looks_like_klist') && C._looks_like_klist(text))) && has('_parse_klist')) C._parse_klist(text, ws, command, source, facts);
+    if ((lc.indexOf('icacls') >= 0 || lc.indexOf('accesschk') >= 0 || (has('_looks_like_icacls_accesschk') && C._looks_like_icacls_accesschk(text))) && has('_parse_icacls_accesschk')) C._parse_icacls_accesschk(text, ws, command, source, facts);
+
+    // endpoint defensive posture (read-only): languagemode / Get-MpComputerStatus / Get-MpPreference /
+    // Get-AppLockerPolicy → defense.control, so the coach can prefer remote-first and warn before on-host runs.
+    if ((lc.indexOf('get-mpcomputerstatus') >= 0 || lc.indexOf('get-applockerpolicy') >= 0 || lc.indexOf('languagemode') >= 0 || lc.indexOf('get-mppreference') >= 0 || (has('_looks_like_defense_enum') && C._looks_like_defense_enum(text))) && has('_parse_defense_enum')) C._parse_defense_enum(text, ws, command, source, facts);
     if (has('_parse_script_sinks')) C._parse_script_sinks(text, command, ws, source, facts);
     if (has('_parse_shadow_file')) C._parse_shadow_file(text, command, ws, source, facts);
 

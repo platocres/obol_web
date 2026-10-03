@@ -296,6 +296,42 @@
     return cmd.split(LIT_OPEN).join('{{').split(LIT_CLOSE).join('}}');
   }
 
+  // ── Loadout command-rewrite ──────────────────────────────────────────────────────
+  // Once the operator has synced their box (Loadout), rewrite a filled command to THEIR box's reality:
+  //   - tool invocation: impacket-psexec ↔ psexec.py ↔ python3 …/psexec.py; nxc ↔ netexec ↔ crackmapexec
+  //   - wordlist paths: the real rockyou / SecLists location on this box
+  // Conservative + reversible: only a recognized ARSENAL variant appearing as a STANDALONE token is
+  // swapped, and only for the actual invocation the box reported; anything un-synced or unknown is left
+  // exactly as authored (today's behavior). Reads the per-browser profile from localStorage (so it needs
+  // none of the lazy arsenal.js); a profile may be passed explicitly (tests / callers that already have it).
+  function _arsenalProfile() { try { return JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { return null; } }
+  function _reEsc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function applyArsenal(filled, action, prof) {
+    if (!filled) return filled;
+    prof = prof || _arsenalProfile();
+    if (!prof) return filled;
+    var A = (root.OBOL && root.OBOL.ARSENAL) || {};
+    var tools = (action && (action.tools && action.tools.length ? action.tools : [action.tool])) || [];
+    var ptools = prof.tools || {};
+    tools.forEach(function (t) {
+      if (!t) return;
+      var e = A[String(t).toLowerCase()]; if (!e) return;
+      var rec = ptools[e.key]; var inv = rec && rec.present && rec.invocation;
+      if (!inv) return;
+      (e.variants || []).forEach(function (v) {
+        if (!v || v === inv) return;
+        filled = filled.replace(new RegExp('(^|\\s)' + _reEsc(v) + '(?=\\s|$)', 'g'), '$1' + inv);
+      });
+    });
+    var wl = prof.wordlists || {};
+    if (wl.rockyou) {
+      filled = filled.replace(/\/usr\/share\/wordlists\/rockyou\.txt(?:\.gz)?/g, wl.rockyou)
+                     .replace(/(^|\s)rockyou\.txt(?=\s|$)/g, '$1' + wl.rockyou);
+    }
+    if (wl.seclists) filled = filled.replace(/\/usr\/share\/seclists\b/g, wl.seclists);
+    return filled;
+  }
+
   // Fill a command variant of an action (0-based). Returns {tool, run, note, filled, webNote}.
   // obol web is the hands-on edition: where an action carries a web-suited command (`web` on a
   // variant, or `web_command` on the action) — one tuned for a human who must copy/paste or attach
@@ -315,8 +351,9 @@
       webNote: c.web_note || action.web_note || '',
       win: !!c.win,   // a box-ending move — the coach flags it "PWN THIS TARGET"
       run: run,
-      // thread the action so the loot glue can resolve {{userlist}}/{{hashfile}} for THIS move.
-      filled: fillTemplate(run, facts, opts.action === action ? opts : Object.assign({}, opts, { action: action })),
+      // thread the action so the loot glue can resolve {{userlist}}/{{hashfile}} for THIS move, then
+      // rewrite to the operator's synced box (invocation + wordlist paths) — a no-op until they sync.
+      filled: applyArsenal(fillTemplate(run, facts, opts.action === action ? opts : Object.assign({}, opts, { action: action })), action, opts.arsenal),
     };
   }
 
@@ -419,6 +456,7 @@
     fillTemplate: fillTemplate,
     fillCommand: fillCommand,
     fillAll: fillAll,
+    applyArsenal: applyArsenal,
     commandWasRun: commandWasRun,
     unfilledTokens: unfilledTokens,
   };

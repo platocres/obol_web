@@ -559,6 +559,63 @@
      "note": "Parse it offline on your box. Logonpasswords, NT hashes, and Kerberos tickets for every captured session — no spraying needed, just reuse. The Windows-side equivalent is mimikatz sekurlsa::minidump followed by sekurlsa::logonpasswords."
     }
    ]
+  },
+  {
+   "id": "defense-enum",
+   "title": "Enumerate Endpoint Defenses",
+   "hypothesis": "Before running anything on the host, record which endpoint controls are active — PowerShell language mode, Microsoft Defender real-time state with its configured exclusion paths, and whether an AppLocker policy is applied. Knowing the posture up front keeps obol remote-first honest: if the box is locked down, prefer tooling that runs from Kali and stay off the host.",
+   "tool": "powershell",
+   "tools": [
+    "powershell"
+   ],
+   "os": [
+    "windows"
+   ],
+   "requires_all": [],
+   "requires_any": [
+    "foothold.windows",
+    "access.shell",
+    "access.system",
+    "access.admin"
+   ],
+   "produces": [
+    "defense.control"
+   ],
+   "priority": 55,
+   "scope": "oscp+",
+   "locus": "F",
+   "proves": "the host defensive posture: PowerShell language mode, whether Defender real-time protection is on, any configured Defender exclusion paths, and whether an AppLocker policy is enforced",
+   "does_not_prove": "that any control can be evaded — this is read-only situational awareness, not an exploit; it says nothing about a way past AMSI, AppLocker, WDAC, or Defender",
+   "report": {
+    "finding": "Endpoint Defensive Posture",
+    "severity": "informational"
+   },
+   "refs": [
+    "https://learn.microsoft.com/powershell/module/defender/get-mpcomputerstatus",
+    "https://learn.microsoft.com/powershell/module/applocker/get-applockerpolicy"
+   ],
+   "commands": [
+    {
+     "tool": "powershell",
+     "run": "$ExecutionContext.SessionState.LanguageMode",
+     "note": "FullLanguage vs ConstrainedLanguage. Constrained language mode is a lockdown signal worth recording before you try anything on the box."
+    },
+    {
+     "tool": "powershell",
+     "run": "Get-MpComputerStatus | Select-Object AMServiceEnabled,RealTimeProtectionEnabled,AntivirusEnabled",
+     "note": "Whether Microsoft Defender and its real-time protection are running on this host."
+    },
+    {
+     "tool": "powershell",
+     "run": "Get-MpPreference | Select-Object -ExpandProperty ExclusionPath",
+     "note": "Any folders Defender is configured to skip. Situational awareness only — recorded, not acted on."
+    },
+    {
+     "tool": "powershell",
+     "run": "Get-AppLockerPolicy -Effective -Xml",
+     "note": "The effective AppLocker policy, if one is applied — which rule collections are enforced."
+    }
+   ]
   }
  ]
 }

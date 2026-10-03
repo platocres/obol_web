@@ -39,6 +39,9 @@ function serve() {
 
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
+  // First-run routing: a brand-new visitor (no synced Loadout + only the untouched seed engagement)
+  // lands on Loadout (step zero), not on the empty engagement.
+  ok(page.url().indexOf('#/loadout') >= 0, 'first-run lands on Loadout (got ' + page.url().split('#')[1] + ')');
   // a first-time visitor lands on the plain Obol skin, in a clean untitled run — never an
   // "Imported engagement" with a stale seed target. (Neon and the rest stay selectable in ⚙.)
   ok(await page.getAttribute('html', 'data-skin') === 'obol', 'default skin is obol for a fresh visitor');
@@ -54,7 +57,7 @@ function serve() {
 
   // engine present + packs loaded
   const actionCount = await page.evaluate(() => window.OBOL && window.OBOL.packs ? window.OBOL.packs.actions().length : 0);
-  ok(actionCount === 161, 'packs loaded in browser (161 actions, got ' + actionCount + ')');
+  ok(actionCount === 167, 'packs loaded in browser (167 actions, got ' + actionCount + ')');
 
   // Engagement screen is the default landing; launch an OSCP run with a scoped target.
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
@@ -113,6 +116,12 @@ function serve() {
 
   // Blocked list present
   ok(await page.locator('.coach-blocked').count() >= 1, 'blocked-with-reasons section present');
+
+  // Scope lens: the newcomer-safe syllabus filter renders with its three levels and a default selection.
+  ok(await page.locator('.coach-lens .lens-opt').count() === 3, 'scope lens renders OSCP / OSCP+ / All');
+  // coach → Loadout status strip: with no synced profile it shows the set-up CTA linking to Loadout
+  ok(await page.locator('.coach .lo-strip-cta[href="#/loadout"]').count() === 1, 'coach shows the Loadout set-up CTA strip when no box is synced');
+  ok(await page.locator('.coach-lens .lens-opt.on').count() === 1, 'scope lens has exactly one active level');
 
   // Live context rail is present on the coach (shown at >=1500px; element always rendered).
   ok(await page.locator('.withrail .context-rail').count() === 1, 'coach live context rail rendered');
@@ -741,6 +750,56 @@ function serve() {
     { timeout: 6000 }).then(() => true).catch(() => false);
   ok(bootedBlocked, 'boot completes via fallback when IndexedDB.open is blocked (no infinite hang)');
   await blocked.close();
+
+  // Loadout (step-zero tab): the leftmost nav item, the quickstart face, the Arsenal catalog, and the
+  // paste-back round-trip that flips the page to the synced inventory face.
+  ok((await page.locator('header.appbar .mainnav a[href="#/loadout"]').count()) === 1, 'Loadout is a primary nav item');
+  ok(await page.evaluate(() => {
+    var links = Array.from(document.querySelectorAll('header.appbar .mainnav a[data-nav]'));
+    return links.length && (links[0].getAttribute('href') === '#/loadout');
+  }), 'Loadout is the LEFTMOST nav item (step zero)');
+  await page.goto(`http://localhost:${PORT}/index.html#/loadout`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.lo-route', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.lo-route .lo-steps .lo-download').count()) === 1, 'Loadout empty-state shows the guided quickstart with a download button');
+  ok((await page.locator('.lo-route .lo-paste').count()) === 1, 'Loadout quickstart has the paste-back textarea');
+  ok((await page.locator('.lo-route .lo-tool').count()) >= 10, 'Loadout renders the Arsenal catalog (' + (await page.locator('.lo-route .lo-tool').count()) + ' tool cards)');
+  ok(await page.evaluate(() => !!(window.OBOL.ARSENAL && window.OBOL.arsenal && typeof window.OBOL.arsenal.buildScript === 'function')), 'ARSENAL data + arsenal.js loaded with the route');
+  // the generated script is non-trivial and bash-shaped
+  const script = await page.evaluate(() => window.OBOL.arsenal.buildScript() || '');
+  ok(script.length > 3000, 'buildScript() produces a substantial setup script (' + script.length + ' bytes)');
+  ok(script.indexOf('obol_stamp') >= 0 && script.indexOf('precmd_functions') >= 0, 'the setup script installs the obol prompt stamp when opted in (default)');
+  ok(script.indexOf('$SUDO -v') >= 0, 'the setup script primes sudo once up front');
+  // the prompt-stamp is an explained opt-in, shown before download and honored by the generator
+  ok(await page.locator('.lo-route .lo-stamp-opt').count() === 1, 'Loadout shows the prompt-stamp opt-in checkbox before download');
+  const scriptNoStamp = await page.evaluate(() => window.OBOL.arsenal.buildScript({ promptStamp: false }) || '');
+  ok(scriptNoStamp.indexOf('obol_stamp') < 0, 'unticking the opt-in omits the prompt stamp from the script');
+  // paste-back round-trip: feed an OBOL-ARSENAL block, ingest, and confirm the synced face appears
+  await page.evaluate(() => {
+    var inv = { v: 1, tools: { nxc: { present: true, invocation: 'nxc', path: '/usr/bin/nxc' }, 'impacket-psexec': { present: true, invocation: 'psexec.py', path: '/usr/bin/psexec.py' } }, staged: ['mimikatz.exe', 'Rubeus.exe'], wwwdir: '/home/kali/.obol/arsenal/www', digests: {}, wordlists: { rockyou: '/usr/share/wordlists/rockyou.txt' } };
+    var ta = document.querySelector('.lo-paste'); ta.value = 'noise\nOBOL-ARSENAL v1\n' + JSON.stringify(inv) + '\n$ ';
+    document.querySelector('.lo-ingest').click();
+  });
+  await page.waitForTimeout(150);
+  ok((await page.locator('.lo-route .lo-synced-chip').count()) === 1 && (await page.locator('.lo-route .lo-fs').count()) === 1, 'pasting the OBOL-ARSENAL block flips Loadout to the synced "Your Box" face');
+  ok(await page.evaluate(() => { try { return !!JSON.parse(localStorage.getItem('obol.arsenal-profile')).savedAt; } catch (e) { return false; } }), 'the machine profile is persisted per-browser');
+  // a synced tool shows its resolved invocation when it differs from the canonical form.
+  // impacket ships on Kali so it's under the "hide Kali-defaults" fold — untick to reveal (also exercises the toggle).
+  await page.locator('.lo-route #lo-hidekali').uncheck();
+  await page.waitForTimeout(100);
+  ok(((await page.locator('.lo-route .lo-tool', { hasText: 'impacket-psexec' }).first().textContent().catch(() => '')) || '').indexOf('psexec.py') !== -1, 'a synced tool reflects the box\'s actual invocation (psexec.py)');
+  await page.evaluate(() => { try { localStorage.removeItem('obol.arsenal-profile'); } catch (e) {} });
+
+  // ⌘K palette finds an arsenal tool and surfaces its install one-liner (ARSENAL is critical-path now,
+  // so the palette can index it from any route without opening Loadout first).
+  ok(await page.evaluate(() => !!window.OBOL.ARSENAL), 'ARSENAL registry is loaded at boot (critical path, available to ⌘K + command-rewrite)');
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.OBOL.palette.open());
+  await page.waitForSelector('.pal-input', { timeout: 4000 }).catch(() => {});
+  await page.locator('.pal-input').fill('certipy');
+  await page.waitForTimeout(120);
+  const palTool = (await page.locator('.pal-item', { hasText: 'Certipy' }).first().textContent().catch(() => '')) || '';
+  ok(palTool.indexOf('pipx install certipy-ad') !== -1, '⌘K finds a tool and shows its install command (certipy → pipx install certipy-ad)');
+  await page.keyboard.press('Escape');
 
   await browser.close();
   server.close();

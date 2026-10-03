@@ -156,7 +156,23 @@
     });
     // Lazy routes (tools, domain, checklist, report, graph) register themselves when loaded.
     if (OBOL.lazy) OBOL.lazy.registerLazyRoutes(R);
-    R.setDefault('home');
+    // First-run routing: a brand-new visitor (no synced Loadout AND no engagement work yet) lands on
+    // Loadout — step zero, set up your box. Anyone who has synced a box or started an engagement lands
+    // on Engagements as before. A specific hash in the URL always wins over this default.
+    R.setDefault(isFirstRun() ? 'loadout' : 'home');
+  }
+
+  function isFirstRun() {
+    try {
+      if (JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null')) return false; // already set up a box
+    } catch (e) {}
+    var engs = (OBOL.store.listEngagements && OBOL.store.listEngagements()) || [];
+    if (engs.length > 1) return false;
+    var e = engs[0];
+    if (!e) return true;
+    var touched = (e.targets && e.targets.length) || (e.facts && e.facts.length)
+      || (e.activities && e.activities.length) || (e.credentials && e.credentials.length);
+    return !touched;
   }
 
   function boot() {

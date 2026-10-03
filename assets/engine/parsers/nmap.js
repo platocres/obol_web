@@ -268,6 +268,9 @@
     if (scanSeen && (actionId.indexOf('version') >= 0 || cmdL.indexOf('-sc') >= 0 || cmdL.indexOf('-sv') >= 0 || hasVersionInfo)) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
     if (scanSeen && (actionId.indexOf('udp') >= 0 || cmdL.indexOf(' -su') >= 0)) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
     if (scanSeen && (actionId.indexOf('vuln') >= 0 || srcL.indexOf('--script vuln') >= 0 || srcL.indexOf('-script vuln') >= 0)) _add(facts, mkFact('scan.nmap.vuln', h, { profile: 'nse-vuln' }, S, source));
+    // specific CVE verdict: smb-vuln-ms17-010 flagging the host VULNERABLE unlocks the EternalBlue move.
+    // Conservative — require the positive NSE verdict and skip any "NOT VULNERABLE" result.
+    if (/ms17-?010/i.test(text) && /\bVULNERABLE\b/i.test(text) && !/NOT\s+VULNERABLE/i.test(text)) _add(facts, mkFact('smb.ms17_010', h, { cve: 'CVE-2017-0144', via: 'nmap-nse' }, S, source));
 
     var summary = [];
     Object.keys(openPorts).sort().forEach(function (k) {

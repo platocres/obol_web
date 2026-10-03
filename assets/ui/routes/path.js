@@ -12,8 +12,94 @@
 
   function esc(s) { return U.esc(s); }
 
+  // Scope lens (teaching filter, orthogonal to fact-gating): narrow the visible moves to a syllabus level
+  // so a newcomer isn't handed the whole arsenal at once. Default 'oscp+' hides only the handful of
+  // genuinely out-of-scope edge CVEs (zerologon/noPac/PrintNightmare/MS14-068/SCCM/WSUS); the operator
+  // flips it any time. Persisted per-browser; a read in a private window simply falls back to the default.
+  var LENS_KEY = 'obol.scope-lens', LENS_ORDER = { oscp: 0, 'oscp+': 1, beyond: 2, all: 2 };
+  function lensGet() { try { var v = localStorage.getItem(LENS_KEY); return (v === 'oscp' || v === 'oscp+' || v === 'all') ? v : 'oscp+'; } catch (e) { return 'oscp+'; } }
+  function lensSet(v) { try { localStorage.setItem(LENS_KEY, v); } catch (e) {} }
+  function scopeAllowed(scope, lens) { if (lens === 'all') return true; return LENS_ORDER[scope || 'oscp'] <= LENS_ORDER[lens]; }
+
+  // Small badges on each move: locus (where you operate) + scope (syllabus level). Both are derived in the
+  // engine; the scope badge appears only above core so it reads as "heads-up, this is advanced", not noise.
+  var LOCUS_LABEL = { R: ['remote', 'off-host from Kali'], F: ['on-host', 'one-shot command on the box'], I: ['interactive', 'interactive session on the box'] };
+  function locusBadge(a) {
+    var m = LOCUS_LABEL[a.locus] || LOCUS_LABEL.R;
+    return '<span class="move-locus locus-' + esc(a.locus || 'R') + '" title="' + esc(m[1]) + '">' + esc(m[0]) + '</span>';
+  }
+  function scopeBadge(a) {
+    if (!a.scope || a.scope === 'oscp') return '';
+    var lbl = a.scope === 'beyond' ? 'beyond OSCP' : 'OSCP+';
+    return '<span class="move-scope scope-' + esc(a.scope === 'beyond' ? 'beyond' : 'plus') + '" title="syllabus level: ' + esc(a.scope) + '">' + esc(lbl) + '</span>';
+  }
+
   function phaseChip(phase) {
     return '<span class="ph-chip ph-' + esc(phase) + '">' + esc(phase) + '</span>';
+  }
+
+  // A slim one-line status strip linking to the global Loadout: not-set-up CTA, or a synced summary that
+  // nudges a re-sync once the box snapshot is stale. Reads the per-browser profile straight from
+  // localStorage (no dependency on the lazy arsenal.js), so it renders on the coach without loading it.
+  var ARSENAL_STALE_DAYS = 21;
+  function arsenalProfile() { try { return JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { return null; } }
+  // Commands ALWAYS render as authored — we never gate a move on what we think the box has. But once the box
+  // is synced, if a command's tool isn't present, add a quiet "install it" nudge beneath it (never hiding it).
+  // Only nudge for tools obol actually PROVISIONS (apt/pipx/git/release/material/staged) — never for base Kali
+  // tools (class 'kali') or shell builtins. Those ship by default, so flagging nmap as "missing" would just
+  // look broken, and there's no install command to offer anyway; the Loadout band handles any true Kali gap.
+  function missingToolHint(action, v) {
+    var prof = arsenalProfile(); if (!prof) return '';
+    var A = (OBOL.ARSENAL) || {};
+    var names = []; if (v && v.tool) names.push(v.tool);
+    if (action && action.tools) names = names.concat(action.tools); if (action && action.tool) names.push(action.tool);
+    var seen = {}, miss = [];
+    names.forEach(function (t) {
+      if (!t) return; var e = A[String(t).toLowerCase()];
+      if (!e || e.class === 'builtin' || e.class === 'kali' || seen[e.key]) return; seen[e.key] = 1;
+      var rec = (prof.tools || {})[e.key];
+      var present = (rec && rec.present) || (prof.cloned && prof.cloned[e.key]) || (prof.digests && prof.digests[e.key])
+        || ((prof.staged || []).indexOf(e.dest || '\0') >= 0);
+      if (!present) miss.push(e);
+    });
+    if (!miss.length) return '';
+    return '<div class="cmd-missing">⚠ not on your box: ' + miss.map(function (e) {
+      var how = e.install ? '<code class="cmd-miss-cmd" data-copy="' + U.attr(e.install) + '" title="Click to copy">' + esc(e.install) + '</code>'
+        : (e.manual_url ? '<a href="' + U.attr(e.manual_url) + '" target="_blank" rel="noopener">get it ↗</a>' : 'see Loadout');
+      return '<b>' + esc(e.label || e.key) + '</b> — ' + how;
+    }).join(' · ') + ' · <a href="#/loadout">Loadout →</a></div>';
+  }
+  function arsenalStrip() {
+    var p = arsenalProfile();
+    if (!p) {
+      return '<a class="lo-strip lo-strip-cta" href="#/loadout"><span class="lo-strip-ico">⚙</span>'
+        + '<span class="lo-strip-txt">Set up your attack box — obol tailors every command to the tools you have</span>'
+        + '<span class="lo-strip-go">Loadout →</span></a>';
+    }
+    var present = 0; try { Object.keys(p.tools || {}).forEach(function (k) { if (p.tools[k] && p.tools[k].present) present++; }); } catch (e) {}
+    var ageDays = p.savedAt ? (Date.now() - p.savedAt) / 86400000 : 0;
+    var stale = ageDays > ARSENAL_STALE_DAYS;
+    var txt = stale
+      ? ('Loadout synced ' + Math.round(ageDays) + 'd ago — re-sync your box?')
+      : ('Loadout: ' + present + ' tools · ' + (p.staged || []).length + ' staged ready');
+    return '<a class="lo-strip ' + (stale ? 'lo-strip-stale' : 'lo-strip-ok') + '" href="#/loadout">'
+      + '<span class="lo-strip-ico">' + (stale ? '⚠' : '✓') + '</span>'
+      + '<span class="lo-strip-txt">' + esc(txt) + '</span><span class="lo-strip-go">Loadout →</span></a>';
+  }
+
+  // When defense-enum has proven endpoint controls, warn the operator (remote-first) rather than nudging
+  // them onto a monitored host. Detection only — obol surfaces the posture, it does not evade anything.
+  function defenseAdvisory(facts) {
+    if (!facts.has('defense.control')) return '';
+    var v = {}; try { v = (facts.values('defense.control') || [])[0] || {}; } catch (e) {}
+    var bits = [];
+    if (v.clm) bits.push('Constrained Language Mode');
+    if (v.applocker) bits.push('AppLocker enforced');
+    if (v.defender) bits.push('Defender real-time on');
+    if (v.exclusion_count) bits.push(v.exclusion_count + ' Defender exclusion' + (v.exclusion_count === 1 ? '' : 's'));
+    var what = bits.length ? bits.join(' · ') : 'endpoint controls active';
+    return '<div class="coach-defense"><span class="coach-defense-ico">🛡</span>'
+      + '<span>Endpoint defenses detected — <strong>' + esc(what) + '</strong>. Prefer remote-first moves; on-host tooling may be seen.</span></div>';
   }
 
   function producesChips(action) {
@@ -79,7 +165,7 @@
         + (v.win && !x.ran ? '<span class="cmd-win">☠ Pwn This Target</span>' : '')
         + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '" title="Copy command">copy</button></div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
-        + fillRow + note + webNote + warn + '</div>';
+        + fillRow + note + webNote + warn + missingToolHint(action, v) + '</div>';
     }).join('');
   }
 
@@ -143,6 +229,7 @@
       + '<span class="mi-result" role="status"></span></div></div>';
     return '<article class="move' + (opts.primary ? ' move-primary' : '') + '" data-action="' + esc(action.id) + '">'
       + '<header class="move-head">' + phaseChip(OBOL.phases.phaseOfAction(action))
+      + locusBadge(action) + scopeBadge(action)
       + '<h3 class="move-title">' + esc(action.title) + '</h3></header>'
       + '<p class="move-why">' + esc(why) + '</p>'
       + prepBlock(action, facts, dirs)
@@ -257,13 +344,23 @@
     });
 
     var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
-    var ranked = OBOL.pack.nextActions(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
+    var ranked = (OBOL.pack.rankActions || OBOL.pack.nextActions)(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
     var frontier = OBOL.phases.frontierIndex(facts);
     var onFlow = [], comingUp = [];
     ranked.forEach(function (a) {
       if (OBOL.phases.prematurity(a, facts) === 0) onFlow.push(a); else comingUp.push(a);
     });
     var locked = OBOL.pack.lockedActions(facts, pack);
+
+    // Scope lens: filter the visible moves to the chosen syllabus level. Count what the lens hides so the
+    // operator always knows there's more one click away (never a silent disappearance).
+    var lens = lensGet();
+    function inLens(a) { return scopeAllowed(a.scope, lens); }
+    var hiddenBy = 0;
+    function applyLens(arr) { var kept = arr.filter(inLens); hiddenBy += arr.length - kept.length; return kept; }
+    onFlow = applyLens(onFlow);
+    comingUp = applyLens(comingUp);
+    locked = locked.filter(function (p) { if (inLens(p.action)) return true; hiddenBy++; return false; });
 
     var factCount = Object.keys(facts.kinds()).length;
     var phaseName = OBOL.phases.PHASES[frontier] || 'recon';
@@ -282,6 +379,38 @@
       + '<div class="metric"><span class="metric-n">' + locked.length + '</span><span class="metric-l">Blocked</span></div>'
       + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">Facts</span></div>'
       + '</div></div>';
+
+    html += arsenalStrip();
+    html += defenseAdvisory(facts);
+
+    // Scope lens control: a newcomer-safe syllabus filter. OSCP (core only) · OSCP+ (adds modern AD) ·
+    // All (the full arsenal, edge CVEs included). The hidden-count hint keeps it honest.
+    html += '<div class="coach-lens" role="group" aria-label="Syllabus scope filter">'
+      + '<span class="coach-lens-label">Scope</span>'
+      + ['oscp', 'oscp+', 'all'].map(function (v) {
+          var txt = v === 'oscp' ? 'OSCP' : (v === 'oscp+' ? 'OSCP+' : 'All');
+          return '<button type="button" class="lens-opt' + (lens === v ? ' on' : '') + '" data-lens="' + v + '"'
+            + ' aria-pressed="' + (lens === v ? 'true' : 'false') + '">' + txt + '</button>';
+        }).join('')
+      + (hiddenBy ? '<span class="coach-lens-hint">' + hiddenBy + ' move' + (hiddenBy === 1 ? '' : 's') + ' above this level — tap <strong>All</strong> to show</span>' : '')
+      + '</div>';
+
+    // Planned route to the objective: the planner's lowest-cost dependable path from what's proven to
+    // the goal. Re-planned on every render as evidence accrues. A plausible route, not a promise — the
+    // box decides which steps actually land; this sharpens as you capture more.
+    var route = OBOL.pack.planPath ? OBOL.pack.planPath(facts, pack, {}) : null;
+    if (route && route.reachable && route.path && route.path.length > 1 && factCount > 1) {
+      html += '<details class="coach-route"><summary class="coach-sec-h">Planned route to the objective'
+        + ' <span class="coach-route-n">' + route.path.length + ' steps</span></summary>'
+        + '<ol class="coach-route-list">'
+        + route.path.map(function (id, i) {
+          var a = pack.filter(function (x) { return x.id === id; })[0];
+          return '<li class="coach-route-step' + (i === 0 ? ' next' : '') + '">' + esc(a ? a.title : id) + '</li>';
+        }).join('')
+        + '</ol>'
+        + '<div class="coach-route-note">The shortest dependable path from what you’ve proven to the goal — it re-plans as you capture evidence. A plausible route, not a guarantee.</div>'
+        + '</details>';
+    }
 
     // one-time workspace scaffold: create the output tree once, then every command below writes
     // into it and tells you which file to attach. Dismissible; auto-hides once you're rolling.
@@ -362,6 +491,9 @@
     U.on(mount, 'click', '.btn-copy', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
+    U.on(mount, 'click', '.cmd-miss-cmd', function (e, t) {
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Install command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
     // inline free-text token fill ({{command}} etc.): substitute live into the command + copy button.
     U.on(mount, 'input', '.cmd-fill', function (e, t) {
       var cmd = t.closest('.cmd'); if (!cmd) return;
@@ -372,6 +504,12 @@
       });
       var code = cmd.querySelector('.cmd-run code'); if (code) code.textContent = out;
       var copy = cmd.querySelector('.btn-copy'); if (copy) copy.setAttribute('data-copy', out);
+    });
+    // scope lens: persist the choice and re-render the coach at the new syllabus level
+    U.on(mount, 'click', '.lens-opt', function (e, t) {
+      var v = t.getAttribute('data-lens'); if (!v) return;
+      lensSet(v);
+      OBOL.router.render();
     });
     // mark done
     U.on(mount, 'click', '.btn-done', function (e, t) {
