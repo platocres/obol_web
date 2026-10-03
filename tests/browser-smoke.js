@@ -778,6 +778,18 @@ function serve() {
   ok(((await page.locator('.lo-route .lo-tool', { hasText: 'impacket-psexec' }).first().textContent().catch(() => '')) || '').indexOf('psexec.py') !== -1, 'a synced tool reflects the box\'s actual invocation (psexec.py)');
   await page.evaluate(() => { try { localStorage.removeItem('obol.arsenal-profile'); } catch (e) {} });
 
+  // ⌘K palette finds an arsenal tool and surfaces its install one-liner (ARSENAL is critical-path now,
+  // so the palette can index it from any route without opening Loadout first).
+  ok(await page.evaluate(() => !!window.OBOL.ARSENAL), 'ARSENAL registry is loaded at boot (critical path, available to ⌘K + command-rewrite)');
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.OBOL.palette.open());
+  await page.waitForSelector('.pal-input', { timeout: 4000 }).catch(() => {});
+  await page.locator('.pal-input').fill('certipy');
+  await page.waitForTimeout(120);
+  const palTool = (await page.locator('.pal-item', { hasText: 'Certipy' }).first().textContent().catch(() => '')) || '';
+  ok(palTool.indexOf('pipx install certipy-ad') !== -1, '⌘K finds a tool and shows its install command (certipy → pipx install certipy-ad)');
+  await page.keyboard.press('Escape');
+
   await browser.close();
   server.close();
   console.log(fail ? ('\nBROWSER SMOKE: ' + fail + ' FAILURES') : '\nBROWSER SMOKE: all passed');
