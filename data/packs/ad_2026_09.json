@@ -742,7 +742,12 @@
    "requires_all": [
     "ad.user_list"
    ],
-   "requires_any": [],
+   "requires_any": [
+    "ad.domain_known",
+    "ad.dc_candidate",
+    "ldap.reachable",
+    "kerberos.reachable"
+   ],
    "obsoleted_by": [
     "loot.ntds"
    ],

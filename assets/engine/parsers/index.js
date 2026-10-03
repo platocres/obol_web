@@ -137,6 +137,12 @@
     if (lc.indexOf('penelope') >= 0) C._parse_penelope(text, ws, source, facts);
 
     if (C._PRIVESC_ACTION_IDS && C._PRIVESC_ACTION_IDS.has(actionId)) C._parse_privesc_output(actionId, text, ws, command, source, facts);
+    // A bare `whoami /priv` / `whoami /all` or `sudo -l` / `sudo --list` paste carries no privesc
+    // action-id, so the gate above skips it. Route on the command OR a conservative content signature
+    // (a dangerous Enabled Se*Privilege line; a sudo rights listing) so an attached paste with no
+    // command line still mints its lead, while unrelated output (an ls, a config dump) never does.
+    if ((lc.indexOf('whoami /priv') >= 0 || lc.indexOf('whoami /all') >= 0 || (has('_looks_like_whoami_priv') && C._looks_like_whoami_priv(text))) && has('_parse_whoami_priv')) C._parse_whoami_priv(text, ws, command, source, facts);
+    if ((lc.indexOf('sudo -l') >= 0 || lc.indexOf('sudo --list') >= 0 || (has('_looks_like_sudo_l') && C._looks_like_sudo_l(text))) && has('_parse_sudo_l')) C._parse_sudo_l(text, ws, command, source, facts);
     if (has('_parse_script_sinks')) C._parse_script_sinks(text, command, ws, source, facts);
     if (has('_parse_shadow_file')) C._parse_shadow_file(text, command, ws, source, facts);
 

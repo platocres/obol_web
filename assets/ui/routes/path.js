@@ -283,6 +283,23 @@
       + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">Facts</span></div>'
       + '</div></div>';
 
+    // Planned route to the objective: the planner's lowest-cost dependable path from what's proven to
+    // the goal. Re-planned on every render as evidence accrues. A plausible route, not a promise — the
+    // box decides which steps actually land; this sharpens as you capture more.
+    var route = OBOL.pack.planPath ? OBOL.pack.planPath(facts, pack, {}) : null;
+    if (route && route.reachable && route.path && route.path.length > 1 && factCount > 1) {
+      html += '<details class="coach-route"><summary class="coach-sec-h">Planned route to the objective'
+        + ' <span class="coach-route-n">' + route.path.length + ' steps</span></summary>'
+        + '<ol class="coach-route-list">'
+        + route.path.map(function (id, i) {
+          var a = pack.filter(function (x) { return x.id === id; })[0];
+          return '<li class="coach-route-step' + (i === 0 ? ' next' : '') + '">' + esc(a ? a.title : id) + '</li>';
+        }).join('')
+        + '</ol>'
+        + '<div class="coach-route-note">The shortest dependable path from what you’ve proven to the goal — it re-plans as you capture evidence. A plausible route, not a guarantee.</div>'
+        + '</details>';
+    }
+
     // one-time workspace scaffold: create the output tree once, then every command below writes
     // into it and tells you which file to attach. Dismissible; auto-hides once you're rolling.
     if (OBOL.workspace.isConfigured(eng) && !((eng.ui || {}).wsScaffoldDone) && factCount < 3) {

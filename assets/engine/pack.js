@@ -527,6 +527,87 @@
     return (OBOL.pack && OBOL.pack.ranker === 'v1') ? nextActions(facts, pack, opts) : nextActionsV2(facts, pack, opts);
   }
 
+  // --------------------------------------------------------------- full-route planner --
+  // The lowest-cost sequence of moves from the current facts to any goal. Action cost encodes
+  // reliability: a cash-in earned off specific evidence is cheap (1), an ordinary enumeration step
+  // 1.5, a generic privilege shortcut 8, a speculative "try-if-vulnerable" move 12 — so the plan
+  // prefers dependable routes and only resorts to speculation when nothing else reaches the goal.
+  // A* with the step-distance heuristic (admissible: every step costs >= 1). Exact + instant for a
+  // lab-sized graph. Returns { path:[actionId,...], cost, reachable }; reachable:false is an honest
+  // "no route from here with the current move library", not a guess. OS is fixed per engagement, so
+  // os-compatibility is judged once against the live facts.
+  function v2ActionCost(a, haveObj) {
+    var gates = a.requires_all.concat(a.requires_any), i, earned = false;
+    for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) { earned = true; break; }
+    if (v2Speculative(a) && !earned) return 12;
+    if (earned) return 1;
+    for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return 8;
+    return 1.5;
+  }
+  function planPath(facts, pack, opts) {
+    opts = opts || {};
+    var goals = opts.goals || V2_GOALS;
+    var producers = {}, relevant = {}, i;
+    pack.forEach(function (a) {
+      a.produces.forEach(function (k) { (producers[k] = producers[k] || []).push(a); });
+      a.requires_all.concat(a.requires_any).forEach(function (k) { relevant[k] = 1; });
+    });
+    for (i = 0; i < goals.length; i++) relevant[goals[i]] = 1;
+
+    // OS is fixed per box but may only be learned partway in: honor a known family from the live facts,
+    // else infer it from footholds as the plan accrues them, so a Linux foothold rules out Windows moves.
+    var startFam = hostOsFamily(facts);
+    function famOf(st) {
+      if (startFam) return startFam;
+      if (st['foothold.windows'] || st['winrm.authenticated'] || st['rdp.authenticated']) return 'windows';
+      if (st['foothold.linux']) return 'linux';
+      return '';
+    }
+    function osOkIn(a, st) {
+      var al = a.os || [];
+      if (!al.length) return true;
+      var f = famOf(st);
+      if (!f) return true;
+      for (var j = 0; j < al.length; j++) if (normalizeOsName(al[j]) === f) return true;
+      return false;
+    }
+
+    function sig(st) { var ks = [], k; for (k in st) if (relevant[k]) ks.push(k); return ks.sort().join('|'); }
+    function isGoal(st) { for (var g = 0; g < goals.length; g++) if (st[goals[g]]) return true; return false; }
+    function applic(a, st) {
+      if (!osOkIn(a, st)) return false;
+      for (var j = 0; j < a.requires_all.length; j++) if (!st[a.requires_all[j]]) return false;
+      if (a.requires_any.length) { var any = false; for (j = 0; j < a.requires_any.length; j++) if (st[a.requires_any[j]]) { any = true; break; } if (!any) return false; }
+      return true;
+    }
+    var start = {}, have = facts.kinds(), k;
+    for (k in have) start[k] = 1;
+    var gScore = {}, came = {}, open = [{ st: start, gc: 0, f: v2GoalDistance(start, producers) }];
+    gScore[sig(start)] = 0;
+    var exp = 0, MAXEXP = 60000;
+    while (open.length) {
+      var bi = 0;
+      for (i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+      var cur = open.splice(bi, 1)[0], cs = sig(cur.st);
+      if (++exp > MAXEXP) break;
+      if (isGoal(cur.st)) { var pathIds = [], s = cs; while (came[s]) { pathIds.unshift(came[s].move); s = came[s].prev; } return { path: pathIds, cost: cur.gc, reachable: true }; }
+      if (cur.gc > gScore[cs]) continue;
+      for (var ai = 0; ai < pack.length; ai++) {
+        var a = pack[ai];
+        if (!applic(a, cur.st)) continue;
+        var addsRelevant = false, pk;
+        for (var pi = 0; pi < a.produces.length; pi++) { pk = a.produces[pi]; if (relevant[pk] && !cur.st[pk]) { addsRelevant = true; break; } }
+        if (!addsRelevant) continue;
+        var ns = {}, kk;
+        for (kk in cur.st) ns[kk] = 1;
+        a.produces.forEach(function (p) { ns[p] = 1; });
+        var nsig = sig(ns), ng = cur.gc + v2ActionCost(a, cur.st);
+        if (gScore[nsig] === undefined || ng < gScore[nsig]) { gScore[nsig] = ng; came[nsig] = { prev: cs, move: a.id }; open.push({ st: ns, gc: ng, f: ng + v2GoalDistance(ns, producers) }); }
+      }
+    }
+    return { path: null, cost: Infinity, reachable: false };
+  }
+
   OBOL.pack = {
     DEFAULT_PACK: DEFAULT_PACK,
     PACK_NAMES: PACK_NAMES,
@@ -541,6 +622,7 @@
     nextActions: nextActions,
     nextActionsV2: nextActionsV2,
     rankActions: rankActions,
+    planPath: planPath,
     ranker: 'v2',
     lockedActions: lockedActions,
     blockedActions: blockedActions,

@@ -196,6 +196,19 @@ main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-widt
 .coach-sec-h { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; margin: 0 0 12px; cursor: default; }
 details.coach-section > summary.coach-sec-h { cursor: pointer; }
 .coach-empty { color: var(--muted); padding: 16px; border: 1px dashed var(--line); border-radius: var(--radius); }
+/* planned route to the objective — the full-path planner's dependable route, re-planned live */
+.coach-route { margin: 0 0 20px; background: var(--surf1); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
+.coach-route > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.coach-route > summary::-webkit-details-marker { display: none; }
+.coach-route > summary::before { content: '\25B8'; color: var(--accent-2); font-size: 11px; }
+.coach-route[open] > summary::before { content: '\25BE'; }
+.coach-route-n { font-size: 10.5px; font-weight: 600; color: var(--accent-2); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); border-radius: 20px; padding: 1px 8px; text-transform: none; letter-spacing: 0; }
+.coach-route-list { list-style: none; counter-reset: step; margin: 10px 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.coach-route-step { counter-increment: step; position: relative; padding: 4px 4px 4px 30px; font-size: 13px; color: var(--text-2); border-left: 2px solid var(--line); }
+.coach-route-step::before { content: counter(step); position: absolute; left: 6px; top: 3px; width: 17px; height: 17px; border-radius: 50%; background: var(--bg2); border: 1px solid var(--line); color: var(--muted); font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.coach-route-step.next { color: var(--text); font-weight: 600; }
+.coach-route-step.next::before { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-2); }
+.coach-route-note { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 4px; }
 
 .move { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; transition: border-color .15s; }
 .move:hover { border-color: var(--line-hot); }

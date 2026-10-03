@@ -340,6 +340,41 @@
   }
   C._parse_privesc_output = _parse_privesc_output;
 
+  // ── Bare on-host enum pastes (no privesc action-id) → privesc leads ────────────────
+  // A pasted `whoami /priv` / `whoami /all` token-privilege dump, or a `sudo -l` rights
+  // listing, arrives as operator-ingest with none of the _PRIVESC_ACTION_IDS, so the
+  // action-id-gated _parse_privesc_output never fires. These thin entrypoints let the
+  // dispatcher route such a paste to the matching privesc parser. The parser's inner blocks
+  // are all content-gated (only an Enabled dangerous privilege → privesc.windows_privilege,
+  // only a real sudo rights line → privesc.sudo_rights), so nothing is invented, and they
+  // emit the same privesc.leads roll-up _parse_privesc_output would.
+  function _looks_like_whoami_priv(text) { return !!reSearch(C._WIN_PRIV_RE, text || ''); }
+  C._looks_like_whoami_priv = _looks_like_whoami_priv;
+
+  function _parse_whoami_priv(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    var leadKinds = {};
+    _parse_windows_privesc_output(text, ws, command, source, facts, leadKinds);
+    _add_privesc_leads(facts, ws, source, leadKinds);
+  }
+  C._parse_whoami_priv = _parse_whoami_priv;
+
+  function _looks_like_sudo_l(text) {
+    var lowered = (text || '').toLowerCase();
+    return lowered.indexOf('may run the following commands') >= 0 || lowered.indexOf('nopasswd:') >= 0;
+  }
+  C._looks_like_sudo_l = _looks_like_sudo_l;
+
+  function _parse_sudo_l(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    var leadKinds = {};
+    _parse_linux_privesc_output(text, ws, command, source, facts, leadKinds);
+    _add_privesc_leads(facts, ws, source, leadKinds);
+  }
+  C._parse_sudo_l = _parse_sudo_l;
+
   // sudo-allowed script read → injectable sink lead
   var _SCRIPT_SINKS = [
     ['gitpython_ext', /\.clone_from\s*\(|git\.Repo\.clone|from\s+git\s+import/i, 'CVE-2022-24439'],
