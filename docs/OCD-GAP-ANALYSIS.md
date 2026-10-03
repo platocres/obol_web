@@ -47,10 +47,10 @@ Each ran through the real engine and minted **nothing** today unless noted. Fact
 | 5 | winPEAS / PrivescCheck | `privesc.windows_privilege`, `privesc.stored_credentials`, `privesc.leads` | `windows-enum` | I | ✅ **shipped** |
 | 6 | PowerView `Get-NetUser`/`Get-DomainUser`/`Get-ADUser` | `ad.user_list`, `ad.acl_lead`→(ACL moves), `ad.group_list`, `ad.computer_list` | `powerview-enum`, ACL abuse | I | ✅ **shipped** |
 | 7 | `net user` / `net localgroup`/`net group` | `ad.user_list`, `config.review` (local admins) | enum, admin discovery | F/I | ✅ **shipped** |
-| 8 | `schtasks /query /v` | `privesc.leads` | `windows-enum` | F/I | ⬜ Batch B |
-| 9 | `reg query` (autologon / stored creds) | `credential.candidate`, `privesc.stored_credentials` | cred reuse | F/I | ⬜ Batch B |
-| 10 | `klist` | `kerberos.tickets` | `ticket-reuse` | F/I | ⬜ Batch B |
-| 11 | `icacls` / `accesschk` | `privesc.leads` (writable service/path) | `windows-enum` | F/I | ⬜ Batch B (enhance; today only `host.notable_program`) |
+| 8 | `schtasks /query /v` | `privesc.scheduled_task` → `privesc.leads` | `windows-enum` | F/I | ✅ **shipped** |
+| 9 | `reg query` (autologon / stored creds) | `credential.candidate`, `privesc.stored_credentials` | cred reuse | F/I | ✅ **shipped** |
+| 10 | `klist` | `kerberos.tickets` | `ticket-reuse` | F/I | ✅ **shipped** |
+| 11 | `icacls` / `accesschk` | `privesc.weak_service_permission` → `privesc.leads` (writable service/path) | `windows-enum` | F/I | ✅ **shipped** |
 
 **Note (shipped work):** wiring `whoami /priv`/`sudo -l` only needed dispatch (the `host.js` minters existed).
 The ACL path got a bonus fix: `ad.acl_lead` (from PowerView *and* bloodyAD) was produced but consumed by
@@ -61,7 +61,11 @@ actionable. `nxc`/netexec output was already parsed (not a gap — an earlier gr
 - **Batch 1 (shipped):** `whoami /priv`, `sudo -l` — dispatch-only wins completing already-gated chains.
 - **Batch A (shipped):** mimikatz dumps (#1/#2), winPEAS (#5), PowerView (#6), `net *` (#7), plus the
   `ad.acl_lead` gate wiring.
-- **Batch B (remaining):** `schtasks` (#8), `reg query` (#9), `klist` (#10), `icacls` enhance (#11).
+- **Batch B (shipped):** `schtasks` (#8), `reg query` (#9), `klist` (#10), `icacls`/`accesschk` enhance (#11)
+  — each content-gated (a signature + `_parse_*` → existing minters), so a harmless dump mints nothing.
+
+**Parser work complete:** the on-host/interactive ingestion layer (Batches 1/A/B) now covers every approved
+on-host move. Remote parsing was already solid. The ingestion gap this doc opened with is closed.
 
 ## 3. Move gaps — CONFIRMED (structured field search, not grep)
 
@@ -69,16 +73,19 @@ Re-established by loading every pack and searching `id`/`title`/`tool`/`commands
 (not the broken grep). The earlier grep list was wrong; several it flagged are present (`recon-dns`
 does zone transfer; `nxc` covers RID-brute and `--pass-pol`). What is **genuinely** missing:
 
-| Technique | Scope | State | Add |
+| Technique | Scope | State | Move added |
 |---|---|---|---|
-| **EternalBlue (MS17-010)** | CORE-OSCP | mention only (detected by `nmap-vuln-scripts`, no exploit move) | an exploit move |
-| noPac (CVE-2021-42278/42287) | OSCP+-edge | GAP | AD CVE move |
-| PrintNightmare (1675/34527) | OSCP+-edge | GAP | AD CVE move |
-| MS14-068 (PAC forge) | OSCP+-edge | GAP | legacy AD CVE move |
-| MSCache2 / DCC2 crack | OSCP+-edge | GAP | add to `cracking` pack |
+| **EternalBlue (MS17-010)** | CORE-OSCP | ✅ **shipped** | `eternalblue` (gated on `smb.ms17_010`, minted by the nmap NSE parser from a positive `smb-vuln-ms17-010` verdict only) → `foothold.windows`/`access.system` |
+| noPac (CVE-2021-42278/42287) | OSCP+-edge | ✅ **shipped** | `nopac` (creds + DC context) |
+| PrintNightmare (1675/34527) | OSCP+-edge | ✅ **shipped** | `printnightmare` |
+| MS14-068 (PAC forge) | OSCP+-edge | ✅ **shipped** | `ms14-068` (legacy AD CVE) |
+| MSCache2 / DCC2 crack | OSCP+-edge | ✅ **shipped** | `crack-mscache2` in the `cracking` pack (gated on `hash.mscache`, minted from a `$DCC2$` cache dump) |
 
-EternalBlue is the one CORE-OSCP gap (we only *detect* it). The four edge moves are for pushing past
-OSCP scope. All are small, data-only pack additions with the usual gate/produces/parser treatment.
+All five shipped as data-only pack additions with the usual gate/`produces`/parser treatment. EternalBlue
+and MSCache2 both earn their gate fact from a conservative, content-bound parser (a positive NSE verdict;
+a well-formed `$DCC2$#user#hash` token) — never from a bare mention. The ranker treats the proven-vuln
+facts (`smb.ms17_010`, `hash.mscache`) as deterministic cash-ins and the speculative legacy-CVE firings
+(`ms14-068`, `nopac`, `printnightmare`) as gambles, so they rank sensibly rather than over-eagerly.
 
 ## 4. Small engine additions implied
 
@@ -91,5 +98,6 @@ OSCP scope. All are small, data-only pack additions with the usual gate/produces
 
 ---
 *OCD scoping reality: OCD's machine-readable source is AD-only, so it informs the AD move lane; the
-non-AD breadth and all parser work above come from obol's own surface. Parser findings are
-engine-verified; move findings are pending the same rigor.*
+non-AD breadth and all parser work above come from obol's own surface. Parser and move findings are now
+engine-verified: each shipped parser mints through the real dispatcher, and each new move unlocks only when
+its gate fact is held (and stays blocked otherwise) under the live ranker.*

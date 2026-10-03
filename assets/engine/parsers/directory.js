@@ -896,4 +896,44 @@
   }
   C._parse_ad_abuse_output = _parse_ad_abuse_output;
 
+  // ── klist → kerberos.tickets (cached ticket inventory from a Windows/MIT foothold) ──
+  // Windows `klist` prints `Cached Tickets: (N)` then per-ticket `Client:`/`Server:` lines; MIT
+  // `klist` prints `Default principal:` then a `krbtgt/REALM` service-principal column. A krbtgt
+  // ticket means a usable TGT. The command-/action-gated _parse_kerberos_ticket_material only fires
+  // on a `Default principal:` klist; this covers the Windows cached-ticket form (and an attached
+  // paste with no command). Content-gated so only genuine ticket output mints.
+  var _KLIST_CACHED_RE = /Cached Tickets:\s*\((?<n>\d+)\)/i;
+  var _KLIST_CLIENT_RE = /^\s*(?:#\d+>\s*)?Client:\s*(?<user>\S+)\s*@\s*(?<realm>\S+)/im;
+  var _KLIST_SERVER_RE = /^\s*Server:\s*(?<spn>\S+)\s*@\s*(?<realm>\S+)/im;
+  var _KLIST_DEFAULT_PRINCIPAL_RE = /Default principal:\s*(?<user>[^@\s]+)(?:@(?<realm>\S+))?/i;
+
+  function _looks_like_klist(text) {
+    var t = text || '';
+    if (reSearch(_KLIST_CACHED_RE, t)) return true;
+    if (/^\s*Server:\s*krbtgt\//im.test(t)) return true;
+    if (reSearch(_KLIST_DEFAULT_PRINCIPAL_RE, t) && /krbtgt\//i.test(t)) return true;
+    return false;
+  }
+  C._looks_like_klist = _looks_like_klist;
+
+  function _parse_klist(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    if (!_looks_like_klist(text)) return;
+    var value = { tool: 'klist' }, realm = '';
+    var cm = reSearch(_KLIST_CLIENT_RE, text) || reSearch(_KLIST_DEFAULT_PRINCIPAL_RE, text);
+    if (cm) {
+      var u = C._clean_username(cm.groups.user || '');
+      if (u) value.principal = u;
+      if (cm.groups.realm) realm = cm.groups.realm.toLowerCase().replace(/\.$/, '');
+    }
+    var cnt = reSearch(_KLIST_CACHED_RE, text);
+    if (cnt) value.count = parseInt(cnt.groups.n, 10);
+    var servers = C.uniqueSortedCI(reAll(_KLIST_SERVER_RE, text).map(function (m) { return m.groups.spn; }));
+    if (servers.length) value.services = servers.slice(0, 20);
+    if (/krbtgt\//i.test(text)) value.tgt = true;
+    _add(facts, mkFact('kerberos.tickets', C._scope_for_domain(ws, realm), value, S, source));
+  }
+  C._parse_klist = _parse_klist;
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

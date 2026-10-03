@@ -636,6 +636,195 @@
   }
   C._parse_notable_programs = _parse_notable_programs;
 
+  // ── schtasks /query /v → scheduled-task privesc lead ───────────────────────────────
+  // `schtasks /query /v /fo list` prints one block per task: `TaskName:`, `Run As User:`,
+  // `Task To Run:`. A task that runs as SYSTEM or an admin AND points at a concrete path is a privesc
+  // lead (replace/overwrite that binary — or its directory — and you inherit the run-as identity).
+  // Content-gated: only a block that names a privileged run-as AND a path mints; a task run as the
+  // current user, or one with no path (N/A / a COM handler), mints nothing.
+  var _SCHTASKS_FIELD_RE = /^\s*(?<key>TaskName|Run As User|Task To Run)\s*:\s*(?<value>.+?)\s*$/gim;
+  var _SCHTASKS_PRIV_RUNAS_RE = /\b(?:system|localsystem|administrator|admin|domain admins|nt authority\\system)\b/i;
+  var _SCHTASKS_PATH_RE = /(?:[A-Za-z]:\\|\\\\)[^\r\n]+/;
+
+  function _looks_like_schtasks(text) {
+    var t = text || '';
+    return /^\s*Task To Run\s*:/im.test(t) && /^\s*Run As User\s*:/im.test(t);
+  }
+  C._looks_like_schtasks = _looks_like_schtasks;
+
+  function _parse_schtasks(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    var tasks = [], cur = null;
+    reAll(_SCHTASKS_FIELD_RE, text).forEach(function (m) {
+      var key = m.groups.key.toLowerCase(), val = m.groups.value.trim();
+      if (key === 'taskname') { if (cur) tasks.push(cur); cur = { name: val, run_as: '', run: '' }; return; }
+      if (!cur) cur = { name: '', run_as: '', run: '' };
+      if (key === 'run as user') cur.run_as = val;
+      else if (key === 'task to run') cur.run = val;
+    });
+    if (cur) tasks.push(cur);
+    var leads = [], seen = {};
+    tasks.forEach(function (t) {
+      if (!t.run_as || !t.run) return;
+      if (!_SCHTASKS_PRIV_RUNAS_RE.test(t.run_as)) return;
+      var pm = reSearch(_SCHTASKS_PATH_RE, t.run);
+      if (!pm) return;
+      var pathTok = pm[0].trim();
+      var key = (t.name + '|' + pathTok).toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      leads.push({ task: t.name, run_as: t.run_as, path: pathTok });
+    });
+    if (!leads.length) return;
+    var leadKinds = {};
+    _add_host_privesc_fact(facts, ws, source, 'privesc.scheduled_task', { tasks: leads.slice(0, 20), count: leads.length }, leadKinds);
+    _add_privesc_leads(facts, ws, source, leadKinds);
+  }
+  C._parse_schtasks = _parse_schtasks;
+
+  // ── reg query → Winlogon autologon / stored credentials ────────────────────────────
+  // Winlogon autologon (DefaultUserName/DefaultPassword REG_SZ) is a real cleartext login; common
+  // stored-cred keys (VNC Password, PuTTY session proxy creds, SNMP ValidCommunities) are candidate
+  // material. Content-gated so an unrelated reg dump with no credential-ish value mints nothing.
+  var _REG_DEFAULT_PW_RE = /^\s*DefaultPassword\s+REG_SZ\s+(?<pw>\S.*?)\s*$/im;
+  var _REG_DEFAULT_USER_RE = /^\s*DefaultUserName\s+REG_SZ\s+(?<user>\S.*?)\s*$/im;
+  var _REG_DEFAULT_DOMAIN_RE = /^\s*DefaultDomainName\s+REG_SZ\s+(?<dom>\S.*?)\s*$/im;
+  var _REG_VNC_PW_RE = /^\s*(?:Password|ControlPassword|PasswordViewOnly)\s+REG_(?:BINARY|SZ)\s+(?<pw>\S.*?)\s*$/im;
+  var _REG_PROXY_PW_RE = /^\s*ProxyPassword\s+REG_SZ\s+(?<pw>\S.*?)\s*$/im;
+  var _REG_PROXY_USER_RE = /^\s*ProxyUsername\s+REG_SZ\s+(?<user>\S+)/im;
+  var _REG_PUTTY_SESSION_RE = /SimonTatham\\PuTTY\\Sessions/i;
+  var _REG_SNMP_COMMUNITIES_RE = /SNMP\\Parameters\\ValidCommunities/i;
+  var _REG_VALUE_NAME_RE = /^\s*(?<name>\S+)\s+REG_(?:SZ|DWORD|BINARY|EXPAND_SZ|MULTI_SZ|QWORD)\s+/i;
+
+  function _looks_like_reg_query(text) {
+    var t = text || '';
+    if (reSearch(_REG_DEFAULT_PW_RE, t)) return true;
+    if (/vnc/i.test(t) && reSearch(_REG_VNC_PW_RE, t)) return true;
+    if (reSearch(_REG_PUTTY_SESSION_RE, t) || reSearch(_REG_PROXY_PW_RE, t)) return true;
+    if (reSearch(_REG_SNMP_COMMUNITIES_RE, t)) return true;
+    return false;
+  }
+  C._looks_like_reg_query = _looks_like_reg_query;
+
+  function _parse_reg_query(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    var h = 'host:' + ws.target, kinds = {};
+    // 1) Winlogon autologon → cleartext credential
+    var pwm = reSearch(_REG_DEFAULT_PW_RE, text);
+    if (pwm) {
+      var pw = C.stripChars(pwm.groups.pw.trim(), "'\"");
+      if (pw && pw !== '0') {
+        var val = { password: pw, via: 'winlogon_autologon' };
+        var um = reSearch(_REG_DEFAULT_USER_RE, text);
+        if (um) { var u = C._clean_username(um.groups.user.trim()); if (u) val.user = u; }
+        var dm = reSearch(_REG_DEFAULT_DOMAIN_RE, text);
+        if (dm && dm.groups.dom.trim()) val.domain = dm.groups.dom.trim();
+        _add(facts, mkFact('credential.candidate', h, val, S, source));
+        kinds.autologon = true;
+      }
+    }
+    // 2) VNC stored password
+    if (/vnc/i.test(text)) {
+      var vm = reSearch(_REG_VNC_PW_RE, text);
+      if (vm) {
+        var vpw = C.stripChars(vm.groups.pw.trim(), "'\"");
+        if (vpw) {
+          _add(facts, mkFact('credential.candidate', h, { kind: 'vnc_password', value: vpw, via: 'vnc_registry' }, S, source));
+          kinds.vnc = true;
+        }
+      }
+    }
+    // 3) PuTTY session proxy credential (stored in plaintext under PuTTY\Sessions)
+    if (reSearch(_REG_PUTTY_SESSION_RE, text) || reSearch(_REG_PROXY_PW_RE, text)) {
+      var ppm = reSearch(_REG_PROXY_PW_RE, text);
+      if (ppm) {
+        var ppw = C.stripChars(ppm.groups.pw.trim(), "'\"");
+        if (ppw && ppw !== '0') {
+          var pval = { password: ppw, via: 'putty_registry' };
+          var pum = reSearch(_REG_PROXY_USER_RE, text);
+          if (pum) { var pu = C._clean_username(pum.groups.user.trim()); if (pu) pval.user = pu; }
+          _add(facts, mkFact('credential.candidate', h, pval, S, source));
+        }
+      }
+      kinds.putty = true;
+    }
+    // 4) SNMP community strings (the value NAMES under the ValidCommunities key)
+    if (reSearch(_REG_SNMP_COMMUNITIES_RE, text)) {
+      var communities = [], seenC = {}, inBlock = false;
+      text.split(/\r?\n/).forEach(function (raw) {
+        if (reSearch(_REG_SNMP_COMMUNITIES_RE, raw)) { inBlock = true; return; }
+        if (/^\s*HKEY_/i.test(raw)) { inBlock = false; return; }
+        if (!inBlock) return;
+        var vn = reSearch(_REG_VALUE_NAME_RE, raw);
+        if (vn) {
+          var name = vn.groups.name.trim();
+          if (name && name.toLowerCase() !== '(default)' && !seenC[name.toLowerCase()]) { seenC[name.toLowerCase()] = true; communities.push(name); }
+        }
+      });
+      if (communities.length) {
+        _add(facts, mkFact('credential.candidate', h, { kind: 'snmp_community', communities: communities.slice(0, 20), via: 'snmp_registry' }, S, source));
+        kinds.snmp = true;
+      }
+    }
+    var kindList = C.uniqueSortedCI(Object.keys(kinds));
+    if (kindList.length) _add(facts, mkFact('privesc.stored_credentials', h, { kinds: kindList, count: kindList.length }, S, source));
+  }
+  C._parse_reg_query = _parse_reg_query;
+
+  // ── icacls / accesschk → writable service/path privesc lead ────────────────────────
+  // icacls prints `<path> <PRINCIPAL>:(perms)` (continuation ACEs indented); accesschk prints a path
+  // then `RW <principal>` / `FILE_ALL_ACCESS` lines. When a LOW-PRIV principal (BUILTIN\Users,
+  // Everyone, Authenticated Users) holds a WRITABLE ACE (F/M/W) on a SERVICE BINARY or program path,
+  // that path is replaceable → you inherit whatever identity runs it. Mint privesc.leads (via
+  // privesc.weak_service_permission). Path-gated: a writable ACE on an ordinary/user path, or a
+  // read-only ACE, mints nothing.
+  var _ICACLS_PATH_RE = /(?:[A-Za-z]:\\|\\\\)(?:[^\r\n:()]|:(?=\\))*?\.(?:exe|dll|bat|cmd|ps1|sys|msi|vbs|jar|scr)\b/i;
+  var _ICACLS_DIR_PATH_RE = /[A-Za-z]:\\(?:[^\r\n:()]|:(?=\\))*(?:Program Files(?: \(x86\))?|ProgramData|inetpub|xampp|wamp)(?:\\[^\r\n:()]*)?/i;
+  var _ACCESSCHK_WRITE_RE = /^\s*(?:RW|W)\s+(?:BUILTIN\\Users|Everyone|NT AUTHORITY\\(?:Authenticated Users|INTERACTIVE)|Authenticated Users|\bUsers\b)/im;
+
+  function _looks_like_icacls_accesschk(text) {
+    var t = text || '';
+    return !!(reSearch(C._LOWPRIV_WRITE_ACE_RE, t) || reSearch(_ACCESSCHK_WRITE_RE, t));
+  }
+  C._looks_like_icacls_accesschk = _looks_like_icacls_accesschk;
+
+  function _program_path_from_line(line) {
+    var m = reSearch(_ICACLS_PATH_RE, line);
+    if (m) return m[0].trim();
+    m = reSearch(_ICACLS_DIR_PATH_RE, line);
+    if (m) return m[0].trim();
+    return '';
+  }
+
+  function _parse_icacls_accesschk(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    var currentPath = '', evidence = [], seen = {}, paths = {};
+    text.split(/\r?\n/).forEach(function (raw) {
+      var line = raw.replace(/\s+$/, '');
+      if (!line.trim()) return;
+      var p = _program_path_from_line(line);
+      if (p) currentPath = p;
+      if (!currentPath) return;
+      if (!(reSearch(C._LOWPRIV_WRITE_ACE_RE, line) || reSearch(_ACCESSCHK_WRITE_RE, line))) return;
+      var trimmed = line.trim();
+      var ev = (trimmed.indexOf(currentPath) === 0 ? trimmed : currentPath + ' — ' + trimmed).slice(0, 220), key = ev.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      evidence.push(ev);
+      paths[currentPath] = true;
+    });
+    if (!evidence.length) return;
+    var leadKinds = {};
+    _add_host_privesc_fact(facts, ws, source, 'privesc.weak_service_permission',
+      { evidence: evidence.slice(0, 30), paths: Object.keys(paths).sort().slice(0, 20),
+        tool: command.toLowerCase().indexOf('accesschk') >= 0 ? 'accesschk' : 'icacls' }, leadKinds);
+    _add_privesc_leads(facts, ws, source, leadKinds);
+  }
+  C._parse_icacls_accesschk = _parse_icacls_accesschk;
+
   var _SHADOW_LINE_RE = /^(?<u>[a-z_][\w.-]{0,31}):\$(?:1|2[aby]|5|6|y)\$[^\s:]+/im;
   function _parse_shadow_file(text, command, ws, source, facts) {
     var users = reAll(_SHADOW_LINE_RE, text || '').map(function (m) { return m.groups.u; });

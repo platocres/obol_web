@@ -237,6 +237,34 @@
   }
   C._parse_mimikatz = _parse_mimikatz;
 
+  // ── MSCache2 / DCC2 cached domain-logon hashes ───────────────────────────────────
+  // secretsdump `-o`/cached output and mimikatz `lsadump::cache` surface domain creds that were cached
+  // for offline logon as `$DCC2$<iters>#<user>#<32hex>` (hashcat mode 2100). These crack offline only
+  // (no PtH), so they unlock the crack-mscache2 move rather than a direct login. Conservative: require
+  // the literal `$DCC2$` token with its well-formed `#user#hash` tail — we never mint from a bare mention.
+  var _DCC2_RE = /\$DCC2\$\d+#([^#\s:]+)#([0-9a-fA-F]{32})\b/g;
+  function _looks_like_mscache(text) { return !!text && text.indexOf('$DCC2$') >= 0; }
+  C._looks_like_mscache = _looks_like_mscache;
+
+  function _parse_mscache(text, ws, command, source, facts) {
+    if (!text || text.indexOf('$DCC2$') < 0) return;
+    text = text.replace(C._ANSI_RE, '');
+    var h = 'host:' + ws.target, entries = [], seen = {}, m;
+    _DCC2_RE.lastIndex = 0;
+    while ((m = _DCC2_RE.exec(text)) !== null) {
+      var user = C._clean_username(m[1]), hash = m[2].toLowerCase();
+      if (!C._valid_username(user, false)) continue;
+      var key = user.toLowerCase() + '|' + hash;
+      if (seen[key]) continue;
+      seen[key] = true;
+      entries.push({ user: user, mscache: m[0] });
+    }
+    if (!entries.length) return;
+    _add(facts, mkFact('hash.mscache', h, { count: entries.length, entries: entries, mode: 2100, via: 'cache-dump' }, S, source));
+    _add(facts, mkFact('credential.candidate', h, { kind: 'mscache2', count: entries.length }, S, source));
+  }
+  C._parse_mscache = _parse_mscache;
+
   var _RESPONDER_HASH_RE = /NTLMv2-SSP Hash\s*:\s*(?<hash>(?<user>[^:\s]+)::[^\s]+:[0-9A-Fa-f]{16,}:[0-9A-Fa-f]+:[0-9A-Fa-f]+)/;
 
   function _parse_responder(text, ws, source, facts) {

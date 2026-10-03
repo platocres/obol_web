@@ -173,6 +173,42 @@
         {"tool": "hydra", "run": "hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 1 rdp://{{target}}",
          "note": "-t 1 (single thread) is important for RDP; lockout risk is high — prefer a small, targeted list."}
       ]
+    },
+    {
+      "id": "crack-mscache2",
+      "title": "Crack an MS Cache v2 (DCC2) hash",
+      "hypothesis": "Domain Cached Credentials v2 ($DCC2$) are stored on a workstation so a domain user can log in offline. They are deliberately slow to crack, but a weak password still falls — and the plaintext is a real domain credential to reuse. Pulled from a local secretsdump (the cachedump).",
+      "tool": "hashcat",
+      "tools": [
+        "hashcat",
+        "john"
+      ],
+      "os": [],
+      "requires_all": [
+        "hash.mscache"
+      ],
+      "produces": [
+        "credential.available",
+        "credential.candidate"
+      ],
+      "autonomy": "auto",
+      "priority": 55,
+      "proves": "the plaintext recovered from a cached domain credential (DCC2)",
+      "does_not_prove": "a fast result — DCC2 is intentionally slow; and the hash cannot be passed (unlike NTLM), so cracking is the only use",
+      "report": {
+        "finding": "Weak Cached Domain Credential (DCC2)",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://hashcat.net/wiki/doku.php?id=example_hashes"
+      ],
+      "commands": [
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 2100 dcc2.hash /usr/share/wordlists/rockyou.txt",
+          "note": "Mode 2100 = DCC2 / MS-Cache v2."
+        }
+      ]
     }
   ]
 }

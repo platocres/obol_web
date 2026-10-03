@@ -165,7 +165,8 @@
     'ldap.reachable': 'LDAP is reachable', 'ldap.authenticated': 'authenticated LDAP access',
     'smb.reachable': 'SMB is reachable', 'smb.authenticated': 'authenticated SMB access',
     'smb.null_session': 'SMB null session', 'smb.guest_session': 'SMB guest session',
-    'smb.shares': 'SMB shares', 'winrm.authenticated': 'authenticated WinRM access',
+    'smb.shares': 'SMB shares', 'smb.ms17_010': 'an MS17-010/EternalBlue-vulnerable SMB host (CVE-2017-0144)',
+    'winrm.authenticated': 'authenticated WinRM access',
     'winrm.reachable': 'WinRM is reachable', 'rdp.reachable': 'RDP is reachable',
     'rdp.authenticated': 'authenticated RDP access', 'ssh.reachable': 'SSH is reachable',
     'ssh.authenticated': 'authenticated SSH access', 'ssh.banner': 'an SSH banner',
@@ -185,12 +186,14 @@
     'host.kernel': 'host kernel/version', 'host.arch': 'host architecture',
     'host.firewall': 'host firewall rules (egress/pivot intel)',
     'hash.type': 'an identified hash type + cracking mode',
+    'hash.mscache': 'a cached domain-logon hash (MSCache2/DCC2)',
     'defense.control': 'an endpoint defensive control (AMSI/AppLocker/CLM)',
     'privesc.leads': 'local privilege escalation leads',
     'privesc.sudo_rights': 'sudo rights lead',
     'privesc.sudo_binary': 'a sudo-allowed binary with a GTFOBins escalation',
     'privesc.suid_candidate': 'SUID/SGID candidate', 'privesc.capability': 'dangerous Linux capability',
     'privesc.cron_writable': 'writable scheduled task or cron lead',
+    'privesc.scheduled_task': 'a privileged scheduled-task privesc lead',
     'privesc.process_lead': 'process-monitoring privesc lead',
     'privesc.passwd_writable': 'writable /etc/passwd lead',
     'privesc.nfs_no_root_squash': 'NFS no_root_squash lead',
@@ -397,10 +400,10 @@
     'hash.asrep': 1, 'hash.tgs': 1, 'hash.ntlm': 1, 'loot.ntds': 1, 'ad.zerologon': 1,
     'adcs.vulnerable': 1, 'credential.certificate': 1, 'ad.sid_history': 1, 'ad.coerced_auth': 1,
     'ad.unconstrained': 1, 'privesc.sudo_rights': 1, 'privesc.windows_privilege': 1,
-    'db.session': 1, 'ad.gmsa': 1, 'kerberos.tickets': 1,
+    'db.session': 1, 'ad.gmsa': 1, 'kerberos.tickets': 1, 'smb.ms17_010': 1, 'hash.mscache': 1,
   };
   var V2_PRIV = { 'access.admin': 1, 'access.system': 1, 'access.root': 1, 'loot.ntds': 1, 'objective.flag': 1 };
-  var V2_SPEC_RE = /check$|coerce|relay|responder|mitm|zerologon|printnight|nopac/;
+  var V2_SPEC_RE = /check$|coerce|relay|responder|mitm|zerologon|printnight|nopac|ms14-068/;
 
   function v2Speculative(a) {
     if (V2_SPEC_RE.test(a.id)) return true;
