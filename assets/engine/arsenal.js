@@ -54,6 +54,14 @@
       'obol_pipx(){ have "$2" && { skip "$2"; return; }; say "pipx $1"; pipx install "$1" >/dev/null 2>&1 || pipx install --force "$1" >/dev/null 2>&1 || warn "pipx $1 failed (try: pipx install $1)"; }',
       // records the clone (key git <dir>) so the inventory probe counts run-from-repo tools that are NOT on PATH.
       'obol_git(){ local d="$TOOLDIR/$2"; if [ -d "$d" ]; then skip "$2"; else say "git $2"; git clone --depth 1 "$1" "$d" >/dev/null 2>&1 || { warn "clone $2 failed"; return; }; fi; rec "$2" git "$d"; }',
+      // obol_bin <key> <repo> <asset-regex> <binname> — install-if-missing a standalone release binary to ~/.local/bin.
+      'obol_bin(){ local k="$1" repo="$2" re="$3" bn="$4" out="$HOME/.local/bin/$4"; ',
+      '  if have "$bn"; then skip "$bn"; rec "$k" "$(sha256sum "$(command -v "$bn")" 2>/dev/null | cut -d" " -f1)" "$(command -v "$bn")"; return; fi; ',
+      '  say "fetch $k ($repo)"; mkdir -p "$HOME/.local/bin"; ',
+      '  local url; url=$(curl -fsSL "${GH_AUTH[@]}" "https://api.github.com/repos/$repo/releases/latest" | grep -oE "https://[^\\\"]*" | grep -E "$re" | head -n1); ',
+      '  [ -n "$url" ] || { warn "$k: no asset matched /$re/"; return; }; ',
+      '  curl -fsSL "$url" -o "$out" || { warn "fetch $k failed"; return; }; chmod +x "$out"; ',
+      '  local h; h=$(sha256sum "$out" | cut -d" " -f1); rec "$k" "$h" "$out"; }',
       '# obol_fetch <key> <url> <dest> [sha256]',
       'obol_fetch(){ local k="$1" u="$2" d="$3" pin="${4:-}" out="$CACHE/$3"; ',
       '  [ -s "$out" ] || { say "fetch $k"; curl -fsSL "$u" -o "$out" || { warn "fetch $k failed"; return; }; }; ',
@@ -85,7 +93,7 @@
     var A = OBOL.ARSENAL || {};
     var keys = Object.keys(A).sort();
     var seen = {};   // de-dupe shared entries (aliases point at one object)
-    var apt = [], pipx = [], git = [], lin = [], win = [];
+    var apt = [], pipx = [], git = [], bin = [], lin = [], win = [];
     keys.forEach(function (k) {
       var e = A[k];
       if (!e || seen[e.key]) return; seen[e.key] = 1;
@@ -94,6 +102,7 @@
       if (e.class === 'apt') apt.push('obol_apt "' + sh(e.install.replace(/^.*install\s+-y\s+/, '')) + '" "' + (e.bins && e.bins[0] || e.key) + '"');
       else if (e.class === 'pipx') pipx.push('obol_pipx "' + sh((e.install || '').replace(/^pipx install\s+/, '')) + '" "' + (e.bins && e.bins[0] || e.canonical || e.key) + '"');
       else if (e.class === 'git') git.push('obol_git "' + sh((e.install || '').replace(/^git clone\s+/, '').replace(/\s+\S+\/tools\/.*$/, '')) + '" "' + e.key + '"');
+      else if (e.class === 'release-bin') bin.push('obol_bin "' + e.key + '" "' + sh(e.gh_repo) + '" "' + sh(e.gh_asset) + '" "' + (e.bins && e.bins[0] || e.canonical || e.key) + '"');
       else if (e.class === 'material' || e.class === 'stage-lin') lin.push(e.gh_repo ? fetchGh(e) : fetchUrl(e));
       else if (e.class === 'stage-win') win.push(e.gh_repo ? fetchGh(e) : fetchUrl(e));
     });
@@ -117,6 +126,7 @@
     if (pipx.length) { out.push('echo "[pipx] AD tooling Kali omits"'); out.push.apply(out, pipx); out.push(''); }
     if (apt.length) { out.push('echo "[apt] extra packages"'); out.push.apply(out, apt); out.push(''); }
     if (git.length) { out.push('echo "[git] run-from-repo tools -> $TOOLDIR"'); out.push.apply(out, git); out.push(''); }
+    if (bin.length) { out.push('echo "[bin] standalone release binaries -> ~/.local/bin"'); out.push.apply(out, bin); out.push(''); }
     if (lin.length) { out.push('echo "[linux] enum/privesc/pivot staged to $CACHE"'); out.push.apply(out, lin); out.push(''); }
     if (win.length) {
       out.push('echo "[windows] binaries staged to $CACHE/win (copy to your www/ to serve) — Defender will flag these"');
@@ -180,13 +190,44 @@
     out.push('wl={}');
     out.push('for name,path in {"rockyou":"/usr/share/wordlists/rockyou.txt","seclists":"/usr/share/seclists","rockyou-gz":"/usr/share/wordlists/rockyou.txt.gz"}.items():');
     out.push('    if os.path.exists(path): wl[name]=path');
-    out.push('print(json.dumps({"v":1,"tools":tools,"staged":staged,"wwwdir":www,"digests":digests,"cloned":cloned,"wordlists":wl}))');
+    // best-effort accounting: of everything the script TRIED to provide, what is still not on the box? That is
+    // a genuine failure the operator must resolve by hand — emit it so both the terminal and obol can say so.
+    out.push('attempts=' + JSON.stringify(installAttempts(A)));
+    out.push('missing={}');
+    out.push('for k,meta in attempts.items():');
+    out.push('    sat = tools.get(k,{}).get("present") or (k in digests) or (k in cloned) or (meta.get("dest") and meta["dest"] in staged)');
+    out.push('    if not sat: missing[k]=meta.get("hint","")');
+    out.push('try:');
+    out.push('    open(os.path.join(os.path.dirname(rec) or ".", ".missing"),"w").write("".join(k+"\\t"+h+"\\n" for k,h in sorted(missing.items())))');
+    out.push('except Exception: pass');
+    out.push('print(json.dumps({"v":1,"tools":tools,"staged":staged,"wwwdir":www,"digests":digests,"cloned":cloned,"wordlists":wl,"missing":missing}))');
     out.push('PY');
     out.push(')');
     out.push('printf "\\n\\033[1;36mOBOL-ARSENAL v1\\033[0m\\n%s\\n" "$INV"');
     out.push('printf "\\n\\033[1mDone.\\033[0m Copy the OBOL-ARSENAL line above into obol-web → Loadout.\\n"');
     out.push('have pipx && printf "\\033[2m(new pipx tools are on ~/.local/bin — open a new terminal if a command is not found.)\\033[0m\\n" || true');
+    // the honest tail: if best-effort install still left gaps, name them + where to look, so nothing fails silently.
+    out.push('MISS="$CACHE/.missing"');
+    out.push('if [ -s "$MISS" ]; then n=$(grep -c . "$MISS"); TAB=$(printf "\\t");');
+    out.push('  printf "\\n\\033[1;33m! %s tool(s) obol uses could not be installed automatically — you will need to grab these yourself:\\033[0m\\n" "$n";');
+    out.push('  while IFS="$TAB" read -r k h; do printf "    \\033[1m%s\\033[0m%s\\n" "$k" "${h:+  — $h}"; done < "$MISS";');
+    out.push('  printf "\\033[2m(obol still works without them; it just will not auto-fill a path until they are installed. Loadout flags these too.)\\033[0m\\n";');
+    out.push('fi');
     return out.join('\n') + '\n';
+  }
+
+  // Everything the setup script TRIES to provide (non-Kali), with a where-to-get-it hint + its staged dest.
+  // The probe uses this to report what best-effort install could not satisfy, so nothing fails silently.
+  function installAttempts(A) {
+    var m = {}, seen = {};
+    Object.keys(A).forEach(function (k) {
+      var e = A[k]; if (!e || seen[e.key]) return; seen[e.key] = 1;
+      if (e.class === 'kali' || e.class === 'builtin') return;
+      // Prefer a where-to-get-it URL; fall back to the install command so an apt/pipx failure still gives a next step.
+      var hint = e.manual_url || e.url || (e.gh_repo ? 'https://github.com/' + e.gh_repo : '') || e.install || '';
+      m[e.key] = { hint: hint, dest: e.dest || '' };
+    });
+    return m;
   }
 
   // The name->variants map the paste-back probe uses to detect which invocation a box exposes.

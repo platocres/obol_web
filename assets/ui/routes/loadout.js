@@ -125,7 +125,8 @@
   //   kaliMissing   obol assumed Kali ships it, but a default install didn't (metapackage gap / misflag)
   function reconcile(prof) {
     var A = OBOL.ARSENAL || {}, seen = {};
-    var r = { ready: [], alt: [], fetchMissing: [], manualMissing: [], kaliMissing: [] };
+    var miss = (prof && prof.missing) || {};   // what the last script run TRIED to install but couldn't (key -> source hint)
+    var r = { ready: [], alt: [], fetchMissing: [], installFailed: [], manualMissing: [], kaliMissing: [] };
     Object.keys(A).forEach(function (k) {
       var e = A[k]; if (!e || seen[e.key]) return; seen[e.key] = 1;
       if (e.class === 'builtin') return;
@@ -136,7 +137,10 @@
         return;
       }
       if (e.manual) r.manualMissing.push(e);
-      else if (needsFetch(e)) r.fetchMissing.push(e);
+      else if (needsFetch(e)) {
+        if (Object.prototype.hasOwnProperty.call(miss, e.key)) r.installFailed.push(e);  // script tried, couldn't
+        else r.fetchMissing.push(e);                                                      // not attempted yet — run the script
+      }
       else if (e.os !== 'windows') r.kaliMissing.push(e);   // a Windows command absent from Kali is expected, not a gap
     });
     return r;
@@ -149,6 +153,11 @@
       var extra = '';
       if (mode === 'manual' && e.manual_url) extra = ' — <a href="' + U.attr(e.manual_url) + '" target="_blank" rel="noopener">get it ↗</a>';
       else if (mode === 'install' && e.install) extra = ' — <code>' + esc(e.install) + '</code>';
+      else if (mode === 'failed') {
+        var h = ((prof && prof.missing) || {})[e.key] || e.manual_url || (e.gh_repo ? 'https://github.com/' + e.gh_repo : '') || e.install || '';
+        if (/^https?:\/\//.test(h)) extra = ' — <a href="' + U.attr(h) + '" target="_blank" rel="noopener">find it ↗</a>';
+        else if (h) extra = ' — <code>' + esc(h) + '</code>';
+      }
       else if (mode === 'alt') { var t = (prof.tools || {})[e.key] || {}; extra = ' — present as <code>' + esc(t.invocation || '') + '</code>'; }
       return '<li>' + esc(e.label || e.key) + extra + '</li>';
     }).join('') + '</ul>';
@@ -162,6 +171,9 @@
         + '<div class="lo-recon-body">' + (note ? '<p class="lo-recon-note">' + note + '</p>' : '') + body + '</div></details>';
     }
     var band = '<span class="lo-recon-pill lo-rp-ok" title="Accounted for on your box">' + r.ready.length + ' ready</span>'
+      + pill(r.installFailed, 'lo-rp-bad', 'couldn\'t install',
+          'The setup script tried to install these and couldn\'t (no package, a 404, a failed build). Grab each from its source, drop it on your PATH (or in <code>~/.obol/arsenal</code>), and re-paste.',
+          reconList(r.installFailed, 'failed', prof))
       + pill(r.fetchMissing, 'lo-rp-warn', 'to install',
           'obol\'s setup script fetches these — they\'re not on your box yet. Re-run Step 2 (<code>./download-arsenal.sh</code>) and paste back.',
           reconList(r.fetchMissing, 'install', prof))

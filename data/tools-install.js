@@ -93,6 +93,31 @@
       canonical: 'nxc', variants: ['nxc', 'netexec', 'crackmapexec', 'cme'], source: 'Pennyw0rth/NetExec', license: 'BSD-2-Clause', purpose: 'swiss-army SMB/LDAP/WinRM/MSSQL' };
   });
 
+  // ── Don't assume what Kali ships. A fresh default install does NOT carry these (verified against the
+  // Kali package catalog, kali.org/tools, not a decked-out box), yet obol's packs use them — so give each a
+  // real install recipe. The setup script already runs every installer have-guarded (present → skip,
+  // missing → install), so wiring a recipe turns "silently assumed present" into "installed if absent".
+  function reclass(key, patch) { if (A[key]) Object.assign(A[key], patch); }
+  // apt packages Kali publishes (install-if-missing; present on a decked-out box, apt-fetched on a bare one)
+  [['rustscan', 'rustscan'], ['mitm6', 'mitm6'], ['enum4linux-ng', 'enum4linux-ng'], ['arjun', 'arjun'],
+   ['name-that-hash', 'name-that-hash'], ['sprayhound', 'sprayhound'], ['penelope', 'penelope'],
+   ['sshpass', 'sshpass'], ['sshuttle', 'sshuttle'], ['ncat', 'ncat'], ['rlwrap', 'rlwrap'],
+   ['ntpdate', 'ntpdate'], ['kinit', 'krb5-user'], ['klist', 'krb5-user']].forEach(function (r) {
+    reclass(r[0], { class: 'apt', on_kali: false, install: 'sudo apt install -y ' + r[1], bins: [r[0]], source: 'kali/' + r[1] });
+  });
+  reclass('name-that-hash', { bins: ['name-that-hash', 'nth'], variants: ['name-that-hash', 'nth'] });
+  // pipx (no Kali package)
+  reclass('git-dumper', { class: 'pipx', on_kali: false, install: 'pipx install git-dumper', bins: ['git-dumper'], source: 'arthaud/git-dumper', license: 'MIT' });
+  // git run-from-repo (python; no Kali package) — cloned to ~/tools, invoked as windapsearch.py
+  reclass('windapsearch', { class: 'git', on_kali: false, install: 'git clone https://github.com/ropnop/windapsearch ~/tools/windapsearch',
+    bins: ['windapsearch.py'], canonical: 'windapsearch.py', variants: ['windapsearch.py', 'windapsearch'], source: 'ropnop/windapsearch', license: 'MIT' });
+  // release binary → ~/.local/bin (Go tool, no Kali package)
+  reclass('kerbrute', { class: 'release-bin', on_kali: false, gh_repo: 'ropnop/kerbrute', gh_asset: 'kerbrute_linux_amd64$',
+    bins: ['kerbrute'], canonical: 'kerbrute', dest: 'kerbrute', install: '', source: 'ropnop/kerbrute', license: 'Apache-2.0' });
+  // name-only fixes — genuinely present on a default Kali, obol just probed the wrong name
+  reclass('metasploit', { canonical: 'msfconsole', variants: ['msfconsole', 'msfvenom'] });        // metasploit-framework ships msfconsole
+  reclass('mssqlclient.py', { canonical: 'impacket-mssqlclient', variants: ['impacket-mssqlclient', 'mssqlclient.py'] });  // alias of the impacket wrapper
+
   // ── 2. Not on Kali by default — a one-line install. (pipx/git/go: the AD tools Kali omits.)
   var INSTALL = [
     { key: 'certipy', label: 'Certipy', category: 'AD', os: 'linux', class: 'pipx',
