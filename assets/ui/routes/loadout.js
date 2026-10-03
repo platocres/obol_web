@@ -316,11 +316,24 @@
         + '<code class="btn-copy lo-serve-cmd" data-copy="' + U.attr(serveCmd) + '" title="Click to copy">' + esc(serveCmd) + '</code>'
         + '<span class="lo-serve-hint">then pull each from the target (hover a payload)</span></div>'
       : '';
+    // Base Kali tools already on the system PATH: obol DID record each one's path + invocation from the paste —
+    // surface them as a single collapsed node so that's visible, without spraying /usr/bin across the view.
+    var onPathSeen = {}, onPath = [];
+    present.forEach(function (k) {
+      if (pipx.indexOf(k) >= 0 || cloned.indexOf(k) >= 0) return;   // already shown under ~/.local/bin or ~/tools
+      var t = tools[k], e = A[k]; if (!t || !t.path || !e) return;
+      if (e.class === 'stage-win' || e.class === 'material' || e.class === 'stage-lin') return;   // staged, not on PATH
+      if (/\/\.local\/bin\//.test(t.path) || /\/tools\//.test(t.path)) return;
+      var inv = t.invocation || e.canonical || k; if (onPathSeen[inv]) return; onPathSeen[inv] = 1;   // dedupe nxc aliases etc.
+      onPath.push({ label: e.label || k, e: e, inv: inv, path: t.path });
+    });
+    onPath.sort(function (a, b) { return a.label.toLowerCase() < b.label.toLowerCase() ? -1 : 1; });
     var fsRows = node('~/.obol/arsenal/win', winNames.map(winItem), serveHelper)
       + node('~/.obol/arsenal', linCache.map(function (k) { return keyItem(k, '~/.obol/arsenal/' + ((A[k] && A[k].dest) || k)); }))
       + node('~/.local/bin', pipx.map(function (k) { return keyItem(k, (tools[k] && tools[k].path) || ''); }))
       + node('~/tools', cloned.map(function (k) { return keyItem(k, (prof.cloned && prof.cloned[k]) || (tools[k] && tools[k].path) || ''); }))
-      + node('/usr/share/wordlists', Object.keys(wl).map(function (n) { return { label: n, e: null, inv: '', path: wl[n] }; }));
+      + node('/usr/share/wordlists', Object.keys(wl).map(function (n) { return { label: n, e: null, inv: '', path: wl[n] }; }))
+      + node('$PATH · Kali defaults', onPath);
 
     // "What it's for" lens: every tool obol uses, grouped by capability. Present = solid, missing = dimmed.
     function locOf(e, rec) {
