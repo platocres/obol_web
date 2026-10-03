@@ -106,6 +106,7 @@
     reclass(r[0], { class: 'apt', on_kali: false, install: 'sudo apt install -y ' + r[1], bins: [r[0]], source: 'kali/' + r[1] });
   });
   reclass('name-that-hash', { bins: ['name-that-hash', 'nth'], variants: ['name-that-hash', 'nth'] });
+  reclass('penelope', { purpose: 'shell handler — auto PTY upgrade, session management, logging + file transfer (catch your reverse shells here)' });
   // pipx (no Kali package)
   reclass('git-dumper', { class: 'pipx', on_kali: false, install: 'pipx install git-dumper', bins: ['git-dumper'], source: 'arthaud/git-dumper', license: 'MIT' });
   // git run-from-repo (python; no Kali package) — cloned to ~/tools, invoked as windapsearch.py
