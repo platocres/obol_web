@@ -37,6 +37,12 @@
       'CACHE=' + CACHE + '; TOOLDIR=' + TOOLDIR + '; WWW="${1:-$CACHE/www}"',
       'mkdir -p "$CACHE" "$CACHE/win" "$CACHE/lin" "$TOOLDIR" "$WWW"',
       'IDX="$CACHE/index.json"; [ -f "$IDX" ] || echo "{}" > "$IDX"',
+      // pipx + user-local installs land here; put it on PATH now so the inventory probe sees them this run.
+      'export PATH="$HOME/.local/bin:$PATH"',
+      'export PIP_BREAK_SYSTEM_PACKAGES=1',   // PEP 668: tolerate pip on externally-managed Kali/Debian
+      // optional: a GitHub token lifts the 60/hr anonymous API limit used to resolve release assets.
+      'GH_AUTH=(); [ -n "${GITHUB_TOKEN:-}" ] && GH_AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")',
+      'SUDO=""; if [ "$(id -u)" -ne 0 ]; then command -v sudo >/dev/null 2>&1 && SUDO="sudo"; fi',
       'have(){ command -v "$1" >/dev/null 2>&1; }',
       'say(){ printf "  \\033[1;32m•\\033[0m %s\\n" "$1"; }',
       'skip(){ printf "  \\033[2m- %s (present)\\033[0m\\n" "$1"; }',
@@ -44,8 +50,8 @@
       '# record "<key> <sha256> <path>" into a flat sidecar the paste-back block reads.',
       'REC="$CACHE/.records"; : > "$REC"',
       'rec(){ printf "%s %s %s\\n" "$1" "$2" "$3" >> "$REC"; }',
-      'obol_apt(){ have "$2" && { skip "$2"; return; }; say "apt $1"; sudo apt-get install -y "$1" >/dev/null 2>&1 || warn "apt $1 failed"; }',
-      'obol_pipx(){ have "$2" && { skip "$2"; return; }; say "pipx $1"; pipx install "$1" >/dev/null 2>&1 || warn "pipx $1 failed"; }',
+      'obol_apt(){ have "$2" && { skip "$2"; return; }; say "apt $1"; $SUDO apt-get install -y "$1" >/dev/null 2>&1 || warn "apt $1 failed"; }',
+      'obol_pipx(){ have "$2" && { skip "$2"; return; }; say "pipx $1"; pipx install "$1" >/dev/null 2>&1 || pipx install --force "$1" >/dev/null 2>&1 || warn "pipx $1 failed (try: pipx install $1)"; }',
       'obol_git(){ local d="$TOOLDIR/$2"; [ -d "$d" ] && { skip "$2"; return; }; say "git $2"; git clone --depth 1 "$1" "$d" >/dev/null 2>&1 || warn "clone $2 failed"; }',
       '# obol_fetch <key> <url> <dest> [sha256]',
       'obol_fetch(){ local k="$1" u="$2" d="$3" pin="${4:-}" out="$CACHE/$3"; ',
@@ -57,7 +63,7 @@
       'obol_fetch_gh(){ local k="$1" repo="$2" re="$3" d="$4" mem="${5:-}" out="$CACHE/$4"; ',
       '  [ -s "$out" ] && { local h0; h0=$(sha256sum "$out"|cut -d" " -f1); rec "$k" "$h0" "$out"; skip "$k"; return; }; ',
       '  say "fetch $k ($repo)"; ',
-      '  local url; url=$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" | grep -oE "https://[^\\\"]*" | grep -E "$re" | head -n1); ',
+      '  local url; url=$(curl -fsSL "${GH_AUTH[@]}" "https://api.github.com/repos/$repo/releases/latest" | grep -oE "https://[^\\\"]*" | grep -E "$re" | head -n1); ',
       '  [ -n "$url" ] || { warn "$k: no asset matched /$re/"; return; }; ',
       '  local tmp; tmp=$(mktemp); curl -fsSL "$url" -o "$tmp" || { warn "fetch $k failed"; return; }; ',
       '  case "$url" in ',
@@ -92,6 +98,16 @@
 
     var out = [preamble()];
     out.push('printf "\\n\\033[1mobol arsenal\\033[0m — stocking your box (cache: $CACHE)\\n\\n"');
+    // bootstrap: a fresh Kali may lack curl/git/unzip or pipx; take it 0→ready (PEP 668-safe, older-tolerant).
+    out.push('echo "[prep] base packages + pipx"');
+    out.push('APT_READY=0');
+    out.push('ensure_apt(){ [ "$APT_READY" = "1" ] || { $SUDO apt-get update -y >/dev/null 2>&1; APT_READY=1; }; }');
+    out.push('for b in curl git unzip tar; do have "$b" || { ensure_apt; say "apt $b"; $SUDO apt-get install -y "$b" >/dev/null 2>&1 || warn "apt $b failed"; }; done');
+    out.push('if ! have pipx; then ensure_apt; say "installing pipx";');
+    out.push('  $SUDO apt-get install -y pipx >/dev/null 2>&1 || python3 -m pip install --user pipx >/dev/null 2>&1 || warn "pipx bootstrap failed — install it and re-run";');
+    out.push('  pipx ensurepath >/dev/null 2>&1 || true; export PATH="$HOME/.local/bin:$PATH";');
+    out.push('fi');
+    out.push('');
     if (pipx.length) { out.push('echo "[pipx] AD tooling Kali omits"'); out.push.apply(out, pipx); out.push(''); }
     if (apt.length) { out.push('echo "[apt] extra packages"'); out.push.apply(out, apt); out.push(''); }
     if (git.length) { out.push('echo "[git] run-from-repo tools -> $TOOLDIR"'); out.push.apply(out, git); out.push(''); }
@@ -136,6 +152,7 @@
     out.push(')');
     out.push('printf "\\n\\033[1;36mOBOL-ARSENAL v1\\033[0m\\n%s\\n" "$INV"');
     out.push('printf "\\n\\033[1mDone.\\033[0m Copy the OBOL-ARSENAL line above into obol-web → Loadout.\\n"');
+    out.push('have pipx && printf "\\033[2m(new pipx tools are on ~/.local/bin — open a new terminal if a command is not found.)\\033[0m\\n" || true');
     return out.join('\n') + '\n';
   }
 
