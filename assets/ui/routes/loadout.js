@@ -218,7 +218,8 @@
       return '<span class="lo-ti-card" role="tooltip">'
         + '<span class="lo-ti-card-h"><span class="lo-ti-name">' + esc(e.label || e.key) + '</span>'
         + '<span class="lo-cat-badge lo-catc-' + catSlug(cat) + '">' + esc(titleCase(cat)) + '</span></span>'
-        + (e.purpose ? '<span class="lo-ti-why">' + esc(cap1(e.purpose)) + '</span>' : '')
+        + ((e.desc || e.purpose) ? '<span class="lo-ti-why">' + esc(cap1(e.desc || e.purpose)) + '</span>' : '')
+        + (e.example ? '<span class="lo-ti-eg"><span class="lo-ti-eg-l">Example</span><code>' + esc(e.example) + '</code></span>' : '')
         + '<span class="lo-ti-meta">' + (inv ? '<code class="lo-ti-inv">' + esc(inv) + '</code>' : '')
         + (path ? '<code class="lo-ti-path">' + esc(path) + '</code>' : '') + '</span></span>';
     }
