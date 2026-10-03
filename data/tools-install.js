@@ -51,7 +51,7 @@
     ['impacket-mssqlclient', 'Database', 'linux'], ['bloodhound', 'AD', 'linux'],
     ['bloodhound-python', 'AD', 'linux'], ['sprayhound', 'AD', 'linux'], ['metasploit', 'Exploitation', 'linux'],
     ['msfvenom', 'Exploitation', 'linux'], ['ysoserial', 'Web', 'linux'], ['git-dumper', 'Web', 'linux'],
-    ['python3', 'Support', 'multi'], ['java', 'Support', 'multi'], ['docker', 'Support', 'linux'],
+    ['python3', 'Support', 'multi'], ['java', 'Support', 'multi'],
     ['svn', 'Support', 'linux'], ['penelope', 'Support', 'linux'], ['rlwrap', 'Support', 'linux'],
   ];
   KALI.forEach(function (row) {
@@ -117,6 +117,12 @@
   // name-only fixes — genuinely present on a default Kali, obol just probed the wrong name
   reclass('metasploit', { canonical: 'msfconsole', variants: ['msfconsole', 'msfvenom'] });        // metasploit-framework ships msfconsole
   reclass('mssqlclient.py', { canonical: 'impacket-mssqlclient', variants: ['impacket-mssqlclient', 'mssqlclient.py'] });  // alias of the impacket wrapper
+  // BloodHound GUI: obol does the analysis on-site and never invokes the GUI, but offer it if the box lacks
+  // it. have-guarded, so it only installs (and pulls neo4j) when actually absent.
+  reclass('bloodhound', { class: 'apt', on_kali: false, install: 'sudo apt install -y bloodhound', bins: ['bloodhound'], source: 'kali/bloodhound', purpose: 'BloodHound GUI (optional — obol analyses collection data on-site)' });
+  // ysoserial: Java deserialization payload generator used by the web lane (java -jar ysoserial.jar).
+  // One jar, Java already present — fetch + cache it like any other material.
+  reclass('ysoserial', { class: 'material', on_kali: false, gh_repo: 'frohoff/ysoserial', gh_asset: 'ysoserial.*\\.jar$', dest: 'ysoserial.jar', bins: ['ysoserial.jar'], canonical: 'ysoserial', source: 'frohoff/ysoserial', license: 'MIT', purpose: 'Java deserialization payload generator (gadget chains)' });
 
   // ── 2. Not on Kali by default — a one-line install. (pipx/git/go: the AD tools Kali omits.)
   var INSTALL = [
