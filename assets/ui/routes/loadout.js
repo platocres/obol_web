@@ -246,7 +246,7 @@
       + '<div class="lo-step-sub">Run it as your normal user (not <code>sudo</code>). This assumes it landed in <code>~/Downloads</code> — adjust the path if you saved it elsewhere. Safe to re-run; it only does the missing work.</div>'
       + '<div class="lo-recipe"><code>cd ~/Downloads &amp;&amp; chmod +x download-arsenal.sh &amp;&amp; ./download-arsenal.sh</code><button class="btn-copy" data-copy="cd ~/Downloads &amp;&amp; chmod +x download-arsenal.sh &amp;&amp; ./download-arsenal.sh">Copy</button></div></div></li>'
       + '<li><span class="lo-step-n">3</span><div><div class="lo-step-t">Paste The Result Back</div>'
-      + '<div class="lo-step-sub">The script ends by printing an <code>OBOL-ARSENAL</code> block — paste the whole thing here and obol learns your box.</div>'
+      + '<div class="lo-step-sub">The script ends by printing a block fenced between two <code>✂</code> lines — select everything between them (including the <code>✂</code> lines is fine) and paste it here. obol learns your box.</div>'
       + '<textarea class="lo-paste" placeholder="Paste the OBOL-ARSENAL block (or the whole script output) here…" spellcheck="false"></textarea>'
       + '<div class="lo-paste-row"><button class="btn-primary lo-ingest">Stock My Loadout</button><span class="lo-paste-msg" role="status"></span></div></div></li>'
       + '</ol>';

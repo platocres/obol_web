@@ -209,16 +209,21 @@
     out.push('print(json.dumps({"v":1,"tools":tools,"staged":staged,"wwwdir":www,"digests":digests,"cloned":cloned,"wordlists":wl,"missing":missing}))');
     out.push('PY');
     out.push(')');
-    out.push('printf "\\n\\033[1;36mOBOL-ARSENAL v1\\033[0m\\n%s\\n" "$INV"');
-    out.push('printf "\\n\\033[1mDone.\\033[0m Copy the OBOL-ARSENAL line above into obol-web → Loadout.\\n"');
-    out.push('have pipx && printf "\\033[2m(new pipx tools are on ~/.local/bin — open a new terminal if a command is not found.)\\033[0m\\n" || true');
-    // the honest tail: if best-effort install still left gaps, name them + where to look, so nothing fails silently.
+    // Informational notes + the best-effort gap report print FIRST, so the copy block is the LAST thing on
+    // screen (easiest to find + select to the bottom).
+    out.push('have pipx && printf "\\n\\033[2m(new pipx tools are on ~/.local/bin — open a new terminal if a command is not found.)\\033[0m\\n" || true');
     out.push('MISS="$CACHE/.missing"');
     out.push('if [ -s "$MISS" ]; then n=$(grep -c . "$MISS"); TAB=$(printf "\\t");');
     out.push('  printf "\\n\\033[1;33m! %s tool(s) obol uses could not be installed automatically — you will need to grab these yourself:\\033[0m\\n" "$n";');
     out.push('  while IFS="$TAB" read -r k h; do printf "    \\033[1m%s\\033[0m%s\\n" "$k" "${h:+  — $h}"; done < "$MISS";');
     out.push('  printf "\\033[2m(obol still works without them; it just will not auto-fill a path until they are installed. Loadout flags these too.)\\033[0m\\n";');
     out.push('fi');
+    // The paste block, clearly fenced so it is obvious what to select. The ✂ lines are not part of the data —
+    // obol ignores them — but copying them too is harmless, so "select everything between the lines" always works.
+    out.push('printf "\\n\\033[1mDone.\\033[0m Select everything between the two \\342\\234\\202 lines below and paste it into obol-web \\342\\206\\222 Loadout:\\n"');
+    out.push('printf "\\033[1;32m\\342\\234\\202\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200 COPY FROM HERE \\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\033[0m\\n"');
+    out.push('printf "OBOL-ARSENAL v1\\n%s\\n" "$INV"');
+    out.push('printf "\\033[1;32m\\342\\234\\202\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200 TO HERE (end of block) \\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\342\\224\\200\\033[0m\\n"');
     return out.join('\n') + '\n';
   }
 
