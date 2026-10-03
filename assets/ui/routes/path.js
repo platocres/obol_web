@@ -43,6 +43,28 @@
   // localStorage (no dependency on the lazy arsenal.js), so it renders on the coach without loading it.
   var ARSENAL_STALE_DAYS = 21;
   function arsenalProfile() { try { return JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { return null; } }
+  // Commands ALWAYS render as authored — we never gate a move on what we think the box has. But once the box
+  // is synced, if a command's tool isn't present, add a quiet "install it" nudge beneath it (never hiding it).
+  function missingToolHint(action, v) {
+    var prof = arsenalProfile(); if (!prof) return '';
+    var A = (OBOL.ARSENAL) || {};
+    var names = []; if (v && v.tool) names.push(v.tool);
+    if (action && action.tools) names = names.concat(action.tools); if (action && action.tool) names.push(action.tool);
+    var seen = {}, miss = [];
+    names.forEach(function (t) {
+      if (!t) return; var e = A[String(t).toLowerCase()]; if (!e || e.class === 'builtin' || seen[e.key]) return; seen[e.key] = 1;
+      var rec = (prof.tools || {})[e.key];
+      var present = (rec && rec.present) || (prof.cloned && prof.cloned[e.key]) || (prof.digests && prof.digests[e.key])
+        || ((prof.staged || []).indexOf(e.dest || '\0') >= 0);
+      if (!present) miss.push(e);
+    });
+    if (!miss.length) return '';
+    return '<div class="cmd-missing">⚠ not on your box: ' + miss.map(function (e) {
+      var how = e.install ? '<code class="cmd-miss-cmd" data-copy="' + U.attr(e.install) + '" title="Click to copy">' + esc(e.install) + '</code>'
+        : (e.manual_url ? '<a href="' + U.attr(e.manual_url) + '" target="_blank" rel="noopener">get it ↗</a>' : 'see Loadout');
+      return '<b>' + esc(e.label || e.key) + '</b> — ' + how;
+    }).join(' · ') + ' · <a href="#/loadout">Loadout →</a></div>';
+  }
   function arsenalStrip() {
     var p = arsenalProfile();
     if (!p) {
@@ -139,7 +161,7 @@
         + (v.win && !x.ran ? '<span class="cmd-win">☠ Pwn This Target</span>' : '')
         + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '" title="Copy command">copy</button></div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
-        + fillRow + note + webNote + warn + '</div>';
+        + fillRow + note + webNote + warn + missingToolHint(action, v) + '</div>';
     }).join('');
   }
 
@@ -464,6 +486,9 @@
     });
     U.on(mount, 'click', '.btn-copy', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    U.on(mount, 'click', '.cmd-miss-cmd', function (e, t) {
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Install command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
     // inline free-text token fill ({{command}} etc.): substitute live into the command + copy button.
     U.on(mount, 'input', '.cmd-fill', function (e, t) {

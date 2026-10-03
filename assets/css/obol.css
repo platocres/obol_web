@@ -427,6 +427,13 @@ details.lo-fs-node[open] > summary::after { transform: rotate(-90deg); }
 .cmd-webnote { margin: 0 10px 8px; padding: 6px 10px; border-left: 2px solid var(--accent-2); background: color-mix(in srgb, var(--accent-2) 8%, transparent); color: var(--text-2); font-size: 12px; border-radius: 0 6px 6px 0; }
 .cmd-needs { padding: 0 12px 8px; color: var(--yellow); font-size: 12px; }
 .cmd-needs code { color: var(--yellow); }
+/* "tool not detected on your box" nudge — informational, never hides the command. */
+.cmd-missing { margin: 0 10px 8px; padding: 6px 10px; border-left: 2px solid #d79a2b; border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, #d79a2b 9%, transparent); color: var(--text-2); font-size: 11.5px; line-height: 1.5; }
+.cmd-missing b { color: var(--text); font-weight: 700; }
+.cmd-missing .cmd-miss-cmd { cursor: pointer; color: #d79a2b; background: color-mix(in srgb, #d79a2b 12%, transparent);
+  border: 1px solid color-mix(in srgb, #d79a2b 30%, transparent); border-radius: 5px; padding: 1px 6px; font-size: 11px; }
+.cmd-missing a { color: var(--accent-2); }
 /* inline free-text token fill ({{command}} etc.) — type a value, the command + copy update live */
 .cmd-fill-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 12px 10px; border-top: 1px dashed var(--line); }
 .cmd-fill-lbl { display: flex; flex-direction: column; gap: 3px; flex: 1 1 180px; }
