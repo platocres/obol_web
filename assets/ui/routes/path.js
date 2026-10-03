@@ -45,6 +45,9 @@
   function arsenalProfile() { try { return JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { return null; } }
   // Commands ALWAYS render as authored — we never gate a move on what we think the box has. But once the box
   // is synced, if a command's tool isn't present, add a quiet "install it" nudge beneath it (never hiding it).
+  // Only nudge for tools obol actually PROVISIONS (apt/pipx/git/release/material/staged) — never for base Kali
+  // tools (class 'kali') or shell builtins. Those ship by default, so flagging nmap as "missing" would just
+  // look broken, and there's no install command to offer anyway; the Loadout band handles any true Kali gap.
   function missingToolHint(action, v) {
     var prof = arsenalProfile(); if (!prof) return '';
     var A = (OBOL.ARSENAL) || {};
@@ -52,7 +55,8 @@
     if (action && action.tools) names = names.concat(action.tools); if (action && action.tool) names.push(action.tool);
     var seen = {}, miss = [];
     names.forEach(function (t) {
-      if (!t) return; var e = A[String(t).toLowerCase()]; if (!e || e.class === 'builtin' || seen[e.key]) return; seen[e.key] = 1;
+      if (!t) return; var e = A[String(t).toLowerCase()];
+      if (!e || e.class === 'builtin' || e.class === 'kali' || seen[e.key]) return; seen[e.key] = 1;
       var rec = (prof.tools || {})[e.key];
       var present = (rec && rec.present) || (prof.cloned && prof.cloned[e.key]) || (prof.digests && prof.digests[e.key])
         || ((prof.staged || []).indexOf(e.dest || '\0') >= 0);
