@@ -27,6 +27,8 @@
   var _path = [];                // the compiled path currently being studied
   var _pathName = 'Your custom path';
   var _pathMode = false;         // node view follows _path instead of the move's lane
+  var _collapsed = {};           // Atlas: laneKey -> true when that lane band is folded shut
+  var _atlasQuery = '';          // Atlas: current search text (dims non-matching steps)
 
   function esc(s) { return U.esc(String(s == null ? '' : s)); }
   function study() { return OBOL.study; }
@@ -52,6 +54,12 @@
   function laneMeta(key) { var ls = study().lanes(); for (var i = 0; i < ls.length; i++) if (ls[i].key === key) return ls[i]; return { name: key }; }
 
   // ---- left: the current lane (or custom path) as a rail --------------------------------------
+  function masteryGlyph(id) {
+    var mk = study().mastery()[id] || {};
+    if (mk.correct) return '<span class="study-gn-m done" title="You answered this correctly">✓</span>';
+    if (mk.studied) return '<span class="study-gn-m seen" title="You\'ve watched this step">◐</span>';
+    return '';
+  }
   function graphPanel() {
     var html = '', header;
     if (_pathMode && _path.length) {
@@ -61,7 +69,7 @@
         var lk = laneKeyOf(id);
         var cls = 'study-gnode lane-' + lk + (id === _sel ? ' active' : '') + (i > 0 ? ' linked' : '');
         html += '<button type="button" class="' + cls + '" data-node="' + U.attr(id) + '">'
-          + '<span class="study-gn-t">' + esc(m.title) + '</span>'
+          + '<span class="study-gn-t">' + esc(m.title) + masteryGlyph(id) + '</span>'
           + '<span class="study-gn-k">' + esc(laneMeta(lk).short) + (m.proves && m.proves.length ? ' · gets you ' + esc(human(m.proves[0])) : '') + '</span>'
           + '</button>';
       });
@@ -72,7 +80,7 @@
         if (n.phase !== lastPhase) { html += '<div class="study-phase">' + esc(n.phase) + '</div>'; lastPhase = n.phase; }
         var cls = 'study-gnode lane-' + lk2 + (n.id === _sel ? ' active' : '') + (i > 0 ? ' linked' : '');
         html += '<button type="button" class="' + cls + '" data-node="' + U.attr(n.id) + '">'
-          + '<span class="study-gn-t">' + esc(n.title) + '</span>'
+          + '<span class="study-gn-t">' + esc(n.title) + masteryGlyph(n.id) + '</span>'
           + (n.proves && n.proves.length ? '<span class="study-gn-k">gets you ' + esc(human(n.proves[0])) + '</span>' : '')
           + '</button>';
       });
@@ -111,14 +119,17 @@
   // signal lights up, the facts it mints pop. Markup only — the controller lives in mounted(). ----
   function replayPlayer(rp) {
     if (!rp) return '';
+    var idle = rp.hasOutput
+      ? 'Press <b>Play</b> — watch <b>' + esc(rp.tool) + '</b> run against the target and the result land, the way it would on a real box.'
+      : 'Press <b>Play</b> to watch <b>' + esc(rp.tool) + '</b> run. <span class="rp-nosample">A captured sample of this step’s output is still being written — you’ll see the command and what it proves.</span>';
     return '<div class="study-replay" data-move="' + U.attr(rp.id) + '">'
       + '<div class="study-replay-bar"><span class="study-replay-title">▶ Watch it run</span>'
       + '<span class="study-replay-loc">' + locusGlyph(rp.locus) + ' ' + esc(rp.locus) + ' · ' + esc(rp.tool) + '</span></div>'
-      + '<div class="study-replay-term" id="rp-term"><div class="rp-idle">Press <b>Play</b> — watch <b>' + esc(rp.tool) + '</b> run against the target and the result land, the way it would on a real box.</div></div>'
+      + '<div class="study-replay-term" id="rp-term"><div class="rp-idle">' + idle + '</div></div>'
       + '<div class="study-replay-facts" id="rp-facts"></div>'
       + '<div class="study-replay-ctrl">'
       + '<button type="button" class="study-rp-btn primary" data-rp="play">▶ Play</button>'
-      + '<button type="button" class="study-rp-btn" data-rp="skip">⏭ Skip to result</button>'
+      + (rp.hasOutput ? '<button type="button" class="study-rp-btn" data-rp="skip">⏭ Skip to result</button>' : '')
       + '<button type="button" class="study-rp-btn" data-rp="restart">↺ Replay</button>'
       + '<label class="study-rp-auto"><input type="checkbox" data-rp="autolane"' + (_autolane ? ' checked' : '') + '> auto-play the whole chain</label>'
       + '<span class="study-rp-prog"></span>'
@@ -165,7 +176,7 @@
 
   // ---- right: YOUR TURN (practice) ------------------------------------------------------------
   function practicePanel() {
-    var q = study().practiceFor(_sel);
+    var q = study().practiceFor(_sel, _pathMode && _path.length ? _path : null);
     if (!q) return '<div class="study-panel"><p class="study-sub">No practice for this node yet.</p></div>';
     var letters = 'ABCDEFGH';
     var h = '<div class="study-panel">';
@@ -205,10 +216,12 @@
       + '<p class="study-hero-p">obol teaches offensive security as a decision graph — <b>know what to do, and why, from what you\'ve found.</b> '
       + 'Pick a path below and step through it: watch each move play out like it would on a real box, or test yourself.</p></div>';
     h += '<div class="study-lanes">' + ls.map(function (L) {
+      var pr = study().laneProgress(L.key), pct = pr.total ? Math.round(pr.studied / pr.total * 100) : 0;
       return '<button type="button" class="study-lane-card active lane-' + L.key + '" data-open="' + U.attr(L.firstId) + '">'
         + '<div class="study-lane-name">' + esc(L.name) + ' <span class="study-lane-badge">' + L.count + ' steps</span></div>'
         + '<div class="study-lane-desc">' + esc(L.desc) + '</div>'
-        + '<div class="study-lane-go">Start the path →</div></button>';
+        + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:' + pct + '%"></span></div>'
+        + '<span class="study-lane-go">' + (pr.studied ? pr.studied + ' / ' + pr.total + ' studied · continue →' : 'Start the path →') + '</span></div></button>';
     }).join('') + '</div>';
     h += '<button type="button" class="study-graph-cta" data-graph>⊞ See the whole methodology as one graph →</button>';
     h += '<div class="study-doors">'
@@ -219,48 +232,92 @@
   }
 
   // ---- the full methodology graph: every lane, every step, pickable ---------------------------
-  function atlasView() {
-    // --- the Atlas: a zoomable/pannable methodology graph you draw custom paths through ----------
-    var NW = 184, NH = 50, CGAP = 66, RGAP = 54, LEFT = 150, TOP = 54;
+  // Layout: each lane is a horizontal *band*. Its steps wrap across up to MAXC columns so a 48-step
+  // lane like AD reads as a compact block of rows instead of one 12,000px line. A band can be folded
+  // shut (its steps collapse to a dot strip) so you can hide lanes you're not working. Everything is
+  // derived from study().atlas(); positions are computed once in atlasLayout() and shared by the SVG,
+  // the edges, the path-line and the minimap.
+  var MAXC = 8, NW = 172, NH = 46, CGAP = 18, RGAP = 20, LEFT = 118, TOP = 10, BANDHEAD = 28, BANDGAP = 16;
+  function atlasLayout() {
     var A = study().atlas();
-    var pos = {};
-    A.nodes.forEach(function (n) { var x = LEFT + n.col * (NW + CGAP), y = TOP + n.row * (NH + RGAP); pos[n.id] = { x: x, y: y, cx: x + NW / 2, cy: y + NH / 2 }; });
-    var W = LEFT + A.cols * (NW + CGAP) + 20, H = TOP + A.laneOrder.length * (NH + RGAP) + 20;
+    var colW = NW + CGAP, rowH = NH + RGAP, pos = {}, bands = [], y = TOP, maxRight = LEFT + MAXC * colW;
+    A.lanes.forEach(function (L) {
+      var collapsed = !!_collapsed[L.key];
+      var laneNodes = A.nodes.filter(function (n) { return n.lane === L.key; });
+      var rows = collapsed ? 0 : Math.ceil(laneNodes.length / MAXC) || 1;
+      var top = y, h = BANDHEAD + (collapsed ? 6 : rows * rowH);
+      if (!collapsed) laneNodes.forEach(function (n, idx) {
+        var col = idx % MAXC, lr = Math.floor(idx / MAXC);
+        var x = LEFT + col * colW, ny = top + BANDHEAD + lr * rowH;
+        pos[n.id] = { x: x, y: ny, cx: x + NW / 2, cy: ny + NH / 2, lr: lr };
+        if (x + NW > maxRight) maxRight = x + NW;
+      });
+      bands.push({ key: L.key, name: L.name, short: L.short, count: laneNodes.length, top: top, h: h, collapsed: collapsed, rows: rows, nodes: laneNodes });
+      y += h + BANDGAP;
+    });
+    return { A: A, pos: pos, bands: bands, colW: colW, rowH: rowH, W: maxRight + 24, H: y + 6 };
+  }
 
-    function edgePath(a, b, cross) {
-      var p1 = pos[a], p2 = pos[b]; if (!p1 || !p2) return '';
-      if (!cross) { var x1 = p1.x + NW, y1 = p1.cy, x2 = p2.x, y2 = p2.cy, mx = (x1 + x2) / 2; return 'M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2; }
-      var sx = p1.cx, sy = (p2.cy > p1.cy ? p1.y + NH : p1.y), ex = p2.cx, ey = (p2.cy > p1.cy ? p2.y : p2.y + NH);
-      return 'M' + sx + ',' + sy + ' C' + sx + ',' + ((sy + ey) / 2) + ' ' + ex + ',' + ((sy + ey) / 2) + ' ' + ex + ',' + ey;
-    }
-    var laneEdgeSvg = A.laneEdges.map(function (e) { return '<path class="atlas-edge atlas-edge-lane lane-' + study().laneEntry(e.from).laneKey + '" d="' + edgePath(e.from, e.to, false) + '"/>'; }).join('');
-    var crossEdgeSvg = A.crossEdges.map(function (e) { return '<path class="atlas-edge atlas-edge-cross" d="' + edgePath(e.from, e.to, true) + '"><title>' + esc(e.note || '') + '</title></path>'; }).join('');
+  function edgePath(pos, a, b, cross) {
+    var p1 = pos[a], p2 = pos[b]; if (!p1 || !p2) return '';
+    if (cross) { var sx = p1.cx, sy = (p2.cy > p1.cy ? p1.y + NH : p1.y), ex = p2.cx, ey = (p2.cy > p1.cy ? p2.y : p2.y + NH); return 'M' + sx + ',' + sy + ' C' + sx + ',' + ((sy + ey) / 2) + ' ' + ex + ',' + ((sy + ey) / 2) + ' ' + ex + ',' + ey; }
+    if (p1.lr === p2.lr && p2.x > p1.x) { var x1 = p1.x + NW, y1 = p1.cy, x2 = p2.x, y2 = p2.cy, mx = (x1 + x2) / 2; return 'M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2; }
+    // a step that wraps to the next row: drop out of the bottom and curve back up to the row start
+    var bx = p1.cx, by = p1.y + NH, tx = p2.cx, ty = p2.y, my = (by + ty) / 2;
+    return 'M' + bx + ',' + by + ' C' + bx + ',' + my + ' ' + tx + ',' + my + ' ' + tx + ',' + ty;
+  }
+
+  function atlasView() {
+    var LY = atlasLayout(), A = LY.A, pos = LY.pos, M = study().mastery();
+    var laneEdgeSvg = A.laneEdges.map(function (e) { var d = edgePath(pos, e.from, e.to, false); return d ? '<path class="atlas-edge atlas-edge-lane lane-' + study().laneEntry(e.from).laneKey + '" d="' + d + '"/>' : ''; }).join('');
+    var crossEdgeSvg = A.crossEdges.map(function (e) { var d = edgePath(pos, e.from, e.to, true); return d ? '<path class="atlas-edge atlas-edge-cross" d="' + d + '"><title>' + esc(e.note || '') + '</title></path>' : ''; }).join('');
     var nodeSvg = A.nodes.map(function (n) {
-      var p = pos[n.id], proof = (n.proves && n.proves[0]) ? human(n.proves[0]) : '';
-      return '<g class="atlas-node lane-' + n.lane + '" data-anode="' + U.attr(n.id) + '" data-cx="' + p.cx + '" data-cy="' + p.cy + '" transform="translate(' + p.x + ',' + p.y + ')">'
+      var p = pos[n.id]; if (!p) return '';
+      var proof = (n.proves && n.proves[0]) ? human(n.proves[0]) : '', mk = M[n.id] || {};
+      var glyph = mk.correct ? '✓' : (mk.studied ? '◐' : '');
+      return '<g class="atlas-node lane-' + n.lane + (mk.correct ? ' done' : (mk.studied ? ' seen' : '')) + '" data-anode="' + U.attr(n.id) + '" data-cx="' + p.cx + '" data-cy="' + p.cy + '" transform="translate(' + p.x + ',' + p.y + ')">'
         + '<rect class="an-box" width="' + NW + '" height="' + NH + '" rx="9"/>'
         + '<text class="an-badge" x="9" y="-7"></text>'
-        + '<text class="an-ph" x="11" y="17">' + esc(n.phase.toUpperCase()) + '</text>'
-        + '<text class="an-t" x="11" y="32">' + esc(n.title.length > 26 ? n.title.slice(0, 25) + '…' : n.title) + '</text>'
-        + '<text class="an-sub" x="11" y="45">' + esc(proof ? ('→ ' + (proof.length > 28 ? proof.slice(0, 27) + '…' : proof)) : '') + '</text>'
+        + '<text class="an-mastery" x="' + (NW - 11) + '" y="17">' + glyph + '</text>'
+        + '<text class="an-ph" x="11" y="16">' + esc(n.phase.toUpperCase()) + '</text>'
+        + '<text class="an-t" x="11" y="31">' + esc(n.title.length > 24 ? n.title.slice(0, 23) + '…' : n.title) + '</text>'
+        + '<text class="an-sub" x="11" y="43">' + esc(proof ? ('→ ' + (proof.length > 26 ? proof.slice(0, 25) + '…' : proof)) : '') + '</text>'
         + '</g>';
     }).join('');
-    var laneLabels = A.laneOrder.map(function (lk, row) { var meta = laneMeta(lk); var y = TOP + row * (NH + RGAP) + NH / 2; return '<text class="atlas-lanelabel lane-' + lk + '" x="12" y="' + (y + 4) + '">' + esc(meta.short || meta.name) + '</text>'; }).join('');
+    var bandSvg = LY.bands.map(function (b) {
+      var prog = study().laneProgress(b.key);
+      var label = '<g class="atlas-band lane-' + b.key + (b.collapsed ? ' collapsed' : '') + '" data-band="' + U.attr(b.key) + '">'
+        + '<rect class="ab-bg" x="4" y="' + b.top + '" width="' + (LY.W - 8) + '" height="' + b.h + '" rx="10"/>'
+        + '<text class="ab-chev" x="14" y="' + (b.top + 19) + '">' + (b.collapsed ? '▸' : '▾') + '</text>'
+        + '<text class="atlas-lanelabel lane-' + b.key + '" x="30" y="' + (b.top + 19) + '">' + esc(b.short) + '</text>'
+        + '<text class="ab-count" x="' + (LY.W - 20) + '" y="' + (b.top + 19) + '">' + prog.studied + '/' + b.count + '</text>';
+      if (b.collapsed) {
+        // folded: a strip of dots so the lane's size and progress still read at a glance
+        var dots = b.nodes.map(function (n, i) { var mk = (study().mastery()[n.id] || {}); var cls = mk.correct ? ' done' : (mk.studied ? ' seen' : ''); return '<circle class="ab-dot' + cls + '" cx="' + (118 + i * 11) + '" cy="' + (b.top + 15) + '" r="3.2"/>'; }).join('');
+        label += dots;
+      }
+      return label + '</g>';
+    }).join('');
 
     return '<section class="study-route study-atlas-route">'
       + '<div class="study-top"><button type="button" class="study-back" data-back-map>← Paths</button>'
-      + '<div class="study-crumb"><b>Study</b> · Atlas <span class="study-map-path-note">drag to pan · scroll to zoom · click steps to draw a path</span></div>'
-      + '<div class="atlas-ctrl"><button type="button" class="study-rp-btn" data-az="out">−</button>'
+      + '<div class="study-crumb"><b>Study</b> · Atlas <span class="study-map-path-note">drag to pan · scroll to zoom · click a step to add it to a path · click a lane title to fold it</span></div>'
+      + '<div class="atlas-ctrl">'
+      + '<input type="search" class="atlas-search" id="atlas-search" placeholder="Search steps…" value="' + U.attr(_atlasQuery) + '" autocomplete="off" spellcheck="false">'
+      + '<button type="button" class="study-rp-btn" data-az="out">−</button>'
       + '<button type="button" class="study-rp-btn" data-az="reset">fit</button>'
       + '<button type="button" class="study-rp-btn" data-az="in">+</button></div></div>'
       + '<div class="atlas-scenarios"><span class="atlas-scen-l">Common scenarios</span>'
       + study().scenarios().map(function (s) { return '<button type="button" class="atlas-scen' + (s.key === _scenario ? ' on' : '') + '" data-scen="' + U.attr(s.key) + '" title="' + U.attr(s.desc) + '">' + esc(s.name) + '</button>'; }).join('')
       + '<span class="atlas-scen-or">or click steps to draw your own</span></div>'
       + '<div class="atlas-stage" id="atlas-stage">'
-      + '<svg class="atlas-svg" id="atlas-svg"><g class="atlas-view" id="atlas-view" data-w="' + W + '" data-h="' + H + '">'
-      + laneLabels + '<g class="atlas-edges">' + laneEdgeSvg + crossEdgeSvg + '</g>'
+      + '<svg class="atlas-svg" id="atlas-svg"><g class="atlas-view" id="atlas-view" data-w="' + LY.W + '" data-h="' + LY.H + '">'
+      + '<g class="atlas-bands">' + bandSvg + '</g>'
+      + '<g class="atlas-edges">' + laneEdgeSvg + crossEdgeSvg + '</g>'
       + '<path class="atlas-pathline" id="atlas-pathline" d=""/>'
       + '<g class="atlas-nodes">' + nodeSvg + '</g></g></svg>'
+      + '<div class="atlas-minimap" id="atlas-minimap"><svg id="atlas-mini-svg" class="atlas-mini-svg"></svg><div class="atlas-mini-vp" id="atlas-mini-vp"></div></div>'
+      + '<div class="atlas-empty" id="atlas-empty" hidden>No step matches “<span id="atlas-empty-q"></span>”.</div>'
       + '</div>'
       + '<div class="atlas-tray" id="atlas-tray"></div>'
       + '</section>';
@@ -299,6 +356,7 @@
     var idx = seq.indexOf(rp.id);
     if (prog) prog.textContent = 'step ' + (idx + 1) + ' / ' + seq.length;
     function popFacts(delay) {
+      study().markStudied(rp.id, 'studied');   // watching a step through counts as having studied it
       (rp.proves || []).forEach(function (f, k) { setTimeout(function () { if (token.cancelled || !facts) return; var c = document.createElement('span'); c.className = 'study-chip proof rp-pop'; c.textContent = '+ ' + human(f); facts.appendChild(c); }, delay + k * 260); });
       var nextId = rp.next;
       if (_pathMode && _path.length) { var pi = _path.indexOf(rp.id); nextId = (pi >= 0 && pi < _path.length - 1) ? _path[pi + 1] : null; }
@@ -317,6 +375,7 @@
       if (token.cancelled) return;
       if (ci <= cmd.length) { typed.textContent = cmd.slice(0, ci); ci++; setTimeout(typeCmd, 16); return; }
       var cur = promptLine.querySelector('.rp-cursor'); if (cur) cur.remove();
+      if (!rp.outputLines.length) { var ns = document.createElement('div'); ns.className = 'rp-line rp-nosample-line'; ns.textContent = '· sample output for this step is still being captured — but you can see the command above and what it proves below ·'; term.appendChild(ns); popFacts(500); return; }
       var i = 0;
       (function nextLine() {
         if (token.cancelled) return;
@@ -340,14 +399,28 @@
     return pts.length < 2 ? '' : 'M' + pts.join(' L');
   }
   function scenName(key) { var s = study().scenario(key); return s ? s.name : ''; }
+  // a plain-language read-out of what (if anything) is wrong with the drawn path
+  function pathWarnings() {
+    if (_atlasPath.length < 2) return '';
+    var v = study().validatePath(_atlasPath); if (v.ok) return '';
+    var lines = v.issues.map(function (iss) {
+      var c = study().cellFor(iss.id), title = c ? c.title : iss.id;
+      if (iss.kind === 'unknown') return '<b>Step ' + (iss.idx + 1) + '</b> (' + esc(title) + ') isn\'t in this build.';
+      var missing = (iss.missing || []).map(function (mk) { return /^one of:/.test(mk) ? ('one of: ' + mk.replace(/^one of:\s*/, '').split(' / ').map(human).join(' or ')) : human(mk); });
+      return '<b>Step ' + (iss.idx + 1) + '</b> (' + esc(title) + ') needs ' + missing.map(function (x) { return '<i>' + esc(x) + '</i>'; }).join(', ') + ' — nothing earlier in this path gets you that.';
+    });
+    return '<div class="atlas-tray-warn"><span class="atw-i">🔒</span><div><b>Locked doors on this path:</b> '
+      + lines.join(' ') + ' Add the step that opens each, or start where you already have the keys.</div></div>';
+  }
   function atlasTray(mount) {
     var tray = mount.querySelector('#atlas-tray'); if (!tray) return;
     if (!_atlasPath.length) { tray.innerHTML = '<span class="atlas-tray-hint">Pick a <b>common scenario</b> above, or click steps in order to draw your own path — then study it as one guided run.</span>'; return; }
     var lead = _scenario ? ('<span class="atlas-tray-name">' + esc(scenName(_scenario)) + '</span>') : '<span class="atlas-tray-name custom">Custom path</span>';
     var chips = _atlasPath.map(function (id, i) { var c = study().cellFor(id); return '<span class="atlas-trchip lane-' + laneKeyOf(id) + '">' + (i + 1) + '. ' + esc(c ? c.title : id) + '</span>'; }).join('<span class="atlas-trarr">→</span>');
-    tray.innerHTML = lead + '<div class="atlas-tray-path">' + chips + '</div>'
+    tray.innerHTML = '<div class="atlas-tray-row">' + lead + '<div class="atlas-tray-path">' + chips + '</div>'
       + '<div class="atlas-tray-act"><button type="button" class="study-rp-btn" data-atlas="clear">clear</button>'
-      + '<button type="button" class="study-rp-btn primary" data-atlas="study">▶ Study this path (' + _atlasPath.length + ') →</button></div>';
+      + '<button type="button" class="study-rp-btn primary" data-atlas="study">▶ Study this path (' + _atlasPath.length + ') →</button></div></div>'
+      + pathWarnings();
   }
   function syncScen(mount) { Array.prototype.forEach.call(mount.querySelectorAll('.atlas-scen'), function (c) { c.classList.toggle('on', c.getAttribute('data-scen') === _scenario); }); }
   function atlasSelection(mount) {
@@ -360,22 +433,58 @@
     syncScen(mount);
     atlasTray(mount);
   }
+  // dim every step that doesn't match the search; returns the first matching node's id (for centring)
+  function applyQuery(mount) {
+    var q = _atlasQuery.trim().toLowerCase(), first = null, nMatch = 0;
+    Array.prototype.forEach.call(mount.querySelectorAll('.atlas-node'), function (g) {
+      var id = g.getAttribute('data-anode'), c = study().cellFor(id);
+      var hay = (id + ' ' + (c ? c.title : '') + ' ' + (c && c.proves ? c.proves.map(human).join(' ') : '')).toLowerCase();
+      var hit = !q || hay.indexOf(q) >= 0;
+      g.classList.toggle('dim', !!q && !hit);
+      g.classList.toggle('qmatch', !!q && hit);
+      if (q && hit) { nMatch++; if (!first) first = id; }
+    });
+    var empty = mount.querySelector('#atlas-empty'); if (empty) { empty.hidden = !(q && nMatch === 0); var eq = mount.querySelector('#atlas-empty-q'); if (eq) eq.textContent = _atlasQuery; }
+    return q ? first : null;
+  }
   function wireAtlas(mount) {
     var stage = mount.querySelector('#atlas-stage'), view = mount.querySelector('#atlas-view');
     if (!stage || !view) return;
     var W = +view.getAttribute('data-w'), H = +view.getAttribute('data-h');
-    function fit() { var r = stage.getBoundingClientRect(); var k = Math.min((r.width - 24) / W, (r.height - 24) / H, 1.1); k = Math.max(k, 0.3); _az = { k: k, tx: (r.width - W * k) / 2, ty: 12 }; atlasApply(view); atlasLOD(stage); }
-    function zoomAround(mx, my, f) { var nk = Math.max(0.3, Math.min(2.4, _az.k * f)), ratio = nk / _az.k; _az.tx = mx - (mx - _az.tx) * ratio; _az.ty = my - (my - _az.ty) * ratio; _az.k = nk; atlasApply(view); atlasLOD(stage); }
-    if (!_az) fit(); else { atlasApply(view); atlasLOD(stage); }
+    var mini = mount.querySelector('#atlas-minimap'), miniSvg = mount.querySelector('#atlas-mini-svg'), miniVp = mount.querySelector('#atlas-mini-vp');
+    var MINIW = 164, miniK = Math.min(MINIW / W, 120 / H), miniH = Math.round(H * miniK);
+    if (miniSvg) {
+      miniSvg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); miniSvg.setAttribute('width', Math.round(W * miniK)); miniSvg.setAttribute('height', miniH);
+      miniSvg.innerHTML = atlasLayout().bands.map(function (b) { return '<rect class="amm-band lane-' + b.key + '" x="4" y="' + b.top + '" width="' + (W - 8) + '" height="' + b.h + '" rx="8"/>'; }).join('');
+      if (mini) mini.style.width = Math.round(W * miniK) + 'px';
+    }
+    function updateMini() {
+      if (!miniVp) return; var r = stage.getBoundingClientRect();
+      var vx = (-_az.tx / _az.k) * miniK, vy = (-_az.ty / _az.k) * miniK, vw = (r.width / _az.k) * miniK, vh = (r.height / _az.k) * miniK;
+      miniVp.style.left = Math.max(0, vx) + 'px'; miniVp.style.top = Math.max(0, vy) + 'px';
+      miniVp.style.width = Math.min(vw, Math.round(W * miniK)) + 'px'; miniVp.style.height = Math.min(vh, miniH) + 'px';
+    }
+    function apply() { atlasApply(view); atlasLOD(stage); updateMini(); }
+    function fit() { var r = stage.getBoundingClientRect(); var k = Math.min((r.width - 24) / W, (r.height - 24) / H, 1.1); k = Math.max(k, 0.26); _az = { k: k, tx: (r.width - W * k) / 2, ty: 12 }; apply(); }
+    function zoomAround(mx, my, f) { var nk = Math.max(0.26, Math.min(2.4, _az.k * f)), ratio = nk / _az.k; _az.tx = mx - (mx - _az.tx) * ratio; _az.ty = my - (my - _az.ty) * ratio; _az.k = nk; apply(); }
+    function centerOn(id) { var g = mount.querySelector('.atlas-node[data-anode="' + id + '"]'); if (!g) return; var r = stage.getBoundingClientRect(); var cx = +g.getAttribute('data-cx'), cy = +g.getAttribute('data-cy'); _az.tx = r.width / 2 - cx * _az.k; _az.ty = r.height / 2 - cy * _az.k; apply(); }
+    if (!_az) fit(); else apply();
     atlasSelection(mount);
+    if (_atlasQuery) applyQuery(mount);
     var down = null, moved = false;
-    stage.addEventListener('pointerdown', function (e) { var g = e.target.closest && e.target.closest('.atlas-node'); down = { x: e.clientX, y: e.clientY, tx: _az.tx, ty: _az.ty, node: g }; moved = false; try { stage.setPointerCapture(e.pointerId); } catch (x) {} });
-    stage.addEventListener('pointermove', function (e) { if (!down) return; var dx = e.clientX - down.x, dy = e.clientY - down.y; if (Math.abs(dx) + Math.abs(dy) > 4) moved = true; _az.tx = down.tx + dx; _az.ty = down.ty + dy; atlasApply(view); });
+    stage.addEventListener('pointerdown', function (e) { if (e.target.closest && (e.target.closest('.atlas-band') || e.target.closest('.atlas-minimap'))) { down = null; return; } var g = e.target.closest && e.target.closest('.atlas-node'); down = { x: e.clientX, y: e.clientY, tx: _az.tx, ty: _az.ty, node: g }; moved = false; try { stage.setPointerCapture(e.pointerId); } catch (x) {} });
+    stage.addEventListener('pointermove', function (e) { if (!down) return; var dx = e.clientX - down.x, dy = e.clientY - down.y; if (Math.abs(dx) + Math.abs(dy) > 4) moved = true; _az.tx = down.tx + dx; _az.ty = down.ty + dy; apply(); });
     stage.addEventListener('pointerup', function () { var wasMoved = moved, g = down && down.node; down = null; if (wasMoved || !g) return; var id = g.getAttribute('data-anode'), i = _atlasPath.indexOf(id); if (i >= 0) _atlasPath.splice(i, 1); else _atlasPath.push(id); _scenario = null; atlasSelection(mount); });
     stage.addEventListener('wheel', function (e) { e.preventDefault(); var r = stage.getBoundingClientRect(); zoomAround(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.12 : 0.89); }, { passive: false });
+    // minimap: click to recentre the stage on that point
+    if (mini) mini.addEventListener('click', function (e) { var r = mini.getBoundingClientRect(), sr = stage.getBoundingClientRect(); var cx = (e.clientX - r.left) / miniK, cy = (e.clientY - r.top) / miniK; _az.tx = sr.width / 2 - cx * _az.k; _az.ty = sr.height / 2 - cy * _az.k; apply(); });
     U.on(mount, 'click', '[data-az]', function (e, t) { var a = t.getAttribute('data-az'); if (a === 'in' || a === 'out') { var r = stage.getBoundingClientRect(); zoomAround(r.width / 2, r.height / 2, a === 'in' ? 1.2 : 0.83); } else fit(); });
     U.on(mount, 'click', '[data-atlas="clear"]', function () { _atlasPath = []; _scenario = null; atlasSelection(mount); });
     U.on(mount, 'click', '[data-atlas="study"]', function () { if (!_atlasPath.length) return; _path = _atlasPath.slice(); _pathName = _scenario ? scenName(_scenario) : 'Your custom path'; _pathMode = true; _from = 'atlas'; _sel = _path[0]; _view = 'node'; OBOL.router.render(); });
+    // fold / unfold a lane band (full re-render — the whole layout reflows around it; the pan/zoom persists)
+    U.on(mount, 'click', '[data-band]', function (e, t) { var k = t.getAttribute('data-band'); _collapsed[k] = !_collapsed[k]; OBOL.router.render(); });
+    // search: dim non-matches, centre the first hit
+    U.on(mount, 'input', '#atlas-search', function (e, t) { _atlasQuery = t.value || ''; var first = applyQuery(mount); if (first) centerOn(first); });
     // toggle a fixed scenario on/off (loads its steps as the path)
     U.on(mount, 'click', '[data-scen]', function (e, t) {
       var key = t.getAttribute('data-scen');
@@ -415,7 +524,7 @@
       var vbox = mount.querySelector('#study-verdict'), slot = mount.querySelector('#study-reveal-slot');
       if (slot) slot.innerHTML = '';
       var head, body;
-      if (verdict === 'correct') { head = '✓ Exactly.'; body = 'That\'s the move. Here\'s how it plays out →'; }
+      if (verdict === 'correct') { head = '✓ Exactly.'; body = 'That\'s the move. Here\'s how it plays out →'; study().markStudied(_sel, 'correct'); }
       else if (verdict === 'alt') { head = '~ Also valid — but weigh it.'; body = coach ? codeify(coach) : 'A legal move here; consider the tradeoff against the cleaner path.'; }
       else { head = '✗ Not yet.'; body = (coach ? codeify(coach) : 'This needs something you don\'t have.') + (missing ? ' <span class="study-missing">Still need: ' + esc(missing) + '</span>' : ''); }
       if (vbox) {

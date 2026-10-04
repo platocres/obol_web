@@ -1818,18 +1818,20 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 :root[data-route="study"] #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "main"; }
 :root[data-route="study"] aside#sidebar { display: none; }
 
-/* --- Study: lane hues (one accent per path) --- */
-.lane-recon   { --lane: #14B8A6; }
-.lane-ad      { --lane: #22C55E; }
-.lane-web     { --lane: #A855F7; }
-.lane-linux   { --lane: #F59E0B; }
-.lane-windows { --lane: #3E7BC4; }
+/* --- Study: lane hues (one accent per lane) --- */
+.lane-recon    { --lane: #14B8A6; }
+.lane-web      { --lane: #A855F7; }
+.lane-checks   { --lane: #22D3EE; }
+.lane-ad       { --lane: #22C55E; }
+.lane-creds    { --lane: #EAB308; }
+.lane-linux    { --lane: #F97316; }
+.lane-windows  { --lane: #3E7BC4; }
+.lane-database { --lane: #EC4899; }
+.lane-shells   { --lane: #84CC16; }
+.lane-pivot    { --lane: #8B5CF6; }
+.lane-proof    { --lane: #F43F5E; }
 /* lane cards on the map pick up their hue */
-.study-lane-card.active.lane-recon:hover,
-.study-lane-card.active.lane-ad:hover,
-.study-lane-card.active.lane-web:hover,
-.study-lane-card.active.lane-linux:hover,
-.study-lane-card.active.lane-windows:hover { border-color: var(--lane); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lane) 22%, transparent); }
+.study-lane-card.active:hover { border-color: var(--lane); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lane) 22%, transparent); }
 .study-lane-card.active { background: color-mix(in srgb, var(--lane) 6%, var(--surf1)); border-color: color-mix(in srgb, var(--lane) 40%, var(--line)); }
 .study-lane-card .study-lane-badge { color: color-mix(in srgb, var(--lane) 72%, white); background: color-mix(in srgb, var(--lane) 16%, transparent); border-color: color-mix(in srgb, var(--lane) 45%, var(--line)); }
 .study-lane-card .study-lane-go { color: color-mix(in srgb, var(--lane) 72%, white); }
@@ -1899,3 +1901,51 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .atlas-scen-or { font-size: 11px; color: var(--muted); font-style: italic; margin-left: 2px; }
 .atlas-tray-name { font-size: 12.5px; font-weight: 800; color: var(--accent-2); white-space: nowrap; }
 .atlas-tray-name.custom { color: var(--text-2); }
+
+/* --- Study: scale polish (rail scroll, no-sample replay state) --- */
+.study-graph { max-height: 64vh; overflow-y: auto; padding-right: 2px; }
+.rp-nosample { color: var(--muted); font-size: 11.5px; display: block; margin-top: 5px; }
+.rp-nosample-line { color: var(--muted); font-style: italic; opacity: .8; padding: 4px 0; white-space: normal; }
+
+/* --- Study: Atlas density (bands, search, minimap, mastery) --- */
+.atlas-search { font-family: var(--mono); font-size: 12px; background: var(--surf2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; width: 150px; transition: border-color .14s, width .18s; }
+.atlas-search:focus { outline: none; border-color: var(--accent); width: 190px; }
+.atlas-search::placeholder { color: var(--muted); }
+/* lane bands: a tinted strip per lane, label folds the band */
+.atlas-band { cursor: pointer; }
+.atlas-band .ab-bg { fill: color-mix(in srgb, var(--lane) 6%, var(--surf1)); stroke: color-mix(in srgb, var(--lane) 22%, var(--line)); stroke-width: 1; }
+.atlas-band:hover .ab-bg { fill: color-mix(in srgb, var(--lane) 11%, var(--surf1)); }
+.atlas-band .ab-chev { font-family: var(--mono); font-size: 12px; font-weight: 800; fill: color-mix(in srgb, var(--lane) 70%, var(--text-2)); }
+.atlas-band .ab-count { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); text-anchor: end; }
+.atlas-band .ab-dot { fill: color-mix(in srgb, var(--lane) 45%, var(--surf3)); }
+.atlas-band .ab-dot.seen { fill: color-mix(in srgb, var(--lane) 75%, white); }
+.atlas-band .ab-dot.done { fill: var(--accent); }
+/* per-node mastery + search dimming */
+.atlas-node .an-mastery { font-family: var(--mono); font-size: 13px; font-weight: 800; text-anchor: end; fill: var(--accent); }
+.atlas-node.seen .an-mastery { fill: color-mix(in srgb, var(--lane) 80%, white); }
+.atlas-node.done .an-box { stroke: var(--accent); stroke-width: 2; }
+.atlas-node.dim { opacity: .16; }
+.atlas-node.qmatch .an-box { stroke: var(--accent-2); stroke-width: 2.5; }
+/* far zoom: let the lane labels read as cluster headers */
+.atlas-stage[data-lod="far"] .atlas-lanelabel { font-size: 18px; opacity: 1; }
+.atlas-stage[data-lod="far"] .an-mastery { display: none; }
+/* minimap overlay (bottom-right of the stage) */
+.atlas-minimap { position: absolute; right: 10px; bottom: 10px; background: color-mix(in srgb, var(--surf1) 86%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 4px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.35); }
+.atlas-mini-svg { display: block; border-radius: 4px; }
+.amm-band { fill: color-mix(in srgb, var(--lane) 40%, var(--surf3)); stroke: none; }
+.atlas-mini-vp { position: absolute; border: 1.5px solid var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 2px; pointer-events: none; top: 4px; left: 4px; }
+.atlas-empty { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--surf2); border: 1px solid var(--line-hot); border-radius: 8px; padding: 7px 14px; font-size: 12px; color: var(--text-2); }
+/* path tray rows + locked-door warning */
+.atlas-tray { flex-direction: column; align-items: stretch; }
+.atlas-tray-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; }
+.atlas-tray-warn { display: flex; gap: 9px; align-items: flex-start; margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--line); font-size: 12px; line-height: 1.5; color: var(--text-2); }
+.atlas-tray-warn .atw-i { font-size: 14px; flex: none; }
+.atlas-tray-warn i { font-style: normal; color: var(--accent-2); font-weight: 700; }
+/* rail + lane-card mastery marks */
+.study-gn-m { font-family: var(--mono); font-weight: 800; margin-left: 6px; }
+.study-gn-m.done { color: var(--accent); }
+.study-gn-m.seen { color: var(--text-2); }
+.study-lane-foot { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
+.study-lane-bar { flex: 1 1 auto; height: 4px; border-radius: 3px; background: var(--surf3); overflow: hidden; }
+.study-lane-bar span { display: block; height: 100%; background: color-mix(in srgb, var(--lane) 70%, var(--accent)); border-radius: 3px; transition: width .3s; }
+.study-lane-foot .study-lane-go { margin-top: 0; white-space: nowrap; }

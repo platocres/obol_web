@@ -470,5 +470,349 @@
       },
     },
 
+    // ==================== RECON (service enumeration) ====================
+    'nmap-udp-top': {
+      output: [
+        'PORT    STATE         SERVICE',
+        '53/udp  open          domain',
+        '161/udp open          snmp',
+        '500/udp open|filtered isakmp',
+      ].join('\n'),
+      signal: '161/udp open          snmp',
+      teach: 'TCP is only half the surface. A quick UDP sweep of the top ports finds the services people forget — SNMP (161), DNS (53), IKE/VPN (500) — and each is its own way in.',
+    },
+    'recon-dns': {
+      output: [
+        '; <<>> DiG 9.18 <<>> axfr corp.local @10.10.10.10',
+        'corp.local.          IN SOA  dc01.corp.local. admin.corp.local.',
+        'dc01.corp.local.     IN A    10.10.10.10',
+        'dev.corp.local.      IN A    10.10.10.25',
+        'intranet.corp.local. IN A    10.10.10.30',
+      ].join('\n'),
+      signal: 'intranet.corp.local. IN A    10.10.10.30',
+      teach: 'A DNS zone transfer (AXFR) that succeeds hands you the whole internal name map in one request — every host and subdomain the admin forgot to lock down. Those new names are new targets.',
+    },
+    'recon-snmp': {
+      output: [
+        '10.10.10.10 [public] Linux dev 5.4.0-91-generic',
+        '10.10.10.10 [public] HOST-RESOURCES-MIB::hrSWRunName',
+        '10.10.10.10 [public]   "sshd" "apache2" "mysqld"',
+      ].join('\n'),
+      signal: '10.10.10.10 [public] Linux dev 5.4.0-91-generic',
+      teach: 'An SNMP community string of "public" is a default nobody changed. With it you can read the host\'s running processes, users, and sometimes credentials straight out of the MIB — no login required.',
+    },
+    'recon-smtp': {
+      output: [
+        '10.10.10.10: root exists',
+        '10.10.10.10: admin exists',
+        '10.10.10.10: bob exists',
+        '10.10.10.10: nonexistent does not exist',
+      ].join('\n'),
+      signal: '10.10.10.10: admin exists',
+      teach: 'An SMTP server that answers VRFY confirms which usernames are real. A confirmed user list is the raw material for a password spray or a brute — you stop guessing names and start guessing passwords.',
+    },
+    'rdp-enum': {
+      output: [
+        'RDP         10.10.10.10     3389   TARGET   [*] Windows 10 / Server 2019 Build 17763 (name:TARGET) (domain:CORP)',
+        'RDP         10.10.10.10     3389   TARGET   [+] CORP\\bob:Summer2024! (Pwn3d!)',
+      ].join('\n'),
+      signal: '[+] CORP\\bob:Summer2024! (Pwn3d!)',
+      teach: '"Pwn3d!" on an RDP check means the credentials you tested actually log in — you have an interactive desktop waiting. Always confirm which creds work against which service before you commit to a session.',
+    },
+    'nfs-enum': {
+      output: [
+        'Export list for 10.10.10.10:',
+        '/srv/home   *',
+        '/var/backups 10.10.10.0/24',
+      ].join('\n'),
+      signal: '/srv/home   *',
+      teach: 'An NFS export shared with "*" is readable by anyone who mounts it. Mount it locally and you can read — and often, with a matching UID, write — other users\' files. A classic foothold and privesc rolled into one.',
+    },
+
+    // ==================== WEB ====================
+    'vhost-discovery': {
+      output: [
+        'dev                     [Status: 200, Size: 5210, Words: 412]',
+        'staging                 [Status: 200, Size: 1840, Words: 95]',
+        'www                     [Status: 200, Size: 5210, Words: 412]',
+      ].join('\n'),
+      signal: 'staging                 [Status: 200, Size: 1840, Words: 95]',
+      teach: 'One IP can serve many sites by Host header. Fuzzing virtual hosts surfaces the ones with no public link — a "staging" or "dev" vhost is usually less hardened than production and is where the bug lives.',
+    },
+    'sqli-basics': {
+      output: [
+        'You have an error in your SQL syntax; check the manual that',
+        "corresponds to your MySQL server version near '''' at line 1",
+      ].join('\n'),
+      signal: 'You have an error in your SQL syntax; check the manual that',
+      teach: 'A single quote that throws a SQL error means your input reaches the query unescaped — the first proof of SQL injection. From here you confirm the column count and start extracting data.',
+    },
+    'command-injection': {
+      output: [
+        'PING 127.0.0.1 (127.0.0.1): 56 data bytes',
+        '64 bytes from 127.0.0.1: icmp_seq=0 ttl=64 time=0.04 ms',
+        'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
+      ].join('\n'),
+      signal: 'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
+      teach: 'The app ran your `;id` alongside its ping — the `uid=www-data` line is the web server executing your command. That is command injection, and it is a direct path to a shell as the web user.',
+    },
+    'ssti': {
+      output: [
+        'Hello 49',
+      ].join('\n'),
+      signal: 'Hello 49',
+      teach: 'You sent `{{7*7}}` and the page returned `49` — the template engine evaluated your input instead of printing it. Server-side template injection often escalates straight to remote code execution.',
+    },
+    'nikto-scan': {
+      output: [
+        '+ Server: Apache/2.4.49 (Unix)',
+        '+ /admin/: This might be interesting.',
+        '+ OSVDB-3233: /icons/README: Apache default file found.',
+        '+ /cgi-bin/: Directory indexing found.',
+      ].join('\n'),
+      signal: '+ /admin/: This might be interesting.',
+      teach: 'Nikto is a fast first pass that flags the obvious — default files, an exposed /admin, a dated server banner. Treat each hit as a lead to chase by hand, not a finding on its own.',
+    },
+    'tomcat-deploy': {
+      output: [
+        'OK - Deployed application at context path [/shell]',
+        '$ curl http://10.10.10.10:8080/shell/',
+        'uid=997(tomcat) gid=997(tomcat) groups=997(tomcat)',
+      ].join('\n'),
+      signal: 'OK - Deployed application at context path [/shell]',
+      teach: 'Tomcat Manager with valid creds lets you deploy a WAR — your own app — which runs as the Tomcat service account. Deploying a JSP shell is the standard route from "I can log into Manager" to code execution.',
+    },
+
+    // ==================== SERVICE & WEB CHECKS ====================
+    'check-http-methods': {
+      output: [
+        'HTTP/1.1 200 OK',
+        'Allow: GET, POST, PUT, DELETE, OPTIONS',
+      ].join('\n'),
+      signal: 'Allow: GET, POST, PUT, DELETE, OPTIONS',
+      teach: 'OPTIONS tells you what verbs the server accepts. PUT or DELETE in the list is a red flag — PUT can mean you upload a web shell directly, no injection needed.',
+    },
+    'check-exposed-files': {
+      output: [
+        '$ curl -s http://10.10.10.10/.git/HEAD',
+        'ref: refs/heads/master',
+        '$ curl -s http://10.10.10.10/.env',
+        'DB_PASSWORD=sup3rs3cret',
+      ].join('\n'),
+      signal: 'DB_PASSWORD=sup3rs3cret',
+      teach: 'An exposed `.git/` lets you reconstruct the whole source; a readable `.env` leaks secrets outright. Developers leave these behind constantly — always probe for them before anything clever.',
+    },
+    'check-tls-config': {
+      output: [
+        '| ssl-cert: Subject: commonName=dev.corp.local',
+        '| Subject Alternative Name: DNS:dev.corp.local, DNS:vault.corp.local',
+        '|_  Not valid after:  2025-11-01T00:00:00',
+      ].join('\n'),
+      signal: 'Subject Alternative Name: DNS:dev.corp.local, DNS:vault.corp.local',
+      teach: 'A TLS certificate leaks names. The Subject and SAN fields often reveal internal hostnames — like `vault.corp.local` — that you had no other way to discover. Add them to your target list.',
+    },
+
+    // ==================== ACTIVE DIRECTORY ====================
+    'eternalblue': {
+      output: [
+        'Host script results:',
+        '| smb-vuln-ms17-010:',
+        '|   VULNERABLE: Remote Code Execution vulnerability in SMBv1 (ms17-010)',
+        '|_    State: VULNERABLE',
+      ].join('\n'),
+      signal: '|_    State: VULNERABLE',
+      teach: 'MS17-010 (EternalBlue) is unauthenticated SMBv1 remote code execution as SYSTEM. If the scan says VULNERABLE, it is often the whole box in one shot — but confirm the target is a real lab host, not a honeypot, before you fire.',
+    },
+    'gpp-passwords': {
+      output: [
+        'Groups.xml:',
+        '  <Properties userName="svc_admin"',
+        '    cpassword="j1Uyj3Vx8TY9LtLZil2uAuZkFQA/4latT76ZwgdHdQ"/>',
+        '$ gpp-decrypt j1Uyj3Vx8TY9LtLZil2uAuZkFQA/4latT76ZwgdHdQ',
+        'Password123',
+      ].join('\n'),
+      signal: 'Password123',
+      teach: 'Group Policy Preferences stored passwords in SYSVOL encrypted with a key Microsoft published. Any domain user can read `Groups.xml` and decrypt the `cpassword` — a free set of working credentials.',
+    },
+    'lateral-exec': {
+      output: [
+        'SMB    10.10.10.20   445  WEB01   [+] CORP\\svc_admin:Password123 (Pwn3d!)',
+        'SMB    10.10.10.20   445  WEB01   [+] Executed command via wmiexec',
+        'SMB    10.10.10.20   445  WEB01   nt authority\\system',
+      ].join('\n'),
+      signal: 'SMB    10.10.10.20   445  WEB01   [+] CORP\\svc_admin:Password123 (Pwn3d!)',
+      teach: 'Once a credential is local admin somewhere, "Pwn3d!" marks every host it owns. Spraying the cred across the subnet maps your lateral movement — each Pwn3d! box is a new shell and new loot.',
+    },
+    'trust-enum': {
+      output: [
+        'List of domain trusts:',
+        '    0: CORP corp.local (NT 5) (Forest Tree Root) (Primary Domain)',
+        '    1: DEV dev.corp.local (NT 5) (Direct Outbound)',
+        'The command completed successfully',
+      ].join('\n'),
+      signal: '1: DEV dev.corp.local (NT 5) (Direct Outbound)',
+      teach: 'Domains rarely stand alone. A trust to `dev.corp.local` means credentials or tickets from one domain may reach the other — the path to the goal sometimes runs through a trusted domain, not the one you landed in.',
+    },
+
+    // ==================== CREDENTIALS & CRACKING ====================
+    'responder-poison': {
+      output: [
+        '[*] [LLMNR]  Poisoned answer sent to 10.10.10.50 for name fileshare',
+        '[SMB] NTLMv2-SSP Client   : 10.10.10.50',
+        '[SMB] NTLMv2-SSP Username : CORP\\jdoe',
+        '[SMB] NTLMv2-SSP Hash     : jdoe::CORP:1122...:A1B2...',
+      ].join('\n'),
+      signal: '[SMB] NTLMv2-SSP Username : CORP\\jdoe',
+      teach: 'When a Windows host mistypes a share name, it broadcasts asking "who is fileshare?". Responder answers "me", and the victim sends its NetNTLMv2 hash. You now have a hash to crack or relay — no exploit, just a protocol default.',
+    },
+    'crack-kerberoast': {
+      output: [
+        '$krb5tgs$23$*svc_sql$CORP.LOCAL$...:3f2a... : Summer2024!',
+        'Session..........: hashcat',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'Status...........: Cracked',
+      teach: 'A Kerberoast ticket (mode 13100) is encrypted with the service account\'s password hash, so you can crack it offline at full speed. "Cracked" means you now hold that account\'s cleartext password.',
+    },
+    'crack-netntlmv2': {
+      output: [
+        'JDOE::CORP:1122334455667788:A1B2...:0101... : Winter2024!',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'JDOE::CORP:1122334455667788:A1B2...:0101... : Winter2024!',
+      teach: 'The NetNTLMv2 hash Responder captured cracks offline in hashcat mode 5600. Recover the password and the captured hash becomes a real login you can use anywhere that account is valid.',
+    },
+    'online-brute-ssh': {
+      output: [
+        '[DATA] attacking ssh://10.10.10.10:22/',
+        '[22][ssh] host: 10.10.10.10   login: bob   password: iloveyou',
+        '1 of 1 target successfully completed, 1 valid password found',
+      ].join('\n'),
+      signal: '[22][ssh] host: 10.10.10.10   login: bob   password: iloveyou',
+      teach: 'When you have a real username but no password, an online brute against SSH can find a weak one. Keep the wordlist small and the rate sane — lab accounts lock out too, and a found pair is an instant shell.',
+    },
+
+    // ==================== DATABASES ====================
+    'mysql-login': {
+      output: [
+        '+-------------------------+',
+        '| version()               |',
+        '+-------------------------+',
+        '| 5.7.33-0ubuntu0.16.04.1 |',
+        '+-------------------------+',
+      ].join('\n'),
+      signal: '| 5.7.33-0ubuntu0.16.04.1 |',
+      teach: 'A successful MySQL login is a foothold of its own: from the SQL prompt you can read application secrets, write files to the web root with INTO OUTFILE, and sometimes reach the OS. Confirm the version first — it steers what is possible.',
+    },
+    'mssql-xp-cmdshell': {
+      output: [
+        'SQL> EXEC xp_cmdshell \'whoami\'',
+        'output',
+        '--------------------------------',
+        'nt service\\mssqlserver',
+      ].join('\n'),
+      signal: 'nt service\\mssqlserver',
+      teach: 'With sysadmin on MSSQL you can re-enable `xp_cmdshell` and run OS commands as the SQL service account. The `whoami` output confirms code execution — the database just became a shell.',
+    },
+    'postgres-login': {
+      output: [
+        ' version',
+        '--------------------------------------------',
+        ' PostgreSQL 13.3 on x86_64-pc-linux-gnu',
+        '(1 row)',
+      ].join('\n'),
+      signal: ' PostgreSQL 13.3 on x86_64-pc-linux-gnu',
+      teach: 'A PostgreSQL session with the right role can read files and, via COPY ... FROM PROGRAM, run commands. As with any DB foothold, the version tells you which of those paths is open to you.',
+    },
+
+    // ==================== SHELLS & TRANSFER ====================
+    'shell-revshell-linux': {
+      output: [
+        'listening on [any] 4444 ...',
+        'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 54312',
+        'bash: cannot set terminal process group: Inappropriate ioctl for device',
+        'www-data@target:/var/www/html$ id',
+        'uid=33(www-data) gid=33(www-data)',
+      ].join('\n'),
+      signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 54312',
+      teach: 'The "connect to … from" line is your listener catching the target calling back — the moment code execution becomes an interactive shell. Note the raw prompt; it is not a proper TTY yet, which is why the next move is to upgrade it.',
+    },
+    'shell-pty-upgrade': {
+      output: [
+        'www-data@target:/$ python3 -c \'import pty;pty.spawn("/bin/bash")\'',
+        'www-data@target:/$ ^Z',
+        '[1]+  Stopped',
+        '$ stty raw -echo; fg',
+        'www-data@target:/$',
+      ].join('\n'),
+      signal: '$ stty raw -echo; fg',
+      teach: 'A raw netcat shell has no job control, no arrows, no tab-complete, and dies on Ctrl-C. Spawning a PTY and fixing the terminal with `stty raw -echo` gives you a real shell — do it before you try anything that needs interaction, like `su` or `ssh`.',
+    },
+
+    // ==================== LINUX PRIVESC ====================
+    'capabilities': {
+      output: [
+        '/usr/bin/python3.8 = cap_setuid+ep',
+        '/usr/bin/ping = cap_net_raw+ep',
+      ].join('\n'),
+      signal: '/usr/bin/python3.8 = cap_setuid+ep',
+      teach: 'File capabilities grant slices of root power without the SUID bit. `cap_setuid+ep` on python means python can set its UID to 0 — one line (`os.setuid(0)`) and you are root. Always run `getcap -r /` on a Linux box.',
+    },
+    'docker-socket': {
+      output: [
+        'srw-rw---- 1 root docker 0 Jan  1 10:00 /var/run/docker.sock',
+        'uid=1000(dev) gid=1000(dev) groups=1000(dev),998(docker)',
+      ].join('\n'),
+      signal: 'groups=1000(dev),998(docker)',
+      teach: 'Membership in the `docker` group is root-equivalent: you can start a container that mounts the host\'s `/` and read or write anything as root. The docker socket being reachable is the whole game.',
+    },
+    'writable-passwd': {
+      output: [
+        '-rw-rw-rw- 1 root root 2841 Jan  1 10:00 /etc/passwd',
+      ].join('\n'),
+      signal: '-rw-rw-rw- 1 root root 2841 Jan  1 10:00 /etc/passwd',
+      teach: 'A world-writable `/etc/passwd` lets you add a root-UID user with a password hash you control (openssl passwd), then `su` to it. A single misconfigured permission bit is a direct path to root.',
+    },
+
+    // ==================== WINDOWS PRIVESC ====================
+    'stored-credentials': {
+      output: [
+        'Currently stored credentials:',
+        '    Target: Domain:interactive=CORP\\administrator',
+        '    Type: Domain Password',
+      ].join('\n'),
+      signal: '    Target: Domain:interactive=CORP\\administrator',
+      teach: 'Windows caches credentials for convenience. `cmdkey /list` shows stored logins you can reuse with `runas /savecred` — sometimes an Administrator credential is sitting there for the taking, no cracking needed.',
+    },
+    'wesng-patch-gaps': {
+      output: [
+        '[+] OS: Windows Server 2016 1607 (10.0.14393)',
+        '[+] Missing: MS16-135 (CVE-2016-7255) — Win32k elevation of privilege',
+        '[+] Missing: CVE-2021-34527 (PrintNightmare)',
+      ].join('\n'),
+      signal: '[+] Missing: CVE-2021-34527 (PrintNightmare)',
+      teach: 'Feeding `systeminfo` to a patch-gap checker lists the kernel exploits the box is missing. Treat each as a candidate — confirm the build and architecture before running one, since a wrong kernel exploit can bluescreen the target.',
+    },
+
+    // ==================== PIVOTING ====================
+    'local-linux-interfaces': {
+      output: [
+        'eth0: 10.10.10.10/24',
+        'eth1: 172.16.5.10/24',
+      ].join('\n'),
+      signal: 'eth1: 172.16.5.10/24',
+      teach: 'A compromised host with a second NIC is a doorway. `eth1` on 172.16.5.0/24 is a network you could not reach before — the reason to pivot. Map the host\'s interfaces first; they tell you what is now in range.',
+    },
+    'pivot-chisel-socks': {
+      output: [
+        'server: Reverse tunnelling enabled',
+        'server: Listening on http://0.0.0.0:8080',
+        'client: Connected to http://10.10.14.5:8080',
+        'client: tun: proxy#R:127.0.0.1:1080=>socks',
+      ].join('\n'),
+      signal: 'client: tun: proxy#R:127.0.0.1:1080=>socks',
+      teach: 'Chisel builds a SOCKS proxy back through the compromised host. Point proxychains at 127.0.0.1:1080 and your tools reach the internal network as if you were on it — the standard way to scan and attack a subnet you can only touch through one box.',
+    },
+
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

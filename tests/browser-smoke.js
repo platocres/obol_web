@@ -805,13 +805,30 @@ function serve() {
   // shows the derived cell with remote-first commands + the replay; "Your turn" scores an answer.
   await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.study-route', { timeout: 6000 }).catch(() => {});
-  ok((await page.locator('.study-map .study-lane-card.active').count()) === 5, 'Learn opens on the map with 5 pickable lanes');
+  ok((await page.locator('.study-map .study-lane-card.active').count()) === 11, 'Learn opens on the map with all 11 pickable lanes');
   // the Atlas: every lane's steps as one zoomable graph; draw a custom path and study it
   await page.locator('.study-graph-cta').click();
   await page.waitForTimeout(250);
   ok((await page.locator('.atlas-stage').count()) === 1, 'the Atlas renders a zoomable stage');
-  ok((await page.locator('.atlas-node').count()) === 26, 'the Atlas shows all 26 method steps as nodes');
+  ok((await page.locator('.atlas-node').count()) === 167, 'the Atlas shows all 167 method steps as nodes');
+  ok((await page.locator('.atlas-band').count()) === 11, 'the Atlas groups steps into 11 lane bands');
   ok((await page.locator('.atlas-edge-cross').count()) >= 1, 'the Atlas draws cross-lane bridges');
+  // density: search dims the non-matching steps
+  await page.locator('#atlas-search').fill('kerberoast');
+  await page.waitForTimeout(120);
+  ok((await page.locator('.atlas-node.dim').count()) > 100, 'searching the Atlas dims the non-matching steps');
+  ok((await page.locator('.atlas-node.qmatch').count()) >= 1, 'searching the Atlas highlights matches');
+  await page.locator('#atlas-search').fill('');
+  await page.waitForTimeout(100);
+  ok((await page.locator('.atlas-node.dim').count()) === 0, 'clearing the search restores every step');
+  // density: folding a lane band collapses its steps out of the layout
+  const beforeFold = await page.locator('.atlas-node').count();
+  await page.locator('.atlas-band[data-band="ad"] .ab-chev').click();
+  await page.waitForTimeout(200);
+  ok((await page.locator('.atlas-node').count()) === beforeFold - 48, 'folding the AD band collapses its 48 steps');
+  await page.locator('.atlas-band[data-band="ad"] .ab-chev').click();   // unfold
+  await page.waitForTimeout(200);
+  ok((await page.locator('.atlas-node').count()) === beforeFold, 'unfolding the AD band brings its steps back');
   // fixed scenarios: toggling one loads its steps as the drawn path
   ok((await page.locator('.atlas-scen').count()) >= 4, 'the Atlas offers fixed common scenarios to toggle');
   await page.locator('.atlas-scen[data-scen="web-linux"]').click();
@@ -833,7 +850,7 @@ function serve() {
   // deep-link straight into a node to exercise the cell + replay
   await page.goto(`http://localhost:${PORT}/index.html#/study/asrep-roast`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.study-cols', { timeout: 6000 }).catch(() => {});
-  ok((await page.locator('.study-gnode').count()) === 7, 'node view renders the 7-node AD lane rail');
+  ok((await page.locator('.study-gnode').count()) === 48, 'node view renders the full 48-step AD lane rail');
   ok((await page.locator('.study-cell-title').first().textContent().catch(() => '') || '').indexOf('AS-REP') !== -1, 'the node cell is AS-REP Roasting');
   ok((await page.locator('.study-cmd').first().locator('.study-loc').textContent().catch(() => '') || '').indexOf('REMOTE') !== -1, 'cell lists commands remote-first (first is REMOTE)');
   // the replay: Skip jumps straight to the finished output with the signal highlighted
@@ -845,6 +862,11 @@ function serve() {
   await page.locator('.study-choice[data-verdict="correct"]').first().click();
   await page.waitForTimeout(120);
   ok((await page.locator('.study-verdict.show.ok').count()) === 1, 'Study "Your turn" scores the correct answer');
+  // the correct answer is recorded as mastery — on a fresh load the map shows progress on the AD lane
+  await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'networkidle' });   // reset the SPA's in-memory view to the map
+  await page.waitForSelector('.study-map', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.study-lane-go', { hasText: 'studied' }).count()) >= 1, 'mastery persists: a lane card reports studied progress');
 
   await browser.close();
   server.close();

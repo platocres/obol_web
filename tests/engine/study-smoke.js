@@ -12,28 +12,35 @@ const fs = require('fs'), path = require('path');
 const OBOL = globalThis.OBOL, PK = OBOL.pack;
 
 const pdir = path.join(__dirname, '..', '..', 'data', 'packs');
-const packData = fs.readdirSync(pdir).filter((f) => f.endsWith('.json'))
-  .map((f) => { try { return JSON.parse(fs.readFileSync(path.join(pdir, f), 'utf8')); } catch (e) { return {}; } });
-const A = PK.loadPacks(packData);
-OBOL.packs = { actions: () => A };
+// Build the pack bundle keyed by file basename (e.g. 'cracking_2026_09'), exactly how data/packs-bundle.js
+// keys OBOL.packData in the browser — study.js strips the _YYYY_MM suffix off each key to find the lane.
+const bundle = {};
+fs.readdirSync(pdir).filter((f) => f.endsWith('.json')).forEach((f) => {
+  try { bundle[f.replace(/\.json$/, '')] = JSON.parse(fs.readFileSync(path.join(pdir, f), 'utf8')); } catch (e) {}
+});
+const A = PK.loadPacks(Object.keys(bundle).map((k) => bundle[k]));
+OBOL.packs = { actions: () => A, packData: () => bundle };
 globalThis.globalThis = globalThis;
-require('../../data/tools-install.js');     // OBOL.ARSENAL
-require('../../data/study-fixtures.js');     // OBOL.STUDY_FIXTURES
-require('../../assets/engine/study.js');     // OBOL.study
+require('../../data/tools-install.js');          // OBOL.ARSENAL
+require('../../data/study-fixtures-auto.js');    // OBOL.STUDY_FIXTURES_AUTO (bootstrapped)
+require('../../data/study-fixtures.js');         // OBOL.STUDY_FIXTURES (hand-written, wins)
+require('../../assets/engine/study.js');         // OBOL.study
 const S = OBOL.study;
 
 let fail = 0;
 function ok(cond, msg) { if (!cond) { console.error('  FAIL:', msg); fail++; } else { console.log('  ok  :', msg); } }
 
 // --- lanes + edges ---------------------------------------------------------------------------
-ok(S.lanes().length === 5, 'five lanes exposed (recon, ad, web, linux, windows)');
+ok(S.lanes().length === 11, 'eleven taxonomy lanes exposed (every pack lands in one)');
+ok(S.LANE_KEYS.length === 11 && S.LANE_KEYS[0] === 'recon' && S.LANE_KEYS.indexOf('proof') === 10, 'lane order runs recon → … → proof');
 const lane = S.lane('ad');
-ok(lane.length === 7, 'AD lane has 7 nodes');
-ok(lane[0].id === 'ad-dc-identify' && lane[lane.length - 1].id === 'dcsync', 'AD lane runs DC-identify → DCSync');
+ok(lane.length === 48, 'AD lane carries all 48 AD-pack moves');
+ok(lane[0].id === 'ad-dc-identify', 'AD lane opens on DC-identify');
 const edges = S.laneEdges('ad');
 ok(edges.some((e) => e.from === 'ad-anon-ldap-enum' && e.to === 'asrep-roast'), 'edge derived: anon-LDAP → AS-REP (ad.user_list)');
 ok(edges.some((e) => e.from === 'asrep-roast' && e.to === 'crack-asrep'), 'edge derived: AS-REP → crack (hash.asrep)');
-ok(S.laneOf('sudo-abuse').key === 'linux' && S.laneOf('seimpersonate').key === 'windows', 'moves resolve to the right lane');
+ok(S.laneEntry('sudo-abuse').laneKey === 'linux' && S.laneEntry('seimpersonate').laneKey === 'windows', 'moves resolve to the right lane');
+ok(S.laneEntry('nmap-fast-open-ports').laneKey === 'recon', 'nmap scans re-homed to the Recon lane (they ship in the AD pack)');
 
 // --- cell generation (asrep-roast, the hero) -------------------------------------------------
 const c = S.cellFor('asrep-roast');
@@ -64,23 +71,29 @@ ok(v['kerberoast'] === 'locked', 'practice: Kerberoasting is locked (needs crede
 ok(v['dcsync'] === 'locked', 'practice: DCSync is locked (needs Domain Admin)');
 
 // --- every node in every lane generates a complete cell + practice + replay ------------------
-let allCells = true, total = 0;
-S.LANE_ORDER.forEach((k) => {
+// (the sample OUTPUT is the one non-derivable field — a move with no fixture still makes a full
+//  cell, so output is counted, not required.)
+let allCells = true, total = 0, withOutput = 0;
+S.LANE_KEYS.forEach((k) => {
   S.lane(k).forEach((n) => {
     total++;
     const cc = S.cellFor(n.id), pp = S.practiceFor(n.id), rr = S.replayFor(n.id);
-    if (!cc || !cc.commands.length || !cc.output || !cc.output.text || !pp || !pp.choices.length || !rr || !rr.command) { allCells = false; console.error('    weak node:', k, n.id); }
+    if (!cc || !cc.commands.length || !pp || !pp.choices.length || !rr || !rr.command) { allCells = false; console.error('    weak node:', k, n.id); }
+    if (cc && cc.output && cc.output.text) withOutput++;
     if (cc && cc.commands.length) { const rk = cc.commands.map((c) => c.rank); if (!rk.every((v, i) => i === 0 || v >= rk[i - 1])) { allCells = false; console.error('    not remote-first:', n.id); } }
   });
 });
-ok(allCells, 'all ' + total + ' nodes across 5 lanes: complete cell + output + practice + replay, commands remote-first');
+ok(total === 167, 'all 167 pack moves are navigable as lane nodes');
+ok(allCells, 'every one of ' + total + ' nodes: complete cell + commands + practice + replay, commands remote-first');
+ok(withOutput >= 40, withOutput + ' nodes carry a sample output (hand + auto-bootstrapped fixtures)');
 
 // --- the atlas (all lanes as one graph) ------------------------------------------------------
 const at = S.atlas();
-ok(at.nodes.length === 26, 'atlas has all 26 nodes');
-ok(at.laneEdges.length === 21, 'atlas has 21 intra-lane edges (5 lanes)');
+ok(at.nodes.length === 167, 'atlas has all 167 nodes');
+ok(at.laneEdges.length === 167 - at.lanes.length, 'atlas intra-lane edges = nodes − lanes (one chain per lane)');
 ok(at.crossEdges.length >= 5 && at.crossEdges.some((e) => e.from === 'recon-smb-anon' && e.to === 'asrep-roast'), 'atlas draws cross-lane bridges (SMB enum → AS-REP)');
 ok(at.nodes.every((n) => typeof n.col === 'number' && typeof n.row === 'number'), 'every atlas node has a grid position');
+ok(at.lanes.length === 11 && at.laneOrder.length === 11, 'atlas carries all eleven lanes');
 
 // --- fixed scenarios -------------------------------------------------------------------------
 const scn = S.scenarios();
@@ -92,6 +105,24 @@ ok(scn.some((s) => s.key === 'web-linux' && s.steps[0] === 'recon-web-triage'), 
 const rs = S.replayFor('sudo-abuse');
 ok(rs.command === 'sudo -l', 'replay primary command is sudo -l');
 ok(!/^\s*\$?\s*sudo -l\s*$/.test(rs.outputLines[0] || ''), 'replay output does not re-echo the played command');
+ok(typeof rs.hasOutput === 'boolean', 'replay reports hasOutput for graceful no-sample rendering');
+
+// --- path validation (locked-door detection across a drawn path) -----------------------------
+const good = S.validatePath(['ad-anon-ldap-enum', 'asrep-roast', 'crack-asrep']);
+ok(good.ok, 'a path that mints each step\'s prereqs validates clean');
+const bad = S.validatePath(['asrep-roast', 'crack-asrep']);
+ok(!bad.ok && bad.issues[0].idx === 0 && bad.issues[0].missing.indexOf('ad.user_list') >= 0, 'a path that opens on AS-REP flags the missing user list (locked door)');
+ok(S.validatePath(['nmap-fast-open-ports']).ok, 'an opening recon move needs only environment facts (not flagged)');
+
+// --- mastery (per-browser progress) ----------------------------------------------------------
+const mem = {}; globalThis.localStorage = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } };
+S.markStudied('asrep-roast', 'studied');
+S.markStudied('crack-asrep', 'correct');
+const M = S.mastery();
+ok(M['asrep-roast'] && M['asrep-roast'].studied && !M['asrep-roast'].correct, 'markStudied records a watched step');
+ok(M['crack-asrep'] && M['crack-asrep'].correct && M['crack-asrep'].studied, 'a correct answer records both studied + correct');
+const lp = S.laneProgress('ad');
+ok(lp.total === 48 && lp.studied >= 2 && lp.correct >= 1, 'laneProgress counts studied/correct within a lane');
 
 if (fail) { console.error('\nSTUDY SMOKE: ' + fail + ' failure(s)'); process.exit(1); }
 console.log('\nSTUDY SMOKE: all passed');
