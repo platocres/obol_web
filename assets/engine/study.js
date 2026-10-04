@@ -246,6 +246,7 @@
     { from: 'kerberoast', to: 'crack-kerberoast', note: 'a service ticket to crack' },
     { from: 'dcsync', to: 'crack-ntlm', note: 'dumped NTLM hashes to crack' },
     { from: 'responder-poison', to: 'crack-netntlmv2', note: 'a captured NetNTLMv2 hash to crack' },
+    { from: 'coerce-auth', to: 'ntlm-relay-attack', note: 'coerced auth → relay it to a second host' },
     { from: 'crack-netntlmv2', to: 'lateral-exec', note: 'a cracked password → move laterally' },
     { from: 'mssql-xp-cmdshell', to: 'windows-enum', note: 'a DB shell → escalate on the host' },
     { from: 'sudo-abuse', to: 'local-linux-interfaces', note: 'now root → pivot deeper' },

