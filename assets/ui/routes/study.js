@@ -32,6 +32,7 @@
   var _whyOverride = {};         // node: moveId -> true when the learner asked to show the reasoning anyway
   var _practiceMode = 'next';    // practice gear: 'next' (what to do) | 'read' (diagnose the output)
   var _recapPath = {};           // "how you got here": moveId -> selected lead-up path key
+  var _rpSeen = {};              // Watch: moveId -> already auto-played once (so it plays on first scroll-in, not again)
   var _benchSel = {};            // field-notes bench: moveId -> selected technique index
   var _benchTok = null;          // field-notes bench: cancel token for the running demo animation
   var _simKey = null;            // cold-box sim: active scenario key (null = pick one)
@@ -144,8 +145,8 @@
   function replayPlayer(rp) {
     if (!rp) return '';
     var idle = rp.hasOutput
-      ? 'Press <b>Play</b> and watch <b>' + esc(rp.tool) + '</b> run against the target and the result land, the way it would on a real box.'
-      : 'Press <b>Play</b> to watch <b>' + esc(rp.tool) + '</b> run. <span class="rp-nosample">A captured sample of this step’s output is still being written, so you’ll see the command and what it proves.</span>';
+      ? 'Watch <b>' + esc(rp.tool) + '</b> run against the target and the result land, the way it would on a real box. It plays as you scroll here; press <b>Replay</b> to see it again.'
+      : 'Watch <b>' + esc(rp.tool) + '</b> run. <span class="rp-nosample">A captured sample of this step’s output is still being written, so you’ll see the command and what it proves.</span>';
     var recap = recapBlock();
     // the facts this move mints are static truth, so show them at rest; Play re-animates them.
     var factsInit = (rp.proves && rp.proves.length)
@@ -1139,6 +1140,26 @@
     });
     // auto-start when a chain step mounts
     if (_view === 'node' && _gear === 'watch' && _autoplay) { _autoplay = false; setTimeout(function () { runReplay(mount, false); }, 250); }
+    // otherwise, play the run once it scrolls into view; a re-render after that shows the result at rest
+    else if (_view === 'node' && _gear === 'watch') {
+      var rpEl = mount.querySelector('.study-replay');
+      if (rpEl) {
+        var selAt = _sel;
+        if (_rpSeen[selAt]) { runReplay(mount, true); }                 // already watched: show the finished result
+        else if (typeof IntersectionObserver !== 'undefined') {
+          var io = new IntersectionObserver(function (ents) {
+            for (var i = 0; i < ents.length; i++) {
+              if (!ents[i].isIntersecting) continue;
+              io.disconnect();
+              if (_sel !== selAt) return;                               // navigated away before it came into view
+              _rpSeen[selAt] = true; runReplay(mount, false);
+              return;
+            }
+          }, { threshold: 0.3 });
+          io.observe(rpEl);
+        } else { _rpSeen[selAt] = true; runReplay(mount, false); }
+      }
+    }
     // the Atlas: pan / zoom / semantic LOD / draw a custom path
     if (_view === 'atlas') setTimeout(function () { wireAtlas(mount); }, 30);
     // practice: switch between "what to do next" and "reading the output"
