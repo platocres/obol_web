@@ -137,6 +137,11 @@
     'cron-abuse': 'Cron & Writable Files', 'writable-passwd': 'Cron & Writable Files', 'nfs-squash': 'Cron & Writable Files',
     'lxc-lxd-escape': 'Container Escape', 'docker-socket': 'Container Escape',
     'linux-persistence': 'Persistence',
+    // windows lane
+    'windows-enum': 'Enumeration', 'wesng-patch-gaps': 'Enumeration', 'defense-enum': 'Enumeration',
+    'seimpersonate': 'Token & Service Abuse', 'unquoted-service-path': 'Token & Service Abuse', 'weak-service-permissions': 'Token & Service Abuse', 'alwaysinstallelevated': 'Token & Service Abuse',
+    'dpapi-secrets': 'Credential Dumping', 'stored-credentials': 'Credential Dumping', 'windows-old-hives': 'Credential Dumping', 'lsass-dump-onbox': 'Credential Dumping',
+    'windows-persistence': 'Windows Persistence',
   };
   var CATEGORY_ORDER = [
     // web
@@ -148,6 +153,8 @@
     'Hash Cracking', 'Online Brute-Force', 'Poisoning & Relay',
     // linux
     'Enumeration', 'Sudo, SUID & Capabilities', 'Cron & Writable Files', 'Container Escape', 'Persistence',
+    // windows
+    'Token & Service Abuse', 'Credential Dumping', 'Windows Persistence',
   ];
   function categoryOf(moveId) { var m = byId(moveId); return MOVE_CATEGORY[moveId] || deriveStage(m || {}); }
 
