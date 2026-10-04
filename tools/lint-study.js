@@ -52,6 +52,25 @@ function sigMisses(steps) {       // demo/leadup steps whose signal line is not 
 }
 function emDash(s) { return /[—–]/.test(String(s || '')); }
 function labIp(s) { return /\b10\.10\.\d{1,3}\.\d{1,3}\b|\b192\.168\.\d{1,3}\.\d{1,3}\b/.test(String(s || '')); }
+// A Windows path or registry key in a COMMAND that lost its backslash to JS-string under-escaping
+// (e.g. "C:\Windows" written as "C:\Windows" renders "C:Windows"; reg keys lose "HKLM\" the same way).
+// This caught a whole class after the find -exec "\;" bug; run it on run/cmd strings only, not prose.
+function backslashDropped(s) {
+  s = String(s || '');
+  return /\b[A-Za-z]:(?:Windows|Users|Program|Temp|Inetpub|ProgramData|Windws)/.test(s)   // C:Windows (no slash)
+    || /\bHK(?:LM|CU|CR|U|EY_LOCAL_MACHINE|EY_CURRENT_USER)(?:SYSTEM|SOFTWARE|SAM|SECURITY|Services|Microsoft)/.test(s); // HKLMSYSTEM
+}
+function cmdStrings(fx, leadFn, id) {   // every COMMAND/OUTPUT string for a move (not prose fields)
+  const out = [];
+  const how = fx.how;
+  if (how && how.items) how.items.forEach((it) => (it.demo || []).forEach((d) => { out.push(d.run); out.push(d.out); }));
+  const lead = leadFn ? leadFn(id) : fx.leadup;
+  const routes = Array.isArray(lead) && lead[0] && lead[0].steps ? lead : null;
+  if (routes) routes.forEach((r) => (r.steps || []).forEach((st) => { out.push(st.cmd); out.push(st.out); }));
+  if (fx.cmd) out.push(fx.cmd);
+  if (fx.output) out.push(fx.output);
+  return out.filter(Boolean);
+}
 
 // --- walk every move -----------------------------------------------------------------------------
 const lanes = S.lanes();
@@ -105,6 +124,10 @@ lanes.forEach((L) => {
     if (how && how.lead && emDash(how.lead)) hyg++;
     if (hyg) { stat.hygiene++; issues.push('em-dash x' + hyg); }
 
+    // backslash-drop guard: Windows paths / registry keys in commands that lost a backslash
+    const bsBad = cmdStrings(fx, S.leadupFor, id).filter(backslashDropped);
+    if (bsBad.length) issues.push('backslash-dropped: ' + JSON.stringify(bsBad[0]).slice(0, 48));
+
     if (issues.length) flagged.push({ lane: L.key, id, title: cell.title || id, issues });
   });
   perLane[L.key] = stat;
@@ -137,10 +160,10 @@ if (process.argv.includes('--flagged') || process.argv.includes('--lane')) {
 
 // --check: fail (exit 1) on HARD content errors only (bad demo signals, em-dashes), for CI gating.
 if (process.argv.includes('--check')) {
-  const hard = flagged.filter((f) => f.issues.some((s) => /sig-not-in-out|em-dash/.test(s)));
+  const hard = flagged.filter((f) => f.issues.some((s) => /sig-not-in-out|em-dash|backslash-dropped/.test(s)));
   if (hard.length) {
     console.error('LINT FAIL: ' + hard.length + ' move(s) with hard content errors:');
-    hard.forEach((f) => console.error('  ' + f.id + ': ' + f.issues.filter((s) => /sig-not-in-out|em-dash/.test(s)).join(' · ')));
+    hard.forEach((f) => console.error('  ' + f.id + ': ' + f.issues.filter((s) => /sig-not-in-out|em-dash|backslash-dropped/.test(s)).join(' · ')));
     process.exit(1);
   }
   console.log('LINT OK: no hard content errors.');
