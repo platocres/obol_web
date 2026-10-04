@@ -171,7 +171,7 @@
       + '<span class="study-replay-loc">' + locusGlyph(rp.locus) + ' ' + esc(rp.locus) + ' · ' + esc(rp.tool) + '</span></div>'
       + recap
       + '<div class="study-replay-term" id="rp-term"><div class="rp-idle">' + idle + '</div></div>'
-      + '<div class="study-replay-facts" id="rp-facts">' + factsInit + '</div>'
+      + '<div class="study-replay-facts" id="rp-facts" aria-live="polite">' + factsInit + '</div>'
       + '<div class="study-replay-ctrl">'
       + '<button type="button" class="study-rp-btn primary" data-rp="play">▶ Play</button>'
       + (rp.hasOutput ? '<button type="button" class="study-rp-btn" data-rp="skip">⏭ Skip to result</button>' : '')
@@ -550,7 +550,7 @@
         + '<span class="study-tag">' + letters[i] + '</span>'
         + '<span class="study-ct">' + esc(c.title) + '</span></button>';
     });
-    h += '</div><div class="study-verdict" id="study-verdict"></div>';
+    h += '</div><div class="study-verdict" id="study-verdict" role="status" aria-live="polite"></div>';
     h += '<div class="study-reveal-slot" id="study-reveal-slot"></div>';
     return h;
   }
@@ -566,7 +566,7 @@
       h += '<button type="button" class="study-choice study-dx-choice" data-correct="' + (c.correct ? '1' : '0') + '">'
         + '<span class="study-tag">' + letters[i] + '</span><span class="study-ct">' + esc(c.label) + '</span></button>';
     });
-    h += '</div><div class="study-verdict" id="study-verdict"></div>';
+    h += '</div><div class="study-verdict" id="study-verdict" role="status" aria-live="polite"></div>';
     h += '<div class="dx-why" id="dx-why" data-why="' + U.attr(q.why) + '" hidden></div>';
     return h;
   }
@@ -884,6 +884,17 @@
   // learner always sees WHERE each command runs and in what order. The prompt itself (kali$ / target$)
   // also reflects the locus.
   function cancelReplay() { if (_rpToken) { _rpToken.cancelled = true; _rpToken = null; } }
+  // Honour reduced motion for UNINITIATED replay (scroll-in / chaining): OS setting or the
+  // ⚙ motion pref set to reduced/off. An explicit Play/Replay click always animates, since
+  // the person asked for it. Under reduced motion auto-play still shows the full result, just
+  // without the typing animation, so nothing is lost.
+  function reducedMotion() {
+    try {
+      var m = (typeof OBOL !== 'undefined' && OBOL.store) ? (OBOL.store.pref('motion') || localStorage.getItem('obol.motion')) : localStorage.getItem('obol.motion');
+      if (m === 'reduced' || m === 'off') return true;
+    } catch (e) {}
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+  }
   function stepHeader(where) {
     return where === 'host'
       ? '<div class="rp-step-h rp-host"><span class="rp-where-glyph">🎯</span> on the target, the compromised host</div>'
@@ -1151,13 +1162,14 @@
       else { cancelReplay(); OBOL.router.render(); }                // stop instantly, one click
     });
     // auto-start when a chain step mounts
-    if (_view === 'node' && _gear === 'watch' && _autoplay) { _autoplay = false; setTimeout(function () { runReplay(mount, false); }, 250); }
+    if (_view === 'node' && _gear === 'watch' && _autoplay) { _autoplay = false; var rm0 = reducedMotion(); setTimeout(function () { runReplay(mount, rm0); }, rm0 ? 0 : 250); }
     // otherwise, play the run once it scrolls into view; a re-render after that shows the result at rest
     else if (_view === 'node' && _gear === 'watch') {
       var rpEl = mount.querySelector('.study-replay');
       if (rpEl) {
         var selAt = _sel;
         if (_rpSeen[selAt]) { runReplay(mount, true); }                 // already watched: show the finished result
+        else if (reducedMotion()) { _rpSeen[selAt] = true; runReplay(mount, true); }  // reduced motion: show the result at rest, no typing
         else if (typeof IntersectionObserver !== 'undefined') {
           var io = new IntersectionObserver(function (ents) {
             for (var i = 0; i < ents.length; i++) {

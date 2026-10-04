@@ -1733,7 +1733,7 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .study-choices { display: flex; flex-direction: column; gap: 9px; }
 .study-choice { display: flex; align-items: center; gap: 11px; text-align: left; background: var(--surf2); border: 1.5px solid var(--line); border-radius: 10px; padding: 11px 13px; cursor: pointer; font-family: var(--sans); transition: .15s; }
 .study-choice:hover { border-color: var(--line-hot); background: var(--surf3); }
-.study-choice .study-tag { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.study-choice .study-tag { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-2); border: 1px solid var(--line); border-radius: 6px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
 .study-choice .study-ct { font-size: 13px; font-weight: 700; color: var(--text); }
 .study-choice.ok { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surf2)); }
 .study-choice.ok .study-tag { border-color: var(--accent); color: var(--accent-2); }
@@ -1755,6 +1755,23 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .study-reveal-btn { margin-top: 10px; font-family: var(--mono); font-size: 11.5px; color: var(--accent-2); background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid var(--g-proven-line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
 .study-reveal-btn:hover { background: var(--accent-soft); }
 .study-reveal { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+/* Skin contrast fixes (WCAG AA): tokens tuned for the dark skins go too light on the
+   light Daylight surface, and a couple of accent labels dip just under 4.5:1 on Indigo.
+   Status is never carried by colour alone here (each verdict keeps its glyph + heading),
+   so these only darken text to meet contrast, they do not change meaning. */
+:root[data-skin="daylight"] .study-gn-k { color: #566378; }
+:root[data-skin="daylight"] .study-scn-l { color: #8a5200; }
+:root[data-skin="daylight"] .study-verdict.ok,
+:root[data-skin="daylight"] .study-verdict.alt,
+:root[data-skin="daylight"] .study-verdict.bad { color: var(--text); }
+:root[data-skin="daylight"] .study-verdict.ok .study-vh { color: #0b6b4a; }
+:root[data-skin="daylight"] .study-verdict.alt .study-vh { color: #8a5200; }
+:root[data-skin="daylight"] .study-verdict.bad .study-vh { color: #b11f1f; }
+:root[data-skin="daylight"] .study-missing { color: #b11f1f; }
+:root[data-skin="daylight"] .study-choice.ok .study-tag { color: #0b6b4a; }
+:root[data-skin="daylight"] .study-choice.alt .study-tag { color: #8a5200; }
+:root[data-skin="daylight"] .study-choice.bad .study-tag { color: #b11f1f; }
+:root[data-skin="indigo"] .study-crumb b { color: var(--accent-2); }
 /* practice mode toggle: "what to do next" vs "reading the output" */
 .study-pmodes { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .study-pm-l { font-size: 11.5px; color: var(--text-2); font-weight: 700; font-family: var(--sans); margin-right: 2px; }
