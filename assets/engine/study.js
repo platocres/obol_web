@@ -289,37 +289,59 @@
   function scenarios() { return SCENARIOS.filter(function (s) { return s.steps.every(byId); }).map(function (s) { return { key: s.key, name: s.name, desc: s.desc, steps: s.steps.slice(), count: s.steps.length }; }); }
   function scenario(key) { for (var i = 0; i < SCENARIOS.length; i++) if (SCENARIOS[i].key === key) return { key: SCENARIOS[i].key, name: SCENARIOS[i].name, desc: SCENARIOS[i].desc, steps: SCENARIOS[i].steps.slice(), count: SCENARIOS[i].steps.length }; return null; }
 
-  // --- "by open port" view: the way you actually operate — a port is open, so WHAT does it mean and
-  //     WHICH moves does it unlock? This is signal recognition made literal. Curated port→moves map. ---
-  var PORTS = [
-    { port: 'scan', proto: '', service: 'No ports yet?', signal: 'Every engagement opens the same way: sweep the target so you know which doors exist before you touch any one of them.', moves: ['nmap-fast-open-ports', 'nmap-version-scripts', 'nmap-udp-top', 'nmap-vuln-scripts'] },
-    { port: '21', proto: 'tcp', service: 'FTP', signal: 'File transfer. Test anonymous login first (it is free), then brute a known user — files on FTP routinely hold configs, source, or credentials.', moves: ['recon-ftp', 'online-brute-ftp'] },
-    { port: '22', proto: 'tcp', service: 'SSH', signal: 'Remote shell. No RCE here, but a looted private key or a weak password is a stable foothold — and SSH is your cleanest pivot.', moves: ['ssh-key-login', 'online-brute-ssh', 'pivot-ssh-dynamic', 'pivot-sshuttle'] },
-    { port: '25/110/143', proto: 'tcp', service: 'SMTP / POP3 / IMAP', signal: 'Mail. SMTP VRFY confirms real usernames; a mailbox credential lets you read mail for secrets and reset links. NTLM auth leaks the domain name.', moves: ['recon-smtp', 'recon-mail'] },
-    { port: '53', proto: 'tcp/udp', service: 'DNS', signal: 'Name service. A zone transfer (AXFR) can hand you the whole internal host map in one request.', moves: ['recon-dns'] },
-    { port: '79', proto: 'tcp', service: 'Finger', signal: 'Ancient, but when it is open it leaks real usernames and who is logged in — raw material for a spray or brute.', moves: ['recon-finger'] },
-    { port: '80/443', proto: 'tcp', service: 'HTTP / HTTPS', signal: 'A web app — the single richest attack surface on the exam. Fingerprint the stack, map the content, then hunt the injectable edge.', moves: ['recon-web-triage', 'vhost-discovery', 'content-discovery', 'nikto-scan', 'wordpress', 'sqli-basics', 'command-injection', 'lfi-probe', 'file-upload', 'check-exposed-files'] },
-    { port: '88', proto: 'tcp', service: 'Kerberos', signal: 'A Domain Controller. Kerberos (88) with LDAP (389) and SMB (445) is the AD fingerprint — name the domain, list users, then roast.', moves: ['ad-dc-identify', 'ad-user-enum', 'asrep-roast', 'kerberoast'] },
-    { port: '111/2049', proto: 'tcp', service: 'NFS', signal: 'Network file shares. An export open to "*" is readable by anyone; no_root_squash turns it into a privesc.', moves: ['nfs-enum', 'nfs-squash'] },
-    { port: '135/139/445', proto: 'tcp', service: 'SMB / RPC', signal: 'Windows file sharing and RPC. Try anonymous access, hunt readable shares, check for old SMBv1 (EternalBlue), and relay NTLM. The busiest port in AD.', moves: ['recon-smb-anon', 'smb-share-inventory', 'gpp-passwords', 'eternalblue', 'ntlm-relay-attack', 'lateral-exec', 'dump-secrets', 'own-domain-pth'] },
-    { port: '161', proto: 'udp', service: 'SNMP', signal: 'A default "public" community string reads running processes, users, and sometimes credentials straight out of the host.', moves: ['recon-snmp'] },
-    { port: '389/636/3268', proto: 'tcp', service: 'LDAP / Global Catalog', signal: 'The directory itself. Anonymous bind lists every user; with a credential you collect BloodHound, read LAPS, and find AD CS templates.', moves: ['ad-dc-identify', 'ad-anon-ldap-enum', 'bloodhound-collect', 'laps-read', 'adcs-esc'] },
-    { port: '500', proto: 'udp', service: 'IKE / IPsec VPN', signal: 'A VPN endpoint. Aggressive Mode hands back a PSK hash you can crack offline — and a finding on its own.', moves: ['recon-ike-vpn'] },
-    { port: '1433', proto: 'tcp', service: 'MSSQL', signal: 'Microsoft SQL. A login with sysadmin re-enables xp_cmdshell and runs OS commands — the database becomes a shell.', moves: ['mssql-login', 'mssql-xp-cmdshell'] },
-    { port: '3306', proto: 'tcp', service: 'MySQL / MariaDB', signal: 'A login reads app secrets and the mysql.user hash table, and can write files to the web root.', moves: ['mysql-login', 'mysql-loot'] },
-    { port: '3389', proto: 'tcp', service: 'RDP', signal: 'Remote desktop. Confirm which credentials log in; a weak password is a full GUI session as that user.', moves: ['rdp-enum', 'online-brute-rdp'] },
-    { port: '5432', proto: 'tcp', service: 'PostgreSQL', signal: 'A session with the right role reads files and, via COPY ... FROM PROGRAM, runs commands.', moves: ['postgres-login'] },
-    { port: '5900', proto: 'tcp', service: 'VNC', signal: 'Remote desktop. "None" security is an unauthenticated screen; even with a password, VNC passwords are short and crackable.', moves: ['recon-vnc'] },
-    { port: '5985/5986', proto: 'tcp', service: 'WinRM', signal: 'Windows remote management. With a credential it is an interactive shell (evil-winrm) — your way onto and through Windows hosts.', moves: ['lateral-exec', 'local-windows-interfaces', 'local-windows-routes', 'local-windows-neighbors', 'local-windows-listeners'] },
-    { port: '6379', proto: 'tcp', service: 'Redis', signal: 'Often unauthenticated. INFO reads the host; a writable Redis can drop an SSH key or web shell — a direct foothold.', moves: ['redis-enum'] },
-    { port: '8080', proto: 'tcp', service: 'HTTP-alt (Tomcat / Jenkins)', signal: 'App servers. Tomcat Manager deploys a WAR; Jenkins\' script console runs Groovy — both are code execution with creds.', moves: ['tomcat-deploy', 'jenkins-access'] },
-    { port: '27017', proto: 'tcp', service: 'MongoDB', signal: 'Historically no auth. If you can list databases, you can read them — hashes and API keys sit in plain collections.', moves: ['mongo-enum'] },
+  // --- the EVIDENCE index: "what do I have in front of me, and what does it unlock?" -------------
+  // This is the by-port view, generalised. Ports are the first evidence you get; after a foothold the
+  // evidence is a shell, a hash, a credential, a pivot host. Each entry carries one curated plain
+  // sentence ("what it means") and a DERIVED, topo-ordered mini-lane of the moves that evidence opens,
+  // so every entry is as navigable as a methodology lane. Membership is seeded + pulled from whole
+  // taxonomy lanes, and a coverage check keeps it honest. tier 'ports' shows first, then tier 'access'.
+  var EVIDENCE = [
+    { key: 'scan', tier: 'ports', port: 'first', proto: '', label: 'Before anything, scan', signal: 'Every engagement opens the same way. Sweep the target so you know which doors exist before you touch any one of them.', seed: ['nmap-fast-open-ports', 'nmap-version-scripts', 'nmap-udp-top', 'nmap-vuln-scripts'] },
+    { key: 'p21', tier: 'ports', port: '21', proto: 'tcp', label: 'FTP', signal: 'File transfer. Test the anonymous login first because it costs nothing, then brute a known user. Files on FTP routinely hold configs, source, or credentials.', seed: ['recon-ftp', 'online-brute-ftp'] },
+    { key: 'p22', tier: 'ports', port: '22', proto: 'tcp', label: 'SSH', signal: 'Remote shell. There is no code execution here, but a looted private key or a weak password is a stable foothold, and SSH is your cleanest pivot.', seed: ['ssh-key-login', 'online-brute-ssh', 'pivot-ssh-dynamic', 'pivot-sshuttle'] },
+    { key: 'p25', tier: 'ports', port: '25/110/143', proto: 'tcp', label: 'SMTP, POP3, IMAP', signal: 'Mail. SMTP VRFY confirms real usernames, and a mailbox credential lets you read mail for secrets and reset links. NTLM auth leaks the domain name.', seed: ['recon-smtp', 'recon-mail'] },
+    { key: 'p53', tier: 'ports', port: '53', proto: 'tcp/udp', label: 'DNS', signal: 'Name service. A zone transfer (AXFR) can hand you the whole internal host map in one request.', seed: ['recon-dns'] },
+    { key: 'p79', tier: 'ports', port: '79', proto: 'tcp', label: 'Finger', signal: 'Ancient, but when it is open it leaks real usernames and who is logged in, which is raw material for a spray or a brute.', seed: ['recon-finger'] },
+    { key: 'p80', tier: 'ports', port: '80/443', proto: 'tcp', label: 'HTTP, HTTPS', signal: 'A web app, the single richest attack surface on the exam. Fingerprint the stack, map the content, then hunt the injectable edge.', seed: ['recon-web-triage', 'vhost-discovery', 'content-discovery', 'param-discovery', 'nikto-scan', 'wordpress', 'check-web-headers', 'check-web-components', 'check-cms-version', 'check-exposed-files', 'check-http-methods', 'check-cors', 'check-http-redirect', 'check-web-body', 'check-tls-config', 'check-dns-email', 'check-subdomain-takeover', 'sqli-basics', 'sqlmap-automation', 'command-injection', 'lfi-probe', 'file-upload', 'ssti', 'xxe', 'ssrf', 'nosql-injection', 'jwt-attacks', 'verb-tampering', 'xss-basics', 'git-exposed', 'svn-exposed', 'idor', 'deserialization', 'check-log4shell', 'check-struts2', 'jenkins-access', 'web-shells'] },
+    { key: 'p88', tier: 'ports', port: '88', proto: 'tcp', label: 'Kerberos', signal: 'A Domain Controller. Kerberos (88) with LDAP (389) and SMB (445) is the AD fingerprint. Name the domain, list the users, then roast.', seed: ['ad-dc-identify', 'ad-user-enum', 'asrep-roast', 'kerberoast', 'kerberos-tickets'] },
+    { key: 'p111', tier: 'ports', port: '111/2049', proto: 'tcp', label: 'NFS', signal: 'Network file shares. An export open to everyone is readable by anyone, and no_root_squash turns it into a privilege escalation.', seed: ['nfs-enum', 'nfs-squash'] },
+    { key: 'p135', tier: 'ports', port: '135/139/445', proto: 'tcp', label: 'SMB, RPC', signal: 'Windows file sharing and RPC, the busiest port in AD. Try anonymous access, hunt readable shares, check for old SMBv1 (EternalBlue), and poison or relay NTLM.', seed: ['recon-smb-anon', 'smb-share-inventory', 'gpp-passwords', 'eternalblue', 'responder-poison', 'ntlm-relay-attack', 'mitm6-ipv6-takeover', 'coerce-auth', 'ad-legacy-enum', 'lateral-exec', 'dump-secrets', 'own-domain-pth', 'dcsync'] },
+    { key: 'p161', tier: 'ports', port: '161', proto: 'udp', label: 'SNMP', signal: 'A default "public" community string reads running processes, users, and sometimes credentials straight out of the host.', seed: ['recon-snmp'] },
+    { key: 'p389', tier: 'ports', port: '389/636/3268', proto: 'tcp', label: 'LDAP, Global Catalog', signal: 'The directory itself. An anonymous bind lists every user, and with a credential you collect BloodHound, read LAPS, and find AD CS templates.', seed: ['ad-dc-identify', 'ad-anon-ldap-enum', 'bloodhound-collect', 'ad-path-manual', 'laps-read', 'gmsa-read', 'adcs-esc', 'cert-authenticate', 'password-spray', 'nxc-arsenal'] },
+    { key: 'p500', tier: 'ports', port: '500', proto: 'udp', label: 'IKE, IPsec VPN', signal: 'A VPN endpoint. Aggressive Mode hands back a PSK hash you can crack offline, and is a finding on its own.', seed: ['recon-ike-vpn'] },
+    { key: 'p1433', tier: 'ports', port: '1433', proto: 'tcp', label: 'MSSQL', signal: 'Microsoft SQL. A login with sysadmin re-enables xp_cmdshell and runs OS commands, so the database becomes a shell.', seed: ['mssql-login', 'mssql-xp-cmdshell'] },
+    { key: 'p3306', tier: 'ports', port: '3306', proto: 'tcp', label: 'MySQL, MariaDB', signal: 'A login reads app secrets and the mysql.user hash table, and can write files into the web root.', seed: ['mysql-login', 'mysql-loot'] },
+    { key: 'p3389', tier: 'ports', port: '3389', proto: 'tcp', label: 'RDP', signal: 'Remote desktop. Confirm which credentials log in, because a weak password is a full graphical session as that user.', seed: ['rdp-enum', 'online-brute-rdp'] },
+    { key: 'p5432', tier: 'ports', port: '5432', proto: 'tcp', label: 'PostgreSQL', signal: 'A session with the right role reads files and, through COPY FROM PROGRAM, runs commands.', seed: ['postgres-login'] },
+    { key: 'p5900', tier: 'ports', port: '5900', proto: 'tcp', label: 'VNC', signal: 'Remote desktop. A security type of "None" is an unauthenticated screen, and even with a password, VNC passwords are short and crackable.', seed: ['recon-vnc'] },
+    { key: 'p5985', tier: 'ports', port: '5985/5986', proto: 'tcp', label: 'WinRM', signal: 'Windows remote management. With a credential it is an interactive shell (evil-winrm), your way onto and through Windows hosts.', seed: ['lateral-exec', 'local-windows-interfaces', 'local-windows-routes', 'local-windows-neighbors', 'local-windows-listeners'] },
+    { key: 'p6379', tier: 'ports', port: '6379', proto: 'tcp', label: 'Redis', signal: 'Often unauthenticated. INFO reads the host, and a writable Redis can drop an SSH key or a web shell, which is a direct foothold.', seed: ['redis-enum'] },
+    { key: 'p8080', tier: 'ports', port: '8080', proto: 'tcp', label: 'HTTP-alt (Tomcat, Jenkins)', signal: 'App servers. Tomcat Manager deploys a WAR, and the Jenkins script console runs Groovy. Both are code execution once you have credentials.', seed: ['tomcat-deploy', 'jenkins-access'] },
+    { key: 'p27017', tier: 'ports', port: '27017', proto: 'tcp', label: 'MongoDB', signal: 'Historically no auth. If you can list the databases you can read them, and hashes and API keys sit in plain collections.', seed: ['mongo-enum'] },
+    // once you are in: the evidence is no longer a port but what you are holding
+    { key: 'shell-linux', tier: 'access', port: '', proto: '', label: 'You have a shell on Linux', signal: 'You landed a foothold, so the box itself is now the signal. Before escalating, enumerate: sudo rights, SUID bits, capabilities, cron jobs, and loot all point the way to root.', seed: ['shell-listener', 'shell-revshell-linux', 'shell-pty-upgrade', 'linux-remote-exec'], lanes: ['linux'] },
+    { key: 'shell-windows', tier: 'access', port: '', proto: '', label: 'You have a shell on Windows', signal: 'You landed on a Windows host. Check your privileges first: a single enabled token privilege, a weak service, or a saved credential is usually the whole way to SYSTEM.', seed: ['shell-listener', 'shell-revshell-windows'], lanes: ['windows'] },
+    { key: 'offline-hash', tier: 'access', port: '', proto: '', label: 'You have a hash (crack it offline)', signal: 'A hash in hand is a credential you have not spent yet. Identify the type, pick the matching mode, and crack it offline where there is no lockout.', seed: ['crack-identify', 'crack-ntlm', 'crack-netntlmv2', 'crack-kerberoast', 'crack-asrep-offline', 'crack-shadow', 'crack-archive', 'crack-mscache2', 'crack-asrep', 'crack-tgs'] },
+    { key: 'domain-cred', tier: 'access', port: '', proto: '', label: 'You have a valid domain credential', signal: 'One domain account changes everything. Map the attack paths, roast service accounts, abuse ACLs and delegation, and walk the graph toward Domain Admin.', seed: ['bloodhound-collect', 'ad-path-manual', 'powerview-enum', 'ad-psdotnet-enum', 'kerberoast', 'ad-acl-abuse', 'bloodyad-acl', 'gpo-abuse', 'dnsadmins-abuse', 'shadow-credentials', 'delegation-abuse', 'getst-impersonation', 'unconstrained-delegation', 'adcs-esc', 'cert-authenticate', 'dcsync', 'golden-ticket', 'silver-ticket', 'diamond-ticket', 'sid-history-abuse', 'trust-enum', 'laps-read', 'gmsa-read', 'own-domain-pth', 'zerologon-check', 'zerologon-exploit', 'nopac', 'printnightmare', 'ms14-068', 'wsus-abuse', 'sccm-enum'] },
+    { key: 'pivot', tier: 'access', port: '', proto: '', label: 'You have a foothold on a dual-homed host', signal: 'The box you own can reach a network you cannot. Enumerate its interfaces and routes, stand up a tunnel, and scan the subnet behind it.', seed: [], lanes: ['pivot'] },
+    { key: 'proof', tier: 'access', port: '', proto: '', label: 'You have root or SYSTEM (capture the proof)', signal: 'The objective. Grab the user and root flags, and capture the proof the report needs.', seed: [], lanes: ['proof'] },
   ];
-  function ports() {
-    return PORTS.map(function (p) {
-      var moves = (p.moves || []).filter(byId).map(function (id) { var m = byId(id); return { id: id, title: m.title, laneKey: (laneEntry(id) || {}).laneKey || '' }; });
-      return { port: p.port, proto: p.proto, service: p.service, signal: p.signal, moves: moves };
-    }).filter(function (p) { return p.moves.length; });
+  function evidenceMoves(seedIds) {
+    var ms = [], seen = {};
+    seedIds.forEach(function (id) { var m = byId(id); if (m && !seen[id]) { seen[id] = 1; ms.push(m); } });
+    return topoOrder(ms).map(function (m) { return { id: m.id, title: m.title, laneKey: (laneEntry(m.id) || {}).laneKey || '', phase: deriveStage(m) }; });
+  }
+  function evidence() {
+    return EVIDENCE.map(function (e) {
+      var seed = (e.seed || []).slice();
+      (e.lanes || []).forEach(function (lk) { lane(lk).forEach(function (n) { if (seed.indexOf(n.id) < 0) seed.push(n.id); }); });
+      return { key: e.key, tier: e.tier, port: e.port || '', proto: e.proto || '', label: e.label, signal: e.signal, moves: evidenceMoves(seed) };
+    }).filter(function (e) { return e.moves.length; });
+  }
+  // moves that never appear under any evidence entry (coverage guard for the by-evidence view)
+  function evidenceGaps() {
+    var seen = {}; evidence().forEach(function (e) { e.moves.forEach(function (m) { seen[m.id] = 1; }); });
+    return allMoves().map(function (m) { return m.id; }).filter(function (id) { return !seen[id]; });
   }
 
   // --- "Your turn" practice --------------------------------------------------------------------
@@ -385,12 +407,150 @@
   // another move — so a path that starts mid-stream isn't flagged for them.
   function isExternal(fact) { return /^(target\.|host\.up|ports\.open|port:|.*\.reachable$|http\.reachable|foothold\.)/.test(fact); }
 
+  // --- signal recognition helpers: the "so what" behind evidence -------------------------------
+  function friendly(k) { try { return (OBOL.pack && OBOL.pack.friendly) ? OBOL.pack.friendly(k) : k; } catch (e) { return k; } }
+  // the "why this line matters" read-out for a move's highlighted signal
+  function signalTell(moveId) {
+    var m = byId(moveId); if (!m) return null;
+    var fx = fixtures()[moveId] || {};
+    var proves = (m.produces || []).map(function (f) { return { fact: f, label: friendly(f) }; });
+    var opens = opensNext(m).slice(0, 5).map(function (x) { return { id: x.id, title: x.title }; });
+    var gist = proves.length
+      ? ('This line is your proof that you now have ' + proves[0].label + (opens.length ? ', which is what lets you ' + opens[0].title.charAt(0).toLowerCase() + opens[0].title.slice(1) + '.' : '.'))
+      : 'This line is the result that confirms the step worked.';
+    return { signal: fx.signal || '', proves: proves, opens: opens, gist: gist, teach: fx.teach || '' };
+  }
+  // one fact, made first-class: what produces it, and what it then unlocks
+  function factInfo(fact) {
+    return {
+      fact: fact, label: friendly(fact),
+      producedBy: allMoves().filter(function (m) { return (m.produces || []).indexOf(fact) >= 0; }).map(function (m) { return { id: m.id, title: m.title }; }),
+      unlocks: allMoves().filter(function (m) { return reqSet(m).indexOf(fact) >= 0; }).map(function (m) { return { id: m.id, title: m.title }; }),
+    };
+  }
+  // other moves that reach the same outcome (share a produced fact) — the candidates for "which, when?"
+  function alternativesFor(moveId) {
+    var m = byId(moveId); if (!m) return [];
+    var prod = m.produces || []; if (!prod.length) return [];
+    var out = [];
+    allMoves().forEach(function (x) {
+      if (x.id === moveId) return;
+      var shared = (x.produces || []).filter(function (p) { return prod.indexOf(p) >= 0; });
+      if (shared.length) out.push({ id: x.id, title: x.title, shared: shared });
+    });
+    return out;
+  }
+
+  // --- scope-safety: which moves are loud or can break things (teach when NOT to fire) ----------
+  var SCOPE = {
+    'eternalblue': { level: 'destructive', note: 'The SMBv1 exploit can blue-screen the target. Confirm it is a lab box, not a honeypot, before you fire it.' },
+    'zerologon-check': { level: 'loud', note: 'The check itself is safe; the exploit it leads to is destructive.' },
+    'zerologon-exploit': { level: 'destructive', note: 'Resets the DC machine password and breaks its secure channel. You MUST restore the original password afterward or you take the domain down.' },
+    'dnsadmins-abuse': { level: 'loud', note: 'Requires restarting the DNS service on a DC, which is noisy and disruptive.' },
+    'printnightmare': { level: 'loud', note: 'Loads a driver through the print spooler and can be unstable on some builds.' },
+    'nopac': { level: 'loud', note: 'Creates a machine account and forges a ticket. Unpatched DCs only.' },
+    'coerce-auth': { level: 'loud', note: 'Forces a target to authenticate to you. Obvious in logs.' },
+    'responder-poison': { level: 'loud', note: 'Poisons name resolution for the whole segment and can affect machines you did not intend. Scope it carefully.' },
+    'ntlm-relay-attack': { level: 'loud', note: 'Active on the wire; logs an authentication on the relayed host.' },
+    'mitm6-ipv6-takeover': { level: 'loud', note: 'Rogue DHCPv6 and DNS affect every Windows host on the segment. Scope it carefully.' },
+    'online-brute-ssh': { level: 'loud', note: 'Failed logins are logged and can lock accounts. Keep the list small.' },
+    'online-brute-ftp': { level: 'loud', note: 'Failed logins are logged and can lock accounts.' },
+    'online-brute-rdp': { level: 'loud', note: 'RDP lockout is unforgiving. Use one password at a time.' },
+    'password-spray': { level: 'loud', note: 'One password across many users avoids lockout, but the failed logons are still logged. Read the policy first.' },
+    'dcsync': { level: 'loud', note: 'Replication from a non-DC account stands out in the logs.' },
+    'golden-ticket': { level: 'loud', note: 'Post-compromise persistence that forges tickets bypassing normal auth.' },
+    'linux-persistence': { level: 'loud', note: 'Adds a durable way back in. On a real engagement this is scoped, logged, and cleaned up.' },
+    'windows-persistence': { level: 'loud', note: 'Adds a local admin account. Scope it, log it, and remove it afterward.' },
+  };
+  function scopeSafety(moveId) { return SCOPE[moveId] || { level: 'safe', note: '' }; }
+
+  // --- "which tool, when?": curated tradeoff decisions over moves that reach the same outcome ----
+  var DECISIONS = [
+    { key: 'ad-paths', moves: ['bloodhound-collect', 'ad-path-manual', 'powerview-enum'],
+      question: 'BloodHound, bloodyAD, or PowerView to work AD attack paths?',
+      pick: 'BloodHound to discover', rule: 'Use BloodHound to DISCOVER the path, then bloodyAD to EXECUTE a known edge.',
+      unless: 'you cannot exfil a large collection or need to stay quiet (go straight to bloodyAD), or you are already on a Windows box with no way to upload (use PowerView in memory).',
+      detail: [
+        { id: 'bloodhound-collect', when: 'You want to see the whole domain and have it compute the shortest path for you. Heavier: it collects a large dataset, wants the GUI to analyse, and the collection is noisy.' },
+        { id: 'ad-path-manual', when: 'You already know or suspect the edge and want to act on it surgically from the command line. Light and quiet, no big collection, but you have to know what you are looking for.' },
+        { id: 'powerview-enum', when: 'You are on a Windows foothold and cannot upload tools. Loads in memory and queries live, at the cost of running on the target.' },
+      ] },
+    { key: 'dump-creds', moves: ['dcsync', 'dump-secrets', 'lsass-dump-onbox'],
+      question: 'Dump credentials remotely, or on the host with mimikatz?',
+      pick: 'Remotely', rule: 'Default to the remote dump. It is fast, uploads nothing, and never touches AV on the host.',
+      unless: 'remote is blocked, or you specifically need the live secrets that only exist in memory (cleartext passwords, the Kerberos tickets of logged-in users), which are not in the SAM or NTDS. Then dump LSASS on the host.',
+      detail: [
+        { id: 'dcsync', when: 'You hold replication rights. Pulls every hash in the domain from the DC over the network, in seconds, with nothing uploaded.' },
+        { id: 'dump-secrets', when: 'You have admin on a host and want its local SAM and LSA, remotely, with no shell needed.' },
+        { id: 'lsass-dump-onbox', when: 'You need what is only in memory right now: cleartext passwords and the tickets of other logged-in users, none of which live in the SAM or NTDS. Slower and more tedious, runs on the host, and is exactly what AV watches most closely. Reach for it only when the fast remote dump cannot give you the live secret you are after.' },
+      ] },
+    { key: 'relay-or-crack', moves: ['ntlm-relay-attack', 'crack-netntlmv2'],
+      question: 'A captured NetNTLMv2 hash: relay it, or crack it?',
+      pick: 'Relay it', rule: 'If SMB signing is off on a host where the victim is a local admin, relay the authentication straight to it. No cracking, no password needed.',
+      unless: 'signing is on everywhere (nothing to relay to) or you want the actual cleartext password to reuse elsewhere. Then crack it offline.',
+      detail: [
+        { id: 'ntlm-relay-attack', when: 'Signing is off and a reachable target has the victim as admin. Instant access, nothing to crack, but it needs a valid relay target.' },
+        { id: 'crack-netntlmv2', when: 'You cannot relay, or you want the plaintext to reuse on services that will not accept a hash. Offline and no lockout, but only if the password is in your wordlist.' },
+      ] },
+    { key: 'capture-auth', moves: ['responder-poison', 'coerce-auth'],
+      question: 'Wait for authentication with Responder, or coerce it?',
+      pick: 'Coerce it', rule: 'If you can, force a chosen host to authenticate to you with a coercion tool. You get the hash on demand instead of hoping for traffic.',
+      unless: 'you expect organic traffic (a busy segment, a user about to log on) or want to stay passive and quiet. Then just listen with Responder.',
+      detail: [
+        { id: 'responder-poison', when: 'Passive. Catches the authentication that happens to come your way. Quiet, but on a dead network you wait forever.' },
+        { id: 'coerce-auth', when: 'Active. Forces a specific target to authenticate to you right now. Reliable, but obvious in the logs.' },
+      ] },
+    { key: 'crack-engine', moves: ['crack-ntlm', 'crack-netntlmv2', 'crack-kerberoast', 'crack-asrep-offline', 'crack-shadow', 'crack-mscache2', 'crack-tgs', 'crack-asrep', 'crack-archive'],
+      question: 'hashcat or john to crack a hash?',
+      pick: 'hashcat', rule: 'Default to hashcat. On a GPU it is far faster, and its mode numbers are well documented.',
+      unless: 'you are CPU-only, or the hash is an odd format hashcat has no clean mode for. Then john, which has the widest format support and the bundled zip2john and ssh2john extractors.',
+      detail: [
+        { id: 'crack-ntlm', when: 'Applies to every crack step: hashcat for raw speed on a GPU, john for format breadth and its *2john helpers when you are extracting a hash from a file.' },
+      ] },
+  ];
+  function decisionFor(moveId) { return DECISIONS.filter(function (d) { return d.moves.indexOf(moveId) >= 0; }); }
+
+  // --- diagnosis practice: read raw output, name what you now have (facts, not moves) -----------
+  var FACTPOOL = null;
+  function factPool() {
+    if (FACTPOOL) return FACTPOOL;
+    var set = {}; allMoves().forEach(function (m) { (m.produces || []).forEach(function (f) { set[f] = 1; }); });
+    FACTPOOL = Object.keys(set);
+    return FACTPOOL;
+  }
+  function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var r = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[r]; a[r] = t; } return a; }
+  function practiceDiagnose(moveId) {
+    var cell = cellFor(moveId); if (!cell || !cell.output || !cell.output.text) return null;
+    var m = byId(moveId); var correct = (m.produces || [])[0]; if (!correct) return null;
+    var mine = {}; (m.produces || []).forEach(function (f) { mine[f] = 1; });
+    var pool = {};
+    lane((laneEntry(moveId) || {}).laneKey).forEach(function (n) { var nm = byId(n.id); if (nm) (nm.produces || []).forEach(function (f) { if (!mine[f]) pool[f] = 1; }); });
+    var distract = shuffle(Object.keys(pool));
+    if (distract.length < 3) { shuffle(factPool()).forEach(function (f) { if (!mine[f] && distract.indexOf(f) < 0 && distract.length < 3) distract.push(f); }); }
+    distract = distract.slice(0, 3);
+    var choices = distract.map(function (f) { return { fact: f, label: friendly(f), correct: false }; });
+    choices.push({ fact: correct, label: friendly(correct), correct: true });
+    return { moveId: moveId, title: cell.title, output: cell.output.text, signal: cell.output.signal,
+      question: 'You ran this step and got the output above. What does it tell you that you now have?',
+      choices: shuffle(choices),
+      why: 'That output line is the evidence you now hold ' + friendly(correct) + ', which is what the next move needs.' };
+  }
+
+  // --- scaffolding level: how much "why" to show. Fades as a move is mastered, or set manually ---
+  var CKEY = 'obol.study-coach';
+  function coachPref() { try { return localStorage.getItem(CKEY) || 'auto'; } catch (e) { return 'auto'; } }
+  function setCoachPref(v) { try { localStorage.setItem(CKEY, v); } catch (e) {} }
+  function showWhy(moveId) { var p = coachPref(); if (p === 'always') return true; if (p === 'off') return false; var mk = mastery()[moveId] || {}; return !mk.correct; }
+
   OBOL.study = {
     LANE_DEFS: LANE_DEFS, LANE_KEYS: LANE_KEYS,
     lanes: lanes, lane: lane, laneEdges: laneEdges, laneEntry: laneEntry, laneNext: laneNext,
-    atlas: atlas, scenarios: scenarios, scenario: scenario, ports: ports,
-    cmdLocus: cmdLocus, cellFor: cellFor, replayFor: replayFor, practiceFor: practiceFor,
+    atlas: atlas, scenarios: scenarios, scenario: scenario,
+    evidence: evidence, evidenceGaps: evidenceGaps,
+    cmdLocus: cmdLocus, cellFor: cellFor, replayFor: replayFor, practiceFor: practiceFor, practiceDiagnose: practiceDiagnose,
     producersOf: producersOf, opensNext: opensNext,
+    signalTell: signalTell, factInfo: factInfo, alternativesFor: alternativesFor, decisionFor: decisionFor, scopeSafety: scopeSafety,
+    coachPref: coachPref, setCoachPref: setCoachPref, showWhy: showWhy,
     mastery: mastery, markStudied: markStudied, laneProgress: laneProgress, validatePath: validatePath,
     // back-compat for tests
     get AD_LANE() { return lane('ad'); },

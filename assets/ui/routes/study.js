@@ -267,25 +267,40 @@
     return h + '</section>';
   }
 
-  // ---- the BY-PORT view: a port is open → what it means, and the moves it unlocks ----------------
+  // ---- the BY-EVIDENCE view: what is in front of you (a port, a shell, a hash) and what it unlocks.
+  // Two tiers: open ports first (how you actually start), then "once you are in" evidence. Each entry
+  // is an ordered mini-lane, so it reads with the same flow as the methodology lanes.
+  function evidenceCard(e, mk) {
+    var isPort = e.tier === 'ports';
+    var head = isPort
+      ? '<div class="port-card-h"><span class="port-num">' + esc(e.port) + (e.proto ? '<span class="port-proto">/' + esc(e.proto) + '</span>' : '') + '</span>'
+        + '<span class="port-svc">' + esc(e.label) + '</span></div>'
+      : '<div class="port-card-h ev-access-h"><span class="port-svc">' + esc(e.label) + '</span></div>';
+    var moves = e.moves.map(function (m, i) {
+      var studied = (mk[m.id] || {}).studied ? ' done' : '';
+      return (i ? '<span class="ev-arrow">→</span>' : '')
+        + '<button type="button" class="port-move lane-' + m.laneKey + studied + '" data-open="' + U.attr(m.id) + '">' + esc(m.title) + '</button>';
+    }).join('');
+    return '<div class="port-card' + (e.key === 'scan' ? ' port-scan' : '') + (isPort ? '' : ' ev-access') + '">'
+      + head
+      + '<p class="port-sig">' + esc(e.signal) + '</p>'
+      + '<div class="port-moves ev-flow">' + moves + '</div>'
+      + '</div>';
+  }
   function portsView() {
-    var ps = study().ports(), mk = study().mastery();
+    var ev = study().evidence(), mk = study().mastery();
+    var portsT = ev.filter(function (e) { return e.tier === 'ports'; });
+    var accessT = ev.filter(function (e) { return e.tier === 'access'; });
     var h = '<section class="study-route study-ports">';
     h += '<div class="study-top"><button type="button" class="study-back" data-back-map>← Paths</button>'
-      + '<div class="study-crumb"><b>Study</b> · By open port</div></div>';
-    h += '<div class="study-hero"><h1 class="study-hero-h">What do I do with <i>this</i> port?</h1>'
-      + '<p class="study-hero-p">This is how you actually operate: you scan, and a <b>list of open ports</b> comes back. Each one is a signal — it tells you what the box runs and which moves it opens. '
-      + 'Find the port you see, read what it means, and jump straight to the move.</p></div>';
-    h += '<div class="port-grid">' + ps.map(function (p) {
-      return '<div class="port-card' + (p.port === 'scan' ? ' port-scan' : '') + '">'
-        + '<div class="port-card-h"><span class="port-num">' + esc(p.port) + (p.proto ? '<span class="port-proto">/' + esc(p.proto) + '</span>' : '') + '</span>'
-        + '<span class="port-svc">' + esc(p.service) + '</span></div>'
-        + '<p class="port-sig">' + esc(p.signal) + '</p>'
-        + '<div class="port-moves">' + p.moves.map(function (m) {
-            return '<button type="button" class="port-move lane-' + m.laneKey + ((mk[m.id] || {}).studied ? ' done' : '') + '" data-open="' + U.attr(m.id) + '">' + esc(m.title) + ' →</button>';
-          }).join('') + '</div>'
-        + '</div>';
-    }).join('') + '</div>';
+      + '<div class="study-crumb"><b>Study</b> · By what you have found</div></div>';
+    h += '<div class="study-hero"><h1 class="study-hero-h">What do I do with <i>this</i>?</h1>'
+      + '<p class="study-hero-p">This is how you actually operate. You scan, and a list of open ports comes back. Each one is a signal: it tells you what the box runs and which moves it opens. '
+      + 'Once you are in, the signal changes to what you are holding, a shell, a hash, a credential. Find yours, read what it means, and step into the move.</p></div>';
+    h += '<h2 class="ev-tier-h">Open ports, what you see first</h2>';
+    h += '<div class="port-grid">' + portsT.map(function (e) { return evidenceCard(e, mk); }).join('') + '</div>';
+    h += '<h2 class="ev-tier-h">Once you are in, what you are holding</h2>';
+    h += '<div class="port-grid ev-access-grid">' + accessT.map(function (e) { return evidenceCard(e, mk); }).join('') + '</div>';
     return h + '</section>';
   }
 

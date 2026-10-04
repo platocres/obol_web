@@ -1945,6 +1945,15 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .port-move:hover { background: color-mix(in srgb, var(--lane, var(--accent)) 12%, var(--surf2)); border-color: var(--lane, var(--accent)); }
 .port-move.done { color: var(--text-2); }
 .port-move.done::after { content: ' ✓'; color: var(--accent); font-weight: 800; }
+/* evidence tiers + ordered mini-lane flow */
+.ev-tier-h { font-family: var(--mono); font-size: 13px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); margin: 26px 0 12px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+.ev-tier-h:first-of-type { margin-top: 8px; }
+.port-moves.ev-flow { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 5px; }
+.ev-flow .port-move { border-left-width: 3px; }
+.ev-arrow { color: var(--muted); font-weight: 800; font-size: 12px; margin: 0 1px; }
+.port-card.ev-access { background: color-mix(in srgb, var(--accent) 5%, var(--surf1)); }
+.ev-access-h .port-svc { font-size: 15px; }
+.port-card.ev-access .port-svc::before { content: '🎯 '; font-size: 13px; }
 
 /* --- Study: Atlas density (bands, search, minimap, mastery) --- */
 .atlas-search { font-family: var(--mono); font-size: 12px; background: var(--surf2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; width: 150px; transition: border-color .14s, width .18s; }

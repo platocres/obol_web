@@ -94,13 +94,33 @@ ok(at.crossEdges.length >= 5 && at.crossEdges.some((e) => e.from === 'recon-smb-
 ok(at.nodes.every((n) => typeof n.col === 'number' && typeof n.row === 'number'), 'every atlas node has a grid position');
 ok(at.lanes.length === 11 && at.laneOrder.length === 11, 'atlas carries all eleven lanes');
 
-// --- by-port view (signal recognition: a port is open → the moves it unlocks) ----------------
-const pv = S.ports();
-ok(pv.length >= 15, 'the by-port view groups moves under at least 15 ports/services');
-ok(pv.every((p) => p.moves.length && p.moves.every((m) => !!S.cellFor(m.id))), 'every port lists real, resolvable moves');
-ok(pv.some((p) => p.port === '135/139/445' && p.moves.some((m) => m.id === 'eternalblue')), 'SMB (445) surfaces EternalBlue');
-ok(pv.some((p) => p.port === '88' && p.moves.some((m) => m.id === 'asrep-roast')), 'Kerberos (88) surfaces AS-REP roasting');
-ok(pv.every((p) => p.signal && p.signal.length > 20), 'each port carries a plain-language "what it means" signal');
+// --- by-evidence view (signal recognition: what you have → the moves it unlocks) --------------
+const ev = S.evidence();
+ok(ev.length >= 25, 'the evidence index exposes 25+ entries (ports + access tiers)');
+ok(ev.filter((e) => e.tier === 'ports').length >= 20 && ev.filter((e) => e.tier === 'access').length >= 5, 'it has both an open-ports tier and an "once you are in" access tier');
+ok(ev.every((e) => e.moves.length && e.moves.every((m) => !!S.cellFor(m.id))), 'every evidence entry lists real, resolvable moves');
+ok(ev.some((e) => e.key === 'p135' && e.moves.some((m) => m.id === 'eternalblue')), 'SMB (445) surfaces EternalBlue');
+ok(ev.some((e) => e.key === 'p88' && e.moves.some((m) => m.id === 'asrep-roast')), 'Kerberos (88) surfaces AS-REP roasting');
+ok(ev.some((e) => e.key === 'shell-linux' && e.moves.some((m) => m.id === 'sudo-abuse')), '"shell on Linux" surfaces sudo abuse');
+ok(ev.every((e) => e.signal && e.signal.length > 20), 'each entry carries a plain-language "what it means" signal');
+ok(S.evidenceGaps().length <= 2, 'almost every move appears under at least one evidence entry (coverage)');
+
+// --- "which tool, when?" decisions + scope-safety --------------------------------------------
+ok(S.decisionFor('dcsync').some((d) => d.key === 'dump-creds'), 'dcsync carries the remote-vs-mimikatz decision');
+ok(S.decisionFor('lsass-dump-onbox').length >= 1 && S.decisionFor('bloodhound-collect').some((d) => d.key === 'ad-paths'), 'the BloodHound/bloodyAD decision attaches to its moves');
+const dc = S.decisionFor('dcsync')[0];
+ok(dc.pick && dc.rule && dc.unless && dc.detail.length >= 2, 'a decision has a prescriptive pick + rule + exception + per-option detail');
+ok(S.scopeSafety('eternalblue').level === 'destructive' && S.scopeSafety('responder-poison').level === 'loud', 'scope-safety flags destructive/loud moves');
+ok(S.scopeSafety('sudo-abuse').level === 'safe', 'an ordinary move is scope-safe by default');
+
+// --- signal "so what", fact index, diagnosis practice ----------------------------------------
+const st = S.signalTell('asrep-roast');
+ok(st && st.gist.length > 20 && st.proves.length >= 1, 'signalTell explains what the highlighted line proves');
+const fi = S.factInfo('ad.user_list');
+ok(fi.producedBy.length >= 1 && fi.unlocks.length >= 1, 'factInfo lists what produces a fact and what it unlocks');
+const diag = S.practiceDiagnose('sudo-abuse');
+ok(diag && diag.choices.length >= 2 && diag.choices.filter((c) => c.correct).length === 1, 'diagnosis practice asks what a sample output proves (one correct fact)');
+ok(S.alternativesFor('dcsync').length >= 1, 'alternativesFor finds moves that reach the same outcome');
 
 // --- fixed scenarios -------------------------------------------------------------------------
 const scn = S.scenarios();
