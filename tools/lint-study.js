@@ -127,8 +127,22 @@ console.log(pad('TOTAL', 10) + num(T.n, 4) + num(T.why, 5) + num(T.overlap, 5) +
 console.log('\nLegend: why=has why · ovlp=why duplicates description · lead=has lead-up · multi=multi-route lead-up');
 console.log('        how=has field notes · demo=field notes are playable · turn=bespoke your-turn · watch=has replay output\n');
 
-if (process.argv.includes('--flagged')) {
-  console.log('FLAGGED MOVES (' + flagged.length + '):\n');
-  flagged.forEach((f) => console.log('  [' + pad(f.lane, 8) + '] ' + pad(f.id, 26) + ' ' + f.issues.join(' · ')));
+if (process.argv.includes('--flagged') || process.argv.includes('--lane')) {
+  const laneArg = (process.argv[process.argv.indexOf('--lane') + 1]) || null;
+  const list = laneArg ? flagged.filter((f) => f.lane === laneArg) : flagged;
+  console.log('FLAGGED MOVES (' + list.length + (laneArg ? ' in ' + laneArg : '') + '):\n');
+  list.forEach((f) => console.log('  [' + pad(f.lane, 8) + '] ' + pad(f.id, 28) + ' ' + f.issues.join(' · ')));
   console.log('');
 }
+
+// --check: fail (exit 1) on HARD content errors only (bad demo signals, em-dashes), for CI gating.
+if (process.argv.includes('--check')) {
+  const hard = flagged.filter((f) => f.issues.some((s) => /sig-not-in-out|em-dash/.test(s)));
+  if (hard.length) {
+    console.error('LINT FAIL: ' + hard.length + ' move(s) with hard content errors:');
+    hard.forEach((f) => console.error('  ' + f.id + ': ' + f.issues.filter((s) => /sig-not-in-out|em-dash/.test(s)).join(' · ')));
+    process.exit(1);
+  }
+  console.log('LINT OK: no hard content errors.');
+}
+

