@@ -99,15 +99,29 @@
           + '</button>';
       });
     } else {
-      var lk2 = laneKeyOf(_sel), lane = study().lane(lk2), lastPhase = null;
+      var lk2 = laneKeyOf(_sel), lane = study().lane(lk2);
       header = laneMeta(lk2).name + ' · click a step';
-      lane.forEach(function (n, i) {
-        if (n.phase !== lastPhase) { html += '<div class="study-phase">' + esc(n.phase) + '</div>'; lastPhase = n.phase; }
-        var cls = 'study-gnode lane-' + lk2 + (n.id === _sel ? ' active' : '') + (i > 0 ? ' linked' : '');
-        html += '<button type="button" class="' + cls + '" data-node="' + U.attr(n.id) + '">'
-          + '<span class="study-gn-t">' + esc(n.title) + masteryGlyph(n.id) + '</span>'
-          + (n.proves && n.proves.length ? '<span class="study-gn-k">Gets you ' + esc(human(n.proves[0])) + '</span>' : '')
-          + '</button>';
+      // group the lane's steps by stage so each stage is one contiguous section with a single header,
+      // rather than the same label ("Web", "Foothold") repeating as the dependency order scatters it.
+      var groups = [], gmap = {};
+      lane.forEach(function (n) { var p = n.phase || 'Steps'; if (!gmap[p]) { gmap[p] = []; groups.push(p); } gmap[p].push(n); });
+      // order the sections as an attack progression, not by where they first fell in dependency order
+      var PHASE_ORDER = ['Recon', 'Web', 'Foothold', 'Credentials', 'Escalate', 'Lateral', 'Loot', 'Active Directory', 'Proof', 'Steps'];
+      groups.sort(function (a, b) {
+        var ia = PHASE_ORDER.indexOf(a), ib = PHASE_ORDER.indexOf(b);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+      });
+      var gi = 0;
+      groups.forEach(function (p) {
+        html += '<div class="study-phase">' + esc(p) + '</div>';
+        gmap[p].forEach(function (n) {
+          var cls = 'study-gnode lane-' + lk2 + (n.id === _sel ? ' active' : '') + (gi > 0 ? ' linked' : '');
+          gi++;
+          html += '<button type="button" class="' + cls + '" data-node="' + U.attr(n.id) + '">'
+            + '<span class="study-gn-t">' + esc(n.title) + masteryGlyph(n.id) + '</span>'
+            + (n.proves && n.proves.length ? '<span class="study-gn-k">Gets you ' + esc(human(n.proves[0])) + '</span>' : '')
+            + '</button>';
+        });
       });
     }
     return '<div class="study-panel study-graph-panel">'

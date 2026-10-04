@@ -70,16 +70,30 @@
   }
 
   // coarse stage label for a move, from the fact it mints (used as the phase chip at scale)
-  function deriveStage(m) {
-    if (m.phase) return cap1(m.phase);
-    var p = (m.produces || [])[0] || '';
+  // canonical stage labels, so synonyms (creds/credentials, priv/privesc/escalate, pivot/lateral) never
+  // show up as two different headers in the rail or the atlas.
+  var STAGE_ALIAS = {
+    recon: 'Recon', web: 'Web', foothold: 'Foothold', access: 'Foothold', shell: 'Foothold',
+    cred: 'Credentials', creds: 'Credentials', credential: 'Credentials', credentials: 'Credentials',
+    priv: 'Escalate', privesc: 'Escalate', escalate: 'Escalate', escalation: 'Escalate',
+    lateral: 'Lateral', pivot: 'Lateral', loot: 'Loot', proof: 'Proof', flag: 'Proof',
+    ad: 'Active Directory', 'active directory': 'Active Directory', domain: 'Active Directory',
+  };
+  function canonStage(s) { var k = String(s || '').toLowerCase().trim(); return STAGE_ALIAS[k] || (s ? cap1(s) : ''); }
+  function stageOfFact(p) {
     if (/^access\.(admin|system|root)/.test(p) || p === 'access.admin' || p === 'access.system') return 'Escalate';
     if (/^(foothold\.|access\.shell)/.test(p)) return 'Foothold';
-    if (/^(hash\.|credential\.)/.test(p)) return 'Credentials';
+    if (/^(hash\.|credential\.|db\.cred)/.test(p)) return 'Credentials';
     if (/^(loot\.|proof|flag)/.test(p)) return 'Loot';
     if (/^ad\./.test(p)) return 'Active Directory';
     if (/^web\./.test(p)) return 'Web';
     if (/^(scan\.|host\.|ports|service\.)/.test(p) || /\.reachable$/.test(p)) return 'Recon';
+    return '';
+  }
+  function deriveStage(m) {
+    if (m.phase) return canonStage(m.phase);
+    var prod = m.produces || [];
+    for (var i = 0; i < prod.length; i++) { var st = stageOfFact(prod[i]); if (st) return st; }
     return '';
   }
   function cap1(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
