@@ -277,7 +277,7 @@
     var live = benchLive();
     var badge = live
       ? '<span class="bench-live">● filled from your engagement</span>'
-      : '<span class="bench-live off">example values, fill in once you start an engagement</span>';
+      : '<span class="bench-live off">Example values, these fill in once you start an engagement</span>';
     return '<div class="study-benchcol' + (benchCollapsed() ? ' collapsed' : '') + '">'
       + '<div class="study-panel benchpanel study-bench">'
       + '<div class="benchcol-h"><span class="benchcol-title">Field notes: how to actually do it</span>'
