@@ -2109,6 +2109,8 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .bench-ctrl { display: flex; gap: 8px; margin-top: 10px; }
 .bench-note { margin-top: 11px; font-size: 12px; line-height: 1.55; color: var(--text-2); background: var(--surf1); border-left: 2px solid var(--accent); border-radius: 6px; padding: 8px 11px; max-width: 74ch; }
 .bench-note-i { color: var(--accent-2); font-weight: 700; }
+/* a concept technique has no runnable demo, so its guidance is the whole body, not a footnote */
+.bench-note-solo { margin-top: 13px; font-size: 13px; background: color-mix(in srgb, var(--accent) 6%, var(--surf1)); border-left-width: 3px; padding: 11px 13px; }
 @media (max-width: 1024px) {
   .bench { grid-template-columns: 1fr; }
   .bench-list { position: static; flex-direction: row; flex-wrap: wrap; }

@@ -895,6 +895,45 @@ function serve() {
   await page.waitForSelector('.study-map', { timeout: 6000 }).catch(() => {});
   ok((await page.locator('.study-lane-go', { hasText: 'studied' }).count()) >= 1, 'mastery persists: a lane card reports studied progress');
 
+  // Field-notes bench: every item that shows a Play button must actually play something, and a
+  // concept item with no demo must NOT show a dead Play button. (Regression: the last item used to
+  // render Play that did nothing.) xss-basics ends on a no-demo concept ("beat filters and CSP").
+  await page.goto(`http://localhost:${PORT}/index.html#/study/xss-basics`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-bench .bench-item', { timeout: 6000 }).catch(() => {});
+  const benchN = await page.locator('.study-bench .bench-item').count();
+  ok(benchN >= 2, 'field-notes bench lists its techniques (' + benchN + ')');
+  let deadPlay = 0, playable = 0;
+  for (let i = 0; i < benchN; i++) {
+    await page.locator('.study-bench .bench-item').nth(i).click();
+    await page.waitForTimeout(60);
+    const hasPlay = (await page.locator('.study-bench [data-bench-play]').count()) > 0;
+    const hasTermText = ((await page.locator('.study-bench #bench-term').textContent().catch(() => '')) || '').trim().length > 0;
+    if (hasPlay) { playable++; if (!hasTermText) deadPlay++; }           // Play present but nothing to play = dead button
+    else { const note = (await page.locator('.study-bench .bench-note').count()) > 0; if (!note) deadPlay++; } // no Play and no guidance = empty pane
+  }
+  ok(deadPlay === 0, 'no dead field-note item: every Play has output, every no-demo item shows guidance (' + deadPlay + ' bad)');
+  ok(playable >= 1, 'at least one field-note technique is playable (' + playable + ')');
+
+  // Rail keeps your place: scroll the step rail, click a step lower down, the rail must not jump to the top.
+  await page.goto(`http://localhost:${PORT}/index.html#/study/vhost-discovery`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-graph .study-gnode', { timeout: 6000 }).catch(() => {});
+  await page.evaluate(() => { const g = document.querySelector('.study-graph'); if (g) g.scrollTop = 320; });
+  const beforeTop = await page.evaluate(() => { const g = document.querySelector('.study-graph'); return g ? g.scrollTop : -1; });
+  // click a step that is currently scrolled into view (not the first one)
+  const visIdx = await page.evaluate(() => {
+    const g = document.querySelector('.study-graph'); const gr = g.getBoundingClientRect();
+    const nodes = [...g.querySelectorAll('.study-gnode')];
+    for (let i = 0; i < nodes.length; i++) { const r = nodes[i].getBoundingClientRect(); if (r.top >= gr.top && r.bottom <= gr.bottom) return i; }
+    return 0;
+  });
+  // click it the way a user does — a plain click on a step already on screen (Playwright's own
+  // .click() would scroll the rail to "action" the element, which a real user never triggers).
+  await page.evaluate((i) => { document.querySelectorAll('.study-graph .study-gnode')[i].click(); }, visIdx);
+  await page.waitForTimeout(150);
+  const afterTop = await page.evaluate(() => { const g = document.querySelector('.study-graph'); return g ? g.scrollTop : -1; });
+  ok(Math.abs(afterTop - beforeTop) <= 24, 'clicking a step keeps the rail scroll (was ' + beforeTop + ', now ' + afterTop + ')');
+  ok((await page.locator('.study-graph .study-gnode.active').count()) === 1, 'the clicked step is highlighted as active');
+
   await browser.close();
   server.close();
   console.log(fail ? ('\nBROWSER SMOKE: ' + fail + ' FAILURES') : '\nBROWSER SMOKE: all passed');

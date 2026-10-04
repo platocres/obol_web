@@ -34,6 +34,8 @@
   var _recapPath = {};           // "how you got here": moveId -> selected lead-up path key
   var _rpSeen = {};              // Watch: moveId -> already auto-played once (so it plays on first scroll-in, not again)
   var _benchSel = {};            // field-notes bench: moveId -> selected technique index
+  var _railScroll = null;        // node view: rail (.study-graph) scrollTop to restore after a re-render, so clicking a step keeps your place in the list
+  var _railNodeSeen = null;      // node view: the move we last scrolled the rail to (so we only auto-scroll on a genuine arrival, not every in-place re-render)
   var _benchTok = null;          // field-notes bench: cancel token for the running demo animation
   var _simKey = null;            // cold-box sim: active scenario key (null = pick one)
   var _simStep = 0;              // cold-box sim: current step index
@@ -393,11 +395,17 @@
   }
   function benchMain(items, i) {
     var it = items[i]; if (!it) return '';
-    return '<div class="bench-tech"><div class="bench-t">' + esc(it.t) + '</div><div class="bench-d">' + codeify(it.d) + '</div></div>'
-      + '<div class="bench-term" id="bench-term">' + benchTermStatic(it.demo) + '</div>'
-      + '<div class="bench-ctrl"><button type="button" class="study-rp-btn primary" data-bench-play>▶ Play</button>'
-      + '<button type="button" class="study-rp-btn" data-bench-replay>↺ Replay</button></div>'
-      + (it.note ? '<div class="bench-note"><span class="bench-note-i">↳</span> ' + codeify(it.note) + '</div>' : '');
+    var hasDemo = it.demo && it.demo.length;
+    var h = '<div class="bench-tech"><div class="bench-t">' + esc(it.t) + '</div><div class="bench-d">' + codeify(it.d) + '</div></div>';
+    // A playable technique gets the live terminal + Play/Replay. A concept with no single command
+    // (e.g. "beat filters and CSP") gets its guidance instead of a Play button that would do nothing.
+    if (hasDemo) {
+      h += '<div class="bench-term" id="bench-term">' + benchTermStatic(it.demo) + '</div>'
+        + '<div class="bench-ctrl"><button type="button" class="study-rp-btn primary" data-bench-play>▶ Play</button>'
+        + '<button type="button" class="study-rp-btn" data-bench-replay>↺ Replay</button></div>';
+    }
+    h += (it.note ? '<div class="bench-note' + (hasDemo ? '' : ' bench-note-solo') + '"><span class="bench-note-i">↳</span> ' + codeify(it.note) + '</div>' : '');
+    return h;
   }
   function benchTermStatic(demo) {
     return (demo || []).map(function (s) {
@@ -1101,6 +1109,62 @@
   function mounted(ctx) {
     var mount = ctx.mount;
     cancelReplay(); cancelBench();
+    // Delegated click handlers are registered ONCE per mount element. The route re-renders in place
+    // (it replaces #view's innerHTML, the element itself is stable), so re-binding every render would
+    // stack duplicate listeners — one click would then fire N handlers and re-render N times, and a
+    // handler that reads live DOM (the rail scroll) would see the already-rebuilt view. Bind once.
+    if (!mount.__studyWired) {
+      mount.__studyWired = true;
+      wireStudyClicks(mount);
+    }
+    // ---- per-render setup (runs every render) ----
+    // keep your place in the step rail across a re-render: restore the scroll you clicked from, or,
+    // when arriving on a different step (a jump from the map/atlas), bring the active step into view.
+    if (_view === 'node') {
+      var railEl = mount.querySelector('.study-graph');
+      if (railEl) {
+        var wantTop = _railScroll; _railScroll = null;
+        var sawNode = _railNodeSeen; _railNodeSeen = _sel;
+        // defer a frame: a freshly-built rail has no scrollHeight yet, so setting scrollTop now clamps to 0
+        var applyRail = function () {
+          if (!railEl.isConnected) return;
+          if (wantTop != null) { railEl.scrollTop = wantTop; }
+          else if (_sel !== sawNode) { var actEl = railEl.querySelector('.study-gnode.active'); if (actEl && actEl.scrollIntoView) { try { actEl.scrollIntoView({ block: 'nearest' }); } catch (e) { actEl.scrollIntoView(); } } }
+          // same move, in-place re-render (gear/recap toggle): leave the rail exactly where the learner left it
+        };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(applyRail); else applyRail();
+      }
+    } else { _railNodeSeen = null; }
+    // auto-start when a chain step mounts
+    if (_view === 'node' && _gear === 'watch' && _autoplay) { _autoplay = false; var rm0 = reducedMotion(); setTimeout(function () { runReplay(mount, rm0); }, rm0 ? 0 : 250); }
+    // otherwise, play the run once it scrolls into view; a re-render after that shows the result at rest
+    else if (_view === 'node' && _gear === 'watch') {
+      var rpEl = mount.querySelector('.study-replay');
+      if (rpEl) {
+        var selAt = _sel;
+        if (_rpSeen[selAt]) { runReplay(mount, true); }                 // already watched: show the finished result
+        else if (reducedMotion()) { _rpSeen[selAt] = true; runReplay(mount, true); }  // reduced motion: show the result at rest, no typing
+        else if (typeof IntersectionObserver !== 'undefined') {
+          var io = new IntersectionObserver(function (ents) {
+            for (var i = 0; i < ents.length; i++) {
+              if (!ents[i].isIntersecting) continue;
+              io.disconnect();
+              if (_sel !== selAt) return;                               // navigated away before it came into view
+              _rpSeen[selAt] = true; runReplay(mount, false);
+              return;
+            }
+          }, { threshold: 0.3 });
+          io.observe(rpEl);
+        } else { _rpSeen[selAt] = true; runReplay(mount, false); }
+      }
+    }
+    // the Atlas: pan / zoom / semantic LOD / draw a custom path
+    if (_view === 'atlas') setTimeout(function () { wireAtlas(mount); }, 30);
+  }
+
+  // All delegated click handlers for the study route. Bound once (see mounted); they read current
+  // state from module vars and query the current DOM through the stable mount element.
+  function wireStudyClicks(mount) {
     // "How you got here": collapsible context, collapsed by default
     U.on(mount, 'click', '[data-recap-toggle]', function () { setRecapOpen(!recapOpen()); OBOL.router.render(); });
     // switch which plausible lead-up route is shown
@@ -1135,7 +1199,7 @@
       OBOL.router.render();
     });
     // node select + "opens →" jumps + goto chips → re-render
-    U.on(mount, 'click', '[data-node]', function (e, t) { _sel = t.getAttribute('data-node'); OBOL.router.render(); });
+    U.on(mount, 'click', '[data-node]', function (e, t) { var g = mount.querySelector('.study-graph'); _railScroll = g ? g.scrollTop : null; _sel = t.getAttribute('data-node'); OBOL.router.render(); });
     U.on(mount, 'click', '[data-goto]', function (e, t) { if (_view === 'sim') _from = 'map'; _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
     // gear toggle → re-render
     U.on(mount, 'click', '[data-gear]', function (e, t) { _gear = t.getAttribute('data-gear'); OBOL.router.render(); });
@@ -1161,31 +1225,6 @@
       if (_autolane) { _autoplay = true; OBOL.router.render(); }   // start chaining from here
       else { cancelReplay(); OBOL.router.render(); }                // stop instantly, one click
     });
-    // auto-start when a chain step mounts
-    if (_view === 'node' && _gear === 'watch' && _autoplay) { _autoplay = false; var rm0 = reducedMotion(); setTimeout(function () { runReplay(mount, rm0); }, rm0 ? 0 : 250); }
-    // otherwise, play the run once it scrolls into view; a re-render after that shows the result at rest
-    else if (_view === 'node' && _gear === 'watch') {
-      var rpEl = mount.querySelector('.study-replay');
-      if (rpEl) {
-        var selAt = _sel;
-        if (_rpSeen[selAt]) { runReplay(mount, true); }                 // already watched: show the finished result
-        else if (reducedMotion()) { _rpSeen[selAt] = true; runReplay(mount, true); }  // reduced motion: show the result at rest, no typing
-        else if (typeof IntersectionObserver !== 'undefined') {
-          var io = new IntersectionObserver(function (ents) {
-            for (var i = 0; i < ents.length; i++) {
-              if (!ents[i].isIntersecting) continue;
-              io.disconnect();
-              if (_sel !== selAt) return;                               // navigated away before it came into view
-              _rpSeen[selAt] = true; runReplay(mount, false);
-              return;
-            }
-          }, { threshold: 0.3 });
-          io.observe(rpEl);
-        } else { _rpSeen[selAt] = true; runReplay(mount, false); }
-      }
-    }
-    // the Atlas: pan / zoom / semantic LOD / draw a custom path
-    if (_view === 'atlas') setTimeout(function () { wireAtlas(mount); }, 30);
     // practice: switch between "what to do next" and "reading the output"
     U.on(mount, 'click', '[data-pmode]', function (e, t) { _practiceMode = t.getAttribute('data-pmode'); OBOL.router.render(); });
     // diagnosis: read the output, name what it proves
