@@ -812,6 +812,15 @@ function serve() {
   ok((await page.locator('.atlas-stage').count()) === 1, 'the Atlas renders a zoomable stage');
   ok((await page.locator('.atlas-node').count()) === 26, 'the Atlas shows all 26 method steps as nodes');
   ok((await page.locator('.atlas-edge-cross').count()) >= 1, 'the Atlas draws cross-lane bridges');
+  // fixed scenarios: toggling one loads its steps as the drawn path
+  ok((await page.locator('.atlas-scen').count()) >= 4, 'the Atlas offers fixed common scenarios to toggle');
+  await page.locator('.atlas-scen[data-scen="web-linux"]').click();
+  await page.waitForTimeout(120);
+  ok((await page.locator('.atlas-node.sel').count()) === 7, 'picking the "Web → Linux root" scenario lights its 7 steps');
+  ok((await page.locator('.atlas-scen.on').count()) === 1, 'the active scenario chip is marked');
+  await page.locator('.atlas-scen[data-scen="web-linux"]').click();   // toggle off
+  await page.waitForTimeout(80);
+  ok((await page.locator('.atlas-node.sel').count()) === 0, 're-clicking the scenario clears it');
   // draw a 2-node custom path, then study it
   await page.locator('.atlas-node[data-anode="asrep-roast"]').click();
   await page.locator('.atlas-node[data-anode="crack-asrep"]').click();

@@ -78,6 +78,23 @@
   };
   var LANE_ORDER = ['recon', 'ad', 'web', 'linux', 'windows'];
 
+  // Fixed, named scenarios — common end-to-end engagements that cross lanes. Toggle through these
+  // on the Atlas (or free-draw your own). Each is an ordered list of real study node ids.
+  var SCENARIOS = [
+    { key: 'ad-classic', name: 'Classic AD: no creds → Domain Admin', desc: 'Anonymous foothold, roast a hash, crack it, walk an ACL path to DCSync.',
+      steps: ['nmap-fast-open-ports', 'ad-dc-identify', 'ad-anon-ldap-enum', 'asrep-roast', 'crack-asrep', 'ad-acl-abuse', 'dcsync'] },
+    { key: 'web-linux', name: 'Web app → Linux root', desc: 'Map a web app, get a shell through it, then escalate to root.',
+      steps: ['recon-web-triage', 'content-discovery', 'lfi-probe', 'file-upload', 'web-shells', 'linux-enum', 'sudo-abuse'] },
+    { key: 'web-windows', name: 'Web app → Windows SYSTEM', desc: 'Web foothold on a Windows host, then abuse a privilege to SYSTEM.',
+      steps: ['recon-web-triage', 'content-discovery', 'file-upload', 'web-shells', 'windows-enum', 'seimpersonate'] },
+    { key: 'smb-spray', name: 'SMB foothold → spray → DA', desc: 'Pull a user list from anonymous SMB, spray for a login, escalate in the domain.',
+      steps: ['recon-smb-anon', 'password-spray', 'ad-acl-abuse', 'dcsync'] },
+    { key: 'recon-sweep', name: 'Full recon sweep', desc: 'The opening every engagement shares — ports, versions, SMB, and the web surface.',
+      steps: ['nmap-fast-open-ports', 'nmap-version-scripts', 'recon-smb-anon', 'recon-web-triage'] },
+  ];
+  function scenarios() { return SCENARIOS.map(function (s) { return { key: s.key, name: s.name, desc: s.desc, steps: s.steps.slice(), count: s.steps.length }; }); }
+  function scenario(key) { for (var i = 0; i < SCENARIOS.length; i++) if (SCENARIOS[i].key === key) return scenarios()[i]; return null; }
+
   function allMoves() { try { return (OBOL.packs && OBOL.packs.actions()) || []; } catch (e) { return []; } }
   function arsenal() { return OBOL.ARSENAL || {}; }
   function fixtures() { return OBOL.STUDY_FIXTURES || {}; }
@@ -276,7 +293,7 @@
   OBOL.study = {
     LANES: LANES, LANE_ORDER: LANE_ORDER, AD_LANE: LANES.ad.nodes,
     lanes: lanes, lane: lane, laneEdges: laneEdges, laneOf: laneOf, laneEntry: laneEntry, laneNext: laneNext,
-    atlas: atlas,
+    atlas: atlas, scenarios: scenarios, scenario: scenario,
     cmdLocus: cmdLocus, cellFor: cellFor, replayFor: replayFor, practiceFor: practiceFor,
     producersOf: producersOf, opensNext: opensNext,
   };

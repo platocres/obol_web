@@ -1889,3 +1889,13 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .atlas-trchip { font-family: var(--mono); font-size: 11px; color: var(--text); background: color-mix(in srgb, var(--lane) 16%, var(--surf3)); border: 1px solid color-mix(in srgb, var(--lane) 45%, var(--line)); border-radius: 6px; padding: 2px 8px; }
 .atlas-trarr { color: var(--accent); font-weight: 800; }
 .atlas-tray-act { display: flex; gap: 7px; margin-left: auto; }
+
+/* --- Study: Atlas fixed-scenario strip --- */
+.atlas-scenarios { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 2px; }
+.atlas-scen-l { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); }
+.atlas-scen { font-family: var(--sans); font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--surf2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 13px; cursor: pointer; transition: .14s; }
+.atlas-scen:hover { border-color: var(--line-hot); color: var(--text); }
+.atlas-scen.on { color: var(--on-accent, #04120a); background: var(--accent); border-color: var(--accent); font-weight: 700; }
+.atlas-scen-or { font-size: 11px; color: var(--muted); font-style: italic; margin-left: 2px; }
+.atlas-tray-name { font-size: 12.5px; font-weight: 800; color: var(--accent-2); white-space: nowrap; }
+.atlas-tray-name.custom { color: var(--text-2); }

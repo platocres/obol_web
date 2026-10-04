@@ -82,6 +82,12 @@ ok(at.laneEdges.length === 21, 'atlas has 21 intra-lane edges (5 lanes)');
 ok(at.crossEdges.length >= 5 && at.crossEdges.some((e) => e.from === 'recon-smb-anon' && e.to === 'asrep-roast'), 'atlas draws cross-lane bridges (SMB enum → AS-REP)');
 ok(at.nodes.every((n) => typeof n.col === 'number' && typeof n.row === 'number'), 'every atlas node has a grid position');
 
+// --- fixed scenarios -------------------------------------------------------------------------
+const scn = S.scenarios();
+ok(scn.length >= 4, 'at least four fixed scenarios are defined');
+ok(scn.every((s) => s.steps.every((id) => !!S.cellFor(id))), 'every scenario step maps to a real study node');
+ok(scn.some((s) => s.key === 'web-linux' && s.steps[0] === 'recon-web-triage'), 'the Web → Linux scenario starts at web triage');
+
 // --- replay drops a command-echo first line --------------------------------------------------
 const rs = S.replayFor('sudo-abuse');
 ok(rs.command === 'sudo -l', 'replay primary command is sudo -l');
