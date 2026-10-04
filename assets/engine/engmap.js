@@ -238,7 +238,7 @@
       nodes.push({ id: sid, type: 'scope', tier: 0, label: entry, meta: { scope: entry } });
     });
 
-    // ── tier 2: credentials — one node per distinct (user, domain) ──
+    // ── tier 2: credentials, one node per distinct (user, domain) ──
     // From credential facts (host-scoped ones tie the cred to that host) and from the engagement's
     // credential list. NEVER glued to a foothold; a host link needs actual evidence.
     var creds = {}; // key -> {user, domain, hosts:{}}
@@ -372,7 +372,7 @@
     var model = buildEngagementGraph(engagement);
     if (!model.nodes.length) {
       return '<svg viewBox="0 0 360 60" width="360" height="60" xmlns="http://www.w3.org/2000/svg" class="obol-engmap">'
-        + '<text x="12" y="34" class="em-empty" font-size="13">No engagement map yet — add a target or paste a scan.</text></svg>';
+        + '<text x="12" y="34" class="em-empty" font-size="13">No engagement map yet, add a target or paste a scan.</text></svg>';
     }
     // group nodes by tier, preserving insertion order within a tier
     var byTier = {};
@@ -439,7 +439,7 @@
       var cx = m.cx;
       var main = '<text x="' + cx + '" y="' + (m.y + (n.type === 'target' ? NH / 2 - 2 : NH / 2 + 4))
         + '" text-anchor="middle" class="em-label" font-size="12">'
-        + '<title>' + esc(n.label) + (meta.fqdn ? ' — ' + esc(meta.fqdn) : '') + '</title>'
+        + '<title>' + esc(n.label) + (meta.fqdn ? '' + esc(meta.fqdn) : '') + '</title>'
         + esc(trunc(n.label)) + '</text>';
       var sub = '';
       if (n.type === 'target') {

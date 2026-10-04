@@ -176,7 +176,7 @@
           targets: _pv_values(text, _PV_ACL_TARGET_RE).slice(0, 8),
           principals: _pv_values(text, _PV_ACL_ID_RE).slice(0, 8),
           method: 'powerview',
-          note: 'enumerated control right (lead) — cash it in with the ACL-abuse move; not a granted control path yet',
+          note: 'enumerated control right (lead), cash it in with the ACL-abuse move; not a granted control path yet',
         }, S, source));
       }
     }
@@ -801,7 +801,7 @@
     memberT.concat(daclT, ownerT).forEach(function (t) { if (!seenT[t]) { seenT[t] = 1; targets.push(t); } });
     var rightList = Object.keys(rights);
     if (!(rightList.length && targets.length)) return;
-    if (!notes.length) notes.push('enumerated control right (lead) — cash it in with the ACL-abuse move; not a granted control path yet');
+    if (!notes.length) notes.push('enumerated control right (lead), cash it in with the ACL-abuse move; not a granted control path yet');
     _add(facts, mkFact('ad.acl_lead', C._scope_for_domain(ws), {
       rights: rightList.sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : 1; }),
       targets: targets.slice(0, 10), method: 'bloodyad', note: notes.join(' · '),

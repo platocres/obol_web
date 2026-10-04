@@ -250,7 +250,7 @@
     var CAP = 24000;
     var lines = text.split(/\r?\n/).length;
     var stored = text.length > CAP
-      ? (text.slice(0, CAP) + '\n… [truncated — ' + (text.length - CAP) + ' more chars, ' + lines + ' lines total]')
+      ? (text.slice(0, CAP) + '\n… [truncated, ' + (text.length - CAP) + ' more chars, ' + lines + ' lines total]')
       : text;
     OBOL.store.update(function (e) {
       e.activities = e.activities || [];
@@ -315,7 +315,7 @@
     return segs.map(function (s) { return { command: s.command, stdout: s.stdout.join('\n').replace(/^\n+|\n+$/g, ''), ts: s.ts }; });
   }
 
-  // The credential a command authenticated WITH — its -u / -H / -p (and -d). Used to activate the identity
+  // The credential a command authenticated WITH, its -u / -H / -p (and -d). Used to activate the identity
   // you actually escalated with, rather than hardcoding "Administrator" or guessing at the first credential.
   function credFromCommand(cmd) {
     cmd = String(cmd || '');

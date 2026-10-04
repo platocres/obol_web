@@ -230,7 +230,7 @@
     if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) C._parse_sqli_oracle(text, ws, command, source, facts);
 
     } catch (e) {
-      try { if (typeof console !== 'undefined' && console.warn) console.warn('obol parser: a sub-parser failed — keeping the ' + facts.length + ' fact(s) already recognized. Command: ' + command + ' — ' + (e && e.message)); } catch (_e) {}
+      try { if (typeof console !== 'undefined' && console.warn) console.warn('obol parser: a sub-parser failed, keeping the ' + facts.length + ' fact(s) already recognized. Command: ' + command + ' | ' + (e && e.message)); } catch (_e) {}
       return { facts: facts, unmatched: facts.length === 0, error: (e && e.message) || String(e) };
     }
 

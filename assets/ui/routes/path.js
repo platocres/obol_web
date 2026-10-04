@@ -66,21 +66,21 @@
     return '<div class="cmd-missing">⚠ not on your box: ' + miss.map(function (e) {
       var how = e.install ? '<code class="cmd-miss-cmd" data-copy="' + U.attr(e.install) + '" title="Click to copy">' + esc(e.install) + '</code>'
         : (e.manual_url ? '<a href="' + U.attr(e.manual_url) + '" target="_blank" rel="noopener">get it ↗</a>' : 'see Loadout');
-      return '<b>' + esc(e.label || e.key) + '</b> — ' + how;
+      return '<b>' + esc(e.label || e.key) + '</b> ' + how;
     }).join(' · ') + ' · <a href="#/loadout">Loadout →</a></div>';
   }
   function arsenalStrip() {
     var p = arsenalProfile();
     if (!p) {
       return '<a class="lo-strip lo-strip-cta" href="#/loadout"><span class="lo-strip-ico">⚙</span>'
-        + '<span class="lo-strip-txt">Set up your attack box — obol tailors every command to the tools you have</span>'
+        + '<span class="lo-strip-txt">Set up your attack box, obol tailors every command to the tools you have</span>'
         + '<span class="lo-strip-go">Loadout →</span></a>';
     }
     var present = 0; try { Object.keys(p.tools || {}).forEach(function (k) { if (p.tools[k] && p.tools[k].present) present++; }); } catch (e) {}
     var ageDays = p.savedAt ? (Date.now() - p.savedAt) / 86400000 : 0;
     var stale = ageDays > ARSENAL_STALE_DAYS;
     var txt = stale
-      ? ('Loadout synced ' + Math.round(ageDays) + 'd ago — re-sync your box?')
+      ? ('Loadout synced ' + Math.round(ageDays) + 'd ago, re-sync your box?')
       : ('Loadout: ' + present + ' tools · ' + (p.staged || []).length + ' staged ready');
     return '<a class="lo-strip ' + (stale ? 'lo-strip-stale' : 'lo-strip-ok') + '" href="#/loadout">'
       + '<span class="lo-strip-ico">' + (stale ? '⚠' : '✓') + '</span>'
@@ -99,7 +99,7 @@
     if (v.exclusion_count) bits.push(v.exclusion_count + ' Defender exclusion' + (v.exclusion_count === 1 ? '' : 's'));
     var what = bits.length ? bits.join(' · ') : 'endpoint controls active';
     return '<div class="coach-defense"><span class="coach-defense-ico">🛡</span>'
-      + '<span>Endpoint defenses detected — <strong>' + esc(what) + '</strong>. Prefer remote-first moves; on-host tooling may be seen.</span></div>';
+      + '<span>Endpoint defenses detected, <strong>' + esc(what) + '</strong>. Prefer remote-first moves; on-host tooling may be seen.</span></div>';
   }
 
   function producesChips(action) {
@@ -157,7 +157,7 @@
       var label = action.sequence ? ('step ' + (i + 1))
         : (x.ran ? 'already run' : (pos === firstUnrun ? 'preferred' : 'alt ' + pos));
       var ranTag = (x.ran && !action.sequence)
-        ? '<span class="cmd-ran" title="obol saw this command in your run ledger — run the next one instead">✓ ran</span>' : '';
+        ? '<span class="cmd-ran" title="obol saw this command in your run ledger, run the next one instead">✓ ran</span>' : '';
       return '<div class="cmd' + (x.ran ? ' cmd-ran-done' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
         + (fillable.length ? ' data-tmpl="' + U.attr(v.filled) + '"' : '') + '>'
         + '<div class="cmd-head"><span class="cmd-tag">' + esc(v.tool || action.tool || 'cmd') + '</span>'
@@ -191,7 +191,7 @@
       var ulCmd = OBOL.loot.userlistCommand(facts, dirs);
       if (users.length && ulCmd) {
         steps += prepStep('write', 'creates ' + OBOL.loot.userlistPath(dirs),
-          ulCmd, 'Run once — the ' + users.length + ' users obol proved, written where every command below reads them.');
+          ulCmd, 'Run once, the ' + users.length + ' users obol proved, written where every command below reads them.');
       }
     }
     // {{hashfile}} as an INPUT (a crack move) — obol holds the roasted hashes as facts but no file
@@ -223,7 +223,7 @@
     // Inline ingestion: paste this move's output right here — the coach mints facts and advances,
     // so a first-timer never has to guess where the output goes. Big dumps still go to Evidence.
     var ingestBox = '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr(prefCmd) + '" hidden>'
-      + '<textarea class="mi-text" placeholder="Paste this command\'s full output here — prompt, command and all. The coach reads it, mints only what it proves, and advances." spellcheck="false"></textarea>'
+      + '<textarea class="mi-text" placeholder="Paste this command\'s full output here, prompt, command and all. The coach reads it, mints only what it proves, and advances." spellcheck="false"></textarea>'
       + '<div class="mi-row"><button class="btn-primary mi-go" data-action="' + esc(action.id) + '">Ingest → Facts</button>'
       + '<a class="mi-evlink" href="#/evidence/' + esc(action.id) + '">Big output or a screenshot? Full Evidence ↗</a>'
       + '<span class="mi-result" role="status"></span></div></div>';
@@ -301,9 +301,9 @@
           + located.map(function (f) {
             var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
             var label = SL[v.slot] || 'Flag';
-            return '<li class="rail-located" title="' + U.attr('located remotely at ' + (v.path || v.name || '') + ' — read it from an on-host shell for the report') + '"><span>📍 ' + esc(label) + ' <em>located</em></span><span class="rail-produced">capture on-host</span></li>';
+            return '<li class="rail-located" title="' + U.attr('located remotely at ' + (v.path || v.name || '') + 'read it from an on-host shell for the report') + '"><span>📍 ' + esc(label) + ' <em>located</em></span><span class="rail-produced">capture on-host</span></li>';
           }).join('')
-          + '</ul>' + (located.length ? '<div class="rail-note">📍 located remotely — read on the host (interactive shell) so it counts for the report.</div>' : '')
+          + '</ul>' + (located.length ? '<div class="rail-note">📍 located remotely, read on the host (interactive shell) so it counts for the report.</div>' : '')
         : '<div class="rail-empty">None captured yet.</div>')
       + railCard('Credentials (' + creds.length + ')', creds.length
         ? '<ul class="rail-list">' + creds.slice(0, 6).map(function (c) {
@@ -392,7 +392,7 @@
           return '<button type="button" class="lens-opt' + (lens === v ? ' on' : '') + '" data-lens="' + v + '"'
             + ' aria-pressed="' + (lens === v ? 'true' : 'false') + '">' + txt + '</button>';
         }).join('')
-      + (hiddenBy ? '<span class="coach-lens-hint">' + hiddenBy + ' move' + (hiddenBy === 1 ? '' : 's') + ' above this level — tap <strong>All</strong> to show</span>' : '')
+      + (hiddenBy ? '<span class="coach-lens-hint">' + hiddenBy + ' move' + (hiddenBy === 1 ? '' : 's') + ' above this level, tap <strong>All</strong> to show</span>' : '')
       + '</div>';
 
     // Planned route to the objective: the planner's lowest-cost dependable path from what's proven to
@@ -408,7 +408,7 @@
           return '<li class="coach-route-step' + (i === 0 ? ' next' : '') + '">' + esc(a ? a.title : id) + '</li>';
         }).join('')
         + '</ol>'
-        + '<div class="coach-route-note">The shortest dependable path from what you’ve proven to the goal — it re-plans as you capture evidence. A plausible route, not a guarantee.</div>'
+        + '<div class="coach-route-note">The shortest dependable path from what you’ve proven to the goal, it re-plans as you capture evidence. A plausible route, not a guarantee.</div>'
         + '</details>';
     }
 
@@ -419,11 +419,11 @@
       var scandir = OBOL.workspace.tokens(eng).scandir;
       var stamp = OBOL.workspace.promptStamp ? OBOL.workspace.promptStamp((params || {}).lhost_iface || '') : (OBOL.workspace.PROMPT_STAMP_ZSH || '');
       html += '<div class="ws-banner">'
-        + '<div class="ws-banner-h">📁 Set up your working directory — run this once on your Kali box:</div>'
+        + '<div class="ws-banner-h">📁 Set up your working directory, run this once on your Kali box:</div>'
         + '<pre class="cmd-run"><code>' + esc(scaffold) + '</code></pre>'
         + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(scaffold) + '">copy</button>'
         + '<button class="btn-ghost ws-done">Got It</button></div>'
-        + '<div class="ws-banner-note">Commands below write into <code>' + esc(scandir) + '</code> — run one, then attach its output file in Evidence.</div>'
+        + '<div class="ws-banner-note">Commands below write into <code>' + esc(scandir) + '</code>, run one, then attach its output file in Evidence.</div>'
         + (stamp
           ? ('<details class="ws-stamp"><summary>Optional: stamp your prompt with the time + VPN IP <span class="ev-import-tag">recommended</span></summary>'
             + '<div class="ws-banner-note">Paste this into <code>~/.zshrc</code> once. It prints a dim <code>[UTC time] [tun0:IP]</code> line before each prompt (your prompt is untouched), so later you can paste your <strong>whole session</strong> into Evidence and obol orders it correctly and auto-fills your <code>{{lhost}}</code>.</div>'
@@ -444,7 +444,7 @@
       top.forEach(function (a, i) { html += moveCard(a, facts, params, { primary: i === 0 }); });
       html += '</div>';
       if (rest.length) {
-        html += '<details class="coach-section coach-more"><summary class="coach-sec-h">More ready moves — lower priority right now (' + rest.length + ')</summary>';
+        html += '<details class="coach-section coach-more"><summary class="coach-sec-h">More ready moves, lower priority right now (' + rest.length + ')</summary>';
         rest.forEach(function (a) { html += moveCard(a, facts, params, {}); });
         html += '</details>';
       }
@@ -454,7 +454,7 @@
 
     // coming up (premature but eligible)
     if (comingUp.length) {
-      html += '<details class="coach-section coach-comingup"><summary class="coach-sec-h">Coming up — eligible but ahead of your frontier (' + comingUp.length + ')</summary>';
+      html += '<details class="coach-section coach-comingup"><summary class="coach-sec-h">Coming up, eligible but ahead of your frontier (' + comingUp.length + ')</summary>';
       comingUp.forEach(function (a) { html += moveCard(a, facts, params, {}); });
       html += '</details>';
     }
@@ -467,7 +467,7 @@
       locked.forEach(function (p) { (groups[p.reason] = groups[p.reason] || []).push(p.action); });
       var groupList = Object.keys(groups).map(function (r) { return { reason: r, actions: groups[r] }; })
         .sort(function (a, b) { return b.actions.length - a.actions.length; });
-      html += '<details class="coach-section coach-blocked"><summary class="coach-sec-h">Blocked — grouped by what unlocks them ('
+      html += '<details class="coach-section coach-blocked"><summary class="coach-sec-h">Blocked, grouped by what unlocks them ('
         + locked.length + ' moves · ' + groupList.length + ' prerequisite' + (groupList.length === 1 ? '' : 's') + ')</summary>'
         + '<div class="blocked-groups">';
       groupList.forEach(function (g) { html += blockedGroup(g); });
@@ -515,7 +515,7 @@
     U.on(mount, 'click', '.btn-done', function (e, t) {
       var id = t.getAttribute('data-action');
       OBOL.store.update(function (eng) { eng.checklist = eng.checklist || {}; eng.checklist[id] = 'done'; }, 'done');
-      U.toast('Marked done — recomputing');
+      U.toast('Marked done, recomputing');
       OBOL.router.render();
     });
     // dismiss the workspace scaffold banner
@@ -541,12 +541,12 @@
       if (out) out.textContent = 'Reading…';
       t.disabled = true;
       OBOL.ingest.ensureParsers().then(function (okp) {
-        if (!okp) { if (out) out.textContent = 'Parsers still loading — try again.'; t.disabled = false; return; }
+        if (!okp) { if (out) out.textContent = 'Parsers still loading, try again.'; t.disabled = false; return; }
         var r = OBOL.ingest.run({ text: text, command: box.getAttribute('data-cmd') || '',
           actionId: box.getAttribute('data-action') || '', source: 'paste' });
-        if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading — try again.' : 'Nothing to parse.'; t.disabled = false; return; }
+        if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
         if (r.added) {
-          U.toast('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + ' — recomputing');
+          U.toast('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + 'recomputing');
           OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
         } else {
           var aid = box.getAttribute('data-action') || '';
@@ -562,7 +562,7 @@
           var moveEverPaid = (eng2.activities || []).some(function (a) { return a && a.action_id === aid && (a.produced || []).length > 0; });
           if (aid && !moveEverPaid && !r.parseError && r.recognizedTool && !r.looksError && bodyLines >= 2) {
             OBOL.store.update(function (engg) { engg.checklist = engg.checklist || {}; engg.checklist[aid] = 'empty'; }, 'done');
-            U.toast(toolNm + ' ran — nothing found here. Retired from the coach.');
+            U.toast(toolNm + ' ran, nothing found here. Retired from the coach.');
             OBOL.router.render();
             return;
           }
@@ -570,7 +570,7 @@
           if (out) {
             // The output is always saved as evidence; only fact extraction may come up empty.
             out.innerHTML = r.parseError
-              ? ('Output saved — the parser skipped part of it, no new facts. <a href="#/evidence/' + esc(aid) + '">Open in Evidence ↗</a>')
+              ? ('Output saved, the parser skipped part of it, no new facts. <a href="#/evidence/' + esc(aid) + '">Open in Evidence ↗</a>')
               : r.facts.length
                 ? ('Recognized ' + r.facts.length + ', nothing new (already known).')
                 : 'No facts recognized (output saved). <a href="#/evidence/' + esc(aid) + '">Set the command in Evidence ↗</a>';

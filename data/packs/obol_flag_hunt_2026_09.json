@@ -30,22 +30,22 @@
       "commands": [
         {
           "tool": "sshpass",
-          "note": "STEP 1 — LOCATE (from your box). Find every flag file so you know its path before you log in. This is a one-liner from Kali, so it only LOCATES — OffSec scores a flag read this way ZERO. Paste the output back and obol records each flag's path; capture it on the host in steps 3-4.",
+          "note": "STEP 1, LOCATE (from your box). Find every flag file so you know its path before you log in. This is a one-liner from Kali, so it only LOCATES, OffSec scores a flag read this way ZERO. Paste the output back and obol records each flag's path; capture it on the host in steps 3-4.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 {{user}}@{{target}} 'find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null'"
         },
         {
           "tool": "ssh",
-          "note": "STEP 2 — GET ON THE HOST (interactive). Open a real shell on the target; the report proof must be a screenshot of THIS session. Run steps 3-4 inside it.",
+          "note": "STEP 2, GET ON THE HOST (interactive). Open a real shell on the target; the report proof must be a screenshot of THIS session. Run steps 3-4 inside it.",
           "run": "ssh {{user}}@{{target}}"
         },
         {
           "tool": "cat",
-          "note": "STEP 3 — ON THE HOST, capture the LOCAL/user flag with its identity. Run this INSIDE the step-2 shell and screenshot the whole frame: id + ip addr (the target IP) + the flag, together. The path fills from what step 1 located; adjust it if you skipped the locate. obol records this as the captured local flag.",
+          "note": "STEP 3, ON THE HOST, capture the LOCAL/user flag with its identity. Run this INSIDE the step-2 shell and screenshot the whole frame: id + ip addr (the target IP) + the flag, together. The path fills from what step 1 located; adjust it if you skipped the locate. obol records this as the captured local flag.",
           "run": "id; hostname; ip -4 addr | grep inet; cat {{flag_path_local}}"
         },
         {
           "tool": "cat",
-          "note": "STEP 4 — ON THE HOST, capture the ROOT flag with its identity (after you escalate to root). Run this INSIDE a root shell and screenshot the whole frame together. obol records this as the captured root flag.",
+          "note": "STEP 4, ON THE HOST, capture the ROOT flag with its identity (after you escalate to root). Run this INSIDE a root shell and screenshot the whole frame together. obol records this as the captured root flag.",
           "run": "id; hostname; ip -4 addr | grep inet; cat {{flag_path_root}}"
         }
       ]
@@ -77,22 +77,22 @@
       "commands": [
         {
           "tool": "nxc",
-          "note": "STEP 1 — LOCATE (from your box). Spider C$ for the flag files so you know each one's exact path (which user's Desktop) before you log in. This runs from Kali, so it only LOCATES the flags — OffSec scores a flag read this way ZERO. Paste the output back and obol records each flag's path and fills it into steps 3-4; you capture it on the host there.",
+          "note": "STEP 1, LOCATE (from your box). Spider C$ for the flag files so you know each one's exact path (which user's Desktop) before you log in. This runs from Kali, so it only LOCATES the flags, OffSec scores a flag read this way ZERO. Paste the output back and obol records each flag's path and fills it into steps 3-4; you capture it on the host there.",
           "run": "nxc smb {{target}} -u {{user}} -H {{nthash}} --spider C$ --regex \"(local|proof|user|root|flag)\\.txt\""
         },
         {
           "tool": "evil-winrm",
-          "note": "STEP 2 — GET ON THE HOST (interactive). Log in with the dumped hash — no plaintext needed. The report proof must be a screenshot of THIS session (a shell on the target), so run steps 3-4 inside it. For a SYSTEM shell instead, use impacket-psexec {{domain}}/{{user}}@{{target}} -hashes :{{nthash}}.",
+          "note": "STEP 2, GET ON THE HOST (interactive). Log in with the dumped hash, no plaintext needed. The report proof must be a screenshot of THIS session (a shell on the target), so run steps 3-4 inside it. For a SYSTEM shell instead, use impacket-psexec {{domain}}/{{user}}@{{target}} -hashes :{{nthash}}.",
           "run": "evil-winrm -i {{target}} -u {{user}} -H {{nthash}}"
         },
         {
           "tool": "evil-winrm",
-          "note": "STEP 3 — ON THE HOST, capture the LOCAL flag with its identity. Run this INSIDE the step-2 session and screenshot the whole frame: hostname + ipconfig (the target IP) + the flag, together. The path fills from what step 1 located (the right user's Desktop, the platform's own flag name); adjust it if you skipped the locate. obol records this as the captured local flag.",
+          "note": "STEP 3, ON THE HOST, capture the LOCAL flag with its identity. Run this INSIDE the step-2 session and screenshot the whole frame: hostname + ipconfig (the target IP) + the flag, together. The path fills from what step 1 located (the right user's Desktop, the platform's own flag name); adjust it if you skipped the locate. obol records this as the captured local flag.",
           "run": "hostname; ipconfig; type {{flag_path_local}}"
         },
         {
           "tool": "evil-winrm",
-          "note": "STEP 4 — ON THE HOST, capture the ROOT/proof flag with its identity. Run this INSIDE the step-2 session (or a SYSTEM/Administrator shell) and screenshot the whole frame together. The path fills from what step 1 located. obol records this as the captured root flag.",
+          "note": "STEP 4, ON THE HOST, capture the ROOT/proof flag with its identity. Run this INSIDE the step-2 session (or a SYSTEM/Administrator shell) and screenshot the whole frame together. The path fills from what step 1 located. obol records this as the captured root flag.",
           "run": "hostname; ipconfig; type {{flag_path_root}}"
         }
       ]

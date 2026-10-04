@@ -196,7 +196,7 @@ function serve() {
   // attack path: dense horizontal block ribbon (this target has recon facts from the earlier nmap paste)
   ok(await page.locator('.apath-flow .apath-block').count() >= 1, 'target page shows the attack-path ribbon (' + (await page.locator('.apath-flow .apath-block').count()) + ' blocks)');
   ok(await page.locator('.apath-block .ph-chip').count() >= 1, 'attack-path blocks carry a phase category chip');
-  ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Attack Path — What Led to What') !== -1; }), 'attack-path heading is Title Case');
+  ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Attack Path: What Led to What') !== -1; }), 'attack-path heading is Title Case');
   // A proven hostname is reflected onto the target record and shown alongside the IP in the header.
   await page.evaluate(() => {
     const S = window.OBOL.store, F = window.OBOL.facts;

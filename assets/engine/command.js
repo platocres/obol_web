@@ -221,7 +221,7 @@
       if (!ctx.flag_names_windows) ctx.flag_names_windows = OBOL.profile.windowsNameList(fc.names);
 
       // Per-slot flag file PATHS for the on-host capture step. Prefer a path obol actually LOCATED (a
-      // nxc/smb spider, or a prior read) so step 3/4 fill with the real file — the user's Desktop, the
+      // nxc/smb spider, or a prior read) so step 3/4 fill with the real file, the user's Desktop, the
       // platform's own name — instead of a guessed placeholder; else a profile-aware default.
       var _flagName = function (slot) {
         var ns = fc.names || [];
@@ -422,7 +422,7 @@
     var sig = _actionSig(filledCmd, params), keys = Object.keys(sig);
     // Only DISTINCTIVE commands are confidently "already run": a verb+object enumeration or grant has 3+
     // action tokens (`bloodyad get writable`, `nxc ldap --users`, `bloodyad add dcsync`). A generic
-    // tool+mode invocation — `nxc smb` (validate), `evil-winrm`, `impacket-psexec`, `certipy find` — is a
+    // tool+mode invocation, `nxc smb` (validate), `evil-winrm`, `impacket-psexec`, `certipy find`, is a
     // re-runnable check/shell that recurs across many moves; marking it run is high-confusion, low-value,
     // and is exactly what wrongly flagged an UNRUN `nxc smb` as ✓ ran. Bias to under-marking: re-suggesting
     // a command is a mild annoyance, wrongly hiding one you still need is the failure that keeps biting.
@@ -435,7 +435,7 @@
     }
     for (var a = 0; a < (activities || []).length; a++) {
       var act = activities[a] || {};
-      // Match the honest command OR the recovered dispatch label — an ATTACHED dump has no typed command,
+      // Match the honest command OR the recovered dispatch label, an ATTACHED dump has no typed command,
       // so obol's recovered routing signature is the only record of what actually ran.
       if (covers(act.command) || covers(act.dispatch)) return true;
     }

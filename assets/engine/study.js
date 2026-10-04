@@ -21,8 +21,8 @@
 
   // --- the lane taxonomy: every move lands in exactly one lane, grouped by source pack ----------
   var LANE_DEFS = [
-    { key: 'recon', name: 'Recon & Enumeration', short: 'Recon', packs: ['recon'], desc: 'Map the attack surface — ports, services, shares, and the web.' },
-    { key: 'web', name: 'Web Exploitation', short: 'Web', packs: ['web', 'web_exploit_checks'], desc: 'Turn a web app into a shell — map it, find the injectable edge, land code execution.' },
+    { key: 'recon', name: 'Recon & Enumeration', short: 'Recon', packs: ['recon'], desc: 'Map the attack surface, ports, services, shares, and the web.' },
+    { key: 'web', name: 'Web Exploitation', short: 'Web', packs: ['web', 'web_exploit_checks'], desc: 'Turn a web app into a shell, map it, find the injectable edge, land code execution.' },
     { key: 'checks', name: 'Service & Web Checks', short: 'Checks', packs: ['findings_checks'], desc: 'Fast, safe checks that surface misconfigurations and version leads.' },
     { key: 'ad', name: 'Active Directory', short: 'AD', packs: ['ad'], desc: 'From an anonymous foothold to owning the domain.' },
     { key: 'creds', name: 'Credentials & Cracking', short: 'Creds', packs: ['cracking', 'credential_access'], desc: 'Capture, relay, and crack credentials into usable access.' },
@@ -273,7 +273,7 @@
       steps: ['recon-web-triage', 'content-discovery', 'file-upload', 'web-shells', 'windows-enum', 'seimpersonate'] },
     { key: 'smb-spray', name: 'SMB foothold → spray → DA', desc: 'Pull a user list from anonymous SMB, spray for a login, escalate in the domain.',
       steps: ['recon-smb-anon', 'password-spray', 'ad-acl-abuse', 'dcsync'] },
-    { key: 'recon-sweep', name: 'Full recon sweep', desc: 'The opening every engagement shares — ports, versions, SMB, and the web surface.',
+    { key: 'recon-sweep', name: 'Full recon sweep', desc: 'The opening every engagement shares, ports, versions, SMB, and the web surface.',
       steps: ['nmap-fast-open-ports', 'nmap-version-scripts', 'recon-smb-anon', 'recon-web-triage'] },
     { key: 'web-root-proof', name: 'Web → root → proof', desc: 'The full exam arc: recon a web app, shell it, escalate to root, capture the flag.',
       steps: ['nmap-fast-open-ports', 'recon-web-triage', 'content-discovery', 'file-upload', 'web-shells', 'linux-enum', 'sudo-abuse', 'flag-hunt-linux'] },
@@ -288,6 +288,67 @@
   ];
   function scenarios() { return SCENARIOS.filter(function (s) { return s.steps.every(byId); }).map(function (s) { return { key: s.key, name: s.name, desc: s.desc, steps: s.steps.slice(), count: s.steps.length }; }); }
   function scenario(key) { for (var i = 0; i < SCENARIOS.length; i++) if (SCENARIOS[i].key === key) return { key: SCENARIOS[i].key, name: SCENARIOS[i].name, desc: SCENARIOS[i].desc, steps: SCENARIOS[i].steps.slice(), count: SCENARIOS[i].steps.length }; return null; }
+
+  // --- cold-box simulation: run a scenario as a guided, scaffolded playthrough -------------------
+  // A real box starts cold: an IP and nothing else. simFor walks a scenario one move at a time. Each
+  // step reveals that move's real captured output (the replay), then asks which move comes next. The
+  // right answer is the scenario's own next step; the distractors are tempting-but-wrong moves, each
+  // labelled with why it is wrong here (a prereq you have not earned yet, or simply a different path).
+  // The simulation reuses the fixtures and the replay, so what the learner reads is the same evidence
+  // the Watch panel shows, never a throwaway mock.
+  function simLockState(id, produced) {
+    var m = byId(id); if (!m) return { locked: true, missing: [] };
+    var all = m.requires_all || [], any = m.requires_any || [];
+    var missAll = all.filter(function (r) { return !produced[r] && !isExternal(r); });
+    var anyOk = any.length === 0 || any.some(function (r) { return produced[r] || isExternal(r); });
+    return { locked: missAll.length > 0 || !anyOk, missing: missAll.concat(anyOk ? [] : ['one of: ' + any.join(' / ')]) };
+  }
+  function simHumanFact(k) { return /^one of:/.test(k) ? ('one of: ' + k.replace(/^one of:\s*/, '').split(' / ').map(friendly).join(' or ')) : friendly(k); }
+  function simChoices(ids, i, produced) {
+    var correctId = ids[i + 1], cm = byId(correctId); if (!cm) return null;
+    var onpath = {}; ids.forEach(function (x) { onpath[x] = 1; });
+    var correctLane = (laneEntry(correctId) || {}).laneKey;
+    var cand = allMoves().filter(function (m) { return !onpath[m.id]; });
+    cand.sort(function (a, b) {
+      var la = (laneEntry(a.id) || {}).laneKey === correctLane ? 0 : 1;
+      var lb = (laneEntry(b.id) || {}).laneKey === correctLane ? 0 : 1;
+      return la - lb;
+    });
+    var locked = [], open = [];
+    cand.forEach(function (m) { var s = simLockState(m.id, produced); (s.locked ? locked : open).push({ m: m, s: s }); });
+    var picks = [];
+    if (locked.length) picks.push(locked[0]);
+    if (open.length) picks.push(open[0]);
+    [locked[1], open[1], locked[2], open[2]].forEach(function (p) { if (p && picks.length < 2 && picks.indexOf(p) < 0) picks.push(p); });
+    var choices = [{ id: correctId, title: cm.title, correct: true, why: '' }];
+    picks.slice(0, 2).forEach(function (p) {
+      var why = p.s.locked
+        ? 'Not yet. This needs ' + p.s.missing.map(simHumanFact).join(', ') + ', and you have not earned that.'
+        : 'A legal move, but it is not the next step on this path.';
+      choices.push({ id: p.m.id, title: p.m.title, correct: false, why: why });
+    });
+    for (var j = choices.length - 1; j > 0; j--) { var r = Math.floor(Math.random() * (j + 1)); var t = choices[j]; choices[j] = choices[r]; choices[r] = t; }
+    return choices;
+  }
+  function simFor(key) {
+    var sc = scenario(key); if (!sc) return null;
+    var ids = sc.steps.filter(byId);
+    var produced = {};
+    var steps = ids.map(function (id, i) {
+      var m = byId(id), rp = replayFor(id);
+      (m.produces || []).forEach(function (p) { produced[p] = 1; });
+      var nextId = ids[i + 1] || null;
+      return {
+        idx: i, id: id, title: m.title, phase: (laneEntry(id) || {}).phase || '',
+        intro: i === 0 ? 'A fresh box: an IP and nothing else. You run your opening move.' : 'You run it. This comes back.',
+        replay: rp,
+        prompt: nextId ? 'You have your result. What is your next move?' : '',
+        choices: nextId ? simChoices(ids, i, produced) : null,
+        nextId: nextId, last: !nextId,
+      };
+    });
+    return { key: sc.key, name: sc.name, desc: sc.desc, count: steps.length, steps: steps };
+  }
 
   // --- the EVIDENCE index: "what do I have in front of me, and what does it unlock?" -------------
   // This is the by-port view, generalised. Ports are the first evidence you get; after a foothold the
@@ -545,7 +606,7 @@
   OBOL.study = {
     LANE_DEFS: LANE_DEFS, LANE_KEYS: LANE_KEYS,
     lanes: lanes, lane: lane, laneEdges: laneEdges, laneEntry: laneEntry, laneNext: laneNext,
-    atlas: atlas, scenarios: scenarios, scenario: scenario,
+    atlas: atlas, scenarios: scenarios, scenario: scenario, simFor: simFor,
     evidence: evidence, evidenceGaps: evidenceGaps,
     cmdLocus: cmdLocus, cellFor: cellFor, replayFor: replayFor, practiceFor: practiceFor, practiceDiagnose: practiceDiagnose,
     producersOf: producersOf, opensNext: opensNext,

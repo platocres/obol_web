@@ -49,7 +49,7 @@
     if (isSystem) _add(facts, mkFact('access.system', h, { identity: 'nt authority\\system', method: tool }, S, source));
     var lowCmd = command.toLowerCase();
     if (!isSystem && ['wmiexec', 'atexec'].some(function (t) { return lowCmd.indexOf(t) >= 0; })) {
-      _add(facts, mkFact('access.admin', h, { identity: nonSystem.length ? nonSystem[0] : '', method: tool, note: 'local admin — wmiexec/atexec require it' }, S, source));
+      _add(facts, mkFact('access.admin', h, { identity: nonSystem.length ? nonSystem[0] : '', method: tool, note: 'local admin, wmiexec/atexec require it' }, S, source));
     }
     if (interactive && C._INTERACTIVE_WIN_TOOLS.has(tool)) _add(facts, mkFact('access.desktop', h, { session: tool }, S, source));
   }
@@ -810,7 +810,7 @@
       if (!currentPath) return;
       if (!(reSearch(C._LOWPRIV_WRITE_ACE_RE, line) || reSearch(_ACCESSCHK_WRITE_RE, line))) return;
       var trimmed = line.trim();
-      var ev = (trimmed.indexOf(currentPath) === 0 ? trimmed : currentPath + ' — ' + trimmed).slice(0, 220), key = ev.toLowerCase();
+      var ev = (trimmed.indexOf(currentPath) === 0 ? trimmed : currentPath + ' ' + trimmed).slice(0, 220), key = ev.toLowerCase();
       if (seen[key]) return;
       seen[key] = true;
       evidence.push(ev);

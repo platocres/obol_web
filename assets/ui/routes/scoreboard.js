@@ -41,17 +41,17 @@
     var passing = threshold ? total >= threshold : null;
 
     var scoreLine = threshold
-      ? '<div class="score-total ' + (passing ? 'pass' : 'fail') + '"><span class="score-n">' + total + '</span> / ' + threshold + ' to pass' + (passing ? ' — passing ✓' : '') + '</div>'
+      ? '<div class="score-total ' + (passing ? 'pass' : 'fail') + '"><span class="score-n">' + total + '</span> / ' + threshold + ' to pass' + (passing ? 'passing ✓' : '') + '</div>'
       : '<div class="score-total"><span class="score-n">' + total + '</span> points captured</div>';
 
     return '<section class="score-route"><h1 class="route-h1">Scoreboard</h1>'
-      + '<p class="route-sub">' + esc(proof.platform_name) + ' — captured flags per target.'
-      + (proof.required ? ' This platform requires a compliant proof screenshot (flag + host-identity in one frame) for each slot — capture it in your report.' : '')
+      + '<p class="route-sub">' + esc(proof.platform_name) + 'captured flags per target.'
+      + (proof.required ? ' This platform requires a compliant proof screenshot (flag + host-identity in one frame) for each slot, capture it in your report.' : '')
       + (adSet.length ? ' The AD set (' + esc(adSet.join(', ')) + ') scores all-or-nothing (' + (proof.ad_set_points || 0) + ').' : '')
       + '</p>'
       + scoreLine
       + (hosts.length ? '<table class="score-table"><thead><tr><th>Target</th><th>Local</th><th>Root</th></tr></thead><tbody>' + rows + '</tbody></table>'
-        : '<div class="coach-empty">No targets yet — launch an engagement.</div>')
+        : '<div class="coach-empty">No targets yet, launch an engagement.</div>')
       + (proof.points_note ? '<p class="route-sub score-note">' + esc(proof.points_note) + '</p>' : '')
       + '</section>';
   }

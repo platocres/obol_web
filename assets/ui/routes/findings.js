@@ -100,7 +100,7 @@
   }
   function hostPill(host) {
     var id = identity(host), hn = id && id.hostname ? id.hostname : '';
-    return '<span class="pill finding-host"' + (hn ? ' title="' + U.attr(host + ' — ' + hn) + '"' : '') + '>'
+    return '<span class="pill finding-host"' + (hn ? ' title="' + U.attr(host + '' + hn) + '"' : '') + '>'
       + esc(host) + (hn ? '<span class="finding-hostname">' + esc(hn) + '</span>' : '') + '</span>';
   }
 
@@ -154,7 +154,7 @@
     var findings = gather();
     if (!findings.length) {
       return '<section class="findings-route"><h1 class="route-h1">Findings</h1>'
-        + '<p class="route-sub">No findings yet. Run coach moves and paste the output on Evidence — every move that carries a report finding (anonymous bind, AS-REP roastable, weak password, exposed shares, HTTP/TLS checks…) rolls up here across every host once it is proven.</p></section>';
+        + '<p class="route-sub">No findings yet. Run coach moves and paste the output on Evidence, every move that carries a report finding (anonymous bind, AS-REP roastable, weak password, exposed shares, HTTP/TLS checks…) rolls up here across every host once it is proven.</p></section>';
     }
     var bySev = {}; SEV_ORDER.forEach(function (s) { bySev[s] = []; });
     findings.forEach(function (f) { (bySev[f.severity] = bySev[f.severity] || []).push(f); });

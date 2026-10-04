@@ -22,7 +22,7 @@
     var total = pack.length, done = Object.keys(ticks).filter(function (k) { return ticks[k]; }).length;
     var html = '<section class="checklist">'
       + '<h1 class="route-h1">Checklist</h1>'
-      + '<p class="route-sub">Every methodology action, grouped by attack-chain phase — tick as you go. This is the exhaustive reference; the coach on Next Steps ranks the evidence-relevant subset. ' + done + '/' + total + ' ticked.</p>';
+      + '<p class="route-sub">Every methodology action, grouped by attack-chain phase, tick as you go. This is the exhaustive reference; the coach on Next Steps ranks the evidence-relevant subset. ' + done + '/' + total + ' ticked.</p>';
 
     OBOL.phases.PHASES.forEach(function (p) {
       var items = (byPhase[p] || []).slice().sort(function (a, b) { return b.priority - a.priority; });

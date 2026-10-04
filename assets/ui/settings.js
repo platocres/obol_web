@@ -119,12 +119,12 @@
     panel.appendChild(sectionTitle("Data"));
     var dataWrap = document.createElement("div"); dataWrap.className = "obol-set-row";
     var resetBtn = document.createElement("button");
-    resetBtn.type = "button"; resetBtn.className = "obol-set-btn obol-set-danger"; resetBtn.textContent = "⚠ Full Reset — Erase All Data";
+    resetBtn.type = "button"; resetBtn.className = "obol-set-btn obol-set-danger"; resetBtn.textContent = "⚠ Full Reset, Erase All Data";
     resetBtn.addEventListener("click", function (e) {
       e.stopPropagation();
-      if (!confirm("FULL RESET\n\nErase everything obol saved in this browser — every engagement, screenshot, and setting — and start completely fresh.\n\nThis cannot be undone. Continue?")) return;
+      if (!confirm("FULL RESET\n\nErase everything obol saved in this browser (every engagement, screenshot, and setting) and start completely fresh.\n\nThis cannot be undone. Continue?")) return;
       if (!(OBOL.store && OBOL.store.resetAll)) { location.reload(); return; }
-      OBOL.store.resetAll().then(function () { toast("All data cleared — reloading fresh"); setTimeout(function () { location.reload(); }, 200); });
+      OBOL.store.resetAll().then(function () { toast("All data cleared, reloading fresh"); setTimeout(function () { location.reload(); }, 200); });
     });
     dataWrap.appendChild(resetBtn); panel.appendChild(dataWrap);
 

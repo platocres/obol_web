@@ -44,7 +44,7 @@
   }
 
   function machineOptions(selected) {
-    return '<option value="">— machine type (optional) —</option>' + OBOL.profile.listMachineTypes().map(function (m) {
+    return '<option value="">, machine type (optional), </option>' + OBOL.profile.listMachineTypes().map(function (m) {
       return '<option value="' + esc(m.id) + '"' + (m.id === selected ? ' selected' : '') + '>' + esc(m.name) + '</option>';
     }).join('');
   }
@@ -67,7 +67,7 @@
   function gettingStarted() {
     return '<div class="eng-welcome">'
       + '<div class="eng-welcome-h">Set up your first engagement</div>'
-      + '<p class="eng-welcome-sub">obol coaches your next move from the evidence you collect — no run is configured yet. Set one up below and the coach takes over from there.</p>'
+      + '<p class="eng-welcome-sub">obol coaches your next move from the evidence you collect, no run is configured yet. Set one up below and the coach takes over from there.</p>'
       + '<ol class="eng-steps">'
       + '<li><span class="eng-step-n">1</span><div><b>Pick a platform</b><span>Hack The Box, OffSec OSCP, CTF… it decides the flags, proof rules, and report shape.</span></div></li>'
       + '<li><span class="eng-step-n">2</span><div><b>Set your scope</b><span>Paste the target IPs / CIDRs for the box or lab (junk is filtered).</span></div></li>'
@@ -156,23 +156,23 @@
     } else if (f.status === 'captured') {
       // drill-down: the raw command output as a mini terminal, plus what it proved and where to review it.
       var out = String(f.output || '').replace(/\s+$/, '');
-      var capped = out.length > 4000 ? out.slice(0, 4000) + '\n… (truncated — full output in the Run Log)' : out;
+      var capped = out.length > 4000 ? out.slice(0, 4000) + '\n… (truncated, full output in the Run Log)' : out;
       body = cmdBlock
-        + (capped ? '<pre class="ws-mini-term">' + esc(capped) + '</pre>' : '<div class="ws-file-note">Captured — no text body.</div>')
+        + (capped ? '<pre class="ws-mini-term">' + esc(capped) + '</pre>' : '<div class="ws-file-note">Captured, no text body.</div>')
         + factLine(f.facts)
         + '<div class="ws-file-links"><a class="ws-file-link" href="#/history">Review in the Run Log →</a>' + credsLink + '</div>';
     } else if (suggested) {
       // anticipated: the coach is recommending a move that writes this file. obol assumes you are
       // probably about to create it and pencils it in — it becomes real once you run and paste it.
       body = '<div class="ws-file-note">The coach is suggesting a move that creates this file'
-        + (f.title ? ' (<strong>' + esc(f.title) + '</strong>)' : '') + '. Pencilled in — run it, then paste the output to capture it.</div>'
+        + (f.title ? ' (<strong>' + esc(f.title) + '</strong>)' : '') + '. Pencilled in, run it, then paste the output to capture it.</div>'
         + cmdBlock
         + '<div class="ws-file-links"><a class="ws-file-link" href="#/path">Open the move in Next Steps →</a>'
         + '<a class="ws-file-link" href="' + captureHref(f) + '">Capture its output →</a></div>';
     } else if (f.unknown) {
       // a disk-sync turned this up but obol has no move that made it — stay on the same page, invite it.
       body = '<div class="ws-file-note">Found on your disk by a workspace sync. obol doesn\'t know this one yet'
-        + (f.size ? ' (' + esc(fsize(f.size)) + ')' : '') + ' — paste its contents and the parsers will read whatever they recognize.</div>'
+        + (f.size ? ' (' + esc(fsize(f.size)) + ')' : '') + '. Paste its contents and the parsers will read whatever they recognize.</div>'
         + '<a class="ws-file-link" href="#/evidence">Paste its contents on Evidence →</a>';
     } else if (f.manual) {
       body = '<div class="ws-file-note">You added this file by hand. Paste its contents on Evidence to mint any facts it proves.</div>'
@@ -250,7 +250,7 @@
       + '<span class="ws-proof-v">' + shots + ' shot' + (shots === 1 ? '' : 's') + ' · ' + proofFiles + ' flag file' + (proofFiles === 1 ? '' : 's') + ' · ' + nTargets + ' target' + (nTargets === 1 ? '' : 's') + '</span></div>'
       + '<div class="ws-proof-note">' + (proofN
           ? 'Every owned target needs a flag file + an interactive screenshot showing the flag AND your IP, or the report scores it zero.'
-          : 'No proof captured yet — the OSCP report scores zero without a flag + an interactive screenshot per target.')
+          : 'No proof captured yet, the OSCP report scores zero without a flag + an interactive screenshot per target.')
       + ' <a class="ws-file-link" href="#/report">Open Report →</a></div></div>') : '';
     var invite = started
       ? '<p class="ws-invite">A live picture of your Kali working directory. obol pencils in the files the coach\'s next moves'
@@ -317,7 +317,7 @@
   function engagementPath() {
     var flow = OBOL.chainview ? OBOL.chainview.engagement() : '';
     if (!flow) return '';
-    return '<div class="eng-apath"><h2 class="coach-sec-h">Attack Path — What Led to What</h2>' + flow + '</div>';
+    return '<div class="eng-apath"><h2 class="coach-sec-h">Attack Path: What Led to What</h2>' + flow + '</div>';
   }
 
   function libraryList() {
@@ -351,25 +351,25 @@
       + '<span>Remove every saved run and its evidence. Keeps your skin &amp; appearance settings.</span></div>'
       + '<button class="btn-danger" id="eng-clear">Delete All Engagements</button></div>'
       + '<div class="eng-danger-item"><div class="eng-danger-txt"><strong>Full Reset</strong>'
-      + '<span>Erase <em>everything</em> obol saved in this browser — engagements, screenshots, and settings — and start completely fresh. A hard refresh (Ctrl+F5) does not do this.</span></div>'
-      + '<button class="btn-danger btn-danger-strong" id="eng-reset">Full Reset — Erase All Data</button></div>'
+      + '<span>Erase <em>everything</em> obol saved in this browser (engagements, screenshots, and settings) and start completely fresh. A hard refresh (Ctrl+F5) does not do this.</span></div>'
+      + '<button class="btn-danger btn-danger-strong" id="eng-reset">Full Reset, Erase All Data</button></div>'
       + '</div></details></div>'
       + libraryList() + '</div>'
       + '<div class="eng-create" id="eng-setup"><h2 class="coach-sec-h">' + (configured ? 'New Engagement' : 'Set up your run') + '</h2>'
-      + '<label class="eng-field"><span>Name</span><input id="eng-name" placeholder="Name this run — e.g. “OSCP prep” or “Lab night 3”" autocomplete="off"></label>'
+      + '<label class="eng-field"><span>Name</span><input id="eng-name" placeholder="Name this run, e.g. “OSCP prep” or “Lab night 3”" autocomplete="off"></label>'
       + '<div class="eng-field"><span>Platform profile</span><div class="pf-grid" id="pf-grid">' + platformCards(sel) + '</div></div>'
       + '<div class="eng-row2">'
       + '<label class="eng-field"><span>Machine type</span><select id="eng-mt">' + machineOptions(prof.machine_type || '') + '</select></label>'
       + '<label class="eng-field pf-osid" id="pf-osid-wrap" style="display:none"><span>OSID (OffSec exam)</span><input id="eng-osid" placeholder="OS-XXXXX"></label>'
       + '<label class="eng-field pf-osid" id="pf-cand-wrap" style="display:none"><span>Candidate</span><input id="eng-cand" placeholder="Your name"></label>'
       + '</div>'
-      + '<label class="eng-field"><span>Scope / targets — paste IPs &amp; CIDRs (junk is filtered)</span>'
+      + '<label class="eng-field"><span>Scope / targets, paste IPs &amp; CIDRs (junk is filtered)</span>'
       + '<textarea id="eng-scope" class="ev-textarea" style="min-height:90px" placeholder="10.10.10.10  10.10.10.20&#10;10.10.10.0/24"></textarea></label>'
-      + '<label class="eng-field"><span>Working directory <span class="eng-field-opt">(on your Kali box — optional)</span></span>'
+      + '<label class="eng-field"><span>Working directory <span class="eng-field-opt">(on your Kali box, optional)</span></span>'
       + '<input id="eng-workdir" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
       + '<div class="eng-field-hint">obol fills output paths from this (<code>scans/</code>, <code>loot/</code>, <code>proof/</code>…) and gives you a one-line setup command. Leave blank for a sensible default.</div>'
       + '<div class="eng-row2">'
-      + '<label class="eng-field"><span>Your VM IP <span class="eng-field-opt">(attacker box — optional)</span></span>'
+      + '<label class="eng-field"><span>Your VM IP <span class="eng-field-opt">(attacker box, optional)</span></span>'
       + '<input id="eng-lhost" autocomplete="off" spellcheck="false" inputmode="decimal" placeholder="e.g. 10.10.14.9"></label>'
       + '<label class="eng-field"><span>Interface</span><select id="eng-iface">'
       + ['tun0', 'tun1', 'tap0', 'eth0', 'wlan0', 'vpn0', 'wg0'].map(function (i) { return '<option value="' + i + '"' + (i === 'tun0' ? ' selected' : '') + '>' + i + '</option>'; }).join('')
@@ -419,11 +419,11 @@
     // danger zone: delete all engagements (keeps prefs) / full reset (erase all browser data)
     U.on(mount, 'click', '#eng-clear', function () {
       if (!confirm('Delete ALL engagements and their evidence?\n\nThis cannot be undone. Your appearance settings are kept.')) return;
-      OBOL.store.clearEngagements().then(function () { try { U.toast('All engagements deleted — reloading'); } catch (e) {} setTimeout(function () { location.reload(); }, 150); });
+      OBOL.store.clearEngagements().then(function () { try { U.toast('All engagements deleted, reloading'); } catch (e) {} setTimeout(function () { location.reload(); }, 150); });
     });
     U.on(mount, 'click', '#eng-reset', function () {
-      if (!confirm('FULL RESET\n\nErase everything obol saved in this browser — every engagement, screenshot, and setting — and start completely fresh.\n\nThis cannot be undone. Continue?')) return;
-      OBOL.store.resetAll().then(function () { try { U.toast('All data cleared — reloading fresh'); } catch (e) {} setTimeout(function () { location.reload(); }, 200); });
+      if (!confirm('FULL RESET\n\nErase everything obol saved in this browser (every engagement, screenshot, and setting) and start completely fresh.\n\nThis cannot be undone. Continue?')) return;
+      OBOL.store.resetAll().then(function () { try { U.toast('All data cleared, reloading fresh'); } catch (e) {} setTimeout(function () { location.reload(); }, 200); });
     });
 
     // ── virtual workspace: keep the file tree in sync with the operator's real disk ──
@@ -449,7 +449,7 @@
     U.on(mount, 'click', '.ws-add', function (e, t) {
       e.preventDefault();
       var folder = t.getAttribute('data-folder') || 'other';
-      var raw = (window.prompt('Add a file to ' + folder + '/ — name it exactly as it is on your disk:', '') || '').trim();
+      var raw = (window.prompt('Add a file to ' + folder + '/, name it exactly as it is on your disk:', '') || '').trim();
       if (!raw) return;
       var lay = (OBOL.workspace && OBOL.workspace.LAYOUT) || {};
       var name = raw.replace(/^\/+/, '');
@@ -460,7 +460,7 @@
           ov.added.push({ path: rel, source: 'manual', at: Date.now() });
         }
       }, 'ws-add');
-      U.toast('Added ' + rel + ' — paste its contents on Evidence to mint facts');
+      U.toast('Added ' + rel + '. Paste its contents on Evidence to mint facts');
     });
     // restore everything the operator hid.
     U.on(mount, 'click', '.ws-restore', function (e) {
@@ -498,9 +498,9 @@
           var lines = String(f.output).replace(/\s+$/, '').split(/\n/);
           var shown = lines.slice(0, 16).join('\n') + (lines.length > 16 ? '\n… ' + (lines.length - 16) + ' more line' + (lines.length - 16 === 1 ? '' : 's') : '');
           body = '<pre class="ws-pv-term">' + esc(shown) + '</pre>';
-        } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the coach — run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
+        } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the coach, run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
         else if (f.unknown) body = '<div class="ws-pv-note">Found on your disk by a sync. obol knows it exists but not what\'s inside.</div>' + cta;
-        else if (f.manual) body = '<div class="ws-pv-note">Added by hand. Syncing only confirms it exists — to mint facts, paste what\'s inside.</div>' + cta;
+        else if (f.manual) body = '<div class="ws-pv-note">Added by hand. Syncing only confirms it exists, to mint facts, paste what\'s inside.</div>' + cta;
         else body = '<div class="ws-pv-note">obol expects this file but hasn\'t received its output yet.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
         return head + body;
       }
@@ -554,7 +554,7 @@
       var lhostRaw = ((document.getElementById('eng-lhost') || {}).value || '').trim();
       var lhost = /^(\d{1,3}\.){3}\d{1,3}$/.test(lhostRaw) ? lhostRaw : '';
       var iface = ((document.getElementById('eng-iface') || {}).value || '').trim();
-      if (lhostRaw && !lhost) { U.toast('That VM IP doesn\'t look like an IPv4 address — ignoring it', 'err'); }
+      if (lhostRaw && !lhost) { U.toast('That VM IP doesn\'t look like an IPv4 address, ignoring it', 'err'); }
       if (!name) { name = (OBOL.profile.PRESETS[platform] || {}).name || 'Engagement'; }
 
       // If the active engagement is still the untouched default, configure it in place rather than
@@ -590,7 +590,7 @@
         }, 'launch');
         if (facts.length) OBOL.store.addFacts(facts, 'launch');
         OBOL.app.renderSidebar();
-        U.toast(hosts.length ? ('Launched — ' + hosts.length + ' target(s) scoped') : 'Engagement created — add targets to begin');
+        U.toast(hosts.length ? ('Launched ' + hosts.length + ' target(s) scoped') : 'Engagement created, add targets to begin');
         OBOL.router.go('path');
       };
 

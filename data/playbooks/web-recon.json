@@ -6,7 +6,7 @@
   {
    "label": "Content discovery",
    "action_id": "content-discovery",
-   "note": "Fuzz paths for the unlinked surface (admin panels, .git, backups, /api) — maps discovered content."
+   "note": "Fuzz paths for the unlinked surface (admin panels.git, backups, /api), maps discovered content."
   },
   {
    "label": "Nikto scan",
@@ -17,7 +17,7 @@
    "label": "Virtual-host discovery",
    "action_id": "vhost-discovery",
    "require_approval": true,
-   "note": "Subdomain/vhost fuzzing — noisier, and needs a known domain (set one with --set domain=example.com if nmap did not reveal it)."
+   "note": "Subdomain/vhost fuzzing, noisier, and needs a known domain (set one with --set domain=example.com if nmap did not reveal it)."
   }
  ],
  "phase": "recon"

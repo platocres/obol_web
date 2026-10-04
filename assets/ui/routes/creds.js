@@ -34,7 +34,7 @@
     var creds = gatherCreds();
     if (!creds.length) {
       return '<section class="creds-route"><h1 class="route-h1">Credentials</h1>'
-        + '<p class="route-sub">No credentials yet. Add them in the sidebar params (User/Password/NT hash), or paste output that proves a credential on Evidence — they will appear here as a reuse matrix.</p></section>';
+        + '<p class="route-sub">No credentials yet. Add them in the sidebar params (User/Password/NT hash), or paste output that proves a credential on Evidence, they will appear here as a reuse matrix.</p></section>';
     }
     var head = '<th class="cm-corner">cred \\ host</th>' + hosts.map(function (h) {
       return '<th class="cm-host" data-host="' + esc(h.ip) + '"><button class="cm-hostbtn" data-host="' + esc(h.ip) + '">' + esc(h.ip) + '</button></th>';
@@ -52,7 +52,7 @@
     render._creds = creds;
 
     return '<section class="creds-route"><h1 class="route-h1">Credentials</h1>'
-      + '<p class="route-sub">Reuse matrix — <strong>ADM</strong> = admin proven, <strong>✓</strong> = valid, <strong>·</strong> = untested. Click a credential, a host, or a cell to retarget the whole console to it.</p>'
+      + '<p class="route-sub">Reuse matrix, <strong>ADM</strong> = admin proven, <strong>✓</strong> = valid, <strong>·</strong> = untested. Click a credential, a host, or a cell to retarget the whole console to it.</p>'
       + '<div class="cm-scroll"><table class="cm-table"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
       + '</section>';
   }

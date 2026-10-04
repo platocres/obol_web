@@ -343,7 +343,7 @@
   C._add_os_from_text = _add_os_from_text;
 
   function _clean_username(user) {
-    user = stripChars((user || '').trim(), ',;:');
+    user = stripChars((user || '').trim(), ';:');
     if (user.indexOf('\\') >= 0) user = user.split('\\').pop();
     if (user.indexOf('@') >= 0) user = user.split('@')[0];
     return user.trim();
@@ -356,7 +356,7 @@
     if (C._NOISE_USERS.has(user.toLowerCase())) return false;
     if (!allowMachine && user.endsWith('$')) return false;
     // A real sAMAccountName never starts with '-' or '.'. A leading dash is the tell of a column
-    // header ('-Username-') or a flag token that leaked out of tabular tool output — never an account.
+    // header ('-Username-') or a flag token that leaked out of tabular tool output, never an account.
     if (/^[-.]/.test(user)) return false;
     return /^[A-Za-z0-9._$-]{2,}$/.test(user);
   }

@@ -11,27 +11,27 @@
   // Files per group, in load order. Populated as bundles are built; tolerant of absent files.
   var GROUPS = {
     parsers: [
-      'assets/engine/parsers/common.js?v=28ba0970',
-      'assets/engine/parsers/nmap.js?v=c3b834f5', 'assets/engine/parsers/directory.js?v=5ac36d12',
-      'assets/engine/parsers/creds.js?v=22662bce', 'assets/engine/parsers/host.js?v=dbfd0eba',
+      'assets/engine/parsers/common.js?v=3d0dbce0',
+      'assets/engine/parsers/nmap.js?v=c3b834f5', 'assets/engine/parsers/directory.js?v=4d54b812',
+      'assets/engine/parsers/creds.js?v=22662bce', 'assets/engine/parsers/host.js?v=dc42c8bf',
       'assets/engine/parsers/services.js?v=6808bcc2', 'assets/engine/parsers/database.js?v=3dfc40c5',
-      'assets/engine/parsers/web.js?v=fbb0e904', 'assets/engine/parsers/websource.js?v=d7ad840b',
-      'assets/engine/parsers/index.js?v=84120e8f',
+      'assets/engine/parsers/web.js?v=30a3b534', 'assets/engine/parsers/websource.js?v=2c736bdb',
+      'assets/engine/parsers/index.js?v=84b90d76',
     ],
-    graph: ['assets/engine/graph.js?v=97e4f668', 'assets/ui/routes/graph.js?v=f509cf3e'],
-    domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=e54f7903', 'assets/ui/bhgraph.js?v=ed34873b', 'assets/ui/routes/domain.js?v=e0d3fe25'],
-    report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=9ad71876', 'assets/engine/report.js?v=60a4b750', 'assets/ui/routes/report.js?v=a57c0597'],
-    tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=f27f51ef', 'assets/ui/routes/tools.js?v=7d043fd0'],
-    loadout: ['assets/engine/arsenal.js?v=88353a90', 'assets/ui/routes/loadout.js?v=b449616c'],
-    study: ['data/study-fixtures.js?v=6e473eea', 'assets/engine/study.js?v=d598d6fe', 'assets/ui/routes/study.js?v=fcfab397'],
-    checklist: ['assets/ui/routes/checklist.js?v=116058c6'],
-    target: ['assets/engine/graph.js?v=97e4f668', 'assets/ui/routes/target.js?v=72f3be6c'],
-    creds: ['assets/ui/routes/creds.js?v=6935aeca'],
-    scoreboard: ['assets/ui/routes/scoreboard.js?v=1d235ab7'],
-    playbooks: ['data/playbooks-bundle.js?v=4294252f', 'assets/engine/playbooks.js?v=be235b11', 'assets/ui/routes/playbooks.js?v=0d08af7e'],
-    map: ['assets/engine/engmap.js?v=274fcc29', 'assets/ui/routes/map.js?v=c92643bb'],
-    findings: ['assets/ui/routes/findings.js?v=ce4b0fe2'],
-    history: ['assets/ui/routes/history.js?v=65925c29'],
+    graph: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/graph.js?v=f509cf3e'],
+    domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=e356519c', 'assets/ui/bhgraph.js?v=80a0f124', 'assets/ui/routes/domain.js?v=78af2103'],
+    report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=b4a40b19', 'assets/engine/report.js?v=885cb4fb', 'assets/ui/routes/report.js?v=217e6ca7'],
+    tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=70b2d005', 'assets/ui/routes/tools.js?v=aff6dc97'],
+    loadout: ['assets/engine/arsenal.js?v=9a46d3b8', 'assets/ui/routes/loadout.js?v=f6d299e1'],
+    study: ['data/study-fixtures.js?v=b62791fc', 'assets/engine/study.js?v=fceb17d4', 'assets/ui/routes/study.js?v=748c264e'],
+    checklist: ['assets/ui/routes/checklist.js?v=68b05ed8'],
+    target: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/target.js?v=91aee1df'],
+    creds: ['assets/ui/routes/creds.js?v=c8322951'],
+    scoreboard: ['assets/ui/routes/scoreboard.js?v=73e1ae28'],
+    playbooks: ['data/playbooks-bundle.js?v=31b337d6', 'assets/engine/playbooks.js?v=be235b11', 'assets/ui/routes/playbooks.js?v=db570cba'],
+    map: ['assets/engine/engmap.js?v=488914b1', 'assets/ui/routes/map.js?v=b415a554'],
+    findings: ['assets/ui/routes/findings.js?v=629fbcf9'],
+    history: ['assets/ui/routes/history.js?v=f2888760'],
   };
 
   var _loaded = {};   // group -> Promise
@@ -77,7 +77,7 @@
             return out;
           }
           return '<section class="route-stub"><h1 class="route-h1">' + name.charAt(0).toUpperCase() + name.slice(1) + '</h1>'
-            + '<p class="route-sub">This surface is coming online in this build. If you just opened it, the bundle may still be loading — try again in a moment.</p></section>';
+            + '<p class="route-sub">This surface is coming online in this build. If you just opened it, the bundle may still be loading, try again in a moment.</p></section>';
         },
         mounted: function (ctx) {
           var real = OBOL.routes[name];

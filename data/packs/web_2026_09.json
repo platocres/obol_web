@@ -7,7 +7,7 @@
   {
    "id": "vhost-discovery",
    "title": "Virtual Host Discovery",
-   "hypothesis": "A single IP frequently serves several applications, each one reachable only when the request carries the correct hostname via vhost routing. When the box has a domain name, sweep candidate values through the Host header and watch for a reply whose size differs from the baseline — that difference points to a site kept out of sight.",
+   "hypothesis": "A single IP frequently serves several applications, each one reachable only when the request carries the correct hostname via vhost routing. When the box has a domain name, sweep candidate values through the Host header and watch for a reply whose size differs from the baseline, that difference points to a site kept out of sight.",
    "tool": "ffuf",
    "tools": [
     "ffuf",
@@ -29,7 +29,7 @@
    ],
    "priority": 86,
    "proves": "confirms a virtual host you have located",
-   "does_not_prove": "only newly found attack surface — not a vulnerability, a credential, or any access",
+   "does_not_prove": "only newly found attack surface, not a vulnerability, a credential, or any access",
    "report": {
     "finding": "Hidden Virtual Host Discovered",
     "severity": "low"
@@ -71,7 +71,7 @@
    ],
    "priority": 90,
    "proves": "produces a catalogue of the web content you have uncovered",
-   "does_not_prove": "only newly found attack surface — not a vulnerability, a credential, or any access",
+   "does_not_prove": "only newly found attack surface, not a vulnerability, a credential, or any access",
    "report": {
     "finding": "Sensitive Paths Discovered via Content Discovery",
     "severity": "low"
@@ -102,7 +102,7 @@
   {
    "id": "param-discovery",
    "title": "Parameter Discovery (arjun)",
-   "hypothesis": "A form or endpoint often accepts far more parameters than its HTML reveals — and the hidden one is frequently the injectable one. Fuzzing a known parameter dictionary against the endpoint (arjun) surfaces the accepted GET/POST parameters, so the injection probes have a concrete parameter to test instead of a guess.",
+   "hypothesis": "A form or endpoint often accepts far more parameters than its HTML reveals, and the hidden one is frequently the injectable one. Fuzzing a known parameter dictionary against the endpoint (arjun) surfaces the accepted GET/POST parameters, so the injection probes have a concrete parameter to test instead of a guess.",
    "tool": "arjun",
    "tools": ["arjun"],
    "os": [],
@@ -111,7 +111,7 @@
    "produces": ["web.param_candidate"],
    "priority": 78,
    "proves": "surfaces the request parameters an endpoint actually accepts",
-   "does_not_prove": "only attack surface — an accepted parameter is not a vulnerability until a probe confirms it injectable",
+   "does_not_prove": "only attack surface, an accepted parameter is not a vulnerability until a probe confirms it injectable",
    "report": {"finding": "Hidden Request Parameters Discovered", "severity": "info"},
    "refs": ["https://github.com/s0md3v/Arjun"],
    "commands": [
@@ -122,7 +122,7 @@
   {
    "id": "lfi-probe",
    "title": "Local File Inclusion Probe",
-   "hypothesis": "Parameters that pull in content by its name (page=, file=, include=) are prime LFI suspects. A traversal string settles it: when ../../../../etc/passwd hands back the passwd file, arbitrary local reads are possible — and that spirals into source disclosure, lifting credentials out of config files, and now and then RCE via log poisoning or wrappers.",
+   "hypothesis": "Parameters that pull in content by its name (page=, file=, include=) are prime LFI suspects. A traversal string settles it: when ../../../../etc/passwd hands back the passwd file, arbitrary local reads are possible, and that spirals into source disclosure, lifting credentials out of config files, and now and then RCE via log poisoning or wrappers.",
    "tool": "curl",
    "tools": [
     "curl"
@@ -138,7 +138,7 @@
    ],
    "priority": 60,
    "proves": "confirms a working local file inclusion",
-   "does_not_prove": "merely a verified injection point — not code execution, data, or access until it is actually exploited",
+   "does_not_prove": "merely a verified injection point, not code execution, data, or access until it is actually exploited",
    "report": {
     "finding": "Local File Inclusion",
     "severity": "high"
@@ -168,7 +168,7 @@
   {
    "id": "file-upload",
    "title": "File Upload Abuse",
-   "hypothesis": "An upload form that accepts a script and stores it somewhere web-reachable is immediate RCE. Start by mapping what the form allows — extension blacklist versus whitelist, MIME inspection, content inspection. Then confirm the file was stored, confirm you can reach it, and only after that fire it off.",
+   "hypothesis": "An upload form that accepts a script and stores it somewhere web-reachable is immediate RCE. Start by mapping what the form allows, extension blacklist versus whitelist, MIME inspection, content inspection. Then confirm the file was stored, confirm you can reach it, and only after that fire it off.",
    "tool": "curl",
    "tools": [
     "curl"
@@ -185,7 +185,7 @@
    ],
    "priority": 80,
    "proves": "confirms a working file upload and a web shell",
-   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "does_not_prove": "execution within the web/application context only, not any elevated privilege",
    "report": {
     "finding": "Unrestricted File Upload Leading to Code Execution",
     "severity": "critical"
@@ -215,7 +215,7 @@
   {
    "id": "sqli-basics",
    "title": "SQL Injection Confirmation",
-   "hypothesis": "A parameter whose results shift the moment you add a quote is a SQLi candidate. Nail it down by hand with boolean or error-based signals — grasp the injection before turning to tooling, since exploiting blind cases requires knowing what the query looks like.",
+   "hypothesis": "A parameter whose results shift the moment you add a quote is a SQLi candidate. Nail it down by hand with boolean or error-based signals, grasp the injection before turning to tooling, since exploiting blind cases requires knowing what the query looks like.",
    "tool": "curl",
    "tools": [
     "curl"
@@ -231,7 +231,7 @@
    ],
    "priority": 60,
    "proves": "confirms a working SQL injection",
-   "does_not_prove": "merely a verified injection point — not code execution, data, or access until it is actually exploited",
+   "does_not_prove": "merely a verified injection point, not code execution, data, or access until it is actually exploited",
    "report": {
     "finding": "SQL Injection",
     "severity": "high"
@@ -261,7 +261,7 @@
   {
    "id": "sqlmap-automation",
    "title": "SQLmap Exploitation (post-confirmation)",
-   "hypothesis": "Once you've verified SQLi by hand, sqlmap takes over the heavy lifting: dumping databases, executing OS commands, staging shells. WARNING: sqlmap is EXPLICITLY PROHIBITED on the OSCP exam — regard this card as lab-only. Under exam conditions everything it does must be performed by hand (see sqli-basics). Away from the exam, hand it a captured raw request so the auth cookies and parameters are exactly right.",
+   "hypothesis": "Once you've verified SQLi by hand, sqlmap takes over the heavy lifting: dumping databases, executing OS commands, staging shells. WARNING: sqlmap is EXPLICITLY PROHIBITED on the OSCP exam, regard this card as lab-only. Under exam conditions everything it does must be performed by hand (see sqli-basics). Away from the exam, hand it a captured raw request so the auth cookies and parameters are exactly right.",
    "tool": "sqlmap",
    "tools": [
     "sqlmap"
@@ -277,7 +277,7 @@
    ],
    "priority": 80,
    "proves": "confirms database credentials and a web shell",
-   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "does_not_prove": "execution within the web/application context only, not any elevated privilege",
    "report": {
     "finding": "SQL Injection (Automated Exploitation)",
     "severity": "high"
@@ -308,7 +308,7 @@
   {
    "id": "git-exposed",
    "title": "Exposed .git Directory",
-   "hypothesis": "Sites deployed via git clone occasionally leave the entire .git directory in place. When /.git/HEAD can be read, the full source history is recoverable — credentials sitting in config files, secrets removed in later commits, and the complete application logic to study.",
+   "hypothesis": "Sites deployed via git clone occasionally leave the entire .git directory in place. When /.git/HEAD can be read, the full source history is recoverable, credentials sitting in config files, secrets removed in later commits, and the complete application logic to study.",
    "tool": "curl",
    "tools": [
     "curl",
@@ -325,7 +325,7 @@
    ],
    "priority": 84,
    "proves": "confirms candidate credentials and disclosed application source",
-   "does_not_prove": "unconfirmed leads only — neither a verified credential nor access",
+   "does_not_prove": "unconfirmed leads only, neither a verified credential nor access",
    "report": {
     "finding": "Source Code Disclosure via Exposed .git",
     "severity": "high"
@@ -355,7 +355,7 @@
   {
    "id": "svn-exposed",
    "title": "Exposed .svn Directory",
-   "hypothesis": "Subversion's counterpart to an exposed .git: /.svn/ entries and pristine copies spill the whole working tree. Older codebases and legacy deployments still carry it. Also look for an SVN service on 3690 — anonymous checkout shows up often in labs.",
+   "hypothesis": "Subversion's counterpart to an exposed .git: /.svn/ entries and pristine copies spill the whole working tree. Older codebases and legacy deployments still carry it. Also look for an SVN service on 3690, anonymous checkout shows up often in labs.",
    "tool": "curl",
    "tools": [
     "curl",
@@ -373,7 +373,7 @@
    ],
    "priority": 83,
    "proves": "confirms disclosed application source and candidate credentials",
-   "does_not_prove": "unconfirmed leads only — neither a verified credential nor access",
+   "does_not_prove": "unconfirmed leads only, neither a verified credential nor access",
    "report": {
     "finding": "Source Code Disclosure via Exposed .svn",
     "severity": "high"
@@ -419,7 +419,7 @@
    ],
    "priority": 66,
    "proves": "confirms a working SSRF, retrieved files, and AWS cloud access",
-   "does_not_prove": "merely a verified injection point — not code execution, data, or access until it is actually exploited",
+   "does_not_prove": "merely a verified injection point, not code execution, data, or access until it is actually exploited",
    "report": {
     "finding": "Server-Side Request Forgery",
     "severity": "high"
@@ -431,7 +431,7 @@
     {
      "tool": "curl",
      "run": "curl -s 'http://{{target}}/fetch?url=http://127.0.0.1/'",
-     "note": "Opening move: will it pull localhost? Point it at your listener IP as well — an inbound connection demonstrates the primitive."
+     "note": "Opening move: will it pull localhost? Point it at your listener IP as well, an inbound connection demonstrates the primitive."
     },
     {
      "tool": "curl",
@@ -449,7 +449,7 @@
   {
    "id": "ssti",
    "title": "Server-Side Template Injection (SSTI)",
-   "hypothesis": "When user input passes through a template engine, {{7*7}} coming back as 49 shows the server is running template code — and template code leads to RCE. The 0xdf corpus runs into Jinja2, Twig, and ASP over and over. Spotting it is the same across engines, but exploiting it is engine-specific, so pin down the engine first (its template-error output usually names it).",
+   "hypothesis": "When user input passes through a template engine, {{7*7}} coming back as 49 shows the server is running template code, and template code leads to RCE. The 0xdf corpus runs into Jinja2, Twig, and ASP over and over. Spotting it is the same across engines, but exploiting it is engine-specific, so pin down the engine first (its template-error output usually names it).",
    "tool": "curl",
    "tools": [
     "curl"
@@ -465,7 +465,7 @@
    ],
    "priority": 80,
    "proves": "confirms a web shell",
-   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "does_not_prove": "execution within the web/application context only, not any elevated privilege",
    "report": {
     "finding": "Server-Side Template Injection (RCE)",
     "severity": "critical"
@@ -482,7 +482,7 @@
     {
      "tool": "curl",
      "run": "curl -s --data-urlencode 'name=\\{\\{config\\}\\}' http://{{target}}/",
-     "note": "Jinja2: print the config (frequently exposes SECRET_KEY — see jwt-attacks)."
+     "note": "Jinja2: print the config (frequently exposes SECRET_KEY, see jwt-attacks)."
     },
     {
      "tool": "curl",
@@ -495,7 +495,7 @@
   {
    "id": "xxe",
    "title": "XML External Entity (XXE) Injection",
-   "hypothesis": "An endpoint that reads XML (uploads, APIs, SAML, docx/xlsx handlers) may resolve external entities — giving file reads, SSRF, and now and then RCE. Find the XML parsers by submitting content or switching Content-Type to application/xml and watching for parse errors.",
+   "hypothesis": "An endpoint that reads XML (uploads, APIs, SAML, docx/xlsx handlers) may resolve external entities, giving file reads, SSRF, and now and then RCE. Find the XML parsers by submitting content or switching Content-Type to application/xml and watching for parse errors.",
    "tool": "curl",
    "tools": [
     "curl"
@@ -511,7 +511,7 @@
    ],
    "priority": 66,
    "proves": "confirms retrieved files and a working SSRF",
-   "does_not_prove": "merely a verified injection point — not code execution, data, or access until it is actually exploited",
+   "does_not_prove": "merely a verified injection point, not code execution, data, or access until it is actually exploited",
    "report": {
     "finding": "XML External Entity Injection",
     "severity": "high"
@@ -541,7 +541,7 @@
   {
    "id": "deserialization",
    "title": "Insecure Deserialization",
-   "hypothesis": "Serialized objects riding in cookies, ViewStates, or API bodies become execution primitives wherever the server trusts them blindly. Tell-tale markers: Java (rO0AB base64 / \\xac\\xed), .NET (__VIEWSTATE, /wEP), PHP (O:4:). Exploiting requires a gadget chain matching the libraries in play — ysoserial (Java), ysoserial.net (.NET), and phpggc (PHP) build them.",
+   "hypothesis": "Serialized objects riding in cookies, ViewStates, or API bodies become execution primitives wherever the server trusts them blindly. Tell-tale markers: Java (rO0AB base64 / \\xac\\xed).NET (__VIEWSTATE, /wEP), PHP (O:4:). Exploiting requires a gadget chain matching the libraries in play, ysoserial (Java), ysoserial.net (.NET), and phpggc (PHP) build them.",
    "tool": "ysoserial",
    "tools": [
     "ysoserial",
@@ -558,7 +558,7 @@
    ],
    "priority": 80,
    "proves": "confirms a web shell",
-   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "does_not_prove": "execution within the web/application context only, not any elevated privilege",
    "report": {
     "finding": "Insecure Deserialization (RCE)",
     "severity": "critical"
@@ -570,7 +570,7 @@
     {
      "tool": "ysoserial",
      "run": "ysoserial CommonsCollections5 'ping -c 3 {{lhost}}' | base64 -w0",
-     "note": "Java: build a gadget-chain payload. Fire a pingback at your listener to verify execution before staging anything larger — 0xdf does exactly this each time."
+     "note": "Java: build a gadget-chain payload. Fire a pingback at your listener to verify execution before staging anything larger, 0xdf does exactly this each time."
     },
     {
      "tool": "curl",
@@ -588,7 +588,7 @@
   {
    "id": "jwt-attacks",
    "title": "JWT Attacks",
-   "hypothesis": "A JSON Web Token is no stronger than its signing secret and the code that verifies it. The escalation ladder: (1) decode it and read the claims, (2) attempt alg:none, (3) crack weak HMAC secrets offline, (4) where you've obtained the app source (git-exposed, LFI), lift the hardcoded secret and mint admin tokens — the outcome 0xdf sees most often.",
+   "hypothesis": "A JSON Web Token is no stronger than its signing secret and the code that verifies it. The escalation ladder: (1) decode it and read the claims, (2) attempt alg:none, (3) crack weak HMAC secrets offline, (4) where you've obtained the app source (git-exposed, LFI), lift the hardcoded secret and mint admin tokens, the outcome 0xdf sees most often.",
    "tool": "hashcat",
    "tools": [
     "hashcat",
@@ -606,7 +606,7 @@
    ],
    "priority": 82,
    "proves": "confirms administrative access and a cleartext password",
-   "does_not_prove": "admin rights inside the application only — not an OS shell or system-level privilege unless proven on its own",
+   "does_not_prove": "admin rights inside the application only, not an OS shell or system-level privilege unless proven on its own",
    "report": {
     "finding": "JWT Forgery via Weak/Leaked Secret",
     "severity": "high"
@@ -633,7 +633,7 @@
     {
      "tool": "sh",
      "run": "python3 -c \"import jwt; print(jwt.encode({'user':'admin'}, '', algorithm='none'))\"",
-     "note": "The alg:none variation — worth ten seconds on any JWT you come across."
+     "note": "The alg:none variation, worth ten seconds on any JWT you come across."
     }
    ],
    "autonomy": "manual"
@@ -641,7 +641,7 @@
   {
    "id": "nosql-injection",
    "title": "NoSQL Injection",
-   "hypothesis": "Logins backed by MongoDB will frequently accept operator objects in place of plain strings: user[$ne]=x&pass[$ne]=x signs you in as the first account (typically admin). And where equality holds but you still need the password, pulling it out with $regex leaks it one character at a time — the Mango approach.",
+   "hypothesis": "Logins backed by MongoDB will frequently accept operator objects in place of plain strings: user[$ne]=x&pass[$ne]=x signs you in as the first account (typically admin). And where equality holds but you still need the password, pulling it out with $regex leaks it one character at a time, the Mango approach.",
    "tool": "curl",
    "tools": [
     "curl"
@@ -657,7 +657,7 @@
    ],
    "priority": 82,
    "proves": "confirms administrative access and a cleartext password",
-   "does_not_prove": "admin rights inside the application only — not an OS shell or system-level privilege unless proven on its own",
+   "does_not_prove": "admin rights inside the application only, not an OS shell or system-level privilege unless proven on its own",
    "report": {
     "finding": "NoSQL Injection (Auth Bypass)",
     "severity": "high"
@@ -682,7 +682,7 @@
   {
    "id": "tomcat-deploy",
    "title": "Tomcat Manager WAR Deploy",
-   "hypothesis": "Credentials for the Tomcat manager (defaults like tomcat:s3cret, tomcat:tomcat, admin:admin, or ones recovered from tomcat-users.xml via LFI) become RCE once you deploy a WAR webshell. It works through the HTML manager interface or the text API — and the text API scripts neatly with curl.",
+   "hypothesis": "Credentials for the Tomcat manager (defaults like tomcat:s3cret, tomcat:tomcat, admin:admin, or ones recovered from tomcat-users.xml via LFI) become RCE once you deploy a WAR webshell. It works through the HTML manager interface or the text API, and the text API scripts neatly with curl.",
    "tool": "msfvenom",
    "tools": [
     "msfvenom",
@@ -701,7 +701,7 @@
    ],
    "priority": 80,
    "proves": "confirms a web shell",
-   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "does_not_prove": "execution within the web/application context only, not any elevated privilege",
    "report": {
     "finding": "Tomcat Manager Authenticated RCE",
     "severity": "critical"
@@ -729,7 +729,7 @@
   {
    "id": "jenkins-access",
    "title": "Jenkins Exploitation",
-   "hypothesis": "Jenkins (8080 out of the box) with any near-admin access is code execution: the Script Console runs Groovy as the Jenkins user, and a project build with a shell step does the same. Even instances with no authentication give up data — the CLI @file read flaw and anonymous job listings both turn up in the corpus.",
+   "hypothesis": "Jenkins (8080 out of the box) with any near-admin access is code execution: the Script Console runs Groovy as the Jenkins user, and a project build with a shell step does the same. Even instances with no authentication give up data, the CLI @file read flaw and anonymous job listings both turn up in the corpus.",
    "tool": "curl",
    "tools": [
     "curl",
@@ -750,7 +750,7 @@
    ],
    "priority": 80,
    "proves": "confirms a Linux foothold, a Windows foothold, and retrieved files",
-   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "does_not_prove": "execution within the web/application context only, not any elevated privilege",
    "report": {
     "finding": "Jenkins Console Access (RCE)",
     "severity": "critical"
@@ -780,7 +780,7 @@
   {
    "id": "wordpress",
    "title": "WordPress Attack Surface",
-   "hypothesis": "WordPress calls for wpscan: enumerate the plugins, themes, and users, tie their versions to CVEs, then either exploit a flawed plugin or — should you land admin credentials — edit a theme file (Appearance → Editor) or upload a plugin zip to get the shell. XML-RPC (xmlrpc.php) offers an amplified channel for brute-forcing logins.",
+   "hypothesis": "WordPress calls for wpscan: enumerate the plugins, themes, and users, tie their versions to CVEs, then either exploit a flawed plugin or (should you land admin credentials) edit a theme file (Appearance → Editor) or upload a plugin zip to get the shell. XML-RPC (xmlrpc.php) offers an amplified channel for brute-forcing logins.",
    "tool": "wpscan",
    "tools": [
     "wpscan",
@@ -797,7 +797,7 @@
    ],
    "priority": 80,
    "proves": "confirms a candidate exploit, a web shell, and enumerated application users",
-   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "does_not_prove": "execution within the web/application context only, not any elevated privilege",
    "report": {
     "finding": "WordPress Vulnerable Component",
     "severity": "high"
@@ -815,7 +815,7 @@
     {
      "tool": "wpscan",
      "run": "wpscan -e ap --plugins-detection aggressive --url http://{{target}}",
-     "note": "Aggressive plugin detection for when the passive pass turns up nothing — louder, but more thorough."
+     "note": "Aggressive plugin detection for when the passive pass turns up nothing, louder, but more thorough."
     },
     {
      "tool": "curl",
@@ -827,7 +827,7 @@
   {
    "id": "nikto-scan",
    "title": "Web Server Vulnerability Scan (nikto)",
-   "hypothesis": "nikto probes for files known to be dangerous, stale server software, and the usual misconfigurations — catching what content discovery overlooks (default scripts, sample apps, hazardous HTTP methods). It is SLOW and VERY loud, so let it run in the background while you enumerate by hand, and treat each result as a lead to confirm rather than a verdict.",
+   "hypothesis": "nikto probes for files known to be dangerous, stale server software, and the usual misconfigurations, catching what content discovery overlooks (default scripts, sample apps, hazardous HTTP methods). It is SLOW and VERY loud, so let it run in the background while you enumerate by hand, and treat each result as a lead to confirm rather than a verdict.",
    "tool": "nikto",
    "tools": [
     "nikto"
@@ -843,7 +843,7 @@
    ],
    "priority": 88,
    "proves": "confirms a candidate exploit and a catalogue of uncovered web content",
-   "does_not_prove": "only newly found attack surface — not a vulnerability, a credential, or any access",
+   "does_not_prove": "only newly found attack surface, not a vulnerability, a credential, or any access",
    "report": {
     "finding": "Web Server Misconfiguration (nikto)",
     "severity": "low"
@@ -855,7 +855,7 @@
     {
      "tool": "nikto",
      "run": "nikto -h http://{{target}} -o scans/nikto.txt",
-     "note": "The standard scan. Kick it off, push it to the background, and keep working — it takes a while."
+     "note": "The standard scan. Kick it off, push it to the background, and keep working, it takes a while."
     },
     {
      "tool": "nikto",
@@ -872,7 +872,7 @@
   {
    "id": "command-injection",
    "title": "OS Command Injection",
-   "hypothesis": "A parameter that flows into a system call (ping forms, IP lookups, filename converters, PDF generators) can let you tack on your own commands. Verify with an innocuous probe, then enumerate with id/hostname, and only afterwards go for a shell. The separator makes all the difference: ; | && || a newline and $() each behave differently — and the output-hiding ones (|, &&) still run even when nothing appears (that's blind injection: demonstrate it with sleep).",
+   "hypothesis": "A parameter that flows into a system call (ping forms, IP lookups, filename converters, PDF generators) can let you tack on your own commands. Verify with an innocuous probe, then enumerate with id/hostname, and only afterwards go for a shell. The separator makes all the difference: ; | && || a newline and $() each behave differently, and the output-hiding ones (|, &&) still run even when nothing appears (that's blind injection: demonstrate it with sleep).",
    "tool": "curl",
    "tools": [
     "curl"
@@ -889,7 +889,7 @@
    ],
    "priority": 80,
    "proves": "confirms a working command injection and a web shell",
-   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "does_not_prove": "execution within the web/application context only, not any elevated privilege",
    "report": {
     "finding": "OS Command Injection",
     "severity": "critical"
@@ -924,7 +924,7 @@
   {
    "id": "idor",
    "title": "Insecure Direct Object Reference (IDOR)",
-   "hypothesis": "Every request that carries a reference to an object (?uid=, ?filename=, /api/users/123, document ids inside JSON) poses an access-control question: is the server checking WHO is asking, or only WHAT is being asked for? Bump ids up, substitute uuids, decode then re-encode base64 or hashed references, and compare against a second account you control — any returned data that isn't yours is the finding. Enumerating at scale escalates one IDOR into a data breach.",
+   "hypothesis": "Every request that carries a reference to an object (?uid=?filename=, /api/users/123, document ids inside JSON) poses an access-control question: is the server checking WHO is asking, or only WHAT is being asked for? Bump ids up, substitute uuids, decode then re-encode base64 or hashed references, and compare against a second account you control, any returned data that isn't yours is the finding. Enumerating at scale escalates one IDOR into a data breach.",
    "tool": "ffuf",
    "tools": [
     "ffuf",
@@ -941,7 +941,7 @@
    ],
    "priority": 66,
    "proves": "flags an IDOR access-control lead (another object's data returned for a bumped/substituted id)",
-   "does_not_prove": "an unconfirmed lead only — no verified credential or access; any files/creds pulled through it come back via `obol ingest`, not this card's parse",
+   "does_not_prove": "an unconfirmed lead only, no verified credential or access; any files/creds pulled through it come back via `obol ingest`, not this card's parse",
    "report": {
     "finding": "Insecure Direct Object Reference (Broken Access Control)",
     "severity": "high"
@@ -952,8 +952,8 @@
    "commands": [
     {
      "tool": "sh",
-     "run": "echo 'Create TWO accounts (or use your account + another known user). Capture a request that returns YOUR object — profile, invoice, file — then replay it with the id changed.'",
-     "note": "How to do it: replay the reference parameter in Burp Repeater (uid=1 → uid=2) and compare against the second account. Inspect COOKIES and JSON bodies too — references lurk there as well."
+     "run": "echo 'Create TWO accounts (or use your account + another known user). Capture a request that returns YOUR object (profile, invoice, file) then replay it with the id changed.'",
+     "note": "How to do it: replay the reference parameter in Burp Repeater (uid=1 → uid=2) and compare against the second account. Inspect COOKIES and JSON bodies too, references lurk there as well."
     },
     {
      "tool": "curl",
@@ -976,7 +976,7 @@
   {
    "id": "verb-tampering",
    "title": "HTTP Verb Tampering",
-   "hypothesis": "Authentication rules and framework settings frequently account for GET and POST alone: <Limit GET POST> in Apache, route decorators, WAF rules. Striking the same endpoint with HEAD, PUT, OPTIONS, or PATCH can slip straight past authentication — or grant file writes (PUT) and resource deletion (DELETE). It costs almost nothing to try anywhere: every 401/403 endpoint is worth a verb sweep.",
+   "hypothesis": "Authentication rules and framework settings frequently account for GET and POST alone: <Limit GET POST> in Apache, route decorators, WAF rules. Striking the same endpoint with HEAD, PUT, OPTIONS, or PATCH can slip straight past authentication, or grant file writes (PUT) and resource deletion (DELETE). It costs almost nothing to try anywhere: every 401/403 endpoint is worth a verb sweep.",
    "tool": "curl",
    "tools": [
     "curl"
@@ -992,7 +992,7 @@
    ],
    "priority": 80,
    "proves": "confirms a catalogue of uncovered web content and a web shell",
-   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "does_not_prove": "execution within the web/application context only, not any elevated privilege",
    "report": {
     "finding": "HTTP Verb Tampering / Method-Based Auth Bypass",
     "severity": "high"
@@ -1004,7 +1004,7 @@
     {
      "tool": "curl",
      "run": "curl -s -X OPTIONS -i http://{{target}}/admin/ | grep -i allow",
-     "note": "Read the Allow header to begin — the server discloses which verbs it will take."
+     "note": "Read the Allow header to begin, the server discloses which verbs it will take."
     },
     {
      "tool": "curl",
@@ -1022,7 +1022,7 @@
   {
    "id": "web-shells",
    "title": "Web Shells (Laudanum & Friends)",
-   "hypothesis": "As soon as you can write into a webroot (via upload, LFI-to-log, SQL OUTFILE, a redis write, a verb-tampered PUT), you need a shell file suited to the server's technology. Kali bundles vetted sets: Laudanum (asp/aspx/jsp/php/cfm) and the /usr/share/webshells directory (php-reverse-shell, simple-backdoor, qsd). Learn the locations so you aren't hand-writing shell code at 3am — choose the right file, drop in your IP and port, upload, trigger.",
+   "hypothesis": "As soon as you can write into a webroot (via upload, LFI-to-log, SQL OUTFILE, a redis write, a verb-tampered PUT), you need a shell file suited to the server's technology. Kali bundles vetted sets: Laudanum (asp/aspx/jsp/php/cfm) and the /usr/share/webshells directory (php-reverse-shell, simple-backdoor, qsd). Learn the locations so you aren't hand-writing shell code at 3am, choose the right file, drop in your IP and port, upload, trigger.",
    "tool": "sh",
    "tools": [
     "sh",
@@ -1044,7 +1044,7 @@
    ],
    "priority": 80,
    "proves": "confirms an interactive shell and a working command injection",
-   "does_not_prove": "execution within the web/application context only — not any elevated privilege",
+   "does_not_prove": "execution within the web/application context only, not any elevated privilege",
    "report": {
     "finding": "Web Shell Deployed via File Write Primitive",
     "severity": "critical"
@@ -1071,7 +1071,7 @@
     {
      "tool": "curl",
      "run": "curl -s 'http://{{target}}/uploads/cmd.php?c=id'",
-     "note": "Trigger and confirm it BEFORE moving up to a reverse shell — a webshell that won't run is a path problem, not a payload problem (see the file-upload readback)."
+     "note": "Trigger and confirm it BEFORE moving up to a reverse shell, a webshell that won't run is a path problem, not a payload problem (see the file-upload readback)."
     }
    ],
    "autonomy": "manual"
@@ -1079,7 +1079,7 @@
   {
    "id": "xss-basics",
    "title": "Cross-Site Scripting (Cookie Theft Angle)",
-   "hypothesis": "On a CTF or lab box XSS is seldom the objective itself — it's a credential cannon: grab the admin's session cookie (or coerce the admin's browser into fetching a URL that reveals a page only they can view), then hijack their session. Try every input that reflects back (search, comments, usernames, error pages), then arm it with a callback to your listener. Reflected XSS depends on delivery (someone clicking a link); stored XSS goes off by itself and is the one you're hoping for.",
+   "hypothesis": "On a CTF or lab box XSS is seldom the objective itself, it's a credential cannon: grab the admin's session cookie (or coerce the admin's browser into fetching a URL that reveals a page only they can view), then hijack their session. Try every input that reflects back (search, comments, usernames, error pages), then arm it with a callback to your listener. Reflected XSS depends on delivery (someone clicking a link); stored XSS goes off by itself and is the one you're hoping for.",
    "tool": "curl",
    "tools": [
     "curl",
@@ -1097,7 +1097,7 @@
    ],
    "priority": 66,
    "proves": "confirms candidate credentials and retrieved files",
-   "does_not_prove": "unconfirmed leads only — neither a verified credential nor access",
+   "does_not_prove": "unconfirmed leads only, neither a verified credential nor access",
    "report": {
     "finding": "Cross-Site Scripting Leading to Session Theft",
     "severity": "medium"
@@ -1114,7 +1114,7 @@
     {
      "tool": "python3",
      "run": "python3 -m http.server 8000",
-     "note": "Your callback listener. Any request landing on it proves a browser ran your payload — and it brings along whatever you requested (cookie, page content)."
+     "note": "Your callback listener. Any request landing on it proves a browser ran your payload, and it brings along whatever you requested (cookie, page content)."
     },
     {
      "tool": "sh",

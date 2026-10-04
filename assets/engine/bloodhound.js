@@ -561,45 +561,45 @@
     }
 
     sec('asrep', 'AS-REP Roastable Users',
-        'DONT_REQ_PREAUTH accounts — request the AS-REP and crack it offline, no credential needed.',
+        'DONT_REQ_PREAUTH accounts, request the AS-REP and crack it offline, no credential needed.',
         summary.asrep_roastable, 'obol AS-REP roasts + cracks these automatically');
     sec('kerberoast', 'Kerberoastable Users',
-        'Accounts with an SPN — request a TGS ticket and crack it offline.',
+        'Accounts with an SPN, request a TGS ticket and crack it offline.',
         summary.kerberoastable, 'obol Kerberoasts these');
-    sec('da', 'Domain Admins', 'Full control of the domain — the usual objective.', summary.domain_admins);
+    sec('da', 'Domain Admins', 'Full control of the domain, the usual objective.', summary.domain_admins);
     sec('ea', 'Enterprise Admins', 'Forest-wide control (all domains).', summary.enterprise_admins);
     sec('dcsync', 'Can DCSync the Domain', 'Principals holding replication rights (or the ACL to grant '
-        + 'them) on the domain object — they can already pull every hash. Where you land, this is the win.',
+        + 'them) on the domain object, they can already pull every hash. Where you land, this is the win.',
         summary.dcsync_principals, 'obol secretsdumps once you become one of these');
     sec('unconstrained', 'Unconstrained Delegation', 'Computers that cache any authenticating user’s TGT '
-        + '— coerce a DC to authenticate, capture its TGT, and you own the domain.',
+        + 'coerce a DC to authenticate, capture its TGT, and you own the domain.',
         summary.unconstrained_delegation, 'obol coerces + captures the TGT');
     sec('adminto', 'Domain Users → Local Admin', 'Hosts where a broad, low-privilege group is a local '
-        + 'administrator — instant lateral movement with any domain account.',
+        + 'administrator, instant lateral movement with any domain account.',
         summary.admin_to, 'log in and dump credentials');
-    sec('sessions', 'Where a Domain Admin Is Logged In', 'Live DA sessions — land on this host and steal '
+    sec('sessions', 'Where a Domain Admin Is Logged In', 'Live DA sessions, land on this host and steal '
         + 'the token or credentials in memory.', summary.da_sessions, 'token-impersonate or dump LSASS');
-    sec('rdp', 'Can RDP', 'Principals who can open an RDP session (Remote Desktop Users) — a way onto '
+    sec('rdp', 'Can RDP', 'Principals who can open an RDP session (Remote Desktop Users), a way onto '
         + 'a host with a credential you hold.', summary.can_rdp, 'xfreerdp / nxc rdp');
     sec('winrm', 'Can WinRM', 'Principals who can open a WinRM / evil-winrm shell (Remote Management Users).',
         summary.can_winrm, 'evil-winrm / nxc winrm');
-    sec('rdp_reach', 'Broad RDP Reach → Host', 'Hosts where a broad, low-privilege group can RDP in — '
+    sec('rdp_reach', 'Broad RDP Reach → Host', 'Hosts where a broad, low-privilege group can RDP in'
         + 'instant lateral movement with any domain credential.', summary.rdp_reach, 'xfreerdp / nxc rdp to that host');
     sec('psremote_reach', 'Broad PSRemote Reach → Host', 'Hosts where a broad group can open a WinRM / '
-        + 'PSRemote shell — a shell on that host with any domain credential.', summary.psremote_reach,
+        + 'PSRemote shell, a shell on that host with any domain credential.', summary.psremote_reach,
         'evil-winrm / nxc winrm to that host');
     sec('dcom_reach', 'Broad DCOM Reach → Host', 'Hosts where a broad group is in Distributed COM Users '
-        + '— MMC20/ShellWindows DCOM code execution with any domain credential.', summary.dcom_reach,
+        + 'MMC20/ShellWindows DCOM code execution with any domain credential.', summary.dcom_reach,
         'impacket-dcomexec to that host');
     sec('foreign', 'Foreign Principals (cross-trust)', 'Group members whose SID belongs to another domain '
-        + '— a foreign security principal reached over a trust; membership of a privileged group is a '
+        + 'a foreign security principal reached over a trust; membership of a privileged group is a '
         + 'cross-domain route to control.', summary.foreign_principals);
     sec('esc', 'Vulnerable Cert Templates (AD CS)', 'ESC1-shape templates: client-auth certificates whose '
-        + 'enrollee supplies the subject — request one AS a Domain Admin and authenticate as them.',
+        + 'enrollee supplies the subject, request one AS a Domain Admin and authenticate as them.',
         summary.esc_templates, 'certipy req → PKINIT / UnPAC-the-hash');
-    sec('passwordnotreqd', 'Password Not Required', 'Accounts flagged PASSWD_NOTREQD — may authenticate '
+    sec('passwordnotreqd', 'Password Not Required', 'Accounts flagged PASSWD_NOTREQD, may authenticate '
         + 'with a BLANK password. Try it first, it costs nothing.', summary.password_not_required, "nxc with -p ''");
-    sec('pwdneverexpires', 'Password Never Expires', 'Accounts whose password never expires — stale, '
+    sec('pwdneverexpires', 'Password Never Expires', 'Accounts whose password never expires, stale'
         + 'high-value crack/spray targets.', summary.pwd_never_expires);
     sec('highvalue', 'High-Value Targets', 'Objects BloodHound marks high-value.', summary.high_value);
     sec('computers', 'Computers', 'Domain-joined hosts in the collection.', summary.computers);
@@ -621,10 +621,10 @@
     var headline;
     if (paths.length) {
       var goal = paths[0].hops[paths[0].hops.length - 1].to;
-      headline = paths.length + ' path(s) from a principal you own to ' + goal + ' — the shortest is '
+      headline = paths.length + ' path(s) from a principal you own to ' + goal + 'the shortest is '
         + paths[0].length + ' hop(s). obol’s ACL-abuse move walks it automatically.';
     } else if (summary.domain || (summary.files && summary.files.length) || summary.users) {
-      headline = 'No owned→Domain-Admins path derived from this collection — start from the high-value '
+      headline = 'No owned→Domain-Admins path derived from this collection, start from the high-value '
         + 'queries below (a DCSync principal, an unconstrained-delegation host, or a broad local-admin edge is '
         + 'usually the way in). Enter a principal you own to derive the route.';
     } else {
@@ -678,7 +678,7 @@
       + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ' UTC';
   }
 
-  // A self-contained, printable PlumHound-style HTML report — the attack path(s) obol surmised
+  // A self-contained, printable PlumHound-style HTML report, the attack path(s) obol surmised
   // plus every high-value canned query. No external assets, no neo4j; opens in a browser or
   // downloads as one file. `view` is optional; when omitted it is computed from the summary.
   function domainReportHtml(summary, view) {
@@ -690,7 +690,7 @@
     var parts = [];
     if (!v.collected) parts.push('<div class="empty">No BloodHound collection ingested yet.</div>');
     if (an.headline) {
-      parts.push('<h2>Attack analysis — route to Domain Admins</h2>');
+      parts.push('<h2>Attack analysis, route to Domain Admins</h2>');
       parts.push('<div class="analysis"><div>' + esc(an.headline) + '</div>');
       (an.paths || []).forEach(function (p, i) {
         var hops = p.hops || [];
@@ -722,9 +722,9 @@
       }
     });
     return '<!doctype html><html><head><meta charset="utf-8">'
-      + '<title>Domain analysis — ' + dom + '</title><style>' + REPORT_CSS + '</style></head><body><div class="wrap">'
+      + '<title>Domain analysis: ' + dom + '</title><style>' + REPORT_CSS + '</style></head><body><div class="wrap">'
       + '<header><h1>Domain analysis · ' + dom + '</h1>'
-      + '<div class="sub">obol — BloodHound analysis &amp; escalation report · ingested ' + when + '</div>'
+      + '<div class="sub">obol, BloodHound analysis &amp; escalation report · ingested ' + when + '</div>'
       + '<div class="kpis">' + kpis + '</div></header>'
       + parts.join('')
       + '<footer>Generated by obol from a BloodHound collection · every path is a lead over collected edges, '

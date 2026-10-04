@@ -45,15 +45,15 @@
         return '<option value="' + U.attr(ip) + '">' + esc(ip) + (t.hostname && t.ip ? (' · ' + t.hostname) : '') + '</option>';
       }).join('');
     return '<details class="ev-import"><summary>Import a Full Session <span class="ev-import-tag">catch up on the whole box</span></summary>'
-      + '<p class="ev-hint">Already deep into a box? Paste (or attach) your <strong>entire terminal</strong> from this run — every command and its output. obol splits it into per-command segments, orders them by time, skips duplicates, and mints facts from all of them at once, so the coach jumps straight to your real frontier.</p>'
-      + '<textarea id="ev-imp-text" class="ev-textarea" placeholder="Paste your whole session — many commands and all their output. obol finds each command by its prompt line." spellcheck="false"></textarea>'
+      + '<p class="ev-hint">Already deep into a box? Paste (or attach) your <strong>entire terminal</strong> from this run, every command and its output. obol splits it into per-command segments, orders them by time, skips duplicates, and mints facts from all of them at once, so the coach jumps straight to your real frontier.</p>'
+      + '<textarea id="ev-imp-text" class="ev-textarea" placeholder="Paste your whole session, many commands and all their output. obol finds each command by its prompt line." spellcheck="false"></textarea>'
       + '<label class="ev-imp-route"><span>Route facts to</span><select id="ev-imp-target" class="ev-cmd">' + tOpts + '</select></label>'
-      + '<div class="ev-hint ev-imp-route-hint">Auto-route reads the target IP from each command (<code>nxc smb 10.0.0.5</code>, <code>--host 10.0.0.5</code>…) and files its facts under that host — your VPN/<code>tun0</code> address is never treated as a target. New hosts you touch are added automatically. Pick a specific target to force everything onto one host.</div>'
+      + '<div class="ev-hint ev-imp-route-hint">Auto-route reads the target IP from each command (<code>nxc smb 10.0.0.5</code>, <code>--host 10.0.0.5</code>…) and files its facts under that host, your VPN/<code>tun0</code> address is never treated as a target. New hosts you touch are added automatically. Pick a specific target to force everything onto one host.</div>'
       + '<details class="ev-imp-remap"><summary>Box got reverted? Remap an old IP</summary>'
       + '<div class="ev-imp-remap-row"><input id="ev-imp-oldip" class="ev-cmd" placeholder="old IP in your capture (e.g. 10.129.95.9)" autocomplete="off" spellcheck="false" inputmode="decimal">'
       + '<span class="ev-imp-arrow">→</span>'
       + '<input id="ev-imp-newip" class="ev-cmd" placeholder="' + esc((eng && eng.params && eng.params.target) || 'current target IP') + '" value="' + U.attr((eng && eng.params && eng.params.target) || '') + '" autocomplete="off" spellcheck="false" inputmode="decimal"></div>'
-      + '<div class="ev-hint">If the lab reset and the target IP changed, obol rewrites the old IP to the new one across the whole capture before parsing — so you don\'t have to hand-edit your log. New IP defaults to your current target.</div>'
+      + '<div class="ev-hint">If the lab reset and the target IP changed, obol rewrites the old IP to the new one across the whole capture before parsing, so you don\'t have to hand-edit your log. New IP defaults to your current target.</div>'
       + '</details>'
       + '<div class="ev-row">'
       + '<label class="ev-filebtn" for="ev-imp-file">⭱ Attach Session File(s)…</label>'
@@ -62,15 +62,15 @@
       + '</div>'
       + '<div id="ev-imp-result" class="ev-result"></div>'
       + '<details class="ev-import-setup"><summary>Set your terminal up like this (recommended, one-time)</summary>'
-      + '<p class="ev-hint">These are optional, but they make imports far more accurate — obol reads a UTC timestamp to stitch tabs in order, and your VPN IP to auto-fill <code>{{lhost}}</code> for coercion/relay/reverse-shell commands.</p>'
-      + '<div class="ev-setup-step"><div class="ev-setup-lbl">1 · Stamp every prompt with the time + VPN IP <span class="ev-import-tag">non-destructive — keeps your prompt</span></div>'
+      + '<p class="ev-hint">These are optional, but they make imports far more accurate, obol reads a UTC timestamp to stitch tabs in order, and your VPN IP to auto-fill <code>{{lhost}}</code> for coercion/relay/reverse-shell commands.</p>'
+      + '<div class="ev-setup-step"><div class="ev-setup-lbl">1 · Stamp every prompt with the time + VPN IP <span class="ev-import-tag">non-destructive, keeps your prompt</span></div>'
       + '<pre class="cmd-run"><code id="ev-stamp-code">' + esc(stamp) + '</code></pre>'
       + '<button class="ev-copy" data-copy="ev-stamp-code">Copy zsh Snippet</button>'
-      + '<span class="ev-file-hint">Append to <code>~/.zshrc</code> and run <code>source ~/.zshrc</code>. Appends a hook — it composes with oh-my-zsh / powerlevel10k and leaves your existing prompt alone.</span></div>'
+      + '<span class="ev-file-hint">Append to <code>~/.zshrc</code> and run <code>source ~/.zshrc</code>. Appends a hook, it composes with oh-my-zsh / powerlevel10k and leaves your existing prompt alone.</span></div>'
       + '<div class="ev-setup-step"><div class="ev-setup-lbl">2 · Record a whole session to a file (optional)</div>'
       + '<pre class="cmd-run"><code id="ev-capture-code">' + esc(capture) + '</code></pre>'
       + '<button class="ev-copy" data-copy="ev-capture-code">Copy Capture Command</button>'
-      + '<span class="ev-file-hint"><code>script</code> logs everything you run and its output. When you\'re done, <kbd>Ctrl-D</kbd> to stop, then attach the <code>.log</code> above. Works with or without the prompt tweak — timestamps just come out cleaner with it.</span></div>'
+      + '<span class="ev-file-hint"><code>script</code> logs everything you run and its output. When you\'re done, <kbd>Ctrl-D</kbd> to stop, then attach the <code>.log</code> above. Works with or without the prompt tweak, timestamps just come out cleaner with it.</span></div>'
       + '</details>'
       + '</details>';
   }
@@ -105,12 +105,12 @@
     }
     return '<section class="evidence">'
       + '<h1 class="route-h1">Evidence</h1>'
-      + '<p class="route-sub">Paste your <strong>whole terminal</strong> — the command you ran <em>and</em> its full output. Conservative parsers mint only proven facts (nothing is inferred that the output doesn\'t show), the coach recomputes, and the raw command+output is kept as verbatim evidence for your report.</p>'
+      + '<p class="route-sub">Paste your <strong>whole terminal</strong>, the command you ran <em>and</em> its full output. Conservative parsers mint only proven facts (nothing is inferred that the output doesn\'t show), the coach recomputes, and the raw command+output is kept as verbatim evidence for your report.</p>'
       + pinBlock
       + '<div class="ev-paste">'
-      + '<textarea id="ev-text" class="ev-textarea" placeholder="Select your whole terminal and paste it here — prompt, command, and all output. e.g.&#10;&#10;$ nmap -sC -sV -oN nmap/full 10.10.10.10&#10;Starting Nmap 7.94 ...&#10;PORT     STATE SERVICE&#10;53/tcp   open  domain&#10;88/tcp   open  kerberos-sec&#10;389/tcp  open  ldap&#10;..." spellcheck="false"></textarea>'
+      + '<textarea id="ev-text" class="ev-textarea" placeholder="Select your whole terminal and paste it here, prompt, command, and all output. e.g.&#10;&#10;$ nmap -sC -sV -oN nmap/full 10.10.10.10&#10;Starting Nmap 7.94 ...&#10;PORT     STATE SERVICE&#10;53/tcp   open  domain&#10;88/tcp   open  kerberos-sec&#10;389/tcp  open  ldap&#10;..." spellcheck="false"></textarea>'
       + '<div class="ev-row">'
-      + '<input id="ev-cmd" class="ev-cmd" placeholder="command (auto-detected from your paste — only set this if the paste is output-only)" value="' + (pin ? U.attr(pin.command) : '') + '">'
+      + '<input id="ev-cmd" class="ev-cmd" placeholder="command (auto-detected from your paste, only set this if the paste is output-only)" value="' + (pin ? U.attr(pin.command) : '') + '">'
       + '<button id="ev-parse" class="btn-primary"' + (parsersReady ? '' : ' disabled') + '>' + (parsersReady ? 'Parse → Facts' : 'Loading parsers…') + '</button>'
       + '</div>'
       // Attach an output file for firehose tools too big to paste (bloodyAD, full ldapsearch,
@@ -118,15 +118,15 @@
       + '<div class="ev-row ev-file-row">'
       + '<label class="ev-filebtn" for="ev-file">⭱ Attach Output File…</label>'
       + '<input type="file" id="ev-file" class="ev-file" accept=".txt,.log,.out,.json,.ldif,.csv,.tsv,text/plain" hidden>'
-      + '<span class="ev-file-hint">Too big to paste? Attach the tool\'s output file' + fileHintPath() + ' — parsed on your machine, only a sample is kept. Set the command above if the file is output-only.</span>'
+      + '<span class="ev-file-hint">Too big to paste? Attach the tool\'s output file' + fileHintPath() + '. Parsed on your machine, only a sample is kept. Set the command above if the file is output-only.</span>'
       + '</div>'
-      + '<div class="ev-hint ev-paste-hint">Tip: paste the full output even if it looks noisy — the parser ignores what it doesn\'t recognize, and the extra context makes your report\'s evidence blocks complete.</div>'
+      + '<div class="ev-hint ev-paste-hint">Tip: paste the full output even if it looks noisy, the parser ignores what it doesn\'t recognize, and the extra context makes your report\'s evidence blocks complete.</div>'
       + '<div id="ev-result" class="ev-result"></div>'
       + '</div>'
       + importSection()
       + shotsSection()
       + '<details class="ev-manual"><summary>Add a fact manually</summary>'
-      + '<p class="ev-hint">Pick what you\'ve confirmed and the coach advances — use this when you did something obol\'s parsers can\'t read (a manual exploit, an unsupported tool).</p>'
+      + '<p class="ev-hint">Pick what you\'ve confirmed and the coach advances, use this when you did something obol\'s parsers can\'t read (a manual exploit, an unsupported tool).</p>'
       + '<div id="ev-factpick" class="fact-pick"></div>'
       + '</details>'
       + '</section>';
@@ -137,7 +137,7 @@
     meta = meta || {};
     var r = OBOL.ingest.run({ text: text, command: cmd, source: meta.source, fileName: meta.fileName });
     if (!r.ok) {
-      if (r.reason === 'empty') U.toast('Nothing to parse — the ' + (meta.fileName ? 'file' : 'paste') + ' is empty');
+      if (r.reason === 'empty') U.toast('Nothing to parse, the ' + (meta.fileName ? 'file' : 'paste') + ' is empty');
       else U.toast('Parsers not loaded yet');
       return;
     }
@@ -145,7 +145,7 @@
     var resEl = document.getElementById('ev-result');
     if (resEl) {
       if (!r.facts.length) {
-        resEl.innerHTML = '<div class="ev-none">' + (origin ? ('Read ' + origin + ' — no ') : 'No ')
+        resEl.innerHTML = '<div class="ev-none">' + (origin ? ('Read ' + origin + 'no ') : 'No ')
           + 'facts recognized (output saved; nothing invented). '
           + (r.parseError ? 'The parser skipped part of this output (see the browser console). ' : '')
           + 'Set the command above if the output is on its own, or add a fact manually.</div>';
@@ -168,8 +168,8 @@
   var FILE_MAX = 25 * 1024 * 1024; // 25 MB guard: even huge AD dumps are well under this
   function ingestFile(file) {
     if (!file) return;
-    if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers still loading — try again in a second'); return; }
-    if (file.size > FILE_MAX) { U.toast('That file is over 25 MB — attach the relevant portion instead', 'err'); return; }
+    if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers still loading, try again in a second'); return; }
+    if (file.size > FILE_MAX) { U.toast('That file is over 25 MB, attach the relevant portion instead', 'err'); return; }
     var r = new FileReader();
     r.onload = function () {
       ingest(String(r.result || ''), (document.getElementById('ev-cmd') || {}).value || '', { source: 'file', fileName: file.name });
@@ -204,13 +204,13 @@
     var inputs = window._obolImpFiles ? window._obolImpFiles.slice() : [];
     if (pasted.trim()) inputs.push(pasted);
     if (!inputs.length) { U.toast('Paste a session or attach a file first'); return; }
-    if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers still loading — try again in a second'); return; }
+    if (!(OBOL.parsers && OBOL.parsers.parseActionOutput)) { U.toast('Parsers still loading, try again in a second'); return; }
     var routeTo = (document.getElementById('ev-imp-target') || {}).value || 'auto';
     var oldIp = ((document.getElementById('ev-imp-oldip') || {}).value || '').trim();
     var newIp = ((document.getElementById('ev-imp-newip') || {}).value || '').trim();
     var IPRE = /^(\d{1,3}\.){3}\d{1,3}$/;
     var remap = (oldIp && newIp && IPRE.test(oldIp) && IPRE.test(newIp) && oldIp !== newIp) ? [{ from: oldIp, to: newIp }] : null;
-    if (oldIp && !remap) { U.toast('Remap needs two different valid IPs — ignoring it', 'err'); }
+    if (oldIp && !remap) { U.toast('Remap needs two different valid IPs, ignoring it', 'err'); }
     var r = OBOL.ingest.importSession(inputs, { source: 'session', target: routeTo, remap: remap });
     if (!r || !r.ok) { U.toast('Could not import that session'); return; }
     var next = topNextMove();
@@ -253,7 +253,7 @@
       var files = Array.prototype.slice.call(impFileEl.files || []);
       if (!files.length) return;
       var over = files.filter(function (f) { return f.size > FILE_MAX; });
-      if (over.length) { U.toast('Skipping ' + over.length + ' file(s) over 25 MB — attach the relevant portion', 'err'); }
+      if (over.length) { U.toast('Skipping ' + over.length + ' file(s) over 25 MB, attach the relevant portion', 'err'); }
       files = files.filter(function (f) { return f.size <= FILE_MAX; });
       var pending = files.length, names = [];
       if (!pending) { impFileEl.value = ''; return; }

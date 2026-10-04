@@ -37,7 +37,7 @@
   function renderInto(container, graph, opts) {
     opts = opts || {};
     if (!graph || !graph.nodes || !graph.nodes.length) {
-      container.innerHTML = '<div class="coach-empty">No attack path to graph — set an owned principal to derive paths.</div>';
+      container.innerHTML = '<div class="coach-empty">No attack path to graph, set an owned principal to derive paths.</div>';
       return;
     }
     var pos = layout(graph);

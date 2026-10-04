@@ -27,7 +27,7 @@
    "label": "SMB / RID user enumeration",
    "action_id": "ad-user-enum",
    "require_approval": true,
-   "note": "Guest RID brute-force — the noisiest recon step; use when anonymous LDAP is thin."
+   "note": "Guest RID brute-force, the noisiest recon step; use when anonymous LDAP is thin."
   }
  ],
  "phase": "recon"

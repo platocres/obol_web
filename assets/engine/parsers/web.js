@@ -31,7 +31,7 @@
       if (!title) return;
       var val = { key: 'wordpress', name: title, source: 'wpscan (candidate lead, not confirmed)' };
       if (version) val.version = version.groups.v;
-      _add(facts, mkFact('exploit.candidate', h, val, S, 'wpscan finding — candidate lead, not confirmed (' + source + ')'));
+      _add(facts, mkFact('exploit.candidate', h, val, S, 'wpscan finding, candidate lead, not confirmed (' + source + ')'));
     });
     reAll(C._WPSCAN_LOGIN_RE, text).forEach(function (m) {
       _add(facts, mkFact('credential.candidate', h, { kind: 'wordpress_login', user: m.groups.u.trim(), password: m.groups.p.trim(), via: 'wpscan' }, S, source));
@@ -103,7 +103,7 @@
 
   // arjun (HTTP parameter discovery) → web.param_candidate. The endpoint is the URL arjun was
   // pointed at (`-u`); the parameters are the names it reports finding. Attack surface (a parameter
-  // that exists), never a vulnerability — the probe loop is what proves any of them injectable.
+  // that exists), never a vulnerability, the probe loop is what proves any of them injectable.
   var _ARJUN_URL_RE = /-u\s+['"]?(?<url>https?:\/\/[^\s'"]+)/i;
   var _ARJUN_FOUND_RE = /parameters?\s+found\s*[:\-]?\s*(?<names>[A-Za-z0-9_,\s.\-]+)/gi;
   var _ARJUN_FUZZ_RE = /[?&](?<name>[A-Za-z_][\w.\-]*)=FUZZ/gi;

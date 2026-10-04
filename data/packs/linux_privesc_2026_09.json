@@ -7,7 +7,7 @@
   {
    "id": "linux-enum",
    "title": "Local Enumeration Sweep",
-   "hypothesis": "You escalate by finding things, not by recall. Kick off a scanner such as linpeas for coverage, but review its output with a purpose: hunt for the single outlier — an odd SUID bit, a writable path, a secret sitting in a config — rather than skimming the whole colorized dump. Confirm the candidate by hand before you sink time into an exploit.",
+   "hypothesis": "You escalate by finding things, not by recall. Kick off a scanner such as linpeas for coverage, but review its output with a purpose: hunt for the single outlier (an odd SUID bit, a writable path, a secret sitting in a config) rather than skimming the whole colorized dump. Confirm the candidate by hand before you sink time into an exploit.",
    "tool": "linpeas",
    "tools": [
     "linpeas"
@@ -30,7 +30,7 @@
    ],
    "priority": 94,
    "proves": "surfaces candidate local privilege-escalation paths, the host kernel/version, and the host architecture",
-   "does_not_prove": "this is a local privesc lead only — it is not admin/root/SYSTEM access until that is demonstrated on its own",
+   "does_not_prove": "this is a local privesc lead only, it is not admin/root/SYSTEM access until that is demonstrated on its own",
    "report": {
     "finding": "Local Privilege Escalation Vector",
     "severity": "high"
@@ -53,7 +53,7 @@
     {
      "tool": "sh",
      "run": "find / -perm -4000 2>/dev/null; getcap -r / 2>/dev/null; ls -la /etc/cron*; crontab -l",
-     "note": "SUID files, capabilities, and cron in a single command — the three checks that most often decide a lab."
+     "note": "SUID files, capabilities, and cron in a single command, the three checks that most often decide a lab."
     }
    ]
   },
@@ -98,14 +98,14 @@
     {
      "tool": "sh",
      "run": "sudo {{binary}} -c \"!/bin/sh\"",
-     "note": "This is the general shape; the precise escape varies by binary — GTFOBins provides the exact command for each tool."
+     "note": "This is the general shape; the precise escape varies by binary, GTFOBins provides the exact command for each tool."
     }
    ]
   },
   {
    "id": "writable-passwd",
    "title": "Writable /etc/passwd",
-   "hypothesis": "When /etc/passwd is writable by everyone (it turns up in labs more often than expected), you can add a root-equivalent account using a hash you produce on your own machine. There is no exploit involved — the file itself defines the trust boundary, and here it is wide open.",
+   "hypothesis": "When /etc/passwd is writable by everyone (it turns up in labs more often than expected), you can add a root-equivalent account using a hash you produce on your own machine. There is no exploit involved, the file itself defines the trust boundary, and here it is wide open.",
    "tool": "openssl",
    "tools": [
     "openssl"
@@ -203,7 +203,7 @@
   {
    "id": "lxc-lxd-escape",
    "title": "LXC/LXD Group Escape",
-   "hypothesis": "Being in the lxd group is root without a password: lxd lets you spin up a privileged container, bind the host filesystem inside it, and then read or write anything as root. It is among the most frequent intended privesc routes in HTB/0xdf machines. Once `id` reports lxd (or lxc), the box is effectively done — everything after is procedure.",
+   "hypothesis": "Being in the lxd group is root without a password: lxd lets you spin up a privileged container, bind the host filesystem inside it, and then read or write anything as root. It is among the most frequent intended privesc routes in HTB/0xdf machines. Once `id` reports lxd (or lxc), the box is effectively done, everything after is procedure.",
    "tool": "lxc",
    "tools": [
     "lxc"
@@ -311,7 +311,7 @@
   {
    "id": "suid-gtfobins",
    "title": "SUID Binary Abuse",
-   "hypothesis": "SUID binaries execute with their owner's identity (typically root). The stock ones (su, sudo, mount) are expected — what you want is the OUTLIER: a custom or out-of-place binary carrying the SUID bit. Check anything unusual against GTFOBins; there are plenty of boxes where find / -perm -4000 alone is the whole path to root.",
+   "hypothesis": "SUID binaries execute with their owner's identity (typically root). The stock ones (su, sudo, mount) are expected, what you want is the OUTLIER: a custom or out-of-place binary carrying the SUID bit. Check anything unusual against GTFOBins; there are plenty of boxes where find / -perm -4000 alone is the whole path to root.",
    "tool": "sh",
    "tools": [
     "sh"
@@ -345,7 +345,7 @@
     {
      "tool": "sh",
      "run": "find / -perm -4000 -type f 2>/dev/null",
-     "note": "Enumerate every SUID binary. Measure against the default set — anything that is not standard is your lead."
+     "note": "Enumerate every SUID binary. Measure against the default set, anything that is not standard is your lead."
     },
     {
      "tool": "sh",
@@ -357,7 +357,7 @@
   {
    "id": "pspy-monitor",
    "title": "Process Monitoring (pspy)",
-   "hypothesis": "Cron entries and timers execute root commands you will not find in /etc/crontab. pspy observes process creation WITHOUT needing root and exposes them: scripts sitting in writable paths, commands that leak credentials through their arguments, backup jobs open to hijack. When static enumeration dries up, watching the machine in motion is the next step — 0xdf uses pspy all the time.",
+   "hypothesis": "Cron entries and timers execute root commands you will not find in /etc/crontab. pspy observes process creation WITHOUT needing root and exposes them: scripts sitting in writable paths, commands that leak credentials through their arguments, backup jobs open to hijack. When static enumeration dries up, watching the machine in motion is the next step, 0xdf uses pspy all the time.",
    "tool": "pspy",
    "tools": [
     "pspy"
@@ -376,7 +376,7 @@
    ],
    "priority": 72,
    "proves": "surfaces a process-monitoring privesc lead and candidate credentials",
-   "does_not_prove": "this is a local privesc lead only — it is not admin/root/SYSTEM access until that is demonstrated on its own",
+   "does_not_prove": "this is a local privesc lead only, it is not admin/root/SYSTEM access until that is demonstrated on its own",
    "report": {
     "finding": "Scheduled Task Credential/Script Exposure",
     "severity": "high"
@@ -400,7 +400,7 @@
   {
    "id": "cron-abuse",
    "title": "Cron Job Abuse and Tar Wildcards",
-   "hypothesis": "Two variants: (1) a root cron job executes a script you can WRITE — modify it, wait for the run, become root. (2) A root job runs tar/rsync/chown using a WILDCARD inside a directory you control — you cannot alter the command, yet you can drop files whose NAMES smuggle in options (tartarsauce: --checkpoint-action=exec). Wildcard injection is the move that catches people off guard.",
+   "hypothesis": "Two variants: (1) a root cron job executes a script you can WRITE, modify it, wait for the run, become root. (2) A root job runs tar/rsync/chown using a WILDCARD inside a directory you control, you cannot alter the command, yet you can drop files whose NAMES smuggle in options (tartarsauce: --checkpoint-action=exec). Wildcard injection is the move that catches people off guard.",
    "tool": "sh",
    "tools": [
     "sh"
@@ -451,7 +451,7 @@
   {
    "id": "capabilities",
    "title": "Linux Capabilities Abuse",
-   "hypothesis": "Capabilities carve up root's privileges — and misplaced ones become privesc: cap_setuid on python/perl is an instant root shell, cap_dac_read_search lets you read any file (shadow), cap_sys_admin is close to root. getcap locates them; GTFOBins documents a capabilities section for every interpreter.",
+   "hypothesis": "Capabilities carve up root's privileges, and misplaced ones become privesc: cap_setuid on python/perl is an instant root shell, cap_dac_read_search lets you read any file (shadow), cap_sys_admin is close to root. getcap locates them; GTFOBins documents a capabilities section for every interpreter.",
    "tool": "python3",
    "tools": [
     "python3"
@@ -502,7 +502,7 @@
   {
    "id": "linux-loot-hunt",
    "title": "Loot Hunting (Linux)",
-   "hypothesis": "Ahead of the exotic techniques, go looking for loot: shell history, configs containing passwords, other users' readable home directories, backups under /opt and /var, mail spools. Credentials repeatedly turn up in history files and config files — and a .bash_history symlinked to /dev/null is itself a tell that the author stashed something somewhere else.",
+   "hypothesis": "Ahead of the exotic techniques, go looking for loot: shell history, configs containing passwords, other users' readable home directories, backups under /opt and /var, mail spools. Credentials repeatedly turn up in history files and config files, and a .bash_history symlinked to /dev/null is itself a tell that the author stashed something somewhere else.",
    "tool": "sh",
    "tools": [
     "sh"
@@ -521,7 +521,7 @@
    ],
    "priority": 82,
    "proves": "surfaces candidate credentials and recovers files",
-   "does_not_prove": "this is credential material only — it is not access until it successfully authenticates against a service",
+   "does_not_prove": "this is credential material only, it is not access until it successfully authenticates against a service",
    "report": {
     "finding": "Credentials in Plaintext on Filesystem",
     "severity": "high"
@@ -550,7 +550,7 @@
   {
    "id": "linux-persistence",
    "title": "Linux Persistence (Post-Root)",
-   "hypothesis": "Once you have root, leave a way back in that outlasts password resets and reboots — handy for extended labs and when an exam permits re-entry. The low-profile choices: your SSH key in root's authorized_keys, a sudoers line for a low-priv account you own, or a cron callback. (Record everything you place.)",
+   "hypothesis": "Once you have root, leave a way back in that outlasts password resets and reboots, handy for extended labs and when an exam permits re-entry. The low-profile choices: your SSH key in root's authorized_keys, a sudoers line for a low-priv account you own, or a cron callback. (Record everything you place.)",
    "tool": "sh",
    "tools": [
     "sh"
@@ -567,7 +567,7 @@
    ],
    "priority": 50,
    "proves": "sets up a Linux persistence foothold",
-   "does_not_prove": "this is persistence-setup context — document it and clean it up; it is not a new privilege level",
+   "does_not_prove": "this is persistence-setup context, document it and clean it up; it is not a new privilege level",
    "report": {
     "finding": "Persistence Mechanism Planted",
     "severity": "informational"
@@ -584,7 +584,7 @@
     {
      "tool": "sh",
      "run": "echo 'www-data ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
-     "note": "A sudoers backdoor for an account you already own — it endures through root password changes."
+     "note": "A sudoers backdoor for an account you already own, it endures through root password changes."
     },
     {
      "tool": "sh",

@@ -454,7 +454,7 @@
   },
   {
    "key": "cve-angularjs-2019-10768",
-   "title": "angularjs < 1.7.9 \u2014 Prototype pollution (CVE-2019-10768)",
+   "title": "angularjs < 1.7.9: Prototype pollution (CVE-2019-10768)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -474,7 +474,7 @@
   },
   {
    "key": "cve-angularjs-2019-14863",
-   "title": "angularjs < 1.5.0-beta.1 \u2014 XSS through xlink:href attributes (CVE-2019-14863)",
+   "title": "angularjs < 1.5.0-beta.1: XSS through xlink:href attributes (CVE-2019-14863)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -494,7 +494,7 @@
   },
   {
    "key": "cve-angularjs-2020-7676",
-   "title": "angularjs < 1.8.0 \u2014 XSS may be triggered in AngularJS applications that sanitize user-controlled HTML snippets before passing them to JQLite",
+   "title": "angularjs < 1.8.0: XSS may be triggered in AngularJS applications that sanitize user-controlled HTML snippets before passing them to JQLite",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -514,7 +514,7 @@
   },
   {
    "key": "cve-angularjs-2022-25844",
-   "title": "angularjs < 999.999.999 \u2014 angular vulnerable to regular expression denial of service (ReDoS) (CVE-2022-25844)",
+   "title": "angularjs < 999.999.999: angular vulnerable to regular expression denial of service (ReDoS) (CVE-2022-25844)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -533,7 +533,7 @@
   },
   {
    "key": "cve-angularjs-2022-25869",
-   "title": "angularjs < 1.8.4 \u2014 Angular (deprecated package) Cross-site Scripting (CVE-2022-25869)",
+   "title": "angularjs < 1.8.4: Angular (deprecated package) Cross-site Scripting (CVE-2022-25869)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -552,7 +552,7 @@
   },
   {
    "key": "cve-angularjs-2023-26116",
-   "title": "angularjs < 1.8.4 \u2014 angular vulnerable to regular expression denial of service via the angular.copy() utility (CVE-2023-26116)",
+   "title": "angularjs < 1.8.4: angular vulnerable to regular expression denial of service via the angular.copy() utility (CVE-2023-26116)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -571,7 +571,7 @@
   },
   {
    "key": "cve-angularjs-2023-26117",
-   "title": "angularjs < 1.8.4 \u2014 angular vulnerable to regular expression denial of service via the $resource service (CVE-2023-26117)",
+   "title": "angularjs < 1.8.4: angular vulnerable to regular expression denial of service via the $resource service (CVE-2023-26117)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -590,7 +590,7 @@
   },
   {
    "key": "cve-angularjs-2023-26118",
-   "title": "angularjs < 1.8.4 \u2014 angular vulnerable to regular expression denial of service via the <input type=\"url\"> element (CVE-2023-26118)",
+   "title": "angularjs < 1.8.4: angular vulnerable to regular expression denial of service via the <input type=\"url\"> element (CVE-2023-26118)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -609,7 +609,7 @@
   },
   {
    "key": "cve-angularjs-2024-21490",
-   "title": "angularjs < 1.8.4 \u2014 angular vulnerable to super-linear runtime due to backtracking (CVE-2024-21490)",
+   "title": "angularjs < 1.8.4: angular vulnerable to super-linear runtime due to backtracking (CVE-2024-21490)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -633,7 +633,7 @@
   },
   {
    "key": "cve-angularjs-2024-8372",
-   "title": "angularjs < 1.8.4 \u2014 AngularJS allows attackers to bypass common image source restrictions (CVE-2024-8372)",
+   "title": "angularjs < 1.8.4: AngularJS allows attackers to bypass common image source restrictions (CVE-2024-8372)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -656,7 +656,7 @@
   },
   {
    "key": "cve-angularjs-2024-8373",
-   "title": "angularjs < 1.8.4 \u2014 AngularJS allows attackers to bypass common image source restrictions (CVE-2024-8373)",
+   "title": "angularjs < 1.8.4: AngularJS allows attackers to bypass common image source restrictions (CVE-2024-8373)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -679,7 +679,7 @@
   },
   {
    "key": "cve-angularjs-2025-0716",
-   "title": "angularjs < 1.8.4 \u2014 AngularJS improperly sanitizes SVG elements (CVE-2025-0716)",
+   "title": "angularjs < 1.8.4: AngularJS improperly sanitizes SVG elements (CVE-2025-0716)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -701,7 +701,7 @@
   },
   {
    "key": "cve-angularjs-2025-2336",
-   "title": "angularjs < 1.8.4 \u2014 AngularJS Incomplete Filtering of Special Elements vulnerability (CVE-2025-2336)",
+   "title": "angularjs < 1.8.4: AngularJS Incomplete Filtering of Special Elements vulnerability (CVE-2025-2336)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -723,7 +723,7 @@
   },
   {
    "key": "cve-angularjs-2025-4690",
-   "title": "angularjs < 1.9.9 \u2014 AngularJS Regular expression Denial of Service (ReDoS) (CVE-2025-4690)",
+   "title": "angularjs < 1.9.9: AngularJS Regular expression Denial of Service (ReDoS) (CVE-2025-4690)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -746,7 +746,7 @@
   },
   {
    "key": "cve-angularjs-2026-11998",
-   "title": "angularjs < 1.8.4 \u2014 Angular's deprecated package has a Cross-Site Scripting issue (CVE-2026-11998)",
+   "title": "angularjs < 1.8.4: Angular's deprecated package has a Cross-Site Scripting issue (CVE-2026-11998)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -770,7 +770,7 @@
   },
   {
    "key": "cve-apache-2019-0211",
-   "title": "Apache HTTP 2.4.17-2.4.38 \u2014 Local root privesc via scoreboard (CVE-2019-0211)",
+   "title": "Apache HTTP 2.4.17-2.4.38: Local root privesc via scoreboard (CVE-2019-0211)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -789,7 +789,7 @@
   },
   {
    "key": "cve-apache-2021-41773",
-   "title": "Apache HTTP 2.4.49 \u2014 Path traversal + RCE via %2e encoding (CVE-2021-41773)",
+   "title": "Apache HTTP 2.4.49: Path traversal + RCE via %2e encoding (CVE-2021-41773)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -808,7 +808,7 @@
   },
   {
    "key": "cve-apache-2021-42013",
-   "title": "Apache HTTP 2.4.49-2.4.50 \u2014 Path traversal + RCE via double encoding (CVE-2021-42013)",
+   "title": "Apache HTTP 2.4.49-2.4.50: Path traversal + RCE via double encoding (CVE-2021-42013)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -827,7 +827,7 @@
   },
   {
    "key": "cve-bootstrap-2016-10735",
-   "title": "bootstrap < 3.4.0 \u2014 XSS is possible in the data-target attribute. (CVE-2016-10735)",
+   "title": "bootstrap < 3.4.0: XSS is possible in the data-target attribute. (CVE-2016-10735)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -846,7 +846,7 @@
   },
   {
    "key": "cve-bootstrap-2018-14040",
-   "title": "bootstrap < 3.4.0 \u2014 XSS in collapse data-parent attribute (CVE-2018-14040)",
+   "title": "bootstrap < 3.4.0: XSS in collapse data-parent attribute (CVE-2018-14040)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -865,7 +865,7 @@
   },
   {
    "key": "cve-bootstrap-2018-14042",
-   "title": "bootstrap < 3.4.0 \u2014 XSS in data-container property of tooltip (CVE-2018-14042)",
+   "title": "bootstrap < 3.4.0: XSS in data-container property of tooltip (CVE-2018-14042)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -884,7 +884,7 @@
   },
   {
    "key": "cve-bootstrap-2018-20676",
-   "title": "bootstrap < 3.4.0 \u2014 In Bootstrap before 3.4.0, XSS is possible in the tooltip data-viewport attribute. (CVE-2018-20676)",
+   "title": "bootstrap < 3.4.0: In Bootstrap before 3.4.0, XSS is possible in the tooltip data-viewport attribute. (CVE-2018-20676)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -903,7 +903,7 @@
   },
   {
    "key": "cve-bootstrap-2018-20677",
-   "title": "bootstrap < 3.4.0 \u2014 In Bootstrap before 3.4.0, XSS is possible in the affix configuration target property. (CVE-2018-20677)",
+   "title": "bootstrap < 3.4.0: In Bootstrap before 3.4.0, XSS is possible in the affix configuration target property. (CVE-2018-20677)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -922,7 +922,7 @@
   },
   {
    "key": "cve-bootstrap-2019-8331",
-   "title": "bootstrap < 3.4.1 \u2014 XSS in data-template, data-content and data-title properties of tooltip/popover (CVE-2019-8331)",
+   "title": "bootstrap < 3.4.1: XSS in data-template, data-content and data-title properties of tooltip/popover (CVE-2019-8331)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -942,7 +942,7 @@
   },
   {
    "key": "cve-bootstrap-2024-6485",
-   "title": "bootstrap < 3.4.2 \u2014 Bootstrap Cross-Site Scripting (XSS) vulnerability for data-* attributes (CVE-2024-6485)",
+   "title": "bootstrap < 3.4.2: Bootstrap Cross-Site Scripting (XSS) vulnerability for data-* attributes (CVE-2024-6485)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -964,7 +964,7 @@
   },
   {
    "key": "cve-bootstrap-2025-1647",
-   "title": "bootstrap < 3.4.2 \u2014 Improper Neutralization of Input During Web Page Generation (XSS or 'Cross-site Scripting') vulnerability in Bootstrap a",
+   "title": "bootstrap < 3.4.2: Improper Neutralization of Input During Web Page Generation (XSS or 'Cross-site Scripting') vulnerability in Bootstrap a",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -984,7 +984,7 @@
   },
   {
    "key": "cve-ckeditor-2021-32808",
-   "title": "ckeditor < 4.16.2 \u2014 XSS vulnerability in the Widget plugin (CVE-2021-32808)",
+   "title": "ckeditor < 4.16.2: XSS vulnerability in the Widget plugin (CVE-2021-32808)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -1003,7 +1003,7 @@
   },
   {
    "key": "cve-ckeditor-2021-32809",
-   "title": "ckeditor < 4.16.2 \u2014 XSS vulnerability in the Clipboard plugin (CVE-2021-32809)",
+   "title": "ckeditor < 4.16.2: XSS vulnerability in the Clipboard plugin (CVE-2021-32809)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -1022,7 +1022,7 @@
   },
   {
    "key": "cve-ckeditor-2021-37695",
-   "title": "ckeditor < 4.16.2 \u2014 XSS vulnerability in the Fake Objects plugin (CVE-2021-37695)",
+   "title": "ckeditor < 4.16.2: XSS vulnerability in the Fake Objects plugin (CVE-2021-37695)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1041,7 +1041,7 @@
   },
   {
    "key": "cve-ckeditor-2021-41164",
-   "title": "ckeditor < 4.17.0 \u2014 XSS vulnerabilities in the core module (CVE-2021-41164)",
+   "title": "ckeditor < 4.17.0: XSS vulnerabilities in the core module (CVE-2021-41164)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1061,7 +1061,7 @@
   },
   {
    "key": "cve-ckeditor-2023-28439",
-   "title": "ckeditor < 4.21.0 \u2014 cross-site scripting vulnerability has been discovered affecting Iframe Dialog and Media Embed packages. The vulnerabili",
+   "title": "ckeditor < 4.21.0: cross-site scripting vulnerability has been discovered affecting Iframe Dialog and Media Embed packages. The vulnerabili",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1082,7 +1082,7 @@
   },
   {
    "key": "cve-dojo-2008-6681",
-   "title": "dojo < 1.1.0 \u2014 Affected versions of dojo are susceptible to a cross-site scripting vulnerability in the dijit.Editor and textarea components",
+   "title": "dojo < 1.1.0: Affected versions of dojo are susceptible to a cross-site scripting vulnerability in the dijit.Editor and textarea components",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1101,7 +1101,7 @@
   },
   {
    "key": "cve-dojo-2010-2273",
-   "title": "dojo < 1.10.10 \u2014 Versions of dojo prior to 1.4.2 are vulnerable to DOM-based Cross-Site Scripting (XSS). The package does not sanitize URL p",
+   "title": "dojo < 1.10.10: Versions of dojo prior to 1.4.2 are vulnerable to DOM-based Cross-Site Scripting (XSS). The package does not sanitize URL p",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1127,7 +1127,7 @@
   },
   {
    "key": "cve-dojo-2010-2275",
-   "title": "dojo < 1.4.2 \u2014 Cross-site scripting (XSS) vulnerability in dijit/tests/_testCommon.js in Dojo Toolkit SDK before 1.4.2 allows remote attacke",
+   "title": "dojo < 1.4.2: Cross-site scripting (XSS) vulnerability in dijit/tests/_testCommon.js in Dojo Toolkit SDK before 1.4.2 allows remote attacke",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1146,7 +1146,7 @@
   },
   {
    "key": "cve-dojo-2015-5654",
-   "title": "dojo < 1.2.0 \u2014 Versions of dojo prior to 1.2.0 are vulnerable to Cross-Site Scripting (XSS). The package fails to sanitize HTML code in user",
+   "title": "dojo < 1.2.0: Versions of dojo prior to 1.2.0 are vulnerable to Cross-Site Scripting (XSS). The package fails to sanitize HTML code in user",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1165,7 +1165,7 @@
   },
   {
    "key": "cve-dojo-2018-15494",
-   "title": "dojo < 1.14 \u2014 In Dojo Toolkit before 1.14.0, there is unescaped string injection in dojox/Grid/DataGrid. (CVE-2018-15494)",
+   "title": "dojo < 1.14: In Dojo Toolkit before 1.14.0, there is unescaped string injection in dojox/Grid/DataGrid. (CVE-2018-15494)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1183,7 +1183,7 @@
   },
   {
    "key": "cve-dojo-2020-5258",
-   "title": "dojo < 1.11.10 \u2014 Prototype pollution in dojo (CVE-2020-5258)",
+   "title": "dojo < 1.11.10: Prototype pollution in dojo (CVE-2020-5258)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1203,7 +1203,7 @@
   },
   {
    "key": "cve-dojo-2021-23450",
-   "title": "dojo < 1.16.5 \u2014 Prototype pollution (CVE-2021-23450)",
+   "title": "dojo < 1.16.5: Prototype pollution (CVE-2021-23450)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1222,7 +1222,7 @@
   },
   {
    "key": "cve-dompurify-2019-16728",
-   "title": "DOMPurify < 2.0.3 \u2014 Fixed an mXSS-based bypass caused by nested forms inside MathML (CVE-2019-16728)",
+   "title": "DOMPurify < 2.0.3: Fixed an mXSS-based bypass caused by nested forms inside MathML (CVE-2019-16728)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1241,7 +1241,7 @@
   },
   {
    "key": "cve-dompurify-2019-25155",
-   "title": "DOMPurify < 1.0.11 \u2014 DOMPurify Open Redirect vulnerability (CVE-2019-25155)",
+   "title": "DOMPurify < 1.0.11: DOMPurify Open Redirect vulnerability (CVE-2019-25155)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1265,7 +1265,7 @@
   },
   {
    "key": "cve-dompurify-2020-26870",
-   "title": "DOMPurify < 2.0.17 \u2014 Fixed another bypass causing mXSS by using MathML (CVE-2020-26870)",
+   "title": "DOMPurify < 2.0.17: Fixed another bypass causing mXSS by using MathML (CVE-2020-26870)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1284,7 +1284,7 @@
   },
   {
    "key": "cve-dompurify-2024-45801",
-   "title": "DOMPurify < 2.5.4 \u2014 DOMPurify allows tampering by prototype pollution (CVE-2024-45801)",
+   "title": "DOMPurify < 2.5.4: DOMPurify allows tampering by prototype pollution (CVE-2024-45801)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1308,7 +1308,7 @@
   },
   {
    "key": "cve-dompurify-2024-47875",
-   "title": "DOMPurify < 2.5.0 \u2014 DOMpurify has a nesting-based mXSS (CVE-2024-47875)",
+   "title": "DOMPurify < 2.5.0: DOMpurify has a nesting-based mXSS (CVE-2024-47875)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1333,7 +1333,7 @@
   },
   {
    "key": "cve-dompurify-2024-48910",
-   "title": "DOMPurify < 2.4.2 \u2014 DOMPurify vulnerable to tampering by prototype polution (CVE-2024-48910)",
+   "title": "DOMPurify < 2.4.2: DOMPurify vulnerable to tampering by prototype polution (CVE-2024-48910)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1355,7 +1355,7 @@
   },
   {
    "key": "cve-dompurify-2025-15599",
-   "title": "DOMPurify < 2.5.9 \u2014 DOMPurify 3.1.3 through 3.2.6 and 2.5.3 through 2.5.8 contain a cross-site scripting vulnerability that allows attackers",
+   "title": "DOMPurify < 2.5.9: DOMPurify 3.1.3 through 3.2.6 and 2.5.3 through 2.5.8 contain a cross-site scripting vulnerability that allows attackers",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1376,7 +1376,7 @@
   },
   {
    "key": "cve-dompurify-2025-26791",
-   "title": "DOMPurify < 3.2.4 \u2014 DOMPurify allows Cross-site Scripting (XSS) (CVE-2025-26791)",
+   "title": "DOMPurify < 3.2.4: DOMPurify allows Cross-site Scripting (XSS) (CVE-2025-26791)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1401,7 +1401,7 @@
   },
   {
    "key": "cve-dompurify-2026-0540",
-   "title": "DOMPurify < 2.5.9 \u2014 DOMPurify 3.1.3-3.3.1 and 2.5.3-2.5.8 contain a cross-site scripting vulnerability allowing bypass of attribute sanitiza",
+   "title": "DOMPurify < 2.5.9: DOMPurify 3.1.3-3.3.1 and 2.5.3-2.5.8 contain a cross-site scripting vulnerability allowing bypass of attribute sanitiza",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1422,7 +1422,7 @@
   },
   {
    "key": "cve-dompurify-2026-41238",
-   "title": "DOMPurify < 3.4.0 \u2014 DOMPurify versions 3.0.1 through 3.3.3 are vulnerable to an XSS bypass via prototype pollution. When no CUSTOM_ELEMENT_H",
+   "title": "DOMPurify < 3.4.0: DOMPurify versions 3.0.1 through 3.3.3 are vulnerable to an XSS bypass via prototype pollution. When no CUSTOM_ELEMENT_H",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1442,7 +1442,7 @@
   },
   {
    "key": "cve-dompurify-2026-41239",
-   "title": "DOMPurify < 3.4.0 \u2014 DOMPurify's SAFE_FOR_TEMPLATES feature fails to strip Mustache/template expressions when RETURN_DOM or RETURN_DOM_FRAGME",
+   "title": "DOMPurify < 3.4.0: DOMPurify's SAFE_FOR_TEMPLATES feature fails to strip Mustache/template expressions when RETURN_DOM or RETURN_DOM_FRAGME",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1461,7 +1461,7 @@
   },
   {
    "key": "cve-dompurify-2026-41240",
-   "title": "DOMPurify < 3.4.0 \u2014 DOMPurify has an asymmetric security inconsistency where FORBID_TAGS does not win over a function-based ADD_TAGS predica",
+   "title": "DOMPurify < 3.4.0: DOMPurify has an asymmetric security inconsistency where FORBID_TAGS does not win over a function-based ADD_TAGS predica",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1480,7 +1480,7 @@
   },
   {
    "key": "cve-dompurify-2026-47423",
-   "title": "DOMPurify < 3.4.5 \u2014 DOMPurify XSS via selectedcontent re-clone (CVE-2026-47423)",
+   "title": "DOMPurify < 3.4.5: DOMPurify XSS via selectedcontent re-clone (CVE-2026-47423)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1499,7 +1499,7 @@
   },
   {
    "key": "cve-dompurify-2026-49458",
-   "title": "DOMPurify < 3.4.6 \u2014 DOMPurify: Cross-realm IN_PLACE sanitization leaves executable markup intact via realm-bound `instanceof` checks (CVE-20",
+   "title": "DOMPurify < 3.4.6: DOMPurify: Cross-realm IN_PLACE sanitization leaves executable markup intact via realm-bound `instanceof` checks (CVE-20",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1517,7 +1517,7 @@
   },
   {
    "key": "cve-dompurify-2026-49459",
-   "title": "DOMPurify < 3.4.6 \u2014 DOMPurify: IN_PLACE mode preserves attributes of a clobbered root element, allowing XSS via attacker-controlled root DOM",
+   "title": "DOMPurify < 3.4.6: DOMPurify: IN_PLACE mode preserves attributes of a clobbered root element, allowing XSS via attacker-controlled root DOM",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1536,7 +1536,7 @@
   },
   {
    "key": "cve-dompurify-2026-49978",
-   "title": "DOMPurify < 3.4.7 \u2014 DOMPurify IN_PLACE Sanitization Bypass via Attached Shadow Root Inside <template>.content (CVE-2026-49978)",
+   "title": "DOMPurify < 3.4.7: DOMPurify IN_PLACE Sanitization Bypass via Attached Shadow Root Inside <template>.content (CVE-2026-49978)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1554,7 +1554,7 @@
   },
   {
    "key": "cve-dompurify-2026-65898",
-   "title": "DOMPurify < 3.4.11 \u2014 DOMPurify: Permanent `ALLOWED_ATTR` pollution via `setConfig()` bypassing the hook clone-guard (incomplete fix of the 3",
+   "title": "DOMPurify < 3.4.11: DOMPurify: Permanent `ALLOWED_ATTR` pollution via `setConfig()` bypassing the hook clone-guard (incomplete fix of the 3",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1572,7 +1572,7 @@
   },
   {
    "key": "cve-dompurify-2026-65899",
-   "title": "DOMPurify < 3.4.9 \u2014 DOMPurify: Trusted Types policy survives `clearConfig()` and can poison later `RETURN_TRUSTED_TYPE` output (CVE-2026-658",
+   "title": "DOMPurify < 3.4.9: DOMPurify: Trusted Types policy survives `clearConfig()` and can poison later `RETURN_TRUSTED_TYPE` output (CVE-2026-658",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -1590,7 +1590,7 @@
   },
   {
    "key": "cve-dompurify-2026-65900",
-   "title": "DOMPurify < 3.4.8 \u2014 DOMPurify: SAFE_FOR_TEMPLATES bypass - template expressions survive sanitization inside <template> content when using DO",
+   "title": "DOMPurify < 3.4.8: DOMPurify: SAFE_FOR_TEMPLATES bypass - template expressions survive sanitization inside <template> content when using DO",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -1608,7 +1608,7 @@
   },
   {
    "key": "cve-dompurify-2026-65901",
-   "title": "DOMPurify < 3.4.7 \u2014 DOMPurify: `IN_PLACE` mode trusts attacker-controlled `nodeName` on live non-form nodes, allowing script retention and X",
+   "title": "DOMPurify < 3.4.7: DOMPurify: `IN_PLACE` mode trusts attacker-controlled `nodeName` on live non-form nodes, allowing script retention and X",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -1627,7 +1627,7 @@
   },
   {
    "key": "cve-dompurify-2026-65902",
-   "title": "DOMPurify < 3.4.7 \u2014 DOMPurify: Hook mutation of `data.allowedTags` / `data.allowedAttributes` permanently pollutes `DEFAULT_ALLOWED_TAGS` / ",
+   "title": "DOMPurify < 3.4.7: DOMPurify: Hook mutation of `data.allowedTags` / `data.allowedAttributes` permanently pollutes `DEFAULT_ALLOWED_TAGS` / ",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1645,7 +1645,7 @@
   },
   {
    "key": "cve-dompurify-2026-65903",
-   "title": "DOMPurify < 3.4.0 \u2014 DOMPurify has a logic inconsistency where FORBID_TAGS is not checked when a function-based ADD_TAGS (tagCheck) returns t",
+   "title": "DOMPurify < 3.4.0: DOMPurify has a logic inconsistency where FORBID_TAGS is not checked when a function-based ADD_TAGS (tagCheck) returns t",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1663,7 +1663,7 @@
   },
   {
    "key": "cve-dompurify-2026-65912",
-   "title": "DOMPurify < 3.3.2 \u2014 DOMPurify's ADD_ATTR predicate function mechanism (via EXTRA_ELEMENT_HANDLING.attributeCheck) short-circuits URI validat",
+   "title": "DOMPurify < 3.3.2: DOMPurify's ADD_ATTR predicate function mechanism (via EXTRA_ELEMENT_HANDLING.attributeCheck) short-circuits URI validat",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1683,7 +1683,7 @@
   },
   {
    "key": "cve-dompurify-2026-65913",
-   "title": "DOMPurify < 3.3.2 \u2014 When USE_PROFILES is enabled, DOMPurify rebuilds ALLOWED_ATTR as a plain array whose properties are looked up by name, m",
+   "title": "DOMPurify < 3.3.2: When USE_PROFILES is enabled, DOMPurify rebuilds ALLOWED_ATTR as a plain array whose properties are looked up by name, m",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1703,7 +1703,7 @@
   },
   {
    "key": "cve-dompurify-2026-65914",
-   "title": "DOMPurify < 3.3.2 \u2014 DOMPurify is vulnerable to mutation-XSS (mXSS) when sanitized HTML is embedded into special raw-text wrapper elements su",
+   "title": "DOMPurify < 3.3.2: DOMPurify is vulnerable to mutation-XSS (mXSS) when sanitized HTML is embedded into special raw-text wrapper elements su",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1723,7 +1723,7 @@
   },
   {
    "key": "cve-dompurify-2026-66010",
-   "title": "DOMPurify < 3.4.12 \u2014 DOMPurify: `CUSTOM_ELEMENT_HANDLING` bypasses `afterSanitizeElements` for allowed custom elements. (CVE-2026-66010)",
+   "title": "DOMPurify < 3.4.12: DOMPurify: `CUSTOM_ELEMENT_HANDLING` bypasses `afterSanitizeElements` for allowed custom elements. (CVE-2026-66010)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -1744,7 +1744,7 @@
   },
   {
    "key": "cve-dompurify-2026-75838",
-   "title": "DOMPurify < 3.4.13 \u2014 DOMPurify: IN_PLACE hook removal leaves a detached subtree executable, causing XSS (CVE-2026-75838)",
+   "title": "DOMPurify < 3.4.13: DOMPurify: IN_PLACE hook removal leaves a detached subtree executable, causing XSS (CVE-2026-75838)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1766,7 +1766,7 @@
   },
   {
    "key": "cve-drupal-2011-2687",
-   "title": "drupal < 7.3 \u2014 Drupal Access Control Bypass (CVE-2011-2687)",
+   "title": "drupal < 7.3: Drupal Access Control Bypass (CVE-2011-2687)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1786,7 +1786,7 @@
   },
   {
    "key": "cve-drupal-2016-3162",
-   "title": "drupal < 7.43 \u2014 Drupal File upload access bypass and denial of service (CVE-2016-3162)",
+   "title": "drupal < 7.43: Drupal File upload access bypass and denial of service (CVE-2016-3162)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1807,7 +1807,7 @@
   },
   {
    "key": "cve-drupal-2016-3163",
-   "title": "drupal < 6.38 \u2014 Drupal Brute force amplification attacks via XML-RPC (CVE-2016-3163)",
+   "title": "drupal < 6.38: Drupal Brute force amplification attacks via XML-RPC (CVE-2016-3163)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1828,7 +1828,7 @@
   },
   {
    "key": "cve-drupal-2016-3164",
-   "title": "drupal < 6.38 \u2014 Drupal Open Redirect (CVE-2016-3164)",
+   "title": "drupal < 6.38: Drupal Open Redirect (CVE-2016-3164)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1849,7 +1849,7 @@
   },
   {
    "key": "cve-drupal-2016-3165",
-   "title": "drupal < 6.38 \u2014 Drupal Form API ignores access restrictions on submit buttons (CVE-2016-3165)",
+   "title": "drupal < 6.38: Drupal Form API ignores access restrictions on submit buttons (CVE-2016-3165)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1869,7 +1869,7 @@
   },
   {
    "key": "cve-drupal-2016-3166",
-   "title": "drupal < 6.38 \u2014 Drupal CRLF injection vulnerability in the drupal_set_header function (CVE-2016-3166)",
+   "title": "drupal < 6.38: Drupal CRLF injection vulnerability in the drupal_set_header function (CVE-2016-3166)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1889,7 +1889,7 @@
   },
   {
    "key": "cve-drupal-2016-3167",
-   "title": "drupal < 6.38 \u2014 Drupal Open redirect vulnerability in the drupal_goto function (CVE-2016-3167)",
+   "title": "drupal < 6.38: Drupal Open redirect vulnerability in the drupal_goto function (CVE-2016-3167)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1910,7 +1910,7 @@
   },
   {
    "key": "cve-drupal-2016-3168",
-   "title": "drupal < 6.38 \u2014 Drupal Reflected file download vulnerability (CVE-2016-3168)",
+   "title": "drupal < 6.38: Drupal Reflected file download vulnerability (CVE-2016-3168)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1930,7 +1930,7 @@
   },
   {
    "key": "cve-drupal-2016-3169",
-   "title": "drupal < 6.38 \u2014 Drupal saving user accounts can sometimes grant the user all roles (CVE-2016-3169)",
+   "title": "drupal < 6.38: Drupal saving user accounts can sometimes grant the user all roles (CVE-2016-3169)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1950,7 +1950,7 @@
   },
   {
    "key": "cve-drupal-2016-3170",
-   "title": "drupal < 7.43 \u2014 Drupal sensitive information disclosure (CVE-2016-3170)",
+   "title": "drupal < 7.43: Drupal sensitive information disclosure (CVE-2016-3170)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -1970,7 +1970,7 @@
   },
   {
    "key": "cve-drupal-2016-3171",
-   "title": "drupal < 6.38 \u2014 Drupal arbitrary code execution (CVE-2016-3171)",
+   "title": "drupal < 6.38: Drupal arbitrary code execution (CVE-2016-3171)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -1990,7 +1990,7 @@
   },
   {
    "key": "cve-drupal-2016-5385",
-   "title": "drupal < 1.1.2 \u2014 HTTP Proxy header vulnerability (CVE-2016-5385)",
+   "title": "drupal < 1.1.2: HTTP Proxy header vulnerability (CVE-2016-5385)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -2010,7 +2010,7 @@
   },
   {
    "key": "cve-drupal-2016-6211",
-   "title": "drupal < 7.44 \u2014 Drupal Saving user accounts can sometimes grant the user all roles (CVE-2016-6211)",
+   "title": "drupal < 7.44: Drupal Saving user accounts can sometimes grant the user all roles (CVE-2016-6211)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -2030,7 +2030,7 @@
   },
   {
    "key": "cve-drupal-2016-6212",
-   "title": "drupal < 8.1.3 \u2014 Drupal Views can allow unauthorized users to see Statistics information (CVE-2016-6212)",
+   "title": "drupal < 8.1.3: Drupal Views can allow unauthorized users to see Statistics information (CVE-2016-6212)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2050,7 +2050,7 @@
   },
   {
    "key": "cve-drupal-2016-7570",
-   "title": "drupal < 8.1.10 \u2014 Drupal Users without \"Administer comments\" can set comment visibility on nodes they can edit (CVE-2016-7570)",
+   "title": "drupal < 8.1.10: Drupal Users without \"Administer comments\" can set comment visibility on nodes they can edit (CVE-2016-7570)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2070,7 +2070,7 @@
   },
   {
    "key": "cve-drupal-2016-7571",
-   "title": "drupal < 8.1.10 \u2014 Drupal Cross-site scripting (XSS) vulnerability (CVE-2016-7571)",
+   "title": "drupal < 8.1.10: Drupal Cross-site scripting (XSS) vulnerability (CVE-2016-7571)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2091,7 +2091,7 @@
   },
   {
    "key": "cve-drupal-2016-7572",
-   "title": "drupal < 8.1.10 \u2014 Drupal Unprivileged access to config export (CVE-2016-7572)",
+   "title": "drupal < 8.1.10: Drupal Unprivileged access to config export (CVE-2016-7572)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2111,7 +2111,7 @@
   },
   {
    "key": "cve-drupal-2016-9449",
-   "title": "drupal < 7.52 \u2014 Drupal sensitive information disclosure (CVE-2016-9449)",
+   "title": "drupal < 7.52: Drupal sensitive information disclosure (CVE-2016-9449)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2131,7 +2131,7 @@
   },
   {
    "key": "cve-drupal-2016-9450",
-   "title": "drupal < 8.2.3 \u2014 Drupal Incorrect cache context on password reset page (CVE-2016-9450)",
+   "title": "drupal < 8.2.3: Drupal Incorrect cache context on password reset page (CVE-2016-9450)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -2151,7 +2151,7 @@
   },
   {
    "key": "cve-drupal-2016-9451",
-   "title": "drupal < 8.2.3 \u2014 Drupal Open Redirect (CVE-2016-9451)",
+   "title": "drupal < 8.2.3: Drupal Open Redirect (CVE-2016-9451)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2172,7 +2172,7 @@
   },
   {
    "key": "cve-drupal-2016-9452",
-   "title": "drupal < 8.2.3 \u2014 Drupal Denial of service via transliterate mechanism (CVE-2016-9452)",
+   "title": "drupal < 8.2.3: Drupal Denial of service via transliterate mechanism (CVE-2016-9452)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2193,7 +2193,7 @@
   },
   {
    "key": "cve-drupal-2017-6377",
-   "title": "drupal < 8.2.7 \u2014 Drupal editor module incorrectly checks access to inline private files (CVE-2017-6377)",
+   "title": "drupal < 8.2.7: Drupal editor module incorrectly checks access to inline private files (CVE-2017-6377)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -2213,7 +2213,7 @@
   },
   {
    "key": "cve-drupal-2017-6379",
-   "title": "drupal < 8.2.7 \u2014 Drupal Cross-Site Request Forgery (CSRF) (CVE-2017-6379)",
+   "title": "drupal < 8.2.7: Drupal Cross-Site Request Forgery (CSRF) (CVE-2017-6379)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -2234,7 +2234,7 @@
   },
   {
    "key": "cve-drupal-2017-6381",
-   "title": "drupal < 8.2.7 \u2014 Drupal Remote code execution (CVE-2017-6381)",
+   "title": "drupal < 8.2.7: Drupal Remote code execution (CVE-2017-6381)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -2255,7 +2255,7 @@
   },
   {
    "key": "cve-drupal-2017-6919",
-   "title": "drupal < 8.3.1 \u2014 Drupal access control bypass vulnerability (CVE-2017-6919)",
+   "title": "drupal < 8.3.1: Drupal access control bypass vulnerability (CVE-2017-6919)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -2275,7 +2275,7 @@
   },
   {
    "key": "cve-drupal-2017-6920",
-   "title": "drupal < 8.3.4 \u2014 Drupal PECL YAML parser unsafe object handling (CVE-2017-6920)",
+   "title": "drupal < 8.3.4: Drupal PECL YAML parser unsafe object handling (CVE-2017-6920)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -2295,7 +2295,7 @@
   },
   {
    "key": "cve-drupal-2017-6921",
-   "title": "drupal < 8.3.4 \u2014 Drupal file REST resource does not properly validate (CVE-2017-6921)",
+   "title": "drupal < 8.3.4: Drupal file REST resource does not properly validate (CVE-2017-6921)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2316,7 +2316,7 @@
   },
   {
    "key": "cve-drupal-2017-6922",
-   "title": "drupal < 7.56 \u2014 Drupal core access bypass vulnerability (CVE-2017-6922)",
+   "title": "drupal < 7.56: Drupal core access bypass vulnerability (CVE-2017-6922)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2336,7 +2336,7 @@
   },
   {
    "key": "cve-drupal-2017-6923",
-   "title": "drupal < 8.3.7 \u2014 Missing Authorization in Drupal (CVE-2017-6923)",
+   "title": "drupal < 8.3.7: Missing Authorization in Drupal (CVE-2017-6923)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2356,7 +2356,7 @@
   },
   {
    "key": "cve-drupal-2017-6924",
-   "title": "drupal < 8.3.7 \u2014 Drupal REST API can bypass comment approval (CVE-2017-6924)",
+   "title": "drupal < 8.3.7: Drupal REST API can bypass comment approval (CVE-2017-6924)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -2376,7 +2376,7 @@
   },
   {
    "key": "cve-drupal-2017-6925",
-   "title": "drupal < 8.3.7 \u2014 Drupal Entity access bypass for entities that do not have UUIDs or have protected revisions (CVE-2017-6925)",
+   "title": "drupal < 8.3.7: Drupal Entity access bypass for entities that do not have UUIDs or have protected revisions (CVE-2017-6925)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -2396,7 +2396,7 @@
   },
   {
    "key": "cve-drupal-2017-6926",
-   "title": "drupal < 7.57 \u2014 Drupal Comment reply form allows access to restricted content (CVE-2017-6926)",
+   "title": "drupal < 7.57: Drupal Comment reply form allows access to restricted content (CVE-2017-6926)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -2416,7 +2416,7 @@
   },
   {
    "key": "cve-drupal-2017-6927",
-   "title": "drupal < 7.57 \u2014 Drupal cross-site scripting vulnerability (CVE-2017-6927)",
+   "title": "drupal < 7.57: Drupal cross-site scripting vulnerability (CVE-2017-6927)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2437,7 +2437,7 @@
   },
   {
    "key": "cve-drupal-2017-6928",
-   "title": "drupal < 7.57 \u2014 Drupal access bypass vulnerability (CVE-2017-6928)",
+   "title": "drupal < 7.57: Drupal access bypass vulnerability (CVE-2017-6928)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2457,7 +2457,7 @@
   },
   {
    "key": "cve-drupal-2017-6929",
-   "title": "drupal < 7.57 \u2014 Drupal cross site scripting vulnerability (CVE-2017-6929)",
+   "title": "drupal < 7.57: Drupal cross site scripting vulnerability (CVE-2017-6929)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2477,7 +2477,7 @@
   },
   {
    "key": "cve-drupal-2017-6930",
-   "title": "drupal < 8.4.5 \u2014 Drupal access bypass vulnerability (CVE-2017-6930)",
+   "title": "drupal < 8.4.5: Drupal access bypass vulnerability (CVE-2017-6930)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -2497,7 +2497,7 @@
   },
   {
    "key": "cve-drupal-2017-6931",
-   "title": "drupal < 8.4.5 \u2014 Drupal Settings Tray access bypass (CVE-2017-6931)",
+   "title": "drupal < 8.4.5: Drupal Settings Tray access bypass (CVE-2017-6931)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2517,7 +2517,7 @@
   },
   {
    "key": "cve-drupal-2017-6932",
-   "title": "drupal < 7.57 \u2014 Drupal external link injection vulnerability (CVE-2017-6932)",
+   "title": "drupal < 7.57: Drupal external link injection vulnerability (CVE-2017-6932)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2537,7 +2537,7 @@
   },
   {
    "key": "cve-drupal-2018-7600",
-   "title": "drupal < 8.5.1 \u2014 drupal vulnerability (CVE-2018-7600)",
+   "title": "drupal < 8.5.1: drupal vulnerability (CVE-2018-7600)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2555,7 +2555,7 @@
   },
   {
    "key": "cve-drupal-2018-7602",
-   "title": "drupal < 8.5.3 \u2014 drupal vulnerability (CVE-2018-7602)",
+   "title": "drupal < 8.5.3: drupal vulnerability (CVE-2018-7602)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2573,7 +2573,7 @@
   },
   {
    "key": "cve-drupal-2018-9861",
-   "title": "drupal < 8.5.2 \u2014 drupal vulnerability (CVE-2018-9861)",
+   "title": "drupal < 8.5.2: drupal vulnerability (CVE-2018-9861)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2591,7 +2591,7 @@
   },
   {
    "key": "cve-drupal-2019-11358",
-   "title": "drupal < 8.6.15 \u2014 drupal vulnerability (CVE-2019-11358)",
+   "title": "drupal < 8.6.15: drupal vulnerability (CVE-2019-11358)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2609,7 +2609,7 @@
   },
   {
    "key": "cve-drupal-2019-11831",
-   "title": "drupal < 8.7.1 \u2014 drupal vulnerability (CVE-2019-11831)",
+   "title": "drupal < 8.7.1: drupal vulnerability (CVE-2019-11831)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2627,7 +2627,7 @@
   },
   {
    "key": "cve-drupal-2019-6338",
-   "title": "drupal < 8.6.6 \u2014 drupal vulnerability (CVE-2019-6338)",
+   "title": "drupal < 8.6.6: drupal vulnerability (CVE-2019-6338)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2645,7 +2645,7 @@
   },
   {
    "key": "cve-drupal-2019-6339",
-   "title": "drupal < 8.6.6 \u2014 drupal vulnerability (CVE-2019-6339)",
+   "title": "drupal < 8.6.6: drupal vulnerability (CVE-2019-6339)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2663,7 +2663,7 @@
   },
   {
    "key": "cve-drupal-2019-6340",
-   "title": "drupal < 8.6.10 \u2014 drupal vulnerability (CVE-2019-6340)",
+   "title": "drupal < 8.6.10: drupal vulnerability (CVE-2019-6340)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2681,7 +2681,7 @@
   },
   {
    "key": "cve-drupal-2019-6341",
-   "title": "drupal < 8.6.13 \u2014 drupal vulnerability (CVE-2019-6341)",
+   "title": "drupal < 8.6.13: drupal vulnerability (CVE-2019-6341)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2699,7 +2699,7 @@
   },
   {
    "key": "cve-drupal-2019-6342",
-   "title": "drupal < 8.7.5 \u2014 drupal vulnerability (CVE-2019-6342)",
+   "title": "drupal < 8.7.5: drupal vulnerability (CVE-2019-6342)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2717,7 +2717,7 @@
   },
   {
    "key": "cve-drupal-2020-13662",
-   "title": "drupal < 7.70 \u2014 Drupal Core Open Redirect vulnerability (CVE-2020-13662)",
+   "title": "drupal < 7.70: Drupal Core Open Redirect vulnerability (CVE-2020-13662)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2738,7 +2738,7 @@
   },
   {
    "key": "cve-drupal-2020-13663",
-   "title": "drupal < 9.0.1 \u2014 drupal vulnerability (CVE-2020-13663)",
+   "title": "drupal < 9.0.1: drupal vulnerability (CVE-2020-13663)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2756,7 +2756,7 @@
   },
   {
    "key": "cve-drupal-2020-13664",
-   "title": "drupal < 9.0.1 \u2014 drupal vulnerability (CVE-2020-13664)",
+   "title": "drupal < 9.0.1: drupal vulnerability (CVE-2020-13664)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2774,7 +2774,7 @@
   },
   {
    "key": "cve-drupal-2020-13665",
-   "title": "drupal < 9.0.1 \u2014 Drupal Core Access bypass vulnerability (CVE-2020-13665)",
+   "title": "drupal < 9.0.1: Drupal Core Access bypass vulnerability (CVE-2020-13665)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -2794,7 +2794,7 @@
   },
   {
    "key": "cve-drupal-2020-13665 ",
-   "title": "drupal < 9.0.1 \u2014 drupal vulnerability (CVE-2020-13665 )",
+   "title": "drupal < 9.0.1: drupal vulnerability (CVE-2020-13665 )",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2812,7 +2812,7 @@
   },
   {
    "key": "cve-drupal-2020-13666",
-   "title": "drupal < 9.0.6 \u2014 drupal vulnerability (CVE-2020-13666)",
+   "title": "drupal < 9.0.6: drupal vulnerability (CVE-2020-13666)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2830,7 +2830,7 @@
   },
   {
    "key": "cve-drupal-2020-13667",
-   "title": "drupal < 9.0.6 \u2014 drupal vulnerability (CVE-2020-13667)",
+   "title": "drupal < 9.0.6: drupal vulnerability (CVE-2020-13667)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2848,7 +2848,7 @@
   },
   {
    "key": "cve-drupal-2020-13668",
-   "title": "drupal < 9.0.6 \u2014 Cross-site Scripting in Drupal Core (CVE-2020-13668)",
+   "title": "drupal < 9.0.6: Cross-site Scripting in Drupal Core (CVE-2020-13668)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2869,7 +2869,7 @@
   },
   {
    "key": "cve-drupal-2020-13669",
-   "title": "drupal < 9.0.6 \u2014 drupal vulnerability (CVE-2020-13669)",
+   "title": "drupal < 9.0.6: drupal vulnerability (CVE-2020-13669)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2887,7 +2887,7 @@
   },
   {
    "key": "cve-drupal-2020-13670",
-   "title": "drupal < 9.0.6 \u2014 drupal vulnerability (CVE-2020-13670)",
+   "title": "drupal < 9.0.6: drupal vulnerability (CVE-2020-13670)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2905,7 +2905,7 @@
   },
   {
    "key": "cve-drupal-2020-13671",
-   "title": "drupal < 9.0.8 \u2014 drupal vulnerability (CVE-2020-13671)",
+   "title": "drupal < 9.0.8: drupal vulnerability (CVE-2020-13671)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2923,7 +2923,7 @@
   },
   {
    "key": "cve-drupal-2020-13672",
-   "title": "drupal < 9.1.7 \u2014 drupal vulnerability (CVE-2020-13672)",
+   "title": "drupal < 9.1.7: drupal vulnerability (CVE-2020-13672)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2941,7 +2941,7 @@
   },
   {
    "key": "cve-drupal-2020-13673",
-   "title": "drupal < 9.2.6 \u2014 drupal vulnerability (CVE-2020-13673)",
+   "title": "drupal < 9.2.6: drupal vulnerability (CVE-2020-13673)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2959,7 +2959,7 @@
   },
   {
    "key": "cve-drupal-2020-13674",
-   "title": "drupal < 9.2.6 \u2014 drupal vulnerability (CVE-2020-13674)",
+   "title": "drupal < 9.2.6: drupal vulnerability (CVE-2020-13674)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2977,7 +2977,7 @@
   },
   {
    "key": "cve-drupal-2020-13675",
-   "title": "drupal < 9.2.6 \u2014 drupal vulnerability (CVE-2020-13675)",
+   "title": "drupal < 9.2.6: drupal vulnerability (CVE-2020-13675)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -2995,7 +2995,7 @@
   },
   {
    "key": "cve-drupal-2020-13676",
-   "title": "drupal < 9.2.6 \u2014 drupal vulnerability (CVE-2020-13676)",
+   "title": "drupal < 9.2.6: drupal vulnerability (CVE-2020-13676)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3013,7 +3013,7 @@
   },
   {
    "key": "cve-drupal-2020-13677",
-   "title": "drupal < 9.2.6 \u2014 drupal vulnerability (CVE-2020-13677)",
+   "title": "drupal < 9.2.6: drupal vulnerability (CVE-2020-13677)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3031,7 +3031,7 @@
   },
   {
    "key": "cve-drupal-2020-13688",
-   "title": "drupal < 9.0.6 \u2014 drupal vulnerability (CVE-2020-13688)",
+   "title": "drupal < 9.0.6: drupal vulnerability (CVE-2020-13688)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3049,7 +3049,7 @@
   },
   {
    "key": "cve-drupal-2020-28948",
-   "title": "drupal < 9.0.9 \u2014 drupal vulnerability (CVE-2020-28948)",
+   "title": "drupal < 9.0.9: drupal vulnerability (CVE-2020-28948)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3067,7 +3067,7 @@
   },
   {
    "key": "cve-drupal-2021-32610",
-   "title": "drupal < 9.2.2 \u2014 drupal vulnerability (CVE-2021-32610)",
+   "title": "drupal < 9.2.2: drupal vulnerability (CVE-2021-32610)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3085,7 +3085,7 @@
   },
   {
    "key": "cve-drupal-2021-33829",
-   "title": "drupal < 9.1.9 \u2014 drupal vulnerability (CVE-2021-33829)",
+   "title": "drupal < 9.1.9: drupal vulnerability (CVE-2021-33829)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3103,7 +3103,7 @@
   },
   {
    "key": "cve-drupal-2022-24728",
-   "title": "drupal < 9.3.8 \u2014 drupal vulnerability (CVE-2022-24728)",
+   "title": "drupal < 9.3.8: drupal vulnerability (CVE-2022-24728)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3121,7 +3121,7 @@
   },
   {
    "key": "cve-drupal-2022-24775",
-   "title": "drupal < 9.3.9 \u2014 drupal vulnerability (CVE-2022-24775)",
+   "title": "drupal < 9.3.9: drupal vulnerability (CVE-2022-24775)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3139,7 +3139,7 @@
   },
   {
    "key": "cve-drupal-2022-25270",
-   "title": "drupal < 9.3.6 \u2014 drupal vulnerability (CVE-2022-25270)",
+   "title": "drupal < 9.3.6: drupal vulnerability (CVE-2022-25270)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3157,7 +3157,7 @@
   },
   {
    "key": "cve-drupal-2022-25271",
-   "title": "drupal < 9.3.6 \u2014 drupal vulnerability (CVE-2022-25271)",
+   "title": "drupal < 9.3.6: drupal vulnerability (CVE-2022-25271)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3175,7 +3175,7 @@
   },
   {
    "key": "cve-drupal-2022-25273",
-   "title": "drupal < 9.3.12 \u2014 drupal vulnerability (CVE-2022-25273)",
+   "title": "drupal < 9.3.12: drupal vulnerability (CVE-2022-25273)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3193,7 +3193,7 @@
   },
   {
    "key": "cve-drupal-2022-25274",
-   "title": "drupal < 9.3.12 \u2014 drupal vulnerability (CVE-2022-25274)",
+   "title": "drupal < 9.3.12: drupal vulnerability (CVE-2022-25274)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3211,7 +3211,7 @@
   },
   {
    "key": "cve-drupal-2022-25275",
-   "title": "drupal < 9.4.3 \u2014 drupal vulnerability (CVE-2022-25275)",
+   "title": "drupal < 9.4.3: drupal vulnerability (CVE-2022-25275)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3229,7 +3229,7 @@
   },
   {
    "key": "cve-drupal-2022-25276",
-   "title": "drupal < 9.4.3 \u2014 drupal vulnerability (CVE-2022-25276)",
+   "title": "drupal < 9.4.3: drupal vulnerability (CVE-2022-25276)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3247,7 +3247,7 @@
   },
   {
    "key": "cve-drupal-2022-25277",
-   "title": "drupal < 9.4.3 \u2014 drupal vulnerability (CVE-2022-25277)",
+   "title": "drupal < 9.4.3: drupal vulnerability (CVE-2022-25277)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3265,7 +3265,7 @@
   },
   {
    "key": "cve-drupal-2022-25278",
-   "title": "drupal < 9.4.3 \u2014 drupal vulnerability (CVE-2022-25278)",
+   "title": "drupal < 9.4.3: drupal vulnerability (CVE-2022-25278)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3283,7 +3283,7 @@
   },
   {
    "key": "cve-drupal-2022-29248",
-   "title": "drupal < 9.3.14 \u2014 drupal vulnerability (CVE-2022-29248)",
+   "title": "drupal < 9.3.14: drupal vulnerability (CVE-2022-29248)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3301,7 +3301,7 @@
   },
   {
    "key": "cve-drupal-2022-31042",
-   "title": "drupal < 9.3.16 \u2014 drupal vulnerability (CVE-2022-31042)",
+   "title": "drupal < 9.3.16: drupal vulnerability (CVE-2022-31042)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3319,7 +3319,7 @@
   },
   {
    "key": "cve-drupal-2022-39261",
-   "title": "drupal < 9.4.7 \u2014 drupal vulnerability (CVE-2022-39261)",
+   "title": "drupal < 9.4.7: drupal vulnerability (CVE-2022-39261)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3337,7 +3337,7 @@
   },
   {
    "key": "cve-drupal-2023-31250",
-   "title": "drupal < 10.0.8 \u2014 drupal vulnerability (CVE-2023-31250)",
+   "title": "drupal < 10.0.8: drupal vulnerability (CVE-2023-31250)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3355,7 +3355,7 @@
   },
   {
    "key": "cve-drupal-2023-5256",
-   "title": "drupal < 10.1.4 \u2014 drupal vulnerability (CVE-2023-5256)",
+   "title": "drupal < 10.1.4: drupal vulnerability (CVE-2023-5256)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3373,7 +3373,7 @@
   },
   {
    "key": "cve-drupal-2024-11941",
-   "title": "drupal < 10.2.2 \u2014 drupal vulnerability (CVE-2024-11941)",
+   "title": "drupal < 10.2.2: drupal vulnerability (CVE-2024-11941)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3391,7 +3391,7 @@
   },
   {
    "key": "cve-drupal-2024-11942",
-   "title": "drupal < 10.2.10 \u2014 drupal vulnerability (CVE-2024-11942)",
+   "title": "drupal < 10.2.10: drupal vulnerability (CVE-2024-11942)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3409,7 +3409,7 @@
   },
   {
    "key": "cve-drupal-2024-12393",
-   "title": "drupal < 11.0.8 \u2014 drupal vulnerability (CVE-2024-12393)",
+   "title": "drupal < 11.0.8: drupal vulnerability (CVE-2024-12393)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3427,7 +3427,7 @@
   },
   {
    "key": "cve-drupal-2024-45440",
-   "title": "drupal < 10.2.9 \u2014 Drupal Full Path Disclosure (CVE-2024-45440)",
+   "title": "drupal < 10.2.9: Drupal Full Path Disclosure (CVE-2024-45440)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3447,7 +3447,7 @@
   },
   {
    "key": "cve-drupal-2024-55634",
-   "title": "drupal < 11.0.8 \u2014 drupal vulnerability (CVE-2024-55634)",
+   "title": "drupal < 11.0.8: drupal vulnerability (CVE-2024-55634)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3465,7 +3465,7 @@
   },
   {
    "key": "cve-drupal-2024-55636",
-   "title": "drupal < 11.0.8 \u2014 drupal vulnerability (CVE-2024-55636)",
+   "title": "drupal < 11.0.8: drupal vulnerability (CVE-2024-55636)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3483,7 +3483,7 @@
   },
   {
    "key": "cve-drupal-2024-55637",
-   "title": "drupal < 11.0.8 \u2014 drupal vulnerability (CVE-2024-55637)",
+   "title": "drupal < 11.0.8: drupal vulnerability (CVE-2024-55637)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3501,7 +3501,7 @@
   },
   {
    "key": "cve-drupal-2024-55638",
-   "title": "drupal < 10.3.9 \u2014 drupal vulnerability (CVE-2024-55638)",
+   "title": "drupal < 10.3.9: drupal vulnerability (CVE-2024-55638)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3519,7 +3519,7 @@
   },
   {
    "key": "cve-drupal-2025-13080",
-   "title": "drupal < 11.2.8 \u2014 drupal vulnerability (CVE-2025-13080)",
+   "title": "drupal < 11.2.8: drupal vulnerability (CVE-2025-13080)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3537,7 +3537,7 @@
   },
   {
    "key": "cve-drupal-2025-13081",
-   "title": "drupal < 11.2.8 \u2014 drupal vulnerability (CVE-2025-13081)",
+   "title": "drupal < 11.2.8: drupal vulnerability (CVE-2025-13081)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3555,7 +3555,7 @@
   },
   {
    "key": "cve-drupal-2025-13082",
-   "title": "drupal < 11.2.8 \u2014 drupal vulnerability (CVE-2025-13082)",
+   "title": "drupal < 11.2.8: drupal vulnerability (CVE-2025-13082)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3573,7 +3573,7 @@
   },
   {
    "key": "cve-drupal-2025-13083",
-   "title": "drupal < 11.2.8 \u2014 drupal vulnerability (CVE-2025-13083)",
+   "title": "drupal < 11.2.8: drupal vulnerability (CVE-2025-13083)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3591,7 +3591,7 @@
   },
   {
    "key": "cve-drupal-2025-3057",
-   "title": "drupal < 11.1.3 \u2014 drupal vulnerability (CVE-2025-3057)",
+   "title": "drupal < 11.1.3: drupal vulnerability (CVE-2025-3057)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3609,7 +3609,7 @@
   },
   {
    "key": "cve-drupal-2025-31673",
-   "title": "drupal < 11.1.3 \u2014 drupal vulnerability (CVE-2025-31673)",
+   "title": "drupal < 11.1.3: drupal vulnerability (CVE-2025-31673)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3627,7 +3627,7 @@
   },
   {
    "key": "cve-drupal-2025-31674",
-   "title": "drupal < 11.1.3 \u2014 drupal vulnerability (CVE-2025-31674)",
+   "title": "drupal < 11.1.3: drupal vulnerability (CVE-2025-31674)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3645,7 +3645,7 @@
   },
   {
    "key": "cve-drupal-2025-31675",
-   "title": "drupal < 11.1.5 \u2014 drupal vulnerability (CVE-2025-31675)",
+   "title": "drupal < 11.1.5: drupal vulnerability (CVE-2025-31675)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3663,7 +3663,7 @@
   },
   {
    "key": "cve-drupal-2026-15916",
-   "title": "drupal < 11.3.0 \u2014 drupal vulnerability (CVE-2026-15916)",
+   "title": "drupal < 11.3.0: drupal vulnerability (CVE-2026-15916)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3681,7 +3681,7 @@
   },
   {
    "key": "cve-drupal-2026-15917",
-   "title": "drupal < 11.3.0 \u2014 drupal vulnerability (CVE-2026-15917)",
+   "title": "drupal < 11.3.0: drupal vulnerability (CVE-2026-15917)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3699,7 +3699,7 @@
   },
   {
    "key": "cve-drupal-2026-55803",
-   "title": "drupal < 11.2.0 \u2014 drupal vulnerability (CVE-2026-55803)",
+   "title": "drupal < 11.2.0: drupal vulnerability (CVE-2026-55803)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3717,7 +3717,7 @@
   },
   {
    "key": "cve-drupal-2026-55804",
-   "title": "drupal < 11.2.0 \u2014 drupal vulnerability (CVE-2026-55804)",
+   "title": "drupal < 11.2.0: drupal vulnerability (CVE-2026-55804)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3735,7 +3735,7 @@
   },
   {
    "key": "cve-drupal-2026-55805",
-   "title": "drupal < 11.3.0 \u2014 drupal vulnerability (CVE-2026-55805)",
+   "title": "drupal < 11.3.0: drupal vulnerability (CVE-2026-55805)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3753,7 +3753,7 @@
   },
   {
    "key": "cve-drupal-2026-55806",
-   "title": "drupal < 11.2.0 \u2014 drupal vulnerability (CVE-2026-55806)",
+   "title": "drupal < 11.2.0: drupal vulnerability (CVE-2026-55806)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3771,7 +3771,7 @@
   },
   {
    "key": "cve-drupal-2026-55807",
-   "title": "drupal < 11.2.0 \u2014 drupal vulnerability (CVE-2026-55807)",
+   "title": "drupal < 11.2.0: drupal vulnerability (CVE-2026-55807)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3789,7 +3789,7 @@
   },
   {
    "key": "cve-drupal-2026-55808",
-   "title": "drupal < 11.2.0 \u2014 drupal vulnerability (CVE-2026-55808)",
+   "title": "drupal < 11.2.0: drupal vulnerability (CVE-2026-55808)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3807,7 +3807,7 @@
   },
   {
    "key": "cve-drupal-2026-6365",
-   "title": "drupal < 11.3.7 \u2014 drupal vulnerability (CVE-2026-6365)",
+   "title": "drupal < 11.3.7: drupal vulnerability (CVE-2026-6365)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3825,7 +3825,7 @@
   },
   {
    "key": "cve-drupal-2026-6366",
-   "title": "drupal < 11.3.7 \u2014 drupal vulnerability (CVE-2026-6366)",
+   "title": "drupal < 11.3.7: drupal vulnerability (CVE-2026-6366)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3843,7 +3843,7 @@
   },
   {
    "key": "cve-drupal-2026-6367",
-   "title": "drupal < 11.3.7 \u2014 drupal vulnerability (CVE-2026-6367)",
+   "title": "drupal < 11.3.7: drupal vulnerability (CVE-2026-6367)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3861,7 +3861,7 @@
   },
   {
    "key": "cve-drupal-2026-9082",
-   "title": "drupal < 11.3.10 \u2014 drupal vulnerability (CVE-2026-9082)",
+   "title": "drupal < 11.3.10: drupal vulnerability (CVE-2026-9082)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3879,7 +3879,7 @@
   },
   {
    "key": "cve-ember-2013-4170",
-   "title": "ember < 1.0.0-rc.1.1 \u2014 ember vulnerability (CVE-2013-4170)",
+   "title": "ember < 1.0.0-rc.1.1: ember vulnerability (CVE-2013-4170)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3897,7 +3897,7 @@
   },
   {
    "key": "cve-ember-2014-0013",
-   "title": "ember < 1.0.1 \u2014 ember vulnerability (CVE-2014-0013)",
+   "title": "ember < 1.0.1: ember vulnerability (CVE-2014-0013)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -3916,7 +3916,7 @@
   },
   {
    "key": "cve-ember-2014-0046",
-   "title": "ember < 1.2.2 \u2014 ember-routing-auto-location can be forced to redirect to another domain (CVE-2014-0046)",
+   "title": "ember < 1.2.2: ember-routing-auto-location can be forced to redirect to another domain (CVE-2014-0046)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -3936,7 +3936,7 @@
   },
   {
    "key": "cve-ember-2015-7565",
-   "title": "ember < 1.11.4 \u2014 ember vulnerability (CVE-2015-7565)",
+   "title": "ember < 1.11.4: ember vulnerability (CVE-2015-7565)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3954,7 +3954,7 @@
   },
   {
    "key": "cve-handlebars-2015-8861",
-   "title": "handlebars < 4.0.0 \u2014 Quoteless attributes in templates can lead to XSS (CVE-2015-8861)",
+   "title": "handlebars < 4.0.0: Quoteless attributes in templates can lead to XSS (CVE-2015-8861)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -3973,7 +3973,7 @@
   },
   {
    "key": "cve-handlebars-2019-19919",
-   "title": "handlebars < 3.0.8 \u2014 Disallow calling helperMissing and blockHelperMissing directly (CVE-2019-19919)",
+   "title": "handlebars < 3.0.8: Disallow calling helperMissing and blockHelperMissing directly (CVE-2019-19919)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -3991,7 +3991,7 @@
   },
   {
    "key": "cve-handlebars-2019-20920",
-   "title": "handlebars < 3.0.8 \u2014 Handlebars before 3.0.8 and 4.x before 4.5.3 is vulnerable to Arbitrary Code Execution. The lookup helper fails to prop",
+   "title": "handlebars < 3.0.8: Handlebars before 3.0.8 and 4.x before 4.5.3 is vulnerable to Arbitrary Code Execution. The lookup helper fails to prop",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4011,7 +4011,7 @@
   },
   {
    "key": "cve-handlebars-2019-20922",
-   "title": "handlebars < 4.4.5 \u2014 Regular Expression Denial of Service in Handlebars (CVE-2019-20922)",
+   "title": "handlebars < 4.4.5: Regular Expression Denial of Service in Handlebars (CVE-2019-20922)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4030,7 +4030,7 @@
   },
   {
    "key": "cve-handlebars-2021-23369",
-   "title": "handlebars < 4.7.7 \u2014 Remote code execution in handlebars when compiling templates (CVE-2021-23369)",
+   "title": "handlebars < 4.7.7: Remote code execution in handlebars when compiling templates (CVE-2021-23369)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4049,7 +4049,7 @@
   },
   {
    "key": "cve-handlebars-2021-23383",
-   "title": "handlebars < 4.7.7 \u2014 Prototype Pollution in handlebars (CVE-2021-23383)",
+   "title": "handlebars < 4.7.7: Prototype Pollution in handlebars (CVE-2021-23383)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4068,7 +4068,7 @@
   },
   {
    "key": "cve-handlebars-2026-33916",
-   "title": "handlebars < 4.7.9 \u2014 Handlebars is vulnerable to XSS via prototype pollution: the resolvePartial() function looks up partial names with an u",
+   "title": "handlebars < 4.7.9: Handlebars is vulnerable to XSS via prototype pollution: the resolvePartial() function looks up partial names with an u",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4089,7 +4089,7 @@
   },
   {
    "key": "cve-handlebars-2026-33937",
-   "title": "handlebars < 4.7.9 \u2014 Handlebars is vulnerable to Remote Code Execution when Handlebars.compile() is passed an attacker-controlled pre-parsed",
+   "title": "handlebars < 4.7.9: Handlebars is vulnerable to Remote Code Execution when Handlebars.compile() is passed an attacker-controlled pre-parsed",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -4110,7 +4110,7 @@
   },
   {
    "key": "cve-handlebars-2026-33938",
-   "title": "handlebars < 4.7.9 \u2014 Handlebars is vulnerable to Remote Code Execution via the @partial-block mechanism. When a helper with write access to ",
+   "title": "handlebars < 4.7.9: Handlebars is vulnerable to Remote Code Execution via the @partial-block mechanism. When a helper with write access to ",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4131,7 +4131,7 @@
   },
   {
    "key": "cve-handlebars-2026-33939",
-   "title": "handlebars < 4.7.9 \u2014 Handlebars is vulnerable to Denial of Service via unregistered decorator syntax. When a template contains a decorator r",
+   "title": "handlebars < 4.7.9: Handlebars is vulnerable to Denial of Service via unregistered decorator syntax. When a template contains a decorator r",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4152,7 +4152,7 @@
   },
   {
    "key": "cve-handlebars-2026-33940",
-   "title": "handlebars < 4.7.9 \u2014 Handlebars is vulnerable to Remote Code Execution through dynamic partial lookups. A crafted object with call: true pla",
+   "title": "handlebars < 4.7.9: Handlebars is vulnerable to Remote Code Execution through dynamic partial lookups. A crafted object with call: true pla",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4173,7 +4173,7 @@
   },
   {
    "key": "cve-handlebars-2026-33941",
-   "title": "handlebars < 4.7.9 \u2014 The Handlebars CLI precompiler is vulnerable to code injection through multiple unsanitized inputs: template file names",
+   "title": "handlebars < 4.7.9: The Handlebars CLI precompiler is vulnerable to code injection through multiple unsanitized inputs: template file names",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4193,7 +4193,7 @@
   },
   {
    "key": "cve-iis-2015-1635",
-   "title": "IIS < 8.5 \u2014 HTTP.sys RCE via crafted Range header (MS15-034, CVE-2015-1635)",
+   "title": "IIS < 8.5: HTTP.sys RCE via crafted Range header (MS15-034, CVE-2015-1635)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -4212,7 +4212,7 @@
   },
   {
    "key": "cve-iis-2017-7269",
-   "title": "IIS 6.0 \u2014 WebDAV ScStoragePathFromUrl buffer overflow RCE (CVE-2017-7269)",
+   "title": "IIS 6.0: WebDAV ScStoragePathFromUrl buffer overflow RCE (CVE-2017-7269)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -4231,7 +4231,7 @@
   },
   {
    "key": "cve-joomla-2010-1649",
-   "title": "joomla < 1.5.18 \u2014 Joomla! vulnerable to Cross-site Scripting (CVE-2010-1649)",
+   "title": "joomla < 1.5.18: Joomla! vulnerable to Cross-site Scripting (CVE-2010-1649)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4252,7 +4252,7 @@
   },
   {
    "key": "cve-joomla-2011-2509",
-   "title": "joomla < 1.6.4 \u2014 Joomla! vulnerable to Cross-site Scripting (CVE-2011-2509)",
+   "title": "joomla < 1.6.4: Joomla! vulnerable to Cross-site Scripting (CVE-2011-2509)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4273,7 +4273,7 @@
   },
   {
    "key": "cve-joomla-2011-4332",
-   "title": "joomla < 1.6.4 \u2014 Joomla! vulnerable to Cross-site Scripting (CVE-2011-4332)",
+   "title": "joomla < 1.6.4: Joomla! vulnerable to Cross-site Scripting (CVE-2011-4332)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -4294,7 +4294,7 @@
   },
   {
    "key": "cve-joomla-2013-5583",
-   "title": "joomla < 3.1.6 \u2014 Joomla! Cross-site Scripting vulnerability (CVE-2013-5583)",
+   "title": "joomla < 3.1.6: Joomla! Cross-site Scripting vulnerability (CVE-2013-5583)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -4315,7 +4315,7 @@
   },
   {
    "key": "cve-joomla-2015-8562",
-   "title": "Joomla < 3.4.6 \u2014 PHP object injection RCE via User-Agent (CVE-2015-8562)",
+   "title": "Joomla < 3.4.6: PHP object injection RCE via User-Agent (CVE-2015-8562)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -4334,7 +4334,7 @@
   },
   {
    "key": "cve-joomla-2018-11326",
-   "title": "joomla < 3.8.8 \u2014 Joomla! XSS Vulnerability (CVE-2018-11326)",
+   "title": "joomla < 3.8.8: Joomla! XSS Vulnerability (CVE-2018-11326)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4355,7 +4355,7 @@
   },
   {
    "key": "cve-joomla-2019-16725",
-   "title": "joomla < 3.9.12 \u2014 Joomla! XSS in Default Templates (CVE-2019-16725)",
+   "title": "joomla < 3.9.12: Joomla! XSS in Default Templates (CVE-2019-16725)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4376,7 +4376,7 @@
   },
   {
    "key": "cve-joomla-2019-7743",
-   "title": "joomla < 3.9.3 \u2014 Joomla! Object Injection Vulnerability (CVE-2019-7743)",
+   "title": "joomla < 3.9.3: Joomla! Object Injection Vulnerability (CVE-2019-7743)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -4396,7 +4396,7 @@
   },
   {
    "key": "cve-joomla-2023-23752",
-   "title": "Joomla < 4.2.8 \u2014 Improper access check exposes web-service endpoints (CVE-2023-23752)",
+   "title": "Joomla < 4.2.8: Improper access check exposes web-service endpoints (CVE-2023-23752)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4414,7 +4414,7 @@
   },
   {
    "key": "cve-joomla-2025-25227",
-   "title": "joomla < 4.4.13 \u2014 Joomla CMS Multi-Factor Authentication Bypass (CVE-2025-25227)",
+   "title": "joomla < 4.4.13: Joomla CMS Multi-Factor Authentication Bypass (CVE-2025-25227)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4434,7 +4434,7 @@
   },
   {
    "key": "cve-jquery-2011-4969",
-   "title": "jquery < 1.6.3 \u2014 XSS with location.hash (CVE-2011-4969)",
+   "title": "jquery < 1.6.3: XSS with location.hash (CVE-2011-4969)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4455,7 +4455,7 @@
   },
   {
    "key": "cve-jquery-2012-6708",
-   "title": "jquery < 1.9.0b1 \u2014 Selector interpreted as HTML (CVE-2012-6708)",
+   "title": "jquery < 1.9.0b1: Selector interpreted as HTML (CVE-2012-6708)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4475,7 +4475,7 @@
   },
   {
    "key": "cve-jquery-2015-9251",
-   "title": "jquery < 1.12.0 \u2014 3rd party CORS request may execute (CVE-2015-9251)",
+   "title": "jquery < 1.12.0: 3rd party CORS request may execute (CVE-2015-9251)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4497,7 +4497,7 @@
   },
   {
    "key": "cve-jquery-2016-10707",
-   "title": "jquery < 3.0.0 \u2014 Denial of Service in jquery (CVE-2016-10707)",
+   "title": "jquery < 3.0.0: Denial of Service in jquery (CVE-2016-10707)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4516,7 +4516,7 @@
   },
   {
    "key": "cve-jquery-2020-11022",
-   "title": "jquery < 3.5.0 \u2014 Regex in its jQuery.htmlPrefilter sometimes may introduce XSS (CVE-2020-11022)",
+   "title": "jquery < 3.5.0: Regex in its jQuery.htmlPrefilter sometimes may introduce XSS (CVE-2020-11022)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4535,7 +4535,7 @@
   },
   {
    "key": "cve-jquery-2020-11023",
-   "title": "jquery < 3.5.0 \u2014 passing HTML containing <option> elements from untrusted sources - even after sanitizing it - to one of jQuery's DOM manipu",
+   "title": "jquery < 3.5.0: passing HTML containing <option> elements from untrusted sources - even after sanitizing it - to one of jQuery's DOM manipu",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4554,7 +4554,7 @@
   },
   {
    "key": "cve-jquery-2020-7656",
-   "title": "jquery < 1.9.0 \u2014 Versions of jQuery prior to 1.9.0 are vulnerable to Cross-Site Scripting (XSS). The load method fails to recognize and stri",
+   "title": "jquery < 1.9.0: Versions of jQuery prior to 1.9.0 are vulnerable to Cross-Site Scripting (XSS). The load method fails to recognize and stri",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4575,7 +4575,7 @@
   },
   {
    "key": "cve-jquery-ui-2021-41182",
-   "title": "jquery-ui < 1.13.0 \u2014 XSS in the `altField` option of the Datepicker widget (CVE-2021-41182)",
+   "title": "jquery-ui < 1.13.0: XSS in the `altField` option of the Datepicker widget (CVE-2021-41182)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4595,7 +4595,7 @@
   },
   {
    "key": "cve-jquery-ui-2021-41183",
-   "title": "jquery-ui < 1.13.0 \u2014 XSS Vulnerability on text options of jQuery UI datepicker (CVE-2021-41183)",
+   "title": "jquery-ui < 1.13.0: XSS Vulnerability on text options of jQuery UI datepicker (CVE-2021-41183)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4615,7 +4615,7 @@
   },
   {
    "key": "cve-jquery-ui-2021-41184",
-   "title": "jquery-ui < 1.13.0 \u2014 XSS in the `of` option of the `.position()` util (CVE-2021-41184)",
+   "title": "jquery-ui < 1.13.0: XSS in the `of` option of the `.position()` util (CVE-2021-41184)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4635,7 +4635,7 @@
   },
   {
    "key": "cve-jquery-ui-2022-31160",
-   "title": "jquery-ui < 1.13.2 \u2014 XSS when refreshing a checkboxradio with an HTML-like initial text label  (CVE-2022-31160)",
+   "title": "jquery-ui < 1.13.2: XSS when refreshing a checkboxradio with an HTML-like initial text label  (CVE-2022-31160)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4657,7 +4657,7 @@
   },
   {
    "key": "cve-knockout-2019-14862",
-   "title": "knockout < 3.5.0 \u2014 XSS injection point in attr name binding for browser IE7 and older (CVE-2019-14862)",
+   "title": "knockout < 3.5.0: XSS injection point in attr name binding for browser IE7 and older (CVE-2019-14862)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4676,7 +4676,7 @@
   },
   {
    "key": "cve-laravel-2017-14775",
-   "title": "laravel < 5.5.10 \u2014 Laravel Sensitive Data Exposure (CVE-2017-14775)",
+   "title": "laravel < 5.5.10: Laravel Sensitive Data Exposure (CVE-2017-14775)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4696,7 +4696,7 @@
   },
   {
    "key": "cve-laravel-2017-9303",
-   "title": "laravel < 5.4.22 \u2014 Laravel does not properly constrain the host portion of a password-reset URL (CVE-2017-9303)",
+   "title": "laravel < 5.4.22: Laravel does not properly constrain the host portion of a password-reset URL (CVE-2017-9303)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4716,7 +4716,7 @@
   },
   {
    "key": "cve-laravel-2018-15133",
-   "title": "laravel < 5.6.30 \u2014 Laravel Framework RCE Vulnerability (CVE-2018-15133)",
+   "title": "laravel < 5.6.30: Laravel Framework RCE Vulnerability (CVE-2018-15133)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4737,7 +4737,7 @@
   },
   {
    "key": "cve-laravel-2019-9081",
-   "title": "laravel < 6.20.44 \u2014 Laravel Framework Deserialization Vulnerability (CVE-2019-9081)",
+   "title": "laravel < 6.20.44: Laravel Framework Deserialization Vulnerability (CVE-2019-9081)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -4758,7 +4758,7 @@
   },
   {
    "key": "cve-laravel-2020-19316",
-   "title": "laravel < 5.8.17 \u2014 OS Command Injection in Laravel Framework (CVE-2020-19316)",
+   "title": "laravel < 5.8.17: OS Command Injection in Laravel Framework (CVE-2020-19316)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4778,7 +4778,7 @@
   },
   {
    "key": "cve-laravel-2020-24941",
-   "title": "laravel < 7.24.0 \u2014 Improper Input Validation in Laravel (CVE-2020-24941)",
+   "title": "laravel < 7.24.0: Improper Input Validation in Laravel (CVE-2020-24941)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4798,7 +4798,7 @@
   },
   {
    "key": "cve-laravel-2021-21263",
-   "title": "laravel < 7.30.2 \u2014 Query Binding Exploitation (CVE-2021-21263)",
+   "title": "laravel < 7.30.2: Query Binding Exploitation (CVE-2021-21263)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4818,7 +4818,7 @@
   },
   {
    "key": "cve-laravel-2021-3129",
-   "title": "Laravel < 8.4.3 \u2014 Ignition debug-mode RCE via phar deserialization (CVE-2021-3129)",
+   "title": "Laravel < 8.4.3: Ignition debug-mode RCE via phar deserialization (CVE-2021-3129)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -4837,7 +4837,7 @@
   },
   {
    "key": "cve-laravel-2021-43808",
-   "title": "laravel < 8.75.0 \u2014 Laravel Framework XSS in Blade templating engine (CVE-2021-43808)",
+   "title": "laravel < 8.75.0: Laravel Framework XSS in Blade templating engine (CVE-2021-43808)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4858,7 +4858,7 @@
   },
   {
    "key": "cve-laravel-2024-13918",
-   "title": "laravel < 11.36.0 \u2014 Laravel framework susceptible to reflected cross-site scripting (CVE-2024-13918)",
+   "title": "laravel < 11.36.0: Laravel framework susceptible to reflected cross-site scripting (CVE-2024-13918)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4879,7 +4879,7 @@
   },
   {
    "key": "cve-laravel-2024-13919",
-   "title": "laravel < 11.36.0 \u2014 Laravel framework susceptible to reflected cross-site scripting (CVE-2024-13919)",
+   "title": "laravel < 11.36.0: Laravel framework susceptible to reflected cross-site scripting (CVE-2024-13919)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4900,7 +4900,7 @@
   },
   {
    "key": "cve-laravel-2024-52301",
-   "title": "laravel < 11.31.0 \u2014 Laravel environment manipulation via query string (CVE-2024-52301)",
+   "title": "laravel < 11.31.0: Laravel environment manipulation via query string (CVE-2024-52301)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4920,7 +4920,7 @@
   },
   {
    "key": "cve-laravel-2025-27515",
-   "title": "laravel < 10.48.29 \u2014 Laravel has a File Validation Bypass (CVE-2025-27515)",
+   "title": "laravel < 10.48.29: Laravel has a File Validation Bypass (CVE-2025-27515)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -4940,7 +4940,7 @@
   },
   {
    "key": "cve-laravel-2026-48019",
-   "title": "laravel < 12.60.0 \u2014 Laravel Framework: CRLF injection in default email rule  (CVE-2026-48019)",
+   "title": "laravel < 12.60.0: Laravel Framework: CRLF injection in default email rule  (CVE-2026-48019)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4959,7 +4959,7 @@
   },
   {
    "key": "cve-lodash-2018-16487",
-   "title": "lodash < 4.17.11 \u2014 Prototype Pollution in lodash (CVE-2018-16487)",
+   "title": "lodash < 4.17.11: Prototype Pollution in lodash (CVE-2018-16487)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -4984,7 +4984,7 @@
   },
   {
    "key": "cve-lodash-2018-3721",
-   "title": "lodash < 4.17.5 \u2014 Prototype Pollution in lodash (CVE-2018-3721)",
+   "title": "lodash < 4.17.5: Prototype Pollution in lodash (CVE-2018-3721)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5009,7 +5009,7 @@
   },
   {
    "key": "cve-lodash-2019-1010266",
-   "title": "lodash < 4.17.11 \u2014 Regular Expression Denial of Service (ReDoS) in lodash (CVE-2019-1010266)",
+   "title": "lodash < 4.17.11: Regular Expression Denial of Service (ReDoS) in lodash (CVE-2019-1010266)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5034,7 +5034,7 @@
   },
   {
    "key": "cve-lodash-2019-10744",
-   "title": "lodash < 4.17.12 \u2014 Prototype Pollution in lodash (CVE-2019-10744)",
+   "title": "lodash < 4.17.12: Prototype Pollution in lodash (CVE-2019-10744)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5062,7 +5062,7 @@
   },
   {
    "key": "cve-lodash-2020-28500",
-   "title": "lodash < 4.17.21 \u2014 Regular Expression Denial of Service (ReDoS) in lodash (CVE-2020-28500)",
+   "title": "lodash < 4.17.21: Regular Expression Denial of Service (ReDoS) in lodash (CVE-2020-28500)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5099,7 +5099,7 @@
   },
   {
    "key": "cve-lodash-2020-8203",
-   "title": "lodash < 4.17.19 \u2014 Prototype Pollution in lodash (CVE-2020-8203)",
+   "title": "lodash < 4.17.19: Prototype Pollution in lodash (CVE-2020-8203)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5128,7 +5128,7 @@
   },
   {
    "key": "cve-lodash-2021-23337",
-   "title": "lodash < 4.17.21 \u2014 Command Injection in lodash (CVE-2021-23337)",
+   "title": "lodash < 4.17.21: Command Injection in lodash (CVE-2021-23337)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5163,7 +5163,7 @@
   },
   {
    "key": "cve-lodash-2025-13465",
-   "title": "lodash < 4.17.23 \u2014 Lodash versions 4.0.0 through 4.17.22 are vulnerable to prototype pollution via the _.unset and _.omit functions. An atta",
+   "title": "lodash < 4.17.23: Lodash versions 4.0.0 through 4.17.22 are vulnerable to prototype pollution via the _.unset and _.omit functions. An atta",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5183,7 +5183,7 @@
   },
   {
    "key": "cve-log4j-2021-44228",
-   "title": "Apache Log4j2 2.0-2.14.1 \u2014 Log4Shell JNDI RCE (CVE-2021-44228)",
+   "title": "Apache Log4j2 2.0-2.14.1: Log4Shell JNDI RCE (CVE-2021-44228)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -5202,7 +5202,7 @@
   },
   {
    "key": "cve-mootools-2021-23432",
-   "title": "mootools < 1.5.3 \u2014 This affects all versions of package mootools. This is due to the ability to pass untrusted input to Object.merge() (CVE-",
+   "title": "mootools < 1.5.3: This affects all versions of package mootools. This is due to the ability to pass untrusted input to Object.merge() (CVE-",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5220,7 +5220,7 @@
   },
   {
    "key": "cve-mootools-2021-32821",
-   "title": "mootools < 1.5.3 \u2014 MooTools is a collection of JavaScript utilities for JavaScript developers. All known versions include a CSS selector par",
+   "title": "mootools < 1.5.3: MooTools is a collection of JavaScript utilities for JavaScript developers. All known versions include a CSS selector par",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5239,7 +5239,7 @@
   },
   {
    "key": "cve-nginx-2013-2028",
-   "title": "nginx 1.3.9-1.4.0 \u2014 Stack overflow RCE via chunked Transfer-Encoding (CVE-2013-2028)",
+   "title": "nginx 1.3.9-1.4.0: Stack overflow RCE via chunked Transfer-Encoding (CVE-2013-2028)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5258,7 +5258,7 @@
   },
   {
    "key": "cve-nginx-2017-7529",
-   "title": "nginx < 1.13.3 \u2014 Integer overflow / info disclosure in range filter (CVE-2017-7529)",
+   "title": "nginx < 1.13.3: Integer overflow / info disclosure in range filter (CVE-2017-7529)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5276,7 +5276,7 @@
   },
   {
    "key": "cve-nginx-2019-20372",
-   "title": "nginx < 1.17.7 \u2014 HTTP request smuggling via error_page (CVE-2019-20372)",
+   "title": "nginx < 1.17.7: HTTP request smuggling via error_page (CVE-2019-20372)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5294,7 +5294,7 @@
   },
   {
    "key": "cve-php-2024-4577",
-   "title": "PHP-CGI < 8.3.8 \u2014 CGI argument injection RCE on Windows (CVE-2024-4577)",
+   "title": "PHP-CGI < 8.3.8: CGI argument injection RCE on Windows (CVE-2024-4577)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -5313,7 +5313,7 @@
   },
   {
    "key": "cve-prototypejs-2008-7220",
-   "title": "prototypejs < 1.5.1.2 \u2014 prototypejs vulnerability (CVE-2008-7220)",
+   "title": "prototypejs < 1.5.1.2: prototypejs vulnerability (CVE-2008-7220)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5332,7 +5332,7 @@
   },
   {
    "key": "cve-prototypejs-2020-27511",
-   "title": "prototypejs < 1.7.4 \u2014 An issue was discovered in the stripTags and unescapeHTML components in Prototype 1.7.3 where an attacker can cause a ",
+   "title": "prototypejs < 1.7.4: An issue was discovered in the stripTags and unescapeHTML components in Prototype 1.7.3 where an attacker can cause a ",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5352,7 +5352,7 @@
   },
   {
    "key": "cve-react-2013-7035",
-   "title": "react < 0.4.2 \u2014 potential XSS vulnerability can arise when using user data as a key (CVE-2013-7035)",
+   "title": "react < 0.4.2: potential XSS vulnerability can arise when using user data as a key (CVE-2013-7035)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5372,7 +5372,7 @@
   },
   {
    "key": "cve-react-2018-6341",
-   "title": "react < 16.0.1 \u2014 potential XSS vulnerability when the attacker controls an attribute name (CVE-2018-6341)",
+   "title": "react < 16.0.1: potential XSS vulnerability when the attacker controls an attribute name (CVE-2018-6341)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5392,7 +5392,7 @@
   },
   {
    "key": "cve-struts-2017-5638",
-   "title": "Apache Struts 2 < 2.3.32 / < 2.5.10.1 \u2014 Jakarta Multipart RCE (CVE-2017-5638)",
+   "title": "Apache Struts 2 < 2.3.32 / < 2.5.10.1: Jakarta Multipart RCE (CVE-2017-5638)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -5411,7 +5411,7 @@
   },
   {
    "key": "cve-symfony-2012-6431",
-   "title": "symfony < 2.0.19 \u2014 Symfony Allows URI Restrictions Bypass Via Double-Encoded String (CVE-2012-6431)",
+   "title": "symfony < 2.0.19: Symfony Allows URI Restrictions Bypass Via Double-Encoded String (CVE-2012-6431)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5431,7 +5431,7 @@
   },
   {
    "key": "cve-symfony-2012-6432",
-   "title": "symfony < 2.1.5 \u2014 Symfony Access Control Vulnerability (CVE-2012-6432)",
+   "title": "symfony < 2.1.5: Symfony Access Control Vulnerability (CVE-2012-6432)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5451,7 +5451,7 @@
   },
   {
    "key": "cve-symfony-2013-1348",
-   "title": "symfony < 2.0.22 \u2014 Symphony Vulnerable to PHP Code Injection via YAML Parsing (CVE-2013-1348)",
+   "title": "symfony < 2.0.22: Symphony Vulnerable to PHP Code Injection via YAML Parsing (CVE-2013-1348)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5471,7 +5471,7 @@
   },
   {
    "key": "cve-symfony-2013-1397",
-   "title": "symfony < 2.2.0-BETA2 \u2014 Symfony Arbitrary PHP code Execution (CVE-2013-1397)",
+   "title": "symfony < 2.2.0-BETA2: Symfony Arbitrary PHP code Execution (CVE-2013-1397)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5491,7 +5491,7 @@
   },
   {
    "key": "cve-symfony-2013-4751",
-   "title": "symfony < 2.3.3 \u2014 Symfony collectionCascaded and collectionCascadedDeeply fields security bypass (CVE-2013-4751)",
+   "title": "symfony < 2.3.3: Symfony collectionCascaded and collectionCascadedDeeply fields security bypass (CVE-2013-4751)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5511,7 +5511,7 @@
   },
   {
    "key": "cve-symfony-2013-4752",
-   "title": "symfony < 2.3.3 \u2014 Symfony Host Header Injection vulnerability in the HttpFoundation component (CVE-2013-4752)",
+   "title": "symfony < 2.3.3: Symfony Host Header Injection vulnerability in the HttpFoundation component (CVE-2013-4752)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5531,7 +5531,7 @@
   },
   {
    "key": "cve-symfony-2013-5958",
-   "title": "symfony < 2.3.6 \u2014 Symfony Denial of Service Via Long Password Hashing (CVE-2013-5958)",
+   "title": "symfony < 2.3.6: Symfony Denial of Service Via Long Password Hashing (CVE-2013-5958)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5552,7 +5552,7 @@
   },
   {
    "key": "cve-symfony-2014-4931",
-   "title": "symfony < 2.5.4 \u2014 Code injection in the way Symfony implements translation caching in FrameworkBundle (CVE-2014-4931)",
+   "title": "symfony < 2.5.4: Code injection in the way Symfony implements translation caching in FrameworkBundle (CVE-2014-4931)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5572,7 +5572,7 @@
   },
   {
    "key": "cve-symfony-2014-5244",
-   "title": "symfony < 2.5.4 \u2014 Symfony vulnerable to denial of service via a malicious HTTP Host header (CVE-2014-5244)",
+   "title": "symfony < 2.5.4: Symfony vulnerable to denial of service via a malicious HTTP Host header (CVE-2014-5244)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5593,7 +5593,7 @@
   },
   {
    "key": "cve-symfony-2014-5245",
-   "title": "symfony < 2.5.4 \u2014 Symfony allows direct access of ESI URLs behind a trusted proxy (CVE-2014-5245)",
+   "title": "symfony < 2.5.4: Symfony allows direct access of ESI URLs behind a trusted proxy (CVE-2014-5245)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5613,7 +5613,7 @@
   },
   {
    "key": "cve-symfony-2014-6061",
-   "title": "symfony < 2.5.4 \u2014 Symfony has a security issue when parsing the Authorization header (CVE-2014-6061)",
+   "title": "symfony < 2.5.4: Symfony has a security issue when parsing the Authorization header (CVE-2014-6061)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5633,7 +5633,7 @@
   },
   {
    "key": "cve-symfony-2014-6072",
-   "title": "symfony < 2.5.4 \u2014 Symfony Cross-Site Request Forgery vulnerability in the Web Profiler (CVE-2014-6072)",
+   "title": "symfony < 2.5.4: Symfony Cross-Site Request Forgery vulnerability in the Web Profiler (CVE-2014-6072)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5653,7 +5653,7 @@
   },
   {
    "key": "cve-symfony-2015-2308",
-   "title": "symfony < 2.6.6 \u2014 Symfony Vulnerable to PHP Eval Injection (CVE-2015-2308)",
+   "title": "symfony < 2.6.6: Symfony Vulnerable to PHP Eval Injection (CVE-2015-2308)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5673,7 +5673,7 @@
   },
   {
    "key": "cve-symfony-2015-2309",
-   "title": "symfony < 2.6.6 \u2014 Symfony has unsafe methods in the Request class (CVE-2015-2309)",
+   "title": "symfony < 2.6.6: Symfony has unsafe methods in the Request class (CVE-2015-2309)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5693,7 +5693,7 @@
   },
   {
    "key": "cve-symfony-2015-4050",
-   "title": "symfony < 2.6.8 \u2014 Symfony Incorrect Access Control (CVE-2015-4050)",
+   "title": "symfony < 2.6.8: Symfony Incorrect Access Control (CVE-2015-4050)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5713,7 +5713,7 @@
   },
   {
    "key": "cve-symfony-2015-8124",
-   "title": "symfony < 2.7.7 \u2014 Symfony Session Fixation Vulnerability (CVE-2015-8124)",
+   "title": "symfony < 2.7.7: Symfony Session Fixation Vulnerability (CVE-2015-8124)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -5733,7 +5733,7 @@
   },
   {
    "key": "cve-symfony-2015-8125",
-   "title": "symfony < 2.6.12 \u2014 Symfony Vulnerable to Timing Attack (CVE-2015-8125)",
+   "title": "symfony < 2.6.12: Symfony Vulnerable to Timing Attack (CVE-2015-8125)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5753,7 +5753,7 @@
   },
   {
    "key": "cve-symfony-2016-1902",
-   "title": "symfony < 2.7.9 \u2014 Symfony Cryptographic Vulnerability (CVE-2016-1902)",
+   "title": "symfony < 2.7.9: Symfony Cryptographic Vulnerability (CVE-2016-1902)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5773,7 +5773,7 @@
   },
   {
    "key": "cve-symfony-2016-2403",
-   "title": "symfony < 3.0.6 \u2014 Symfony Authentication Bypass (CVE-2016-2403)",
+   "title": "symfony < 3.0.6: Symfony Authentication Bypass (CVE-2016-2403)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -5793,7 +5793,7 @@
   },
   {
    "key": "cve-symfony-2016-4423",
-   "title": "symfony < 3.0.6 \u2014 Symphony Denial of Service Via Overlong Usernames (CVE-2016-4423)",
+   "title": "symfony < 3.0.6: Symphony Denial of Service Via Overlong Usernames (CVE-2016-4423)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5814,7 +5814,7 @@
   },
   {
    "key": "cve-symfony-2017-11365",
-   "title": "symfony < 3.3.5 \u2014 Symfony Incorrect Access Control (CVE-2017-11365)",
+   "title": "symfony < 3.3.5: Symfony Incorrect Access Control (CVE-2017-11365)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -5834,7 +5834,7 @@
   },
   {
    "key": "cve-symfony-2017-16652",
-   "title": "symfony < 3.3.13 \u2014 Symfony Open Redirect (CVE-2017-16652)",
+   "title": "symfony < 3.3.13: Symfony Open Redirect (CVE-2017-16652)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5855,7 +5855,7 @@
   },
   {
    "key": "cve-symfony-2017-16653",
-   "title": "symfony < 3.3.13 \u2014 Symfony CSRF Vulnerability (CVE-2017-16653)",
+   "title": "symfony < 3.3.13: Symfony CSRF Vulnerability (CVE-2017-16653)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5876,7 +5876,7 @@
   },
   {
    "key": "cve-symfony-2017-16654",
-   "title": "symfony < 3.3.13 \u2014 Symfony Directory Traversal (CVE-2017-16654)",
+   "title": "symfony < 3.3.13: Symfony Directory Traversal (CVE-2017-16654)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5896,7 +5896,7 @@
   },
   {
    "key": "cve-symfony-2017-16790",
-   "title": "symfony < 3.3.13 \u2014 Symfony SSRF Vulnerability via Form Component (CVE-2017-16790)",
+   "title": "symfony < 3.3.13: Symfony SSRF Vulnerability via Form Component (CVE-2017-16790)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5916,7 +5916,7 @@
   },
   {
    "key": "cve-symfony-2018-11385",
-   "title": "symfony < 4.0.11 \u2014 Symfony Session Fixation Vulnerability (CVE-2018-11385)",
+   "title": "symfony < 4.0.11: Symfony Session Fixation Vulnerability (CVE-2018-11385)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5936,7 +5936,7 @@
   },
   {
    "key": "cve-symfony-2018-11386",
-   "title": "symfony < 4.0.11 \u2014 Symfony DoS (CVE-2018-11386)",
+   "title": "symfony < 4.0.11: Symfony DoS (CVE-2018-11386)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -5956,7 +5956,7 @@
   },
   {
    "key": "cve-symfony-2018-11406",
-   "title": "symfony < 4.0.11 \u2014 Symfony CSRF Token Fixation (CVE-2018-11406)",
+   "title": "symfony < 4.0.11: Symfony CSRF Token Fixation (CVE-2018-11406)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -5977,7 +5977,7 @@
   },
   {
    "key": "cve-symfony-2018-11407",
-   "title": "symfony < 4.0.7 \u2014 Symfony Authentication Bypass (CVE-2018-11407)",
+   "title": "symfony < 4.0.7: Symfony Authentication Bypass (CVE-2018-11407)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -5997,7 +5997,7 @@
   },
   {
    "key": "cve-symfony-2018-11408",
-   "title": "symfony < 4.0.11 \u2014 Symfony Open Redirect (CVE-2018-11408)",
+   "title": "symfony < 4.0.11: Symfony Open Redirect (CVE-2018-11408)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6018,7 +6018,7 @@
   },
   {
    "key": "cve-symfony-2018-14773",
-   "title": "symfony < 4.1.3 \u2014 Symfony HTTP Foundation web cache poisoning (CVE-2018-14773)",
+   "title": "symfony < 4.1.3: Symfony HTTP Foundation web cache poisoning (CVE-2018-14773)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6038,7 +6038,7 @@
   },
   {
    "key": "cve-symfony-2018-14774",
-   "title": "symfony < 4.1.3 \u2014 Symfony Host Header Injection (CVE-2018-14774)",
+   "title": "symfony < 4.1.3: Symfony Host Header Injection (CVE-2018-14774)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6058,7 +6058,7 @@
   },
   {
    "key": "cve-symfony-2018-19789",
-   "title": "symfony < 4.2.1 \u2014 Symfony Path Disclosure (CVE-2018-19789)",
+   "title": "symfony < 4.2.1: Symfony Path Disclosure (CVE-2018-19789)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6078,7 +6078,7 @@
   },
   {
    "key": "cve-symfony-2018-19790",
-   "title": "symfony < 4.1.9 \u2014 Symfony Open Redirect (CVE-2018-19790)",
+   "title": "symfony < 4.1.9: Symfony Open Redirect (CVE-2018-19790)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6099,7 +6099,7 @@
   },
   {
    "key": "cve-symfony-2019-10909",
-   "title": "symfony < 8.6.15 \u2014 Symfony Cross-site Scripting (XSS) vulnerability (CVE-2019-10909)",
+   "title": "symfony < 8.6.15: Symfony Cross-site Scripting (XSS) vulnerability (CVE-2019-10909)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6120,7 +6120,7 @@
   },
   {
    "key": "cve-symfony-2019-10910",
-   "title": "symfony < 4.2.7 \u2014 Symfony Service IDs Allow Injection (CVE-2019-10910)",
+   "title": "symfony < 4.2.7: Symfony Service IDs Allow Injection (CVE-2019-10910)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -6140,7 +6140,7 @@
   },
   {
    "key": "cve-symfony-2019-10911",
-   "title": "symfony < 4.2.7 \u2014 Improper authentication in Symfony (CVE-2019-10911)",
+   "title": "symfony < 4.2.7: Improper authentication in Symfony (CVE-2019-10911)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6160,7 +6160,7 @@
   },
   {
    "key": "cve-symfony-2019-10913",
-   "title": "symfony < 4.2.7 \u2014 Invalid HTTP method overrides allow possible XSS or other attacks in Symfony (CVE-2019-10913)",
+   "title": "symfony < 4.2.7: Invalid HTTP method overrides allow possible XSS or other attacks in Symfony (CVE-2019-10913)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -6181,7 +6181,7 @@
   },
   {
    "key": "cve-symfony-2019-11325",
-   "title": "symfony < 4.3.8 \u2014 Improper Input Validation in Symfony (CVE-2019-11325)",
+   "title": "symfony < 4.3.8: Improper Input Validation in Symfony (CVE-2019-11325)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -6201,7 +6201,7 @@
   },
   {
    "key": "cve-symfony-2019-18886",
-   "title": "symfony < 4.3.8 \u2014 User enumeration leak using switch user functionality in Symfony (CVE-2019-18886)",
+   "title": "symfony < 4.3.8: User enumeration leak using switch user functionality in Symfony (CVE-2019-18886)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6221,7 +6221,7 @@
   },
   {
    "key": "cve-symfony-2019-18887",
-   "title": "symfony < 4.3.8 \u2014 Symfony Http-Kernel has non-constant time comparison in UriSigner (CVE-2019-18887)",
+   "title": "symfony < 4.3.8: Symfony Http-Kernel has non-constant time comparison in UriSigner (CVE-2019-18887)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6241,7 +6241,7 @@
   },
   {
    "key": "cve-symfony-2019-18888",
-   "title": "symfony < 4.3.8 \u2014 Argument injection in a MimeTypeGuesser in Symfony (CVE-2019-18888)",
+   "title": "symfony < 4.3.8: Argument injection in a MimeTypeGuesser in Symfony (CVE-2019-18888)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6261,7 +6261,7 @@
   },
   {
    "key": "cve-symfony-2019-18889",
-   "title": "symfony < 4.3.8 \u2014 Symfony Unsafe Cache Serialization Could Enable RCE (CVE-2019-18889)",
+   "title": "symfony < 4.3.8: Symfony Unsafe Cache Serialization Could Enable RCE (CVE-2019-18889)",
    "category": "cve",
    "severity": "critical",
    "confidence": "candidate",
@@ -6282,7 +6282,7 @@
   },
   {
    "key": "cve-symfony-2020-15094",
-   "title": "symfony < 5.1.5 \u2014 RCE in Symfony (CVE-2020-15094)",
+   "title": "symfony < 5.1.5: RCE in Symfony (CVE-2020-15094)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6303,7 +6303,7 @@
   },
   {
    "key": "cve-symfony-2020-5255",
-   "title": "symfony < 5.0.7 \u2014 Prevent cache poisoning via a Response Content-Type header in Symfony (CVE-2020-5255)",
+   "title": "symfony < 5.0.7: Prevent cache poisoning via a Response Content-Type header in Symfony (CVE-2020-5255)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -6323,7 +6323,7 @@
   },
   {
    "key": "cve-symfony-2020-5274",
-   "title": "symfony < 5.0.4 \u2014 Exceptions displayed in non-debug configurations in Symfony (CVE-2020-5274)",
+   "title": "symfony < 5.0.4: Exceptions displayed in non-debug configurations in Symfony (CVE-2020-5274)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6343,7 +6343,7 @@
   },
   {
    "key": "cve-symfony-2020-5275",
-   "title": "symfony < 5.0.7 \u2014 Firewall configured with unanimous strategy was not actually unanimous in Symfony (CVE-2020-5275)",
+   "title": "symfony < 5.0.7: Firewall configured with unanimous strategy was not actually unanimous in Symfony (CVE-2020-5275)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6363,7 +6363,7 @@
   },
   {
    "key": "cve-symfony-2021-21424",
-   "title": "symfony < 5.2.9 \u2014 Prevent user enumeration using Guard or the new Authenticator-based Security (CVE-2021-21424)",
+   "title": "symfony < 5.2.9: Prevent user enumeration using Guard or the new Authenticator-based Security (CVE-2021-21424)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6383,7 +6383,7 @@
   },
   {
    "key": "cve-symfony-2021-32693",
-   "title": "symfony < 5.3.2 \u2014 Authentication granted to all firewalls instead of just one (CVE-2021-32693)",
+   "title": "symfony < 5.3.2: Authentication granted to all firewalls instead of just one (CVE-2021-32693)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6403,7 +6403,7 @@
   },
   {
    "key": "cve-symfony-2021-41267",
-   "title": "symfony < 5.3.12 \u2014 Webcache Poisoning in symfony/http-kernel (CVE-2021-41267)",
+   "title": "symfony < 5.3.12: Webcache Poisoning in symfony/http-kernel (CVE-2021-41267)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6423,7 +6423,7 @@
   },
   {
    "key": "cve-symfony-2021-41268",
-   "title": "symfony < 5.3.12 \u2014 Cookie persistence after password changes in symfony/security-bundle (CVE-2021-41268)",
+   "title": "symfony < 5.3.12: Cookie persistence after password changes in symfony/security-bundle (CVE-2021-41268)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6443,7 +6443,7 @@
   },
   {
    "key": "cve-symfony-2021-41270",
-   "title": "symfony < 5.3.12 \u2014 CSV Injection in symfony/serializer (CVE-2021-41270)",
+   "title": "symfony < 5.3.12: CSV Injection in symfony/serializer (CVE-2021-41270)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6463,7 +6463,7 @@
   },
   {
    "key": "cve-symfony-2022-24894",
-   "title": "symfony < 6.2.6 \u2014 Symfony storing cookie headers in HttpCache (CVE-2022-24894)",
+   "title": "symfony < 6.2.6: Symfony storing cookie headers in HttpCache (CVE-2022-24894)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6483,7 +6483,7 @@
   },
   {
    "key": "cve-symfony-2022-24895",
-   "title": "symfony < 6.2.6 \u2014 Symfony vulnerable to Session Fixation of CSRF tokens (CVE-2022-24895)",
+   "title": "symfony < 6.2.6: Symfony vulnerable to Session Fixation of CSRF tokens (CVE-2022-24895)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6504,7 +6504,7 @@
   },
   {
    "key": "cve-symfony-2023-46733",
-   "title": "symfony < 6.3.8 \u2014 Symfony possible session fixation vulnerability (CVE-2023-46733)",
+   "title": "symfony < 6.3.8: Symfony possible session fixation vulnerability (CVE-2023-46733)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6524,7 +6524,7 @@
   },
   {
    "key": "cve-symfony-2023-46734",
-   "title": "symfony < 6.3.8 \u2014 Symfony potential Cross-site Scripting vulnerabilities in CodeExtension filters (CVE-2023-46734)",
+   "title": "symfony < 6.3.8: Symfony potential Cross-site Scripting vulnerabilities in CodeExtension filters (CVE-2023-46734)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6545,7 +6545,7 @@
   },
   {
    "key": "cve-symfony-2023-46735",
-   "title": "symfony < 6.3.8 \u2014 Symfony potential Cross-site Scripting in WebhookController (CVE-2023-46735)",
+   "title": "symfony < 6.3.8: Symfony potential Cross-site Scripting in WebhookController (CVE-2023-46735)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6566,7 +6566,7 @@
   },
   {
    "key": "cve-symfony-2024-50340",
-   "title": "symfony < 7.1.7 \u2014 Symfony allows changing the environment through a query (CVE-2024-50340)",
+   "title": "symfony < 7.1.7: Symfony allows changing the environment through a query (CVE-2024-50340)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6586,7 +6586,7 @@
   },
   {
    "key": "cve-symfony-2024-50341",
-   "title": "symfony < 7.1.3 \u2014 Symfony's `Security::login` does not take into account custom `user_checker` (CVE-2024-50341)",
+   "title": "symfony < 7.1.3: Symfony's `Security::login` does not take into account custom `user_checker` (CVE-2024-50341)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -6606,7 +6606,7 @@
   },
   {
    "key": "cve-symfony-2024-50342",
-   "title": "symfony < 7.1.8 \u2014 Symfony allows internal address and port enumeration by NoPrivateNetworkHttpClient (CVE-2024-50342)",
+   "title": "symfony < 7.1.8: Symfony allows internal address and port enumeration by NoPrivateNetworkHttpClient (CVE-2024-50342)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -6626,7 +6626,7 @@
   },
   {
    "key": "cve-symfony-2024-50343",
-   "title": "symfony < 7.1.4 \u2014 Symfony has an incorrect response from Validator when input ends with `\\n` (CVE-2024-50343)",
+   "title": "symfony < 7.1.4: Symfony has an incorrect response from Validator when input ends with `\\n` (CVE-2024-50343)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -6646,7 +6646,7 @@
   },
   {
    "key": "cve-symfony-2024-51736",
-   "title": "symfony < 7.1.7 \u2014 Symfony vulnerable to command execution hijack on Windows with Process class (CVE-2024-51736)",
+   "title": "symfony < 7.1.7: Symfony vulnerable to command execution hijack on Windows with Process class (CVE-2024-51736)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6666,7 +6666,7 @@
   },
   {
    "key": "cve-symfony-2025-64500",
-   "title": "symfony < 7.3.7 \u2014 Symfony's incorrect parsing of PATH_INFO can lead to limited authorization bypass (CVE-2025-64500)",
+   "title": "symfony < 7.3.7: Symfony's incorrect parsing of PATH_INFO can lead to limited authorization bypass (CVE-2025-64500)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6686,7 +6686,7 @@
   },
   {
    "key": "cve-symfony-2026-24739",
-   "title": "symfony < 8.0.5 \u2014 Symfony's incorrect argument escaping under MSYS2/Git Bash can lead to destructive file operations on Windows (CVE-2026-24",
+   "title": "symfony < 8.0.5: Symfony's incorrect argument escaping under MSYS2/Git Bash can lead to destructive file operations on Windows (CVE-2026-24",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6706,7 +6706,7 @@
   },
   {
    "key": "cve-symfony-2026-45063",
-   "title": "symfony < 8.0.12 \u2014 Symfony Vulnerable to Identity Spoofing via Unanchored DN Regex in X509Authenticator (CVE-2026-45063)",
+   "title": "symfony < 8.0.12: Symfony Vulnerable to Identity Spoofing via Unanchored DN Regex in X509Authenticator (CVE-2026-45063)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6726,7 +6726,7 @@
   },
   {
    "key": "cve-symfony-2026-45064",
-   "title": "symfony < 8.0.12 \u2014 Symfony's HtmlSanitizer URL Attributes Pass Through BiDi Override Characters \u2192 Visual href Spoofing (CVE-2026-45064)",
+   "title": "symfony < 8.0.12: Symfony's HtmlSanitizer URL Attributes Pass Through BiDi Override Characters \u2192 Visual href Spoofing (CVE-2026-45064)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6746,7 +6746,7 @@
   },
   {
    "key": "cve-symfony-2026-45065",
-   "title": "symfony < 8.0.12 \u2014 Symfony has a UrlGenerator Route-Requirement Bypass via Unanchored Regex Alternation \u2192 Off-Site //host URL Injection (CVE",
+   "title": "symfony < 8.0.12: Symfony has a UrlGenerator Route-Requirement Bypass via Unanchored Regex Alternation \u2192 Off-Site //host URL Injection (CVE",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6766,7 +6766,7 @@
   },
   {
    "key": "cve-symfony-2026-45066",
-   "title": "symfony < 8.0.12 \u2014 Symfony has an HtmlSanitizer allowLinkHosts() / allowMediaHosts() Bypass via URL-Parser Differentials and <area> Misclass",
+   "title": "symfony < 8.0.12: Symfony has an HtmlSanitizer allowLinkHosts() / allowMediaHosts() Bypass via URL-Parser Differentials and <area> Misclass",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6786,7 +6786,7 @@
   },
   {
    "key": "cve-symfony-2026-45067",
-   "title": "symfony < 8.0.12 \u2014 Symfony has Email Header / SMTP Command Injection via CRLF in Symfony\\Component\\Mime\\Address (CVE-2026-45067)",
+   "title": "symfony < 8.0.12: Symfony has Email Header / SMTP Command Injection via CRLF in Symfony\\Component\\Mime\\Address (CVE-2026-45067)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6806,7 +6806,7 @@
   },
   {
    "key": "cve-symfony-2026-45068",
-   "title": "symfony < 8.0.12 \u2014 Symfony has an Argument Injection in SendmailTransport via Dash-Prefixed Recipient Address (CVE-2026-45068)",
+   "title": "symfony < 8.0.12: Symfony has an Argument Injection in SendmailTransport via Dash-Prefixed Recipient Address (CVE-2026-45068)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6826,7 +6826,7 @@
   },
   {
    "key": "cve-symfony-2026-45069",
-   "title": "symfony < 8.0.12 \u2014 Symfony's OidcTokenHandler Accepts JWTs Missing aud/iss/exp Claims (CVE-2026-45069)",
+   "title": "symfony < 8.0.12: Symfony's OidcTokenHandler Accepts JWTs Missing aud/iss/exp Claims (CVE-2026-45069)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6846,7 +6846,7 @@
   },
   {
    "key": "cve-symfony-2026-45070",
-   "title": "symfony < 8.0.12 \u2014 Symfony has Email Header Injection via Non-Token Characters in Mime Parameter Names (CVE-2026-45070)",
+   "title": "symfony < 8.0.12: Symfony has Email Header Injection via Non-Token Characters in Mime Parameter Names (CVE-2026-45070)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6866,7 +6866,7 @@
   },
   {
    "key": "cve-symfony-2026-45071",
-   "title": "symfony < 8.0.12 \u2014 Symfony has XXE (Local File Disclosure) in DomCrawler::addXmlContent() via validateOnParse = true (CVE-2026-45071)",
+   "title": "symfony < 8.0.12: Symfony has XXE (Local File Disclosure) in DomCrawler::addXmlContent() via validateOnParse = true (CVE-2026-45071)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -6886,7 +6886,7 @@
   },
   {
    "key": "cve-symfony-2026-45072",
-   "title": "symfony < 8.0.12 \u2014 Symfony Vulnerable to stored XSS in WebProfiler CodeExtension::fileExcerpt() \u2014 Unescaped Non-PHP File Rendering (CVE-2026",
+   "title": "symfony < 8.0.12: Symfony Vulnerable to stored XSS in WebProfiler CodeExtension::fileExcerpt(): Unescaped Non-PHP File Rendering (CVE-2026",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -6907,7 +6907,7 @@
   },
   {
    "key": "cve-symfony-2026-45073",
-   "title": "symfony < 8.0.12 \u2014 Symfony Vulnerable to SQL Injection in PdoAdapter::doClear() via Unsanitized $prefix (CVE-2026-45073)",
+   "title": "symfony < 8.0.12: Symfony Vulnerable to SQL Injection in PdoAdapter::doClear() via Unsanitized $prefix (CVE-2026-45073)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6928,7 +6928,7 @@
   },
   {
    "key": "cve-symfony-2026-45074",
-   "title": "symfony < 8.0.12 \u2014 Symfony's Cas2Handler Derives CAS service URL from Client Host Header \u2192 Cross-Service Ticket Replay (CVE-2026-45074)",
+   "title": "symfony < 8.0.12: Symfony's Cas2Handler Derives CAS service URL from Client Host Header \u2192 Cross-Service Ticket Replay (CVE-2026-45074)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -6948,7 +6948,7 @@
   },
   {
    "key": "cve-symfony-2026-45075",
-   "title": "symfony < 8.0.12 \u2014 Symfony's HEAD Request Bypasses methods: ['GET'] Filter in #[IsGranted] / #[IsSignatureValid] / #[IsCsrfTokenValid] (CVE-",
+   "title": "symfony < 8.0.12: Symfony's HEAD Request Bypasses methods: ['GET'] Filter in #[IsGranted] / #[IsSignatureValid] / #[IsCsrfTokenValid] (CVE-",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6969,7 +6969,7 @@
   },
   {
    "key": "cve-symfony-2026-45077",
-   "title": "symfony < 8.0.12 \u2014 Symfony has Unauthenticated PHP Object Deserialization in MonologBridge server:log Listener (CVE-2026-45077)",
+   "title": "symfony < 8.0.12: Symfony has Unauthenticated PHP Object Deserialization in MonologBridge server:log Listener (CVE-2026-45077)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -6990,7 +6990,7 @@
   },
   {
    "key": "cve-symfony-2026-45133",
-   "title": "symfony < 8.0.12 \u2014 Symfony hardened the parser when handling untrusted input (CVE-2026-45133)",
+   "title": "symfony < 8.0.12: Symfony hardened the parser when handling untrusted input (CVE-2026-45133)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -7010,7 +7010,7 @@
   },
   {
    "key": "cve-symfony-2026-45304",
-   "title": "symfony < 8.0.12 \u2014 Symfony's YAML Parser Vulnerable to Exponential Memory Allocation via Recursive Collection-Alias Expansion (\"Billion Laug",
+   "title": "symfony < 8.0.12: Symfony's YAML Parser Vulnerable to Exponential Memory Allocation via Recursive Collection-Alias Expansion (\"Billion Laug",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -7030,7 +7030,7 @@
   },
   {
    "key": "cve-symfony-2026-45305",
-   "title": "symfony < 8.0.12 \u2014 Symfony's YAML Parser has a ReDoS via Catastrophic Backtracking in Parser::cleanup() Regex (CVE-2026-45305)",
+   "title": "symfony < 8.0.12: Symfony's YAML Parser has a ReDoS via Catastrophic Backtracking in Parser::cleanup() Regex (CVE-2026-45305)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -7051,7 +7051,7 @@
   },
   {
    "key": "cve-symfony-2026-45753",
-   "title": "symfony < 8.0.12 \u2014 Symfony's HtmlSanitizer UrlAttributeSanitizer Omits action/formaction/poster/cite \u2014 `javascript`: URI Survives Sanitizati",
+   "title": "symfony < 8.0.12: Symfony's HtmlSanitizer UrlAttributeSanitizer Omits action/formaction/poster/cite: `javascript`: URI Survives Sanitizati",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -7072,7 +7072,7 @@
   },
   {
    "key": "cve-symfony-2026-45754",
-   "title": "symfony < 8.0.12 \u2014 Symfony's Mailjet Mailer Webhook Parser Never Verifies the Configured Secret \u2014 Unauthenticated Webhook Event Injection (C",
+   "title": "symfony < 8.0.12: Symfony's Mailjet Mailer Webhook Parser Never Verifies the Configured Secret: Unauthenticated Webhook Event Injection (C",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7092,7 +7092,7 @@
   },
   {
    "key": "cve-symfony-2026-45755",
-   "title": "symfony < 8.0.12 \u2014 Symfony's Mailtrap Mailer Webhook Parser Never Verifies the X-Mt-Signature HMAC \u2014 Unauthenticated Webhook Event Injection",
+   "title": "symfony < 8.0.12: Symfony's Mailtrap Mailer Webhook Parser Never Verifies the X-Mt-Signature HMAC: Unauthenticated Webhook Event Injection",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7112,7 +7112,7 @@
   },
   {
    "key": "cve-symfony-2026-45756",
-   "title": "symfony < 8.0.12 \u2014 Symfony's JsonPath Evaluates Attacker-Controlled Regular Expressions in match()/search() Without Limits \u2014 ReDoS (CVE-2026",
+   "title": "symfony < 8.0.12: Symfony's JsonPath Evaluates Attacker-Controlled Regular Expressions in match()/search() Without Limits: ReDoS (CVE-2026",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -7133,7 +7133,7 @@
   },
   {
    "key": "cve-symfony-2026-47212",
-   "title": "symfony < 8.0.12 \u2014 Symfony: Twilio SMS Notifier allows unauthenticated webhook injection due to missing X-Twilio-Signature verification (CVE",
+   "title": "symfony < 8.0.12: Symfony: Twilio SMS Notifier allows unauthenticated webhook injection due to missing X-Twilio-Signature verification (CVE",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7153,7 +7153,7 @@
   },
   {
    "key": "cve-symfony-2026-47767",
-   "title": "symfony < 8.0.12 \u2014 SymfonyRuntime CVE-2024-50340 Patch Bypass: Web Requests Can Still Set APP_ENV/APP_DEBUG via parse_str/SAPI Argv Mismatch",
+   "title": "symfony < 8.0.12: SymfonyRuntime CVE-2024-50340 Patch Bypass: Web Requests Can Still Set APP_ENV/APP_DEBUG via parse_str/SAPI Argv Mismatch",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7172,7 +7172,7 @@
   },
   {
    "key": "cve-symfony-2026-48489",
-   "title": "symfony < 8.0.13 \u2014 Symfony: Security Firewall Bypass via failure_forward Subrequest: Unauthenticated Access to access_control-Protected GET ",
+   "title": "symfony < 8.0.13: Symfony: Security Firewall Bypass via failure_forward Subrequest: Unauthenticated Access to access_control-Protected GET ",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -7192,7 +7192,7 @@
   },
   {
    "key": "cve-symfony-2026-48736",
-   "title": "symfony < 8.0.13 \u2014 Symfony: IpUtils::PRIVATE_SUBNETS Omits IPv6 Transition Forms (6to4, NAT64, Teredo, IPv4-compatible): SSRF Bypass in NoPr",
+   "title": "symfony < 8.0.13: Symfony: IpUtils::PRIVATE_SUBNETS Omits IPv6 Transition Forms (6to4, NAT64, Teredo, IPv4-compatible): SSRF Bypass in NoPr",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7212,7 +7212,7 @@
   },
   {
    "key": "cve-symfony-2026-48747",
-   "title": "symfony < 8.0.13 \u2014 Symfony: Mailomat Mailer Webhook Parser Reads the HMAC Algorithm from the Request: Signature Algorithm Downgrade (CVE-202",
+   "title": "symfony < 8.0.13: Symfony: Mailomat Mailer Webhook Parser Reads the HMAC Algorithm from the Request: Signature Algorithm Downgrade (CVE-202",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7232,7 +7232,7 @@
   },
   {
    "key": "cve-symfony-2026-48760",
-   "title": "symfony < 8.0.13 \u2014 Symfony: HtmlSanitizer URL Parser Deny Gates Underinclusive: Percent-Encoded BiDi Marks and Unicode Whitespace Bypass Vis",
+   "title": "symfony < 8.0.13: Symfony: HtmlSanitizer URL Parser Deny Gates Underinclusive: Percent-Encoded BiDi Marks and Unicode Whitespace Bypass Vis",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7253,7 +7253,7 @@
   },
   {
    "key": "cve-symfony-2026-48761",
-   "title": "symfony < 8.0.13 \u2014 Symfony: HtmlSanitizer UrlAttributeSanitizer Misses URL Attributes (CVE-2026-48761)",
+   "title": "symfony < 8.0.13: Symfony: HtmlSanitizer UrlAttributeSanitizer Misses URL Attributes (CVE-2026-48761)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7273,7 +7273,7 @@
   },
   {
    "key": "cve-symfony-2026-48784",
-   "title": "symfony < 8.0.13 \u2014 Symfony: UrlGenerator Dot-Segment Encoding Skips Every Other Chained `../` or `./` \u2192 Generated URL Collapses Off-Route Un",
+   "title": "symfony < 8.0.13: Symfony: UrlGenerator Dot-Segment Encoding Skips Every Other Chained `../` or `./` \u2192 Generated URL Collapses Off-Route Un",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7293,7 +7293,7 @@
   },
   {
    "key": "cve-tinymce-2011-4825",
-   "title": "tinyMCE < 1.4.2 \u2014 Static code injection vulnerability in inc/function.base.php (CVE-2011-4825)",
+   "title": "tinyMCE < 1.4.2: Static code injection vulnerability in inc/function.base.php (CVE-2011-4825)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -7311,7 +7311,7 @@
   },
   {
    "key": "cve-tinymce-2019-1010091",
-   "title": "tinyMCE < 4.9.10 \u2014 cross-site scripting (XSS) vulnerability was discovered in: the core parser and `media` plugin.  (CVE-2019-1010091)",
+   "title": "tinyMCE < 4.9.10: cross-site scripting (XSS) vulnerability was discovered in: the core parser and `media` plugin.  (CVE-2019-1010091)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7331,7 +7331,7 @@
   },
   {
    "key": "cve-tinymce-2020-12648",
-   "title": "tinyMCE < 4.9.11 \u2014 Cross-site scripting vulnerability in TinyMCE (CVE-2020-12648)",
+   "title": "tinyMCE < 4.9.11: Cross-site scripting vulnerability in TinyMCE (CVE-2020-12648)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7351,7 +7351,7 @@
   },
   {
    "key": "cve-tinymce-2020-17480",
-   "title": "tinyMCE < 4.9.7 \u2014 The vulnerability allowed arbitrary JavaScript execution when inserting a specially crafted piece of content into the edit",
+   "title": "tinyMCE < 4.9.7: The vulnerability allowed arbitrary JavaScript execution when inserting a specially crafted piece of content into the edit",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -7370,7 +7370,7 @@
   },
   {
    "key": "cve-tinymce-2022-23494",
-   "title": "tinyMCE < 5.10.7 \u2014 A cross-site scripting (XSS) vulnerability in TinyMCE alerts which allowed arbitrary JavaScript execution was found and f",
+   "title": "tinyMCE < 5.10.7: A cross-site scripting (XSS) vulnerability in TinyMCE alerts which allowed arbitrary JavaScript execution was found and f",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7391,7 +7391,7 @@
   },
   {
    "key": "cve-tinymce-2023-45818",
-   "title": "tinyMCE < 5.10.8 \u2014 TinyMCE mXSS vulnerability in undo/redo, getContent API, resetContent API, and Autosave plugin (CVE-2023-45818)",
+   "title": "tinyMCE < 5.10.8: TinyMCE mXSS vulnerability in undo/redo, getContent API, resetContent API, and Autosave plugin (CVE-2023-45818)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7410,7 +7410,7 @@
   },
   {
    "key": "cve-tinymce-2023-45819",
-   "title": "tinyMCE < 5.10.8 \u2014 TinyMCE XSS vulnerability in notificationManager.open API (CVE-2023-45819)",
+   "title": "tinyMCE < 5.10.8: TinyMCE XSS vulnerability in notificationManager.open API (CVE-2023-45819)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7431,7 +7431,7 @@
   },
   {
    "key": "cve-tinymce-2023-48219",
-   "title": "tinyMCE < 5.10.9 \u2014 TinyMCE vulnerable to mutation Cross-site Scripting via special characters in unescaped text nodes (CVE-2023-48219)",
+   "title": "tinyMCE < 5.10.9: TinyMCE vulnerable to mutation Cross-site Scripting via special characters in unescaped text nodes (CVE-2023-48219)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7457,7 +7457,7 @@
   },
   {
    "key": "cve-tinymce-2024-21908",
-   "title": "tinyMCE < 5.9.0 \u2014 Inserting certain HTML content into the editor could result in invalid HTML once parsed. This caused a medium severity Cro",
+   "title": "tinyMCE < 5.9.0: Inserting certain HTML content into the editor could result in invalid HTML once parsed. This caused a medium severity Cro",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7476,7 +7476,7 @@
   },
   {
    "key": "cve-tinymce-2024-21910",
-   "title": "tinyMCE < 5.10.0 \u2014 URLs not cleaned correctly in some cases in the link and image plugins (CVE-2024-21910)",
+   "title": "tinyMCE < 5.10.0: URLs not cleaned correctly in some cases in the link and image plugins (CVE-2024-21910)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7494,7 +7494,7 @@
   },
   {
    "key": "cve-tinymce-2024-21911",
-   "title": "tinyMCE < 5.6.0 \u2014 security issue where URLs in attributes weren\u2019t correctly sanitized. security issue in the codesample plugin (CVE-2024-219",
+   "title": "tinyMCE < 5.6.0: security issue where URLs in attributes weren\u2019t correctly sanitized. security issue in the codesample plugin (CVE-2024-219",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7512,7 +7512,7 @@
   },
   {
    "key": "cve-tinymce-2024-29203",
-   "title": "tinyMCE < 6.8.1 \u2014 TinyMCE Cross-Site Scripting (XSS) vulnerability in handling iframes (CVE-2024-29203)",
+   "title": "tinyMCE < 6.8.1: TinyMCE Cross-Site Scripting (XSS) vulnerability in handling iframes (CVE-2024-29203)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7537,7 +7537,7 @@
   },
   {
    "key": "cve-tinymce-2024-29881",
-   "title": "tinyMCE < 7.0.0 \u2014 TinyMCE Cross-Site Scripting (XSS) vulnerability in handling external SVG files through Object or Embed elements (CVE-2024",
+   "title": "tinyMCE < 7.0.0: TinyMCE Cross-Site Scripting (XSS) vulnerability in handling external SVG files through Object or Embed elements (CVE-2024",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7562,7 +7562,7 @@
   },
   {
    "key": "cve-tinymce-2024-38356",
-   "title": "tinyMCE < 5.11.0 \u2014 TinyMCE Cross-Site Scripting (XSS) vulnerability using noneditable_regexp option (CVE-2024-38356)",
+   "title": "tinyMCE < 5.11.0: TinyMCE Cross-Site Scripting (XSS) vulnerability using noneditable_regexp option (CVE-2024-38356)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7590,7 +7590,7 @@
   },
   {
    "key": "cve-tinymce-2024-38357",
-   "title": "tinyMCE < 5.11.0 \u2014 TinyMCE Cross-Site Scripting (XSS) vulnerability using noscript elements (CVE-2024-38357)",
+   "title": "tinyMCE < 5.11.0: TinyMCE Cross-Site Scripting (XSS) vulnerability using noscript elements (CVE-2024-38357)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7617,7 +7617,7 @@
   },
   {
    "key": "cve-tinymce-2026-47759",
-   "title": "tinyMCE < 5.10.10 \u2014 TinyMCE Cross-Site Scripting (XSS) vulnerability using through data-mce- prefixed src, href, style attributes (CVE-2026-",
+   "title": "tinyMCE < 5.10.10: TinyMCE Cross-Site Scripting (XSS) vulnerability using through data-mce- prefixed src, href, style attributes (CVE-2026-",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -7638,7 +7638,7 @@
   },
   {
    "key": "cve-tinymce-2026-47760",
-   "title": "tinyMCE < 7.1.0 \u2014 TinyMCE Cross-Site Scripting (XSS) vulnerability using sanitization bypass through nested SVGs (CVE-2026-47760)",
+   "title": "tinyMCE < 7.1.0: TinyMCE Cross-Site Scripting (XSS) vulnerability using sanitization bypass through nested SVGs (CVE-2026-47760)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -7657,7 +7657,7 @@
   },
   {
    "key": "cve-tinymce-2026-47761",
-   "title": "tinyMCE < 5.10.10 \u2014 TinyMCE Cross-Site Scripting (XSS) vulnerability using media plugin `data-mce-object` injection (CVE-2026-47761)",
+   "title": "tinyMCE < 5.10.10: TinyMCE Cross-Site Scripting (XSS) vulnerability using media plugin `data-mce-object` injection (CVE-2026-47761)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -7678,7 +7678,7 @@
   },
   {
    "key": "cve-tinymce-2026-47762",
-   "title": "tinyMCE < 5.10.10 \u2014 TinyMCE Cross-Site Scripting (XSS) vulnerability through `mce:protected` comments (CVE-2026-47762)",
+   "title": "tinyMCE < 5.10.10: TinyMCE Cross-Site Scripting (XSS) vulnerability through `mce:protected` comments (CVE-2026-47762)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -7699,7 +7699,7 @@
   },
   {
    "key": "cve-typo3-2008-2717",
-   "title": "typo3 < 4.2.1 \u2014 TYPO3 Unrestricted File Upload vulnerability (CVE-2008-2717)",
+   "title": "typo3 < 4.2.1: TYPO3 Unrestricted File Upload vulnerability (CVE-2008-2717)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7719,7 +7719,7 @@
   },
   {
    "key": "cve-typo3-2009-3633",
-   "title": "typo3 < 4.3beta2 \u2014 TYPO3 API function vulnerable to Cross-site Scripting (CVE-2009-3633)",
+   "title": "typo3 < 4.3beta2: TYPO3 API function vulnerable to Cross-site Scripting (CVE-2009-3633)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7740,7 +7740,7 @@
   },
   {
    "key": "cve-typo3-2010-3673",
-   "title": "typo3 < 4.4.1 \u2014 TYPO3 is vulnerable to Information Disclosure in the HTML mailing API (CVE-2010-3673)",
+   "title": "typo3 < 4.4.1: TYPO3 is vulnerable to Information Disclosure in the HTML mailing API (CVE-2010-3673)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7760,7 +7760,7 @@
   },
   {
    "key": "cve-typo3-2010-5104",
-   "title": "typo3 < 4.4.5 \u2014 TYPO3 Sensitive Information Disclosure via escapeStrForLike method (CVE-2010-5104)",
+   "title": "typo3 < 4.4.5: TYPO3 Sensitive Information Disclosure via escapeStrForLike method (CVE-2010-5104)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7780,7 +7780,7 @@
   },
   {
    "key": "cve-typo3-2013-1842",
-   "title": "typo3 < 6.0.3 \u2014 TYPO3 SQL injection vulnerability in the Extbase Framework (CVE-2013-1842)",
+   "title": "typo3 < 6.0.3: TYPO3 SQL injection vulnerability in the Extbase Framework (CVE-2013-1842)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -7801,7 +7801,7 @@
   },
   {
    "key": "cve-typo3-2013-1843",
-   "title": "typo3 < 6.0.3 \u2014 TYPO3 Open redirect vulnerability in the Access tracking mechanism  (CVE-2013-1843)",
+   "title": "typo3 < 6.0.3: TYPO3 Open redirect vulnerability in the Access tracking mechanism  (CVE-2013-1843)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7822,7 +7822,7 @@
   },
   {
    "key": "cve-typo3-2013-4320",
-   "title": "typo3 < 6.1.4 \u2014 TYPO3 Improper Access Management in the File Abstraction Layer (CVE-2013-4320)",
+   "title": "typo3 < 6.1.4: TYPO3 Improper Access Management in the File Abstraction Layer (CVE-2013-4320)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7842,7 +7842,7 @@
   },
   {
    "key": "cve-typo3-2013-7077",
-   "title": "typo3 < 6.1.7 \u2014 TYPO3 Cross-site scripting (XSS) vulnerability in the Backend User Administration Module  (CVE-2013-7077)",
+   "title": "typo3 < 6.1.7: TYPO3 Cross-site scripting (XSS) vulnerability in the Backend User Administration Module  (CVE-2013-7077)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7863,7 +7863,7 @@
   },
   {
    "key": "cve-typo3-2013-7078",
-   "title": "typo3 < 6.0.11 \u2014 TYPO3 Cross-site scripting (XSS) vulnerability in the Extbase Framework (CVE-2013-7078)",
+   "title": "typo3 < 6.0.11: TYPO3 Cross-site scripting (XSS) vulnerability in the Extbase Framework (CVE-2013-7078)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -7884,7 +7884,7 @@
   },
   {
    "key": "cve-typo3-2013-7080",
-   "title": "typo3 < 6.0.11 \u2014 TYPO3 is vulnerable to Mass Assignment in the Extension table administration library (CVE-2013-7080)",
+   "title": "typo3 < 6.0.11: TYPO3 is vulnerable to Mass Assignment in the Extension table administration library (CVE-2013-7080)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7904,7 +7904,7 @@
   },
   {
    "key": "cve-typo3-2013-7081",
-   "title": "typo3 < 6.1.6 \u2014 TYPO3 Improper Access Control vulnerability (CVE-2013-7081)",
+   "title": "typo3 < 6.1.6: TYPO3 Improper Access Control vulnerability (CVE-2013-7081)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7924,7 +7924,7 @@
   },
   {
    "key": "cve-typo3-2018-14041",
-   "title": "typo3 < 4.1.2 \u2014 Bootstrap Cross-site Scripting vulnerability (CVE-2018-14041)",
+   "title": "typo3 < 4.1.2: Bootstrap Cross-site Scripting vulnerability (CVE-2018-14041)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7945,7 +7945,7 @@
   },
   {
    "key": "cve-typo3-2018-17960",
-   "title": "typo3 < 9.5.2 \u2014 Ckeditor XSS Vulnerability (CVE-2018-17960)",
+   "title": "typo3 < 9.5.2: Ckeditor XSS Vulnerability (CVE-2018-17960)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -7966,7 +7966,7 @@
   },
   {
    "key": "cve-typo3-2019-10912",
-   "title": "typo3 < 9.5.8 \u2014 Deserialization of untrusted data in Symfony (CVE-2019-10912)",
+   "title": "typo3 < 9.5.8: Deserialization of untrusted data in Symfony (CVE-2019-10912)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -7987,7 +7987,7 @@
   },
   {
    "key": "cve-typo3-2019-11832",
-   "title": "typo3 < 9.5.6 \u2014 TYPO3 Image Processing susceptible to Code Execution (CVE-2019-11832)",
+   "title": "typo3 < 9.5.6: TYPO3 Image Processing susceptible to Code Execution (CVE-2019-11832)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8007,7 +8007,7 @@
   },
   {
    "key": "cve-typo3-2019-12747",
-   "title": "typo3 < 9.5.8 \u2014 TYPO3 Vulnerable to Insecure Deserialization (CVE-2019-12747)",
+   "title": "typo3 < 9.5.8: TYPO3 Vulnerable to Insecure Deserialization (CVE-2019-12747)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8028,7 +8028,7 @@
   },
   {
    "key": "cve-typo3-2019-12748",
-   "title": "typo3 < 9.5.8 \u2014 Typo3 Cross-Site Scripting in Link Handling (CVE-2019-12748)",
+   "title": "typo3 < 9.5.8: Typo3 Cross-Site Scripting in Link Handling (CVE-2019-12748)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8049,7 +8049,7 @@
   },
   {
    "key": "cve-typo3-2019-19848",
-   "title": "typo3 < 9.5.12 \u2014 TYPO3 Directory Traversal on ZIP extraction (CVE-2019-19848)",
+   "title": "typo3 < 9.5.12: TYPO3 Directory Traversal on ZIP extraction (CVE-2019-19848)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8069,7 +8069,7 @@
   },
   {
    "key": "cve-typo3-2019-19849",
-   "title": "typo3 < 9.5.12 \u2014 TYPO3 Insecure Deserialization in Query Generator & Query View (CVE-2019-19849)",
+   "title": "typo3 < 9.5.12: TYPO3 Insecure Deserialization in Query Generator & Query View (CVE-2019-19849)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8090,7 +8090,7 @@
   },
   {
    "key": "cve-typo3-2019-19850",
-   "title": "typo3 < 10.2.2 \u2014 TYPO3  SQL Injection in low-level Query Generator (CVE-2019-19850)",
+   "title": "typo3 < 10.2.2: TYPO3  SQL Injection in low-level Query Generator (CVE-2019-19850)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8111,7 +8111,7 @@
   },
   {
    "key": "cve-typo3-2020-11063",
-   "title": "typo3 < 10.4.2 \u2014 Information Disclosure in Password Reset (CVE-2020-11063)",
+   "title": "typo3 < 10.4.2: Information Disclosure in Password Reset (CVE-2020-11063)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -8131,7 +8131,7 @@
   },
   {
    "key": "cve-typo3-2020-11064",
-   "title": "typo3 < 9.5.17 \u2014 Cross-Site Scripting in TYPO3 CMS Form Engine (CVE-2020-11064)",
+   "title": "typo3 < 9.5.17: Cross-Site Scripting in TYPO3 CMS Form Engine (CVE-2020-11064)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8152,7 +8152,7 @@
   },
   {
    "key": "cve-typo3-2020-11065",
-   "title": "typo3 < 9.5.17 \u2014 Cross-Site Scripting in TYPO3 CMS Link Handling (CVE-2020-11065)",
+   "title": "typo3 < 9.5.17: Cross-Site Scripting in TYPO3 CMS Link Handling (CVE-2020-11065)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8173,7 +8173,7 @@
   },
   {
    "key": "cve-typo3-2020-11066",
-   "title": "typo3 < 9.5.17 \u2014 Class destructors causing side-effects when being unserialized in TYPO3 CMS (CVE-2020-11066)",
+   "title": "typo3 < 9.5.17: Class destructors causing side-effects when being unserialized in TYPO3 CMS (CVE-2020-11066)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8193,7 +8193,7 @@
   },
   {
    "key": "cve-typo3-2020-11067",
-   "title": "typo3 < 9.5.17 \u2014 Insecure Deserialization in Backend User Settings in TYPO3 CMS (CVE-2020-11067)",
+   "title": "typo3 < 9.5.17: Insecure Deserialization in Backend User Settings in TYPO3 CMS (CVE-2020-11067)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8214,7 +8214,7 @@
   },
   {
    "key": "cve-typo3-2020-11069",
-   "title": "typo3 < 9.5.17 \u2014 Backend Same-Site Request Forgery in TYPO3 CMS (CVE-2020-11069)",
+   "title": "typo3 < 9.5.17: Backend Same-Site Request Forgery in TYPO3 CMS (CVE-2020-11069)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8234,7 +8234,7 @@
   },
   {
    "key": "cve-typo3-2020-15098",
-   "title": "typo3 < 9.5.20 \u2014 Missing Required Cryptographic Step Leading to Sensitive Information Disclosure in TYPO3 CMS (CVE-2020-15098)",
+   "title": "typo3 < 9.5.20: Missing Required Cryptographic Step Leading to Sensitive Information Disclosure in TYPO3 CMS (CVE-2020-15098)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8254,7 +8254,7 @@
   },
   {
    "key": "cve-typo3-2020-15099",
-   "title": "typo3 < 9.5.20 \u2014 Exposure of Sensitive Information to an Unauthorized Actor in TYPO3 CMS (CVE-2020-15099)",
+   "title": "typo3 < 9.5.20: Exposure of Sensitive Information to an Unauthorized Actor in TYPO3 CMS (CVE-2020-15099)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8274,7 +8274,7 @@
   },
   {
    "key": "cve-typo3-2020-15241",
-   "title": "typo3 < 9.5.6 \u2014 Cross-Site Scripting in ternary conditional operator (CVE-2020-15241)",
+   "title": "typo3 < 9.5.6: Cross-Site Scripting in ternary conditional operator (CVE-2020-15241)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8295,7 +8295,7 @@
   },
   {
    "key": "cve-typo3-2020-26227",
-   "title": "typo3 < 8.7.38 \u2014 Cross-Site Scripting in Fluid view helpers (CVE-2020-26227)",
+   "title": "typo3 < 8.7.38: Cross-Site Scripting in Fluid view helpers (CVE-2020-26227)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8316,7 +8316,7 @@
   },
   {
    "key": "cve-typo3-2020-26228",
-   "title": "typo3 < 8.7.38 \u2014 Cleartext storage of session identifier (CVE-2020-26228)",
+   "title": "typo3 < 8.7.38: Cleartext storage of session identifier (CVE-2020-26228)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8336,7 +8336,7 @@
   },
   {
    "key": "cve-typo3-2020-26229",
-   "title": "typo3 < 10.4.10 \u2014 XML External Entity in Dashboard Widget (CVE-2020-26229)",
+   "title": "typo3 < 10.4.10: XML External Entity in Dashboard Widget (CVE-2020-26229)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -8356,7 +8356,7 @@
   },
   {
    "key": "cve-typo3-2021-21338",
-   "title": "typo3 < 9.5.25 \u2014 Open Redirection in Login Handling (CVE-2021-21338)",
+   "title": "typo3 < 9.5.25: Open Redirection in Login Handling (CVE-2021-21338)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8377,7 +8377,7 @@
   },
   {
    "key": "cve-typo3-2021-21339",
-   "title": "typo3 < 9.5.25 \u2014 Cleartext storage of session identifier (CVE-2021-21339)",
+   "title": "typo3 < 9.5.25: Cleartext storage of session identifier (CVE-2021-21339)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8397,7 +8397,7 @@
   },
   {
    "key": "cve-typo3-2021-21340",
-   "title": "typo3 < 11.1.1 \u2014 Cross-Site Scripting in Content Preview (CVE-2021-21340)",
+   "title": "typo3 < 11.1.1: Cross-Site Scripting in Content Preview (CVE-2021-21340)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8418,7 +8418,7 @@
   },
   {
    "key": "cve-typo3-2021-21355",
-   "title": "typo3 < 9.5.25 \u2014 Unrestricted File Upload in Form Framework (CVE-2021-21355)",
+   "title": "typo3 < 9.5.25: Unrestricted File Upload in Form Framework (CVE-2021-21355)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8438,7 +8438,7 @@
   },
   {
    "key": "cve-typo3-2021-21357",
-   "title": "typo3 < 9.5.25 \u2014 Broken Access Control in Form Framework (CVE-2021-21357)",
+   "title": "typo3 < 9.5.25: Broken Access Control in Form Framework (CVE-2021-21357)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8458,7 +8458,7 @@
   },
   {
    "key": "cve-typo3-2021-21358",
-   "title": "typo3 < 11.1.1 \u2014 Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting') in typo3/cms-form (CVE-2021-21358)",
+   "title": "typo3 < 11.1.1: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting') in typo3/cms-form (CVE-2021-21358)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8479,7 +8479,7 @@
   },
   {
    "key": "cve-typo3-2021-21359",
-   "title": "typo3 < 9.5.25 \u2014 Denial of Service in Page Error Handling (CVE-2021-21359)",
+   "title": "typo3 < 9.5.25: Denial of Service in Page Error Handling (CVE-2021-21359)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8500,7 +8500,7 @@
   },
   {
    "key": "cve-typo3-2021-21370",
-   "title": "typo3 < 9.5.25 \u2014 Cross-Site Scripting in Content Preview (CType menu) (CVE-2021-21370)",
+   "title": "typo3 < 9.5.25: Cross-Site Scripting in Content Preview (CType menu) (CVE-2021-21370)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8521,7 +8521,7 @@
   },
   {
    "key": "cve-typo3-2021-32667",
-   "title": "typo3 < 9.5.28 \u2014 Cross-Site Scripting in Page Preview (CVE-2021-32667)",
+   "title": "typo3 < 9.5.28: Cross-Site Scripting in Page Preview (CVE-2021-32667)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8542,7 +8542,7 @@
   },
   {
    "key": "cve-typo3-2021-32668",
-   "title": "typo3 < 9.5.28 \u2014 Cross-Site Scripting in Query Generator & Query View (CVE-2021-32668)",
+   "title": "typo3 < 9.5.28: Cross-Site Scripting in Query Generator & Query View (CVE-2021-32668)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8563,7 +8563,7 @@
   },
   {
    "key": "cve-typo3-2021-32669",
-   "title": "typo3 < 9.5.28 \u2014 Cross-Site Scripting in Backend Grid View (CVE-2021-32669)",
+   "title": "typo3 < 9.5.28: Cross-Site Scripting in Backend Grid View (CVE-2021-32669)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8584,7 +8584,7 @@
   },
   {
    "key": "cve-typo3-2021-32767",
-   "title": "typo3 < 9.5.28 \u2014 Information Disclosure in User Authentication (CVE-2021-32767)",
+   "title": "typo3 < 9.5.28: Information Disclosure in User Authentication (CVE-2021-32767)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8604,7 +8604,7 @@
   },
   {
    "key": "cve-typo3-2021-32768",
-   "title": "typo3 < 7.6.53 \u2014 Cross-Site Scripting via Rich-Text Content (CVE-2021-32768)",
+   "title": "typo3 < 7.6.53: Cross-Site Scripting via Rich-Text Content (CVE-2021-32768)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8625,7 +8625,7 @@
   },
   {
    "key": "cve-typo3-2021-41113",
-   "title": "typo3 < 11.5.0 \u2014 Cross-Site-Request-Forgery in Backend (CVE-2021-41113)",
+   "title": "typo3 < 11.5.0: Cross-Site-Request-Forgery in Backend (CVE-2021-41113)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8645,7 +8645,7 @@
   },
   {
    "key": "cve-typo3-2021-41114",
-   "title": "typo3 < 11.5.0 \u2014 HTTP Host Header Injection (CVE-2021-41114)",
+   "title": "typo3 < 11.5.0: HTTP Host Header Injection (CVE-2021-41114)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8665,7 +8665,7 @@
   },
   {
    "key": "cve-typo3-2022-23500",
-   "title": "typo3 < 11.5.20 \u2014 TYPO3 CMS vulnerable to Denial of Service in Page Error Handling (CVE-2022-23500)",
+   "title": "typo3 < 11.5.20: TYPO3 CMS vulnerable to Denial of Service in Page Error Handling (CVE-2022-23500)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8686,7 +8686,7 @@
   },
   {
    "key": "cve-typo3-2022-23501",
-   "title": "typo3 < 12.1.1 \u2014 TYPO3 CMS vulnerable to Weak Authentication in Frontend Login (CVE-2022-23501)",
+   "title": "typo3 < 12.1.1: TYPO3 CMS vulnerable to Weak Authentication in Frontend Login (CVE-2022-23501)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8706,7 +8706,7 @@
   },
   {
    "key": "cve-typo3-2022-23502",
-   "title": "typo3 < 12.1.1 \u2014 TYPO3 CMS vulnerable to Insufficient Session Expiration after Password Reset (CVE-2022-23502)",
+   "title": "typo3 < 12.1.1: TYPO3 CMS vulnerable to Insufficient Session Expiration after Password Reset (CVE-2022-23502)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8726,7 +8726,7 @@
   },
   {
    "key": "cve-typo3-2022-23503",
-   "title": "typo3 < 12.1.1 \u2014 TYPO3 CMS vulnerable to Arbitrary Code Execution via Form Framework (CVE-2022-23503)",
+   "title": "typo3 < 12.1.1: TYPO3 CMS vulnerable to Arbitrary Code Execution via Form Framework (CVE-2022-23503)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -8746,7 +8746,7 @@
   },
   {
    "key": "cve-typo3-2022-23504",
-   "title": "typo3 < 12.1.1 \u2014 TYPO3 CMS vulnerable to Sensitive Information Disclosure via YAML Placeholder Expressions in Site Configuration (CVE-2022-2",
+   "title": "typo3 < 12.1.1: TYPO3 CMS vulnerable to Sensitive Information Disclosure via YAML Placeholder Expressions in Site Configuration (CVE-2022-2",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8766,7 +8766,7 @@
   },
   {
    "key": "cve-typo3-2022-31046",
-   "title": "typo3 < 11.5.11 \u2014 Information Disclosure via Export Module (CVE-2022-31046)",
+   "title": "typo3 < 11.5.11: Information Disclosure via Export Module (CVE-2022-31046)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8786,7 +8786,7 @@
   },
   {
    "key": "cve-typo3-2022-31047",
-   "title": "typo3 < 11.5.11 \u2014 Insertion of Sensitive Information into Log File in typo3/cms-core (CVE-2022-31047)",
+   "title": "typo3 < 11.5.11: Insertion of Sensitive Information into Log File in typo3/cms-core (CVE-2022-31047)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8806,7 +8806,7 @@
   },
   {
    "key": "cve-typo3-2022-31048",
-   "title": "typo3 < 11.5.11 \u2014 Cross-Site Scripting in TYPO3's Form Framework (CVE-2022-31048)",
+   "title": "typo3 < 11.5.11: Cross-Site Scripting in TYPO3's Form Framework (CVE-2022-31048)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8827,7 +8827,7 @@
   },
   {
    "key": "cve-typo3-2022-31049",
-   "title": "typo3 < 11.5.11 \u2014 Cross-Site Scripting in TYPO3's Frontend Login Mailer (CVE-2022-31049)",
+   "title": "typo3 < 11.5.11: Cross-Site Scripting in TYPO3's Frontend Login Mailer (CVE-2022-31049)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8848,7 +8848,7 @@
   },
   {
    "key": "cve-typo3-2022-31050",
-   "title": "typo3 < 11.5.11 \u2014 Insufficient Session Expiration in TYPO3's Admin Tool (CVE-2022-31050)",
+   "title": "typo3 < 11.5.11: Insufficient Session Expiration in TYPO3's Admin Tool (CVE-2022-31050)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8868,7 +8868,7 @@
   },
   {
    "key": "cve-typo3-2022-36020",
-   "title": "typo3 < 11.5.16 \u2014 TYPO3 HTML Sanitizer Bypasses Cross-Site Scripting Protection (CVE-2022-36020)",
+   "title": "typo3 < 11.5.16: TYPO3 HTML Sanitizer Bypasses Cross-Site Scripting Protection (CVE-2022-36020)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8889,7 +8889,7 @@
   },
   {
    "key": "cve-typo3-2022-36104",
-   "title": "typo3 < 11.5.16 \u2014 TYPO3 CMS vulnerable to Denial of Service in Page Error Handling (CVE-2022-36104)",
+   "title": "typo3 < 11.5.16: TYPO3 CMS vulnerable to Denial of Service in Page Error Handling (CVE-2022-36104)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8910,7 +8910,7 @@
   },
   {
    "key": "cve-typo3-2022-36105",
-   "title": "typo3 < 11.5.16 \u2014 TYPO3 CMS vulnerable to User Enumeration via Response Timing (CVE-2022-36105)",
+   "title": "typo3 < 11.5.16: TYPO3 CMS vulnerable to User Enumeration via Response Timing (CVE-2022-36105)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8930,7 +8930,7 @@
   },
   {
    "key": "cve-typo3-2022-36106",
-   "title": "typo3 < 11.5.16 \u2014 TYPO3 CMS missing check for expiration time of password reset token for backend users (CVE-2022-36106)",
+   "title": "typo3 < 11.5.16: TYPO3 CMS missing check for expiration time of password reset token for backend users (CVE-2022-36106)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8950,7 +8950,7 @@
   },
   {
    "key": "cve-typo3-2022-36107",
-   "title": "typo3 < 11.5.16 \u2014 TYPO3 CMS Stored Cross-Site Scripting via FileDumpController (CVE-2022-36107)",
+   "title": "typo3 < 11.5.16: TYPO3 CMS Stored Cross-Site Scripting via FileDumpController (CVE-2022-36107)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8971,7 +8971,7 @@
   },
   {
    "key": "cve-typo3-2022-36108",
-   "title": "typo3 < 11.5.16 \u2014 TYPO3 CMS vulnerable to Cross-Site Scripting in <f:asset.css> view helper (CVE-2022-36108)",
+   "title": "typo3 < 11.5.16: TYPO3 CMS vulnerable to Cross-Site Scripting in <f:asset.css> view helper (CVE-2022-36108)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -8992,7 +8992,7 @@
   },
   {
    "key": "cve-typo3-2023-24814",
-   "title": "typo3 < 12.2.0 \u2014 TYPO3 is vulnerable to Cross-Site Scripting via frontend rendering (CVE-2023-24814)",
+   "title": "typo3 < 12.2.0: TYPO3 is vulnerable to Cross-Site Scripting via frontend rendering (CVE-2023-24814)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9013,7 +9013,7 @@
   },
   {
    "key": "cve-typo3-2023-30451",
-   "title": "typo3 < 13.0.1 \u2014 Path Traversal in TYPO3 File Abstraction Layer Storages (CVE-2023-30451)",
+   "title": "typo3 < 13.0.1: Path Traversal in TYPO3 File Abstraction Layer Storages (CVE-2023-30451)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9034,7 +9034,7 @@
   },
   {
    "key": "cve-typo3-2023-38499",
-   "title": "typo3 < 12.4.4 \u2014 Information Disclosure due to Out-of-scope Site Resolution (CVE-2023-38499)",
+   "title": "typo3 < 12.4.4: Information Disclosure due to Out-of-scope Site Resolution (CVE-2023-38499)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -9054,7 +9054,7 @@
   },
   {
    "key": "cve-typo3-2023-47127",
-   "title": "typo3 < 12.4.8 \u2014 TYPO3 vulnerable to Weak Authentication in Session Handling (CVE-2023-47127)",
+   "title": "typo3 < 12.4.8: TYPO3 vulnerable to Weak Authentication in Session Handling (CVE-2023-47127)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9074,7 +9074,7 @@
   },
   {
    "key": "cve-typo3-2024-22188",
-   "title": "typo3 < 13.0.1 \u2014 TYPO3 Install Tool vulnerable to Code Execution (CVE-2024-22188)",
+   "title": "typo3 < 13.0.1: TYPO3 Install Tool vulnerable to Code Execution (CVE-2024-22188)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9094,7 +9094,7 @@
   },
   {
    "key": "cve-typo3-2024-25118",
-   "title": "typo3 < 13.0.1 \u2014 TYPO3 Backend Forms vulnerable to Information Disclosure of Hashed Passwords (CVE-2024-25118)",
+   "title": "typo3 < 13.0.1: TYPO3 Backend Forms vulnerable to Information Disclosure of Hashed Passwords (CVE-2024-25118)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9114,7 +9114,7 @@
   },
   {
    "key": "cve-typo3-2024-25119",
-   "title": "typo3 < 13.0.1 \u2014 TYPO3 Install Tool vulnerable to Information Disclosure of Encryption Key (CVE-2024-25119)",
+   "title": "typo3 < 13.0.1: TYPO3 Install Tool vulnerable to Information Disclosure of Encryption Key (CVE-2024-25119)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9134,7 +9134,7 @@
   },
   {
    "key": "cve-typo3-2024-25120",
-   "title": "typo3 < 13.0.1 \u2014 TYPO3 vulnerable to Improper Access Control of Resources Referenced by t3:// URI Scheme (CVE-2024-25120)",
+   "title": "typo3 < 13.0.1: TYPO3 vulnerable to Improper Access Control of Resources Referenced by t3:// URI Scheme (CVE-2024-25120)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9155,7 +9155,7 @@
   },
   {
    "key": "cve-typo3-2024-25121",
-   "title": "typo3 < 13.0.1 \u2014 TYPO3 vulnerable to Improper Access Control Persisting File Abstraction Layer Entities via Data Handler (CVE-2024-25121)",
+   "title": "typo3 < 13.0.1: TYPO3 vulnerable to Improper Access Control Persisting File Abstraction Layer Entities via Data Handler (CVE-2024-25121)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9175,7 +9175,7 @@
   },
   {
    "key": "cve-typo3-2024-34355",
-   "title": "typo3 < 13.1.1 \u2014 TYPO3 vulnerable to an HTML Injection in the History Module (CVE-2024-34355)",
+   "title": "typo3 < 13.1.1: TYPO3 vulnerable to an HTML Injection in the History Module (CVE-2024-34355)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -9195,7 +9195,7 @@
   },
   {
    "key": "cve-typo3-2024-34356",
-   "title": "typo3 < 13.1.1 \u2014 TYPO3 vulnerable to Cross-Site Scripting in the Form Manager Module (CVE-2024-34356)",
+   "title": "typo3 < 13.1.1: TYPO3 vulnerable to Cross-Site Scripting in the Form Manager Module (CVE-2024-34356)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9216,7 +9216,7 @@
   },
   {
    "key": "cve-typo3-2024-34357",
-   "title": "typo3 < 13.1.1 \u2014 TYPO3 vulnerable to Cross-Site Scripting in the ShowImageController (CVE-2024-34357)",
+   "title": "typo3 < 13.1.1: TYPO3 vulnerable to Cross-Site Scripting in the ShowImageController (CVE-2024-34357)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9237,7 +9237,7 @@
   },
   {
    "key": "cve-typo3-2024-34358",
-   "title": "typo3 < 13.1.1 \u2014 TYPO3 vulnerable to an Uncontrolled Resource Consumption in the ShowImageController (CVE-2024-34358)",
+   "title": "typo3 < 13.1.1: TYPO3 vulnerable to an Uncontrolled Resource Consumption in the ShowImageController (CVE-2024-34358)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9258,7 +9258,7 @@
   },
   {
    "key": "cve-typo3-2024-55892",
-   "title": "typo3 < 13.4.3 \u2014 TYPO3 Potential Open Redirect via Parsing Differences (CVE-2024-55892)",
+   "title": "typo3 < 13.4.3: TYPO3 Potential Open Redirect via Parsing Differences (CVE-2024-55892)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9279,7 +9279,7 @@
   },
   {
    "key": "cve-typo3-2025-47937",
-   "title": "typo3 < 13.4.12 \u2014 TYPO3 Allows Information Disclosure via DBAL Restriction Handling (CVE-2025-47937)",
+   "title": "typo3 < 13.4.12: TYPO3 Allows Information Disclosure via DBAL Restriction Handling (CVE-2025-47937)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -9299,7 +9299,7 @@
   },
   {
    "key": "cve-typo3-2025-47938",
-   "title": "typo3 < 13.4.12 \u2014 TYPO3 Unverified Password Change for Backend Users (CVE-2025-47938)",
+   "title": "typo3 < 13.4.12: TYPO3 Unverified Password Change for Backend Users (CVE-2025-47938)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -9319,7 +9319,7 @@
   },
   {
    "key": "cve-typo3-2025-47939",
-   "title": "typo3 < 13.4.12 \u2014 TYPO3 Allows Unrestricted File Upload in File Abstraction Layer (CVE-2025-47939)",
+   "title": "typo3 < 13.4.12: TYPO3 Allows Unrestricted File Upload in File Abstraction Layer (CVE-2025-47939)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9339,7 +9339,7 @@
   },
   {
    "key": "cve-typo3-2025-47940",
-   "title": "typo3 < 13.4.12 \u2014 TYPO3 Allows Privilege Escalation to System Maintainer (CVE-2025-47940)",
+   "title": "typo3 < 13.4.12: TYPO3 Allows Privilege Escalation to System Maintainer (CVE-2025-47940)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9359,7 +9359,7 @@
   },
   {
    "key": "cve-typo3-2025-59013",
-   "title": "typo3 < 13.4.18 \u2014 TYPO3 CMS has an open\u2011redirect vulnerability (CVE-2025-59013)",
+   "title": "typo3 < 13.4.18: TYPO3 CMS has an open\u2011redirect vulnerability (CVE-2025-59013)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9379,7 +9379,7 @@
   },
   {
    "key": "cve-typo3-2025-59015",
-   "title": "typo3 < 13.4.18 \u2014 TYPO3 CMS uses insufficient entropy when generating passwords (CVE-2025-59015)",
+   "title": "typo3 < 13.4.18: TYPO3 CMS uses insufficient entropy when generating passwords (CVE-2025-59015)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9399,7 +9399,7 @@
   },
   {
    "key": "cve-typo3-2025-59016",
-   "title": "typo3 < 13.4.18 \u2014 TYPO3 CMS exposes sensitive information in an error message (CVE-2025-59016)",
+   "title": "typo3 < 13.4.18: TYPO3 CMS exposes sensitive information in an error message (CVE-2025-59016)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9419,7 +9419,7 @@
   },
   {
    "key": "cve-typo3-2026-0859",
-   "title": "typo3 < 10.4.55 \u2014 TYPO3 CMS Allows Insecure Deserialization via Mailer File Spool (CVE-2026-0859)",
+   "title": "typo3 < 10.4.55: TYPO3 CMS Allows Insecure Deserialization via Mailer File Spool (CVE-2026-0859)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9440,7 +9440,7 @@
   },
   {
    "key": "cve-typo3-2026-11607",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has Broken Access Control in its Form Framework (CVE-2026-11607)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has Broken Access Control in its Form Framework (CVE-2026-11607)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9460,7 +9460,7 @@
   },
   {
    "key": "cve-typo3-2026-19418",
-   "title": "typo3 < 14.3.6 \u2014 TYPO3 CMS - Broken Access Control in Backend and Install Tool (CVE-2026-19418)",
+   "title": "typo3 < 14.3.6: TYPO3 CMS - Broken Access Control in Backend and Install Tool (CVE-2026-19418)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9480,7 +9480,7 @@
   },
   {
    "key": "cve-typo3-2026-47343",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS: Destructive Actions on File Mount Folders (CVE-2026-47343)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS: Destructive Actions on File Mount Folders (CVE-2026-47343)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9500,7 +9500,7 @@
   },
   {
    "key": "cve-typo3-2026-47346",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has Broken Access Control in its Form Framework (CVE-2026-47346)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has Broken Access Control in its Form Framework (CVE-2026-47346)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9520,7 +9520,7 @@
   },
   {
    "key": "cve-typo3-2026-47347",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has an Open Redirect Vulnerability via Core Utilities (CVE-2026-47347)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has an Open Redirect Vulnerability via Core Utilities (CVE-2026-47347)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9541,7 +9541,7 @@
   },
   {
    "key": "cve-typo3-2026-47348",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has Cross-Site Scripting in Indexed Search (CVE-2026-47348)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has Cross-Site Scripting in Indexed Search (CVE-2026-47348)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9562,7 +9562,7 @@
   },
   {
    "key": "cve-typo3-2026-47349",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has Broken Access Control in the Recycler Module (CVE-2026-47349)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has Broken Access Control in the Recycler Module (CVE-2026-47349)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9582,7 +9582,7 @@
   },
   {
    "key": "cve-typo3-2026-47350",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has Broken Access Control in its DataHandler (CVE-2026-47350)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has Broken Access Control in its DataHandler (CVE-2026-47350)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9602,7 +9602,7 @@
   },
   {
    "key": "cve-typo3-2026-47351",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS: Broken Access Control in Media Module (CVE-2026-47351)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS: Broken Access Control in Media Module (CVE-2026-47351)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9622,7 +9622,7 @@
   },
   {
    "key": "cve-typo3-2026-47352",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has Broken Access Control in Backend API (CVE-2026-47352)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has Broken Access Control in Backend API (CVE-2026-47352)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9642,7 +9642,7 @@
   },
   {
    "key": "cve-typo3-2026-49738",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has Broken Access Control in its File Abstraction Layer (CVE-2026-49738)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has Broken Access Control in its File Abstraction Layer (CVE-2026-49738)",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -9662,7 +9662,7 @@
   },
   {
    "key": "cve-typo3-2026-49740",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has Insecure Deserialization via Core API (CVE-2026-49740)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has Insecure Deserialization via Core API (CVE-2026-49740)",
    "category": "cve",
    "severity": "medium",
    "confidence": "candidate",
@@ -9683,7 +9683,7 @@
   },
   {
    "key": "cve-typo3-2026-49741",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has Privilege Escalation & SQL Injection in its Form Framework (CVE-2026-49741)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has Privilege Escalation & SQL Injection in its Form Framework (CVE-2026-49741)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9704,7 +9704,7 @@
   },
   {
    "key": "cve-typo3-2026-49742",
-   "title": "typo3 < 14.3.3 \u2014 TYPO3 CMS has Broken Access Control in its Media Module (CVE-2026-49742)",
+   "title": "typo3 < 14.3.3: TYPO3 CMS has Broken Access Control in its Media Module (CVE-2026-49742)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9724,7 +9724,7 @@
   },
   {
    "key": "cve-vue-2024-9506",
-   "title": "vue < 3.0.0-alpha.0 \u2014 ReDoS vulnerability in vue package that is exploitable through inefficient regex evaluation in the parseHTML function ",
+   "title": "vue < 3.0.0-alpha.0: ReDoS vulnerability in vue package that is exploitable through inefficient regex evaluation in the parseHTML function ",
    "category": "cve",
    "severity": "low",
    "confidence": "candidate",
@@ -9746,7 +9746,7 @@
   },
   {
    "key": "cve-wordpress-2022-21661",
-   "title": "WordPress < 5.8.3 \u2014 SQL injection via WP_Query (CVE-2022-21661)",
+   "title": "WordPress < 5.8.3: SQL injection via WP_Query (CVE-2022-21661)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -9765,7 +9765,7 @@
   },
   {
    "key": "cve-wordpress-2022-21663",
-   "title": "WordPress < 5.8.3 \u2014 Object injection via multisite (CVE-2022-21663)",
+   "title": "WordPress < 5.8.3: Object injection via multisite (CVE-2022-21663)",
    "category": "cve",
    "severity": "high",
    "confidence": "candidate",
@@ -10387,7 +10387,7 @@
    "category": "privesc",
    "severity": "high",
    "confidence": "confirmed",
-   "remediation": "Remove unneeded file capabilities (setcap -r); never grant cap_setuid/cap_dac_override/cap_sys_admin to general-purpose binaries — they are root-equivalent.",
+   "remediation": "Remove unneeded file capabilities (setcap -r); never grant cap_setuid/cap_dac_override/cap_sys_admin to general-purpose binaries, they are root-equivalent.",
    "refs": [
     "https://cwe.mitre.org/data/definitions/250.html",
     "https://attack.mitre.org/techniques/T1548/",

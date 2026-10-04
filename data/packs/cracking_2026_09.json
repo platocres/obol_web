@@ -1,6 +1,6 @@
 {
   "name": "Offline password cracking (§3)",
-  "description": "Feed recovered hash material — kerberoast and AS-REP tickets, NTLM/NTDS dumps, captured NetNTLMv2, /etc/shadow entries — to hashcat or john and recover the plaintext. It all runs offline on your own box and touches no target, so these steps auto-advance; a cracked hash stays a candidate secret until a real login proves it.",
+  "description": "Feed recovered hash material (kerberoast and AS-REP tickets, NTLM/NTDS dumps, captured NetNTLMv2, /etc/shadow entries) to hashcat or john and recover the plaintext. It all runs offline on your own box and touches no target, so these steps auto-advance; a cracked hash stays a candidate secret until a real login proves it.",
   "source": "OSCP methodology (project-authored, obol-local)",
   "actions": [
     {
@@ -66,7 +66,7 @@
       "priority": 60,
       "autonomy": "auto",
       "proves": "the plaintext recovered from an NTLM hash (a candidate credential)",
-      "does_not_prove": "a login on its own — and note the NT hash is already usable for pass-the-hash without any cracking",
+      "does_not_prove": "a login on its own, and note the NT hash is already usable for pass-the-hash without any cracking",
       "commands": [
         {"tool": "hashcat", "run": "hashcat -m 1000 ntlm.hash /usr/share/wordlists/rockyou.txt"}
       ]
@@ -115,9 +115,9 @@
       "priority": 60,
       "autonomy": "auto",
       "proves": "the archive password (a candidate secret until it unlocks the archive and its contents are read back)",
-      "does_not_prove": "any access — the password only unlocks the file; what's inside must still be extracted and validated",
+      "does_not_prove": "any access, the password only unlocks the file; what's inside must still be extracted and validated",
       "commands": [
-        {"tool": "zip2john", "run": "zip2john archive.zip > archive.hash", "note": "for a .zip — use the archive obol flagged as loot.material"},
+        {"tool": "zip2john", "run": "zip2john archive.zip > archive.hash", "note": "for a .zip, use the archive obol flagged as loot.material"},
         {"tool": "rar2john", "run": "rar2john archive.rar > archive.hash", "note": "for a .rar"},
         {"tool": "7z2john", "run": "7z2john archive.7z > archive.hash", "note": "for a .7z (needs the john-jumbo build)"},
         {"tool": "john", "run": "john --wordlist=/usr/share/wordlists/rockyou.txt archive.hash", "note": "john auto-detects the *2john format; unzip with the cracked password, then paste any creds/config from inside on Evidence."}
@@ -126,7 +126,7 @@
     {
       "id": "online-brute-ssh",
       "title": "Online password brute over SSH (hydra)",
-      "hypothesis": "When SSH is reachable and no working credential is known yet, a targeted hydra run against an enumerated user list can recover a login — a noisy, lockout-risky attack, so it is approve-tier and never auto-fires in a normal cruise.",
+      "hypothesis": "When SSH is reachable and no working credential is known yet, a targeted hydra run against an enumerated user list can recover a login, a noisy, lockout-risky attack, so it is approve-tier and never auto-fires in a normal cruise.",
       "tool": "hydra",
       "tools": ["hydra"],
       "requires_any": ["ssh.reachable"],
@@ -171,13 +171,13 @@
       "does_not_prove": "anything until hydra returns a hit",
       "commands": [
         {"tool": "hydra", "run": "hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 1 rdp://{{target}}",
-         "note": "-t 1 (single thread) is important for RDP; lockout risk is high — prefer a small, targeted list."}
+         "note": "-t 1 (single thread) is important for RDP; lockout risk is high, prefer a small, targeted list."}
       ]
     },
     {
       "id": "crack-mscache2",
       "title": "Crack an MS Cache v2 (DCC2) hash",
-      "hypothesis": "Domain Cached Credentials v2 ($DCC2$) are stored on a workstation so a domain user can log in offline. They are deliberately slow to crack, but a weak password still falls — and the plaintext is a real domain credential to reuse. Pulled from a local secretsdump (the cachedump).",
+      "hypothesis": "Domain Cached Credentials v2 ($DCC2$) are stored on a workstation so a domain user can log in offline. They are deliberately slow to crack, but a weak password still falls, and the plaintext is a real domain credential to reuse. Pulled from a local secretsdump (the cachedump).",
       "tool": "hashcat",
       "tools": [
         "hashcat",
@@ -194,7 +194,7 @@
       "autonomy": "auto",
       "priority": 55,
       "proves": "the plaintext recovered from a cached domain credential (DCC2)",
-      "does_not_prove": "a fast result — DCC2 is intentionally slow; and the hash cannot be passed (unlike NTLM), so cracking is the only use",
+      "does_not_prove": "a fast result, DCC2 is intentionally slow; and the hash cannot be passed (unlike NTLM), so cracking is the only use",
       "report": {
         "finding": "Weak Cached Domain Credential (DCC2)",
         "severity": "medium"

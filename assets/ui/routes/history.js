@@ -27,7 +27,7 @@
     var acts = (eng.activities || []);
     if (!acts.length) {
       return '<section class="history-route"><h1 class="route-h1">Run Log</h1>'
-        + '<p class="route-sub">No commands logged yet. Everything you paste or attach on the Evidence route — the command and its full output — is recorded here so you can review the whole run later.</p></section>';
+        + '<p class="route-sub">No commands logged yet. Everything you paste or attach on the Evidence route (the command and its full output) is recorded here so you can review the whole run later.</p></section>';
     }
     var rows = acts.map(function (a, i) {
       var cmd = label(a);
@@ -54,7 +54,7 @@
     }).join('');
 
     return '<section class="history-route"><h1 class="route-h1">Run Log</h1>'
-      + '<p class="route-sub">Every command run on <strong>' + esc(eng.name || 'this engagement') + '</strong> (' + acts.length + '), newest first — with what it proved and its full saved output. Search to find one fast.</p>'
+      + '<p class="route-sub">Every command run on <strong>' + esc(eng.name || 'this engagement') + '</strong> (' + acts.length + '), newest first, with what it proved and its full saved output. Search to find one fast.</p>'
       + '<input class="hl-filter" type="search" placeholder="Filter commands and output…" autocomplete="off" spellcheck="false" aria-label="Filter the run log">'
       + '<div class="hl-list">' + rows + '</div></section>';
   }

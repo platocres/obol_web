@@ -1,6 +1,6 @@
 {
   "name": "Network pivoting & tunnelling (§3)",
-  "description": "Turn a proven foothold into reach onto an internal segment: a chisel or ligolo-ng SOCKS/TUN tunnel, sshuttle, an SSH dynamic forward, then enumerate the far side through the proxy. Every tunnel puts traffic on the wire, so each pauses for approval; a confirmed pivot widens scope to the subnet it exposes — scope grows, it is never skipped.",
+  "description": "Turn a proven foothold into reach onto an internal segment: a chisel or ligolo-ng SOCKS/TUN tunnel, sshuttle, an SSH dynamic forward, then enumerate the far side through the proxy. Every tunnel puts traffic on the wire, so each pauses for approval; a confirmed pivot widens scope to the subnet it exposes, scope grows, it is never skipped.",
   "source": "OSCP methodology (project-authored, obol-local)",
   "actions": [
     {
@@ -14,7 +14,7 @@
       "priority": 64,
       "autonomy": "approve",
       "proves": "a working SOCKS tunnel into the network the foothold sits on",
-      "does_not_prove": "that any particular internal host is reachable — only a scan through the tunnel shows that",
+      "does_not_prove": "that any particular internal host is reachable, only a scan through the tunnel shows that",
       "refs": ["https://github.com/jpillora/chisel"],
       "commands": [
         {"tool": "chisel", "run": "chisel server -p 8080 --reverse"},
@@ -59,7 +59,7 @@
     {
       "id": "pivot-ssh-dynamic",
       "title": "SSH dynamic port-forward (SOCKS)",
-      "hypothesis": "`ssh -D` on its own stands up a SOCKS proxy through the foothold — the no-extra-tooling pivot whenever SSH credentials are already in hand.",
+      "hypothesis": "`ssh -D` on its own stands up a SOCKS proxy through the foothold, the no-extra-tooling pivot whenever SSH credentials are already in hand.",
       "tool": "ssh",
       "tools": ["ssh"],
       "requires_any": ["credential.available", "foothold.linux"],
@@ -83,7 +83,7 @@
       "priority": 52,
       "autonomy": "approve",
       "proves": "open ports on an internal host reached across the pivot",
-      "does_not_prove": "a vulnerability — this maps attack surface and nothing more",
+      "does_not_prove": "a vulnerability, this maps attack surface and nothing more",
       "commands": [
         {"tool": "proxychains", "run": "proxychains -q nmap -sT -Pn -n <internal-host>"}
       ]

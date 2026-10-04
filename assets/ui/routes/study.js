@@ -29,13 +29,18 @@
   var _pathMode = false;         // node view follows _path instead of the move's lane
   var _collapsed = {};           // Atlas: laneKey -> true when that lane band is folded shut
   var _atlasQuery = '';          // Atlas: current search text (dims non-matching steps)
+  var _whyOverride = {};         // node: moveId -> true when the learner asked to show the reasoning anyway
+  var _practiceMode = 'next';    // practice gear: 'next' (what to do) | 'read' (diagnose the output)
+  var _simKey = null;            // cold-box sim: active scenario key (null = pick one)
+  var _simStep = 0;              // cold-box sim: current step index
+  var _simState = {};            // cold-box sim: stepIdx -> { pickedId, correct } answered state
 
   function esc(s) { return U.esc(String(s == null ? '' : s)); }
   function study() { return OBOL.study; }
   // raw fact kind → the human phrase the packs already carry (ad.user_list → "a domain user list")
   function human(k) { try { return (OBOL.pack && OBOL.pack.friendly) ? OBOL.pack.friendly(k) : k; } catch (e) { return k; } }
   function factChips(list, cls) {
-    return (list || []).map(function (x) { return '<span class="study-chip ' + (cls || '') + '" title="' + U.attr(x) + '">' + esc(human(x)) + '</span>'; }).join('');
+    return (list || []).map(function (x) { return '<button type="button" class="study-chip study-chip-fact ' + (cls || '') + '" data-fact="' + U.attr(x) + '" title="What produces ' + U.attr(human(x)) + ', and what it unlocks">' + esc(human(x)) + '</button>'; }).join('');
   }
   // wrap code-ish fragments in prose as real <code> (backticked spans, $hashes, fact.kinds, CONSTANTS)
   function codeify(s) {
@@ -120,8 +125,8 @@
   function replayPlayer(rp) {
     if (!rp) return '';
     var idle = rp.hasOutput
-      ? 'Press <b>Play</b> — watch <b>' + esc(rp.tool) + '</b> run against the target and the result land, the way it would on a real box.'
-      : 'Press <b>Play</b> to watch <b>' + esc(rp.tool) + '</b> run. <span class="rp-nosample">A captured sample of this step’s output is still being written — you’ll see the command and what it proves.</span>';
+      ? 'Press <b>Play</b> and watch <b>' + esc(rp.tool) + '</b> run against the target and the result land, the way it would on a real box.'
+      : 'Press <b>Play</b> to watch <b>' + esc(rp.tool) + '</b> run. <span class="rp-nosample">A captured sample of this step’s output is still being written, so you’ll see the command and what it proves.</span>';
     return '<div class="study-replay" data-move="' + U.attr(rp.id) + '">'
       + '<div class="study-replay-bar"><span class="study-replay-title">▶ Watch it run</span>'
       + '<span class="study-replay-loc">' + locusGlyph(rp.locus) + ' ' + esc(rp.locus) + ' · ' + esc(rp.tool) + '</span></div>'
@@ -156,13 +161,15 @@
     var remote = cmds.filter(function (c) { return c.rank === 0 || c.rank === 1; });   // your box: remote + offline
     var onhost = cmds.filter(function (c) { return c.rank === 2; });                    // on the target
     var conn = connectCmd(osForMove(cell));
-    var remotePane = remote.length
+    var remoteWhen = '<div class="rw-when"><b>When:</b> this is the default. It is fast, puts nothing on the box, and needs no shell. Reach for it first.</div>';
+    var hostWhen = '<div class="rw-when"><b>When:</b> go on the target for interactive or multi-step tools, when the remote wrapper mangles your quoting, when you need a real terminal, or when the remote attempt simply fails. It is more steps and more footprint, so it is the second choice, not the first.</div>';
+    var remotePane = remoteWhen + (remote.length
       ? remote.map(commandBlock).join('')
-      : '<div class="rw-note">This move is normally run <b>on the target</b> after you have a shell — switch the toggle.</div>';
-    var hostPane = '<div class="rw-connect">' + commandBlock(conn) + '</div>'
+      : '<div class="rw-note">This move is normally run <b>on the target</b> after you have a shell. Switch the toggle to see how.</div>');
+    var hostPane = hostWhen + '<div class="rw-connect">' + commandBlock(conn) + '</div>'
       + (onhost.length
         ? onhost.map(commandBlock).join('')
-        : '<div class="rw-note">Once you are on the box, run the same command locally — the built-ins shown, or the tool staged as in the replay above. (Remotely, you can also wrap it: <code class="study-ic">' + esc(osForMove(cell) === 'windows' ? 'nxc winrm 10.10.10.10 -u <user> -p <password> -x "…"' : 'ssh <user>@10.10.10.10 "…"') + '</code>.)</div>');
+        : '<div class="rw-note">Once you are on the box, run the same command locally: the built-ins shown, or the tool staged as in the replay above. (Remotely, you can also wrap it: <code class="study-ic">' + esc(osForMove(cell) === 'windows' ? 'nxc winrm 10.10.10.10 -u <user> -p <password> -x "..."' : 'ssh <user>@10.10.10.10 "..."') + '</code>.)</div>');
     return '<div class="study-runways">'
       + '<div class="rw-head"><span class="rw-label">Run it from</span>'
       + '<button type="button" class="rw-tab on" data-runway="remote">🛰 your box <span class="rw-n">' + remote.length + '</span></button>'
@@ -172,35 +179,114 @@
       + '</div>';
   }
 
+  // the scope-safety badge (header) + callout (body) — teach when NOT to fire a move
+  function scopeBadge(id) {
+    var s = study().scopeSafety(id);
+    if (s.level === 'destructive') return '<span class="study-badge b-danger">can break things</span>';
+    if (s.level === 'loud') return '<span class="study-badge b-loud">loud</span>';
+    return '';
+  }
+  function scopeCallout(id) {
+    var s = study().scopeSafety(id);
+    if (s.level === 'safe' || !s.note) return '';
+    var lab = s.level === 'destructive' ? 'Can break things' : 'Loud';
+    return '<div class="study-scope ' + s.level + '"><span class="study-scope-i">' + (s.level === 'destructive' ? '🛑' : '🔊') + '</span>'
+      + '<div><b>' + lab + '.</b> ' + esc(s.note) + ' On the exam, scope is the rule: do not nuke what you do not have to.</div></div>';
+  }
+  // the always-on reasoning: why this move applies now, and why it matters (fades once mastered)
+  function whyPanel(cell) {
+    if (!study().showWhy(cell.id) && !_whyOverride[cell.id]) {
+      return '<button type="button" class="study-why-show" data-why-show>Show the reasoning</button>';
+    }
+    var proves = (cell.proves || [])[0];
+    var needs = cell.prereqFacts.length
+      ? 'you are holding ' + cell.prereqFacts.map(function (f) { return '<b>' + esc(human(f)) + '</b>'; }).join(', ')
+      : 'this is an opening move, so it needs nothing but a reachable target';
+    var turns = proves ? ('it turns that into <b>' + esc(human(proves)) + '</b>') : 'it confirms the step worked';
+    var mattersBit = (cell.opens && cell.opens.length) ? (', which is exactly what <b>' + esc(cell.opens[0].title) + '</b> needs next') : '';
+    return '<div class="study-why"><div class="study-why-h">Why this, why now</div>'
+      + '<p>You reach for this because ' + needs + ', and ' + turns + mattersBit + '. That is the whole logic: a specific thing you found makes a specific next move possible.</p></div>';
+  }
+  // reading the result: what the highlighted signal line actually tells you
+  function signalTellBlock(cell) {
+    if (!cell.output || !cell.output.text) return '';
+    var t = study().signalTell(cell.id); if (!t || !t.gist) return '';
+    return '<div class="study-tell"><div class="study-tell-h">Reading the result</div>'
+      + '<p>' + codeify(t.gist) + '</p></div>';
+  }
+  // "Why this, not that?" — the tool-selection decisions attached to this move
+  function decisionPanel(cell) {
+    var ds = study().decisionFor(cell.id); if (!ds.length) return '';
+    return ds.map(function (d) {
+      var detail = d.detail.map(function (o) {
+        var m = study().cellFor(o.id);
+        return '<div class="dec-opt"><button type="button" class="dec-opt-t" data-goto="' + U.attr(o.id) + '">' + esc(m ? m.title : o.id) + '</button>'
+          + '<span class="dec-opt-when">' + esc(o.when) + '</span></div>';
+      }).join('');
+      return '<div class="study-decision"><div class="dec-q">' + esc(d.question) + '</div>'
+        + '<div class="dec-tldr"><span class="dec-tldr-l">In short</span> Default to <b>' + esc(d.pick) + '</b>. ' + esc(d.rule) + ' <span class="dec-unless">Unless ' + esc(d.unless) + '</span></div>'
+        + '<details class="dec-detail"><summary>The longer why, option by option</summary>' + detail + '</details>'
+        + '</div>';
+    }).join('');
+  }
+
+  // fact popover: one fact made first-class. What produces it, and what it then unlocks.
+  function showFactPop(mount, fact) {
+    var el = mount.querySelector('#study-factpop'); if (!el) return;
+    var info = study().factInfo(fact);
+    function list(arr, kind) {
+      if (!arr.length) return '<p class="fp-none">' + (kind === 'from' ? 'Nothing in the methodology produces this yet; it usually comes from the environment (an open port, a reachable target).' : 'This is an outcome in its own right.') + '</p>';
+      return '<div class="fp-moves">' + arr.slice(0, 12).map(function (m) { return '<button type="button" class="fp-move lane-' + (laneKeyOf(m.id)) + '" data-goto="' + U.attr(m.id) + '">' + esc(m.title) + '</button>'; }).join('') + '</div>';
+    }
+    el.innerHTML = '<div class="fp-card">'
+      + '<button type="button" class="fp-close" data-factpop-close aria-label="Close">×</button>'
+      + '<div class="fp-fact">' + esc(info.label) + '</div>'
+      + '<div class="fp-sec"><div class="fp-sec-l">You get it from</div>' + list(info.producedBy, 'from') + '</div>'
+      + '<div class="fp-sec"><div class="fp-sec-l">Once you have it, it unlocks</div>' + list(info.unlocks, 'to') + '</div>'
+      + '</div>';
+    el.hidden = false;
+  }
+
   // ---- right: WATCH (replay up top, derived reference below) -----------------------------------
   function cellPanel() {
     var cell = study().cellFor(_sel, { profile: (OBOL.arsenal && OBOL.arsenal.profileGet && OBOL.arsenal.profileGet()) || null });
-    if (!cell) return '<div class="study-panel"><p class="study-sub">Node unavailable in this build.</p></div>';
+    if (!cell) return '<div class="study-panel"><p class="study-sub">This step is not available in this build.</p></div>';
     var rp = study().replayFor(_sel);
     var h = '<div class="study-panel">';
     h += '<div class="study-cell-h"><h2 class="study-cell-title">' + esc(cell.title) + '</h2>'
       + (cell.phase ? '<span class="study-badge b-phase">' + esc(cell.phase) + '</span>' : '')
       + (cell.scope ? '<span class="study-badge b-scope">' + esc(cell.scope === 'oscp' ? 'OSCP core' : cell.scope) + '</span>' : '')
       + (cell.locus ? '<span class="study-badge b-locus">' + esc(cell.locus === 'R' ? 'runs remotely' : (cell.locus === 'F' ? 'runs on the target' : 'interactive on the target')) + '</span>' : '')
+      + scopeBadge(cell.id)
       + '</div>';
     if (cell.whatItIs) h += '<p class="study-cell-sub">' + codeify(cell.whatItIs) + '</p>';
 
+    h += whyPanel(cell);
+
     h += '<div class="study-startfrom"><span class="study-sf-l">Starting from</span> '
-      + (cell.prereqFacts.length ? factChips(cell.prereqFacts, 'proven') : '<span class="study-dim">nothing — this is an opening move</span>')
-      + (cell.producedBy.length ? '<span class="study-via">you\'d have run ' + cell.producedBy.slice(0, 2).map(function (x) { return '<b>' + esc(x.title) + '</b>'; }).join(' · ') + '</span>' : '')
+      + (cell.prereqFacts.length ? factChips(cell.prereqFacts, 'proven') : '<span class="study-dim">nothing. This is an opening move.</span>')
+      + (cell.producedBy.length ? '<span class="study-via">you would have run ' + cell.producedBy.slice(0, 2).map(function (x) { return '<b>' + esc(x.title) + '</b>'; }).join(', ') + '</span>' : '')
       + '</div>';
 
     // the replay
     h += replayPlayer(rp);
 
-    // Run-it-from toggle: the same move, two ways — remotely from your box, or on the target after you
-    // get a shell (with the connect step shown). Reuses the pack's own remote-first command loci.
+    // reading the highlighted result line
+    h += signalTellBlock(cell);
+
+    // Run-it-from toggle: the same move, two ways, remotely from your box or on the target after a shell.
     h += runWaysPanel(cell);
 
-    h += '<div class="study-seg study-outcome"><div class="study-seg-l">What you walk away with <span class="study-seg-note">— and the moves it unlocks</span></div>'
+    // which tool, when: tradeoff decisions over moves that reach the same outcome
+    h += decisionPanel(cell);
+
+    h += '<div class="study-seg study-outcome"><div class="study-seg-l">What you walk away with <span class="study-seg-note">and the moves it unlocks</span></div>'
       + '<div class="study-flow">' + factChips(cell.proves, 'proof')
-      + (cell.opens.length ? '<span class="study-arr">unlocks →</span>' + cell.opens.slice(0, 4).map(function (x) { return '<span class="study-chip study-next" data-goto="' + U.attr(x.id) + '">' + esc(x.title) + ' →</span>'; }).join('') : '')
+      + (cell.opens.length ? '<span class="study-arr">unlocks</span>' + cell.opens.slice(0, 4).map(function (x) { return '<button type="button" class="study-chip study-next" data-goto="' + U.attr(x.id) + '">' + esc(x.title) + ' →</button>'; }).join('') : '')
       + '</div></div>';
+
+    // scope-safety callout (when NOT to fire)
+    h += scopeCallout(cell.id);
 
     if (cell.rulesOut) h += '<div class="study-mistake"><span class="study-mi">⚠</span><div><b>Watch out:</b> ' + codeify(cell.rulesOut) + '</div></div>';
 
@@ -209,13 +295,14 @@
   }
 
   // ---- right: YOUR TURN (practice) ------------------------------------------------------------
-  function practicePanel() {
+  // Two question types, the same muscle: read a situation and decide ("what to do next"), or read raw
+  // output and name what it proves ("reading the output"). Diagnosis is the purest signal-recognition.
+  function nextMovePanel() {
     var q = study().practiceFor(_sel, _pathMode && _path.length ? _path : null);
-    if (!q) return '<div class="study-panel"><p class="study-sub">No practice for this node yet.</p></div>';
+    if (!q) return '<div class="study-scn"><p>No practice for this step yet.</p></div>';
     var letters = 'ABCDEFGH';
-    var h = '<div class="study-panel">';
-    h += '<div class="study-scn"><div class="study-scn-l">The situation</div><p>' + codeify(q.situation || 'Given where you are, what\'s your next move?') + '</p></div>';
-    h += '<div class="study-q">What\'s your next move?</div><div class="study-choices">';
+    var h = '<div class="study-scn"><div class="study-scn-l">The situation</div><p>' + codeify(q.situation || 'Given where you are, what is your next move?') + '</p></div>';
+    h += '<div class="study-q">What is your next move?</div><div class="study-choices">';
     q.choices.forEach(function (c, i) {
       var missingTxt = (c.missing || []).map(function (mk) { return /^one of:/.test(mk) ? ('one of: ' + mk.replace(/^one of:\s*/, '').split(' / ').map(human).join(' or ')) : human(mk); });
       var missing = missingTxt.length ? ' data-missing="' + U.attr(missingTxt.join('; ')) + '"' : '';
@@ -226,8 +313,31 @@
     });
     h += '</div><div class="study-verdict" id="study-verdict"></div>';
     h += '<div class="study-reveal-slot" id="study-reveal-slot"></div>';
-    h += '</div>';
     return h;
+  }
+  function diagnosePanel() {
+    var q = study().practiceDiagnose(_sel);
+    if (!q) return '<div class="study-scn"><p>This step has no captured output to read yet. Try <b>What to do next</b> instead.</p></div>';
+    var letters = 'ABCDEFGH';
+    var term = q.output.split('\n').map(function (ln) { var hot = q.signal && ln.indexOf(q.signal) >= 0; return '<span class="study-ln' + (hot ? ' hot' : '') + '">' + esc(ln || ' ') + '</span>'; }).join('');
+    var h = '<div class="study-q">You ran <b>' + esc(q.title) + '</b> and got this:</div>';
+    h += '<div class="study-term dx-term">' + term + '</div>';
+    h += '<div class="study-q">' + esc(q.question) + '</div><div class="study-choices">';
+    q.choices.forEach(function (c, i) {
+      h += '<button type="button" class="study-choice study-dx-choice" data-correct="' + (c.correct ? '1' : '0') + '">'
+        + '<span class="study-tag">' + letters[i] + '</span><span class="study-ct">' + esc(c.label) + '</span></button>';
+    });
+    h += '</div><div class="study-verdict" id="study-verdict"></div>';
+    h += '<div class="dx-why" id="dx-why" data-why="' + U.attr(q.why) + '" hidden></div>';
+    return h;
+  }
+  function practicePanel() {
+    var h = '<div class="study-panel">';
+    h += '<div class="study-pmodes"><span class="study-pm-l">Test me on</span>'
+      + '<button type="button" class="study-pm' + (_practiceMode !== 'read' ? ' on' : '') + '" data-pmode="next">What to do next</button>'
+      + '<button type="button" class="study-pm' + (_practiceMode === 'read' ? ' on' : '') + '" data-pmode="read">Reading the output</button></div>';
+    h += _practiceMode === 'read' ? diagnosePanel() : nextMovePanel();
+    return h + '</div>';
   }
 
   // ---- the MAP (Learn landing): pick a lane, pick a step, or head to setup / an engagement --------
@@ -247,7 +357,7 @@
     var ls = study().lanes();
     var h = '<section class="study-route study-map">';
     h += '<div class="study-hero"><h1 class="study-hero-h">Learn the methodology</h1>'
-      + '<p class="study-hero-p">obol teaches offensive security as a decision graph — <b>know what to do, and why, from what you\'ve found.</b> '
+      + '<p class="study-hero-p">obol teaches offensive security as a decision graph: <b>know what to do, and why, from what you\'ve found.</b> '
       + 'Pick a path below and step through it: watch each move play out like it would on a real box, or test yourself.</p></div>';
     h += '<div class="study-lanes">' + ls.map(function (L) {
       var pr = study().laneProgress(L.key), pct = pr.total ? Math.round(pr.studied / pr.total * 100) : 0;
@@ -257,12 +367,13 @@
         + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:' + pct + '%"></span></div>'
         + '<span class="study-lane-go">' + (pr.studied ? pr.studied + ' / ' + pr.total + ' studied · continue →' : 'Start the path →') + '</span></div></button>';
     }).join('') + '</div>';
-    h += '<div class="study-browse"><span class="study-browse-l">Or browse by</span>'
-      + '<button type="button" class="study-browse-b" data-graph>⊞ the whole graph</button>'
-      + '<button type="button" class="study-browse-b" data-ports>⊟ open port — what you actually see first</button></div>';
+    h += '<div class="study-browse"><span class="study-browse-l">Or</span>'
+      + '<button type="button" class="study-browse-b" data-sim>▶ run a cold box (guided simulation)</button>'
+      + '<button type="button" class="study-browse-b" data-graph>⊞ browse the whole graph</button>'
+      + '<button type="button" class="study-browse-b" data-ports>⊟ browse by open port</button></div>';
     h += '<div class="study-doors">'
       + door('#/loadout', '⚙', 'Set up your box', 'Install the toolset so the commands you learn match your own machine.')
-      + door('#/home', '▶', 'Start an engagement', 'Working a real box? Track it — paste output, get your next move.')
+      + door('#/home', '▶', 'Start an engagement', 'Working a real box? Track it: paste output, get your next move.')
       + '</div>';
     return h + '</section>';
   }
@@ -396,6 +507,11 @@
       + '</section>';
   }
 
+  function coachControl() {
+    var p = study().coachPref();
+    var lab = p === 'always' ? 'Why: always on' : (p === 'off' ? 'Why: off' : 'Why: auto');
+    return '<button type="button" class="study-coach-ctl" data-coach-cycle title="How much reasoning to show. Auto fades it once you have the move down.">' + lab + '</button>';
+  }
   function nodeView() {
     var right = _gear === 'practice' ? practicePanel() : cellPanel();
     return '<section class="study-route">'
@@ -403,16 +519,103 @@
       + '<button type="button" class="study-back" data-back>← ' + (_pathMode ? 'Your path' : (_from === 'atlas' ? 'The Atlas' : (_from === 'ports' ? 'Open ports' : 'All paths'))) + '</button>'
       + '<div class="study-crumb"><b>Study</b> · ' + esc(laneMeta(laneKeyOf(_sel)).name) + ' · <span class="study-here">' + esc((study().cellFor(_sel) || {}).title || _sel) + '</span></div>'
       + '<div class="study-gears">'
+      + coachControl()
       + '<button type="button" class="study-gear' + (_gear === 'watch' ? ' on' : '') + '" data-gear="watch">▶ Watch</button>'
       + '<button type="button" class="study-gear' + (_gear === 'practice' ? ' on' : '') + '" data-gear="practice">✎ Your turn</button>'
       + '</div></div>'
       + '<div class="study-cols">' + graphPanel() + right + '</div>'
+      + '<div class="study-factpop" id="study-factpop" hidden></div>'
       + '</section>';
+  }
+
+  // ---- COLD BOX: a guided, scaffolded playthrough of a scenario -------------------------------
+  // Start from an IP and nothing else. Each step shows the real captured output of one move, then
+  // asks which move comes next. The scaffolding (the "tell" that explains the output) shows while a
+  // step is unmastered and whenever an answer is wrong, then fades once the move is mastered.
+  function simTerm(rp) {
+    if (!rp || !rp.steps || !rp.steps.length) return '<div class="study-term sim-term"><span class="study-ln">No captured output for this step yet.</span></div>';
+    var sig = rp.signal || '';
+    var body = rp.steps.map(function (s) {
+      var prompt = s.where === 'host' ? 'target$' : 'kali$';
+      var cmd = '<span class="study-ln sim-cmd">' + esc(prompt + ' ' + (s.command || '')) + '</span>';
+      var out = (s.outputLines || []).map(function (ln) {
+        var hot = sig && ln.indexOf(sig) >= 0;
+        return '<span class="study-ln' + (hot ? ' hot' : '') + '">' + esc(ln || ' ') + '</span>';
+      }).join('');
+      return cmd + out;
+    }).join('');
+    return '<div class="study-term sim-term">' + body + '</div>';
+  }
+  function simPicker() {
+    var scs = study().scenarios(), mk = study().mastery();
+    var h = '<section class="study-route study-sim">';
+    h += '<div class="study-top"><button type="button" class="study-back" data-back-map>← Paths</button>'
+      + '<div class="study-crumb"><b>Cold box</b> · pick a scenario</div></div>';
+    h += '<div class="study-hero"><h1 class="study-hero-h">Run a cold box</h1>'
+      + '<p class="study-hero-p">Start from an IP and nothing else. Read each result, decide the next move, and watch the box fall one step at a time. This is the exam, rehearsed.</p></div>';
+    h += '<div class="sim-cards">' + scs.map(function (s) {
+      var done = s.steps.filter(function (id) { return (mk[id] || {}).correct; }).length;
+      return '<button type="button" class="sim-card" data-sim-start="' + U.attr(s.key) + '">'
+        + '<div class="sim-card-n">' + esc(s.name) + '</div>'
+        + '<div class="sim-card-d">' + esc(s.desc) + '</div>'
+        + '<div class="sim-card-f"><span class="sim-card-steps">' + s.count + ' steps</span>'
+        + '<span class="sim-card-go">' + (done ? done + ' / ' + s.count + ' mastered · run again →' : 'Start cold →') + '</span></div></button>';
+    }).join('') + '</div>';
+    return h + '</section>';
+  }
+  function simView() {
+    if (!_simKey) return simPicker();
+    var sim = study().simFor(_simKey);
+    if (!sim || !sim.steps.length) { _simKey = null; return simPicker(); }
+    var i = Math.max(0, Math.min(_simStep, sim.steps.length - 1));
+    var step = sim.steps[i], st = _simState[i] || null, rp = step.replay;
+    var h = '<section class="study-route study-sim">';
+    h += '<div class="study-top"><button type="button" class="study-back" data-sim-exit>← Scenarios</button>'
+      + '<div class="study-crumb"><b>Cold box</b> · ' + esc(sim.name) + '</div>'
+      + '<div class="sim-prog">' + sim.steps.map(function (s, k) {
+        return '<span class="sim-dot' + (k < i ? ' done' : (k === i ? ' here' : '')) + '"></span>';
+      }).join('') + '<span class="sim-prog-l">Step ' + (i + 1) + ' of ' + sim.count + '</span></div></div>';
+    h += '<div class="sim-stage">';
+    h += '<div class="sim-intro">' + esc(step.intro) + '</div>';
+    h += '<div class="sim-run"><span class="sim-run-l">You run</span> '
+      + '<button type="button" class="sim-movelink" data-goto="' + U.attr(step.id) + '">' + esc(step.title) + '</button>'
+      + '<span class="sim-run-hint">study this move in depth →</span></div>';
+    h += simTerm(rp);
+    var showTell = study().showWhy(step.id) || (st && !st.correct);
+    if (showTell && rp && (rp.teach || rp.signal)) {
+      h += '<div class="sim-tell"><span class="sim-tell-l">The tell</span><div>' + esc(rp.teach || rp.signal) + '</div></div>';
+    }
+    if (step.last) {
+      h += '<div class="sim-done"><div class="sim-done-h">✓ You reached the end of this path.</div>'
+        + '<p>From a cold box to ' + esc((step.title || '').toLowerCase()) + '. Run it again to lock it in, or open any move to study it in depth.</p>'
+        + '<div class="sim-done-ctl"><button type="button" class="study-rp-btn primary" data-sim-restart>↺ Run it again</button>'
+        + '<button type="button" class="study-rp-btn" data-sim-exit>Pick another scenario</button></div></div>';
+    } else if (step.choices) {
+      h += '<div class="sim-q">' + esc(step.prompt) + '</div><div class="study-choices sim-choices">';
+      var letters = 'ABCDEFGH';
+      step.choices.forEach(function (c, k) {
+        var picked = st && st.pickedId === c.id, cls = '';
+        if (picked) cls = c.correct ? ' ok' : ' bad';
+        else if (st && st.correct) cls = ' dimmed';
+        h += '<button type="button" class="study-choice sim-choice' + cls + '" data-sim-pick="' + U.attr(c.id) + '" data-correct="' + (c.correct ? '1' : '0') + '">'
+          + '<span class="study-tag">' + letters[k] + '</span><span class="study-ct">' + esc(c.title) + '</span></button>';
+      });
+      h += '</div>';
+      if (st && st.correct) {
+        h += '<div class="study-verdict show ok"><div class="study-vh">✓ That is the move.</div><div>Good read. On to the next step.</div></div>';
+        h += '<div class="sim-adv"><button type="button" class="study-rp-btn primary" data-sim-next>Next step →</button></div>';
+      } else if (st) {
+        var pc = null; step.choices.forEach(function (c) { if (c.id === st.pickedId) pc = c; });
+        h += '<div class="study-verdict show bad"><div class="study-vh">✗ Not here.</div><div>' + esc(pc ? pc.why : '') + ' Read the output again and pick what it sets up.</div></div>';
+      }
+    }
+    h += '</div><div class="study-factpop" id="study-factpop" hidden></div></section>';
+    return h;
   }
 
   function render(ctx) {
     if (ctx && ctx.args && ctx.args[0] && study().cellFor(ctx.args[0])) { _sel = ctx.args[0]; _view = 'node'; _pathMode = false; _path = []; }
-    return _view === 'map' ? mapView() : (_view === 'atlas' ? atlasView() : (_view === 'ports' ? portsView() : nodeView()));
+    return _view === 'map' ? mapView() : (_view === 'atlas' ? atlasView() : (_view === 'ports' ? portsView() : (_view === 'sim' ? simView() : nodeView())));
   }
 
   // ---- replay controller ----------------------------------------------------------------------
@@ -423,7 +626,7 @@
   function cancelReplay() { if (_rpToken) { _rpToken.cancelled = true; _rpToken = null; } }
   function stepHeader(where) {
     return where === 'host'
-      ? '<div class="rp-step-h rp-host"><span class="rp-where-glyph">🎯</span> on the target — the compromised host</div>'
+      ? '<div class="rp-step-h rp-host"><span class="rp-where-glyph">🎯</span> on the target, the compromised host</div>'
       : '<div class="rp-step-h rp-local"><span class="rp-where-glyph">🖥</span> on your box (Kali)</div>';
   }
   function promptFor(where) { return where === 'host' ? 'target$' : 'kali$'; }
@@ -477,7 +680,7 @@
         var cur = promptLine.querySelector('.rp-cursor'); if (cur) cur.remove();
         var lines = s.outputLines || [];
         if (!lines.length) {
-          if (si === steps.length - 1 && !rp.hasOutput) { var ns = document.createElement('div'); ns.className = 'rp-line rp-nosample-line'; ns.textContent = '· sample output for this step is still being captured — but you can see the command above and what it proves below ·'; term.appendChild(ns); }
+          if (si === steps.length - 1 && !rp.hasOutput) { var ns = document.createElement('div'); ns.className = 'rp-line rp-nosample-line'; ns.textContent = '· sample output for this step is still being captured, but you can see the command above and what it proves below ·'; term.appendChild(ns); }
           si++; setTimeout(nextStep, 500); return;
         }
         var i = 0;
@@ -512,14 +715,14 @@
       var c = study().cellFor(iss.id), title = c ? c.title : iss.id;
       if (iss.kind === 'unknown') return '<b>Step ' + (iss.idx + 1) + '</b> (' + esc(title) + ') isn\'t in this build.';
       var missing = (iss.missing || []).map(function (mk) { return /^one of:/.test(mk) ? ('one of: ' + mk.replace(/^one of:\s*/, '').split(' / ').map(human).join(' or ')) : human(mk); });
-      return '<b>Step ' + (iss.idx + 1) + '</b> (' + esc(title) + ') needs ' + missing.map(function (x) { return '<i>' + esc(x) + '</i>'; }).join(', ') + ' — nothing earlier in this path gets you that.';
+      return '<b>Step ' + (iss.idx + 1) + '</b> (' + esc(title) + ') needs ' + missing.map(function (x) { return '<i>' + esc(x) + '</i>'; }).join(', ') + '. Nothing earlier in this path gets you that.';
     });
     return '<div class="atlas-tray-warn"><span class="atw-i">🔒</span><div><b>Locked doors on this path:</b> '
       + lines.join(' ') + ' Add the step that opens each, or start where you already have the keys.</div></div>';
   }
   function atlasTray(mount) {
     var tray = mount.querySelector('#atlas-tray'); if (!tray) return;
-    if (!_atlasPath.length) { tray.innerHTML = '<span class="atlas-tray-hint">Pick a <b>common scenario</b> above, or click steps in order to draw your own path — then study it as one guided run.</span>'; return; }
+    if (!_atlasPath.length) { tray.innerHTML = '<span class="atlas-tray-hint">Pick a <b>common scenario</b> above, or click steps in order to draw your own path, then study it as one guided run.</span>'; return; }
     var lead = _scenario ? ('<span class="atlas-tray-name">' + esc(scenName(_scenario)) + '</span>') : '<span class="atlas-tray-name custom">Custom path</span>';
     var chips = _atlasPath.map(function (id, i) { var c = study().cellFor(id); return '<span class="atlas-trchip lane-' + laneKeyOf(id) + '">' + (i + 1) + '. ' + esc(c ? c.title : id) + '</span>'; }).join('<span class="atlas-trarr">→</span>');
     tray.innerHTML = '<div class="atlas-tray-row">' + lead + '<div class="atlas-tray-path">' + chips + '</div>'
@@ -608,9 +811,21 @@
     U.on(mount, 'click', '[data-back-map]', function () { _view = 'map'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-graph]', function () { _view = 'atlas'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-ports]', function () { _view = 'ports'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-sim]', function () { _view = 'sim'; _simKey = null; _simStep = 0; _simState = {}; OBOL.router.render(); });
+    // cold-box simulation: pick a scenario, answer each "what next", advance
+    U.on(mount, 'click', '[data-sim-start]', function (e, t) { _simKey = t.getAttribute('data-sim-start'); _simStep = 0; _simState = {}; _view = 'sim'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-sim-exit]', function () { _simKey = null; _simStep = 0; _simState = {}; _view = 'sim'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-sim-restart]', function () { _simStep = 0; _simState = {}; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-sim-next]', function () { _simStep += 1; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-sim-pick]', function (e, t) {
+      var id = t.getAttribute('data-sim-pick'), correct = t.getAttribute('data-correct') === '1';
+      _simState[_simStep] = { pickedId: id, correct: correct };
+      if (correct) { var sim = study().simFor(_simKey); if (sim && sim.steps[_simStep]) study().markStudied(sim.steps[_simStep].id, 'correct'); }
+      OBOL.router.render();
+    });
     // node select + "opens →" jumps + goto chips → re-render
     U.on(mount, 'click', '[data-node]', function (e, t) { _sel = t.getAttribute('data-node'); OBOL.router.render(); });
-    U.on(mount, 'click', '[data-goto]', function (e, t) { _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-goto]', function (e, t) { if (_view === 'sim') _from = 'map'; _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
     // gear toggle → re-render
     U.on(mount, 'click', '[data-gear]', function (e, t) { _gear = t.getAttribute('data-gear'); OBOL.router.render(); });
     // "Run it from" toggle: remote (your box) vs on the target — local DOM swap, no re-render
@@ -619,6 +834,13 @@
       Array.prototype.forEach.call(mount.querySelectorAll('.rw-tab'), function (b) { b.classList.toggle('on', b.getAttribute('data-runway') === way); });
       Array.prototype.forEach.call(mount.querySelectorAll('.rw-pane'), function (p) { p.hidden = p.getAttribute('data-pane') !== way; });
     });
+    // reveal the reasoning for this move (overrides the faded-once-mastered default)
+    U.on(mount, 'click', '[data-why-show]', function () { _whyOverride[_sel] = true; OBOL.router.render(); });
+    // cycle how much reasoning to show: auto -> always -> off
+    U.on(mount, 'click', '[data-coach-cycle]', function () { var p = study().coachPref(); study().setCoachPref(p === 'auto' ? 'always' : (p === 'always' ? 'off' : 'auto')); OBOL.router.render(); });
+    // a fact chip is first-class: tap it to see what produces it and what it unlocks
+    U.on(mount, 'click', '[data-fact]', function (e, t) { showFactPop(mount, t.getAttribute('data-fact')); });
+    U.on(mount, 'click', '[data-factpop-close]', function () { var p = mount.querySelector('#study-factpop'); if (p) p.hidden = true; });
     // replay controls
     U.on(mount, 'click', '[data-rp="play"]', function () { runReplay(mount, false); });
     U.on(mount, 'click', '[data-rp="restart"]', function () { runReplay(mount, false); });
@@ -628,8 +850,24 @@
     if (_view === 'node' && _gear === 'watch' && _autoplay) { _autoplay = false; setTimeout(function () { runReplay(mount, false); }, 250); }
     // the Atlas: pan / zoom / semantic LOD / draw a custom path
     if (_view === 'atlas') setTimeout(function () { wireAtlas(mount); }, 30);
+    // practice: switch between "what to do next" and "reading the output"
+    U.on(mount, 'click', '[data-pmode]', function (e, t) { _practiceMode = t.getAttribute('data-pmode'); OBOL.router.render(); });
+    // diagnosis: read the output, name what it proves
+    U.on(mount, 'click', '.study-dx-choice', function (e, t) {
+      var correct = t.getAttribute('data-correct') === '1';
+      Array.prototype.forEach.call(mount.querySelectorAll('.study-dx-choice'), function (c) { c.classList.remove('ok', 'bad', 'dimmed'); if (c !== t) c.classList.add('dimmed'); });
+      t.classList.add(correct ? 'ok' : 'bad');
+      var vbox = mount.querySelector('#study-verdict'), why = mount.querySelector('#dx-why');
+      if (correct) study().markStudied(_sel, 'correct');
+      if (vbox) {
+        vbox.className = 'study-verdict show ' + (correct ? 'ok' : 'bad');
+        vbox.innerHTML = '<div class="study-vh">' + (correct ? '✓ That is the read.' : '✗ Not quite.') + '</div>'
+          + '<div>' + (why ? codeify(why.getAttribute('data-why') || '') : '') + '</div>';
+      }
+    });
     // practice: answer a choice (local DOM update, keeps the answered state)
     U.on(mount, 'click', '.study-choice', function (e, t) {
+      if (t.classList.contains('study-dx-choice')) return; // handled above
       var verdict = t.getAttribute('data-verdict'), coach = t.getAttribute('data-coach') || '', missing = t.getAttribute('data-missing') || '';
       Array.prototype.forEach.call(mount.querySelectorAll('.study-choice'), function (c) { c.classList.remove('ok', 'alt', 'bad', 'dimmed'); if (c !== t) c.classList.add('dimmed'); });
       t.classList.add(verdict === 'correct' ? 'ok' : (verdict === 'alt' ? 'alt' : 'bad'));
@@ -637,7 +875,7 @@
       if (slot) slot.innerHTML = '';
       var head, body;
       if (verdict === 'correct') { head = '✓ Exactly.'; body = 'That\'s the move. Here\'s how it plays out →'; study().markStudied(_sel, 'correct'); }
-      else if (verdict === 'alt') { head = '~ Also valid — but weigh it.'; body = coach ? codeify(coach) : 'A legal move here; consider the tradeoff against the cleaner path.'; }
+      else if (verdict === 'alt') { head = '~ Also valid, but weigh it.'; body = coach ? codeify(coach) : 'A legal move here; consider the tradeoff against the cleaner path.'; }
       else { head = '✗ Not yet.'; body = (coach ? codeify(coach) : 'This needs something you don\'t have.') + (missing ? ' <span class="study-missing">Still need: ' + esc(missing) + '</span>' : ''); }
       if (vbox) {
         vbox.className = 'study-verdict show ' + (verdict === 'correct' ? 'ok' : (verdict === 'alt' ? 'alt' : 'bad'));

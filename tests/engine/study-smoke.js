@@ -122,6 +122,15 @@ const diag = S.practiceDiagnose('sudo-abuse');
 ok(diag && diag.choices.length >= 2 && diag.choices.filter((c) => c.correct).length === 1, 'diagnosis practice asks what a sample output proves (one correct fact)');
 ok(S.alternativesFor('dcsync').length >= 1, 'alternativesFor finds moves that reach the same outcome');
 
+// --- cold-box simulation ---------------------------------------------------------------------
+const sim = S.simFor('web-linux');
+ok(sim && sim.steps.length === S.scenario('web-linux').steps.length, 'simFor walks every step of its scenario');
+ok(sim.steps[0].replay && sim.steps[0].intro, 'the first sim step has a cold-box intro and a replay to read');
+ok(sim.steps.slice(0, -1).every((s) => s.choices && s.choices.filter((c) => c.correct).length === 1), 'every non-final sim step offers choices with exactly one correct next move');
+ok(sim.steps.every((s, i) => i === sim.steps.length - 1 ? s.last : (s.choices[0] && s.choices.some((c) => c.correct && c.id === sim.steps[i + 1].id))), 'the correct choice is always the scenario next step; the last step ends the run');
+ok(sim.steps.slice(0, -1).some((s) => s.choices.some((c) => !c.correct && /not yet|not the next step/i.test(c.why))), 'wrong choices carry a reason (locked prereq or off-path)');
+ok(S.simFor('does-not-exist') === null, 'simFor returns null for an unknown scenario');
+
 // --- fixed scenarios -------------------------------------------------------------------------
 const scn = S.scenarios();
 ok(scn.length >= 4, 'at least four fixed scenarios are defined');

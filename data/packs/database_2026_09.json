@@ -1,6 +1,6 @@
 {
   "name": "Database service enumeration & access (§3)",
-  "description": "Enumerate, log into, and — carefully, exam-safe — exploit exposed database services: MySQL/MariaDB, MSSQL, PostgreSQL, Redis, and MongoDB. Enumeration and login run automatically; OS command execution such as xp_cmdshell is only crafted and handed off, never auto-fired.",
+  "description": "Enumerate, log into, and (carefully, exam-safe) exploit exposed database services: MySQL/MariaDB, MSSQL, PostgreSQL, Redis, and MongoDB. Enumeration and login run automatically; OS command execution such as xp_cmdshell is only crafted and handed off, never auto-fired.",
   "source": "OSCP methodology (project-authored, obol-local)",
   "actions": [
     {
@@ -14,7 +14,7 @@
       "priority": 70,
       "autonomy": "approve",
       "proves": "an authenticated MySQL session",
-      "does_not_prove": "OS access or a validated OS credential — a database login lives at the app layer",
+      "does_not_prove": "OS access or a validated OS credential, a database login lives at the app layer",
       "report": {"finding": "Database service accessible", "severity": "medium"},
       "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-mysql"],
       "commands": [
@@ -32,7 +32,7 @@
       "produces": ["loot.material"],
       "priority": 66,
       "autonomy": "approve",
-      "proves": "recovered credential material from the database (hashes) — crackable loot",
+      "proves": "recovered credential material from the database (hashes), crackable loot",
       "does_not_prove": "a usable credential until a hash is cracked and a login confirms it",
       "commands": [
         {"tool": "mysql", "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT user,authentication_string FROM mysql.user;'"},
@@ -50,7 +50,7 @@
       "priority": 72,
       "autonomy": "approve",
       "proves": "an authenticated MSSQL session",
-      "does_not_prove": "OS command execution — that requires xp_cmdshell, a separate crafted step",
+      "does_not_prove": "OS command execution, that requires xp_cmdshell, a separate crafted step",
       "report": {"finding": "MSSQL service accessible", "severity": "medium"},
       "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-mssql-microsoft-sql-server"],
       "commands": [
@@ -69,7 +69,7 @@
       "priority": 60,
       "autonomy": "manual",
       "proves": "OS command execution as the MSSQL service account (a Windows foothold)",
-      "does_not_prove": "an interactive shell or administrator — the service account is frequently low-privileged",
+      "does_not_prove": "an interactive shell or administrator, the service account is frequently low-privileged",
       "report": {"finding": "MSSQL xp_cmdshell command execution", "severity": "high"},
       "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-mssql-microsoft-sql-server"],
       "commands": [
@@ -87,7 +87,7 @@
       "priority": 68,
       "autonomy": "approve",
       "proves": "an authenticated PostgreSQL session",
-      "does_not_prove": "OS access — RCE on Postgres is a separate, version-dependent step",
+      "does_not_prove": "OS access, RCE on Postgres is a separate, version-dependent step",
       "report": {"finding": "PostgreSQL service accessible", "severity": "medium"},
       "commands": [
         {"tool": "psql", "run": "PGPASSWORD={{password}} psql -h {{target}} -U {{user}} -c '\\l'"}
@@ -104,7 +104,7 @@
       "priority": 64,
       "autonomy": "auto",
       "proves": "an unauthenticated Redis instance and any secrets cached in it",
-      "does_not_prove": "OS access — Redis RCE is a separate, crafted step",
+      "does_not_prove": "OS access, Redis RCE is a separate, crafted step",
       "report": {"finding": "Unauthenticated Redis service", "severity": "high"},
       "refs": ["https://book.hacktricks.xyz/network-services-pentesting/6379-pentesting-redis"],
       "sequence": true,
@@ -132,11 +132,11 @@
         {"tool": "nmap", "run": "nmap -Pn -p 27017 --script mongodb-info,mongodb-databases {{target}}",
          "note": "the zero-install lead: stock nmap NSE confirms an unauthenticated MongoDB and lists its databases"},
         {"tool": "pymongo", "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); print(c.list_database_names())'",
-         "note": "list databases through the client (pymongo, apt python3-pymongo) — the query is on the terminal"},
+         "note": "list databases through the client (pymongo, apt python3-pymongo), the query is on the terminal"},
         {"tool": "pymongo", "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); [print(db, c[db].list_collection_names()) for db in c.list_database_names()]'",
-         "note": "enumerate the collections in each database — spot the interesting one (users, creds, config)"},
+         "note": "enumerate the collections in each database, spot the interesting one (users, creds, config)"},
         {"tool": "pymongo", "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); [print(d) for d in c[\"admin\"][\"users\"].find().limit(50)]'",
-         "note": "dump a collection — set the db/collection from the step above (here admin.users); reads any stored credentials"}
+         "note": "dump a collection, set the db/collection from the step above (here admin.users); reads any stored credentials"}
       ]
     }
   ]

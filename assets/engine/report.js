@@ -55,10 +55,10 @@
   // ── redaction regexes (ported, JS-native) ────────────────────────────────
   // flags whose value is ALWAYS a secret, for any tool
   var SECRET_FLAG_RE = /((?:^|\s)(?:--password|--pass|--?nthash|--?aes-?key|-computer-pass))([=\s]+)('[^']*'|"[^"]*"|\S+)/gi;
-  // hash flags — redact only a hash-shaped value (curl -H headers survive)
+  // hash flags, redact only a hash-shaped value (curl -H headers survive)
   var HASH_FLAG_RE = /((?:^|\s)(?:--hashes|-hashes|-H))([=\s]+)('[^']*'|"[^"]*"|\S+)/gi;
   var HASHLIKE_RE = /[0-9a-fA-F]{16,}/;
-  // lowercase -p / -p= / -pGLUED — tool-gated below. Case-SENSITIVE on the flag letter (never -P).
+  // lowercase -p / -p= / -pGLUED, tool-gated below. Case-SENSITIVE on the flag letter (never -P).
   var P_FLAG_RE = /((?:^|\s)-p)([=\s]*)('[^']*'|"[^"]*"|\S+)/g;
   // Tools where `-p` is a PORT / PRESERVE / PAYLOAD flag — never a password.
   var P_SPARE_TOOLS = {
@@ -275,7 +275,7 @@
     }
     if (!identity) {
       flags.push({ level: 'fail', message: 'No host-identity in the capture (need an IP from `ip a`/`ipconfig` '
-        + 'plus a hostname/whoami in the same frame) — a flag alone does not prove it was read on the target.' });
+        + 'plus a hostname/whoami in the same frame), a flag alone does not prove it was read on the target.' });
     }
     return {
       interactive: interactive,
@@ -491,7 +491,7 @@
           if (b.shot_data_uri) extra += '<img class="shot" alt="operator screenshot" src="' + esc(b.shot_data_uri) + '">';
           var status = '';
           if (b.gap) status = '<div class="callout gap">proof gap: ' + mdInline(b.gap) + '</div>';
-          else if (b.compliant) status = '<div class="callout ok">OSCP-compliant — interactive shell, target IP visible</div>';
+          else if (b.compliant) status = '<div class="callout ok">OSCP-compliant, interactive shell, target IP visible</div>';
           out.push('<div class="proof-item"><h4>' + esc(b.label) + '</h4><table class="kv">' + rws.join('') + '</table>' + extra + status + '</div>');
           break;
         }
@@ -512,7 +512,7 @@
     return out.join('\n');
   }
 
-  // Self-contained stylesheet for the DOWNLOADED .html report — the on-screen paper styling lives in
+  // Self-contained stylesheet for the DOWNLOADED .html report, the on-screen paper styling lives in
   // obol.css, which a standalone file cannot see, so without this the export renders as browser-default
   // serif at full page width (i.e. "awful"). Kept in sync with the print/paper look: centred paper column,
   // sans body, bordered tables with shaded headers, and the shaded terminal boxes with muted prompts.
@@ -669,7 +669,7 @@
     return String(str || '').replace(/\{\{(\w+)\}\}/g, function (m, k) { return (subs[k] != null && subs[k] !== '') ? subs[k] : (k === 'subject' ? 'the affected account' : (k === 'domain' ? 'the domain' : m)); });
   }
   // A host's facts for catalog matching: its own host-scoped facts, plus domain-wide facts (ad.*, loot.*,
-  // krbtgt) when this host is the domain's DC / the primary target — so domain compromise is reported once.
+  // krbtgt) when this host is the domain's DC / the primary target, so domain compromise is reported once.
   function hostFactSubset(factset, host, isPrimary) {
     var facts = (factset.facts || []).filter(function (f) {
       if (f.state !== SUPPORTED) return false;
@@ -1009,9 +1009,9 @@
     if (a.gaps.length) {
       var miss = a.gaps.slice(0, 4).map(function (g) { return g.label + ' on ' + g.host; }).join(', ');
       var more = a.gaps.length > 4 ? ' (+' + (a.gaps.length - 4) + ' more)' : '';
-      return base + ' — missing proof: ' + miss + more;
+      return base + 'missing proof: ' + miss + more;
     }
-    return base + ' — every captured flag has compliant proof';
+    return base + 'every captured flag has compliant proof';
   }
 
   // wrapped/manual command output that looks like proof but was never promoted (browser: activity.stdout is text)
@@ -1098,14 +1098,14 @@
   function looksLikeCommand(ev) {
     var low = (ev || '').toLowerCase();
     if (NON_COMMAND_PREFIXES.some(function (p) { return low.indexOf(p) === 0; })) return false;
-    if (ev.indexOf('—') !== -1) return false;         // em-dash = descriptive lineage note
+    if (ev.indexOf('') !== -1) return false;         // em-dash = descriptive lineage note
     return true;
   }
   function humanizeCaption(raw, fallback) {
     raw = (raw || '').trim();
     if (!raw) return fallback;
     var low = raw.toLowerCase();
-    if (low.indexOf('operator —') === 0 || low.indexOf('operator -') === 0 || low.indexOf('operator:') === 0 || MACHINE_CAPTION_RE.test(raw)) return fallback;
+    if (low.indexOf('operator') === 0 || low.indexOf('operator -') === 0 || low.indexOf('operator:') === 0 || MACHINE_CAPTION_RE.test(raw)) return fallback;
     return raw;
   }
 
@@ -1223,7 +1223,7 @@
     });
     if (split.scoped && split.noise.length) {
       blocks.push(P('_+ ' + split.noise.length + ' enumeration/no-op command' + (split.noise.length === 1 ? '' : 's')
-        + ' not on the critical path — see Appendix: Key Commands & Evidence for the full log._'));
+        + ' not on the critical path, see Appendix: Key Commands & Evidence for the full log._'));
     }
     return any ? blocks : [];
   }
@@ -1253,9 +1253,9 @@
       pairs.push(['OSID', cfg.osid || 'OS-XXXXX']);
     }
     pairs.push(['Engagement', meta.name || '']);
-    pairs.push(['Scope', (meta.scope || []).join(', ') || meta.target || '—']);
+    pairs.push(['Scope', (meta.scope || []).join(', ') || meta.target || '']);
     if (meta.domain) pairs.push(['Domain', meta.domain]);
-    pairs.push(['Generated', meta.generated_at || '—']);
+    pairs.push(['Generated', meta.generated_at || '']);
     pairs.push(['Tool', ('obol ' + VERSION).trim()]);
     var blocks = [H(profile.title, 1), KVB(pairs)];
     if (!meta.include_secrets) blocks.push(CALL('Secrets are redacted in this draft. Re-generate with include-secrets for a private working copy.', 'note'));
@@ -1271,7 +1271,7 @@
       var proof = t.proof || {};
       var proven = {}; (proof.flags || []).forEach(function (r) { proven[r.slot] = r.has_proof; });
       var anyProven = Object.keys(proven).some(function (k) { return proven[k]; });
-      var ev = (proof.screenshots || []).length ? 'screenshot' : ((proof.flags || []).some(function (r) { return r.obol_block; }) ? 'obol block' : '—');
+      var ev = (proof.screenshots || []).length ? 'screenshot' : ((proof.flags || []).some(function (r) { return r.obol_block; }) ? 'obol block' : '');
       var needReview = (slots.local || slots.root) && !anyProven && !(proof.screenshots || []).length;
       rows.push([
         (t.label || t.host) + ' (' + t.host + ')',
@@ -1286,7 +1286,7 @@
 
   // ── methodology ──
   var OSCP_METHODOLOGY = 'Each target was approached with the standard OSCP methodology: full service enumeration, identification and exploitation of an initial access vector, capture of the low-privilege proof (`local.txt`), local privilege-escalation enumeration and exploitation, and capture of the elevated proof (`proof.txt`) from an interactive shell. Every fact below is backed by the exact command that produced it; nothing is asserted without evidence.';
-  var GENERIC_METHODOLOGY = 'Testing followed a structured methodology — reconnaissance, enumeration, exploitation, post-exploitation, and lateral movement — with findings triaged by severity and each backed by reproducible evidence. Remediation guidance accompanies each finding.';
+  var GENERIC_METHODOLOGY = 'Testing followed a structured methodology (reconnaissance, enumeration, exploitation, post-exploitation, and lateral movement) with findings triaged by severity and each backed by reproducible evidence. Remediation guidance accompanies each finding.';
 
   function scopeIps(ctx) {
     var meta = ctx.meta || {};
@@ -1314,7 +1314,7 @@
       H('Maintaining Access', 3),
       P('obol does not plant persistence or backdoors: no user accounts, services, or implants were installed to maintain access. Access was re-established, when needed, by re-running the documented steps against the recorded credentials/vectors.'),
       H('House Cleaning', 3),
-      P('No artifacts were left on the in-scope systems beyond the evidence captured for this report. Any files staged during testing were removed, and no accounts or services were added — nothing requires clean-up by the system owner.'),
+      P('No artifacts were left on the in-scope systems beyond the evidence captured for this report. Any files staged during testing were removed, and no accounts or services were added, nothing requires clean-up by the system owner.'),
     ];
   }
 
@@ -1386,7 +1386,7 @@
     function line(t) {
       var label = t.label || t.host;
       var name = (label && label !== t.host) ? (label + ' (' + t.host + ')') : String(t.host);
-      return name + ' — ' + footholdDesc(t) + ' → ' + oscpPriv(t);
+      return name + ': ' + footholdDesc(t) + ' → ' + oscpPriv(t);
     }
     var listed = owned.length ? owned : targets;
     var ad = listed.filter(function (t) { return t.domain || t.domain_owned; });
@@ -1499,7 +1499,7 @@
           .map(function (k) { return k + ': ' + fmtVal(val[k]); }).join(', ').slice(0, 220);
       } else if (val) detail = fmtVal(val);
       var tag = f.origin === 'operator-attested' ? ' _(operator-attested)_' : '';
-      return '**' + (f.label || f.kind) + '**' + (detail ? ' — ' + detail : '') + tag;
+      return '**' + (f.label || f.kind) + '**' + (detail ? '' + detail : '') + tag;
     });
   }
   function phaseCommands(facts) {
@@ -1516,7 +1516,7 @@
       var ev = (f.evidence || '').trim();
       if (!ev || !looksLikeCommand(ev) || seen[ev]) return;
       seen[ev] = 1;
-      steps.push((f.label || f.kind || 'result') + ' — `' + ev + '`');
+      steps.push((f.label || f.kind || 'result') + '`' + ev + '`');
     });
     return steps;
   }
@@ -1627,7 +1627,7 @@
       var reachedFull = isFullPriv(oscpPriv(t));
       var top = phaseFacts.length ? phaseFacts[0] : null;
       if (writeup.description && finding && ['critical', 'high'].indexOf(finding.severity) !== -1) parts.push(writeup.description.replace(/\.$/, ''));
-      if (domainWin) parts.push('Domain-level compromise was achieved from ' + host + ' — credential material (e.g. the NTDS/krbtgt secrets) was extracted, yielding administrative control across the domain');
+      if (domainWin) parts.push('Domain-level compromise was achieved from ' + host + '; credential material (e.g. the NTDS/krbtgt secrets) was extracted, yielding administrative control across the domain');
       else if (sysAdmin || reachedFull) { var lvl = isLinuxTarget(t) ? 'root' : 'administrative/SYSTEM level'; parts.push('Local privileges on ' + host + ' were escalated to ' + lvl); }
       if (top && !domainWin && !sysAdmin && !reachedFull) parts.push('A privilege-escalation lead was identified on ' + host + ' (' + (top.label || top.kind) + ')');
       if (!parts.length) parts.push('No privilege-escalation was recorded for ' + host);
@@ -1693,11 +1693,11 @@
     if (imgs.length) { out = out.concat(imgs); return out; }
     var frame = onHostCaptureFrame(ctx, host, slot);
     if (frame) {
-      out.push(P('_Captured on-host (below). **Attach a screenshot of this exact terminal frame** — the flag and the target IP together in one interactive shell — on the Evidence tab under Proof screenshots (tagged ' + (slot === 'root' ? 'root' : 'local') + '); OffSec requires the image, not text._'));
+      out.push(P('_Captured on-host (below). **Attach a screenshot of this exact terminal frame** (the flag and the target IP together in one interactive shell) on the Evidence tab under Proof screenshots (tagged ' + (slot === 'root' ? 'root' : 'local') + '); OffSec requires the image, not text._'));
       var win = /\\|ipconfig|C:/i.test(frame.command + ' ' + frame.output);
       out.push(TERM({ command: frame.command, output: frame.output, style: 'target', os: win ? 'windows' : 'linux', host: (t.hostname || host), root: slot === 'root' }));
     } else {
-      out.push(P('_No proof screenshot captured. Read the flag from an **interactive shell on the target** with `type`/`cat`, beside `ipconfig`/`ip addr`, then attach that screenshot on the Evidence tab (Proof screenshots, tagged ' + (slot === 'root' ? 'root' : 'local') + ') — OffSec awards zero without it._'));
+      out.push(P('_No proof screenshot captured. Read the flag from an **interactive shell on the target** with `type`/`cat`, beside `ipconfig`/`ip addr`, then attach that screenshot on the Evidence tab (Proof screenshots, tagged ' + (slot === 'root' ? 'root' : 'local') + '), OffSec awards zero without it._'));
     }
     return out;
   }
@@ -1717,12 +1717,12 @@
     targets.forEach(function (t) {
       var host = t.host, label = t.label || host;
       blocks.push(PB());
-      blocks.push(H(label + ' — ' + host, 3));
+      blocks.push(H(label + ': ' + host, 3));
       var hn = (t.hostname || '').trim(), dom = (t.domain || '').trim();
-      var fqdn = t.fqdn || ((hn && dom && hn.indexOf('.') === -1) ? (hn + '.' + dom) : '—');
+      var fqdn = t.fqdn || ((hn && dom && hn.indexOf('.') === -1) ? (hn + '.' + dom) : '');
       blocks.push(KVB([
-        ['IP', host], ['Hostname', t.hostname || '—'], ['FQDN', fqdn], ['Domain', t.domain || '—'],
-        ['OS', t.os || '—'], ['Privilege reached', oscpPriv(t)],
+        ['IP', host], ['Hostname', t.hostname || ''], ['FQDN', fqdn], ['Domain', t.domain || ''],
+        ['OS', t.os || ''], ['Privilege reached', oscpPriv(t)],
       ]));
       blocks = blocks.concat(hostNarrative(ctx, host));   // operator summary / exploitation steps
       var findings = hostFindings(ctx, host);
@@ -1783,7 +1783,7 @@
         blocks.push(H('Attack Path', 4));
         blocks.push(UL(ch.map(function (s) {
           var lead = '**' + s.label + '**';
-          var det = s.detail ? ' — ' + s.detail : '';
+          var det = s.detail ? ': ' + s.detail : '';
           var tech = s.technique ? '  ·  _' + s.technique + '_' : '';
           var from = (s.enabledBy && s.enabledBy.length) ? '  ·  _(from ' + s.enabledBy.join(', ') + ')_' : '';
           var via = s.command ? '  ·  `' + s.command + '`' : '';
@@ -1799,7 +1799,7 @@
       var cmds = commandsFor(t);
       if (cmds.length) {
         blocks.push(H('Key Commands', 4));
-        var rows = cmds.map(function (c, i) { return [String(i + 1), '—', (c.split(/\s+/)[0] || ''), c]; });
+        var rows = cmds.map(function (c, i) { return [String(i + 1), '', (c.split(/\s+/)[0] || ''), c]; });
         blocks.push(TBL(['#', 'Technique', 'Tool', 'Command'], rows));
       } else if (!ch.length) {
         blocks.push(P('_No copy-pasteable commands were recorded for this host (facts were seeded/ingested)._'));
@@ -1817,7 +1817,7 @@
       var slot = r.slot || '';
       var shot = shots[slot] || (proof.flags.length === 1 ? shots[''] : null);
       var compliant = !!r.obol_compliant || !!shot;
-      var gap = compliant ? '' : 'captured value present but no interactive-shell screenshot showing the file contents AND the target IP — OffSec awards ZERO points without it.';
+      var gap = compliant ? '' : 'captured value present but no interactive-shell screenshot showing the file contents AND the target IP, OffSec awards ZERO points without it.';
       return PROOF({
         label: (r.label || slot) + '  ·  ' + (r.path || slot), flag: r.flag || '', path: r.path || '',
         screenshot: shot ? (shot.label || 'operator screenshot') : '', compliant: compliant, gap: gap,
@@ -1852,7 +1852,7 @@
     if (cands.length) {
       blocks.push(CALL('These wrapped/manual command outputs contain flag-like values or identity blocks that obol did NOT auto-promote to an objective. Confirm and record them so they count.', 'warn'));
       cands.forEach(function (c) {
-        blocks.push(H((c.tool || 'command') + ' — ' + (c.at || ''), 4));
+        blocks.push(H((c.tool || 'command') + ' · ' + (c.at || ''), 4));
         blocks.push(CODE(c.command));
         blocks.push(UL(c.values.map(function (v) { return 'candidate value: `' + v + '`'; })));
       });
@@ -1872,7 +1872,7 @@
   function riskOverview(ctx) {
     var counts = ctx.severity_counts || {};
     var rows = SEV_ORDER.filter(function (s) { return counts[s]; }).map(function (s) { return [s.charAt(0).toUpperCase() + s.slice(1), String(counts[s]) ]; });
-    return [H('Risk Overview', 2), TBL(['Severity', 'Count'], rows.length ? rows : [['—', '0']])];
+    return [H('Risk Overview', 2), TBL(['Severity', 'Count'], rows.length ? rows : [['', '0']])];
   }
   function findingsCatalog(ctx, remediation) {
     var blocks = [H('Findings', 2)];
@@ -1950,7 +1950,7 @@
     var ev = (ctx.evidence || []).filter(function (e) { return e.include !== false; });
     if (ev.length) {
       blocks.push(H('Evidence', 3));
-      blocks.push(UL(ev.map(function (e) { return '`' + (e.stored || e.id) + '` — ' + (e.caption || e.phase || e.kind || 'evidence'); })));
+      blocks.push(UL(ev.map(function (e) { return '`' + (e.stored || e.id) + '`' + (e.caption || e.phase || e.kind || 'evidence'); })));
     }
     blocks = blocks.concat(screenshotBlocks(ctx, 'appendix', '', 'Appendix evidence'));
     blocks = blocks.concat(workspaceAppendix(ctx));
@@ -1958,9 +1958,9 @@
     if (profile && profile.id === 'oscp') {
       var usedMsf = (ctx.timeline || []).some(function (r) { var c = (r.command || '').toLowerCase(); return c.indexOf('metasploit') !== -1 || c.indexOf('meterpreter') !== -1 || c.indexOf('msfconsole') !== -1; });
       blocks.push(H('Appendix: Metasploit / Meterpreter Usage', 3));
-      blocks.push(P(usedMsf ? 'Metasploit/Meterpreter was used on the machine(s) noted in the walkthrough.' : 'N/A — Metasploit/Meterpreter was not used during this engagement.'));
+      blocks.push(P(usedMsf ? 'Metasploit/Meterpreter was used on the machine(s) noted in the walkthrough.' : 'N/A, Metasploit/Meterpreter was not used during this engagement.'));
       blocks.push(H('Appendix: Completed Buffer Overflow Code', 3));
-      blocks.push(P('N/A — no buffer-overflow exploit was developed or used during this engagement.'));
+      blocks.push(P('N/A, no buffer-overflow exploit was developed or used during this engagement.'));
     }
     return blocks;
   }
@@ -1970,7 +1970,7 @@
   // ─────────────────────────────────────────────────────────────────────────
   var PROFILES = {
     oscp: {
-      id: 'oscp', name: 'OSCP', title: 'OSCP Exam Report', subtitle: 'Offensive Security Certified Professional — exam report',
+      id: 'oscp', name: 'OSCP', title: 'OSCP Exam Report', subtitle: 'Offensive Security Certified Professional, exam report',
       sections: ['cover', 'toc', 'high_level_summary', 'recommendations', 'objective_summary', 'methodology', 'narrative', 'per_machine', 'proof', 'manual_evidence', 'appendix'],
       risk: 'severity', exec_summary: false, screenshots_required: true, remediation: false, include_secrets_default: false,
       filename_pattern: 'OSCP-{osid}-Exam-Report',
@@ -1985,21 +1985,21 @@
       note: 'Methodology, findings with remediation, per-target detail, and evidence appendices.', config: {},
     },
     executive: {
-      id: 'executive', name: 'Executive', title: 'Security Assessment — Executive Report', subtitle: 'Executive summary and risk overview',
+      id: 'executive', name: 'Executive', title: 'Security Assessment, Executive Report', subtitle: 'Executive summary and risk overview',
       sections: ['cover', 'exec_summary', 'risk_overview', 'findings', 'appendix'],
       risk: 'rating', exec_summary: true, screenshots_required: false, remediation: true, include_secrets_default: false,
       filename_pattern: '{name}-executive-report',
       note: 'Leadership-facing: executive summary, risk ratings, top findings, remediation posture.', config: {},
     },
     technical: {
-      id: 'technical', name: 'Technical', title: 'Technical Assessment Report', subtitle: 'Full technical detail — findings, per-machine, evidence',
+      id: 'technical', name: 'Technical', title: 'Technical Assessment Report', subtitle: 'Full technical detail, findings, per-machine, evidence',
       sections: ['cover', 'toc', 'high_level_summary', 'recommendations', 'methodology', 'findings', 'per_machine', 'proof', 'manual_evidence', 'appendix'],
       risk: 'severity', exec_summary: false, screenshots_required: false, remediation: true, include_secrets_default: false,
       filename_pattern: '{name}-technical-report',
       note: 'Deep technical walkthrough with full command/evidence detail for every target.', config: {},
     },
     oswp: {
-      id: 'oswp', name: 'OSWP', title: 'OSWP Exam Report', subtitle: 'Offensive Security Wireless Professional — exam report',
+      id: 'oswp', name: 'OSWP', title: 'OSWP Exam Report', subtitle: 'Offensive Security Wireless Professional, exam report',
       sections: ['cover', 'toc', 'objective_summary', 'wireless', 'per_machine', 'proof', 'manual_evidence', 'appendix'],
       risk: 'severity', exec_summary: false, screenshots_required: true, remediation: false, include_secrets_default: false,
       filename_pattern: 'OSWP-{osid}-Exam-Report',
@@ -2076,10 +2076,10 @@
     var profile = resolve(profileName, ctx);
     var gaps = [];
     var targets = (ctx && ctx.targets) || [];
-    if (!targets.length) gaps.push({ level: 'fail', message: 'No targets recorded — nothing to report.' });
+    if (!targets.length) gaps.push({ level: 'fail', message: 'No targets recorded, nothing to report.' });
     if (profile.id === 'oscp' || profile.id === 'oswp') {
       if (!(profile.config && profile.config.osid)) {
-        gaps.push({ level: 'warn', message: 'OSID not set — filename will be ' + filenameStem(profile, ctx) + '.pdf. Set it in the engagement profile.' });
+        gaps.push({ level: 'warn', message: 'OSID not set, filename will be ' + filenameStem(profile, ctx) + '.pdf. Set it in the engagement profile.' });
       }
       if (!(profile.config && profile.config.candidate)) {
         gaps.push({ level: 'warn', message: 'Candidate name not set for the cover page. Set it in the engagement profile.' });
@@ -2095,12 +2095,12 @@
         var compliant = !!r.obol_compliant;
         var hasShot = !!shots.length;
         if (profile.screenshots_required && !(compliant || hasShot)) {
-          gaps.push({ level: 'fail', message: host + ': ' + r.slot + ' flag has NO interactive-shell screenshot showing the file + target IP — OffSec awards ZERO points without it.' });
+          gaps.push({ level: 'fail', message: host + ': ' + r.slot + ' flag has NO interactive-shell screenshot showing the file + target IP, OffSec awards ZERO points without it.' });
         }
       });
     });
     (ctx.proof_candidates || []).forEach(function (c) {
-      gaps.push({ level: 'warn', message: 'Unpromoted proof candidate in `' + (c.tool || 'a command') + '` — capture it so it counts.' });
+      gaps.push({ level: 'warn', message: 'Unpromoted proof candidate in `' + (c.tool || 'a command') + '`, capture it so it counts.' });
     });
     return gaps;
   }

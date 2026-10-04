@@ -28,7 +28,7 @@
     ['gitea', /Powered by\s+Gitea/i, /Gitea\s+Version:\s*(\d+\.\d+\.\d+)/i, 'enum /explore/users + repos to review; git-hook RCE if admin'],
     ['gitbucket', /\bGitBucket\b/i, /GitBucket\s+(\d+\.\d+(?:\.\d+)?)/i, 'plugin/H2-console RCE; repo review'],
     ['gogs', /Powered by\s+Gogs/i, /Gogs\s+Version:\s*(\d+\.\d+(?:\.\d+){0,2})/i, 'enum /explore/users + repos to review; git-hook RCE if admin; Gogs CVE-2018-18925 (auth-bypass/RCE), path-traversal'],
-    ['gitlab', /GitLab (?:Community|Enterprise) Edition|Powered by\s+GitLab|content=["']GitLab["']/i, /GitLab(?:\s+(?:Community|Enterprise)\s+Edition)?\s+v?(\d+\.\d+\.\d+)/i, 'check /help & /api/v4/version; user-enum via /users; ExifTool unauth RCE (CVE-2021-22205) — pin the exact version for the CVE match'],
+    ['gitlab', /GitLab (?:Community|Enterprise) Edition|Powered by\s+GitLab|content=["']GitLab["']/i, /GitLab(?:\s+(?:Community|Enterprise)\s+Edition)?\s+v?(\d+\.\d+\.\d+)/i, 'check /help & /api/v4/version; user-enum via /users; ExifTool unauth RCE (CVE-2021-22205), pin the exact version for the CVE match'],
     ['zabbix', /Zabbix\s+SIA|<title>\s*Zabbix/i, /Zabbix\s+(\d+\.\d+(?:\.\d+)?)/i, 'auth bypass / SQLi CVEs; script-item RCE as Admin'],
     ['cacti', /Cacti(?:\s+Group|<)|The Cacti Group/i, /Version\s+(\d+\.\d+(?:\.\d+)?)/i, 'CVE-2022-46169 unauth RCE; SQLi chains'],
     ['apache-ofbiz', /Apache\s+OFBiz/i, /OFBiz\s+(\d+\.\d+(?:\.\d+)?)/i, 'XML-RPC deserialization (CVE-2020-9496 / groovy)'],
@@ -39,7 +39,7 @@
     ['gophish', /\bgophish\b|X-Gophish/i, null, 'admin panel default creds; phishing infra'],
     ['jamovi', /\bjamovi\b/i, /jamovi\s+(\d+\.\d+(?:\.\d+)?)/i, 'Rj-editor / compute-module RCE'],
     ['splunk', /Splunk\s+(?:Enterprise|Inc)|\/en-US\/account\/login/i, /Splunk[^\d]{0,20}(\d+\.\d+\.\d+)/i, 'custom-app scripted-input RCE; splunk.secret → $7$ decrypt'],
-    ['powershell-web-access', /PowerShell Web Access|\/pswa\//i, null, 'gateway to any Windows host — try captured/guessed domain creds'],
+    ['powershell-web-access', /PowerShell Web Access|\/pswa\//i, null, 'gateway to any Windows host, try captured/guessed domain creds'],
   ];
 
   function _has_product_signature(text) {
@@ -140,7 +140,7 @@
   var _ENV_PW_RE = /^\s*(?:export\s+)?(?<key>[A-Z][A-Z0-9_]*(?:PASS(?:WORD|WD)?|PWD))\s*=\s*["']?(?<s>[^\s"'#]{3,})/gm;
   // A credential embedded in a connection URI: mysql://user:pass@host, ftp://u:p@host, etc.
   var _URI_CRED_RE = /(?<scheme>[a-z][a-z0-9+.\-]{1,15}):\/\/(?<user>[^:/@\s]{1,64}):(?<s>[^@/\s]{3,64})@(?<host>[\w.\-]+)/gi;
-  // A version-control access token — a GitHub PAT (classic gh?_ / fine-grained github_pat_) or a
+  // A version-control access token, a GitHub PAT (classic gh?_ / fine-grained github_pat_) or a
   // GitLab glpat-. The token IS the credential.
   var _VCS_TOKEN_RE = /\b(?<token>gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|glpat-[A-Za-z0-9_-]{20,})\b/g;
 
@@ -177,7 +177,7 @@
       _add(facts, mkFact('credential.candidate', scope, { kind: 'jwt_signing_secret', secret: s, source: 'source-disclosure' }, S, source));
     });
 
-    // A generic SECRET_KEY assignment is app signing material — a candidate lead, not a JWT claim.
+    // A generic SECRET_KEY assignment is app signing material, a candidate lead, not a JWT claim.
     reAll(_SECRET_KEY_RE, t).forEach(function (m) {
       var s = _clean_secret(m.groups.s);
       if (!s || seen[s]) return;
@@ -194,7 +194,7 @@
       });
     });
 
-    // a VCS access token (GitHub PAT / GitLab glpat) — the token itself is the credential.
+    // a VCS access token (GitHub PAT / GitLab glpat), the token itself is the credential.
     reAll(_VCS_TOKEN_RE, t).forEach(function (m) {
       var tok = m.groups.token;
       if (seen[tok]) return;

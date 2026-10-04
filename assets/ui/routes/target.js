@@ -88,7 +88,7 @@
               ? shots.map(function (s) { return '<span class="flag-shot-wrap"><img class="flag-shot" src="' + esc(s.data_uri) + '" alt="proof screenshot"><button class="flag-shot-rm" data-rm="' + esc(s.id) + '" title="Remove">✕</button></span>'; }).join('')
                 + '<span class="flag-proof-ok">✓ proof screenshot attached</span>'
               : '<button class="flag-attach" data-slot="' + esc(slot) + '">📎 Attach proof screenshot</button>'
-                + '<span class="flag-proof-note">flag + ipconfig in one interactive-shell frame — OffSec requires the image</span>')
+                + '<span class="flag-proof-note">flag + ipconfig in one interactive-shell frame, OffSec requires the image</span>')
             + '</div></li>';
         }).join('')
         + locatedFacts.map(function (v) {
@@ -97,7 +97,7 @@
           return '<li class="flag-card flag-located">'
             + '<div class="flag-card-h"><span class="flag-slot">📍 ' + esc(label) + ' <em>located</em></span>'
             + (v.name ? '<span class="flag-file" title="' + U.attr(v.path || v.name) + '">' + esc(v.path || v.name) + '</span>' : '') + '</div>'
-            + '<div class="flag-locnote">Found remotely — read it from an interactive shell on this host so it counts for the report (OffSec scores a remote read zero).</div>'
+            + '<div class="flag-locnote">Found remotely, read it from an interactive shell on this host so it counts for the report (OffSec scores a remote read zero).</div>'
             + '</li>';
         }).join('') + '</ul>'
       : '';
@@ -145,15 +145,15 @@
 
       + '<div class="target-grid">'
       + '<div class="target-col">'
-      + '<h2 class="coach-sec-h">Attack Path — What Led to What</h2>'
-      + (story ? '<div class="apath-flow">' + story + '</div>' : '<div class="coach-empty">Nothing proven yet — run the recon move.</div>')
+      + '<h2 class="coach-sec-h">Attack Path: What Led to What</h2>'
+      + (story ? '<div class="apath-flow">' + story + '</div>' : '<div class="coach-empty">Nothing proven yet, run the recon move.</div>')
       + '<h2 class="coach-sec-h">Path Graph</h2>'
       + (OBOL.graphview ? OBOL.graphview.html(svg) : '<div class="graph-scroll">' + svg + '</div>')
       + '</div>'
       + '<div class="target-col">'
       + flagCard
       + '<h2 class="coach-sec-h">Next moves for this target</h2>'
-      + (moveHtml || '<div class="coach-empty">No moves — paste evidence to unlock.</div>')
+      + (moveHtml || '<div class="coach-empty">No moves, paste evidence to unlock.</div>')
       + '<a class="btn-ghost" href="#/path">Full Coach →</a>'
       + '</div>'
       + '</div>'

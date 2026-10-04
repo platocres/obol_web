@@ -52,7 +52,7 @@
     var summary = eng && eng.bloodhound;
     var html = '<section class="domain-route">'
       + '<h1 class="route-h1">Domain (BloodHound)</h1>'
-      + '<p class="route-sub">Upload a SharpHound <code>.zip</code> (or BloodHound-CE <code>.json</code> files). Everything is parsed and analysed in your browser — nothing is uploaded anywhere.</p>'
+      + '<p class="route-sub">Upload a SharpHound <code>.zip</code> (or BloodHound-CE <code>.json</code> files). Everything is parsed and analysed in your browser, nothing is uploaded anywhere.</p>'
       + '<div class="bh-drop" id="bh-drop" tabindex="0" role="button">Drop a SharpHound .zip here, or click to choose files'
       + '<input type="file" id="bh-file" accept=".zip,.json" multiple hidden></div>'
       + '<div id="bh-status" class="route-sub"></div>';
@@ -61,7 +61,7 @@
       var owned = ownedFromEngagement();
       var view = OBOL.bloodhound.domainView(summary, owned, cmdCtx(owned, true));
       html += '<div class="bh-summary-head"><h2 class="coach-sec-h">' + esc(summary.domain || 'domain')
-        + ' — ' + (summary.users ? summary.users.length : 0) + ' users, ' + (summary.computers ? summary.computers.length : 0) + ' computers</h2>'
+        + ': ' + (summary.users ? summary.users.length : 0) + ' users, ' + (summary.computers ? summary.computers.length : 0) + ' computers</h2>'
         + '<div class="ev-row"><input id="bh-owned" class="ev-cmd" placeholder="owned principals (comma-separated), e.g. ADMINISTRATOR@CORP.LOCAL" value="' + U.attr(owned.join(', ')) + '">'
         + '<button id="bh-recompute" class="btn-ghost">Recompute Paths</button>'
         + '<button id="bh-report" class="btn-primary">Open Report</button></div></div>';
@@ -128,7 +128,7 @@
       OBOL.store.update(function (eng) { eng.bloodhound = summary; }, 'bloodhound');
       OBOL.store.addFacts(facts, 'bloodhound');
       OBOL.app.renderSidebar();
-      U.toast('Ingested ' + (summary.domain || 'domain') + ' — ' + facts.length + ' facts');
+      U.toast('Ingested ' + (summary.domain || 'domain') + ': ' + facts.length + ' facts');
       OBOL.router.render();
     } catch (e) {
       if (status) status.textContent = 'Parse failed: ' + (e && e.message);
