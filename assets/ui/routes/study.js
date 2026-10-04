@@ -101,15 +101,15 @@
     } else {
       var lk2 = laneKeyOf(_sel), lane = study().lane(lk2);
       header = laneMeta(lk2).name + ' · click a step';
-      // group the lane's steps by stage so each stage is one contiguous section with a single header,
-      // rather than the same label ("Web", "Foothold") repeating as the dependency order scatters it.
+      // group the lane's steps by TOPICAL category so related moves sit together (all the SQL in one
+      // place), each a single contiguous section. A move with no category falls back to its stage.
       var groups = [], gmap = {};
-      lane.forEach(function (n) { var p = n.phase || 'Steps'; if (!gmap[p]) { gmap[p] = []; groups.push(p); } gmap[p].push(n); });
-      // order the sections as an attack progression, not by where they first fell in dependency order
-      var PHASE_ORDER = ['Recon', 'Enumeration', 'Web', 'Foothold', 'Credentials', 'Escalate', 'Lateral', 'Active Directory', 'Persistence', 'Loot', 'Proof', 'Steps'];
+      lane.forEach(function (n) { var p = n.category || n.phase || 'Steps'; if (!gmap[p]) { gmap[p] = []; groups.push(p); } gmap[p].push(n); });
+      // order: curated topical categories first (engine CATEGORY_ORDER), then any stage fallbacks.
+      var ORDER = (study().CATEGORY_ORDER || []).concat(['Recon', 'Enumeration', 'Web', 'Foothold', 'Credentials', 'Escalate', 'Lateral', 'Active Directory', 'Persistence', 'Loot', 'Proof', 'Steps']);
       groups.sort(function (a, b) {
-        var ia = PHASE_ORDER.indexOf(a), ib = PHASE_ORDER.indexOf(b);
-        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+        var ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
+        return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
       });
       var gi = 0;
       groups.forEach(function (p) {

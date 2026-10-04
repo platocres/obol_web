@@ -105,6 +105,28 @@
   }
   function cap1(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
 
+  // --- topical categories: group reasonably-related moves together in the rail ("all the SQL in one
+  //     place"), rather than by coarse attack stage. A move with no category falls back to its stage,
+  //     so lanes not yet categorized still render. CATEGORY_ORDER sets the section order in the rail. ---
+  var MOVE_CATEGORY = {
+    // web lane
+    'vhost-discovery': 'Recon & Discovery', 'content-discovery': 'Recon & Discovery', 'param-discovery': 'Recon & Discovery', 'nikto-scan': 'Recon & Discovery',
+    'sqli-basics': 'SQL Injection', 'manual-sqli-exploitation': 'SQL Injection', 'sqlmap-automation': 'SQL Injection',
+    'file-upload': 'Upload, Inclusion & Shells', 'lfi-probe': 'Upload, Inclusion & Shells', 'web-shells': 'Upload, Inclusion & Shells',
+    'command-injection': 'Command & Template Injection', 'ssti': 'Command & Template Injection',
+    'ssrf': 'SSRF, XXE & Deserialization', 'xxe': 'SSRF, XXE & Deserialization', 'deserialization': 'SSRF, XXE & Deserialization',
+    'idor': 'Auth & Access Control', 'jwt-attacks': 'Auth & Access Control', 'nosql-injection': 'Auth & Access Control', 'verb-tampering': 'Auth & Access Control',
+    'xss-basics': 'Cross-Site Scripting',
+    'git-exposed': 'Source Exposure', 'svn-exposed': 'Source Exposure',
+    'tomcat-deploy': 'App Servers & Known CVEs', 'jenkins-access': 'App Servers & Known CVEs', 'wordpress': 'App Servers & Known CVEs', 'check-log4shell': 'App Servers & Known CVEs', 'check-struts2': 'App Servers & Known CVEs',
+  };
+  var CATEGORY_ORDER = [
+    // web
+    'Recon & Discovery', 'SQL Injection', 'Upload, Inclusion & Shells', 'Command & Template Injection',
+    'SSRF, XXE & Deserialization', 'Auth & Access Control', 'Cross-Site Scripting', 'Source Exposure', 'App Servers & Known CVEs',
+  ];
+  function categoryOf(moveId) { var m = byId(moveId); return MOVE_CATEGORY[moveId] || deriveStage(m || {}); }
+
   // --- build the atlas lanes (all moves, topologically ordered within each lane) ----------------
   var _lanes = null;
   function buildLanes() {
@@ -142,7 +164,7 @@
   }
 
   function lanes() { return buildLanes().map(function (L) { return { key: L.key, name: L.name, short: L.short, desc: L.desc, count: L.nodes.length, firstId: L.nodes[0].id }; }); }
-  function lane(key) { var Ls = buildLanes(); for (var i = 0; i < Ls.length; i++) if (Ls[i].key === key) return Ls[i].nodes.map(function (n) { return { id: n.id, phase: n.phase, laneKey: key, title: n.title, proves: n.proves, reqs: n.reqs }; }); return []; }
+  function lane(key) { var Ls = buildLanes(); for (var i = 0; i < Ls.length; i++) if (Ls[i].key === key) return Ls[i].nodes.map(function (n) { return { id: n.id, phase: n.phase, category: categoryOf(n.id), laneKey: key, title: n.title, proves: n.proves, reqs: n.reqs }; }); return []; }
   function laneOfId(id) { var Ls = buildLanes(); for (var i = 0; i < Ls.length; i++) for (var j = 0; j < Ls[i].nodes.length; j++) if (Ls[i].nodes[j].id === id) return { lane: Ls[i], idx: j }; return null; }
   function laneEntry(moveId) { var r = laneOfId(moveId); if (!r) return null; return { id: moveId, phase: r.lane.nodes[r.idx].phase, laneKey: r.lane.key }; }
   function laneEdges(key) {
@@ -694,6 +716,7 @@
     evidence: evidence, evidenceGaps: evidenceGaps,
     cmdLocus: cmdLocus, cellFor: cellFor, replayFor: replayFor, practiceFor: practiceFor, practiceDiagnose: practiceDiagnose,
     producersOf: producersOf, opensNext: opensNext, pathTo: pathTo, leadupFor: leadupFor,
+    categoryOf: categoryOf, CATEGORY_ORDER: CATEGORY_ORDER,
     signalTell: signalTell, whyNow: whyNow, howTo: howTo, factInfo: factInfo, alternativesFor: alternativesFor, decisionFor: decisionFor, scopeSafety: scopeSafety,
     coachPref: coachPref, setCoachPref: setCoachPref, showWhy: showWhy,
     mastery: mastery, markStudied: markStudied, laneProgress: laneProgress, validatePath: validatePath,
