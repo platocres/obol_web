@@ -161,7 +161,7 @@
       teach: 'A VNC server that offers "None" security is an unauthenticated remote desktop, connect and you are on the box\'s screen. Even when it wants a password, VNC passwords are short and crackable.',
     },
     'recon-smtp': {
-      why: "A mail server that answers VRFY or EXPN will confirm, for free, which usernames actually exist on the system. That is the value here: you turn a guessed name list into a verified one, which makes a later password spray far more likely to land. SMTP (25) also leaks the server software and sometimes the internal hostname in its banner. Reach for it early when 25 is open, because every other credential attack gets cheaper once you know the real usernames.",
+      why: "Every password attack later in the engagement is only as good as the username list behind it, and SMTP hands you a way to verify that list without a single login attempt. Port 25 answering VRFY, EXPN, or a telltale RCPT response is a free oracle: feed it guessed names and it tells you which ones are real, turning a noisy spray into a targeted one. The banner usually leaks the mail software and sometimes the internal hostname as a bonus. Reach for it the moment 25 is open, before you spray anything.",
       cmd: 'smtp-user-enum -M VRFY -U users.txt -t 10.10.10.10', tool: 'smtp-user-enum',
       output: [
         'Starting smtp-user-enum v1.2',

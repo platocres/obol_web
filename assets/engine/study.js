@@ -119,11 +119,20 @@
     'xss-basics': 'Cross-Site Scripting',
     'git-exposed': 'Source Exposure', 'svn-exposed': 'Source Exposure',
     'tomcat-deploy': 'App Servers & Known CVEs', 'jenkins-access': 'App Servers & Known CVEs', 'wordpress': 'App Servers & Known CVEs', 'check-log4shell': 'App Servers & Known CVEs', 'check-struts2': 'App Servers & Known CVEs',
+    // recon lane
+    'nmap-fast-open-ports': 'Port Scanning', 'nmap-version-scripts': 'Port Scanning', 'nmap-vuln-scripts': 'Port Scanning', 'nmap-udp-top': 'Port Scanning',
+    'recon-smb-anon': 'SMB, RDP & Web', 'rdp-enum': 'SMB, RDP & Web', 'recon-web-triage': 'SMB, RDP & Web',
+    'recon-dns': 'DNS, SNMP & VPN', 'recon-snmp': 'DNS, SNMP & VPN', 'recon-ike-vpn': 'DNS, SNMP & VPN',
+    'recon-smtp': 'Mail Services', 'recon-mail': 'Mail Services',
+    'recon-ftp': 'File Shares', 'nfs-enum': 'File Shares',
+    'recon-finger': 'Legacy & Remote Access', 'recon-vnc': 'Legacy & Remote Access',
   };
   var CATEGORY_ORDER = [
     // web
     'Recon & Discovery', 'SQL Injection', 'Upload, Inclusion & Shells', 'Command & Template Injection',
     'SSRF, XXE & Deserialization', 'Auth & Access Control', 'Cross-Site Scripting', 'Source Exposure', 'App Servers & Known CVEs',
+    // recon
+    'Port Scanning', 'SMB, RDP & Web', 'DNS, SNMP & VPN', 'Mail Services', 'File Shares', 'Legacy & Remote Access',
   ];
   function categoryOf(moveId) { var m = byId(moveId); return MOVE_CATEGORY[moveId] || deriveStage(m || {}); }
 
