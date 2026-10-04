@@ -2101,4 +2101,86 @@
   };
   Object.keys(PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var p = PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = p.situation; OBOL.STUDY_FIXTURES[k].choices = p.choices; OBOL.STUDY_FIXTURES[k].coach = p.coach; } });
 
+  // "How you got here" lead-ups, merged in the same way as PRACTICE. Recon moves are opening moves,
+  // so most are reached straight off a scan; a genuine second route is given only where one really
+  // exists (fast-scan port vs version-scan fingerprint, an alt web port, a leaked domain name, etc.),
+  // never a clone. The root scan (nmap-fast-open-ports) has no lead-up by design.
+  var RECON_LEADUPS = {
+    'nmap-version-scripts': [
+      { key: 'scan', label: 'The fast scan found open ports', steps: [
+        { title: 'Sweep every TCP port', tool: 'nmap', where: 'local', cmd: 'nmap -p- --min-rate 5000 <target>', out: 'PORT     STATE SERVICE\n22/tcp   open  ssh\n80/tcp   open  http\n3306/tcp open  mysql', sig: '3306/tcp open  mysql', teach: 'The fast sweep names the open ports but not the software behind them; that gap is what this move fills.' } ] },
+    ],
+    'nmap-vuln-scripts': [
+      { key: 'fingerprint', label: 'The version scan named an old service', steps: [
+        { title: 'Fingerprint the open ports', tool: 'nmap', where: 'local', cmd: 'nmap -sCV -p 139,445 <target>', out: '445/tcp open  microsoft-ds Windows Server 2008 R2 Standard 7601 Service Pack 1', sig: 'Windows Server 2008 R2', teach: 'An unpatched 2008 R2 box is exactly what the vuln NSE category checks for (ms17-010 and friends).' } ] },
+    ],
+    'nmap-udp-top': [
+      { key: 'tcp-quiet', label: 'TCP came up thin', steps: [
+        { title: 'Sweep TCP and find little', tool: 'nmap', where: 'local', cmd: 'nmap -p- --min-rate 5000 <target>', out: 'PORT   STATE SERVICE\n22/tcp open  ssh\n80/tcp open  http', sig: '22/tcp open  ssh', teach: 'Two quiet TCP ports and no obvious way in; the half of the attack surface everyone forgets is UDP.' } ] },
+    ],
+    'recon-smb-anon': [
+      { key: 'scan', label: 'The scan found 445', steps: [
+        { title: 'Sweep every TCP port', tool: 'nmap', where: 'local', cmd: 'nmap -p- --min-rate 5000 <target>', out: '139/tcp open  netbios-ssn\n445/tcp open  microsoft-ds', sig: '445/tcp open  microsoft-ds', teach: '445 open means SMB; the cheapest possible first test is to log in as nobody.' } ] },
+      { key: 'fingerprint', label: 'The version scan named Samba', steps: [
+        { title: 'Fingerprint the service', tool: 'nmap', where: 'local', cmd: 'nmap -sCV -p 445 <target>', out: '445/tcp open  netbios-ssn Samba smbd 4.6.2', sig: 'Samba smbd 4.6.2', teach: 'A Samba box frequently allows a null session; anonymous enumeration is the natural first swing.' } ] },
+    ],
+    'recon-web-triage': [
+      { key: 'port80', label: 'The scan found 80', steps: [
+        { title: 'Sweep every TCP port', tool: 'nmap', where: 'local', cmd: 'nmap -p- --min-rate 5000 <target>', out: '22/tcp open  ssh\n80/tcp open  http', sig: '80/tcp open  http', teach: 'A web port is the richest surface on the exam; fingerprint the stack before you fuzz anything.' } ] },
+      { key: 'altport', label: 'The scan found an alternate web port', steps: [
+        { title: 'Sweep every TCP port', tool: 'nmap', where: 'local', cmd: 'nmap -p- --min-rate 5000 <target>', out: '22/tcp   open  ssh\n8080/tcp open  http-proxy', sig: '8080/tcp open  http-proxy', teach: '8080 and 8443 are web too, and often run a different app than 80; triage each one on its own.' } ] },
+    ],
+    'recon-dns': [
+      { key: 'port53', label: 'The scan found 53', steps: [
+        { title: 'Spot the DNS port', tool: 'nmap', where: 'local', cmd: 'nmap -p 53 <target>', out: '53/tcp open  domain', sig: '53/tcp open  domain', teach: 'A reachable nameserver is worth a zone-transfer attempt and, failing that, record enumeration.' } ] },
+      { key: 'domain', label: 'A banner leaked the domain name', steps: [
+        { title: 'Read the LDAP root DSE', tool: 'nmap', where: 'local', cmd: 'nmap -p 389 --script ldap-rootdse <target>', out: '| ldap-rootdse:\n|   rootDomainNamingContext: DC=corp,DC=local', sig: 'DC=corp,DC=local', teach: 'Now you know the domain; point your DNS queries at its nameserver and ask for the zone.' } ] },
+    ],
+    'recon-snmp': [
+      { key: 'udp', label: 'The UDP scan found 161', steps: [
+        { title: 'Check the top UDP ports', tool: 'nmap', where: 'local', cmd: 'nmap -sU --top-ports 50 <target>', out: '161/udp open  snmp', sig: '161/udp open  snmp', teach: 'SNMP answering on 161 is a quiet goldmine if the community string was never changed from the default.' } ] },
+    ],
+    'recon-ike-vpn': [
+      { key: 'udp500', label: 'The UDP scan found 500', steps: [
+        { title: 'Check the top UDP ports', tool: 'nmap', where: 'local', cmd: 'nmap -sU -p 500 <target>', out: '500/udp open  isakmp', sig: '500/udp open  isakmp', teach: 'An IKE endpoint on 500 may still accept aggressive mode and hand you a crackable PSK hash.' } ] },
+    ],
+    'recon-finger': [
+      { key: 'port79', label: 'The scan found 79', steps: [
+        { title: 'Spot the finger port', tool: 'nmap', where: 'local', cmd: 'nmap -p 79 <target>', out: '79/tcp open  finger', sig: '79/tcp open  finger', teach: 'Finger is rare but, when open, confirms real usernames for free: a ready-made spray list.' } ] },
+    ],
+    'recon-vnc': [
+      { key: 'port5900', label: 'The scan found 5900', steps: [
+        { title: 'Spot the VNC port', tool: 'nmap', where: 'local', cmd: 'nmap -p 5900 <target>', out: '5900/tcp open  vnc', sig: '5900/tcp open  vnc', teach: 'A VNC service begs one blunt question: does it even ask for a password?' } ] },
+    ],
+    'recon-smtp': [
+      { key: 'port25', label: 'The scan found 25', steps: [
+        { title: 'Spot the mail port', tool: 'nmap', where: 'local', cmd: 'nmap -p 25 <target>', out: '25/tcp open  smtp', sig: '25/tcp open  smtp', teach: 'A mail server on 25 may answer VRFY or EXPN and verify your username guesses for free.' } ] },
+      { key: 'banner', label: 'The version scan named the mail server', steps: [
+        { title: 'Fingerprint the mail server', tool: 'nmap', where: 'local', cmd: 'nmap -sCV -p 25 <target>', out: '25/tcp open  smtp Postfix smtpd\n|_smtp-commands: mail.corp.local, VRFY, EXPN', sig: 'VRFY, EXPN', teach: 'The banner itself advertised VRFY and EXPN; those are exactly the verbs that confirm users.' } ] },
+    ],
+    'recon-ftp': [
+      { key: 'port21', label: 'The scan found 21', steps: [
+        { title: 'Spot the FTP port', tool: 'nmap', where: 'local', cmd: 'nmap -p 21 <target>', out: '21/tcp open  ftp', sig: '21/tcp open  ftp', teach: 'FTP on 21 gets one free test before anything else: the anonymous login.' } ] },
+      { key: 'anon', label: 'The version scan flagged anonymous login', steps: [
+        { title: 'Fingerprint the FTP service', tool: 'nmap', where: 'local', cmd: 'nmap -sCV -p 21 <target>', out: '21/tcp open  ftp vsftpd 3.0.3\n|_ftp-anon: Anonymous FTP login allowed (FTP code 230)', sig: 'Anonymous FTP login allowed', teach: 'nmap already proved anonymous works; log in and see what the share leaks.' } ] },
+    ],
+    'recon-mail': [
+      { key: 'ports', label: 'The scan found 110 or 143', steps: [
+        { title: 'Spot the mailbox ports', tool: 'nmap', where: 'local', cmd: 'nmap -p 110,143,993,995 <target>', out: '110/tcp open  pop3\n143/tcp open  imap', sig: '110/tcp open  pop3', teach: 'POP3 and IMAP serve mailboxes; with a credential, reading the mail is itself an attack.' } ] },
+    ],
+    'rdp-enum': [
+      { key: 'port3389', label: 'The scan found 3389', steps: [
+        { title: 'Spot the RDP port', tool: 'nmap', where: 'local', cmd: 'nmap -p 3389 <target>', out: '3389/tcp open  ms-wbt-server', sig: '3389/tcp open  ms-wbt-server', teach: 'RDP open means you can read its NLA mode now, and log in the moment you hold a credential.' } ] },
+      { key: 'cred', label: 'You already hold a credential', steps: [
+        { title: 'A share dump leaked a password', tool: 'netexec', where: 'local', cmd: 'nxc smb <target> -u svc_backup -p "Winter2024!" --shares', sig: 'svc_backup', teach: 'With a credential in hand, the question becomes whether that account can reach the desktop over RDP.' } ] },
+    ],
+    'nfs-enum': [
+      { key: 'port2049', label: 'The scan found 2049', steps: [
+        { title: 'Spot the NFS port', tool: 'nmap', where: 'local', cmd: 'nmap -p 2049 <target>', out: '2049/tcp open  nfs', sig: '2049/tcp open  nfs', teach: 'NFS shares a filesystem over the network; the question is what it exports and to whom.' } ] },
+      { key: 'rpcbind', label: 'rpcbind on 111 pointed the way', steps: [
+        { title: 'List RPC services', tool: 'nmap', where: 'local', cmd: 'nmap -sCV -p 111 <target>', out: '111/tcp open  rpcbind\n|   100003  3,4  2049/tcp  nfs', sig: '100003', teach: 'rpcbind advertised nfs behind it; ask showmount what directories it hands out.' } ] },
+    ],
+  };
+  Object.keys(RECON_LEADUPS).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) OBOL.STUDY_FIXTURES[k].leadup = RECON_LEADUPS[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);
