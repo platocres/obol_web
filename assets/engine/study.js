@@ -264,30 +264,67 @@
   }
 
   // --- scenarios: curated cross-lane paths ------------------------------------------------------
+  // Curated end-to-end paths, grouped by category so the picker reads like a menu. `cat` drives the
+  // grouping + colour in the UI; SCEN_CATS sets the display order. Every step is a real move id.
+  var SCEN_CATS = ['Recon', 'Web to Shell', 'Privilege Escalation', 'Active Directory', 'Databases', 'Lateral & Pivot'];
   var SCENARIOS = [
-    { key: 'ad-classic', name: 'Classic AD: no creds → Domain Admin', desc: 'Anonymous foothold, roast a hash, crack it, walk an ACL path to DCSync.',
-      steps: ['nmap-fast-open-ports', 'ad-dc-identify', 'ad-anon-ldap-enum', 'asrep-roast', 'crack-asrep', 'ad-acl-abuse', 'dcsync'] },
-    { key: 'web-linux', name: 'Web app → Linux root', desc: 'Map a web app, get a shell through it, then escalate to root.',
-      steps: ['recon-web-triage', 'content-discovery', 'lfi-probe', 'file-upload', 'web-shells', 'linux-enum', 'sudo-abuse'] },
-    { key: 'web-windows', name: 'Web app → Windows SYSTEM', desc: 'Web foothold on a Windows host, then abuse a privilege to SYSTEM.',
-      steps: ['recon-web-triage', 'content-discovery', 'file-upload', 'web-shells', 'windows-enum', 'seimpersonate'] },
-    { key: 'smb-spray', name: 'SMB foothold → spray → DA', desc: 'Pull a user list from anonymous SMB, spray for a login, escalate in the domain.',
-      steps: ['recon-smb-anon', 'password-spray', 'ad-acl-abuse', 'dcsync'] },
-    { key: 'recon-sweep', name: 'Full recon sweep', desc: 'The opening every engagement shares, ports, versions, SMB, and the web surface.',
+    { key: 'recon-sweep', cat: 'Recon', name: 'Full recon sweep', desc: 'The opening every engagement shares: ports, versions, SMB, and the web surface.',
       steps: ['nmap-fast-open-ports', 'nmap-version-scripts', 'recon-smb-anon', 'recon-web-triage'] },
-    { key: 'web-root-proof', name: 'Web → root → proof', desc: 'The full exam arc: recon a web app, shell it, escalate to root, capture the flag.',
+
+    { key: 'web-linux', cat: 'Web to Shell', name: 'Web app → Linux root', desc: 'Map a web app, get a shell through it, then escalate to root.',
+      steps: ['recon-web-triage', 'content-discovery', 'lfi-probe', 'file-upload', 'web-shells', 'linux-enum', 'sudo-abuse'] },
+    { key: 'web-windows', cat: 'Web to Shell', name: 'Web app → Windows SYSTEM', desc: 'Web foothold on a Windows host, then abuse a privilege to SYSTEM.',
+      steps: ['recon-web-triage', 'content-discovery', 'file-upload', 'web-shells', 'windows-enum', 'seimpersonate'] },
+    { key: 'ssti-root', cat: 'Web to Shell', name: 'SSTI → RCE → root', desc: 'Spot template injection, turn it into a shell, then escalate on Linux.',
+      steps: ['recon-web-triage', 'content-discovery', 'ssti', 'web-shells', 'linux-enum', 'sudo-abuse'] },
+    { key: 'cmdi-root', cat: 'Web to Shell', name: 'Command injection → shell → root', desc: 'Inject an OS command, catch a reverse shell, then escalate.',
+      steps: ['recon-web-triage', 'content-discovery', 'command-injection', 'shell-revshell-linux', 'linux-enum', 'sudo-abuse'] },
+    { key: 'tomcat-system', cat: 'Web to Shell', name: 'Tomcat manager → WAR → SYSTEM', desc: 'Fingerprint Tomcat, deploy a WAR shell, then take SYSTEM.',
+      steps: ['recon-web-triage', 'check-web-components', 'tomcat-deploy', 'windows-enum', 'seimpersonate'] },
+    { key: 'web-root-proof', cat: 'Web to Shell', name: 'Web → root → proof', desc: 'The full exam arc: recon a web app, shell it, escalate to root, capture the flag.',
       steps: ['nmap-fast-open-ports', 'recon-web-triage', 'content-discovery', 'file-upload', 'web-shells', 'linux-enum', 'sudo-abuse', 'flag-hunt-linux'] },
-    { key: 'mssql-system', name: 'MSSQL sysadmin → SYSTEM', desc: 'A database login with sysadmin becomes a shell, then SYSTEM on the host.',
-      steps: ['nmap-version-scripts', 'mssql-login', 'mssql-xp-cmdshell', 'windows-enum', 'seimpersonate'] },
-    { key: 'responder-lateral', name: 'Poison → crack → move laterally', desc: 'Capture a hash off the wire, crack it, and reuse it to own a second host.',
-      steps: ['responder-poison', 'crack-netntlmv2', 'lateral-exec', 'windows-enum'] },
-    { key: 'adcs-da', name: 'AD CS (ESC1) → Domain Admin', desc: 'Abuse a vulnerable certificate template to mint a DA credential, then DCSync.',
+
+    { key: 'linux-sudo', cat: 'Privilege Escalation', name: 'Linux foothold → sudo → root', desc: 'From a low-priv shell, read your sudo rights and escape a binary to root.',
+      steps: ['linux-enum', 'sudo-abuse', 'flag-hunt-linux'] },
+    { key: 'win-potato', cat: 'Privilege Escalation', name: 'Windows foothold → SeImpersonate → SYSTEM', desc: 'Enumerate, find SeImpersonatePrivilege, and ride a potato to SYSTEM.',
+      steps: ['windows-enum', 'seimpersonate', 'flag-hunt-windows'] },
+    { key: 'cron-root', cat: 'Privilege Escalation', name: 'Find the cron job → root', desc: 'Watch processes with pspy, spot a root job you can influence, and take root.',
+      steps: ['linux-enum', 'pspy-monitor', 'cron-abuse'] },
+
+    { key: 'ad-classic', cat: 'Active Directory', name: 'Classic AD: no creds → Domain Admin', desc: 'Anonymous foothold, roast a hash, crack it, walk an ACL path to DCSync.',
+      steps: ['nmap-fast-open-ports', 'ad-dc-identify', 'ad-anon-ldap-enum', 'asrep-roast', 'crack-asrep', 'ad-acl-abuse', 'dcsync'] },
+    { key: 'kerberoast-da', cat: 'Active Directory', name: 'Kerberoast → crack → Domain Admin', desc: 'With one domain credential, roast a service account, crack it, and escalate.',
+      steps: ['ad-dc-identify', 'ad-anon-ldap-enum', 'kerberoast', 'crack-tgs', 'ad-acl-abuse', 'dcsync'] },
+    { key: 'adcs-da', cat: 'Active Directory', name: 'AD CS (ESC1) → Domain Admin', desc: 'Abuse a vulnerable certificate template to mint a DA credential, then DCSync.',
       steps: ['ad-dc-identify', 'ad-anon-ldap-enum', 'adcs-esc', 'cert-authenticate', 'dcsync'] },
-    { key: 'web-pivot-deep', name: 'Web shell → loot → pivot', desc: 'Land through the web, loot creds, then tunnel into the network behind the box.',
+    { key: 'smb-spray', cat: 'Active Directory', name: 'SMB foothold → spray → DA', desc: 'Pull a user list from anonymous SMB, spray for a login, escalate in the domain.',
+      steps: ['recon-smb-anon', 'password-spray', 'ad-acl-abuse', 'dcsync'] },
+    { key: 'nopac-da', cat: 'Active Directory', name: 'Domain cred → noPac → Domain Admin', desc: 'A single low-priv credential against an unpatched DC becomes Domain Admin.',
+      steps: ['ad-dc-identify', 'ad-anon-ldap-enum', 'asrep-roast', 'crack-asrep', 'nopac'] },
+    { key: 'coerce-relay', cat: 'Active Directory', name: 'Coerce → relay → DCSync', desc: 'Force the DC to authenticate, relay it to grant replication rights, then DCSync.',
+      steps: ['coerce-auth', 'ntlm-relay-attack', 'dcsync'] },
+    { key: 'golden-persist', cat: 'Active Directory', name: 'Domain Admin → Golden Ticket', desc: 'Once you own the domain, forge a TGT that survives password resets.',
+      steps: ['dcsync', 'golden-ticket'] },
+    { key: 'eternalblue-sys', cat: 'Active Directory', name: 'SMBv1 → EternalBlue → SYSTEM', desc: 'An unpatched SMBv1 host falls to MS17-010 for SYSTEM without credentials.',
+      steps: ['nmap-version-scripts', 'nmap-vuln-scripts', 'eternalblue', 'flag-hunt-windows'] },
+
+    { key: 'mssql-system', cat: 'Databases', name: 'MSSQL sysadmin → SYSTEM', desc: 'A database login with sysadmin becomes a shell, then SYSTEM on the host.',
+      steps: ['nmap-version-scripts', 'mssql-login', 'mssql-xp-cmdshell', 'windows-enum', 'seimpersonate'] },
+    { key: 'mysql-reuse', cat: 'Databases', name: 'MySQL → dump hashes → reuse', desc: 'Log in, dump the app password table, crack a hash, and reuse it to move.',
+      steps: ['mysql-login', 'mysql-loot', 'crack-ntlm', 'lateral-exec'] },
+
+    { key: 'responder-lateral', cat: 'Lateral & Pivot', name: 'Poison → crack → move laterally', desc: 'Capture a hash off the wire, crack it, and reuse it to own a second host.',
+      steps: ['responder-poison', 'crack-netntlmv2', 'lateral-exec', 'windows-enum'] },
+    { key: 'web-pivot-deep', cat: 'Lateral & Pivot', name: 'Web shell → loot → pivot', desc: 'Land through the web, loot creds, then tunnel into the network behind the box.',
       steps: ['recon-web-triage', 'content-discovery', 'web-shells', 'linux-enum', 'linux-loot-hunt', 'local-linux-interfaces', 'pivot-chisel-socks', 'pivot-scan-through'] },
+    { key: 'pivot-internal', cat: 'Lateral & Pivot', name: 'Foothold → tunnel → reach internal', desc: 'From a foothold, map the hidden subnet, build a tunnel, and scan what is behind it.',
+      steps: ['linux-enum', 'local-linux-interfaces', 'pivot-ligolo', 'pivot-scan-through'] },
   ];
-  function scenarios() { return SCENARIOS.filter(function (s) { return s.steps.every(byId); }).map(function (s) { return { key: s.key, name: s.name, desc: s.desc, steps: s.steps.slice(), count: s.steps.length }; }); }
-  function scenario(key) { for (var i = 0; i < SCENARIOS.length; i++) if (SCENARIOS[i].key === key) return { key: SCENARIOS[i].key, name: SCENARIOS[i].name, desc: SCENARIOS[i].desc, steps: SCENARIOS[i].steps.slice(), count: SCENARIOS[i].steps.length }; return null; }
+  function scenCat(s) { return s.cat || 'Other'; }
+  function scenMap(s) { return { key: s.key, cat: scenCat(s), name: s.name, desc: s.desc, steps: s.steps.slice(), count: s.steps.length }; }
+  function scenarios() { return SCENARIOS.filter(function (s) { return s.steps.every(byId); }).map(scenMap); }
+  function scenarioCats() { return SCEN_CATS.slice(); }
+  function scenario(key) { for (var i = 0; i < SCENARIOS.length; i++) if (SCENARIOS[i].key === key) return scenMap(SCENARIOS[i]); return null; }
 
   // --- cold-box simulation: run a scenario as a guided, scaffolded playthrough -------------------
   // A real box starts cold: an IP and nothing else. simFor walks a scenario one move at a time. Each
@@ -473,6 +510,9 @@
   // the hand-written "why this, why now" teaching note for a move (fixtures carry it as `why`); empty
   // when none is authored yet, so the route can fall back to the derived dependency explanation.
   function whyNow(moveId) { var fx = fixtures()[moveId] || {}; return fx.why || ''; }
+  // the hand-written "how to actually do it" field notes for a move (fixtures carry it as `how`):
+  // { lead: '…', items: [{ t: 'technique', d: 'how' }, …] }. Empty when none is authored yet.
+  function howTo(moveId) { var fx = fixtures()[moveId] || {}; var h = fx.how; return (h && h.items && h.items.length) ? h : null; }
   // the "why this line matters" read-out for a move's highlighted signal
   function signalTell(moveId) {
     var m = byId(moveId); if (!m) return null;
@@ -602,18 +642,18 @@
 
   // --- scaffolding level: how much "why" to show. Fades as a move is mastered, or set manually ---
   var CKEY = 'obol.study-coach';
-  function coachPref() { try { return localStorage.getItem(CKEY) || 'auto'; } catch (e) { return 'auto'; } }
+  function coachPref() { try { return localStorage.getItem(CKEY) || 'always'; } catch (e) { return 'always'; } }
   function setCoachPref(v) { try { localStorage.setItem(CKEY, v); } catch (e) {} }
   function showWhy(moveId) { var p = coachPref(); if (p === 'always') return true; if (p === 'off') return false; var mk = mastery()[moveId] || {}; return !mk.correct; }
 
   OBOL.study = {
     LANE_DEFS: LANE_DEFS, LANE_KEYS: LANE_KEYS,
     lanes: lanes, lane: lane, laneEdges: laneEdges, laneEntry: laneEntry, laneNext: laneNext,
-    atlas: atlas, scenarios: scenarios, scenario: scenario, simFor: simFor,
+    atlas: atlas, scenarios: scenarios, scenarioCats: scenarioCats, scenario: scenario, simFor: simFor,
     evidence: evidence, evidenceGaps: evidenceGaps,
     cmdLocus: cmdLocus, cellFor: cellFor, replayFor: replayFor, practiceFor: practiceFor, practiceDiagnose: practiceDiagnose,
     producersOf: producersOf, opensNext: opensNext,
-    signalTell: signalTell, whyNow: whyNow, factInfo: factInfo, alternativesFor: alternativesFor, decisionFor: decisionFor, scopeSafety: scopeSafety,
+    signalTell: signalTell, whyNow: whyNow, howTo: howTo, factInfo: factInfo, alternativesFor: alternativesFor, decisionFor: decisionFor, scopeSafety: scopeSafety,
     coachPref: coachPref, setCoachPref: setCoachPref, showWhy: showWhy,
     mastery: mastery, markStudied: markStudied, laneProgress: laneProgress, validatePath: validatePath,
     // back-compat for tests

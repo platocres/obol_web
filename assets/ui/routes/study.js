@@ -136,7 +136,7 @@
       + '<button type="button" class="study-rp-btn primary" data-rp="play">▶ Play</button>'
       + (rp.hasOutput ? '<button type="button" class="study-rp-btn" data-rp="skip">⏭ Skip to result</button>' : '')
       + '<button type="button" class="study-rp-btn" data-rp="restart">↺ Replay</button>'
-      + '<label class="study-rp-auto"><input type="checkbox" data-rp="autolane"' + (_autolane ? ' checked' : '') + '> auto-play the whole chain</label>'
+      + '<button type="button" class="study-rp-btn study-rp-auto' + (_autolane ? ' on' : '') + '" data-rp="autolane">' + (_autolane ? '⏹ Stop auto-play' : '⏭ Auto-play the whole path') + '</button>'
       + '<span class="study-rp-prog"></span>'
       + '</div></div>';
   }
@@ -229,6 +229,17 @@
     return '<div class="study-why"><div class="study-why-h">Why this, why now</div>'
       + '<p>You reach for this because ' + needs + ', and ' + turns + mattersBit + '.</p></div>';
   }
+  // "How to actually do it": the hand-written field notes, the techniques and bypasses a student needs
+  // to beat the real thing in a lab or on the exam. Only renders when a move has authored field notes.
+  function howPanel(cell) {
+    var h = study().howTo(cell.id); if (!h) return '';
+    var items = h.items.map(function (it) {
+      return '<div class="howto-item"><div class="howto-t">' + esc(it.t) + '</div><div class="howto-d">' + codeify(it.d) + '</div></div>';
+    }).join('');
+    return '<div class="study-howto"><div class="study-howto-h">Field notes: how to actually do it</div>'
+      + (h.lead ? '<p class="howto-lead">' + codeify(h.lead) + '</p>' : '')
+      + '<div class="howto-list">' + items + '</div></div>';
+  }
   // reading the result: what the highlighted signal line actually tells you
   function signalTellBlock(cell) {
     if (!cell.output || !cell.output.text) return '';
@@ -303,6 +314,9 @@
 
     // which tool, when: tradeoff decisions over moves that reach the same outcome
     h += decisionPanel(cell);
+
+    // field notes: the techniques and bypasses that make the move actually land
+    h += howPanel(cell);
 
     h += '<div class="study-seg study-outcome"><div class="study-seg-l">What you walk away with <span class="study-seg-note">and the moves it unlocks</span></div>'
       + '<div class="study-flow">' + factChips(cell.proves, 'proof')
@@ -475,6 +489,26 @@
     return 'M' + bx + ',' + by + ' C' + bx + ',' + my + ' ' + tx + ',' + my + ' ' + tx + ',' + ty;
   }
 
+  // category → short colour slug for the scenario chips
+  var SCEN_SLUG = { 'Recon': 'recon', 'Web to Shell': 'web', 'Privilege Escalation': 'privesc', 'Active Directory': 'ad', 'Databases': 'database', 'Lateral & Pivot': 'pivot' };
+  function catSlug(c) { return SCEN_SLUG[c] || 'recon'; }
+  // the Atlas "common scenarios" menu: end-to-end paths grouped by category, colour-coded, each a chip
+  // you toggle to light up its steps (and then "Study this path" to walk it as one guided replay).
+  function scenariosBar() {
+    var all = study().scenarios(), cats = study().scenarioCats(), byCat = {};
+    all.forEach(function (s) { (byCat[s.cat] = byCat[s.cat] || []).push(s); });
+    var groups = cats.filter(function (c) { return byCat[c]; }).map(function (c) {
+      var slug = catSlug(c);
+      return '<div class="scen-group scen-' + slug + '"><span class="scen-cat">' + esc(c) + '</span><div class="scen-chips">'
+        + byCat[c].map(function (s) {
+          return '<button type="button" class="atlas-scen scen-chip' + (s.key === _scenario ? ' on' : '') + '" data-scen="' + U.attr(s.key) + '" title="' + U.attr(s.desc) + '">'
+            + esc(s.name) + ' <span class="scen-n">' + s.count + '</span></button>';
+        }).join('') + '</div></div>';
+    }).join('');
+    return '<div class="atlas-scenarios"><div class="atlas-scen-head"><span class="atlas-scen-l">Common scenarios</span>'
+      + '<span class="atlas-scen-or">pick one to light its path, then <b>Study this path</b> to walk it, or click steps to draw your own</span></div>'
+      + '<div class="scen-groups">' + groups + '</div></div>';
+  }
   function atlasView() {
     var LY = atlasLayout(), A = LY.A, pos = LY.pos, M = study().mastery();
     var laneEdgeSvg = A.laneEdges.map(function (e) { var d = edgePath(pos, e.from, e.to, false); return d ? '<path class="atlas-edge atlas-edge-lane lane-' + study().laneEntry(e.from).laneKey + '" d="' + d + '"/>' : ''; }).join('');
@@ -515,9 +549,7 @@
       + '<button type="button" class="study-rp-btn" data-az="out">−</button>'
       + '<button type="button" class="study-rp-btn" data-az="reset">fit</button>'
       + '<button type="button" class="study-rp-btn" data-az="in">+</button></div></div>'
-      + '<div class="atlas-scenarios"><span class="atlas-scen-l">Common scenarios</span>'
-      + study().scenarios().map(function (s) { return '<button type="button" class="atlas-scen' + (s.key === _scenario ? ' on' : '') + '" data-scen="' + U.attr(s.key) + '" title="' + U.attr(s.desc) + '">' + esc(s.name) + '</button>'; }).join('')
-      + '<span class="atlas-scen-or">or click steps to draw your own</span></div>'
+      + scenariosBar()
       + '<div class="atlas-stage" id="atlas-stage">'
       + '<svg class="atlas-svg" id="atlas-svg"><g class="atlas-view" id="atlas-view" data-w="' + LY.W + '" data-h="' + LY.H + '">'
       + '<g class="atlas-bands">' + bandSvg + '</g>'
@@ -894,7 +926,11 @@
     U.on(mount, 'click', '[data-rp="play"]', function () { runReplay(mount, false); });
     U.on(mount, 'click', '[data-rp="restart"]', function () { runReplay(mount, false); });
     U.on(mount, 'click', '[data-rp="skip"]', function () { runReplay(mount, true); });
-    U.on(mount, 'change', '[data-rp="autolane"]', function (e, t) { _autolane = !!t.checked; });
+    U.on(mount, 'click', '[data-rp="autolane"]', function () {
+      _autolane = !_autolane;
+      if (_autolane) { _autoplay = true; OBOL.router.render(); }   // start chaining from here
+      else { cancelReplay(); OBOL.router.render(); }                // stop instantly, one click
+    });
     // auto-start when a chain step mounts
     if (_view === 'node' && _gear === 'watch' && _autoplay) { _autoplay = false; setTimeout(function () { runReplay(mount, false); }, 250); }
     // the Atlas: pan / zoom / semantic LOD / draw a custom path
