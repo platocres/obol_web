@@ -1562,7 +1562,7 @@
 
     // ============================ WINDOWS PRIVESC ============================
     'windows-enum': {
-      why: "Same principle as Linux: let winpeas give you coverage, then let your own judgment pick the one finding that matters. On lab Windows boxes the usual winners are a misconfigured service, a credential left in a file or the registry, or an abusable privilege. Reach for it the moment you land. The output is long and mostly noise, so read it hunting for the outlier, not top to bottom.",
+      why: "Windows privesc rewards reading over running: winpeas floods you with output, and the whole skill is spotting the one line that matters in the noise. On lab boxes that outlier is usually a misconfigured service, a credential left in a file or the registry, or an abusable token privilege. Run it the moment you land a shell, then hunt the report for the outlier rather than reading it top to bottom.",
       signal: 'SeImpersonatePrivilege: Enabled',
       teach: 'Start with the built-in whoami /priv (instant, nothing to stage), then run the deep sweep with winPEAS, which is an .exe you must get onto the box first. Serve it from your box and pull it over with certutil, then run it. SeImpersonate Enabled on a service account means a "potato" exploit gets you SYSTEM.',
       steps: [
@@ -1620,7 +1620,7 @@
       ],
     },
     'alwaysinstallelevated': {
-      why: "When AlwaysInstallElevated is set in both HKLM and HKCU, any MSI you run installs with SYSTEM rights, so you build an MSI that adds an admin or runs your command and launch it. Reach for it when enumeration shows both registry keys set to 1, both are required, one alone does nothing. It is a quick, reliable win when present, which is why winpeas checks for it specifically.",
+      why: "This is a free SYSTEM shell hiding in a policy almost nobody means to enable. With the feature on, Windows installs any MSI you hand it at full SYSTEM rights, so a one-line package that adds an admin or runs your command is game over. The catch is that both the HKLM and HKCU keys must read 1, one alone does nothing, which is exactly the pair winpeas confirms for you.",
       cmd: 'reg query HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated', tool: 'sh',
       output: [
         'HKLM\\...\\Installer',
@@ -1631,7 +1631,7 @@
       teach: 'When AlwaysInstallElevated is 0x1 in BOTH HKLM and HKCU, any MSI you install runs as SYSTEM. Build a malicious MSI (msfvenom -f msi), run msiexec, and you escalate, a pure misconfiguration, no exploit needed.',
     },
     'dpapi-secrets': {
-      why: "Windows encrypts saved credentials (RDP, scheduled tasks, browser passwords) under DPAPI masterkeys, which are themselves protected by the user's password hash, so once you have that user you can decrypt their stored secrets. Reach for it after you own a user account and suspect saved credentials. It turns \"I am this user\" into \"here is everything this user saved\", which often includes a path to a more privileged account.",
+      why: "This is how you turn being a user into holding everything that user ever saved. Windows locks stored RDP, scheduled-task, and browser credentials behind DPAPI masterkeys that are themselves sealed by the account's password hash, so the moment you own the user (or SYSTEM) the whole vault opens. Reach for it once you have an account and suspect saved secrets, because what falls out is frequently the credential for a more privileged account.",
       cmd: "impacket-dpapi credential -file C:\\Users\\dev\\AppData\\...\\Credentials\\A1B2 -key 0x...", tool: 'impacket-dpapi',
       output: [
         '[CREDENTIAL]',
@@ -1654,7 +1654,7 @@
       teach: 'Windows caches credentials for convenience. cmdkey /list shows stored logins you can reuse with runas /savecred, sometimes an Administrator credential is sitting there for the taking, no cracking needed.',
     },
     'windows-old-hives': {
-      why: "A leftover C:\\windows.old from an in-place upgrade, or any saved SAM/SYSTEM hive, holds old local-account hashes, and the local Administrator hash is frequently still valid. Pull the hives, dump them offline with secretsdump, then crack or pass the hash. Reach for it when you find windows.old or readable hive backups. It is a clean path to local admin that bypasses touching LSASS at all.",
+      why: "Sometimes the credentials you need were never in memory at all, just left behind on disk. A half-finished upgrade or a lazy backup leaves copies of the account database where an ordinary user can read them, and what is inside is frequently still live. You carry those files back to Kali and open them there, offline, well away from any protected process or endpoint sensor. It is the quietest route to local admin there is, and the thing to look for first is a stray upgrade folder or a backup share.",
       cmd: 'dir C:\\Windows.old\\Windows\\System32\\config', tool: 'sh',
       output: [
         'Directory of C:\\Windows.old\\Windows\\System32\\config',
@@ -1686,7 +1686,7 @@
       teach: 'A local admin account you add is a durable way back onto a Windows box after a revert or reboot. On a real engagement this is scoped, logged, and cleaned up afterward; note what you create so you can remove it.',
     },
     'lsass-dump-onbox': {
-      why: "LSASS holds the credentials of every user currently logged on, so with admin or SYSTEM you dump its memory and parse out hashes, tickets, and sometimes plaintext. The built-in comsvcs.dll method needs nothing uploaded; ship the .dmp to Kali and parse it there to keep noise down. Reach for it once you have admin and want to harvest more credentials, especially on a box where a domain admin may have logged in.",
+      why: "The appeal is scope: one dump of a single process hands you the credentials of everyone currently signed in, which on a shared box can include a domain admin. With admin or SYSTEM you capture LSASS memory using the built-in comsvcs.dll (nothing uploaded), ship the .dmp to Kali, and parse it with pypykatz for hashes, tickets, and sometimes plaintext. Reach for it once you are admin and want to harvest further up the chain.",
       cmd: 'rundll32 C:\\windows\\system32\\comsvcs.dll, MiniDump 672 C:\\Windows\\Temp\\lsass.dmp full', tool: 'cmd',
       output: [
         '# dump written; parse offline with pypykatz:',
