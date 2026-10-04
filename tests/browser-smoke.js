@@ -751,13 +751,13 @@ function serve() {
   ok(bootedBlocked, 'boot completes via fallback when IndexedDB.open is blocked (no infinite hang)');
   await blocked.close();
 
-  // Loadout (step-zero tab): the leftmost nav item, the quickstart face, the Arsenal catalog, and the
-  // paste-back round-trip that flips the page to the synced inventory face.
+  // Nav order: Learn (the teaching front door) is leftmost, Loadout (box setup) second. Both are
+  // primary nav items ahead of the engagement surfaces.
   ok((await page.locator('header.appbar .mainnav a[href="#/loadout"]').count()) === 1, 'Loadout is a primary nav item');
   ok(await page.evaluate(() => {
-    var links = Array.from(document.querySelectorAll('header.appbar .mainnav a[data-nav]'));
-    return links.length && (links[0].getAttribute('href') === '#/loadout');
-  }), 'Loadout is the LEFTMOST nav item (step zero)');
+    var links = Array.from(document.querySelectorAll('header.appbar .mainnav a[data-nav]')).map(function (a) { return a.getAttribute('href'); });
+    return links.length >= 2 && links[0] === '#/study' && links[1] === '#/loadout';
+  }), 'Learn is the LEFTMOST nav item, Loadout second');
   await page.goto(`http://localhost:${PORT}/index.html#/loadout`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.lo-route', { timeout: 6000 }).catch(() => {});
   ok((await page.locator('.lo-route .lo-steps .lo-download').count()) === 1, 'Loadout empty-state shows the guided quickstart with a download button');
@@ -800,6 +800,20 @@ function serve() {
   const palTool = (await page.locator('.pal-item', { hasText: 'Certipy' }).first().textContent().catch(() => '')) || '';
   ok(palTool.indexOf('pipx install certipy-ad') !== -1, '⌘K finds a tool and shows its install command (certipy → pipx install certipy-ad)');
   await page.keyboard.press('Escape');
+
+  // Study mode (milestone 1 — AD vertical slice): the route renders a derived cell with remote-first
+  // commands, and the "Your turn" gear scores a correct answer.
+  await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-route', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.study-gnode').count()) === 7, 'Study renders the 7-node AD lane');
+  ok((await page.locator('.study-cell-title').first().textContent().catch(() => '') || '').indexOf('AS-REP') !== -1, 'Study opens on the AS-REP node cell');
+  ok((await page.locator('.study-cmd').first().locator('.study-loc').textContent().catch(() => '') || '').indexOf('REMOTE') !== -1, 'Study cell lists commands remote-first (first is REMOTE)');
+  ok((await page.locator('.study-ln.hot').count()) >= 1, 'Study sample output highlights the signal line');
+  await page.locator('[data-gear="practice"]').click();
+  await page.waitForTimeout(150);
+  await page.locator('.study-choice[data-verdict="correct"]').first().click();
+  await page.waitForTimeout(120);
+  ok((await page.locator('.study-verdict.show.ok').count()) === 1, 'Study "Your turn" scores the correct answer');
 
   await browser.close();
   server.close();
