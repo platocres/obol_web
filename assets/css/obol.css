@@ -1818,11 +1818,12 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 
 /* "How you got here": the plausible lead-up, shown as condensed scrollback above the current step. */
 .study-recap { background: #060b18; border-bottom: 1px solid var(--line); padding: 4px 14px; font-family: var(--mono); }
-.recap-h { display: flex; align-items: center; gap: 7px; width: 100%; background: none; border: 0; cursor: pointer; text-align: left; font-family: var(--mono); font-size: 10.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text-2); padding: 8px 0; }
-.recap-h:hover { color: var(--text); }
+.recap-h { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; cursor: pointer; text-align: left; font-family: var(--mono); font-size: 10.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text-2); padding: 8px 0; }
+.recap-h:hover .recap-h-t { color: var(--text); }
 .recap-chev { color: var(--accent); font-weight: 800; }
-.recap-hint { margin-left: auto; font-weight: 700; letter-spacing: .02em; text-transform: none; color: var(--muted); }
-.recap-h:hover .recap-hint { color: var(--text-2); }
+.recap-count { font-weight: 700; letter-spacing: .02em; text-transform: none; color: var(--text-2); }
+.recap-showbtn { margin-left: auto; font-family: var(--mono); font-size: 10.5px; font-weight: 800; letter-spacing: .03em; text-transform: none; color: var(--accent-2); background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line)); border-radius: 7px; padding: 4px 10px; }
+.recap-h:hover .recap-showbtn { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); color: var(--text); }
 .study-recap.collapsed .recap-body { display: none; }
 .recap-body { padding-bottom: 4px; }
 .recap-steps { display: flex; flex-direction: column; gap: 0; border-left: 2px solid var(--line); padding-left: 13px; margin-left: 3px; }

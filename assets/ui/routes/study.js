@@ -304,8 +304,11 @@
     var open = recapOpen();
     return '<div class="study-recap' + (open ? '' : ' collapsed') + '" id="study-recap">'
       + '<button type="button" class="recap-h" data-recap-toggle aria-expanded="' + (open ? 'true' : 'false') + '">'
-      + '<span class="recap-chev">' + (open ? '▾' : '▸') + '</span> How you got here'
-      + '<span class="recap-hint">' + (open ? 'hide' : steps.length + ' steps that led here · show') + '</span></button>'
+      + '<span class="recap-chev">' + (open ? '▾' : '▸') + '</span>'
+      + '<span class="recap-h-t">How you got here</span>'
+      + (open ? '' : '<span class="recap-count">' + steps.length + ' steps that led here</span>')
+      + '<span class="recap-showbtn">' + (open ? 'Hide ▴' : 'Show ▾') + '</span>'
+      + '</button>'
       + '<div class="recap-body">'
       + '<div class="recap-steps">' + rows + '</div>'
       + '<div class="recap-here"><span class="recap-here-i">▾</span> You are here: <b>' + esc(cur.title) + '</b></div>'
