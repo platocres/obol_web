@@ -190,6 +190,15 @@ const bad = S.validatePath(['asrep-roast', 'crack-asrep']);
 ok(!bad.ok && bad.issues[0].idx === 0 && bad.issues[0].missing.indexOf('ad.user_list') >= 0, 'a path that opens on AS-REP flags the missing user list (locked door)');
 ok(S.validatePath(['nmap-fast-open-ports']).ok, 'an opening recon move needs only environment facts (not flagged)');
 
+// --- "how you got here": derived lead-up chain + authored gap-fill ---------------------------
+const ptFU = S.pathTo('file-upload');
+ok(Array.isArray(ptFU) && ptFU[ptFU.length - 1] === 'file-upload', 'pathTo ends at the requested move');
+const ptCrack = S.pathTo('crack-asrep');
+ok(ptCrack.indexOf('asrep-roast') >= 0 && ptCrack.indexOf('asrep-roast') < ptCrack.indexOf('crack-asrep'), 'pathTo derives a causal ancestor before the move that needs it');
+const lead = S.leadupFor('file-upload');
+ok(lead && lead.length === 2 && /nmap/.test(lead[0].cmd) && lead[0].sig, 'leadupFor returns the authored recon lead-up (nmap first, with a signal line)');
+ok(S.leadupFor('crack-asrep') === null, 'a move with no authored lead-up returns null (no half-baked gap-fill)');
+
 // --- mastery (per-browser progress) ----------------------------------------------------------
 const mem = {}; globalThis.localStorage = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } };
 S.markStudied('asrep-roast', 'studied');

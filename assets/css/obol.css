@@ -1815,6 +1815,28 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .rp-prompt { color: var(--accent); font-weight: 700; }
 .rp-cursor { color: var(--accent); animation: rpBlink 1s step-end infinite; }
 @keyframes rpBlink { 50% { opacity: 0; } }
+
+/* "How you got here": the plausible lead-up, shown as condensed scrollback above the current step. */
+.study-recap { background: #060b18; border-bottom: 1px solid var(--line); padding: 11px 14px 4px; font-family: var(--mono); }
+.recap-h { font-family: var(--mono); font-size: 10.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text-2); margin-bottom: 9px; }
+.recap-steps { display: flex; flex-direction: column; gap: 0; border-left: 2px solid var(--line); padding-left: 13px; margin-left: 3px; }
+.recap-step { position: relative; padding: 0 0 12px; opacity: .62; transition: opacity .25s ease; }
+.recap-step::before { content: ''; position: absolute; left: -17px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--bg3); border: 1.5px solid var(--line); }
+.recap-step.done { opacity: .82; }
+.recap-step.on { opacity: 1; }
+.recap-step.on::before { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.recap-top { display: flex; align-items: baseline; gap: 7px; margin-bottom: 3px; }
+.recap-n { font-size: 10px; font-weight: 800; color: var(--muted); min-width: 12px; }
+.recap-title { font-family: var(--sans); font-size: 12.5px; font-weight: 700; color: var(--text); }
+.recap-where { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: auto; letter-spacing: .02em; }
+.recap-cmd { font-size: 12px; line-height: 1.5; color: #d7e3f4; white-space: pre-wrap; word-break: break-word; }
+.recap-prompt { color: var(--accent); font-weight: 700; }
+.recap-prompt.host { color: #F7C948; }
+.recap-sig { font-size: 12px; line-height: 1.5; color: var(--accent-2); white-space: pre-wrap; word-break: break-word; margin-top: 2px; }
+.recap-cap { font-family: var(--sans); font-size: 12px; color: var(--text-2); line-height: 1.5; margin-top: 3px; }
+.recap-here { font-family: var(--sans); font-size: 12.5px; color: var(--text-2); padding: 7px 0 3px; }
+.recap-here b { color: var(--accent-2); font-weight: 700; }
+.recap-here-i { color: var(--accent); font-weight: 800; margin-right: 3px; }
 .rp-out { color: #8498b4; opacity: 0; animation: rpFade .18s ease forwards; }
 @keyframes rpFade { to { opacity: 1; } }
 .rp-out.hot { background: linear-gradient(90deg, rgba(34,197,94,.18), rgba(34,197,94,.02)); border-left: 2px solid var(--accent); margin-left: -14px; padding-left: 12px; color: #e7f6ec; }

@@ -145,6 +145,26 @@
   function producersOf(facts) { if (!facts || !facts.length) return []; return allMoves().filter(function (m) { return (m.produces || []).some(function (p) { return facts.indexOf(p) >= 0; }); }); }
   function opensNext(m) { var prod = m.produces || []; if (!prod.length) return []; return allMoves().filter(function (x) { return x.id !== m.id && reqSet(x).some(function (r) { return prod.indexOf(r) >= 0; }); }); }
 
+  // --- "how you got here": the plausible lead-up chain to a move ---------------------------------
+  // Walk the fact graph backward: the moves that mint this move's prerequisites, transitively, then
+  // topologically ordered and ending at the target. Environmental prerequisites (a port, a reachable
+  // form) have no producing move, so the chain bottoms out there; that is the gap an authored leadup
+  // (leadupFor) fills well, rooting the story back at the scan. Returns move ids, oldest first.
+  function pathTo(moveId) {
+    var target = byId(moveId); if (!target) return [];
+    var inset = {}; inset[moveId] = true;
+    var stack = [target], guard = 0;
+    while (stack.length && guard++ < 1000) {
+      var m = stack.pop();
+      producersOf(reqSet(m)).forEach(function (p) { if (p.id === m.id || inset[p.id]) return; inset[p.id] = true; stack.push(p); });
+    }
+    var moves = Object.keys(inset).map(byId).filter(Boolean);
+    var ordered = topoOrder(moves).map(function (m) { return m.id; });
+    return ordered.filter(function (id) { return id !== moveId; }).concat([moveId]);
+  }
+  // an authored recon lead-up for moves whose prerequisites come from the environment, not a prior move.
+  function leadupFor(moveId) { var fx = fixtures()[moveId] || {}; return (fx.leadup && fx.leadup.length) ? fx.leadup.slice() : null; }
+
   function applyProfile(run, tool, profile) {
     if (!profile || !tool || !profile.tools) return run;
     var p = profile.tools[tool] || profile.tools[tool.toLowerCase()];
@@ -652,7 +672,7 @@
     atlas: atlas, scenarios: scenarios, scenarioCats: scenarioCats, scenario: scenario, simFor: simFor,
     evidence: evidence, evidenceGaps: evidenceGaps,
     cmdLocus: cmdLocus, cellFor: cellFor, replayFor: replayFor, practiceFor: practiceFor, practiceDiagnose: practiceDiagnose,
-    producersOf: producersOf, opensNext: opensNext,
+    producersOf: producersOf, opensNext: opensNext, pathTo: pathTo, leadupFor: leadupFor,
     signalTell: signalTell, whyNow: whyNow, howTo: howTo, factInfo: factInfo, alternativesFor: alternativesFor, decisionFor: decisionFor, scopeSafety: scopeSafety,
     coachPref: coachPref, setCoachPref: setCoachPref, showWhy: showWhy,
     mastery: mastery, markStudied: markStudied, laneProgress: laneProgress, validatePath: validatePath,

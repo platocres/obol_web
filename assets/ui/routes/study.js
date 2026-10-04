@@ -33,6 +33,7 @@
   var _practiceMode = 'next';    // practice gear: 'next' (what to do) | 'read' (diagnose the output)
   var _benchSel = {};            // field-notes bench: moveId -> selected technique index
   var _benchTok = null;          // field-notes bench: cancel token for the running demo animation
+  var _recapTok = null;          // "how you got here": cancel token for the lead-up sweep animation
   var _simKey = null;            // cold-box sim: active scenario key (null = pick one)
   var _simStep = 0;              // cold-box sim: current step index
   var _simState = {};            // cold-box sim: stepIdx -> { pickedId, correct } answered state
@@ -145,16 +146,20 @@
     var idle = rp.hasOutput
       ? 'Press <b>Play</b> and watch <b>' + esc(rp.tool) + '</b> run against the target and the result land, the way it would on a real box.'
       : 'Press <b>Play</b> to watch <b>' + esc(rp.tool) + '</b> run. <span class="rp-nosample">A captured sample of this step’s output is still being written, so you’ll see the command and what it proves.</span>';
+    var recap = recapBlock();
     return '<div class="study-replay" data-move="' + U.attr(rp.id) + '">'
       + '<div class="study-replay-bar"><span class="study-replay-title">▶ Watch it run</span>'
       + '<span class="study-replay-loc">' + locusGlyph(rp.locus) + ' ' + esc(rp.locus) + ' · ' + esc(rp.tool) + '</span></div>'
+      + recap
       + '<div class="study-replay-term" id="rp-term"><div class="rp-idle">' + idle + '</div></div>'
       + '<div class="study-replay-facts" id="rp-facts"></div>'
       + '<div class="study-replay-ctrl">'
       + '<button type="button" class="study-rp-btn primary" data-rp="play">▶ Play</button>'
       + (rp.hasOutput ? '<button type="button" class="study-rp-btn" data-rp="skip">⏭ Skip to result</button>' : '')
       + '<button type="button" class="study-rp-btn" data-rp="restart">↺ Replay</button>'
-      + '<button type="button" class="study-rp-btn study-rp-auto' + (_autolane ? ' on' : '') + '" data-rp="autolane">' + (_autolane ? '⏹ Stop auto-play' : '⏭ Auto-play the whole path') + '</button>'
+      + (recap
+          ? '<button type="button" class="study-rp-btn study-rp-auto" data-rp="leadup">▶ Replay how I got here</button>'
+          : '<button type="button" class="study-rp-btn study-rp-auto' + (_autolane ? ' on' : '') + '" data-rp="autolane">' + (_autolane ? '⏹ Stop auto-play' : '⏭ Auto-play the whole path') + '</button>')
       + '<span class="study-rp-prog"></span>'
       + '</div></div>';
   }
@@ -260,6 +265,60 @@
     return out;
   }
   function benchLive() { var p = benchParams(); return !!(p.target || p.rhost); }
+
+  // ---- "How you got here": the plausible lead-up to the current move --------------------------
+  // Composed from an authored recon lead-up (fills the gap back to the scan) plus the causal
+  // ancestors the fact graph derives. Each prior step is condensed to its command + the one output
+  // line that unlocked the next move. The current move stays below, full and highlighted.
+  function recapSteps(moveId) {
+    var out = [];
+    var lead = study().leadupFor(moveId);
+    if (lead) lead.forEach(function (s) {
+      out.push({ title: s.title || (s.tool || 'Recon'), where: s.where || 'local', cmd: s.cmd || '', sig: s.sig || '', teach: s.teach || '' });
+    });
+    (study().pathTo(moveId) || []).slice(0, -1).forEach(function (id) {
+      var rp = study().replayFor(id); if (!rp || !rp.command) return;
+      out.push({ title: rp.title, where: rp.locus === 'ON-TARGET' ? 'host' : 'local', cmd: rp.command, sig: rp.signal || '', teach: rp.teach || '', id: id });
+    });
+    return out;
+  }
+  function recapBlock() {
+    var steps = recapSteps(_sel); if (!steps.length) return '';
+    var cur = study().cellFor(_sel);
+    var rows = steps.map(function (s, i) {
+      return '<div class="recap-step" data-recap="' + i + '">'
+        + '<div class="recap-top"><span class="recap-n">' + (i + 1) + '</span><span class="recap-title">' + esc(s.title) + '</span>'
+        + '<span class="recap-where">' + (s.where === 'host' ? 'on the target' : 'your box') + '</span></div>'
+        + '<div class="recap-cmd"><span class="recap-prompt' + (s.where === 'host' ? ' host' : '') + '">' + (s.where === 'host' ? 'target$' : 'kali$') + '</span> ' + esc(benchFill(s.cmd)) + '</div>'
+        + (s.sig ? '<div class="recap-sig">' + esc(benchFill(s.sig)) + '</div>' : '')
+        + (s.teach ? '<div class="recap-cap">↳ ' + codeify(benchFill(s.teach)) + '</div>' : '')
+        + '</div>';
+    }).join('');
+    return '<div class="study-recap" id="study-recap">'
+      + '<div class="recap-h">How you got here</div>'
+      + '<div class="recap-steps">' + rows + '</div>'
+      + '<div class="recap-here"><span class="recap-here-i">▾</span> You are here: <b>' + esc(cur.title) + '</b></div>'
+      + '</div>';
+  }
+  function cancelRecap() { if (_recapTok) { _recapTok.cancelled = true; _recapTok = null; } }
+  // sweep the lead-up steps one by one, then run the current move's full replay, and stop (no navigation)
+  function playLeadup(mount) {
+    cancelReplay(); cancelBench(); cancelRecap();
+    var recap = mount.querySelector('#study-recap');
+    var steps = recap ? Array.prototype.slice.call(recap.querySelectorAll('.recap-step')) : [];
+    var tok = { cancelled: false }; _recapTok = tok;
+    steps.forEach(function (s) { s.classList.remove('on', 'done'); });
+    var i = 0;
+    (function step() {
+      if (tok.cancelled) return;
+      if (i >= steps.length) { _recapTok = null; runReplay(mount, false); return; }
+      if (i > 0) steps[i - 1].classList.add('done');
+      var s = steps[i]; s.classList.add('on');
+      try { s.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+      i++;
+      setTimeout(step, 1000);
+    })();
+  }
   // "How to actually do it": the field notes. When a move's techniques carry runnable demos, this is a
   // two-pane lab bench, a technique index on the left, a live terminal on the right that plays the real
   // request and response for the one you pick. Moves with text-only notes fall back to a simple list.
@@ -995,7 +1054,9 @@
 
   function mounted(ctx) {
     var mount = ctx.mount;
-    cancelReplay(); cancelBench();
+    cancelReplay(); cancelBench(); cancelRecap();
+    // "How you got here": sweep the lead-up, then run the current step, and stop
+    U.on(mount, 'click', '[data-rp="leadup"]', function () { playLeadup(mount); });
     // field-notes bench: pick a technique (plays its demo), or replay the current one
     U.on(mount, 'click', '[data-bench]', function (e, t) {
       var i = +t.getAttribute('data-bench'), h = study().howTo(_sel); if (!h) return;
