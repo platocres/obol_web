@@ -77,24 +77,31 @@
     cred: 'Credentials', creds: 'Credentials', credential: 'Credentials', credentials: 'Credentials',
     priv: 'Escalate', privesc: 'Escalate', escalate: 'Escalate', escalation: 'Escalate',
     lateral: 'Lateral', pivot: 'Lateral', loot: 'Loot', proof: 'Proof', flag: 'Proof',
+    enum: 'Enumeration', enumeration: 'Enumeration', recon: 'Recon', persistence: 'Persistence',
     ad: 'Active Directory', 'active directory': 'Active Directory', domain: 'Active Directory',
   };
   function canonStage(s) { var k = String(s || '').toLowerCase().trim(); return STAGE_ALIAS[k] || (s ? cap1(s) : ''); }
   function stageOfFact(p) {
-    if (/^access\.(admin|system|root)/.test(p) || p === 'access.admin' || p === 'access.system') return 'Escalate';
-    if (/^(foothold\.|access\.shell)/.test(p)) return 'Foothold';
-    if (/^(hash\.|credential\.|db\.cred)/.test(p)) return 'Credentials';
-    if (/^(loot\.|proof|flag)/.test(p)) return 'Loot';
+    if (/^(persistence\.)/.test(p)) return 'Persistence';
+    if (/^access\.(admin|system|root)/.test(p) || p === 'access.admin' || p === 'access.system' || /^privesc\./.test(p)) return 'Escalate';
+    if (/^(foothold\.|access\.shell|db\.session|listener\.)/.test(p)) return 'Foothold';
+    if (/^(hash\.|credential\.|db\.cred|kerberos\.)/.test(p)) return 'Credentials';
+    if (/^(objective|flag|proof)/.test(p)) return 'Proof';
+    if (/^loot\./.test(p)) return 'Loot';
+    if (/^tunnel\./.test(p)) return 'Lateral';
     if (/^ad\./.test(p)) return 'Active Directory';
     if (/^web\./.test(p)) return 'Web';
+    if (/^defense\./.test(p)) return 'Enumeration';
     if (/^(scan\.|host\.|ports|service\.)/.test(p) || /\.reachable$/.test(p)) return 'Recon';
     return '';
   }
+  // when a move declares no output (or none that classifies), fall back to its lane's natural stage.
+  var LANE_STAGE = { recon: 'Recon', web: 'Web', checks: 'Enumeration', ad: 'Active Directory', creds: 'Credentials', linux: 'Escalate', windows: 'Escalate', database: 'Foothold', shells: 'Foothold', pivot: 'Lateral', proof: 'Proof' };
   function deriveStage(m) {
     if (m.phase) return canonStage(m.phase);
     var prod = m.produces || [];
     for (var i = 0; i < prod.length; i++) { var st = stageOfFact(prod[i]); if (st) return st; }
-    return '';
+    return LANE_STAGE[laneForMove(m)] || '';
   }
   function cap1(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
 

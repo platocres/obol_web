@@ -106,7 +106,7 @@
       var groups = [], gmap = {};
       lane.forEach(function (n) { var p = n.phase || 'Steps'; if (!gmap[p]) { gmap[p] = []; groups.push(p); } gmap[p].push(n); });
       // order the sections as an attack progression, not by where they first fell in dependency order
-      var PHASE_ORDER = ['Recon', 'Web', 'Foothold', 'Credentials', 'Escalate', 'Lateral', 'Loot', 'Active Directory', 'Proof', 'Steps'];
+      var PHASE_ORDER = ['Recon', 'Enumeration', 'Web', 'Foothold', 'Credentials', 'Escalate', 'Lateral', 'Active Directory', 'Persistence', 'Loot', 'Proof', 'Steps'];
       groups.sort(function (a, b) {
         var ia = PHASE_ORDER.indexOf(a), ib = PHASE_ORDER.indexOf(b);
         return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
