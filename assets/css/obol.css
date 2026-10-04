@@ -1649,22 +1649,19 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
    field-notes bench, sitting beside the lesson and sticky so you do not scroll to reach it. The rail +
    lesson keep their original proportions (the fr columns share the same ~1180px); only the bench is added. */
 @media (min-width: 1640px) {
-  /* rail + lesson stay at their original 1180px split; the bench gets a modest widen (420 -> 470) and the
-     whole three-column block stays centered on the page (1180 + 16 gap + 470 bench = 1666, margin auto),
-     so the free space sits as even gutters either side rather than one wide margin. The bench is sticky
-     and sized to its content, so it never grows its own scrollbar; a long technique scrolls with the page. */
+  /* rail + lesson stay at their original 1180px split; the bench gets a modest widen (420 -> 470), so
+     the three columns total 1180 + 16 gap + 470 bench = 1666. main#view is capped and left-pinned in
+     its grid cell, so centering the block on the page means centering main itself for this view. The
+     bench is sticky and sized to its content, so it never grows its own scrollbar; a long technique
+     scrolls with the page. */
+  main#view:has(.study-route.has-bench) { margin-inline: auto; }
   .study-route.has-bench { max-width: 1666px; }
   .study-cols.has-bench { grid-template-columns: minmax(0,0.82fr) minmax(0,1.18fr) 470px; }
-  .study-cols.has-bench.bench-collapsed { grid-template-columns: minmax(0,0.82fr) minmax(0,1.18fr) 46px; }
   .study-cols.has-bench .study-benchcol { position: sticky; top: 12px; align-self: start; }
 }
 /* below the 3-column breakpoint (or on a move with no demos), the bench stacks full width under the lesson */
 .study-benchcol { grid-column: 1 / -1; }
 @media (min-width: 1640px) { .study-cols.has-bench .study-benchcol { grid-column: auto; } }
-/* collapsed: hide the panel, show a slim labelled strip that invites the student back in */
-.benchcol-reopen { display: none; }
-.study-benchcol.collapsed .benchpanel { display: none; }
-.study-benchcol.collapsed .benchcol-reopen { display: flex; }
 .study-panel { background: var(--surf1); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
 .study-panel-h { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 800; font-family: var(--mono); margin: 0 0 12px; }
 .study-sub { font-size: 13px; color: var(--text-2); }
@@ -2067,21 +2064,13 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 }
 /* the field-notes bench as its own column */
 .benchpanel { border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }
-.benchcol-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.benchcol-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .benchcol-title { font-family: var(--mono); font-size: 12px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--accent-2); }
-.benchcol-x { font-family: var(--mono); font-size: 13px; color: var(--text-2); background: var(--surf2); border: 1px solid var(--line); border-radius: 6px; width: 26px; height: 24px; cursor: pointer; }
-.benchcol-x:hover { border-color: var(--line-hot); color: var(--text); }
 .benchpanel .bench-live { display: block; margin-bottom: 9px; }
 /* inside the narrow side column the bench stacks vertically: technique list on top, terminal below */
 @media (min-width: 1640px) {
   .study-cols.has-bench .study-benchcol .bench { grid-template-columns: 1fr; gap: 11px; }
   .study-cols.has-bench .study-benchcol .bench-list { position: static; flex-direction: column; }
-}
-/* collapsed strip: a slim vertical invite to reopen the notes */
-.benchcol-reopen { align-items: center; justify-content: center; gap: 8px; width: 100%; cursor: pointer; background: color-mix(in srgb, var(--accent) 10%, var(--surf1)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: 11px; color: var(--accent-2); font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 10px; }
-.benchcol-reopen:hover { background: color-mix(in srgb, var(--accent) 18%, var(--surf1)); }
-@media (min-width: 1640px) {
-  .study-cols.has-bench.bench-collapsed .study-benchcol.collapsed .benchcol-reopen { height: 100%; min-height: 220px; writing-mode: vertical-rl; transform: rotate(180deg); padding: 14px 10px; }
 }
 
 /* "which tool, when?" decision panel */

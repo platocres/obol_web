@@ -33,8 +33,6 @@
   var _practiceMode = 'next';    // practice gear: 'next' (what to do) | 'read' (diagnose the output)
   var _benchSel = {};            // field-notes bench: moveId -> selected technique index
   var _benchTok = null;          // field-notes bench: cancel token for the running demo animation
-  function benchCollapsed() { try { return localStorage.getItem('obol.study-bench') === 'off'; } catch (e) { return false; } }
-  function setBenchCollapsed(v) { try { localStorage.setItem('obol.study-bench', v ? 'off' : 'on'); } catch (e) {} }
   var _simKey = null;            // cold-box sim: active scenario key (null = pick one)
   var _simStep = 0;              // cold-box sim: current step index
   var _simState = {};            // cold-box sim: stepIdx -> { pickedId, correct } answered state
@@ -79,7 +77,7 @@
         var cls = 'study-gnode lane-' + lk + (id === _sel ? ' active' : '') + (i > 0 ? ' linked' : '');
         html += '<button type="button" class="' + cls + '" data-node="' + U.attr(id) + '">'
           + '<span class="study-gn-t">' + esc(m.title) + masteryGlyph(id) + '</span>'
-          + '<span class="study-gn-k">' + esc(laneMeta(lk).short) + (m.proves && m.proves.length ? ' · gets you ' + esc(human(m.proves[0])) : '') + '</span>'
+          + '<span class="study-gn-k">' + esc(laneMeta(lk).short) + (m.proves && m.proves.length ? ' · Gets you ' + esc(human(m.proves[0])) : '') + '</span>'
           + '</button>';
       });
     } else {
@@ -90,7 +88,7 @@
         var cls = 'study-gnode lane-' + lk2 + (n.id === _sel ? ' active' : '') + (i > 0 ? ' linked' : '');
         html += '<button type="button" class="' + cls + '" data-node="' + U.attr(n.id) + '">'
           + '<span class="study-gn-t">' + esc(n.title) + masteryGlyph(n.id) + '</span>'
-          + (n.proves && n.proves.length ? '<span class="study-gn-k">gets you ' + esc(human(n.proves[0])) + '</span>' : '')
+          + (n.proves && n.proves.length ? '<span class="study-gn-k">Gets you ' + esc(human(n.proves[0])) + '</span>' : '')
           + '</button>';
       });
     }
@@ -271,20 +269,17 @@
       + '<div class="bench"><div class="bench-list">' + list + '</div>'
       + '<div class="bench-main" id="bench-main">' + benchMain(h.items, sel) + '</div></div>';
   }
-  // the field-notes bench as its own column: a titled panel you can collapse to a slim invite strip
+  // the field-notes bench as its own column: a titled panel that is always present beside the lesson
   function howColumn() {
     var h = study().howTo(_sel); if (!h || !hasDemoBench(_sel)) return '';
     var live = benchLive();
     var badge = live
       ? '<span class="bench-live">● filled from your engagement</span>'
       : '<span class="bench-live off">Example values, these fill in once you start an engagement</span>';
-    return '<div class="study-benchcol' + (benchCollapsed() ? ' collapsed' : '') + '">'
+    return '<div class="study-benchcol">'
       + '<div class="study-panel benchpanel study-bench">'
-      + '<div class="benchcol-h"><span class="benchcol-title">Field notes: how to actually do it</span>'
-      + '<button type="button" class="benchcol-x" data-bench-collapse title="Collapse">⟩</button></div>'
+      + '<div class="benchcol-h"><span class="benchcol-title">Field notes: how to actually do it</span></div>'
       + badge + benchBody(h, _sel) + '</div>'
-      + '<button type="button" class="benchcol-reopen" data-bench-expand title="Show the field notes">'
-      + '<span class="benchcol-reopen-t">Field notes: how to actually do it</span> ›</button>'
       + '</div>';
   }
   function benchMain(items, i) {
@@ -668,7 +663,7 @@
   function nodeView() {
     var right = _gear === 'practice' ? practicePanel() : cellPanel();
     var bench = (_gear !== 'practice' && hasDemoBench(_sel)) ? howColumn() : '';
-    var colsCls = 'study-cols' + (bench ? ' has-bench' + (benchCollapsed() ? ' bench-collapsed' : '') : '');
+    var colsCls = 'study-cols' + (bench ? ' has-bench' : '');
     return '<section class="study-route' + (bench ? ' has-bench' : '') + '">'
       + '<div class="study-top">'
       + '<button type="button" class="study-back" data-back>← ' + (_pathMode ? 'Your path' : (_from === 'atlas' ? 'The Atlas' : (_from === 'ports' ? 'Open ports' : 'All paths'))) + '</button>'
@@ -995,8 +990,6 @@
       var h = study().howTo(_sel); if (!h) return; var i = _benchSel[_sel] || 0;
       playBenchTerm(mount, (h.items[i] || {}).demo);
     });
-    U.on(mount, 'click', '[data-bench-collapse]', function () { setBenchCollapsed(true); OBOL.router.render(); });
-    U.on(mount, 'click', '[data-bench-expand]', function () { setBenchCollapsed(false); OBOL.router.render(); });
     // map/graph: open a lane/step → node view (remember where we came from)
     U.on(mount, 'click', '[data-open]', function (e, t) { _from = (_view === 'atlas' ? 'atlas' : (_view === 'ports' ? 'ports' : 'map')); _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-back]', function () { _view = _from; OBOL.router.render(); });
