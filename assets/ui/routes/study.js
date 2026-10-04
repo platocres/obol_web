@@ -14,7 +14,8 @@
   var OBOL = root.OBOL = root.OBOL || {};
   var U = OBOL.util;
 
-  var _view = 'map';             // 'map' (pick a lane / step) | 'node' (study one step)
+  var _view = 'map';             // 'map' (pick a lane) | 'graph' (all lanes) | 'node' (study one step)
+  var _from = 'map';             // where a node was opened from, so "back" returns there
   var _gear = 'watch';           // 'watch' | 'practice'
   var _sel = 'asrep-roast';      // selected lane node
   var _autolane = false;         // Watch: auto-advance through the whole chain
@@ -41,21 +42,24 @@
   function locusClass(rank) { return 'study-loc-' + rank; }
   function locusGlyph(label) { return label === 'REMOTE' ? '🛰' : (label === 'OFFLINE' ? '💾' : '🖥'); }
 
-  // ---- left: the lane graph -------------------------------------------------------------------
+  function laneKeyOf(moveId) { var e = study().laneEntry(moveId); return e ? e.laneKey : 'ad'; }
+  function laneMeta(key) { var ls = study().lanes(); for (var i = 0; i < ls.length; i++) if (ls[i].key === key) return ls[i]; return { name: key }; }
+
+  // ---- left: the current lane as a rail -------------------------------------------------------
   function graphPanel() {
-    var lane = study().lane(), lastPhase = null, html = '';
+    var lk = laneKeyOf(_sel), lane = study().lane(lk), meta = laneMeta(lk), lastPhase = null, html = '';
     lane.forEach(function (n, i) {
       if (n.phase !== lastPhase) { html += '<div class="study-phase">' + esc(n.phase) + '</div>'; lastPhase = n.phase; }
-      var cls = 'study-gnode' + (n.id === _sel ? ' active' : '') + (i > 0 ? ' linked' : '');
+      var cls = 'study-gnode lane-' + lk + (n.id === _sel ? ' active' : '') + (i > 0 ? ' linked' : '');
       html += '<button type="button" class="' + cls + '" data-node="' + U.attr(n.id) + '">'
         + '<span class="study-gn-t">' + esc(n.title) + '</span>'
         + (n.proves && n.proves.length ? '<span class="study-gn-k">gets you ' + esc(human(n.proves[0])) + '</span>' : '')
         + '</button>';
     });
     return '<div class="study-panel study-graph-panel">'
-      + '<p class="study-panel-h">Active Directory lane · click a node</p>'
+      + '<p class="study-panel-h">' + esc(meta.name) + ' · click a step</p>'
       + '<div class="study-graph">' + html + '</div>'
-      + '<p class="study-graph-foot">A guided path through the AD methodology. Milestone 1 — more lanes to come.</p>'
+      + '<button type="button" class="study-graph-all" data-graph>⊞ See all lanes on the graph</button>'
       + '</div>';
   }
 
@@ -169,31 +173,23 @@
         + '<span class="study-path-t">' + esc(n.title) + '</span></button>';
     }).join('') + '</div>';
   }
-  function comingLane(name, desc) {
-    return '<div class="study-lane-card coming"><div class="study-lane-name">' + esc(name) + '</div>'
-      + '<div class="study-lane-desc">' + esc(desc) + '</div><div class="study-lane-soon">more lanes coming</div></div>';
-  }
   function door(href, glyph, title, desc) {
     return '<a class="study-door" href="' + href + '"><span class="study-door-g">' + glyph + '</span>'
       + '<span class="study-door-t">' + esc(title) + '</span><span class="study-door-d">' + esc(desc) + '</span></a>';
   }
   function mapView() {
-    var lane = study().lane();
+    var ls = study().lanes();
     var h = '<section class="study-route study-map">';
     h += '<div class="study-hero"><h1 class="study-hero-h">Learn the methodology</h1>'
       + '<p class="study-hero-p">obol teaches offensive security as a decision graph — <b>know what to do, and why, from what you\'ve found.</b> '
       + 'Pick a path below and step through it: watch each move play out like it would on a real box, or test yourself.</p></div>';
-    h += '<div class="study-lanes">'
-      + '<button type="button" class="study-lane-card active" data-open="' + U.attr(lane[0].id) + '">'
-      + '<div class="study-lane-name">Active Directory <span class="study-lane-badge">' + lane.length + ' steps</span></div>'
-      + '<div class="study-lane-desc">From an anonymous foothold to owning the domain — enumerate, roast, crack, abuse ACLs, DCSync.</div>'
-      + '<div class="study-lane-go">Start the path →</div></button>'
-      + comingLane('Web Exploitation', 'LFI, SQLi, file upload → a shell on the box.')
-      + comingLane('Linux Privesc', 'sudo, SUID, cron, capabilities → root.')
-      + comingLane('Windows Privesc', 'services, tokens, AlwaysInstallElevated → SYSTEM.')
-      + '</div>';
-    h += '<div class="study-map-path"><div class="study-map-path-h">Active Directory · the whole path <span class="study-map-path-note">click any step to study it</span></div>'
-      + pathStrip(lane) + '</div>';
+    h += '<div class="study-lanes">' + ls.map(function (L) {
+      return '<button type="button" class="study-lane-card active lane-' + L.key + '" data-open="' + U.attr(L.firstId) + '">'
+        + '<div class="study-lane-name">' + esc(L.name) + ' <span class="study-lane-badge">' + L.count + ' steps</span></div>'
+        + '<div class="study-lane-desc">' + esc(L.desc) + '</div>'
+        + '<div class="study-lane-go">Start the path →</div></button>';
+    }).join('') + '</div>';
+    h += '<button type="button" class="study-graph-cta" data-graph>⊞ See the whole methodology as one graph →</button>';
     h += '<div class="study-doors">'
       + door('#/loadout', '⚙', 'Set up your box', 'Install the toolset so the commands you learn match your own machine.')
       + door('#/home', '▶', 'Start an engagement', 'Working a real box? Track it — paste output, get your next move.')
@@ -201,12 +197,34 @@
     return h + '</section>';
   }
 
+  // ---- the full methodology graph: every lane, every step, pickable ---------------------------
+  function graphView() {
+    var ls = study().lanes();
+    var cols = ls.map(function (L) {
+      var nodes = study().lane(L.key);
+      var items = nodes.map(function (n, i) {
+        return (i ? '<div class="study-gconn">↓</div>' : '')
+          + '<button type="button" class="study-gcard lane-' + L.key + '" data-open="' + U.attr(n.id) + '">'
+          + '<span class="study-gcard-ph">' + esc(n.phase) + '</span>'
+          + '<span class="study-gcard-t">' + esc(n.title) + '</span></button>';
+      }).join('');
+      return '<div class="study-gcol lane-' + L.key + '">'
+        + '<div class="study-gcol-h">' + esc(L.name) + ' <span class="study-gcol-n">' + L.count + '</span></div>'
+        + '<div class="study-gcol-body">' + items + '</div></div>';
+    }).join('');
+    return '<section class="study-route study-graphview">'
+      + '<div class="study-top"><button type="button" class="study-back" data-back-map>← Back to paths</button>'
+      + '<div class="study-crumb"><b>Study</b> · The whole methodology <span class="study-map-path-note">each column is a path · click any step to study it</span></div></div>'
+      + '<div class="study-graphwrap">' + cols + '</div>'
+      + '</section>';
+  }
+
   function nodeView() {
     var right = _gear === 'practice' ? practicePanel() : cellPanel();
     return '<section class="study-route">'
       + '<div class="study-top">'
-      + '<button type="button" class="study-back" data-back>← All paths</button>'
-      + '<div class="study-crumb"><b>Study</b> · Active Directory · <span class="study-here">' + esc((study().cellFor(_sel) || {}).title || _sel) + '</span></div>'
+      + '<button type="button" class="study-back" data-back>← ' + (_from === 'graph' ? 'The graph' : 'All paths') + '</button>'
+      + '<div class="study-crumb"><b>Study</b> · ' + esc(laneMeta(laneKeyOf(_sel)).name) + ' · <span class="study-here">' + esc((study().cellFor(_sel) || {}).title || _sel) + '</span></div>'
       + '<div class="study-gears">'
       + '<button type="button" class="study-gear' + (_gear === 'watch' ? ' on' : '') + '" data-gear="watch">▶ Watch</button>'
       + '<button type="button" class="study-gear' + (_gear === 'practice' ? ' on' : '') + '" data-gear="practice">✎ Your turn</button>'
@@ -217,7 +235,7 @@
 
   function render(ctx) {
     if (ctx && ctx.args && ctx.args[0] && study().cellFor(ctx.args[0])) { _sel = ctx.args[0]; _view = 'node'; }
-    return _view === 'map' ? mapView() : nodeView();
+    return _view === 'map' ? mapView() : (_view === 'graph' ? graphView() : nodeView());
   }
 
   // ---- replay controller ----------------------------------------------------------------------
@@ -230,7 +248,7 @@
     if (!term) return;
     var token = { cancelled: false }; _rpToken = token;
     term.innerHTML = ''; if (facts) facts.innerHTML = '';
-    var laneIds = study().AD_LANE.map(function (x) { return x.id; }), idx = laneIds.indexOf(rp.id);
+    var laneIds = study().lane(laneKeyOf(rp.id)).map(function (x) { return x.id; }), idx = laneIds.indexOf(rp.id);
     if (prog) prog.textContent = 'step ' + (idx + 1) + ' / ' + laneIds.length;
     function popFacts(delay) {
       (rp.proves || []).forEach(function (f, k) { setTimeout(function () { if (token.cancelled || !facts) return; var c = document.createElement('span'); c.className = 'study-chip proof rp-pop'; c.textContent = '+ ' + human(f); facts.appendChild(c); }, delay + k * 260); });
@@ -266,9 +284,11 @@
   function mounted(ctx) {
     var mount = ctx.mount;
     cancelReplay();
-    // map: open a lane/step → node view
-    U.on(mount, 'click', '[data-open]', function (e, t) { _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-back]', function () { _view = 'map'; OBOL.router.render(); });
+    // map/graph: open a lane/step → node view (remember where we came from)
+    U.on(mount, 'click', '[data-open]', function (e, t) { _from = (_view === 'graph' ? 'graph' : 'map'); _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-back]', function () { _view = _from; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-back-map]', function () { _view = 'map'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-graph]', function () { _view = 'graph'; OBOL.router.render(); });
     // node select + "opens →" jumps + goto chips → re-render
     U.on(mount, 'click', '[data-node]', function (e, t) { _sel = t.getAttribute('data-node'); OBOL.router.render(); });
     U.on(mount, 'click', '[data-goto]', function (e, t) { _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });

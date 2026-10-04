@@ -805,8 +805,15 @@ function serve() {
   // shows the derived cell with remote-first commands + the replay; "Your turn" scores an answer.
   await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.study-route', { timeout: 6000 }).catch(() => {});
-  ok((await page.locator('.study-map .study-lane-card.active').count()) === 1, 'Learn opens on the map with a pickable AD lane');
-  ok((await page.locator('.study-map .study-path-node').count()) === 7, 'the map shows all 7 AD steps to pick from');
+  ok((await page.locator('.study-map .study-lane-card.active').count()) === 5, 'Learn opens on the map with 5 pickable lanes');
+  // the full methodology graph: every lane as a column of pickable steps
+  await page.locator('.study-graph-cta').click();
+  await page.waitForTimeout(150);
+  ok((await page.locator('.study-graphview .study-gcol').count()) === 5, 'the full graph shows all 5 lane columns');
+  ok((await page.locator('.study-graphview .study-gcard').count()) === 26, 'the graph shows all 26 steps across the lanes');
+  await page.locator('.study-graphview .study-gcard', { hasText: 'SeImpersonate' }).first().click();
+  await page.waitForTimeout(200);
+  ok((await page.locator('.study-cell-title').first().textContent().catch(() => '') || '').indexOf('SeImpersonate') !== -1, 'picking a Windows step from the graph opens its cell');
   // deep-link straight into a node to exercise the cell + replay
   await page.goto(`http://localhost:${PORT}/index.html#/study/asrep-roast`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.study-cols', { timeout: 6000 }).catch(() => {});

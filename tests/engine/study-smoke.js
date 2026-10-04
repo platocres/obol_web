@@ -25,13 +25,15 @@ const S = OBOL.study;
 let fail = 0;
 function ok(cond, msg) { if (!cond) { console.error('  FAIL:', msg); fail++; } else { console.log('  ok  :', msg); } }
 
-// --- lane + edges ----------------------------------------------------------------------------
-const lane = S.lane();
+// --- lanes + edges ---------------------------------------------------------------------------
+ok(S.lanes().length === 5, 'five lanes exposed (recon, ad, web, linux, windows)');
+const lane = S.lane('ad');
 ok(lane.length === 7, 'AD lane has 7 nodes');
-ok(lane[0].id === 'ad-dc-identify' && lane[lane.length - 1].id === 'dcsync', 'lane runs DC-identify → DCSync');
-const edges = S.laneEdges();
+ok(lane[0].id === 'ad-dc-identify' && lane[lane.length - 1].id === 'dcsync', 'AD lane runs DC-identify → DCSync');
+const edges = S.laneEdges('ad');
 ok(edges.some((e) => e.from === 'ad-anon-ldap-enum' && e.to === 'asrep-roast'), 'edge derived: anon-LDAP → AS-REP (ad.user_list)');
 ok(edges.some((e) => e.from === 'asrep-roast' && e.to === 'crack-asrep'), 'edge derived: AS-REP → crack (hash.asrep)');
+ok(S.laneOf('sudo-abuse').key === 'linux' && S.laneOf('seimpersonate').key === 'windows', 'moves resolve to the right lane');
 
 // --- cell generation (asrep-roast, the hero) -------------------------------------------------
 const c = S.cellFor('asrep-roast');
@@ -61,13 +63,17 @@ ok(v['password-spray'] === 'alt', 'practice: Password Spray reads as also-valid 
 ok(v['kerberoast'] === 'locked', 'practice: Kerberoasting is locked (needs credentials)');
 ok(v['dcsync'] === 'locked', 'practice: DCSync is locked (needs Domain Admin)');
 
-// --- every lane node generates a usable cell + practice --------------------------------------
-let allCells = true;
-S.AD_LANE.forEach((e) => {
-  const cc = S.cellFor(e.id), pp = S.practiceFor(e.id);
-  if (!cc || !cc.commands.length || !cc.output || !pp || !pp.choices.length) { allCells = false; console.error('    weak node:', e.id); }
+// --- every node in every lane generates a complete cell + practice + replay ------------------
+let allCells = true, total = 0;
+S.LANE_ORDER.forEach((k) => {
+  S.lane(k).forEach((n) => {
+    total++;
+    const cc = S.cellFor(n.id), pp = S.practiceFor(n.id), rr = S.replayFor(n.id);
+    if (!cc || !cc.commands.length || !cc.output || !cc.output.text || !pp || !pp.choices.length || !rr || !rr.command) { allCells = false; console.error('    weak node:', k, n.id); }
+    if (cc && cc.commands.length) { const rk = cc.commands.map((c) => c.rank); if (!rk.every((v, i) => i === 0 || v >= rk[i - 1])) { allCells = false; console.error('    not remote-first:', n.id); } }
+  });
 });
-ok(allCells, 'all 7 AD lane nodes produce a complete cell + practice');
+ok(allCells, 'all ' + total + ' nodes across 5 lanes: complete cell + output + practice + replay, commands remote-first');
 
 if (fail) { console.error('\nSTUDY SMOKE: ' + fail + ' failure(s)'); process.exit(1); }
 console.log('\nSTUDY SMOKE: all passed');
