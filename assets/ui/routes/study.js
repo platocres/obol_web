@@ -146,12 +146,16 @@
       ? 'Press <b>Play</b> and watch <b>' + esc(rp.tool) + '</b> run against the target and the result land, the way it would on a real box.'
       : 'Press <b>Play</b> to watch <b>' + esc(rp.tool) + '</b> run. <span class="rp-nosample">A captured sample of this step’s output is still being written, so you’ll see the command and what it proves.</span>';
     var recap = recapBlock();
+    // the facts this move mints are static truth, so show them at rest; Play re-animates them.
+    var factsInit = (rp.proves && rp.proves.length)
+      ? '<span class="rp-facts-l">New facts in hand</span>' + rp.proves.map(function (f) { return '<span class="study-chip proof">+ ' + esc(titleCase(human(f))) + '</span>'; }).join('')
+      : '';
     return '<div class="study-replay" data-move="' + U.attr(rp.id) + '">'
       + '<div class="study-replay-bar"><span class="study-replay-title">▶ Watch it run</span>'
       + '<span class="study-replay-loc">' + locusGlyph(rp.locus) + ' ' + esc(rp.locus) + ' · ' + esc(rp.tool) + '</span></div>'
       + recap
       + '<div class="study-replay-term" id="rp-term"><div class="rp-idle">' + idle + '</div></div>'
-      + '<div class="study-replay-facts" id="rp-facts"></div>'
+      + '<div class="study-replay-facts" id="rp-facts">' + factsInit + '</div>'
       + '<div class="study-replay-ctrl">'
       + '<button type="button" class="study-rp-btn primary" data-rp="play">▶ Play</button>'
       + (rp.hasOutput ? '<button type="button" class="study-rp-btn" data-rp="skip">⏭ Skip to result</button>' : '')
