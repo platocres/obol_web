@@ -1295,7 +1295,7 @@
       ],
     },
     'mitm6-ipv6-takeover': {
-      why: "Windows prefers IPv6 and constantly asks for a DHCPv6 lease that usually goes unanswered, so mitm6 answers as a rogue DHCPv6 and DNS server, becomes the victim's DNS, and feeds the resulting authentication into a relay. Reach for it on a dual-stack Windows network when plain Responder is quiet. It is powerful but noisy and disruptive, so understand the blast radius before you run it on anything you care about.",
+      why: "On a default dual-stack AD network this is one of the highest-impact moves you have, precisely because nobody configured the IPv6 nobody uses. mitm6 answers the DHCPv6 lease Windows keeps asking for, becomes the victim's DNS, and feeds the resulting authentication into a relay to a DC. Reach for it when plain Responder stays quiet, but respect the blast radius: it is powerful, noisy, and disruptive.",
       signal: '[*] Authenticating against ldaps://10.10.10.10 as ACME\\jdoe SUCCEED',
       teach: 'mitm6 runs on your box and abuses Windows\' preference for IPv6: it answers the DHCPv6 nobody configured, becomes the victim\'s DNS, and points WPAD at you, then ntlmrelayx relays the auth that follows to LDAP. It is not passive, but it does wait for a Windows host to renew (often a reboot or logon), so pair it with the relay and give it time.',
       steps: [
@@ -1332,7 +1332,7 @@
       teach: 'A Kerberoast ticket (mode 13100) is encrypted with the service account\'s password hash, so you crack it offline at full speed with no lockout. "Cracked" means you now hold that account\'s cleartext password.',
     },
     'crack-asrep-offline': {
-      why: "An account configured without Kerberos pre-authentication lets anyone request a chunk of ciphertext encrypted with that user's password, with no credentials at all, and that $krb5asrep$ hash cracks offline to their plaintext. Reach for it after AS-REP roasting surfaces such a user. It is pure upside: finding even one pre-auth-disabled account can be your entire foothold into the domain.",
+      why: "This is the rare attack that asks nothing of you but a username list: one account with pre-authentication disabled hands you crackable ciphertext for free, no credentials required. The $krb5asrep$ hash it yields cracks offline to that user's plaintext, and a single pre-auth-disabled account can be your entire foothold into the domain. Reach for it the moment AS-REP roasting surfaces such a user; it is pure upside with nothing noisy on the wire.",
       cmd: 'hashcat -m 18200 asrep.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         '$krb5asrep$23$jdoe@ACME.INTERNAL:a1b2...:Welcome2024!',
@@ -1342,7 +1342,7 @@
       teach: 'An AS-REP hash (mode 18200) comes from an account with pre-auth disabled, and it cracks offline at full speed. "Cracked" turns the roast into a login, a real domain credential.',
     },
     'crack-ntlm': {
-      why: "An NTLM hash pulled from the SAM or NTDS may crack to a plaintext that logs in here or, more usefully, is reused on another host. Reach for it after a dump, but remember you do not always need to crack: NTLM can be passed directly. Crack it when you specifically need the cleartext, for a service that will not take a hash (RDP, a web login, SSH), or to prove password reuse.",
+      why: "Cracking is the step you take when passing the hash is not enough. A dump from the SAM or NTDS usually lets you pass NTLM directly, but plenty of services demand cleartext (RDP, a web login, SSH), and a recovered password is what proves reuse across the estate. So reach for it deliberately, when you need the plaintext specifically, not reflexively after every dump.",
       cmd: 'hashcat -m 1000 ntlm.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         '31d6cfe0d16ae931b73c59d7e0c089c0:(empty)',
@@ -1353,7 +1353,7 @@
       teach: 'A dumped NTLM hash (mode 1000) cracks offline. You do not always need to (NTLM can be passed directly), but a recovered cleartext password is reusable on services that will not take a hash (RDP, web, SSH).',
     },
     'crack-netntlmv2': {
-      why: "A NetNTLMv2 hash caught by Responder or a relay differs from an NT hash in one crucial way: it cannot be passed, only cracked or relayed. So if you are not relaying, cracking is the only route, and a cracked password becomes a real login wherever that account is valid. Reach for it after a capture, and strip duplicates first, because Responder appends on every run.",
+      why: "Unlike almost every hash you dump, this one cannot be passed: a NetNTLMv2 capture is crack-or-relay and nothing else. When you are not relaying it, the wordlist is your only route, and a crack turns a captured handshake into a real login wherever that account is valid. Reach for it right after a Responder or relay capture, and strip the duplicates Responder appends on every run before you start.",
       cmd: 'hashcat -m 5600 netntlmv2.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         'JDOE::ACME:1122334455667788:A1B2...:Winter2024!',
@@ -1373,7 +1373,7 @@
       teach: 'A $6$ hash from /etc/shadow is sha512crypt (mode 1800), slow by design, so lean on a good wordlist and rules. Crack root\'s hash and the privesc is done; crack a service user and you may unlock lateral moves.',
     },
     'crack-archive': {
-      why: "A password-protected backup or export sitting in your loot almost always hides config files or credentials, which is exactly why someone locked it. Extract its hash with the matching *2john (zip2john, rar2john), crack it offline, then unpack it and read what is inside. Reach for it whenever you find a locked archive; it is a self-contained side quest that frequently hands you the next credential.",
+      why: "Someone bothered to lock this file, which is the whole reason to open it: encrypted backups and exports in loot almost always hide config files or credentials. The matching *2john (zip2john, rar2john) pulls a crackable hash, and once it falls you unpack the archive and read what was worth hiding. Treat any locked archive as a self-contained side quest that often hands you the next credential.",
       cmd: 'zip2john backup.zip > archive.hash && hashcat -m 17200 archive.hash rockyou.txt', tool: 'zip2john',
       output: [
         'backup.zip/config.bak:$pkzip2$...:hunter2',
@@ -1394,7 +1394,7 @@
       teach: 'When you have a real username but no password, a measured online brute against SSH can find a weak one. Keep the wordlist small and the rate sane (-t 4), lab accounts lock out too, and a found pair is an instant shell.',
     },
     'online-brute-ftp': {
-      why: "FTP with no known credential is a classic hydra target, and a recovered FTP login frequently reuses onto SSH or the web, so the payoff reaches past FTP itself. Still, it is online brute-forcing: loud and lockout-prone, so treat it as a fallback after anonymous login and loot have failed. Keep the user list tight and the password list sensible; blasting rockyou at it is rarely the move.",
+      why: "Once anonymous login and loot have both come up empty, FTP becomes a hydra target of last resort. The appeal is reuse: a recovered FTP password often unlocks SSH or the web too, so the payoff reaches past FTP itself. But this is loud, online brute-forcing that trips lockouts, so keep the user list tight and the password list sensible rather than blasting rockyou at it.",
       cmd: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f ftp://10.10.10.10', tool: 'hydra',
       output: [
         '[DATA] attacking ftp://10.10.10.10:21/',
@@ -1404,7 +1404,7 @@
       teach: 'Against a confirmed FTP service with a known user, a measured hydra run finds weak passwords, and always test anonymous first, it is free. A hit gives you file access, and often the files hold the next credential.',
     },
     'online-brute-rdp': {
-      why: "A reachable RDP service with no credential can be sprayed, but RDP lockout policies bite hard, so go slow and spray one or two likely passwords across users rather than many passwords at one account. Reach for it only after the quieter options are gone. A valid RDP login is a full interactive desktop, which is the temptation, but the lockout risk makes this a careful, late-stage move.",
+      why: "The prize is tempting (a valid RDP login is a full interactive desktop) but the lockout risk makes this a careful, late-stage move. Spray one or two likely passwords across many users rather than many passwords at a single account, and reach for it only once the quieter options are exhausted. Go slow: RDP lockout policies bite hard, and a tripped account is exactly what wakes a defender.",
       cmd: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 1 rdp://10.10.10.10', tool: 'hydra',
       output: [
         '[DATA] attacking rdp://10.10.10.10:3389/',
@@ -1414,7 +1414,7 @@
       teach: 'A weak RDP password is an interactive desktop. Brute it only with a real username and a short list at -t 1, RDP lockout policies are unforgiving. A hit here is a full GUI session as that user.',
     },
     'crack-mscache2': {
-      why: "Domain Cached Credentials v2 ($DCC2$) are what a laptop stores so a domain user can still log in when the DC is unreachable. They are deliberately slow to crack and, unlike NT hashes, cannot be passed, so cracking is the only path. Reach for them when you dump a workstation's secrets and find cached logons. A weak one still falls, and the plaintext is a genuine domain credential, worth the long crack.",
+      why: "When you dump a workstation's secrets and find cached logons, this is how you turn them into a usable password. The $DCC2$ blobs exist so a laptop can authenticate a domain user with the DC unreachable; they are deliberately slow and, unlike NT hashes, cannot be passed, so cracking is the only path. A weak one still falls, and the plaintext is a genuine domain credential worth the long wait.",
       cmd: 'hashcat -m 2100 dcc2.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         '$DCC2$10240#jdoe#a1b2c3...:Autumn2023!',
