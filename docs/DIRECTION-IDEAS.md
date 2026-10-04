@@ -34,10 +34,70 @@ whole tool; the specific command becomes the footnote that progressively disclos
 - **Scaffolding / fading:** obol fades its guidance as the learner proves mastery (also a second
   research contribution — see #4).
 
-**Status.** Decision made; mostly **not built.** The engine already *is* an evidence-gated decision
-graph, and `map.js` + the per-target graph exist — but as engine detail under the coach, not as an
-explorable, teach-from-it front door. The "why/rules-out/common-mistake" layer, the suspected-vs-
-proven surface, and fading are absent. **This is the lead discussion.**
+**Status.** Decision made; **mocked + feasibility-proven; not yet built.** The engine already *is* an
+evidence-gated decision graph, and `map.js` + the per-target graph exist — but as engine detail under
+the coach, not as an explorable, teach-from-it front door. Two interaction mocks are done and
+approved (the **Watch** worked-example cell + the **Your turn** practice gear). A throwaway spike
+(`spike-cellgen.js`) confirmed the cell generates from existing pack data.
+
+### Feasibility verdict (2026-10-04 spike, 3 moves across AD/Linux/web)
+
+The conditional cell is **~90% auto-generated from data we already have** — not 167 hand-written
+lessons. Field coverage across all 167 moves:
+
+| Cell field | Source (already in the pack) | Coverage |
+|---|---|---|
+| "What it is" | `move.hypothesis` | **100%** |
+| "To be here, you'd have proved" | `requires_all` / `requires_any` + producer-move search | **100%** |
+| Commands (remote-first) | `commands[]` ordered by ARSENAL `os`/`class` | **100%** |
+| Per-command "why" | `commands[].note` | 87% |
+| "This proves" | `produces` | 93% |
+| "Common mistake / rules out" | `move.does_not_prove` | 93% |
+| "What it opens" (downstream edges) | graph search `produces → requires` | 72% |
+| "You'd likely see" (sample output) | parser fixture match | ~51%* |
+
+*\*Fixture number is **optimistic** — keyword matching gives loose hits. The real "has a genuinely
+relevant fixture" figure is lower and needs an explicit move→fixture map. This is the one true
+authoring cost; everything else is free today.*
+
+**Remote-first rule (locked).** Command variants in the cell are ordered
+**🛰 remote → 💾 offline → 🖥 on-target**, derived from each tool's ARSENAL `os`/`class` — never
+hand-ranked. Rationale: prefer the option that needs the *least* access to the box; needing a foothold
+first is almost always the worse path IRL. (AS-REP demo: the derived order drops `Rubeus` — on-target
+— to last, even though the pack authored it second.) This extends the engine's existing `locus`
+axis (R/F/I) and remote-first ranker tiebreak down to the per-command level.
+
+**Known gaps the spike surfaced (bounded):** (1) sample-output fixtures — the real content work,
+OSCP-core-first; (2) ~28% of moves show no downstream edge (mostly terminal root/flag moves, a few
+true graph gaps to close); (3) command-locus classifier needs a small refinement for `sh`-wrapped
+offline handoffs (read inside the command, not just the tool name).
+
+### Build plan
+
+**New surface:** a `study` route (leftmost intent on the new landing), two gears — **Watch** (narrated
+worked cell) and **Your turn** (retrieval-practice: masked graph + multiple-choice, teach on *every*
+answer, unfold the cell as the reward). Landing = three doors: **Learn · Set up your box (Loadout) ·
+Start an engagement**, skippable, first-run-aware.
+
+- **`OBOL.study.cellFor(moveId, { profile })`** — the generator the spike prototyped. Pure function
+  over the loaded packs + ARSENAL: returns `{ whatItIs, prereqs[], producedBy[], commands[] (locus-
+  ordered, Loadout-invocation-aware), fixtureRef, proves[], opens[], rulesOut, refs[] }`. No new
+  content for the structure; reuses `requires`/`produces`/`hypothesis`/`does_not_prove`/`commands[].note`.
+- **Command locus classifier** — `remote(0) < offline(1) < on-target(2)` from ARSENAL `os`/`class`,
+  with the `sh`-wrapper refinement. Shared with the live coach so ordering is consistent app-wide.
+- **Graph helpers** — `producersOf(facts)` and `opensNext(move)` over the move set (spike has both);
+  promote into the engine (`graph.js`) so Study and the live path share one implementation.
+- **Move → fixture map** — `data/study-fixtures.json` (or a `fixture` field per move): explicit
+  `moveId → fixtures/parser/outputs/<file>` + the line/signal to highlight. Author OSCP-core-first;
+  reuse the parser's own known-extracted fact to pick the highlight line.
+- **Study graph canvas** — branching, progressive-disclosure zoom (phase spine → technique branch →
+  node), reusing/extending `map.js`. Masked-node mode for "Your turn".
+- **Content pass (incremental, not blocking):** backfill `does_not_prove` on the 7% missing, close
+  the real downstream-edge gaps, capture missing fixtures.
+
+**Milestone 1 — AD vertical slice.** One lane end-to-end (anon LDAP → AS-REP roast → crack → spray →
+ACL → DCSync): `cellFor` live, both gears, the branch canvas, remote-first ordering, real fixtures for
+each node. Ship it, teach a real person, then decide whether to scale to all lanes.
 
 ## 2. Give obol-web "hands" (live ingestion, L0.5 seam)
 
