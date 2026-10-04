@@ -126,6 +126,11 @@
     'recon-smtp': 'Mail Services', 'recon-mail': 'Mail Services',
     'recon-ftp': 'File Shares', 'nfs-enum': 'File Shares',
     'recon-finger': 'Legacy & Remote Access', 'recon-vnc': 'Legacy & Remote Access',
+    // creds lane
+    'crack-identify': 'Hash Cracking', 'crack-ntlm': 'Hash Cracking', 'crack-netntlmv2': 'Hash Cracking', 'crack-kerberoast': 'Hash Cracking',
+    'crack-asrep-offline': 'Hash Cracking', 'crack-shadow': 'Hash Cracking', 'crack-mscache2': 'Hash Cracking', 'crack-archive': 'Hash Cracking',
+    'online-brute-ssh': 'Online Brute-Force', 'online-brute-ftp': 'Online Brute-Force', 'online-brute-rdp': 'Online Brute-Force',
+    'responder-poison': 'Poisoning & Relay', 'ntlm-relay-attack': 'Poisoning & Relay', 'mitm6-ipv6-takeover': 'Poisoning & Relay',
   };
   var CATEGORY_ORDER = [
     // web
@@ -133,6 +138,8 @@
     'SSRF, XXE & Deserialization', 'Auth & Access Control', 'Cross-Site Scripting', 'Source Exposure', 'App Servers & Known CVEs',
     // recon
     'Port Scanning', 'SMB, RDP & Web', 'DNS, SNMP & VPN', 'Mail Services', 'File Shares', 'Legacy & Remote Access',
+    // creds
+    'Hash Cracking', 'Online Brute-Force', 'Poisoning & Relay',
   ];
   function categoryOf(moveId) { var m = byId(moveId); return MOVE_CATEGORY[moveId] || deriveStage(m || {}); }
 
