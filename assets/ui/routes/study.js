@@ -152,28 +152,43 @@
   }
   function connectCmd(os) {
     return os === 'windows'
-      ? { tool: 'evil-winrm', run: "evil-winrm -i 10.10.10.10 -u <user> -p '<password>'", note: 'get an interactive shell on the box over WinRM (5985), then run the command there', locus: 'ON-TARGET', tag: 'connect first', rank: 2 }
-      : { tool: 'ssh', run: 'ssh <user>@10.10.10.10', note: 'get an interactive shell on the box, then run the command there', locus: 'ON-TARGET', tag: 'connect first', rank: 2 };
+      ? { tool: 'evil-winrm', run: "evil-winrm -i 10.10.10.10 -u <user> -p '<password>'", note: 'Open an interactive shell on the box over WinRM (5985), then run the command below in that shell.', locus: 'ON-TARGET', tag: 'Connect First', rank: 2 }
+      : { tool: 'ssh', run: 'ssh <user>@10.10.10.10', note: 'Open an interactive shell on the box, then run the command below in that shell.', locus: 'ON-TARGET', tag: 'Connect First', rank: 2 };
+  }
+  // One honest pane when a move runs only one way (no misleading toggle, no bare shell handed out as "the move").
+  function singleWay(label, kind, note, cmds) {
+    var glyph = kind === 'onhost' ? '🖥' : '🛰';
+    return '<div class="study-runways"><div class="rw-head"><span class="rw-label">Run it from</span>'
+      + '<span class="rw-single">' + glyph + ' ' + esc(label) + '</span></div>'
+      + '<div class="rw-pane">' + note + cmds.map(commandBlock).join('') + '</div></div>';
   }
   function runWaysPanel(cell) {
     var cmds = cell.commands || [];
     if (!cmds.length) return '';
     var remote = cmds.filter(function (c) { return c.rank === 0 || c.rank === 1; });   // your box: remote + offline
     var onhost = cmds.filter(function (c) { return c.rank === 2; });                    // on the target
+    // Remote-only move (recon / remote enumeration / offline cracking): there is no on-target version.
+    if (remote.length && !onhost.length) {
+      var rnote = (cell.locus === 'F' || cell.locus === 'I')
+        ? '<div class="rw-when"><b>From your own box (Kali).</b> You stage the tool on Kali and run it against the target, the way the replay above shows.</div>'
+        : '<div class="rw-when"><b>From your own box (Kali).</b> This is a remote move: you run it over the network before you hold any shell. There is nothing to run on the target itself, which is the whole point of recon, it is how you find the way in.</div>';
+      return singleWay('Your box (Kali)', 'remote', rnote, remote);
+    }
+    // Host-only move: you must be on the box first, then run it there.
+    if (!remote.length && onhost.length) {
+      var hnote = '<div class="rw-when"><b>On the target, once you have a foothold.</b> This reads or changes state that only lives on the box, so get a shell first, then run it in that shell.</div>';
+      return singleWay('On the target', 'onhost', hnote, [connectCmd(osForMove(cell))].concat(onhost));
+    }
+    // Genuine either/or: the same outcome two ways. Show the toggle and teach the tradeoff.
     var conn = connectCmd(osForMove(cell));
-    var remoteWhen = '<div class="rw-when"><b>When:</b> this is the default. It is fast, puts nothing on the box, and needs no shell. Reach for it first.</div>';
-    var hostWhen = '<div class="rw-when"><b>When:</b> go on the target for interactive or multi-step tools, when the remote wrapper mangles your quoting, when you need a real terminal, or when the remote attempt simply fails. It is more steps and more footprint, so it is the second choice, not the first.</div>';
-    var remotePane = remoteWhen + (remote.length
-      ? remote.map(commandBlock).join('')
-      : '<div class="rw-note">This move is normally run <b>on the target</b> after you have a shell. Switch the toggle to see how.</div>');
-    var hostPane = hostWhen + '<div class="rw-connect">' + commandBlock(conn) + '</div>'
-      + (onhost.length
-        ? onhost.map(commandBlock).join('')
-        : '<div class="rw-note">Once you are on the box, run the same command locally: the built-ins shown, or the tool staged as in the replay above. (Remotely, you can also wrap it: <code class="study-ic">' + esc(osForMove(cell) === 'windows' ? 'nxc winrm 10.10.10.10 -u <user> -p <password> -x "..."' : 'ssh <user>@10.10.10.10 "..."') + '</code>.)</div>');
+    var remoteWhen = '<div class="rw-when"><b>When:</b> This is the default. It is fast, puts nothing on the box, and needs no shell. Reach for it first.</div>';
+    var hostWhen = '<div class="rw-when"><b>When:</b> Go on the target for interactive or multi-step tools, when the remote wrapper mangles your quoting, when you need a real terminal, or when the remote attempt simply fails. It is more steps and more footprint, so it is the second choice, not the first.</div>';
+    var remotePane = remoteWhen + remote.map(commandBlock).join('');
+    var hostPane = hostWhen + '<div class="rw-connect">' + commandBlock(conn) + '</div>' + onhost.map(commandBlock).join('');
     return '<div class="study-runways">'
       + '<div class="rw-head"><span class="rw-label">Run it from</span>'
-      + '<button type="button" class="rw-tab on" data-runway="remote">🛰 your box <span class="rw-n">' + remote.length + '</span></button>'
-      + '<button type="button" class="rw-tab" data-runway="onhost">🖥 on the target <span class="rw-n">' + onhost.length + '</span></button></div>'
+      + '<button type="button" class="rw-tab on" data-runway="remote">🛰 Your box <span class="rw-n">' + remote.length + '</span></button>'
+      + '<button type="button" class="rw-tab" data-runway="onhost">🖥 On the target <span class="rw-n">' + onhost.length + '</span></button></div>'
       + '<div class="rw-pane" data-pane="remote">' + remotePane + '</div>'
       + '<div class="rw-pane" data-pane="onhost" hidden>' + hostPane + '</div>'
       + '</div>';
@@ -198,6 +213,13 @@
     if (!study().showWhy(cell.id) && !_whyOverride[cell.id]) {
       return '<button type="button" class="study-why-show" data-why-show>Show the reasoning</button>';
     }
+    // Hand-written teaching note when one is authored for this move: what it is really for, what it
+    // buys you, when to reach for it, when to skip it. This is the part that should actually teach.
+    var authored = study().whyNow(cell.id);
+    if (authored) {
+      return '<div class="study-why"><div class="study-why-h">Why this, why now</div><p>' + codeify(authored) + '</p></div>';
+    }
+    // Fallback (derived) until a move has an authored note: name the prereq → outcome link plainly.
     var proves = (cell.proves || [])[0];
     var needs = cell.prereqFacts.length
       ? 'you are holding ' + cell.prereqFacts.map(function (f) { return '<b>' + esc(human(f)) + '</b>'; }).join(', ')
@@ -205,14 +227,16 @@
     var turns = proves ? ('it turns that into <b>' + esc(human(proves)) + '</b>') : 'it confirms the step worked';
     var mattersBit = (cell.opens && cell.opens.length) ? (', which is exactly what <b>' + esc(cell.opens[0].title) + '</b> needs next') : '';
     return '<div class="study-why"><div class="study-why-h">Why this, why now</div>'
-      + '<p>You reach for this because ' + needs + ', and ' + turns + mattersBit + '. That is the whole logic: a specific thing you found makes a specific next move possible.</p></div>';
+      + '<p>You reach for this because ' + needs + ', and ' + turns + mattersBit + '.</p></div>';
   }
   // reading the result: what the highlighted signal line actually tells you
   function signalTellBlock(cell) {
     if (!cell.output || !cell.output.text) return '';
-    var t = study().signalTell(cell.id); if (!t || !t.gist) return '';
+    var t = study().signalTell(cell.id); if (!t) return '';
+    // Prefer the hand-written teaching note pinned to this move's captured output; the derived gist is the fallback.
+    var body = t.teach || t.gist; if (!body) return '';
     return '<div class="study-tell"><div class="study-tell-h">Reading the result</div>'
-      + '<p>' + codeify(t.gist) + '</p></div>';
+      + '<p>' + codeify(body) + '</p></div>';
   }
   // "Why this, not that?" — the tool-selection decisions attached to this move
   function decisionPanel(cell) {
@@ -357,7 +381,7 @@
     var ls = study().lanes();
     var h = '<section class="study-route study-map">';
     h += '<div class="study-hero"><h1 class="study-hero-h">Learn the methodology</h1>'
-      + '<p class="study-hero-p">obol teaches offensive security as a decision graph: <b>know what to do, and why, from what you\'ve found.</b> '
+      + '<p class="study-hero-p">Obol teaches offensive security as a decision graph: <b>know what to do, and why, from what you\'ve found.</b> '
       + 'Pick a path below and step through it: watch each move play out like it would on a real box, or test yourself.</p></div>';
     h += '<div class="study-lanes">' + ls.map(function (L) {
       var pr = study().laneProgress(L.key), pct = pr.total ? Math.round(pr.studied / pr.total * 100) : 0;
@@ -502,6 +526,7 @@
       + '<g class="atlas-nodes">' + nodeSvg + '</g></g></svg>'
       + '<div class="atlas-minimap" id="atlas-minimap"><svg id="atlas-mini-svg" class="atlas-mini-svg"></svg><div class="atlas-mini-vp" id="atlas-mini-vp"></div></div>'
       + '<div class="atlas-empty" id="atlas-empty" hidden>No step matches “<span id="atlas-empty-q"></span>”.</div>'
+      + '<div class="atlas-hovercard" id="atlas-hovercard" hidden></div>'
       + '</div>'
       + '<div class="atlas-tray" id="atlas-tray"></div>'
       + '</section>';
@@ -784,6 +809,30 @@
     stage.addEventListener('pointermove', function (e) { if (!down) return; var dx = e.clientX - down.x, dy = e.clientY - down.y; if (Math.abs(dx) + Math.abs(dy) > 4) moved = true; _az.tx = down.tx + dx; _az.ty = down.ty + dy; apply(); });
     stage.addEventListener('pointerup', function () { var wasMoved = moved, g = down && down.node; down = null; if (wasMoved || !g) return; var id = g.getAttribute('data-anode'), i = _atlasPath.indexOf(id); if (i >= 0) _atlasPath.splice(i, 1); else _atlasPath.push(id); _scenario = null; atlasSelection(mount); });
     stage.addEventListener('wheel', function (e) { e.preventDefault(); var r = stage.getBoundingClientRect(); zoomAround(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.12 : 0.89); }, { passive: false });
+    // hover card: the atlas labels are clipped for uniformity, so hovering a step shows its full title,
+    // what it is, and what it proves, so a learner can tell what they are about to pick.
+    var hover = mount.querySelector('#atlas-hovercard');
+    function showHover(g, e) {
+      if (!hover) return;
+      var id = g.getAttribute('data-anode'), c = study().cellFor(id); if (!c) { hover.hidden = true; return; }
+      var desc = c.whatItIs || '';
+      hover.innerHTML = '<div class="ahc-ph lane-' + laneKeyOf(id) + '">' + esc((c.phase || '').toUpperCase()) + '</div>'
+        + '<div class="ahc-t">' + esc(c.title) + '</div>'
+        + (desc ? '<div class="ahc-d">' + esc(desc.length > 240 ? desc.slice(0, 237) + '…' : desc) + '</div>' : '')
+        + (c.proves && c.proves.length ? '<div class="ahc-p"><span class="ahc-arr">→</span> ' + esc(c.proves.map(human).join(', ')) + '</div>' : '');
+      hover.hidden = false;
+      var r = stage.getBoundingClientRect(), cw = hover.offsetWidth || 300, ch = hover.offsetHeight || 120;
+      var x = e.clientX - r.left + 16, y = e.clientY - r.top + 16;
+      if (x + cw > r.width - 6) x = e.clientX - r.left - cw - 16;
+      if (y + ch > r.height - 6) y = r.height - ch - 8;
+      hover.style.left = Math.max(6, x) + 'px'; hover.style.top = Math.max(6, y) + 'px';
+    }
+    stage.addEventListener('pointermove', function (e) {
+      if (down) { if (hover) hover.hidden = true; return; }
+      var g = e.target.closest && e.target.closest('.atlas-node');
+      if (g) showHover(g, e); else if (hover && !hover.hidden) hover.hidden = true;
+    });
+    stage.addEventListener('pointerleave', function () { if (hover) hover.hidden = true; });
     // minimap: click to recentre the stage on that point
     if (mini) mini.addEventListener('click', function (e) { var r = mini.getBoundingClientRect(), sr = stage.getBoundingClientRect(); var cx = (e.clientX - r.left) / miniK, cy = (e.clientY - r.top) / miniK; _az.tx = sr.width / 2 - cx * _az.k; _az.ty = sr.height / 2 - cy * _az.k; apply(); });
     U.on(mount, 'click', '[data-az]', function (e, t) { var a = t.getAttribute('data-az'); if (a === 'in' || a === 'out') { var r = stage.getBoundingClientRect(); zoomAround(r.width / 2, r.height / 2, a === 'in' ? 1.2 : 0.83); } else fit(); });

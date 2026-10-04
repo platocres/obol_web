@@ -26,6 +26,7 @@
 
     // ============================ RECON ============================
     'nmap-fast-open-ports': {
+      why: "This is the first thing you do on every box, and the one step you cannot skip: you cannot attack a service you have not found. The fast all-ports sweep catches the services people hide on odd numbers, a web app on 8080, SSH moved to 2222, that a default top-1000 scan walks straight past. Everything downstream (which service to enumerate, which exploit to try) is decided by what this returns, so start here, then run the slower version scan only against the ports it finds, never against all 65,535.",
       cmd: 'nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.10.10.10', tool: 'nmap',
       output: [
         'Nmap scan report for 10.10.10.10',
@@ -40,6 +41,7 @@
       teach: 'Every open port is a door. A fast all-ports sweep first tells you what to look at (here SSH, a web server, and SMB) before you spend time on any one service.',
     },
     'nmap-version-scripts': {
+      why: "Knowing a port is open tells you a door exists; knowing it runs \"Apache 2.4.49\" tells you which key to try. This scan fingerprints the exact software and version on each open port and runs nmap's safe default scripts, which pull banners, anonymous-login hints, and SMB signing status for free. Run it right after the fast sweep and only against the handful of open ports, because a specific version is a searchable CVE and the rest of your attack hinges on getting it right. Guessing the service from the port number, assuming 80 is just a plain website, is how people miss the easy win.",
       cmd: 'nmap -Pn -sC -sV -p 22,80,445 -oN scans/nmap-version.txt 10.10.10.10', tool: 'nmap',
       output: [
         'PORT    STATE SERVICE VERSION',
@@ -52,6 +54,7 @@
       teach: 'Versions are leads. "Apache 2.4.49" is a specific, searchable build, many such versions have a public CVE. Always pull the version before deciding how to attack a service.',
     },
     'nmap-vuln-scripts': {
+      why: "When you want nmap itself to point at known holes, the vuln script category runs detection checks (EternalBlue, common SMB, HTTP and RDP CVEs) against the open ports. It is a fast way to surface a lead, but it only detects, it does not exploit, and it false-positives, so read a VULNERABLE line as \"go verify this\", not \"you are in\". Reach for it after the version scan when a service looks old or interesting; do not lean on it as your plan, because a clean result just means nmap's small script set recognised nothing, not that the box is safe. It is enumeration, which keeps it exam-safe.",
       cmd: 'nmap -Pn -sV --script vuln -p 80 -oN scans/nmap-vuln.txt 10.10.10.10', tool: 'nmap',
       output: [
         'PORT   STATE SERVICE VERSION',
@@ -64,6 +67,7 @@
       teach: 'The vuln scripts run safe-ish checks that flag known CVEs on the open ports. Treat a VULNERABLE line as a strong lead to verify, not a guaranteed win, scripts can false-positive, so confirm before you commit.',
     },
     'nmap-udp-top': {
+      why: "TCP is only half the attack surface, and UDP is the half everyone forgets. SNMP (161), DNS (53), TFTP (69) and IKE/VPN (500) all live on UDP, and any one of them can be the way in, an SNMP \"public\" string alone can dump credentials. UDP has no handshake to confirm a port, so scanning is slow and noisy with false \"open|filtered\" results; you check only the top ports and run it alongside your TCP work rather than waiting on it. Do this on every box, because the UDP-only service is the classic \"stuck for hours\" lesson.",
       cmd: 'sudo nmap -Pn -sU --top-ports 20 --open -oN scans/nmap-udp-top20.txt 10.10.10.10', tool: 'nmap',
       output: [
         'PORT    STATE SERVICE',
@@ -74,6 +78,7 @@
       teach: 'TCP is only half the surface. A quick UDP sweep of the top ports finds the services people forget (SNMP on 161, DNS on 53, TFTP on 69), and each is its own way in.',
     },
     'recon-smb-anon': {
+      why: "SMB on 445 is the busiest port in a Windows network, and the first thing to try is the free one: log in as nobody. An anonymous session costs nothing and routinely hands you a readable share full of configs or scripts, the domain name, and whether SMB signing is off (which matters later for relaying). Do this the moment you see 445, before any brute-forcing, because why guess a password when the box might just let you in. A readable share like \"Profiles\" or \"Backups\" is somewhere to go hunting right away.",
       cmd: "nxc smb 10.10.10.10 -u '' -p '' --shares", tool: 'nxc',
       output: [
         'SMB  10.10.10.10  445  FILE01  [*] Windows Server 2019 Build 17763 (name:FILE01) (domain:acme.internal) (signing:False)',
@@ -86,6 +91,7 @@
       teach: 'An anonymous ("-u \'\' -p \'\'") SMB check costs nothing and often hands you a readable share and the domain name. A READ share like Profiles is a place to hunt for files; the banner also leaks that signing is off.',
     },
     'recon-web-triage': {
+      why: "A web app is the single richest attack surface on the exam, but before you fuzz anything you need to know what you are looking at. Fingerprinting the stack in one request (server, language, framework, CMS, page title) decides which exploits and which wordlists are even worth trying, hunting WordPress plugins on a .NET site is wasted time. Run this the instant you see 80 or 443, right after the version scan. It is the cheap step that aims every expensive step after it.",
       cmd: 'whatweb -a3 http://10.10.10.10', tool: 'whatweb',
       output: [
         'http://10.10.10.10 [200 OK] Apache[2.4.49], HTTPServer[Unix][Apache/2.4.49 (Unix)],',
@@ -95,6 +101,7 @@
       teach: 'whatweb fingerprints the stack in one request, web server, language, CMS, title. Knowing it is Apache 2.4.49 + PHP 7.4 steers which exploits and wordlists make sense before you touch the site further.',
     },
     'recon-dns': {
+      why: "A nameserver is meant to answer a zone transfer only to its own backup servers, but admins leave AXFR open to the world constantly, and when they do, one request hands you every hostname in the domain: internal apps, dev boxes, mail servers, names you would otherwise have to brute-force. It costs one command and makes almost no noise, so it is always worth trying when you see port 53. If AXFR is refused (the common case) you have lost nothing and fall back to brute-forcing records. Every name you collect is a new target and a new vhost to fuzz.",
       cmd: 'dig axfr acme.internal @10.10.10.10', tool: 'dig',
       output: [
         '; <<>> DiG 9.18.12 <<>> axfr acme.internal @10.10.10.10',
@@ -107,6 +114,7 @@
       teach: 'A DNS zone transfer (AXFR) that succeeds hands you the whole internal name map in one request, every host and subdomain the admin forgot to lock down. Those new names are new targets.',
     },
     'recon-snmp': {
+      why: "SNMP on UDP 161 is a quiet goldmine because of one default nobody changes: the \"public\" community string. If it answers, you can read the device's running processes, network interfaces, installed software, and on misconfigured hosts actual credentials, with no login at all. Reach for it whenever a UDP scan shows 161 open; it is high value for almost no effort. People skip UDP and never find this, which is exactly why it keeps working.",
       cmd: 'onesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp.txt 10.10.10.10', tool: 'onesixtyone',
       output: [
         'Scanning 1 hosts, 3220 communities',
@@ -116,6 +124,7 @@
       teach: 'An SNMP community string of "public" is a default nobody changed. onesixtyone confirms it answers; with it (via snmpwalk) you can read running processes, users, and sometimes credentials, no login required.',
     },
     'recon-ike-vpn': {
+      why: "UDP 500 is an IKE endpoint, the handshake service for an IPsec VPN. Enumerating it confirms the VPN is there and can leak the vendor and supported transforms, and an aggressive-mode handshake can hand you a hash to crack offline for a way into the internal network. It is niche, so reach for it only when 500/udp shows up; most boxes will not have it. When it does appear it is often the intended path in, and easy to walk past if you ignore UDP.",
       cmd: 'sudo ike-scan -M 10.10.10.10', tool: 'ike-scan',
       output: [
         'Starting ike-scan 1.9.5 with 1 hosts',
@@ -127,6 +136,7 @@
       teach: 'An IKE/IPsec VPN on UDP 500 reveals its crypto. A dated 3DES/SHA1/PSK config is a finding on its own, and if the server also allows Aggressive Mode (ike-scan -A) it will hand back a PSK hash you can crack offline.',
     },
     'recon-finger': {
+      why: "Finger (port 79) is ancient and nearly extinct, but when it is open it does one thing very well for you: it confirms real usernames and shows who is logged in. A confirmed list of accounts is the raw material for a password spray or a brute-force, so finger turns \"I am guessing names\" into \"I am guessing passwords for names I know are real\". You will rarely see it; when you do, enumerate it first, because valid usernames are worth more than almost anything else this early.",
       cmd: 'finger @10.10.10.10', tool: 'finger',
       output: [
         'Login     Name          Tty   Idle  Login Time',
@@ -137,6 +147,7 @@
       teach: 'The finger service (port 79) is ancient but still appears on old Unix boxes. It leaks real usernames and who is logged in, bmurphy is a confirmed account to spray or brute.',
     },
     'recon-vnc': {
+      why: "VNC is a remote-desktop service, and the enumeration question is blunt: does it even ask for a password? A server set to \"None\" security is an unauthenticated desktop, you connect and you are looking at the box's screen. Even when it wants a password, VNC passwords are capped at eight characters and crack fast. Check this whenever you see a 59xx port; it is one of the rare services where enumeration and full compromise can be the same step.",
       cmd: 'nmap -p 5900,5901 --script vnc-info,realvnc-auth-bypass 10.10.10.10', tool: 'nmap',
       output: [
         'PORT     STATE SERVICE',
@@ -150,6 +161,7 @@
       teach: 'A VNC server that offers "None" security is an unauthenticated remote desktop, connect and you are on the box\'s screen. Even when it wants a password, VNC passwords are short and crackable.',
     },
     'recon-smtp': {
+      why: "A mail server that answers VRFY or EXPN will confirm, for free, which usernames actually exist on the system. That is the value here: you turn a guessed name list into a verified one, which makes a later password spray far more likely to land. SMTP (25) also leaks the server software and sometimes the internal hostname in its banner. Reach for it early when 25 is open, because every other credential attack gets cheaper once you know the real usernames.",
       cmd: 'smtp-user-enum -M VRFY -U users.txt -t 10.10.10.10', tool: 'smtp-user-enum',
       output: [
         'Starting smtp-user-enum v1.2',
@@ -161,6 +173,7 @@
       teach: 'An SMTP server that answers VRFY confirms which usernames are real. A confirmed user list is the raw material for a password spray or a brute, you stop guessing names and start guessing passwords.',
     },
     'recon-ftp': {
+      why: "FTP's first test is free and almost always worth it: try the anonymous login. Boxes leave it open constantly, and an anonymous session routinely exposes a directory of source code, backups, or config files with credentials in them, a foothold sitting in plain sight. Do this the moment you see port 21, before brute-forcing a real account. Download everything you can read and look through it, because the win is usually in a file, not in the service itself.",
       cmd: "nxc ftp 10.10.10.10 -u anonymous -p ''", tool: 'nxc',
       output: [
         'FTP  10.10.10.10  21  FTP01  [*] Banner: 220 (vsFTPd 3.0.3)',
@@ -171,6 +184,7 @@
       teach: 'Anonymous FTP is a free login, always test it. A readable file like backup.zip often holds source, configs, or credentials; download everything and look through it.',
     },
     'recon-mail': {
+      why: "Once you hold a mailbox credential, reading the mail is itself an attack: people send passwords, VPN configs, and password-reset links to each other, and the inbox is where that history lives. This step logs into POP3 or IMAP with creds you already recovered and pulls the messages so you can mine them. Reach for it after you have a working credential and see 110/143/993/995 open; the mailbox often hands you the next credential or the next host.",
       cmd: 'nmap -sV -p 110,143,993,995 --script pop3-capabilities,pop3-ntlm-info 10.10.10.10', tool: 'nmap',
       output: [
         'PORT    STATE SERVICE',
@@ -184,6 +198,7 @@
       teach: 'Mail services leak more than you expect: capabilities, and via NTLM auth the internal domain name (ACME). With a valid mailbox credential you can read mail for secrets, reset links, and internal contacts.',
     },
     'rdp-enum': {
+      why: "RDP on 3389 is both a service to check and, with a working credential, your way onto the desktop. Enumeration answers two questions: is Network Level Authentication required (which blocks some attacks), and do the credentials you already hold actually log in here. A \"Pwn3d!\" against RDP means an interactive session is waiting, so always confirm which creds work against which service, a password that fails on SMB can still open RDP. Check it whenever 3389 is open and you have any credential to test.",
       cmd: "nxc rdp 10.10.10.10 -u bmurphy -p 'Summer2024!'", tool: 'nxc',
       output: [
         'RDP  10.10.10.10  3389  TARGET  [*] Windows 10 / Server 2019 Build 17763 (name:TARGET) (domain:ACME)',
@@ -193,6 +208,7 @@
       teach: '"Pwn3d!" on an RDP check means the credentials you tested actually log in, you have an interactive desktop waiting (connect with xfreerdp). Always confirm which creds work against which service.',
     },
     'nfs-enum': {
+      why: "NFS (111 and 2049) shares a filesystem over the network, and the enumeration step asks what is exported and to whom. An export shared with \"*\" is readable by anyone who mounts it, and if it is exported with no_root_squash you can write files as root on it, which is a direct privilege-escalation primitive, not just a file read. Reach for it the moment you see those ports: mount the share, read what you can, and check the squash setting, because an NFS misconfiguration is often the foothold and the root in one service.",
       cmd: 'showmount -e 10.10.10.10', tool: 'showmount',
       output: [
         'Export list for 10.10.10.10:',

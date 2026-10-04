@@ -135,10 +135,10 @@
   function cmdLocus(c) {
     var run = (c && c.run) || '', tool = (c && c.tool) || '';
     var A = arsenal(), e = A[tool] || A[tool.toLowerCase()] || {};
-    if (/(^|[\s|&;])(hashcat|john)\b/.test(run) || /\s-m\s+\d+/.test(run)) return { rank: 1, tag: 'offline · your box', label: 'OFFLINE' };
+    if (/(^|[\s|&;])(hashcat|john)\b/.test(run) || /\s-m\s+\d+/.test(run)) return { rank: 1, tag: 'Offline · Your Box', label: 'OFFLINE' };
     if (e.os === 'windows' || /^(stage-win|stage-lin|material)$/.test(e.class || '') || /(^|\s)\.[\\/]/.test(run) || /Rubeus|winPEAS|Sharp[A-Z]|mimikatz|GodPotato|PrintSpoofer/.test(run))
-      return { rank: 2, tag: 'on-target · needs a foothold', label: 'ON-TARGET' };
-    return { rank: 0, tag: 'remote · from your box', label: 'REMOTE' };
+      return { rank: 2, tag: 'On-Target · Needs a Foothold', label: 'ON-TARGET' };
+    return { rank: 0, tag: 'Remote · From Your Box', label: 'REMOTE' };
   }
 
   // --- derived graph edges ---------------------------------------------------------------------
@@ -470,6 +470,9 @@
 
   // --- signal recognition helpers: the "so what" behind evidence -------------------------------
   function friendly(k) { try { return (OBOL.pack && OBOL.pack.friendly) ? OBOL.pack.friendly(k) : k; } catch (e) { return k; } }
+  // the hand-written "why this, why now" teaching note for a move (fixtures carry it as `why`); empty
+  // when none is authored yet, so the route can fall back to the derived dependency explanation.
+  function whyNow(moveId) { var fx = fixtures()[moveId] || {}; return fx.why || ''; }
   // the "why this line matters" read-out for a move's highlighted signal
   function signalTell(moveId) {
     var m = byId(moveId); if (!m) return null;
@@ -610,7 +613,7 @@
     evidence: evidence, evidenceGaps: evidenceGaps,
     cmdLocus: cmdLocus, cellFor: cellFor, replayFor: replayFor, practiceFor: practiceFor, practiceDiagnose: practiceDiagnose,
     producersOf: producersOf, opensNext: opensNext,
-    signalTell: signalTell, factInfo: factInfo, alternativesFor: alternativesFor, decisionFor: decisionFor, scopeSafety: scopeSafety,
+    signalTell: signalTell, whyNow: whyNow, factInfo: factInfo, alternativesFor: alternativesFor, decisionFor: decisionFor, scopeSafety: scopeSafety,
     coachPref: coachPref, setCoachPref: setCoachPref, showWhy: showWhy,
     mastery: mastery, markStudied: markStudied, laneProgress: laneProgress, validatePath: validatePath,
     // back-compat for tests

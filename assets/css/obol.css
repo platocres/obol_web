@@ -1833,7 +1833,7 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .study-lane-card.active:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .study-lane-card.coming { opacity: .62; }
 .study-lane-name { font-size: 14px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 8px; }
-.study-lane-badge { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--accent-2); background: var(--accent-soft); border: 1px solid var(--g-proven-line); border-radius: 999px; padding: 1px 7px; }
+.study-lane-badge { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--accent-2); background: var(--accent-soft); border: 1px solid var(--g-proven-line); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
 .study-lane-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; margin: 7px 0 0; }
 .study-lane-go { font-size: 12px; font-weight: 700; color: var(--accent-2); margin-top: 10px; }
 .study-lane-soon { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 10px; text-transform: uppercase; letter-spacing: .06em; }
@@ -1906,6 +1906,12 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .atlas-stage { position: relative; height: 66vh; min-height: 440px; margin-top: 8px; border: 1px solid var(--line); border-radius: 14px;
   background: radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--accent) 5%, var(--bg1)), var(--bg)); overflow: hidden; cursor: grab; touch-action: none; }
 .atlas-stage:active { cursor: grabbing; }
+.atlas-hovercard { position: absolute; z-index: 20; max-width: 320px; pointer-events: none; background: var(--bg2); border: 1px solid var(--line-hot); border-radius: 10px; padding: 11px 13px; box-shadow: 0 8px 28px rgba(0,0,0,.55); }
+.atlas-hovercard .ahc-ph { font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .04em; color: var(--lane, var(--muted)); margin-bottom: 3px; }
+.atlas-hovercard .ahc-t { font-family: var(--sans); font-size: 14px; font-weight: 800; color: var(--text); line-height: 1.3; margin-bottom: 5px; }
+.atlas-hovercard .ahc-d { font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+.atlas-hovercard .ahc-p { margin-top: 7px; font-size: 12px; color: var(--accent-2); font-weight: 600; }
+.atlas-hovercard .ahc-arr { opacity: .7; }
 .atlas-svg { width: 100%; height: 100%; display: block; }
 .atlas-view { transition: none; }
 .atlas-lanelabel { font-family: var(--mono); font-size: 13px; font-weight: 800; fill: color-mix(in srgb, var(--lane) 72%, white); opacity: .9; text-transform: uppercase; letter-spacing: .04em; }
@@ -1963,6 +1969,7 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .rw-tab:hover { border-color: var(--line-hot); color: var(--text); }
 .rw-tab.on { color: var(--on-accent, #04120a); background: var(--accent); border-color: var(--accent); font-weight: 700; }
 .rw-tab .rw-n { font-family: var(--mono); font-size: 11px; opacity: .7; margin-left: 3px; }
+.rw-single { font-family: var(--sans); font-size: 12px; font-weight: 700; color: var(--accent-2); background: var(--accent-soft); border: 1px solid var(--g-proven-line); border-radius: 999px; padding: 4px 12px; }
 .rw-pane { padding: 10px; }
 .rw-pane[hidden] { display: none; }
 .rw-connect { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--line); }
