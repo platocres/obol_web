@@ -477,7 +477,7 @@
     var proves = (m.produces || []).map(function (f) { return { fact: f, label: friendly(f) }; });
     var opens = opensNext(m).slice(0, 5).map(function (x) { return { id: x.id, title: x.title }; });
     var gist = proves.length
-      ? ('This line is your proof that you now have ' + proves[0].label + (opens.length ? ', which is what lets you ' + opens[0].title.charAt(0).toLowerCase() + opens[0].title.slice(1) + '.' : '.'))
+      ? ('This line is your proof that you now have ' + proves[0].label + (opens.length ? ', which is exactly what ' + opens[0].title + ' needs next.' : '.'))
       : 'This line is the result that confirms the step worked.';
     return { signal: fx.signal || '', proves: proves, opens: opens, gist: gist, teach: fx.teach || '' };
   }

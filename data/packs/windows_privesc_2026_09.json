@@ -378,7 +378,7 @@
   },
   {
    "id": "windows-old-hives",
-   "title": "windows.old / Registry-Hive Secret Dump",
+   "title": "Windows.old / Registry-Hive Secret Dump",
    "hypothesis": "A leftover C:\\windows.old (from an in-place upgrade) or a saved SAM/SYSTEM/SECURITY hive holds old local-account hashes, often a still-valid Administrator hash you can crack or pass-the-hash. With a foothold, pull or save the hives and run secretsdump offline.",
    "tool": "impacket-secretsdump",
    "tools": ["impacket-secretsdump", "reg"],

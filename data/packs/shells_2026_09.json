@@ -5,7 +5,7 @@
   "actions": [
     {
       "id": "shell-listener",
-      "title": "Start a reverse-shell listener",
+      "title": "Start a Reverse-Shell Listener",
       "hypothesis": "Any reverse-shell payload needs a listener already waiting on your LHOST to catch the callback before it fires.",
       "tool": "nc",
       "tools": ["nc", "ncat", "rlwrap", "penelope"],
@@ -22,7 +22,7 @@
     },
     {
       "id": "shell-revshell-linux",
-      "title": "Linux reverse-shell payload",
+      "title": "Linux Reverse-Shell Payload",
       "hypothesis": "A confirmed command-execution primitive on a Linux target becomes an interactive shell by firing a bash or python callback back to your listener.",
       "tool": "bash",
       "tools": ["bash", "python3", "nc"],
@@ -40,7 +40,7 @@
     },
     {
       "id": "shell-revshell-windows",
-      "title": "Windows reverse-shell payload",
+      "title": "Windows Reverse-Shell Payload",
       "hypothesis": "A command-execution primitive on Windows becomes a shell via a PowerShell or nc.exe callback back to your listener.",
       "tool": "powershell",
       "tools": ["powershell", "nc.exe"],
@@ -57,7 +57,7 @@
     },
     {
       "id": "shell-pty-upgrade",
-      "title": "Upgrade a dumb shell to a full PTY",
+      "title": "Upgrade a Dumb Shell to a Full PTY",
       "hypothesis": "A freshly caught reverse shell is line-buffered and drops Ctrl-C and arrow keys; upgrading it to a PTY gives a real terminal, which su, sudo, and vim all need.",
       "tool": "python3",
       "tools": ["python3", "script", "stty"],
@@ -74,7 +74,7 @@
     },
     {
       "id": "ssh-key-login",
-      "title": "Log in over SSH with a recovered private key",
+      "title": "Log in over SSH with a Recovered Private Key",
       "hypothesis": "A PEM private key recovered from loot (LFI, a backup, a readable home, a git-dump) is a foothold when SSH is reachable, save it, tighten its permissions, and log in. The username is the piece to determine (the key's path/comment, an enumerated user, or the box's theme).",
       "tool": "ssh",
       "tools": ["ssh"],

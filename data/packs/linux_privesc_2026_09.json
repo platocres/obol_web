@@ -59,7 +59,7 @@
   },
   {
    "id": "sudo-abuse",
-   "title": "sudo / GTFOBins Abuse",
+   "title": "Sudo / GTFOBins Abuse",
    "hypothesis": "Entries returned by sudo -l on ordinary binaries frequently mean immediate root: any tool with a sudo entry on GTFOBins (vim, find, awk, tar, less, python...) has a published shell-escape technique. A NOPASSWD entry just hands it to you.",
    "tool": "sudo",
    "tools": [

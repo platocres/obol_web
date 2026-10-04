@@ -5,7 +5,7 @@
   "actions": [
     {
       "id": "crack-identify",
-      "title": "Identify an unknown hash",
+      "title": "Identify an Unknown Hash",
       "hypothesis": "Pinning down the hash format before cracking keeps you from burning hours on the wrong hashcat mode.",
       "tool": "name-that-hash",
       "tools": ["name-that-hash", "hashid"],
@@ -22,7 +22,7 @@
     },
     {
       "id": "crack-kerberoast",
-      "title": "Crack a kerberoast (TGS) hash",
+      "title": "Crack a Kerberoast (TGS) Hash",
       "hypothesis": "Service accounts frequently use weak, human-chosen passwords, so a cracked $krb5tgs$ ticket hands you the service account's plaintext.",
       "tool": "hashcat",
       "tools": ["hashcat", "john"],
@@ -40,7 +40,7 @@
     },
     {
       "id": "crack-asrep-offline",
-      "title": "Crack an AS-REP roast hash",
+      "title": "Crack an AS-REP Roast Hash",
       "hypothesis": "An account without Kerberos pre-auth is AS-REP-roastable: the $krb5asrep$ hash it yields cracks to that user's plaintext.",
       "tool": "hashcat",
       "tools": ["hashcat", "john"],
@@ -57,7 +57,7 @@
     },
     {
       "id": "crack-ntlm",
-      "title": "Crack a dumped NTLM hash",
+      "title": "Crack a Dumped NTLM Hash",
       "hypothesis": "An NTLM hash pulled from SAM or NTDS may crack to a plaintext that logs in here or is reused elsewhere.",
       "tool": "hashcat",
       "tools": ["hashcat", "john"],
@@ -73,7 +73,7 @@
     },
     {
       "id": "crack-netntlmv2",
-      "title": "Crack a captured NetNTLMv2 hash",
+      "title": "Crack a Captured NetNTLMv2 Hash",
       "hypothesis": "A NetNTLMv2 hash captured by Responder or a relay cracks to the account's plaintext; unlike an NT hash it cannot be passed, so cracking is the only route.",
       "tool": "hashcat",
       "tools": ["hashcat", "john"],
@@ -89,7 +89,7 @@
     },
     {
       "id": "crack-shadow",
-      "title": "Crack a Linux /etc/shadow hash",
+      "title": "Crack a Linux /etc/shadow Hash",
       "hypothesis": "A shadow entry you can read (via a SUID binary, a backup, or a misconfig) cracks to a local password that is often reused for sudo.",
       "tool": "hashcat",
       "tools": ["hashcat", "john"],
@@ -125,7 +125,7 @@
     },
     {
       "id": "online-brute-ssh",
-      "title": "Online password brute over SSH (hydra)",
+      "title": "Online Password Brute over SSH (hydra)",
       "hypothesis": "When SSH is reachable and no working credential is known yet, a targeted hydra run against an enumerated user list can recover a login, a noisy, lockout-risky attack, so it is approve-tier and never auto-fires in a normal cruise.",
       "tool": "hydra",
       "tools": ["hydra"],
@@ -142,7 +142,7 @@
     },
     {
       "id": "online-brute-ftp",
-      "title": "Online password brute over FTP (hydra)",
+      "title": "Online Password Brute over FTP (hydra)",
       "hypothesis": "A reachable FTP service with no known credential is a classic hydra target; a recovered login often reuses onto other services.",
       "tool": "hydra",
       "tools": ["hydra"],
@@ -159,7 +159,7 @@
     },
     {
       "id": "online-brute-rdp",
-      "title": "Online password brute over RDP (hydra)",
+      "title": "Online Password Brute over RDP (hydra)",
       "hypothesis": "A reachable RDP service with no known credential can be sprayed with hydra; go slow to avoid account lockout.",
       "tool": "hydra",
       "tools": ["hydra"],
@@ -176,7 +176,7 @@
     },
     {
       "id": "crack-mscache2",
-      "title": "Crack an MS Cache v2 (DCC2) hash",
+      "title": "Crack an MS Cache v2 (DCC2) Hash",
       "hypothesis": "Domain Cached Credentials v2 ($DCC2$) are stored on a workstation so a domain user can log in offline. They are deliberately slow to crack, but a weak password still falls, and the plaintext is a real domain credential to reuse. Pulled from a local secretsdump (the cachedump).",
       "tool": "hashcat",
       "tools": [

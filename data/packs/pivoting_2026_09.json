@@ -5,7 +5,7 @@
   "actions": [
     {
       "id": "pivot-chisel-socks",
-      "title": "Chisel reverse SOCKS tunnel",
+      "title": "Chisel Reverse SOCKS Tunnel",
       "hypothesis": "When the foothold can see an internal subnet, a reverse SOCKS proxy served by chisel routes your attacker-box tooling through the compromised host and onto that segment.",
       "tool": "chisel",
       "tools": ["chisel"],
@@ -23,7 +23,7 @@
     },
     {
       "id": "pivot-ligolo",
-      "title": "Ligolo-ng tunnel + route",
+      "title": "Ligolo-ng Tunnel + Route",
       "hypothesis": "ligolo-ng builds a TUN-interface pivot: once the agent connects back you add a route for the discovered subnet and internal hosts answer as if directly attached.",
       "tool": "ligolo-ng",
       "tools": ["ligolo-ng", "ligolo-proxy", "ligolo-agent"],
@@ -41,7 +41,7 @@
     },
     {
       "id": "pivot-sshuttle",
-      "title": "sshuttle transparent pivot",
+      "title": "sshuttle Transparent Pivot",
       "hypothesis": "Given working SSH credentials on the foothold, sshuttle carries a whole subnet over that SSH session transparently, with no proxychains or client-side proxy setup.",
       "tool": "sshuttle",
       "tools": ["sshuttle"],
@@ -58,7 +58,7 @@
     },
     {
       "id": "pivot-ssh-dynamic",
-      "title": "SSH dynamic port-forward (SOCKS)",
+      "title": "SSH Dynamic Port-Forward (SOCKS)",
       "hypothesis": "`ssh -D` on its own stands up a SOCKS proxy through the foothold, the no-extra-tooling pivot whenever SSH credentials are already in hand.",
       "tool": "ssh",
       "tools": ["ssh"],
@@ -74,7 +74,7 @@
     },
     {
       "id": "pivot-scan-through",
-      "title": "Scan an internal host through the proxy",
+      "title": "Scan an Internal Host Through the Proxy",
       "hypothesis": "With a SOCKS tunnel established, proxychains wrapping a TCP-connect nmap enumerates a now-reachable internal host.",
       "tool": "proxychains",
       "tools": ["proxychains", "proxychains4"],

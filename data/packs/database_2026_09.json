@@ -5,7 +5,7 @@
   "actions": [
     {
       "id": "mysql-login",
-      "title": "MySQL / MariaDB login",
+      "title": "MySQL / MariaDB Login",
       "hypothesis": "A reachable MySQL will often take a discovered credential, a blank root password, or reused creds; a session into it opens up schema and credential-table enumeration.",
       "tool": "mysql",
       "tools": ["mysql", "mariadb"],
@@ -24,7 +24,7 @@
     },
     {
       "id": "mysql-loot",
-      "title": "MySQL credential-table sweep",
+      "title": "MySQL Credential-Table Sweep",
       "hypothesis": "Application databases keep their own user rows and password hashes, so dumping the user tables yields crackable material and frequently reused admin creds.",
       "tool": "mysql",
       "tools": ["mysql"],
@@ -41,7 +41,7 @@
     },
     {
       "id": "mssql-login",
-      "title": "MSSQL login",
+      "title": "MSSQL Login",
       "hypothesis": "MSSQL will often accept a domain credential or the `sa` account; an authenticated SQL prompt is the way into enumeration and, given enough privilege, command execution.",
       "tool": "mssqlclient.py",
       "tools": ["mssqlclient.py", "impacket-mssqlclient"],
@@ -60,7 +60,7 @@
     },
     {
       "id": "mssql-xp-cmdshell",
-      "title": "MSSQL xp_cmdshell command execution",
+      "title": "MSSQL xp_cmdshell Command Execution",
       "hypothesis": "An MSSQL login with sysadmin rights can enable and invoke xp_cmdshell to run OS commands as the SQL service account, giving a Windows foothold.",
       "tool": "mssqlclient.py",
       "tools": ["mssqlclient.py"],
@@ -78,7 +78,7 @@
     },
     {
       "id": "postgres-login",
-      "title": "PostgreSQL login",
+      "title": "PostgreSQL Login",
       "hypothesis": "PostgreSQL may accept a default or reused credential; an authenticated session enumerates databases and, on older versions, opens RCE through COPY or large-object tricks.",
       "tool": "psql",
       "tools": ["psql"],
@@ -95,7 +95,7 @@
     },
     {
       "id": "redis-enum",
-      "title": "Redis unauthenticated enumeration",
+      "title": "Redis Unauthenticated Enumeration",
       "hypothesis": "A Redis exposed on a lab or the internet frequently has no AUTH set; INFO and KEYS surface cached secrets, and a writable instance can be pushed toward RCE by writing an SSH key or a webshell.",
       "tool": "redis-cli",
       "tools": ["redis-cli"],
@@ -115,7 +115,7 @@
     },
     {
       "id": "mongo-enum",
-      "title": "MongoDB unauthenticated enumeration",
+      "title": "MongoDB Unauthenticated Enumeration",
       "hypothesis": "An exposed MongoDB with no auth lets you list databases and dump a collection, exposing application data and any stored credentials.",
       "tool": "nmap",
       "tools": ["nmap", "pymongo"],

