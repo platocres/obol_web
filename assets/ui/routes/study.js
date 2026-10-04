@@ -33,7 +33,6 @@
   var _practiceMode = 'next';    // practice gear: 'next' (what to do) | 'read' (diagnose the output)
   var _benchSel = {};            // field-notes bench: moveId -> selected technique index
   var _benchTok = null;          // field-notes bench: cancel token for the running demo animation
-  var _recapTok = null;          // "how you got here": cancel token for the lead-up sweep animation
   var _simKey = null;            // cold-box sim: active scenario key (null = pick one)
   var _simStep = 0;              // cold-box sim: current step index
   var _simState = {};            // cold-box sim: stepIdx -> { pickedId, correct } answered state
@@ -158,7 +157,7 @@
       + (rp.hasOutput ? '<button type="button" class="study-rp-btn" data-rp="skip">⏭ Skip to result</button>' : '')
       + '<button type="button" class="study-rp-btn" data-rp="restart">↺ Replay</button>'
       + (recap
-          ? '<button type="button" class="study-rp-btn study-rp-auto" data-rp="leadup">▶ Replay how I got here</button>'
+          ? ''
           : '<button type="button" class="study-rp-btn study-rp-auto' + (_autolane ? ' on' : '') + '" data-rp="autolane">' + (_autolane ? '⏹ Stop auto-play' : '⏭ Auto-play the whole path') + '</button>')
       + '<span class="study-rp-prog"></span>'
       + '</div></div>';
@@ -298,31 +297,18 @@
         + (s.teach ? '<div class="recap-cap">↳ ' + codeify(benchFill(s.teach)) + '</div>' : '')
         + '</div>';
     }).join('');
-    return '<div class="study-recap" id="study-recap">'
-      + '<div class="recap-h">How you got here</div>'
+    var open = recapOpen();
+    return '<div class="study-recap' + (open ? '' : ' collapsed') + '" id="study-recap">'
+      + '<button type="button" class="recap-h" data-recap-toggle aria-expanded="' + (open ? 'true' : 'false') + '">'
+      + '<span class="recap-chev">' + (open ? '▾' : '▸') + '</span> How you got here'
+      + '<span class="recap-hint">' + (open ? 'hide' : steps.length + ' steps that led here · show') + '</span></button>'
+      + '<div class="recap-body">'
       + '<div class="recap-steps">' + rows + '</div>'
       + '<div class="recap-here"><span class="recap-here-i">▾</span> You are here: <b>' + esc(cur.title) + '</b></div>'
-      + '</div>';
+      + '</div></div>';
   }
-  function cancelRecap() { if (_recapTok) { _recapTok.cancelled = true; _recapTok = null; } }
-  // sweep the lead-up steps one by one, then run the current move's full replay, and stop (no navigation)
-  function playLeadup(mount) {
-    cancelReplay(); cancelBench(); cancelRecap();
-    var recap = mount.querySelector('#study-recap');
-    var steps = recap ? Array.prototype.slice.call(recap.querySelectorAll('.recap-step')) : [];
-    var tok = { cancelled: false }; _recapTok = tok;
-    steps.forEach(function (s) { s.classList.remove('on', 'done'); });
-    var i = 0;
-    (function step() {
-      if (tok.cancelled) return;
-      if (i >= steps.length) { _recapTok = null; runReplay(mount, false); return; }
-      if (i > 0) steps[i - 1].classList.add('done');
-      var s = steps[i]; s.classList.add('on');
-      try { s.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
-      i++;
-      setTimeout(step, 1000);
-    })();
-  }
+  function recapOpen() { try { return localStorage.getItem('obol.study-recap') === 'open'; } catch (e) { return false; } }
+  function setRecapOpen(v) { try { localStorage.setItem('obol.study-recap', v ? 'open' : 'closed'); } catch (e) {} }
   // "How to actually do it": the field notes. When a move's techniques carry runnable demos, this is a
   // two-pane lab bench, a technique index on the left, a live terminal on the right that plays the real
   // request and response for the one you pick. Moves with text-only notes fall back to a simple list.
@@ -1059,9 +1045,9 @@
 
   function mounted(ctx) {
     var mount = ctx.mount;
-    cancelReplay(); cancelBench(); cancelRecap();
-    // "How you got here": sweep the lead-up, then run the current step, and stop
-    U.on(mount, 'click', '[data-rp="leadup"]', function () { playLeadup(mount); });
+    cancelReplay(); cancelBench();
+    // "How you got here": collapsible context, collapsed by default
+    U.on(mount, 'click', '[data-recap-toggle]', function () { setRecapOpen(!recapOpen()); OBOL.router.render(); });
     // field-notes bench: pick a technique (plays its demo), or replay the current one
     U.on(mount, 'click', '[data-bench]', function (e, t) {
       var i = +t.getAttribute('data-bench'), h = study().howTo(_sel); if (!h) return;
