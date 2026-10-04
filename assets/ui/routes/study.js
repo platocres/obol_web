@@ -31,6 +31,8 @@
   var _atlasQuery = '';          // Atlas: current search text (dims non-matching steps)
   var _whyOverride = {};         // node: moveId -> true when the learner asked to show the reasoning anyway
   var _practiceMode = 'next';    // practice gear: 'next' (what to do) | 'read' (diagnose the output)
+  var _benchSel = {};            // field-notes bench: moveId -> selected technique index
+  var _benchTok = null;          // field-notes bench: cancel token for the running demo animation
   var _simKey = null;            // cold-box sim: active scenario key (null = pick one)
   var _simStep = 0;              // cold-box sim: current step index
   var _simState = {};            // cold-box sim: stepIdx -> { pickedId, correct } answered state
@@ -229,16 +231,96 @@
     return '<div class="study-why"><div class="study-why-h">Why this, why now</div>'
       + '<p>You reach for this because ' + needs + ', and ' + turns + mattersBit + '.</p></div>';
   }
-  // "How to actually do it": the hand-written field notes, the techniques and bypasses a student needs
-  // to beat the real thing in a lab or on the exam. Only renders when a move has authored field notes.
+  // Learn shows realistic placeholders; the moment an engagement is live, the same demo fills in the
+  // operator's real target (and more), so the lesson maps straight onto the box they are stuck on.
+  function benchParams() {
+    try { var eng = OBOL.store && OBOL.store.active && OBOL.store.active(); var p = (eng && eng.params) || {}; return p; } catch (e) { return {}; }
+  }
+  function benchFill(str) {
+    var p = benchParams(), out = String(str == null ? '' : str), tgt = p.target || p.rhost;
+    if (tgt) out = out.replace(/<target>/g, tgt);
+    if (p.lhost) out = out.replace(/<lhost>/g, p.lhost);
+    if (p.domain) out = out.replace(/<domain>/g, p.domain);
+    return out;
+  }
+  function benchLive() { var p = benchParams(); return !!(p.target || p.rhost); }
+  // "How to actually do it": the field notes. When a move's techniques carry runnable demos, this is a
+  // two-pane lab bench, a technique index on the left, a live terminal on the right that plays the real
+  // request and response for the one you pick. Moves with text-only notes fall back to a simple list.
   function howPanel(cell) {
     var h = study().howTo(cell.id); if (!h) return '';
-    var items = h.items.map(function (it) {
-      return '<div class="howto-item"><div class="howto-t">' + esc(it.t) + '</div><div class="howto-d">' + codeify(it.d) + '</div></div>';
+    var hasDemos = h.items.some(function (it) { return it.demo && it.demo.length; });
+    if (!hasDemos) {
+      var items = h.items.map(function (it) {
+        return '<div class="howto-item"><div class="howto-t">' + esc(it.t) + '</div><div class="howto-d">' + codeify(it.d) + '</div></div>';
+      }).join('');
+      return '<div class="study-howto"><div class="study-howto-h">Field notes: how to actually do it</div>'
+        + (h.lead ? '<p class="howto-lead">' + codeify(h.lead) + '</p>' : '')
+        + '<div class="howto-list">' + items + '</div></div>';
+    }
+    var sel = _benchSel[cell.id] || 0; if (sel >= h.items.length) sel = 0;
+    var list = h.items.map(function (it, i) {
+      return '<button type="button" class="bench-item' + (i === sel ? ' on' : '') + '" data-bench="' + i + '">'
+        + '<span class="bench-num">' + (i + 1) + '</span><span class="bench-it-t">' + esc(it.t) + '</span></button>';
     }).join('');
-    return '<div class="study-howto"><div class="study-howto-h">Field notes: how to actually do it</div>'
+    var live = benchLive();
+    var badge = live
+      ? '<span class="bench-live">● filled from your engagement</span>'
+      : '<span class="bench-live off">example values, these fill in once you start an engagement</span>';
+    return '<div class="study-howto study-bench">'
+      + '<div class="study-howto-h">Field notes: how to actually do it' + badge + '</div>'
       + (h.lead ? '<p class="howto-lead">' + codeify(h.lead) + '</p>' : '')
-      + '<div class="howto-list">' + items + '</div></div>';
+      + '<div class="bench"><div class="bench-list">' + list + '</div>'
+      + '<div class="bench-main" id="bench-main">' + benchMain(h.items, sel) + '</div></div></div>';
+  }
+  function benchMain(items, i) {
+    var it = items[i]; if (!it) return '';
+    return '<div class="bench-tech"><div class="bench-t">' + esc(it.t) + '</div><div class="bench-d">' + codeify(it.d) + '</div></div>'
+      + '<div class="bench-term" id="bench-term">' + benchTermStatic(it.demo) + '</div>'
+      + '<div class="bench-ctrl"><button type="button" class="study-rp-btn primary" data-bench-play>▶ Play</button>'
+      + '<button type="button" class="study-rp-btn" data-bench-replay>↺ Replay</button></div>'
+      + (it.note ? '<div class="bench-note"><span class="bench-note-i">↳</span> ' + codeify(it.note) + '</div>' : '');
+  }
+  function benchTermStatic(demo) {
+    return (demo || []).map(function (s) {
+      var sig = benchFill(s.sig || '');
+      var out = benchFill(s.out).split('\n').map(function (ln) {
+        var hot = sig && ln.indexOf(sig) >= 0;
+        return '<span class="bench-ln' + (hot ? ' hot' : '') + '">' + esc(ln || ' ') + '</span>';
+      }).join('');
+      return '<span class="bench-ln bench-cmd">kali$ ' + esc(benchFill(s.run)) + '</span>' + out;
+    }).join('');
+  }
+  function cancelBench() { if (_benchTok) { _benchTok.cancelled = true; _benchTok = null; } }
+  // animate the selected technique's demo: type each command, stream its output, light the signal line
+  function playBenchTerm(mount, demo) {
+    cancelBench();
+    var term = mount.querySelector('#bench-term'); if (!term) return;
+    var tok = { cancelled: false }; _benchTok = tok;
+    term.innerHTML = '';
+    var steps = (demo || []).map(function (s) { return { cmd: benchFill(s.run), out: benchFill(s.out), sig: benchFill(s.sig || '') }; });
+    var si = 0;
+    function nextStep() {
+      if (tok.cancelled || si >= steps.length) return;
+      var s = steps[si], cmdEl = document.createElement('span');
+      cmdEl.className = 'bench-ln bench-cmd'; term.appendChild(cmdEl);
+      var ci = 0;
+      (function type() {
+        if (tok.cancelled) return;
+        if (ci <= s.cmd.length) { cmdEl.textContent = 'kali$ ' + s.cmd.slice(0, ci); ci++; setTimeout(type, 11); return; }
+        var lines = s.out.split('\n'), li = 0;
+        (function emit() {
+          if (tok.cancelled) return;
+          if (li < lines.length) {
+            var el = document.createElement('span'), hot = s.sig && lines[li].indexOf(s.sig) >= 0;
+            el.className = 'bench-ln' + (hot ? ' hot' : ''); el.textContent = lines[li] || ' '; term.appendChild(el);
+            term.scrollTop = term.scrollHeight; li++; setTimeout(emit, 80); return;
+          }
+          si++; setTimeout(nextStep, 300);
+        })();
+      })();
+    }
+    nextStep();
   }
   // reading the result: what the highlighted signal line actually tells you
   function signalTellBlock(cell) {
@@ -885,7 +967,18 @@
 
   function mounted(ctx) {
     var mount = ctx.mount;
-    cancelReplay();
+    cancelReplay(); cancelBench();
+    // field-notes bench: pick a technique (plays its demo), or replay the current one
+    U.on(mount, 'click', '[data-bench]', function (e, t) {
+      var i = +t.getAttribute('data-bench'), h = study().howTo(_sel); if (!h) return;
+      _benchSel[_sel] = i;
+      Array.prototype.forEach.call(mount.querySelectorAll('.bench-item'), function (b) { b.classList.toggle('on', +b.getAttribute('data-bench') === i); });
+      var main = mount.querySelector('#bench-main'); if (main) { main.innerHTML = benchMain(h.items, i); playBenchTerm(mount, h.items[i].demo); }
+    });
+    U.on(mount, 'click', '[data-bench-play], [data-bench-replay]', function () {
+      var h = study().howTo(_sel); if (!h) return; var i = _benchSel[_sel] || 0;
+      playBenchTerm(mount, (h.items[i] || {}).demo);
+    });
     // map/graph: open a lane/step → node view (remember where we came from)
     U.on(mount, 'click', '[data-open]', function (e, t) { _from = (_view === 'atlas' ? 'atlas' : (_view === 'ports' ? 'ports' : 'map')); _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-back]', function () { _view = _from; OBOL.router.render(); });
