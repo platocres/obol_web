@@ -131,6 +131,12 @@
     'crack-asrep-offline': 'Hash Cracking', 'crack-shadow': 'Hash Cracking', 'crack-mscache2': 'Hash Cracking', 'crack-archive': 'Hash Cracking',
     'online-brute-ssh': 'Online Brute-Force', 'online-brute-ftp': 'Online Brute-Force', 'online-brute-rdp': 'Online Brute-Force',
     'responder-poison': 'Poisoning & Relay', 'ntlm-relay-attack': 'Poisoning & Relay', 'mitm6-ipv6-takeover': 'Poisoning & Relay',
+    // linux lane
+    'linux-enum': 'Enumeration', 'pspy-monitor': 'Enumeration', 'linux-loot-hunt': 'Enumeration',
+    'sudo-abuse': 'Sudo, SUID & Capabilities', 'suid-gtfobins': 'Sudo, SUID & Capabilities', 'capabilities': 'Sudo, SUID & Capabilities',
+    'cron-abuse': 'Cron & Writable Files', 'writable-passwd': 'Cron & Writable Files', 'nfs-squash': 'Cron & Writable Files',
+    'lxc-lxd-escape': 'Container Escape', 'docker-socket': 'Container Escape',
+    'linux-persistence': 'Persistence',
   };
   var CATEGORY_ORDER = [
     // web
@@ -140,6 +146,8 @@
     'Port Scanning', 'SMB, RDP & Web', 'DNS, SNMP & VPN', 'Mail Services', 'File Shares', 'Legacy & Remote Access',
     // creds
     'Hash Cracking', 'Online Brute-Force', 'Poisoning & Relay',
+    // linux
+    'Enumeration', 'Sudo, SUID & Capabilities', 'Cron & Writable Files', 'Container Escape', 'Persistence',
   ];
   function categoryOf(moveId) { var m = byId(moveId); return MOVE_CATEGORY[moveId] || deriveStage(m || {}); }
 
