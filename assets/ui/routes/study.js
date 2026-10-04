@@ -31,6 +31,7 @@
   var _atlasQuery = '';          // Atlas: current search text (dims non-matching steps)
   var _whyOverride = {};         // node: moveId -> true when the learner asked to show the reasoning anyway
   var _practiceMode = 'next';    // practice gear: 'next' (what to do) | 'read' (diagnose the output)
+  var _recapPath = {};           // "how you got here": moveId -> selected lead-up path key
   var _benchSel = {};            // field-notes bench: moveId -> selected technique index
   var _benchTok = null;          // field-notes bench: cancel token for the running demo animation
   var _simKey = null;            // cold-box sim: active scenario key (null = pick one)
@@ -273,10 +274,22 @@
   // Composed from an authored recon lead-up (fills the gap back to the scan) plus the causal
   // ancestors the fact graph derives. Each prior step is condensed to its command + the one output
   // line that unlocked the next move. The current move stays below, full and highlighted.
+  var RECAP_COLORS = ['#4FC3F7', '#B088FF', '#FF9E5E', '#4DD6C1', '#FF8FB8'];  // cyan, violet, amber, teal, pink
+  // normalize an authored lead-up into one or more named paths (a plausible route each)
+  function leadupPaths(moveId) {
+    var raw = study().leadupFor(moveId); if (!raw) return [];
+    if (raw[0] && raw[0].steps) return raw;                       // already a set of named paths
+    return [{ key: 'default', label: '', steps: raw }];           // a single unnamed path
+  }
+  function chosenPath(moveId) {
+    var paths = leadupPaths(moveId); if (!paths.length) return null;
+    var sel = _recapPath[moveId];
+    return paths.filter(function (p) { return p.key === sel; })[0] || paths[0];
+  }
   function recapSteps(moveId) {
     var out = [];
-    var lead = study().leadupFor(moveId);
-    if (lead) lead.forEach(function (s) {
+    var cp = chosenPath(moveId);
+    if (cp) cp.steps.forEach(function (s) {
       out.push({ title: s.title || (s.tool || 'Recon'), where: s.where || 'local', cmd: s.cmd || '', sig: s.sig || '', teach: s.teach || '' });
     });
     (study().pathTo(moveId) || []).slice(0, -1).forEach(function (id) {
@@ -292,15 +305,25 @@
     if (!study().leadupFor(_sel)) return '';
     var steps = recapSteps(_sel); if (!steps.length) return '';
     var cur = study().cellFor(_sel);
+    var paths = leadupPaths(_sel), cp = chosenPath(_sel);
     var rows = steps.map(function (s, i) {
       return '<div class="recap-step" data-recap="' + i + '">'
         + '<div class="recap-top"><span class="recap-n">' + (i + 1) + '</span><span class="recap-title">' + esc(s.title) + '</span>'
-        + '<span class="recap-where">' + (s.where === 'host' ? 'on the target' : 'your box') + '</span></div>'
+        + '<span class="recap-where">' + (s.where === 'host' ? 'On the Target' : 'Your Box') + '</span></div>'
         + '<div class="recap-cmd"><span class="recap-prompt' + (s.where === 'host' ? ' host' : '') + '">' + (s.where === 'host' ? 'target$' : 'kali$') + '</span> ' + esc(benchFill(s.cmd)) + '</div>'
         + (s.sig ? '<div class="recap-sig">' + esc(benchFill(s.sig)) + '</div>' : '')
         + (s.teach ? '<div class="recap-cap">↳ ' + codeify(benchFill(s.teach)) + '</div>' : '')
         + '</div>';
     }).join('');
+    var toggles = paths.length > 1
+      ? '<div class="recap-paths" role="tablist">' + paths.map(function (p, i) {
+          var col = RECAP_COLORS[i % RECAP_COLORS.length];
+          return '<button type="button" class="recap-path' + (p.key === cp.key ? ' on' : '') + '" data-recap-path="' + U.attr(p.key) + '" style="--rpc:' + col + '">' + esc(p.label) + '</button>';
+        }).join('') + '</div>'
+      : '';
+    var note = '<div class="recap-note">' + (paths.length > 1
+      ? 'One plausible route to here, of several. Real engagements vary, so switch routes to see other ways in.'
+      : 'One plausible route to here. Real engagements vary; this is an example, not the only way in.') + '</div>';
     var open = recapOpen();
     return '<div class="study-recap' + (open ? '' : ' collapsed') + '" id="study-recap">'
       + '<button type="button" class="recap-h" data-recap-toggle aria-expanded="' + (open ? 'true' : 'false') + '">'
@@ -310,6 +333,7 @@
       + '<span class="recap-showbtn">' + (open ? 'Hide ▴' : 'Show ▾') + '</span>'
       + '</button>'
       + '<div class="recap-body">'
+      + note + toggles
       + '<div class="recap-steps">' + rows + '</div>'
       + '<div class="recap-here"><span class="recap-here-i">▾</span> You are here: <b>' + esc(cur.title) + '</b></div>'
       + '</div></div>';
@@ -1055,6 +1079,8 @@
     cancelReplay(); cancelBench();
     // "How you got here": collapsible context, collapsed by default
     U.on(mount, 'click', '[data-recap-toggle]', function () { setRecapOpen(!recapOpen()); OBOL.router.render(); });
+    // switch which plausible lead-up route is shown
+    U.on(mount, 'click', '[data-recap-path]', function (e, t) { _recapPath[_sel] = t.getAttribute('data-recap-path'); OBOL.router.render(); });
     // field-notes bench: pick a technique (plays its demo), or replay the current one
     U.on(mount, 'click', '[data-bench]', function (e, t) {
       var i = +t.getAttribute('data-bench'), h = study().howTo(_sel); if (!h) return;

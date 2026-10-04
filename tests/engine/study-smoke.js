@@ -196,7 +196,8 @@ ok(Array.isArray(ptFU) && ptFU[ptFU.length - 1] === 'file-upload', 'pathTo ends 
 const ptCrack = S.pathTo('crack-asrep');
 ok(ptCrack.indexOf('asrep-roast') >= 0 && ptCrack.indexOf('asrep-roast') < ptCrack.indexOf('crack-asrep'), 'pathTo derives a causal ancestor before the move that needs it');
 const lead = S.leadupFor('file-upload');
-ok(lead && lead.length === 2 && /nmap/.test(lead[0].cmd) && lead[0].sig, 'leadupFor returns the authored recon lead-up (nmap first, with a signal line)');
+ok(lead && lead.length >= 2 && lead.every(function (p) { return p.key && p.steps && p.steps.length; }), 'leadupFor returns multiple authored lead-up routes, each with steps');
+ok(/nmap/.test(lead[0].steps[0].cmd) && lead[0].steps[0].sig, 'the first route opens with an nmap scan carrying a signal line');
 ok(S.leadupFor('crack-asrep') === null, 'a move with no authored lead-up returns null (no half-baked gap-fill)');
 
 // --- mastery (per-browser progress) ----------------------------------------------------------
