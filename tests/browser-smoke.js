@@ -857,6 +857,15 @@ function serve() {
   await page.locator('[data-rp="skip"]').click();
   await page.waitForTimeout(200);
   ok((await page.locator('.study-replay .rp-line.hot').count()) >= 1, 'the Watch replay highlights the signal line in the output');
+  // multi-step replay: a two-sided tool (ligolo) shows per-locus headers in order (on your box / on the target)
+  await page.goto(`http://localhost:${PORT}/index.html#/study/pivot-ligolo`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-replay', { timeout: 6000 }).catch(() => {});
+  await page.locator('[data-rp="skip"]').click();
+  await page.waitForTimeout(250);
+  ok((await page.locator('.rp-step-h').count()) >= 3, 'a multi-step tool replays each setup step with its own locus header');
+  ok((await page.locator('.rp-step-h.rp-local').count()) >= 1 && (await page.locator('.rp-step-h.rp-host').count()) >= 1, 'the multi-step replay labels both "on your box" and "on the target" steps');
+  await page.goto(`http://localhost:${PORT}/index.html#/study/asrep-roast`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-cols', { timeout: 6000 }).catch(() => {});
   await page.locator('[data-gear="practice"]').click();
   await page.waitForTimeout(150);
   await page.locator('.study-choice[data-verdict="correct"]').first().click();

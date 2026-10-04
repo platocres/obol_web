@@ -1,13 +1,15 @@
 /*!
  * obol engine — study.js
  * Study mode's engine half. Pure functions over the loaded packs (OBOL.packs.actions()) + ARSENAL +
- * the embedded sample-output map (OBOL.STUDY_FIXTURES, with auto-bootstrapped OBOL.STUDY_FIXTURES_AUTO).
+ * the embedded sample-output map (OBOL.STUDY_FIXTURES).
  *
  * The conditional "study cell" is DERIVED, not hand-authored: every field maps to data the move
  * already carries — hypothesis / requires_* / produces / does_not_prove / commands[].note / refs —
  * plus two graph walks (what mints my prereqs, what my output opens). The one non-pack piece is the
  * sample output; a move with no fixture still produces a full cell (the Watch replay just shows no
- * streamed output yet).
+ * streamed output yet). Each fixture pins the exact command its output came from (cmd/tool), so the
+ * Watch replay always types the command that produced the result shown — command and output are one
+ * coherent run, never a sample paired against a different command.
  *
  * Lanes are the methodology taxonomy: every move is auto-assigned to a lane from its source pack and
  * topologically ordered within it, so all 167 moves are navigable. Scenarios are curated cross-lane
@@ -35,7 +37,7 @@
 
   function allMoves() { try { return (OBOL.packs && OBOL.packs.actions()) || []; } catch (e) { return []; } }
   function arsenal() { return OBOL.ARSENAL || {}; }
-  function fixtures() { return OBOL._studyFx || (OBOL._studyFx = Object.assign({}, OBOL.STUDY_FIXTURES_AUTO || {}, OBOL.STUDY_FIXTURES || {})); }
+  function fixtures() { return OBOL._studyFx || (OBOL._studyFx = Object.assign({}, OBOL.STUDY_FIXTURES || {})); }
   function byId(id) { var a = allMoves(); for (var i = 0; i < a.length; i++) if (a[i].id === id) return a[i]; return null; }
   function reqSet(m) { return [].concat(m.requires_all || [], m.requires_any || []); }
 
@@ -170,7 +172,12 @@
       prereqFacts: reqs,
       producedBy: producersOf(reqs).filter(function (x) { return x.id !== m.id; }).map(function (x) { return { id: x.id, title: x.title }; }),
       commands: commands,
-      output: (fx && fx.output) ? { text: fx.output || '', signal: fx.signal || '', teach: fx.teach || '' } : null,
+      // A fixture pins the exact command its sample output came from (fx.cmd / fx.tool), so the Watch
+      // replay types that command above its real result — command and output are one coherent run, never
+      // a guess paired against the ranker. A multi-step fixture (fx.steps) models a tool that is set up
+      // on BOTH your box and the target: each step carries its own `where` (local / host), command and
+      // output, played in the real order. Single fixtures fall back to the move's remote-first command.
+      output: buildFixtureOutput(fx),
       proves: prod,
       opens: opensNext(m).map(function (x) { return { id: x.id, title: x.title }; }),
       rulesOut: Array.isArray(m.does_not_prove) ? m.does_not_prove.join(' ; ') : (m.does_not_prove || ''),
@@ -178,18 +185,46 @@
     };
   }
 
+  // Normalise a fixture's sample into a cell.output shape. A `steps` fixture keeps its ordered,
+  // per-locus steps; a single fixture becomes a one-step sample. `text` is the concatenation used by
+  // the static reference block; the Watch replay walks `steps`.
+  function buildFixtureOutput(fx) {
+    if (!fx) return null;
+    if (fx.steps && fx.steps.length) {
+      var text = fx.steps.map(function (s) { return s.output || ''; }).join('\n');
+      return { text: text, signal: fx.signal || '', teach: fx.teach || '', cmd: fx.steps[0].cmd || '', tool: fx.steps[0].tool || '', steps: fx.steps };
+    }
+    if (fx.output) return { text: fx.output, signal: fx.signal || '', teach: fx.teach || '', cmd: fx.cmd || '', tool: fx.tool || '', steps: null };
+    return null;
+  }
+
   function stripPrompt(s) { return String(s || '').replace(/^\s*(kali\$|root@[^\s#]*[#$]|C:\\[^>]*>|[#$])\s*/, '').trim(); }
   function replayFor(moveId) {
     var cell = cellFor(moveId); if (!cell) return null;
-    var primary = cell.commands[0] || null, cmd = primary ? primary.run : '';
-    var lines = cell.output ? cell.output.text.split('\n') : [];
-    if (lines.length && cmd && stripPrompt(lines[0]) === stripPrompt(cmd)) lines = lines.slice(1);
+    var primary = cell.commands[0] || null, out = cell.output;
+    var steps = [];
+    if (out && out.steps) {
+      steps = out.steps.map(function (s) {
+        var lines = String(s.output || '').split('\n');
+        var cmd = s.cmd || '';
+        if (lines.length && cmd && stripPrompt(lines[0]) === stripPrompt(cmd)) lines = lines.slice(1);
+        return { where: s.where === 'host' ? 'host' : 'local', tool: s.tool || '', command: cmd, outputLines: lines, note: s.note || '' };
+      });
+    } else if (out) {
+      var pcmd = out.cmd || (primary ? primary.run : '');
+      var lines2 = out.text.split('\n');
+      if (lines2.length && pcmd && stripPrompt(lines2[0]) === stripPrompt(pcmd)) lines2 = lines2.slice(1);
+      var where = (primary && primary.locus === 'ON-TARGET') ? 'host' : 'local';
+      steps = [{ where: where, tool: out.tool || (primary ? primary.tool : ''), command: pcmd, outputLines: lines2, note: primary ? primary.note : '' }];
+    }
+    var first = steps[0] || {};
     return {
       id: cell.id, title: cell.title, phase: cell.phase, laneKey: cell.laneKey,
-      tool: primary ? primary.tool : '', locus: primary ? primary.locus : '', tag: primary ? primary.tag : '',
-      command: cmd, note: primary ? primary.note : '',
-      outputLines: lines, hasOutput: !!(cell.output && cell.output.text),
-      signal: cell.output ? cell.output.signal : '', teach: cell.output ? cell.output.teach : '',
+      tool: first.tool || '', locus: primary ? primary.locus : '', tag: primary ? primary.tag : '',
+      command: first.command || '', note: first.note || '',
+      steps: steps, multi: steps.length > 1,
+      outputLines: first.outputLines || [], hasOutput: !!(out && out.text),
+      signal: out ? out.signal : '', teach: out ? out.teach : '',
       proves: cell.proves, opens: (cell.opens[0] || {}).title || '', next: laneNext(moveId),
     };
   }

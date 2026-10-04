@@ -1906,6 +1906,13 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .study-graph { max-height: 64vh; overflow-y: auto; padding-right: 2px; }
 .rp-nosample { color: var(--muted); font-size: 11.5px; display: block; margin-top: 5px; }
 .rp-nosample-line { color: var(--muted); font-style: italic; opacity: .8; padding: 4px 0; white-space: normal; }
+/* multi-step replay: a locus header before each step (tunnels set up on both your box + the target) */
+.rp-step-h { font-family: var(--mono); font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; margin: 12px 0 5px; padding: 3px 9px; border-radius: 6px; display: inline-block; }
+.rp-step-h:first-child { margin-top: 2px; }
+.rp-step-h.rp-local { color: var(--accent-2); background: var(--accent-soft); border: 1px solid var(--g-proven-line); }
+.rp-step-h.rp-host  { color: #F7C948; background: color-mix(in srgb, #F7C948 13%, transparent); border: 1px solid color-mix(in srgb, #F7C948 40%, var(--line)); }
+.rp-where-glyph { margin-right: 4px; }
+.rp-prompt.host { color: #F7C948; }
 
 /* --- Study: Atlas density (bands, search, minimap, mastery) --- */
 .atlas-search { font-family: var(--mono); font-size: 12px; background: var(--surf2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; width: 150px; transition: border-color .14s, width .18s; }

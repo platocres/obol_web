@@ -343,7 +343,17 @@
   }
 
   // ---- replay controller ----------------------------------------------------------------------
+  // The replay walks rp.steps in order. A multi-step fixture (a tunnel set up on both your box and the
+  // target) gets a "on your box (Kali)" / "on the target" header before each step's prompt, so the
+  // learner always sees WHERE each command runs and in what order. The prompt itself (kali$ / target$)
+  // also reflects the locus.
   function cancelReplay() { if (_rpToken) { _rpToken.cancelled = true; _rpToken = null; } }
+  function stepHeader(where) {
+    return where === 'host'
+      ? '<div class="rp-step-h rp-host"><span class="rp-where-glyph">🎯</span> on the target — the compromised host</div>'
+      : '<div class="rp-step-h rp-local"><span class="rp-where-glyph">🖥</span> on your box (Kali)</div>';
+  }
+  function promptFor(where) { return where === 'host' ? 'target$' : 'kali$'; }
   function runReplay(mount, instant) {
     cancelReplay();
     var player = mount.querySelector('.study-replay'); if (!player) return;
@@ -354,38 +364,60 @@
     term.innerHTML = ''; if (facts) facts.innerHTML = '';
     var seq = (_pathMode && _path.length) ? _path.slice() : study().lane(laneKeyOf(rp.id)).map(function (x) { return x.id; });
     var idx = seq.indexOf(rp.id);
-    if (prog) prog.textContent = 'step ' + (idx + 1) + ' / ' + seq.length;
+    if (prog) prog.textContent = 'move ' + (idx + 1) + ' / ' + seq.length + (rp.multi ? ' · ' + rp.steps.length + ' setup steps' : '');
+    var steps = rp.steps && rp.steps.length ? rp.steps : [{ where: 'local', command: rp.command, outputLines: rp.outputLines }];
+    var multi = steps.length > 1;
     function popFacts(delay) {
-      study().markStudied(rp.id, 'studied');   // watching a step through counts as having studied it
+      study().markStudied(rp.id, 'studied');   // watching a move through counts as having studied it
       (rp.proves || []).forEach(function (f, k) { setTimeout(function () { if (token.cancelled || !facts) return; var c = document.createElement('span'); c.className = 'study-chip proof rp-pop'; c.textContent = '+ ' + human(f); facts.appendChild(c); }, delay + k * 260); });
       var nextId = rp.next;
       if (_pathMode && _path.length) { var pi = _path.indexOf(rp.id); nextId = (pi >= 0 && pi < _path.length - 1) ? _path[pi + 1] : null; }
       if (_autolane && nextId) setTimeout(function () { if (token.cancelled) return; _sel = nextId; _autoplay = true; OBOL.router.render(); }, delay + (rp.proves.length * 260) + 1400);
     }
+    function lineHtml(ln) {
+      var hot = rp.signal && ln.indexOf(rp.signal) >= 0;
+      return '<div class="rp-line rp-out' + (hot ? ' hot' : '') + '">' + esc(ln || ' ') + '</div>'
+        + (hot && rp.teach ? '<div class="rp-cap">← ' + codeify(rp.teach) + '</div>' : '');
+    }
     if (instant) {
-      var html = '<div class="rp-line rp-cmd"><span class="rp-prompt">kali$</span> ' + esc(rp.command) + '</div>'
-        + rp.outputLines.map(function (ln) { var hot = rp.signal && ln.indexOf(rp.signal) >= 0; return '<div class="rp-line rp-out' + (hot ? ' hot' : '') + '">' + esc(ln || ' ') + '</div>' + (hot && rp.teach ? '<div class="rp-cap">← ' + codeify(rp.teach) + '</div>' : ''); }).join('');
+      var html = steps.map(function (s) {
+        var head = multi ? stepHeader(s.where) : '';
+        var cmdLine = '<div class="rp-line rp-cmd"><span class="rp-prompt' + (s.where === 'host' ? ' host' : '') + '">' + promptFor(s.where) + '</span> ' + esc(s.command) + '</div>';
+        return head + cmdLine + (s.outputLines || []).map(lineHtml).join('');
+      }).join('');
       term.innerHTML = html; term.scrollTop = term.scrollHeight; popFacts(200); return;
     }
-    var promptLine = document.createElement('div'); promptLine.className = 'rp-line rp-cmd';
-    promptLine.innerHTML = '<span class="rp-prompt">kali$</span> <span class="rp-typed"></span><span class="rp-cursor">▋</span>';
-    term.appendChild(promptLine);
-    var typed = promptLine.querySelector('.rp-typed'), cmd = rp.command, ci = 0;
-    (function typeCmd() {
+    // animated: type each step's command, stream its output, then move to the next step
+    var si = 0;
+    (function nextStep() {
       if (token.cancelled) return;
-      if (ci <= cmd.length) { typed.textContent = cmd.slice(0, ci); ci++; setTimeout(typeCmd, 16); return; }
-      var cur = promptLine.querySelector('.rp-cursor'); if (cur) cur.remove();
-      if (!rp.outputLines.length) { var ns = document.createElement('div'); ns.className = 'rp-line rp-nosample-line'; ns.textContent = '· sample output for this step is still being captured — but you can see the command above and what it proves below ·'; term.appendChild(ns); popFacts(500); return; }
-      var i = 0;
-      (function nextLine() {
+      if (si >= steps.length) { popFacts(300); return; }
+      var s = steps[si];
+      if (multi) { var h = document.createElement('div'); h.innerHTML = stepHeader(s.where); term.appendChild(h.firstChild); term.scrollTop = term.scrollHeight; }
+      var promptLine = document.createElement('div'); promptLine.className = 'rp-line rp-cmd';
+      promptLine.innerHTML = '<span class="rp-prompt' + (s.where === 'host' ? ' host' : '') + '">' + promptFor(s.where) + '</span> <span class="rp-typed"></span><span class="rp-cursor">▋</span>';
+      term.appendChild(promptLine); term.scrollTop = term.scrollHeight;
+      var typed = promptLine.querySelector('.rp-typed'), cmd = s.command || '', ci = 0;
+      (function typeCmd() {
         if (token.cancelled) return;
-        if (i >= rp.outputLines.length) { popFacts(300); return; }
-        var ln = rp.outputLines[i], el = document.createElement('div');
-        var hot = rp.signal && ln.indexOf(rp.signal) >= 0;
-        el.className = 'rp-line rp-out' + (hot ? ' hot' : ''); el.textContent = ln || ' ';
-        term.appendChild(el); term.scrollTop = term.scrollHeight;
-        if (hot && rp.teach) { var cap = document.createElement('div'); cap.className = 'rp-cap'; cap.innerHTML = '← ' + codeify(rp.teach); term.appendChild(cap); term.scrollTop = term.scrollHeight; }
-        i++; setTimeout(nextLine, hot ? 1100 : 230);
+        if (ci <= cmd.length) { typed.textContent = cmd.slice(0, ci); ci++; setTimeout(typeCmd, 14); return; }
+        var cur = promptLine.querySelector('.rp-cursor'); if (cur) cur.remove();
+        var lines = s.outputLines || [];
+        if (!lines.length) {
+          if (si === steps.length - 1 && !rp.hasOutput) { var ns = document.createElement('div'); ns.className = 'rp-line rp-nosample-line'; ns.textContent = '· sample output for this step is still being captured — but you can see the command above and what it proves below ·'; term.appendChild(ns); }
+          si++; setTimeout(nextStep, 500); return;
+        }
+        var i = 0;
+        (function nextLine() {
+          if (token.cancelled) return;
+          if (i >= lines.length) { si++; setTimeout(nextStep, multi ? 650 : 300); return; }
+          var ln = lines[i], el = document.createElement('div');
+          var hot = rp.signal && ln.indexOf(rp.signal) >= 0;
+          el.className = 'rp-line rp-out' + (hot ? ' hot' : ''); el.textContent = ln || ' ';
+          term.appendChild(el); term.scrollTop = term.scrollHeight;
+          if (hot && rp.teach) { var cap = document.createElement('div'); cap.className = 'rp-cap'; cap.innerHTML = '← ' + codeify(rp.teach); term.appendChild(cap); term.scrollTop = term.scrollHeight; }
+          i++; setTimeout(nextLine, hot ? 1100 : 220);
+        })();
       })();
     })();
   }

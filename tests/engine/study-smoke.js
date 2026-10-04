@@ -22,8 +22,7 @@ const A = PK.loadPacks(Object.keys(bundle).map((k) => bundle[k]));
 OBOL.packs = { actions: () => A, packData: () => bundle };
 globalThis.globalThis = globalThis;
 require('../../data/tools-install.js');          // OBOL.ARSENAL
-require('../../data/study-fixtures-auto.js');    // OBOL.STUDY_FIXTURES_AUTO (bootstrapped)
-require('../../data/study-fixtures.js');         // OBOL.STUDY_FIXTURES (hand-written, wins)
+require('../../data/study-fixtures.js');         // OBOL.STUDY_FIXTURES (hand-written, coherence-vetted)
 require('../../assets/engine/study.js');         // OBOL.study
 const S = OBOL.study;
 
@@ -48,7 +47,7 @@ ok(c && c.whatItIs && c.whatItIs.length > 20, 'cell.whatItIs comes from move.hyp
 ok(c.prereqFacts.indexOf('ad.user_list') >= 0, 'cell prereqs include ad.user_list');
 ok(c.producedBy.some((p) => /LDAP/i.test(p.title)), 'cell.producedBy names the upstream LDAP enum move');
 ok(c.commands.length >= 3, 'cell has multiple command variants');
-ok(c.output && c.output.signal === '$krb5asrep$23$', 'cell.output + signal come from STUDY_FIXTURES');
+ok(c.output && c.output.signal.indexOf('$krb5asrep$23$') === 0, 'cell.output + signal come from STUDY_FIXTURES');
 ok(c.proves.indexOf('hash.asrep') >= 0, 'cell.proves includes hash.asrep (from produces)');
 ok(c.opens.some((o) => o.id === 'crack-asrep'), 'cell.opens includes Crack AS-REP (graph edge)');
 ok(c.rulesOut && /candidate/i.test(c.rulesOut), 'cell.rulesOut comes from does_not_prove');
@@ -106,6 +105,46 @@ const rs = S.replayFor('sudo-abuse');
 ok(rs.command === 'sudo -l', 'replay primary command is sudo -l');
 ok(!/^\s*\$?\s*sudo -l\s*$/.test(rs.outputLines[0] || ''), 'replay output does not re-echo the played command');
 ok(typeof rs.hasOutput === 'boolean', 'replay reports hasOutput for graceful no-sample rendering');
+
+// --- command ↔ output COHERENCE (the contract: the replay types the command that made the sample) ---
+// Every fixture must pin the command its output came from, the signal must really be in the output,
+// and the output must be pure tool result — never a re-typed `$ command` echo that fights the command
+// the replay types above it. This is what stops a move from showing one tool's command over another
+// tool's output (e.g. an `nxc ldap` command over an nmap port-scan).
+const FX = OBOL.STUDY_FIXTURES || {};
+const echoLine = (ln) => /^\s*\$\s+\S/.test(ln) || /^\s*kali\$\s/.test(ln) || /^\s*target\$\s/.test(ln);
+let incoherent = 0;
+Object.keys(FX).forEach((id) => {
+  const f = FX[id];
+  const move = S.cellFor(id);
+  if (!move) { console.error('    fixture for unknown move:', id); incoherent++; return; }
+  if (f.steps) {
+    // multi-step fixture: each step pins a command + output, carries a valid locus, and no echo lines
+    if (!Array.isArray(f.steps) || f.steps.length < 2) { console.error('    steps fixture needs >=2 steps:', id); incoherent++; }
+    let all = '';
+    (f.steps || []).forEach((s, i) => {
+      if (!s.cmd || !s.cmd.trim()) { console.error('    step ' + i + ' missing cmd:', id); incoherent++; }
+      if (s.where !== 'local' && s.where !== 'host') { console.error('    step ' + i + ' bad where:', id); incoherent++; }
+      const so = String(s.output || '');
+      if (so.split('\n').some(echoLine)) { console.error('    step ' + i + ' re-types a command:', id); incoherent++; }
+      all += so + '\n';
+    });
+    if (!f.signal || all.indexOf(f.signal) < 0) { console.error('    signal not in any step output:', id); incoherent++; }
+    const rp = S.replayFor(id);
+    if (rp && (!rp.multi || rp.steps.length !== f.steps.length)) { console.error('    replay did not expand steps:', id); incoherent++; }
+    return;
+  }
+  if (!f.cmd || typeof f.cmd !== 'string' || !f.cmd.trim()) { console.error('    fixture missing pinned cmd:', id); incoherent++; }
+  if (!f.output || !f.signal) { console.error('    fixture missing output/signal:', id); incoherent++; return; }
+  if (f.output.indexOf(f.signal) < 0) { console.error('    signal not in output:', id); incoherent++; }
+  // no embedded bash-command echo lines (they duplicate / contradict the one typed command)
+  const bad = f.output.split('\n').filter(echoLine);
+  if (bad.length) { console.error('    output re-types a command (' + id + '):', JSON.stringify(bad[0])); incoherent++; }
+  // the replay must surface the pinned command, not the pack default
+  const rp = S.replayFor(id);
+  if (rp && rp.command !== f.cmd) { console.error('    replay command != pinned cmd:', id); incoherent++; }
+});
+ok(incoherent === 0, 'all ' + Object.keys(FX).length + ' fixtures: coherent command↔output (pinned cmd, signal present, no re-typed echoes, multi-step locus-labelled)');
 
 // --- path validation (locked-door detection across a drawn path) -----------------------------
 const good = S.validatePath(['ad-anon-ldap-enum', 'asrep-roast', 'crack-asrep']);
