@@ -1505,5 +1505,189 @@
       teach: 'Through a SOCKS proxy you must use TCP connect scans (`-sT`) and skip host discovery (`-Pn`) — SYN scans and ping do not survive a proxy. Scanning the internal host over your pivot is how enumeration starts all over again, one network deeper.',
     },
 
+    // ==================== RECON (remaining services) ====================
+    'nmap-vuln-scripts': {
+      output: [
+        'PORT   STATE SERVICE',
+        '80/tcp open  http',
+        '| http-vuln-cve2017-5638:',
+        '|   VULNERABLE: Apache Struts2 RCE (S2-045)',
+        '|_    References: https://nvd.nist.gov/vuln/detail/CVE-2017-5638',
+      ].join('\n'),
+      signal: '|   VULNERABLE: Apache Struts2 RCE (S2-045)',
+      teach: 'Nmap\'s `--script vuln` runs safe-ish checks that flag known CVEs on the open ports. Treat a VULNERABLE line as a strong lead to verify, not a guaranteed win — scripts can false-positive, so confirm before you commit.',
+    },
+    'recon-ike-vpn': {
+      output: [
+        '$ sudo ike-scan -M 10.10.10.10',
+        '10.10.10.10  Main Mode Handshake returned',
+        '  Encryption: 3DES  Hash: SHA1  Auth: PSK  Group: 2',
+        '  Aggressive Mode supported — PSK hash obtainable',
+      ].join('\n'),
+      signal: '  Aggressive Mode supported — PSK hash obtainable',
+      teach: 'An IKE/IPsec VPN on UDP 500 that allows Aggressive Mode will hand back a pre-shared-key hash you can crack offline. A dated 3DES/SHA1/PSK config is both a finding and a potential route into the VPN.',
+    },
+    'recon-finger': {
+      output: [
+        '$ finger @10.10.10.10',
+        'Login     Name       TTY   Idle   When',
+        'root      root       *     1d     Mon 09:14',
+        'bmurphy   Bob Murphy pts/0  2:00   Mon 11:02',
+      ].join('\n'),
+      signal: 'bmurphy   Bob Murphy pts/0  2:00   Mon 11:02',
+      teach: 'The finger service (port 79) is ancient but still appears on old Unix boxes. It leaks real usernames and who is logged in — `bmurphy` is a confirmed account to spray or brute. Enumerate it whenever 79 is open.',
+    },
+    'recon-vnc': {
+      output: [
+        'PORT     STATE SERVICE',
+        '5900/tcp open  vnc',
+        '| vnc-info:',
+        '|   Security types: VNC Authentication (2)',
+        '|_  None (1)  — no password required',
+      ].join('\n'),
+      signal: '|_  None (1)  — no password required',
+      teach: 'A VNC server that offers "None" security is an unauthenticated remote desktop — connect and you are on the box\'s screen. Even when it wants a password, VNC passwords are short and crackable. Always check what auth a VNC port requires.',
+    },
+    'recon-mail': {
+      output: [
+        'PORT    STATE SERVICE',
+        '110/tcp open  pop3',
+        '143/tcp open  imap',
+        '| pop3-capabilities: USER TOP UIDL',
+        '|_pop3-ntlm-info: Domain: CORP',
+      ].join('\n'),
+      signal: '|_pop3-ntlm-info: Domain: CORP',
+      teach: 'Mail services leak more than you expect: POP3/IMAP capabilities, and via NTLM auth the internal domain name (CORP). With a valid mailbox credential you can read mail for secrets, password-reset links, and internal contacts.',
+    },
+
+    // ==================== ACTIVE DIRECTORY (named CVEs — confirm the lab first) ====================
+    'zerologon-check': {
+      output: [
+        '$ zerologon-scan DC01 10.10.10.10',
+        'Performing authentication attempts...',
+        'Success! DC01 is vulnerable to Zerologon (CVE-2020-1472).',
+      ].join('\n'),
+      signal: 'Success! DC01 is vulnerable to Zerologon (CVE-2020-1472).',
+      teach: 'Zerologon checks whether a DC accepts an all-zero challenge to reset its own machine password. The check is safe; the exploit is NOT — it breaks the DC\'s secure channel and must be restored afterward. Confirm it is a lab you own before going further.',
+    },
+    'zerologon-exploit': {
+      output: [
+        '[*] Resetting DC01$ machine account password to empty',
+        '[+] Success — authenticating with empty hash',
+        '[*] Dumping domain hashes (DCSync)',
+        'Administrator:500:aad3b...:31d6cfe0...:::',
+      ].join('\n'),
+      signal: '[*] Dumping domain hashes (DCSync)',
+      teach: 'Zerologon zeroes the DC\'s machine password, letting you DCSync the whole domain — total compromise. It also breaks the DC until you restore the original password from the local SAM, so the restore step is mandatory. Lab-only, high-risk.',
+    },
+    'nopac': {
+      output: [
+        '[*] Exploiting CVE-2021-42278 + CVE-2021-42287 (sAMAccountName spoofing)',
+        '[+] Got TGT impersonating domain administrator',
+        '[*] Dumping NTDS via DCSync',
+        'krbtgt:502:aad3b...:...:::',
+      ].join('\n'),
+      signal: '[+] Got TGT impersonating domain administrator',
+      teach: 'noPac abuses a sAMAccountName confusion to get a ticket as a DC/administrator from an ordinary user — a near-instant domain takeover on unpatched DCs. It is beyond core OSCP scope but common in labs; verify the DC is unpatched first.',
+    },
+    'printnightmare': {
+      output: [
+        '[*] Triggering the print spooler to load a remote driver',
+        '[+] Driver loaded — code executed as SYSTEM',
+        'C:\\> whoami',
+        'nt authority\\system',
+      ].join('\n'),
+      signal: 'nt authority\\system',
+      teach: 'PrintNightmare (CVE-2021-34527) abuses the Print Spooler to run a driver as SYSTEM — local privesc, or remote with creds. Check whether the Spooler service is even running first; if it is disabled, this path is closed.',
+    },
+    'ms14-068': {
+      output: [
+        '$ impacket-goldenPac corp.local/jdoe@dc01',
+        '[*] Requesting TGT with forged PAC (admin SID)',
+        '[+] Authenticated as Domain Admin — opening shell',
+        'C:\\Windows\\system32>',
+      ].join('\n'),
+      signal: '[+] Authenticated as Domain Admin — opening shell',
+      teach: 'MS14-068 forges the PAC inside a Kerberos ticket so an ordinary user claims Domain Admin group membership. It only works on DCs missing the 2014 patch — rare today, but a clean, memorable example of how PAC validation can fail.',
+    },
+    'diamond-ticket': {
+      output: [
+        '[*] Requesting a legitimate TGT for jdoe',
+        '[*] Decrypting with krbtgt key, patching PAC → administrator',
+        '[+] Saving diamond ticket to administrator.ccache',
+      ].join('\n'),
+      signal: '[+] Saving diamond ticket to administrator.ccache',
+      teach: 'A diamond ticket modifies a real TGT instead of forging one from scratch (like a golden ticket), so its details match a genuine request and look less anomalous. Both need the krbtgt key — this is a stealth refinement of the same post-DA persistence.',
+    },
+    'gpo-abuse': {
+      output: [
+        '[*] jdoe has edit rights on GPO {31B2F340-...}',
+        '[*] Adding an immediate scheduled task to the GPO',
+        '[+] Task will run on next gpupdate as SYSTEM on linked hosts',
+      ].join('\n'),
+      signal: '[+] Task will run on next gpupdate as SYSTEM on linked hosts',
+      teach: 'Write access to a Group Policy Object lets you push a scheduled task or script to every computer the GPO is linked to — code execution as SYSTEM across an OU. A single misassigned GPO permission can escalate to a whole fleet of machines.',
+    },
+    'dnsadmins-abuse': {
+      output: [
+        '[*] Member of DnsAdmins — setting ServerLevelPluginDll',
+        '[*] Restarting DNS service to load the DLL',
+        '[+] DLL executed as SYSTEM on the DC',
+      ].join('\n'),
+      signal: '[+] DLL executed as SYSTEM on the DC',
+      teach: 'The DnsAdmins group can tell the DNS service (often running on a DC) to load an arbitrary DLL, which then runs as SYSTEM. It needs a service restart, so it is noisy — but membership in DnsAdmins is a direct line to owning the DC.',
+    },
+    'sid-history-abuse': {
+      output: [
+        '[*] Forging a ticket with SID History = Enterprise Admins',
+        '[+] Saving ticket; principal now carries the EA SID',
+        '[*] Cross-domain access granted via SID History',
+      ].join('\n'),
+      signal: '[*] Cross-domain access granted via SID History',
+      teach: 'SID History lets a principal carry privileged SIDs from another domain — legitimately used in migrations, abused to smuggle Enterprise Admin rights across a trust. It is how a single-domain compromise becomes forest-wide.',
+    },
+    'wsus-abuse': {
+      output: [
+        'C:\\> SharpWSUS.exe locate',
+        '[+] WSUS server: http://wsus.corp.local:8530 (HTTP, not HTTPS)',
+        '[*] A malicious "update" could be approved to run as SYSTEM',
+      ].join('\n'),
+      signal: '[+] WSUS server: http://wsus.corp.local:8530 (HTTP, not HTTPS)',
+      teach: 'WSUS served over plain HTTP lets an attacker who can approve updates push a signed Microsoft binary with attacker-chosen arguments to clients — running as SYSTEM. An internal patch server is a high-value, often-overlooked target.',
+    },
+    'sccm-enum': {
+      output: [
+        '$ sccmhunter find -u jdoe -p ... -d corp.local',
+        '[+] Management Point: MP01.corp.local',
+        '[+] Network Access Account credentials retrievable',
+        'CORP\\svc_naa : NAA-P@ssw0rd',
+      ].join('\n'),
+      signal: 'CORP\\svc_naa : NAA-P@ssw0rd',
+      teach: 'SCCM/MECM deployments store Network Access Account credentials that clients can retrieve — frequently over-privileged and reusable across the domain. Enumerating the management point often hands you a working service credential outright.',
+    },
+
+    // ==================== FLAGS & PROOF ====================
+    'flag-hunt-linux': {
+      output: [
+        '$ find / -name "*.txt" 2>/dev/null | grep -iE "user|root|proof|flag"',
+        '/home/bob/user.txt',
+        '/root/root.txt',
+        '$ cat /root/root.txt',
+        'd41d8cd98f00b204e9800998ecf8427e',
+      ].join('\n'),
+      signal: 'd41d8cd98f00b204e9800998ecf8427e',
+      teach: 'The flags are the point: `user.txt` in a home directory, `root.txt` under /root. Capture both — and on a real exam, also screenshot the hostname, your id/whoami, and the IP in the same frame so the proof is undeniable.',
+    },
+    'flag-hunt-windows': {
+      output: [
+        'C:\\> type C:\\Users\\bob\\Desktop\\user.txt',
+        '7f6b2c...e1a9',
+        'C:\\> type C:\\Users\\Administrator\\Desktop\\proof.txt',
+        'a0c3f1...9d2b',
+      ].join('\n'),
+      signal: 'a0c3f1...9d2b',
+      teach: 'On Windows the flags sit on the Desktops — `user.txt` for the low-priv user, `proof.txt` (or root.txt) for Administrator. Grab both, and capture `whoami`, `hostname`, and `ipconfig` alongside the flag so your screenshot proves the compromise.',
+    },
+
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
