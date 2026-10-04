@@ -15,7 +15,7 @@
            Neon (synthwave sunset) and the others remain selectable in the ⚙ panel. */
         document.documentElement.setAttribute('data-skin', (p && p.skin) || 'obol');
         var a = parseFloat(localStorage.getItem('obol.surface-alpha'));
-        if (isNaN(a)) a = 0.3; /* fade surfaces so the motion background shows through */
+        if (isNaN(a)) a = 0.5; /* fade surfaces so the motion background shows through, but keep panels readable */
         if (a >= 0 && a <= 1) document.documentElement.style.setProperty('--surface-alpha', String(a));
       } catch (e) {}
     })();
@@ -153,6 +153,6 @@
        motion background, coin bursts on genuine proof, and the ⚙ appearance settings. -->
   <script defer src="assets/ui/backdrop.js?v=7c2472f2"></script>
   <script defer src="assets/ui/coin.js?v=06db103a"></script>
-  <script defer src="assets/ui/settings.js?v=918402b7"></script>
+  <script defer src="assets/ui/settings.js?v=75ce18ee"></script>
 </body>
 </html>

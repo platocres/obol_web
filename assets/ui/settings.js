@@ -24,7 +24,7 @@
     try { return document.documentElement.getAttribute("data-skin") || (OBOL.store && OBOL.store.pref().skin) || "obol"; } catch (e) { return "obol"; }
   }
   function motionLevel() { var v = lsGet(LS_MOTION); return (v === "full" || v === "reduced" || v === "off") ? v : "full"; }
-  function surfaceAlpha() { var v = parseFloat(lsGet(LS_OPACITY)); return (v >= 0 && v <= 1) ? v : 0.3; }
+  function surfaceAlpha() { var v = parseFloat(lsGet(LS_OPACITY)); return (v >= 0 && v <= 1) ? v : 0.5; }
   function applySurfaceAlpha(v) { try { document.documentElement.style.setProperty("--surface-alpha", String(v)); } catch (e) {} }
   function coinsOn() { return !OBOL.coins || OBOL.coins.enabled(); }
 
