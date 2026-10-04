@@ -2421,4 +2421,62 @@
   };
   Object.keys(CREDS_PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var pr = CREDS_PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = pr.situation; OBOL.STUDY_FIXTURES[k].choices = pr.choices; OBOL.STUDY_FIXTURES[k].coach = pr.coach; } });
 
+  // linux privesc lead-ups: reached from a foothold and the enumeration sweep that surfaced the lead.
+  // Commands run on the target (where: host). Multi-route only where a genuine second path exists.
+  var LINUX_LEADUPS = {
+    "linux-enum": [
+      { key: "foothold", label: "A web exploit landed a shell", steps: [
+        { title: "Confirm who you are", tool: "id", where: "host", cmd: "id", out: "uid=33(www-data) gid=33(www-data) groups=33(www-data)", sig: "www-data", teach: "You hold an unprivileged shell; the first job is a full local sweep to find the way up." } ] },
+    ],
+    "sudo-abuse": [
+      { key: "enum", label: "The sweep flagged a sudo entry", steps: [
+        { title: "linpeas flagged sudo rights", tool: "linpeas", where: "host", cmd: "./linpeas.sh | grep -iA2 'sudo -l'", out: "User www-data may run the following commands:\n    (root) NOPASSWD: /usr/bin/find", sig: "NOPASSWD: /usr/bin/find", teach: "A NOPASSWD sudo entry on a GTFOBins binary is a clean, loud-green path to root." } ] },
+      { key: "manual", label: "You checked sudo -l by hand", steps: [
+        { title: "sudo -l listed a NOPASSWD rule", tool: "sudo", where: "host", cmd: "sudo -l", out: "User www-data may run the following commands:\n    (root) NOPASSWD: /usr/bin/find", sig: "NOPASSWD: /usr/bin/find", teach: "sudo -l is the very first thing to run; it needs no password to list your rights." } ] },
+    ],
+    "writable-passwd": [
+      { key: "enum", label: "The sweep flagged a writable /etc/passwd", steps: [
+        { title: "Check the permissions on /etc/passwd", tool: "ls", where: "host", cmd: "ls -l /etc/passwd", out: "-rw-rw-r-- 1 root root 2341 /etc/passwd", sig: "-rw-rw-r--", teach: "A group- or world-writable /etc/passwd lets you add a root user or paste in a known hash." } ] },
+    ],
+    "nfs-squash": [
+      { key: "enum", label: "An export carried no_root_squash", steps: [
+        { title: "Read the NFS exports", tool: "cat", where: "host", cmd: "cat /etc/exports", out: "/srv/share   *(rw,sync,no_root_squash)", sig: "no_root_squash", teach: "no_root_squash trusts your remote root; mount the export and run a SUID shell you built as root." } ] },
+    ],
+    "lxc-lxd-escape": [
+      { key: "id", label: "id showed the lxd group", steps: [
+        { title: "Read your group memberships", tool: "id", where: "host", cmd: "id", out: "uid=1000(user) gid=1000(user) groups=1000(user),110(lxd)", sig: "110(lxd)", teach: "Membership in lxd is root without a password; everything after this is procedure." } ] },
+    ],
+    "docker-socket": [
+      { key: "id", label: "id showed the docker group", steps: [
+        { title: "Read your group memberships", tool: "id", where: "host", cmd: "id", out: "uid=1000(user) gid=1000(user) groups=1000(user),999(docker)", sig: "999(docker)", teach: "The docker group commands the root docker daemon, which is root on the host." } ] },
+    ],
+    "suid-gtfobins": [
+      { key: "enum", label: "The sweep flagged an uncommon SUID", steps: [
+        { title: "linpeas highlighted a SUID binary", tool: "linpeas", where: "host", cmd: "./linpeas.sh | grep -i 'SUID'", out: "-rwsr-xr-x 1 root root /usr/bin/find  (Unknown SUID binary)", sig: "/usr/bin/find", teach: "An uncommon SUID binary is a GTFOBins lookup away from a root shell." } ] },
+      { key: "manual", label: "You searched for SUID bits yourself", steps: [
+        { title: "find listed the SUID binaries", tool: "find", where: "host", cmd: "find / -perm -4000 -type f 2>/dev/null", out: "/usr/bin/passwd\n/usr/bin/sudo\n/usr/bin/find", sig: "/usr/bin/find", teach: "find -perm -4000 lists every SUID file; the odd one out against a default set is the lead." } ] },
+    ],
+    "pspy-monitor": [
+      { key: "stuck", label: "No sudo and no SUID lead", steps: [
+        { title: "The easy paths were closed", tool: "sudo", where: "host", cmd: "sudo -l", out: "Sorry, user www-data may not run sudo on this host.", sig: "may not run sudo", teach: "With sudo and SUID dry, watch the process list for a root job that is not in any crontab you can read." } ] },
+    ],
+    "cron-abuse": [
+      { key: "pspy", label: "pspy caught a root job", steps: [
+        { title: "pspy showed a recurring root process", tool: "pspy", where: "host", cmd: "./pspy64", out: "2024/01/01 12:02:01 CMD: UID=0  PID=1123  /bin/bash /opt/backup.sh", sig: "UID=0  PID=1123  /bin/bash /opt/backup.sh", teach: "A root job firing on a schedule is yours if you can write to the script or the files it reads." } ] },
+    ],
+    "capabilities": [
+      { key: "enum", label: "getcap found a dangerous capability", steps: [
+        { title: "The sweep flagged a file capability", tool: "getcap", where: "host", cmd: "getcap -r / 2>/dev/null", out: "/usr/bin/python3.8 = cap_setuid+ep", sig: "cap_setuid+ep", teach: "cap_setuid on an interpreter lets it set uid 0: root with no SUID bit and no sudo." } ] },
+    ],
+    "linux-loot-hunt": [
+      { key: "foothold", label: "You have a shell and want credentials", steps: [
+        { title: "You landed an unprivileged shell", tool: "id", where: "host", cmd: "id", out: "uid=1000(user) gid=1000(user) groups=1000(user)", sig: "uid=1000(user)", teach: "Before escalating, sweep home dirs, configs, and shell history for passwords and keys left lying around." } ] },
+    ],
+    "linux-persistence": [
+      { key: "rooted", label: "You just became root", steps: [
+        { title: "A privesc gave you root", tool: "id", where: "host", cmd: "id", out: "uid=0(root) gid=0(root) groups=0(root)", sig: "uid=0(root)", teach: "With root in hand, drop a quiet way back in before you risk losing the shell." } ] },
+    ]
+  };
+  Object.keys(LINUX_LEADUPS).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) OBOL.STUDY_FIXTURES[k].leadup = LINUX_LEADUPS[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);
