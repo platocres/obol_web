@@ -1462,7 +1462,7 @@
       teach: 'A world-writable /etc/passwd lets you add a root-UID user with a password hash you control (openssl passwd), then su to it. A single misconfigured permission bit is a direct path to root.',
     },
     'nfs-squash': {
-      why: "An NFS share exported with no_root_squash trusts your remote root, so you mount it, drop a root-owned SUID shell on it from your side, then execute that shell on the target as root. Reach for it when enumeration or an NFS scan shows that export option. It lives half on your box and half on the target: you make the SUID binary as root locally and run it remotely, and understanding that split is the key to not fumbling it.",
+      why: "This is the privesc that straddles two machines, and that split is exactly where people fumble it: you build the weapon on your box and fire it on the target. When an export carries no_root_squash the server honours your local root, so a root-owned SUID shell you drop over the mount runs as root the moment you execute it on the target. Reach for it as soon as an NFS scan or enumeration shows that export flag, and keep clear which half runs where.",
       cmd: 'showmount -e 10.10.10.10', tool: 'showmount',
       output: [
         'Export list for 10.10.10.10:',
@@ -1472,7 +1472,7 @@
       teach: 'no_root_squash on an NFS export means files you create as root on your own machine stay root-owned on the target. Mount it, drop a root-owned SUID shell, and run it on the box, a classic NFS privesc. Check the export options first.',
     },
     'lxc-lxd-escape': {
-      why: "Membership in the lxd group is root without a password, and one of the most common intended paths on lab boxes: lxd lets you start a privileged container, mount the host filesystem inside it, and read or write anything as root. Reach for it the instant `id` shows the lxd group. The win is in who you already are, which is why checking your group memberships is the very first thing to do.",
+      why: "Most privilege escalation turns on what you can do; this one turns on who you already are. A single line of `id` can hand you the entire machine with no exploit fired and no password guessed. That is the habit worth building: the instant you land a foothold, read your group memberships before anything else, because one dangerous group makes the rest a formality you simply follow a recipe through. On lab boxes this is one of the most common ways in for exactly that reason.",
       cmd: 'id', tool: 'sh',
       output: [
         'uid=1000(dev) gid=1000(dev) groups=1000(dev),110(lxd)',
@@ -1481,7 +1481,7 @@
       teach: 'Membership in the lxd group is root-equivalent: you launch a privileged container that mounts the host filesystem and read or write anything as root. Like the docker group, lxd is a privilege nobody thinks of as one, always check your groups.',
     },
     'docker-socket': {
-      why: "A writable /var/run/docker.sock, or the docker group, is root on the host by design: launch a container with the host filesystem attached and chroot into it. It is the lxd escape with a different daemon. Reach for it when the socket is writable or `id` shows the docker group. The idea that generalises: any group or socket that controls a root daemon is effectively root, so always check what your groups can talk to.",
+      why: "The pattern here outlives this one trick: anything that lets you speak to a daemon running as root is, in effect, root yourself. A socket you can write to, or a group that grants it, is worth as much as the password you never had to find. So after a foothold do not stop at files and sudo rights; ask what each group you hold and each writable socket can actually command, because that question is what quietly turns an ordinary shell into ownership of the whole host.",
       cmd: 'ls -la /var/run/docker.sock && id', tool: 'sh',
       output: [
         'srw-rw---- 1 root docker 0 Jan 1 10:00 /var/run/docker.sock',
@@ -1546,7 +1546,7 @@
       teach: 'Once you have a shell, loot before you escalate. Config files, shell history, and web roots leak passwords constantly, and people reuse them, so a web app\'s DB password is often root\'s too. Grep widely for password, secret, and key.',
     },
     'linux-persistence': {
-      why: "Once you are root, persistence buys a way back in that survives password resets and reboots, which matters in long engagements and when an exam permits re-entry. The low-profile options: your SSH key in root's authorized_keys, a cron job, a SUID backdoor. Reach for it only after you have rooted the box and need durable access. On a short lab it is optional; as a habit and a report note, it is still worth understanding.",
+      why: "Persistence is the move you make after the box is already won, to keep it won: a way back that outlasts the password reset and the reboot. It earns its place in long engagements and wherever an exam permits re-entry, and on a short lab it is simply optional. The quiet options are your SSH key in root's authorized_keys, a sudoers line for an account you own, or a cron callback, and every single one belongs in your notes so you can clean it up.",
       signal: 'root@target:~#',
       teach: 'Labs revert and shells die. Adding your public key to authorized_keys gives you a stable, password-free way back in, far better than re-exploiting each time. On a real engagement, persistence is scoped and documented.',
       steps: [
