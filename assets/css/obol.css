@@ -2097,12 +2097,13 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 /* fact popover (centred card) */
 .study-factpop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.5); padding: 20px; }
 .study-factpop[hidden] { display: none; }
-.fp-card { position: relative; width: 100%; max-width: 460px; max-height: 80vh; overflow-y: auto; background: var(--surf2); border: 1px solid var(--line-hot); border-radius: 14px; padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+.fp-card { position: relative; width: 100%; max-width: 460px; max-height: 80vh; overflow-y: auto; background: var(--bg2); border: 1px solid var(--line-hot); border-radius: 14px; padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+.fp-lead { font-size: 12.5px; color: var(--text-2); line-height: 1.6; margin: 0 0 4px; }
 .fp-close { position: absolute; top: 10px; right: 12px; font-size: 22px; line-height: 1; cursor: pointer; color: var(--muted); background: transparent; border: 0; }
 .fp-close:hover { color: var(--text); }
 .fp-fact { font-size: 17px; font-weight: 800; color: var(--accent-2); margin-bottom: 14px; padding-right: 24px; }
 .fp-sec { margin-top: 12px; }
-.fp-sec-l { font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+.fp-sec-l { font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-2); margin-bottom: 7px; }
 .fp-moves { display: flex; flex-direction: column; gap: 6px; }
 .fp-move { text-align: left; font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text); background: var(--surf3); border: 1px solid var(--line); border-left: 3px solid var(--lane, var(--accent)); border-radius: 7px; padding: 7px 10px; }
 .fp-move:hover { border-color: var(--lane, var(--accent)); background: color-mix(in srgb, var(--lane, var(--accent)) 12%, var(--surf3)); }

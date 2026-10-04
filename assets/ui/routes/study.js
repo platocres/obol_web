@@ -41,8 +41,24 @@
   function study() { return OBOL.study; }
   // raw fact kind → the human phrase the packs already carry (ad.user_list → "a domain user list")
   function human(k) { try { return (OBOL.pack && OBOL.pack.friendly) ? OBOL.pack.friendly(k) : k; } catch (e) { return k; } }
+  // Title Case for short label phrases: keep acronyms (HTTP, SMB, RID), lowercase minor words unless first.
+  var SMALL_WORDS = { a: 1, an: 1, the: 1, and: 1, or: 1, but: 1, nor: 1, of: 1, to: 1, in: 1, on: 1, at: 1, by: 1, for: 1, with: 1, from: 1, via: 1, per: 1, vs: 1 };
+  function titleCase(str) {
+    var first = true;
+    return String(str == null ? '' : str).split(/(\s+)/).map(function (tok) {
+      if (/^\s*$/.test(tok)) return tok;
+      var isFirst = first; first = false;
+      return tok.split('-').map(function (part, pi) {
+        if (!part) return part;
+        if (/^[A-Z0-9][A-Z0-9.]*$/.test(part) && part.length >= 2) return part;   // acronym, keep as-is
+        var lower = part.toLowerCase();
+        if (!isFirst && pi === 0 && SMALL_WORDS[lower]) return lower;              // minor word, not first
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      }).join('-');
+    }).join('');
+  }
   function factChips(list, cls) {
-    return (list || []).map(function (x) { return '<button type="button" class="study-chip study-chip-fact ' + (cls || '') + '" data-fact="' + U.attr(x) + '" title="What produces ' + U.attr(human(x)) + ', and what it unlocks">' + esc(human(x)) + '</button>'; }).join('');
+    return (list || []).map(function (x) { return '<button type="button" class="study-chip study-chip-fact ' + (cls || '') + '" data-fact="' + U.attr(x) + '" title="What produces ' + U.attr(human(x)) + ', and what it unlocks">' + esc(titleCase(human(x))) + '</button>'; }).join('');
   }
   // wrap code-ish fragments in prose as real <code> (backticked spans, $hashes, fact.kinds, CONSTANTS)
   function codeify(s) {
@@ -361,12 +377,13 @@
     var el = mount.querySelector('#study-factpop'); if (!el) return;
     var info = study().factInfo(fact);
     function list(arr, kind) {
-      if (!arr.length) return '<p class="fp-none">' + (kind === 'from' ? 'Nothing in the methodology produces this yet; it usually comes from the environment (an open port, a reachable target).' : 'This is an outcome in its own right.') + '</p>';
+      if (!arr.length) return '<p class="fp-none">' + (kind === 'from' ? 'No earlier step produces this. It comes from the environment itself, so you find it during recon, a port you scan open, a service banner, a form you spot while browsing the target, rather than earning it with a command.' : 'This is a goal in its own right. Nothing further depends on it; it is a result you bank.') + '</p>';
       return '<div class="fp-moves">' + arr.slice(0, 12).map(function (m) { return '<button type="button" class="fp-move lane-' + (laneKeyOf(m.id)) + '" data-goto="' + U.attr(m.id) + '">' + esc(m.title) + '</button>'; }).join('') + '</div>';
     }
     el.innerHTML = '<div class="fp-card">'
       + '<button type="button" class="fp-close" data-factpop-close aria-label="Close">×</button>'
-      + '<div class="fp-fact">' + esc(info.label) + '</div>'
+      + '<div class="fp-fact">' + esc(titleCase(info.label)) + '</div>'
+      + '<p class="fp-lead">Every move needs certain facts in hand before it makes sense, and hands you new ones when it lands. Here is where this fact fits in the chain.</p>'
       + '<div class="fp-sec"><div class="fp-sec-l">You get it from</div>' + list(info.producedBy, 'from') + '</div>'
       + '<div class="fp-sec"><div class="fp-sec-l">Once you have it, it unlocks</div>' + list(info.unlocks, 'to') + '</div>'
       + '</div>';
