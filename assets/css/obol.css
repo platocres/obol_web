@@ -1913,6 +1913,38 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .rp-step-h.rp-host  { color: #F7C948; background: color-mix(in srgb, #F7C948 13%, transparent); border: 1px solid color-mix(in srgb, #F7C948 40%, var(--line)); }
 .rp-where-glyph { margin-right: 4px; }
 .rp-prompt.host { color: #F7C948; }
+/* "Run it from" toggle: remote (your box) vs on the target */
+.study-runways { margin: 14px 0 4px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.rw-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--surf1); border-bottom: 1px solid var(--line); }
+.rw-label { font-family: var(--mono); font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rw-tab { font-family: var(--sans); font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--surf2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; transition: .14s; }
+.rw-tab:hover { border-color: var(--line-hot); color: var(--text); }
+.rw-tab.on { color: var(--on-accent, #04120a); background: var(--accent); border-color: var(--accent); font-weight: 700; }
+.rw-tab .rw-n { font-family: var(--mono); font-size: 10px; opacity: .7; margin-left: 3px; }
+.rw-pane { padding: 10px; }
+.rw-pane[hidden] { display: none; }
+.rw-connect { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--line); }
+.rw-note { font-size: 12px; color: var(--text-2); line-height: 1.55; }
+
+/* --- Study: browse-by toggle on the map + the by-port view --- */
+.study-browse { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 20px; }
+.study-browse-l { font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.study-browse-b { font-family: var(--mono); font-size: 12.5px; font-weight: 700; cursor: pointer; color: var(--accent-2); background: color-mix(in srgb, var(--accent) 8%, var(--surf1)); border: 1px solid var(--g-proven-line); border-radius: 8px; padding: 9px 14px; }
+.study-browse-b:hover { background: var(--accent-soft); }
+.study-ports .study-hero-h i { color: var(--accent-2); font-style: italic; }
+.port-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.port-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--surf1); }
+.port-card.port-scan { border-color: var(--g-proven-line); background: color-mix(in srgb, var(--accent) 7%, var(--surf1)); grid-column: 1 / -1; }
+.port-card-h { display: flex; align-items: baseline; gap: 10px; }
+.port-num { font-family: var(--mono); font-size: 20px; font-weight: 800; color: var(--accent-2); }
+.port-num .port-proto { font-size: 11px; color: var(--muted); font-weight: 600; }
+.port-svc { font-size: 14px; font-weight: 800; color: var(--text); }
+.port-sig { font-size: 12.5px; color: var(--text-2); line-height: 1.55; margin: 8px 0 10px; }
+.port-moves { display: flex; flex-direction: column; gap: 6px; }
+.port-move { text-align: left; font-family: var(--sans); font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--text); background: var(--surf2); border: 1px solid color-mix(in srgb, var(--lane, var(--line)) 45%, var(--line)); border-left: 3px solid var(--lane, var(--accent)); border-radius: 7px; padding: 7px 10px; transition: .12s; }
+.port-move:hover { background: color-mix(in srgb, var(--lane, var(--accent)) 12%, var(--surf2)); border-color: var(--lane, var(--accent)); }
+.port-move.done { color: var(--text-2); }
+.port-move.done::after { content: ' ✓'; color: var(--accent); font-weight: 800; }
 
 /* --- Study: Atlas density (bands, search, minimap, mastery) --- */
 .atlas-search { font-family: var(--mono); font-size: 12px; background: var(--surf2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; width: 150px; transition: border-color .14s, width .18s; }

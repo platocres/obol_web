@@ -136,6 +136,42 @@
       + '</div></div>';
   }
 
+  // ---- "Run it from" toggle: remote (your box) vs on the target (after a shell) -----------------
+  function osForMove(cell) {
+    var lk = cell.laneKey || laneKeyOf(cell.id);
+    if (lk === 'windows' || lk === 'ad') return 'windows';
+    if (lk === 'linux') return 'linux';
+    var blob = (cell.commands || []).map(function (c) { return (c.run || '') + ' ' + (c.tool || ''); }).join(' ').toLowerCase();
+    if (/powershell|(^| )cmd |winrm|\.exe|certutil|evil-winrm|rubeus|mssql|xfreerdp|impacket|nxc (smb|ldap|winrm)/.test(blob)) return 'windows';
+    return 'linux';
+  }
+  function connectCmd(os) {
+    return os === 'windows'
+      ? { tool: 'evil-winrm', run: "evil-winrm -i 10.10.10.10 -u <user> -p '<password>'", note: 'get an interactive shell on the box over WinRM (5985), then run the command there', locus: 'ON-TARGET', tag: 'connect first', rank: 2 }
+      : { tool: 'ssh', run: 'ssh <user>@10.10.10.10', note: 'get an interactive shell on the box, then run the command there', locus: 'ON-TARGET', tag: 'connect first', rank: 2 };
+  }
+  function runWaysPanel(cell) {
+    var cmds = cell.commands || [];
+    if (!cmds.length) return '';
+    var remote = cmds.filter(function (c) { return c.rank === 0 || c.rank === 1; });   // your box: remote + offline
+    var onhost = cmds.filter(function (c) { return c.rank === 2; });                    // on the target
+    var conn = connectCmd(osForMove(cell));
+    var remotePane = remote.length
+      ? remote.map(commandBlock).join('')
+      : '<div class="rw-note">This move is normally run <b>on the target</b> after you have a shell — switch the toggle.</div>';
+    var hostPane = '<div class="rw-connect">' + commandBlock(conn) + '</div>'
+      + (onhost.length
+        ? onhost.map(commandBlock).join('')
+        : '<div class="rw-note">Once you are on the box, run the same command locally — the built-ins shown, or the tool staged as in the replay above. (Remotely, you can also wrap it: <code class="study-ic">' + esc(osForMove(cell) === 'windows' ? 'nxc winrm 10.10.10.10 -u <user> -p <password> -x "…"' : 'ssh <user>@10.10.10.10 "…"') + '</code>.)</div>');
+    return '<div class="study-runways">'
+      + '<div class="rw-head"><span class="rw-label">Run it from</span>'
+      + '<button type="button" class="rw-tab on" data-runway="remote">🛰 your box <span class="rw-n">' + remote.length + '</span></button>'
+      + '<button type="button" class="rw-tab" data-runway="onhost">🖥 on the target <span class="rw-n">' + onhost.length + '</span></button></div>'
+      + '<div class="rw-pane" data-pane="remote">' + remotePane + '</div>'
+      + '<div class="rw-pane" data-pane="onhost" hidden>' + hostPane + '</div>'
+      + '</div>';
+  }
+
   // ---- right: WATCH (replay up top, derived reference below) -----------------------------------
   function cellPanel() {
     var cell = study().cellFor(_sel, { profile: (OBOL.arsenal && OBOL.arsenal.profileGet && OBOL.arsenal.profileGet()) || null });
@@ -157,11 +193,9 @@
     // the replay
     h += replayPlayer(rp);
 
-    // the alternatives, folded away
-    if (cell.commands.length > 1) {
-      h += '<details class="study-allcmds"><summary>All ' + cell.commands.length + ' ways to run this · remote-first</summary>'
-        + cell.commands.map(commandBlock).join('') + '</details>';
-    }
+    // Run-it-from toggle: the same move, two ways — remotely from your box, or on the target after you
+    // get a shell (with the connect step shown). Reuses the pack's own remote-first command loci.
+    h += runWaysPanel(cell);
 
     h += '<div class="study-seg study-outcome"><div class="study-seg-l">What you walk away with <span class="study-seg-note">— and the moves it unlocks</span></div>'
       + '<div class="study-flow">' + factChips(cell.proves, 'proof')
@@ -223,11 +257,35 @@
         + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:' + pct + '%"></span></div>'
         + '<span class="study-lane-go">' + (pr.studied ? pr.studied + ' / ' + pr.total + ' studied · continue →' : 'Start the path →') + '</span></div></button>';
     }).join('') + '</div>';
-    h += '<button type="button" class="study-graph-cta" data-graph>⊞ See the whole methodology as one graph →</button>';
+    h += '<div class="study-browse"><span class="study-browse-l">Or browse by</span>'
+      + '<button type="button" class="study-browse-b" data-graph>⊞ the whole graph</button>'
+      + '<button type="button" class="study-browse-b" data-ports>⊟ open port — what you actually see first</button></div>';
     h += '<div class="study-doors">'
       + door('#/loadout', '⚙', 'Set up your box', 'Install the toolset so the commands you learn match your own machine.')
       + door('#/home', '▶', 'Start an engagement', 'Working a real box? Track it — paste output, get your next move.')
       + '</div>';
+    return h + '</section>';
+  }
+
+  // ---- the BY-PORT view: a port is open → what it means, and the moves it unlocks ----------------
+  function portsView() {
+    var ps = study().ports(), mk = study().mastery();
+    var h = '<section class="study-route study-ports">';
+    h += '<div class="study-top"><button type="button" class="study-back" data-back-map>← Paths</button>'
+      + '<div class="study-crumb"><b>Study</b> · By open port</div></div>';
+    h += '<div class="study-hero"><h1 class="study-hero-h">What do I do with <i>this</i> port?</h1>'
+      + '<p class="study-hero-p">This is how you actually operate: you scan, and a <b>list of open ports</b> comes back. Each one is a signal — it tells you what the box runs and which moves it opens. '
+      + 'Find the port you see, read what it means, and jump straight to the move.</p></div>';
+    h += '<div class="port-grid">' + ps.map(function (p) {
+      return '<div class="port-card' + (p.port === 'scan' ? ' port-scan' : '') + '">'
+        + '<div class="port-card-h"><span class="port-num">' + esc(p.port) + (p.proto ? '<span class="port-proto">/' + esc(p.proto) + '</span>' : '') + '</span>'
+        + '<span class="port-svc">' + esc(p.service) + '</span></div>'
+        + '<p class="port-sig">' + esc(p.signal) + '</p>'
+        + '<div class="port-moves">' + p.moves.map(function (m) {
+            return '<button type="button" class="port-move lane-' + m.laneKey + ((mk[m.id] || {}).studied ? ' done' : '') + '" data-open="' + U.attr(m.id) + '">' + esc(m.title) + ' →</button>';
+          }).join('') + '</div>'
+        + '</div>';
+    }).join('') + '</div>';
     return h + '</section>';
   }
 
@@ -327,7 +385,7 @@
     var right = _gear === 'practice' ? practicePanel() : cellPanel();
     return '<section class="study-route">'
       + '<div class="study-top">'
-      + '<button type="button" class="study-back" data-back>← ' + (_pathMode ? 'Your path' : (_from === 'atlas' ? 'The Atlas' : 'All paths')) + '</button>'
+      + '<button type="button" class="study-back" data-back>← ' + (_pathMode ? 'Your path' : (_from === 'atlas' ? 'The Atlas' : (_from === 'ports' ? 'Open ports' : 'All paths'))) + '</button>'
       + '<div class="study-crumb"><b>Study</b> · ' + esc(laneMeta(laneKeyOf(_sel)).name) + ' · <span class="study-here">' + esc((study().cellFor(_sel) || {}).title || _sel) + '</span></div>'
       + '<div class="study-gears">'
       + '<button type="button" class="study-gear' + (_gear === 'watch' ? ' on' : '') + '" data-gear="watch">▶ Watch</button>'
@@ -339,7 +397,7 @@
 
   function render(ctx) {
     if (ctx && ctx.args && ctx.args[0] && study().cellFor(ctx.args[0])) { _sel = ctx.args[0]; _view = 'node'; _pathMode = false; _path = []; }
-    return _view === 'map' ? mapView() : (_view === 'atlas' ? atlasView() : nodeView());
+    return _view === 'map' ? mapView() : (_view === 'atlas' ? atlasView() : (_view === 'ports' ? portsView() : nodeView()));
   }
 
   // ---- replay controller ----------------------------------------------------------------------
@@ -530,15 +588,22 @@
     var mount = ctx.mount;
     cancelReplay();
     // map/graph: open a lane/step → node view (remember where we came from)
-    U.on(mount, 'click', '[data-open]', function (e, t) { _from = (_view === 'atlas' ? 'atlas' : 'map'); _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-open]', function (e, t) { _from = (_view === 'atlas' ? 'atlas' : (_view === 'ports' ? 'ports' : 'map')); _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-back]', function () { _view = _from; OBOL.router.render(); });
     U.on(mount, 'click', '[data-back-map]', function () { _view = 'map'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-graph]', function () { _view = 'atlas'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-ports]', function () { _view = 'ports'; OBOL.router.render(); });
     // node select + "opens →" jumps + goto chips → re-render
     U.on(mount, 'click', '[data-node]', function (e, t) { _sel = t.getAttribute('data-node'); OBOL.router.render(); });
     U.on(mount, 'click', '[data-goto]', function (e, t) { _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
     // gear toggle → re-render
     U.on(mount, 'click', '[data-gear]', function (e, t) { _gear = t.getAttribute('data-gear'); OBOL.router.render(); });
+    // "Run it from" toggle: remote (your box) vs on the target — local DOM swap, no re-render
+    U.on(mount, 'click', '[data-runway]', function (e, t) {
+      var way = t.getAttribute('data-runway');
+      Array.prototype.forEach.call(mount.querySelectorAll('.rw-tab'), function (b) { b.classList.toggle('on', b.getAttribute('data-runway') === way); });
+      Array.prototype.forEach.call(mount.querySelectorAll('.rw-pane'), function (p) { p.hidden = p.getAttribute('data-pane') !== way; });
+    });
     // replay controls
     U.on(mount, 'click', '[data-rp="play"]', function () { runReplay(mount, false); });
     U.on(mount, 'click', '[data-rp="restart"]', function () { runReplay(mount, false); });

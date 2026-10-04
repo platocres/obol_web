@@ -289,6 +289,39 @@
   function scenarios() { return SCENARIOS.filter(function (s) { return s.steps.every(byId); }).map(function (s) { return { key: s.key, name: s.name, desc: s.desc, steps: s.steps.slice(), count: s.steps.length }; }); }
   function scenario(key) { for (var i = 0; i < SCENARIOS.length; i++) if (SCENARIOS[i].key === key) return { key: SCENARIOS[i].key, name: SCENARIOS[i].name, desc: SCENARIOS[i].desc, steps: SCENARIOS[i].steps.slice(), count: SCENARIOS[i].steps.length }; return null; }
 
+  // --- "by open port" view: the way you actually operate — a port is open, so WHAT does it mean and
+  //     WHICH moves does it unlock? This is signal recognition made literal. Curated port→moves map. ---
+  var PORTS = [
+    { port: 'scan', proto: '', service: 'No ports yet?', signal: 'Every engagement opens the same way: sweep the target so you know which doors exist before you touch any one of them.', moves: ['nmap-fast-open-ports', 'nmap-version-scripts', 'nmap-udp-top', 'nmap-vuln-scripts'] },
+    { port: '21', proto: 'tcp', service: 'FTP', signal: 'File transfer. Test anonymous login first (it is free), then brute a known user — files on FTP routinely hold configs, source, or credentials.', moves: ['recon-ftp', 'online-brute-ftp'] },
+    { port: '22', proto: 'tcp', service: 'SSH', signal: 'Remote shell. No RCE here, but a looted private key or a weak password is a stable foothold — and SSH is your cleanest pivot.', moves: ['ssh-key-login', 'online-brute-ssh', 'pivot-ssh-dynamic', 'pivot-sshuttle'] },
+    { port: '25/110/143', proto: 'tcp', service: 'SMTP / POP3 / IMAP', signal: 'Mail. SMTP VRFY confirms real usernames; a mailbox credential lets you read mail for secrets and reset links. NTLM auth leaks the domain name.', moves: ['recon-smtp', 'recon-mail'] },
+    { port: '53', proto: 'tcp/udp', service: 'DNS', signal: 'Name service. A zone transfer (AXFR) can hand you the whole internal host map in one request.', moves: ['recon-dns'] },
+    { port: '79', proto: 'tcp', service: 'Finger', signal: 'Ancient, but when it is open it leaks real usernames and who is logged in — raw material for a spray or brute.', moves: ['recon-finger'] },
+    { port: '80/443', proto: 'tcp', service: 'HTTP / HTTPS', signal: 'A web app — the single richest attack surface on the exam. Fingerprint the stack, map the content, then hunt the injectable edge.', moves: ['recon-web-triage', 'vhost-discovery', 'content-discovery', 'nikto-scan', 'wordpress', 'sqli-basics', 'command-injection', 'lfi-probe', 'file-upload', 'check-exposed-files'] },
+    { port: '88', proto: 'tcp', service: 'Kerberos', signal: 'A Domain Controller. Kerberos (88) with LDAP (389) and SMB (445) is the AD fingerprint — name the domain, list users, then roast.', moves: ['ad-dc-identify', 'ad-user-enum', 'asrep-roast', 'kerberoast'] },
+    { port: '111/2049', proto: 'tcp', service: 'NFS', signal: 'Network file shares. An export open to "*" is readable by anyone; no_root_squash turns it into a privesc.', moves: ['nfs-enum', 'nfs-squash'] },
+    { port: '135/139/445', proto: 'tcp', service: 'SMB / RPC', signal: 'Windows file sharing and RPC. Try anonymous access, hunt readable shares, check for old SMBv1 (EternalBlue), and relay NTLM. The busiest port in AD.', moves: ['recon-smb-anon', 'smb-share-inventory', 'gpp-passwords', 'eternalblue', 'ntlm-relay-attack', 'lateral-exec', 'dump-secrets', 'own-domain-pth'] },
+    { port: '161', proto: 'udp', service: 'SNMP', signal: 'A default "public" community string reads running processes, users, and sometimes credentials straight out of the host.', moves: ['recon-snmp'] },
+    { port: '389/636/3268', proto: 'tcp', service: 'LDAP / Global Catalog', signal: 'The directory itself. Anonymous bind lists every user; with a credential you collect BloodHound, read LAPS, and find AD CS templates.', moves: ['ad-dc-identify', 'ad-anon-ldap-enum', 'bloodhound-collect', 'laps-read', 'adcs-esc'] },
+    { port: '500', proto: 'udp', service: 'IKE / IPsec VPN', signal: 'A VPN endpoint. Aggressive Mode hands back a PSK hash you can crack offline — and a finding on its own.', moves: ['recon-ike-vpn'] },
+    { port: '1433', proto: 'tcp', service: 'MSSQL', signal: 'Microsoft SQL. A login with sysadmin re-enables xp_cmdshell and runs OS commands — the database becomes a shell.', moves: ['mssql-login', 'mssql-xp-cmdshell'] },
+    { port: '3306', proto: 'tcp', service: 'MySQL / MariaDB', signal: 'A login reads app secrets and the mysql.user hash table, and can write files to the web root.', moves: ['mysql-login', 'mysql-loot'] },
+    { port: '3389', proto: 'tcp', service: 'RDP', signal: 'Remote desktop. Confirm which credentials log in; a weak password is a full GUI session as that user.', moves: ['rdp-enum', 'online-brute-rdp'] },
+    { port: '5432', proto: 'tcp', service: 'PostgreSQL', signal: 'A session with the right role reads files and, via COPY ... FROM PROGRAM, runs commands.', moves: ['postgres-login'] },
+    { port: '5900', proto: 'tcp', service: 'VNC', signal: 'Remote desktop. "None" security is an unauthenticated screen; even with a password, VNC passwords are short and crackable.', moves: ['recon-vnc'] },
+    { port: '5985/5986', proto: 'tcp', service: 'WinRM', signal: 'Windows remote management. With a credential it is an interactive shell (evil-winrm) — your way onto and through Windows hosts.', moves: ['lateral-exec', 'local-windows-interfaces', 'local-windows-routes', 'local-windows-neighbors', 'local-windows-listeners'] },
+    { port: '6379', proto: 'tcp', service: 'Redis', signal: 'Often unauthenticated. INFO reads the host; a writable Redis can drop an SSH key or web shell — a direct foothold.', moves: ['redis-enum'] },
+    { port: '8080', proto: 'tcp', service: 'HTTP-alt (Tomcat / Jenkins)', signal: 'App servers. Tomcat Manager deploys a WAR; Jenkins\' script console runs Groovy — both are code execution with creds.', moves: ['tomcat-deploy', 'jenkins-access'] },
+    { port: '27017', proto: 'tcp', service: 'MongoDB', signal: 'Historically no auth. If you can list databases, you can read them — hashes and API keys sit in plain collections.', moves: ['mongo-enum'] },
+  ];
+  function ports() {
+    return PORTS.map(function (p) {
+      var moves = (p.moves || []).filter(byId).map(function (id) { var m = byId(id); return { id: id, title: m.title, laneKey: (laneEntry(id) || {}).laneKey || '' }; });
+      return { port: p.port, proto: p.proto, service: p.service, signal: p.signal, moves: moves };
+    }).filter(function (p) { return p.moves.length; });
+  }
+
   // --- "Your turn" practice --------------------------------------------------------------------
   function factsInHandAt(moveId, seq) {
     var have = {}, m = byId(moveId);
@@ -355,7 +388,7 @@
   OBOL.study = {
     LANE_DEFS: LANE_DEFS, LANE_KEYS: LANE_KEYS,
     lanes: lanes, lane: lane, laneEdges: laneEdges, laneEntry: laneEntry, laneNext: laneNext,
-    atlas: atlas, scenarios: scenarios, scenario: scenario,
+    atlas: atlas, scenarios: scenarios, scenario: scenario, ports: ports,
     cmdLocus: cmdLocus, cellFor: cellFor, replayFor: replayFor, practiceFor: practiceFor,
     producersOf: producersOf, opensNext: opensNext,
     mastery: mastery, markStudied: markStudied, laneProgress: laneProgress, validatePath: validatePath,

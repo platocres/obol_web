@@ -807,7 +807,7 @@ function serve() {
   await page.waitForSelector('.study-route', { timeout: 6000 }).catch(() => {});
   ok((await page.locator('.study-map .study-lane-card.active').count()) === 11, 'Learn opens on the map with all 11 pickable lanes');
   // the Atlas: every lane's steps as one zoomable graph; draw a custom path and study it
-  await page.locator('.study-graph-cta').click();
+  await page.locator('[data-graph]').click();
   await page.waitForTimeout(250);
   ok((await page.locator('.atlas-stage').count()) === 1, 'the Atlas renders a zoomable stage');
   ok((await page.locator('.atlas-node').count()) === 167, 'the Atlas shows all 167 method steps as nodes');
@@ -857,6 +857,24 @@ function serve() {
   await page.locator('[data-rp="skip"]').click();
   await page.waitForTimeout(200);
   ok((await page.locator('.study-replay .rp-line.hot').count()) >= 1, 'the Watch replay highlights the signal line in the output');
+  // "Run it from" toggle: remote (your box) vs on the target, with a connect step
+  ok((await page.locator('.study-runways .rw-tab').count()) === 2, 'the cell offers a remote vs on-target run toggle');
+  await page.locator('.rw-tab[data-runway="onhost"]').click();
+  await page.waitForTimeout(120);
+  ok(!(await page.locator('.rw-pane[data-pane="onhost"]').isHidden()), 'switching to "on the target" reveals the on-host pane with a connect step');
+  ok((await page.locator('.rw-pane[data-pane="onhost"] .rw-connect').count()) === 1, 'the on-target pane shows how to connect first');
+  // the by-port view: a port is open → the moves it unlocks (signal recognition)
+  await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-map', { timeout: 6000 }).catch(() => {});
+  await page.locator('[data-ports]').click();
+  await page.waitForTimeout(200);
+  ok((await page.locator('.port-card').count()) >= 15, 'the by-port view renders a card per open port');
+  ok((await page.locator('.port-move').count()) >= 40, 'each port card lists the moves it unlocks');
+  await page.locator('.port-move').first().click();
+  await page.waitForTimeout(150);
+  ok((await page.locator('.study-cols').count()) === 1, 'clicking a port move opens its study cell');
+  ok((await page.locator('.study-back', { hasText: 'Open ports' }).count()) === 1, 'the cell can go back to the by-port view');
   // multi-step replay: a two-sided tool (ligolo) shows per-locus headers in order (on your box / on the target)
   await page.goto(`http://localhost:${PORT}/index.html#/study/pivot-ligolo`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.study-replay', { timeout: 6000 }).catch(() => {});

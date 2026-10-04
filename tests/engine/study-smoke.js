@@ -94,6 +94,14 @@ ok(at.crossEdges.length >= 5 && at.crossEdges.some((e) => e.from === 'recon-smb-
 ok(at.nodes.every((n) => typeof n.col === 'number' && typeof n.row === 'number'), 'every atlas node has a grid position');
 ok(at.lanes.length === 11 && at.laneOrder.length === 11, 'atlas carries all eleven lanes');
 
+// --- by-port view (signal recognition: a port is open → the moves it unlocks) ----------------
+const pv = S.ports();
+ok(pv.length >= 15, 'the by-port view groups moves under at least 15 ports/services');
+ok(pv.every((p) => p.moves.length && p.moves.every((m) => !!S.cellFor(m.id))), 'every port lists real, resolvable moves');
+ok(pv.some((p) => p.port === '135/139/445' && p.moves.some((m) => m.id === 'eternalblue')), 'SMB (445) surfaces EternalBlue');
+ok(pv.some((p) => p.port === '88' && p.moves.some((m) => m.id === 'asrep-roast')), 'Kerberos (88) surfaces AS-REP roasting');
+ok(pv.every((p) => p.signal && p.signal.length > 20), 'each port carries a plain-language "what it means" signal');
+
 // --- fixed scenarios -------------------------------------------------------------------------
 const scn = S.scenarios();
 ok(scn.length >= 4, 'at least four fixed scenarios are defined');
