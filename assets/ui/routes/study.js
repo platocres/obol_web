@@ -283,6 +283,10 @@
     return out;
   }
   function recapBlock() {
+    // prototype scope: only show the recap where we have authored a clean lead-up (file-upload).
+    // pathTo ancestors exist for many moves but the raw transitive closure is noisy, so we do not
+    // surface it until each entry point's lead-up is curated. See recapSteps for the composition.
+    if (!study().leadupFor(_sel)) return '';
     var steps = recapSteps(_sel); if (!steps.length) return '';
     var cur = study().cellFor(_sel);
     var rows = steps.map(function (s, i) {
@@ -871,7 +875,8 @@
     var multi = steps.length > 1;
     function popFacts(delay) {
       study().markStudied(rp.id, 'studied');   // watching a move through counts as having studied it
-      (rp.proves || []).forEach(function (f, k) { setTimeout(function () { if (token.cancelled || !facts) return; var c = document.createElement('span'); c.className = 'study-chip proof rp-pop'; c.textContent = '+ ' + human(f); facts.appendChild(c); }, delay + k * 260); });
+      if (facts && (rp.proves || []).length) setTimeout(function () { if (token.cancelled || !facts) return; var lab = document.createElement('span'); lab.className = 'rp-facts-l'; lab.textContent = 'New facts in hand'; facts.appendChild(lab); }, delay);
+      (rp.proves || []).forEach(function (f, k) { setTimeout(function () { if (token.cancelled || !facts) return; var c = document.createElement('span'); c.className = 'study-chip proof rp-pop'; c.textContent = '+ ' + titleCase(human(f)); facts.appendChild(c); }, delay + 120 + k * 260); });
       var nextId = rp.next;
       if (_pathMode && _path.length) { var pi = _path.indexOf(rp.id); nextId = (pi >= 0 && pi < _path.length - 1) ? _path[pi + 1] : null; }
       if (_autolane && nextId) setTimeout(function () { if (token.cancelled) return; _sel = nextId; _autoplay = true; OBOL.router.render(); }, delay + (rp.proves.length * 260) + 1400);

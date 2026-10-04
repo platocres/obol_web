@@ -299,6 +299,17 @@
       signal: 'You have an error in your SQL syntax; check the manual that',
       teach: 'A single quote that throws a SQL error means your input reaches the query unescaped, the first proof of SQL injection. From here you find the column count and start extracting data (or hand it to sqlmap).',
     },
+    'manual-sqli-exploitation': {
+      why: "Automated injection tools such as sqlmap are prohibited under OSCP examination conditions, so a confirmed injection must be exploited entirely by hand, and this is the module that drills it. The sequence is fixed: find the column count, locate the reflected columns with a UNION SELECT, fingerprint the database and the account it runs as, then extract data one table at a time. Where nothing is reflected, recover the data through an inference oracle, one character per request. Where the database account holds the FILE privilege, the same injection reads local files and writes a web shell to the web root, turning data theft into code execution. Practise it until it is second nature, because on the exam it is the only SQL injection path open to you.",
+      cmd: "curl -s 'http://10.10.10.10/page.php?id=0 UNION SELECT 1,group_concat(username,0x3a,password),3 FROM users-- -'", tool: 'curl',
+      output: [
+        '<h2>Search results</h2>',
+        '<div class="row">admin:21232f297a57a5a743894a0e4a801fc3</div>',
+        '<div class="row">jdoe:5f4dcc3b5aa765d61d8327deb882cf99</div>',
+      ].join('\n'),
+      signal: '<div class="row">admin:21232f297a57a5a743894a0e4a801fc3</div>',
+      teach: 'The UNION SELECT reflected the username and password columns straight into the page, one row per user, concatenated with a colon. You have extracted every credential in the users table by hand with a single request, no sqlmap involved. Crack the hashes offline, then reuse the recovered passwords to log in.',
+    },
     'sqlmap-automation': {
       why: "Once you have confirmed injection by hand, sqlmap automates the tedious part: dumping tables, reading files, sometimes landing a shell. The rule you must internalise is that sqlmap is banned on the OSCP exam, so treat this as a lab-only accelerator and make sure you can do the same extraction manually. Reach for it in labs to save time after you already understand the bug, never as a way to discover bugs you have not verified.",
       cmd: 'sqlmap -r request.txt --batch --level=3 --risk=2 --dump', tool: 'sqlmap',

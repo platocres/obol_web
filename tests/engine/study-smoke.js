@@ -82,14 +82,14 @@ S.LANE_KEYS.forEach((k) => {
     if (cc && cc.commands.length) { const rk = cc.commands.map((c) => c.rank); if (!rk.every((v, i) => i === 0 || v >= rk[i - 1])) { allCells = false; console.error('    not remote-first:', n.id); } }
   });
 });
-ok(total === 167, 'all 167 pack moves are navigable as lane nodes');
+ok(total === 168, 'all 168 pack moves are navigable as lane nodes');
 ok(allCells, 'every one of ' + total + ' nodes: complete cell + commands + practice + replay, commands remote-first');
 ok(withOutput >= 40, withOutput + ' nodes carry a sample output (hand + auto-bootstrapped fixtures)');
 
 // --- the atlas (all lanes as one graph) ------------------------------------------------------
 const at = S.atlas();
-ok(at.nodes.length === 167, 'atlas has all 167 nodes');
-ok(at.laneEdges.length === 167 - at.lanes.length, 'atlas intra-lane edges = nodes − lanes (one chain per lane)');
+ok(at.nodes.length === 168, 'atlas has all 168 nodes');
+ok(at.laneEdges.length === 168 - at.lanes.length, 'atlas intra-lane edges = nodes − lanes (one chain per lane)');
 ok(at.crossEdges.length >= 5 && at.crossEdges.some((e) => e.from === 'recon-smb-anon' && e.to === 'asrep-roast'), 'atlas draws cross-lane bridges (SMB enum → AS-REP)');
 ok(at.nodes.every((n) => typeof n.col === 'number' && typeof n.row === 'number'), 'every atlas node has a grid position');
 ok(at.lanes.length === 11 && at.laneOrder.length === 11, 'atlas carries all eleven lanes');
