@@ -814,5 +814,185 @@
       teach: 'Chisel builds a SOCKS proxy back through the compromised host. Point proxychains at 127.0.0.1:1080 and your tools reach the internal network as if you were on it — the standard way to scan and attack a subnet you can only touch through one box.',
     },
 
+    // ==================== ACTIVE DIRECTORY (depth) ====================
+    'nxc-arsenal': {
+      output: [
+        'SMB  10.10.10.10  445  DC01  [+] corp.local\\jdoe:Summer2024!',
+        'SMB  10.10.10.10  445  DC01  [*] Enumerated shares',
+        'SMB  10.10.10.10  445  DC01  Share       Permissions  Remark',
+        'SMB  10.10.10.10  445  DC01  SYSVOL      READ',
+        'SMB  10.10.10.10  445  DC01  Finance     READ,WRITE',
+      ].join('\n'),
+      signal: 'SMB  10.10.10.10  445  DC01  Finance     READ,WRITE',
+      teach: 'NetExec (nxc) is the swiss-army knife of AD: one credential, and it enumerates shares, users, password policy, and sessions, then runs modules. A WRITE share is a place to drop a payload or capture a hash — note it and move on.',
+    },
+    'ticket-reuse': {
+      output: [
+        '[*] Action: Import Ticket',
+        '[+] Ticket successfully imported!',
+        'C:\\> klist',
+        '   Client: jdoe @ CORP.LOCAL',
+        '   Server: krbtgt/CORP.LOCAL',
+      ].join('\n'),
+      signal: '[+] Ticket successfully imported!',
+      teach: 'Pass-the-Ticket loads a stolen Kerberos ticket straight into your session — no password needed. Once "imported", every tool that speaks Kerberos acts as that user. A TGT is the whole identity; a TGS is one service.',
+    },
+    'powerview-enum': {
+      output: [
+        'PS> Get-DomainUser -SPN | select samaccountname',
+        'samaccountname',
+        '--------------',
+        'svc_sql',
+        'svc_web',
+        'PS> Find-InterestingDomainAcl -ResolveGUIDs',
+        'IdentityReferenceName : jdoe   ActiveDirectoryRights : GenericAll',
+      ].join('\n'),
+      signal: 'IdentityReferenceName : jdoe   ActiveDirectoryRights : GenericAll',
+      teach: 'PowerView turns a Windows foothold into a map of the domain. Accounts with an SPN are kerberoastable; a GenericAll ACL over an object is a takeover edge. This is BloodHound\'s data, gathered by hand.',
+    },
+    'ad-psdotnet-enum': {
+      output: [
+        'PS> ([ADSISearcher]"(samAccountType=805306368)").FindAll().Count',
+        '42',
+        'PS> ([ADSISearcher]"(&(objectCategory=user)(servicePrincipalName=*))")',
+        'svc_sql  CN=svc_sql,OU=Services,DC=corp,DC=local',
+      ].join('\n'),
+      signal: 'svc_sql  CN=svc_sql,OU=Services,DC=corp,DC=local',
+      teach: 'When PowerView is blocked, raw .NET ADSI queries enumerate the domain with nothing but built-in PowerShell — no upload, no download. Living off the land this way sidesteps the AV that flags known tooling.',
+    },
+    'ad-legacy-enum': {
+      output: [
+        'C:\\> net user /domain',
+        'User accounts for \\\\DC01',
+        'Administrator   jdoe   krbtgt   svc_sql',
+        'C:\\> net group "Domain Admins" /domain',
+        'Members: Administrator  backupadmin',
+      ].join('\n'),
+      signal: 'Members: Administrator  backupadmin',
+      teach: 'Every Windows box ships with `net` and `nltest`. They are noisy but always present — when you land on a host with no tools, these built-ins still list users, groups, and domain admins. `backupadmin` in Domain Admins is a lead.',
+    },
+    'kerberos-tickets': {
+      output: [
+        '$ nxc ldap 10.10.10.10 -u jdoe -p Summer2024!',
+        'LDAP  10.10.10.10  389  DC01  [-] KRB_AP_ERR_SKEW (clock skew too great)',
+        '$ sudo ntpdate -u 10.10.10.10',
+        '$ nxc ldap 10.10.10.10 -u jdoe -p Summer2024!',
+        'LDAP  10.10.10.10  389  DC01  [+] corp.local\\jdoe:Summer2024!',
+      ].join('\n'),
+      signal: 'KRB_AP_ERR_SKEW (clock skew too great)',
+      teach: 'Kerberos refuses tickets when your clock differs from the DC by more than 5 minutes — "KRB_AP_ERR_SKEW". It is the single most common reason an AD attack "mysteriously" fails. Sync your clock to the DC and try again.',
+    },
+    'crack-tgs': {
+      output: [
+        '$krb5tgs$23$*svc_sql$CORP.LOCAL$...:9f8c... : P@ssw0rd2023',
+        'Session..........: hashcat',
+        'Status...........: Cracked',
+      ].join('\n'),
+      signal: 'Status...........: Cracked',
+      teach: 'A Kerberoasted service ticket (mode 13100) cracks offline — the DC never sees your guesses, so you crack at full GPU speed with no lockout. Service accounts often have weak, rarely-rotated passwords, which is why this works so often.',
+    },
+    'laps-read': {
+      output: [
+        'LDAP  10.10.10.20  389  WS01  [+] ms-Mcs-AdmPwd read',
+        'LDAP  10.10.10.20  389  WS01  Computer:WS01$  Password:Hb7!xQ2m...k9',
+      ].join('\n'),
+      signal: 'Computer:WS01$  Password:Hb7!xQ2m...k9',
+      teach: 'LAPS randomises the local Administrator password per machine — good security, unless your account has the right to read the `ms-Mcs-AdmPwd` attribute. If you can read it, you have local admin on that host, handed over in cleartext.',
+    },
+    'gmsa-read': {
+      output: [
+        'ReadGMSAPassword via corp.local\\svc_app$',
+        '[*] Managed Password: aad3b435...:5f4dcc3b5aa765d61d8327deb882cf99',
+        '[*] NTLM            : 5f4dcc3b5aa765d61d8327deb882cf99',
+      ].join('\n'),
+      signal: '[*] NTLM            : 5f4dcc3b5aa765d61d8327deb882cf99',
+      teach: 'A gMSA\'s password is managed by AD and readable only by principals on its allow-list. When your account is on that list, you recover the NT hash directly — no cracking — and can pass it. gMSAs are often over-privileged service identities.',
+    },
+    'bloodyad-acl': {
+      output: [
+        '[+] jdoe has GenericAll over svc_backup',
+        '$ bloodyAD ... set password svc_backup NewP@ss123!',
+        '[+] Password changed successfully for svc_backup',
+      ].join('\n'),
+      signal: '[+] Password changed successfully for svc_backup',
+      teach: 'An ACL edge like GenericAll is abstract until you use it. bloodyAD turns "I have rights over this account" into "I just set its password" — a concrete takeover. Each edge BloodHound draws is an action like this one.',
+    },
+    'shadow-credentials': {
+      output: [
+        '[*] Adding Key Credential to msDS-KeyCredentialLink of svc_app',
+        '[+] Saved PFX to svc_app.pfx',
+        '$ certipy auth -pfx svc_app.pfx',
+        '[*] Got hash for svc_app: aad3b...:2b576acbe6b...',
+      ].join('\n'),
+      signal: '[*] Got hash for svc_app: aad3b...:2b576acbe6b...',
+      teach: 'Shadow Credentials abuses write access to an account\'s msDS-KeyCredentialLink: you add your own certificate, then authenticate as the account via PKINIT and recover its NT hash. A modern, quiet alternative to resetting the password.',
+    },
+    'adcs-esc': {
+      output: [
+        'Certificate Templates',
+        '  0',
+        '    Template Name    : UserEnroll',
+        '    Enrollment Rights: Domain Users',
+        '    [!] Vulnerabilities: ESC1 — Enrollee supplies subject + client auth',
+      ].join('\n'),
+      signal: '[!] Vulnerabilities: ESC1 — Enrollee supplies subject + client auth',
+      teach: 'A misconfigured certificate template (ESC1) lets any user request a cert as anyone — including a Domain Admin. certipy finds the template; the "Vulnerabilities" line is your path. AD CS is a frequent, high-impact domain-takeover route.',
+    },
+    'cert-authenticate': {
+      output: [
+        '[*] Using principal: administrator@corp.local',
+        '[*] Trying to get TGT...',
+        '[+] Got hash for administrator@corp.local: aad3b...:31d6cfe0d16...',
+      ].join('\n'),
+      signal: '[+] Got hash for administrator@corp.local: aad3b...:31d6cfe0d16...',
+      teach: 'A certificate you obtained (via ESC1, Shadow Credentials, etc.) authenticates over PKINIT and hands back the account\'s NT hash. From there you pass-the-hash — the certificate was just the key that unlocked the credential.',
+    },
+    'getst-impersonation': {
+      output: [
+        '[*] Impersonating administrator',
+        '[*] Requesting S4U2self',
+        '[*] Requesting S4U2proxy',
+        '[+] Saving ticket in administrator@cifs_dc01.ccache',
+      ].join('\n'),
+      signal: '[+] Saving ticket in administrator@cifs_dc01.ccache',
+      teach: 'With constrained-delegation rights you ask the KDC for a service ticket "on behalf of" any user — S4U2self then S4U2proxy — and get a ccache that lets you act as Administrator against that service. Load the ticket and you are in.',
+    },
+    'coerce-auth': {
+      output: [
+        '[*] Sending PetitPotam (EfsRpcOpenFileRaw) to 10.10.10.10',
+        '[+] Attack worked — target authenticated to 10.10.14.5',
+        '[SMB] NTLMv2-SSP Username : CORP\\DC01$',
+      ].join('\n'),
+      signal: '[SMB] NTLMv2-SSP Username : CORP\\DC01$',
+      teach: 'Coercion tricks a target — often a DC — into authenticating to you (PetitPotam, PrinterBug). The machine account hash you catch (`DC01$`) can be relayed to AD CS or LDAP for escalation. The DC authenticating to you is the whole point.',
+    },
+    'unconstrained-delegation': {
+      output: [
+        '[*] Monitoring for new TGTs every 5 seconds',
+        '[+] Found new TGT: user=DC01$@CORP.LOCAL',
+        '[*] Base64(ticket.kirbi): doIF...',
+      ].join('\n'),
+      signal: '[+] Found new TGT: user=DC01$@CORP.LOCAL',
+      teach: 'A host with unconstrained delegation caches the TGT of everyone who authenticates to it. Combine it with coercion to make a DC connect, capture `DC01$`\'s TGT, and you can DCSync. Watching for the DC\'s ticket is the goal.',
+    },
+    'golden-ticket': {
+      output: [
+        '[*] Creating golden ticket for administrator',
+        '[*] Using domain SID S-1-5-21-...-...-...',
+        '[+] Saving ticket in administrator.ccache',
+      ].join('\n'),
+      signal: '[+] Saving ticket in administrator.ccache',
+      teach: 'With the krbtgt hash you forge a TGT for any user, valid until krbtgt is rotated twice — the ultimate persistence. This is a post-compromise move: you already own the domain, and the golden ticket keeps you in.',
+    },
+    'silver-ticket': {
+      output: [
+        '[*] Creating silver ticket for CIFS/dc01.corp.local',
+        '[*] Using service account hash (RC4)',
+        '[+] Saving ticket in administrator.ccache',
+      ].join('\n'),
+      signal: '[+] Saving ticket in administrator.ccache',
+      teach: 'A silver ticket forges a service ticket using one service account\'s hash — scoped to that one service, but it never touches the DC, so it is quiet. Narrower than a golden ticket, and useful when all you have is a single service hash.',
+    },
+
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
