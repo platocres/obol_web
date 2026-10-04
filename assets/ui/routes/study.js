@@ -302,14 +302,12 @@
     return paths.filter(function (p) { return p.key === sel; })[0] || paths[0];
   }
   function recapSteps(moveId) {
+    // the chosen authored route is the complete "how you got here"; we do not append the raw pathTo
+    // ancestor closure, which duplicates what a hand-authored lead-up already walks through.
     var out = [];
     var cp = chosenPath(moveId);
     if (cp) cp.steps.forEach(function (s) {
       out.push({ title: s.title || (s.tool || 'Recon'), where: s.where || 'local', cmd: s.cmd || '', sig: s.sig || '', teach: s.teach || '' });
-    });
-    (study().pathTo(moveId) || []).slice(0, -1).forEach(function (id) {
-      var rp = study().replayFor(id); if (!rp || !rp.command) return;
-      out.push({ title: rp.title, where: rp.locus === 'ON-TARGET' ? 'host' : 'local', cmd: rp.command, sig: rp.signal || '', teach: rp.teach || '', id: id });
     });
     return out;
   }
