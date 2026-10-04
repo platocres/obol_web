@@ -806,14 +806,21 @@ function serve() {
   await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.study-route', { timeout: 6000 }).catch(() => {});
   ok((await page.locator('.study-map .study-lane-card.active').count()) === 5, 'Learn opens on the map with 5 pickable lanes');
-  // the full methodology graph: every lane as a column of pickable steps
+  // the Atlas: every lane's steps as one zoomable graph; draw a custom path and study it
   await page.locator('.study-graph-cta').click();
-  await page.waitForTimeout(150);
-  ok((await page.locator('.study-graphview .study-gcol').count()) === 5, 'the full graph shows all 5 lane columns');
-  ok((await page.locator('.study-graphview .study-gcard').count()) === 26, 'the graph shows all 26 steps across the lanes');
-  await page.locator('.study-graphview .study-gcard', { hasText: 'SeImpersonate' }).first().click();
+  await page.waitForTimeout(250);
+  ok((await page.locator('.atlas-stage').count()) === 1, 'the Atlas renders a zoomable stage');
+  ok((await page.locator('.atlas-node').count()) === 26, 'the Atlas shows all 26 method steps as nodes');
+  ok((await page.locator('.atlas-edge-cross').count()) >= 1, 'the Atlas draws cross-lane bridges');
+  // draw a 2-node custom path, then study it
+  await page.locator('.atlas-node[data-anode="asrep-roast"]').click();
+  await page.locator('.atlas-node[data-anode="crack-asrep"]').click();
+  await page.waitForTimeout(120);
+  ok((await page.locator('.atlas-node.sel').count()) === 2, 'clicking nodes draws a custom path (2 selected)');
+  await page.locator('[data-atlas="study"]').click();
   await page.waitForTimeout(200);
-  ok((await page.locator('.study-cell-title').first().textContent().catch(() => '') || '').indexOf('SeImpersonate') !== -1, 'picking a Windows step from the graph opens its cell');
+  ok((await page.locator('.study-panel-h', { hasText: 'custom path' }).count()) === 1, 'studying a custom path shows it as the rail');
+  ok((await page.locator('.study-cell-title').first().textContent().catch(() => '') || '').indexOf('AS-REP') !== -1, 'the custom path opens on its first step');
   // deep-link straight into a node to exercise the cell + replay
   await page.goto(`http://localhost:${PORT}/index.html#/study/asrep-roast`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.study-cols', { timeout: 6000 }).catch(() => {});

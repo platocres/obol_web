@@ -183,21 +183,57 @@
     return null;
   }
 
+  // strip a leading shell prompt so an echoed command line can be compared to the played command
+  function stripPrompt(s) { return String(s || '').replace(/^\s*(kali\$|root@[^\s#]*[#$]|C:\\[^>]*>|[#$])\s*/, '').trim(); }
+
   // --- replay script (Watch) -------------------------------------------------------------------
   function replayFor(moveId) {
     var cell = cellFor(moveId); if (!cell) return null;
     var primary = cell.commands[0] || null;
+    var cmd = primary ? primary.run : '';
+    var lines = cell.output ? cell.output.text.split('\n') : [];
+    // the replay already types the command as its prompt line — drop a first output line that just
+    // echoes that same command, so it isn't shown twice.
+    if (lines.length && cmd && stripPrompt(lines[0]) === stripPrompt(cmd)) lines = lines.slice(1);
     return {
       id: cell.id, title: cell.title, phase: cell.phase, laneKey: cell.laneKey,
       tool: primary ? primary.tool : '', locus: primary ? primary.locus : '', tag: primary ? primary.tag : '',
-      command: primary ? primary.run : '', note: primary ? primary.note : '',
-      outputLines: cell.output ? cell.output.text.split('\n') : [],
+      command: cmd, note: primary ? primary.note : '',
+      outputLines: lines,
       signal: cell.output ? cell.output.signal : '',
       teach: cell.output ? cell.output.teach : '',
       proves: cell.proves,
       opens: (cell.opens[0] || {}).title || '',
       next: laneNext(moveId),
     };
+  }
+
+  // --- the atlas: all lanes as one layered graph, with cross-lane bridges ----------------------
+  // Hand-curated bridges tell the real story the raw fact-vocabulary doesn't always spell out: how
+  // a result in one lane becomes the foothold/seed for another.
+  var BRIDGES = [
+    { from: 'nmap-version-scripts', to: 'ad-dc-identify', note: 'a Windows/AD host → the AD lane' },
+    { from: 'recon-smb-anon', to: 'asrep-roast', note: 'anonymous SMB can leak the user list' },
+    { from: 'recon-smb-anon', to: 'password-spray', note: 'a user list to spray' },
+    { from: 'recon-web-triage', to: 'content-discovery', note: 'a live web app → map it' },
+    { from: 'web-shells', to: 'linux-enum', note: 'a web shell is a Linux foothold' },
+    { from: 'web-shells', to: 'windows-enum', note: '…or a Windows foothold' },
+  ];
+  function atlas() {
+    var nodes = [], index = {};
+    LANE_ORDER.forEach(function (lk, row) {
+      lane(lk).forEach(function (n, col) {
+        var node = { id: n.id, title: n.title, lane: lk, phase: n.phase, proves: n.proves, reqs: n.reqs, col: col, row: row };
+        nodes.push(node); index[n.id] = node;
+      });
+    });
+    var laneE = [], crossE = [];
+    LANE_ORDER.forEach(function (lk) {
+      var N = lane(lk);
+      for (var i = 1; i < N.length; i++) laneE.push({ from: N[i - 1].id, to: N[i].id });
+    });
+    BRIDGES.forEach(function (b) { if (index[b.from] && index[b.to]) crossE.push({ from: b.from, to: b.to, note: b.note }); });
+    return { nodes: nodes, laneEdges: laneE, crossEdges: crossE, laneOrder: LANE_ORDER, cols: Math.max.apply(null, LANE_ORDER.map(function (k) { return LANES[k].nodes.length; })) };
   }
 
   // --- "Your turn" practice --------------------------------------------------------------------
@@ -240,6 +276,7 @@
   OBOL.study = {
     LANES: LANES, LANE_ORDER: LANE_ORDER, AD_LANE: LANES.ad.nodes,
     lanes: lanes, lane: lane, laneEdges: laneEdges, laneOf: laneOf, laneEntry: laneEntry, laneNext: laneNext,
+    atlas: atlas,
     cmdLocus: cmdLocus, cellFor: cellFor, replayFor: replayFor, practiceFor: practiceFor,
     producersOf: producersOf, opensNext: opensNext,
   };

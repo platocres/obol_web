@@ -21,6 +21,10 @@
   var _autolane = false;         // Watch: auto-advance through the whole chain
   var _autoplay = false;         // start the replay as soon as the next node mounts (chain mode)
   var _rpToken = null;           // cancel token for the running replay's timers
+  var _atlasPath = [];           // Atlas: the custom path being drawn (ordered node ids)
+  var _az = null;                // Atlas pan/zoom state {tx,ty,k}; null = fit on mount
+  var _path = [];                // the compiled custom path currently being studied
+  var _pathMode = false;         // node view follows _path instead of the move's lane
 
   function esc(s) { return U.esc(String(s == null ? '' : s)); }
   function study() { return OBOL.study; }
@@ -45,21 +49,36 @@
   function laneKeyOf(moveId) { var e = study().laneEntry(moveId); return e ? e.laneKey : 'ad'; }
   function laneMeta(key) { var ls = study().lanes(); for (var i = 0; i < ls.length; i++) if (ls[i].key === key) return ls[i]; return { name: key }; }
 
-  // ---- left: the current lane as a rail -------------------------------------------------------
+  // ---- left: the current lane (or custom path) as a rail --------------------------------------
   function graphPanel() {
-    var lk = laneKeyOf(_sel), lane = study().lane(lk), meta = laneMeta(lk), lastPhase = null, html = '';
-    lane.forEach(function (n, i) {
-      if (n.phase !== lastPhase) { html += '<div class="study-phase">' + esc(n.phase) + '</div>'; lastPhase = n.phase; }
-      var cls = 'study-gnode lane-' + lk + (n.id === _sel ? ' active' : '') + (i > 0 ? ' linked' : '');
-      html += '<button type="button" class="' + cls + '" data-node="' + U.attr(n.id) + '">'
-        + '<span class="study-gn-t">' + esc(n.title) + '</span>'
-        + (n.proves && n.proves.length ? '<span class="study-gn-k">gets you ' + esc(human(n.proves[0])) + '</span>' : '')
-        + '</button>';
-    });
+    var html = '', header;
+    if (_pathMode && _path.length) {
+      header = 'Your custom path · click a step';
+      _path.forEach(function (id, i) {
+        var m = study().cellFor(id); if (!m) return;
+        var lk = laneKeyOf(id);
+        var cls = 'study-gnode lane-' + lk + (id === _sel ? ' active' : '') + (i > 0 ? ' linked' : '');
+        html += '<button type="button" class="' + cls + '" data-node="' + U.attr(id) + '">'
+          + '<span class="study-gn-t">' + esc(m.title) + '</span>'
+          + '<span class="study-gn-k">' + esc(laneMeta(lk).short) + (m.proves && m.proves.length ? ' · gets you ' + esc(human(m.proves[0])) : '') + '</span>'
+          + '</button>';
+      });
+    } else {
+      var lk2 = laneKeyOf(_sel), lane = study().lane(lk2), lastPhase = null;
+      header = laneMeta(lk2).name + ' · click a step';
+      lane.forEach(function (n, i) {
+        if (n.phase !== lastPhase) { html += '<div class="study-phase">' + esc(n.phase) + '</div>'; lastPhase = n.phase; }
+        var cls = 'study-gnode lane-' + lk2 + (n.id === _sel ? ' active' : '') + (i > 0 ? ' linked' : '');
+        html += '<button type="button" class="' + cls + '" data-node="' + U.attr(n.id) + '">'
+          + '<span class="study-gn-t">' + esc(n.title) + '</span>'
+          + (n.proves && n.proves.length ? '<span class="study-gn-k">gets you ' + esc(human(n.proves[0])) + '</span>' : '')
+          + '</button>';
+      });
+    }
     return '<div class="study-panel study-graph-panel">'
-      + '<p class="study-panel-h">' + esc(meta.name) + ' · click a step</p>'
+      + '<p class="study-panel-h">' + esc(header) + '</p>'
       + '<div class="study-graph">' + html + '</div>'
-      + '<button type="button" class="study-graph-all" data-graph>⊞ See all lanes on the graph</button>'
+      + '<button type="button" class="study-graph-all" data-graph>\u229e Open the Atlas (all lanes)</button>'
       + '</div>';
   }
 
@@ -198,24 +217,47 @@
   }
 
   // ---- the full methodology graph: every lane, every step, pickable ---------------------------
-  function graphView() {
-    var ls = study().lanes();
-    var cols = ls.map(function (L) {
-      var nodes = study().lane(L.key);
-      var items = nodes.map(function (n, i) {
-        return (i ? '<div class="study-gconn">↓</div>' : '')
-          + '<button type="button" class="study-gcard lane-' + L.key + '" data-open="' + U.attr(n.id) + '">'
-          + '<span class="study-gcard-ph">' + esc(n.phase) + '</span>'
-          + '<span class="study-gcard-t">' + esc(n.title) + '</span></button>';
-      }).join('');
-      return '<div class="study-gcol lane-' + L.key + '">'
-        + '<div class="study-gcol-h">' + esc(L.name) + ' <span class="study-gcol-n">' + L.count + '</span></div>'
-        + '<div class="study-gcol-body">' + items + '</div></div>';
+  function atlasView() {
+    // --- the Atlas: a zoomable/pannable methodology graph you draw custom paths through ----------
+    var NW = 184, NH = 50, CGAP = 66, RGAP = 54, LEFT = 150, TOP = 54;
+    var A = study().atlas();
+    var pos = {};
+    A.nodes.forEach(function (n) { var x = LEFT + n.col * (NW + CGAP), y = TOP + n.row * (NH + RGAP); pos[n.id] = { x: x, y: y, cx: x + NW / 2, cy: y + NH / 2 }; });
+    var W = LEFT + A.cols * (NW + CGAP) + 20, H = TOP + A.laneOrder.length * (NH + RGAP) + 20;
+
+    function edgePath(a, b, cross) {
+      var p1 = pos[a], p2 = pos[b]; if (!p1 || !p2) return '';
+      if (!cross) { var x1 = p1.x + NW, y1 = p1.cy, x2 = p2.x, y2 = p2.cy, mx = (x1 + x2) / 2; return 'M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2; }
+      var sx = p1.cx, sy = (p2.cy > p1.cy ? p1.y + NH : p1.y), ex = p2.cx, ey = (p2.cy > p1.cy ? p2.y : p2.y + NH);
+      return 'M' + sx + ',' + sy + ' C' + sx + ',' + ((sy + ey) / 2) + ' ' + ex + ',' + ((sy + ey) / 2) + ' ' + ex + ',' + ey;
+    }
+    var laneEdgeSvg = A.laneEdges.map(function (e) { return '<path class="atlas-edge atlas-edge-lane lane-' + study().laneEntry(e.from).laneKey + '" d="' + edgePath(e.from, e.to, false) + '"/>'; }).join('');
+    var crossEdgeSvg = A.crossEdges.map(function (e) { return '<path class="atlas-edge atlas-edge-cross" d="' + edgePath(e.from, e.to, true) + '"><title>' + esc(e.note || '') + '</title></path>'; }).join('');
+    var nodeSvg = A.nodes.map(function (n) {
+      var p = pos[n.id], proof = (n.proves && n.proves[0]) ? human(n.proves[0]) : '';
+      return '<g class="atlas-node lane-' + n.lane + '" data-anode="' + U.attr(n.id) + '" data-cx="' + p.cx + '" data-cy="' + p.cy + '" transform="translate(' + p.x + ',' + p.y + ')">'
+        + '<rect class="an-box" width="' + NW + '" height="' + NH + '" rx="9"/>'
+        + '<text class="an-badge" x="9" y="-7"></text>'
+        + '<text class="an-ph" x="11" y="17">' + esc(n.phase.toUpperCase()) + '</text>'
+        + '<text class="an-t" x="11" y="32">' + esc(n.title.length > 26 ? n.title.slice(0, 25) + '…' : n.title) + '</text>'
+        + '<text class="an-sub" x="11" y="45">' + esc(proof ? ('→ ' + (proof.length > 28 ? proof.slice(0, 27) + '…' : proof)) : '') + '</text>'
+        + '</g>';
     }).join('');
-    return '<section class="study-route study-graphview">'
-      + '<div class="study-top"><button type="button" class="study-back" data-back-map>← Back to paths</button>'
-      + '<div class="study-crumb"><b>Study</b> · The whole methodology <span class="study-map-path-note">each column is a path · click any step to study it</span></div></div>'
-      + '<div class="study-graphwrap">' + cols + '</div>'
+    var laneLabels = A.laneOrder.map(function (lk, row) { var meta = laneMeta(lk); var y = TOP + row * (NH + RGAP) + NH / 2; return '<text class="atlas-lanelabel lane-' + lk + '" x="12" y="' + (y + 4) + '">' + esc(meta.short || meta.name) + '</text>'; }).join('');
+
+    return '<section class="study-route study-atlas-route">'
+      + '<div class="study-top"><button type="button" class="study-back" data-back-map>← Paths</button>'
+      + '<div class="study-crumb"><b>Study</b> · Atlas <span class="study-map-path-note">drag to pan · scroll to zoom · click steps to draw a path</span></div>'
+      + '<div class="atlas-ctrl"><button type="button" class="study-rp-btn" data-az="out">−</button>'
+      + '<button type="button" class="study-rp-btn" data-az="reset">fit</button>'
+      + '<button type="button" class="study-rp-btn" data-az="in">+</button></div></div>'
+      + '<div class="atlas-stage" id="atlas-stage">'
+      + '<svg class="atlas-svg" id="atlas-svg"><g class="atlas-view" id="atlas-view" data-w="' + W + '" data-h="' + H + '">'
+      + laneLabels + '<g class="atlas-edges">' + laneEdgeSvg + crossEdgeSvg + '</g>'
+      + '<path class="atlas-pathline" id="atlas-pathline" d=""/>'
+      + '<g class="atlas-nodes">' + nodeSvg + '</g></g></svg>'
+      + '</div>'
+      + '<div class="atlas-tray" id="atlas-tray"></div>'
       + '</section>';
   }
 
@@ -223,7 +265,7 @@
     var right = _gear === 'practice' ? practicePanel() : cellPanel();
     return '<section class="study-route">'
       + '<div class="study-top">'
-      + '<button type="button" class="study-back" data-back>← ' + (_from === 'graph' ? 'The graph' : 'All paths') + '</button>'
+      + '<button type="button" class="study-back" data-back>← ' + (_pathMode ? 'Your path' : (_from === 'atlas' ? 'The Atlas' : 'All paths')) + '</button>'
       + '<div class="study-crumb"><b>Study</b> · ' + esc(laneMeta(laneKeyOf(_sel)).name) + ' · <span class="study-here">' + esc((study().cellFor(_sel) || {}).title || _sel) + '</span></div>'
       + '<div class="study-gears">'
       + '<button type="button" class="study-gear' + (_gear === 'watch' ? ' on' : '') + '" data-gear="watch">▶ Watch</button>'
@@ -234,8 +276,8 @@
   }
 
   function render(ctx) {
-    if (ctx && ctx.args && ctx.args[0] && study().cellFor(ctx.args[0])) { _sel = ctx.args[0]; _view = 'node'; }
-    return _view === 'map' ? mapView() : (_view === 'graph' ? graphView() : nodeView());
+    if (ctx && ctx.args && ctx.args[0] && study().cellFor(ctx.args[0])) { _sel = ctx.args[0]; _view = 'node'; _pathMode = false; _path = []; }
+    return _view === 'map' ? mapView() : (_view === 'atlas' ? atlasView() : nodeView());
   }
 
   // ---- replay controller ----------------------------------------------------------------------
@@ -248,11 +290,14 @@
     if (!term) return;
     var token = { cancelled: false }; _rpToken = token;
     term.innerHTML = ''; if (facts) facts.innerHTML = '';
-    var laneIds = study().lane(laneKeyOf(rp.id)).map(function (x) { return x.id; }), idx = laneIds.indexOf(rp.id);
-    if (prog) prog.textContent = 'step ' + (idx + 1) + ' / ' + laneIds.length;
+    var seq = (_pathMode && _path.length) ? _path.slice() : study().lane(laneKeyOf(rp.id)).map(function (x) { return x.id; });
+    var idx = seq.indexOf(rp.id);
+    if (prog) prog.textContent = 'step ' + (idx + 1) + ' / ' + seq.length;
     function popFacts(delay) {
       (rp.proves || []).forEach(function (f, k) { setTimeout(function () { if (token.cancelled || !facts) return; var c = document.createElement('span'); c.className = 'study-chip proof rp-pop'; c.textContent = '+ ' + human(f); facts.appendChild(c); }, delay + k * 260); });
-      if (_autolane && rp.next) setTimeout(function () { if (token.cancelled) return; _sel = rp.next; _autoplay = true; OBOL.router.render(); }, delay + (rp.proves.length * 260) + 1400);
+      var nextId = rp.next;
+      if (_pathMode && _path.length) { var pi = _path.indexOf(rp.id); nextId = (pi >= 0 && pi < _path.length - 1) ? _path[pi + 1] : null; }
+      if (_autolane && nextId) setTimeout(function () { if (token.cancelled) return; _sel = nextId; _autoplay = true; OBOL.router.render(); }, delay + (rp.proves.length * 260) + 1400);
     }
     if (instant) {
       var html = '<div class="rp-line rp-cmd"><span class="rp-prompt">kali$</span> ' + esc(rp.command) + '</div>'
@@ -281,14 +326,57 @@
     })();
   }
 
+  // ---- Atlas interaction ----------------------------------------------------------------------
+  function atlasApply(view) { view.setAttribute('transform', 'translate(' + _az.tx + ',' + _az.ty + ') scale(' + _az.k + ')'); }
+  function atlasLOD(stage) { var k = _az.k; stage.setAttribute('data-lod', k < 0.62 ? 'far' : (k < 1.05 ? 'mid' : 'near')); }
+  function atlasPathD(mount) {
+    if (_atlasPath.length < 2) return '';
+    var pts = _atlasPath.map(function (id) { var g = mount.querySelector('.atlas-node[data-anode="' + id + '"]'); return g ? (g.getAttribute('data-cx') + ',' + g.getAttribute('data-cy')) : null; }).filter(Boolean);
+    return pts.length < 2 ? '' : 'M' + pts.join(' L');
+  }
+  function atlasTray(mount) {
+    var tray = mount.querySelector('#atlas-tray'); if (!tray) return;
+    if (!_atlasPath.length) { tray.innerHTML = '<span class="atlas-tray-hint">Click steps in order to draw your own path — then study it as one guided sequence of replays.</span>'; return; }
+    var chips = _atlasPath.map(function (id, i) { var c = study().cellFor(id); return '<span class="atlas-trchip lane-' + laneKeyOf(id) + '">' + (i + 1) + '. ' + esc(c ? c.title : id) + '</span>'; }).join('<span class="atlas-trarr">→</span>');
+    tray.innerHTML = '<div class="atlas-tray-path">' + chips + '</div>'
+      + '<div class="atlas-tray-act"><button type="button" class="study-rp-btn" data-atlas="clear">clear</button>'
+      + '<button type="button" class="study-rp-btn primary" data-atlas="study">▶ Study this path (' + _atlasPath.length + ') →</button></div>';
+  }
+  function atlasSelection(mount) {
+    Array.prototype.forEach.call(mount.querySelectorAll('.atlas-node'), function (g) {
+      var i = _atlasPath.indexOf(g.getAttribute('data-anode'));
+      g.classList.toggle('sel', i >= 0);
+      var b = g.querySelector('.an-badge'); if (b) b.textContent = i >= 0 ? (i + 1) : '';
+    });
+    var pl = mount.querySelector('#atlas-pathline'); if (pl) pl.setAttribute('d', atlasPathD(mount));
+    atlasTray(mount);
+  }
+  function wireAtlas(mount) {
+    var stage = mount.querySelector('#atlas-stage'), view = mount.querySelector('#atlas-view');
+    if (!stage || !view) return;
+    var W = +view.getAttribute('data-w'), H = +view.getAttribute('data-h');
+    function fit() { var r = stage.getBoundingClientRect(); var k = Math.min((r.width - 24) / W, (r.height - 24) / H, 1.1); k = Math.max(k, 0.3); _az = { k: k, tx: (r.width - W * k) / 2, ty: 12 }; atlasApply(view); atlasLOD(stage); }
+    function zoomAround(mx, my, f) { var nk = Math.max(0.3, Math.min(2.4, _az.k * f)), ratio = nk / _az.k; _az.tx = mx - (mx - _az.tx) * ratio; _az.ty = my - (my - _az.ty) * ratio; _az.k = nk; atlasApply(view); atlasLOD(stage); }
+    if (!_az) fit(); else { atlasApply(view); atlasLOD(stage); }
+    atlasSelection(mount);
+    var down = null, moved = false;
+    stage.addEventListener('pointerdown', function (e) { var g = e.target.closest && e.target.closest('.atlas-node'); down = { x: e.clientX, y: e.clientY, tx: _az.tx, ty: _az.ty, node: g }; moved = false; try { stage.setPointerCapture(e.pointerId); } catch (x) {} });
+    stage.addEventListener('pointermove', function (e) { if (!down) return; var dx = e.clientX - down.x, dy = e.clientY - down.y; if (Math.abs(dx) + Math.abs(dy) > 4) moved = true; _az.tx = down.tx + dx; _az.ty = down.ty + dy; atlasApply(view); });
+    stage.addEventListener('pointerup', function () { var wasMoved = moved, g = down && down.node; down = null; if (wasMoved || !g) return; var id = g.getAttribute('data-anode'), i = _atlasPath.indexOf(id); if (i >= 0) _atlasPath.splice(i, 1); else _atlasPath.push(id); atlasSelection(mount); });
+    stage.addEventListener('wheel', function (e) { e.preventDefault(); var r = stage.getBoundingClientRect(); zoomAround(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.12 : 0.89); }, { passive: false });
+    U.on(mount, 'click', '[data-az]', function (e, t) { var a = t.getAttribute('data-az'); if (a === 'in' || a === 'out') { var r = stage.getBoundingClientRect(); zoomAround(r.width / 2, r.height / 2, a === 'in' ? 1.2 : 0.83); } else fit(); });
+    U.on(mount, 'click', '[data-atlas="clear"]', function () { _atlasPath = []; atlasSelection(mount); });
+    U.on(mount, 'click', '[data-atlas="study"]', function () { if (!_atlasPath.length) return; _path = _atlasPath.slice(); _pathMode = true; _from = 'atlas'; _sel = _path[0]; _view = 'node'; OBOL.router.render(); });
+  }
+
   function mounted(ctx) {
     var mount = ctx.mount;
     cancelReplay();
     // map/graph: open a lane/step → node view (remember where we came from)
-    U.on(mount, 'click', '[data-open]', function (e, t) { _from = (_view === 'graph' ? 'graph' : 'map'); _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-open]', function (e, t) { _from = (_view === 'atlas' ? 'atlas' : 'map'); _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-back]', function () { _view = _from; OBOL.router.render(); });
     U.on(mount, 'click', '[data-back-map]', function () { _view = 'map'; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-graph]', function () { _view = 'graph'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-graph]', function () { _view = 'atlas'; OBOL.router.render(); });
     // node select + "opens →" jumps + goto chips → re-render
     U.on(mount, 'click', '[data-node]', function (e, t) { _sel = t.getAttribute('data-node'); OBOL.router.render(); });
     U.on(mount, 'click', '[data-goto]', function (e, t) { _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
@@ -301,6 +389,8 @@
     U.on(mount, 'change', '[data-rp="autolane"]', function (e, t) { _autolane = !!t.checked; });
     // auto-start when a chain step mounts
     if (_view === 'node' && _gear === 'watch' && _autoplay) { _autoplay = false; setTimeout(function () { runReplay(mount, false); }, 250); }
+    // the Atlas: pan / zoom / semantic LOD / draw a custom path
+    if (_view === 'atlas') setTimeout(function () { wireAtlas(mount); }, 30);
     // practice: answer a choice (local DOM update, keeps the answered state)
     U.on(mount, 'click', '.study-choice', function (e, t) {
       var verdict = t.getAttribute('data-verdict'), coach = t.getAttribute('data-coach') || '', missing = t.getAttribute('data-missing') || '';
