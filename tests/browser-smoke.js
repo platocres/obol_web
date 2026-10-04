@@ -40,8 +40,8 @@ function serve() {
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
   // First-run routing: a brand-new visitor (no synced Loadout + only the untouched seed engagement)
-  // lands on Loadout (step zero), not on the empty engagement.
-  ok(page.url().indexOf('#/loadout') >= 0, 'first-run lands on Loadout (got ' + page.url().split('#')[1] + ')');
+  // lands on Learn — the teaching front door — not on the empty engagement.
+  ok(page.url().indexOf('#/study') >= 0, 'first-run lands on Learn (got ' + page.url().split('#')[1] + ')');
   // a first-time visitor lands on the plain Obol skin, in a clean untitled run — never an
   // "Imported engagement" with a stale seed target. (Neon and the rest stay selectable in ⚙.)
   ok(await page.getAttribute('html', 'data-skin') === 'obol', 'default skin is obol for a fresh visitor');
@@ -801,14 +801,22 @@ function serve() {
   ok(palTool.indexOf('pipx install certipy-ad') !== -1, '⌘K finds a tool and shows its install command (certipy → pipx install certipy-ad)');
   await page.keyboard.press('Escape');
 
-  // Study mode (milestone 1 — AD vertical slice): the route renders a derived cell with remote-first
-  // commands, and the "Your turn" gear scores a correct answer.
+  // Study mode (milestone 1 — AD vertical slice). Learn opens on the MAP (pick a path); a node then
+  // shows the derived cell with remote-first commands + the replay; "Your turn" scores an answer.
   await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.study-route', { timeout: 6000 }).catch(() => {});
-  ok((await page.locator('.study-gnode').count()) === 7, 'Study renders the 7-node AD lane');
-  ok((await page.locator('.study-cell-title').first().textContent().catch(() => '') || '').indexOf('AS-REP') !== -1, 'Study opens on the AS-REP node cell');
-  ok((await page.locator('.study-cmd').first().locator('.study-loc').textContent().catch(() => '') || '').indexOf('REMOTE') !== -1, 'Study cell lists commands remote-first (first is REMOTE)');
-  ok((await page.locator('.study-ln.hot').count()) >= 1, 'Study sample output highlights the signal line');
+  ok((await page.locator('.study-map .study-lane-card.active').count()) === 1, 'Learn opens on the map with a pickable AD lane');
+  ok((await page.locator('.study-map .study-path-node').count()) === 7, 'the map shows all 7 AD steps to pick from');
+  // deep-link straight into a node to exercise the cell + replay
+  await page.goto(`http://localhost:${PORT}/index.html#/study/asrep-roast`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-cols', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.study-gnode').count()) === 7, 'node view renders the 7-node AD lane rail');
+  ok((await page.locator('.study-cell-title').first().textContent().catch(() => '') || '').indexOf('AS-REP') !== -1, 'the node cell is AS-REP Roasting');
+  ok((await page.locator('.study-cmd').first().locator('.study-loc').textContent().catch(() => '') || '').indexOf('REMOTE') !== -1, 'cell lists commands remote-first (first is REMOTE)');
+  // the replay: Skip jumps straight to the finished output with the signal highlighted
+  await page.locator('[data-rp="skip"]').click();
+  await page.waitForTimeout(200);
+  ok((await page.locator('.study-replay .rp-line.hot').count()) >= 1, 'the Watch replay highlights the signal line in the output');
   await page.locator('[data-gear="practice"]').click();
   await page.waitForTimeout(150);
   await page.locator('.study-choice[data-verdict="correct"]').first().click();

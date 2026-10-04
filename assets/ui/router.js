@@ -46,8 +46,9 @@
         if (typeof out === 'string') _mount.innerHTML = out;
         if (def.mounted) { try { def.mounted({ name: route.name, args: route.args, mount: _mount }); } catch (e) {} }
       }
-      // reflect active nav
+      // reflect active nav + expose the route name for layout (e.g. the full-bleed Learn front door)
       reflectNav(route.name);
+      try { document.documentElement.setAttribute('data-route', route.name); } catch (e) {}
       // On a real route change (e.g. launch → coach), land at the top; leave scroll alone on the
       // in-place re-renders that happen after minting a fact or marking a move done.
       if (route.name !== _lastRoute) {

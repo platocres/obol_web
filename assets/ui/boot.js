@@ -157,9 +157,10 @@
     // Lazy routes (tools, domain, checklist, report, graph) register themselves when loaded.
     if (OBOL.lazy) OBOL.lazy.registerLazyRoutes(R);
     // First-run routing: a brand-new visitor (no synced Loadout AND no engagement work yet) lands on
-    // Loadout — step zero, set up your box. Anyone who has synced a box or started an engagement lands
-    // on Engagements as before. A specific hash in the URL always wins over this default.
-    R.setDefault(isFirstRun() ? 'loadout' : 'home');
+    // Learn — the teaching front door (pick a path, set up a box, or start an engagement from there).
+    // Anyone who has synced a box or started an engagement lands on Engagements as before. A specific
+    // hash in the URL always wins over this default.
+    R.setDefault(isFirstRun() ? 'study' : 'home');
   }
 
   function isFirstRun() {

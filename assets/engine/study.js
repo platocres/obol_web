@@ -159,15 +159,43 @@
       }
       return { id: id, title: d.title, verdict: verdict, missing: missing, coach: coach[id] || '' };
     }).filter(Boolean);
+    // shuffle so the correct answer isn't always first — real retrieval practice, not pattern-matching
+    for (var j = choices.length - 1; j > 0; j--) { var r = Math.floor(Math.random() * (j + 1)); var t = choices[j]; choices[j] = choices[r]; choices[r] = t; }
     return { moveId: moveId, situation: fx.situation || '', have: have, choices: choices };
+  }
+
+  // the lane node after this one (for Watch autoplay through the kill chain)
+  function laneNext(moveId) {
+    for (var i = 0; i < AD_LANE.length - 1; i++) if (AD_LANE[i].id === moveId) return AD_LANE[i + 1].id;
+    return null;
+  }
+
+  // Replay script for Watch mode: the ONE remote-first command "runs", its output streams in, the
+  // signal line is flagged, and the facts it mints pop. A reshape of cellFor — no new data.
+  function replayFor(moveId) {
+    var cell = cellFor(moveId); if (!cell) return null;
+    var primary = cell.commands[0] || null;
+    return {
+      id: cell.id, title: cell.title, phase: cell.phase,
+      tool: primary ? primary.tool : '', locus: primary ? primary.locus : '', tag: primary ? primary.tag : '',
+      command: primary ? primary.run : '', note: primary ? primary.note : '',
+      outputLines: cell.output ? cell.output.text.split('\n') : [],
+      signal: cell.output ? cell.output.signal : '',
+      teach: cell.output ? cell.output.teach : '',
+      proves: cell.proves,
+      opens: (cell.opens[0] || {}).title || '',
+      next: laneNext(moveId),
+    };
   }
 
   OBOL.study = {
     AD_LANE: AD_LANE,
     cmdLocus: cmdLocus,
     cellFor: cellFor,
+    replayFor: replayFor,
     lane: lane,
     laneEdges: laneEdges,
+    laneNext: laneNext,
     practiceFor: practiceFor,
     producersOf: producersOf,
     opensNext: opensNext,

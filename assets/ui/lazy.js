@@ -23,7 +23,7 @@
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=9ad71876', 'assets/engine/report.js?v=60a4b750', 'assets/ui/routes/report.js?v=a57c0597'],
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=f27f51ef', 'assets/ui/routes/tools.js?v=7d043fd0'],
     loadout: ['assets/engine/arsenal.js?v=88353a90', 'assets/ui/routes/loadout.js?v=b449616c'],
-    study: ['data/study-fixtures.js?v=de47ef99', 'assets/engine/study.js?v=f4fbee92', 'assets/ui/routes/study.js?v=665e08f6'],
+    study: ['data/study-fixtures.js?v=de47ef99', 'assets/engine/study.js?v=cbe90383', 'assets/ui/routes/study.js?v=a69d297d'],
     checklist: ['assets/ui/routes/checklist.js?v=116058c6'],
     target: ['assets/engine/graph.js?v=97e4f668', 'assets/ui/routes/target.js?v=72f3be6c'],
     creds: ['assets/ui/routes/creds.js?v=6935aeca'],
