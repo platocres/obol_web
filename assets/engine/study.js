@@ -197,14 +197,26 @@
   // --- the atlas: every lane as one layered graph, with cross-lane bridges ----------------------
   var BRIDGES = [
     { from: 'nmap-version-scripts', to: 'ad-dc-identify', note: 'a Windows/AD host → the AD lane' },
+    { from: 'nmap-version-scripts', to: 'check-web-components', note: 'a web port → run the safe checks' },
     { from: 'recon-smb-anon', to: 'asrep-roast', note: 'anonymous SMB can leak the user list' },
     { from: 'recon-smb-anon', to: 'password-spray', note: 'a user list to spray' },
     { from: 'recon-web-triage', to: 'content-discovery', note: 'a live web app → map it' },
+    { from: 'content-discovery', to: 'check-exposed-files', note: 'discovered paths → probe for leaks' },
     { from: 'web-shells', to: 'linux-enum', note: 'a web shell is a Linux foothold' },
     { from: 'web-shells', to: 'windows-enum', note: '…or a Windows foothold' },
+    { from: 'web-shells', to: 'shell-pty-upgrade', note: 'a raw web shell → upgrade it to a real TTY' },
+    { from: 'shell-revshell-linux', to: 'linux-enum', note: 'a caught shell → start Linux enumeration' },
+    { from: 'shell-revshell-windows', to: 'windows-enum', note: 'a caught shell → start Windows enumeration' },
     { from: 'asrep-roast', to: 'crack-asrep-offline', note: 'an AS-REP hash to crack' },
     { from: 'kerberoast', to: 'crack-kerberoast', note: 'a service ticket to crack' },
     { from: 'dcsync', to: 'crack-ntlm', note: 'dumped NTLM hashes to crack' },
+    { from: 'responder-poison', to: 'crack-netntlmv2', note: 'a captured NetNTLMv2 hash to crack' },
+    { from: 'crack-netntlmv2', to: 'lateral-exec', note: 'a cracked password → move laterally' },
+    { from: 'mssql-xp-cmdshell', to: 'windows-enum', note: 'a DB shell → escalate on the host' },
+    { from: 'sudo-abuse', to: 'local-linux-interfaces', note: 'now root → pivot deeper' },
+    { from: 'seimpersonate', to: 'local-windows-interfaces', note: 'now SYSTEM → pivot deeper' },
+    { from: 'sudo-abuse', to: 'flag-hunt-linux', note: 'root → grab the proof' },
+    { from: 'seimpersonate', to: 'flag-hunt-windows', note: 'SYSTEM → grab the proof' },
   ];
   function atlas() {
     var Ls = buildLanes(), nodes = [], index = {};
@@ -227,6 +239,16 @@
       steps: ['recon-smb-anon', 'password-spray', 'ad-acl-abuse', 'dcsync'] },
     { key: 'recon-sweep', name: 'Full recon sweep', desc: 'The opening every engagement shares — ports, versions, SMB, and the web surface.',
       steps: ['nmap-fast-open-ports', 'nmap-version-scripts', 'recon-smb-anon', 'recon-web-triage'] },
+    { key: 'web-root-proof', name: 'Web → root → proof', desc: 'The full exam arc: recon a web app, shell it, escalate to root, capture the flag.',
+      steps: ['nmap-fast-open-ports', 'recon-web-triage', 'content-discovery', 'file-upload', 'web-shells', 'linux-enum', 'sudo-abuse', 'flag-hunt-linux'] },
+    { key: 'mssql-system', name: 'MSSQL sysadmin → SYSTEM', desc: 'A database login with sysadmin becomes a shell, then SYSTEM on the host.',
+      steps: ['nmap-version-scripts', 'mssql-login', 'mssql-xp-cmdshell', 'windows-enum', 'seimpersonate'] },
+    { key: 'responder-lateral', name: 'Poison → crack → move laterally', desc: 'Capture a hash off the wire, crack it, and reuse it to own a second host.',
+      steps: ['responder-poison', 'crack-netntlmv2', 'lateral-exec', 'windows-enum'] },
+    { key: 'adcs-da', name: 'AD CS (ESC1) → Domain Admin', desc: 'Abuse a vulnerable certificate template to mint a DA credential, then DCSync.',
+      steps: ['ad-dc-identify', 'ad-anon-ldap-enum', 'adcs-esc', 'cert-authenticate', 'dcsync'] },
+    { key: 'web-pivot-deep', name: 'Web shell → loot → pivot', desc: 'Land through the web, loot creds, then tunnel into the network behind the box.',
+      steps: ['recon-web-triage', 'content-discovery', 'web-shells', 'linux-enum', 'linux-loot-hunt', 'local-linux-interfaces', 'pivot-chisel-socks', 'pivot-scan-through'] },
   ];
   function scenarios() { return SCENARIOS.filter(function (s) { return s.steps.every(byId); }).map(function (s) { return { key: s.key, name: s.name, desc: s.desc, steps: s.steps.slice(), count: s.steps.length }; }); }
   function scenario(key) { for (var i = 0; i < SCENARIOS.length; i++) if (SCENARIOS[i].key === key) return { key: SCENARIOS[i].key, name: SCENARIOS[i].name, desc: SCENARIOS[i].desc, steps: SCENARIOS[i].steps.slice(), count: SCENARIOS[i].steps.length }; return null; }
