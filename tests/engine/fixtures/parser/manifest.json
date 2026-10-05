@@ -931,7 +931,8 @@
       "stdout": "outputs/web_ssrf_imds_aws_creds.txt",
       "expected_supported_kinds": [
         "web.ssrf_confirmed",
-        "credential.candidate"
+        "credential.candidate",
+        "cloud.credential"
       ],
       "expected_facts": [
         {

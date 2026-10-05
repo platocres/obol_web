@@ -67,6 +67,7 @@
       { name: 'Auth bypass / IDOR / JWT', moves: ['idor', 'jwt-attacks', 'verb-tampering'] },
       { name: 'Source exposure (.git/.svn)', moves: ['git-exposed', 'svn-exposed'] },
       { name: 'Known app CVEs (Log4Shell/Struts)', moves: ['check-log4shell', 'check-struts2'] },
+      { name: 'Cloud metadata SSRF to IAM abuse', moves: ['aws-credential-abuse'], note: 'turn stolen IMDS keys into S3/Secrets/SSM access (beyond OSCP, common in practice)' },
       { name: 'Local file read → secrets', moves: ['lfi-secret-harvest'], note: 'turn a confirmed LFI into credentials, keys, and source via the filter wrapper' },
     ] },
     p88: { label: 'Kerberos / DC', expect: [
@@ -131,9 +132,9 @@
       { name: 'NFS no_root_squash', moves: ['nfs-squash'] },
       { name: 'Docker / LXD group escape', moves: ['docker-socket', 'lxc-lxd-escape'] },
       { name: 'Hidden processes (pspy)', moves: ['pspy-monitor'] },
-      { name: 'Kernel / exploit-suggester (DirtyPipe, pwnkit)', moves: [], note: 'no module: linux-exploit-suggester and the kernel/LPE CVEs it flags are not taught yet' },
-      { name: 'PATH hijack in a SUID/cron script', moves: [], note: 'no module: relative-binary PATH hijack of a privileged script' },
-      { name: 'LD_PRELOAD / LD_LIBRARY_PATH via sudo env_keep', moves: [], note: 'no module: library-injection through a preserved sudo environment' },
+      { name: 'Kernel / exploit-suggester (DirtyPipe, pwnkit)', moves: ['linux-kernel-exploit'], note: 'match a public LPE to the exact kernel as a last resort' },
+      { name: 'PATH hijack in a SUID/cron script', moves: ['linux-path-hijack'], note: 'hijack a relative-binary call in a privileged SUID/cron' },
+      { name: 'LD_PRELOAD / LD_LIBRARY_PATH via sudo env_keep', moves: ['linux-ld-preload'], note: 'library-injection through a preserved sudo environment' },
     ] },
     'shell-windows': { label: 'Windows privilege escalation', expect: [
       { name: 'Baseline enumeration (winPEAS / manual)', moves: ['windows-enum'] },
@@ -147,8 +148,8 @@
       { name: 'LSASS memory dump', moves: ['lsass-dump-onbox'] },
       { name: 'Missing patches (wesng)', moves: ['wesng-patch-gaps'] },
       { name: 'Defensive posture (AV / AppLocker / CLM)', moves: ['defense-enum'] },
-      { name: 'DLL search-order hijack', moves: [], note: 'no module: writable-path DLL hijack of a privileged process' },
-      { name: 'Writable scheduled-task binary', moves: [], note: 'no module: a scheduled task that runs a path you can overwrite' },
+      { name: 'DLL search-order hijack', moves: ['windows-dll-hijack'], note: 'writable-path or phantom DLL hijack of a privileged process' },
+      { name: 'Writable scheduled-task binary', moves: ['windows-schtask-abuse'], note: 'a SYSTEM scheduled task that runs a path you can overwrite' },
     ] },
     'domain-cred': { label: 'Active Directory to Domain Admin', expect: [
       { name: 'Graph recon (BloodHound)', moves: ['bloodhound-collect', 'ad-path-manual'] },

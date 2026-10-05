@@ -398,6 +398,10 @@
       var token = reSearch(C._AWS_TOKEN_RE, text);
       if (token) cred.session_token = token.groups.token;
       _add(facts, mkFact('credential.candidate', h, cred, S, source));
+      // also a typed cloud-credential lead, so the cloud post-exploitation move can key on it directly
+      // (the generic credential.candidate still drives the cred loop). NOT cloud.aws_access: a key read
+      // from metadata is a candidate to try with aws-cli, not proof of access, per the proof discipline.
+      _add(facts, mkFact('cloud.credential', h, { provider: 'aws', access_key_id: akid.groups.akid, temporary: /^ASIA/.test(akid.groups.akid), via: method }, S, source));
     }
     mined.forEach(function (cred) {
       var v = {};

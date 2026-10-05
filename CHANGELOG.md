@@ -1,3 +1,12 @@
+## v12.3 — Fill the privesc radar, and teach beyond the exam (cloud)
+
+The exam-readiness oracle did its job and flagged five privilege-escalation techniques with no module; this release builds them, and adds the first deliberately-beyond-OSCP path.
+
+- **Five new privilege-escalation modules, to the gold standard.** Linux kernel exploitation (match a public LPE to the exact kernel as a last resort), PATH hijack of a SUID or cron binary that calls a program by its bare name, and sudo LD_PRELOAD library injection; Windows DLL search-order / phantom-DLL hijack, and writable scheduled-task abuse. Each carries the full teaching surface and a coherent command/output replay, and each resolves onto the right post-foothold access card. The oracle's privesc radar is now clear.
+- **A first-class cloud post-exploitation path.** An SSRF that reaches the instance metadata service was already read as an AWS credential candidate; it now also mints a typed `cloud.credential` lead, which drives a new `aws-credential-abuse` module: load the temporary keys, confirm the identity with the aws CLI, map the role's permissions, loot S3 and Secrets Manager, and chain `ssm:SendCommand` back onto the instance for a shell. This is beyond the OSCP syllabus and intentionally so, because it is where a real engagement goes after a web SSRF. (The existing SSRF parser is untouched and still mints `credential.candidate`; a key read from metadata remains a candidate to try, never auto-promoted to access, per the proof discipline.)
+- **Tighter enum-to-privesc wiring.** The Windows schtasks parser already minted a scheduled-task lead that nothing consumed; the new scheduled-task module now requires it, so pasting `schtasks /query /v` lights the module directly.
+- **Scoreboard.** `tools/gap-report.js --check`: 0 unreachable, 0 missing hand-offs, 0 parse gaps, 0 coverage gaps, 0 signature drift. 191 moves, 120 with authored fork conditions. The parser corpus is unchanged at 79/79; new regression suites (`privesc-cloud-smoke`) lock the modules and the cloud lead in; the 7-skin accessibility gate still passes.
+
 ## v12.2 — Close every gap the decision map found, and turn the oracle into an exam-readiness checklist
 
 The decision map's gap X-ray surfaced where running a move advanced nothing, where a looted credential drove nothing, and which standard techniques had no module. This release closes all of them and widens the coverage oracle to the whole OSCP exam.

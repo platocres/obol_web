@@ -53,7 +53,7 @@
       regex: 'SQL syntax; root:x:0:0; uid=…; {{7*7}}=49',
       emits: ['web.sqli_confirmed', 'web.lfi_confirmed', 'web.cmdi_confirmed', 'web.ssti_confirmed', 'web.ssrf_confirmed',
         'web.xxe_confirmed', 'web.xss_confirmed', 'web.nosqli_confirmed', 'web.deserial_confirmed', 'web.authz_bypass',
-        'web.idor_candidate', 'web.jwt_secret', 'web.upload_confirmed', 'foothold.webshell'],
+        'web.idor_candidate', 'web.jwt_secret', 'web.upload_confirmed', 'foothold.webshell', 'cloud.credential'],
     },
     'smb-shares': {
       looksFor: 'smbclient / smbmap / nxc share listings and the null-/guest-session banner that lets you read them.',

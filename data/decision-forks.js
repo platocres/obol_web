@@ -100,6 +100,14 @@
     'suid-gtfobins': { cond: 'Is a SUID binary abusable per GTFOBins?', onFail: 'None abusable → watch for a root cron job.' },
     'seimpersonate': { cond: 'Is SeImpersonate/SeAssignPrimaryToken enabled?', onFail: 'Not held → try a service or stored-credential path.' },
 
+    // ---- phase-6 privesc radar modules + cloud post-exploitation ----
+    'linux-kernel-exploit': { cond: 'Does an exploit-suggester match a public LPE to this exact kernel?', onFail: 'No clean match → re-check misconfig leads before risking a crash.' },
+    'linux-path-hijack': { cond: 'Does a root SUID/cron binary call a program by its bare name?', onFail: 'All calls are absolute → no PATH hijack; try another lead.' },
+    'linux-ld-preload': { cond: 'Does sudo -l show env_keep carrying LD_PRELOAD (or LD_LIBRARY_PATH)?', onFail: 'Variable stripped → this path is closed; abuse the sudo command itself instead.' },
+    'windows-dll-hijack': { cond: 'Does a privileged process load a DLL from a writable or missing path?', onFail: 'No hijackable load → try service permissions or a token.' },
+    'windows-schtask-abuse': { cond: 'Is there a SYSTEM task whose target file (or the task itself) you can write?', onFail: 'Nothing writable → pivot to a service or token path.' },
+    'aws-credential-abuse': { cond: 'Do the stolen keys authenticate, and what can the role do?', onFail: 'Keys expired or denied → re-pull from the metadata service, mind the session token.' },
+
     // ---- linux privesc ----
     'capabilities': { cond: 'Does a binary carry an abusable capability (cap_setuid, cap_dac_read_search)?', onFail: 'No usable cap, pivot to SUID or sudo.' },
     'cron-abuse': { cond: 'Is a root cron job running a script or path you can write?', onFail: 'No writable cron target, run pspy to catch hidden jobs.' },

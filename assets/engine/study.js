@@ -114,7 +114,7 @@
     'sqli-basics': 'SQL Injection', 'manual-sqli-exploitation': 'SQL Injection', 'sqlmap-automation': 'SQL Injection',
     'file-upload': 'Upload, Inclusion & Shells', 'lfi-probe': 'Upload, Inclusion & Shells', 'lfi-secret-harvest': 'Upload, Inclusion & Shells', 'web-shells': 'Upload, Inclusion & Shells',
     'command-injection': 'Command & Template Injection', 'ssti': 'Command & Template Injection',
-    'ssrf': 'SSRF, XXE & Deserialization', 'xxe': 'SSRF, XXE & Deserialization', 'deserialization': 'SSRF, XXE & Deserialization',
+    'ssrf': 'SSRF, XXE & Deserialization', 'xxe': 'SSRF, XXE & Deserialization', 'deserialization': 'SSRF, XXE & Deserialization', 'aws-credential-abuse': 'SSRF, XXE & Deserialization',
     'idor': 'Auth & Access Control', 'jwt-attacks': 'Auth & Access Control', 'nosql-injection': 'Auth & Access Control', 'verb-tampering': 'Auth & Access Control',
     'xss-basics': 'Cross-Site Scripting',
     'git-exposed': 'Source Exposure', 'svn-exposed': 'Source Exposure',
@@ -133,13 +133,14 @@
     'responder-poison': 'Poisoning & Relay', 'ntlm-relay-attack': 'Poisoning & Relay', 'mitm6-ipv6-takeover': 'Poisoning & Relay',
     // linux lane
     'linux-enum': 'Enumeration', 'pspy-monitor': 'Enumeration', 'linux-loot-hunt': 'Enumeration',
-    'sudo-abuse': 'Sudo, SUID & Capabilities', 'suid-gtfobins': 'Sudo, SUID & Capabilities', 'capabilities': 'Sudo, SUID & Capabilities',
-    'cron-abuse': 'Cron & Writable Files', 'writable-passwd': 'Cron & Writable Files', 'nfs-squash': 'Cron & Writable Files',
+    'sudo-abuse': 'Sudo, SUID & Capabilities', 'suid-gtfobins': 'Sudo, SUID & Capabilities', 'capabilities': 'Sudo, SUID & Capabilities', 'linux-ld-preload': 'Sudo, SUID & Capabilities',
+    'cron-abuse': 'Cron & Writable Files', 'writable-passwd': 'Cron & Writable Files', 'nfs-squash': 'Cron & Writable Files', 'linux-path-hijack': 'Cron & Writable Files',
     'lxc-lxd-escape': 'Container Escape', 'docker-socket': 'Container Escape',
+    'linux-kernel-exploit': 'Kernel & LPE CVEs',
     'linux-persistence': 'Persistence',
     // windows lane
     'windows-enum': 'Enumeration', 'wesng-patch-gaps': 'Enumeration', 'defense-enum': 'Enumeration',
-    'seimpersonate': 'Token & Service Abuse', 'unquoted-service-path': 'Token & Service Abuse', 'weak-service-permissions': 'Token & Service Abuse', 'alwaysinstallelevated': 'Token & Service Abuse',
+    'seimpersonate': 'Token & Service Abuse', 'unquoted-service-path': 'Token & Service Abuse', 'weak-service-permissions': 'Token & Service Abuse', 'alwaysinstallelevated': 'Token & Service Abuse', 'windows-dll-hijack': 'Token & Service Abuse', 'windows-schtask-abuse': 'Token & Service Abuse',
     'dpapi-secrets': 'Credential Dumping', 'stored-credentials': 'Credential Dumping', 'windows-old-hives': 'Credential Dumping', 'lsass-dump-onbox': 'Credential Dumping',
     'windows-persistence': 'Windows Persistence',
     // database lane
@@ -182,7 +183,7 @@
     // creds
     'Hash Cracking', 'Online Brute-Force', 'Poisoning & Relay',
     // linux
-    'Enumeration', 'Sudo, SUID & Capabilities', 'Cron & Writable Files', 'Container Escape', 'Persistence',
+    'Enumeration', 'Sudo, SUID & Capabilities', 'Cron & Writable Files', 'Container Escape', 'Kernel & LPE CVEs', 'Persistence',
     // windows
     'Token & Service Abuse', 'Credential Dumping', 'Windows Persistence',
     // database
@@ -539,7 +540,7 @@
     { key: 'p53', tier: 'ports', port: '53', proto: 'tcp/udp', fam: 'recon', label: 'DNS', signal: 'Name service. A zone transfer (AXFR) can hand you the whole internal host map in one request.', seed: ['recon-dns'] },
     { key: 'p69', tier: 'ports', port: '69', proto: 'udp', fam: 'file', label: 'TFTP', signal: 'A tiny unauthenticated file service with no listing. Common on routers and phones, it hands out config files full of hashes and management passwords if you can name them.', seed: ['recon-tftp'] },
     { key: 'p79', tier: 'ports', port: '79', proto: 'tcp', fam: 'recon', label: 'Finger', signal: 'Ancient, but when it is open it leaks real usernames and who is logged in, which is raw material for a spray or a brute.', seed: ['recon-finger'] },
-    { key: 'p80', tier: 'ports', port: '80/443', proto: 'tcp', fam: 'web', label: 'HTTP, HTTPS', signal: 'A web app, the single richest attack surface on the exam. Fingerprint the stack, map the content, then hunt the injectable edge.', seed: ['recon-web-triage', 'vhost-discovery', 'content-discovery', 'param-discovery', 'nikto-scan', 'wordpress', 'check-web-headers', 'check-web-components', 'check-cms-version', 'check-exposed-files', 'check-http-methods', 'check-cors', 'check-http-redirect', 'check-web-body', 'check-tls-config', 'check-dns-email', 'check-subdomain-takeover', 'sqli-basics', 'manual-sqli-exploitation', 'sqlmap-automation', 'command-injection', 'lfi-probe', 'lfi-secret-harvest', 'file-upload', 'ssti', 'xxe', 'ssrf', 'nosql-injection', 'jwt-attacks', 'verb-tampering', 'xss-basics', 'git-exposed', 'svn-exposed', 'idor', 'deserialization', 'check-log4shell', 'check-struts2', 'jenkins-access', 'web-shells'] },
+    { key: 'p80', tier: 'ports', port: '80/443', proto: 'tcp', fam: 'web', label: 'HTTP, HTTPS', signal: 'A web app, the single richest attack surface on the exam. Fingerprint the stack, map the content, then hunt the injectable edge.', seed: ['recon-web-triage', 'vhost-discovery', 'content-discovery', 'param-discovery', 'nikto-scan', 'wordpress', 'check-web-headers', 'check-web-components', 'check-cms-version', 'check-exposed-files', 'check-http-methods', 'check-cors', 'check-http-redirect', 'check-web-body', 'check-tls-config', 'check-dns-email', 'check-subdomain-takeover', 'sqli-basics', 'manual-sqli-exploitation', 'sqlmap-automation', 'command-injection', 'lfi-probe', 'lfi-secret-harvest', 'file-upload', 'ssti', 'xxe', 'ssrf', 'nosql-injection', 'jwt-attacks', 'verb-tampering', 'xss-basics', 'git-exposed', 'svn-exposed', 'idor', 'deserialization', 'aws-credential-abuse', 'check-log4shell', 'check-struts2', 'jenkins-access', 'web-shells'] },
     { key: 'p88', tier: 'ports', port: '88', proto: 'tcp', fam: 'ad', label: 'Kerberos', signal: 'A Domain Controller. Kerberos (88) with LDAP (389) and SMB (445) is the AD fingerprint. Name the domain, list the users, then roast.', seed: ['ad-dc-identify', 'ad-user-enum', 'asrep-roast', 'crack-asrep', 'kerberoast', 'crack-tgs', 'kerberos-tickets', 'ticket-reuse'] },
     { key: 'p111', tier: 'ports', port: '111/2049', proto: 'tcp', fam: 'file', label: 'NFS', signal: 'Network file shares. An export open to everyone is readable by anyone, and no_root_squash turns it into a privilege escalation.', seed: ['nfs-enum', 'nfs-squash'] },
     { key: 'p135', tier: 'ports', port: '135/139/445', proto: 'tcp', fam: 'ad', label: 'SMB, RPC', signal: 'Windows file sharing and RPC, the busiest port in AD. Try anonymous access, hunt readable shares, check for old SMBv1 (EternalBlue), and poison or relay NTLM.', seed: ['recon-smb-anon', 'smb-share-inventory', 'gpp-passwords', 'eternalblue', 'responder-poison', 'ntlm-relay-attack', 'mitm6-ipv6-takeover', 'coerce-auth', 'ad-legacy-enum', 'lateral-exec', 'dump-secrets', 'own-domain-pth', 'dcsync'] },

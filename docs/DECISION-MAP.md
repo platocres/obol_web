@@ -136,16 +136,23 @@ buffer overflow, and client-side / phishing. The exam shape modelled is three st
 40-pt AD set reached by pivoting.
 
 To grow exam coverage: add expected techniques to the right card (a port, or an access card). A
-technique with no backing move is a radar gap — e.g. the current build knowingly flags five Linux/
-Windows privesc vectors not yet taught (kernel exploit-suggester, PATH hijack, LD_PRELOAD, DLL
-search-order hijack, writable scheduled task). Build the module and the gap clears itself.
+technique with no backing move is a radar gap. The oracle's job is to surface them; when it flagged
+five privesc vectors (Linux kernel exploit, PATH hijack, LD_PRELOAD; Windows DLL hijack, writable
+scheduled task) they were built as modules and the gaps cleared themselves — that loop is the point.
+
+"OSCP is a floor, not a ceiling": the map intentionally teaches beyond the exam where a real
+engagement goes. The cloud post-exploitation module (`aws-credential-abuse`) is the first example: an
+SSRF that reaches the instance metadata service already mints a typed `cloud.credential` lead (the web
+parser also keeps the generic `credential.candidate`), and that lead drives a first-class aws-cli
+enumeration / loot / escalation module.
 
 ### Current scoreboard (this build)
 
 `node tools/gap-report.js --check` → `unreachable 0 · missing-handoff 0 · parseGap 0 ·
-parsePartial 0 · signature-drift 0 · coverageGap 5` (the 5 privesc radar items above). 185 moves,
-114 with authored fork conditions. Everything that blocks an attack chain is closed; what remains is
-the privesc radar (intentional) and the dead-end review list (terminal/observational facts).
+parsePartial 0 · signature-drift 0 · coverageGap 0`. 191 moves, 120 with authored fork conditions.
+Everything that blocks an attack chain is closed, every expected technique across the port cards and
+the post-foothold axes has a module, and every move's result is readable. What remains is the
+dead-end review list (terminal/observational facts) and 8 orphan parser sub-signals — both benign.
 
 ### How to close a **parse** gap concretely
 

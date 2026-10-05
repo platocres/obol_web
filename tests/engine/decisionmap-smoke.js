@@ -60,8 +60,7 @@ ok(pc0['recon-dns'] && pc0['recon-dns'].status === 'verified', 'the DNS zone-tra
 // left are the deliberately-seeded privesc radar items (Linux kernel/PATH/LD_PRELOAD, Windows DLL/task),
 // all on the shell-* access cards. No port technique should be a gap (p3306 resolves to its new module).
 ok((OBOL.COVERAGE_EXPECTED && Object.keys(OBOL.COVERAGE_EXPECTED).length >= 6), 'the expected-coverage oracle is populated');
-ok(gr.coverage.every(function (c) { return c.port === 'shell-linux' || c.port === 'shell-windows'; }), 'the only coverage gaps are the deliberate privesc radar items (' + gr.coverage.length + ')');
-ok(!gr.coverage.some(function (c) { return /^p\d/.test(c.port); }), 'no per-port technique is an unfilled coverage gap');
+ok(gr.coverage.length === 0, 'every expected technique across ports and post-foothold axes now has a module (coverageGap ' + gr.coverage.length + ')');
 ok(!gr.coverage.some(function (c) { return c.port === 'p3306'; }), 'the p3306 INTO OUTFILE technique resolves to its new module (mysql-outfile-rce)');
 
 // --- parser capability derivation ---
