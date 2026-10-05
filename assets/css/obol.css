@@ -2131,8 +2131,8 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 /* The landing is a wide two-column dashboard, so it opts out of the 1180px .study-route cap and
    lets main#view grow past its 1720px default (same :has() technique as the bench view). Other
    study views keep their narrower reading widths. */
-.study-map { max-width: 1440px; margin-inline: auto; }
-main#view:has(.study-map) { max-width: 1480px; margin-inline: auto; }
+.study-map { max-width: 1760px; margin-inline: auto; }
+main#view:has(.study-map) { max-width: 1800px; margin-inline: auto; }
 .study-hero { margin: 4px 0 20px; }
 .study-hero-h { font-size: 26px; font-weight: 800; color: var(--text); margin: 0 0 8px; }
 .study-hero-p { font-size: 14px; color: var(--text-2); line-height: 1.6; max-width: 760px; margin: 0; }
@@ -2276,9 +2276,11 @@ main#view:has(.study-map) { max-width: 1480px; margin-inline: auto; }
    like light off a CD. The base text leans toward --text so it stays AA on every skin; the rainbow is
    a brief passing glint, not the permanent fill. Static gold under reduced motion. */
 .sl-tag { position: relative; overflow: hidden; display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: color-mix(in srgb, var(--ph-creds) 60%, var(--text)); margin-bottom: 11px; padding: 3px 10px; border: 1px solid color-mix(in srgb, var(--ph-creds) 50%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--ph-creds) 10%, transparent); text-shadow: 0 0 10px color-mix(in srgb, var(--ph-creds) 30%, transparent); }
-.sl-tag::after { content: ""; position: absolute; top: 0; bottom: 0; left: -70%; width: 55%; transform: skewX(-18deg); pointer-events: none; mix-blend-mode: screen; filter: blur(2px); background: linear-gradient(100deg, transparent, rgba(255,90,90,.45), rgba(255,210,90,.45), rgba(120,235,160,.45), rgba(110,180,255,.45), rgba(205,130,255,.45), transparent); animation: sl-prism 9s ease-in-out infinite; }
-@keyframes sl-prism { 0%, 72% { left: -70%; opacity: 0; } 74% { opacity: 1; } 86% { left: 115%; opacity: .95; } 88%, 100% { left: 115%; opacity: 0; } }
+.sl-tag::after { content: ""; position: absolute; top: 0; bottom: 0; left: -70%; width: 55%; transform: skewX(-18deg); pointer-events: none; mix-blend-mode: screen; filter: blur(2px); background: linear-gradient(100deg, transparent, rgba(255,90,90,.45), rgba(255,210,90,.45), rgba(120,235,160,.45), rgba(110,180,255,.45), rgba(205,130,255,.45), transparent); animation: sl-prism 60s linear infinite; }
+/* one quick sweep per minute: idle and invisible for most of the cycle, a brief glint near the end */
+@keyframes sl-prism { 0%, 96% { left: -70%; opacity: 0; } 97% { opacity: 1; } 99% { left: 115%; opacity: .95; } 100% { left: 115%; opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .sl-tag::after { display: none; } }
+:root[data-focus="1"] .sl-tag::after { display: none; }
 
 /* the three promoted entries: cold box / atlas / by-port */
 /* the unified action bar (3 ways + 3 utility entries). 3-up by default so it reads as two tidy rows
@@ -2307,15 +2309,15 @@ main#view:has(.study-map) { max-width: 1480px; margin-inline: auto; }
 .sl-way-go { margin-top: auto; font-size: 12px; font-weight: 700; color: color-mix(in srgb, var(--way, var(--accent)) 60%, var(--text)); }
 
 /* the two-column dashboard: methodology (left, leads) + by-port (right, equal-second) */
-.sl-dash { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; align-items: start; }
+.sl-dash { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; align-items: start; }
 .sl-col-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 13px; padding-bottom: 9px; border-bottom: 1px solid var(--line); }
 .sl-col-t { font-size: 16px; font-weight: 800; margin: 0; letter-spacing: -.01em; color: var(--text); }
 .sl-col-count { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--text-2); }
-.sl-col-more { margin-left: auto; font-family: var(--sans); font-size: 12px; font-weight: 700; color: var(--accent-2); background: none; border: 0; cursor: pointer; white-space: nowrap; padding: 2px 0; }
-.sl-col-more:hover { text-decoration: underline; }
+.sl-col-more { margin-left: auto; font-family: var(--sans); font-size: 11.5px; font-weight: 700; color: var(--accent-2); background: var(--surf1); border: 1px solid color-mix(in srgb, var(--accent-2) 40%, var(--line)); border-radius: 999px; cursor: pointer; white-space: nowrap; padding: 4px 12px; transition: .14s; }
+.sl-col-more:hover { background: color-mix(in srgb, var(--accent-2) 14%, var(--surf2)); border-color: var(--accent-2); color: var(--text); }
+.sl-col-more:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .sl-col-more { transition: none; } }
 .sl-col-method .study-lanes { margin-bottom: 0; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); }
-/* the Active Directory & Databases sub-heading spans the lane grid and separates the grouped pair */
-.sl-lane-sub { grid-column: 1 / -1; font-family: var(--mono); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: color-mix(in srgb, var(--ph-loot) 66%, var(--text)); margin: 6px 0 2px; padding-bottom: 4px; border-bottom: 1px solid color-mix(in srgb, var(--ph-loot) 30%, var(--line)); }
 .sl-col .study-lane-card { display: flex; flex-direction: column; min-height: 132px; }
 .sl-col .study-lane-foot { margin-top: auto; }
 

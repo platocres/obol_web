@@ -689,11 +689,11 @@
       + 'Start from a structured path, from a port you just scanned, or drop into a live box, whatever fits how you learn.</p></div>';
     // one unified action bar: the three ways to start + the three utility entries, all title case.
     h += '<div class="sl-bar">'
-      + slWay('data-sim', 'sl-way-cold', 'Guided Simulation', 'Run a Cold Box', 'Start from an IP and nothing else. Read each result, choose the next move, and watch the box fall one step at a time.', 'Start a Run')
-      + slWay('data-graph', 'sl-way-atlas', 'The Whole Map', 'Walk the Attack Graph', 'Every move in one graph, wired by what unlocks what. Pan, zoom, and trace end-to-end paths, or light up a ready-made scenario.', 'Open the Atlas')
-      + slWay('data-ports', 'sl-way-port', 'Start from a Scan', 'Browse by Open Port', 'You scanned; these ports are open. Pick the one in front of you and get the exact, ordered moves it unlocks.', 'Full By-Port View')
+      + slWay('data-sim', 'sl-way-cold', 'Guided Simulation', 'Run A Cold Box', 'Start from an IP and nothing else. Read each result, choose the next move, and watch the box fall one step at a time.', 'Start A Run')
+      + slWay('data-graph', 'sl-way-atlas', 'The Whole Map', 'Walk The Attack Graph', 'Every move in one graph, wired by what unlocks what. Pan, zoom, and trace end-to-end paths, or light up a ready-made scenario.', 'Open The Atlas')
+      + slWay('data-ports', 'sl-way-port', 'Start From A Scan', 'Browse By Open Port', 'You scanned; these ports are open. Pick the one in front of you and get the exact, ordered moves it unlocks.', 'Full By-Port View')
       + slUtil('#/loadout', OBOL.ic('gear'), 'Set Up Your Box', 'Install the toolset so the commands you learn match your own machine.')
-      + slUtil('#/home', '▶', 'Start an Engagement', 'Working a real box? Track it: paste output, get your next move.')
+      + slUtil('#/home', '▶', 'Start An Engagement', 'Working a real box? Track it: paste output, get your next move.')
       + slProg(contId, studiedTotal, totalSteps)
       + '</div>';
     // the two-column dashboard
@@ -707,16 +707,14 @@
         + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:' + pct + '%"></span></div>'
         + '<span class="study-lane-go">' + (pr.studied ? pr.studied + ' / ' + pr.total + ' studied · continue →' : 'Start the path →') + '</span></div></button>';
     }
-    // left: methodology (leads). Active Directory + Databases are grouped under their own sub-heading.
+    // left: methodology (leads). Active Directory + Databases stay grouped as the last adjacent pair,
+    // kept in the natural grid flow (no full-width divider) so the card grid reads continuously.
     var GROUP = { ad: 1, database: 1 };
-    var mainLanes = ls.filter(function (L) { return !GROUP[L.key]; });
-    var grpLanes = ls.filter(function (L) { return GROUP[L.key]; });
+    var methodLanes = ls.filter(function (L) { return !GROUP[L.key]; }).concat(ls.filter(function (L) { return GROUP[L.key]; }));
     h += '<section class="sl-col sl-col-method" aria-label="Learn by methodology">'
       + '<div class="sl-col-h"><h2 class="sl-col-t">By Methodology</h2><span class="sl-col-count">' + ls.length + ' Lanes · ' + totalSteps + ' Steps</span>'
-      + '<button type="button" class="sl-col-more" data-go-atlas>Browse All as a Graph →</button></div>'
-      + '<div class="study-lanes">' + mainLanes.map(laneCard).join('')
-      + (grpLanes.length ? '<div class="sl-lane-sub">Active Directory &amp; Databases</div>' + grpLanes.map(laneCard).join('') : '')
-      + '</div></section>';
+      + '<button type="button" class="sl-col-more" data-go-atlas>Browse All As A Graph →</button></div>'
+      + '<div class="study-lanes">' + methodLanes.map(laneCard).join('') + '</div></section>';
     // right: by open port (equal-second). No separate button: the bar's "Browse by Open Port" entry
     // already opens this view, which carries its own Cards / Decision-map toggle.
     h += '<section class="sl-col sl-col-port" aria-label="Learn by open port">'
