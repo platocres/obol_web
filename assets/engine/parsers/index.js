@@ -254,9 +254,9 @@
 
     // Connectivity: a foothold's own interface/route dump → the subnets it reaches (and multihomed);
     // a pivot tool's setup output → the live tunnel. Powers the hub connectivity view.
-    if (has('_parse_local_net') && (/\bip\s+(?:-\d+\s+)?a(?:ddr)?\b|\bifconfig\b|\bip\s+route\b|\bipconfig\b|\broute\s+print\b/.test(lc) || /\binet\s+\d|IPv4 Address/i.test(text)))
+    if (has('_parse_local_net') && (/\bip\s+(?:-\d+\s+)?a(?:ddr)?\b|\bifconfig\b|\bip\s+route\b|\bipconfig\b|\broute\s+print\b|\bnetstat\s+-r/.test(lc) || /\binet\s+\d|IPv4 Address|Network Destination|\bGenmask\b/i.test(text)))
       C._parse_local_net(text, ws, source, facts);
-    if (has('_parse_tunnel') && (/\bchisel\b|\bligolo\b|\bsshuttle\b|\bdnscat|ssh\s+[^\n]*-[a-z]*d\b/.test(lc) || /\bchisel\b|ligolo|sshuttle|dnscat/i.test(text)))
+    if (has('_parse_tunnel') && (/\bchisel\b|\bligolo\b|\bsshuttle\b|\bdnscat|ssh\s+[^\n]*-[a-z]*d\b/.test(lc) || /\bchisel\b|ligolo|sshuttle|dnscat|Agent joined/i.test(text)))
       C._parse_tunnel(text, ws, source, facts, command);
 
     // Output-shape fallback (runs last): recognize common output by its shape when the command-keyed
