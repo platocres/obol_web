@@ -247,6 +247,11 @@
     if (actionId === 'gpo-abuse' && has('_parse_gpo_control')) C._parse_gpo_control(text, ws, source, facts);
     if (actionId === 'sid-history-abuse' && has('_parse_sid_history')) C._parse_sid_history(text, ws, source, facts);
 
+    // Known-exploit fingerprint recognizer: when pasted service/version output names a product+version
+    // (or a CVE / nmap vuln verdict) that a promoted known-exploit module targets, mint a vuln.<name>
+    // lead so the coach lights that exact module. Anchored and additive; unrelated output mints nothing.
+    if (has('_parse_vulnmatch')) C._parse_vulnmatch(text, ws, source, facts);
+
     // Output-shape fallback (runs last): recognize common output by its shape when the command-keyed
     // dispatch above did not key on it. Strictly additive and guarded, so it only fills gaps (a bare
     // port table, a raw HTTP response, a pasted AS-REP/TGS hash) and never alters a parsed result.

@@ -1,3 +1,12 @@
+## v12.7 — Close the evidence loop: a vulnmatch parser lights the exact exploit module
+
+The promoted known-exploit modules surfaced on their open port, but pasting a version scan did not yet single out the specific vulnerable software. This adds the fingerprint half of the loop so the Evidence paste drives the coach to the right module.
+
+- **A new vulnmatch recognizer** (in the parsers' output-shape pass) reads a pasted service or version banner, a CHANGELOG line, a CVE string, or an nmap vuln-script verdict, and mints a `vuln.<name>` lead for the matching module. It is anchored on specific product-and-version, CVE, or handshake tokens, so unrelated output and patched versions mint nothing (a plain OpenSSH banner or a patched vsftpd 3.0.3 mints no lead).
+- **A lead is a candidate, never proof.** The recognizer only records that a known-vulnerable fingerprint was observed; the module still proves the box only when its own foothold or access fact is minted from a real shell, exactly as the proof discipline requires.
+- **The loop is wired and orphan-free.** The 20 service and application exploit modules now accept their `vuln.<name>` lead in requires_any (additive, alongside the open-port trigger), so the lead is always consumed, never an orphan fact. The kernel and sudo escalations keep their post-foothold triggers, and the seven originally-promoted exploits keep their existing fingerprint facts (such as `smb.ms17_010`), so nothing is duplicated.
+- **Proved and drift-safe.** A new `vulnmatch-smoke` engine test locks every fingerprint, the conservative boundary, and the consume-side wiring. The parser-cover lens gains a `vulnmatch` capability entry; gap-report --check/--verify stays clean (0 unreachable, 0 missing hand-offs, 0 parse gaps, 0 signature drift, orphans unchanged at 1), the 79-case parser corpus is untouched, and the browser smoke's parser lens still classifies every move.
+
 ## v12.6 — Promote every known-exploit to a gold-standard Learn module (7/30 to 30/30)
 
 The known-exploits catalog was a lighter "this version is vulnerable, here is the command" reference: only 7 of its 30 entries were first-class coach moves, the other 23 surfaced as passive cards with no teaching surface. This release promotes all 23 to the same gold standard as the rest of the curriculum, so every catalogued exploit is a ranked Next Steps action, a node in the by-port decision map, and a Learn methodology-lane module whose field notes walk the real fingerprint, stage, and run.

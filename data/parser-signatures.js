@@ -26,6 +26,11 @@
         'service.', 'ftp.reachable', 'ssh.reachable', 'smb.reachable', 'ldap.reachable', 'kerberos.reachable',
         'rdp.reachable', 'winrm.reachable', 'snmp.reachable', 'dns.reachable', 'http.reachable', 'ad.dc_candidate'],
     },
+    'vulnmatch': {
+      looksFor: 'a product and version in a scan or banner (nmap -sV, whatweb, a CHANGELOG) or a CVE / nmap vuln verdict that matches a known-exploit module, for example "vsftpd 2.3.4", "ProFTPD 1.3.5", "Drupal 7.57", or "VULNERABLE: CVE-2019-0708".',
+      regex: '<product> <vulnerable-version> | CVE-id | vuln-script VULNERABLE',
+      emits: ['vuln.'],
+    },
     'nmap-nse': {
       looksFor: 'nmap script output — the hostname/OS it fingerprints, SMB signing and SMBv1/EternalBlue verdicts, anonymous-FTP and SSH host-key lines, and the LDAP-named domain.',
       regex: '| <script>: … , Host is up, VULNERABLE',

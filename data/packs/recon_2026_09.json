@@ -976,7 +976,8 @@
         "linux"
       ],
       "requires_any": [
-        "port:21"
+        "port:21",
+        "vuln.vsftpd_234"
       ],
       "produces": [
         "foothold.linux",
@@ -1026,7 +1027,8 @@
         "linux"
       ],
       "requires_any": [
-        "port:21"
+        "port:21",
+        "vuln.proftpd_modcopy"
       ],
       "produces": [
         "foothold.webshell"
@@ -1075,7 +1077,8 @@
       ],
       "requires_any": [
         "port:445",
-        "port:139"
+        "port:139",
+        "vuln.samba_usermap"
       ],
       "produces": [
         "foothold.linux",
@@ -1124,7 +1127,8 @@
         "windows"
       ],
       "requires_any": [
-        "port:445"
+        "port:445",
+        "vuln.smbghost"
       ],
       "produces": [
         "foothold.windows",
@@ -1173,7 +1177,8 @@
         "windows"
       ],
       "requires_any": [
-        "port:3389"
+        "port:3389",
+        "vuln.bluekeep"
       ],
       "produces": [
         "foothold.windows",
@@ -1216,7 +1221,8 @@
       "os": [],
       "phase": "access",
       "requires_any": [
-        "port:8021"
+        "port:8021",
+        "vuln.freeswitch"
       ],
       "produces": [
         "foothold.linux",
@@ -1267,7 +1273,8 @@
       "requires_any": [
         "port:8000",
         "port:8787",
-        "port:5005"
+        "port:5005",
+        "vuln.jdwp"
       ],
       "produces": [
         "foothold.linux"
@@ -1317,7 +1324,8 @@
       ],
       "phase": "access",
       "requires_any": [
-        "port:3000"
+        "port:3000",
+        "vuln.aerospike"
       ],
       "produces": [
         "foothold.linux"
@@ -1367,7 +1375,8 @@
       ],
       "phase": "access",
       "requires_any": [
-        "port:1978"
+        "port:1978",
+        "vuln.wifi_mouse"
       ],
       "produces": [
         "foothold.windows"
