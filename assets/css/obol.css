@@ -206,12 +206,17 @@ main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-widt
 .ctx-subnav a.active { color: var(--text); background: var(--accent-soft); font-weight: 700; }
 .ctx-subnav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (max-width: 760px) {
-  .ctx-context { gap: 7px; padding: 6px 12px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
-  .ctx-pill .ctx-k { display: none; }
-  .ctx-pill select { max-width: 150px; }
-  .ctx-subnav { flex-wrap: nowrap; overflow-x: auto; padding: 0 12px 6px; -webkit-overflow-scrolling: touch; }
+  /* Stack the three context pills full-width so every control (especially the target and credential
+     swappers) stays visible and reachable — a horizontal-scroll row would hide controls off-screen,
+     which is an accessibility and discoverability trap. The strip is not sticky, so it scrolls away. */
+  .ctx-context { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 12px; }
+  .ctx-pill { display: flex; width: 100%; padding: 5px 11px; }
+  .ctx-pill .ctx-k { min-width: 76px; }
+  .ctx-pill select { flex: 1 1 auto; max-width: none; width: 100%; }
+  .ctx-subnav { flex-wrap: nowrap; overflow-x: auto; gap: 4px; padding: 2px 12px 8px; -webkit-overflow-scrolling: touch; }
+  .ctx-subgroup { flex: none; }
   .ctx-subgroup-l { display: none; }
-  .ctx-subgroup + .ctx-subgroup { border-left: 0; padding-left: 0; }
+  .ctx-subgroup + .ctx-subgroup { border-left: 1px solid var(--line); padding-left: 6px; margin-left: 2px; }
 }
 @media print { .ctxbar { display: none; } }
 
