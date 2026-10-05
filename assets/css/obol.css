@@ -2139,6 +2139,34 @@ main#view:has(.study-map) { max-width: 2080px; margin-inline: auto; }
 .qp-err { color: var(--red); } .qp-warn { color: var(--g-next); } .qp-wait { color: var(--muted); }
 @media (max-width: 560px) { .qp-panel { padding: 14px; } .qp-row .btn-primary { width: 100%; } }
 
+/* ---- pivot staging guide in the coach (routes/path.js) ---- */
+.move-staging { margin: 10px 0 2px; border: 1px solid color-mix(in srgb, var(--ph-loot) 35%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--ph-loot) 5%, var(--surf1)); }
+.move-staging > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 9px; padding: 9px 13px; font-size: 12.5px; }
+.move-staging > summary::-webkit-details-marker { display: none; }
+.move-staging > summary::before { content: "\25B8"; color: var(--ph-loot); font-size: 11px; }
+.move-staging[open] > summary::before { content: "\25BE"; }
+.move-staging > summary:focus-visible { outline: 2px solid var(--ph-loot); outline-offset: 2px; border-radius: 6px; }
+.stage-sum-l { font-weight: 800; color: color-mix(in srgb, var(--ph-loot) 72%, var(--text)); }
+.stage-sum-d { font-weight: 500; font-size: 11px; color: var(--muted); }
+.stage-intro { font-size: 12px; color: var(--text-2); line-height: 1.5; margin: 0 13px 6px; }
+.stage-steps { list-style: none; margin: 0; padding: 0 13px 12px; display: flex; flex-direction: column; gap: 10px; }
+.stage-step { display: flex; gap: 10px; align-items: flex-start; }
+.stage-check { flex: none; width: 22px; height: 22px; margin-top: 1px; border: 1px solid var(--line-hot); border-radius: 6px; background: var(--surf2); color: var(--accent); font-size: 13px; font-weight: 800; cursor: pointer; display: grid; place-items: center; }
+.stage-check[aria-checked="true"] { background: color-mix(in srgb, var(--accent) 18%, var(--surf2)); border-color: var(--accent); }
+.stage-check:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.stage-body { flex: 1 1 auto; min-width: 0; }
+.stage-step.done .stage-body { opacity: .55; }
+.stage-wl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stage-n { font-family: var(--mono); font-size: 11px; font-weight: 800; color: var(--muted); }
+.stage-where { font-family: var(--mono); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+.stage-where-local { color: var(--ph-recon); background: color-mix(in srgb, var(--ph-recon) 15%, transparent); border: 1px solid color-mix(in srgb, var(--ph-recon) 40%, var(--line)); }
+.stage-where-host { color: var(--g-next); background: color-mix(in srgb, var(--g-next) 14%, transparent); border: 1px solid color-mix(in srgb, var(--g-next) 40%, var(--line)); }
+.stage-title { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.stage-cmd { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.stage-cmd code { flex: 1 1 auto; font-family: var(--mono); font-size: 11.5px; color: var(--accent-2); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; overflow-x: auto; white-space: pre; }
+.stage-cmd .btn-copy { flex: none; }
+.stage-note { font-size: 11px; color: var(--text-2); line-height: 1.45; margin-top: 4px; }
+
 /* ---- Learn landing: the reworked #/study map view (wide two-column dashboard) ----
    Accent-tinted text mixes toward var(--text), not white, so it keeps contrast on every skin
    (light accent + dark text on daylight; light accent + light text on the dark skins). */

