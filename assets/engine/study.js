@@ -134,9 +134,9 @@
     // linux lane
     'linux-enum': 'Enumeration', 'pspy-monitor': 'Enumeration', 'linux-loot-hunt': 'Enumeration',
     'sudo-abuse': 'Sudo, SUID & Capabilities', 'suid-gtfobins': 'Sudo, SUID & Capabilities', 'capabilities': 'Sudo, SUID & Capabilities', 'linux-ld-preload': 'Sudo, SUID & Capabilities',
-    'cron-abuse': 'Cron & Writable Files', 'writable-passwd': 'Cron & Writable Files', 'nfs-squash': 'Cron & Writable Files', 'linux-path-hijack': 'Cron & Writable Files', 'wildcard-injection': 'Cron & Writable Files', 'systemd-timer-abuse': 'Cron & Writable Files',
-    'lxc-lxd-escape': 'Container Escape', 'docker-socket': 'Container Escape',
-    'linux-kernel-exploit': 'Kernel & LPE CVEs', 'windows-patch-exploit': 'Kernel & LPE CVEs',
+    'cron-abuse': 'Cron & Writable Files', 'writable-passwd': 'Cron & Writable Files', 'nfs-squash': 'Cron & Writable Files', 'linux-path-hijack': 'Cron & Writable Files', 'wildcard-injection': 'Cron & Writable Files', 'systemd-timer-abuse': 'Cron & Writable Files', 'python-library-hijack': 'Cron & Writable Files',
+    'lxc-lxd-escape': 'Container Escape', 'docker-socket': 'Container Escape', 'container-escape': 'Container Escape',
+    'linux-kernel-exploit': 'Kernel & LPE CVEs', 'windows-patch-exploit': 'Kernel & LPE CVEs', 'polkit-abuse': 'Kernel & LPE CVEs',
     'linux-persistence': 'Persistence',
     // windows lane
     'windows-enum': 'Enumeration', 'wesng-patch-gaps': 'Enumeration', 'defense-enum': 'Enumeration',

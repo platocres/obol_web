@@ -130,7 +130,9 @@
     // phase-E module tokens
     spoofed_name: 'spoofed DNS name', victim_fqdn: 'victim FQDN', wordlist: 'wordlist path', rid: 'computer RID', iface: 'your interface', project: 'GCP project id', secret: 'secret name',
     // phase-F module tokens
-    endpoint: 'API endpoint path', cookie: 'session cookie' };
+    endpoint: 'API endpoint path', cookie: 'session cookie',
+    // phase-G module tokens
+    exploit_src: 'exploit source file', script_path: 'root script path', script_dir: 'script directory' };
   var FILL_PH = { command: 'e.g. whoami /all', cmd: 'e.g. id', lport: '4444', payload: 'windows/x64/…', outfile: 'out.txt', url: 'http://…', share: 'C$', file: 'C:\\path\\file',
     suid_bin: '/usr/local/bin/backup', hijack_name: 'backup', dll_name: 'config', dll_path: 'C:\\Program Files\\App', task_target: 'C:\\Scripts\\backup.bat', task_name: '\\VulnBackup', service: 'VulnAppSvc',
     sid: 'ORCL', sudo_command: '/usr/sbin/apache2ctl', kernel: '5.8.0', access_key: 'ASIA…', secret_key: 'wJalr…', token: 'IQoJb…', instance: 'i-0abc123',

