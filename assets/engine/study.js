@@ -140,7 +140,7 @@
     'linux-persistence': 'Persistence',
     // windows lane
     'windows-enum': 'Enumeration', 'wesng-patch-gaps': 'Enumeration', 'defense-enum': 'Enumeration',
-    'seimpersonate': 'Token & Service Abuse', 'unquoted-service-path': 'Token & Service Abuse', 'weak-service-permissions': 'Token & Service Abuse', 'alwaysinstallelevated': 'Token & Service Abuse', 'windows-dll-hijack': 'Token & Service Abuse', 'windows-schtask-abuse': 'Token & Service Abuse', 'uac-bypass': 'Token & Service Abuse', 'com-hijack': 'Token & Service Abuse',
+    'seimpersonate': 'Token & Service Abuse', 'unquoted-service-path': 'Token & Service Abuse', 'weak-service-permissions': 'Token & Service Abuse', 'alwaysinstallelevated': 'Token & Service Abuse', 'windows-dll-hijack': 'Token & Service Abuse', 'windows-schtask-abuse': 'Token & Service Abuse', 'uac-bypass': 'Token & Service Abuse', 'com-hijack': 'Token & Service Abuse', 'windows-service-dacl-abuse': 'Token & Service Abuse', 'windows-namedpipe-impersonation': 'Token & Service Abuse',
     'dpapi-secrets': 'Credential Dumping', 'stored-credentials': 'Credential Dumping', 'windows-old-hives': 'Credential Dumping', 'lsass-dump-onbox': 'Credential Dumping',
     'windows-persistence': 'Windows Persistence',
     // database lane
@@ -152,7 +152,7 @@
     // pivot lane
     'local-linux-interfaces': 'Map the Foothold (Linux)', 'local-linux-routes': 'Map the Foothold (Linux)', 'local-linux-neighbors': 'Map the Foothold (Linux)', 'local-linux-dns': 'Map the Foothold (Linux)',
     'local-windows-interfaces': 'Map the Foothold (Windows)', 'local-windows-routes': 'Map the Foothold (Windows)', 'local-windows-neighbors': 'Map the Foothold (Windows)', 'local-windows-listeners': 'Map the Foothold (Windows)',
-    'pivot-chisel-socks': 'Build the Tunnel', 'pivot-ligolo': 'Build the Tunnel', 'pivot-sshuttle': 'Build the Tunnel', 'pivot-ssh-dynamic': 'Build the Tunnel', 'dns-tunnel': 'Build the Tunnel',
+    'pivot-chisel-socks': 'Build the Tunnel', 'pivot-ligolo': 'Build the Tunnel', 'pivot-sshuttle': 'Build the Tunnel', 'pivot-ssh-dynamic': 'Build the Tunnel', 'pivot-ssh-portforward': 'Build the Tunnel', 'dns-tunnel': 'Build the Tunnel',
     'pivot-scan-through': 'Work Through the Pivot',
     // checks lane
     'check-tls-config': 'TLS & Cleartext', 'check-http-redirect': 'TLS & Cleartext',
@@ -445,6 +445,10 @@
       steps: ['windows-enum', 'com-hijack', 'flag-hunt-windows'] },
     { key: 'patch-system', cat: 'Privilege Escalation', name: 'Missing patch → kernel CVE → SYSTEM', desc: 'wesng names a missing KB with a public local exploit; run it for SYSTEM.',
       steps: ['windows-enum', 'wesng-patch-gaps', 'windows-patch-exploit', 'flag-hunt-windows'] },
+    { key: 'svc-dacl-system', cat: 'Privilege Escalation', name: 'Weak service DACL → reconfigure → SYSTEM', desc: 'A service grants you SERVICE_CHANGE_CONFIG; repoint its binpath and ride the next start to SYSTEM. (Beyond OSCP.)',
+      steps: ['windows-enum', 'windows-service-dacl-abuse', 'flag-hunt-windows'] },
+    { key: 'pipe-system', cat: 'Privilege Escalation', name: 'Named pipe → impersonate client → SYSTEM', desc: 'Stand up a pipe, coerce a privileged client onto it, and duplicate its token to SYSTEM. (Beyond OSCP.)',
+      steps: ['windows-enum', 'windows-namedpipe-impersonation', 'flag-hunt-windows'] },
 
     { key: 'ad-classic', cat: 'Active Directory', name: 'Classic AD: no creds → Domain Admin', desc: 'Anonymous foothold, roast a hash, crack it, walk an ACL path to DCSync.',
       steps: ['nmap-fast-open-ports', 'ad-dc-identify', 'ad-anon-ldap-enum', 'asrep-roast', 'crack-asrep', 'ad-acl-abuse', 'dcsync'] },
@@ -480,6 +484,8 @@
       steps: ['linux-enum', 'local-linux-interfaces', 'pivot-ligolo', 'pivot-scan-through'] },
     { key: 'dns-egress', cat: 'Lateral & Pivot', name: 'Egress-filtered foothold → DNS tunnel → pivot', desc: 'When only DNS resolves outbound, tunnel over it with dnscat2 and scan the network behind the box. (Beyond OSCP.)',
       steps: ['linux-enum', 'local-linux-interfaces', 'dns-tunnel', 'pivot-scan-through'] },
+    { key: 'ssh-forward-reach', cat: 'Lateral & Pivot', name: 'Foothold → SSH forward → one internal service', desc: 'Map the subnet, then forward a single internal port over SSH when a SOCKS pivot is more than you need.',
+      steps: ['linux-enum', 'local-linux-interfaces', 'pivot-ssh-portforward'] },
   ];
   function scenCat(s) { return s.cat || 'Other'; }
   function scenMap(s) { return { key: s.key, cat: scenCat(s), name: s.name, desc: s.desc, steps: s.steps.slice(), count: s.steps.length }; }

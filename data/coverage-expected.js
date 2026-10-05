@@ -164,8 +164,8 @@
       { name: 'Writable scheduled-task binary', moves: ['windows-schtask-abuse'], note: 'a SYSTEM scheduled task that runs a path you can overwrite' },
       { name: 'UAC bypass (filtered admin to high integrity)', moves: ['uac-bypass'], note: 'un-filter an existing admin token via an auto-elevating binary (beyond OSCP)' },
       { name: 'COM hijack (writable CLSID)', moves: ['com-hijack'], note: 'redirect a CLSID a privileged process loads to your DLL; also persistence (beyond OSCP)' },
-      { name: 'Named-pipe impersonation', moves: [], note: 'radar: coerce a privileged client onto a pipe you own and impersonate it; no module yet' },
-      { name: 'Service DACL abuse (SERVICE_CHANGE_CONFIG)', moves: [], note: 'radar: reconfigure a service binpath/account via a weak DACL short of full write; no module yet' },
+      { name: 'Named-pipe impersonation', moves: ['windows-namedpipe-impersonation'], note: 'coerce a privileged client onto a pipe you own, impersonate its token to SYSTEM (the primitive behind the Potato family, beyond OSCP)' },
+      { name: 'Service DACL abuse (SERVICE_CHANGE_CONFIG)', moves: ['windows-service-dacl-abuse'], note: 'reconfigure a service binpath/account via SERVICE_CHANGE_CONFIG, a weak DACL short of full write (beyond OSCP)' },
     ] },
     'domain-cred': { label: 'Active Directory to Domain Admin', expect: [
       { name: 'Graph recon (BloodHound)', moves: ['bloodhound-collect', 'ad-path-manual'] },
@@ -191,7 +191,7 @@
       { name: 'Stand up a tunnel (chisel / ligolo / sshuttle / ssh)', moves: ['pivot-chisel-socks', 'pivot-ligolo', 'pivot-sshuttle', 'pivot-ssh-dynamic'] },
       { name: 'Scan and attack through the tunnel', moves: ['pivot-scan-through'] },
       { name: 'DNS tunnel for egress-restricted hosts', moves: ['dns-tunnel'], note: 'dnscat2 / iodine when only DNS resolves outbound (beyond OSCP, the egress escape hatch)' },
-      { name: 'SSH local / remote port forwarding (-L / -R)', moves: [], note: 'radar: single-port forwards distinct from a dynamic SOCKS pivot; no dedicated module yet' },
+      { name: 'SSH local / remote port forwarding (-L / -R)', moves: ['pivot-ssh-portforward'], note: 'single-port forwards distinct from a dynamic SOCKS pivot, when you need one internal service not the whole subnet' },
     ] },
     'proof': { label: 'Proof capture & documentation', expect: [
       { name: 'Capture user + root/proof flags', moves: ['flag-hunt-linux', 'flag-hunt-windows'] },

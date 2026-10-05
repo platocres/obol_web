@@ -119,6 +119,8 @@
     'sccm-exploit': { cond: 'Can you read the Network Access Account from the management point?', onFail: 'No NAA returned → try relaying the MP, or move to another AD path.' },
     'uac-bypass': { cond: 'Are you a local admin running at Medium integrity (a filtered token)?', onFail: 'Standard user or already High → a UAC bypass gives you nothing; find a real escalation.' },
     'com-hijack': { cond: 'Does a privileged process resolve a CLSID from a registry key you can write?', onFail: 'No writable CLSID load → try a DLL path hijack or a service.' },
+    'windows-service-dacl-abuse': { cond: 'Does the service DACL grant you SERVICE_CHANGE_CONFIG, and can you reach a restart?', onFail: 'No config right, or no way to trigger a start → try a token or DLL path instead.' },
+    'windows-namedpipe-impersonation': { cond: 'Can you make a more privileged process connect to a named pipe you control?', onFail: 'No coercible client → without SeImpersonate or a connectable service this is closed; find another lever.' },
 
     // ---- linux privesc ----
     'capabilities': { cond: 'Does a binary carry an abusable capability (cap_setuid, cap_dac_read_search)?', onFail: 'No usable cap, pivot to SUID or sudo.' },
@@ -165,6 +167,7 @@
     'kerberos-tickets': { cond: 'Do you hold a usable ticket in the cache to reuse?', onFail: 'No ticket, request or forge one first.' },
     // ---- pivot ----
     'pivot-chisel-socks': { cond: 'Does the chisel SOCKS tunnel come up and proxy traffic?', onFail: 'No tunnel, check the server port and firewall.' },
+    'pivot-ssh-portforward': { cond: 'Do you need just one internal service (a single -L/-R forward) rather than the whole subnet?', onFail: 'You need broad reach → stand up a SOCKS or TUN tunnel instead of a single forward.' },
     'dns-tunnel': { cond: 'Is DNS the only egress (faster transports all blocked) and can the host resolve your domain?', onFail: 'A faster channel works, or DNS does not resolve out → use that instead.' },
     'pivot-ligolo': { cond: 'Is the ligolo tunnel up with a route to the internal subnet?', onFail: 'No route, add the interface route and retry.' },
     'pivot-scan-through': { cond: 'Do internal hosts answer through the tunnel (proxychains nmap)?', onFail: 'Nothing responds, confirm the route and tunnel first.' },
