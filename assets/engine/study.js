@@ -143,8 +143,8 @@
     'dpapi-secrets': 'Credential Dumping', 'stored-credentials': 'Credential Dumping', 'windows-old-hives': 'Credential Dumping', 'lsass-dump-onbox': 'Credential Dumping',
     'windows-persistence': 'Windows Persistence',
     // database lane
-    'mysql-login': 'Relational (MySQL, MSSQL, Postgres)', 'mysql-loot': 'Relational (MySQL, MSSQL, Postgres)', 'mssql-login': 'Relational (MySQL, MSSQL, Postgres)', 'mssql-xp-cmdshell': 'Relational (MySQL, MSSQL, Postgres)', 'postgres-login': 'Relational (MySQL, MSSQL, Postgres)',
-    'redis-enum': 'NoSQL & Key-Value', 'mongo-enum': 'NoSQL & Key-Value',
+    'mysql-login': 'Relational databases', 'mysql-loot': 'Relational databases', 'mssql-login': 'Relational databases', 'mssql-xp-cmdshell': 'Relational databases', 'postgres-login': 'Relational databases', 'oracle-tns': 'Relational databases',
+    'redis-enum': 'NoSQL, Cache & Search', 'mongo-enum': 'NoSQL, Cache & Search', 'elasticsearch-enum': 'NoSQL, Cache & Search', 'memcached-enum': 'NoSQL, Cache & Search',
     // shells lane
     'shell-listener': 'Reverse Shells', 'shell-revshell-linux': 'Reverse Shells', 'shell-revshell-windows': 'Reverse Shells', 'shell-pty-upgrade': 'Reverse Shells',
     'ssh-key-login': 'Key & Credential Login', 'linux-remote-exec': 'Key & Credential Login',
@@ -186,7 +186,7 @@
     // windows
     'Token & Service Abuse', 'Credential Dumping', 'Windows Persistence',
     // database
-    'Relational (MySQL, MSSQL, Postgres)', 'NoSQL & Key-Value',
+    'Relational databases', 'NoSQL, Cache & Search',
     // shells
     'Reverse Shells', 'Key & Credential Login',
     // pivot
@@ -549,6 +549,7 @@
     { key: 'p512', tier: 'ports', port: '512/513/514', proto: 'tcp', fam: 'remote', label: 'r-services (rexec, rlogin, rsh)', signal: 'Berkeley trust logins. A permissive .rhosts or hosts.equiv lets you rlogin or rsh in as any user, root included, with no password at all.', seed: ['recon-rservices'] },
     { key: 'p873', tier: 'ports', port: '873', proto: 'tcp', fam: 'file', label: 'rsync', signal: 'A file-sync daemon serving named modules. Many list and read without auth (source, backups, keys), and a writable module maps straight onto a sensitive path.', seed: ['recon-rsync'] },
     { key: 'p1433', tier: 'ports', port: '1433', proto: 'tcp', fam: 'db', label: 'MSSQL', signal: 'Microsoft SQL. A login with sysadmin re-enables xp_cmdshell and runs OS commands, so the database becomes a shell.', seed: ['mssql-login', 'mssql-xp-cmdshell', 'crack-identify'] },
+    { key: 'p1521', tier: 'ports', port: '1521', proto: 'tcp', fam: 'db', label: 'Oracle TNS', signal: 'The Oracle listener. Brute the SID, try default accounts (system, scott, dbsnmp), and a privileged login reads and writes host files and reaches command execution.', seed: ['oracle-tns', 'crack-identify'] },
     { key: 'p3306', tier: 'ports', port: '3306', proto: 'tcp', fam: 'db', label: 'MySQL, MariaDB', signal: 'A login reads app secrets and the mysql.user hash table, and can write files into the web root.', seed: ['mysql-login', 'mysql-loot', 'crack-identify'] },
     { key: 'p3389', tier: 'ports', port: '3389', proto: 'tcp', fam: 'remote', label: 'RDP', signal: 'Remote desktop. Confirm which credentials log in, because a weak password is a full graphical session as that user.', seed: ['rdp-enum', 'online-brute-rdp'] },
     { key: 'p5432', tier: 'ports', port: '5432', proto: 'tcp', fam: 'db', label: 'PostgreSQL', signal: 'A session with the right role reads files and, through COPY FROM PROGRAM, runs commands.', seed: ['postgres-login', 'crack-identify'] },
@@ -557,6 +558,8 @@
     { key: 'p6000', tier: 'ports', port: '6000', proto: 'tcp', fam: 'remote', label: 'X11', signal: 'A desktop display with access control off. Any network client can screenshot the session, log keystrokes as they are typed, and inject input, all as the logged-in user.', seed: ['recon-x11'] },
     { key: 'p6379', tier: 'ports', port: '6379', proto: 'tcp', fam: 'db', label: 'Redis', signal: 'Often unauthenticated. INFO reads the host, and a writable Redis can drop an SSH key or a web shell, which is a direct foothold.', seed: ['redis-enum', 'ssh-key-login', 'shell-listener'] },
     { key: 'p8080', tier: 'ports', port: '8080', proto: 'tcp', fam: 'web', label: 'HTTP-alt (Tomcat, Jenkins)', signal: 'App servers. Tomcat Manager deploys a WAR, and the Jenkins script console runs Groovy. Both are code execution once you have credentials.', seed: ['tomcat-deploy', 'jenkins-access'] },
+    { key: 'p9200', tier: 'ports', port: '9200', proto: 'tcp', fam: 'db', label: 'Elasticsearch', signal: 'A JSON REST API, often unauthenticated. List the indices and dump the interesting one for stored records; old versions carry a scripting-engine RCE.', seed: ['elasticsearch-enum'] },
+    { key: 'p11211', tier: 'ports', port: '11211', proto: 'tcp', fam: 'db', label: 'Memcached', signal: 'An in-memory cache with no auth by design. Dump the cached keys for session tokens and secrets the application left in memory.', seed: ['memcached-enum'] },
     { key: 'p27017', tier: 'ports', port: '27017', proto: 'tcp', fam: 'db', label: 'MongoDB', signal: 'Historically no auth. If you can list the databases you can read them, and hashes and API keys sit in plain collections.', seed: ['mongo-enum'] },
     // once you are in: the evidence is no longer a port but what you are holding
     { key: 'shell-linux', tier: 'access', port: '', proto: '', fam: 'access', label: 'You have a shell on Linux', signal: 'You landed a foothold, so the box itself is now the signal. Before escalating, enumerate: sudo rights, SUID bits, capabilities, cron jobs, and loot all point the way to root.', seed: ['shell-listener', 'shell-revshell-linux', 'shell-pty-upgrade', 'linux-remote-exec'], lanes: ['linux'] },
