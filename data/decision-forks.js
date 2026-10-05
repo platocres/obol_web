@@ -240,6 +240,11 @@
     'drupalgeddon2': { cond: 'Is the CHANGELOG version below 7.58 or 8.5.1?', onFail: 'Patched Drupal → the form-render RCE is closed; enumerate modules and users instead.' },
     'phpmyadmin-lfi': { cond: 'Is it phpMyAdmin 4.8.0/4.8.1, and can you log in to use the SQL tab?', onFail: 'Different version, or no login → the session-poison chain will not land; try credential recovery.' },
     'webmin-rce': { cond: 'Is Webmin 1.890 to 1.920 on 10000 with password expiry enabled?', onFail: 'Patched or expiry disabled → the injection path is closed; look for creds or another service.' },
+    'ofbiz-deser': { cond: 'Is OFBiz below 17.12.04, and is /webtools/control/xmlrpc reachable?', onFail: 'Patched or endpoint filtered → the deserialiser is closed; enumerate the app instead.' },
+    'cacti-cmdinjection': { cond: 'Is Cacti 1.2.22 or below, and can you spoof an authorized poller address?', onFail: 'Patched, or no authorized address accepted → remote_agent.php will reject you.' },
+    'zabbix-script-rce': { cond: 'Is SAML SSO enabled on the frontend (so the cookie forgery works)?', onFail: 'No SSO, or patched → forge no cookie; try default creds or another path.' },
+    'splunk-app-rce': { cond: 'Can you upload an app (a login, or the CVE-2023-46214 path)?', onFail: 'No upload path → you cannot plant a scripted input; recover a credential first.' },
+    'text4shell': { cond: 'Does a parameter reflect into a Commons Text interpolation (callback fires)?', onFail: 'No interpolation evaluated → the parameter does not reach StringSubstitutor; test other inputs.' },
 
     "check-web-headers": { cond: "Do the response headers reveal a stack, version, or missing control worth noting?", onFail: "Nothing notable → record and move to active tests." },
     "check-web-components": { cond: "Does the fingerprint name a component with a known CVE?", onFail: "No versioned component → enumerate content and parameters directly." },

