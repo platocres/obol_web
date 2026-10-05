@@ -89,7 +89,9 @@
   C._JOHN_CRACKED_LIVE_RE = /^(?<pw>\S.*?)\s{2,}\((?<label>[^)]+)\)\s*$/;
   C._CPASSWORD_RE = /\bcpassword\s*=\s*["']?([^"'\s<>]+)/i;
   C._GPP_FILE_RE = /\b(?:Groups|ScheduledTasks|Services|DataSources|Printers|Drives)\.xml\b/i;
-  C._NMAP_OPEN_RE = /^(?<port>\d+)\/(?:tcp|udp)\s+open(?:\|\w+)?\s+(?<service>\S+)?(?:\s+(?<version>.*?))?\s*$/im;
+  // Whitespace is restricted to [ \t] (not \s) so a greedy trailing match cannot eat the line's own
+  // newline and skip the next port row when iterated globally (reAll). A port row is always one line.
+  C._NMAP_OPEN_RE = /^(?<port>\d+)\/(?:tcp|udp)[ \t]+open(?:\|\w+)?(?:[ \t]+(?<service>\S+))?(?:[ \t]+(?<version>.*?))?[ \t]*$/im;
   C._NMAP_DISCOVERED_RE = /Discovered open port (?<port>\d+)\/(?<proto>tcp|udp) on (?<host>\S+)/i;
   C._NMAP_DOMAIN_NAME_RE = /^\|_?\s*(?:Domain name|DNS_Domain_Name|NetBIOS_Domain_Name):\s*(?<domain>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
   C._NMAP_FQDN_RE = /^\|_?\s*FQDN:\s*(?<fqdn>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;

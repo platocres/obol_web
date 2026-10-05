@@ -11,12 +11,13 @@
   // Files per group, in load order. Populated as bundles are built; tolerant of absent files.
   var GROUPS = {
     parsers: [
-      'assets/engine/parsers/common.js?v=3d0dbce0',
+      'assets/engine/parsers/common.js?v=b5952184',
       'assets/engine/parsers/nmap.js?v=c3b834f5', 'assets/engine/parsers/directory.js?v=4d54b812',
       'assets/engine/parsers/creds.js?v=22662bce', 'assets/engine/parsers/host.js?v=dc42c8bf',
       'assets/engine/parsers/services.js?v=6808bcc2', 'assets/engine/parsers/database.js?v=3dfc40c5',
       'assets/engine/parsers/web.js?v=30a3b534', 'assets/engine/parsers/websource.js?v=2c736bdb',
-      'assets/engine/parsers/index.js?v=84b90d76',
+      'assets/engine/parsers/shape.js?v=253e2667',
+      'assets/engine/parsers/index.js?v=0c37a53d',
     ],
     graph: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/graph.js?v=f509cf3e'],
     domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=d8710496', 'assets/ui/bhgraph.js?v=80a0f124', 'assets/ui/routes/domain.js?v=78af2103'],

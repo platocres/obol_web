@@ -229,6 +229,11 @@
     if (has('_has_product_signature') && C._has_product_signature(text)) C._parse_product_signature(text, ws, command, source, facts);
     if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) C._parse_sqli_oracle(text, ws, command, source, facts);
 
+    // Output-shape fallback (runs last): recognize common output by its shape when the command-keyed
+    // dispatch above did not key on it. Strictly additive and guarded, so it only fills gaps (a bare
+    // port table, a raw HTTP response, a pasted AS-REP/TGS hash) and never alters a parsed result.
+    if (has('_parse_shape')) C._parse_shape(text, ws, source, facts);
+
     } catch (e) {
       try { if (typeof console !== 'undefined' && console.warn) console.warn('obol parser: a sub-parser failed, keeping the ' + facts.length + ' fact(s) already recognized. Command: ' + command + ' | ' + (e && e.message)); } catch (_e) {}
       return { facts: facts, unmatched: facts.length === 0, error: (e && e.message) || String(e) };
