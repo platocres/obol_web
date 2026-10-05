@@ -2114,6 +2114,31 @@ main#view:has(.study-map) { max-width: 2080px; margin-inline: auto; }
 .ctx-focus .ic { width: 13px; height: 13px; }
 @media (max-width: 760px) { .ctx-focus { margin-left: 0; align-self: flex-start; } }
 
+/* ---- the one global paste: appbar trigger + overlay (quickpaste.js) ---- */
+.nav-paste { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; color: var(--text-2); background: color-mix(in srgb, var(--accent) 8%, var(--surf2)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 9px; padding: 6px 11px; font: 600 12.5px var(--sans); }
+.nav-paste:hover { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+.nav-paste:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.nav-paste svg { color: var(--accent-2); }
+@media (max-width: 980px) { .nav-paste-l { display: none; } .nav-paste { padding: 6px 8px; } }
+.qp-overlay { position: fixed; inset: 0; z-index: 210; display: none; align-items: flex-start; justify-content: center; padding: 8vh 16px 16px; background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
+.qp-overlay.open { display: flex; }
+.qp-panel { width: 100%; max-width: 680px; background: var(--bg1); border: 1px solid var(--line-hot); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.5); padding: 18px 20px 20px; }
+.qp-head { display: flex; align-items: center; }
+.qp-title { font-size: 16px; font-weight: 800; color: var(--text); }
+.qp-x { margin-left: auto; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: var(--surf2); color: var(--text-2); font-size: 17px; cursor: pointer; line-height: 1; }
+.qp-x:hover { color: var(--text); border-color: var(--line-hot); }
+.qp-x:focus-visible, .qp-text:focus-visible, #qp-route:focus-visible, #qp-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.qp-sub { font-size: 12.5px; color: var(--text-2); line-height: 1.5; margin: 6px 0 12px; }
+.qp-text { width: 100%; min-height: 200px; resize: vertical; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; color: var(--text); font-family: var(--mono); font-size: 12.5px; padding: 11px 12px; }
+.qp-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.qp-route { font-size: 12.5px; color: var(--text-2); display: flex; align-items: center; gap: 8px; flex: 1 1 auto; }
+.qp-route select { flex: 1 1 auto; max-width: 420px; background: var(--surf2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font: 12px var(--mono); }
+.qp-row .btn-primary { flex: none; }
+.qp-result { margin-top: 12px; font-size: 13px; min-height: 20px; }
+.qp-ok { color: var(--text-2); } .qp-ok b { color: var(--accent-2); } .qp-ok code { font-family: var(--mono); color: var(--accent-2); } .qp-ok a { color: var(--accent-2); font-weight: 700; margin-left: 6px; }
+.qp-err { color: var(--red); } .qp-warn { color: var(--g-next); } .qp-wait { color: var(--muted); }
+@media (max-width: 560px) { .qp-panel { padding: 14px; } .qp-row .btn-primary { width: 100%; } }
+
 /* ---- Learn landing: the reworked #/study map view (wide two-column dashboard) ----
    Accent-tinted text mixes toward var(--text), not white, so it keeps contrast on every skin
    (light accent + dark text on daylight; light accent + light text on the dark skins). */

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OBOL: Offensive Box Operations Ledger</title>
   <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the obol engine: proof-gated next-move coach, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
-  <link rel="stylesheet" href="assets/css/obol.css?v=d25c737a">
+  <link rel="stylesheet" href="assets/css/obol.css?v=3c357008">
   <script>
     /* Pre-paint skin: set before first paint so there is no flash. Tiny + synchronous. */
     (function () {
@@ -51,6 +51,10 @@
         <a data-nav href="#/tools">Tools</a>
         <a data-nav href="#/playbooks">Playbooks</a>
       </nav>
+      <button id="nav-paste" class="nav-paste" type="button" aria-label="Paste evidence" title="Paste evidence (mint facts from any output)">
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"/><path d="M9 12h6M9 16h4"/></svg>
+        <span class="nav-paste-l">Paste</span>
+      </button>
       <button id="nav-search" class="nav-search" type="button" aria-label="Search commands">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
       </button>
@@ -129,6 +133,7 @@
   <script defer src="assets/ui/store.js?v=a91d199d"></script>
   <script defer src="assets/ui/credbar.js?v=90944c50"></script>
   <script defer src="assets/ui/ctxbar.js?v=af6f7cb8"></script>
+  <script defer src="assets/ui/quickpaste.js?v=1fee55fa"></script>
   <script defer src="assets/ui/chainview.js?v=3b7e3f4c"></script>
   <script defer src="assets/ui/graphview.js?v=2cd81edc"></script>
   <script defer src="assets/ui/graphtip.js?v=bb9b0267"></script>
