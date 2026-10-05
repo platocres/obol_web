@@ -23,19 +23,19 @@
 
   // Small badges on each move: locus (where you operate) + scope (syllabus level). Both are derived in the
   // engine; the scope badge appears only above core so it reads as "heads-up, this is advanced", not noise.
-  var LOCUS_LABEL = { R: ['remote', 'off-host from Kali'], F: ['on-host', 'one-shot command on the box'], I: ['interactive', 'interactive session on the box'] };
+  var LOCUS_LABEL = { R: ['Remote', 'off-host from Kali'], F: ['On-Host', 'one-shot command on the box'], I: ['Interactive', 'interactive session on the box'] };
   function locusBadge(a) {
     var m = LOCUS_LABEL[a.locus] || LOCUS_LABEL.R;
     return '<span class="move-locus locus-' + esc(a.locus || 'R') + '" title="' + esc(m[1]) + '">' + esc(m[0]) + '</span>';
   }
   function scopeBadge(a) {
     if (!a.scope || a.scope === 'oscp') return '';
-    var lbl = a.scope === 'beyond' ? 'beyond OSCP' : 'OSCP+';
+    var lbl = a.scope === 'beyond' ? 'Beyond OSCP' : 'OSCP+';
     return '<span class="move-scope scope-' + esc(a.scope === 'beyond' ? 'beyond' : 'plus') + '" title="syllabus level: ' + esc(a.scope) + '">' + esc(lbl) + '</span>';
   }
 
   function phaseChip(phase) {
-    return '<span class="ph-chip ph-' + esc(phase) + '">' + esc(phase) + '</span>';
+    return '<span class="ph-chip ph-' + esc(phase) + '">' + esc(U.titleCase(phase)) + '</span>';
   }
 
   // A slim one-line status strip linking to the global Loadout: not-set-up CTA, or a synced summary that
@@ -63,7 +63,7 @@
       if (!present) miss.push(e);
     });
     if (!miss.length) return '';
-    return '<div class="cmd-missing">⚠ not on your box: ' + miss.map(function (e) {
+    return '<div class="cmd-missing">⚠ Not On Your Box: ' + miss.map(function (e) {
       var how = e.install ? '<code class="cmd-miss-cmd" data-copy="' + U.attr(e.install) + '" title="Click to copy">' + esc(e.install) + '</code>'
         : (e.manual_url ? '<a href="' + U.attr(e.manual_url) + '" target="_blank" rel="noopener">get it ↗</a>' : 'see Loadout');
       return '<b>' + esc(e.label || e.key) + '</b> ' + how;
@@ -158,7 +158,7 @@
       var derived = unfilled.filter(function (t) { return DERIVED_TOKENS[t]; });
       var fillable = unfilled.filter(function (t) { return !DERIVED_TOKENS[t]; });
       var warn = derived.length
-        ? '<div class="cmd-needs">needs: ' + derived.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(', ') + '</div>'
+        ? '<div class="cmd-needs">Needs: ' + derived.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(', ') + '</div>'
         : '';
       // an inline input per ad-hoc token; typing substitutes live into the command + copy button.
       var fillRow = fillable.length
@@ -170,10 +170,10 @@
       var note = v.note ? '<div class="cmd-note">' + esc(v.note) + '</div>' : '';
       // hands-on guidance for obol web: big output → tee to a file and attach it in Evidence.
       var webNote = v.webNote ? '<div class="cmd-webnote">⚠ ' + esc(v.webNote) + '</div>' : '';
-      var label = action.sequence ? ('step ' + (i + 1))
-        : (x.ran ? 'already run' : (pos === firstUnrun ? 'preferred' : 'alt ' + pos));
+      var label = action.sequence ? ('Step ' + (i + 1))
+        : (x.ran ? 'Already Run' : (pos === firstUnrun ? 'Preferred' : 'Alt ' + pos));
       var ranTag = (x.ran && !action.sequence)
-        ? '<span class="cmd-ran" title="obol saw this command in your run ledger, run the next one instead">✓ ran</span>' : '';
+        ? '<span class="cmd-ran" title="obol saw this command in your run ledger, run the next one instead">✓ Ran</span>' : '';
       return '<div class="cmd' + (x.ran ? ' cmd-ran-done' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
         + (fillable.length ? ' data-tmpl="' + U.attr(v.filled) + '"' : '') + '>'
         + '<div class="cmd-head"><span class="cmd-tag">' + esc(v.tool || action.tool || 'cmd') + '</span>'
@@ -238,9 +238,9 @@
   function stagingGuide(action, params) {
     var s = tunnelFor(action.id); if (!s || !OBOL.renderTunnelSteps) return '';
     var intro = (s.when || s.summary ? '<p class="stage-intro">' + esc(s.when || s.summary) + '</p>' : '')
-      + (s.prereq ? '<p class="stage-prereq"><span class="stage-prereq-l">Before you start:</span> ' + esc(s.prereq) + '</p>' : '');
-    return '<details class="move-staging"><summary><span class="stage-sum-l">Setup guide</span>'
-      + '<span class="stage-sum-d">step by step, on your box and the host</span></summary>'
+      + (s.prereq ? '<p class="stage-prereq"><span class="stage-prereq-l">Before You Start:</span> ' + esc(s.prereq) + '</p>' : '');
+    return '<details class="move-staging"><summary><span class="stage-sum-l">Setup Guide</span>'
+      + '<span class="stage-sum-d">Step by step, on your box and the host</span></summary>'
       + intro + OBOL.renderTunnelSteps(s, params) + '</details>';
   }
 
@@ -251,7 +251,7 @@
       ? '<div class="move-dnp"><span class="mini-label">Does Not Prove</span>' + esc(action.does_not_prove) + '</div>'
       : '';
     var toolLink = (action.tool || (action.tools && action.tools[0]))
-      ? '<a class="btn-ghost" href="#/tools/' + esc(action.tool || action.tools[0]) + '">Build in Tools ↗</a>'
+      ? '<a class="btn-ghost" href="#/tools/' + esc(action.tool || action.tools[0]) + '">Build In Tools ↗</a>'
       : '';
     var dirs = OBOL.workspace.tokens(OBOL.store.active());
     var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: dirs });
@@ -291,7 +291,7 @@
     }).join('');
     var more = g.actions.length > cap ? '<li class="blocked-more">…and ' + (g.actions.length - cap) + ' more</li>' : '';
     return '<section class="blocked-group">'
-      + '<div class="blocked-group-head"><span class="blocked-unlock">unlock →</span>'
+      + '<div class="blocked-group-head"><span class="blocked-unlock">Unlock →</span>'
       + '<span class="blocked-reason">' + esc(reason) + '</span>'
       + '<span class="blocked-count">' + g.actions.length + '</span></div>'
       + '<ul class="blocked-items">' + items + more + '</ul></section>';
@@ -324,11 +324,11 @@
     var acts = (eng && eng.activities || []).slice(0, 4);
     return '<aside class="context-rail" aria-label="Live context">'
       + railCard('Access', '<div class="rail-access ra-' + access[1] + '">' + esc(access[0]) + '</div>')
-      + railCard('Next move', topMove ? ('<div class="rail-move">' + esc(topMove.title) + '</div>') : '<div class="rail-empty">Log evidence to unlock moves.</div>')
+      + railCard('Next Move', topMove ? ('<div class="rail-move">' + esc(topMove.title) + '</div>') : '<div class="rail-empty">Log evidence to unlock moves.</div>')
       + railCard('Flags (' + flags.length + ')', (flags.length || located.length)
         ? '<ul class="rail-list rail-flags">' + flags.map(function (f) {
-            var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
-            var label = SL[v.slot] || (f.kind.split('.').pop().replace('_', ' '));
+            var v = f.value || {}; var SL = { root: 'Root Flag', local: 'Local Flag', user: 'Local Flag' };
+            var label = SL[v.slot] || U.titleCase(f.kind.split('.').pop().replace('_', ' '));
             var val = v.flag || '';
             // Show the WHOLE flag (wrapped, selectable, click-to-copy) — a captured flag is the deliverable.
             return '<li class="rail-flag"><div class="rail-flag-h"><span>' + OBOL.ic('flag') + ' ' + esc(label) + '</span>'
@@ -336,9 +336,9 @@
               + (val ? '<code class="rail-flag-val" data-copy="' + U.attr(val) + '" title="Click to copy">' + esc(val) + '</code>' : '') + '</li>';
           }).join('')
           + located.map(function (f) {
-            var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
+            var v = f.value || {}; var SL = { root: 'Root Flag', local: 'Local Flag', user: 'Local Flag' };
             var label = SL[v.slot] || 'Flag';
-            return '<li class="rail-located" title="' + U.attr('located remotely at ' + (v.path || v.name || '') + 'read it from an on-host shell for the report') + '"><span>' + OBOL.ic('pin') + ' ' + esc(label) + ' <em>located</em></span><span class="rail-produced">capture on-host</span></li>';
+            return '<li class="rail-located" title="' + U.attr('located remotely at ' + (v.path || v.name || '') + ', read it from an on-host shell for the report') + '"><span>' + OBOL.ic('pin') + ' ' + esc(label) + ' <em>Located</em></span><span class="rail-produced">Capture On-Host</span></li>';
           }).join('')
           + '</ul>' + (located.length ? '<div class="rail-note">' + OBOL.ic('pin') + ' located remotely, read on the host (interactive shell) so it counts for the report.</div>' : '')
         : '<div class="rail-empty">None captured yet.</div>')
@@ -351,10 +351,10 @@
               + (shown ? '<span class="rail-secret"' + (redact ? '' : ' title="' + U.attr(secret) + '"') + '>' + esc(shown) + '</span>' : '') + '</li>';
           }).join('') + '</ul>'
         : '<div class="rail-empty">None validated yet.</div>')
-      + railCard('Recent evidence', (acts.length
+      + railCard('Recent Evidence', (acts.length
         ? '<ul class="rail-list rail-acts">' + acts.map(function (a) { var c = a.command || (a.file ? a.file : 'pasted output'); return '<li title="' + U.attr(c) + '"><code>' + esc(c.length > 30 ? c.slice(0, 30) + '…' : c) + '</code><span class="rail-produced">' + ((a.produced || []).length) + '</span></li>'; }).join('') + '</ul>'
         : '<div class="rail-empty">Paste tool output on Evidence.</div>')
-        + '<a class="rail-link" href="#/history">View full Run Log →</a>')
+        + '<a class="rail-link" href="#/history">View Full Run Log →</a>')
       + '</aside>';
   }
   OBOL.rail = { html: buildRail };
@@ -406,7 +406,7 @@
     // hero
     html += '<div class="coach-hero">'
       + '<div class="coach-hero-main">'
-      + '<div class="coach-kicker">Next move · frontier: <strong>' + esc(phaseName) + '</strong></div>'
+      + '<div class="coach-kicker">Next Move · Frontier: <strong>' + esc(U.titleCase(phaseName)) + '</strong></div>'
       + '<h1 class="coach-h1">' + (onFlow.length ? esc(onFlow[0].title) : 'Log evidence to unlock moves') + '</h1>'
       + '<p class="coach-sub">' + (onFlow.length ? esc(U.firstSentence(onFlow[0].hypothesis || '')) : 'Paste tool output on the Evidence route (or add a fact) and the coach ranks your next commands.') + '</p>'
       + '</div>'
@@ -437,7 +437,7 @@
     // box decides which steps actually land; this sharpens as you capture more.
     var route = OBOL.pack.planPath ? OBOL.pack.planPath(facts, pack, {}) : null;
     if (route && route.reachable && route.path && route.path.length > 1 && factCount > 1) {
-      html += '<details class="coach-route"><summary class="coach-sec-h">Planned route to the objective'
+      html += '<details class="coach-route"><summary class="coach-sec-h">Planned Route To The Objective'
         + ' <span class="coach-route-n">' + route.path.length + ' steps</span></summary>'
         + '<ol class="coach-route-list">'
         + route.path.map(function (id, i) {
@@ -462,7 +462,7 @@
         + '<button class="btn-ghost ws-done">Got It</button></div>'
         + '<div class="ws-banner-note">Commands below write into <code>' + esc(scandir) + '</code>, run one, then attach its output file in Evidence.</div>'
         + (stamp
-          ? ('<details class="ws-stamp"><summary>Optional: stamp your prompt with the time + VPN IP <span class="ev-import-tag">recommended</span></summary>'
+          ? ('<details class="ws-stamp"><summary>Optional: stamp your prompt with the time + VPN IP <span class="ev-import-tag">Recommended</span></summary>'
             + '<div class="ws-banner-note">Paste this into <code>~/.zshrc</code> once. It prints a dim <code>[UTC time] [tun0:IP]</code> line before each prompt (your prompt is untouched), so later you can paste your <strong>whole session</strong> into Evidence and obol orders it correctly and auto-fills your <code>{{lhost}}</code>.</div>'
             + '<pre class="cmd-run"><code>' + esc(stamp) + '</code></pre>'
             + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(stamp) + '">copy</button></div>'
@@ -477,7 +477,7 @@
     var READY_CAP = 6;
     if (onFlow.length) {
       var top = onFlow.slice(0, READY_CAP), rest = onFlow.slice(READY_CAP);
-      html += '<div class="coach-section"><h2 class="coach-sec-h">Ready now</h2>';
+      html += '<div class="coach-section"><h2 class="coach-sec-h">Ready Now</h2>';
       top.forEach(function (a, i) { html += moveCard(a, facts, params, { primary: i === 0 }); });
       html += '</div>';
       if (rest.length) {

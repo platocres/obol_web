@@ -44,10 +44,10 @@
         var ip = t.ip || t.hostname; if (!ip) return '';
         return '<option value="' + U.attr(ip) + '">' + esc(ip) + (t.hostname && t.ip ? (' · ' + t.hostname) : '') + '</option>';
       }).join('');
-    return '<details class="ev-import"><summary>Import a Full Session <span class="ev-import-tag">catch up on the whole box</span></summary>'
+    return '<details class="ev-import"><summary>Import A Full Session <span class="ev-import-tag">Catch Up On The Whole Box</span></summary>'
       + '<p class="ev-hint">Already deep into a box? Paste (or attach) your <strong>entire terminal</strong> from this run, every command and its output. obol splits it into per-command segments, orders them by time, skips duplicates, and mints facts from all of them at once, so the coach jumps straight to your real frontier.</p>'
       + '<textarea id="ev-imp-text" class="ev-textarea" placeholder="Paste your whole session, many commands and all their output. obol finds each command by its prompt line." spellcheck="false"></textarea>'
-      + '<label class="ev-imp-route"><span>Route facts to</span><select id="ev-imp-target" class="ev-cmd">' + tOpts + '</select></label>'
+      + '<label class="ev-imp-route"><span>Route Facts To</span><select id="ev-imp-target" class="ev-cmd">' + tOpts + '</select></label>'
       + '<div class="ev-hint ev-imp-route-hint">Auto-route reads the target IP from each command (<code>nxc smb 10.0.0.5</code>, <code>--host 10.0.0.5</code>…) and files its facts under that host, your VPN/<code>tun0</code> address is never treated as a target. New hosts you touch are added automatically. Pick a specific target to force everything onto one host.</div>'
       + '<details class="ev-imp-remap"><summary>Box got reverted? Remap an old IP</summary>'
       + '<div class="ev-imp-remap-row"><input id="ev-imp-oldip" class="ev-cmd" placeholder="old IP in your capture (e.g. 10.129.95.9)" autocomplete="off" spellcheck="false" inputmode="decimal">'
@@ -63,7 +63,7 @@
       + '<div id="ev-imp-result" class="ev-result"></div>'
       + '<details class="ev-import-setup"><summary>Set your terminal up like this (recommended, one-time)</summary>'
       + '<p class="ev-hint">These are optional, but they make imports far more accurate, obol reads a UTC timestamp to stitch tabs in order, and your VPN IP to auto-fill <code>{{lhost}}</code> for coercion/relay/reverse-shell commands.</p>'
-      + '<div class="ev-setup-step"><div class="ev-setup-lbl">1 · Stamp every prompt with the time + VPN IP <span class="ev-import-tag">non-destructive, keeps your prompt</span></div>'
+      + '<div class="ev-setup-step"><div class="ev-setup-lbl">1 · Stamp every prompt with the time + VPN IP <span class="ev-import-tag">Non-Destructive, Keeps Your Prompt</span></div>'
       + '<pre class="cmd-run"><code id="ev-stamp-code">' + esc(stamp) + '</code></pre>'
       + '<button class="ev-copy" data-copy="ev-stamp-code">Copy zsh Snippet</button>'
       + '<span class="ev-file-hint">Append to <code>~/.zshrc</code> and run <code>source ~/.zshrc</code>. Appends a hook, it composes with oh-my-zsh / powerlevel10k and leaves your existing prompt alone.</span></div>'
@@ -83,11 +83,11 @@
         + '<figcaption>' + esc(s.caption || '(no caption)') + (s.slot ? ' · <span class="pill">' + esc(s.slot) + '</span>' : '')
         + '<button class="ev-shot-del" data-shot="' + esc(s.id) + '" title="Remove">×</button></figcaption></figure>';
     }).join('') : '<div class="ev-hint">No screenshots yet.</div>';
-    return '<div class="ev-shots"><h2 class="coach-sec-h">Proof screenshots</h2>'
+    return '<div class="ev-shots"><h2 class="coach-sec-h">Proof Screenshots</h2>'
       + '<p class="ev-hint">Attach PNGs (for OSCP: the flag <em>and</em> a host-identity command like <code>ip a</code>/<code>hostname</code> in one frame). They embed into your exported report.</p>'
       + '<div class="ev-row"><input type="file" id="ss-file" accept="image/*" multiple>'
       + '<input id="ss-cap" class="ev-cmd" placeholder="caption (e.g. proof.txt on 10.10.10.10)">'
-      + '<select id="ss-slot" class="ev-cmd"><option value="">slot…</option><option value="local">local</option><option value="root">root</option><option value="other">other</option></select></div>'
+      + '<select id="ss-slot" class="ev-cmd"><option value="">Slot…</option><option value="local">Local</option><option value="root">Root</option><option value="other">Other</option></select></div>'
       + '<div class="ev-shot-grid">' + grid + '</div></div>';
   }
 
@@ -98,7 +98,7 @@
     if (pin) {
       var facts = OBOL.store.factSet();
       var v = OBOL.command.fillCommand(pin, facts, { params: (OBOL.store.active().params || {}), workspace: OBOL.workspace.tokens(OBOL.store.active()) }, 0);
-      pinBlock = '<div class="ev-pin"><div class="ev-pin-h">Paste result for</div>'
+      pinBlock = '<div class="ev-pin"><div class="ev-pin-h">Paste Result For</div>'
         + '<div class="ev-pin-title">' + esc(pin.title) + '</div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
         + '<div class="ev-pin-dnp">' + (pin.does_not_prove ? ('Remember: does not prove ' + esc(pin.does_not_prove)) : '') + '</div></div>';
@@ -125,7 +125,7 @@
       + '</div>'
       + importSection()
       + shotsSection()
-      + '<details class="ev-manual"><summary>Add a fact manually</summary>'
+      + '<details class="ev-manual"><summary>Add A Fact Manually</summary>'
       + '<p class="ev-hint">Pick what you\'ve confirmed and the coach advances, use this when you did something obol\'s parsers can\'t read (a manual exploit, an unsupported tool).</p>'
       + '<div id="ev-factpick" class="fact-pick"></div>'
       + '</details>'
@@ -145,7 +145,7 @@
     var resEl = document.getElementById('ev-result');
     if (resEl) {
       if (!r.facts.length) {
-        resEl.innerHTML = '<div class="ev-none">' + (origin ? ('Read ' + origin + 'no ') : 'No ')
+        resEl.innerHTML = '<div class="ev-none">' + (origin ? ('Read ' + origin + ', no ') : 'No ')
           + 'facts recognized (output saved; nothing invented). '
           + (r.parseError ? 'The parser skipped part of this output (see the browser console). ' : '')
           + 'Set the command above if the output is on its own, or add a fact manually.</div>';

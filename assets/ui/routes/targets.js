@@ -18,18 +18,23 @@
         + '<a class="tcard-main" href="#/target/' + esc(t.ip || t.id) + '"><div class="tcard-ip">' + esc(t.ip || t.hostname || '?') + '</div>'
         + (t.hostname ? '<div class="tcard-host">' + esc(t.hostname) + '</div>' : '')
         + '</a>'
-        + '<div class="tcard-meta">' + (t.os ? '<span class="pill">' + esc(t.os) + '</span>' : '') + '</div>'
-        + '<button class="tcard-del" data-tid="' + esc(t.id) + '" title="Remove">×</button>'
+        + '<div class="tcard-meta">' + (t.os ? '<span class="pill">' + esc(U.titleCase(t.os)) + '</span>' : '<span class="pill tcard-pill-new">Unscanned</span>') + '</div>'
+        + '<button class="tcard-del" data-tid="' + esc(t.id) + '" title="Remove target" aria-label="Remove target ' + U.attr(t.ip || t.hostname || '') + '">×</button>'
         + '</article>';
-    }).join('') : '<div class="coach-empty">No targets yet. Add one below to start the coach.</div>';
+    }).join('') : '<div class="coach-empty">No Targets Yet. Add one below and the coach lights up with your first recon move.</div>';
 
+    var count = targets.length;
     return '<section class="targets">'
       + '<h1 class="route-h1">Targets</h1>'
-      + '<div class="ev-row targets-add">'
-      + '<input id="t-ip" class="ev-cmd" placeholder="IP or CIDR, e.g. 10.10.10.10">'
-      + '<input id="t-host" class="ev-cmd" placeholder="hostname (optional)">'
-      + '<button id="t-add" class="btn-primary">Add Target</button>'
-      + '</div>'
+      + '<p class="route-sub">Add the boxes in scope. Each target seeds a fact so the coach immediately surfaces the nmap-first recon move for it.</p>'
+      + '<div class="targets-add">'
+      + '<div class="targets-add-h">Add A Target</div>'
+      + '<div class="targets-add-row">'
+      + '<label class="targets-add-field"><span>IP Or CIDR</span><input id="t-ip" class="ev-cmd" placeholder="e.g. 10.10.10.10" autocomplete="off" spellcheck="false" inputmode="decimal"></label>'
+      + '<label class="targets-add-field"><span>Hostname <span class="targets-add-opt">(Optional)</span></span><input id="t-host" class="ev-cmd" placeholder="e.g. dc01.corp.local" autocomplete="off" spellcheck="false"></label>'
+      + '<button id="t-add" class="btn-primary targets-add-btn">Add Target</button>'
+      + '</div></div>'
+      + '<div class="targets-grid-h"><h2 class="coach-sec-h">In Scope</h2><span class="pill">' + count + ' Target' + (count === 1 ? '' : 's') + '</span></div>'
       + '<div class="tgrid">' + rows + '</div>'
       + '</section>';
   }

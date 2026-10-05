@@ -2808,3 +2808,140 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 .dt-lg.parse-partial::before { background: var(--yellow); }
 .dt-lg.parse-gap::before { background: var(--red); }
 .dt-lg.parse-noproduce::before { background: transparent; border: 1.5px dashed var(--line-hot); }
+
+/* ============================================================================
+   ENGAGEMENT SURFACES — accessibility + neon accent pass
+   Scope: Engagements/Hub (.engscreen), Targets (.targets), Evidence
+   (.evidence), Next Steps/coach (.withrail). Learn & Loadout are untouched.
+   Design brief: phase-keyed CALM accents (one hue per card, bright labels,
+   no glowing card bodies), an 11px label floor, and no new motion (the
+   connectivity flow is the only animation and is already reduced-motion gated).
+   For neurodivergent & disabled learners: lift every dim-gray micro-label so
+   nothing important hides, and carry meaning in text + colour, never colour
+   alone. Appended last so these scoped rules win the cascade.
+   ============================================================================ */
+
+/* 1 ── Brighten the dimmest text in one move. Redefine --muted as a skin-safe
+   mix toward each skin's own --text, so it lifts on dark skins AND stays dark
+   enough on the daylight skin. Kills the "little lines of gray text" without
+   per-rule edits; still a hair below --text-2 so the hierarchy survives. */
+.engscreen, .targets, .evidence, .withrail {
+  --muted: color-mix(in srgb, var(--text-2) 82%, var(--text));
+}
+
+/* 2 ── Lift every sub-11px micro-label to a comfortable floor. These are the
+   connectivity map + access badge labels that read tiny for low-vision users. */
+.engscreen .hb-acc { font-size: 10.5px; }
+.engscreen .hb-port, .engscreen .hb-port-none { font-size: 11px; }
+.engscreen .conn-node-s { font-size: 10.5px; }
+.engscreen .conn-edge-tag, .engscreen .conn-edge-tag.conn-edge-off,
+.engscreen .conn-edge-warntag { font-size: 10.5px; }
+.engscreen .conn-rec, .engscreen .conn-tag-mh, .engscreen .conn-warnchip,
+.engscreen .ptr-v-h, .engscreen .ptr-line-l, .engscreen .ptr-fix-l { font-size: 10.5px; }
+.engscreen .hb-surf-d, .engscreen .hb-surf-n { font-size: 11.5px; }
+.engscreen .hb-sec-n, .engscreen .hb-log-t, .engscreen .hb-log li { font-size: 11.5px; }
+.withrail .rail-produced, .withrail .rail-acts code, .withrail .rail-flag-file,
+.withrail .rail-flag-val, .withrail .rail-note, .withrail .rail-empty,
+.withrail .rail-list .rail-located em { font-size: 11.5px; }
+.withrail .coach-kicker, .withrail .metric-l, .withrail .coach-lens-label,
+.withrail .coach-lens-hint { font-size: 11.5px; }
+
+/* 3 ── Section headers: a bright title with a neon accent tick. Targets only
+   the <h2> form (h2.coach-sec-h / .hb-sec-h h2), never a <summary>, so the
+   collapsible-section disclosure triangles keep their own ::before markers. */
+.withrail h2.coach-sec-h, .engscreen h2.coach-sec-h, .evidence h2.coach-sec-h {
+  color: var(--text-2); position: relative; padding-left: 12px;
+}
+.withrail h2.coach-sec-h::before, .engscreen h2.coach-sec-h::before,
+.evidence h2.coach-sec-h::before {
+  content: ""; position: absolute; left: 0; top: .08em; bottom: .08em;
+  width: 3px; border-radius: 2px;
+  background: linear-gradient(var(--accent), var(--accent-2));
+}
+/* Hub section headers already carry a bottom rule — make it a neon fade and
+   brighten the heading + the collapsible-summary labels that stay muted. */
+.engscreen .hb-sec-h { border-bottom-color: color-mix(in srgb, var(--accent) 34%, var(--line)); }
+.engscreen .hb-sec-h h2 { color: var(--text); }
+.withrail summary.coach-sec-h, .engscreen summary.coach-sec-h { color: var(--text-2); }
+
+/* 4 ── Hero + kicker: keep the gradient calm, brighten the kicker label. */
+.withrail .coach-kicker { color: var(--text-2); }
+.withrail .coach-kicker strong, .engscreen .hb-anchor-l { color: var(--accent-2); }
+
+/* 5 ── Coach metric tiles: one phase hue each (Ready / Coming Up / Blocked /
+   Facts). Colour rides a top bar + the number; the label underneath names it,
+   so colour is never the only signal. */
+.coach-metrics .metric { border-top: 2px solid var(--line); }
+.coach-metrics .metric:nth-child(1) { border-top-color: var(--ph-access); }
+.coach-metrics .metric:nth-child(1) .metric-n { color: var(--ph-access); }
+.coach-metrics .metric:nth-child(2) { border-top-color: var(--ph-enum); }
+.coach-metrics .metric:nth-child(2) .metric-n { color: var(--ph-enum); }
+.coach-metrics .metric:nth-child(3) { border-top-color: var(--ph-escalate); }
+.coach-metrics .metric:nth-child(3) .metric-n { color: var(--ph-escalate); }
+.coach-metrics .metric:nth-child(4) { border-top-color: var(--ph-recon); }
+.coach-metrics .metric:nth-child(4) .metric-n { color: var(--ph-recon); }
+
+/* 6 ── Hub vitals tiles: Targets (recon) · Flags (gold) · Credentials (teal). */
+.hb-vitals .hb-tile { border-top: 2px solid var(--line); }
+.hb-vitals .hb-tile:nth-child(1) { border-top-color: var(--ph-recon); }
+.hb-vitals .hb-tile:nth-child(1) .hb-v { color: var(--ph-recon); }
+.hb-vitals .hb-tile:nth-child(2) { border-top-color: var(--g-next); }
+.hb-vitals .hb-tile:nth-child(2) .hb-v { color: var(--g-next); }
+.hb-vitals .hb-tile:nth-child(3) { border-top-color: var(--teal); }
+.hb-vitals .hb-tile:nth-child(3) .hb-v { color: color-mix(in srgb, var(--teal) 78%, white); }
+
+/* 7 ── Surfaces rail: a distinct neon per destination icon tile (Map · Domain ·
+   Creds · Findings · Report), matching the phase language used across obol. */
+.hb-surfs .hb-surf:nth-child(1) .hb-surf-ic { color: var(--ph-recon); background: color-mix(in srgb, var(--ph-recon) 16%, var(--surf3)); }
+.hb-surfs .hb-surf:nth-child(2) .hb-surf-ic { color: var(--ph-escalate); background: color-mix(in srgb, var(--ph-escalate) 16%, var(--surf3)); }
+.hb-surfs .hb-surf:nth-child(3) .hb-surf-ic { color: var(--ph-creds); background: color-mix(in srgb, var(--ph-creds) 16%, var(--surf3)); }
+.hb-surfs .hb-surf:nth-child(4) .hb-surf-ic { color: var(--ph-loot); background: color-mix(in srgb, var(--ph-loot) 16%, var(--surf3)); }
+.hb-surfs .hb-surf:nth-child(5) .hb-surf-ic { color: var(--ph-access); background: color-mix(in srgb, var(--ph-access) 16%, var(--surf3)); }
+
+/* 8 ── Pills: give the plain .pill a faint accent wash + brighter ink so a
+   "2 Targets / 3 Facts" chip reads as a badge, not gray filler. */
+.engscreen .pill, .evidence .pill, .targets .pill, .withrail .pill {
+  color: var(--text); font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 11%, var(--surf3));
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+
+/* 9 ── Coach "Ready now" cards: a phase-keyed left edge keyed to each move's
+   phase chip, so the ranked list reads as colour-coded lanes while card bodies
+   stay calm. The chip itself still carries the phase name in text. */
+.withrail .move { border-left: 3px solid var(--line); }
+.withrail .move:has(.ph-recon) { border-left-color: var(--ph-recon); }
+.withrail .move:has(.ph-enum) { border-left-color: var(--ph-enum); }
+.withrail .move:has(.ph-creds) { border-left-color: var(--ph-creds); }
+.withrail .move:has(.ph-access) { border-left-color: var(--ph-access); }
+.withrail .move:has(.ph-escalate) { border-left-color: var(--ph-escalate); }
+.withrail .move:has(.ph-loot) { border-left-color: var(--ph-loot); }
+
+/* 10 ── Evidence: brighten the quiet hints/labels and give the fact-count
+   result a brighter, badge-like read. */
+.evidence .ev-hint, .evidence .ev-none { color: var(--text-2); }
+.evidence .ev-fscope { color: var(--text-2); }
+.evidence .ev-pin-h, .evidence .ev-setup-lbl { color: var(--text-2); }
+
+/* 11 ── Rail labels: keep them readable, tint the header a touch of accent. */
+.withrail .rail-h { color: color-mix(in srgb, var(--accent-2) 42%, var(--text-2)); }
+
+/* 12 ── Targets: a proper carded add-form (was a bare input row) + a labelled
+   "In scope" grid header. Light restructure, no behaviour change. */
+.targets-add { background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surf2);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: var(--radius);
+  padding: 14px 16px; margin-bottom: 22px; }
+.targets-add-h { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--accent-2); margin-bottom: 10px; }
+.targets-add-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.targets-add-field { display: flex; flex-direction: column; gap: 5px; flex: 1 1 200px; min-width: 0; }
+.targets-add-field > span { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); font-weight: 700; }
+.targets-add-opt { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); }
+.targets-add-field .ev-cmd { width: 100%; box-sizing: border-box; }
+.targets-add-btn { flex: 0 0 auto; }
+.targets-grid-h { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.targets-grid-h h2 { margin: 0; }
+.tcard-meta .pill { white-space: nowrap; }
+.tcard-pill-new { color: var(--muted) !important; background: var(--surf3) !important;
+  border-color: var(--line) !important; font-weight: 600; }
+@media (max-width: 560px) { .targets-add-row { flex-direction: column; align-items: stretch; } .targets-add-btn { width: 100%; } }
