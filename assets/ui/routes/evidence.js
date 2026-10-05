@@ -183,6 +183,9 @@
   // the same move the coach will show. Best-effort — returns '' if anything is unavailable.
   function topNextMove() {
     try {
+      // Prefer the shared coach computation so the post-import "Next move" matches the coach and hub
+      // exactly (report-only writeup checks already excluded there).
+      if (OBOL.coach && OBOL.coach.topMove) { var m0 = OBOL.coach.topMove(); return m0 ? m0.title : ''; }
       var eng = OBOL.store.active(), facts = OBOL.store.factSet(), pack = OBOL.packs.actions();
       var doneIds = {};
       function moveEverProduced(id) { return (eng.activities || []).some(function (a) { return a && a.action_id === id && (a.produced || []).length > 0; }); }

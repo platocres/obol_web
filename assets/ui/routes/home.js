@@ -371,6 +371,27 @@
     var n = 0; ['objective.root_flag', 'objective.local_flag', 'objective.flag'].forEach(function (k) { n += f.values(k).length; });
     return n;
   }
+  // Readable OS, domain, and reachable-service facts for a target's dossier (shared by the hub board
+  // and the Targets screen). All read-only projections of proven facts — nothing is invented.
+  function fval(f, k) { try { return (f.values(k) || [])[0] || null; } catch (e) { return null; } }
+  function hostOs(f, t) {
+    if (t && t.os) return t.os;
+    var v = fval(f, 'host.os_hint') || fval(f, 'host.os') || {};
+    return v.os || v.name || v.family || '';
+  }
+  function hostDomain(f) {
+    var v = fval(f, 'ad.domain_known') || fval(f, 'host.domain') || fval(f, 'ad.dc_candidate') || {};
+    return (v && (v.domain || v.fqdn || v.dns_domain)) || '';
+  }
+  function hostServices(f) {
+    var out = [], seen = {};
+    (f.facts || []).forEach(function (x) {
+      if (x.state !== 'supported') return;
+      var m = /^([a-z0-9]+)\.reachable$/.exec(x.kind);
+      if (m) { var s = m[1].toUpperCase(); if (!seen[s]) { seen[s] = 1; out.push(s); } }
+    });
+    return out;
+  }
   function pinnedSet(eng) { return ((eng.ui || {}).pinnedTargets) || []; }
   function boardMode() { try { return localStorage.getItem('obol.hubBoard') || 'all'; } catch (e) { return 'all'; } }
 
@@ -383,14 +404,24 @@
       var ip = t.ip || t.id;
       var f = OBOL.store.factSetForTarget(ip);
       var lvl = hostLevel(f);
-      var moves = OBOL.pack.nextActions(f, pack, { focusPrefixes: focus });
+      // Same ranker as the coach (v2), report-only writeup checks excluded, frontier-ready preferred —
+      // so a target card's "→ next" matches what the coach would actually tell you to do on that box.
+      var moves = OBOL.pack.rankActions(f, pack, { focusPrefixes: focus })
+        .filter(function (a) { return !(OBOL.pack.isReportOnly && OBOL.pack.isReportOnly(a, pack)); });
+      var nextMove = moves.filter(function (a) { return OBOL.phases.prematurity(a, f) === 0; })[0] || moves[0];
       return {
-        t: t, ip: ip, host: t.hostname || '', os: t.os || '',
+        t: t, ip: ip, host: t.hostname || '', os: hostOs(f, t),
         lvl: lvl, badge: ACC_BADGE[lvl], ports: hostPorts(f), flags: hostFlags(f),
-        next: moves.length ? moves[0].title : '', pinned: pins.indexOf(t.id) >= 0,
+        domain: hostDomain(f), svcs: hostServices(f),
+        next: nextMove ? nextMove.title : '', pinned: pins.indexOf(t.id) >= 0,
       };
     });
   }
+  // Shared so the Targets screen can show the same rich per-target dossier (OS, domain, ports, access,
+  // next move) the hub board shows, from one projection — the two never drift.
+  OBOL.targets = OBOL.targets || {};
+  OBOL.targets.all = function (eng) { return targetInfos(eng || OBOL.store.active() || { targets: [] }); };
+  OBOL.targets.ACC_BADGE = ACC_BADGE;
 
   function targetCard(info) {
     var b = info.badge;
@@ -462,7 +493,12 @@
       + '<div class="conn-tool-row" role="group" aria-label="Choose a tunnel tool">' + tabs + '</div>'
       + '<div class="conn-sel"><p class="conn-sel-when">' + esc(sel.when || sel.summary) + '</p>'
       + (sel.prereq ? '<p class="stage-prereq"><span class="stage-prereq-l">Before You Start:</span> ' + esc(sel.prereq) + '</p>' : '')
-      + OBOL.renderTunnelSteps(sel, params) + '</div></div>';
+      // The full step-by-step guide is long; keep it collapsed so the hub rail stays compact (the coach's
+      // Setup guide works the same way). The shared tick state is preserved across both.
+      + '<details class="conn-steps"><summary><span class="stage-sum-l">Setup Steps</span>'
+      + '<span class="stage-sum-d">step by step, on your box and the host</span></summary>'
+      + OBOL.renderTunnelSteps(sel, params) + '</details>'
+      + '</div></div>';
   }
 
   // You → pivot host → reachable subnet, rendered as nodes carrying their own text (so the graphic
@@ -558,13 +594,17 @@
     var eng = OBOL.store.active();
     var params = eng.params || {};
     var pivots = connData(eng);
-    var map = pivots.length
-      ? connMap(pivots, params)
-      : '<div class="conn-empty">No pivots charted yet. Paste <code>ip a</code> or <code>ip route</code> from a foothold and obol maps the subnets it can reach, then set up a tunnel below to reach them.</div>';
+    // No pivot yet → keep this compact: a single slim hint, NOT the full tunnel chooser + step guide +
+    // troubleshooter, which otherwise make the hub rail enormously tall (and shove the rest of the page
+    // down). The chooser appears only once there's an actual pivot to set up.
+    if (!pivots.length) {
+      return '<div class="hb-conn"><div class="hb-sec-h"><h2>Connectivity</h2></div>'
+        + '<div class="conn-empty">No Pivots Charted Yet. Paste <code>ip a</code> or <code>ip route</code> from a foothold and obol maps the subnets it can reach — a tunnel chooser appears here once there’s a pivot to set up.</div></div>';
+    }
     return '<div class="hb-conn' + (troubleOn() ? ' hb-conn--warn' : '') + '"><div class="hb-sec-h"><h2>Connectivity</h2>'
-      + (pivots.length ? '<span class="hb-sec-n">' + pivots.length + ' pivot' + (pivots.length > 1 ? 's' : '') + '</span>' : '')
+      + '<span class="hb-sec-n">' + pivots.length + ' pivot' + (pivots.length > 1 ? 's' : '') + '</span>'
       + '<span class="conn-warnchip">' + OBOL.ic('bolt') + 'Needs Attention</span>'
-      + '</div>' + map
+      + '</div>' + connMap(pivots, params)
       + '<div class="conn-chooser-h"><h3>Set Up A Tunnel</h3><span class="conn-chooser-sub">Pick a tool, then follow the steps on each machine.</span></div>'
       + tunnelChooser(params)
       + troublePanel(params)
@@ -581,11 +621,13 @@
     var totFlags = infos.reduce(function (a, i) { return a + i.flags; }, 0);
     var creds = (OBOL.creds && OBOL.creds.gather()) || [];
 
-    // the "your next move" anchor — the top-ranked engagement-wide move
+    // the "your next move" anchor — the SAME top move the coach (Next Steps) shows. Uses the shared
+    // OBOL.coach.topMove() so the Hub and the coach can never disagree (and report-only writeup checks
+    // are already excluded there), rather than the old v1 ranker which drifted from the coach's v2.
     var pack = OBOL.packs.actions();
     var focus = (OBOL.profile && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
-    var engMoves = OBOL.pack.nextActions(OBOL.store.factSet(), pack, { focusPrefixes: focus });
-    var nm = engMoves[0];
+    var nm = (OBOL.coach && OBOL.coach.topMove) ? OBOL.coach.topMove()
+      : OBOL.pack.rankActions(OBOL.store.factSet(), pack, { focusPrefixes: focus })[0];
     var nmHtml;
     if (nm) {
       var v = OBOL.command.fillCommand(nm, OBOL.store.factSet(), { params: eng.params || {}, profile: eng.profile }, 0);

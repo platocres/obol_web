@@ -644,6 +644,31 @@
     return (OBOL.pack && OBOL.pack.ranker === 'v1') ? nextActions(facts, pack, opts) : nextActionsV2(facts, pack, opts);
   }
 
+  // A "report-only" check: an info-severity finding whose produced facts enable nothing (no action
+  // requires them) — an SPF/DMARC review, a security-header or TLS read, a CORS/HTTP-methods probe.
+  // They belong in the writeup, not at the top of the coach, so the UI groups them out of the live
+  // "ready" list instead of letting one headline a box you are actively working. Conservative: a move
+  // is spared the moment any of its produced facts is consumed by another move (then it enables
+  // progression and is a real step, not a dead-end report note). Cached per pack-array identity.
+  var _consumedCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function consumedKinds(pack) {
+    if (_consumedCache && _consumedCache.has(pack)) return _consumedCache.get(pack);
+    var c = {};
+    (pack || []).forEach(function (a) {
+      (a.requires_all || []).concat(a.requires_any || []).forEach(function (k) { c[k] = 1; });
+    });
+    if (_consumedCache) _consumedCache.set(pack, c);
+    return c;
+  }
+  function isReportOnly(action, pack) {
+    if (!action || !action.report || action.report.severity !== 'info') return false;
+    var prod = action.produces || [];
+    if (!prod.length) return false;
+    var consumed = pack ? consumedKinds(pack) : {};
+    for (var i = 0; i < prod.length; i++) if (consumed[prod[i]]) return false;
+    return true;
+  }
+
   // --------------------------------------------------------------- full-route planner --
   // The lowest-cost sequence of moves from the current facts to any goal. Action cost encodes
   // reliability: a cash-in earned off specific evidence is cheap (1), an ordinary enumeration step
@@ -742,6 +767,7 @@
     nextActions: nextActions,
     nextActionsV2: nextActionsV2,
     rankActions: rankActions,
+    isReportOnly: isReportOnly,
     planPath: planPath,
     ranker: 'v2',
     lockedActions: lockedActions,

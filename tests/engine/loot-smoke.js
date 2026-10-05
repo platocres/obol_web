@@ -25,6 +25,12 @@ ok(JSON.stringify(names) === JSON.stringify(['Administrator', 'Guest', 'krbtgt',
   'usernames dedupes case-insensitively, trims, and sorts (' + names.join(',') + ')');
 ok(L.usernames(fs_([])).length === 0, 'no user list → no usernames');
 
+// --- the userlist is cleaned of noise: machine accounts ($), Exchange system (SM_) + health mailboxes,
+//     and the table header — so kerbrute / spraying / AS-REP roasting never choke on a junk users.txt. ---
+var noisy = fs_([{ kind: 'ad.user_list', scope: 'domain:corp.local', value: { users: ['Administrator', 'svc-alfresco', 'FOREST$', 'SM_2c8eef0a09b545acb', 'HealthMailboxc3d7722', '-Username-'], count: 6 } }]);
+ok(JSON.stringify(L.usernames(noisy)) === JSON.stringify(['Administrator', 'svc-alfresco']),
+  'usernames strips machine accounts, SM_/HealthMailbox mailboxes, and the header (' + L.usernames(noisy).join(',') + ')');
+
 // --- token paths ---
 ok(L.userlistPath(dirs) === '~/e/forest/loot/users.txt', 'userlistPath → loot/users.txt');
 ok(L.hashName({ id: 'asrep-roast', produces: ['hash.asrep'] }) === 'asrep', 'hashName asrep from id/produces');

@@ -331,10 +331,28 @@ function serve() {
   ok(await page.locator('.eng-apath .apath-flow .apath-block').count() >= 1, 'engagement screen shows the engagement-wide Attack Path (' + (await page.locator('.eng-apath .apath-block').count()) + ' blocks)');
   ok(await page.locator('.eng-apath .apath-host').count() === 1, 'the engagement Attack Path carries a per-host IP·hostname header (shown even for one target)');
 
+  // Seed a pivot so the Connectivity panel surfaces its tunnel chooser + troubleshooter. The hub keeps
+  // Connectivity compact until a pivot is actually charted (routes/home.js connPanel), so without a pivot
+  // the chooser/guide/troubleshooter are intentionally absent to keep the rail short.
+  await page.evaluate(() => {
+    const O = window.OBOL, F = O.facts;
+    const eng = O.store.active();
+    const ip = (eng.targets && eng.targets[0] && (eng.targets[0].ip || eng.targets[0].id)) || (eng.params && eng.params.target) || '10.10.10.10';
+    O.store.addFacts([
+      F.makeFact({ kind: 'host.multihomed', scope: 'host:' + ip, source: 'scan' }),
+      F.makeFact({ kind: 'scan.local.interfaces', scope: 'host:' + ip, source: 'scan', value: { subnets: ['172.16.5.0/24'] } }),
+    ], 'facts');
+    O.router.render(); // re-render in place (a full reload would race the async fact persistence)
+  });
+  await page.waitForSelector('.hb-conn .conn-tool', { timeout: 5000 }).catch(() => {});
+
   // Connection wizard: the hub's Connectivity panel carries the tunnel chooser, and the recommended
   // Ligolo path is a thorough, phased, both-machine staging guide (the finished wizard).
   ok(await page.locator('.hb-conn .conn-tool').count() >= 5, 'the connectivity panel offers at least five tunnel tools');
   ok((await page.locator('.hb-conn .conn-tool.on').innerText()).toLowerCase().indexOf('ligolo') !== -1, 'Ligolo-ng is the default selected tunnel');
+  // the full step guide is collapsed by default (keeps the hub rail compact) — open it to inspect the steps
+  await page.locator('.hb-conn .conn-steps > summary').click();
+  await page.waitForTimeout(80);
   ok(await page.locator('.hb-conn .stage-phase').count() >= 3, 'the Ligolo wizard groups its steps into phases (prepare / stage / open / use / clean up)');
   ok(await page.locator('.hb-conn .stage-where-local').count() >= 1 && await page.locator('.hb-conn .stage-where-host').count() >= 1, 'the wizard labels steps on BOTH your Kali box and the target host');
   ok((await page.locator('.hb-conn .stage-alt-l').allInnerTexts()).some(t => /windows/i.test(t)), 'the agent-transfer step spells out a Windows variant, not just Linux');

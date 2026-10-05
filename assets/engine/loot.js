@@ -31,6 +31,14 @@
 
   // Every proven ad.user_list username, deduped (case-insensitively) and sorted — mirrors
   // loot.py.materialize_userlist so the file obol names matches the one it would write.
+  // Noise that must never land in loot/users.txt: machine accounts (end with $), and the Exchange system
+  // mailboxes (SM_*) and health mailboxes (HealthMailbox*) that an LDAP --users dump is full of. Feeding
+  // these to kerbrute / spraying / AS-REP roasting wastes requests and, for a bad list, trips
+  // KDC_ERR_C_PRINCIPAL_UNKNOWN. Mirrors the pack's awk HANDOFF filter so the one-command heredoc and the
+  // hand-rolled pipeline agree. Real accounts (Administrator, krbtgt, svc-*, people) are kept.
+  function isNoiseUser(u) {
+    return /\$$/.test(u) || /^SM_/.test(u) || /^HealthMailbox/i.test(u) || u === '-Username-';
+  }
   function usernames(facts) {
     if (!facts || !facts.values) return [];
     var seen = {}, out = [];
@@ -38,7 +46,7 @@
       ((v && v.users) || []).forEach(function (u) {
         u = String(u == null ? '' : u).trim();
         var key = u.toLowerCase();
-        if (u && !seen[key]) { seen[key] = true; out.push(u); }
+        if (u && !isNoiseUser(u) && !seen[key]) { seen[key] = true; out.push(u); }
       });
     });
     out.sort(function (a, b) { var la = a.toLowerCase(), lb = b.toLowerCase(); return la < lb ? -1 : (la > lb ? 1 : 0); });

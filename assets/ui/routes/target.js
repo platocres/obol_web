@@ -53,7 +53,14 @@
             + '<code class="tw-fkind">' + esc(k) + '</code></li>';
         }).join('') + '</ul>' + (kinds.length > 10 ? '<div class="tw-facts-more">+' + (kinds.length - 10) + ' more proven</div>' : '')
       : '<div class="tw-ev-empty">Nothing proven here yet. Run a move, then paste its output.</div>';
-    return '<div class="tw-ev-head"><a class="btn-primary tw-ev-paste" href="#/evidence">' + OBOL.ic('clip') + ' Paste output for this box</a></div>'
+    // Inline paste — stays on this box's page (no jarring jump to the Evidence tab). Facts are routed to
+    // this host's scope; a big dump or a screenshot still has a link out to the full Evidence surface.
+    return '<div class="tw-ev-head"><button type="button" class="btn-primary tw-ev-paste" data-tw-paste aria-expanded="false">' + OBOL.ic('clip') + ' Paste Output For This Box</button></div>'
+      + '<div class="tw-ingest" data-ip="' + U.attr(ip) + '" hidden>'
+      + '<textarea class="tw-ingest-text" placeholder="Paste this box’s command output here — prompt, command, and all output. obol mints only what it proves and files it under ' + esc(ip) + '. You stay right here on this box." spellcheck="false"></textarea>'
+      + '<div class="tw-ingest-row"><button type="button" class="btn-primary tw-ingest-go">Ingest → Facts</button>'
+      + '<a class="tw-ingest-ev" href="#/evidence/">Big Output Or A Screenshot? Full Evidence ↗</a>'
+      + '<span class="tw-ingest-result" role="status"></span></div></div>'
       + rows
       + '<div class="tw-ev-note">Every fact minted here lands in the engagement report, filed under <b>' + esc(ip) + '</b>.</div>';
   }
@@ -80,7 +87,12 @@
     var facts = OBOL.store.factSetForTarget(ip);
     var pack = OBOL.packs.actions();
     var focus = (OBOL.profile && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
-    var moves = OBOL.pack.nextActions(facts, pack, { focusPrefixes: focus });
+    var dirs = (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(eng) : {};
+    // Rank this box's moves with the SAME shared logic the coach/hub use (report-only writeup checks
+    // excluded, frontier-ready first), scoped to this host's facts — so "Next Steps for this box" never
+    // disagrees with the full coach or the hub.
+    var moves = (OBOL.coach && OBOL.coach.rankFor) ? OBOL.coach.rankFor(facts).onFlow
+      : OBOL.pack.rankActions(facts, pack, { focusPrefixes: focus });
     var lvl = accessLevel(facts);
     var reached = OBOL.phases.phaseIndex(OBOL.phases.targetPhase(facts));
     var frontier = OBOL.phases.frontierIndex(facts);
@@ -151,10 +163,15 @@
     // top scoped moves (compact, copy-ready)
     var params = eng.params || {};
     var moveHtml = moves.slice(0, 6).map(function (a) {
-      var v = OBOL.command.fillCommand(a, facts, { params: params, profile: eng.profile }, 0);
-      return '<article class="tmove"><div class="tmove-head"><span class="ph-chip ph-' + OBOL.phases.phaseOfAction(a) + '">' + OBOL.phases.phaseOfAction(a) + '</span>'
+      var v = OBOL.command.fillCommand(a, facts, { params: params, profile: eng.profile, workspace: dirs }, 0);
+      // The "Set Up First" prep step (e.g. write loot/users.txt from the users obol proved) — the SAME step
+      // the coach renders, so a move whose command reads a file you must create first never ships here
+      // without the command that creates it.
+      var prep = (OBOL.coach && OBOL.coach.prepBlock) ? OBOL.coach.prepBlock(a, facts, dirs) : '';
+      return '<article class="tmove"><div class="tmove-head"><span class="ph-chip ph-' + OBOL.phases.phaseOfAction(a) + '">' + esc(U.titleCase(OBOL.phases.phaseOfAction(a))) + '</span>'
         + '<span class="tmove-title">' + esc(a.title) + '</span>'
         + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '">copy</button></div>'
+        + prep
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre></article>';
     }).join('');
 
@@ -219,6 +236,31 @@
     }
     U.on(mount, 'click', '.btn-copy', function (e, b) {
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    // inline paste for this box: toggle the box, then ingest in place (routed to this host's scope) and
+    // re-render — the operator never leaves the target view.
+    U.on(mount, 'click', '[data-tw-paste]', function (e, t) {
+      var box = mount.querySelector('.tw-ingest'); if (!box) return;
+      var open = box.hasAttribute('hidden');
+      if (open) box.removeAttribute('hidden'); else box.setAttribute('hidden', '');
+      t.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) { var ta = box.querySelector('.tw-ingest-text'); if (ta) ta.focus(); }
+    });
+    U.on(mount, 'click', '.tw-ingest-go', function (e, t) {
+      var box = t.closest('.tw-ingest'); if (!box) return;
+      var ta = box.querySelector('.tw-ingest-text'), out = box.querySelector('.tw-ingest-result');
+      var text = (ta && ta.value) || '';
+      if (!text.trim()) { if (out) out.textContent = 'Paste the output first.'; return; }
+      var ip = box.getAttribute('data-ip') || '';
+      if (out) out.textContent = 'Reading…'; t.disabled = true;
+      if (!(OBOL.ingest && OBOL.ingest.ensureParsers)) { if (out) out.textContent = 'Parsers unavailable.'; t.disabled = false; return; }
+      OBOL.ingest.ensureParsers().then(function (okp) {
+        if (!okp) { if (out) out.textContent = 'Parsers still loading, try again.'; t.disabled = false; return; }
+        var r = OBOL.ingest.run({ text: text, scope: 'host:' + ip, source: 'paste' });
+        if (!r || !r.ok) { if (out) out.textContent = (r && r.reason === 'parsers') ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
+        if (r.added) { U.toast('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + ', updating this box'); OBOL.router.render(); }
+        else { t.disabled = false; if (out) out.textContent = r.facts.length ? ('Recognized ' + r.facts.length + ', nothing new (already known).') : 'No facts recognized (output saved).'; }
+      });
     });
     // contextual launchers: make this box the active target, then open the global Tools / Playbooks
     // library already filled for it.

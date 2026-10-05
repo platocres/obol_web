@@ -359,20 +359,27 @@
   }
   OBOL.rail = { html: buildRail };
 
-  function render(ctx) {
+  // Shared coach computation — the SINGLE source of truth for "what's next". Used by this coach AND by
+  // the engagement Hub's "Your Next Move" anchor, the Hub's per-target cards, and the Evidence summary,
+  // so every screen shows the same move instead of disagreeing (the Hub used to call the old v1 ranker
+  // while the coach called v2). Report-only writeup checks (OBOL.pack.isReportOnly) are pulled out of the
+  // live ready/coming-up lists into their own group, so an info-severity finding (SPF/DMARC, headers, …)
+  // can never headline a box you're actively working.
+  function computeCoach() { return rankFor(OBOL.store.factSet()); }
+  // rankFor(facts) is computeCoach generalized to ANY factset — the engagement-wide one for this coach and
+  // the Hub anchor, or a single host's (factSetForTarget) for the per-target "Next Steps for this box"
+  // panel — so every surface ranks moves the same way and shows the same prep steps. Report-only writeup
+  // checks are split out; the frontier/phase are computed from the passed facts (correct per scope).
+  function rankFor(facts) {
     var eng = OBOL.store.active();
-    var facts = OBOL.store.factSet();
     var params = (eng && eng.params) || {};
     var pack = OBOL.packs.actions();
     var doneIds = {};
     // 'done' = the operator ticked it; 'empty' = its tool ran and proved nothing (a useless path RIGHT NOW,
     // e.g. no SCCM in this environment). Both retire the move from the ready list. The un-retire test is per
-    // MOVE, not per fact-KIND: a move stays retired only while NONE of its OWN runs ever produced a fact,
-    // and comes back the moment a run attributed to it produces one (new evidence revealing it is no longer
-    // a dead end). Checking the fact kind globally was wrong — sccm-enum "produces" credential.candidate,
-    // which you already hold from an unrelated AS-REP crack, so it never retired.
+    // MOVE, not per fact-KIND: a move stays retired only while NONE of its OWN runs ever produced a fact.
     function moveEverProduced(actionId) {
-      return (eng.activities || []).some(function (a) { return a && a.action_id === actionId && (a.produced || []).length > 0; });
+      return (eng && eng.activities || []).some(function (a) { return a && a.action_id === actionId && (a.produced || []).length > 0; });
     }
     Object.keys((eng && eng.checklist) || {}).forEach(function (k) {
       var st = eng.checklist[k];
@@ -383,8 +390,10 @@
     var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
     var ranked = (OBOL.pack.rankActions || OBOL.pack.nextActions)(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
     var frontier = OBOL.phases.frontierIndex(facts);
-    var onFlow = [], comingUp = [];
+    var onFlow = [], comingUp = [], reportChecks = [];
+    function reportOnly(a) { return !!(OBOL.pack.isReportOnly && OBOL.pack.isReportOnly(a, pack)); }
     ranked.forEach(function (a) {
+      if (reportOnly(a)) { reportChecks.push(a); return; }                 // writeup check → own group, never headlines
       if (OBOL.phases.prematurity(a, facts) === 0) onFlow.push(a); else comingUp.push(a);
     });
     var locked = OBOL.pack.lockedActions(facts, pack);
@@ -397,10 +406,31 @@
     function applyLens(arr) { var kept = arr.filter(inLens); hiddenBy += arr.length - kept.length; return kept; }
     onFlow = applyLens(onFlow);
     comingUp = applyLens(comingUp);
+    reportChecks = applyLens(reportChecks);
     locked = locked.filter(function (p) { if (inLens(p.action)) return true; hiddenBy++; return false; });
 
     var factCount = Object.keys(facts.kinds()).length;
     var phaseName = OBOL.phases.PHASES[frontier] || 'recon';
+    return { eng: eng, facts: facts, params: params, pack: pack, frontier: frontier,
+      onFlow: onFlow, comingUp: comingUp, reportChecks: reportChecks, locked: locked,
+      lens: lens, hiddenBy: hiddenBy, factCount: factCount, phaseName: phaseName };
+  }
+  // The authoritative ranking every screen shares, plus the renderers (prep step + full move card) so the
+  // per-target panel can show the exact same "Set Up First" steps and cards the coach does.
+  OBOL.coach = {
+    compute: computeCoach,
+    rankFor: rankFor,
+    topMove: function () { return computeCoach().onFlow[0] || null; },
+    topMoveFor: function (facts) { return rankFor(facts).onFlow[0] || null; },
+    prepBlock: prepBlock,
+    moveCard: moveCard,
+  };
+
+  function render(ctx) {
+    var c = computeCoach();
+    var eng = c.eng, facts = c.facts, params = c.params, pack = c.pack;
+    var onFlow = c.onFlow, comingUp = c.comingUp, reportChecks = c.reportChecks, locked = c.locked;
+    var frontier = c.frontier, lens = c.lens, hiddenBy = c.hiddenBy, factCount = c.factCount, phaseName = c.phaseName;
 
     var html = '<div class="withrail"><section class="coach">';
     // hero
@@ -493,6 +523,15 @@
     if (comingUp.length) {
       html += '<details class="coach-section coach-comingup"><summary class="coach-sec-h">Coming up, eligible but ahead of your frontier (' + comingUp.length + ')</summary>';
       comingUp.forEach(function (a) { html += moveCard(a, facts, params, {}); });
+      html += '</details>';
+    }
+
+    // report checks (info-only writeup findings) — pulled out of the live list so they never headline;
+    // still here, collapsed, as quick wins for the report. See OBOL.pack.isReportOnly.
+    if (reportChecks.length) {
+      html += '<details class="coach-section coach-reportchecks"><summary class="coach-sec-h">Report Checks, For The Writeup (' + reportChecks.length + ')</summary>'
+        + '<p class="coach-reportchecks-note">Info-only checks that don’t move the box forward (SPF/DMARC, security headers, TLS, CORS…). They won’t headline your next move — run them when you’re tidying up the report.</p>';
+      reportChecks.forEach(function (a) { html += moveCard(a, facts, params, {}); });
       html += '</details>';
     }
 
