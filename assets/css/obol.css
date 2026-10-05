@@ -2203,6 +2203,19 @@ main#view:has(.study-map) { max-width: 2080px; margin-inline: auto; }
 .stage-cmd code { flex: 1 1 auto; font-family: var(--mono); font-size: 11.5px; color: var(--accent-2); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; overflow-x: auto; white-space: pre; }
 .stage-cmd .btn-copy { flex: none; }
 .stage-note { font-size: 11px; color: var(--text-2); line-height: 1.45; margin-top: 4px; }
+/* connection wizard: phase-group headers, the why / verify hand-holding, and OS variants.
+   Every state is named in text (not colour alone); hues tint borders/labels, never body text. */
+.stage-phase { list-style: none; margin: 6px 0 0; }
+.stage-phase:first-child { margin-top: 0; }
+.stage-phase-l { display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: color-mix(in srgb, var(--ph-loot) 70%, var(--text)); border-bottom: 1px solid color-mix(in srgb, var(--ph-loot) 35%, var(--line)); padding-bottom: 3px; }
+.stage-why { font-size: 11.5px; color: var(--text-2); line-height: 1.5; margin: 4px 0 2px; }
+.stage-alts { display: flex; flex-direction: column; gap: 7px; margin-top: 5px; }
+.stage-alt { display: flex; flex-direction: column; gap: 3px; }
+.stage-alt-l { font-family: var(--mono); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.stage-verify { font-size: 11px; color: var(--text-2); line-height: 1.45; margin-top: 5px; padding-left: 9px; border-left: 2px solid color-mix(in srgb, var(--ph-recon) 45%, var(--line)); }
+.stage-verify-l { font-weight: 800; color: color-mix(in srgb, var(--ph-recon) 68%, var(--text)); }
+.stage-prereq { font-size: 11.5px; color: var(--text-2); line-height: 1.5; margin: 0 13px 8px; }
+.stage-prereq-l { font-weight: 800; color: var(--text); }
 
 /* ---- Learn landing: the reworked #/study map view (wide two-column dashboard) ----
    Accent-tinted text mixes toward var(--text), not white, so it keeps contrast on every skin

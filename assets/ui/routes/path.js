@@ -232,33 +232,16 @@
   // The tunnel-setup field notes come from the shared catalog (data/tunnels.js), keyed by move id,
   // so the coach guide and the connectivity-panel chooser never drift.
   function tunnelFor(moveId) { var ts = OBOL.TUNNELS || []; for (var i = 0; i < ts.length; i++) if (ts[i].moveId === moveId) return ts[i]; return null; }
-  function fillStage(cmd, params) {
-    params = params || {};
-    return String(cmd).replace(/\{\{(\w+)\}\}/g, function (m, k) {
-      var v = params[k];
-      if ((v === undefined || v === '') && k === 'user') v = params.username;
-      return (v !== undefined && v !== '') ? v : '<' + k + '>';
-    });
-  }
-  function stageDone(id, i) { try { return localStorage.getItem('obol.stage:' + id + ':' + i) === '1'; } catch (e) { return false; } }
+  // The step list itself is rendered by the shared OBOL.renderTunnelSteps (data/tunnels.js), so the
+  // coach's Setup guide and the hub's tunnel chooser can never drift. Here we only wrap it in the
+  // collapsible <details> and add the when / before-you-start intro.
   function stagingGuide(action, params) {
-    var s = tunnelFor(action.id); if (!s) return '';
-    var steps = s.steps.map(function (st, i) {
-      var done = stageDone(action.id, i), cmd = fillStage(st.cmd, params);
-      var whereLbl = st.where === 'host' ? 'On the target host' : 'On your Kali box';
-      return '<li class="stage-step stage-' + st.where + (done ? ' done' : '') + '">'
-        + '<button type="button" class="stage-check" data-stage="' + esc(action.id) + '" data-stage-i="' + i + '" role="checkbox" aria-checked="' + (done ? 'true' : 'false') + '" aria-label="Mark step ' + (i + 1) + ' done">' + (done ? '✓' : '') + '</button>'
-        + '<div class="stage-body"><div class="stage-wl"><span class="stage-n">' + (i + 1) + '</span>'
-        + '<span class="stage-where stage-where-' + st.where + '">' + whereLbl + '</span>'
-        + '<span class="stage-title">' + esc(st.title) + '</span></div>'
-        + '<div class="stage-cmd"><code>' + esc(cmd) + '</code><button class="btn-copy stage-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button></div>'
-        + (st.note ? '<div class="stage-note">' + esc(st.note) + '</div>' : '')
-        + '</div></li>';
-    }).join('');
+    var s = tunnelFor(action.id); if (!s || !OBOL.renderTunnelSteps) return '';
+    var intro = (s.when || s.summary ? '<p class="stage-intro">' + esc(s.when || s.summary) + '</p>' : '')
+      + (s.prereq ? '<p class="stage-prereq"><span class="stage-prereq-l">Before you start:</span> ' + esc(s.prereq) + '</p>' : '');
     return '<details class="move-staging"><summary><span class="stage-sum-l">Setup guide</span>'
       + '<span class="stage-sum-d">step by step, on your box and the host</span></summary>'
-      + (s.when || s.summary ? '<p class="stage-intro">' + esc(s.when || s.summary) + '</p>' : '')
-      + '<ol class="stage-steps">' + steps + '</ol></details>';
+      + intro + OBOL.renderTunnelSteps(s, params) + '</details>';
   }
 
   function moveCard(action, facts, params, opts) {

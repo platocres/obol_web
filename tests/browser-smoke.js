@@ -331,6 +331,19 @@ function serve() {
   ok(await page.locator('.eng-apath .apath-flow .apath-block').count() >= 1, 'engagement screen shows the engagement-wide Attack Path (' + (await page.locator('.eng-apath .apath-block').count()) + ' blocks)');
   ok(await page.locator('.eng-apath .apath-host').count() === 1, 'the engagement Attack Path carries a per-host IP·hostname header (shown even for one target)');
 
+  // Connection wizard: the hub's Connectivity panel carries the tunnel chooser, and the recommended
+  // Ligolo path is a thorough, phased, both-machine staging guide (the finished wizard).
+  ok(await page.locator('.hb-conn .conn-tool').count() >= 5, 'the connectivity panel offers at least five tunnel tools');
+  ok((await page.locator('.hb-conn .conn-tool.on').innerText()).toLowerCase().indexOf('ligolo') !== -1, 'Ligolo-ng is the default selected tunnel');
+  ok(await page.locator('.hb-conn .stage-phase').count() >= 3, 'the Ligolo wizard groups its steps into phases (prepare / stage / open / use / clean up)');
+  ok(await page.locator('.hb-conn .stage-where-local').count() >= 1 && await page.locator('.hb-conn .stage-where-host').count() >= 1, 'the wizard labels steps on BOTH your Kali box and the target host');
+  ok((await page.locator('.hb-conn .stage-alt-l').allInnerTexts()).some(t => /windows/i.test(t)), 'the agent-transfer step spells out a Windows variant, not just Linux');
+  ok(await page.locator('.hb-conn .stage-verify').count() >= 1, 'wizard steps carry a "you will know it worked" checkpoint');
+  // swapping to another tool re-renders its own steps
+  await page.locator('.hb-conn [data-tunnel-sel="sshuttle"]').click();
+  await page.waitForTimeout(120);
+  ok((await page.locator('.hb-conn .conn-tool.on').innerText()).toLowerCase().indexOf('sshuttle') !== -1, 'the chooser swaps the selected tunnel tool');
+
   // Loot glue: proving a user list resolves {{userlist}}/{{hashfile}} to workspace paths and offers
   // a "set up first" heredoc that writes the exact proven names to loot/users.txt.
   await page.evaluate(() => {

@@ -435,41 +435,13 @@
     }).filter(function (h) { return h.subnetList.length || h.tunnels.length || h.multihomed; });
   }
 
-  // Fill a staging command's {{tokens}} from engagement params. {{user}} falls back to the
-  // username param; an unfilled token shows as <token> so the operator knows what to supply.
-  function fillStage(cmd, params) {
-    params = params || {};
-    return String(cmd).replace(/\{\{(\w+)\}\}/g, function (m, k) {
-      var v = params[k];
-      if ((v === undefined || v === '') && k === 'user') v = params.username;
-      return (v !== undefined && v !== '') ? v : '<' + k + '>';
-    });
-  }
-  function stageDone(id, i) { try { return localStorage.getItem('obol.stage:' + id + ':' + i) === '1'; } catch (e) { return false; } }
-
-  // The per-machine setup steps for one tunnel tool. Uses the SAME data-stage keys as the coach's
-  // staging guide (keyed on moveId), so a step ticked here shows ticked there and vice-versa.
-  function stageStepsHtml(tn, params) {
-    var steps = (tn.steps || []).map(function (st, i) {
-      var done = stageDone(tn.moveId, i), cmd = fillStage(st.cmd, params);
-      var whereLbl = st.where === 'host' ? 'On the target host' : 'On your Kali box';
-      return '<li class="stage-step stage-' + st.where + (done ? ' done' : '') + '">'
-        + '<button type="button" class="stage-check" data-stage="' + esc(tn.moveId) + '" data-stage-i="' + i + '" role="checkbox" aria-checked="' + (done ? 'true' : 'false') + '" aria-label="Mark step ' + (i + 1) + ' done">' + (done ? '✓' : '') + '</button>'
-        + '<div class="stage-body"><div class="stage-wl"><span class="stage-n">' + (i + 1) + '</span>'
-        + '<span class="stage-where stage-where-' + st.where + '">' + whereLbl + '</span>'
-        + '<span class="stage-title">' + esc(st.title) + '</span></div>'
-        + '<div class="stage-cmd"><code>' + esc(cmd) + '</code><button class="btn-copy stage-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button></div>'
-        + (st.note ? '<div class="stage-note">' + esc(st.note) + '</div>' : '')
-        + '</div></li>';
-    }).join('');
-    return '<ol class="stage-steps">' + steps + '</ol>';
-  }
-
   // The tool picker: Ligolo-ng first and flagged "recommended", the rest swappable. Shows the
-  // selected tool's when-to-use line + its setup steps.
+  // selected tool's when-to-use line, a before-you-start prereq, and its setup steps. The steps
+  // are rendered by the shared OBOL.renderTunnelSteps (data/tunnels.js) on the SAME data-stage keys
+  // the coach's staging guide uses, so a step ticked here shows ticked there and vice-versa.
   function tunnelChooser(params) {
     var tools = OBOL.TUNNELS || [];
-    if (!tools.length) return '';
+    if (!tools.length || !OBOL.renderTunnelSteps) return '';
     var sel = tools.filter(function (t) { return t.key === _tunnelSel; })[0] || tools[0];
     var tabs = tools.map(function (t) {
       var on = t.key === sel.key;
@@ -481,7 +453,8 @@
     return '<div class="conn-chooser">'
       + '<div class="conn-tool-row" role="group" aria-label="Choose a tunnel tool">' + tabs + '</div>'
       + '<div class="conn-sel"><p class="conn-sel-when">' + esc(sel.when || sel.summary) + '</p>'
-      + stageStepsHtml(sel, params) + '</div></div>';
+      + (sel.prereq ? '<p class="stage-prereq"><span class="stage-prereq-l">Before you start:</span> ' + esc(sel.prereq) + '</p>' : '')
+      + OBOL.renderTunnelSteps(sel, params) + '</div></div>';
   }
 
   // You → pivot host → reachable subnet, rendered as nodes carrying their own text (so the graphic
