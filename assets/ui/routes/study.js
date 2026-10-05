@@ -605,27 +605,90 @@
     return '<a class="study-door" href="' + href + '"><span class="study-door-g">' + glyph + '</span>'
       + '<span class="study-door-t">' + esc(title) + '</span><span class="study-door-d">' + esc(desc) + '</span></a>';
   }
+  // ---- the Learn landing's building blocks -----------------------------------------------------
+  // The three promoted entries (cold box / atlas / by-port). Each carries the canonical single
+  // trigger attribute the rest of the route (and the smoke test) expects: data-sim / data-graph /
+  // data-ports live here and nowhere else, so a click selector stays unambiguous.
+  function wayGlyph(mod) { return mod === 'sl-way-cold' ? '▶' : (mod === 'sl-way-atlas' ? '⊞' : '⊟'); }
+  function slWay(trigAttr, mod, kick, title, desc, go) {
+    return '<button type="button" class="sl-way ' + mod + '" ' + trigAttr + '>'
+      + '<span class="sl-way-top"><span class="sl-way-ic" aria-hidden="true">' + wayGlyph(mod) + '</span>'
+      + '<span class="sl-way-head"><span class="sl-way-kick">' + esc(kick) + '</span><span class="sl-way-t">' + esc(title) + '</span></span></span>'
+      + '<span class="sl-way-d">' + esc(desc) + '</span>'
+      + '<span class="sl-way-go">' + esc(go) + ' →</span></button>';
+  }
+  // a curated by-port card for the landing, derived from the same evidence index the full by-port
+  // view uses, so its counts/signals never drift. Clicking opens the by-port view with it expanded.
+  function slPortCard(e) {
+    var fam = e.fam || 'recon', n = e.moves.length;
+    return '<button type="button" class="sl-pcard sl-fam-' + esc(fam) + '" data-port-open="' + U.attr(e.key) + '">'
+      + '<span class="sl-pcard-top"><span class="sl-pnum">' + esc(e.port) + '</span>'
+      + '<span class="sl-psvc">' + esc(e.label) + '</span><span class="sl-pfam">' + esc(fam) + '</span></span>'
+      + '<span class="sl-psig">' + esc(e.signal) + '</span>'
+      + '<span class="sl-pmoves">' + n + ' move' + (n === 1 ? '' : 's') + ' →</span></button>';
+  }
+  function slAccessCard(e) {
+    return '<button type="button" class="sl-acard" data-port-open="' + U.attr(e.key) + '">'
+      + '<span class="sl-adot" aria-hidden="true"></span><span class="sl-at">' + esc(e.label) + '</span></button>';
+  }
+
+  // ---- the Learn landing: a wide two-column dashboard (methodology leads, by-port equal-second) --
+  var SL_CURATED_PORTS = ['p80', 'p135', 'p88', 'p389', 'p22', 'p21', 'p3306', 'p1433', 'p53', 'p161', 'p3389', 'p5985'];
   function mapView() {
     var ls = study().lanes();
+    var totalSteps = ls.reduce(function (a, L) { return a + L.count; }, 0);
+    // overall progress + where "continue" should jump (the lane with the most studied steps)
+    var studiedTotal = 0, contId = (ls[0] || {}).firstId || '', best = 0;
+    ls.forEach(function (L) { var pr = study().laneProgress(L.key); studiedTotal += pr.studied; if (pr.studied > best) { best = pr.studied; contId = L.firstId; } });
+    // by-port column, from the same evidence index the full by-port view projects
+    var ev = study().evidence(), byKey = {};
+    ev.forEach(function (e) { byKey[e.key] = e; });
+    var ports = SL_CURATED_PORTS.map(function (k) { return byKey[k]; }).filter(Boolean);
+    var access = ev.filter(function (e) { return e.tier === 'access'; });
+
     var h = '<section class="study-route study-map">';
-    h += '<div class="study-hero"><h1 class="study-hero-h">Learn the methodology</h1>'
+    h += '<div class="study-hero sl-hero"><span class="sl-tag">Learn at your own pace, your own way</span>'
+      + '<h1 class="study-hero-h">Learn the methodology</h1>'
       + '<p class="study-hero-p">Obol teaches offensive security as a decision graph: <b>know what to do, and why, from what you\'ve found.</b> '
-      + 'Pick a path below and step through it: watch each move play out like it would on a real box, or test yourself.</p></div>';
-    h += '<div class="study-lanes">' + ls.map(function (L) {
-      var pr = study().laneProgress(L.key), pct = pr.total ? Math.round(pr.studied / pr.total * 100) : 0;
-      return '<button type="button" class="study-lane-card active lane-' + L.key + '" data-open="' + U.attr(L.firstId) + '">'
-        + '<div class="study-lane-name">' + esc(L.name) + ' <span class="study-lane-badge">' + L.count + ' steps</span></div>'
-        + '<div class="study-lane-desc">' + esc(L.desc) + '</div>'
-        + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:' + pct + '%"></span></div>'
-        + '<span class="study-lane-go">' + (pr.studied ? pr.studied + ' / ' + pr.total + ' studied · continue →' : 'Start the path →') + '</span></div></button>';
-    }).join('') + '</div>';
-    h += '<div class="study-browse"><span class="study-browse-l">Or</span>'
-      + '<button type="button" class="study-browse-b" data-sim>▶ run a cold box (guided simulation)</button>'
-      + '<button type="button" class="study-browse-b" data-graph>⊞ browse the whole graph</button>'
-      + '<button type="button" class="study-browse-b" data-ports>⊟ browse by open port</button></div>';
-    h += '<div class="study-doors">'
+      + 'Start from a structured path, from a port you just scanned, or drop into a live box, whatever fits how you learn.</p></div>';
+    // the three promoted entries
+    h += '<div class="sl-ways">'
+      + slWay('data-sim', 'sl-way-cold', 'Guided simulation', 'Run a cold box', 'Start from an IP and nothing else. Read each result, choose the next move, and watch the box fall one step at a time.', 'Start a run')
+      + slWay('data-graph', 'sl-way-atlas', 'The whole map', 'Walk the attack graph', 'Every move in one graph, wired by what unlocks what. Pan, zoom, and trace end-to-end paths, or light up a ready-made scenario.', 'Open the atlas')
+      + slWay('data-ports', 'sl-way-port', 'Start from a scan', 'Browse by open port', 'You scanned; these ports are open. Pick the one in front of you and get the exact, ordered moves it unlocks.', 'Full by-port view')
+      + '</div>';
+    // the two-column dashboard
+    h += '<div class="sl-dash">';
+    // left: methodology (leads)
+    h += '<section class="sl-col sl-col-method" aria-label="Learn by methodology">'
+      + '<div class="sl-col-h"><h2 class="sl-col-t">By methodology</h2><span class="sl-col-count">' + ls.length + ' lanes · ' + totalSteps + ' steps</span>'
+      + '<button type="button" class="sl-col-more" data-go-atlas>Browse all as a graph →</button></div>'
+      + '<div class="study-lanes">' + ls.map(function (L) {
+        var pr = study().laneProgress(L.key), pct = pr.total ? Math.round(pr.studied / pr.total * 100) : 0;
+        return '<button type="button" class="study-lane-card active lane-' + L.key + '" data-open="' + U.attr(L.firstId) + '">'
+          + '<div class="study-lane-name">' + esc(L.name) + ' <span class="study-lane-badge">' + L.count + ' steps</span></div>'
+          + '<div class="study-lane-desc">' + esc(L.desc) + '</div>'
+          + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:' + pct + '%"></span></div>'
+          + '<span class="study-lane-go">' + (pr.studied ? pr.studied + ' / ' + pr.total + ' studied · continue →' : 'Start the path →') + '</span></div></button>';
+      }).join('') + '</div></section>';
+    // right: by open port (equal-second)
+    h += '<section class="sl-col sl-col-port" aria-label="Learn by open port">'
+      + '<div class="sl-col-h"><h2 class="sl-col-t">By open port</h2><span class="sl-col-count">what you scanned</span>'
+      + '<button type="button" class="sl-col-more" data-go-ports>All ports + decision map →</button></div>'
+      + '<div class="sl-ports">' + ports.map(slPortCard).join('') + '</div>';
+    if (access.length) {
+      h += '<div class="sl-access-h">Once you are in, what you are holding</div>'
+        + '<div class="sl-access">' + access.map(slAccessCard).join('') + '</div>';
+    }
+    h += '</section></div>'; // .sl-col-port + .sl-dash
+    // utility footer
+    h += '<div class="sl-footer">'
       + door('#/loadout', OBOL.ic('gear'), 'Set up your box', 'Install the toolset so the commands you learn match your own machine.')
       + door('#/home', '▶', 'Start an engagement', 'Working a real box? Track it: paste output, get your next move.')
+      + '<button type="button" class="study-door sl-prog" data-open="' + U.attr(contId) + '">'
+      + '<span class="study-door-g sl-prog-g">' + studiedTotal + '<span class="sl-prog-tot">/' + totalSteps + '</span></span>'
+      + '<span class="study-door-t">' + (studiedTotal ? 'Continue where you left off' : 'Your progress') + '</span>'
+      + '<span class="study-door-d">' + (studiedTotal ? (studiedTotal + ' step' + (studiedTotal === 1 ? '' : 's') + ' studied across all lanes.') : 'Pick a lane and your progress tracks here.') + '</span></button>'
       + '</div>';
     return h + '</section>';
   }
@@ -1246,6 +1309,18 @@
     U.on(mount, 'click', '[data-back-map]', function () { _view = 'map'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-graph]', function () { _view = 'atlas'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-ports]', function () { _view = 'ports'; OBOL.router.render(); });
+    // landing "more" links — distinct from the single data-graph/data-ports triggers above so a
+    // click selector stays unambiguous (the smoke test clicks [data-graph]/[data-ports] directly).
+    U.on(mount, 'click', '[data-go-atlas]', function () { _view = 'atlas'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-go-ports]', function () { _view = 'ports'; OBOL.router.render(); });
+    // a landing by-port/access card: open the full by-port view (cards mode) with that card expanded.
+    U.on(mount, 'click', '[data-port-open]', function (e, t) {
+      var k = t.getAttribute('data-port-open');
+      _view = 'ports'; _evMode = 'cards';
+      try { localStorage.setItem('obol.evMode', 'cards'); } catch (x) {}
+      var o = evOpen(); o[k] = true; evSave();
+      OBOL.router.render();
+    });
     U.on(mount, 'click', '[data-ev-toggle]', function (e, t) { var k = t.getAttribute('data-ev-toggle'); var o = evOpen(); o[k] = !o[k]; evSave(); OBOL.router.render(); });
     U.on(mount, 'click', '[data-ev-all]', function (e, t) { var open = t.getAttribute('data-ev-all') === 'open'; var o = evOpen(); study().evidence().forEach(function (x) { o[x.key] = open; }); evSave(); OBOL.router.render(); });
     // by-port: flip between the ordered-move cards and the derived LTR decision forest

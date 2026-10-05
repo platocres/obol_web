@@ -1894,7 +1894,11 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .study-cmd-run { white-space: pre-wrap; word-break: break-word; }
 
 /* --- Study: map / Learn landing --- */
-.study-map { max-width: 1040px; }
+/* The landing is a wide two-column dashboard, so it opts out of the 1180px .study-route cap and
+   lets main#view grow past its 1720px default (same :has() technique as the bench view). Other
+   study views keep their narrower reading widths. */
+.study-map { max-width: 2040px; }
+main#view:has(.study-map) { max-width: 2080px; margin-inline: auto; }
 .study-hero { margin: 4px 0 20px; }
 .study-hero-h { font-size: 26px; font-weight: 800; color: var(--text); margin: 0 0 8px; }
 .study-hero-p { font-size: 14px; color: var(--text-2); line-height: 1.6; max-width: 760px; margin: 0; }
@@ -1927,6 +1931,74 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .study-door-d { font-size: 11.5px; color: var(--text-2); line-height: 1.45; }
 .study-back { font-family: var(--mono); font-size: 11px; color: var(--text-2); background: var(--surf1); border: 1px solid var(--line); border-radius: 7px; padding: 5px 11px; cursor: pointer; margin-right: 4px; }
 .study-back:hover { border-color: var(--accent); color: var(--accent-2); }
+
+/* ---- Learn landing: the reworked #/study map view (wide two-column dashboard) ----
+   Accent-tinted text mixes toward var(--text), not white, so it keeps contrast on every skin
+   (light accent + dark text on daylight; light accent + light text on the dark skins). */
+.sl-hero { margin: 2px 0 22px; }
+.sl-hero .study-hero-h { font-size: clamp(24px, 2.4vw, 32px); letter-spacing: -.01em; }
+.sl-hero .study-hero-p { max-width: 900px; font-size: clamp(13.5px, 1vw, 15px); }
+.sl-tag { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-bottom: 11px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; }
+
+/* the three promoted entries: cold box / atlas / by-port */
+.sl-ways { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 26px; }
+.sl-way { position: relative; display: flex; flex-direction: column; gap: 7px; text-align: left; cursor: pointer; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 17px 15px; min-height: 120px; overflow: hidden; font-family: var(--sans); background: linear-gradient(180deg, color-mix(in srgb, var(--way, var(--accent)) 10%, var(--surf1)), var(--surf1)); transition: .15s; }
+.sl-way::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--way, var(--accent)); opacity: .9; }
+.sl-way:hover { border-color: var(--way, var(--accent)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--way, var(--accent)) 20%, transparent); transform: translateY(-1px); }
+.sl-way:focus-visible { outline: 2px solid var(--way, var(--accent)); outline-offset: 2px; }
+.sl-way-cold { --way: var(--g-next); } .sl-way-atlas { --way: var(--ph-loot); } .sl-way-port { --way: var(--ph-recon); }
+.sl-way-top { display: flex; align-items: center; gap: 11px; }
+.sl-way-ic { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 8px; font-size: 15px; background: color-mix(in srgb, var(--way, var(--accent)) 20%, transparent); color: color-mix(in srgb, var(--way, var(--accent)) 60%, var(--text)); }
+.sl-way-head { display: flex; flex-direction: column; min-width: 0; }
+.sl-way-kick { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: color-mix(in srgb, var(--way, var(--accent)) 55%, var(--text-2)); }
+.sl-way-t { font-size: 15px; font-weight: 800; color: var(--text); }
+.sl-way-d { font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+.sl-way-go { margin-top: auto; font-size: 12px; font-weight: 700; color: color-mix(in srgb, var(--way, var(--accent)) 60%, var(--text)); }
+
+/* the two-column dashboard: methodology (left, leads) + by-port (right, equal-second) */
+.sl-dash { display: grid; grid-template-columns: 1.55fr 1fr; gap: 24px; align-items: start; }
+.sl-col-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 13px; padding-bottom: 9px; border-bottom: 1px solid var(--line); }
+.sl-col-t { font-size: 16px; font-weight: 800; margin: 0; letter-spacing: -.01em; color: var(--text); }
+.sl-col-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.sl-col-more { margin-left: auto; font-family: var(--sans); font-size: 12px; font-weight: 700; color: var(--accent-2); background: none; border: 0; cursor: pointer; white-space: nowrap; padding: 2px 0; }
+.sl-col-more:hover { text-decoration: underline; }
+.sl-col-method .study-lanes { margin-bottom: 0; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); }
+.sl-col .study-lane-card { display: flex; flex-direction: column; min-height: 132px; }
+.sl-col .study-lane-foot { margin-top: auto; }
+
+/* by-port curated cards (first-class, data-driven from study().evidence()) */
+.sl-ports { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 11px; }
+.sl-pcard { text-align: left; display: flex; flex-direction: column; gap: 7px; min-height: 120px; cursor: pointer; font-family: var(--sans); border: 1px solid var(--line); border-left: 3px solid var(--sl-fam, var(--accent)); border-radius: 11px; padding: 12px 13px; background: var(--surf1); transition: .15s; }
+.sl-pcard:hover { border-color: var(--line-hot); border-left-color: var(--sl-fam, var(--accent)); background: var(--surf2); transform: translateY(-1px); }
+.sl-pcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sl-pcard-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 9px; }
+.sl-pnum { font-family: var(--mono); font-size: 17px; font-weight: 800; color: var(--accent-2); white-space: nowrap; }
+.sl-psvc { font-size: 12.5px; font-weight: 800; color: var(--text); }
+.sl-pfam { margin-left: auto; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--text-2); padding: 2px 6px; border-radius: 5px; border-left: 3px solid var(--sl-fam, var(--line)); background: color-mix(in srgb, var(--text) 5%, transparent); white-space: nowrap; }
+.sl-psig { font-size: 11.5px; color: var(--text-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sl-pmoves { margin-top: auto; font-family: var(--mono); font-size: 11px; font-weight: 700; color: color-mix(in srgb, var(--sl-fam, var(--accent)) 60%, var(--text)); }
+.sl-fam-web { --sl-fam: #4aa3ff; } .sl-fam-ad { --sl-fam: #c06cf0; } .sl-fam-db { --sl-fam: #e0882f; } .sl-fam-remote { --sl-fam: #2fb6a8; } .sl-fam-file { --sl-fam: #d6a93a; } .sl-fam-recon { --sl-fam: var(--accent-2); } .sl-fam-mail { --sl-fam: #e06c9a; } .sl-fam-access { --sl-fam: var(--accent); }
+
+/* "once you are in" access strip */
+.sl-access-h { font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); margin: 20px 0 10px; }
+.sl-access { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.sl-acard { display: flex; align-items: center; gap: 9px; text-align: left; cursor: pointer; font-family: var(--sans); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; background: color-mix(in srgb, var(--accent) 5%, var(--surf1)); transition: .15s; }
+.sl-acard:hover { border-color: var(--accent); background: var(--accent-soft); }
+.sl-acard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sl-adot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.sl-at { font-size: 12px; font-weight: 700; color: var(--text); }
+
+/* utility footer (keeps the vertical .study-door tiles, in a 3-up grid) */
+.sl-footer { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.sl-prog { cursor: pointer; text-align: left; font-family: var(--sans); }
+.sl-prog-g { font-family: var(--mono); font-weight: 800; font-size: 20px; color: var(--g-next); }
+.sl-prog-tot { font-size: 13px; color: var(--muted); font-weight: 600; }
+
+/* responsive: two columns collapse to one, band + footer stack, access goes single-col */
+@media (max-width: 1120px) { .sl-dash { grid-template-columns: 1fr; gap: 30px; } }
+@media (max-width: 760px) { .sl-ways { grid-template-columns: 1fr; } .sl-footer { grid-template-columns: 1fr; } }
+@media (max-width: 460px) { .sl-access { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .sl-way, .sl-pcard, .sl-acard { transition: none; } .sl-way:hover, .sl-pcard:hover { transform: none; } }
 
 /* Learn is a full-bleed teaching front door — no per-engagement sidebar. */
 :root[data-route="study"] #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "main"; }
