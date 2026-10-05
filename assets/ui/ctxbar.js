@@ -30,6 +30,8 @@
   ];
 
   function ic(n) { return OBOL.ic ? OBOL.ic(n) : ''; }
+  function focusOn() { try { return localStorage.getItem('obol.focus') === '1'; } catch (e) { return false; } }
+  function applyFocus() { try { document.documentElement.setAttribute('data-focus', focusOn() ? '1' : '0'); } catch (e) {} }
   function routeName() { return (location.hash || '').replace(/^#\/?/, '').split('/')[0] || ''; }
   function isEngRoute(n) { return ENG_ROUTES.indexOf(n) >= 0; }
 
@@ -95,6 +97,7 @@
       + '<label class="ctx-pill ctx-target' + (tgt.disabled ? ' is-empty' : '') + '" title="Active target, fills {{target}} and routes anchorless pastes">'
       + '<span class="ctx-ic" aria-hidden="true">' + ic('crosshair') + '</span><span class="ctx-k">Target</span>'
       + '<select id="ctx-target" aria-label="Active target"' + (tgt.disabled ? ' disabled' : '') + '>' + tgt.html + '</select></label>'
+      + '<button type="button" class="ctx-focus" data-ctx-focus aria-pressed="' + (focusOn() ? 'true' : 'false') + '" title="Focus mode: hide secondary panels for low-distraction work">' + ic('spark') + '<span>Focus</span></button>'
       + '</div>';
     html += '<nav class="ctx-subnav" aria-label="Engagement surfaces"' + (onEng ? '' : ' hidden') + '>' + (onEng ? subnavHtml(name) : '') + '</nav>';
     bar.innerHTML = html;
@@ -105,6 +108,12 @@
     var bar = document.getElementById('ctxbar');
     if (!bar || bar._wired) return;
     bar._wired = true;
+    bar.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('[data-ctx-focus]')) {
+        try { localStorage.setItem('obol.focus', focusOn() ? '0' : '1'); } catch (x) {}
+        applyFocus(); render();
+      }
+    });
     bar.addEventListener('change', function (e) {
       var t = e.target;
       if (t.id === 'ctx-eng') {
@@ -123,7 +132,7 @@
     window.addEventListener('hashchange', render);
   }
 
-  function init() { render(); wire(); }
+  function init() { applyFocus(); render(); wire(); }
 
   OBOL.ctxbar = { init: init, render: render, ENG_ROUTES: ENG_ROUTES };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

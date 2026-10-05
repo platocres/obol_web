@@ -2080,6 +2080,40 @@ main#view:has(.study-map) { max-width: 2080px; margin-inline: auto; }
 .study-back { font-family: var(--mono); font-size: 11px; color: var(--text-2); background: var(--surf1); border: 1px solid var(--line); border-radius: 7px; padding: 5px 11px; cursor: pointer; margin-right: 4px; }
 .study-back:hover { border-color: var(--accent); color: var(--accent-2); }
 
+/* ---- Learn first-run welcome (two doors), inline and dismissible ---- */
+.study-welcome { position: relative; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 14px; padding: 18px 20px 20px; margin: 2px 0 22px; background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 9%, var(--surf1)), var(--surf1)); }
+.study-welcome-x { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; background: var(--surf2); color: var(--text-2); font-size: 16px; cursor: pointer; line-height: 1; }
+.study-welcome-x:hover { color: var(--text); border-color: var(--line-hot); }
+.study-welcome-x:focus-visible, .study-welcome-door:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.study-welcome-h { font-size: 20px; font-weight: 800; color: var(--text); }
+.study-welcome-p { font-size: 13.5px; color: var(--text-2); margin: 6px 0 14px; max-width: 70ch; }
+.study-welcome-doors { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 680px) { .study-welcome-doors { grid-template-columns: 1fr; } }
+.study-welcome-door { display: flex; flex-direction: column; gap: 3px; text-align: left; cursor: pointer; border: 1px solid var(--line); border-radius: 11px; padding: 14px 16px; background: var(--surf1); font-family: var(--sans); transition: .15s; }
+.study-welcome-door:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); transform: translateY(-1px); }
+.study-welcome-door .sw-ic { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--accent-soft); color: var(--accent-2); margin-bottom: 4px; }
+.study-welcome-door .sw-ic .ic { width: 16px; height: 16px; }
+.study-welcome-door .sw-t { font-size: 14px; font-weight: 800; color: var(--text); }
+.study-welcome-door .sw-d { font-size: 12px; color: var(--text-2); line-height: 1.45; }
+.sw-eng { background: linear-gradient(180deg, color-mix(in srgb, var(--g-next) 8%, var(--surf1)), var(--surf1)); }
+.sw-eng .sw-ic { background: color-mix(in srgb, var(--g-next) 16%, transparent); color: color-mix(in srgb, var(--g-next) 72%, var(--text)); }
+.sw-eng:hover { border-color: var(--g-next); box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-next) 20%, transparent); }
+@media (prefers-reduced-motion: reduce) { .study-welcome-door { transition: none; } .study-welcome-door:hover { transform: none; } }
+
+/* ---- focus mode: a low-distraction view that hides secondary panels, leaving the spine ---- */
+:root[data-focus="1"] #obolth-bg { display: none !important; }
+:root[data-focus="1"] .ctx-subnav { display: none; }
+:root[data-focus="1"] .hb-grid { grid-template-columns: 1fr; }
+:root[data-focus="1"] .hb-col-rail { display: none; }
+:root[data-focus="1"] .withrail .context-rail { display: none; }
+:root[data-focus="1"] .target-grid { display: none; }
+.ctx-focus { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 11.5px; font-weight: 700; color: var(--text-2); background: var(--surf2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; cursor: pointer; flex: none; }
+.ctx-focus:hover { color: var(--text); border-color: var(--line-hot); }
+.ctx-focus[aria-pressed="true"] { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+.ctx-focus:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ctx-focus .ic { width: 13px; height: 13px; }
+@media (max-width: 760px) { .ctx-focus { margin-left: 0; align-self: flex-start; } }
+
 /* ---- Learn landing: the reworked #/study map view (wide two-column dashboard) ----
    Accent-tinted text mixes toward var(--text), not white, so it keeps contrast on every skin
    (light accent + dark text on daylight; light accent + light text on the dark skins). */

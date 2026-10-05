@@ -634,6 +634,27 @@
 
   // ---- the Learn landing: a wide two-column dashboard (methodology leads, by-port equal-second) --
   var SL_CURATED_PORTS = ['p80', 'p135', 'p88', 'p389', 'p22', 'p21', 'p3306', 'p1433', 'p53', 'p161', 'p3389', 'p5985'];
+  // A gentle, dismissible two-doors welcome for first-time visitors (first-run routes here). It is
+  // inline, not a modal, so nothing traps focus; it is remembered once dismissed or a door is chosen.
+  function welcomed() { try { return !!localStorage.getItem('obol.welcomed'); } catch (e) { return false; } }
+  function welcomeBanner() {
+    if (welcomed()) return '';
+    return '<div class="study-welcome" role="region" aria-label="Welcome to Obol">'
+      + '<button type="button" class="study-welcome-x" data-welcome-dismiss aria-label="Dismiss welcome">×</button>'
+      + '<div class="study-welcome-h">Welcome to Obol</div>'
+      + '<p class="study-welcome-p">A calm companion for learning offensive security, at your own pace, your own way. Where would you like to start?</p>'
+      + '<div class="study-welcome-doors">'
+      + '<button type="button" class="study-welcome-door sw-learn" data-welcome-dismiss>'
+      + '<span class="sw-ic">' + OBOL.ic('spark') + '</span>'
+      + '<span class="sw-t">I am new to this</span>'
+      + '<span class="sw-d">Learn the methodology step by step, with a why for every move. No box required.</span></button>'
+      + '<button type="button" class="study-welcome-door sw-eng" data-welcome-go>'
+      + '<span class="sw-ic">' + OBOL.ic('crosshair') + '</span>'
+      + '<span class="sw-t">I am working a real box</span>'
+      + '<span class="sw-d">Start an engagement and let the coach track your next move from what you find.</span></button>'
+      + '</div></div>';
+  }
+
   function mapView() {
     var ls = study().lanes();
     var totalSteps = ls.reduce(function (a, L) { return a + L.count; }, 0);
@@ -647,6 +668,7 @@
     var access = ev.filter(function (e) { return e.tier === 'access'; });
 
     var h = '<section class="study-route study-map">';
+    h += welcomeBanner();
     h += '<div class="study-hero sl-hero"><span class="sl-tag">Learn at your own pace, your own way</span>'
       + '<h1 class="study-hero-h">Learn the methodology</h1>'
       + '<p class="study-hero-p">Obol teaches offensive security as a decision graph: <b>know what to do, and why, from what you\'ve found.</b> '
@@ -1289,6 +1311,9 @@
   // state from module vars and query the current DOM through the stable mount element.
   function wireStudyClicks(mount) {
     // "How you got here": collapsible context, collapsed by default
+    // welcome two-doors: remember the choice, then stay on Learn or start an engagement
+    U.on(mount, 'click', '[data-welcome-dismiss]', function () { try { localStorage.setItem('obol.welcomed', '1'); } catch (e) {} OBOL.router.render(); });
+    U.on(mount, 'click', '[data-welcome-go]', function () { try { localStorage.setItem('obol.welcomed', '1'); } catch (e) {} OBOL.router.go('home'); });
     U.on(mount, 'click', '[data-recap-toggle]', function () { setRecapOpen(!recapOpen()); OBOL.router.render(); });
     // switch which plausible lead-up route is shown
     U.on(mount, 'click', '[data-recap-path]', function (e, t) { _recapPath[_sel] = t.getAttribute('data-recap-path'); OBOL.router.render(); });
