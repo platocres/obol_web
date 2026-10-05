@@ -149,10 +149,13 @@ enumeration / loot / escalation module.
 ### Current scoreboard (this build)
 
 `node tools/gap-report.js --check` → `unreachable 0 · missing-handoff 0 · parseGap 0 ·
-parsePartial 0 · signature-drift 0 · coverageGap 0`. 191 moves, 120 with authored fork conditions.
-Everything that blocks an attack chain is closed, every expected technique across the port cards and
-the post-foothold axes has a module, and every move's result is readable. What remains is the
-dead-end review list (terminal/observational facts) and 8 orphan parser sub-signals — both benign.
+parsePartial 0 · signature-drift 0`. 201 moves, 130 with authored fork conditions. Everything that
+blocks an attack chain is closed, every expected technique that lists a module resolves, and every
+move's result is readable. The coverage report now shows 13 gaps on purpose: these are the
+deliberately-seeded beyond-OSCP radar entries (`moves: []` in `coverage-expected.js`) that read red
+until a module is built for them — the regression suites assert every coverage gap is one of these
+seeded entries, never an accident. What else remains is the dead-end review list
+(terminal/observational facts) and 8 orphan parser sub-signals — both benign.
 
 ### How to close a **parse** gap concretely
 

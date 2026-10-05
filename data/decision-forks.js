@@ -43,6 +43,7 @@
     // ---- web ----
     'vhost-discovery': { cond: 'Does a Host value return a differently-sized, real site?', onFail: 'Only the default size → no hidden vhosts; work the main site.' },
     'content-discovery': { cond: 'Did discovery turn up an admin panel, upload, backup, or source?', onFail: 'Nothing interesting → add extensions and a bigger wordlist.' },
+    'graphql-abuse': { cond: 'Does introspection return the schema, and does a privileged query/mutation run unauthenticated?', onFail: 'Introspection off and authorization enforced → test resolver arguments for injection instead.' },
     'param-discovery': { cond: 'Is there a hidden parameter that feeds the page?', onFail: 'No parameters → look for a different injectable surface.' },
     'sqli-basics': { cond: 'Does a single quote change the response (error/boolean/timing)?', onFail: 'No reaction → the parameter is not injectable here.' },
     'manual-sqli-exploitation': { cond: 'Can you read data (UNION reflects, or blind oracle responds)?', onFail: 'Locked down → try a different injection type or parameter.' },
@@ -65,6 +66,7 @@
     'bloodhound-collect': { cond: 'Did collection return a graph with attack paths?', onFail: 'Collection failed → check creds/DNS and retry a method.' },
     'ad-acl-abuse': { cond: 'Do you hold an ACL edge (GenericAll/WriteDacl) to abuse?', onFail: 'No edge → map more of the graph first.' },
     'adcs-esc': { cond: 'Is a certificate template vulnerable (ESC1-8)?', onFail: 'No vulnerable template → another path to privilege.' },
+    'certifried': { cond: 'Is AD CS present and MachineAccountQuota non-zero?', onFail: 'Quota 0 or no CA → Certifried is closed; try a vulnerable template or roasting.' },
     'dcsync': { cond: 'Do you hold replication rights (DS-Replication-Get-Changes)?', onFail: 'Not yet → walk an ACL/delegation path to earn them.' },
     'eternalblue': { cond: 'Is the host confirmed MS17-010 vulnerable?', onFail: 'Patched / not vulnerable → do not fire; find another way.' },
 
@@ -109,10 +111,14 @@
     'aws-credential-abuse': { cond: 'Do the stolen keys authenticate, and what can the role do?', onFail: 'Keys expired or denied → re-pull from the metadata service, mind the session token.' },
     'windows-patch-exploit': { cond: 'Does wesng/Watson name a missing KB with a reliable public exploit?', onFail: 'Fully patched → focus on tokens, services, and stored credentials.' },
     'sccm-exploit': { cond: 'Can you read the Network Access Account from the management point?', onFail: 'No NAA returned → try relaying the MP, or move to another AD path.' },
+    'uac-bypass': { cond: 'Are you a local admin running at Medium integrity (a filtered token)?', onFail: 'Standard user or already High → a UAC bypass gives you nothing; find a real escalation.' },
+    'com-hijack': { cond: 'Does a privileged process resolve a CLSID from a registry key you can write?', onFail: 'No writable CLSID load → try a DLL path hijack or a service.' },
 
     // ---- linux privesc ----
     'capabilities': { cond: 'Does a binary carry an abusable capability (cap_setuid, cap_dac_read_search)?', onFail: 'No usable cap, pivot to SUID or sudo.' },
     'cron-abuse': { cond: 'Is a root cron job running a script or path you can write?', onFail: 'No writable cron target, run pspy to catch hidden jobs.' },
+    'wildcard-injection': { cond: 'Does a root job run a wildcard tool (tar, chown, rsync) in a directory you can write?', onFail: 'No writable wildcard directory → the expansion trick is closed; try cron or systemd.' },
+    'systemd-timer-abuse': { cond: 'Is a root systemd unit file (or the script it ExecStarts) writable by you?', onFail: 'Nothing writable → fall back to cron, sudo, or SUID.' },
     'writable-passwd': { cond: 'Can you write /etc/passwd, or read /etc/shadow to crack it?', onFail: 'Not writable, look at sudo, SUID, or cron instead.' },
     'nfs-squash': { cond: 'Is an export mounted with no_root_squash?', onFail: 'root_squash set, your uploaded SUID runs as nobody; move on.' },
     'docker-socket': { cond: 'Can you reach a writable docker socket or the docker group?', onFail: 'No docker access, check the lxd group instead.' },
@@ -150,6 +156,7 @@
     'kerberos-tickets': { cond: 'Do you hold a usable ticket in the cache to reuse?', onFail: 'No ticket, request or forge one first.' },
     // ---- pivot ----
     'pivot-chisel-socks': { cond: 'Does the chisel SOCKS tunnel come up and proxy traffic?', onFail: 'No tunnel, check the server port and firewall.' },
+    'dns-tunnel': { cond: 'Is DNS the only egress (faster transports all blocked) and can the host resolve your domain?', onFail: 'A faster channel works, or DNS does not resolve out → use that instead.' },
     'pivot-ligolo': { cond: 'Is the ligolo tunnel up with a route to the internal subnet?', onFail: 'No route, add the interface route and retry.' },
     'pivot-scan-through': { cond: 'Do internal hosts answer through the tunnel (proxychains nmap)?', onFail: 'Nothing responds, confirm the route and tunnel first.' },
     // ---- proof ----
@@ -157,6 +164,7 @@
     'flag-hunt-windows': { cond: 'Can you read user.txt and proof.txt with proof context visible?', onFail: 'Not readable yet, escalate further first.' },
     // ---- web ----
     'ssrf': { cond: 'Does the server fetch a URL you control (internal target or callback)?', onFail: 'No fetch, the parameter is not SSRFable.' },
+    'azure-imds': { cond: 'Can the SSRF reach 169.254.169.254 with the Metadata header and return a token?', onFail: 'No token (not Azure, or header stripped) → try the AWS metadata path, or treat the SSRF as internal recon.' },
     'xxe': { cond: 'Does the XML parser resolve an external entity you define?', onFail: 'Entities disabled, try another injection point.' }
 
   };

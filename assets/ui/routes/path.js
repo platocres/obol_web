@@ -122,10 +122,13 @@
   var FILL_LABEL = { command: 'run on host', cmd: 'command', lport: 'listener port', rport: 'remote port', payload: 'payload', outfile: 'output file', url: 'URL', share: 'share', file: 'file', listener: 'listener',
     // privesc / cloud module tokens (values you discover from the previous step)
     suid_bin: 'SUID binary path', hijack_name: 'hijacked name', dll_name: 'DLL name', dll_path: 'writable DLL dir', task_target: 'task target path', task_name: 'task name', service: 'service name',
-    sid: 'Oracle SID', sudo_command: 'allowed sudo command', kernel: 'kernel version', access_key: 'AWS access key', secret_key: 'AWS secret key', token: 'AWS session token', instance: 'EC2 instance id' };
+    sid: 'Oracle SID', sudo_command: 'allowed sudo command', kernel: 'kernel version', access_key: 'AWS access key', secret_key: 'AWS secret key', token: 'AWS session token', instance: 'EC2 instance id',
+    // phase-B module tokens (values you discover from the previous step)
+    clsid: 'hijackable CLSID', writable_dir: 'writable directory', unit: 'systemd unit', unit_path: 'unit file path', resource_group: 'Azure resource group', vm_name: 'Azure VM name', bearer: 'bearer token', dc_fqdn: 'DC FQDN', ca_name: 'CA name', nthash: 'NT hash' };
   var FILL_PH = { command: 'e.g. whoami /all', cmd: 'e.g. id', lport: '4444', payload: 'windows/x64/…', outfile: 'out.txt', url: 'http://…', share: 'C$', file: 'C:\\path\\file',
     suid_bin: '/usr/local/bin/backup', hijack_name: 'backup', dll_name: 'config', dll_path: 'C:\\Program Files\\App', task_target: 'C:\\Scripts\\backup.bat', task_name: '\\VulnBackup', service: 'VulnAppSvc',
-    sid: 'ORCL', sudo_command: '/usr/sbin/apache2ctl', kernel: '5.8.0', access_key: 'ASIA…', secret_key: 'wJalr…', token: 'IQoJb…', instance: 'i-0abc123' };
+    sid: 'ORCL', sudo_command: '/usr/sbin/apache2ctl', kernel: '5.8.0', access_key: 'ASIA…', secret_key: 'wJalr…', token: 'IQoJb…', instance: 'i-0abc123',
+    clsid: '{0ABCD...}', writable_dir: '/opt/backups', unit: 'backup.service', unit_path: '/etc/systemd/system/backup.service', resource_group: 'rg-prod', vm_name: 'web-vm', bearer: 'eyJ0eXA…', dc_fqdn: 'dc01.acme.internal', ca_name: 'acme-DC01-CA', nthash: 'aad3b…' };
 
   function commandsBlock(action, filled) {
     // Coach awareness: mark each variant obol has already seen you run (from the activity ledger) and, for

@@ -57,9 +57,17 @@ var ranked = PK.nextActionsV2(new OBOL.facts.FactSet(['target.configured', 'host
 var cloud = ranked.filter(function (x) { return x.id === 'aws-credential-abuse'; })[0];
 ok(cloud && (cloud.commands || []).length >= 2, 'Next Steps ranks aws-credential-abuse and hands its commands when cloud.credential is present');
 
-// the gap report is clean: the radar is cleared and nothing regressed
+// the gap report is clean: the only coverage gaps are the deliberately-seeded beyond-OSCP radar items
+// (oracle entries with `moves: []`), and nothing regressed. Every module-backed technique still resolves.
 var gr = DM.gapReport();
-ok(gr.counts.coverageGap === 0, 'the privesc radar is cleared: 0 coverage gaps (' + gr.counts.coverageGap + ')');
+var radar = {};
+Object.keys(OBOL.COVERAGE_EXPECTED).forEach(function (k) {
+  (OBOL.COVERAGE_EXPECTED[k].expect || []).forEach(function (e) {
+    if (!e.moves || e.moves.length === 0) radar[k + '::' + e.name] = true;
+  });
+});
+ok(gr.coverage.every(function (c) { return radar[c.port + '::' + c.technique]; }),
+  'every remaining coverage gap is a deliberate radar entry, not a module we claim to teach (gaps ' + gr.counts.coverageGap + ')');
 ok(gr.counts.parseGap === 0 && gr.counts.unreachable === 0, 'still 0 parse gaps and 0 unreachable moves');
 
 console.log('\nPRIVESC + CLOUD SMOKE: ' + (fail ? fail + ' FAILURE(S)' : 'all passed'));

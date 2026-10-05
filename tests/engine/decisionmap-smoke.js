@@ -56,11 +56,21 @@ ok(gr.counts.parseGap === 0, 'every move result is readable by a parser now (par
 ok(pc0['check-tls-config'] && pc0['check-tls-config'].status === 'verified', 'the TLS check reads back verified (its result is parseable)');
 ok(pc0['recon-dns'] && pc0['recon-dns'].status === 'verified', 'the DNS zone-transfer reads back verified');
 // the oracle now spans the port cards AND the post-foothold exam axes (shell-linux/windows, domain-cred,
-// pivot, proof). Every per-service and AD/pivot technique resolves to a module; the only coverage gaps
-// left are the deliberately-seeded privesc radar items (Linux kernel/PATH/LD_PRELOAD, Windows DLL/task),
-// all on the shell-* access cards. No port technique should be a gap (p3306 resolves to its new module).
+// pivot, proof). Every expected technique that we claim to teach resolves to a module; the only coverage
+// gaps left are the deliberately-seeded beyond-OSCP radar items (oracle entries with `moves: []`), which
+// are meant to read red until a module is written. No technique that lists a move may be a gap, and every
+// gap must be a deliberate radar entry — that is what keeps the "0 accidental gaps" contract honest.
+var radarNames = {};
+Object.keys(OBOL.COVERAGE_EXPECTED).forEach(function (k) {
+  (OBOL.COVERAGE_EXPECTED[k].expect || []).forEach(function (e) {
+    if (!e.moves || e.moves.length === 0) radarNames[k + '::' + e.name] = true;
+  });
+});
+var radarCount = Object.keys(radarNames).length;
 ok((OBOL.COVERAGE_EXPECTED && Object.keys(OBOL.COVERAGE_EXPECTED).length >= 6), 'the expected-coverage oracle is populated');
-ok(gr.coverage.length === 0, 'every expected technique across ports and post-foothold axes now has a module (coverageGap ' + gr.coverage.length + ')');
+ok(gr.coverage.every(function (c) { return radarNames[c.port + '::' + c.technique]; }),
+  'every coverage gap is a deliberate beyond-OSCP radar entry, not an accidental one (gaps ' + gr.coverage.length + ')');
+ok(gr.coverage.length === radarCount, 'the coverage gaps are exactly the seeded radar set (' + gr.coverage.length + ' of ' + radarCount + ')');
 ok(!gr.coverage.some(function (c) { return c.port === 'p3306'; }), 'the p3306 INTO OUTFILE technique resolves to its new module (mysql-outfile-rce)');
 
 // --- parser capability derivation ---

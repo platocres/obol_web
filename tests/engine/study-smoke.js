@@ -33,7 +33,7 @@ function ok(cond, msg) { if (!cond) { console.error('  FAIL:', msg); fail++; } e
 ok(S.lanes().length === 11, 'eleven taxonomy lanes exposed (every pack lands in one)');
 ok(S.LANE_KEYS.length === 11 && S.LANE_KEYS[0] === 'recon' && S.LANE_KEYS.indexOf('proof') === 10, 'lane order runs recon → … → proof');
 const lane = S.lane('ad');
-ok(lane.length === 49, 'AD lane carries all 49 AD-pack moves');
+ok(lane.length === 50, 'AD lane carries all 50 AD-pack moves');
 ok(lane[0].id === 'ad-dc-identify', 'AD lane opens on DC-identify');
 const edges = S.laneEdges('ad');
 ok(edges.some((e) => e.from === 'ad-anon-ldap-enum' && e.to === 'asrep-roast'), 'edge derived: anon-LDAP → AS-REP (ad.user_list)');
@@ -208,7 +208,7 @@ const M = S.mastery();
 ok(M['asrep-roast'] && M['asrep-roast'].studied && !M['asrep-roast'].correct, 'markStudied records a watched step');
 ok(M['crack-asrep'] && M['crack-asrep'].correct && M['crack-asrep'].studied, 'a correct answer records both studied + correct');
 const lp = S.laneProgress('ad');
-ok(lp.total === 49 && lp.studied >= 2 && lp.correct >= 1, 'laneProgress counts studied/correct within a lane');
+ok(lp.total === 50 && lp.studied >= 2 && lp.correct >= 1, 'laneProgress counts studied/correct within a lane');
 
 if (fail) { console.error('\nSTUDY SMOKE: ' + fail + ' failure(s)'); process.exit(1); }
 console.log('\nSTUDY SMOKE: all passed');
