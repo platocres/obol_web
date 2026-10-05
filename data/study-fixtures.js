@@ -2544,4 +2544,60 @@
   };
   Object.keys(LINUX_PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var pr = LINUX_PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = pr.situation; OBOL.STUDY_FIXTURES[k].choices = pr.choices; OBOL.STUDY_FIXTURES[k].coach = pr.coach; } });
 
+  // windows privesc lead-ups: reached from a foothold and the enum line that surfaced the lead.
+  // Commands run on the target (where: host). Backslashes double-escaped (\\ renders one).
+  var WINDOWS_LEADUPS = {
+    "windows-enum": [
+      { key: "foothold", label: "A service exploit landed a shell", steps: [
+        { title: "Confirm who you are", tool: "whoami", where: "host", cmd: "whoami", out: "corp\\svc_web", sig: "svc_web", teach: "You hold a low-privilege shell; a winpeas sweep surfaces the one misconfiguration that lifts you to SYSTEM." } ] },
+    ],
+    "seimpersonate": [
+      { key: "priv", label: "whoami /priv showed SeImpersonate", steps: [
+        { title: "List your token privileges", tool: "whoami", where: "host", cmd: "whoami /priv", out: "SeImpersonatePrivilege          Impersonate a client after authentication  Enabled", sig: "SeImpersonatePrivilege", teach: "A service account holding SeImpersonate can run a potato to become SYSTEM." } ] },
+      { key: "winpeas", label: "winpeas highlighted the privilege", steps: [
+        { title: "winpeas flagged the token privilege", tool: "winpeas", where: "host", cmd: "winPEASx64.exe quiet | findstr /i impersonate", out: "SeImpersonatePrivilege: Enabled (potato attacks)", sig: "SeImpersonatePrivilege: Enabled", teach: "winpeas calls this out specifically because it is one of the most reliable Windows privescs." } ] },
+    ],
+    "unquoted-service-path": [
+      { key: "winpeas", label: "winpeas flagged an unquoted path", steps: [
+        { title: "winpeas flagged an unquoted service path", tool: "winpeas", where: "host", cmd: "winPEASx64.exe quiet | findstr /i unquoted", out: "[!] Unquoted Service Path: C:\\Program Files\\My App\\service.exe", sig: "Unquoted Service Path", teach: "Windows searches each space-separated prefix; a writable earlier folder lets you hijack the binary." } ] },
+    ],
+    "weak-service-permissions": [
+      { key: "accesschk", label: "accesschk found a writable service", steps: [
+        { title: "Check service permissions", tool: "accesschk", where: "host", cmd: "accesschk.exe /accepteula -uwcqv svc_web *", out: "RW regsvc\n        SERVICE_CHANGE_CONFIG", sig: "SERVICE_CHANGE_CONFIG", teach: "SERVICE_CHANGE_CONFIG lets you repoint the service binary to your own, run as its often-SYSTEM account." } ] },
+    ],
+    "alwaysinstallelevated": [
+      { key: "reg", label: "Both AlwaysInstallElevated keys read 1", steps: [
+        { title: "Query the HKLM policy key", tool: "reg", where: "host", cmd: "reg query HKLM\\Software\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated", out: "    AlwaysInstallElevated    REG_DWORD    0x1", sig: "0x1", teach: "With the HKLM and HKCU keys both at 1, any MSI you run installs as SYSTEM." } ] },
+    ],
+    "dpapi-secrets": [
+      { key: "user", label: "You own a user with saved credentials", steps: [
+        { title: "Confirm the user you control", tool: "whoami", where: "host", cmd: "whoami", out: "corp\\jdoe", sig: "corp\\jdoe", teach: "As jdoe you can decrypt what jdoe saved under DPAPI, often a path to a better account." } ] },
+    ],
+    "stored-credentials": [
+      { key: "cmdkey", label: "cmdkey listed saved credentials", steps: [
+        { title: "List stored credentials", tool: "cmdkey", where: "host", cmd: "cmdkey /list", out: "Target: Domain:interactive=CORP\\Administrator\n    Type: Domain Password", sig: "CORP\\Administrator", teach: "A stored Administrator credential runs with runas /savecred without ever showing the password." } ] },
+    ],
+    "windows-old-hives": [
+      { key: "found", label: "A stray upgrade folder turned up", steps: [
+        { title: "List the drive root", tool: "dir", where: "host", cmd: "dir C:\\ /a", out: "01/01/2024  <DIR>          Windows.old", sig: "Windows.old", teach: "windows.old holds the old SAM and SYSTEM hives, readable copies of the local account database." } ] },
+    ],
+    "wesng-patch-gaps": [
+      { key: "systeminfo", label: "systeminfo showed a thin patch level", steps: [
+        { title: "Read the patch level", tool: "systeminfo", where: "host", cmd: "systeminfo", out: "OS Version: 10.0.17763 N/A Build 17763\nHotfix(s): 2 Hotfix(s) Installed.", sig: "2 Hotfix(s) Installed", teach: "Only two hotfixes on an old build means missing patches; feed systeminfo to wesng for CVE candidates." } ] },
+    ],
+    "windows-persistence": [
+      { key: "system", label: "You reached SYSTEM", steps: [
+        { title: "Confirm SYSTEM", tool: "whoami", where: "host", cmd: "whoami", out: "nt authority\\system", sig: "nt authority\\system", teach: "With SYSTEM, add a durable way back before you risk losing the session." } ] },
+    ],
+    "lsass-dump-onbox": [
+      { key: "admin", label: "You hold local admin", steps: [
+        { title: "Confirm you are in Administrators", tool: "whoami", where: "host", cmd: "whoami /groups | findstr /i S-1-5-32-544", out: "BUILTIN\\Administrators    Alias    S-1-5-32-544    Enabled group", sig: "BUILTIN\\Administrators", teach: "Local admin lets you read LSASS; everyone logged in since boot has credentials sitting in there." } ] },
+    ],
+    "defense-enum": [
+      { key: "foothold", label: "You have a shell and want to drop tools", steps: [
+        { title: "Confirm your foothold", tool: "whoami", where: "host", cmd: "whoami", out: "corp\\svc_web", sig: "svc_web", teach: "Before uploading winpeas or mimikatz, find out what AV or EDR is watching so you do not burn the foothold." } ] },
+    ]
+  };
+  Object.keys(WINDOWS_LEADUPS).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) OBOL.STUDY_FIXTURES[k].leadup = WINDOWS_LEADUPS[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);
