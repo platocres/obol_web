@@ -76,6 +76,13 @@
     'dcsync': { cond: 'Do you hold replication rights (DS-Replication-Get-Changes)?', onFail: 'Not yet → walk an ACL/delegation path to earn them.' },
     'eternalblue': { cond: 'Is the host confirmed MS17-010 vulnerable?', onFail: 'Patched / not vulnerable → do not fire; find another way.' },
 
+    // ---- known-exploit modules: service RCEs (version-gated, confirm before firing) ----
+    'vsftpd-backdoor': { cond: 'Does the FTP banner read exactly vsftpd 2.3.4?', onFail: 'Any other version → no backdoor; brute or loot the service instead.' },
+    'proftpd-modcopy': { cond: 'Is the banner ProFTPD 1.3.5, and do you know a web-served directory?', onFail: 'Different version, or no writable web path found → find the web root first, or move on.' },
+    'samba-usermap': { cond: 'Is the Samba version between 3.0.20 and 3.0.25rc3?', onFail: 'Newer Samba → the username-map injection is patched; enumerate shares instead.' },
+    'smbghost': { cond: 'Is it SMB 3.1.1 on Win10 1903/1909 or Server 2019 (scanner says Vulnerable)?', onFail: 'Not the exact build → do not fire; the RCE can crash the host for nothing.' },
+    'bluekeep': { cond: 'Does the nmap script confirm the host is BlueKeep-vulnerable?', onFail: 'Patched or not matching → do not fire; the PoC BSODs non-vulnerable targets.' },
+
     // ---- databases ----
     'mysql-login': { cond: 'Does a credential (or blank root) open a session?', onFail: 'No login → brute, or recover a credential elsewhere.' },
     'mysql-loot': { cond: 'Do the tables hold crackable hashes or reused secrets?', onFail: 'Nothing useful → the DB was a dead end.' },

