@@ -740,7 +740,7 @@
   }
 
   // category → short colour slug for the scenario chips
-  var SCEN_SLUG = { 'Recon': 'recon', 'Web to Shell': 'web', 'Privilege Escalation': 'privesc', 'Active Directory': 'ad', 'Databases': 'database', 'Lateral & Pivot': 'pivot' };
+  var SCEN_SLUG = { 'Recon': 'recon', 'Web to Shell': 'web', 'Cloud': 'cloud', 'Privilege Escalation': 'privesc', 'Active Directory': 'ad', 'Databases': 'database', 'Lateral & Pivot': 'pivot' };
   function catSlug(c) { return SCEN_SLUG[c] || 'recon'; }
   // the Atlas "common scenarios" menu: end-to-end paths grouped by category, colour-coded, each a chip
   // you toggle to light up its steps (and then "Study this path" to walk it as one guided replay).

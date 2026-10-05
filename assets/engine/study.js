@@ -404,7 +404,7 @@
   // --- scenarios: curated cross-lane paths ------------------------------------------------------
   // Curated end-to-end paths, grouped by category so the picker reads like a menu. `cat` drives the
   // grouping + colour in the UI; SCEN_CATS sets the display order. Every step is a real move id.
-  var SCEN_CATS = ['Recon', 'Web to Shell', 'Privilege Escalation', 'Active Directory', 'Databases', 'Lateral & Pivot'];
+  var SCEN_CATS = ['Recon', 'Web to Shell', 'Cloud', 'Privilege Escalation', 'Active Directory', 'Databases', 'Lateral & Pivot'];
   var SCENARIOS = [
     { key: 'recon-sweep', cat: 'Recon', name: 'Full recon sweep', desc: 'The opening every engagement shares: ports, versions, SMB, and the web surface.',
       steps: ['nmap-fast-open-ports', 'nmap-version-scripts', 'recon-smb-anon', 'recon-web-triage'] },
@@ -421,6 +421,13 @@
       steps: ['recon-web-triage', 'check-web-components', 'tomcat-deploy', 'windows-enum', 'seimpersonate'] },
     { key: 'web-root-proof', cat: 'Web to Shell', name: 'Web → root → proof', desc: 'The full exam arc: recon a web app, shell it, escalate to root, capture the flag.',
       steps: ['nmap-fast-open-ports', 'recon-web-triage', 'content-discovery', 'file-upload', 'web-shells', 'linux-enum', 'sudo-abuse', 'flag-hunt-linux'] },
+    { key: 'graphql-authz', cat: 'Web to Shell', name: 'GraphQL → broken authorization', desc: 'Find a GraphQL endpoint, introspect the whole schema, then abuse a mutation the app forgot to guard. (Beyond OSCP.)',
+      steps: ['recon-web-triage', 'content-discovery', 'graphql-abuse'] },
+
+    { key: 'web-ssrf-aws', cat: 'Cloud', name: 'SSRF → AWS metadata → account', desc: 'Turn a server-side request forgery into IMDS credentials, then loot the AWS account the role can see. (Beyond OSCP.)',
+      steps: ['recon-web-triage', 'content-discovery', 'ssrf', 'aws-credential-abuse'] },
+    { key: 'web-ssrf-azure', cat: 'Cloud', name: 'SSRF → Azure IMDS → subscription', desc: 'Smuggle the Metadata header through an SSRF for a managed-identity token, then enumerate the subscription and loot Key Vault. (Beyond OSCP.)',
+      steps: ['recon-web-triage', 'content-discovery', 'ssrf', 'azure-imds'] },
 
     { key: 'linux-sudo', cat: 'Privilege Escalation', name: 'Linux foothold → sudo → root', desc: 'From a low-priv shell, read your sudo rights and escape a binary to root.',
       steps: ['linux-enum', 'sudo-abuse', 'flag-hunt-linux'] },
@@ -428,6 +435,16 @@
       steps: ['windows-enum', 'seimpersonate', 'flag-hunt-windows'] },
     { key: 'cron-root', cat: 'Privilege Escalation', name: 'Find the cron job → root', desc: 'Watch processes with pspy, spot a root job you can influence, and take root.',
       steps: ['linux-enum', 'pspy-monitor', 'cron-abuse'] },
+    { key: 'wildcard-root', cat: 'Privilege Escalation', name: 'Wildcard cron → root', desc: 'Catch a root tar-on-* in a writable directory, drop flag-named files, and ride the expansion to root. (Beyond OSCP.)',
+      steps: ['linux-enum', 'pspy-monitor', 'wildcard-injection', 'flag-hunt-linux'] },
+    { key: 'systemd-root', cat: 'Privilege Escalation', name: 'Writable systemd unit → root', desc: 'Find a root unit file you can edit, point its ExecStart at your payload, and trigger it. (Beyond OSCP.)',
+      steps: ['linux-enum', 'systemd-timer-abuse', 'flag-hunt-linux'] },
+    { key: 'uac-lsass', cat: 'Privilege Escalation', name: 'Filtered admin → UAC bypass → LSASS', desc: 'A medium-integrity admin bypasses UAC to high integrity, then dumps LSASS for more credentials. (Beyond OSCP.)',
+      steps: ['windows-enum', 'uac-bypass', 'lsass-dump-onbox'] },
+    { key: 'com-persist', cat: 'Privilege Escalation', name: 'COM hijack → execution', desc: 'Redirect a CLSID a privileged process loads to your DLL, and run as it. (Beyond OSCP.)',
+      steps: ['windows-enum', 'com-hijack', 'flag-hunt-windows'] },
+    { key: 'patch-system', cat: 'Privilege Escalation', name: 'Missing patch → kernel CVE → SYSTEM', desc: 'wesng names a missing KB with a public local exploit; run it for SYSTEM.',
+      steps: ['windows-enum', 'wesng-patch-gaps', 'windows-patch-exploit', 'flag-hunt-windows'] },
 
     { key: 'ad-classic', cat: 'Active Directory', name: 'Classic AD: no creds → Domain Admin', desc: 'Anonymous foothold, roast a hash, crack it, walk an ACL path to DCSync.',
       steps: ['nmap-fast-open-ports', 'ad-dc-identify', 'ad-anon-ldap-enum', 'asrep-roast', 'crack-asrep', 'ad-acl-abuse', 'dcsync'] },
@@ -445,6 +462,10 @@
       steps: ['dcsync', 'golden-ticket'] },
     { key: 'eternalblue-sys', cat: 'Active Directory', name: 'SMBv1 → EternalBlue → SYSTEM', desc: 'An unpatched SMBv1 host falls to MS17-010 for SYSTEM without credentials.',
       steps: ['nmap-version-scripts', 'nmap-vuln-scripts', 'eternalblue', 'flag-hunt-windows'] },
+    { key: 'certifried-da', cat: 'Active Directory', name: 'AD CS + machine quota → Certifried → DA', desc: 'One domain credential, a non-zero machine-account quota, and an enterprise CA become a DC certificate, then DCSync. (Beyond OSCP.)',
+      steps: ['ad-dc-identify', 'ad-anon-ldap-enum', 'asrep-roast', 'crack-asrep', 'certifried', 'dcsync'] },
+    { key: 'sccm-naa', cat: 'Active Directory', name: 'SCCM management point → NAA → lateral', desc: 'Graph the domain, find an SCCM management point, pull its Network Access Account, and reuse it to move. (Beyond OSCP.)',
+      steps: ['ad-dc-identify', 'bloodhound-collect', 'sccm-enum', 'sccm-exploit', 'lateral-exec'] },
 
     { key: 'mssql-system', cat: 'Databases', name: 'MSSQL sysadmin → SYSTEM', desc: 'A database login with sysadmin becomes a shell, then SYSTEM on the host.',
       steps: ['nmap-version-scripts', 'mssql-login', 'mssql-xp-cmdshell', 'windows-enum', 'seimpersonate'] },
@@ -457,6 +478,8 @@
       steps: ['recon-web-triage', 'content-discovery', 'web-shells', 'linux-enum', 'linux-loot-hunt', 'local-linux-interfaces', 'pivot-chisel-socks', 'pivot-scan-through'] },
     { key: 'pivot-internal', cat: 'Lateral & Pivot', name: 'Foothold → tunnel → reach internal', desc: 'From a foothold, map the hidden subnet, build a tunnel, and scan what is behind it.',
       steps: ['linux-enum', 'local-linux-interfaces', 'pivot-ligolo', 'pivot-scan-through'] },
+    { key: 'dns-egress', cat: 'Lateral & Pivot', name: 'Egress-filtered foothold → DNS tunnel → pivot', desc: 'When only DNS resolves outbound, tunnel over it with dnscat2 and scan the network behind the box. (Beyond OSCP.)',
+      steps: ['linux-enum', 'local-linux-interfaces', 'dns-tunnel', 'pivot-scan-through'] },
   ];
   function scenCat(s) { return s.cat || 'Other'; }
   function scenMap(s) { return { key: s.key, cat: scenCat(s), name: s.name, desc: s.desc, steps: s.steps.slice(), count: s.steps.length }; }
