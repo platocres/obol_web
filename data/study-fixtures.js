@@ -646,7 +646,7 @@
       teach: 'The server reflected your arbitrary Origin AND allows credentials, a CORS misconfiguration. A malicious page could read a logged-in victim\'s API responses, including their data and tokens. Reflected Origin + credentials:true is the dangerous pair.',
     },
     'check-http-redirect': {
-      why: "A plain-HTTP site that serves content instead of redirecting to HTTPS exposes everything in transit, a standard report finding. A single HEAD of http:// (without following redirects) shows whether it redirects or serves in the clear. Run it as part of your web hygiene checks; it is one request and never touches application logic. Low severity, but it belongs in every report.",
+      why: "Low severity, but it belongs in every report and costs exactly one request. The trick is to NOT follow redirects: you want to see whether the bare endpoint answers with real content or bounces you to TLS. If it hands over the page unencrypted, everything on it, cookies and credentials included, is sniffable in transit. Watch the Location line too, a redirect now and then leaks an internal hostname you had no other way to learn.",
       cmd: 'curl -sSIk http://10.10.10.10/', tool: 'curl',
       output: [
         'HTTP/1.1 301 Moved Permanently',
@@ -656,7 +656,7 @@
       teach: 'A redirect can leak an internal hostname in its Location header, dev-internal.acme.internal is a name you had no other way to learn. Add it to /etc/hosts and your target list; the redirect just widened the attack surface.',
     },
     'check-subdomain-takeover': {
-      why: "When a DNS name is a CNAME pointing at a third-party service (S3, GitHub Pages, Heroku) that nobody owns anymore, you can register it yourself and take over the name, which is high impact for one DNS lookup. Run it when you have subdomains and some of their CNAMEs point off-site. Most will be claimed; the one dangling CNAME is worth the whole exercise.",
+      why: "High impact for the price of a single lookup, which is why it earns a pass whenever you hold a list of subdomains. Most names resolve to something still owned and are dead ends; you are hunting the rare one that points at a decommissioned cloud app nobody re-registered. Claim that target yourself and you serve content on the victim's own trusted name. The confirm step is the whole game, a live record is nothing, only the unclaimed one is the finding.",
       cmd: 'dig +noall +answer CNAME shop.acme.internal', tool: 'dig',
       output: [
         'shop.acme.internal.  300  IN  CNAME  acme-shop.herokuapp.com.',
@@ -665,7 +665,7 @@
       teach: 'A CNAME pointing at a cloud service that is no longer claimed is a subdomain takeover: register the dangling target yourself and you control content on the victim\'s trusted subdomain. Confirm by visiting it and seeing an unclaimed-app page.',
     },
     'check-dns-email': {
-      why: "Missing or permissive SPF and DMARC records mean the domain can be spoofed in phishing, a routine report finding whenever the engagement scope includes a domain. Two TXT lookups answer it, with no scanning. Run it when you have a domain in scope. It will not get you a shell, but it is a reliable, defensible finding for the report.",
+      why: "A dependable report bullet whenever a domain is in scope, settled by two TXT lookups and nothing else. What you are judging is whether an outsider could send mail that forges this name: no SPF, or a DMARC policy of p=none, means forged mail is unlikely to be rejected. On the exam it is simply a finding; in a real engagement it is the opening for a phishing pretext. Read both records before you call it.",
       cmd: 'dig +short TXT _dmarc.acme.internal', tool: 'dig',
       output: [
         '"v=DMARC1; p=none; rua=mailto:dmarc@acme.internal"',
@@ -674,7 +674,7 @@
       teach: 'Email records say whether a domain can be spoofed. DMARC p=none means forged mail from this domain is unlikely to be rejected, a phishing lead in a real engagement, a reporting finding on the exam.',
     },
     'check-web-headers': {
-      why: "Security headers are the easiest report wins there are: a missing HSTS, CSP, or X-Frame-Options, or a Server header leaking the exact version. One HEAD request surfaces them all. Run it on every web app early; it costs nothing and never risks the target. The leaked version header also feeds your CVE search, so read it for leads, not just findings.",
+      why: "The cheapest findings on any web app, and a lead generator on top. One HEAD request tells you which defensive headers are absent (no HSTS, no CSP, no X-Frame-Options) and what the stack gives away, a Server or X-Powered-By string naming the exact build. The absences go straight into the report; the leaked version feeds your CVE search. Do it early, before anything clever, because it shapes which clever thing is worth trying.",
       cmd: 'curl -sSIkL http://10.10.10.10/', tool: 'curl',
       output: [
         'HTTP/1.1 200 OK',
@@ -686,7 +686,7 @@
       teach: 'Response headers hand you the stack for free and show what protections are missing. X-Powered-By leaks the PHP version; the absence of CSP and X-Frame-Options are reporting findings. Read the headers before anything clever.',
     },
     'check-web-components': {
-      why: "Before any CVE can fire you have to know exactly what the app is built from, and this reads the page's script sources, generator meta, Server header, and framework cookies to fingerprint the components and versions. It is the input the CVE catalog matches against. Run it on every web app right after triage; a precise fingerprint is what turns \"maybe vulnerable\" into a named exploit to try.",
+      why: "Nothing can fire until you know exactly what the app is built from, so this is the step that turns \"maybe vulnerable\" into a named exploit to try. A single GET exposes the tells: script src paths, a generator meta tag, the Server string, framework-specific cookies. Together they name the components and their versions, which is precisely what the exploit catalog matches against. Run it right after triage; a sharp fingerprint saves you firing CVEs at the wrong stack.",
       cmd: 'curl -sSikL http://10.10.10.10/', tool: 'curl',
       output: [
         'HTTP/1.1 200 OK',
@@ -708,7 +708,7 @@
       teach: 'CMSes leak their version in changelogs, readme files, and meta tags. A pinned version like Drupal 7.57 maps straight to known exploits (here Drupalgeddon2, CVE-2018-7600). Identify the CMS and its exact build, then look up what breaks it.',
     },
     'check-web-body': {
-      why: "Reading the page body catches findings the header checks miss: insecure http:// resource references on an HTTPS page, a login form that allows autocomplete, a POST form with no anti-CSRF token. One GET surfaces them. Run it as part of your web review; it is read-only and exam-safe. Small findings individually, but they round out the report and sometimes flag a form worth attacking.",
+      why: "The header checks stop at the response headers; plenty of findings live in the markup itself. Reading the body turns up http:// resources loaded into an HTTPS page (mixed content), a login form that still allows autocomplete, a POST form with no anti-CSRF token, and, more often than you would expect, credentials and debug endpoints left in HTML comments. Individually minor, together they round out the report, and now and then the source hands you a working test/test login no scan would ever find.",
       cmd: 'curl -sSkL http://10.10.10.10/', tool: 'curl',
       output: [
         '<form action="/login.php" method="post">',
@@ -719,7 +719,7 @@
       teach: 'View the source. Developers leave credentials, debug endpoints, and TODOs in HTML comments and JavaScript all the time. A test/test login left in a comment is a free set of working credentials, read the page humans never read.',
     },
     'check-exposed-files': {
-      why: "A quick GET of the usual leaked paths, a .git tree, a .env, server-status, an editor backup, turns up source and secrets that were never meant to be web-served. It is read-only and takes seconds. Run it on every web app; the payoff is wildly out of proportion to the effort, a single readable .env can hand you database and API credentials outright.",
+      why: "Few checks pay off as wildly out of proportion to the effort: seconds of read-only requests against well-known paths, and a single hit can hand you database and API keys outright. You are probing for things that were never meant to face the web, a .env, a .git directory you can dump back to source, a server-status board, an editor's leftover .bak. Run it on every app before anything fancier; the one that leaks its .env turns a long engagement into a short one.",
       cmd: 'curl -sSkL http://10.10.10.10/.env', tool: 'curl',
       output: [
         'APP_ENV=production',
@@ -1991,10 +1991,7 @@
     'pivot-sshuttle': {
       why: "Reach for this the moment the pivot host is Linux with SSH and you hold a key or password, it is the lowest-friction tunnel that exists. Nothing is uploaded to the target and nothing wraps your commands; traffic to the internal subnet simply routes over the session you already have. The one requirement is real SSH access, so it is the natural first choice on a Linux foothold where you recovered credentials.",
       cmd: 'sshuttle -r bob@10.10.10.10 172.16.5.0/24', tool: 'sshuttle',
-      output: [
-        'c : Connected to server.',
-        'c : Connected to server (internal subnet 172.16.5.0/24 now routed).',
-      ].join('\n'),
+      output: 'c : Connected to server.',
       signal: 'c : Connected to server.',
       teach: 'sshuttle builds a transparent VPN-like route over SSH from your box alone, no agent on the target. Once "Connected", traffic to 172.16.5.0/24 just works, no proxychains wrapper. The most convenient pivot when you have SSH access.',
     },
@@ -2905,7 +2902,7 @@
       {"t":"PowerShell alternative","d":"Get-NetRoute is cleaner and scriptable than route print.","demo":[{"run":"powershell -c \"Get-NetRoute -AddressFamily IPv4 | ft DestinationPrefix,InterfaceAlias\"","out":"DestinationPrefix   InterfaceAlias\n0.0.0.0/0           Ethernet0\n172.16.5.0/24       Ethernet1","sig":"172.16.5.0/24"}],"note":"172.16.5.0/24 on Ethernet1 is reachable from here, not from your box."},
       {"t":"Check a far destination","d":"Find-NetRoute tests whether the box routes toward a deeper network via an internal gateway.","demo":[{"run":"powershell -c \"Find-NetRoute -RemoteIPAddress 172.16.99.10 | ft NextHop,InterfaceAlias\"","out":"NextHop       InterfaceAlias\n172.16.5.1    Ethernet1","sig":"172.16.5.1"}],"note":"The box forwards toward 172.16.99.0/24 via 172.16.5.1, a second hop to plan for."}]},
     "local-windows-neighbors": {"lead":"arp -a lists confirmed-alive internal hosts without sending a scan.","items":[
-      {"t":"Read the ARP cache","d":"arp -a prints each interface's cache; entries on the internal NIC are live neighbours.","demo":[{"run":"arp -a","out":"Interface: 172.16.5.20 --- 0x5\n  Internet Address      Physical Address\n  172.16.5.5            00-50-56-a1-01-02     dynamic\n  172.16.5.25           00-50-56-a1-05-06     dynamic","sig":"172.16.5.25"}],"note":"172.16.5.25 is a live neighbour this box has reached, a strong first internal target."},
+      {"t":"Read the ARP cache","d":"arp -a prints each interface's cache; entries on the internal NIC are live neighbours.","demo":[{"run":"arp -a","out":"Interface: 172.16.5.20 --- 0x5\n  Internet Address      Physical Address      Type\n  172.16.5.5            00-50-56-a1-01-02     dynamic\n  172.16.5.25           00-50-56-a1-05-06     dynamic","sig":"172.16.5.25"}],"note":"172.16.5.25 is a live neighbour this box has reached, a strong first internal target."},
       {"t":"PowerShell alternative","d":"Get-NetNeighbor filters to reachable entries and is easy to script.","demo":[{"run":"powershell -c \"Get-NetNeighbor -AddressFamily IPv4 | ? State -ne Unreachable | ft IPAddress,State\"","out":"IPAddress      State\n172.16.5.5     Reachable\n172.16.5.25    Stale","sig":"172.16.5.5"}],"note":"Reachable entries are alive right now; start there."},
       {"t":"Note the gateway","d":"The gateway's entry confirms the internal router and anchors the segment as real.","demo":[{"run":"arp -a | findstr 172.16.5.1","out":"  172.16.5.1            00-50-56-a1-00-01     dynamic","sig":"172.16.5.1"}],"note":"The internal gateway is live, so the segment is real and routable."}]},
     "local-windows-listeners": {"lead":"netstat -ano shows local services, including loopback-only ones that a port-forward unlocks.","items":[
@@ -2951,5 +2948,117 @@
     "pivot-scan-through": {situation:"A SOCKS tunnel to 172.16.5.0/24 is up, but a normal nmap 172.16.5.20 just hangs. What is wrong?", choices:["pivot-scan-through","pivot-chisel-socks","local-linux-routes","pivot-ligolo"], coach:{"pivot-chisel-socks":"The tunnel is already built; the hang is a scan-flags problem, not a tunnel problem.","local-linux-routes":"Routes are how you found the subnet; the hang is nmap defaulting to a SYN scan and a ping that a SOCKS proxy drops.","pivot-ligolo":"Switching tunnels would not help; with a SOCKS proxy you must use -sT -Pn, which is the actual fix."}}
   };
   Object.keys(PIVOT_PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var pr = PIVOT_PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = pr.situation; OBOL.STUDY_FIXTURES[k].choices = pr.choices; OBOL.STUDY_FIXTURES[k].coach = pr.coach; } });
+
+  // === CHECKS LANE ================================================================================
+  var CHECKS_LEADUPS = {
+    "check-tls-config": [
+      { key: "https", label: "A TLS service is open", steps: [
+        { title: "nmap found 443", tool: "nmap", where: "local", cmd: "nmap -p 443 10.10.10.10", out: "443/tcp open  https", sig: "443/tcp open  https", teach: "Any TLS service is worth a quick cert and cipher read; it is a free finding and often leaks internal names." } ] },
+    ],
+    "check-http-methods": [
+      { key: "web", label: "A web server is open", steps: [
+        { title: "nmap found 80", tool: "nmap", where: "local", cmd: "nmap -p 80 10.10.10.10", out: "80/tcp open  http", sig: "80/tcp open  http", teach: "An OPTIONS request against any web server lists the verbs it allows, a one-request finding." } ] },
+    ],
+    "check-cors": [
+      { key: "api", label: "The app has an authenticated API", steps: [
+        { title: "You found an API endpoint", tool: "curl", where: "local", cmd: "curl -sSIk http://10.10.10.10/api/me", out: "HTTP/1.1 200 OK\nContent-Type: application/json", sig: "application/json", teach: "An endpoint that returns authenticated data is where a permissive CORS policy turns dangerous." } ] },
+    ],
+    "check-http-redirect": [
+      { key: "web", label: "Both 80 and 443 answer", steps: [
+        { title: "A web server answers on 80", tool: "nmap", where: "local", cmd: "nmap -p 80,443 10.10.10.10", out: "80/tcp  open  http\n443/tcp open  https", sig: "80/tcp  open  http", teach: "With both 80 and 443 open, check whether 80 forces you onto 443 or serves content in the clear." } ] },
+    ],
+    "check-subdomain-takeover": [
+      { key: "subs", label: "You enumerated subdomains", steps: [
+        { title: "A subdomain list is in hand", tool: "subfinder", where: "local", cmd: "subfinder -d acme.internal -silent", out: "shop.acme.internal\nblog.acme.internal", sig: "shop.acme.internal", teach: "Each subdomain's CNAME is worth a glance; a dangling one pointing off-site is a takeover." } ] },
+    ],
+    "check-dns-email": [
+      { key: "domain", label: "A domain is in scope", steps: [
+        { title: "The engagement includes a domain", tool: "dig", where: "local", cmd: "dig +short NS acme.internal", out: "ns1.acme.internal.", sig: "ns1.acme.internal", teach: "With a domain in scope, two TXT lookups tell you whether it can be spoofed in phishing." } ] },
+    ],
+    "check-web-headers": [
+      { key: "web", label: "A web app is up", steps: [
+        { title: "The first HEAD already leaks", tool: "curl", where: "local", cmd: "curl -sSIk http://10.10.10.10/", out: "HTTP/1.1 200 OK\nServer: Apache/2.4.29 (Ubuntu)", sig: "Server: Apache/2.4.29", teach: "The very first HEAD leaks the server version; read the whole header block for findings and leads." } ] },
+    ],
+    "check-web-components": [
+      { key: "web", label: "The app is up and triaged", steps: [
+        { title: "A framework cookie hints at the stack", tool: "curl", where: "local", cmd: "curl -sSIk http://10.10.10.10/", out: "HTTP/1.1 200 OK\nSet-Cookie: joomla_session=8a1f...; path=/", sig: "joomla_session", teach: "A framework cookie already hints at the stack; fingerprint it precisely before matching CVEs." } ] },
+    ],
+    "check-cms-version": [
+      { key: "cms", label: "You fingerprinted the CMS", steps: [
+        { title: "whatweb named the CMS", tool: "whatweb", where: "local", cmd: "whatweb http://10.10.10.10/ | grep -oE 'Drupal'", out: "Drupal", sig: "Drupal", teach: "Knowing it is Drupal is not enough; the exact version decides which CVEs apply." } ] },
+    ],
+    "check-web-body": [
+      { key: "web", label: "A web app is up", steps: [
+        { title: "Headers read, body next", tool: "curl", where: "local", cmd: "curl -sSIk http://10.10.10.10/", out: "HTTP/1.1 200 OK\nContent-Type: text/html", sig: "HTTP/1.1 200 OK", teach: "After the headers, read the body humans never read; findings and secrets hide in the markup." } ] },
+    ],
+    "check-exposed-files": [
+      { key: "web", label: "A web app is up", steps: [
+        { title: "A web app is up", tool: "curl", where: "local", cmd: "curl -sSIk http://10.10.10.10/", out: "HTTP/1.1 200 OK\nServer: nginx/1.18.0", sig: "Server: nginx", teach: "Before anything clever, probe the well-known leak paths; a readable .env can end the engagement early." } ] },
+    ]
+  };
+  Object.keys(CHECKS_LEADUPS).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) OBOL.STUDY_FIXTURES[k].leadup = CHECKS_LEADUPS[k]; });
+
+  var CHECKS_HOW = {
+    "check-tls-config": {"lead":"nmap's ssl scripts read the cert and ciphers without touching the app; mine the cert for names and the ciphers for weak protocols.","items":[
+      {"t":"Read cert and ciphers","d":"ssl-cert dumps the subject/SAN and validity; ssl-enum-ciphers grades each protocol.","demo":[{"run":"nmap --script ssl-cert,ssl-enum-ciphers -p 443 10.10.10.10","out":"| ssl-cert: Subject: commonName=vault.acme.internal\n| Not valid after:  2021-03-14T00:00:00\n| ssl-enum-ciphers:\n|   TLSv1.0: (weak)","sig":"vault.acme.internal"}],"note":"An expired cert and TLS 1.0 are report findings; vault.acme.internal is a new host to add."},
+      {"t":"Mine the SAN for hostnames","d":"The SAN list often names several internal vhosts behind one IP.","demo":[{"run":"echo | openssl s_client -connect 10.10.10.10:443 2>/dev/null | openssl x509 -noout -text | grep DNS","out":"DNS:vault.acme.internal, DNS:mail.acme.internal","sig":"mail.acme.internal"}],"note":"Each SAN name is a vhost to try; add them to /etc/hosts."},
+      {"t":"Grade the protocols fast","d":"testssl.sh gives a one-shot grade of every protocol and cipher.","demo":[{"run":"testssl.sh --quiet 10.10.10.10:443","out":"SSLv3     offered (NOT ok)\nTLS 1.0   offered (deprecated)","sig":"SSLv3     offered (NOT ok)"}],"note":"SSLv3 offered is a clear, defensible finding on its own."}]},
+    "check-http-methods": {"lead":"OPTIONS lists the allowed verbs; PUT and DELETE are reportable and sometimes exploitable.","items":[
+      {"t":"Ask with OPTIONS","d":"curl -X OPTIONS and read the Allow header.","demo":[{"run":"curl -sSIkLX OPTIONS http://10.10.10.10/","out":"HTTP/1.1 200 OK\nAllow: GET, HEAD, POST, OPTIONS, PUT, DELETE","sig":"PUT, DELETE"}],"note":"PUT and DELETE in the Allow header are a red flag; PUT may let you upload a shell."},
+      {"t":"Test whether PUT actually works","d":"Allowed in OPTIONS does not always mean enabled; try writing a harmless file.","demo":[{"run":"curl -skX PUT http://10.10.10.10/test.txt -d 'hello' && curl -sk http://10.10.10.10/test.txt","out":"hello","sig":"hello"}],"note":"If your PUT content comes back, you have arbitrary file write, escalate to a web shell via verb-tampering."},
+      {"t":"Check TRACE for XST","d":"TRACE enabled can reflect headers (Cross-Site Tracing); minor but reportable.","demo":[{"run":"curl -sSIkLX TRACE http://10.10.10.10/","out":"HTTP/1.1 200 OK\nContent-Type: message/http","sig":"message/http"}],"note":"A 200 with message/http means TRACE is on, a low-severity finding."}]},
+    "check-cors": {"lead":"Send a spoofed Origin and watch whether the server reflects it and allows credentials, the dangerous pair.","items":[
+      {"t":"Reflect an arbitrary Origin","d":"Send Origin: https://evil.example and read Access-Control-Allow-Origin in the response.","demo":[{"run":"curl -sSIkL -H \"Origin: https://evil.example\" http://10.10.10.10/api/me","out":"HTTP/1.1 200 OK\nAccess-Control-Allow-Origin: https://evil.example\nAccess-Control-Allow-Credentials: true","sig":"Access-Control-Allow-Origin: https://evil.example"}],"note":"The server echoed your Origin and allows credentials, a malicious page could read a victim's responses."},
+      {"t":"Test the null origin","d":"Some servers trust Origin: null, reachable from a sandboxed iframe.","demo":[{"run":"curl -sSIkL -H \"Origin: null\" http://10.10.10.10/api/me","out":"Access-Control-Allow-Origin: null\nAccess-Control-Allow-Credentials: true","sig":"Access-Control-Allow-Origin: null"}],"note":"null plus credentials is exploitable from a sandboxed iframe; still a finding."},
+      {"t":"Confirm the dangerous pair","d":"A reflected Origin alone is low impact; with Allow-Credentials true it leaks authenticated data.","demo":[{"run":"curl -sSIkL -H \"Origin: https://evil.example\" http://10.10.10.10/api/me | grep -i access-control","out":"Access-Control-Allow-Origin: https://evil.example\nAccess-Control-Allow-Credentials: true","sig":"Access-Control-Allow-Credentials: true"}],"note":"Both lines together is the high-value finding; one without the other is weak."}]},
+    "check-http-redirect": {"lead":"HEAD plain http:// without following redirects; a 200 means cleartext, a 301 to https is the fix, and the Location may leak a name.","items":[
+      {"t":"HEAD without following","d":"curl -I and do NOT pass -L; read the status line and any Location.","demo":[{"run":"curl -sSIk http://10.10.10.10/","out":"HTTP/1.1 200 OK\nContent-Type: text/html","sig":"HTTP/1.1 200 OK"}],"note":"A 200 on plain http means the site serves content unencrypted, a report finding."},
+      {"t":"Compare with a redirecting site","d":"A well-configured site answers 301 to the https URL.","demo":[{"run":"curl -sSIk http://secure.acme.internal/","out":"HTTP/1.1 301 Moved Permanently\nLocation: https://dev-internal.acme.internal/","sig":"dev-internal.acme.internal"}],"note":"The 301 is correct, but its Location leaked dev-internal.acme.internal, a new host to target."},
+      {"t":"Add any leaked name","d":"Put leaked hostnames in /etc/hosts so vhost-routed content resolves.","demo":[{"run":"echo '10.10.10.10 dev-internal.acme.internal' | sudo tee -a /etc/hosts","out":"10.10.10.10 dev-internal.acme.internal","sig":"dev-internal.acme.internal"}],"note":"Now requests to that name reach the right vhost; the redirect widened your surface."}]},
+    "check-subdomain-takeover": {"lead":"Resolve each CNAME; a target pointing at an unclaimed third-party service is the finding.","items":[
+      {"t":"Resolve the CNAME","d":"dig CNAME reveals where the name actually points.","demo":[{"run":"dig +noall +answer CNAME shop.acme.internal","out":"shop.acme.internal. 300 IN CNAME shop-acme.s3.amazonaws.com.","sig":"s3.amazonaws.com"}],"note":"The name points at an S3 bucket; if that bucket is unclaimed, you can take it."},
+      {"t":"Confirm the target is unclaimed","d":"Fetch it; a service-specific 'no such bucket/app' page means it is free to register.","demo":[{"run":"curl -sk http://shop.acme.internal/","out":"<Error><Code>NoSuchBucket</Code><BucketName>shop-acme</BucketName></Error>","sig":"NoSuchBucket"}],"note":"NoSuchBucket confirms the dangling target; register shop-acme and you own the subdomain's content."},
+      {"t":"Match the provider fingerprint","d":"Each provider has a known takeover fingerprint; subjack automates matching.","demo":[{"run":"subjack -d shop.acme.internal -ssl","out":"[Vulnerable] shop.acme.internal -> shop-acme.s3.amazonaws.com (S3 Bucket)","sig":"[Vulnerable]"}],"note":"A Vulnerable verdict means the provider fingerprint matched an unclaimed target."}]},
+    "check-dns-email": {"lead":"Read the SPF (TXT at the apex) and DMARC (TXT at _dmarc); missing or p=none is the finding.","items":[
+      {"t":"Read the SPF record","d":"A TXT at the domain apex starting v=spf1; no record, or +all, is permissive.","demo":[{"run":"dig +short TXT acme.internal","out":"\"v=spf1 include:_spf.google.com ~all\"","sig":"v=spf1"}],"note":"~all is softfail (weak); -all is strict. A missing SPF is worse and reportable."},
+      {"t":"Read the DMARC policy","d":"A TXT at _dmarc with p= set to none, quarantine, or reject.","demo":[{"run":"dig +short TXT _dmarc.acme.internal","out":"\"v=DMARC1; p=none; rua=mailto:dmarc@acme.internal\"","sig":"p=none"}],"note":"p=none means forged mail is unlikely to be rejected, a spoofing finding."},
+      {"t":"Note what is missing","d":"No DMARC TXT at all is the strongest finding; the domain is trivially spoofable.","demo":[{"run":"dig +short TXT _dmarc.legacy.acme.internal","out":"(no records returned)","sig":"(no records returned)"}],"note":"No DMARC published means the domain can be spoofed outright."}]},
+    "check-web-headers": {"lead":"One HEAD surfaces missing security headers and a leaked version; the absences are findings, the version is a lead.","items":[
+      {"t":"Read the response headers","d":"curl -I lists every header; note what is present and, more importantly, what is missing.","demo":[{"run":"curl -sSIkL http://10.10.10.10/","out":"HTTP/1.1 200 OK\nServer: Apache/2.4.29 (Ubuntu)\nX-Powered-By: PHP/7.2.24","sig":"X-Powered-By: PHP/7.2.24"}],"note":"No HSTS, no CSP, no X-Frame-Options here; X-Powered-By leaks PHP 7.2.24 for your CVE search."},
+      {"t":"Spot the missing protections","d":"Grep for the headers that should be present; their absence is the finding.","demo":[{"run":"curl -sSIkL http://10.10.10.10/ | grep -iE 'strict-transport|content-security|x-frame' || echo 'none present'","out":"none present","sig":"none present"}],"note":"None present means HSTS, CSP, and X-Frame-Options are all missing, three report bullets."},
+      {"t":"Turn the version into a lead","d":"The leaked server/tech version maps to CVEs; search it.","demo":[{"run":"searchsploit apache 2.4.29","out":"Apache 2.4.x mod_ssl - ... | multiple/remote/...","sig":"Apache 2.4"}],"note":"Read headers for leads, not just findings; the version header starts your exploit hunt."}]},
+    "check-web-components": {"lead":"Read script sources, generator meta, Server header, and cookies together; they name the components and versions.","items":[
+      {"t":"Read the page for tells","d":"A GET exposes generator meta tags and script paths that name the framework.","demo":[{"run":"curl -sSikL http://10.10.10.10/ | grep -iE 'generator|/templates/|joomla'","out":"<meta name=\"generator\" content=\"Joomla! - Open Source Content Management\" />","sig":"Joomla"}],"note":"The generator meta names Joomla; now pin the exact version."},
+      {"t":"Confirm with whatweb","d":"whatweb fingerprints many components at once from one request.","demo":[{"run":"whatweb http://10.10.10.10/","out":"http://10.10.10.10 [200 OK] Joomla[3.9], PHP[7.2.24], Apache[2.4.29]","sig":"Joomla[3.9]"}],"note":"whatweb agrees: Joomla 3.9 on PHP 7.2.24, a precise stack to match CVEs against."},
+      {"t":"List client-side libraries","d":"Old jQuery or bootstrap in the script tags can carry their own CVEs.","demo":[{"run":"curl -sk http://10.10.10.10/ | grep -oE 'jquery[.-][0-9.]+' | head -1","out":"jquery-1.12.4","sig":"jquery-1.12.4"}],"note":"jQuery 1.12.4 is old; note every versioned library, not just the CMS."}]},
+    "check-cms-version": {"lead":"Pin the version from the files that publish it (CHANGELOG, readme, manifest, composer.lock); the exact build decides the CVE.","items":[
+      {"t":"Read the CHANGELOG","d":"Many CMSes ship a web-readable CHANGELOG whose first entry is the version.","demo":[{"run":"curl -sSkL http://10.10.10.10/CHANGELOG.txt | head -1","out":"Drupal 7.57, 2018-02-21","sig":"Drupal 7.57"}],"note":"Drupal 7.57 maps straight to Drupalgeddon2 (CVE-2018-7600)."},
+      {"t":"Try the version files per CMS","d":"WordPress has readme.html, Joomla a manifest, Composer apps a composer.lock.","demo":[{"run":"curl -sSkL http://10.10.10.10/administrator/manifests/files/joomla.xml | grep -oE '<version>[0-9.]+'","out":"<version>3.9.4","sig":"3.9.4"}],"note":"The Joomla manifest pins 3.9.4; match it against Joomla CVEs."},
+      {"t":"Map the version to an exploit","d":"searchsploit the CMS and version to list named exploits.","demo":[{"run":"searchsploit drupal 7.57","out":"Drupal < 7.58 - 'Drupalgeddon2' RCE | php/webapps/44448.rb","sig":"Drupalgeddon2"}],"note":"The exact version turns into a specific, named exploit to run."}]},
+    "check-web-body": {"lead":"Read the source for mixed content, weak forms, and the comments and JS that leak secrets.","items":[
+      {"t":"Grep the body for leaks","d":"View source for HTML comments and inline JS; developers leave creds and TODOs there.","demo":[{"run":"curl -sSkL http://10.10.10.10/ | grep -iE '<!--|password|todo|test'","out":"<!-- test / test works for the staging login -->","sig":"test / test"}],"note":"A test/test credential in a comment is a free working login, the page humans never read pays off."},
+      {"t":"Flag insecure resource refs","d":"http:// scripts or images on an HTTPS page are mixed content, a reportable finding.","demo":[{"run":"curl -sSkL https://10.10.10.10/ | grep -oE 'src=\"http://[^\"]+' | head -1","out":"src=\"http://cdn.acme.internal/app.js","sig":"src=\"http://"}],"note":"An http:// script on an HTTPS page is mixed content; note it in the report."},
+      {"t":"Check forms for weak settings","d":"A login form allowing autocomplete, or a POST form with no CSRF token, are body-level findings.","demo":[{"run":"curl -sSkL http://10.10.10.10/login | grep -iE 'autocomplete|csrf|<form'","out":"<form method=\"POST\" action=\"/login\" autocomplete=\"on\">","sig":"autocomplete=\"on\""}],"note":"autocomplete on a login and no csrf token are two small, defensible findings."}]},
+    "check-exposed-files": {"lead":"GET the usual leaked paths; a .env, a .git tree, server-status, or an editor .bak can hand you secrets or source.","items":[
+      {"t":"Probe for a .env","d":"Framework apps keep DB and API creds in .env, which should never be web-served.","demo":[{"run":"curl -sSkL http://10.10.10.10/.env","out":"DB_PASSWORD=S3cr3tDB\nAWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG","sig":"DB_PASSWORD=S3cr3tDB"}],"note":"A readable .env hands you database and cloud credentials outright."},
+      {"t":"Check for an exposed .git","d":"A web-served .git tree can be dumped back into full source with git-dumper.","demo":[{"run":"curl -sSk http://10.10.10.10/.git/HEAD","out":"ref: refs/heads/master","sig":"ref: refs/heads/master"}],"note":"A valid .git/HEAD means the repo is dumpable; git-dumper reconstructs the source."},
+      {"t":"Look for status and backups","d":"server-status leaks live requests; editor .bak or ~ files leak source.","demo":[{"run":"curl -sSk http://10.10.10.10/server-status","out":"Apache Server Status for 10.10.10.10\nGET /admin/config.php HTTP/1.1","sig":"Apache Server Status"}],"note":"server-status exposes live URLs, including admin paths worth visiting."}]}
+  };
+  Object.keys(CHECKS_HOW).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) OBOL.STUDY_FIXTURES[k].how = CHECKS_HOW[k]; });
+
+  var CHECKS_PRACTICE = {
+    "check-tls-config": {situation:"You want a free, no-risk report finding and possibly some internal hostnames from an HTTPS service. What do you run?", choices:["check-tls-config","check-web-headers","check-http-methods","check-cors"], coach:{"check-web-headers":"That reads HTTP response headers, not the certificate; the cert is where expiry, weak ciphers, and SAN hostnames live.","check-http-methods":"That lists allowed verbs, a different finding; the TLS cert and cipher read is what you want here.","check-cors":"That tests cross-origin policy on the app; the certificate review is the transport-layer check you are after."}},
+    "check-http-methods": {situation:"You want to know in one request whether a web server allows dangerous HTTP verbs like PUT. What do you run?", choices:["check-http-methods","check-web-headers","check-cors","check-exposed-files"], coach:{"check-web-headers":"That reads security headers, not the allowed verb set; OPTIONS is what lists PUT and DELETE.","check-cors":"That tests cross-origin reflection, a different misconfiguration from allowed verbs.","check-exposed-files":"That probes for leaked files; the verb list comes from an OPTIONS request."}},
+    "check-cors": {situation:"An app serves authenticated JSON. You want to know if another site could read a logged-in victim's responses. What do you test?", choices:["check-cors","check-http-methods","check-web-headers","check-web-body"], coach:{"check-http-methods":"That lists allowed verbs; cross-origin read risk comes from the CORS response headers.","check-web-headers":"General header hygiene overlaps, but the specific test is a spoofed Origin against the authenticated endpoint.","check-web-body":"That reads markup; CORS lives in the response headers to a cross-origin request."}},
+    "check-http-redirect": {situation:"Both 80 and 443 are open. You want to know if the site exposes traffic in the clear and whether its redirect leaks anything. What do you run?", choices:["check-http-redirect","check-tls-config","check-web-headers","check-cors"], coach:{"check-tls-config":"That reviews the certificate on 443; the cleartext question is answered by a HEAD of plain http:// that you do not follow.","check-web-headers":"Header hygiene is related, but the specific test is whether http:// redirects or serves content.","check-cors":"A different issue entirely; this is about transport encryption, not cross-origin policy."}},
+    "check-subdomain-takeover": {situation:"You have a list of subdomains and want to find one you could take over. What do you check on each?", choices:["check-subdomain-takeover","check-dns-email","check-tls-config","check-web-components"], coach:{"check-dns-email":"That reviews SPF/DMARC for spoofing, a different DNS finding; takeover is about dangling CNAMEs.","check-tls-config":"That reads certificates; takeover is a DNS CNAME-and-provider question.","check-web-components":"That fingerprints the app stack; here you resolve each CNAME and test if its target is unclaimed."}},
+    "check-dns-email": {situation:"A domain is in scope and you want a defensible report finding about mail spoofing. What two records do you read?", choices:["check-dns-email","check-subdomain-takeover","check-tls-config","check-web-headers"], coach:{"check-subdomain-takeover":"That hunts dangling CNAMEs; spoofing risk comes from the SPF and DMARC TXT records.","check-tls-config":"That reviews the web certificate, unrelated to email authentication records.","check-web-headers":"HTTP headers are a web finding; mail spoofing is judged from SPF and DMARC DNS records."}},
+    "check-web-headers": {situation:"You just loaded a web app and want the fastest batch of report findings plus a version lead for CVEs. What do you run first?", choices:["check-web-headers","check-web-body","check-cms-version","check-http-methods"], coach:{"check-web-body":"That reads the page source, a good follow-up; the header block is the faster first pass for missing protections and the version.","check-cms-version":"That pins a CMS build; the generic security-header read comes first and often reveals the stack already.","check-http-methods":"That lists allowed verbs, a narrower check; start with the header review for the easy wins."}},
+    "check-web-components": {situation:"You want to turn 'it is some CMS' into a named stack and version you can match CVEs against. What do you run right after triage?", choices:["check-web-components","check-cms-version","check-web-headers","check-exposed-files"], coach:{"check-cms-version":"That is the very next step, pinning the exact build; first you fingerprint which CMS it is from the page tells.","check-web-headers":"Headers help and overlap, but component fingerprinting reads the body tells and cookies too, not just headers.","check-exposed-files":"That hunts leaked files; identifying the component stack comes from the page's own fingerprint."}},
+    "check-cms-version": {situation:"whatweb says the app is Drupal but not which version. You need to know whether Drupalgeddon2 applies. What do you read?", choices:["check-cms-version","check-web-components","check-exposed-files","check-web-body"], coach:{"check-web-components":"That already told you it is Drupal; now you pin the exact build from its version files.","check-exposed-files":"That hunts secrets like .env; the CMS version lives in CHANGELOG, readme, and manifest files.","check-web-body":"Body review catches comments and forms; the precise version comes from the CMS's own version files."}},
+    "check-web-body": {situation:"The header checks are done. You suspect the HTML itself hides findings or even credentials. What do you read?", choices:["check-web-body","check-web-headers","check-exposed-files","check-cms-version"], coach:{"check-web-headers":"Already done, that read the headers; the body review catches what the headers miss, comments, forms, mixed content.","check-exposed-files":"That probes separate well-known paths; this is about reading the page's own source.","check-cms-version":"That pins a build from version files; body review is about comments, forms, and inline secrets."}},
+    "check-exposed-files": {situation:"Before anything clever on a new web app, you want the highest-payoff quick wins: leaked source or secrets. What do you probe?", choices:["check-exposed-files","check-web-body","check-web-components","check-http-methods"], coach:{"check-web-body":"That reads the main page source; this probes separate well-known paths like .env and .git not linked from the page.","check-web-components":"That fingerprints the stack; exposed-file probing is the quick-win hunt for leaked secrets and source.","check-http-methods":"That lists verbs; the quick secret wins come from GETting .env, .git, and server-status."}}
+  };
+  Object.keys(CHECKS_PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var pr = CHECKS_PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = pr.situation; OBOL.STUDY_FIXTURES[k].choices = pr.choices; OBOL.STUDY_FIXTURES[k].coach = pr.coach; } });
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

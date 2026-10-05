@@ -153,6 +153,12 @@
     'local-windows-interfaces': 'Map the Foothold (Windows)', 'local-windows-routes': 'Map the Foothold (Windows)', 'local-windows-neighbors': 'Map the Foothold (Windows)', 'local-windows-listeners': 'Map the Foothold (Windows)',
     'pivot-chisel-socks': 'Build the Tunnel', 'pivot-ligolo': 'Build the Tunnel', 'pivot-sshuttle': 'Build the Tunnel', 'pivot-ssh-dynamic': 'Build the Tunnel',
     'pivot-scan-through': 'Work Through the Pivot',
+    // checks lane
+    'check-tls-config': 'TLS & Cleartext', 'check-http-redirect': 'TLS & Cleartext',
+    'check-http-methods': 'HTTP Verbs & CORS', 'check-cors': 'HTTP Verbs & CORS',
+    'check-web-headers': 'Headers & Fingerprint', 'check-web-components': 'Headers & Fingerprint', 'check-cms-version': 'Headers & Fingerprint',
+    'check-web-body': 'Page Body & Exposed Files', 'check-exposed-files': 'Page Body & Exposed Files',
+    'check-subdomain-takeover': 'DNS & Email', 'check-dns-email': 'DNS & Email',
   };
   var CATEGORY_ORDER = [
     // web
@@ -172,6 +178,8 @@
     'Reverse Shells', 'Key & Credential Login',
     // pivot
     'Map the Foothold (Linux)', 'Map the Foothold (Windows)', 'Build the Tunnel', 'Work Through the Pivot',
+    // checks
+    'TLS & Cleartext', 'HTTP Verbs & CORS', 'Headers & Fingerprint', 'Page Body & Exposed Files', 'DNS & Email',
   ];
   function categoryOf(moveId) { var m = byId(moveId); return MOVE_CATEGORY[moveId] || deriveStage(m || {}); }
 
