@@ -1,3 +1,17 @@
+## v12.6 — Promote every known-exploit to a gold-standard Learn module (7/30 to 30/30)
+
+The known-exploits catalog was a lighter "this version is vulnerable, here is the command" reference: only 7 of its 30 entries were first-class coach moves, the other 23 surfaced as passive cards with no teaching surface. This release promotes all 23 to the same gold standard as the rest of the curriculum, so every catalogued exploit is a ranked Next Steps action, a node in the by-port decision map, and a Learn methodology-lane module whose field notes walk the real fingerprint, stage, and run.
+
+- **Twenty-three new gold-standard modules**, each with a bespoke why, a two-route lead-up, playable field notes that teach fingerprint then stage then run, a bespoke your-turn, and a coherent command-and-output replay:
+  - **Network service RCEs:** vsftpd 2.3.4 backdoor, ProFTPD mod_copy, Samba usermap_script, SMBGhost, BlueKeep.
+  - **Web app RCE / LFI / disclosure:** Shellshock, Heartbleed, Drupalgeddon2, phpMyAdmin LFI-to-RCE, Webmin unauthenticated RCE.
+  - **App-platform RCEs:** Apache OFBiz XML-RPC deserialization, Cacti remote_agent.php injection, Zabbix SAML SSO to Scripts RCE, Splunk custom-app scripted-input RCE, Text4Shell.
+  - **Niche services and Linux local escalations:** FreeSWITCH event socket, JDWP debug port, Usermin authenticated RCE, Aerospike UDF, WiFi Mouse Server; and DirtyCow, DirtyPipe, and Baron Samedit as bespoke modules alongside the generic kernel-exploit move.
+- **Each is wired, not just written.** Service exploits join the recon lane under a new "Service Exploits (CVE)" study category and seed their port cards (with new by-port cards for Webmin/Usermin, FreeSWITCH, JDWP, Aerospike, and WiFi Mouse); web app CVEs join the web lane's App Servers category and seed the HTTP cards; the kernel and sudo escalations join the Kernel & LPE CVEs category and attach to the post-foothold Linux shell map. Every module keys on a producible trigger fact and produces a readable handoff fact, so no new unreachable moves, dead-ends, parse gaps, or signature drift.
+- **A regression test locks it.** `tests/engine/known-exploits-coverage-smoke.js` asserts every catalog entry maps to a loaded coach move with a why, playable field notes, and a your-turn. A new catalog entry with no module now fails the suite, so the catalog can never drift ahead of the coach again.
+- **Accessibility and content discipline held throughout:** no em-dashes or emojis in any authored string, every demo signal is a real line of its output, and each cell was read for plain-language coherence.
+- **Scoreboard.** 237 moves (was 214), gap-report --check/--verify clean (0 unreachable, 0 missing hand-offs, 0 parse gaps, 0 drift, 0 coverage gaps), 237/237 fork conditions, lint-study clean, engine suites green including the new coverage smoke, browser smoke green with the decision-map forest at 252 nodes.
+
 ## v12.5 — Close the last three radar gaps: the by-port coverage lens goes fully green
 
 The by-port decision map's coverage oracle is the exam-readiness radar, and it was down to three deliberately-seeded beyond-OSCP entries with no module. This release builds all three to the gold standard, so every expected technique the oracle lists now resolves to a move and the coverage-gap count reaches zero.
