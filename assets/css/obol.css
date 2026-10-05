@@ -2307,7 +2307,7 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 .sl-way:hover { border-color: var(--way, var(--accent)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--way, var(--accent)) 20%, transparent); transform: translateY(-1px); }
 .sl-way:focus-visible { outline: 2px solid var(--way, var(--accent)); outline-offset: 2px; }
 .sl-way-cold { --way: var(--g-next); } .sl-way-atlas { --way: var(--ph-loot); } .sl-way-port { --way: var(--ph-recon); }
-.sl-way-decision { --way: var(--ph-creds); } .sl-way-setup { --way: var(--ph-access); } .sl-way-engage { --way: var(--ph-escalate); }
+.sl-way-decision { --way: var(--ph-enum); } .sl-way-setup { --way: var(--ph-access); } .sl-way-engage { --way: var(--ph-escalate); }
 /* SVG icons in the card tile render at the tile font size, same as the geometric glyphs */
 .sl-way-ic .ic { width: 1em; height: 1em; }
 .sl-way-top { display: flex; align-items: center; gap: 11px; }
