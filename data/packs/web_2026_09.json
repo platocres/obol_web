@@ -735,14 +735,15 @@
       "os": [],
       "requires_all": [],
       "requires_any": [
-        "http.reachable"
+        "http.reachable",
+        "vuln.nosqli"
       ],
       "produces": [
         "access.admin",
         "credential.plaintext",
         "credential.available"
       ],
-      "priority": 82,
+      "priority": 44,
       "proves": "confirms administrative access and a cleartext password",
       "does_not_prove": "admin rights inside the application only, not an OS shell or system-level privilege unless proven on its own",
       "report": {
@@ -828,14 +829,15 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "http.reachable"
+        "http.reachable",
+        "vuln.jenkins"
       ],
       "produces": [
         "foothold.linux",
         "foothold.windows",
         "loot.files"
       ],
-      "priority": 80,
+      "priority": 44,
       "proves": "confirms a Linux foothold, a Windows foothold, and retrieved files",
       "does_not_prove": "execution within the web/application context only, not any elevated privilege",
       "report": {

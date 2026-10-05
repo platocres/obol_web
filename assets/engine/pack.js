@@ -488,13 +488,31 @@
   };
   var V2_PRIV = { 'access.admin': 1, 'access.system': 1, 'access.root': 1, 'loot.ntds': 1, 'objective.flag': 1 };
   var V2_SPEC_RE = /check$|coerce|relay|responder|mitm|zerologon|printnight|nopac|ms14-068/;
+  // An exploit/foothold move is EVIDENCED (not a bare-port gamble) when the box actually shows a
+  // reason to run it: a proven vulnerability fingerprint, a credential/hash in hand, an existing
+  // foothold/access to escalate from, looted material, or an earned privesc/kerberos/ADCS primitive.
+  // A move that lands a foothold but is eligible only because a port/service is open — with none of
+  // these held — is a "try if vulnerable" gamble and must not outrank the evidenced next step
+  // (same discipline already applied to coerce/relay/check moves). EternalBlue is the model: it
+  // requires its smb.ms17_010 NSE verdict, so it is evidenced, never a bare-445 guess.
+  var V2_EVIDENCE_RE = /^(vuln\.|credential\.|hash\.|access\.|foothold\.|loot\.|privesc\.|kerberos\.|adcs\.)/;
+  // Concrete AD primitives a collection/enumeration PROVED (a BloodHound attack path, an ACL lead, a
+  // delegation right, a trust) — abusing one is an evidenced move, not a bare-port guess. (The earned
+  // control/loot facts like ad.control_paths/ad.gpo_control are already in V2_SPECIFIC.)
+  var V2_AD_LEAD = { 'ad.attack_paths': 1, 'ad.acl_lead': 1, 'ad.delegation': 1, 'ad.trusts': 1 };
+  var V2_FOOTHOLD = { 'foothold.linux': 1, 'foothold.windows': 1, 'foothold.webshell': 1, 'access.shell': 1, 'access.admin': 1, 'access.system': 1, 'access.root': 1 };
+  function v2EvidenceFact(g) { return !!V2_SPECIFIC[g] || !!V2_AD_LEAD[g] || V2_EVIDENCE_RE.test(g); }
+  function v2ProducesFoothold(a) { for (var i = 0; i < a.produces.length; i++) { var k = a.produces[i]; if (V2_FOOTHOLD[k] || /_confirmed$/.test(k)) return true; } return false; }
+  function v2Indicated(a, haveObj) { var g = a.requires_all.concat(a.requires_any), i; for (i = 0; i < g.length; i++) if (haveObj[g[i]] && v2EvidenceFact(g[i])) return true; return false; }
 
-  function v2Speculative(a) {
+  function v2Speculative(a, haveObj) {
     if (V2_SPEC_RE.test(a.id)) return true;
     for (var i = 0; i < a.produces.length; i++) {
       var k = a.produces[i];
       if (k === 'exploit.candidate' || k === 'ad.coerced_auth' || k === 'credential.netntlm') return true;
     }
+    // an exploit/foothold move eligible without any proven indicator (fingerprint, cred, foothold) is a gamble
+    if (haveObj && v2ProducesFoothold(a) && !v2Indicated(a, haveObj)) return true;
     return false;
   }
   // Minimal steps from a set of held fact-kinds to any goal, through the produce/require graph:
@@ -544,8 +562,8 @@
   }
   function v2Reliability(a, haveObj) {
     var gates = a.requires_all.concat(a.requires_any), i;
-    for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) return 1.0;
-    if (v2Speculative(a)) return 0.25;
+    for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && (V2_SPECIFIC[gates[i]] || /^vuln\./.test(gates[i]))) return 1.0;
+    if (v2Speculative(a, haveObj)) return 0.25;
     for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return 0.3;
     return 0.8;
   }
@@ -588,7 +606,7 @@
     var scored = live.map(function (a) {
       var gates = a.requires_all.concat(a.requires_any), indicated = false, i;
       for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) { indicated = true; break; }
-      var spec = v2Speculative(a);
+      var spec = v2Speculative(a, haveObj);
       var fresh = v2EligAgainst(a, haveObj) && !v2EligAgainst(a, rec.before);
       var tier = (spec && !indicated) ? -1 : (fresh ? 2 : (indicated ? 1 : 0));
       var h2 = {}, k;
