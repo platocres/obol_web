@@ -609,27 +609,29 @@
   // The three promoted entries (cold box / atlas / by-port). Each carries the canonical single
   // trigger attribute the rest of the route (and the smoke test) expects: data-sim / data-graph /
   // data-ports live here and nowhere else, so a click selector stays unambiguous.
-  function wayGlyph(mod) { return mod === 'sl-way-cold' ? '▶' : (mod === 'sl-way-atlas' ? '⊞' : '⊟'); }
-  function slWay(trigAttr, mod, kick, title, desc, go) {
-    return '<button type="button" class="sl-way ' + mod + '" ' + trigAttr + '>'
-      + '<span class="sl-way-top"><span class="sl-way-ic" aria-hidden="true">' + wayGlyph(mod) + '</span>'
-      + '<span class="sl-way-head"><span class="sl-way-kick">' + esc(kick) + '</span><span class="sl-way-t">' + esc(title) + '</span></span></span>'
-      + '<span class="sl-way-d">' + esc(desc) + '</span>'
-      + '<span class="sl-way-go">' + esc(go) + ' →</span></button>';
+  // One card renderer for every entry in the top action bar, so the six cards share one visual
+  // style (coloured accent, icon tile, kicker, title, description, CTA). o.trig gives a button its
+  // single canonical trigger attribute (data-sim / data-graph / data-decision / data-ports live
+  // here and nowhere else, so the click selectors stay unambiguous); o.href makes it a link instead.
+  // o.icon is ready HTML — a geometric glyph or an OBOL.ic() SVG (both render at the tile font size).
+  function barCard(o) {
+    var isLink = !!o.href;
+    var open = isLink ? '<a class="sl-way ' + o.mod + '" href="' + o.href + '">'
+      : '<button type="button" class="sl-way ' + o.mod + '" ' + (o.trig || '') + '>';
+    var close = isLink ? '</a>' : '</button>';
+    return open
+      + '<span class="sl-way-top"><span class="sl-way-ic" aria-hidden="true">' + o.icon + '</span>'
+      + '<span class="sl-way-head"><span class="sl-way-kick">' + esc(o.kick) + '</span><span class="sl-way-t">' + esc(o.title) + '</span></span></span>'
+      + '<span class="sl-way-d">' + esc(o.desc) + '</span>'
+      + '<span class="sl-way-go">' + esc(o.go) + ' →</span>'
+      + close;
   }
-  // the quieter utility entries that share the action bar with the three ways (a link to a surface).
-  function slUtil(href, glyph, title, desc) {
-    return '<a class="sl-way sl-way-util" href="' + href + '">'
-      + '<span class="sl-way-top"><span class="sl-way-ic" aria-hidden="true">' + glyph + '</span>'
-      + '<span class="sl-way-head"><span class="sl-way-t">' + esc(title) + '</span></span></span>'
-      + '<span class="sl-way-d">' + esc(desc) + '</span></a>';
-  }
-  // the progress entry in the action bar: the big studied/total count, opens where you left off.
-  function slProg(contId, studied, total) {
-    return '<button type="button" class="sl-way sl-way-util sl-prog" data-open="' + U.attr(contId) + '">'
-      + '<span class="sl-way-top"><span class="sl-prog-g">' + studied + '<span class="sl-prog-tot">/' + total + '</span></span></span>'
-      + '<span class="sl-way-head"><span class="sl-way-t">' + (studied ? 'Continue Where You Left Off' : 'Your Progress') + '</span></span>'
-      + '<span class="sl-way-d">' + (studied ? (studied + ' step' + (studied === 1 ? '' : 's') + ' studied across all lanes.') : 'Pick a lane and your progress tracks here.') + '</span></button>';
+  // the progress tile pinned to the hero's top-right corner: the big studied/total, opens where you left off.
+  function heroProg(contId, studied, total) {
+    return '<button type="button" class="sl-hero-prog" data-open="' + U.attr(contId) + '">'
+      + '<span class="sl-hp-g">' + studied + '<span class="sl-hp-tot">/' + total + '</span></span>'
+      + '<span class="sl-hp-t">' + (studied ? 'Continue Where You Left Off' : 'Your Progress') + '</span>'
+      + '<span class="sl-hp-d">' + (studied ? (studied + ' step' + (studied === 1 ? '' : 's') + ' studied · resume →') : 'Pick a lane and your progress tracks here.') + '</span></button>';
   }
   // a curated by-port card for the landing, derived from the same evidence index the full by-port
   // view uses, so its counts/signals never drift. Clicking opens the by-port view with it expanded.
@@ -683,18 +685,22 @@
 
     var h = '<section class="study-route study-map">';
     h += welcomeBanner();
-    h += '<div class="study-hero sl-hero"><span class="sl-tag">Learn at your own pace, your own way</span>'
+    h += '<div class="study-hero sl-hero">'
+      + '<div class="sl-hero-main"><span class="sl-tag">Learn at your own pace, your own way</span>'
       + '<h1 class="study-hero-h">Learn the methodology</h1>'
       + '<p class="study-hero-p">Obol teaches offensive security as a decision graph: <b>know what to do, and why, from what you\'ve found.</b> '
-      + 'Start from a structured path, from a port you just scanned, or drop into a live box, whatever fits how you learn.</p></div>';
-    // one unified action bar: the three ways to start + the three utility entries, all title case.
+      + 'Start from a structured path, from a port you just scanned, or drop into a live box, whatever fits how you learn.</p></div>'
+      + heroProg(contId, studiedTotal, totalSteps)
+      + '</div>';
+    // one unified action bar: six matching cards (three ways to start, the decision graph, and the
+    // set-up / engagement entries). Each has a colour, an icon, a kicker, and a CTA.
     h += '<div class="sl-bar">'
-      + slWay('data-sim', 'sl-way-cold', 'Guided Simulation', 'Run A Cold Box', 'Start from an IP and nothing else. Read each result, choose the next move, and watch the box fall one step at a time.', 'Start A Run')
-      + slWay('data-graph', 'sl-way-atlas', 'The Whole Map', 'Walk The Attack Graph', 'Every move in one graph, wired by what unlocks what. Pan, zoom, and trace end-to-end paths, or light up a ready-made scenario.', 'Open The Atlas')
-      + slWay('data-ports', 'sl-way-port', 'Start From A Scan', 'Browse By Open Port', 'You scanned; these ports are open. Pick the one in front of you and get the exact, ordered moves it unlocks.', 'Full By-Port View')
-      + slUtil('#/loadout', OBOL.ic('gear'), 'Set Up Your Box', 'Install the toolset so the commands you learn match your own machine.')
-      + slUtil('#/home', '▶', 'Start An Engagement', 'Working a real box? Track it: paste output, get your next move.')
-      + slProg(contId, studiedTotal, totalSteps)
+      + barCard({ trig: 'data-sim', mod: 'sl-way-cold', icon: '▶', kick: 'Guided Simulation', title: 'Run A Cold Box', desc: 'Start from an IP and nothing else. Read each result, choose the next move, and watch the box fall one step at a time.', go: 'Start A Run' })
+      + barCard({ trig: 'data-graph', mod: 'sl-way-atlas', icon: '⊞', kick: 'The Whole Map', title: 'Walk The Attack Graph', desc: 'Every move in one graph, wired by what unlocks what. Pan, zoom, and trace end-to-end paths, or light up a ready-made scenario.', go: 'Open The Atlas' })
+      + barCard({ trig: 'data-decision', mod: 'sl-way-decision', icon: OBOL.ic('branch'), kick: 'Why Each Move', title: 'Walk The Decision Graph', desc: 'Every move as a decision: what unlocks it, what it proves, what it rules out. Follow the branches from an open port to the whole path.', go: 'Open The Map' })
+      + barCard({ trig: 'data-ports', mod: 'sl-way-port', icon: '⊟', kick: 'Start From A Scan', title: 'Browse By Open Port', desc: 'You scanned; these ports are open. Pick the one in front of you and get the exact, ordered moves it unlocks.', go: 'Full By-Port View' })
+      + barCard({ href: '#/loadout', mod: 'sl-way-setup', icon: OBOL.ic('gear'), kick: 'Your Machine', title: 'Setup Your Box', desc: 'Install the toolset so the commands you learn match your own machine.', go: 'Install Tools' })
+      + barCard({ href: '#/home', mod: 'sl-way-engage', icon: OBOL.ic('crosshair'), kick: 'Track A Box', title: 'Start An Engagement', desc: 'Working a real box? Track it: paste output, get your next move.', go: 'Start Tracking' })
       + '</div>';
     // the two-column dashboard
     h += '<div class="sl-dash">';
@@ -712,8 +718,7 @@
     var GROUP = { ad: 1, database: 1 };
     var methodLanes = ls.filter(function (L) { return !GROUP[L.key]; }).concat(ls.filter(function (L) { return GROUP[L.key]; }));
     h += '<section class="sl-col sl-col-method" aria-label="Learn by methodology">'
-      + '<div class="sl-col-h"><h2 class="sl-col-t">By Methodology</h2><span class="sl-col-count">' + ls.length + ' Lanes · ' + totalSteps + ' Steps</span>'
-      + '<button type="button" class="sl-col-more" data-go-atlas>Browse All As A Graph →</button></div>'
+      + '<div class="sl-col-h"><h2 class="sl-col-t">By Methodology</h2><span class="sl-col-count">' + ls.length + ' Lanes · ' + totalSteps + ' Steps</span></div>'
       + '<div class="study-lanes">' + methodLanes.map(laneCard).join('') + '</div></section>';
     // right: by open port (equal-second). No separate button: the bar's "Browse by Open Port" entry
     // already opens this view, which carries its own Cards / Decision-map toggle.
@@ -1347,6 +1352,8 @@
     U.on(mount, 'click', '[data-back-map]', function () { _view = 'map'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-graph]', function () { _view = 'atlas'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-ports]', function () { _view = 'ports'; OBOL.router.render(); });
+    // Walk The Decision Graph: open the by-port view straight into its Decision-map mode (the forest).
+    U.on(mount, 'click', '[data-decision]', function () { _view = 'ports'; _evMode = 'map'; try { localStorage.setItem('obol.evMode', 'map'); } catch (e) {} OBOL.router.render(); });
     // landing "more" links — distinct from the single data-graph/data-ports triggers above so a
     // click selector stays unambiguous (the smoke test clicks [data-graph]/[data-ports] directly).
     U.on(mount, 'click', '[data-go-atlas]', function () { _view = 'atlas'; OBOL.router.render(); });

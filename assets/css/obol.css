@@ -2269,9 +2269,20 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 /* ---- Learn landing: the reworked #/study map view (wide two-column dashboard) ----
    Accent-tinted text mixes toward var(--text), not white, so it keeps contrast on every skin
    (light accent + dark text on daylight; light accent + light text on the dark skins). */
-.sl-hero { margin: 2px 0 22px; }
+.sl-hero { margin: 2px 0 22px; display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; }
+.sl-hero-main { flex: 1 1 auto; min-width: 0; }
 .sl-hero .study-hero-h { font-size: clamp(24px, 2.4vw, 32px); letter-spacing: -.01em; }
 .sl-hero .study-hero-p { max-width: 900px; font-size: clamp(13.5px, 1vw, 15px); }
+/* progress tile pinned to the hero's top-right corner */
+.sl-hero-prog { flex: 0 0 auto; width: 212px; max-width: 42vw; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px; font-family: var(--sans); background: linear-gradient(180deg, color-mix(in srgb, var(--g-next) 12%, var(--surf1)), var(--surf1)); border: 1px solid color-mix(in srgb, var(--g-next) 35%, var(--line)); border-radius: var(--radius); padding: 12px 15px; transition: .15s; }
+.sl-hero-prog:hover { border-color: var(--g-next); box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-next) 18%, transparent); transform: translateY(-1px); }
+.sl-hero-prog:focus-visible { outline: 2px solid var(--g-next); outline-offset: 2px; }
+.sl-hp-g { font-family: var(--mono); font-weight: 800; font-size: 26px; line-height: 1; color: var(--g-next); }
+.sl-hp-tot { font-size: 14px; color: var(--muted); font-weight: 600; }
+.sl-hp-t { font-size: 12.5px; font-weight: 800; color: var(--text); margin-top: 5px; }
+.sl-hp-d { font-size: 11px; color: var(--text-2); line-height: 1.4; }
+@media (max-width: 760px) { .sl-hero { flex-direction: column; gap: 14px; } .sl-hero-prog { width: 100%; max-width: none; } }
+@media (prefers-reduced-motion: reduce) { .sl-hero-prog { transition: none; } .sl-hero-prog:hover { transform: none; } }
 /* the "learn at your own pace" tag: gold and bright, with a periodic prism sheen that sweeps across
    like light off a CD. The base text leans toward --text so it stays AA on every skin; the rainbow is
    a brief passing glint, not the permanent fill. Static gold under reduced motion. */
@@ -2290,16 +2301,15 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 @media (max-width: 760px) { .sl-bar { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 480px) { .sl-bar { grid-template-columns: 1fr; } }
 /* the quieter utility entries share the way-card shape but drop the coloured accent bar */
-.sl-way-util { --way: var(--accent-2); background: var(--surf1); }
-.sl-way-util::after { display: none; }
-.sl-way-util .sl-way-ic { background: var(--surf2); color: var(--text-2); }
-.sl-way-util:hover { border-color: var(--line-hot); box-shadow: none; }
 .sl-ways { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 26px; }
 .sl-way { position: relative; display: flex; flex-direction: column; gap: 7px; text-align: left; cursor: pointer; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 17px 15px; min-height: 120px; overflow: hidden; font-family: var(--sans); background: linear-gradient(180deg, color-mix(in srgb, var(--way, var(--accent)) 10%, var(--surf1)), var(--surf1)); transition: .15s; }
 .sl-way::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--way, var(--accent)); opacity: .9; }
 .sl-way:hover { border-color: var(--way, var(--accent)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--way, var(--accent)) 20%, transparent); transform: translateY(-1px); }
 .sl-way:focus-visible { outline: 2px solid var(--way, var(--accent)); outline-offset: 2px; }
 .sl-way-cold { --way: var(--g-next); } .sl-way-atlas { --way: var(--ph-loot); } .sl-way-port { --way: var(--ph-recon); }
+.sl-way-decision { --way: var(--ph-creds); } .sl-way-setup { --way: var(--ph-access); } .sl-way-engage { --way: var(--ph-escalate); }
+/* SVG icons in the card tile render at the tile font size, same as the geometric glyphs */
+.sl-way-ic .ic { width: 1em; height: 1em; }
 .sl-way-top { display: flex; align-items: center; gap: 11px; }
 .sl-way-ic { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 8px; font-size: 15px; background: color-mix(in srgb, var(--way, var(--accent)) 20%, transparent); color: color-mix(in srgb, var(--way, var(--accent)) 60%, var(--text)); }
 .sl-way-head { display: flex; flex-direction: column; min-width: 0; }

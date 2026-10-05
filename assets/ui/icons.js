@@ -30,7 +30,9 @@
     bolt:  '<path d="M9 1.5 3.5 9H7l-.8 5.5L12.5 7H9z"/>',
     stop:  '<path d="M5.4 2.2h5.2L13.8 5.4v5.2l-3.2 3.2H5.4L2.2 10.6V5.4z"/>',
     sound: '<path d="M3 6v4h2.3L9 13V3L5.3 6z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4"/>',
-    crosshair: '<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/>'
+    crosshair: '<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/>',
+    // a decision fork: one node branching into two (the decision graph)
+    branch: '<circle cx="3" cy="8" r="1.7" fill="currentColor" stroke="none"/><path d="M4.7 8H8M8 8V4.8a1.2 1.2 0 0 1 1.2-1.2h1.1M8 8v3.2a1.2 1.2 0 0 0 1.2 1.2h1.1"/><circle cx="12.3" cy="3.6" r="1.7" fill="currentColor" stroke="none"/><circle cx="12.3" cy="12.4" r="1.7" fill="currentColor" stroke="none"/>'
   };
   // icons that look best filled rather than stroked
   var FILLED = { shield: 1, skull: 1, pin: 1, spark: 1, bolt: 1, stop: 1, flagfill: 1 };
