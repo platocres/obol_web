@@ -10,8 +10,16 @@
  * red until someone adds the move — then it clears itself. Keep entries honest: only list a move id here
  * if that move genuinely covers the technique.
  *
- * Keyed by Evidence card key (p21, p80, …). Not every port needs an entry; the ones here are the
- * high-traffic surfaces where coverage matters most. Extend as the curriculum grows.
+ * Keyed by Evidence card key: the open-port cards (p21, p80, …) AND the post-foothold access cards
+ * (shell-linux, shell-windows, domain-cred, pivot, proof), so the oracle is a full OSCP exam-readiness
+ * checklist, not just a per-service one. Each access-card entry lists the privilege-escalation, AD, or
+ * pivoting techniques the exam expects, mapped to the move that teaches it; a `moves: []` entry is a
+ * technique deliberately on the radar that no module teaches yet (it shows red until a move is added).
+ *
+ * DELIBERATELY OUT OF SCOPE (not listed as gaps, so they never show red): stack buffer overflow was
+ * retired from the OSCP exam in 2020; client-side / phishing attacks are not part of the standalone or
+ * AD-set objectives. The current exam is 3 standalone hosts (foothold + root, 20 pts each) plus a
+ * 40-pt AD set (2 clients + 1 DC) reached by pivoting, which is the shape this oracle models.
  */
 (function (root) {
   'use strict';
@@ -110,6 +118,61 @@
     p1099: { label: 'Java RMI', expect: [
       { name: 'Registry enumeration', moves: ['java-rmi'] },
       { name: 'Deserialization RCE', moves: ['java-rmi'] },
+    ] },
+
+    // ---- post-foothold exam axes (keyed by the access cards) ----
+    'shell-linux': { label: 'Linux privilege escalation', expect: [
+      { name: 'Baseline enumeration (linpeas / manual)', moves: ['linux-enum'] },
+      { name: 'Sudo rights abuse (GTFOBins)', moves: ['sudo-abuse'] },
+      { name: 'SUID binaries (GTFOBins)', moves: ['suid-gtfobins'] },
+      { name: 'Linux capabilities', moves: ['capabilities'] },
+      { name: 'Cron jobs / writable scripts', moves: ['cron-abuse'] },
+      { name: 'Writable /etc/passwd or /etc/shadow', moves: ['writable-passwd'] },
+      { name: 'NFS no_root_squash', moves: ['nfs-squash'] },
+      { name: 'Docker / LXD group escape', moves: ['docker-socket', 'lxc-lxd-escape'] },
+      { name: 'Hidden processes (pspy)', moves: ['pspy-monitor'] },
+      { name: 'Kernel / exploit-suggester (DirtyPipe, pwnkit)', moves: [], note: 'no module: linux-exploit-suggester and the kernel/LPE CVEs it flags are not taught yet' },
+      { name: 'PATH hijack in a SUID/cron script', moves: [], note: 'no module: relative-binary PATH hijack of a privileged script' },
+      { name: 'LD_PRELOAD / LD_LIBRARY_PATH via sudo env_keep', moves: [], note: 'no module: library-injection through a preserved sudo environment' },
+    ] },
+    'shell-windows': { label: 'Windows privilege escalation', expect: [
+      { name: 'Baseline enumeration (winPEAS / manual)', moves: ['windows-enum'] },
+      { name: 'SeImpersonate token abuse (Potato family)', moves: ['seimpersonate'] },
+      { name: 'Unquoted service path', moves: ['unquoted-service-path'] },
+      { name: 'Weak service permissions', moves: ['weak-service-permissions'] },
+      { name: 'AlwaysInstallElevated', moves: ['alwaysinstallelevated'] },
+      { name: 'Stored credentials (Credential Manager / registry)', moves: ['stored-credentials'] },
+      { name: 'windows.old / registry hive secrets', moves: ['windows-old-hives'] },
+      { name: 'DPAPI-protected secrets', moves: ['dpapi-secrets'] },
+      { name: 'LSASS memory dump', moves: ['lsass-dump-onbox'] },
+      { name: 'Missing patches (wesng)', moves: ['wesng-patch-gaps'] },
+      { name: 'Defensive posture (AV / AppLocker / CLM)', moves: ['defense-enum'] },
+      { name: 'DLL search-order hijack', moves: [], note: 'no module: writable-path DLL hijack of a privileged process' },
+      { name: 'Writable scheduled-task binary', moves: [], note: 'no module: a scheduled task that runs a path you can overwrite' },
+    ] },
+    'domain-cred': { label: 'Active Directory to Domain Admin', expect: [
+      { name: 'Graph recon (BloodHound)', moves: ['bloodhound-collect', 'ad-path-manual'] },
+      { name: 'Kerberoasting (with a credential)', moves: ['kerberoast'] },
+      { name: 'ACL abuse (GenericAll / WriteDACL)', moves: ['ad-acl-abuse', 'bloodyad-acl'] },
+      { name: 'Delegation abuse (unconstrained / constrained / RBCD)', moves: ['unconstrained-delegation', 'delegation-abuse', 'getst-impersonation'] },
+      { name: 'AD CS template abuse (ESC1-8)', moves: ['adcs-esc', 'cert-authenticate'] },
+      { name: 'Shadow credentials (msDS-KeyCredentialLink)', moves: ['shadow-credentials'] },
+      { name: 'LAPS / gMSA password read', moves: ['laps-read', 'gmsa-read'] },
+      { name: 'DCSync', moves: ['dcsync'] },
+      { name: 'Ticket forging (golden / silver / diamond)', moves: ['golden-ticket', 'silver-ticket', 'diamond-ticket'] },
+      { name: 'Cross-domain (trusts / SID history)', moves: ['trust-enum', 'sid-history-abuse'] },
+      { name: 'Critical CVEs (Zerologon / NoPac / PrintNightmare / MS14-068)', moves: ['zerologon-exploit', 'nopac', 'printnightmare', 'ms14-068'] },
+      { name: 'Policy / service abuse (GPO / DNSAdmins / WSUS / SCCM)', moves: ['gpo-abuse', 'dnsadmins-abuse', 'wsus-abuse', 'sccm-enum'] },
+      { name: 'Domain takeover with the owned hash (PtH as DA)', moves: ['own-domain-pth'] },
+    ] },
+    'pivot': { label: 'Pivoting into the internal network', expect: [
+      { name: 'Map the foothold interfaces / routes / neighbors', moves: ['local-linux-interfaces', 'local-windows-interfaces'] },
+      { name: 'Stand up a tunnel (chisel / ligolo / sshuttle / ssh)', moves: ['pivot-chisel-socks', 'pivot-ligolo', 'pivot-sshuttle', 'pivot-ssh-dynamic'] },
+      { name: 'Scan and attack through the tunnel', moves: ['pivot-scan-through'] },
+    ] },
+    'proof': { label: 'Proof capture & documentation', expect: [
+      { name: 'Capture user + root/proof flags', moves: ['flag-hunt-linux', 'flag-hunt-windows'] },
+      { name: 'Screenshot with identity + IP visible', moves: ['flag-hunt-linux', 'flag-hunt-windows'] },
     ] },
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

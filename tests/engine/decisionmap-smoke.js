@@ -55,10 +55,13 @@ var pc0 = DM.parserCoverage();
 ok(gr.counts.parseGap === 0, 'every move result is readable by a parser now (parseGap ' + gr.counts.parseGap + ')');
 ok(pc0['check-tls-config'] && pc0['check-tls-config'].status === 'verified', 'the TLS check reads back verified (its result is parseable)');
 ok(pc0['recon-dns'] && pc0['recon-dns'].status === 'verified', 'the DNS zone-transfer reads back verified');
-// every seeded expected technique now has a backing move, so the oracle reports zero coverage gaps;
-// the machinery is still exercised (COVERAGE_EXPECTED is populated and each entry resolves to a move).
+// the oracle now spans the port cards AND the post-foothold exam axes (shell-linux/windows, domain-cred,
+// pivot, proof). Every per-service and AD/pivot technique resolves to a module; the only coverage gaps
+// left are the deliberately-seeded privesc radar items (Linux kernel/PATH/LD_PRELOAD, Windows DLL/task),
+// all on the shell-* access cards. No port technique should be a gap (p3306 resolves to its new module).
 ok((OBOL.COVERAGE_EXPECTED && Object.keys(OBOL.COVERAGE_EXPECTED).length >= 6), 'the expected-coverage oracle is populated');
-ok(gr.coverage.length === 0, 'the oracle reports no coverage gaps now every seeded technique has a module (' + gr.coverage.length + ')');
+ok(gr.coverage.every(function (c) { return c.port === 'shell-linux' || c.port === 'shell-windows'; }), 'the only coverage gaps are the deliberate privesc radar items (' + gr.coverage.length + ')');
+ok(!gr.coverage.some(function (c) { return /^p\d/.test(c.port); }), 'no per-port technique is an unfilled coverage gap');
 ok(!gr.coverage.some(function (c) { return c.port === 'p3306'; }), 'the p3306 INTO OUTFILE technique resolves to its new module (mysql-outfile-rce)');
 
 // --- parser capability derivation ---

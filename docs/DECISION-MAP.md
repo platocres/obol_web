@@ -118,6 +118,35 @@ This is the durable payoff the build was for. To find and close coverage gaps:
 Seeding a gap on purpose is a first-class move: a `moves: []` entry in `coverage-expected.js`, or a
 move left without a `decision-forks.js` entry, keeps the hole on the radar instead of forgotten.
 
+### The oracle is an OSCP exam-readiness checklist
+
+`coverage-expected.js` is keyed by Evidence card, and that now includes the **post-foothold access
+cards**, so the oracle spans the whole exam, not just per-service enumeration:
+
+- **Port cards** (`p21`, `p80`, …) — the enumeration + exploitation checklist per open service.
+- **`shell-linux` / `shell-windows`** — the Linux-root and Windows-SYSTEM privilege-escalation
+  checklists.
+- **`domain-cred`** — the Active-Directory-to-Domain-Admin chain (recon → roast → ACL/delegation →
+  ADCS → DCSync → tickets → cross-domain → CVEs).
+- **`pivot`** — map the dual-homed foothold, tunnel, scan through.
+- **`proof`** — capture the flags with the screenshot discipline the exam grades.
+
+Deliberately **out of scope** and therefore not seeded (so they never show red): the retired stack
+buffer overflow, and client-side / phishing. The exam shape modelled is three standalone hosts plus a
+40-pt AD set reached by pivoting.
+
+To grow exam coverage: add expected techniques to the right card (a port, or an access card). A
+technique with no backing move is a radar gap — e.g. the current build knowingly flags five Linux/
+Windows privesc vectors not yet taught (kernel exploit-suggester, PATH hijack, LD_PRELOAD, DLL
+search-order hijack, writable scheduled task). Build the module and the gap clears itself.
+
+### Current scoreboard (this build)
+
+`node tools/gap-report.js --check` → `unreachable 0 · missing-handoff 0 · parseGap 0 ·
+parsePartial 0 · signature-drift 0 · coverageGap 5` (the 5 privesc radar items above). 185 moves,
+114 with authored fork conditions. Everything that blocks an attack chain is closed; what remains is
+the privesc radar (intentional) and the dead-end review list (terminal/observational facts).
+
 ### How to close a **parse** gap concretely
 
 A parse gap means a parser is missing. The parsers live in `assets/engine/parsers/*.js`,

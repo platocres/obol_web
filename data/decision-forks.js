@@ -99,5 +99,55 @@
     'sudo-abuse': { cond: 'Is there a NOPASSWD / GTFOBins-abusable sudo entry?', onFail: 'No usable sudo → pivot to SUID or cron.' },
     'suid-gtfobins': { cond: 'Is a SUID binary abusable per GTFOBins?', onFail: 'None abusable → watch for a root cron job.' },
     'seimpersonate': { cond: 'Is SeImpersonate/SeAssignPrimaryToken enabled?', onFail: 'Not held → try a service or stored-credential path.' },
+
+    // ---- linux privesc ----
+    'capabilities': { cond: 'Does a binary carry an abusable capability (cap_setuid, cap_dac_read_search)?', onFail: 'No usable cap, pivot to SUID or sudo.' },
+    'cron-abuse': { cond: 'Is a root cron job running a script or path you can write?', onFail: 'No writable cron target, run pspy to catch hidden jobs.' },
+    'writable-passwd': { cond: 'Can you write /etc/passwd, or read /etc/shadow to crack it?', onFail: 'Not writable, look at sudo, SUID, or cron instead.' },
+    'nfs-squash': { cond: 'Is an export mounted with no_root_squash?', onFail: 'root_squash set, your uploaded SUID runs as nobody; move on.' },
+    'docker-socket': { cond: 'Can you reach a writable docker socket or the docker group?', onFail: 'No docker access, check the lxd group instead.' },
+    'lxc-lxd-escape': { cond: 'Are you a member of the lxd or lxc group?', onFail: 'Not in the group, pivot to another escalation lead.' },
+    'pspy-monitor': { cond: 'Does pspy reveal a hidden root process or cron you can abuse?', onFail: 'Nothing scheduled, focus on sudo, SUID, and capabilities.' },
+    // ---- windows privesc ----
+    'unquoted-service-path': { cond: 'Is there an unquoted service path with a writable directory in it?', onFail: 'All paths quoted or unwritable, try service permissions.' },
+    'weak-service-permissions': { cond: 'Can you reconfigure or restart a service to run your binary?', onFail: 'No weak ACL, check unquoted paths or token abuse.' },
+    'alwaysinstallelevated': { cond: 'Are both AlwaysInstallElevated registry keys set to 1?', onFail: 'Only one or neither key set, this path is closed.' },
+    'stored-credentials': { cond: 'Did the hunt surface a reusable password or hash?', onFail: 'Nothing stored, dump LSASS or check DPAPI.' },
+    'dpapi-secrets': { cond: "Can you decrypt a DPAPI blob with the user's secret or SYSTEM?", onFail: 'No masterkey access, try another credential source.' },
+    'windows-old-hives': { cond: 'Are the SAM and SYSTEM hives (windows.old or a backup) readable?', onFail: 'No readable hives, pivot to another lead.' },
+    'lsass-dump-onbox': { cond: 'Can you dump LSASS without AV blocking it?', onFail: 'AV blocks the dump, use remote secretsdump or the comsvcs trick.' },
+    'wesng-patch-gaps': { cond: 'Does wesng flag a missing patch with a public exploit?', onFail: 'Fully patched, focus on misconfiguration and tokens.' },
+    'defense-enum': { cond: 'What is blocking you (AV, AppLocker, Constrained Language Mode)?', onFail: 'No controls, run your tooling on-box freely.' },
+    // ---- active directory ----
+    'delegation-abuse': { cond: 'Does an account hold constrained or resource-based delegation you can abuse?', onFail: 'No delegation edge, walk another graph path.' },
+    'unconstrained-delegation': { cond: 'Is there an unconstrained-delegation host to coerce a DC into?', onFail: 'None found, try constrained or RBCD instead.' },
+    'getst-impersonation': { cond: 'Can you request a service ticket impersonating a privileged user?', onFail: 'No delegation rights, earn them via an ACL first.' },
+    'bloodyad-acl': { cond: 'Do you hold a writable ACL (GenericAll/WriteDacl) over the target?', onFail: 'No edge, map more of the graph.' },
+    'golden-ticket': { cond: 'Do you hold the krbtgt hash?', onFail: 'No krbtgt yet, DCSync or dump NTDS first.' },
+    'silver-ticket': { cond: "Do you hold a service account's hash and its SPN?", onFail: 'Missing the service hash, kerberoast or dump it.' },
+    'diamond-ticket': { cond: 'Do you have the krbtgt key to modify a real TGT?', onFail: 'No krbtgt key, fall back to a golden ticket.' },
+    'cert-authenticate': { cond: 'Does the certificate authenticate for an NT hash or a TGT?', onFail: 'Auth rejected, the template or UPN mapping is wrong.' },
+    'laps-read': { cond: 'Can you read the ms-Mcs-AdmPwd attribute on a host?', onFail: 'No read right, find an ACL that grants it.' },
+    'gmsa-read': { cond: 'Can you read the gMSA managed-password blob?', onFail: 'No retrieve right, get it via an ACL first.' },
+    'nopac': { cond: 'Is the DC unpatched for NoPac (CVE-2021-42278/42287)?', onFail: 'Patched, try another DC CVE or path.' },
+    'printnightmare': { cond: 'Is the Print Spooler reachable and unpatched (CVE-2021-34527)?', onFail: 'Spooler off or patched, move on.' },
+    'ms14-068': { cond: 'Is the DC unpatched for MS14-068 (legacy only)?', onFail: 'Patched, this only hits very old DCs.' },
+    'own-domain-pth': { cond: 'Do you hold the Administrator or krbtgt hash to pass?', onFail: 'Not yet, DCSync the domain first.' },
+    'dnsadmins-abuse': { cond: 'Are you a member of DNSAdmins?', onFail: 'Not a member, this path is closed.' },
+    'wsus-abuse': { cond: 'Is WSUS served over HTTP and can you inject an update?', onFail: 'HTTPS or no position, move on.' },
+    'sccm-enum': { cond: 'Did SCCM reveal a management point or a network-access-account credential?', onFail: 'Nothing exposed, pivot to another service.' },
+    'lateral-exec': { cond: 'Does the credential execute on the target (psexec/wmiexec/winrm)?', onFail: 'No exec, the account lacks local admin there.' },
+    'kerberos-tickets': { cond: 'Do you hold a usable ticket in the cache to reuse?', onFail: 'No ticket, request or forge one first.' },
+    // ---- pivot ----
+    'pivot-chisel-socks': { cond: 'Does the chisel SOCKS tunnel come up and proxy traffic?', onFail: 'No tunnel, check the server port and firewall.' },
+    'pivot-ligolo': { cond: 'Is the ligolo tunnel up with a route to the internal subnet?', onFail: 'No route, add the interface route and retry.' },
+    'pivot-scan-through': { cond: 'Do internal hosts answer through the tunnel (proxychains nmap)?', onFail: 'Nothing responds, confirm the route and tunnel first.' },
+    // ---- proof ----
+    'flag-hunt-linux': { cond: 'Can you read user.txt and root.txt with proof context visible?', onFail: 'Not readable yet, you lack the required access.' },
+    'flag-hunt-windows': { cond: 'Can you read user.txt and proof.txt with proof context visible?', onFail: 'Not readable yet, escalate further first.' },
+    // ---- web ----
+    'ssrf': { cond: 'Does the server fetch a URL you control (internal target or callback)?', onFail: 'No fetch, the parameter is not SSRFable.' },
+    'xxe': { cond: 'Does the XML parser resolve an external entity you define?', onFail: 'Entities disabled, try another injection point.' }
+
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
