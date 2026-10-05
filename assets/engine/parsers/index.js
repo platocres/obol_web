@@ -252,6 +252,13 @@
     // lead so the coach lights that exact module. Anchored and additive; unrelated output mints nothing.
     if (has('_parse_vulnmatch')) C._parse_vulnmatch(text, ws, source, facts);
 
+    // Connectivity: a foothold's own interface/route dump → the subnets it reaches (and multihomed);
+    // a pivot tool's setup output → the live tunnel. Powers the hub connectivity view.
+    if (has('_parse_local_net') && (/\bip\s+(?:-\d+\s+)?a(?:ddr)?\b|\bifconfig\b|\bip\s+route\b|\bipconfig\b|\broute\s+print\b/.test(lc) || /\binet\s+\d|IPv4 Address/i.test(text)))
+      C._parse_local_net(text, ws, source, facts);
+    if (has('_parse_tunnel') && (/\bchisel\b|\bligolo\b|\bsshuttle\b|\bdnscat|ssh\s+[^\n]*-[a-z]*d\b/.test(lc) || /\bchisel\b|ligolo|sshuttle|dnscat/i.test(text)))
+      C._parse_tunnel(text, ws, source, facts, command);
+
     // Output-shape fallback (runs last): recognize common output by its shape when the command-keyed
     // dispatch above did not key on it. Strictly additive and guarded, so it only fills gaps (a bare
     // port table, a raw HTTP response, a pasted AS-REP/TGS hash) and never alters a parsed result.

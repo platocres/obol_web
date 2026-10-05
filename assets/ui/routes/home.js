@@ -11,6 +11,10 @@
   var U = OBOL.util;
   function esc(s) { return U.esc(s); }
 
+  // Which tunnel tool the connectivity chooser is showing. Ligolo-ng is the recommended default
+  // (a real routed interface). Lives for the session; the selection just re-renders the panel.
+  var _tunnelSel = 'ligolo';
+
   // Extract IPs and CIDRs from arbitrary pasted text (obol-local `scope paste` filter).
   var IP_RE = /\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b/g;
   function extractScope(text) {
@@ -405,6 +409,118 @@
       + '<span class="hb-surf-d">' + esc(desc) + '</span></a>';
   }
 
+  // ── Connectivity: the pivots obol has charted + a tunnel-setup chooser ──
+  // Read the pivot-lane facts (minted by parsers/pivot.js) into one per-host projection.
+  function connData(eng) {
+    var fs = OBOL.store.factSet();
+    var SUP = OBOL.facts.ProofState.SUPPORTED;
+    var names = {};
+    (eng.targets || []).forEach(function (t) { names[t.ip || t.id] = t.hostname || ''; });
+    var byHost = {};
+    function host(ip) { return byHost[ip] || (byHost[ip] = { ip: ip, hostname: names[ip] || '', subnets: {}, multihomed: false, tunnels: [] }); }
+    (fs.facts || []).forEach(function (f) {
+      if (f.state !== SUP) return;
+      var ip = (f.scope || '').indexOf('host:') === 0 ? f.scope.slice(5) : '';
+      if (!ip) return;
+      if (f.kind === 'scan.local.interfaces' || f.kind === 'scan.local.routes') {
+        var h = host(ip); (f.value.subnets || []).forEach(function (s) { h.subnets[s] = 1; });
+      } else if (f.kind === 'host.multihomed') {
+        host(ip).multihomed = true;
+      } else if (f.kind === 'tunnel.socks' || f.kind === 'tunnel.route' || f.kind === 'tunnel.dns') {
+        host(ip).tunnels.push({ kind: f.kind.split('.')[1], via: f.value.via || '' });
+      }
+    });
+    return Object.keys(byHost).map(function (ip) {
+      var h = byHost[ip]; h.subnetList = Object.keys(h.subnets); return h;
+    }).filter(function (h) { return h.subnetList.length || h.tunnels.length || h.multihomed; });
+  }
+
+  // Fill a staging command's {{tokens}} from engagement params. {{user}} falls back to the
+  // username param; an unfilled token shows as <token> so the operator knows what to supply.
+  function fillStage(cmd, params) {
+    params = params || {};
+    return String(cmd).replace(/\{\{(\w+)\}\}/g, function (m, k) {
+      var v = params[k];
+      if ((v === undefined || v === '') && k === 'user') v = params.username;
+      return (v !== undefined && v !== '') ? v : '<' + k + '>';
+    });
+  }
+  function stageDone(id, i) { try { return localStorage.getItem('obol.stage:' + id + ':' + i) === '1'; } catch (e) { return false; } }
+
+  // The per-machine setup steps for one tunnel tool. Uses the SAME data-stage keys as the coach's
+  // staging guide (keyed on moveId), so a step ticked here shows ticked there and vice-versa.
+  function stageStepsHtml(tn, params) {
+    var steps = (tn.steps || []).map(function (st, i) {
+      var done = stageDone(tn.moveId, i), cmd = fillStage(st.cmd, params);
+      var whereLbl = st.where === 'host' ? 'On the target host' : 'On your Kali box';
+      return '<li class="stage-step stage-' + st.where + (done ? ' done' : '') + '">'
+        + '<button type="button" class="stage-check" data-stage="' + esc(tn.moveId) + '" data-stage-i="' + i + '" role="checkbox" aria-checked="' + (done ? 'true' : 'false') + '" aria-label="Mark step ' + (i + 1) + ' done">' + (done ? '✓' : '') + '</button>'
+        + '<div class="stage-body"><div class="stage-wl"><span class="stage-n">' + (i + 1) + '</span>'
+        + '<span class="stage-where stage-where-' + st.where + '">' + whereLbl + '</span>'
+        + '<span class="stage-title">' + esc(st.title) + '</span></div>'
+        + '<div class="stage-cmd"><code>' + esc(cmd) + '</code><button class="btn-copy stage-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button></div>'
+        + (st.note ? '<div class="stage-note">' + esc(st.note) + '</div>' : '')
+        + '</div></li>';
+    }).join('');
+    return '<ol class="stage-steps">' + steps + '</ol>';
+  }
+
+  // The tool picker: Ligolo-ng first and flagged "recommended", the rest swappable. Shows the
+  // selected tool's when-to-use line + its setup steps.
+  function tunnelChooser(params) {
+    var tools = OBOL.TUNNELS || [];
+    if (!tools.length) return '';
+    var sel = tools.filter(function (t) { return t.key === _tunnelSel; })[0] || tools[0];
+    var tabs = tools.map(function (t) {
+      var on = t.key === sel.key;
+      return '<button type="button" class="conn-tool' + (on ? ' on' : '') + '" data-tunnel-sel="' + esc(t.key) + '" aria-pressed="' + (on ? 'true' : 'false') + '">'
+        + '<span class="conn-tool-n">' + esc(t.name) + '</span>'
+        + (t.rec ? '<span class="conn-rec">recommended</span>' : '')
+        + '</button>';
+    }).join('');
+    return '<div class="conn-chooser">'
+      + '<div class="conn-tool-row" role="group" aria-label="Choose a tunnel tool">' + tabs + '</div>'
+      + '<div class="conn-sel"><p class="conn-sel-when">' + esc(sel.when || sel.summary) + '</p>'
+      + stageStepsHtml(sel, params) + '</div></div>';
+  }
+
+  // You → pivot host → reachable subnet, rendered as nodes carrying their own text (so the graphic
+  // is never the only carrier of meaning). The glow on a live edge is decorative CSS; the tunnel
+  // state is also written as a text tag ("via ligolo" / "no tunnel yet").
+  function connMap(pivots, params) {
+    var lhost = (params && params.lhost) || 'your box';
+    return '<div class="conn-map" role="group" aria-label="Pivot connectivity map">' + pivots.map(function (h) {
+      var label = h.hostname || h.ip;
+      var subs = h.subnetList.length ? h.subnetList.join(', ') : 'subnet unknown';
+      var via = h.tunnels.length ? ('via ' + h.tunnels.map(function (t) { return t.via || t.kind; }).join(', ')) : '';
+      var live = h.tunnels.length;
+      return '<div class="conn-row">'
+        + '<span class="conn-node conn-you">' + OBOL.ic('box') + '<span class="conn-node-l">You</span><span class="conn-node-s">' + esc(lhost) + '</span></span>'
+        + '<span class="conn-edge' + (live ? ' conn-edge-live' : '') + '"><span class="conn-edge-line" aria-hidden="true"></span>'
+        + '<span class="conn-edge-tag' + (live ? '' : ' conn-edge-off') + '">' + esc(via || 'no tunnel yet') + '</span></span>'
+        + '<span class="conn-node conn-pivot">' + OBOL.ic('host') + '<span class="conn-node-l">' + esc(label) + '</span>'
+        + (h.hostname ? '<span class="conn-node-s">' + esc(h.ip) + '</span>' : '') + (h.multihomed ? '<span class="conn-tag-mh">multihomed</span>' : '') + '</span>'
+        + '<span class="conn-edge"><span class="conn-edge-line" aria-hidden="true"></span></span>'
+        + '<span class="conn-node conn-net">' + OBOL.ic('disk') + '<span class="conn-node-l">' + esc(subs) + '</span><span class="conn-node-s">reachable subnet</span></span>'
+        + '</div>';
+    }).join('') + '</div>';
+  }
+
+  function connPanel() {
+    var eng = OBOL.store.active();
+    var params = eng.params || {};
+    var pivots = connData(eng);
+    var map = pivots.length
+      ? connMap(pivots, params)
+      : '<div class="conn-empty">No pivots charted yet. Paste <code>ip a</code> or <code>ip route</code> from a foothold and obol maps the subnets it can reach, then set up a tunnel below to reach them.</div>';
+    return '<div class="hb-conn"><div class="hb-sec-h"><h2>Connectivity</h2>'
+      + (pivots.length ? '<span class="hb-sec-n">' + pivots.length + ' pivot' + (pivots.length > 1 ? 's' : '') + '</span>' : '')
+      + '</div>' + map
+      + '<div class="conn-chooser-h"><h3>Set up a tunnel</h3><span class="conn-chooser-sub">pick a tool, follow the steps on each machine</span></div>'
+      + tunnelChooser(params)
+      + '</div>';
+  }
+
   function hubDashboard() {
     var eng = OBOL.store.active();
     var infos = targetInfos(eng);
@@ -477,8 +593,7 @@
       + surfaceCard('#/findings', 'spark', 'Findings', null, 'Proof-bound findings, grouped for the report.')
       + surfaceCard('#/report', 'disk', 'Report', null, 'The OSCP writeup, exported md / PDF / docx.')
       + '</div>'
-      + '<div class="hb-conn"><div class="hb-sec-h"><h2>Connectivity</h2></div>'
-      + '<div class="hb-conn-ph">Pivots and tunnels will appear here as you build them.</div></div>'
+      + connPanel()
       + '<div class="hb-recent"><div class="hb-sec-h"><h2>Recent activity</h2><a class="hb-sec-more" href="#/history">Run Log →</a></div>'
       + (acts ? '<ul class="hb-log">' + acts + '</ul>' : '<div class="hb-log-empty">Nothing yet. Your commands and proofs will log here.</div>')
       + '</div></aside>'
@@ -581,6 +696,27 @@
       OBOL.router.render();
     });
     U.on(mount, 'click', '.hb-show-all', function () { try { localStorage.setItem('obol.hubBoard', 'all'); } catch (x) {} OBOL.router.render(); });
+
+    // connectivity handlers. Bound ONCE on the persistent #view: the router re-runs mounted() on
+    // every in-place render, so a delegated U.on would stack up — harmless for idempotent handlers,
+    // but a stacked *toggle* (the step tick) fires an even number of times and cancels itself out.
+    if (!mount._obolConnBound) {
+      mount._obolConnBound = true;
+      // swap the selected tunnel tool (re-renders to show its setup steps)
+      U.on(mount, 'click', '[data-tunnel-sel]', function (e, t) {
+        _tunnelSel = t.getAttribute('data-tunnel-sel');
+        OBOL.router.render();
+      });
+      // tick a setup step done, in place (shared localStorage key with the coach's staging guide)
+      U.on(mount, 'click', '[data-stage]', function (e, t) {
+        var id = t.getAttribute('data-stage'), i = t.getAttribute('data-stage-i'), key = 'obol.stage:' + id + ':' + i;
+        var was; try { was = localStorage.getItem(key) === '1'; localStorage.setItem(key, was ? '0' : '1'); } catch (x) { was = false; }
+        var on = !was;
+        t.setAttribute('aria-checked', on ? 'true' : 'false');
+        t.innerHTML = on ? '✓' : '';
+        var li = t.closest('.stage-step'); if (li) li.classList.toggle('done', on);
+      });
+    }
 
     // library: open / delete
     U.on(mount, 'click', '.lib-open', function (e, t) {

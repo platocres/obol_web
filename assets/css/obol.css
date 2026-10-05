@@ -237,8 +237,11 @@ main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-widt
 .hb-tile .hb-v { font-family: var(--mono); font-size: 26px; font-weight: 800; color: var(--accent-2); margin-top: 3px; }
 .hb-tile .hb-d { font-size: 11px; color: var(--text-2); margin-top: 2px; }
 
-.hb-grid { display: grid; grid-template-columns: 1.7fr 1fr; gap: 22px; align-items: start; }
-@media (max-width: 1080px) { .hb-grid { grid-template-columns: 1fr; gap: 26px; } }
+.hb-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+@media (max-width: 1080px) { .hb-grid { grid-template-columns: minmax(0, 1fr); gap: 26px; } }
+/* min-width:0 lets a column shrink below the min-content of a no-wrap command line (stage-cmd code is
+   white-space:pre) instead of blowing the track out past the viewport. */
+.hb-col-main, .hb-col-rail { min-width: 0; }
 .hb-sec-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .hb-sec-h h2 { font-size: 15px; font-weight: 800; margin: 0; letter-spacing: -.01em; color: var(--text); }
 .hb-sec-n { font-family: var(--mono); font-size: 11px; color: var(--muted); }
@@ -288,7 +291,41 @@ main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-widt
 .hb-surf-n { font-family: var(--mono); font-size: 11px; color: var(--text-2); font-weight: 600; }
 .hb-surf-d { grid-area: d; font-size: 11px; color: var(--text-2); line-height: 1.4; }
 .hb-conn, .hb-recent { margin-bottom: 16px; }
-.hb-conn-ph { font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 9px; padding: 14px; text-align: center; }
+.conn-empty { font-size: 12px; color: var(--text-2); line-height: 1.5; border: 1px dashed var(--line); border-radius: 9px; padding: 13px; }
+.conn-empty code { font-family: var(--mono); font-size: 11px; color: var(--accent-2); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+/* pivot map: You → pivot → subnet. Nodes carry their own text; the edge glow is decorative. */
+.conn-map { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.conn-row { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.conn-node { flex: 1 1 0; min-width: 84px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 9px 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--surf1); }
+.conn-node .ic { width: 17px; height: 17px; color: var(--accent-2); }
+.conn-you .ic { color: var(--ph-recon); }
+.conn-pivot .ic { color: var(--g-next); }
+.conn-net .ic { color: var(--ph-escalate); }
+.conn-node-l { font-size: 11.5px; font-weight: 800; color: var(--text); word-break: break-word; line-height: 1.25; }
+.conn-node-s { font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
+.conn-tag-mh { font-family: var(--mono); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--g-next); background: color-mix(in srgb, var(--g-next) 14%, transparent); border: 1px solid color-mix(in srgb, var(--g-next) 40%, var(--line)); border-radius: 999px; padding: 1px 6px; margin-top: 2px; }
+.conn-edge { flex: 0 0 46px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0 2px; }
+.conn-edge-line { width: 100%; height: 2px; border-radius: 2px; background: var(--line-hot); }
+.conn-edge-live .conn-edge-line { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 30%, transparent), var(--accent), color-mix(in srgb, var(--accent) 30%, transparent)); background-size: 200% 100%; box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 65%, transparent); animation: conn-flow 1.8s linear infinite; }
+.conn-edge-tag { font-family: var(--mono); font-size: 9px; font-weight: 700; color: var(--accent); text-align: center; line-height: 1.2; word-break: break-word; }
+.conn-edge-tag.conn-edge-off { color: var(--muted); font-weight: 500; }
+@keyframes conn-flow { from { background-position: 200% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .conn-edge-live .conn-edge-line { animation: none; } }
+@media (max-width: 420px) { .conn-row { flex-direction: column; align-items: stretch; } .conn-edge { flex-basis: auto; flex-direction: row; justify-content: flex-start; gap: 8px; padding: 2px 0; } .conn-edge-line { width: 22px; } }
+/* tunnel-tool chooser */
+.conn-chooser-h { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 8px; flex-wrap: wrap; }
+.conn-chooser-h h3 { font-size: 12.5px; font-weight: 800; color: var(--text); margin: 0; }
+.conn-chooser-sub { font-size: 11px; color: var(--muted); }
+.conn-tool-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.conn-tool { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--text-2); background: var(--surf1); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; transition: .14s; }
+.conn-tool:hover { border-color: var(--line-hot); color: var(--text); }
+.conn-tool.on { color: var(--text); background: color-mix(in srgb, var(--accent) 16%, var(--surf2)); border-color: var(--accent); }
+.conn-tool.on .conn-tool-n { color: color-mix(in srgb, var(--accent) 60%, var(--text)); }
+.conn-rec { font-size: 8.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--g-next); background: color-mix(in srgb, var(--g-next) 15%, transparent); border: 1px solid color-mix(in srgb, var(--g-next) 40%, var(--line)); border-radius: 999px; padding: 1px 5px; }
+.conn-sel { border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--accent) 4%, var(--surf1)); padding-top: 4px; }
+.conn-sel-when { font-size: 12px; color: var(--text-2); line-height: 1.5; margin: 9px 13px 4px; }
+.conn-sel .stage-steps { padding-bottom: 12px; }
+@media (prefers-reduced-motion: reduce) { .conn-tool { transition: none; } }
 .hb-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
 .hb-log li { font-size: 12px; color: var(--text-2); display: flex; gap: 9px; }
 .hb-log-t { font-family: var(--mono); color: var(--muted); flex: none; }
