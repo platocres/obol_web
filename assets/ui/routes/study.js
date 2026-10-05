@@ -708,7 +708,7 @@
     function laneCard(L) {
       var pr = study().laneProgress(L.key), pct = pr.total ? Math.round(pr.studied / pr.total * 100) : 0;
       return '<button type="button" class="study-lane-card active lane-' + L.key + '" data-open="' + U.attr(L.firstId) + '">'
-        + '<div class="study-lane-name">' + esc(L.name) + ' <span class="study-lane-badge">' + L.count + ' steps</span></div>'
+        + '<div class="study-lane-name"><span class="sln-t">' + esc(L.name) + '</span><span class="study-lane-badge">' + L.count + ' steps</span></div>'
         + '<div class="study-lane-desc">' + esc(L.desc) + '</div>'
         + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:' + pct + '%"></span></div>'
         + '<span class="study-lane-go">' + (pr.studied ? pr.studied + ' / ' + pr.total + ' studied · continue →' : 'Start the path →') + '</span></div></button>';
