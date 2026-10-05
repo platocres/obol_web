@@ -64,7 +64,8 @@
    "os": [],
    "requires_all": [],
    "requires_any": [
-    "http.reachable"
+    "http.reachable",
+    "web.vhost"
    ],
    "produces": [
     "web.content_map"

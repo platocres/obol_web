@@ -147,6 +147,7 @@
       { name: 'DPAPI-protected secrets', moves: ['dpapi-secrets'] },
       { name: 'LSASS memory dump', moves: ['lsass-dump-onbox'] },
       { name: 'Missing patches (wesng)', moves: ['wesng-patch-gaps'] },
+      { name: 'Patch-gap / kernel CVE exploitation', moves: ['windows-patch-exploit'], note: 'run the public LPE a missing KB flags, Windows parallel of the Linux kernel path' },
       { name: 'Defensive posture (AV / AppLocker / CLM)', moves: ['defense-enum'] },
       { name: 'DLL search-order hijack', moves: ['windows-dll-hijack'], note: 'writable-path or phantom DLL hijack of a privileged process' },
       { name: 'Writable scheduled-task binary', moves: ['windows-schtask-abuse'], note: 'a SYSTEM scheduled task that runs a path you can overwrite' },
@@ -163,7 +164,7 @@
       { name: 'Ticket forging (golden / silver / diamond)', moves: ['golden-ticket', 'silver-ticket', 'diamond-ticket'] },
       { name: 'Cross-domain (trusts / SID history)', moves: ['trust-enum', 'sid-history-abuse'] },
       { name: 'Critical CVEs (Zerologon / NoPac / PrintNightmare / MS14-068)', moves: ['zerologon-exploit', 'nopac', 'printnightmare', 'ms14-068'] },
-      { name: 'Policy / service abuse (GPO / DNSAdmins / WSUS / SCCM)', moves: ['gpo-abuse', 'dnsadmins-abuse', 'wsus-abuse', 'sccm-enum'] },
+      { name: 'Policy / service abuse (GPO / DNSAdmins / WSUS / SCCM)', moves: ['gpo-abuse', 'dnsadmins-abuse', 'wsus-abuse', 'sccm-enum', 'sccm-exploit'] },
       { name: 'Domain takeover with the owned hash (PtH as DA)', moves: ['own-domain-pth'] },
     ] },
     'pivot': { label: 'Pivoting into the internal network', expect: [

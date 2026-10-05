@@ -107,6 +107,8 @@
     'windows-dll-hijack': { cond: 'Does a privileged process load a DLL from a writable or missing path?', onFail: 'No hijackable load → try service permissions or a token.' },
     'windows-schtask-abuse': { cond: 'Is there a SYSTEM task whose target file (or the task itself) you can write?', onFail: 'Nothing writable → pivot to a service or token path.' },
     'aws-credential-abuse': { cond: 'Do the stolen keys authenticate, and what can the role do?', onFail: 'Keys expired or denied → re-pull from the metadata service, mind the session token.' },
+    'windows-patch-exploit': { cond: 'Does wesng/Watson name a missing KB with a reliable public exploit?', onFail: 'Fully patched → focus on tokens, services, and stored credentials.' },
+    'sccm-exploit': { cond: 'Can you read the Network Access Account from the management point?', onFail: 'No NAA returned → try relaying the MP, or move to another AD path.' },
 
     // ---- linux privesc ----
     'capabilities': { cond: 'Does a binary carry an abusable capability (cap_setuid, cap_dac_read_search)?', onFail: 'No usable cap, pivot to SUID or sudo.' },

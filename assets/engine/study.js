@@ -136,7 +136,7 @@
     'sudo-abuse': 'Sudo, SUID & Capabilities', 'suid-gtfobins': 'Sudo, SUID & Capabilities', 'capabilities': 'Sudo, SUID & Capabilities', 'linux-ld-preload': 'Sudo, SUID & Capabilities',
     'cron-abuse': 'Cron & Writable Files', 'writable-passwd': 'Cron & Writable Files', 'nfs-squash': 'Cron & Writable Files', 'linux-path-hijack': 'Cron & Writable Files',
     'lxc-lxd-escape': 'Container Escape', 'docker-socket': 'Container Escape',
-    'linux-kernel-exploit': 'Kernel & LPE CVEs',
+    'linux-kernel-exploit': 'Kernel & LPE CVEs', 'windows-patch-exploit': 'Kernel & LPE CVEs',
     'linux-persistence': 'Persistence',
     // windows lane
     'windows-enum': 'Enumeration', 'wesng-patch-gaps': 'Enumeration', 'defense-enum': 'Enumeration',
@@ -170,7 +170,7 @@
     'lateral-exec': 'Lateral Movement', 'ticket-reuse': 'Lateral Movement',
     'dump-secrets': 'Dumping & Domain Dominance', 'dcsync': 'Dumping & Domain Dominance', 'own-domain-pth': 'Dumping & Domain Dominance', 'sid-history-abuse': 'Dumping & Domain Dominance',
     'zerologon-check': 'AD CVEs', 'zerologon-exploit': 'AD CVEs', 'eternalblue': 'AD CVEs', 'nopac': 'AD CVEs', 'printnightmare': 'AD CVEs', 'ms14-068': 'AD CVEs',
-    'gpo-abuse': 'Service & Policy Abuse', 'dnsadmins-abuse': 'Service & Policy Abuse', 'wsus-abuse': 'Service & Policy Abuse', 'sccm-enum': 'Service & Policy Abuse',
+    'gpo-abuse': 'Service & Policy Abuse', 'dnsadmins-abuse': 'Service & Policy Abuse', 'wsus-abuse': 'Service & Policy Abuse', 'sccm-enum': 'Service & Policy Abuse', 'sccm-exploit': 'Service & Policy Abuse',
     // proof lane
     'flag-hunt-linux': 'Proof & Capture', 'flag-hunt-windows': 'Proof & Capture',
   };
@@ -568,7 +568,7 @@
     { key: 'shell-linux', tier: 'access', port: '', proto: '', fam: 'access', label: 'You have a shell on Linux', signal: 'You landed a foothold, so the box itself is now the signal. Before escalating, enumerate: sudo rights, SUID bits, capabilities, cron jobs, and loot all point the way to root.', seed: ['shell-listener', 'shell-revshell-linux', 'shell-pty-upgrade', 'linux-remote-exec'], lanes: ['linux'] },
     { key: 'shell-windows', tier: 'access', port: '', proto: '', fam: 'access', label: 'You have a shell on Windows', signal: 'You landed on a Windows host. Check your privileges first: a single enabled token privilege, a weak service, or a saved credential is usually the whole way to SYSTEM.', seed: ['shell-listener', 'shell-revshell-windows'], lanes: ['windows'] },
     { key: 'offline-hash', tier: 'access', port: '', proto: '', fam: 'access', label: 'You have a hash (crack it offline)', signal: 'A hash in hand is a credential you have not spent yet. Identify the type, pick the matching mode, and crack it offline where there is no lockout.', seed: ['crack-identify', 'crack-ntlm', 'crack-netntlmv2', 'crack-kerberoast', 'crack-asrep-offline', 'crack-shadow', 'crack-archive', 'crack-mscache2', 'crack-asrep', 'crack-tgs'] },
-    { key: 'domain-cred', tier: 'access', port: '', proto: '', fam: 'ad', label: 'You have a valid domain credential', signal: 'One domain account changes everything. Map the attack paths, roast service accounts, abuse ACLs and delegation, and walk the graph toward Domain Admin.', seed: ['bloodhound-collect', 'ad-path-manual', 'powerview-enum', 'ad-psdotnet-enum', 'kerberoast', 'ad-acl-abuse', 'bloodyad-acl', 'gpo-abuse', 'dnsadmins-abuse', 'shadow-credentials', 'delegation-abuse', 'getst-impersonation', 'unconstrained-delegation', 'adcs-esc', 'cert-authenticate', 'dcsync', 'golden-ticket', 'silver-ticket', 'diamond-ticket', 'ticket-reuse', 'sid-history-abuse', 'trust-enum', 'laps-read', 'gmsa-read', 'own-domain-pth', 'zerologon-check', 'zerologon-exploit', 'nopac', 'printnightmare', 'ms14-068', 'wsus-abuse', 'sccm-enum'] },
+    { key: 'domain-cred', tier: 'access', port: '', proto: '', fam: 'ad', label: 'You have a valid domain credential', signal: 'One domain account changes everything. Map the attack paths, roast service accounts, abuse ACLs and delegation, and walk the graph toward Domain Admin.', seed: ['bloodhound-collect', 'ad-path-manual', 'powerview-enum', 'ad-psdotnet-enum', 'kerberoast', 'ad-acl-abuse', 'bloodyad-acl', 'gpo-abuse', 'dnsadmins-abuse', 'shadow-credentials', 'delegation-abuse', 'getst-impersonation', 'unconstrained-delegation', 'adcs-esc', 'cert-authenticate', 'dcsync', 'golden-ticket', 'silver-ticket', 'diamond-ticket', 'ticket-reuse', 'sid-history-abuse', 'trust-enum', 'laps-read', 'gmsa-read', 'own-domain-pth', 'zerologon-check', 'zerologon-exploit', 'nopac', 'printnightmare', 'ms14-068', 'wsus-abuse', 'sccm-enum', 'sccm-exploit'] },
     { key: 'pivot', tier: 'access', port: '', proto: '', fam: 'access', label: 'You have a foothold on a dual-homed host', signal: 'The box you own can reach a network you cannot. Enumerate its interfaces and routes, stand up a tunnel, and scan the subnet behind it.', seed: [], lanes: ['pivot'] },
     { key: 'proof', tier: 'access', port: '', proto: '', fam: 'access', label: 'You have root or SYSTEM (capture the proof)', signal: 'The objective. Grab the user and root flags, and capture the proof the report needs.', seed: [], lanes: ['proof'] },
   ];
