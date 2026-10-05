@@ -334,6 +334,157 @@
     return '<ul class="lib-list">' + rows + '</ul>';
   }
 
+  // ---- the engagement hub: the active engagement at a glance (all targets + engagement-wide
+  //      surfaces). Everything below is a projection of the fact ledger, so nothing is invented. ----
+  var ACC_BADGE = {
+    privileged: { label: 'OWNED', cls: 'hb-acc-root', rank: 4 },
+    foothold: { label: 'FOOTHOLD', cls: 'hb-acc-foot', rank: 3 },
+    credentialed: { label: 'CREDS', cls: 'hb-acc-cred', rank: 2 },
+    enumerated: { label: 'ENUM', cls: 'hb-acc-enum', rank: 1 },
+    discovered: { label: 'SCAN', cls: 'hb-acc-disc', rank: 0 },
+  };
+  function hostLevel(f) {
+    if (f.has('access.system') || f.has('access.admin') || f.has('access.root')) return 'privileged';
+    if (f.has('foothold.windows') || f.has('foothold.linux') || f.has('access.shell') || f.has('winrm.authenticated') || f.has('foothold.webshell')) return 'foothold';
+    if (f.has('credential.available') || f.has('credential.candidate')) return 'credentialed';
+    if (f.facts.some(function (x) { return x.state === 'supported' && x.kind.indexOf('target.') !== 0 && x.kind.indexOf('host.') !== 0; })) return 'enumerated';
+    return 'discovered';
+  }
+  function hostPorts(f) {
+    var seen = {}, out = [];
+    f.facts.forEach(function (x) { if (x.state !== 'supported') return; var p = (x.value || {}).port; if (p != null && !seen[p]) { seen[p] = 1; out.push(+p); } });
+    return out.sort(function (a, b) { return a - b; });
+  }
+  function hostFlags(f) {
+    var n = 0; ['objective.root_flag', 'objective.local_flag', 'objective.flag'].forEach(function (k) { n += f.values(k).length; });
+    return n;
+  }
+  function pinnedSet(eng) { return ((eng.ui || {}).pinnedTargets) || []; }
+  function boardMode() { try { return localStorage.getItem('obol.hubBoard') || 'all'; } catch (e) { return 'all'; } }
+
+  // gather per-target projection used by the board + vitals
+  function targetInfos(eng) {
+    var pack = OBOL.packs.actions();
+    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
+    var pins = pinnedSet(eng);
+    return (eng.targets || []).map(function (t) {
+      var ip = t.ip || t.id;
+      var f = OBOL.store.factSetForTarget(ip);
+      var lvl = hostLevel(f);
+      var moves = OBOL.pack.nextActions(f, pack, { focusPrefixes: focus });
+      return {
+        t: t, ip: ip, host: t.hostname || '', os: t.os || '',
+        lvl: lvl, badge: ACC_BADGE[lvl], ports: hostPorts(f), flags: hostFlags(f),
+        next: moves.length ? moves[0].title : '', pinned: pins.indexOf(t.id) >= 0,
+      };
+    });
+  }
+
+  function targetCard(info) {
+    var b = info.badge;
+    var ports = info.ports.slice(0, 7).map(function (p) { return '<span class="hb-port">' + p + '</span>'; }).join('')
+      + (info.ports.length > 7 ? '<span class="hb-port hb-port-more">+' + (info.ports.length - 7) + '</span>' : '');
+    var flags = info.flags ? '<span class="hb-flags">' + OBOL.ic('flag') + ' ' + info.flags + '</span>' : '<span class="hb-flags hb-noflag">no flags</span>';
+    return '<article class="hb-tcard hb-lvl-' + info.lvl + (info.pinned ? ' is-pinned' : '') + '">'
+      + '<button class="hb-pin" type="button" data-hub-pin="' + U.attr(info.t.id) + '" aria-pressed="' + (info.pinned ? 'true' : 'false') + '" aria-label="' + (info.pinned ? 'Unpin' : 'Pin') + ' ' + U.attr(info.ip) + '" title="' + (info.pinned ? 'Unpin' : 'Pin') + ' this target">' + OBOL.ic('pin') + '</button>'
+      + '<a class="hb-tcard-main" href="#/target/' + U.attr(info.ip) + '">'
+      + '<div class="hb-tcard-top"><span class="hb-tname">' + esc(info.host || info.ip) + '</span>'
+      + (info.host ? '<span class="hb-tip">' + esc(info.ip) + '</span>' : '')
+      + '<span class="hb-acc ' + b.cls + '">' + b.label + '</span></div>'
+      + (info.os ? '<div class="hb-tos">' + esc(info.os) + '</div>' : '<div class="hb-tos hb-tos-empty">not yet fingerprinted</div>')
+      + '<div class="hb-ports">' + (ports || '<span class="hb-port-none">no ports yet</span>') + '</div>'
+      + '<div class="hb-tfoot">' + flags
+      + (info.next ? '<span class="hb-next" title="' + U.attr(info.next) + '">→ ' + esc(info.next) + '</span>'
+          : (info.lvl === 'privileged' ? '<span class="hb-next hb-next-done">owned</span>' : ''))
+      + '</div></a></article>';
+  }
+
+  function surfaceCard(href, ic, name, count, desc) {
+    return '<a class="hb-surf" href="' + href + '"><span class="hb-surf-ic">' + OBOL.ic(ic) + '</span>'
+      + '<span class="hb-surf-t">' + esc(name) + (count != null ? '<span class="hb-surf-n">' + esc(count) + '</span>' : '') + '</span>'
+      + '<span class="hb-surf-d">' + esc(desc) + '</span></a>';
+  }
+
+  function hubDashboard() {
+    var eng = OBOL.store.active();
+    var infos = targetInfos(eng);
+    var mode = boardMode();
+    // aggregate access breakdown
+    var owned = 0, foot = 0, untouched = 0;
+    infos.forEach(function (i) { if (i.lvl === 'privileged') owned++; else if (i.lvl === 'foothold' || i.lvl === 'credentialed') foot++; else untouched++; });
+    var totFlags = infos.reduce(function (a, i) { return a + i.flags; }, 0);
+    var creds = (OBOL.creds && OBOL.creds.gather()) || [];
+
+    // the "your next move" anchor — the top-ranked engagement-wide move
+    var pack = OBOL.packs.actions();
+    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
+    var engMoves = OBOL.pack.nextActions(OBOL.store.factSet(), pack, { focusPrefixes: focus });
+    var nm = engMoves[0];
+    var nmHtml;
+    if (nm) {
+      var v = OBOL.command.fillCommand(nm, OBOL.store.factSet(), { params: eng.params || {}, profile: eng.profile }, 0);
+      nmHtml = '<div class="hb-anchor"><div class="hb-anchor-l">Your next move</div>'
+        + '<div class="hb-anchor-body"><span class="hb-anchor-t">' + esc(nm.title) + '</span>'
+        + '<code class="hb-anchor-cmd">' + esc(v.filled) + '</code>'
+        + '<button class="btn-copy hb-copy" data-copy="' + U.attr(v.filled) + '">copy</button></div>'
+        + '<a class="hb-anchor-more" href="#/path">Full coach →</a></div>';
+    } else {
+      nmHtml = '<div class="hb-anchor hb-anchor-empty"><div class="hb-anchor-l">Your next move</div>'
+        + '<div class="hb-anchor-body">Paste some evidence and the coach will rank your next command here.</div>'
+        + '<a class="hb-anchor-more" href="#/evidence">Go to Evidence →</a></div>';
+    }
+
+    // target board, filtered by the Show control
+    var shown = infos.slice();
+    if (mode === 'pinned') shown = infos.filter(function (i) { return i.pinned; });
+    else if (mode === 'attention') shown = infos.filter(function (i) { return i.lvl !== 'privileged' && i.next; });
+    // always put pinned first, then by access rank (most progressed first), stable otherwise
+    shown.sort(function (a, b) { return (b.pinned - a.pinned) || (b.badge.rank - a.badge.rank); });
+    var board = infos.length
+      ? (shown.length ? '<div class="hb-board">' + shown.map(targetCard).join('') + '</div>'
+          : '<div class="coach-empty">No targets match this filter. <button class="hb-show-all" type="button">Show all</button></div>')
+      : '<div class="coach-empty">No targets yet. <a href="#/targets">Add one</a> or paste a scan on <a href="#/evidence">Evidence</a> and obol files new hosts automatically.</div>';
+
+    var showCtl = ['all', 'pinned', 'attention'].map(function (m) {
+      var lbl = m === 'all' ? 'All' : (m === 'pinned' ? 'Pinned' : 'Needs attention');
+      return '<button type="button" class="hb-show' + (m === mode ? ' on' : '') + '" data-hub-show="' + m + '" aria-pressed="' + (m === mode ? 'true' : 'false') + '">' + lbl + '</button>';
+    }).join('');
+
+    // recent activity (last few run-log entries)
+    var acts = (eng.activities || []).slice(-5).reverse().map(function (a) {
+      return '<li><span class="hb-log-t">' + esc(ago(a.at) || '') + '</span>' + esc(a.title || a.summary || a.cmd || 'activity') + '</li>';
+    }).join('');
+
+    return '<section class="hub" aria-label="Engagement hub">'
+      + nmHtml
+      + '<div class="hb-vitals">'
+      + '<div class="hb-tile"><div class="hb-k">Targets</div><div class="hb-v">' + infos.length + '</div><div class="hb-d">' + owned + ' owned · ' + foot + ' foothold · ' + untouched + ' untouched</div></div>'
+      + '<div class="hb-tile"><div class="hb-k">Flags</div><div class="hb-v">' + totFlags + '</div><div class="hb-d">captured across all boxes</div></div>'
+      + '<div class="hb-tile"><div class="hb-k">Credentials</div><div class="hb-v">' + creds.length + '</div><div class="hb-d">usable across the engagement</div></div>'
+      + '</div>'
+      + '<div class="hb-grid">'
+      + '<section class="hb-col-main" aria-label="Targets">'
+      + '<div class="hb-sec-h"><h2>Targets</h2><span class="hb-sec-n">' + infos.length + ' total</span>'
+      + '<span class="hb-show-seg" role="group" aria-label="Show">' + showCtl + '</span>'
+      + '<a class="hb-sec-more" href="#/targets">All targets →</a></div>'
+      + board + '</section>'
+      + '<aside class="hb-col-rail" aria-label="Engagement surfaces">'
+      + '<div class="hb-sec-h"><h2>Surfaces</h2></div>'
+      + '<div class="hb-surfs">'
+      + surfaceCard('#/map', 'host', 'Map', infos.length, 'Hosts, services, creds and the domain as one graph.')
+      + surfaceCard('#/domain', 'shield', 'Domain', null, 'SharpHound census and the owned-to-DA attack paths.')
+      + surfaceCard('#/creds', 'lock', 'Creds', creds.length, 'The credential reuse matrix across every host.')
+      + surfaceCard('#/findings', 'spark', 'Findings', null, 'Proof-bound findings, grouped for the report.')
+      + surfaceCard('#/report', 'disk', 'Report', null, 'The OSCP writeup, exported md / PDF / docx.')
+      + '</div>'
+      + '<div class="hb-conn"><div class="hb-sec-h"><h2>Connectivity</h2></div>'
+      + '<div class="hb-conn-ph">Pivots and tunnels will appear here as you build them.</div></div>'
+      + '<div class="hb-recent"><div class="hb-sec-h"><h2>Recent activity</h2><a class="hb-sec-more" href="#/history">Run Log →</a></div>'
+      + (acts ? '<ul class="hb-log">' + acts + '</ul>' : '<div class="hb-log-empty">Nothing yet. Your commands and proofs will log here.</div>')
+      + '</div></aside>'
+      + '</div></section>';
+  }
+
   function render() {
     var active = OBOL.store.active();
     var prof = (active || {}).profile || {};
@@ -344,6 +495,7 @@
       + '<h1 class="route-h1">Engagements</h1>'
       + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.'
       + ' <span class="kbd-hint">Tip: press <kbd>' + (navigator.platform && /mac/i.test(navigator.platform) ? '⌘' : 'Ctrl') + '</kbd>+<kbd>K</kbd> anywhere to search commands.</span></p>'
+      + (configured ? hubDashboard() : '')
       + '<div class="eng-top">' + (configured ? activePanel() : gettingStarted()) + workspacePanel() + '</div>'
       + '<div class="eng-library"><div class="eng-library-head"><h2 class="coach-sec-h">Engagement Library</h2>'
       + '<details class="eng-danger-toggle"><summary>Manage / Reset</summary>'
@@ -406,6 +558,29 @@
       var nm = document.getElementById('eng-name');
       if (nm) setTimeout(function () { try { nm.focus(); } catch (e) {} }, 300);
     });
+
+    // hub: copy the next-move anchor command
+    U.on(mount, 'click', '.btn-copy', function (e, b) {
+      U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    // hub: pin / unpin a target (stored per engagement; the board floats pinned first)
+    U.on(mount, 'click', '[data-hub-pin]', function (e, t) {
+      e.preventDefault(); e.stopPropagation();
+      var id = t.getAttribute('data-hub-pin');
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        var pins = eng.ui.pinnedTargets = eng.ui.pinnedTargets || [];
+        var i = pins.indexOf(id);
+        if (i >= 0) pins.splice(i, 1); else pins.push(id);
+      }, 'ui');
+      OBOL.router.render();
+    });
+    // hub: the Show control (All / Pinned / Needs attention), remembered per browser
+    U.on(mount, 'click', '[data-hub-show]', function (e, t) {
+      try { localStorage.setItem('obol.hubBoard', t.getAttribute('data-hub-show')); } catch (x) {}
+      OBOL.router.render();
+    });
+    U.on(mount, 'click', '.hb-show-all', function () { try { localStorage.setItem('obol.hubBoard', 'all'); } catch (x) {} OBOL.router.render(); });
 
     // library: open / delete
     U.on(mount, 'click', '.lib-open', function (e, t) {
