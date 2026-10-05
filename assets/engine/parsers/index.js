@@ -201,7 +201,7 @@
     if (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0) C._parse_http_metadata(text, ws, source, facts);
     if (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'katana', 'hakrawler'].some(function (w) { return lc.indexOf(w) >= 0; })) C._parse_web_surface(text, ws, command, source, facts);
     if (['snmpwalk', 'snmp-check', 'onesixtyone'].some(function (t) { return lc.indexOf(t) >= 0; })) C._parse_snmp_output(text, ws, command, source, facts);
-    if (['mysql', 'mssqlclient', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli'].some(function (t) { return lc.indexOf(t) >= 0; })) C._parse_database_output(text, ws, command, source, facts);
+    if (['mysql', 'mssqlclient', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli', 'sqlplus', 'odat'].some(function (t) { return lc.indexOf(t) >= 0; })) C._parse_database_output(text, ws, command, source, facts);
     if (lc.indexOf('sqlite3') >= 0 && has('_parse_sqlite_dump')) C._parse_sqlite_dump(text, ws, source, facts);
     if (has('_has_notable_programs') && C._has_notable_programs(text)) C._parse_notable_programs(text, ws, source, facts);
     if ((' ' + lc + ' ').indexOf('ftp ') >= 0 || lc.indexOf('lftp') >= 0) C._parse_ftp_output(text, ws, command, source, facts);

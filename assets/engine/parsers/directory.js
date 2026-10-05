@@ -936,4 +936,73 @@
   }
   C._parse_klist = _parse_klist;
 
+  // --- Domain / forest trusts (nltest /domain_trusts, PowerView Get-DomainTrust, nxc --domain_trusts,
+  //     Get-ADTrust). A named trusted domain or an explicit trust-direction row -> ad.trusts, so the
+  //     map can open the cross-domain/forest path. Conservative: a trust keyword OR a parsed trust row. ---
+  function _parse_domain_trusts(text, ws, source, facts) {
+    if (!text) return;
+    var low = text.toLowerCase();
+    var trustWord = /domain_trusts|list of domain trusts|trustdirection|trustattributes|forest tree root|trusted domain|get-domaintrust|get-adtrust/.test(low) ||
+      (/\btrust\b/.test(low) && /\b(bidirectional|inbound|outbound|one-way|two-way|forest_transitive|within_forest)\b/.test(low));
+    var names = {}, order = [];
+    function add(d) { if (!d) return; d = d.toLowerCase().replace(/[.,]$/, ''); if (!names[d] && /\.[a-z]{2,}$/.test(d)) { names[d] = 1; order.push(d); } }
+    // nltest: "    0: ACME acme.local (NT 5) (Forest Tree Root) ..."
+    reAll(/^\s*\d+:\s+\S+\s+([A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,})/gm, text).forEach(function (m) { add(m[1]); });
+    // PowerView: "TargetName : child.acme.local"   /  Get-ADTrust: "Target : ..."
+    reAll(/\b(?:TargetName|Target|SourceName)\s*:\s*([A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,})/gi, text).forEach(function (m) { add(m[1]); });
+    // nxc / generic arrow notation: "acme.local -> child.acme.local"
+    reAll(/->\s*([A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,})/g, text).forEach(function (m) { add(m[1]); });
+    if (!trustWord && !order.length) return;
+    _add(facts, mkFact('ad.trusts', C._scope_for_domain(ws), { count: order.length, domains: order.slice(0, 20) }, S, source));
+  }
+  C._parse_domain_trusts = _parse_domain_trusts;
+
+  // --- Zerologon (CVE-2020-1472) scan verdict -> ad.zerologon, so zerologon-exploit lights up. Only a
+  //     clear "vulnerable/success" and not a patched/failed line (a negative run must mint nothing). ---
+  function _parse_zerologon_scan(text, ws, source, facts) {
+    if (!text) return;
+    var low = text.toLowerCase();
+    if (!/zerologon|cve-2020-1472|netlogon/.test(low)) return;
+    if (/not vulnerable|target is patched|is not vulnerable|attack failed|exploit failed|patched!|STATUS_ACCESS_DENIED/i.test(text)) return;
+    if (/success!|is vulnerable|target vulnerable|can be fully compromised|exploitable|performing attack.*success/i.test(low)) {
+      _add(facts, mkFact('ad.zerologon', C._scope_for_domain(ws), { cve: 'CVE-2020-1472', vulnerable: true }, S, source));
+    }
+  }
+  C._parse_zerologon_scan = _parse_zerologon_scan;
+
+  // --- ADCS via certipy/pywhisker. `certipy find -vulnerable` names ESC-vulnerable templates
+  //     -> adcs.vulnerable; `certipy req` / pywhisker save a .pfx -> credential.certificate (the cert
+  //     you can exchange for a TGT/NT hash). Conservative: a real ESC marker, or a saved-PFX line. ---
+  var _ESC_RE = /\bESC(?:1[0-6]|[1-9])\b/g;
+  function _parse_adcs(text, ws, command, source, facts) {
+    if (!text) return;
+    var escs = {}, order = [], m;
+    _ESC_RE.lastIndex = 0;
+    while ((m = _ESC_RE.exec(text)) !== null) { var e = m[0].toUpperCase(); if (!escs[e]) { escs[e] = 1; order.push(e); } }
+    var vulnWord = /\[!\]\s*vulnerabilit|is vulnerable to|vulnerable templates|ESC\d/i.test(text);
+    if (order.length || vulnWord) {
+      var tmpls = C.uniqueSortedCI(reAll(/\b(?:Template Name|Template)\s*:\s*([^\n\r]{1,64})/gi, text).map(function (x) { return (x[1] || '').trim(); }).filter(Boolean));
+      _add(facts, mkFact('adcs.vulnerable', C._scope_for_domain(ws), { esc: order.slice(0, 16), templates: tmpls.slice(0, 10) }, S, source));
+    }
+    // a saved certificate/private key (certipy req, pywhisker --action add)
+    var pfx = reSearch(/Saved (?:certificate and private key|PFX)[^\n]*?(?:to|at)\s*'?([^\s'"]+\.pfx)'?/i, text) ||
+      reSearch(/'?([A-Za-z0-9_.-]+\.pfx)'?\s*(?:saved|written)/i, text);
+    if (pfx) _add(facts, mkFact('credential.certificate', C._scope_for_domain(ws), { pfx: pfx[1], via: /pywhisker/i.test(command) ? 'shadow-credentials' : 'adcs' }, S, source));
+  }
+  C._parse_adcs = _parse_adcs;
+
+  // --- certipy auth: a PKINIT/cert auth that returns the account's NT hash (and a usable credential). ---
+  var _CERT_HASH_RE = /Got hash for\s+'?[^:'"\n]+'?\s*:\s*(?:[a-f0-9]{32}:)?([a-f0-9]{32})/i;
+  function _parse_certipy_auth(text, ws, command, source, facts) {
+    if (!text) return;
+    var hm = reSearch(_CERT_HASH_RE, text);
+    if (hm) {
+      _add(facts, mkFact('hash.ntlm', C._scope_for_domain(ws), { nthash: hm[1].toLowerCase(), via: 'certipy-auth' }, S, source));
+      _add(facts, mkFact('credential.available', C._scope_for_domain(ws), { kind: 'cert_auth_nt_hash', via: 'certipy-auth' }, S, source));
+    } else if (/Got TGT|Saved credential cache|\.ccache/i.test(text)) {
+      _add(facts, mkFact('credential.available', C._scope_for_domain(ws), { kind: 'cert_auth_tgt', via: 'certipy-auth' }, S, source));
+    }
+  }
+  C._parse_certipy_auth = _parse_certipy_auth;
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

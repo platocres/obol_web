@@ -98,9 +98,19 @@
         'ad.gmsa', 'ad.gpo_writable', 'ad.unconstrained', 'ad.group_joined', 'ad.computer_added'],
     },
     'adcs': {
-      looksFor: 'certipy auth output — a certificate exchanged for an NT hash. (Template-vulnerability parsing, ESC1-8, is not ported yet, so adcs.vulnerable / credential.certificate read back from nothing — that is a real parse gap the map should show.)',
-      regex: 'Got hash for …',
-      emits: ['credential.ntlm_hash'],
+      looksFor: 'certipy / pywhisker output — a `find -vulnerable` run naming ESC1-16 templates (adcs.vulnerable), a saved .pfx certificate from `req` or a shadow-credentials add (credential.certificate), and a `certipy auth` that exchanges a cert for the account’s NT hash (hash.ntlm → a usable credential).',
+      regex: "ESC1, Saved certificate … to 'x.pfx', Got hash for …",
+      emits: ['adcs.vulnerable', 'credential.certificate', 'hash.ntlm', 'credential.available', 'credential.ntlm_hash'],
+    },
+    'ad-trusts': {
+      looksFor: 'domain/forest trust enumeration — nltest /domain_trusts, PowerView Get-DomainTrust, Get-ADTrust, or nxc --domain_trusts naming a trusted domain or a trust direction.',
+      regex: 'Forest Tree Root, TrustDirection: …, acme.local -> child.acme.local',
+      emits: ['ad.trusts'],
+    },
+    'zerologon': {
+      looksFor: 'a Zerologon (CVE-2020-1472) scan verdict — a "Success!/vulnerable" line (and not a patched/failed one) that marks the DC exploitable.',
+      regex: 'Success! … Zerologon, is vulnerable',
+      emits: ['ad.zerologon'],
     },
     'host-privesc': {
       looksFor: "a privilege-escalation sweep on the host — winPEAS/linPEAS leads, sudo -l rights, SUID binaries, capabilities, writable cron/paths, docker/lxd groups, unquoted service paths, dangerous tokens, missing patches, stored app credentials (PuTTY/WinSCP/VNC), AV/AppLocker posture, notable programs, and a reachable desktop.",
@@ -114,9 +124,9 @@
       emits: ['objective.'],
     },
     'database': {
-      looksFor: "a database session's output — a version/current-user banner that proves the login, listed databases and tables, and dumped credential rows.",
-      regex: 'current_user(), Database: …',
-      emits: ['db.creds', 'db.databases', 'db.tables', 'loot.material', 'credential.candidate'],
+      looksFor: "a database session's output — a version/current-user banner or engine prompt that proves the login (db.session), listed databases and tables, and dumped credential rows.",
+      regex: 'mysql>, SQL>, List of databases, Server version:',
+      emits: ['db.session', 'db.creds', 'db.databases', 'db.tables', 'loot.material', 'credential.candidate', 'foothold.windows'],
     },
     'snmp': {
       looksFor: 'snmpwalk / snmp-check output — the community string that worked, running processes and users, and any credentials in the MIB.',
