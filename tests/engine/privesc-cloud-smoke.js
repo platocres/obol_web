@@ -44,6 +44,19 @@ ok(kinds.indexOf('credential.candidate') >= 0, 'SSRF to IMDS still mints credent
 ok(kinds.indexOf('cloud.aws_access') < 0, 'SSRF does NOT mint cloud.aws_access (corpus proof discipline respected)');
 ok([].concat(by['aws-credential-abuse'].requires_all || [], by['aws-credential-abuse'].requires_any || []).indexOf('cloud.credential') >= 0, 'aws-credential-abuse requires cloud.credential (so it is reachable after the SSRF)');
 
+// coach integration: every new module is a ranked coach action whose commands are runnable (filled
+// from facts/params) with the remaining blanks as {{tokens}} the coach turns into inputs, never raw
+// <angle-bracket> hand-edit placeholders.
+['linux-kernel-exploit', 'linux-path-hijack', 'linux-ld-preload', 'windows-dll-hijack', 'windows-schtask-abuse', 'aws-credential-abuse', 'mssql-linked-server', 'mysql-outfile-rce'].forEach(function (id) {
+  var cmds = (by[id].commands || []).map(function (c) { return c.run || ''; }).join(' ');
+  ok(cmds.length > 0, id + ' carries coach commands');
+  ok(!/<[a-z][a-z .]+>/.test(cmds), id + ' commands have no raw <angle-bracket> placeholders (use {{tokens}})');
+});
+// the coach actually ranks a new move and hands its command when the trigger fact is present
+var ranked = PK.nextActionsV2(new OBOL.facts.FactSet(['target.configured', 'host.up', 'cloud.credential'].map(function (k, i) { return OBOL.facts.makeFact({ kind: k, scope: { target: '10.10.10.10' }, source: 't', created_at: 1700000000000 + i }); })), A, {}) || [];
+var cloud = ranked.filter(function (x) { return x.id === 'aws-credential-abuse'; })[0];
+ok(cloud && (cloud.commands || []).length >= 2, 'Next Steps ranks aws-credential-abuse and hands its commands when cloud.credential is present');
+
 // the gap report is clean: the radar is cleared and nothing regressed
 var gr = DM.gapReport();
 ok(gr.counts.coverageGap === 0, 'the privesc radar is cleared: 0 coverage gaps (' + gr.counts.coverageGap + ')');
