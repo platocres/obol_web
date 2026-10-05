@@ -124,7 +124,9 @@
     suid_bin: 'SUID binary path', hijack_name: 'hijacked name', dll_name: 'DLL name', dll_path: 'writable DLL dir', task_target: 'task target path', task_name: 'task name', service: 'service name',
     sid: 'Oracle SID', sudo_command: 'allowed sudo command', kernel: 'kernel version', access_key: 'AWS access key', secret_key: 'AWS secret key', token: 'AWS session token', instance: 'EC2 instance id',
     // phase-B module tokens (values you discover from the previous step)
-    clsid: 'hijackable CLSID', writable_dir: 'writable directory', unit: 'systemd unit', unit_path: 'unit file path', resource_group: 'Azure resource group', vm_name: 'Azure VM name', bearer: 'bearer token', dc_fqdn: 'DC FQDN', ca_name: 'CA name', nthash: 'NT hash' };
+    clsid: 'hijackable CLSID', writable_dir: 'writable directory', unit: 'systemd unit', unit_path: 'unit file path', resource_group: 'Azure resource group', vm_name: 'Azure VM name', bearer: 'bearer token', dc_fqdn: 'DC FQDN', ca_name: 'CA name', nthash: 'NT hash',
+    // discover-from-previous-step values swept out of <angle-bracket> dead text
+    gmsa_account: 'gMSA account', forest_root_sid: 'forest root SID', database: 'database name', index: 'index name', internal_cidr: 'internal CIDR', internal_host: 'internal host', export: 'NFS export path', module: 'rsync module', masterkey_file: 'masterkey file', user_sid: 'user SID', credential_blob: 'credential blob', masterkey_hex: 'unwrapped masterkey (hex)', blob: 'credential blob file' };
   var FILL_PH = { command: 'e.g. whoami /all', cmd: 'e.g. id', lport: '4444', payload: 'windows/x64/…', outfile: 'out.txt', url: 'http://…', share: 'C$', file: 'C:\\path\\file',
     suid_bin: '/usr/local/bin/backup', hijack_name: 'backup', dll_name: 'config', dll_path: 'C:\\Program Files\\App', task_target: 'C:\\Scripts\\backup.bat', task_name: '\\VulnBackup', service: 'VulnAppSvc',
     sid: 'ORCL', sudo_command: '/usr/sbin/apache2ctl', kernel: '5.8.0', access_key: 'ASIA…', secret_key: 'wJalr…', token: 'IQoJb…', instance: 'i-0abc123',

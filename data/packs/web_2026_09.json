@@ -660,7 +660,7 @@
         },
         {
           "tool": "curl",
-          "run": "curl -s -X POST http://{{target}}/api --data-binary 'payload=<base64-blob>'",
+          "run": "curl -s -X POST http://{{target}}/api --data-binary 'payload={{payload}}'",
           "note": "Send the payload through whichever parameter, cookie, or ViewState you pinpointed."
         },
         {

