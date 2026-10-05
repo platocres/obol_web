@@ -617,6 +617,20 @@
       + '<span class="sl-way-d">' + esc(desc) + '</span>'
       + '<span class="sl-way-go">' + esc(go) + ' →</span></button>';
   }
+  // the quieter utility entries that share the action bar with the three ways (a link to a surface).
+  function slUtil(href, glyph, title, desc) {
+    return '<a class="sl-way sl-way-util" href="' + href + '">'
+      + '<span class="sl-way-top"><span class="sl-way-ic" aria-hidden="true">' + glyph + '</span>'
+      + '<span class="sl-way-head"><span class="sl-way-t">' + esc(title) + '</span></span></span>'
+      + '<span class="sl-way-d">' + esc(desc) + '</span></a>';
+  }
+  // the progress entry in the action bar: the big studied/total count, opens where you left off.
+  function slProg(contId, studied, total) {
+    return '<button type="button" class="sl-way sl-way-util sl-prog" data-open="' + U.attr(contId) + '">'
+      + '<span class="sl-way-top"><span class="sl-prog-g">' + studied + '<span class="sl-prog-tot">/' + total + '</span></span></span>'
+      + '<span class="sl-way-head"><span class="sl-way-t">' + (studied ? 'Continue Where You Left Off' : 'Your Progress') + '</span></span>'
+      + '<span class="sl-way-d">' + (studied ? (studied + ' step' + (studied === 1 ? '' : 's') + ' studied across all lanes.') : 'Pick a lane and your progress tracks here.') + '</span></button>';
+  }
   // a curated by-port card for the landing, derived from the same evidence index the full by-port
   // view uses, so its counts/signals never drift. Clicking opens the by-port view with it expanded.
   function slPortCard(e) {
@@ -673,45 +687,46 @@
       + '<h1 class="study-hero-h">Learn the methodology</h1>'
       + '<p class="study-hero-p">Obol teaches offensive security as a decision graph: <b>know what to do, and why, from what you\'ve found.</b> '
       + 'Start from a structured path, from a port you just scanned, or drop into a live box, whatever fits how you learn.</p></div>';
-    // the three promoted entries
-    h += '<div class="sl-ways">'
-      + slWay('data-sim', 'sl-way-cold', 'Guided simulation', 'Run a cold box', 'Start from an IP and nothing else. Read each result, choose the next move, and watch the box fall one step at a time.', 'Start a run')
-      + slWay('data-graph', 'sl-way-atlas', 'The whole map', 'Walk the attack graph', 'Every move in one graph, wired by what unlocks what. Pan, zoom, and trace end-to-end paths, or light up a ready-made scenario.', 'Open the atlas')
-      + slWay('data-ports', 'sl-way-port', 'Start from a scan', 'Browse by open port', 'You scanned; these ports are open. Pick the one in front of you and get the exact, ordered moves it unlocks.', 'Full by-port view')
+    // one unified action bar: the three ways to start + the three utility entries, all title case.
+    h += '<div class="sl-bar">'
+      + slWay('data-sim', 'sl-way-cold', 'Guided Simulation', 'Run a Cold Box', 'Start from an IP and nothing else. Read each result, choose the next move, and watch the box fall one step at a time.', 'Start a Run')
+      + slWay('data-graph', 'sl-way-atlas', 'The Whole Map', 'Walk the Attack Graph', 'Every move in one graph, wired by what unlocks what. Pan, zoom, and trace end-to-end paths, or light up a ready-made scenario.', 'Open the Atlas')
+      + slWay('data-ports', 'sl-way-port', 'Start from a Scan', 'Browse by Open Port', 'You scanned; these ports are open. Pick the one in front of you and get the exact, ordered moves it unlocks.', 'Full By-Port View')
+      + slUtil('#/loadout', OBOL.ic('gear'), 'Set Up Your Box', 'Install the toolset so the commands you learn match your own machine.')
+      + slUtil('#/home', '▶', 'Start an Engagement', 'Working a real box? Track it: paste output, get your next move.')
+      + slProg(contId, studiedTotal, totalSteps)
       + '</div>';
     // the two-column dashboard
     h += '<div class="sl-dash">';
-    // left: methodology (leads)
+    // one methodology lane card
+    function laneCard(L) {
+      var pr = study().laneProgress(L.key), pct = pr.total ? Math.round(pr.studied / pr.total * 100) : 0;
+      return '<button type="button" class="study-lane-card active lane-' + L.key + '" data-open="' + U.attr(L.firstId) + '">'
+        + '<div class="study-lane-name">' + esc(L.name) + ' <span class="study-lane-badge">' + L.count + ' steps</span></div>'
+        + '<div class="study-lane-desc">' + esc(L.desc) + '</div>'
+        + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:' + pct + '%"></span></div>'
+        + '<span class="study-lane-go">' + (pr.studied ? pr.studied + ' / ' + pr.total + ' studied · continue →' : 'Start the path →') + '</span></div></button>';
+    }
+    // left: methodology (leads). Active Directory + Databases are grouped under their own sub-heading.
+    var GROUP = { ad: 1, database: 1 };
+    var mainLanes = ls.filter(function (L) { return !GROUP[L.key]; });
+    var grpLanes = ls.filter(function (L) { return GROUP[L.key]; });
     h += '<section class="sl-col sl-col-method" aria-label="Learn by methodology">'
-      + '<div class="sl-col-h"><h2 class="sl-col-t">By methodology</h2><span class="sl-col-count">' + ls.length + ' lanes · ' + totalSteps + ' steps</span>'
-      + '<button type="button" class="sl-col-more" data-go-atlas>Browse all as a graph →</button></div>'
-      + '<div class="study-lanes">' + ls.map(function (L) {
-        var pr = study().laneProgress(L.key), pct = pr.total ? Math.round(pr.studied / pr.total * 100) : 0;
-        return '<button type="button" class="study-lane-card active lane-' + L.key + '" data-open="' + U.attr(L.firstId) + '">'
-          + '<div class="study-lane-name">' + esc(L.name) + ' <span class="study-lane-badge">' + L.count + ' steps</span></div>'
-          + '<div class="study-lane-desc">' + esc(L.desc) + '</div>'
-          + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:' + pct + '%"></span></div>'
-          + '<span class="study-lane-go">' + (pr.studied ? pr.studied + ' / ' + pr.total + ' studied · continue →' : 'Start the path →') + '</span></div></button>';
-      }).join('') + '</div></section>';
-    // right: by open port (equal-second)
+      + '<div class="sl-col-h"><h2 class="sl-col-t">By Methodology</h2><span class="sl-col-count">' + ls.length + ' Lanes · ' + totalSteps + ' Steps</span>'
+      + '<button type="button" class="sl-col-more" data-go-atlas>Browse All as a Graph →</button></div>'
+      + '<div class="study-lanes">' + mainLanes.map(laneCard).join('')
+      + (grpLanes.length ? '<div class="sl-lane-sub">Active Directory &amp; Databases</div>' + grpLanes.map(laneCard).join('') : '')
+      + '</div></section>';
+    // right: by open port (equal-second). No separate button: the bar's "Browse by Open Port" entry
+    // already opens this view, which carries its own Cards / Decision-map toggle.
     h += '<section class="sl-col sl-col-port" aria-label="Learn by open port">'
-      + '<div class="sl-col-h"><h2 class="sl-col-t">By open port</h2><span class="sl-col-count">what you scanned</span>'
-      + '<button type="button" class="sl-col-more" data-go-ports>All ports + decision map →</button></div>'
+      + '<div class="sl-col-h"><h2 class="sl-col-t">By Open Port</h2><span class="sl-col-count">What You Scanned</span></div>'
       + '<div class="sl-ports">' + ports.map(slPortCard).join('') + '</div>';
     if (access.length) {
-      h += '<div class="sl-access-h">Once you are in, what you are holding</div>'
+      h += '<div class="sl-access-h">Once You\'re In, What You\'re Holding</div>'
         + '<div class="sl-access">' + access.map(slAccessCard).join('') + '</div>';
     }
     h += '</section></div>'; // .sl-col-port + .sl-dash
-    // utility footer
-    h += '<div class="sl-footer">'
-      + door('#/loadout', OBOL.ic('gear'), 'Set up your box', 'Install the toolset so the commands you learn match your own machine.')
-      + door('#/home', '▶', 'Start an engagement', 'Working a real box? Track it: paste output, get your next move.')
-      + '<button type="button" class="study-door sl-prog" data-open="' + U.attr(contId) + '">'
-      + '<span class="study-door-g sl-prog-g">' + studiedTotal + '<span class="sl-prog-tot">/' + totalSteps + '</span></span>'
-      + '<span class="study-door-t">' + (studiedTotal ? 'Continue where you left off' : 'Your progress') + '</span>'
-      + '<span class="study-door-d">' + (studiedTotal ? (studiedTotal + ' step' + (studiedTotal === 1 ? '' : 's') + ' studied across all lanes.') : 'Pick a lane and your progress tracks here.') + '</span></button>'
-      + '</div>';
     return h + '</section>';
   }
 

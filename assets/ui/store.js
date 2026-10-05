@@ -129,10 +129,12 @@
   }
 
   // ---- engagement shape ----
+  // A brand-new draft carries an EMPTY name on purpose: the UI shows it as "No Run Yet" and never a
+  // fake "Untitled Run" placeholder. The launch flow fills in a real name when the operator sets up.
   function newEngagement(name) {
     return {
       id: uid('eng'),
-      name: name || 'New engagement',
+      name: name == null ? '' : name,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       schema: 3,
@@ -203,9 +205,10 @@
         }
       });
 
-      // ensure at least one (clean, empty) engagement exists as a starting point
+      // ensure at least one (clean, empty) engagement exists as a starting point — unnamed, so it
+      // shows as "No Run Yet" until the operator actually sets up a run (never a fake "Untitled Run").
       if (!Object.keys(_mem.engagements).length) {
-        var eng = newEngagement('Untitled Run');
+        var eng = newEngagement('');
         _mem.engagements[eng.id] = eng;
         _activeId = eng.id;
         await this._persistEngagement(eng);
@@ -226,6 +229,12 @@
     },
     active() { return _mem.engagements[_activeId] || null; },
     activeId() { return _activeId; },
+    // One source of truth for how a run's name is shown. An unnamed draft, or a legacy placeholder
+    // name from before this change, reads as "No Run Yet" everywhere (chip, selector, library).
+    runLabel(eng) {
+      var n = eng && eng.name != null ? String(eng.name).trim() : '';
+      return (!n || /^(untitled run|new engagement)$/i.test(n)) ? 'No Run Yet' : n;
+    },
     async setActive(id) {
       if (_mem.engagements[id]) { _activeId = id; await this.setSetting('activeEngagement', id); emit('active'); }
     },

@@ -39,14 +39,14 @@
     var list = (OBOL.store.listEngagements && OBOL.store.listEngagements()) || [];
     var activeId = OBOL.store.activeId && OBOL.store.activeId();
     return list.map(function (e) {
-      return '<option value="' + U.attr(e.id) + '"' + (e.id === activeId ? ' selected' : '') + '>' + esc(e.name) + '</option>';
+      return '<option value="' + U.attr(e.id) + '"' + (e.id === activeId ? ' selected' : '') + '>' + esc(OBOL.store.runLabel(e)) + '</option>';
     }).join('');
   }
 
   function credOptions() {
     var creds = (OBOL.creds && OBOL.creds.gather()) || [];
     _creds = creds;
-    if (!creds.length) return { disabled: true, html: '<option value="">no credentials yet</option>' };
+    if (!creds.length) return { disabled: true, html: '<option value="">No Credentials Yet</option>' };
     var active = (OBOL.creds && OBOL.creds.activeKey()) || '';
     var opts = '<option value="">no credential</option>' + creds.map(function (c, i) {
       var on = OBOL.creds.keyOf(c) === active;
@@ -61,7 +61,7 @@
     var cur = (eng.params || {}).target || '';
     var targets = (eng.targets || []).map(function (t) { return t.ip || t.target || ''; }).filter(Boolean);
     if (cur && targets.indexOf(cur) < 0) targets.unshift(cur);
-    if (!targets.length) return { disabled: true, html: '<option value="">no targets yet</option>' };
+    if (!targets.length) return { disabled: true, html: '<option value="">No Targets Yet</option>' };
     var opts = '<option value="">no target</option>' + targets.map(function (ip) {
       return '<option value="' + U.attr(ip) + '"' + (ip === cur ? ' selected' : '') + '>' + esc(ip) + '</option>';
     }).join('');

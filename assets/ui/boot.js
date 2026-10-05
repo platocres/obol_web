@@ -28,7 +28,7 @@
     var engSel = document.getElementById('eng-select');
     if (engSel) {
       engSel.innerHTML = OBOL.store.listEngagements().map(function (e) {
-        return '<option value="' + esc(e.id) + '"' + (e.id === OBOL.store.activeId() ? ' selected' : '') + '>' + esc(e.name) + '</option>';
+        return '<option value="' + esc(e.id) + '"' + (e.id === OBOL.store.activeId() ? ' selected' : '') + '>' + esc(OBOL.store.runLabel(e)) + '</option>';
       }).join('');
     }
 

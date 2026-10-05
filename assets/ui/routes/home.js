@@ -57,7 +57,7 @@
 
   function machineOptions(selected) {
     return '<option value="">, machine type (optional), </option>' + OBOL.profile.listMachineTypes().map(function (m) {
-      return '<option value="' + esc(m.id) + '"' + (m.id === selected ? ' selected' : '') + '>' + esc(m.name) + '</option>';
+      return '<option value="' + esc(m.id) + '"' + (m.id === selected ? ' selected' : '') + '>' + esc(OBOL.store.runLabel(m)) + '</option>';
     }).join('');
   }
 
@@ -111,7 +111,7 @@
     var isCustom = !prof.platform || prof.platform === 'custom';
     return '<div class="eng-active">'
       + '<div class="eng-active-head">'
-      + '<div><div class="eng-active-name">' + esc(eng.name) + '</div>'
+      + '<div><div class="eng-active-name">' + esc(OBOL.store.runLabel(eng)) + '</div>'
       + '<div class="eng-badges">'
       // only show a platform badge for a real platform — "Custom" told the user nothing
       + (isCustom ? '' : '<span class="pf-badge ' + (exam ? 'exam' : 'lab') + '">' + esc(preset.name) + (exam ? ' · exam' : '') + '</span>')
@@ -338,7 +338,7 @@
       var preset = (OBOL.profile.PRESETS[prof.platform] || OBOL.profile.PRESETS.custom);
       var active = e.id === OBOL.store.activeId();
       return '<li class="lib-row' + (active ? ' active' : '') + '">'
-        + '<button class="lib-open" data-eng="' + esc(e.id) + '"><span class="lib-name">' + esc(e.name) + '</span>'
+        + '<button class="lib-open" data-eng="' + esc(e.id) + '"><span class="lib-name">' + esc(OBOL.store.runLabel(e)) + '</span>'
         + '<span class="pill">' + esc(preset.name) + '</span>'
         + '<span class="lib-meta">' + (e.targets || []).length + ' Targets · ' + (e.facts || []).length + ' Facts</span></button>'
         + '<button class="lib-del" data-eng="' + esc(e.id) + '" title="Delete">×</button></li>';
