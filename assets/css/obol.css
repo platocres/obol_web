@@ -326,6 +326,55 @@ main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-widt
 .conn-sel-when { font-size: 12px; color: var(--text-2); line-height: 1.5; margin: 9px 13px 4px; }
 .conn-sel .stage-steps { padding-bottom: 12px; }
 @media (prefers-reduced-motion: reduce) { .conn-tool { transition: none; } }
+
+/* amber "needs attention" state: a diagnosed-but-unresolved pivot. Colour reinforces, never alone —
+   the header chip and the edge both carry the words "needs attention". */
+.conn-warnchip { display: none; align-items: center; gap: 4px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, var(--ph-creds) 70%, var(--text)); background: color-mix(in srgb, var(--ph-creds) 14%, transparent); border: 1px solid color-mix(in srgb, var(--ph-creds) 45%, var(--line)); border-radius: 999px; padding: 2px 7px; }
+.conn-warnchip .ic { width: 11px; height: 11px; }
+.hb-conn--warn .conn-warnchip { display: inline-flex; }
+.conn-edge-warntag { display: none; font-family: var(--mono); font-size: 9px; font-weight: 700; color: color-mix(in srgb, var(--ph-creds) 66%, var(--text)); text-align: center; line-height: 1.2; }
+.hb-conn--warn .conn-edge-tag { display: none; }
+.hb-conn--warn .conn-edge-warntag { display: block; }
+.hb-conn--warn .conn-edge-line { background: var(--ph-creds); box-shadow: 0 0 7px color-mix(in srgb, var(--ph-creds) 55%, transparent); animation: none; }
+
+/* the pivot troubleshooter: symptom chips, probes (reuse .stage-*), paste box, verdict */
+.conn-trouble { margin-top: 14px; border: 1px solid color-mix(in srgb, var(--ph-creds) 26%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--ph-creds) 4%, var(--surf1)); }
+.conn-trouble > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 9px; padding: 9px 13px; font-size: 12.5px; }
+.conn-trouble > summary::-webkit-details-marker { display: none; }
+.conn-trouble > summary::before { content: "\25B8"; color: var(--ph-creds); font-size: 11px; }
+.conn-trouble[open] > summary::before { content: "\25BE"; }
+.conn-trouble > summary:focus-visible { outline: 2px solid var(--ph-creds); outline-offset: 2px; border-radius: 6px; }
+.ct-sum-l { font-weight: 800; color: color-mix(in srgb, var(--ph-creds) 66%, var(--text)); }
+.ct-sum-d { font-weight: 500; font-size: 11px; color: var(--muted); }
+.ptr-lead { font-size: 12px; color: var(--text-2); line-height: 1.5; margin: 0 13px 8px; }
+.ptr-syms { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 13px 10px; }
+.ptr-sym { text-align: left; font-size: 11.5px; font-weight: 700; color: var(--text-2); background: var(--surf1); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; transition: .14s; }
+.ptr-sym:hover { border-color: var(--line-hot); color: var(--text); }
+.ptr-sym.on { color: var(--text); background: color-mix(in srgb, var(--ph-creds) 14%, var(--surf2)); border-color: var(--ph-creds); }
+.ptr-sym:focus-visible { outline: 2px solid var(--ph-creds); outline-offset: 1px; }
+.ptr-body { padding: 0 13px 13px; }
+.ptr-hint { font-size: 12px; color: var(--text-2); line-height: 1.5; margin: 2px 0 8px; }
+.ptr-probe-h { font-size: 11px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+.ptr-probes { padding: 0 0 10px; }
+.ptr-paste { width: 100%; box-sizing: border-box; min-height: 74px; resize: vertical; font-family: var(--mono); font-size: 11.5px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.ptr-paste:focus-visible { outline: 2px solid var(--ph-creds); outline-offset: 1px; }
+.ptr-row { display: flex; gap: 8px; margin-top: 8px; }
+.ptr-verdict:empty { display: none; }
+.ptr-v { margin-top: 10px; border-radius: 9px; padding: 10px 12px; border: 1px solid var(--line); }
+.ptr-v-h { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.ptr-v-say { font-size: 12px; color: var(--text); line-height: 1.5; margin: 0; }
+.ptr-v-bad { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: color-mix(in srgb, var(--danger) 7%, var(--surf1)); }
+.ptr-v-bad .ptr-v-h { color: color-mix(in srgb, var(--danger) 70%, var(--text)); }
+.ptr-v-ok { border-color: color-mix(in srgb, var(--ph-access) 45%, var(--line)); background: color-mix(in srgb, var(--ph-access) 7%, var(--surf1)); }
+.ptr-v-ok .ptr-v-h { color: color-mix(in srgb, var(--ph-access) 66%, var(--text)); }
+.ptr-v-note { border-style: dashed; background: var(--surf1); }
+.ptr-line { margin-top: 7px; font-size: 11px; color: var(--text-2); }
+.ptr-line-l { font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 9px; color: var(--muted); margin-right: 5px; }
+.ptr-line code { font-family: var(--mono); font-size: 11px; color: color-mix(in srgb, var(--danger) 55%, var(--text)); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; display: inline-block; margin-top: 3px; word-break: break-all; }
+.ptr-fix { margin-top: 8px; }
+.ptr-fix-l { display: block; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 3px; }
+.ptr-checklist { margin: 7px 0 0; padding-left: 18px; font-size: 11.5px; color: var(--text-2); line-height: 1.55; }
+@media (prefers-reduced-motion: reduce) { .ptr-sym { transition: none; } }
 .hb-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
 .hb-log li { font-size: 12px; color: var(--text-2); display: flex; gap: 9px; }
 .hb-log-t { font-family: var(--mono); color: var(--muted); flex: none; }

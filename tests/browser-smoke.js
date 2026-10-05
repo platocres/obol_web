@@ -344,6 +344,30 @@ function serve() {
   await page.waitForTimeout(120);
   ok((await page.locator('.hb-conn .conn-tool.on').innerText()).toLowerCase().indexOf('sshuttle') !== -1, 'the chooser swaps the selected tunnel tool');
 
+  // Pivot troubleshooter: symptom-first diagnosis expands off the same connectivity panel.
+  await page.locator('.conn-trouble > summary').click();
+  await page.waitForTimeout(80);
+  ok(await page.locator('.ptr-sym').count() >= 6, 'the troubleshooter offers plain-language symptom chips');
+  await page.locator('.ptr-sym[data-ptr-sym="all-filtered"]').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('.ptr-probes .stage-step').count() >= 1, 'picking a symptom reveals its machine-labelled probe commands');
+  await page.locator('.ptr-paste').fill('proxychains nmap -sS -p- 172.16.5.10');
+  await page.locator('.ptr-go').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('.ptr-verdict .ptr-v-bad').count() === 1, 'a SYN-over-SOCKS paste returns a likely-cause verdict');
+  ok((await page.locator('.ptr-fix code').first().innerText()).indexOf('-sT') !== -1, 'the verdict hands a copy-ready fix (-sT)');
+  ok(await page.locator('.hb-conn--warn').count() === 1, 'an unresolved problem lights the connectivity edge amber');
+  await page.locator('.ptr-paste').fill('proxychains -q nmap -sT -Pn -p 445 172.16.5.10');
+  await page.locator('.ptr-go').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('.ptr-verdict .ptr-v-ok').count() === 1, 'correct -sT -Pn flags read as healthy');
+  ok(await page.locator('.hb-conn--warn').count() === 0, 'a healthy verdict clears the amber state');
+  // unrecognized output stands down to the checklist rather than guessing
+  await page.locator('.ptr-paste').fill('just some unrelated noise');
+  await page.locator('.ptr-go').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('.ptr-verdict .ptr-v-note .ptr-checklist').count() === 1, 'unrecognized output hands over the general checklist');
+
   // Loot glue: proving a user list resolves {{userlist}}/{{hashfile}} to workspace paths and offers
   // a "set up first" heredoc that writes the exact proven names to loot/users.txt.
   await page.evaluate(() => {

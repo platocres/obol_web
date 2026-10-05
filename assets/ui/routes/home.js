@@ -14,6 +14,14 @@
   // Which tunnel tool the connectivity chooser is showing. Ligolo-ng is the recommended default
   // (a real routed interface). Lives for the session; the selection just re-renders the panel.
   var _tunnelSel = 'ligolo';
+  // Which troubleshooter symptom is open (null = none). Session-lived; picking one re-renders.
+  var _ptrSym = null;
+  // A diagnosed-but-unresolved pivot problem turns the connectivity edge amber. Keyed per engagement
+  // so it does not bleed across runs; set when the doctor returns a non-healthy verdict, cleared on a
+  // healthy one or when the operator dismisses it.
+  function troubleKey() { var e = OBOL.store.active() || {}; return 'obol.pivotTrouble:' + (e.id || 'x'); }
+  function troubleOn() { try { return localStorage.getItem(troubleKey()) === '1'; } catch (e) { return false; } }
+  function setTrouble(on) { try { if (on) localStorage.setItem(troubleKey(), '1'); else localStorage.removeItem(troubleKey()); } catch (e) {} }
 
   // Extract IPs and CIDRs from arbitrary pasted text (obol-local `scope paste` filter).
   var IP_RE = /\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b/g;
@@ -462,6 +470,9 @@
   // state is also written as a text tag ("via ligolo" / "no tunnel yet").
   function connMap(pivots, params) {
     var lhost = (params && params.lhost) || 'your box';
+    // The amber "needs attention" state is carried by a single container class on .hb-conn (set from
+    // the persisted trouble flag at render, toggled live by the troubleshooter), so there is one source
+    // of truth for it, not per-row logic that could disagree.
     return '<div class="conn-map" role="group" aria-label="Pivot connectivity map">' + pivots.map(function (h) {
       var label = h.hostname || h.ip;
       var subs = h.subnetList.length ? h.subnetList.join(', ') : 'subnet unknown';
@@ -470,7 +481,8 @@
       return '<div class="conn-row">'
         + '<span class="conn-node conn-you">' + OBOL.ic('box') + '<span class="conn-node-l">You</span><span class="conn-node-s">' + esc(lhost) + '</span></span>'
         + '<span class="conn-edge' + (live ? ' conn-edge-live' : '') + '"><span class="conn-edge-line" aria-hidden="true"></span>'
-        + '<span class="conn-edge-tag' + (live ? '' : ' conn-edge-off') + '">' + esc(via || 'no tunnel yet') + '</span></span>'
+        + '<span class="conn-edge-tag' + (live ? '' : ' conn-edge-off') + '">' + esc(via || 'no tunnel yet') + '</span>'
+        + '<span class="conn-edge-warntag" aria-hidden="true">needs attention</span></span>'
         + '<span class="conn-node conn-pivot">' + OBOL.ic('host') + '<span class="conn-node-l">' + esc(label) + '</span>'
         + (h.hostname ? '<span class="conn-node-s">' + esc(h.ip) + '</span>' : '') + (h.multihomed ? '<span class="conn-tag-mh">multihomed</span>' : '') + '</span>'
         + '<span class="conn-edge"><span class="conn-edge-line" aria-hidden="true"></span></span>'
@@ -479,6 +491,69 @@
     }).join('') + '</div>';
   }
 
+  // ── The pivot troubleshooter: a calm, symptom-first diagnostic that expands off this panel ──
+  // You pick what you SEE in plain language (not the cause); it hands machine-labelled probe
+  // commands; you paste the result; OBOL.pivotDoctor returns a verdict with the problem line and a
+  // fix. It only claims what the output supports, and stands down to a checklist when it cannot tell.
+  function troubleProbe(p, params) {
+    var cmd = OBOL.pivotDoctor.fill(p.cmd, params);
+    var whereLbl = p.where === 'host' ? 'On the target host' : 'On your Kali box';
+    return '<li class="stage-step stage-' + (p.where === 'host' ? 'host' : 'local') + '">'
+      + '<div class="stage-body" style="margin-left:0"><div class="stage-wl">'
+      + '<span class="stage-where stage-where-' + (p.where === 'host' ? 'host' : 'local') + '">' + esc(whereLbl) + '</span>'
+      + '<span class="stage-title">' + esc(p.label) + '</span></div>'
+      + '<div class="stage-why">' + esc(p.why) + '</div>'
+      + '<div class="stage-cmd"><code>' + esc(cmd) + '</code><button class="btn-copy stage-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button></div>'
+      + '</div></li>';
+  }
+  function troublePanel(params) {
+    if (!OBOL.pivotDoctor) return '';
+    var syms = OBOL.pivotDoctor.symptoms();
+    var chips = syms.map(function (s) {
+      var on = s.key === _ptrSym;
+      return '<button type="button" class="ptr-sym' + (on ? ' on' : '') + '" data-ptr-sym="' + esc(s.key) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(s.symptom) + '</button>';
+    }).join('');
+    var body = '';
+    var sel = _ptrSym ? OBOL.pivotDoctor.get(_ptrSym) : null;
+    if (sel) {
+      var probes = '<ol class="stage-steps ptr-probes">' + sel.probes.map(function (p) { return troubleProbe(p, params); }).join('') + '</ol>';
+      body = '<div class="ptr-body">'
+        + '<p class="ptr-hint">' + esc(sel.hint) + '</p>'
+        + '<div class="ptr-probe-h">Run one of these, then paste what it prints:</div>'
+        + probes
+        + '<textarea class="ptr-paste" data-ptr-paste placeholder="Paste the probe output here. obol reads it and tells you what is wrong and how to fix it." spellcheck="false"></textarea>'
+        + '<div class="ptr-row"><button type="button" class="btn-primary ptr-go" data-ptr-go="' + esc(sel.key) + '">Diagnose</button>'
+        + '<button type="button" class="btn-ghost ptr-clear" data-ptr-clear>Clear</button></div>'
+        + '<div class="ptr-verdict" role="status" aria-live="polite"></div>'
+        + '</div>';
+    }
+    return '<details class="conn-trouble"' + (_ptrSym ? ' open' : '') + '><summary><span class="ct-sum-l">Pivot not working?</span>'
+      + '<span class="ct-sum-d">describe what you see, obol diagnoses it</span></summary>'
+      + '<p class="ptr-lead">Pick what you are seeing. You do not need to know the cause.</p>'
+      + '<div class="ptr-syms" role="group" aria-label="What are you seeing?">' + chips + '</div>'
+      + body + '</details>';
+  }
+
+  // Render the doctor's verdict: a healthy all-clear, a likely-cause box with the highlighted line
+  // from the paste and a copy-ready fix, or an honest "could not pin it" with the plain checklist.
+  function verdictHtml(res) {
+    if (!res) return '';
+    if (res.empty) return '<div class="ptr-v ptr-v-note">' + esc(res.verdict) + '</div>';
+    if (!res.matched) {
+      var items = (res.checklist || []).map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('');
+      return '<div class="ptr-v ptr-v-note"><p class="ptr-v-say">' + esc(res.verdict) + '</p>'
+        + (items ? '<ul class="ptr-checklist">' + items + '</ul>' : '') + '</div>';
+    }
+    var cls = res.healthy ? 'ptr-v-ok' : 'ptr-v-bad';
+    var lbl = res.healthy ? 'Looks healthy' : 'Likely cause';
+    var line = res.line ? '<div class="ptr-line"><span class="ptr-line-l">from your output</span> <code>' + esc(res.line) + '</code></div>' : '';
+    var fix = res.fix ? '<div class="ptr-fix"><span class="ptr-fix-l">' + (res.healthy ? 'next' : 'try this fix') + '</span>'
+      + '<div class="stage-cmd"><code>' + esc(res.fix) + '</code><button class="btn-copy stage-copy" data-copy="' + U.attr(res.fix) + '" title="Copy command">copy</button></div></div>' : '';
+    return '<div class="ptr-v ' + cls + '"><div class="ptr-v-h">' + esc(lbl) + '</div>'
+      + '<p class="ptr-v-say">' + esc(res.verdict) + '</p>' + line + fix + '</div>';
+  }
+  function setConnWarn(mount, on) { var hb = mount.querySelector('.hb-conn'); if (hb) hb.classList.toggle('hb-conn--warn', on); }
+
   function connPanel() {
     var eng = OBOL.store.active();
     var params = eng.params || {};
@@ -486,11 +561,13 @@
     var map = pivots.length
       ? connMap(pivots, params)
       : '<div class="conn-empty">No pivots charted yet. Paste <code>ip a</code> or <code>ip route</code> from a foothold and obol maps the subnets it can reach, then set up a tunnel below to reach them.</div>';
-    return '<div class="hb-conn"><div class="hb-sec-h"><h2>Connectivity</h2>'
+    return '<div class="hb-conn' + (troubleOn() ? ' hb-conn--warn' : '') + '"><div class="hb-sec-h"><h2>Connectivity</h2>'
       + (pivots.length ? '<span class="hb-sec-n">' + pivots.length + ' pivot' + (pivots.length > 1 ? 's' : '') + '</span>' : '')
+      + '<span class="conn-warnchip">' + OBOL.ic('bolt') + 'needs attention</span>'
       + '</div>' + map
       + '<div class="conn-chooser-h"><h3>Set up a tunnel</h3><span class="conn-chooser-sub">pick a tool, follow the steps on each machine</span></div>'
       + tunnelChooser(params)
+      + troublePanel(params)
       + '</div>';
   }
 
@@ -688,6 +765,29 @@
         t.setAttribute('aria-checked', on ? 'true' : 'false');
         t.innerHTML = on ? '✓' : '';
         var li = t.closest('.stage-step'); if (li) li.classList.toggle('done', on);
+      });
+      // troubleshooter: pick a symptom (re-renders to reveal its probes + paste box)
+      U.on(mount, 'click', '[data-ptr-sym]', function (e, t) {
+        var k = t.getAttribute('data-ptr-sym');
+        _ptrSym = (_ptrSym === k) ? null : k;   // toggle off if re-clicked
+        OBOL.router.render();
+      });
+      // diagnose the pasted probe output, in place (so the paste and verdict survive); set/clear the
+      // amber "needs attention" edge state live via the container class.
+      U.on(mount, 'click', '[data-ptr-go]', function (e, t) {
+        var key = t.getAttribute('data-ptr-go');
+        var body = t.closest('.ptr-body'); if (!body) return;
+        var ta = body.querySelector('[data-ptr-paste]'), out = body.querySelector('.ptr-verdict');
+        var res = OBOL.pivotDoctor.diagnose(key, ta ? ta.value : '', (OBOL.store.active() || {}).params || {});
+        if (out) out.innerHTML = verdictHtml(res);
+        // a real, unresolved problem lights the edge amber; a healthy verdict clears it
+        if (res && res.matched && !res.healthy) { setTrouble(true); setConnWarn(mount, true); }
+        else if (res && res.matched && res.healthy) { setTrouble(false); setConnWarn(mount, false); }
+      });
+      // clear the current paste + verdict and drop the amber state (keeps the symptom open)
+      U.on(mount, 'click', '[data-ptr-clear]', function (e, t) {
+        setTrouble(false);
+        OBOL.router.render();
       });
     }
 
