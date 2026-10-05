@@ -27,7 +27,7 @@
     study: ['data/study-fixtures.js?v=7af7d7ca', 'assets/engine/study.js?v=2f2551b4', 'assets/ui/routes/study.js?v=41cd329c'],
     decisionmap: ['data/decision-forks.js?v=9785225d', 'data/parser-signatures.js?v=62e74cbf', 'data/coverage-expected.js?v=afdb39b5', 'assets/engine/decisionmap.js?v=940f1173', 'assets/ui/decisiontree.js?v=4d77a423'],
     checklist: ['assets/ui/routes/checklist.js?v=68b05ed8'],
-    target: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/target.js?v=c8287bf3'],
+    target: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/target.js?v=f44f77f5'],
     creds: ['assets/ui/routes/creds.js?v=c8322951'],
     scoreboard: ['assets/ui/routes/scoreboard.js?v=b9b21413'],
     playbooks: ['data/playbooks-bundle.js?v=31b337d6', 'assets/engine/playbooks.js?v=be235b11', 'assets/ui/routes/playbooks.js?v=db570cba'],

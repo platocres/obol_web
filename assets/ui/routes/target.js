@@ -31,6 +31,45 @@
     return (eng.targets || []).find(function (t) { return t.ip === ip || t.id === ip; }) || null;
   }
 
+  // the proven facts for this box (one row per kind), for the Evidence half of the spine
+  function provenKinds(facts) {
+    var seen = {}, out = [];
+    facts.facts.forEach(function (x) {
+      if (x.state !== 'supported') return;
+      if (x.kind.indexOf('target.') === 0) return;
+      if (seen[x.kind]) return; seen[x.kind] = 1; out.push(x.kind);
+    });
+    return out;
+  }
+
+  // the Evidence half of the spine: what you have proven about this box + a way to add more.
+  // One paste feeds the engagement-wide report, filed under this host (see the global paste, phase 3).
+  function evidencePanel(ip, facts) {
+    var kinds = provenKinds(facts);
+    var rows = kinds.length
+      ? '<ul class="tw-facts">' + kinds.slice(0, 10).map(function (k) {
+          return '<li><span class="tw-fcheck" aria-hidden="true">' + OBOL.ic('spark') + '</span>'
+            + '<span class="tw-flabel">' + esc(U.titleCase(OBOL.pack.friendly(k))) + '</span>'
+            + '<code class="tw-fkind">' + esc(k) + '</code></li>';
+        }).join('') + '</ul>' + (kinds.length > 10 ? '<div class="tw-facts-more">+' + (kinds.length - 10) + ' more proven</div>' : '')
+      : '<div class="tw-ev-empty">Nothing proven here yet. Run a move, then paste its output.</div>';
+    return '<div class="tw-ev-head"><a class="btn-primary tw-ev-paste" href="#/evidence">' + OBOL.ic('clip') + ' Paste output for this box</a></div>'
+      + rows
+      + '<div class="tw-ev-note">Every fact minted here lands in the engagement report, filed under <b>' + esc(ip) + '</b>.</div>';
+  }
+
+  // contextual launchers: open the global Tools / Playbooks library already filled for this box.
+  function launchers(ip) {
+    return '<div class="tw-launchers">'
+      + '<button type="button" class="tw-launch" data-launch="tools" data-ip="' + U.attr(ip) + '">'
+      + '<span class="tw-launch-ic">' + OBOL.ic('bolt') + '</span>'
+      + '<span class="tw-launch-txt"><b>Build a command</b><span>Open Tools, filled for ' + esc(ip) + '.</span></span></button>'
+      + '<button type="button" class="tw-launch" data-launch="playbooks" data-ip="' + U.attr(ip) + '">'
+      + '<span class="tw-launch-ic">' + OBOL.ic('box') + '</span>'
+      + '<span class="tw-launch-txt"><b>Run a playbook</b><span>A ready-made sequence, charged with this box.</span></span></button>'
+      + '</div>';
+  }
+
   function render(ctx) {
     var ip = ctx.args[0];
     var eng = OBOL.store.active();
@@ -143,6 +182,16 @@
       + '</dl></div>'
       + '<div class="home-spine target-chain">' + chain + '</div>'
 
+      // the spine: the working loop for this box, Next Steps beside Evidence
+      + '<div class="tw-spine">'
+      + '<section class="tw-panel tw-next"><div class="tw-panel-h"><span class="tw-panel-l">Next Steps for this box</span><span class="tw-panel-tag">ranked by the coach</span></div>'
+      + '<div class="tw-panel-b">' + (moveHtml || '<div class="coach-empty">No moves yet, paste evidence to unlock.</div>')
+      + '<a class="btn-ghost tw-fullcoach" href="#/path">Full coach →</a></div></section>'
+      + '<section class="tw-panel tw-ev"><div class="tw-panel-h"><span class="tw-panel-l">Evidence &amp; proven facts</span><span class="tw-panel-tag">this box, feeds the report</span></div>'
+      + '<div class="tw-panel-b">' + evidencePanel(ip, facts) + '</div></section>'
+      + '</div>'
+      + launchers(ip)
+
       + '<div class="target-grid">'
       + '<div class="target-col">'
       + '<h2 class="coach-sec-h">Attack Path: What Led to What</h2>'
@@ -152,9 +201,6 @@
       + '</div>'
       + '<div class="target-col">'
       + flagCard
-      + '<h2 class="coach-sec-h">Next moves for this target</h2>'
-      + (moveHtml || '<div class="coach-empty">No moves, paste evidence to unlock.</div>')
-      + '<a class="btn-ghost" href="#/path">Full Coach →</a>'
       + '</div>'
       + '</div>'
       + '</section>';
@@ -173,6 +219,14 @@
     }
     U.on(mount, 'click', '.btn-copy', function (e, b) {
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    // contextual launchers: make this box the active target, then open the global Tools / Playbooks
+    // library already filled for it.
+    U.on(mount, 'click', '[data-launch]', function (e, t) {
+      var ip = t.getAttribute('data-ip'), where = t.getAttribute('data-launch');
+      OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = ip; }, 'params');
+      if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+      OBOL.router.go(where);
     });
     // per-flag proof screenshot: attach (bound to the flag's slot + this host) / remove.
     var tgtIp = location.hash.split('/')[2] || (OBOL.store.active().params || {}).target || '';
