@@ -31,6 +31,8 @@
   var _evOpen = null;            // by-port: evidence-card key -> true when that card is expanded (persisted)
   function evOpen() { if (_evOpen) return _evOpen; _evOpen = {}; try { var s = localStorage.getItem('obol.evOpen'); if (s) _evOpen = JSON.parse(s) || {}; } catch (e) {} return _evOpen; }
   function evSave() { try { localStorage.setItem('obol.evOpen', JSON.stringify(_evOpen || {})); } catch (e) {} }
+  var _evMode = 'cards';          // by-port: 'cards' (the ordered-move cards) | 'map' (the derived LTR decision forest)
+  try { var _em = localStorage.getItem('obol.evMode'); if (_em === 'map' || _em === 'cards') _evMode = _em; } catch (e) {}
   var _atlasQuery = '';          // Atlas: current search text (dims non-matching steps)
   var _whyOverride = {};         // node: moveId -> true when the learner asked to show the reasoning anyway
   var _practiceMode = 'next';    // practice gear: 'next' (what to do) | 'read' (diagnose the output)
@@ -675,13 +677,25 @@
     var portsT = ev.filter(function (e) { return e.tier === 'ports'; });
     var accessT = ev.filter(function (e) { return e.tier === 'access'; });
     var allOpen = ev.every(function (e) { return op[e.key]; });
+    var isMap = _evMode === 'map';
     var h = '<section class="study-route study-ports">';
     h += '<div class="study-top"><button type="button" class="study-back" data-back-map>← Paths</button>'
       + '<div class="study-crumb"><b>Study</b> · By what you have found</div>'
-      + '<button type="button" class="ev-allbtn" data-ev-all="' + (allOpen ? 'close' : 'open') + '">' + (allOpen ? 'Collapse all' : 'Expand all') + '</button></div>';
+      + '<div class="ev-mode-seg" role="group" aria-label="By-port view mode">'
+      + '<button type="button" class="ev-mode' + (isMap ? '' : ' on') + '" data-ev-mode="cards" aria-pressed="' + (isMap ? 'false' : 'true') + '">Cards</button>'
+      + '<button type="button" class="ev-mode' + (isMap ? ' on' : '') + '" data-ev-mode="map" aria-pressed="' + (isMap ? 'true' : 'false') + '">Decision map</button></div>'
+      + (isMap ? '' : '<button type="button" class="ev-allbtn" data-ev-all="' + (allOpen ? 'close' : 'open') + '">' + (allOpen ? 'Collapse all' : 'Expand all') + '</button>')
+      + '</div>';
     h += '<div class="study-hero"><h1 class="study-hero-h">What do I do with <i>this</i>?</h1>'
       + '<p class="study-hero-p">This is how you actually operate. You scan, and a list of open ports comes back. Each one is a signal: it tells you what the box runs and which moves it opens. '
       + 'Pick the port in front of you, read what it means, and open it for the ordered moves it unlocks. Once you are in, the signal changes to what you are holding, a shell, a hash, a credential.</p></div>';
+    if (isMap) {
+      h += '<p class="ev-map-lede">The whole forest, derived from the same move graph and ranker that drive Next Steps, so it can never contradict the coach. '
+        + 'It opens zoomed out on the full mass; scroll or use the controls to zoom, drag to pan, click a port to fold its branches, and click a move to open it. '
+        + 'The lit path is the coach’s ranked spine. Flip the lens to <i>Parser cover</i> to see, in plain language, what obol reads at each step, and where it reads nothing.</p>';
+      h += '<div id="port-decision-map" class="dt-mount" role="region" aria-label="By-port decision map"></div>';
+      return h + '</section>';
+    }
     h += '<h2 class="ev-tier-h">Open ports, what you see first</h2>';
     h += '<div class="port-grid">' + portsT.map(function (e) { return evidenceCard(e, mk, !!op[e.key]); }).join('') + '</div>';
     h += '<h2 class="ev-tier-h">Once you are in, what you are holding</h2>';
@@ -1187,6 +1201,25 @@
     }
     // the Atlas: pan / zoom / semantic LOD / draw a custom path
     if (_view === 'atlas') setTimeout(function () { wireAtlas(mount); }, 30);
+    // the by-port decision map: the derived LTR forest (lazy — the engine + renderer load on demand)
+    if (_view === 'ports' && _evMode === 'map') setTimeout(function () { wirePortMap(mount); }, 30);
+  }
+
+  // Mount the derived decision forest into the by-port view. The engine (OBOL.decisionMap) and the
+  // renderer (OBOL.decisionTreeView) plus their data files are lazy-loaded; if they are not ready yet,
+  // show a quiet "building" note and let lazy.js fire a re-render when the group arrives.
+  function wirePortMap(mount) {
+    var el = mount.querySelector('#port-decision-map'); if (!el) return;
+    if (!(OBOL.decisionTreeView && OBOL.decisionMap && OBOL.PARSER_SIGNATURES)) {
+      el.innerHTML = '<div class="dt-loading">Building the decision map…</div>';
+      if (OBOL.lazy && OBOL.lazy.loadGroup) { OBOL.lazy.loadGroup('decisionmap').then(function () { if (el.isConnected && _view === 'ports' && _evMode === 'map') OBOL.router.render(); }); }
+      return;
+    }
+    if (el.__dtMounted) return; el.__dtMounted = true;
+    OBOL.decisionTreeView.mount(el, {
+      onOpen: function (id) { _from = 'ports'; _sel = id; _view = 'node'; OBOL.router.render(); },
+      onCards: function () { _evMode = 'cards'; try { localStorage.setItem('obol.evMode', 'cards'); } catch (e) {} OBOL.router.render(); },
+    });
   }
 
   // All delegated click handlers for the study route. Bound once (see mounted); they read current
@@ -1215,6 +1248,8 @@
     U.on(mount, 'click', '[data-ports]', function () { _view = 'ports'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-ev-toggle]', function (e, t) { var k = t.getAttribute('data-ev-toggle'); var o = evOpen(); o[k] = !o[k]; evSave(); OBOL.router.render(); });
     U.on(mount, 'click', '[data-ev-all]', function (e, t) { var open = t.getAttribute('data-ev-all') === 'open'; var o = evOpen(); study().evidence().forEach(function (x) { o[x.key] = open; }); evSave(); OBOL.router.render(); });
+    // by-port: flip between the ordered-move cards and the derived LTR decision forest
+    U.on(mount, 'click', '[data-ev-mode]', function (e, t) { _evMode = t.getAttribute('data-ev-mode') === 'map' ? 'map' : 'cards'; try { localStorage.setItem('obol.evMode', _evMode); } catch (x) {} OBOL.router.render(); });
     U.on(mount, 'click', '[data-sim]', function () { _view = 'sim'; _simKey = null; _simStep = 0; _simState = {}; OBOL.router.render(); });
     // cold-box simulation: pick a scenario, answer each "what next", advance
     U.on(mount, 'click', '[data-sim-start]', function (e, t) { _simKey = t.getAttribute('data-sim-start'); _simStep = 0; _simState = {}; _view = 'sim'; OBOL.router.render(); });

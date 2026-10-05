@@ -160,6 +160,7 @@
       var pc = (pcov || {})[id] || {};
       var n = {
         id: id, title: m.title || id, cat: (S.categoryOf && S.categoryOf(id)) || '',
+        laneKey: (S.laneEntry && (S.laneEntry(id) || {}).laneKey) || '',
         phase: cell.phase || '', scope: cell.scope || '', locus: (cell.commands && cell.commands[0] && cell.commands[0].locus) || '',
         produces: produces(m), reqs: reqSet(m),
         signal: tell.signal || '', teach: tell.teach || '', gist: tell.gist || '',
@@ -218,7 +219,9 @@
     opts = opts || {};
     var S = study();
     var evAll = (S.evidence && S.evidence()) || [];
-    var portsOnly = evAll.filter(function (e) { return e.tier === 'ports'; });
+    // the 'scan' card is the "before anything, scan" primer, not an open port — the forest root already
+    // IS the port scan, so exclude it here (otherwise it renders a redundant subtree and a "first" chip).
+    var portsOnly = evAll.filter(function (e) { return e.tier === 'ports' && e.key !== 'scan'; });
     var want = opts.ports && opts.ports.length ? opts.ports : null; // array of evidence keys
     var pcov = parserCoverage();
     var trees = portsOnly

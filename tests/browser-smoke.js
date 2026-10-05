@@ -883,6 +883,34 @@ function serve() {
   await page.waitForTimeout(150);
   ok((await page.locator('.port-move').count()) >= 40, 'expand-all reveals the ordered moves each port unlocks');
   ok((await page.locator('.ev-arrow').count()) === 0, 'no connector arrows between port moves');
+  // the DECISION MAP: flip the by-port view to the derived LTR forest (lazy-loads its engine + renderer)
+  await page.locator('[data-ev-mode="map"]').click();
+  await page.waitForSelector('#dt-view .dt-node', { timeout: 8000 }).catch(() => {});
+  const dtNodes = await page.locator('#dt-view .dt-node').count();
+  ok(dtNodes >= 40, 'the decision map renders the derived forest (' + dtNodes + ' nodes)');
+  ok((await page.locator('#dt-view .dt-node.dt-port').count()) >= 15, 'the forest has a port node per open-port card');
+  ok((await page.locator('#dt-view .dt-edge-spine').count()) >= 1, "the coach's ranked spine is lit on the map");
+  ok((await page.locator('#dt-view .dt-node.dt-handoff').count()) >= 1, 'a foothold move hands off to a post-foothold leaf');
+  // port filter: turn on just one port chip → the forest re-roots to that port only
+  const chip = page.locator('.dt-chip').first();
+  const chipLabel = (await chip.textContent().catch(() => '')) || '';
+  await chip.click();
+  await page.waitForTimeout(150);
+  ok((await page.locator('#dt-view .dt-node.dt-port').count()) === 1, 'a port filter chip re-roots the forest to that one port (' + chipLabel.trim() + ')');
+  await chip.click(); // clear the filter
+  await page.waitForTimeout(120);
+  // parser-coverage lens: flip to the parser lens → the stage recolors by what obol can read
+  await page.locator('[data-dt-lens="parser"]').click();
+  await page.waitForTimeout(120);
+  ok((await page.getAttribute('#dt-stage', 'data-lens')) === 'parser', 'the lens toggle switches the map to parser coverage');
+  ok((await page.locator('#dt-stage[data-lens="parser"] .dt-node.parse-gap, #dt-stage[data-lens="parser"] .dt-node.parse-verified').count()) >= 1, 'the parser lens classifies moves by readability (verified / gap)');
+  await page.locator('[data-dt-lens="methodology"]').click();
+  await page.waitForTimeout(100);
+  // back to the cards so the following move-pill assertions run against the card view
+  await page.locator('[data-dt="cards"]').click();
+  await page.waitForTimeout(150);
+  ok((await page.locator('.port-card').count()) >= 15 && (await page.locator('#dt-view').count()) === 0, 'the Cards button returns to the ordered-move cards');
+  ok((await page.locator('.port-move').count()) >= 40, 'returning to Cards preserves the expanded-move state');
   await page.locator('.port-move').first().click();
   await page.waitForTimeout(150);
   ok((await page.locator('.study-cols').count()) === 1, 'clicking a port move opens its study cell');
