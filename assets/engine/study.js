@@ -142,6 +142,9 @@
     'seimpersonate': 'Token & Service Abuse', 'unquoted-service-path': 'Token & Service Abuse', 'weak-service-permissions': 'Token & Service Abuse', 'alwaysinstallelevated': 'Token & Service Abuse',
     'dpapi-secrets': 'Credential Dumping', 'stored-credentials': 'Credential Dumping', 'windows-old-hives': 'Credential Dumping', 'lsass-dump-onbox': 'Credential Dumping',
     'windows-persistence': 'Windows Persistence',
+    // database lane
+    'mysql-login': 'Relational (MySQL, MSSQL, Postgres)', 'mysql-loot': 'Relational (MySQL, MSSQL, Postgres)', 'mssql-login': 'Relational (MySQL, MSSQL, Postgres)', 'mssql-xp-cmdshell': 'Relational (MySQL, MSSQL, Postgres)', 'postgres-login': 'Relational (MySQL, MSSQL, Postgres)',
+    'redis-enum': 'NoSQL & Key-Value', 'mongo-enum': 'NoSQL & Key-Value',
   };
   var CATEGORY_ORDER = [
     // web
@@ -155,6 +158,8 @@
     'Enumeration', 'Sudo, SUID & Capabilities', 'Cron & Writable Files', 'Container Escape', 'Persistence',
     // windows
     'Token & Service Abuse', 'Credential Dumping', 'Windows Persistence',
+    // database
+    'Relational (MySQL, MSSQL, Postgres)', 'NoSQL & Key-Value',
   ];
   function categoryOf(moveId) { var m = byId(moveId); return MOVE_CATEGORY[moveId] || deriveStage(m || {}); }
 
