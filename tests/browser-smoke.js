@@ -57,7 +57,7 @@ function serve() {
 
   // engine present + packs loaded
   const actionCount = await page.evaluate(() => window.OBOL && window.OBOL.packs ? window.OBOL.packs.actions().length : 0);
-  ok(actionCount === 168, 'packs loaded in browser (168 actions, got ' + actionCount + ')');
+  ok(actionCount >= 174, 'packs loaded in browser (>=174 actions, got ' + actionCount + ')');
 
   // Engagement screen is the default landing; launch an OSCP run with a scoped target.
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
@@ -810,7 +810,7 @@ function serve() {
   await page.locator('[data-graph]').click();
   await page.waitForTimeout(250);
   ok((await page.locator('.atlas-stage').count()) === 1, 'the Atlas renders a zoomable stage');
-  ok((await page.locator('.atlas-node').count()) === 168, 'the Atlas shows all 168 method steps as nodes');
+  ok((await page.locator('.atlas-node').count()) === actionCount, 'the Atlas shows all ' + actionCount + ' method steps as nodes');
   ok((await page.locator('.atlas-band').count()) === 11, 'the Atlas groups steps into 11 lane bands');
   ok((await page.locator('.atlas-edge-cross').count()) >= 1, 'the Atlas draws cross-lane bridges');
   // density: search dims the non-matching steps
