@@ -170,6 +170,8 @@
     'dump-secrets': 'Dumping & Domain Dominance', 'dcsync': 'Dumping & Domain Dominance', 'own-domain-pth': 'Dumping & Domain Dominance', 'sid-history-abuse': 'Dumping & Domain Dominance',
     'zerologon-check': 'AD CVEs', 'zerologon-exploit': 'AD CVEs', 'eternalblue': 'AD CVEs', 'nopac': 'AD CVEs', 'printnightmare': 'AD CVEs', 'ms14-068': 'AD CVEs',
     'gpo-abuse': 'Service & Policy Abuse', 'dnsadmins-abuse': 'Service & Policy Abuse', 'wsus-abuse': 'Service & Policy Abuse', 'sccm-enum': 'Service & Policy Abuse',
+    // proof lane
+    'flag-hunt-linux': 'Proof & Capture', 'flag-hunt-windows': 'Proof & Capture',
   };
   var CATEGORY_ORDER = [
     // web
@@ -194,6 +196,8 @@
     // ad
     'AD Recon & Enumeration', 'Credential Harvesting', 'Kerberos Tickets', 'ACL & Object Abuse', 'Delegation & Coercion',
     'ADCS Abuse', 'Lateral Movement', 'Dumping & Domain Dominance', 'AD CVEs', 'Service & Policy Abuse',
+    // proof
+    'Proof & Capture',
   ];
   function categoryOf(moveId) { var m = byId(moveId); return MOVE_CATEGORY[moveId] || deriveStage(m || {}); }
 
