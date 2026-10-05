@@ -70,7 +70,8 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "privesc.sudo_rights"
+        "privesc.sudo_rights",
+        "privesc.sudo_binary"
       ],
       "deprioritize_when": [
         "access.admin",

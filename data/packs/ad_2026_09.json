@@ -620,7 +620,10 @@
       "requires_any": [
         "smb.reachable",
         "port:445",
-        "credential.available"
+        "credential.available",
+        "smb.null_session",
+        "smb.guest_session",
+        "smb.authenticated"
       ],
       "produces": [
         "loot.files"
@@ -1187,7 +1190,8 @@
       "requires_all": [],
       "requires_any": [
         "credential.available",
-        "hash.ntlm"
+        "hash.ntlm",
+        "rdp.authenticated"
       ],
       "produces": [
         "foothold.windows",

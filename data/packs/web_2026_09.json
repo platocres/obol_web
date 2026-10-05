@@ -65,7 +65,8 @@
       "requires_all": [],
       "requires_any": [
         "http.reachable",
-        "web.vhost"
+        "web.vhost",
+        "http.response"
       ],
       "produces": [
         "web.content_map"
