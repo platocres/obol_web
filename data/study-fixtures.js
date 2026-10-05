@@ -1720,7 +1720,7 @@
       teach: 'A successful MySQL login is a foothold of its own: from SQL you can read application secrets, write files to the web root with INTO OUTFILE, and sometimes reach the OS. Confirm the version first, it steers what is possible.',
     },
     'mysql-loot': {
-      why: "Applications keep their own user rows and password hashes in the database, so once you have a session, dumping the user tables yields crackable hashes and, very often, admin credentials that reuse elsewhere. Reach for it immediately after a MySQL login. This is where a database foothold becomes an account: the app's own password table is frequently the shortest path to a real login on the box or the domain.",
+      why: "A database login is only half a win; the credentials inside it are the other half. Every application stores its own user table, and those password hashes crack or, just as often, reuse straight onto the box or the domain. So the moment you are in, go after the user tables, because this is where a database foothold quietly becomes a real account somewhere that matters.",
       cmd: "mysql -h 10.10.10.10 -u root -p'toor' -e 'SELECT user,host,authentication_string FROM mysql.user;'", tool: 'mysql',
       output: [
         '+------------------+------+-------------------------------------------+',
@@ -1734,7 +1734,7 @@
       teach: 'Once you have a DB session, the mysql.user table holds every account\'s password hash (mode 300 for the *HEX form). Dump them and crack offline, database passwords are reused as system and domain passwords all the time.',
     },
     'mssql-login': {
-      why: "MSSQL commonly accepts a domain credential or the `sa` account, and an authenticated SQL prompt is the gateway to enumeration and, with enough privilege, to running OS commands. Reach for it when you see MSSQL and hold any credential, or suspect a weak `sa`. Unlike MySQL, MSSQL's real prize is command execution, so logging in is step one toward a Windows foothold, not the goal itself.",
+      why: "On Windows, a SQL login is rarely the destination; it is the on-ramp to command execution. MSSQL happily takes a domain credential or a weak sa account, and once you are at the prompt the real question is how much privilege you hold, because sysadmin turns the database into a shell. Reach for it whenever you see MSSQL and hold any credential, and treat logging in as step one toward a Windows foothold, not the finish line.",
       cmd: 'mssqlclient.py acme.internal/svc_sql:P@ssw0rd2023@10.10.10.10 -windows-auth', tool: 'mssqlclient.py',
       output: [
         '[*] Encryption required, switching to TLS',
@@ -1746,7 +1746,7 @@
       teach: 'The first thing to check on an MSSQL login is IS_SRVROLEMEMBER(\'sysadmin\'). A 1 means you can re-enable xp_cmdshell and run OS commands, or impersonate other logins. Sysadmin on MSSQL is effectively a shell on the host.',
     },
     'mssql-xp-cmdshell': {
-      why: "A sysadmin-level MSSQL login can enable and call xp_cmdshell to run OS commands as the SQL service account, which is a direct Windows foothold, and that account very often carries SeImpersonatePrivilege for the next step to SYSTEM. Reach for it once you confirm sysadmin rights. It is one of the cleanest database-to-shell paths on Windows, so the moment you hold `sa`, this is the move.",
+      why: "This is the cleanest database-to-shell jump Windows offers, and it comes with a bonus. Sysadmin lets you switch on a stored procedure that runs OS commands as the SQL service account, and that account very often holds SeImpersonate, which is a straight line onward to SYSTEM. So the instant you confirm sysadmin rights on MSSQL, this is the move: a shell now and a privesc teed up for next.",
       cmd: "mssqlclient.py ...@10.10.10.10 -q \"EXEC xp_cmdshell 'whoami'\"", tool: 'mssqlclient.py',
       output: [
         'output',
@@ -1757,7 +1757,7 @@
       teach: 'With sysadmin on MSSQL you re-enable xp_cmdshell and run OS commands as the SQL service account. The whoami output confirms code execution, the database just became a shell. From here, grab a reverse shell.',
     },
     'postgres-login': {
-      why: "PostgreSQL may accept a default or reused credential, and a session opens database enumeration plus, on older versions, RCE through COPY FROM PROGRAM or large-object tricks. Reach for it when you see Postgres and have a plausible credential. Check the version, because the command-execution path depends on it: the same login is either \"just data\" or \"a shell\" depending on how old the server is.",
+      why: "With PostgreSQL the server version decides whether a login is a data leak or a shell. A default or reused credential gets you in, and from there the command-execution paths (COPY FROM PROGRAM, large-object tricks) live or die on how old the build is. So read the version first, then enumerate: the very same session is either rows of data or a route to RCE depending on that one number.",
       cmd: "PGPASSWORD=postgres psql -h 10.10.10.10 -U postgres -c 'SELECT version();'", tool: 'psql',
       output: [
         '                         version',
@@ -1769,7 +1769,7 @@
       teach: 'A PostgreSQL session with the right role can read files and, via COPY ... FROM PROGRAM, run commands. As with any DB foothold, the version tells you which of those paths is open to you.',
     },
     'redis-enum': {
-      why: "An exposed Redis very often has no AUTH at all, so INFO and KEYS dump cached secrets for free, and a writable instance can be pushed to RCE by writing an SSH key or a webshell to disk. Reach for it the moment you see Redis open. First read what is cached (sessions and secrets live there), then, if it is writable and you know a path, escalate the write into code execution.",
+      why: "Redis is a key-value store people forget to lock, and an open one gives up its contents for free. Read first: cached sessions, tokens, and secrets sit in plain view behind a couple of commands, and that alone often unlocks the next step. Then, if the instance is writable and you know a path on disk, that same access escalates from reading secrets to writing an SSH key or a webshell, which is code execution.",
       cmd: 'redis-cli -h 10.10.10.10 INFO server', tool: 'redis-cli',
       output: [
         '# Server',
@@ -1781,7 +1781,7 @@
       teach: 'An unauthenticated Redis answers INFO to anyone. Beyond the version, a writable Redis can be abused to drop an SSH key or a web shell (CONFIG SET dir / dbfilename), an open Redis on 6379 is frequently a direct foothold.',
     },
     'mongo-enum': {
-      why: "An exposed MongoDB with no auth lets you list databases and dump collections outright, which spills application data and any credentials stored in it. Reach for it whenever Mongo is open and unauthenticated. There is no injection or cracking involved, it is just reading what should have been locked down, so enumerate the collections and mine them for credentials and anything that unlocks the next step.",
+      why: "There is nothing clever about this one, which is exactly why it works so often: a Mongo instance left unauthenticated simply hands you its data when you ask. No injection, no cracking, just connecting and reading what should have been locked down. Enumerate the collections and mine them for stored credentials and anything that opens the next door; it is pure misconfiguration, and misconfiguration is everywhere.",
       cmd: 'nmap -Pn -p 27017 --script mongodb-info,mongodb-databases 10.10.10.10', tool: 'nmap',
       output: [
         'PORT      STATE SERVICE',
