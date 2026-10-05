@@ -159,6 +159,17 @@
     'check-web-headers': 'Headers & Fingerprint', 'check-web-components': 'Headers & Fingerprint', 'check-cms-version': 'Headers & Fingerprint',
     'check-web-body': 'Page Body & Exposed Files', 'check-exposed-files': 'Page Body & Exposed Files',
     'check-subdomain-takeover': 'DNS & Email', 'check-dns-email': 'DNS & Email',
+    // ad lane
+    'ad-dc-identify': 'AD Recon & Enumeration', 'ad-anon-ldap-enum': 'AD Recon & Enumeration', 'ad-user-enum': 'AD Recon & Enumeration', 'bloodhound-collect': 'AD Recon & Enumeration', 'ad-path-manual': 'AD Recon & Enumeration', 'nxc-arsenal': 'AD Recon & Enumeration', 'powerview-enum': 'AD Recon & Enumeration', 'ad-legacy-enum': 'AD Recon & Enumeration', 'ad-psdotnet-enum': 'AD Recon & Enumeration', 'trust-enum': 'AD Recon & Enumeration',
+    'asrep-roast': 'Credential Harvesting', 'crack-asrep': 'Credential Harvesting', 'kerberoast': 'Credential Harvesting', 'crack-tgs': 'Credential Harvesting', 'password-spray': 'Credential Harvesting', 'gpp-passwords': 'Credential Harvesting', 'smb-share-inventory': 'Credential Harvesting',
+    'kerberos-tickets': 'Kerberos Tickets', 'silver-ticket': 'Kerberos Tickets', 'golden-ticket': 'Kerberos Tickets', 'diamond-ticket': 'Kerberos Tickets',
+    'ad-acl-abuse': 'ACL & Object Abuse', 'bloodyad-acl': 'ACL & Object Abuse', 'shadow-credentials': 'ACL & Object Abuse', 'gmsa-read': 'ACL & Object Abuse', 'laps-read': 'ACL & Object Abuse',
+    'delegation-abuse': 'Delegation & Coercion', 'unconstrained-delegation': 'Delegation & Coercion', 'getst-impersonation': 'Delegation & Coercion', 'coerce-auth': 'Delegation & Coercion',
+    'adcs-esc': 'ADCS Abuse', 'cert-authenticate': 'ADCS Abuse',
+    'lateral-exec': 'Lateral Movement', 'ticket-reuse': 'Lateral Movement',
+    'dump-secrets': 'Dumping & Domain Dominance', 'dcsync': 'Dumping & Domain Dominance', 'own-domain-pth': 'Dumping & Domain Dominance', 'sid-history-abuse': 'Dumping & Domain Dominance',
+    'zerologon-check': 'AD CVEs', 'zerologon-exploit': 'AD CVEs', 'eternalblue': 'AD CVEs', 'nopac': 'AD CVEs', 'printnightmare': 'AD CVEs', 'ms14-068': 'AD CVEs',
+    'gpo-abuse': 'Service & Policy Abuse', 'dnsadmins-abuse': 'Service & Policy Abuse', 'wsus-abuse': 'Service & Policy Abuse', 'sccm-enum': 'Service & Policy Abuse',
   };
   var CATEGORY_ORDER = [
     // web
@@ -180,6 +191,9 @@
     'Map the Foothold (Linux)', 'Map the Foothold (Windows)', 'Build the Tunnel', 'Work Through the Pivot',
     // checks
     'TLS & Cleartext', 'HTTP Verbs & CORS', 'Headers & Fingerprint', 'Page Body & Exposed Files', 'DNS & Email',
+    // ad
+    'AD Recon & Enumeration', 'Credential Harvesting', 'Kerberos Tickets', 'ACL & Object Abuse', 'Delegation & Coercion',
+    'ADCS Abuse', 'Lateral Movement', 'Dumping & Domain Dominance', 'AD CVEs', 'Service & Policy Abuse',
   ];
   function categoryOf(moveId) { var m = byId(moveId); return MOVE_CATEGORY[moveId] || deriveStage(m || {}); }
 
