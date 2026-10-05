@@ -95,7 +95,8 @@
       looksFor: 'BloodHound / bloodyAD / PowerView output — collected graph, attack and control paths, ACL edges (GenericAll/WriteDacl), delegation, GPO and gMSA control, and the objects you can now add or own.',
       regex: 'GenericAll, Unconstrained, has control over',
       emits: ['ad.graph.collected', 'ad.attack_paths', 'ad.control_paths', 'ad.acl_lead', 'ad.domain_control',
-        'ad.gmsa', 'ad.gpo_writable', 'ad.unconstrained', 'ad.group_joined', 'ad.computer_added'],
+        'ad.gmsa', 'ad.gpo_writable', 'ad.unconstrained', 'ad.group_joined', 'ad.computer_added',
+        'lateral.movement', 'ad.coerced_auth', 'ad.gpo_control', 'ad.sid_history'],
     },
     'adcs': {
       looksFor: 'certipy / pywhisker output — a `find -vulnerable` run naming ESC1-16 templates (adcs.vulnerable), a saved .pfx certificate from `req` or a shadow-credentials add (credential.certificate), and a `certipy auth` that exchanges a cert for the account’s NT hash (hash.ntlm → a usable credential).',
@@ -111,6 +112,26 @@
       looksFor: 'a Zerologon (CVE-2020-1472) scan verdict — a "Success!/vulnerable" line (and not a patched/failed one) that marks the DC exploitable.',
       regex: 'Success! … Zerologon, is vulnerable',
       emits: ['ad.zerologon'],
+    },
+    'http-findings': {
+      looksFor: 'a web posture check — curl -I security headers (which are present vs missing), the OPTIONS Allow verbs, a reflected CORS Access-Control-Allow-Origin, a secret in a page comment or body, and a readable sensitive file (.git, .env, web.config, a private key).',
+      regex: 'Strict-Transport-Security, Allow:, Access-Control-Allow-Origin:, ref: refs/heads/',
+      emits: ['http.headers', 'http.methods', 'http.cors', 'http.body', 'http.exposed'],
+    },
+    'dns-findings': {
+      looksFor: 'a DNS check — a successful AXFR zone transfer (the records and hostnames it leaks), SPF/DMARC email posture, and a dangling-CNAME subdomain-takeover fingerprint.',
+      regex: 'IN SOA, v=spf1, v=DMARC1, NoSuchBucket',
+      emits: ['dns.zone', 'dns.email', 'dns.takeover'],
+    },
+    'vhost': {
+      looksFor: 'virtual-host discovery output — an ffuf/gobuster vhost result where a Host header returns a real, differently-sized page.',
+      regex: 'Found: admin.acme.internal, [Status: 200]',
+      emits: ['web.vhost'],
+    },
+    'tls-config': {
+      looksFor: 'a TLS scan (sslscan / testssl / nmap ssl-enum-ciphers) — weak protocols (SSLv3, TLS 1.0/1.1), weak ciphers (RC4, 3DES, EXPORT), Heartbleed, and certificate problems.',
+      regex: 'SSLv3 enabled, RC4 accepted, Heartbleed, self-signed',
+      emits: ['tls.info'],
     },
     'host-privesc': {
       looksFor: "a privilege-escalation sweep on the host — winPEAS/linPEAS leads, sudo -l rights, SUID binaries, capabilities, writable cron/paths, docker/lxd groups, unquoted service paths, dangerous tokens, missing patches, stored app credentials (PuTTY/WinSCP/VNC), AV/AppLocker posture, notable programs, and a reachable desktop.",

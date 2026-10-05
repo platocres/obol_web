@@ -31,7 +31,7 @@ function load(file) {
 }
 load(path.join(ENGINE, 'facts.js'));
 load(path.join(ENGINE, 'parsers', 'common.js'));
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'shape'].forEach(function (m) {
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape'].forEach(function (m) {
   load(path.join(ENGINE, 'parsers', m + '.js'));
 });
 load(path.join(ENGINE, 'parsers', 'index.js'));

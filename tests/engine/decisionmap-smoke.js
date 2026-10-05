@@ -14,7 +14,7 @@ var A = PK.loadPacks(Object.keys(bundle).map(function (k) { return bundle[k]; })
 OBOL.packs = { actions: function () { return A; }, packData: function () { return bundle; } };
 req('data/tools-install.js'); req('data/study-fixtures.js'); req('assets/engine/study.js');
 req('assets/engine/parsers/common.js');
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'shape'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
 req('data/decision-forks.js'); req('data/parser-signatures.js'); req('data/coverage-expected.js');
 req('assets/engine/decisionmap.js');
@@ -48,10 +48,13 @@ ok(!DM.handoffFor('web.sqli_confirmed'), 'a non-interchange fact does not hand o
 var gr = DM.gapReport();
 ok(gr.wiring.unreachable.length === 0, 'no move is unreachable (every requirement is obtainable)');
 ok(gr.wiring.missingHandoff.length === 0, 'every hand-off points at an access card that exists');
-ok(gr.counts.parseGap >= 1, 'parse-gap lens finds the documented unreadable facts (' + gr.counts.parseGap + ')');
-// the known unported findings-checks surface as parse gaps (the diagnostic working as intended)
-var gapIds = gr.parse.gap.map(function (g) { return g.id; });
-ok(gapIds.indexOf('check-tls-config') >= 0 && gapIds.indexOf('recon-dns') >= 0, 'the known unported parsers (tls check, dns zone) show as parse gaps');
+// the findings-lens parsers (phase 4) now read the checks lane, so every move result is readable and
+// the parse-gap lens reports zero. The lens is still exercised: it grades each move from the real
+// capability set, and the formerly-unported checks now read back as verified.
+var pc0 = DM.parserCoverage();
+ok(gr.counts.parseGap === 0, 'every move result is readable by a parser now (parseGap ' + gr.counts.parseGap + ')');
+ok(pc0['check-tls-config'] && pc0['check-tls-config'].status === 'verified', 'the TLS check reads back verified (its result is parseable)');
+ok(pc0['recon-dns'] && pc0['recon-dns'].status === 'verified', 'the DNS zone-transfer reads back verified');
 // every seeded expected technique now has a backing move, so the oracle reports zero coverage gaps;
 // the machinery is still exercised (COVERAGE_EXPECTED is populated and each entry resolves to a move).
 ok((OBOL.COVERAGE_EXPECTED && Object.keys(OBOL.COVERAGE_EXPECTED).length >= 6), 'the expected-coverage oracle is populated');

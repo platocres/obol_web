@@ -229,6 +229,24 @@
     if (has('_has_product_signature') && C._has_product_signature(text)) C._parse_product_signature(text, ws, command, source, facts);
     if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) C._parse_sqli_oracle(text, ws, command, source, facts);
 
+    // findings-lens checks (the "checks" lane + a couple of recon observations): route on the move's
+    // action-id, each parser is content-gated so an unrelated paste mints nothing.
+    if (actionId === 'check-web-headers' && has('_parse_http_headers')) C._parse_http_headers(text, ws, source, facts);
+    if ((actionId === 'check-http-methods' || /^\s*(allow|public):/im.test(text)) && has('_parse_http_methods')) C._parse_http_methods(text, ws, source, facts);
+    if ((actionId === 'check-cors' || /access-control-allow-origin:/i.test(text)) && has('_parse_http_cors')) C._parse_http_cors(text, ws, source, facts);
+    if (actionId === 'check-web-body' && has('_parse_http_body')) C._parse_http_body(text, ws, source, facts);
+    if ((actionId === 'check-tls-config' || lc.indexOf('sslscan') >= 0 || lc.indexOf('testssl') >= 0 || lc.indexOf('ssl-enum-ciphers') >= 0) && has('_parse_tls_info')) C._parse_tls_info(text, ws, source, facts);
+    if (actionId === 'check-exposed-files' && has('_parse_http_exposed')) C._parse_http_exposed(text, ws, source, facts);
+    if ((actionId === 'recon-dns' || lc.indexOf('axfr') >= 0) && has('_parse_dns_zone')) C._parse_dns_zone(text, ws, source, facts);
+    if (actionId === 'check-dns-email' && has('_parse_dns_email')) C._parse_dns_email(text, ws, source, facts);
+    if (actionId === 'check-subdomain-takeover' && has('_parse_dns_takeover')) C._parse_dns_takeover(text, ws, source, facts);
+    if ((actionId === 'vhost-discovery' || (lc.indexOf('-h ') >= 0 && lc.indexOf('host:') >= 0 && lc.indexOf('fuzz') >= 0)) && has('_parse_vhost')) C._parse_vhost(text, ws, source, facts);
+    // late-game AD recording facts (the access is already landed; these record the specific primitive)
+    if ((actionId === 'ticket-reuse' || actionId === 'lateral-exec') && has('_parse_lateral_movement')) C._parse_lateral_movement(text, ws, source, facts);
+    if (actionId === 'coerce-auth' && has('_parse_coerced_auth')) C._parse_coerced_auth(text, ws, source, facts);
+    if (actionId === 'gpo-abuse' && has('_parse_gpo_control')) C._parse_gpo_control(text, ws, source, facts);
+    if (actionId === 'sid-history-abuse' && has('_parse_sid_history')) C._parse_sid_history(text, ws, source, facts);
+
     // Output-shape fallback (runs last): recognize common output by its shape when the command-keyed
     // dispatch above did not key on it. Strictly additive and guarded, so it only fills gaps (a bare
     // port table, a raw HTTP response, a pasted AS-REP/TGS hash) and never alters a parsed result.

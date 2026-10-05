@@ -499,8 +499,7 @@
    ],
    "produces": [
     "web.ssrf_confirmed",
-    "loot.files",
-    "cloud.aws_access"
+    "loot.files"
    ],
    "priority": 66,
    "proves": "confirms a working SSRF, retrieved files, and AWS cloud access",

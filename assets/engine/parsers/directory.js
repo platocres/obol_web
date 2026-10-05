@@ -1005,4 +1005,34 @@
   }
   C._parse_certipy_auth = _parse_certipy_auth;
 
+  // --- late-game AD recording facts (the move already lands the access; these record the specific
+  //     primitive for the report and the map's parser lens). All content-gated on a success marker. ---
+  function _parse_lateral_movement(text, ws, source, facts) {
+    if (/nt authority\\system|Microsoft Windows \[Version|^[A-Z]:\\[^\n]*>|\bpwned\b|Access granted/i.test(text)) {
+      _add(facts, mkFact('lateral.movement', C._scope_for_domain(ws), { via: /rubeus|ptt|ticket/i.test(text) ? 'ticket-reuse' : 'lateral-exec' }, S, source));
+    }
+  }
+  C._parse_lateral_movement = _parse_lateral_movement;
+
+  function _parse_coerced_auth(text, ws, source, facts) {
+    if (/received connection|smb.*ntlmv2|attack worked|triggered|rpc.*success|\[\+\].*(?:coerc|petitpotam|printerbug|dfscoerce)/i.test(text)) {
+      _add(facts, mkFact('ad.coerced_auth', C._scope_for_domain(ws), { note: 'authentication coerced from the target' }, S, source));
+    }
+  }
+  C._parse_coerced_auth = _parse_coerced_auth;
+
+  function _parse_gpo_control(text, ws, source, facts) {
+    if (/version(?:Number)? (?:updated|incremented)|scheduled task created|immediate task|gPCMachineExtensionNames|GPO .* modified|\[\+\].*gpo/i.test(text)) {
+      _add(facts, mkFact('ad.gpo_control', C._scope_for_domain(ws), { note: 'a writable GPO was modified' }, S, source));
+    }
+  }
+  C._parse_gpo_control = _parse_gpo_control;
+
+  function _parse_sid_history(text, ws, source, facts) {
+    if (/ExtraSids|sid-?history|SID History (?:added|injected)|-extra-sid/i.test(text)) {
+      _add(facts, mkFact('ad.sid_history', C._scope_for_domain(ws), { note: 'SID history abused for cross-domain privilege' }, S, source));
+    }
+  }
+  C._parse_sid_history = _parse_sid_history;
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -8,7 +8,7 @@ var ctx = vm.createContext({ console: console });
 function load(f) { vm.runInContext(fs.readFileSync(f, 'utf8'), ctx, { filename: f }); }
 load(path.join(ENGINE, 'facts.js'));
 load(path.join(ENGINE, 'parsers', 'common.js'));
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'shape'].forEach(function (m) { load(path.join(ENGINE, 'parsers', m + '.js')); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape'].forEach(function (m) { load(path.join(ENGINE, 'parsers', m + '.js')); });
 load(path.join(ENGINE, 'parsers', 'index.js'));
 var OBOL = ctx.OBOL;
 

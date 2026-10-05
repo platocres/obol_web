@@ -28,7 +28,7 @@ var A = PK.loadPacks(Object.keys(bundle).map(function (k) { return bundle[k]; })
 OBOL.packs = { actions: function () { return A; }, packData: function () { return bundle; } };
 req('data/tools-install.js'); req('data/study-fixtures.js'); req('assets/engine/study.js');
 req('assets/engine/parsers/common.js');
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'shape'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
 req('data/decision-forks.js'); req('data/parser-signatures.js'); req('data/coverage-expected.js');
 req('assets/engine/decisionmap.js');
