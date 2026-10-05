@@ -30,7 +30,7 @@
       var inAd = adSet.indexOf(String(h.ip).toLowerCase()) >= 0 || adSet.indexOf(String(h.hostname || '').toLowerCase()) >= 0;
       if (!inAd) { if (local) total += pts.local || 10; if (rooted) total += pts.root || 10; }
       if (inAd && !rooted) adAllRooted = false;
-      function chip(on, label) { return '<span class="score-chip ' + (on ? 'got' : 'miss') + '">' + (on ? '🚩 ' : '') + label + '</span>'; }
+      function chip(on, label) { return '<span class="score-chip ' + (on ? 'got' : 'miss') + '">' + (on ? OBOL.ic('flag') + ' ' : '') + label + '</span>'; }
       return '<tr' + (inAd ? ' class="ad-row"' : '') + '><td><a href="#/target/' + esc(h.ip) + '">' + esc(h.ip) + (h.hostname ? ' <span class="thost">' + esc(h.hostname) + '</span>' : '') + '</a>' + (inAd ? ' <span class="pill">AD set</span>' : '') + '</td>'
         + '<td>' + chip(local, 'local') + '</td><td>' + chip(rooted, 'root') + '</td></tr>';
     }).join('');

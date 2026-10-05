@@ -142,7 +142,7 @@
     // credential switcher click/keyboard handling (delegated, wired once)
     if (OBOL.credbar) OBOL.credbar.mount();
 
-    // (skin/motion/opacity live in the bottom-right ⚙ settings panel — see settings.js)
+    // (skin/motion/opacity live in the bottom-right settings panel — see settings.js)
 
     // re-render sidebar whenever state changes
     OBOL.store.onChange(function () { renderSidebar(); });

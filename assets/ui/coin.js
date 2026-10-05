@@ -132,7 +132,7 @@
         "font:700 20px ui-monospace,monospace;letter-spacing:.04em;color:#FFD34D;text-shadow:0 2px 10px rgba(0,0,0,.6),0 0 18px rgba(255,211,77,.5);opacity:0;transition:opacity .18s ease;white-space:nowrap;";
       (document.body || document.documentElement).appendChild(bannerEl);
     }
-    bannerEl.textContent = loot ? ("✨ loot found: " + m.label) : ("◉ PWNED: " + m.label);
+    bannerEl.innerHTML = loot ? (OBOL.ic('spark') + " loot found: " + m.label) : ("◉ PWNED: " + m.label);
     bannerEl.style.color = loot ? "#FFE9A8" : "#FFD34D"; bannerEl.style.opacity = "1";
     clearTimeout(bannerTimer); bannerTimer = setTimeout(function () { if (bannerEl) bannerEl.style.opacity = "0"; }, 1400);
   }

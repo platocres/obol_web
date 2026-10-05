@@ -710,7 +710,7 @@
       if (s.count) {
         var rows = s.items.map(function (it) { return '<tr><td>' + esc(it) + '</td></tr>'; }).join('');
         parts.push('<table><tr><th>' + esc(s.title) + '</th></tr>' + rows + '</table>');
-        if (s.cash) parts.push('<div class="cash">⚡ ' + esc(s.cash) + '</div>');
+        if (s.cash) parts.push('<div class="cash">' + (OBOL.ic ? OBOL.ic('bolt') : '') + ' ' + esc(s.cash) + '</div>');
       } else {
         parts.push('<div class="empty">None in this collection.</div>');
       }

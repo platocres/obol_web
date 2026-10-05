@@ -81,13 +81,13 @@
           var slot = v.slot === 'user' ? 'local' : (v.slot || 'flag');
           var shots = shotsForSlot(slot);
           return '<li class="flag-card flag-' + esc(v.slot || 'flag') + '">'
-            + '<div class="flag-card-h"><span class="flag-slot">🚩 ' + esc(flagLabel(e)) + '</span>'
+            + '<div class="flag-card-h"><span class="flag-slot">' + OBOL.ic('flag') + ' ' + esc(flagLabel(e)) + '</span>'
             + (v.name ? '<span class="flag-file" title="' + U.attr(v.path || v.name) + '">' + esc(v.name) + '</span>' : '') + '</div>'
             + (val ? '<code class="flag-val" title="' + U.attr(val) + '">' + esc(val) + '</code><button class="btn-copy flag-copy" data-copy="' + U.attr(val) + '">copy</button>' : '')
             + '<div class="flag-proof">' + (shots.length
               ? shots.map(function (s) { return '<span class="flag-shot-wrap"><img class="flag-shot" src="' + esc(s.data_uri) + '" alt="proof screenshot"><button class="flag-shot-rm" data-rm="' + esc(s.id) + '" title="Remove">✕</button></span>'; }).join('')
                 + '<span class="flag-proof-ok">✓ proof screenshot attached</span>'
-              : '<button class="flag-attach" data-slot="' + esc(slot) + '">📎 Attach proof screenshot</button>'
+              : '<button class="flag-attach" data-slot="' + esc(slot) + '">' + OBOL.ic('clip') + ' Attach proof screenshot</button>'
                 + '<span class="flag-proof-note">flag + ipconfig in one interactive-shell frame, OffSec requires the image</span>')
             + '</div></li>';
         }).join('')
@@ -95,7 +95,7 @@
           v = v || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
           var label = SL[v.slot] || 'Flag';
           return '<li class="flag-card flag-located">'
-            + '<div class="flag-card-h"><span class="flag-slot">📍 ' + esc(label) + ' <em>located</em></span>'
+            + '<div class="flag-card-h"><span class="flag-slot">' + OBOL.ic('pin') + ' ' + esc(label) + ' <em>located</em></span>'
             + (v.name ? '<span class="flag-file" title="' + U.attr(v.path || v.name) + '">' + esc(v.path || v.name) + '</span>' : '') + '</div>'
             + '<div class="flag-locnote">Found remotely, read it from an interactive shell on this host so it counts for the report (OffSec scores a remote read zero).</div>'
             + '</li>';
@@ -135,7 +135,7 @@
       + '<div class="target-head">'
       + '<div class="target-crumbs"><a class="crumb" href="#/targets">Targets</a>'
       + '<span class="acc-pill ' + acc.cls + '">' + acc.label + '</span>'
-      + (flags.length ? '<span class="pill flag-pill">🚩 ' + flags.map(esc).join(', ') + '</span>' : '') + '</div>'
+      + (flags.length ? '<span class="pill flag-pill">' + OBOL.ic('flag') + ' ' + flags.map(esc).join(', ') + '</span>' : '') + '</div>'
       + '<dl class="ident target-ident">'
       + '<div class="ident-row"><dt>IP</dt><dd class="ident-ip"><h1 class="route-h1 inline">' + esc(idn.ip) + '</h1></dd></div>'
       + identRow('Hostname', idn.hostname, 'ident-host', idn.hostname && idn.fqdn !== idn.hostname ? idn.fqdn : '')

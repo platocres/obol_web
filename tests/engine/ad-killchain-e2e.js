@@ -97,9 +97,9 @@ ok(adminCred.length === 1, 'LOOT: the Administrator credential carries the dumpe
 var ready = OBOL.pack.nextActions(facts, pack, {});
 ok(ready.length && ready[0].id === 'own-domain-pth', 'LOOT → the #1 next move is "Own the Domain — Pass-the-Hash as Administrator" (id=' + (ready[0] && ready[0].id) + ')');
 ok(!ready.some(function (a) { return a.id === 'coerce-auth'; }), 'LOOT → the coercion move has retired (obsoleted by loot.ntds), no longer steering you sideways');
-// the endgame move's win command carries the ☠ cash-in and pass-the-hash form
+// the endgame move's win command carries the kill-shot cash-in and pass-the-hash form
 var endgame = pack.filter(function (a) { return a.id === 'own-domain-pth'; })[0];
-ok(endgame && (endgame.commands || []).some(function (c) { return c.win && /evil-winrm/.test(c.run); }), 'the endgame move flags a win (☠ Pwn This Target) command');
+ok(endgame && (endgame.commands || []).some(function (c) { return c.win && /evil-winrm/.test(c.run); }), 'the endgame move flags a win (Pwn This Target) command');
 ok(endgame && (endgame.commands || []).some(function (c) { return /-H \{\{nthash\}\}|:\{\{nthash\}\}/.test(c.run); }), 'the endgame commands pass the NT hash (fills from the surfaced Administrator credential)');
 
 // The clutter test: owning the domain retires the credential-harvest + this-domain escalation routes, but

@@ -26,7 +26,7 @@
       var title = U.titleCase(s.label);
       return arrow + '<article class="apath-block ph-' + esc(s.phase) + (s.isFlag ? ' apath-flag' : '') + '">'
         + '<div class="apath-cat"><span class="ph-chip ph-' + esc(s.phase) + '">' + esc(s.phase) + '</span>' + tech + '</div>'
-        + '<div class="apath-title">' + (s.isFlag ? '🚩 ' : '') + esc(title) + '</div>'
+        + '<div class="apath-title">' + (s.isFlag ? OBOL.ic('flag') + ' ' : '') + esc(title) + '</div>'
         + detail + cmd + from + '</article>';
     }).join('');
   }

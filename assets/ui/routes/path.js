@@ -72,7 +72,7 @@
   function arsenalStrip() {
     var p = arsenalProfile();
     if (!p) {
-      return '<a class="lo-strip lo-strip-cta" href="#/loadout"><span class="lo-strip-ico">⚙</span>'
+      return '<a class="lo-strip lo-strip-cta" href="#/loadout"><span class="lo-strip-ico">' + OBOL.ic('gear') + '</span>'
         + '<span class="lo-strip-txt">Set up your attack box, obol tailors every command to the tools you have</span>'
         + '<span class="lo-strip-go">Loadout →</span></a>';
     }
@@ -98,7 +98,7 @@
     if (v.defender) bits.push('Defender real-time on');
     if (v.exclusion_count) bits.push(v.exclusion_count + ' Defender exclusion' + (v.exclusion_count === 1 ? '' : 's'));
     var what = bits.length ? bits.join(' · ') : 'endpoint controls active';
-    return '<div class="coach-defense"><span class="coach-defense-ico">🛡</span>'
+    return '<div class="coach-defense"><span class="coach-defense-ico">' + OBOL.ic('shield') + '</span>'
       + '<span>Endpoint defenses detected, <strong>' + esc(what) + '</strong>. Prefer remote-first moves; on-host tooling may be seen.</span></div>';
   }
 
@@ -153,7 +153,7 @@
         : '';
       var note = v.note ? '<div class="cmd-note">' + esc(v.note) + '</div>' : '';
       // hands-on guidance for obol web: big output → tee to a file and attach it in Evidence.
-      var webNote = v.webNote ? '<div class="cmd-webnote">✋ ' + esc(v.webNote) + '</div>' : '';
+      var webNote = v.webNote ? '<div class="cmd-webnote">⚠ ' + esc(v.webNote) + '</div>' : '';
       var label = action.sequence ? ('step ' + (i + 1))
         : (x.ran ? 'already run' : (pos === firstUnrun ? 'preferred' : 'alt ' + pos));
       var ranTag = (x.ran && !action.sequence)
@@ -162,7 +162,7 @@
         + (fillable.length ? ' data-tmpl="' + U.attr(v.filled) + '"' : '') + '>'
         + '<div class="cmd-head"><span class="cmd-tag">' + esc(v.tool || action.tool || 'cmd') + '</span>'
         + '<span class="cmd-variant">' + label + '</span>' + ranTag
-        + (v.win && !x.ran ? '<span class="cmd-win">☠ Pwn This Target</span>' : '')
+        + (v.win && !x.ran ? '<span class="cmd-win">' + OBOL.ic('skull') + ' Pwn This Target</span>' : '')
         + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '" title="Copy command">copy</button></div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
         + fillRow + note + webNote + warn + missingToolHint(action, v) + '</div>';
@@ -294,16 +294,16 @@
             var label = SL[v.slot] || (f.kind.split('.').pop().replace('_', ' '));
             var val = v.flag || '';
             // Show the WHOLE flag (wrapped, selectable, click-to-copy) — a captured flag is the deliverable.
-            return '<li class="rail-flag"><div class="rail-flag-h"><span>🚩 ' + esc(label) + '</span>'
+            return '<li class="rail-flag"><div class="rail-flag-h"><span>' + OBOL.ic('flag') + ' ' + esc(label) + '</span>'
               + (v.name ? '<span class="rail-flag-file" title="' + U.attr(v.path || v.name) + '">' + esc(v.name) + '</span>' : '') + '</div>'
               + (val ? '<code class="rail-flag-val" data-copy="' + U.attr(val) + '" title="Click to copy">' + esc(val) + '</code>' : '') + '</li>';
           }).join('')
           + located.map(function (f) {
             var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
             var label = SL[v.slot] || 'Flag';
-            return '<li class="rail-located" title="' + U.attr('located remotely at ' + (v.path || v.name || '') + 'read it from an on-host shell for the report') + '"><span>📍 ' + esc(label) + ' <em>located</em></span><span class="rail-produced">capture on-host</span></li>';
+            return '<li class="rail-located" title="' + U.attr('located remotely at ' + (v.path || v.name || '') + 'read it from an on-host shell for the report') + '"><span>' + OBOL.ic('pin') + ' ' + esc(label) + ' <em>located</em></span><span class="rail-produced">capture on-host</span></li>';
           }).join('')
-          + '</ul>' + (located.length ? '<div class="rail-note">📍 located remotely, read on the host (interactive shell) so it counts for the report.</div>' : '')
+          + '</ul>' + (located.length ? '<div class="rail-note">' + OBOL.ic('pin') + ' located remotely, read on the host (interactive shell) so it counts for the report.</div>' : '')
         : '<div class="rail-empty">None captured yet.</div>')
       + railCard('Credentials (' + creds.length + ')', creds.length
         ? '<ul class="rail-list">' + creds.slice(0, 6).map(function (c) {
@@ -419,7 +419,7 @@
       var scandir = OBOL.workspace.tokens(eng).scandir;
       var stamp = OBOL.workspace.promptStamp ? OBOL.workspace.promptStamp((params || {}).lhost_iface || '') : (OBOL.workspace.PROMPT_STAMP_ZSH || '');
       html += '<div class="ws-banner">'
-        + '<div class="ws-banner-h">📁 Set up your working directory, run this once on your Kali box:</div>'
+        + '<div class="ws-banner-h">' + OBOL.ic('folder') + ' Set up your working directory, run this once on your Kali box:</div>'
         + '<pre class="cmd-run"><code>' + esc(scaffold) + '</code></pre>'
         + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(scaffold) + '">copy</button>'
         + '<button class="btn-ghost ws-done">Got It</button></div>'

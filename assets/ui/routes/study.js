@@ -78,7 +78,7 @@
   }
 
   function locusClass(rank) { return 'study-loc-' + rank; }
-  function locusGlyph(label) { return label === 'REMOTE' ? '🛰' : (label === 'OFFLINE' ? '💾' : '🖥'); }
+  function locusGlyph(label) { return label === 'REMOTE' ? OBOL.ic('box') : (label === 'OFFLINE' ? OBOL.ic('disk') : OBOL.ic('host')); }
 
   function laneKeyOf(moveId) { var e = study().laneEntry(moveId); return e ? e.laneKey : 'ad'; }
   function laneMeta(key) { var ls = study().lanes(); for (var i = 0; i < ls.length; i++) if (ls[i].key === key) return ls[i]; return { name: key }; }
@@ -204,7 +204,7 @@
   }
   // One honest pane when a move runs only one way (no misleading toggle, no bare shell handed out as "the move").
   function singleWay(label, kind, note, cmds) {
-    var glyph = kind === 'onhost' ? '🖥' : '🛰';
+    var glyph = kind === 'onhost' ? OBOL.ic('host') : OBOL.ic('box');
     return '<div class="study-runways"><div class="rw-head"><span class="rw-label">Run it from</span>'
       + '<span class="rw-single">' + glyph + ' ' + esc(label) + '</span></div>'
       + '<div class="rw-pane">' + note + cmds.map(commandBlock).join('') + '</div></div>';
@@ -234,8 +234,8 @@
     var hostPane = hostWhen + '<div class="rw-connect">' + commandBlock(conn) + '</div>' + onhost.map(commandBlock).join('');
     return '<div class="study-runways">'
       + '<div class="rw-head"><span class="rw-label">Run it from</span>'
-      + '<button type="button" class="rw-tab on" data-runway="remote">🛰 Your box <span class="rw-n">' + remote.length + '</span></button>'
-      + '<button type="button" class="rw-tab" data-runway="onhost">🖥 On the target <span class="rw-n">' + onhost.length + '</span></button></div>'
+      + '<button type="button" class="rw-tab on" data-runway="remote">' + OBOL.ic('box') + ' Your box <span class="rw-n">' + remote.length + '</span></button>'
+      + '<button type="button" class="rw-tab" data-runway="onhost">' + OBOL.ic('host') + ' On the target <span class="rw-n">' + onhost.length + '</span></button></div>'
       + '<div class="rw-pane" data-pane="remote">' + remotePane + '</div>'
       + '<div class="rw-pane" data-pane="onhost" hidden>' + hostPane + '</div>'
       + '</div>';
@@ -252,7 +252,7 @@
     var s = study().scopeSafety(id);
     if (s.level === 'safe' || !s.note) return '';
     var lab = s.level === 'destructive' ? 'Can break things' : 'Loud';
-    return '<div class="study-scope ' + s.level + '"><span class="study-scope-i">' + (s.level === 'destructive' ? '🛑' : '🔊') + '</span>'
+    return '<div class="study-scope ' + s.level + '"><span class="study-scope-i">' + (s.level === 'destructive' ? OBOL.ic('stop') : OBOL.ic('sound')) + '</span>'
       + '<div><b>' + lab + '.</b> ' + esc(s.note) + ' On the exam, scope is the rule: do not nuke what you do not have to.</div></div>';
   }
   // the always-on reasoning: why this move applies now, and why it matters (fades once mastered)
@@ -622,7 +622,7 @@
       + '<button type="button" class="study-browse-b" data-graph>⊞ browse the whole graph</button>'
       + '<button type="button" class="study-browse-b" data-ports>⊟ browse by open port</button></div>';
     h += '<div class="study-doors">'
-      + door('#/loadout', '⚙', 'Set up your box', 'Install the toolset so the commands you learn match your own machine.')
+      + door('#/loadout', OBOL.ic('gear'), 'Set up your box', 'Install the toolset so the commands you learn match your own machine.')
       + door('#/home', '▶', 'Start an engagement', 'Working a real box? Track it: paste output, get your next move.')
       + '</div>';
     return h + '</section>';
@@ -920,7 +920,7 @@
   // also reflects the locus.
   function cancelReplay() { if (_rpToken) { _rpToken.cancelled = true; _rpToken = null; } }
   // Honour reduced motion for UNINITIATED replay (scroll-in / chaining): OS setting or the
-  // ⚙ motion pref set to reduced/off. An explicit Play/Replay click always animates, since
+  // motion pref set to reduced/off. An explicit Play/Replay click always animates, since
   // the person asked for it. Under reduced motion auto-play still shows the full result, just
   // without the typing animation, so nothing is lost.
   function reducedMotion() {
@@ -932,8 +932,8 @@
   }
   function stepHeader(where) {
     return where === 'host'
-      ? '<div class="rp-step-h rp-host"><span class="rp-where-glyph">🎯</span> on the target, the compromised host</div>'
-      : '<div class="rp-step-h rp-local"><span class="rp-where-glyph">🖥</span> on your box (Kali)</div>';
+      ? '<div class="rp-step-h rp-host"><span class="rp-where-glyph">' + OBOL.ic('host') + '</span> on the target, the compromised host</div>'
+      : '<div class="rp-step-h rp-local"><span class="rp-where-glyph">' + OBOL.ic('box') + '</span> on your box (Kali)</div>';
   }
   function promptFor(where) { return where === 'host' ? 'target$' : 'kali$'; }
   function runReplay(mount, instant) {
@@ -1024,7 +1024,7 @@
       var missing = (iss.missing || []).map(function (mk) { return /^one of:/.test(mk) ? ('one of: ' + mk.replace(/^one of:\s*/, '').split(' / ').map(human).join(' or ')) : human(mk); });
       return '<b>Step ' + (iss.idx + 1) + '</b> (' + esc(title) + ') needs ' + missing.map(function (x) { return '<i>' + esc(x) + '</i>'; }).join(', ') + '. Nothing earlier in this path gets you that.';
     });
-    return '<div class="atlas-tray-warn"><span class="atw-i">🔒</span><div><b>Locked doors on this path:</b> '
+    return '<div class="atlas-tray-warn"><span class="atw-i">' + OBOL.ic('lock') + '</span><div><b>Locked doors on this path:</b> '
       + lines.join(' ') + ' Add the step that opens each, or start where you already have the keys.</div></div>';
   }
   function atlasTray(mount) {

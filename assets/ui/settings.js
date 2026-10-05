@@ -1,5 +1,5 @@
 /*!
- * obol ui — settings.js — the bottom-right ⚙ appearance control.
+ * obol ui — settings.js — the bottom-right appearance control.
  * A single floating button + popover for the things worth letting anyone customise: skin, motion
  * (full/reduced/off), coin bursts, and block opacity (fade the surfaces so the motion background
  * shows through). Presentation-only. Skin persists via OBOL.store prefs (pre-painted in <head>);
@@ -34,7 +34,7 @@
     btn = document.createElement("button");
     btn.id = "obol-settings-toggle"; btn.type = "button"; btn.className = "obol-settings-toggle";
     btn.setAttribute("aria-label", "Appearance settings"); btn.setAttribute("aria-expanded", "false");
-    btn.title = "Appearance"; btn.textContent = "⚙";
+    btn.title = "Appearance"; btn.innerHTML = OBOL.ic("gear");
     btn.addEventListener("click", function (e) { e.stopPropagation(); toggle(); });
 
     panel = document.createElement("div");
@@ -115,7 +115,7 @@
     panel.appendChild(wsWrap); panel.appendChild(fileInput);
 
     // Data: a full factory reset — erase every obol engagement, screenshot and setting in this
-    // browser (a hard refresh doesn't clear IndexedDB). Always reachable from the ⚙, with a confirm.
+    // browser (a hard refresh doesn't clear IndexedDB). Always reachable from the settings panel, with a confirm.
     panel.appendChild(sectionTitle("Data"));
     var dataWrap = document.createElement("div"); dataWrap.className = "obol-set-row";
     var resetBtn = document.createElement("button");
@@ -143,7 +143,7 @@
   }
   function syncSkins() { var cur = currentSkin(); skinBtns.forEach(function (b) { b.classList.toggle("active", b.dataset.skin === cur); }); }
   function syncMotion() { motionBtn.textContent = MOTION_LABEL[motionLevel()]; motionBtn.classList.toggle("active", motionLevel() !== "off"); }
-  function syncCoins() { var on = coinsOn(); coinBtn.textContent = "🪙 Coin bursts: " + (on ? "on" : "off"); coinBtn.classList.toggle("active", on); }
+  function syncCoins() { var on = coinsOn(); coinBtn.innerHTML = OBOL.ic("coin") + " Coin bursts: " + (on ? "on" : "off"); coinBtn.classList.toggle("active", on); }
   function syncAll() { syncSkins(); syncMotion(); syncCoins(); }
   function toggle() { open ? close() : openPanel(); }
   function openPanel() { open = true; panel.hidden = false; btn.setAttribute("aria-expanded", "true"); syncAll(); }

@@ -43,12 +43,12 @@ function serve() {
   // lands on Learn — the teaching front door — not on the empty engagement.
   ok(page.url().indexOf('#/study') >= 0, 'first-run lands on Learn (got ' + page.url().split('#')[1] + ')');
   // a first-time visitor lands on the plain Obol skin, in a clean untitled run — never an
-  // "Imported engagement" with a stale seed target. (Neon and the rest stay selectable in ⚙.)
+  // "Imported engagement" with a stale seed target. (Neon and the rest stay selectable in settings.)
   ok(await page.getAttribute('html', 'data-skin') === 'obol', 'default skin is obol for a fresh visitor');
   const firstEng = await page.evaluate(() => { var e = window.OBOL.store.active(); return { name: e && e.name, target: (e && e.params && e.params.target) || '' }; });
   ok(firstEng.name !== 'Imported engagement' && firstEng.target !== '10.129.85.48', 'fresh engagement is not the legacy import (' + JSON.stringify(firstEng) + ')');
 
-  // presentation modules loaded (motion background, coin bursts, ⚙ settings)
+  // presentation modules loaded (motion background, coin bursts, settings panel)
   ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.backdrop && window.OBOL.coins)), 'backdrop + coin modules attached');
   ok(await page.locator('#obol-settings-toggle').count() === 1, 'bottom-right settings button rendered');
   ok(await page.locator('#skin-select').count() === 0, 'legacy appbar skin select removed (moved into settings)');
@@ -721,7 +721,7 @@ function serve() {
   ok(await page.locator('.eng-library .eng-danger-toggle').count() === 1, 'engagement library carries a Manage / Reset disclosure near the top');
   await page.locator('.eng-danger-toggle > summary').click();
   ok(await page.locator('#eng-clear').isVisible() && await page.locator('#eng-reset').isVisible(), 'Delete-All-Engagements and Full-Reset buttons are present');
-  ok(await page.locator('.obol-set-danger').count() === 1, 'the ⚙ settings panel carries an always-reachable Full Reset');
+  ok(await page.locator('.obol-set-danger').count() === 1, 'the settings panel carries an always-reachable Full Reset');
   // Delete All Engagements clears every run; init() reseeds one fresh engagement.
   const cleared = await page.evaluate(async () => { await window.OBOL.store.createEngagement('temp-run'); await window.OBOL.store.clearEngagements(); await window.OBOL.store.init(); return window.OBOL.store.listEngagements().length; });
   ok(cleared === 1, 'Delete All Engagements clears every run; a fresh one is seeded (' + cleared + ')');
