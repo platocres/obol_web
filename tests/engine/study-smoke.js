@@ -198,7 +198,7 @@ ok(ptCrack.indexOf('asrep-roast') >= 0 && ptCrack.indexOf('asrep-roast') < ptCra
 const lead = S.leadupFor('file-upload');
 ok(lead && lead.length >= 2 && lead.every(function (p) { return p.key && p.steps && p.steps.length; }), 'leadupFor returns multiple authored lead-up routes, each with steps');
 ok(/nmap/.test(lead[0].steps[0].cmd) && lead[0].steps[0].sig, 'the first route opens with an nmap scan carrying a signal line');
-ok(S.leadupFor('crack-asrep') === null, 'a move with no authored lead-up returns null (no half-baked gap-fill)');
+ok(S.leadupFor('nonexistent-move-xyz') === null, 'an unknown move returns null lead-up (no half-baked gap-fill)');
 
 // --- mastery (per-browser progress) ----------------------------------------------------------
 const mem = {}; globalThis.localStorage = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } };
