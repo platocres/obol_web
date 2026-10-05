@@ -233,6 +233,14 @@
     "xss-basics": { cond: "Does your payload execute in the victim context (reflected/stored/DOM)?", onFail: "Output is encoded → no XSS at this sink." },
     "check-log4shell": { cond: "Does a JNDI payload in a logged field call back to your listener?", onFail: "No callback → not vulnerable, or egress is filtered; confirm with DNS." },
     "check-struts2": { cond: "Does an OGNL payload evaluate on the Struts endpoint?", onFail: "No evaluation → patched or not Struts; test other app CVEs." },
+
+    // ---- known-exploit modules: web app RCE / LFI / disclosure ----
+    'shellshock': { cond: 'Did you find a /cgi-bin/ script, and does the header run id?', onFail: 'No CGI endpoint, or id does not return → no Shellshock here; keep discovering content.' },
+    'heartbleed': { cond: 'Does the nmap ssl-heartbleed script report the host vulnerable?', onFail: 'Not vulnerable → the heartbeat leak is closed; look elsewhere for secrets.' },
+    'drupalgeddon2': { cond: 'Is the CHANGELOG version below 7.58 or 8.5.1?', onFail: 'Patched Drupal → the form-render RCE is closed; enumerate modules and users instead.' },
+    'phpmyadmin-lfi': { cond: 'Is it phpMyAdmin 4.8.0/4.8.1, and can you log in to use the SQL tab?', onFail: 'Different version, or no login → the session-poison chain will not land; try credential recovery.' },
+    'webmin-rce': { cond: 'Is Webmin 1.890 to 1.920 on 10000 with password expiry enabled?', onFail: 'Patched or expiry disabled → the injection path is closed; look for creds or another service.' },
+
     "check-web-headers": { cond: "Do the response headers reveal a stack, version, or missing control worth noting?", onFail: "Nothing notable → record and move to active tests." },
     "check-web-components": { cond: "Does the fingerprint name a component with a known CVE?", onFail: "No versioned component → enumerate content and parameters directly." },
     "check-cms-version": { cond: "Does the CMS report a version tied to a public exploit?", onFail: "Unknown or current version → brute logins or hunt plugins instead." },

