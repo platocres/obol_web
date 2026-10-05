@@ -51,11 +51,14 @@
       _add(facts, mkFact('rdp.reachable', h, value, S, source));
       C._add_os_observation(facts, ws, source, 'windows', port + '/' + proto + ' ' + (service || 'rdp'), 'medium', 'nmap', false);
     }
-    if ([5985, 5986].indexOf(port) >= 0 || sl.indexOf('wsman') >= 0 || sl.indexOf('winrm') >= 0) {
+    var isWinrmPort = [5985, 5986, 47001].indexOf(port) >= 0 || sl.indexOf('wsman') >= 0 || sl.indexOf('winrm') >= 0;
+    if (isWinrmPort) {
       _add(facts, mkFact('winrm.reachable', h, value, S, source));
       C._add_os_observation(facts, ws, source, 'windows', port + '/' + proto + ' ' + (service || 'winrm'), 'medium', 'nmap', false);
     }
-    if ([80, 443, 8080, 8000, 8443].indexOf(port) >= 0 || sl === 'http' || sl === 'https' || sl === 'ssl/http') _add(facts, mkFact('http.reachable', h, value, S, source));
+    // WS-Management / HTTPAPI on 5985/5986/47001 is WinRM, not a browsable web app, so it must not
+    // mint http.reachable (nmap labels it "http") or it would unlock the web-exploit moves on an AD box.
+    if (!isWinrmPort && ([80, 443, 8080, 8000, 8443].indexOf(port) >= 0 || sl === 'http' || sl === 'https' || sl === 'ssl/http')) _add(facts, mkFact('http.reachable', h, value, S, source));
   }
   C._parse_service_reachability = _parse_service_reachability;
 

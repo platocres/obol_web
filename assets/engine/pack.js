@@ -555,7 +555,12 @@
     if (opts && opts.recentKinds) return { recent: opts.recentKinds, before: opts.beforeKinds || {} };
     var SUPP = OBOL.facts.ProofState.SUPPORTED, maxT = 0, i, f;
     for (i = 0; i < facts.facts.length; i++) { f = facts.facts[i]; if (f.state === SUPP && f.created_at > maxT) maxT = f.created_at; }
-    var cut = maxT - 2000, recent = {}, before = {};
+    // "latest batch" = facts minted within ~2s of the newest. created_at is seconds in the live app
+    // (facts.makeFact uses Date.now()/1000) but milliseconds in tests/fixtures, so size the window to
+    // the unit — otherwise a 2000-in-seconds window spans ~33 min and the whole session reads as
+    // "recent", which collapses the recency tier and lets raw priority surface noise.
+    var win = maxT > 1e12 ? 2000 : 2;
+    var cut = maxT - win, recent = {}, before = {};
     for (i = 0; i < facts.facts.length; i++) {
       f = facts.facts[i];
       if (f.state !== SUPP) continue;
