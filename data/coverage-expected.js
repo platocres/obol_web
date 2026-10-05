@@ -71,9 +71,9 @@
       { name: 'Azure IMDS SSRF to managed-identity token', moves: ['azure-imds'], note: 'the Azure twin of the AWS metadata path: resource-scoped token, Metadata header, Key Vault loot (beyond OSCP)' },
       { name: 'GraphQL introspection + broken authorization', moves: ['graphql-abuse'], note: 'one URL fronting the data model: per-resolver authz and batching abuse (beyond OSCP, common in modern apps)' },
       { name: 'GCP metadata SSRF to service-account token', moves: ['gcp-metadata'], note: 'the GCP twin: Metadata-Flavor header, OAuth token at computeMetadata/v1 (beyond OSCP)' },
-      { name: 'HTTP request smuggling (CL.TE / TE.CL)', moves: [], note: 'radar: desync a front-end/back-end pair to poison or hijack requests; no module yet' },
-      { name: 'Prototype pollution to RCE/authz bypass', moves: [], note: 'radar: Node/JS __proto__ pollution chaining to gadget execution; no module yet' },
-      { name: 'Mass assignment / autobinding', moves: [], note: 'radar: set a privileged field (role, isAdmin) the binder exposes; no module yet' },
+      { name: 'HTTP request smuggling (CL.TE / TE.CL)', moves: ['http-request-smuggling'], note: 'desync a front-end/back-end pair to poison or hijack requests (beyond OSCP)' },
+      { name: 'Prototype pollution to RCE/authz bypass', moves: ['prototype-pollution'], note: 'Node/JS __proto__ pollution chaining to a gadget (beyond OSCP)' },
+      { name: 'Mass assignment / autobinding', moves: ['mass-assignment'], note: 'set a privileged field (role, isAdmin) the binder exposes (beyond OSCP)' },
       { name: 'Local file read → secrets', moves: ['lfi-secret-harvest'], note: 'turn a confirmed LFI into credentials, keys, and source via the filter wrapper' },
     ] },
     p88: { label: 'Kerberos / DC', expect: [
