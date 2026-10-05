@@ -272,7 +272,8 @@
    ],
    "produces": [
     "credential.plaintext",
-    "credential.candidate"
+    "credential.candidate",
+    "credential.available"
    ],
    "priority": 66,
    "proves": "recovers a plaintext password and candidate credentials",
@@ -326,6 +327,7 @@
    "produces": [
     "credential.candidate",
     "credential.plaintext",
+    "credential.available",
     "privesc.stored_credentials"
    ],
    "priority": 82,
@@ -518,6 +520,7 @@
    ],
    "produces": [
     "credential.plaintext",
+    "credential.available",
     "hash.ntlm",
     "kerberos.tickets"
    ],

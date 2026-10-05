@@ -25,7 +25,7 @@
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=70b2d005', 'assets/ui/routes/tools.js?v=aff6dc97'],
     loadout: ['assets/engine/arsenal.js?v=9a46d3b8', 'assets/ui/routes/loadout.js?v=f6d299e1'],
     study: ['data/study-fixtures.js?v=7bff8242', 'assets/engine/study.js?v=d5ccce68', 'assets/ui/routes/study.js?v=d7e58a8a'],
-    decisionmap: ['data/decision-forks.js?v=45ef962f', 'data/parser-signatures.js?v=261a591b', 'data/coverage-expected.js?v=42f9b1ca', 'assets/engine/decisionmap.js?v=ee4dcd4a', 'assets/ui/decisiontree.js?v=4d77a423'],
+    decisionmap: ['data/decision-forks.js?v=45ef962f', 'data/parser-signatures.js?v=261a591b', 'data/coverage-expected.js?v=42f9b1ca', 'assets/engine/decisionmap.js?v=940f1173', 'assets/ui/decisiontree.js?v=4d77a423'],
     checklist: ['assets/ui/routes/checklist.js?v=68b05ed8'],
     target: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/target.js?v=c8287bf3'],
     creds: ['assets/ui/routes/creds.js?v=c8322951'],

@@ -294,6 +294,7 @@
    "requires_any": [],
    "produces": [
     "db.creds",
+    "credential.candidate",
     "foothold.webshell"
    ],
    "priority": 70,
@@ -356,6 +357,7 @@
    "requires_any": [],
    "produces": [
     "db.creds",
+    "credential.candidate",
     "foothold.webshell"
    ],
    "priority": 80,
@@ -736,7 +738,8 @@
    ],
    "produces": [
     "access.admin",
-    "credential.plaintext"
+    "credential.plaintext",
+    "credential.available"
    ],
    "priority": 82,
    "proves": "confirms administrative access and a cleartext password",
