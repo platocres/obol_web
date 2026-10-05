@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OBOL: Offensive Box Operations Ledger</title>
   <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the obol engine: proof-gated next-move coach, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
-  <link rel="stylesheet" href="assets/css/obol.css?v=7dd713c6">
+  <link rel="stylesheet" href="assets/css/obol.css?v=30bb4e1b">
   <script>
     /* Pre-paint skin: set before first paint so there is no flash. Tiny + synchronous. */
     (function () {
@@ -47,25 +47,16 @@
       <nav class="mainnav" aria-label="Primary">
         <a data-nav href="#/study">Learn</a>
         <a data-nav href="#/loadout">Loadout</a>
-        <a data-nav href="#/home">Engagements</a>
-        <a data-nav href="#/targets">Targets</a>
-        <a data-nav href="#/evidence">Evidence</a>
-        <a data-nav href="#/path">Next Steps</a>
-        <a data-nav href="#/playbooks">Playbooks</a>
+        <a data-nav data-nav-match="home targets target evidence path map domain creds checklist findings history scoreboard report graph" href="#/home">Engagements</a>
         <a data-nav href="#/tools">Tools</a>
-        <a data-nav href="#/map">Map</a>
-        <a data-nav href="#/domain">Domain</a>
-        <a data-nav href="#/creds">Creds</a>
-        <a data-nav href="#/checklist">Checklist</a>
-        <a data-nav href="#/findings">Findings</a>
-        <a data-nav href="#/history">Run Log</a>
-        <a data-nav href="#/scoreboard">Scoreboard</a>
-        <a data-nav href="#/report">Report</a>
+        <a data-nav href="#/playbooks">Playbooks</a>
       </nav>
       <button id="nav-search" class="nav-search" type="button" aria-label="Search commands">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
       </button>
     </header>
+
+    <div id="ctxbar" class="ctxbar" aria-label="Engagement context"><!-- global context strip: engagement · credential · target + engagement sub-nav (ctxbar.js) --></div>
 
     <aside id="sidebar">
       <div class="side-h">Engagement</div>
@@ -137,18 +128,19 @@
   <script defer src="assets/ui/factpick.js?v=012097b2"></script>
   <script defer src="assets/ui/store.js?v=a91d199d"></script>
   <script defer src="assets/ui/credbar.js?v=90944c50"></script>
+  <script defer src="assets/ui/ctxbar.js?v=2ccd3ecb"></script>
   <script defer src="assets/ui/chainview.js?v=3b7e3f4c"></script>
   <script defer src="assets/ui/graphview.js?v=2cd81edc"></script>
   <script defer src="assets/ui/graphtip.js?v=bb9b0267"></script>
   <script defer src="assets/ui/ingest.js?v=7ac4b3d4"></script>
-  <script defer src="assets/ui/router.js?v=f5652071"></script>
+  <script defer src="assets/ui/router.js?v=4dfb140d"></script>
   <script defer src="assets/ui/lazy.js?v=fc2455c4"></script>
   <script defer src="assets/ui/palette.js?v=7810a48c"></script>
   <script defer src="assets/ui/routes/home.js?v=bf4ca154"></script>
   <script defer src="assets/ui/routes/targets.js?v=87247d9b"></script>
   <script defer src="assets/ui/routes/evidence.js?v=7dd97072"></script>
   <script defer src="assets/ui/routes/path.js?v=a5c8a0c1"></script>
-  <script defer src="assets/ui/boot.js?v=352e6860"></script>
+  <script defer src="assets/ui/boot.js?v=de114a08"></script>
 
   <!-- Presentation-only, loaded after the critical path so the boot budget is untouched:
        motion background, coin bursts on genuine proof, and the appearance settings. -->

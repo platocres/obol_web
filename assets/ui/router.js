@@ -66,7 +66,11 @@
     for (var i = 0; i < links.length; i++) {
       var el = links[i];
       var target = (el.getAttribute('href') || '').replace(/^#\/?/, '').split('/')[0];
-      var on = target === name;
+      // a nav item may also light up for a set of related routes (e.g. Engagements covers every
+      // per-engagement surface) via data-nav-match="home targets evidence …".
+      var match = el.getAttribute('data-nav-match');
+      var covered = match ? (' ' + match + ' ').indexOf(' ' + name + ' ') >= 0 : false;
+      var on = target === name || covered;
       el.classList.toggle('active', on);
       if (on) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
     }

@@ -79,7 +79,7 @@ code, pre, .mono { font-family: var(--mono); }
 /* ---- app shell ---- */
 /* minmax(0, 1fr) — not a bare 1fr — so the main column never grows to its content's width
    (wide nav rows, tables, <pre>), which would blow the whole grid past the viewport. */
-#app { display: grid; grid-template-columns: 264px minmax(0, 1fr); grid-template-rows: auto 1fr; grid-template-areas: "head head" "side main"; min-height: 100vh; }
+#app { display: grid; grid-template-columns: 264px minmax(0, 1fr); grid-template-rows: auto auto 1fr; grid-template-areas: "head head" "ctx ctx" "side main"; min-height: 100vh; }
 header.appbar { grid-area: head; display: flex; align-items: center; gap: 18px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--surf1), var(--surf2)); backdrop-filter: blur(6px); position: sticky; top: 0; z-index: 20; }
 .brand { display: flex; align-items: center; gap: 10px; perspective: 360px; }
 /* the obol coin flips slowly like a spinning coin (edge-on rotateY) — full-motion only */
@@ -181,6 +181,39 @@ aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background
 /* bottom padding clears the fixed settings gear so it never covers content (e.g. the last
    engagement row's delete ×) in the bottom-right corner. */
 main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-width: 1720px; }
+
+/* ---- the global engagement context strip (ctxbar.js) ---- */
+.ctxbar { grid-area: ctx; display: flex; flex-direction: column; gap: 0; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg1) 55%, transparent); min-width: 0; }
+.ctx-context { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 16px; }
+.ctx-pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px 3px 11px; background: var(--surf2); min-width: 0; max-width: 100%; }
+.ctx-pill .ctx-ic { color: var(--accent-2); font-size: 12px; flex: none; display: inline-flex; align-items: center; }
+.ctx-pill .ctx-ic .ic { width: 13px; height: 13px; }
+.ctx-pill .ctx-k { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); flex: none; }
+.ctx-pill.ctx-cred { border-color: color-mix(in srgb, var(--accent) 38%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, var(--surf2)); }
+.ctx-pill.is-empty { opacity: .72; }
+.ctx-pill select { font-family: var(--mono); font-size: 12px; color: var(--text); background: transparent; border: 0; border-radius: 6px; padding: 2px 4px; max-width: 220px; cursor: pointer; }
+.ctx-pill select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ctx-pill.ctx-cred select { color: var(--accent-2); }
+.ctx-pill select option { background: var(--bg1); color: var(--text); }
+/* the contextual engagement sub-nav (second row; only on engagement routes) */
+.ctx-subnav { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; padding: 0 16px 7px; }
+.ctx-subnav[hidden] { display: none; }
+.ctx-subgroup { display: inline-flex; align-items: center; gap: 3px; }
+.ctx-subgroup + .ctx-subgroup { border-left: 1px solid var(--line); padding-left: 10px; }
+.ctx-subgroup-l { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-right: 3px; }
+.ctx-subnav a { font-size: 12px; color: var(--text-2); text-decoration: none; padding: 4px 9px; border-radius: 7px; white-space: nowrap; }
+.ctx-subnav a:hover { color: var(--text); background: var(--surf2); }
+.ctx-subnav a.active { color: var(--text); background: var(--accent-soft); font-weight: 700; }
+.ctx-subnav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 760px) {
+  .ctx-context { gap: 7px; padding: 6px 12px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .ctx-pill .ctx-k { display: none; }
+  .ctx-pill select { max-width: 150px; }
+  .ctx-subnav { flex-wrap: nowrap; overflow-x: auto; padding: 0 12px 6px; -webkit-overflow-scrolling: touch; }
+  .ctx-subgroup-l { display: none; }
+  .ctx-subgroup + .ctx-subgroup { border-left: 0; padding-left: 0; }
+}
+@media print { .ctxbar { display: none; } }
 .route-h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .01em; }
 .route-sub { color: var(--text-2); margin: 0 0 20px; max-width: 70ch; }
 .kbd-hint { display: inline-block; margin-left: 6px; color: var(--muted); font-size: 12.5px; }
@@ -633,7 +666,7 @@ details.lo-fs-node[open] > summary::before { transform: rotate(90deg); }
    the sidebar as an off-canvas engagement drawer, and a fixed bottom tab bar for the primary
    sections with a slide-up More sheet for the rest. Everything works down to ~320px wide. */
 @media (max-width: 860px) {
-  #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "main"; }
+  #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "ctx" "main"; }
   header.appbar { min-width: 0; gap: 10px; padding: 8px 14px; }
   .brand .tagline { display: none; }
   .brand h1 { font-size: 15px; }
@@ -2001,7 +2034,7 @@ main#view:has(.study-map) { max-width: 2080px; margin-inline: auto; }
 @media (prefers-reduced-motion: reduce) { .sl-way, .sl-pcard, .sl-acard { transition: none; } .sl-way:hover, .sl-pcard:hover { transform: none; } }
 
 /* Learn is a full-bleed teaching front door — no per-engagement sidebar. */
-:root[data-route="study"] #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "main"; }
+:root[data-route="study"] #app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "ctx" "main"; }
 :root[data-route="study"] aside#sidebar { display: none; }
 
 /* --- Study: lane hues (one accent per lane) --- */

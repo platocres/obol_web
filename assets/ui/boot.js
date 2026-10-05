@@ -186,6 +186,7 @@
       registerRoutes();
       if (OBOL.palette) OBOL.palette.init();
       OBOL.router.start();
+      if (OBOL.ctxbar) OBOL.ctxbar.init();   // global engagement context strip (after the route is known)
       document.documentElement.classList.remove('obol-booting');
       document.documentElement.setAttribute('data-obol-boot', 'ready');
     }).catch(function (err) {
