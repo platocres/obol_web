@@ -21,13 +21,13 @@
       { name: 'Anonymous login + read', moves: ['recon-ftp'] },
       { name: 'Credential brute-force', moves: ['online-brute-ftp'] },
       { name: 'Write-to-webroot → RCE', moves: ['ftp-upload-webshell'] },
-      { name: 'FTP bounce scan (FXP)', moves: [], note: 'no module: nmap -b / bounce-scan an internal host via an open FTP relay' },
+      { name: 'FTP bounce scan (FXP)', moves: ['ftp-bounce'], note: 'nmap -b / bounce-scan an internal host via an open FTP relay' },
     ] },
     p22: { label: 'SSH', expect: [
       { name: 'Key-based login from a looted key', moves: ['ssh-key-login'] },
       { name: 'Password brute-force', moves: ['online-brute-ssh'] },
       { name: 'Pivot (dynamic / sshuttle)', moves: ['pivot-ssh-dynamic', 'pivot-sshuttle'] },
-      { name: 'User enum (CVE-2018-15473, old OpenSSH)', moves: [], note: 'no module: timing-based username enumeration on pre-7.7 OpenSSH' },
+      { name: 'User enum (CVE-2018-15473, old OpenSSH)', moves: ['ssh-user-enum'], note: 'timing-based username enumeration on pre-7.7 OpenSSH' },
     ] },
     p23: { label: 'Telnet', expect: [
       { name: 'Banner + default/weak login', moves: ['recon-telnet'] },
@@ -36,7 +36,7 @@
     p25: { label: 'SMTP / mail', expect: [
       { name: 'User enumeration (VRFY/EXPN/RCPT)', moves: ['recon-smtp'] },
       { name: 'Read the mailbox with a credential', moves: ['recon-mail'] },
-      { name: 'Open-relay test', moves: [], note: 'no module: confirm the server relays mail for arbitrary senders' },
+      { name: 'Open-relay test', moves: ['smtp-open-relay'], note: 'confirm the server relays mail for arbitrary senders' },
     ] },
     p53: { label: 'DNS', expect: [
       { name: 'Zone transfer (AXFR)', moves: ['recon-dns'] },
@@ -59,7 +59,7 @@
       { name: 'Auth bypass / IDOR / JWT', moves: ['idor', 'jwt-attacks', 'verb-tampering'] },
       { name: 'Source exposure (.git/.svn)', moves: ['git-exposed', 'svn-exposed'] },
       { name: 'Known app CVEs (Log4Shell/Struts)', moves: ['check-log4shell', 'check-struts2'] },
-      { name: 'Local file read → secrets', moves: [], note: 'covered via lfi-probe; dedicated secret-harvest-from-LFI module would help' },
+      { name: 'Local file read → secrets', moves: ['lfi-secret-harvest'], note: 'turn a confirmed LFI into credentials, keys, and source via the filter wrapper' },
     ] },
     p88: { label: 'Kerberos / DC', expect: [
       { name: 'Identify the DC + domain', moves: ['ad-dc-identify'] },
@@ -86,7 +86,7 @@
     p1433: { label: 'MSSQL', expect: [
       { name: 'Login (sa / domain / reused)', moves: ['mssql-login'] },
       { name: 'xp_cmdshell OS execution', moves: ['mssql-xp-cmdshell'] },
-      { name: 'Linked-server / impersonation hop', moves: [], note: 'no module: EXECUTE AS / linked-server chaining to another instance' },
+      { name: 'Linked-server / impersonation hop', moves: ['mssql-linked-server'], note: 'EXECUTE AS / linked-server chaining to another instance' },
     ] },
     p1521: { label: 'Oracle TNS', expect: [
       { name: 'SID brute + default accounts', moves: ['oracle-tns'] },
@@ -95,7 +95,7 @@
     p3306: { label: 'MySQL', expect: [
       { name: 'Login + schema/user enum', moves: ['mysql-login'] },
       { name: 'Credential-table sweep', moves: ['mysql-loot'] },
-      { name: 'UDF / INTO OUTFILE to webroot', moves: [], note: 'no module: write a shell via INTO OUTFILE, or RCE via a UDF when FILE priv is held' },
+      { name: 'UDF / INTO OUTFILE to webroot', moves: ['mysql-outfile-rce'], note: 'write a shell via INTO OUTFILE, or RCE via a UDF when FILE priv is held' },
     ] },
     p9200: { label: 'Elasticsearch', expect: [
       { name: 'Unauthenticated index dump', moves: ['elasticsearch-enum'] },

@@ -52,7 +52,11 @@ ok(gr.counts.parseGap >= 1, 'parse-gap lens finds the documented unreadable fact
 // the known unported findings-checks surface as parse gaps (the diagnostic working as intended)
 var gapIds = gr.parse.gap.map(function (g) { return g.id; });
 ok(gapIds.indexOf('check-tls-config') >= 0 && gapIds.indexOf('recon-dns') >= 0, 'the known unported parsers (tls check, dns zone) show as parse gaps');
-ok(gr.coverage.length >= 1 && gr.coverage.some(function (c) { return c.port === 'p3306'; }), 'the expected-coverage oracle surfaces the seeded coverage gaps');
+// every seeded expected technique now has a backing move, so the oracle reports zero coverage gaps;
+// the machinery is still exercised (COVERAGE_EXPECTED is populated and each entry resolves to a move).
+ok((OBOL.COVERAGE_EXPECTED && Object.keys(OBOL.COVERAGE_EXPECTED).length >= 6), 'the expected-coverage oracle is populated');
+ok(gr.coverage.length === 0, 'the oracle reports no coverage gaps now every seeded technique has a module (' + gr.coverage.length + ')');
+ok(!gr.coverage.some(function (c) { return c.port === 'p3306'; }), 'the p3306 INTO OUTFILE technique resolves to its new module (mysql-outfile-rce)');
 
 // --- parser capability derivation ---
 var pc = DM.parserCoverage();

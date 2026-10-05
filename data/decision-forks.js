@@ -17,6 +17,7 @@
     // ---- recon / services ----
     'recon-ftp': { cond: 'Does anonymous login succeed, and is anything readable?', onFail: 'No anonymous access → brute a known user, or move on.' },
     'ftp-upload-webshell': { cond: 'Is the writable FTP directory also the web root (marker round-trips over HTTP)?', onFail: 'No overlap → the write is just loot, not a shell.' },
+    'ftp-bounce': { cond: 'Does the FTP server accept the PORT command (200) to an internal host?', onFail: 'PORT blocked (500) → no bounce; find another route to the segment.' },
     'online-brute-ftp': { cond: 'Does any credential pair log in?', onFail: 'No hit → the account/wordlist is wrong; find usernames first.' },
     'recon-telnet': { cond: 'Does the banner name a device, and does a default/reused password log in?', onFail: 'No default works → brute a small list, or treat it as recon only.' },
     'recon-rservices': { cond: 'Does the host trust you for a password-free rlogin/rsh?', onFail: 'No trust → there is nothing to brute; move on.' },
@@ -24,6 +25,7 @@
     'recon-tftp': { cond: 'Does a guessed device-config filename come back?', onFail: 'Wrong names → try device-specific paths, or move on.' },
     'recon-x11': { cond: 'Is access control off (any client accepted)?', onFail: 'Cookie required → you cannot drive the display.' },
     'recon-smtp': { cond: 'Does the server confirm usernames (VRFY/EXPN/RCPT)?', onFail: 'Verbs disabled → enumerate users another way.' },
+    'smtp-open-relay': { cond: 'Does it accept a MAIL FROM and RCPT TO that are both external (250)?', onFail: 'Refused with 550 → the relay is locked; record it and try user enumeration.' },
     'recon-mail': { cond: 'Do you hold a mailbox credential to read the inbox?', onFail: 'No credential yet → recover one first.' },
     'recon-dns': { cond: 'Does a zone transfer (AXFR) succeed?', onFail: 'Refused → fall back to record/subdomain enumeration.' },
     'recon-snmp': { cond: 'Does a default community string ("public") read the MIB?', onFail: 'No default → brute community strings, or move on.' },
@@ -46,6 +48,7 @@
     'manual-sqli-exploitation': { cond: 'Can you read data (UNION reflects, or blind oracle responds)?', onFail: 'Locked down → try a different injection type or parameter.' },
     'file-upload': { cond: 'Does a filter bypass land a file that executes?', onFail: 'Every trick rejected → the upload may still feed LFI/XXE instead.' },
     'lfi-probe': { cond: 'Does a traversal payload read a known file?', onFail: 'No traversal → test wrappers, or a different parameter.' },
+    'lfi-secret-harvest': { cond: 'Do the readable files hold a credential, key, or hash you can use?', onFail: 'Nothing reusable yet → try the filter wrapper for source, or log poisoning for RCE.' },
     'command-injection': { cond: 'Does an injected command run (echo / sleep / callback)?', onFail: 'No execution → the input is sanitised; try another sink.' },
     'ssti': { cond: 'Does a template expression evaluate (e.g. {{7*7}}=49)?', onFail: 'Rendered literally → not template injection.' },
     'web-shells': { cond: 'Does the planted shell return command output?', onFail: 'No execution → the drop point is not served as code.' },
@@ -68,8 +71,10 @@
     // ---- databases ----
     'mysql-login': { cond: 'Does a credential (or blank root) open a session?', onFail: 'No login → brute, or recover a credential elsewhere.' },
     'mysql-loot': { cond: 'Do the tables hold crackable hashes or reused secrets?', onFail: 'Nothing useful → the DB was a dead end.' },
+    'mysql-outfile-rce': { cond: 'Do you hold FILE privilege with a writable web root (secure_file_priv empty)?', onFail: 'No FILE write → try the UDF route, or just loot the tables.' },
     'mssql-login': { cond: 'Does sa / a domain account log in?', onFail: 'No login → recover a credential first.' },
     'mssql-xp-cmdshell': { cond: 'Does the account have sysadmin to enable xp_cmdshell?', onFail: 'Not sysadmin → impersonate or chain a linked server.' },
+    'mssql-linked-server': { cond: 'Is there a linked server, and is your link login sysadmin on it?', onFail: 'No usable link → impersonate a higher login locally, or loot instead.' },
     'postgres-login': { cond: 'Does a default/reused role log in?', onFail: 'No login → brute, or move on.' },
     'redis-enum': { cond: 'Is Redis unauthenticated, and is it writable?', onFail: 'AUTH set → find the password, else read-only at best.' },
     'mongo-enum': { cond: 'Can you list and read databases without auth?', onFail: 'Auth required → recover a credential first.' },
@@ -79,6 +84,7 @@
     'crack-ntlm': { cond: 'Does the NT hash crack to a password in time?', onFail: 'Uncracked → pass the hash instead of cracking it.' },
     'crack-asrep': { cond: 'Does the AS-REP hash crack offline?', onFail: 'Uncracked → spray or roast another account.' },
     'online-brute-ssh': { cond: 'Does any credential pair log in over SSH?', onFail: 'No hit → wrong account; find usernames first.' },
+    'ssh-user-enum': { cond: 'Is the OpenSSH banner before 7.7 (usernames enumerable)?', onFail: '7.7 or newer → the leak is closed; spray a small list blind or move on.' },
     'online-brute-rdp': { cond: 'Does any credential pair open an RDP session?', onFail: 'No hit → watch for lockout; narrow the list.' },
 
     // ---- shells / foothold ----
