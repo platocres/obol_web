@@ -145,6 +145,9 @@
     // database lane
     'mysql-login': 'Relational (MySQL, MSSQL, Postgres)', 'mysql-loot': 'Relational (MySQL, MSSQL, Postgres)', 'mssql-login': 'Relational (MySQL, MSSQL, Postgres)', 'mssql-xp-cmdshell': 'Relational (MySQL, MSSQL, Postgres)', 'postgres-login': 'Relational (MySQL, MSSQL, Postgres)',
     'redis-enum': 'NoSQL & Key-Value', 'mongo-enum': 'NoSQL & Key-Value',
+    // shells lane
+    'shell-listener': 'Reverse Shells', 'shell-revshell-linux': 'Reverse Shells', 'shell-revshell-windows': 'Reverse Shells', 'shell-pty-upgrade': 'Reverse Shells',
+    'ssh-key-login': 'Key & Credential Login', 'linux-remote-exec': 'Key & Credential Login',
   };
   var CATEGORY_ORDER = [
     // web
