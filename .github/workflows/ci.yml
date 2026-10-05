@@ -6,13 +6,23 @@ name: obol CI
 # retired architecture.
 
 on:
+  # Feature branches are covered by the pull_request event (one run per commit). Pushing to a
+  # claude/** branch no longer also fires a push run, which used to double every commit's runs and
+  # leave the redundant one queued or stalled when runners were scarce. main still runs post-merge.
   push:
-    branches: [main, 'claude/**']
+    branches: [main]
   pull_request:
+
+# Supersede an in-progress run when a newer commit lands on the same branch / PR, so rapid pushes do
+# not stack queued runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   engine-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,6 +51,7 @@ jobs:
 
   browser-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
