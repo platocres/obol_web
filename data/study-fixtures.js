@@ -2103,6 +2103,10 @@
   // exists (fast-scan port vs version-scan fingerprint, an alt web port, a leaked domain name, etc.),
   // never a clone. The root scan (nmap-fast-open-ports) has no lead-up by design.
   var RECON_LEADUPS = {
+    'nmap-fast-open-ports': [
+      { key: 'scope', label: 'The engagement handed you a target', steps: [
+        { title: 'A target IP in scope, nothing else yet', tool: 'ping', where: 'local', cmd: 'ping -c1 10.10.10.10', out: '64 bytes from 10.10.10.10: icmp_seq=1 ttl=127 time=28.4 ms\n1 packets transmitted, 1 received, 0% packet loss', sig: '0% packet loss', teach: 'Step zero: one IP, no creds, no known ports. Confirm the host answers (ttl near 128 hints Windows, near 64 hints Linux), then let the fast scan draw the map every later recon move reads from.' } ] },
+    ],
     'nmap-version-scripts': [
       { key: 'scan', label: 'The fast scan found open ports', steps: [
         { title: 'Sweep every TCP port', tool: 'nmap', where: 'local', cmd: 'nmap -p- --min-rate 5000 <target>', out: 'PORT     STATE SERVICE\n22/tcp   open  ssh\n80/tcp   open  http\n3306/tcp open  mysql', sig: '3306/tcp open  mysql', teach: 'The fast sweep names the open ports but not the software behind them; that gap is what this move fills.' } ] },
