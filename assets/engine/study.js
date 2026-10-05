@@ -118,7 +118,7 @@
     'idor': 'Auth & Access Control', 'jwt-attacks': 'Auth & Access Control', 'nosql-injection': 'Auth & Access Control', 'verb-tampering': 'Auth & Access Control',
     'xss-basics': 'Cross-Site Scripting',
     'git-exposed': 'Source Exposure', 'svn-exposed': 'Source Exposure',
-    'tomcat-deploy': 'App Servers & Known CVEs', 'jenkins-access': 'App Servers & Known CVEs', 'wordpress': 'App Servers & Known CVEs', 'check-log4shell': 'App Servers & Known CVEs', 'check-struts2': 'App Servers & Known CVEs',
+    'tomcat-deploy': 'App Servers & Known CVEs', 'jenkins-access': 'App Servers & Known CVEs', 'wordpress': 'App Servers & Known CVEs', 'check-log4shell': 'App Servers & Known CVEs', 'check-struts2': 'App Servers & Known CVEs', 'ajp-ghostcat': 'App Servers & Known CVEs', 'java-rmi': 'App Servers & Known CVEs',
     // recon lane
     'nmap-fast-open-ports': 'Port Scanning', 'nmap-version-scripts': 'Port Scanning', 'nmap-vuln-scripts': 'Port Scanning', 'nmap-udp-top': 'Port Scanning',
     'recon-smb-anon': 'SMB, RDP & Web', 'rdp-enum': 'SMB, RDP & Web', 'recon-web-triage': 'SMB, RDP & Web',
@@ -557,6 +557,8 @@
     { key: 'p5985', tier: 'ports', port: '5985/5986', proto: 'tcp', fam: 'remote', label: 'WinRM', signal: 'Windows remote management. With a credential it is an interactive shell (evil-winrm), your way onto and through Windows hosts.', seed: ['lateral-exec', 'local-windows-interfaces', 'local-windows-routes', 'local-windows-neighbors', 'local-windows-listeners'] },
     { key: 'p6000', tier: 'ports', port: '6000', proto: 'tcp', fam: 'remote', label: 'X11', signal: 'A desktop display with access control off. Any network client can screenshot the session, log keystrokes as they are typed, and inject input, all as the logged-in user.', seed: ['recon-x11'] },
     { key: 'p6379', tier: 'ports', port: '6379', proto: 'tcp', fam: 'db', label: 'Redis', signal: 'Often unauthenticated. INFO reads the host, and a writable Redis can drop an SSH key or a web shell, which is a direct foothold.', seed: ['redis-enum', 'ssh-key-login', 'shell-listener'] },
+    { key: 'p1099', tier: 'ports', port: '1099', proto: 'tcp', fam: 'web', label: 'Java RMI', signal: 'A Java RMI registry. List the bound objects, then a deserialization gadget (ysoserial via remote-method-guesser) turns a remote method call into code execution.', seed: ['java-rmi'] },
+    { key: 'p8009', tier: 'ports', port: '8009', proto: 'tcp', fam: 'web', label: 'AJP (Tomcat)', signal: 'Tomcat\'s AJP connector. Ghostcat (CVE-2020-1938) reads any file under the web root, and includes an uploaded file as JSP for code execution.', seed: ['ajp-ghostcat'] },
     { key: 'p8080', tier: 'ports', port: '8080', proto: 'tcp', fam: 'web', label: 'HTTP-alt (Tomcat, Jenkins)', signal: 'App servers. Tomcat Manager deploys a WAR, and the Jenkins script console runs Groovy. Both are code execution once you have credentials.', seed: ['tomcat-deploy', 'jenkins-access'] },
     { key: 'p9200', tier: 'ports', port: '9200', proto: 'tcp', fam: 'db', label: 'Elasticsearch', signal: 'A JSON REST API, often unauthenticated. List the indices and dump the interesting one for stored records; old versions carry a scripting-engine RCE.', seed: ['elasticsearch-enum'] },
     { key: 'p11211', tier: 'ports', port: '11211', proto: 'tcp', fam: 'db', label: 'Memcached', signal: 'An in-memory cache with no auth by design. Dump the cached keys for session tokens and secrets the application left in memory.', seed: ['memcached-enum'] },
