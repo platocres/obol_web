@@ -67,6 +67,9 @@
     'ad-acl-abuse': { cond: 'Do you hold an ACL edge (GenericAll/WriteDacl) to abuse?', onFail: 'No edge → map more of the graph first.' },
     'adcs-esc': { cond: 'Is a certificate template vulnerable (ESC1-8)?', onFail: 'No vulnerable template → another path to privilege.' },
     'certifried': { cond: 'Is AD CS present and MachineAccountQuota non-zero?', onFail: 'Quota 0 or no CA → Certifried is closed; try a vulnerable template or roasting.' },
+    'kerberos-relay': { cond: 'Can you coerce Kerberos auth and relay it to LDAP or AD CS (no channel binding)?', onFail: 'Channel binding enforced or no coercion vector → try a different ACL edge or an NTLM relay where signing is off.' },
+    'timeroasting': { cond: 'Does any collected machine-account hash crack to a password?', onFail: 'All random → no foothold here; timeroasting only pays off on weak machine passwords.' },
+    'adidns-abuse': { cond: 'Did the record write, and does a client or relay actually resolve to you?', onFail: 'No hits → the name is not being queried; try WPAD, or anchor a coercion instead.' },
     'dcsync': { cond: 'Do you hold replication rights (DS-Replication-Get-Changes)?', onFail: 'Not yet → walk an ACL/delegation path to earn them.' },
     'eternalblue': { cond: 'Is the host confirmed MS17-010 vulnerable?', onFail: 'Patched / not vulnerable → do not fire; find another way.' },
 
@@ -165,6 +168,7 @@
     // ---- web ----
     'ssrf': { cond: 'Does the server fetch a URL you control (internal target or callback)?', onFail: 'No fetch, the parameter is not SSRFable.' },
     'azure-imds': { cond: 'Can the SSRF reach 169.254.169.254 with the Metadata header and return a token?', onFail: 'No token (not Azure, or header stripped) → try the AWS metadata path, or treat the SSRF as internal recon.' },
+    'gcp-metadata': { cond: 'Can the SSRF reach the metadata server with the Metadata-Flavor header and return a ya29. token?', onFail: 'No token (not GCP, or header stripped) → try the AWS or Azure metadata path.' },
     'xxe': { cond: 'Does the XML parser resolve an external entity you define?', onFail: 'Entities disabled, try another injection point.' },
 
     // ---- Phase-C fork coverage: authored branch conditions for the remaining moves ----

