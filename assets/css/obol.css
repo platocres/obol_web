@@ -2131,8 +2131,8 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 /* The landing is a wide two-column dashboard, so it opts out of the 1180px .study-route cap and
    lets main#view grow past its 1720px default (same :has() technique as the bench view). Other
    study views keep their narrower reading widths. */
-.study-map { max-width: 1760px; margin-inline: auto; }
-main#view:has(.study-map) { max-width: 1800px; margin-inline: auto; }
+.study-map { max-width: 1560px; margin-inline: auto; }
+main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 .study-hero { margin: 4px 0 20px; }
 .study-hero-h { font-size: 26px; font-weight: 800; color: var(--text); margin: 0 0 8px; }
 .study-hero-p { font-size: 14px; color: var(--text-2); line-height: 1.6; max-width: 760px; margin: 0; }
@@ -2309,7 +2309,7 @@ main#view:has(.study-map) { max-width: 1800px; margin-inline: auto; }
 .sl-way-go { margin-top: auto; font-size: 12px; font-weight: 700; color: color-mix(in srgb, var(--way, var(--accent)) 60%, var(--text)); }
 
 /* the two-column dashboard: methodology (left, leads) + by-port (right, equal-second) */
-.sl-dash { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; align-items: start; }
+.sl-dash { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
 .sl-col-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 13px; padding-bottom: 9px; border-bottom: 1px solid var(--line); }
 .sl-col-t { font-size: 16px; font-weight: 800; margin: 0; letter-spacing: -.01em; color: var(--text); }
 .sl-col-count { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--text-2); }
@@ -2317,12 +2317,15 @@ main#view:has(.study-map) { max-width: 1800px; margin-inline: auto; }
 .sl-col-more:hover { background: color-mix(in srgb, var(--accent-2) 14%, var(--surf2)); border-color: var(--accent-2); color: var(--text); }
 .sl-col-more:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .sl-col-more { transition: none; } }
-.sl-col-method .study-lanes { margin-bottom: 0; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); }
+.sl-col-method .study-lanes { margin-bottom: 0; grid-template-columns: repeat(3, 1fr); }
 .sl-col .study-lane-card { display: flex; flex-direction: column; min-height: 132px; }
 .sl-col .study-lane-foot { margin-top: auto; }
 
 /* by-port curated cards (first-class, data-driven from study().evidence()) */
-.sl-ports { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 11px; }
+.sl-ports { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }
+/* both dashboard sections show exactly 3 columns of cards; drop to 2 then 1 as the view narrows */
+@media (max-width: 900px) { .sl-col-method .study-lanes, .sl-ports { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .sl-col-method .study-lanes, .sl-ports { grid-template-columns: 1fr; } }
 .sl-pcard { text-align: left; display: flex; flex-direction: column; gap: 7px; min-height: 120px; cursor: pointer; font-family: var(--sans); border: 1px solid var(--line); border-left: 3px solid var(--sl-fam, var(--accent)); border-radius: 11px; padding: 12px 13px; background: var(--surf1); transition: .15s; }
 .sl-pcard:hover { border-color: var(--sl-fam, var(--accent)); border-left-color: var(--sl-fam, var(--accent)); background: var(--surf2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sl-fam, var(--accent)) 22%, transparent); transform: translateY(-1px); }
 .sl-pcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
