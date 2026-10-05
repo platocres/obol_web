@@ -148,6 +148,11 @@
     // shells lane
     'shell-listener': 'Reverse Shells', 'shell-revshell-linux': 'Reverse Shells', 'shell-revshell-windows': 'Reverse Shells', 'shell-pty-upgrade': 'Reverse Shells',
     'ssh-key-login': 'Key & Credential Login', 'linux-remote-exec': 'Key & Credential Login',
+    // pivot lane
+    'local-linux-interfaces': 'Map the Foothold (Linux)', 'local-linux-routes': 'Map the Foothold (Linux)', 'local-linux-neighbors': 'Map the Foothold (Linux)', 'local-linux-dns': 'Map the Foothold (Linux)',
+    'local-windows-interfaces': 'Map the Foothold (Windows)', 'local-windows-routes': 'Map the Foothold (Windows)', 'local-windows-neighbors': 'Map the Foothold (Windows)', 'local-windows-listeners': 'Map the Foothold (Windows)',
+    'pivot-chisel-socks': 'Build the Tunnel', 'pivot-ligolo': 'Build the Tunnel', 'pivot-sshuttle': 'Build the Tunnel', 'pivot-ssh-dynamic': 'Build the Tunnel',
+    'pivot-scan-through': 'Work Through the Pivot',
   };
   var CATEGORY_ORDER = [
     // web
@@ -163,6 +168,10 @@
     'Token & Service Abuse', 'Credential Dumping', 'Windows Persistence',
     // database
     'Relational (MySQL, MSSQL, Postgres)', 'NoSQL & Key-Value',
+    // shells
+    'Reverse Shells', 'Key & Credential Login',
+    // pivot
+    'Map the Foothold (Linux)', 'Map the Foothold (Windows)', 'Build the Tunnel', 'Work Through the Pivot',
   ];
   function categoryOf(moveId) { var m = byId(moveId); return MOVE_CATEGORY[moveId] || deriveStage(m || {}); }
 
