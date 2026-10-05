@@ -870,7 +870,19 @@ function serve() {
   await page.locator('[data-ports]').click();
   await page.waitForTimeout(200);
   ok((await page.locator('.port-card').count()) >= 15, 'the by-port view renders a card per open port');
-  ok((await page.locator('.port-move').count()) >= 40, 'each port card lists the moves it unlocks');
+  ok((await page.locator('.port-move').count()) === 0, 'cards are collapsed by default (no move pills shown yet)');
+  // one card expands on its own; its header is a real button (keyboard + screen-reader friendly)
+  const firstHead = page.locator('.port-head').first();
+  ok((await firstHead.getAttribute('aria-expanded')) === 'false', 'a collapsed card reports aria-expanded=false');
+  await firstHead.click();
+  await page.waitForTimeout(120);
+  ok((await page.locator('.port-head[aria-expanded="true"]').count()) === 1, 'clicking a card header expands just that one card');
+  ok((await page.locator('.port-move').count()) >= 1, 'the expanded card shows its ordered moves');
+  // expand all reveals every move; no connector arrows anymore
+  await page.locator('[data-ev-all]').click();
+  await page.waitForTimeout(150);
+  ok((await page.locator('.port-move').count()) >= 40, 'expand-all reveals the ordered moves each port unlocks');
+  ok((await page.locator('.ev-arrow').count()) === 0, 'no connector arrows between port moves');
   await page.locator('.port-move').first().click();
   await page.waitForTimeout(150);
   ok((await page.locator('.study-cols').count()) === 1, 'clicking a port move opens its study cell');

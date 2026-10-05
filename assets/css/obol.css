@@ -2169,28 +2169,58 @@ nav.mainnav a.active { text-shadow: 0 0 10px var(--accent-soft); }
 .study-browse-b { font-family: var(--mono); font-size: 12.5px; font-weight: 700; cursor: pointer; color: var(--accent-2); background: color-mix(in srgb, var(--accent) 8%, var(--surf1)); border: 1px solid var(--g-proven-line); border-radius: 8px; padding: 9px 14px; }
 .study-browse-b:hover { background: var(--accent-soft); }
 .study-ports .study-hero-h i { color: var(--accent-2); font-style: italic; }
-.port-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
-.port-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--surf1); }
+/* collapse-by-default: cards start as a compact service overview; they pack because every
+   collapsed card is the same short height, so the ragged-grid voids are gone. Click the header
+   (or Enter/Space) to reveal the ordered moves. Masonry-ish column flow keeps expanded cards tidy. */
+.port-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+.port-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surf1); overflow: hidden; }
 .port-card.port-scan { border-color: var(--g-proven-line); background: color-mix(in srgb, var(--accent) 7%, var(--surf1)); grid-column: 1 / -1; }
-.port-card-h { display: flex; align-items: baseline; gap: 10px; }
-.port-num { font-family: var(--mono); font-size: 20px; font-weight: 800; color: var(--accent-2); }
-.port-num .port-proto { font-size: 11px; color: var(--muted); font-weight: 600; }
-.port-svc { font-size: 14px; font-weight: 800; color: var(--text); }
-.port-sig { font-size: 12.5px; color: var(--text-2); line-height: 1.55; margin: 8px 0 10px; }
-.port-moves { display: flex; flex-direction: column; gap: 6px; }
-.port-move { text-align: left; font-family: var(--sans); font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--text); background: var(--surf2); border: 1px solid color-mix(in srgb, var(--lane, var(--line)) 45%, var(--line)); border-left: 3px solid var(--lane, var(--accent)); border-radius: 7px; padding: 7px 10px; transition: .12s; }
+.port-card.open { box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 18%, transparent); }
+/* the whole header is the toggle button */
+.port-head { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; cursor: pointer; background: none; border: 0; padding: 12px 13px; font-family: inherit; color: var(--text); }
+.port-head:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.port-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.port-lead { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 9px; flex: 1 1 auto; min-width: 0; }
+.port-meta { display: flex; align-items: center; gap: 9px; flex: none; margin-left: auto; }
+.port-num { font-family: var(--mono); font-size: 18px; font-weight: 800; color: var(--accent-2); white-space: nowrap; }
+.port-num .port-proto { font-size: 11px; color: var(--text-2); font-weight: 600; }
+.port-svc { font-size: 13.5px; font-weight: 800; color: var(--text); }
+.port-count { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-2); white-space: nowrap; }
+.port-chev { width: 9px; height: 9px; border-right: 2px solid var(--text-2); border-bottom: 2px solid var(--text-2); transform: rotate(-45deg); transition: transform .14s ease; flex: none; }
+.port-card.open .port-chev { transform: rotate(45deg); }
+/* service-family tag: neutral (high-contrast) text + a family-coloured left accent that works on
+   every skin; the label already names the family, so the colour is redundant reinforcement only. */
+.evfam { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text-2); padding: 2px 7px 2px 6px; border-radius: 5px; white-space: nowrap; border-left: 3px solid var(--line); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.evfam-recon { border-left-color: var(--accent-2); }
+.evfam-web { border-left-color: #4aa3ff; }
+.evfam-db { border-left-color: #e0882f; }
+.evfam-ad { border-left-color: #c06cf0; }
+.evfam-remote { border-left-color: #2fb6a8; }
+.evfam-file { border-left-color: #d6a93a; }
+.evfam-mail { border-left-color: #e06c9a; }
+.evfam-access { border-left-color: var(--accent); }
+.port-sig { font-size: 12.5px; color: var(--text-2); line-height: 1.55; }
+.port-sig-collapsed { margin: 0; padding: 0 13px 12px; }
+.port-body { padding: 0 13px 13px; }
+.port-body .port-sig { margin: 0 0 11px; }
+.port-group { margin-top: 10px; }
+.port-group:first-child { margin-top: 0; }
+.port-group-h { font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; color: var(--text-2); margin: 0 0 6px; }
+.port-moves { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.port-move { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font-family: var(--sans); font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--text); background: var(--surf2); border: 1px solid color-mix(in srgb, var(--lane, var(--line)) 45%, var(--line)); border-left: 3px solid var(--lane, var(--accent)); border-radius: 7px; padding: 7px 10px; transition: .12s; }
 .port-move:hover { background: color-mix(in srgb, var(--lane, var(--accent)) 12%, var(--surf2)); border-color: var(--lane, var(--accent)); }
-.port-move.done { color: var(--text-2); }
-.port-move.done::after { content: ' ✓'; color: var(--accent); font-weight: 800; }
-/* evidence tiers + ordered mini-lane flow */
-.ev-tier-h { font-family: var(--mono); font-size: 13px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); margin: 26px 0 12px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+.port-move:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pm-n { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--text-2); min-width: 1.3em; text-align: right; }
+.port-move:hover .pm-n { color: var(--lane, var(--text)); }
+.port-move.done .pm-t { color: var(--text-2); }
+.port-move.done .pm-n::after { content: '✓'; margin-left: 2px; color: var(--accent); }
+/* evidence tiers + top controls */
+.ev-tier-h { font-family: var(--mono); font-size: 13px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--text-2); margin: 26px 0 12px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
 .ev-tier-h:first-of-type { margin-top: 8px; }
-.port-moves.ev-flow { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 5px; }
-.ev-flow .port-move { border-left-width: 3px; }
-.ev-arrow { color: var(--muted); font-weight: 800; font-size: 12px; margin: 0 1px; }
+.ev-allbtn { margin-left: auto; font-family: var(--mono); font-size: 11px; font-weight: 700; cursor: pointer; color: var(--text-2); background: var(--surf2); border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; }
+.ev-allbtn:hover { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
 .port-card.ev-access { background: color-mix(in srgb, var(--accent) 5%, var(--surf1)); }
-.ev-access-h .port-svc { font-size: 15px; }
-.port-card.ev-access .port-svc::before { content: '🎯 '; font-size: 13px; }
+.ev-access .port-svc { font-size: 14px; }
 
 /* --- Study: Atlas density (bands, search, minimap, mastery) --- */
 .atlas-search { font-family: var(--mono); font-size: 12px; background: var(--surf2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; width: 150px; transition: border-color .14s, width .18s; }

@@ -28,6 +28,9 @@
   var _pathName = 'Your custom path';
   var _pathMode = false;         // node view follows _path instead of the move's lane
   var _collapsed = {};           // Atlas: laneKey -> true when that lane band is folded shut
+  var _evOpen = null;            // by-port: evidence-card key -> true when that card is expanded (persisted)
+  function evOpen() { if (_evOpen) return _evOpen; _evOpen = {}; try { var s = localStorage.getItem('obol.evOpen'); if (s) _evOpen = JSON.parse(s) || {}; } catch (e) {} return _evOpen; }
+  function evSave() { try { localStorage.setItem('obol.evOpen', JSON.stringify(_evOpen || {})); } catch (e) {} }
   var _atlasQuery = '';          // Atlas: current search text (dims non-matching steps)
   var _whyOverride = {};         // node: moveId -> true when the learner asked to show the reasoning anyway
   var _practiceMode = 'next';    // practice gear: 'next' (what to do) | 'read' (diagnose the output)
@@ -628,37 +631,61 @@
   // ---- the BY-EVIDENCE view: what is in front of you (a port, a shell, a hash) and what it unlocks.
   // Two tiers: open ports first (how you actually start), then "once you are in" evidence. Each entry
   // is an ordered mini-lane, so it reads with the same flow as the methodology lanes.
-  function evidenceCard(e, mk) {
-    var isPort = e.tier === 'ports';
-    var head = isPort
-      ? '<div class="port-card-h"><span class="port-num">' + esc(e.port) + (e.proto ? '<span class="port-proto">/' + esc(e.proto) + '</span>' : '') + '</span>'
-        + '<span class="port-svc">' + esc(e.label) + '</span></div>'
-      : '<div class="port-card-h ev-access-h"><span class="port-svc">' + esc(e.label) + '</span></div>';
-    var moves = e.moves.map(function (m, i) {
-      var studied = (mk[m.id] || {}).studied ? ' done' : '';
-      return (i ? '<span class="ev-arrow">→</span>' : '')
-        + '<button type="button" class="port-move lane-' + m.laneKey + studied + '" data-open="' + U.attr(m.id) + '">' + esc(m.title) + '</button>';
+  var FAM_LABEL = { recon: 'recon', web: 'web', db: 'database', ad: 'AD / Windows', remote: 'remote access', file: 'file share', mail: 'mail', access: 'post-foothold' };
+  // one move = a numbered, lane-coloured pill the learner can open
+  function evMovePill(m, i, mk) {
+    var studied = (mk[m.id] || {}).studied ? ' done' : '';
+    return '<li class="port-move-li"><button type="button" class="port-move lane-' + m.laneKey + studied + '" data-open="' + U.attr(m.id) + '">'
+      + '<span class="pm-n" aria-hidden="true">' + i + '</span><span class="pm-t">' + esc(m.title) + '</span></button></li>';
+  }
+  // moves block: a plain numbered list, or (for a mega-card) grouped under its rail sub-categories,
+  // numbered continuously so the order still reads as one sequence. No connector arrows.
+  function evMovesBlock(e, mk) {
+    var moves = e.moves;
+    if (moves.length <= 8) {
+      return '<ol class="port-moves">' + moves.map(function (m, i) { return evMovePill(m, i + 1, mk); }).join('') + '</ol>';
+    }
+    var groups = [], gi = {};
+    moves.forEach(function (m) { var c = m.cat || 'More'; if (gi[c] === undefined) { gi[c] = groups.length; groups.push({ cat: c, items: [] }); } groups[gi[c]].items.push(m); });
+    var n = 0;
+    return groups.map(function (g) {
+      return '<div class="port-group"><h4 class="port-group-h">' + esc(g.cat) + '</h4><ol class="port-moves">'
+        + g.items.map(function (m) { n += 1; return evMovePill(m, n, mk); }).join('') + '</ol></div>';
     }).join('');
-    return '<div class="port-card' + (e.key === 'scan' ? ' port-scan' : '') + (isPort ? '' : ' ev-access') + '">'
-      + head
-      + '<p class="port-sig">' + esc(e.signal) + '</p>'
-      + '<div class="port-moves ev-flow">' + moves + '</div>'
-      + '</div>';
+  }
+  // one evidence card: collapsed by default (service + what-you-leverage overview), expands to its moves.
+  function evidenceCard(e, mk, open) {
+    var isPort = e.tier === 'ports';
+    var n = e.moves.length;
+    var fam = e.fam ? '<span class="evfam evfam-' + esc(e.fam) + '">' + esc(FAM_LABEL[e.fam] || e.fam) + '</span>' : '';
+    var portBadge = (isPort && e.port) ? '<span class="port-num">' + esc(e.port) + (e.proto ? '<span class="port-proto">/' + esc(e.proto) + '</span>' : '') + '</span>' : '';
+    var head = '<button type="button" class="port-head" data-ev-toggle="' + U.attr(e.key) + '" aria-expanded="' + (open ? 'true' : 'false') + '">'
+      + '<span class="port-lead">' + portBadge + '<span class="port-svc">' + esc(e.label) + '</span>' + fam + '</span>'
+      + '<span class="port-meta"><span class="port-count">' + n + ' move' + (n === 1 ? '' : 's') + '</span>'
+      + '<span class="port-chev" aria-hidden="true"></span></span>'
+      + '</button>';
+    var body = open
+      ? '<div class="port-body"><p class="port-sig">' + esc(e.signal) + '</p>' + evMovesBlock(e, mk) + '</div>'
+      : '<p class="port-sig port-sig-collapsed">' + esc(e.signal) + '</p>';
+    return '<div class="port-card' + (e.key === 'scan' ? ' port-scan' : '') + (isPort ? '' : ' ev-access') + (open ? ' open' : '') + '">'
+      + head + body + '</div>';
   }
   function portsView() {
-    var ev = study().evidence(), mk = study().mastery();
+    var ev = study().evidence(), mk = study().mastery(), op = evOpen();
     var portsT = ev.filter(function (e) { return e.tier === 'ports'; });
     var accessT = ev.filter(function (e) { return e.tier === 'access'; });
+    var allOpen = ev.every(function (e) { return op[e.key]; });
     var h = '<section class="study-route study-ports">';
     h += '<div class="study-top"><button type="button" class="study-back" data-back-map>← Paths</button>'
-      + '<div class="study-crumb"><b>Study</b> · By what you have found</div></div>';
+      + '<div class="study-crumb"><b>Study</b> · By what you have found</div>'
+      + '<button type="button" class="ev-allbtn" data-ev-all="' + (allOpen ? 'close' : 'open') + '">' + (allOpen ? 'Collapse all' : 'Expand all') + '</button></div>';
     h += '<div class="study-hero"><h1 class="study-hero-h">What do I do with <i>this</i>?</h1>'
       + '<p class="study-hero-p">This is how you actually operate. You scan, and a list of open ports comes back. Each one is a signal: it tells you what the box runs and which moves it opens. '
-      + 'Once you are in, the signal changes to what you are holding, a shell, a hash, a credential. Find yours, read what it means, and step into the move.</p></div>';
+      + 'Pick the port in front of you, read what it means, and open it for the ordered moves it unlocks. Once you are in, the signal changes to what you are holding, a shell, a hash, a credential.</p></div>';
     h += '<h2 class="ev-tier-h">Open ports, what you see first</h2>';
-    h += '<div class="port-grid">' + portsT.map(function (e) { return evidenceCard(e, mk); }).join('') + '</div>';
+    h += '<div class="port-grid">' + portsT.map(function (e) { return evidenceCard(e, mk, !!op[e.key]); }).join('') + '</div>';
     h += '<h2 class="ev-tier-h">Once you are in, what you are holding</h2>';
-    h += '<div class="port-grid ev-access-grid">' + accessT.map(function (e) { return evidenceCard(e, mk); }).join('') + '</div>';
+    h += '<div class="port-grid ev-access-grid">' + accessT.map(function (e) { return evidenceCard(e, mk, !!op[e.key]); }).join('') + '</div>';
     return h + '</section>';
   }
 
@@ -1186,6 +1213,8 @@
     U.on(mount, 'click', '[data-back-map]', function () { _view = 'map'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-graph]', function () { _view = 'atlas'; OBOL.router.render(); });
     U.on(mount, 'click', '[data-ports]', function () { _view = 'ports'; OBOL.router.render(); });
+    U.on(mount, 'click', '[data-ev-toggle]', function (e, t) { var k = t.getAttribute('data-ev-toggle'); var o = evOpen(); o[k] = !o[k]; evSave(); OBOL.router.render(); });
+    U.on(mount, 'click', '[data-ev-all]', function (e, t) { var open = t.getAttribute('data-ev-all') === 'open'; var o = evOpen(); study().evidence().forEach(function (x) { o[x.key] = open; }); evSave(); OBOL.router.render(); });
     U.on(mount, 'click', '[data-sim]', function () { _view = 'sim'; _simKey = null; _simStep = 0; _simState = {}; OBOL.router.render(); });
     // cold-box simulation: pick a scenario, answer each "what next", advance
     U.on(mount, 'click', '[data-sim-start]', function (e, t) { _simKey = t.getAttribute('data-sim-start'); _simStep = 0; _simState = {}; _view = 'sim'; OBOL.router.render(); });
