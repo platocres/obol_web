@@ -31,11 +31,17 @@
     stop:  '<path d="M5.4 2.2h5.2L13.8 5.4v5.2l-3.2 3.2H5.4L2.2 10.6V5.4z"/>',
     sound: '<path d="M3 6v4h2.3L9 13V3L5.3 6z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4"/>',
     crosshair: '<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/>',
-    // a decision fork: one node branching into two (the decision graph)
-    branch: '<circle cx="3" cy="8" r="1.7" fill="currentColor" stroke="none"/><path d="M4.7 8H8M8 8V4.8a1.2 1.2 0 0 1 1.2-1.2h1.1M8 8v3.2a1.2 1.2 0 0 0 1.2 1.2h1.1"/><circle cx="12.3" cy="3.6" r="1.7" fill="currentColor" stroke="none"/><circle cx="12.3" cy="12.4" r="1.7" fill="currentColor" stroke="none"/>'
+    // a decision fork: one node branching into two (the decision tree)
+    branch: '<circle cx="3" cy="8" r="1.7" fill="currentColor" stroke="none"/><path d="M4.7 8H8M8 8V4.8a1.2 1.2 0 0 1 1.2-1.2h1.1M8 8v3.2a1.2 1.2 0 0 0 1.2 1.2h1.1"/><circle cx="12.3" cy="3.6" r="1.7" fill="currentColor" stroke="none"/><circle cx="12.3" cy="12.4" r="1.7" fill="currentColor" stroke="none"/>',
+    // play triangle (run a cold box)
+    play: '<path d="M4.8 3.2 12.8 8 4.8 12.8Z"/>',
+    // a small node-and-edge graph (the attack graph / atlas)
+    graph: '<path d="M5 4.6 10.7 5.3M5.2 5.6 6.7 10.4M8.7 11.1 10.9 6.4"/><circle cx="4" cy="4.2" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="5.4" r="1.7" fill="currentColor" stroke="none"/><circle cx="7.4" cy="11.6" r="1.7" fill="currentColor" stroke="none"/>',
+    // a list of open ports (browse by open port)
+    ports: '<circle cx="3.4" cy="4" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.4" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.4" cy="12" r="1.1" fill="currentColor" stroke="none"/><path d="M6.2 4h6.4M6.2 8h6.4M6.2 12h4"/>'
   };
   // icons that look best filled rather than stroked
-  var FILLED = { shield: 1, skull: 1, pin: 1, spark: 1, bolt: 1, stop: 1, flagfill: 1 };
+  var FILLED = { shield: 1, skull: 1, pin: 1, spark: 1, bolt: 1, stop: 1, flagfill: 1, play: 1 };
   function ic(name, cls) {
     var body = P[name]; if (!body) return '';
     var fill = FILLED[name] ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"';

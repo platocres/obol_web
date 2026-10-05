@@ -2314,7 +2314,7 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 .sl-way-ic { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 8px; font-size: 15px; background: color-mix(in srgb, var(--way, var(--accent)) 20%, transparent); color: color-mix(in srgb, var(--way, var(--accent)) 60%, var(--text)); }
 .sl-way-head { display: flex; flex-direction: column; min-width: 0; }
 .sl-way-kick { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: color-mix(in srgb, var(--way, var(--accent)) 55%, var(--text-2)); }
-.sl-way-t { font-size: 15px; font-weight: 800; color: var(--text); }
+.sl-way-t { font-size: 13px; font-weight: 800; color: var(--text); white-space: nowrap; }
 .sl-way-d { font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
 .sl-way-go { margin-top: auto; font-size: 12px; font-weight: 700; color: color-mix(in srgb, var(--way, var(--accent)) 60%, var(--text)); }
 
