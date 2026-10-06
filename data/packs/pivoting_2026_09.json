@@ -259,7 +259,7 @@
     {
       "id": "pivot-enumerate-neighbors",
       "title": "Sweep the Adjacent Hosts",
-      "hypothesis": "The foothold's ARP/neighbour cache already named the live hosts on its segments — you do not have to guess the subnet. Scan exactly those IPs: lead with an nxc protocol sweep to spot SMB/WinRM and where your credential already works, then a full nmap for the rest of the surface. Run it straight from the foothold if they share a segment, or through your tunnel from Kali if they do not.",
+      "hypothesis": "The foothold's ARP/neighbour cache already named the live hosts on its segments - you do not have to guess the subnet. Scan exactly those IPs: lead with an nxc protocol sweep to spot SMB/WinRM and where your credential already works, then a full nmap for the rest of the surface. Run it straight from the foothold if they share a segment, or through your tunnel from Kali if they do not.",
       "tool": "nxc",
       "tools": [
         "nxc",
@@ -300,7 +300,7 @@
     {
       "id": "pivot-reach-listener",
       "title": "Reach an Internal-Only Service",
-      "hypothesis": "A service bound to 127.0.0.1 or an internal NIC is invisible from your box but wide open from the foothold — databases, admin panels and message queues hide here constantly. The listener list told you the exact port; forward it out (ssh -L, or a chisel/ligolo forward) and your tools hit it on localhost as if it were local. This is how a localhost-only MySQL or an internal web admin becomes reachable.",
+      "hypothesis": "A service bound to 127.0.0.1 or an internal NIC is invisible from your box but wide open from the foothold - databases, admin panels and message queues hide here constantly. The listener list told you the exact port; forward it out (ssh -L, or a chisel/ligolo forward) and your tools hit it on localhost as if it were local. This is how a localhost-only MySQL or an internal web admin becomes reachable.",
       "tool": "ssh",
       "tools": [
         "ssh",
@@ -333,7 +333,7 @@
     {
       "id": "pivot-internal-dns",
       "title": "Interrogate the Internal Resolver",
-      "hypothesis": "The foothold's own resolver is almost always a domain controller, and it will name the rest of the estate for you. Ask it for the DC locator SRV records and try a zone transfer: in an AD environment this single step hands you the domain name and every DC — unlocking the whole AD attack lane — often before you hold a single credential. The resolver's address came straight from the foothold's DNS config.",
+      "hypothesis": "The foothold's own resolver is almost always a domain controller, and it will name the rest of the estate for you. Ask it for the DC locator SRV records and try a zone transfer: in an AD environment this single step hands you the domain name and every DC - unlocking the whole AD attack lane - often before you hold a single credential. The resolver's address came straight from the foothold's DNS config.",
       "tool": "dig",
       "tools": [
         "dig",

@@ -378,7 +378,7 @@
     {
       "id": "oracle-rce",
       "title": "Oracle to Command Execution",
-      "hypothesis": "A privileged Oracle session reaches the OS: odat automates the known paths — an external table that runs a command, a Java stored procedure, or the scheduler (DBMS_SCHEDULER) — turning a database login into code execution on the host. ODAT bundles them so you do not hand-write the PL/SQL.",
+      "hypothesis": "A privileged Oracle session reaches the OS: odat automates the known paths - an external table that runs a command, a Java stored procedure, or the scheduler (DBMS_SCHEDULER) - turning a database login into code execution on the host. ODAT bundles them so you do not hand-write the PL/SQL.",
       "tool": "odat",
       "tools": [
         "odat",

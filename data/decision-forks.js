@@ -215,8 +215,10 @@
     'pivot-reach-listener': { cond: 'Does the forwarded internal service answer on your localhost port?', onFail: 'No answer → check the forward is up and you named the right listener port.' },
     'pivot-internal-dns': { cond: 'Does the internal resolver return the DC locator SRV records (or a zone transfer)?', onFail: 'Refused/empty → the resolver may not be a DC, or AXFR is blocked; you still have the SRV answers to work from.' },
     // ---- proof ----
-    'flag-hunt-linux': { cond: 'Can you read user.txt and root.txt with proof context visible?', onFail: 'Not readable yet, you lack the required access.' },
-    'flag-hunt-windows': { cond: 'Can you read user.txt and proof.txt with proof context visible?', onFail: 'Not readable yet, escalate further first.' },
+    'flag-hunt-linux': { cond: 'Can you read the user flag (user.txt/local.txt) with proof context visible?', onFail: 'Not readable yet — any shell should read it; confirm your foothold.' },
+    'flag-hunt-root-linux': { cond: 'Can you read the root flag (/root/root.txt) now that id shows uid=0?', onFail: 'Permission denied → you are not root yet; finish privilege escalation first.' },
+    'flag-hunt-windows': { cond: 'Can you read the user flag (Desktop\\local.txt) with proof context visible?', onFail: 'Not readable yet — any shell should read it; confirm your foothold.' },
+    'flag-hunt-root-windows': { cond: 'Can you read the proof flag (Administrator Desktop\\proof.txt) as SYSTEM/Administrator?', onFail: 'Access denied → you are not SYSTEM/Administrator yet; finish escalation first.' },
     // ---- web ----
     'ssrf': { cond: 'Does the server fetch a URL you control (internal target or callback)?', onFail: 'No fetch, the parameter is not SSRFable.' },
     'azure-imds': { cond: 'Can the SSRF reach 169.254.169.254 with the Metadata header and return a token?', onFail: 'No token (not Azure, or header stripped) → try the AWS metadata path, or treat the SSRF as internal recon.' },

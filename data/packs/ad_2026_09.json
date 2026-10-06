@@ -320,7 +320,7 @@
     {
       "id": "ldap-deep-enum",
       "title": "Deep LDAP Enumeration (Base-DN Scoped)",
-      "hypothesis": "Once you can read the directory — with a credential or through an anonymous bind — and you know the base DN, LDAP itself is a goldmine you query precisely rather than dumping blindly. Pull the description fields (admins stash passwords there constantly), the adminCount=1 principals, the accounts with an SPN (kerberoastable) or DONT_REQ_PREAUTH (AS-REP-roastable), and the delegation flags. This is the targeted enumeration that turns 'I can bind' into a user list and a fistful of candidate credentials, before you ever touch a hash.",
+      "hypothesis": "Once you can read the directory - with a credential or through an anonymous bind - and you know the base DN, LDAP itself is a goldmine you query precisely rather than dumping blindly. Pull the description fields (admins stash passwords there constantly), the adminCount=1 principals, the accounts with an SPN (kerberoastable) or DONT_REQ_PREAUTH (AS-REP-roastable), and the delegation flags. This is the targeted enumeration that turns 'I can bind' into a user list and a fistful of candidate credentials, before you ever touch a hash.",
       "tool": "nxc",
       "tools": [
         "nxc",
@@ -2197,7 +2197,7 @@
         "advice.relay"
       ],
       "priority": 82,
-      "hypothesis": "'Signing is required' means THIS relay target enforces SMB signing, so a relayed session is rejected — but signing is per-host, and in most domains plenty of hosts have it OFF. Enumerate which, and relay to one of those instead. The attack is not dead; you aimed it at a hardened box.",
+      "hypothesis": "'Signing is required' means THIS relay target enforces SMB signing, so a relayed session is rejected - but signing is per-host, and in most domains plenty of hosts have it OFF. Enumerate which, and relay to one of those instead. The attack is not dead; you aimed it at a hardened box.",
       "proves": "nothing attack-wise; it redirects the relay to a host where it will actually land",
       "does_not_prove": "that any host has signing off — if the whole domain enforces it, relay is genuinely out",
       "report": {
@@ -2237,7 +2237,7 @@
         "advice.responder"
       ],
       "priority": 60,
-      "hypothesis": "Responder is poisoning but no hashes arrive because the rogue server that captures them is OFF — its SMB/HTTP is disabled in Responder.conf, or your own smbd/Apache is squatting the port. Turn the capture servers on (and free the ports) and the NetNTLM hashes start landing.",
+      "hypothesis": "Responder is poisoning but no hashes arrive because the rogue server that captures them is OFF - its SMB/HTTP is disabled in Responder.conf, or your own smbd/Apache is squatting the port. Turn the capture servers on (and free the ports) and the NetNTLM hashes start landing.",
       "proves": "nothing attack-wise; it makes Responder actually capture the auth it poisons",
       "does_not_prove": "that any victim will authenticate — you still need traffic (a coerce, a logon, a mistyped share)",
       "report": {
@@ -2263,7 +2263,7 @@
     {
       "id": "fix-clock-skew",
       "title": "Kerberos Clock Skew — Sync and Retry",
-      "hypothesis": "KRB_AP_ERR_SKEW / \"clock skew too great\" is not a broken credential — Kerberos simply refuses tickets when your clock and the DC's differ by more than ~5 minutes. Sync your box to the DC and the exact same command works. This one error strands more people in AD than any real defence does.",
+      "hypothesis": "KRB_AP_ERR_SKEW / \"clock skew too great\" is not a broken credential - Kerberos simply refuses tickets when your clock and the DC's differ by more than ~5 minutes. Sync your box to the DC and the exact same command works. This one error strands more people in AD than any real defence does.",
       "tool": "ntpdate",
       "tools": [
         "ntpdate",
@@ -2311,7 +2311,7 @@
     {
       "id": "account-password-change",
       "title": "Change an Expired Password to Use It",
-      "hypothesis": "STATUS_PASSWORD_MUST_CHANGE means the credential is VALID — the account simply must set a new password on first use. Change it remotely (no shell needed) and the account is yours. Lab authors plant this on freshly-created or reset accounts to stall you; it is a one-command fix, not a dead end.",
+      "hypothesis": "STATUS_PASSWORD_MUST_CHANGE means the credential is VALID - the account simply must set a new password on first use. Change it remotely (no shell needed) and the account is yours. Lab authors plant this on freshly-created or reset accounts to stall you; it is a one-command fix, not a dead end.",
       "tool": "smbpasswd",
       "tools": [
         "smbpasswd",
@@ -2373,7 +2373,7 @@
         "advice.kerberos"
       ],
       "priority": 86,
-      "hypothesis": "STATUS_NOT_SUPPORTED on an SMB/LDAP login is not a bad credential — the DC has NTLM turned off and only speaks Kerberos. The exact same credential works the moment you add -k (and point at the DC by name, not IP). A hardened-auth lab banks on you reading this as 'login failed' and giving up.",
+      "hypothesis": "STATUS_NOT_SUPPORTED on an SMB/LDAP login is not a bad credential - the DC has NTLM turned off and only speaks Kerberos. The exact same credential works the moment you add -k (and point at the DC by name, not IP). A hardened-auth lab banks on you reading this as 'login failed' and giving up.",
       "proves": "the credential authenticating over Kerberos once NTLM is taken out of the picture",
       "does_not_prove": "a new credential — it is the one you already have, spoken the way the DC accepts",
       "report": {
@@ -2414,7 +2414,7 @@
         "advice.account"
       ],
       "priority": 70,
-      "hypothesis": "The credential is real but the account cannot log in right now: a spray tripped the lockout threshold, or the account is disabled / not permitted this logon type. This is a STOP-and-redirect, not a dead end — hammering it makes things worse.",
+      "hypothesis": "The credential is real but the account cannot log in right now: a spray tripped the lockout threshold, or the account is disabled / not permitted this logon type. This is a STOP-and-redirect, not a dead end - hammering it makes things worse.",
       "proves": "nothing new; it tells you to change approach before you cause damage",
       "does_not_prove": "that the credential is wrong",
       "report": {

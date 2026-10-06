@@ -47,7 +47,7 @@
         "advice.hash"
       ],
       "priority": 62,
-      "hypothesis": "'No hashes loaded' or 'Token length exception' is not a tough hash — the file or mode is wrong. The usual culprits: a username: prefix left on the line (or missing when the mode wants it), the wrong -m mode for the hash type, CRLF line endings from a Windows copy, or stray whitespace. Fix the file and it cracks.",
+      "hypothesis": "'No hashes loaded' or 'Token length exception' is not a tough hash - the file or mode is wrong. The usual culprits: a username: prefix left on the line (or missing when the mode wants it), the wrong -m mode for the hash type, CRLF line endings from a Windows copy, or stray whitespace. Fix the file and it cracks.",
       "proves": "nothing attack-wise; it gets the cracker to actually load and run on your hash",
       "does_not_prove": "that the password is in your wordlist — that is a separate question",
       "report": {

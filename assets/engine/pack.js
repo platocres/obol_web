@@ -476,7 +476,7 @@
   // moves (exploit checks, coercion/relay) are capped unless their own indicator fact is present,
   // so they never bury the evidenced next step. Pure function of facts (+ fact timestamps).
   var V2_INF = 1e6;
-  var V2_GOALS = ['objective.flag', 'access.admin', 'access.system', 'access.root', 'loot.ntds'];
+  var V2_GOALS = ['objective.flag', 'objective.local_flag', 'objective.root_flag', 'access.admin', 'access.system', 'access.root', 'loot.ntds'];
   // Keystone weighting (gate-wiring aware): `enable` already rewards the single BEST door a move opens
   // (Math.max over newly-unlocked moves). Keystone adds the BREADTH — how many currently-blocked moves a
   // move's produced facts unblock, goal-tempered — so a pivotal fact (credential.available unblocks the whole
@@ -485,6 +485,15 @@
   // toward the keystone, never a term that overrides a clearly-better-progress move. Tune against the corpus.
   var V2_KEYSTONE_W = 0.15;    // weight of the breadth term in the score
   var V2_KEYSTONE_CAP = 4;     // max accumulated breadth before the weight applies (bounds its influence)
+  // Endgame objective pull. Goal-distance is MIN-over-goals, so the moment ONE objective is met (you grab the
+  // user flag — objective.local_flag is a goal) the distance collapses to 0 and every move, including the
+  // still-open ROOT/proof-flag capture, reads zero progress — the two-flag split would otherwise let
+  // enumeration/pivot keystone bury the flag you came to capture. This pull gives any move that DIRECTLY
+  // produces an as-yet-uncaptured objective.*flag a strong, bounded bonus so the reachable flag leads. It is a
+  // within-tier score term (never changes the tier), so a genuinely fresher/higher-tier lead still wins — it
+  // decides "what now that I CAN grab a flag", not "ignore a fresh keystone to grab one".
+  var V2_OBJECTIVE_RE = /^objective\.(flag|local_flag|root_flag)$/;
+  var V2_OBJECTIVE_W = 3;      // bonus for a move that captures an unmet objective flag (beats typical keystone)
   // Specific EARNED control/loot/credential facts: a move gated on one of these is a deterministic
   // cash-in (DCSync given control paths, a crack given a hash), not a gamble — full reliability.
   var V2_SPECIFIC = {
@@ -494,7 +503,7 @@
     'ad.unconstrained': 1, 'privesc.sudo_rights': 1, 'privesc.windows_privilege': 1,
     'db.session': 1, 'ad.gmsa': 1, 'kerberos.tickets': 1, 'smb.ms17_010': 1, 'hash.mscache': 1,
   };
-  var V2_PRIV = { 'access.admin': 1, 'access.system': 1, 'access.root': 1, 'loot.ntds': 1, 'objective.flag': 1 };
+  var V2_PRIV = { 'access.admin': 1, 'access.system': 1, 'access.root': 1, 'loot.ntds': 1, 'objective.flag': 1, 'objective.local_flag': 1, 'objective.root_flag': 1 };
   var V2_SPEC_RE = /check$|coerce|relay|responder|mitm|zerologon|printnight|nopac|ms14-068/;
   // An exploit/foothold move is EVIDENCED (not a bare-port gamble) when the box actually shows a
   // reason to run it: a proven vulnerability fingerprint, a credential/hash in hand, an existing
@@ -668,6 +677,10 @@
       for (i = 0; i < a.deprioritize_when.length; i++) if (haveObj[a.deprioritize_when[i]]) { aSideQuest = true; break; }
       if (aCashIn || aSideQuest) keystone = 0;
       var score = v2Reliability(a, haveObj) * (progA + 0.6 * enable + V2_KEYSTONE_W * keystone) + (onType(a) === -1 ? 0.5 : 0);
+      // Endgame objective pull: a reachable, still-uncaptured flag is the box's actual objective — surface it
+      // over keystone-rich enumeration even after another goal (e.g. the user flag) already zeroed the
+      // goal-distance. See V2_OBJECTIVE_W.
+      for (i = 0; i < a.produces.length; i++) { if (V2_OBJECTIVE_RE.test(a.produces[i]) && !haveObj[a.produces[i]]) { score += V2_OBJECTIVE_W; break; } }
       return { a: a, tier: tier, score: score };
     });
     scored.sort(function (x, y) {

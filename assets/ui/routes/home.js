@@ -60,6 +60,14 @@
       return '<option value="' + esc(m.id) + '"' + (m.id === selected ? ' selected' : '') + '>' + esc(OBOL.store.runLabel(m)) + '</option>';
     }).join('');
   }
+  // The learner's personal attack-order preference. Defaults to 'balanced' (no nudge). See WORKFLOWS in
+  // profile.js — this only nudges Next Steps within a phase, it never overrides an evidence-driven #1.
+  function workflowOptions(selected) {
+    var sel = (OBOL.profile.normalizeWorkflow && OBOL.profile.normalizeWorkflow(selected)) || OBOL.profile.DEFAULT_WORKFLOW;
+    return (OBOL.profile.listWorkflows ? OBOL.profile.listWorkflows() : []).map(function (w) {
+      return '<option value="' + esc(w.id) + '"' + (w.id === sel ? ' selected' : '') + '>' + esc(w.name) + '</option>';
+    }).join('');
+  }
 
   // An engagement is "set up" once the operator has actually done something with it: chosen a real
   // platform, scoped a target, or collected a fact. A brand-new default run (custom platform, no
@@ -398,7 +406,7 @@
   // gather per-target projection used by the board + vitals
   function targetInfos(eng) {
     var pack = OBOL.packs.actions();
-    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
+    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
     var pins = pinnedSet(eng);
     return (eng.targets || []).map(function (t) {
       var ip = t.ip || t.id;
@@ -625,7 +633,7 @@
     // OBOL.coach.topMove() so the Hub and the coach can never disagree (and report-only writeup checks
     // are already excluded there), rather than the old v1 ranker which drifted from the coach's v2.
     var pack = OBOL.packs.actions();
-    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
+    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
     var nm = (OBOL.coach && OBOL.coach.topMove) ? OBOL.coach.topMove()
       : OBOL.pack.rankActions(OBOL.store.factSet(), pack, { focusPrefixes: focus })[0];
     var nmHtml;
@@ -722,6 +730,9 @@
       + '<label class="eng-field pf-osid" id="pf-osid-wrap" style="display:none"><span>OSID (OffSec Exam)</span><input id="eng-osid" placeholder="OS-XXXXX"></label>'
       + '<label class="eng-field pf-osid" id="pf-cand-wrap" style="display:none"><span>Candidate</span><input id="eng-cand" placeholder="Your name"></label>'
       + '</div>'
+      + '<label class="eng-field"><span>Your Workflow <span class="eng-field-opt">(how you like to attack a box)</span></span>'
+      + '<select id="eng-wf">' + workflowOptions(prof.workflow || '') + '</select></label>'
+      + '<div class="eng-field-hint">A gentle, predictable nudge to Next Steps — not a cage. <strong>Flags first</strong> keeps the user and admin flags ahead of pivoting (grab both, mark them off, then pivot); <strong>Map the network early</strong> surfaces multi-homing and tunnels as soon as they appear. The coach still leads with a clear evidence-driven move when there is one. Change it any time.</div>'
       + '<label class="eng-field"><span>Scope / Targets <span class="eng-field-opt">(paste IPs &amp; CIDRs, junk is filtered)</span></span>'
       + '<textarea id="eng-scope" class="ev-textarea" style="min-height:90px" placeholder="10.10.10.10  10.10.10.20&#10;10.10.10.0/24"></textarea></label>'
       + '<label class="eng-field"><span>Working Directory <span class="eng-field-opt">(on your Kali box, optional)</span></span>'
@@ -972,6 +983,7 @@
       var name = (document.getElementById('eng-name').value || '').trim();
       var platform = (document.querySelector('input[name="pf-platform"]:checked') || {}).value || 'custom';
       var mt = (document.getElementById('eng-mt').value || '');
+      var wf = ((document.getElementById('eng-wf') || {}).value || '');
       var osid = (document.getElementById('eng-osid') || {}).value || '';
       var cand = (document.getElementById('eng-cand') || {}).value || '';
       var scopeText = (document.getElementById('eng-scope').value || '');
@@ -1000,7 +1012,7 @@
         OBOL.store.update(function (e) {
           if (reuse) {
             e.name = name;
-            e.profile = Object.assign(e.profile || {}, { platform: platform, machine_type: mt, osid: osid.trim(), candidate: cand.trim(), scope: scope });
+            e.profile = Object.assign(e.profile || {}, { platform: platform, machine_type: mt, workflow: wf, osid: osid.trim(), candidate: cand.trim(), scope: scope });
             e.params = e.params || {}; e.params.platform = platform;
           }
           e.workspace = { root: root };
@@ -1021,7 +1033,7 @@
       };
 
       if (reuse) { seed(); }
-      else { OBOL.store.createEngagement(name, { platform: platform, machine_type: mt, osid: osid.trim(), candidate: cand.trim(), scope: scope }).then(seed); }
+      else { OBOL.store.createEngagement(name, { platform: platform, machine_type: mt, workflow: wf, osid: osid.trim(), candidate: cand.trim(), scope: scope }).then(seed); }
     });
   }
 

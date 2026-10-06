@@ -58,7 +58,7 @@
         "advice.egress"
       ],
       "priority": 64,
-      "hypothesis": "Your payload ran but nothing hit your listener, or a test connection is refused/timed out: the target cannot reach you OUTBOUND on that port. The box is not unexploitable — pick a port egress allows (443/53 almost always leave), or flip the direction with a BIND shell and connect IN to the target instead.",
+      "hypothesis": "Your payload ran but nothing hit your listener, or a test connection is refused/timed out: the target cannot reach you OUTBOUND on that port. The box is not unexploitable - pick a port egress allows (443/53 almost always leave), or flip the direction with a BIND shell and connect IN to the target instead.",
       "proves": "nothing attack-wise; it gets a shell channel through a filtered egress",
       "does_not_prove": "that all egress is blocked — usually only some ports are; 443/53 commonly pass",
       "report": {
@@ -200,7 +200,7 @@
       ],
       "priority": 66,
       "sequence": true,
-      "hypothesis": "'sudo: no tty present' / 'must be run from a terminal' means your shell is a dumb pipe (a web/reverse shell) with no controlling terminal — sudo, su, ssh and many interactive tools refuse to run. Spawn a PTY and they work. This is the first thing to do on nearly every raw reverse shell.",
+      "hypothesis": "'sudo: no tty present' / 'must be run from a terminal' means your shell is a dumb pipe (a web/reverse shell) with no controlling terminal - sudo, su, ssh and many interactive tools refuse to run. Spawn a PTY and they work. This is the first thing to do on nearly every raw reverse shell.",
       "proves": "nothing attack-wise; it turns a dumb shell into an interactive PTY so terminal-only commands run",
       "does_not_prove": "a better privilege — same user, now with a usable terminal",
       "report": {
@@ -241,7 +241,7 @@
         "advice.exec"
       ],
       "priority": 60,
-      "hypothesis": "\"bad interpreter: No such file or directory\" on a script you uploaded means Windows CRLF line endings — the kernel looks for an interpreter literally named `/bin/bash\\r`. Strip the carriage returns and it runs. The same family of wall: a binary in a noexec /tmp, or one you forgot to chmod +x.",
+      "hypothesis": "\"bad interpreter: No such file or directory\" on a script you uploaded means Windows CRLF line endings - the kernel looks for an interpreter literally named `/bin/bash\\r`. Strip the carriage returns and it runs. The same family of wall: a binary in a noexec /tmp, or one you forgot to chmod +x.",
       "proves": "nothing attack-wise; it gets your own tooling running on the foothold",
       "does_not_prove": "anything about the target beyond its mount options",
       "report": {
@@ -338,7 +338,7 @@
     {
       "id": "ssh-key-troubleshoot",
       "title": "SSH Key Rejected — Fix It",
-      "hypothesis": "A found or planted SSH key that SSH refuses is a puzzle lab authors use to stall you, not a dead end — the key is fine, something around it is wrong. Match the exact error to its fix: local key permissions, a passphrase, the modern ssh-rsa block, a mangled format, or — the sneaky one — the TARGET's own ~/.ssh permissions, which you can only correct from a foothold you already hold. Work the list and the key logs you in.",
+      "hypothesis": "A found or planted SSH key that SSH refuses is a puzzle lab authors use to stall you, not a dead end - the key is fine, something around it is wrong. Match the exact error to its fix: local key permissions, a passphrase, the modern ssh-rsa block, a mangled format, or - the sneaky one - the TARGET's own ~/.ssh permissions, which you can only correct from a foothold you already hold. Work the list and the key logs you in.",
       "tool": "ssh",
       "tools": [
         "ssh",

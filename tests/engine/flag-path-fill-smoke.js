@@ -14,15 +14,19 @@ const OBOL = globalThis.OBOL;
 
 const pack = OBOL.pack.loadPacks(OBOL.pack.PACK_NAMES.map((n) =>
   JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'data', 'packs', n + '.json'), 'utf8'))));
-const fh = pack.filter((a) => a.id === 'flag-hunt-windows')[0];
+// local flag lives in flag-hunt-windows; the root/proof flag capture is now its own move
+// (flag-hunt-root-windows), so fill both and check each fills the path its slot located.
+const fhMoves = ['flag-hunt-windows', 'flag-hunt-root-windows'].map((id) => pack.filter((a) => a.id === id)[0]);
 const F = OBOL.facts;
 
 let fail = 0;
 function ok(cond, msg) { if (!cond) { console.error('  FAIL:', msg); fail++; } else { console.log('  ok  :', msg); } }
 function fillAll(facts, profile) {
-  return (fh.commands || []).map((c, i) => OBOL.command.fillCommand(fh, facts, {
+  const out = [];
+  fhMoves.forEach((fh) => (fh.commands || []).forEach((c, i) => out.push(OBOL.command.fillCommand(fh, facts, {
     params: { target: '10.0.0.5', username: 'administrator', nthash: 'aaaa' }, profile: profile,
-  }, i).filled);
+  }, i).filled)));
+  return out;
 }
 function set(kinds, extra) {
   const s = new F.FactSet([]);
@@ -38,7 +42,7 @@ const located = set(['credential.available', 'access.admin', 'os.windows', 'foot
 ]);
 const lf = fillAll(located, { platform: 'htb' });
 ok(lf.some((r) => r === 'hostname; ipconfig; type C:\\Users\\svc-user\\Desktop\\user.txt'), 'STEP 3 fills the LOCATED local flag path (svc-user Desktop, user.txt)');
-ok(lf.some((r) => r === 'hostname; ipconfig; type C:\\Users\\Administrator\\Desktop\\root.txt'), 'STEP 4 fills the LOCATED root flag path (Administrator Desktop, root.txt)');
+ok(lf.some((r) => /type C:\\Users\\Administrator\\Desktop\\root\.txt\b/.test(r)), 'the root move fills the LOCATED root flag path (Administrator Desktop, root.txt)');
 ok(!lf.some((r) => /<user>/.test(r)), 'no <user> placeholder remains once the flags are located');
 
 // 2. Without a located path, HTB profile defaults use the platform names (user.txt / root.txt).

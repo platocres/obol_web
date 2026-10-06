@@ -387,7 +387,7 @@
       if (st === 'empty' && !moveEverProduced(k)) doneIds[k] = true; // never paid off → stay retired
     });
 
-    var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
+    var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
     var ranked = (OBOL.pack.rankActions || OBOL.pack.nextActions)(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
     var frontier = OBOL.phases.frontierIndex(facts);
     var onFlow = [], comingUp = [], reportChecks = [];

@@ -114,7 +114,7 @@ function plan(seed, goals) {
 var MILES = [
   { key: 'FOOTHOLD', goals: ['foothold.linux', 'foothold.windows', 'access.shell', 'foothold.webshell', 'access.desktop'] },
   { key: 'USER-FLAG', goals: ['objective.flag', 'objective.local_flag'] },
-  { key: 'ROOT', goals: ['access.root', 'access.system', 'access.admin'] },
+  { key: 'ROOT', goals: ['access.root', 'access.system', 'access.admin', 'objective.root_flag'] },
 ];
 var DOMAIN = { key: 'DOMAIN', goals: ['loot.ntds', 'access.admin', 'persistence.domain'] };
 

@@ -325,7 +325,7 @@
     {
       "id": "vnc-desktop-shell",
       "title": "VNC Desktop to Shell",
-      "hypothesis": "A VNC session (unauthenticated, or a cracked/short VNC password) puts you at the victim's live desktop — and a desktop is one terminal away from a shell. Open a terminal in the session and run your commands, or type a reverse shell straight in. The graphical foothold becomes a real one.",
+      "hypothesis": "A VNC session (unauthenticated, or a cracked/short VNC password) puts you at the victim's live desktop - and a desktop is one terminal away from a shell. Open a terminal in the session and run your commands, or type a reverse shell straight in. The graphical foothold becomes a real one.",
       "tool": "vncviewer",
       "tools": [
         "vncviewer",
@@ -688,7 +688,7 @@
     {
       "id": "telnet-login",
       "title": "Log In Over Telnet",
-      "hypothesis": "Telnet is a cleartext login shell — the moment you have a username and password (from the banner, a spray, or a reused credential), logging in IS the foothold. Default and reused passwords are the norm on the devices that still run it. Confirm the login with id/hostname so obol records the shell.",
+      "hypothesis": "Telnet is a cleartext login shell - the moment you have a username and password (from the banner, a spray, or a reused credential), logging in IS the foothold. Default and reused passwords are the norm on the devices that still run it. Confirm the login with id/hostname so obol records the shell.",
       "tool": "telnet",
       "tools": [
         "telnet",
@@ -774,7 +774,7 @@
     {
       "id": "rservices-login",
       "title": "Log In via r-services (rlogin/rsh)",
-      "hypothesis": "The Berkeley r-services trust logins outright: a permissive ~/.rhosts or /etc/hosts.equiv lets you rlogin or rsh in as a named user — root included — with NO password at all. When recon showed 512/513/514 open, try the trusted-login path; it is frequently a direct root shell.",
+      "hypothesis": "The Berkeley r-services trust logins outright: a permissive ~/.rhosts or /etc/hosts.equiv lets you rlogin or rsh in as a named user - root included - with NO password at all. When recon showed 512/513/514 open, try the trusted-login path; it is frequently a direct root shell.",
       "tool": "rlogin",
       "tools": [
         "rlogin",
@@ -1038,7 +1038,7 @@
     {
       "id": "x11-keylog",
       "title": "X11 Keylog / Screen Capture to Credentials",
-      "hypothesis": "An open X11 display (access control off) is a window onto the logged-in user's session: snapshot the screen for secrets on show, and log keystrokes to catch passwords as they are typed — including the sudo password. Those captured credentials are your way to a shell and to root, so X11 is a credential oracle, not just a curiosity.",
+      "hypothesis": "An open X11 display (access control off) is a window onto the logged-in user's session: snapshot the screen for secrets on show, and log keystrokes to catch passwords as they are typed - including the sudo password. Those captured credentials are your way to a shell and to root, so X11 is a credential oracle, not just a curiosity.",
       "tool": "xwd",
       "tools": [
         "xwd",
@@ -1728,7 +1728,7 @@
         "ports.open"
       ],
       "priority": 95,
-      "hypothesis": "\"Host seems down\" almost never means down — it means the box drops the ICMP ping nmap uses to decide a host is alive. Skip the ping with -Pn and it answers. This is the single most common reason a beginner thinks a live target is dead. While here, remember UDP and filtered-TCP need their own scan types.",
+      "hypothesis": "\"Host seems down\" almost never means down - it means the box drops the ICMP ping nmap uses to decide a host is alive. Skip the ping with -Pn and it answers. This is the single most common reason a beginner thinks a live target is dead. While here, remember UDP and filtered-TCP need their own scan types.",
       "proves": "the real open-port surface once host discovery is taken out of nmap's way",
       "does_not_prove": "that nothing is filtered; a firewall can still drop specific probes",
       "report": {
@@ -1771,7 +1771,7 @@
         "advice.hosts"
       ],
       "priority": 94,
-      "hypothesis": "\"Could not resolve host\" means a tool was handed a name (box.htb, dc01.corp.local) with nothing to resolve it. Map the name to the IP in /etc/hosts and everything that failed just works — and many web apps and all of Kerberos REQUIRE the name, not the IP, so this unblocks virtual hosts and TGT requests at the same time.",
+      "hypothesis": "\"Could not resolve host\" means a tool was handed a name (box.htb, dc01.corp.local) with nothing to resolve it. Map the name to the IP in /etc/hosts and everything that failed just works - and many web apps and all of Kerberos REQUIRE the name, not the IP, so this unblocks virtual hosts and TGT requests at the same time.",
       "proves": "nothing attack-wise; it makes name-addressed tools and vhosts reachable",
       "does_not_prove": "that the name is the only vhost; enumerate others once resolution works",
       "report": {

@@ -122,7 +122,7 @@
         "advice.web_access"
       ],
       "priority": 58,
-      "hypothesis": "A 429 / \"Too Many Requests\" is a rate limiter or WAF throttling your fuzzing, and a \"wrong version number\" SSL error is just http-vs-https confusion — neither is the app refusing you for real. Slow the scan, soften the fingerprint, or flip the scheme, and enumeration continues.",
+      "hypothesis": "A 429 / \"Too Many Requests\" is a rate limiter or WAF throttling your fuzzing, and a \"wrong version number\" SSL error is just http-vs-https confusion - neither is the app refusing you for real. Slow the scan, soften the fingerprint, or flip the scheme, and enumeration continues.",
       "proves": "nothing attack-wise; it gets your requests flowing again",
       "does_not_prove": "that there is no WAF rule on the actual payloads; tune those separately",
       "report": {
@@ -823,7 +823,7 @@
     {
       "id": "http-put-webshell",
       "title": "Upload a Webshell via HTTP PUT",
-      "hypothesis": "When the allowed-methods check showed PUT (or a WebDAV verb) enabled, the server will often write a file you hand it straight into the web root — and a file you can write and then request is code execution. Confirm PUT works, drop a webshell for the server's language, and call it. This is a direct foothold that costs one request.",
+      "hypothesis": "When the allowed-methods check showed PUT (or a WebDAV verb) enabled, the server will often write a file you hand it straight into the web root - and a file you can write and then request is code execution. Confirm PUT works, drop a webshell for the server's language, and call it. This is a direct foothold that costs one request.",
       "tool": "curl",
       "tools": [
         "curl",
@@ -868,7 +868,7 @@
     {
       "id": "authz-abuse",
       "title": "Abuse the Authorization Bypass",
-      "hypothesis": "An auth bypass — a forged JWT, a NoSQL/GraphQL/mass-assignment flaw, request smuggling, or a stolen admin session from XSS — is only the doorway. The win is what the privileged surface behind it lets you do: dump the user table for reusable credentials, flip your own account to admin, and above all find the admin-only file upload, config writer, or template editor that turns 'I am admin' into code execution.",
+      "hypothesis": "An auth bypass - a forged JWT, a NoSQL/GraphQL/mass-assignment flaw, request smuggling, or a stolen admin session from XSS - is only the doorway. The win is what the privileged surface behind it lets you do: dump the user table for reusable credentials, flip your own account to admin, and above all find the admin-only file upload, config writer, or template editor that turns 'I am admin' into code execution.",
       "tool": "curl",
       "tools": [
         "curl"

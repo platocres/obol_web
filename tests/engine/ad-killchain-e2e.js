@@ -134,10 +134,13 @@ ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /-H \{\{ntha
 ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /nxc smb/.test(c.run) && /--spider/.test(c.run); }), 'flag-hunt LOCATES the flags remotely first (SMB spider)');
 ok(flagHunt && (flagHunt.commands || []).some(function (c) { return /evil-winrm/.test(c.run); }), 'flag-hunt gets ON the host interactively (evil-winrm) — the report proof must be a shell on the target');
 ok(flagHunt && (flagHunt.commands || []).some(function (c) { var r = c.run || ''; return /ipconfig/.test(r) && /\btype\b\s+\{\{flag_path_(?:local|root)\}\}/i.test(r) && !/^\s*(?:nxc|evil-winrm|ssh|sshpass|impacket|wmiexec|psexec|smbclient|winrs)\b/i.test(r.trim()); }), 'flag-hunt captures each flag ON-HOST (a bare `type {{flag_path_*}}` beside ipconfig — not wrapped in a remote exec, so it counts for OSCP)');
-// and the on-host capture path FILLS from a located flag (the spider result), not a placeholder
+// and the on-host capture path FILLS from a located flag (the spider result), not a placeholder. The ROOT
+// path is captured by the dedicated root-flag move (flag-hunt-root-windows) now that the flag is split.
+var flagHuntRoot = pack.filter(function (a) { return a.id === 'flag-hunt-root-windows'; })[0];
+ok(flagHuntRoot, 'the dedicated root/proof flag-hunt move exists (split from the user flag)');
 var locFacts = new OBOL.facts.FactSet(facts.facts.slice());
 locFacts.add(OBOL.facts.makeFact({ kind: 'objective.flag_located', scope: 'host:10.0.0.5', value: { slot: 'root', name: 'root.txt', path: 'C:\\Users\\Administrator\\Desktop\\root.txt' }, source: 'spider' }));
-var capFilled = (flagHunt.commands || []).map(function (c, i) { return OBOL.command.fillCommand(flagHunt, locFacts, { params: { target: '10.0.0.5' }, profile: { platform: 'htb' } }, i).filled; });
+var capFilled = (flagHuntRoot.commands || []).map(function (c, i) { return OBOL.command.fillCommand(flagHuntRoot, locFacts, { params: { target: '10.0.0.5' }, profile: { platform: 'htb' } }, i).filled; });
 ok(capFilled.some(function (r) { return r.indexOf('C:\\Users\\Administrator\\Desktop\\root.txt') >= 0; }), 'the on-host capture fills the LOCATED root path from the spider result');
 // and the platform token itself resolves per profile (HTB vs OffSec) through the existing helper
 var htbNames = OBOL.profile.windowsNameList(OBOL.profile.resolveFlagConfig({ platform: 'htb' }).names);
@@ -163,13 +166,13 @@ var noDomAdmin = (noDom.facts || []).filter(function (f) { return f.kind === 'cr
 ok(noDomAdmin && (noDomAdmin.value.domain || '') === 'corp.local', 'the dumped Administrator cred takes the domain from the dump line (corp.local), not a "domain" placeholder');
 ok(noDomAdmin && String(noDomAdmin.scope) === 'domain:corp.local', 'the NTDS loot is scoped to the real domain even with none configured');
 
-// Flag capture surfaces once you are ADMIN — not only after a WinRM login. Validating the pass-the-hash
-// over SMB (access.admin) is enough for the flag-hunt move to become reachable.
+// Root-flag capture surfaces once you are ADMIN — not only after a WinRM login. Validating the pass-the-hash
+// over SMB (access.admin) is enough for the root flag-hunt move to become reachable.
 var adminFacts = new OBOL.facts.FactSet([
   OBOL.facts.makeFact({ kind: 'credential.available', scope: 'domain:corp.local', value: { user: 'Administrator', nthash: 'x' }, source: 't' }),
   OBOL.facts.makeFact({ kind: 'access.admin', scope: SCOPE, source: 't' }),
 ]);
-ok(flagHunt.eligible(adminFacts), 'flag-hunt becomes reachable from an SMB pass-the-hash (access.admin), not only WinRM');
+ok(flagHuntRoot.eligible(adminFacts), 'flag-hunt-root becomes reachable from an SMB pass-the-hash (access.admin), not only WinRM');
 
 // Endgame ranking: once you're admin, CAPTURING THE FLAG leads, and post-domain persistence / path-mapping
 // are demoted below the objective and the cross-box loot — the coach stops dumping the encyclopedia.
@@ -178,8 +181,8 @@ facts.add(OBOL.facts.makeFact({ kind: 'host.os_family', scope: SCOPE, value: { f
 var endRanked = OBOL.pack.nextActions(facts, pack, {});
 var ids = endRanked.map(function (a) { return a.id; });
 function rank(id) { var i = ids.indexOf(id); return i < 0 ? 999 : i; }
-ok(ids[0] === 'flag-hunt-windows', 'after domain compromise the #1 move is capturing the flag (id=' + ids[0] + ')');
-ok(rank('flag-hunt-windows') < rank('golden-ticket'), 'flag capture outranks post-DA persistence (golden ticket)');
+ok(ids[0] === 'flag-hunt-root-windows', 'after domain compromise the #1 move is capturing the ROOT/proof flag (id=' + ids[0] + ')');
+ok(rank('flag-hunt-root-windows') < rank('golden-ticket') && rank('flag-hunt-windows') < rank('golden-ticket'), 'flag capture (root + user) outranks post-DA persistence (golden ticket)');
 ok(rank('smb-share-inventory') < rank('golden-ticket') && rank('smb-share-inventory') < rank('ad-path-manual'), 'cross-box loot outranks persistence + path-mapping');
 ok(rank('golden-ticket') > 5 && rank('ad-path-manual') > 5 && rank('bloodhound-collect') > 5, 'the demoted side-quests fall out of the top-6 "Ready now" band');
 // the demotion is a nudge, not removal — the moves are still present, just lower
