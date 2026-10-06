@@ -12,9 +12,10 @@
       "title": "Hunt for Flags (Linux)",
       "tool": "sshpass",
       "priority": 97,
-      "requires_all": [
-        "credential.available",
-        "foothold.linux"
+      "requires_all": [],
+      "requires_any": [
+        "foothold.linux",
+        "access.shell"
       ],
       "os": [
         "linux"
@@ -22,15 +23,21 @@
       "produces": [
         "objective.flag"
       ],
-      "hypothesis": "A Linux foothold should be able to read the engagement flag files; capturing their contents proves the objective.",
+      "sequence": true,
+      "hypothesis": "ANY Linux shell can read the engagement flag files — a reverse shell or webshell reads user.txt as readily as an SSH login, no credential required. Capturing the contents proves the objective; escalate to root for the root flag.",
       "report": {
         "finding": "Captured a flag file from the Linux foothold.",
         "severity": "high"
       },
       "commands": [
         {
+          "tool": "sh",
+          "note": "STEP 1 - LOCATE AND CAPTURE IN YOUR SHELL (no credential needed). If you already have a shell (reverse shell, webshell, SSH), run this IN IT: it finds every flag file and prints the user flag with your identity for the screenshot. This is the common case — you do not need SSH creds to read a flag you can already reach.",
+          "run": "id; hostname; ip -4 addr | grep inet; find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;"
+        },
+        {
           "tool": "sshpass",
-          "note": "STEP 1 - LOCATE (from your box). Find every flag file so you know its path before you log in. This is a one-liner from Kali, so it only LOCATES, OffSec scores a flag read this way ZERO. Paste the output back and obol records each flag's path; capture it on the host in steps 3-4.",
+          "note": "STEP 1b - LOCATE OVER SSH (only if you hold SSH creds and have no shell yet). A one-liner from Kali, so it only LOCATES; OffSec scores a flag read this way ZERO. Paste the output back and obol records each flag's path; capture it on the host in steps 3-4.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 {{user}}@{{target}} 'find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null'"
         },
         {
@@ -55,13 +62,13 @@
       "title": "Hunt for Flags (Windows)",
       "tool": "nxc",
       "priority": 97,
-      "requires_all": [
-        "credential.available"
-      ],
+      "requires_all": [],
       "requires_any": [
+        "foothold.windows",
         "winrm.authenticated",
         "access.admin",
-        "foothold.windows"
+        "access.system",
+        "access.shell"
       ],
       "os": [
         "windows"
@@ -69,15 +76,21 @@
       "produces": [
         "objective.flag"
       ],
-      "hypothesis": "A Windows foothold should be able to read the engagement flag files; capturing their contents proves the objective, and printing each next to ipconfig gives the exam screenshot.",
+      "sequence": true,
+      "hypothesis": "ANY Windows shell can read the engagement flag files — a webshell, a service-exploit SYSTEM shell, or a WinRM session all read user.txt, no credential required. Capturing the contents proves the objective, and printing each next to ipconfig gives the exam screenshot.",
       "report": {
         "finding": "Captured a flag file from the Windows foothold.",
         "severity": "high"
       },
       "commands": [
         {
+          "tool": "cmd",
+          "note": "STEP 1 - LOCATE AND CAPTURE IN YOUR SHELL (no credential needed). If you already have a shell (webshell, SYSTEM shell from a service exploit, evil-winrm), run this IN IT: it finds and prints every flag with your identity for the screenshot. You do not need a credential to read a flag you can already reach.",
+          "run": "hostname & ipconfig & where /r C:\\Users *.txt 2>nul & where /r C:\\ user.txt root.txt proof.txt local.txt 2>nul"
+        },
+        {
           "tool": "nxc",
-          "note": "STEP 1 - LOCATE (from your box). Spider C$ for the flag files so you know each one's exact path (which user's Desktop) before you log in. This runs from Kali, so it only LOCATES the flags, OffSec scores a flag read this way ZERO. Paste the output back and obol records each flag's path and fills it into steps 3-4; you capture it on the host there.",
+          "note": "STEP 1b - LOCATE OVER SMB (only if you hold a hash/credential and have no shell yet). Spider C$ for the flag files so you know each one's exact path. This runs from Kali, so it only LOCATES; OffSec scores a flag read this way ZERO. Paste the output back and obol records each flag's path.",
           "run": "nxc smb {{target}} -u {{user}} -H {{nthash}} --spider C$ --regex \"(local|proof|user|root|flag)\\.txt\""
         },
         {
