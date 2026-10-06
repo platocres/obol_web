@@ -11,7 +11,7 @@
 var path = require('path');
 function req(p) { require(path.join(__dirname, '..', '..', p)); }
 ['facts', 'phases', 'pack', 'profile', 'command', 'workspace'].forEach(function (m) { req('assets/engine/' + m + '.js'); });
-['common', 'nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
+['common', 'nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
 var OBOL = globalThis.OBOL, P = OBOL.parsers, CAT = OBOL._nxcCatalog || [];
 

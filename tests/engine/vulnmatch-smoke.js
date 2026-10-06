@@ -8,7 +8,7 @@ require('../../assets/engine/facts.js');
 require('../../assets/engine/phases.js');
 require('../../assets/engine/pack.js');
 require('../../assets/engine/parsers/common.js');
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'nxc-catalog']
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'nxc-catalog']
   .forEach(function (m) { require('../../assets/engine/parsers/' + m + '.js'); });
 require('../../assets/engine/parsers/index.js');
 const fs = require('fs'), path = require('path');

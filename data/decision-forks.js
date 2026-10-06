@@ -178,6 +178,9 @@
     'dns-tunnel': { cond: 'Is DNS the only egress (faster transports all blocked) and can the host resolve your domain?', onFail: 'A faster channel works, or DNS does not resolve out → use that instead.' },
     'pivot-ligolo': { cond: 'Is the ligolo tunnel up with a route to the internal subnet?', onFail: 'No route, add the interface route and retry.' },
     'pivot-scan-through': { cond: 'Do internal hosts answer through the tunnel (proxychains nmap)?', onFail: 'Nothing responds, confirm the route and tunnel first.' },
+    'pivot-enumerate-neighbors': { cond: 'Do the adjacent hosts from the neighbour cache answer a scan (directly or through the tunnel)?', onFail: 'No response → they may be on a subnet you can only reach via the pivot; build a tunnel first, then scan through it.' },
+    'pivot-reach-listener': { cond: 'Does the forwarded internal service answer on your localhost port?', onFail: 'No answer → check the forward is up and you named the right listener port.' },
+    'pivot-internal-dns': { cond: 'Does the internal resolver return the DC locator SRV records (or a zone transfer)?', onFail: 'Refused/empty → the resolver may not be a DC, or AXFR is blocked; you still have the SRV answers to work from.' },
     // ---- proof ----
     'flag-hunt-linux': { cond: 'Can you read user.txt and root.txt with proof context visible?', onFail: 'Not readable yet, you lack the required access.' },
     'flag-hunt-windows': { cond: 'Can you read user.txt and proof.txt with proof context visible?', onFail: 'Not readable yet, escalate further first.' },
@@ -275,6 +278,7 @@
     "local-windows-routes": { cond: "Does the route table reveal an internal subnet to target?", onFail: "Only the known subnet → nothing new to reach." },
     "local-windows-neighbors": { cond: "Does the ARP cache name live internal hosts?", onFail: "Empty → generate traffic or scan through the tunnel." },
     "local-windows-listeners": { cond: "Is a service listening only on localhost worth forwarding out?", onFail: "Nothing local-only → no port-forward target here." },
+    "cred-reuse-sweep": { cond: "Does the credential or hash open other hosts (a [+]) or own any as local admin (Pwn3d!)?", onFail: "No extra hits → the credential is scoped to the one host; move on with what you have." },
     "pivot-sshuttle": { cond: "Does sshuttle route the internal subnet over SSH transparently?", onFail: "No route (no SSH, or Windows target) → use chisel or ligolo instead." },
     "pivot-ssh-dynamic": { cond: "Does the SSH dynamic SOCKS proxy carry traffic to the internal host?", onFail: "No SSH or port blocked → switch to chisel/ligolo." },
     "shell-revshell-windows": { cond: "Does the Windows reverse shell connect back and survive?", onFail: "No callback → egress is filtered; try another port or a different payload." },

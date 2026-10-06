@@ -270,6 +270,10 @@
       C._parse_local_listeners(text, ws, source, facts);
     if (has('_parse_local_dns') && (/\bresolv\.conf\b|\bresolvectl\b|ipconfig\s+\/all/.test(lc) || /^\s*nameserver\s+\d|DNS Servers[^\n:]*:/im.test(text)))
       C._parse_local_dns(text, ws, source, facts);
+    // Internal-resolver interrogation: a dig/nslookup/host query or an AXFR zone transfer against the
+    // foothold's resolver → the domain and its DCs (unlocking the AD lane), plus a zone receipt.
+    if (has('_parse_dns') && (/\b(?:dig|nslookup|host|dnsrecon|dnsenum)\b/.test(lc) || /\bIN\s+(?:SOA|SRV|NS)\b|_ldap\._tcp|service\s*=\s*\d+\s+\d+\s+\d+|has address/i.test(text)))
+      C._parse_dns(text, ws, source, facts);
 
     // Output-shape fallback (runs last): recognize common output by its shape when the command-keyed
     // dispatch above did not key on it. Strictly additive and guarded, so it only fills gaps (a bare

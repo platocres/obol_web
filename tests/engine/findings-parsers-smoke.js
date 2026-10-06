@@ -8,7 +8,7 @@ req('assets/engine/facts.js'); req('assets/engine/phases.js'); req('assets/engin
 req('assets/engine/profile.js'); req('assets/engine/command.js'); req('assets/engine/workspace.js');
 var OBOL = globalThis.OBOL;
 req('assets/engine/parsers/common.js');
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
 
 var fail = 0;

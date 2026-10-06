@@ -15,7 +15,9 @@
         "foothold.linux",
         "foothold.windows",
         "access.shell",
-        "host.multihomed"
+        "host.multihomed",
+        "scan.local.routes",
+        "scan.local.neighbors"
       ],
       "produces": [
         "tunnel.socks"
@@ -52,7 +54,9 @@
         "foothold.linux",
         "foothold.windows",
         "access.shell",
-        "host.multihomed"
+        "host.multihomed",
+        "scan.local.routes",
+        "scan.local.neighbors"
       ],
       "produces": [
         "tunnel.route"
@@ -132,15 +136,17 @@
     },
     {
       "id": "pivot-scan-through",
-      "title": "Scan an Internal Host Through the Proxy",
-      "hypothesis": "With a SOCKS tunnel established, proxychains wrapping a TCP-connect nmap enumerates a now-reachable internal host.",
+      "title": "Scan an Internal Host Through the Pivot",
+      "hypothesis": "Once a tunnel is up, enumerate the far side exactly as you did the first host. Through a SOCKS tunnel (chisel, ssh -D) wrap a TCP-connect nmap in proxychains; through a routed tunnel (ligolo, sshuttle) the subnet is a normal route, so nmap runs unmodified. Either way, this turns 'the tunnel is up' into real attack surface on an internal host.",
       "tool": "proxychains",
       "tools": [
         "proxychains",
-        "proxychains4"
+        "proxychains4",
+        "nmap"
       ],
       "requires_any": [
-        "tunnel.socks"
+        "tunnel.socks",
+        "tunnel.route"
       ],
       "produces": [
         "ports.open"
@@ -152,7 +158,13 @@
       "commands": [
         {
           "tool": "proxychains",
-          "run": "proxychains -q nmap -sT -Pn -n {{internal_host}}"
+          "run": "proxychains -q nmap -sT -Pn -n {{internal_host}}",
+          "note": "SOCKS tunnel (chisel / ssh -D): a SOCKS proxy cannot carry nmap's raw SYN scan, so use -sT (TCP connect). UDP and ICMP will not traverse it."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -sV -Pn {{internal_host}}",
+          "note": "Routed tunnel (ligolo / sshuttle): the subnet is a real route, so nmap runs unmodified — no proxychains, and a normal -sV service scan works."
         }
       ]
     },
@@ -220,7 +232,9 @@
       "requires_any": [
         "credential.available",
         "foothold.linux",
-        "host.multihomed"
+        "host.multihomed",
+        "scan.local.routes",
+        "scan.local.neighbors"
       ],
       "produces": [
         "tunnel.route"
@@ -239,6 +253,122 @@
           "tool": "ssh",
           "run": "ssh -R 9001:127.0.0.1:9001 -N {{user}}@{{target}}",
           "note": "Remote forward: exposes your attacker-box listener on the foothold, for a callback when it cannot reach you directly."
+        }
+      ]
+    },
+    {
+      "id": "pivot-enumerate-neighbors",
+      "title": "Sweep the Adjacent Hosts",
+      "hypothesis": "The foothold's ARP/neighbour cache already named the live hosts on its segments — you do not have to guess the subnet. Scan exactly those IPs: lead with an nxc protocol sweep to spot SMB/WinRM and where your credential already works, then a full nmap for the rest of the surface. Run it straight from the foothold if they share a segment, or through your tunnel from Kali if they do not.",
+      "tool": "nxc",
+      "tools": [
+        "nxc",
+        "nmap",
+        "proxychains"
+      ],
+      "requires_all": [
+        "scan.local.neighbors"
+      ],
+      "produces": [
+        "ports.open"
+      ],
+      "priority": 53,
+      "autonomy": "approve",
+      "proves": "the live attack surface of the adjacent hosts the neighbour cache named",
+      "does_not_prove": "a vulnerability or any access on them, only which ports and services are exposed",
+      "refs": [
+        "https://www.netexec.wiki/"
+      ],
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{neighbor_hosts}}",
+          "note": "PREFERRED: sweep the neighbour IPs over SMB in one shot — it fingerprints OS/domain/signing and, once you add -u/-p, marks every host the credential opens. Pass a space-separated list or a targets file."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -sV -Pn {{neighbor_hosts}}",
+          "note": "Full service scan of the same hosts. If they are only reachable through the pivot, prefix with proxychains (SOCKS tunnel) or run it after a routed tunnel is up — build one from the connectivity panel's tunnel wizard first."
+        },
+        {
+          "tool": "proxychains",
+          "run": "proxychains -q nmap -sT -Pn -n {{neighbor_hosts}}",
+          "note": "The through-a-SOCKS-tunnel form when the neighbours sit on a subnet you can only reach via the foothold."
+        }
+      ]
+    },
+    {
+      "id": "pivot-reach-listener",
+      "title": "Reach an Internal-Only Service",
+      "hypothesis": "A service bound to 127.0.0.1 or an internal NIC is invisible from your box but wide open from the foothold — databases, admin panels and message queues hide here constantly. The listener list told you the exact port; forward it out (ssh -L, or a chisel/ligolo forward) and your tools hit it on localhost as if it were local. This is how a localhost-only MySQL or an internal web admin becomes reachable.",
+      "tool": "ssh",
+      "tools": [
+        "ssh",
+        "chisel",
+        "ligolo-ng"
+      ],
+      "requires_all": [
+        "scan.local.listeners"
+      ],
+      "produces": [
+        "ports.open"
+      ],
+      "priority": 51,
+      "autonomy": "approve",
+      "proves": "a reachable path from your box to an internal-only service the foothold was listening on",
+      "does_not_prove": "a vulnerability in that service, only that you can now talk to it",
+      "commands": [
+        {
+          "tool": "ssh",
+          "run": "ssh -L {{local_port}}:127.0.0.1:{{listener_port}} -N {{user}}@{{target}}",
+          "note": "The quickest forward when you hold SSH on the foothold: localhost:{{local_port}} on Kali now reaches the internal service. No extra tooling touches the target. For a non-SSH foothold, build a chisel/ligolo forward from the connectivity panel's tunnel wizard instead."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -sV -Pn -p {{local_port}} 127.0.0.1",
+          "note": "Confirm the forwarded service answers, then point the matching tool (mysql, a browser, impacket) at localhost:{{local_port}} and enumerate it like any other host."
+        }
+      ]
+    },
+    {
+      "id": "pivot-internal-dns",
+      "title": "Interrogate the Internal Resolver",
+      "hypothesis": "The foothold's own resolver is almost always a domain controller, and it will name the rest of the estate for you. Ask it for the DC locator SRV records and try a zone transfer: in an AD environment this single step hands you the domain name and every DC — unlocking the whole AD attack lane — often before you hold a single credential. The resolver's address came straight from the foothold's DNS config.",
+      "tool": "dig",
+      "tools": [
+        "dig",
+        "nslookup",
+        "dnsrecon"
+      ],
+      "requires_all": [
+        "scan.local.dns"
+      ],
+      "produces": [
+        "ad.dc_candidate",
+        "ad.domain_known"
+      ],
+      "priority": 60,
+      "autonomy": "approve",
+      "proves": "the AD domain and its domain controllers, read from the internal resolver",
+      "does_not_prove": "a credential or any access, this is name resolution — the DCs it names still have to be attacked",
+      "refs": [
+        "https://www.thehacker.recipes/"
+      ],
+      "commands": [
+        {
+          "tool": "dig",
+          "run": "dig @{{dns_server}} -t SRV _ldap._tcp.dc._msdcs.{{domain}}",
+          "note": "The DC locator: every domain controller registers this SRV record, so the answer section lists them by name. _kerberos._tcp.{{domain}} and _gc._tcp.{{domain}} (global catalog) work the same way."
+        },
+        {
+          "tool": "dig",
+          "run": "dig @{{dns_server}} AXFR {{domain}}",
+          "note": "A full zone transfer. Most resolvers refuse it, but a misconfigured one dumps every A record in the domain — an instant host inventory. If AXFR is refused you still have the SRV answers above."
+        },
+        {
+          "tool": "nslookup",
+          "run": "nslookup -type=SRV _ldap._tcp.dc._msdcs.{{domain}} {{dns_server}}",
+          "note": "The Windows-friendly form of the same DC-locator query, for when dig is not to hand."
         }
       ]
     }

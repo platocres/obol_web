@@ -14,7 +14,7 @@ OBOL.packs = { actions: function () { return A; }, packData: function () { retur
 var by = {}; A.forEach(function (m) { by[m.id] = m; });
 req('data/tools-install.js'); req('data/study-fixtures.js'); req('assets/engine/study.js');
 req('assets/engine/parsers/common.js');
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
 req('data/decision-forks.js'); req('data/parser-signatures.js'); req('data/coverage-expected.js');
 req('assets/engine/decisionmap.js');

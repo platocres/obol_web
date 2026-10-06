@@ -11,7 +11,7 @@ req('assets/engine/facts.js'); req('assets/engine/phases.js'); req('assets/engin
 req('assets/engine/profile.js'); req('assets/engine/command.js'); req('assets/engine/workspace.js');
 var OBOL = globalThis.OBOL;
 req('assets/engine/parsers/common.js');
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'pivot', 'shape'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'pivot', 'dns', 'shape'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
 
 var fail = 0;
@@ -90,6 +90,22 @@ ok(has(dnsOf('cat /etc/resolv.conf', resolv), '10.10.14.2') && !has(dnsOf('cat /
 var winDns = '   Connection-specific DNS Suffix  . : acme.local\n   DNS Servers . . . . . . . . . . . : 10.10.14.2\n                                       10.10.14.3';
 ok(has(dnsOf('ipconfig /all', winDns), '10.10.14.2') && has(dnsOf('ipconfig /all', winDns), '10.10.14.3'), 'Windows DNS Servers yields both resolvers');
 ok(kinds('cat /etc/resolv.conf', '# all commented out\n#nameserver 1.1.1.1').length === 0, 'a fully-commented resolv.conf mints nothing');
+
+// ---- internal resolver (parsers/dns.js): dig/nslookup/AXFR → domain + DC candidate, unlocking AD ----
+function scopesOf(cmd, out, kind) { return run(cmd, out).filter(function (x) { return x.kind === kind; }).map(function (x) { return x.scope; }); }
+var digSrv = ';; ANSWER SECTION:\n_ldap._tcp.dc._msdcs.acme.local. 600 IN SRV 0 100 389 dc01.acme.local.\n\n;; ADDITIONAL SECTION:\ndc01.acme.local.\t3600\tIN\tA\t10.10.14.2';
+ok(has(kinds('dig @10.10.14.2 -t SRV _ldap._tcp.dc._msdcs.acme.local', digSrv), 'ad.domain_known'), 'dig SRV mints ad.domain_known');
+ok(has(scopesOf('dig @10.10.14.2 -t SRV _ldap._tcp.dc._msdcs.acme.local', digSrv, 'ad.dc_candidate'), 'host:10.10.14.2'), 'dig SRV + additional A mints the DC candidate at its real IP');
+var axfr = 'acme.local.\t86400\tIN\tSOA\tdc01.acme.local. hostmaster.acme.local. 1 900 600 86400 3600\nacme.local.\t86400\tIN\tNS\tdc01.acme.local.\ndc01.acme.local.\t3600\tIN\tA\t10.10.14.2\nweb01.acme.local.\t3600\tIN\tA\t10.10.14.50';
+var axk = kinds('dig @10.10.14.2 AXFR acme.local', axfr);
+ok(has(axk, 'ad.domain_known') && has(axk, 'ad.dc_candidate') && has(axk, 'dns.zone'), 'a successful AXFR mints the domain, the DC (from SOA/NS + A), and a zone receipt');
+ok(scopesOf('dig @10.10.14.2 AXFR acme.local', axfr, 'ad.dc_candidate').indexOf('host:10.10.14.2') >= 0, 'AXFR pins the DC to the authoritative host address');
+// nslookup SRV form
+var nsl = 'Server:  10.10.14.2\n_ldap._tcp.dc._msdcs.acme.local  SRV service location:\n          priority = 0\n          svr hostname   = dc01.acme.local\ndc01.acme.local internet address = 10.10.14.2';
+ok(has(kinds('nslookup -type=SRV _ldap._tcp.dc._msdcs.acme.local 10.10.14.2', nsl), 'ad.dc_candidate') || has(kinds('nslookup -type=SRV _ldap._tcp.dc._msdcs.acme.local 10.10.14.2', nsl), 'ad.domain_known'), 'nslookup SRV output is recognized');
+// conservative: a refused transfer / NXDOMAIN mints nothing
+ok(kinds('dig @10.10.14.2 AXFR acme.local', '; Transfer failed.\n; communications error to 10.10.14.2#53: connection refused').length === 0, 'a refused zone transfer mints nothing');
+ok(kinds('dig @10.10.14.2 nonexist.acme.local', ';; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 1').length === 0, 'an NXDOMAIN answer mints nothing');
 
 console.log('\nPIVOT PARSER SMOKE: ' + (fail ? fail + ' FAILURE(S)' : 'all passed'));
 process.exit(fail ? 1 : 0);

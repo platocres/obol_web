@@ -194,6 +194,11 @@
       regex: 'Management Point: …, NAA credential',
       emits: ['sccm.enumerated'],
     },
+    'internal-dns': {
+      looksFor: "a dig / nslookup / host query or an AXFR zone transfer aimed at the foothold's internal resolver — the domain it serves (SOA/NS), the DCs it advertises (_ldap._tcp / _kerberos._tcp SRV, or the NS/SOA host resolved to an address), and the A records a successful transfer dumped.",
+      regex: 'IN SOA|IN NS|_ldap._tcp…SRV … <dc>|service = 0 100 389 <dc>|<name> IN A <ip>|<name> has address <ip>',
+      emits: ['ad.domain_known', 'ad.dc_candidate', 'dns.zone'],
+    },
     'connectivity': {
       looksFor: "a foothold's own interface / route dump (ip a, ifconfig, ipconfig, ip route, route print) — the subnets it sits on, and whether it is a dual-homed pivot; its ARP/neighbour cache (ip neigh, arp -a) for adjacent hosts, its listening services (netstat -ano, ss -tlnp) and its internal resolvers (resolv.conf, DNS Servers); and a pivot tool's setup or status output that confirms a live tunnel (chisel R:socks, ssh -D, ligolo agent-joined, sshuttle connected, dnscat2 session).",
       regex: 'inet <ip>/<pfx> | Subnet Mask | <net>/<pfx> dev|via | <ip> ... lladdr|dynamic | LISTENING | nameserver <ip> | Agent joined | R:socks | Connected to server',
