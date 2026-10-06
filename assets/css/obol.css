@@ -3134,6 +3134,20 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
    point of the move reads first. Same pill shape, so the two labels sit as a consistent pair. */
 .ns-cn-what { color: var(--text); margin-bottom: 16px; }
 .ns-oyi-lead { font-size: 13px; color: var(--text-2); line-height: 1.55; margin: 0 0 10px; }
+/* PTY upgrade: ordered, machine-labelled steps (reuses the ns-stage vocabulary). A key press and a
+   kali-side step are called out so it is never mistaken for one copy-paste block. */
+.ns-pty { border: 1px solid color-mix(in srgb, var(--ph-enum) 42%, var(--line)); border-left: 3px solid var(--ph-enum); border-radius: 9px; padding: 11px 13px; margin-bottom: 16px; background: color-mix(in srgb, var(--ph-enum) 10%, transparent); }
+.ns-pty > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font: 800 11px var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--ph-enum); list-style: none; }
+.ns-pty > summary::-webkit-details-marker { display: none; }
+.ns-pty[open] > summary { margin-bottom: 8px; }
+.ns-stage-step .ns-stage-why { margin: 5px 0 0; }
+.ns-stage-check { margin: 4px 0 0; font-size: 12px; color: var(--accent-2); font-weight: 600; }
+.ns-stage-check::before { content: "\2713\00a0"; }
+.ns-stage-keys { background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; font-size: 12px; color: var(--text); }
+.ns-stage-keys kbd { font: 11px var(--mono); background: var(--bg2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--text); margin: 0 1px; }
+/* Distinguish "your Kali box" steps from "the target" steps by colour as well as the label text, so a
+   step that runs on a different machine is obvious at a glance (text still carries the meaning on its own). */
+.ns-stage-where.ns-where-local { background: var(--accent); }
 .ns-cn-list { margin: 0 0 16px; padding-left: 18px; font-size: 13.5px; color: var(--text); line-height: 1.6; }
 .ns-cn-list li { margin-bottom: 5px; } .ns-cn-list.warn li { color: var(--text-2); }
 .ns-cn-list.look li::marker { color: var(--accent-2); }

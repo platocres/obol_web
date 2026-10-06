@@ -334,14 +334,16 @@
     var O = OBOL.ORIENT || {}, p = move.produces || [];
     var isWin = p.indexOf('foothold.windows') >= 0, isLin = p.indexOf('foothold.linux') >= 0;
     if (!isWin && !isLin) { if (p.indexOf('access.system') >= 0) isWin = true; else isLin = true; }
-    var steps = '';
-    if (isLin && O.linux) steps += nsSetupStep(O.linux.label, O.linux.cmd);
-    if (isLin) steps += nsReuseSteps('shell-pty-upgrade', facts, params);
-    if (isWin && O.windows) steps += nsSetupStep(O.windows.label, O.windows.cmd);
-    if (!steps) return '';
-    return '<p class="ns-cn-h">Once You Are In</p>'
-      + '<p class="ns-oyi-lead">You have a shell. Get your bearings first, then the coach ranks your next moves. Do not forget to grab the flag.</p>'
-      + '<div class="ns-setup">' + steps + '</div>';
+    var orient = '';
+    if (isLin && O.linux) orient += nsSetupStep(O.linux.label, O.linux.cmd);
+    if (isWin && O.windows) orient += nsSetupStep(O.windows.label, O.windows.cmd);
+    var html = '<p class="ns-cn-h">Once You Are In</p>'
+      + '<p class="ns-oyi-lead">You have a shell. Get your bearings first, then the coach ranks your next moves. Do not forget to grab the flag.</p>';
+    if (orient) html += '<div class="ns-setup">' + orient + '</div>';
+    // The PTY stabilization is a real multi-step, two-machine sequence, so it is NOT crammed into one copy
+    // box: it renders as ordered, machine-labelled steps (Linux shells only; Windows needs no PTY fix).
+    if (isLin && OBOL.renderPtySteps) html += OBOL.renderPtySteps();
+    return html;
   }
   function nsDoctorBlock(d) {
     return '<div class="ns-doctor"><div class="ns-doctor-h">' + OBOL.ic('shield') + ' ' + esc(d.title) + '</div>'

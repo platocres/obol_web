@@ -113,6 +113,46 @@
     return html;
   }
 
+  // ---- PTY upgrade: the interactive, two-machine shell-stabilization dance ----
+  // A fresh reverse shell is half-broken (no arrows, no tab-complete, Ctrl-C kills it). The fix is a
+  // sequence that CANNOT be pasted as one block: a key press sits in the middle, and one step runs on Kali,
+  // not the target. The pack ships it as a crammed one-liner (shell-pty-upgrade); here it is the structured,
+  // machine-labelled, step-by-step form the canvas surfaces in "Once You Are In". One source of truth so a
+  // later edit flows everywhere it is rendered.
+  var PTY_UPGRADE = OBOL.PTY_UPGRADE = [
+    { where: 'Target', title: 'Spawn a real shell', cmd: 'python3 -c \'import pty;pty.spawn("/bin/bash")\'',
+      why: 'Turns the basic shell into a proper interactive one. No python3? Try python, or: script -qc /bin/bash /dev/null',
+      check: 'Your prompt becomes a normal bash prompt.' },
+    { where: 'Target', title: 'Background it', keys: ['Ctrl', 'Z'],
+      why: 'Press these keys, do not type them. This pauses the remote shell and drops you back on your own Kali terminal.',
+      check: 'You see your Kali prompt again, with a Stopped message.' },
+    { where: 'Kali', title: 'Pass your keys through, then return', cmd: 'stty raw -echo; fg',
+      why: 'This one runs on YOUR Kali box, not the target. It sends keys like Ctrl-C and the arrows straight to the remote shell, then brings it back.',
+      check: 'The remote shell returns. Press Enter once if the line looks blank.' },
+    { where: 'Target', title: 'Set the terminal type and size', cmd: 'export TERM=xterm; stty rows 50 cols 200',
+      why: 'Now the remote shell can clear the screen and draw full-screen editors. Match rows and cols to your window if you like.',
+      check: 'clear works, and editors like nano or vi display correctly.' },
+  ];
+  function renderPtySteps() {
+    var esc = (OBOL.util && OBOL.util.esc) ? OBOL.util.esc : function (s) { return String(s == null ? '' : s); };
+    var attr = (OBOL.util && OBOL.util.attr) ? OBOL.util.attr : esc;
+    var steps = PTY_UPGRADE.map(function (s) {
+      var body = s.keys
+        ? '<div class="ns-stage-keys">Press ' + s.keys.map(function (k) { return '<kbd>' + esc(k) + '</kbd>'; }).join(' + ') + '</div>'
+        : '<div class="ns-stage-cmd"><code>' + esc(s.cmd) + '</code>'
+          + '<button class="btn-copy ns-stage-copy" data-copy="' + attr(s.cmd) + '" title="Copy" aria-label="Copy command">' + (OBOL.ic ? OBOL.ic('clip') : 'copy') + '</button></div>';
+      var whereCls = 'ns-stage-where' + (/kali|local|your box/i.test(s.where) ? ' ns-where-local' : '');
+      return '<div class="ns-stage-step"><div class="ns-stage-step-h"><span class="' + whereCls + '">' + esc(s.where) + '</span>' + esc(s.title) + '</div>'
+        + body
+        + (s.why ? '<p class="ns-stage-why">' + esc(s.why) + '</p>' : '')
+        + (s.check ? '<p class="ns-stage-check">' + esc(s.check) + '</p>' : '') + '</div>';
+    }).join('');
+    return '<details class="ns-pty" open><summary><span class="ns-stage-where">Shell Fix</span>Make the shell usable: arrows, tab-complete, Ctrl-C</summary>'
+      + '<p class="ns-stage-why">Do these in order, one at a time. It is not one block to paste: step 2 is a key press, and step 3 runs on your own Kali box.</p>'
+      + steps + '</details>';
+  }
+
   OBOL.stagingFor = stagingFor;
   OBOL.renderToolStaging = renderToolStaging;
+  OBOL.renderPtySteps = renderPtySteps;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
