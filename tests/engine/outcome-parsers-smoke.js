@@ -26,9 +26,13 @@ function prod(id) { return (by[id] && by[id].produces) || []; }
 
 // --- Phase 1: the loot -> reuse loop is closed ---
 ok(prod('lsass-dump-onbox').indexOf('credential.available') >= 0, 'an LSASS dump yields a usable credential (credential.available)');
-['dpapi-secrets', 'stored-credentials', 'crack-netntlmv2', 'nosql-injection', 'crack-ntlm'].forEach(function (id) {
+['dpapi-secrets', 'stored-credentials', 'crack-netntlmv2', 'crack-ntlm'].forEach(function (id) {
   ok(prod(id).indexOf('credential.available') >= 0, id + ' produces a usable credential');
 });
+// nosql-injection is a WEB auth bypass, not an OS win: it must NOT claim access.admin or a validated
+// credential — only the app-level bypass and candidate material it can extract (gate-audit, web batch).
+ok(prod('nosql-injection').indexOf('access.admin') < 0, 'nosql-injection does NOT claim access.admin (app bypass, not OS win)');
+ok(prod('nosql-injection').indexOf('web.authz_bypass') >= 0 && prod('nosql-injection').indexOf('credential.candidate') >= 0, 'nosql-injection produces web.authz_bypass + credential.candidate (honest)');
 ok(prod('manual-sqli-exploitation').indexOf('credential.candidate') >= 0, 'SQLi-dumped creds enter the crack/reuse loop (credential.candidate)');
 // the usable-credential fact really has downstream consumers (so the loop advances the coach)
 var consumers = A.filter(function (m) { return [].concat(m.requires_all || [], m.requires_any || []).indexOf('credential.available') >= 0; });

@@ -156,3 +156,27 @@ check-cms-version carry the documented advisory SELF-SATISFIED nuance (report-on
 
 **Web batch: 1 FIX (nosql-injection effect honesty). 58/59 gates OK as-authored.**
 
+## ad (57)
+
+Reviewed every move against the AD kill chain. One under-surface bug fixed; the rest gate correctly.
+
+**FIX — delegation-abuse (RBCD) was circular / unreachable.** It gated on `ad.computer_added`, a fact
+produced *only by delegation-abuse itself* (its own addcomputer step) and the parser. So the coach could
+never surface RBCD until the operator had already run addcomputer off-ranker — a bootstrap deadlock. Re-gated
+on the write/delegation lead that actually justifies RBCD: `ad.control_paths` / `ad.attack_paths`. It still
+produces `ad.computer_added`, and `getst-impersonation` (the S4U cash-in) consumes it — so the chain
+`control path → add computer + set RBCD → getST → access.admin` now surfaces end-to-end. (committed)
+
+Recon/enum spine (nmap-*, ad-dc-identify, ad-anon-ldap-enum, ad-user-enum): gated on scan/port facts — OK.
+Roast/crack (asrep-roast needs ad.user_list + kerberos; kerberoast needs credential.available; crack-asrep/
+crack-tgs need the hash): OK — matches the Forest corpus. Cash-ins (dump-secrets/dcsync need access.admin or
+ad.control_paths; own-domain-pth needs loot.ntds; lateral-exec needs a cred/hash): OK. ACL abuse
+(ad-acl-abuse/bloodyad-acl on a BloodHound/ACL lead), ADCS (adcs-esc→certifried→cert-authenticate chained on
+adcs.vulnerable/credential.certificate), delegation (unconstrained on ad.coerced_auth/ad.unconstrained),
+tickets (golden/diamond/sid-history on hash.krbtgt; silver on hash.ntlm), coercion/relay (coerce-auth,
+kerberos-relay), group/primitive abuse (gpo-abuse on ad.gpo_writable, dnsadmins-abuse on ad.control_paths,
+gmsa-read on ad.gmsa, laps-read on credential.available+ldap), and the authenticated exploits (nopac, ms14-068,
+printnightmare, eternalblue on smb.ms17_010, zerologon-exploit on ad.zerologon): all gate on the proven
+primitive their technique needs — OK. password-spray / kerberos-relay / silver-ticket carry the documented
+capped-speculative nuance (OK*). **56/57 OK as-authored, 1 FIX.**
+

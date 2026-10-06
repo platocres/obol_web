@@ -1446,7 +1446,8 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "ad.computer_added"
+        "ad.control_paths",
+        "ad.attack_paths"
       ],
       "deprioritize_when": [
         "loot.ntds"
