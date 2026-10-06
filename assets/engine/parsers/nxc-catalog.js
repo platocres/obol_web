@@ -238,6 +238,25 @@
     { id: 'smb-webdav', proto: 'smb', module: 'webdav', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
     { id: 'smb-runasppl', proto: 'smb', module: 'runasppl', informational: true, produces: [], gate: ['access.admin', 'access.system'] },
 
+    // --- SMB CVE-confirmation modules: a VULNERABLE verdict mints the fact that promotes the exploit move ---
+    { id: 'smb-ms17-010', proto: 'smb', module: 'ms17-010', produces: ['smb.ms17_010'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) { return /\bvulnerable\b/i.test(text) && !/not\s+vulnerable/i.test(text) ? [{ kind: 'smb.ms17_010', scope: host(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'MS17-010' } }] : []; } },
+    { id: 'smb-zerologon', proto: 'smb', module: 'zerologon', produces: ['ad.zerologon'],
+      gate: ['ad.dc_candidate', 'smb.reachable'],
+      extract: function (text, ws) { return /vulnerable|exploitable/i.test(text) && !/not\s+vulnerable/i.test(text) ? [{ kind: 'ad.zerologon', scope: host(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'CVE-2020-1472' } }] : []; } },
+    { id: 'smb-smbghost', proto: 'smb', module: 'smbghost', produces: ['vuln.smbghost'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) { return /vulnerable/i.test(text) && !/not\s+vulnerable/i.test(text) ? [{ kind: 'vuln.smbghost', scope: host(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'CVE-2020-0796' } }] : []; } },
+    { id: 'smb-nopac', proto: 'smb', module: 'nopac', informational: true, produces: [], gate: ['credential.available', 'ad.dc_candidate'] },
+    { id: 'smb-printnightmare', proto: 'smb', module: 'printnightmare', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
+
+    // --- SMB more stored-application credentials ---
+    { id: 'smb-rdcman', proto: 'smb', module: 'rdcman', produces: ['credential.candidate'],
+      gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'rdcman'); } },
+    { id: 'smb-iis', proto: 'smb', module: 'iis', produces: ['credential.candidate'],
+      gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'iis_apppool'); } },
+
     // --- SMB informational enumeration (recognized, no graph-actionable fact) ---
     { id: 'smb-groups', proto: 'smb', flag: '--groups', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
     { id: 'smb-local-groups', proto: 'smb', flag: '--local-groups', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
