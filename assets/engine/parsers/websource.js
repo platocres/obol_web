@@ -143,6 +143,14 @@
   // A version-control access token, a GitHub PAT (classic gh?_ / fine-grained github_pat_) or a
   // GitLab glpat-. The token IS the credential.
   var _VCS_TOKEN_RE = /\b(?<token>gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|glpat-[A-Za-z0-9_-]{20,})\b/g;
+  // A pasted PRIVATE KEY (id_rsa / .pem / .ppk-exported) is a key IN HAND → credential.certificate, which
+  // lights ssh-key-login. This is the payoff of pulling an id_rsa a share-spider flagged.
+  var _PRIVKEY_RE = /-----BEGIN (?:OPENSSH|RSA|DSA|EC|PGP|ENCRYPTED(?: PRIVATE KEY)?) PRIVATE KEY-----|PuTTY-User-Key-File-\d/;
+  // A password inside a DB connection string (web.config / appsettings / JDBC): "...;Password=P@ss;...".
+  // The field regexes above want a quoted literal; a connection string is semicolon-delimited, so catch it
+  // directly — but only in a connection-string context, so a stray "pwd=" elsewhere isn't a false positive.
+  var _CONNSTR_CTX_RE = /connectionstring|connection string|data source|initial catalog|integrated security|\bserver\s*=|jdbc:|\buid\s*=/i;
+  var _CONNSTR_PW_RE = /(?:password|pwd)\s*=\s*(?<s>[^;"'\s>&]{3,})/gi;
 
   function _clean_secret(val) {
     val = (val || '').trim();
@@ -157,7 +165,8 @@
       || reSearch(_CONFIG_PW_RE, t) || reSearch(_FIELD_CRED_RE, t)
       || reSearch(_PHP_PW_RE, t) || reSearch(_DEFINE_PW_RE, t)
       || reSearch(_ENV_PW_RE, t) || reSearch(_URI_CRED_RE, t)
-      || reSearch(_VCS_TOKEN_RE, t));
+      || reSearch(_VCS_TOKEN_RE, t) || reSearch(_PRIVKEY_RE, t)
+      || (reSearch(_CONNSTR_CTX_RE, t) && reSearch(_CONNSTR_PW_RE, t)));
   }
   C._has_source_secret = _has_source_secret;
 
@@ -201,6 +210,21 @@
       seen[tok] = true;
       _add(facts, mkFact('credential.candidate', scope, { kind: 'vcs_token', token: tok, source: 'source-disclosure' }, S, source));
     });
+
+    // a pasted private key is a key in hand → credential.certificate (lights ssh-key-login).
+    if (reSearch(_PRIVKEY_RE, t)) {
+      _add(facts, mkFact('credential.certificate', scope, { kind: 'private_key', encrypted: /ENCRYPTED|Proc-Type:.*ENCRYPTED/i.test(t), source: 'source-disclosure' }, S, source));
+    }
+
+    // a password inside a DB connection string (only in a connection-string context).
+    if (reSearch(_CONNSTR_CTX_RE, t)) {
+      reAll(_CONNSTR_PW_RE, t).forEach(function (m) {
+        var s = _clean_secret(m.groups.s);
+        if (!s || seen[s]) return;
+        seen[s] = true;
+        _add(facts, mkFact('credential.candidate', scope, { kind: 'connection_string', password: s, source: 'source-disclosure' }, S, source));
+      });
+    }
 
     // a credential embedded in a connection URI keeps its username too (a login lead).
     reAll(_URI_CRED_RE, t).forEach(function (m) {

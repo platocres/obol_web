@@ -15,7 +15,7 @@
       'assets/engine/parsers/nmap.js?v=75385ff0', 'assets/engine/parsers/directory.js?v=ad2672df',
       'assets/engine/parsers/creds.js?v=22662bce', 'assets/engine/parsers/host.js?v=dc42c8bf',
       'assets/engine/parsers/services.js?v=6808bcc2', 'assets/engine/parsers/database.js?v=43266544',
-      'assets/engine/parsers/web.js?v=cc567928', 'assets/engine/parsers/websource.js?v=2c736bdb',
+      'assets/engine/parsers/web.js?v=cc567928', 'assets/engine/parsers/websource.js?v=6d031c9c',
       'assets/engine/parsers/findings.js?v=0c7eb0d6', 'assets/engine/parsers/shape.js?v=aba67dd4',
       'assets/engine/parsers/pivot.js?v=cd6f001e',
       'assets/engine/parsers/nxc-catalog.js?v=316868cf',

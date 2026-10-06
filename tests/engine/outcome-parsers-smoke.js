@@ -34,6 +34,14 @@ ok(prod('lsass-dump-onbox').indexOf('credential.available') >= 0, 'an LSASS dump
 ok(prod('nosql-injection').indexOf('access.admin') < 0, 'nosql-injection does NOT claim access.admin (app bypass, not OS win)');
 ok(prod('nosql-injection').indexOf('web.authz_bypass') >= 0 && prod('nosql-injection').indexOf('credential.candidate') >= 0, 'nosql-injection produces web.authz_bypass + credential.candidate (honest)');
 ok(prod('manual-sqli-exploitation').indexOf('credential.candidate') >= 0, 'SQLi-dumped creds enter the crack/reuse loop (credential.candidate)');
+// Loot value-chain: pulling a file a share-spider flagged and pasting it must mint the fact that lights the
+// NEXT move — a found-then-pasted thing generates the follow-up, not a dead end.
+var pem = run('cat id_rsa', '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----');
+ok(pem.indexOf('credential.certificate') >= 0, 'a pasted private key mints credential.certificate (→ ssh-key-login)');
+ok([].concat(by['ssh-key-login'].requires_all || [], by['ssh-key-login'].requires_any || []).indexOf('credential.certificate') >= 0, 'ssh-key-login consumes credential.certificate (the key chains to a foothold)');
+var cfg = run('cat web.config', '<add name="db" connectionString="Server=sql;Initial Catalog=app;User Id=sa;Password=P@ssw0rd123;"/>');
+ok(cfg.indexOf('credential.candidate') >= 0, 'a pasted connection-string password mints credential.candidate');
+ok(run('cat notes.txt', 'notes about the meeting tomorrow, nothing secret here').length === 0, 'a plain-text paste with no secret mints nothing (no false positive)');
 // the usable-credential fact really has downstream consumers (so the loop advances the coach)
 var consumers = A.filter(function (m) { return [].concat(m.requires_all || [], m.requires_any || []).indexOf('credential.available') >= 0; });
 ok(consumers.length >= 20, 'credential.available drives many downstream moves (' + consumers.length + ')');
