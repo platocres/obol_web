@@ -852,13 +852,13 @@
     });
     // inline free-text token fill ({{command}} etc.): substitute live into the command + copy button.
     U.on(mount, 'input', '.cmd-fill', function (e, t) {
-      var cmd = t.closest('.cmd'); if (!cmd) return;
+      var cmd = t.closest('.ns-cmd') || t.closest('.cmd'); if (!cmd) return;
       var out = cmd.getAttribute('data-tmpl') || '';
       Array.prototype.forEach.call(cmd.querySelectorAll('.cmd-fill'), function (inp) {
         var val = (inp.value || '').trim();
         if (val) out = out.split('{{' + inp.getAttribute('data-tok') + '}}').join(val);
       });
-      var code = cmd.querySelector('.cmd-run code'); if (code) code.textContent = out;
+      var code = cmd.querySelector('.cmd-run-code') || cmd.querySelector('.cmd-run code'); if (code) code.textContent = out;
       var copy = cmd.querySelector('.btn-copy'); if (copy) copy.setAttribute('data-copy', out);
     });
     // scope lens: persist the choice and re-render the coach at the new syllabus level
@@ -881,7 +881,7 @@
     });
     // paste-back: toggle this move's inline ingestion box (no route jump — ingest right here)
     U.on(mount, 'click', '.btn-pasteback', function (e, t) {
-      var art = t.closest('.move'); if (!art) return;
+      var art = t.closest('.ns-card') || t.closest('.move'); if (!art) return;
       var box = art.querySelector('.move-ingest'); if (!box) return;
       var open = box.hasAttribute('hidden');
       if (open) { box.removeAttribute('hidden'); } else { box.setAttribute('hidden', ''); }

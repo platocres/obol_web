@@ -92,7 +92,7 @@ function serve() {
   ok(wsRoot === '/home/kali/lab/box', 'launch saved the working directory (' + wsRoot + ')');
   ok(await page.locator('.ws-banner').count() === 1 && (await page.locator('.ws-banner .cmd-run code').first().textContent() || '').indexOf('mkdir -p /home/kali/lab/box/{') === 0,
     'coach shows the one-time workspace scaffold command');
-  const cmdHasScandir = await page.evaluate(() => Array.prototype.some.call(document.querySelectorAll('.move .cmd-run code'), function (c) { return c.textContent.indexOf('/home/kali/lab/box/scans/') !== -1; }));
+  const cmdHasScandir = await page.evaluate(() => Array.prototype.some.call(document.querySelectorAll('.ns-card .cmd-run-code'), function (c) { return c.textContent.indexOf('/home/kali/lab/box/scans/') !== -1; }));
   ok(cmdHasScandir, 'coach commands write into the workspace scans/ directory');
   // launching configured the default in place (no stray second run) and the home panel now shows it
   const engCount = await page.evaluate(() => window.OBOL.store.listEngagements().length);
@@ -100,12 +100,14 @@ function serve() {
   const scopedTargets = await page.evaluate(() => window.OBOL.store.active().targets.length);
   ok(scopedTargets === 1, 'scope paste kept the bare IP as a target, filtered junk+CIDR (' + scopedTargets + ')');
   await page.waitForTimeout(200);
-  const moveCount = await page.locator('.move').count();
-  ok(moveCount >= 1, 'coach renders at least one move after adding a target (' + moveCount + ')');
-  const firstMove = (await page.locator('.move-title').first().textContent()) || '';
-  ok(/nmap/i.test(firstMove), 'top coach move is nmap recon ("' + firstMove.trim() + '")');
-  ok(await page.locator('.move .cmd-run code').count() >= 1, 'move shows a copy-ready command (no toggles)');
-  ok(await page.locator('.move input, .move select').count() === 0, 'coach move has NO form toggles/switches');
+  const moveCount = await page.locator('.ns-card').count();
+  ok(moveCount >= 1, 'coach renders at least one move card after adding a target (' + moveCount + ')');
+  const firstMove = (await page.locator('.ns-card .ns-title').first().textContent()) || '';
+  ok(/nmap/i.test(firstMove), 'top coach card is nmap recon ("' + firstMove.trim() + '")');
+  ok(await page.locator('.ns-card .cmd-run-code').count() >= 1, 'card shows a copy-ready command');
+  ok(await page.locator('.ns-card.selected').count() === 1, 'exactly one card is selected (the #1 move, auto-opened)');
+  ok(await page.locator('.ns-card .ns-suggested').count() === 1, 'the #1 card carries a single Suggested Start tag');
+  ok(await page.locator('.ns-card select').count() === 0, 'no command-builder dropdowns on the coach (building lives in Tools)');
   // now that the run is configured, the home panel shows the active run + phase bar (not the guide)
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(200);
@@ -114,18 +116,19 @@ function serve() {
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(200);
 
-  // Blocked list present
-  ok(await page.locator('.coach-blocked').count() >= 1, 'blocked-with-reasons section present');
+  // "Opens Up Next" — the aspirational roadmap of capability-unlocks replaces the old blocked wall.
+  ok(await page.locator('.ns-opens').count() >= 1, 'the Opens Up Next roadmap is present');
+  ok(await page.locator('.ns-opens .ns-factchip').count() >= 1, 'roadmap cards carry capitalized fact chips (what they need)');
+
+  // The field-notes canvas is the coach's right column (the old context rail moved to the per-target view).
+  ok(await page.locator('#ns-canvas .ns-canvas-kick').count() === 1, 'the field-notes canvas renders for the selected move');
 
   // Scope lens: the newcomer-safe syllabus filter renders with its three levels and a default selection.
   ok(await page.locator('.coach-lens .lens-opt').count() === 3, 'scope lens renders OSCP / OSCP+ / All');
   // coach → Loadout status strip: with no synced profile it shows the set-up CTA linking to Loadout
   ok(await page.locator('.coach .lo-strip-cta[href="#/loadout"]').count() === 1, 'coach shows the Loadout set-up CTA strip when no box is synced');
   ok(await page.locator('.coach-lens .lens-opt.on').count() === 1, 'scope lens has exactly one active level');
-
-  // Live context rail is present on the coach (shown at >=1500px; element always rendered).
-  ok(await page.locator('.withrail .context-rail').count() === 1, 'coach live context rail rendered');
-  ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.rail && window.OBOL.rail.html)), 'rail module exposed for reuse');
+  ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.rail && window.OBOL.rail.html)), 'rail module still exposed for the per-target view');
 
   // Guided fact picker (sidebar): a friendly labelled option adds the underlying fact kind.
   ok(await page.locator('#fact-pick .fp-sel').count() === 1, 'sidebar guided fact picker rendered');
@@ -180,7 +183,7 @@ function serve() {
   // The coach should now surface more moves than before parsing.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
-  ok(await page.locator('.move').count() >= 2, 'coach recomputed: more moves unlocked after evidence (' + (await page.locator('.move').count()) + ')');
+  ok(await page.locator('.ns-card').count() >= 2, 'coach recomputed: more move cards unlocked after evidence (' + (await page.locator('.ns-card').count()) + ')');
 
   // Per-target attack-path page (scoped to the launched target's facts).
   await page.goto(`http://localhost:${PORT}/index.html#/target/10.10.10.10`, { waitUntil: 'networkidle' });
@@ -228,11 +231,8 @@ function serve() {
   // Redaction is opt-in: a recovered password shows in cleartext by default (not dots).
   const aliceSecret = (await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-secret').textContent()) || '';
   ok(aliceSecret.indexOf('S3cret!') !== -1 && aliceSecret.indexOf('•') === -1, 'the credential switcher shows the real password by default (redaction is opt-in), got "' + aliceSecret + '"');
-  // the live context RAIL's Credentials card also shows the recovered secret (not just user@domain).
-  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(150);
-  const railSecret = (await page.locator('.context-rail .rail-secret').first().textContent().catch(() => '')) || '';
-  ok(railSecret.indexOf('S3cret!') !== -1, 'the coach rail Credentials card shows the recovered password, got "' + railSecret + '"');
+  // (The old coach context rail was removed in the Next Steps redesign; credential visibility is covered by
+  // the switcher above, so the rail-specific secret/dedup checks retire with the element.)
   // …and the report's Redact Secrets toggle masks it here too.
   await page.evaluate(() => { window.OBOL.store.update((e) => { e.ui = e.ui || {}; e.ui.reportRedact = true; }, 'ui'); window.OBOL.app.renderSidebar(); });
   await page.waitForTimeout(80);
@@ -245,16 +245,10 @@ function serve() {
   const swapped = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'bob' && p.nthash === 'aabbccddeeff00112233445566778899'; });
   ok(swapped, 'clicking a credential fills the engagement params (bob + NT hash)');
   ok(await page.locator('#cred-switch .cred-row.active', { hasText: 'bob' }).count() === 1, 'the chosen credential is marked active');
-  // The right-rail Credentials card dedupes: one credential proven on two scopes must show ONCE, not twice.
-  await page.evaluate(() => {
-    const S = window.OBOL.store, F = window.OBOL.facts;
-    S.addFacts([F.makeFact({ kind: 'credential.available', scope: 'host:10.10.10.7', value: { user: 'alice', domain: 'corp.local', password: 'S3cret!' }, state: F.ProofState.SUPPORTED, source: 'test2' })], 'test');
-  });
+
+  // Retire/un-retire is judged PER MOVE (its own runs), not per fact-kind. Run on the coach route.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(150);
-  ok((await page.locator('.context-rail .rail-list li', { hasText: 'alice@corp.local' }).count()) === 1, 'the coach rail lists a credential proven on two scopes only once (deduped)');
-
-  // Retire/un-retire is judged PER MOVE (its own runs), not per fact-kind.
   await page.evaluate(() => {
     const S = window.OBOL.store, F = window.OBOL.facts;
     S.update((e) => { e.checklist = e.checklist || {}; e.checklist['bloodyad-acl'] = 'empty'; }, 'done');
@@ -262,7 +256,7 @@ function serve() {
     window.OBOL.router.render();
   });
   await page.waitForTimeout(120);
-  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) === 0, 'a move retired empty (none of its own runs produced a fact) stays out of the coach');
+  ok((await page.locator('.ns-card[data-action="bloodyad-acl"]').count()) === 0, 'a move retired empty (none of its own runs produced a fact) stays out of the coach');
   // The sccm bug: a fact-KIND this move produces (credential.candidate) exists from an UNRELATED source —
   // that must NOT un-retire it.
   await page.evaluate(() => {
@@ -271,7 +265,7 @@ function serve() {
     window.OBOL.router.render();
   });
   await page.waitForTimeout(120);
-  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) === 0, 'a produced fact-kind from an UNRELATED move does not un-retire (the sccm regression)');
+  ok((await page.locator('.ns-card[data-action="bloodyad-acl"]').count()) === 0, 'a produced fact-kind from an UNRELATED move does not un-retire (the sccm regression)');
   // New evidence: a run attributed to THIS move produces a fact → un-retire (the chain is recoverable).
   // The get-writable run yields an ACL lead, so mint that fact too (ACL abuse is gated on a known abusable
   // ACL — see docs/MOVE-ENGINE.md), which is also what makes the move eligible again.
@@ -282,7 +276,7 @@ function serve() {
     window.OBOL.router.render();
   });
   await page.waitForTimeout(120);
-  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) >= 1, 'the move RE-APPEARS once one of ITS OWN runs produced a fact (un-retired)');
+  ok((await page.locator('.ns-card[data-action="bloodyad-acl"]').count()) >= 1, 'the move RE-APPEARS once one of ITS OWN runs produced a fact (un-retired)');
 
   // Run Log: every command run is recorded and reviewable (with a filter), not just the attack-path moves.
   await page.evaluate(() => {
@@ -402,9 +396,9 @@ function serve() {
   });
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(250);
-  const roast = page.locator('.move[data-action="asrep-roast"]');
+  const roast = page.locator('.ns-card[data-action="asrep-roast"]');
   ok(await roast.count() === 1, 'proving a user list surfaces the AS-REP Roasting move on the coach');
-  const roastCmd = (await roast.locator('.cmd-run code').allTextContents()).join('\n');
+  const roastCmd = (await roast.locator('.cmd-run-code').allTextContents()).join('\n');
   ok(roastCmd.indexOf('/home/kali/lab/box/loot/users.txt') !== -1, '{{userlist}} now resolves to the workspace loot/users.txt path (not a bare placeholder)');
   ok(roastCmd.indexOf('/home/kali/lab/box/loot/asrep.hashes') !== -1, '{{hashfile}} resolves to loot/asrep.hashes so roast + crack agree on one file');
   const prep = roast.locator('.move-prep');
@@ -413,31 +407,30 @@ function serve() {
   ok(prepCmd.indexOf("cat > /home/kali/lab/box/loot/users.txt <<'EOF'") === 0, 'the materialize command is a heredoc writing the canonical users.txt');
   ok(prepCmd.indexOf('Administrator') !== -1 && prepCmd.indexOf('svc-web') !== -1, 'the heredoc body carries the exact proven usernames');
   const prepBeforeCmds = await roast.evaluate((el) => {
-    const prep = el.querySelector('.move-prep'), cmd = el.querySelector('.cmd:not(.cmd-prep)');
+    const prep = el.querySelector('.move-prep'), cmd = el.querySelector('.ns-cmd');
     return !!(prep && cmd && (prep.compareDocumentPosition(cmd) & Node.DOCUMENT_POSITION_FOLLOWING));
   });
   ok(prepBeforeCmds, 'the "set up first" block renders ABOVE the roast commands it must precede');
 
-  // Inline per-command ingestion on the coach: open a move's paste box, ingest its output in place.
+  // Inline per-command ingestion on the coach: open the OPEN card's paste box, ingest its output in place.
+  // (The paste box lives in the expanded card body, so it is the selected #1 card's that is interactive.)
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('.coach .move .btn-pasteback', { timeout: 6000 });
+  await page.waitForSelector('.coach .ns-card.selected .btn-pasteback', { timeout: 6000 });
   const actsBefore = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
-  ok(await page.locator('.coach .move .move-ingest[hidden]').count() >= 1, 'each move carries an inline ingestion box (collapsed by default)');
-  await page.locator('.coach .move .btn-pasteback').first().click();
-  await page.waitForSelector('.coach .move .move-ingest:not([hidden]) .mi-text', { timeout: 3000 });
+  ok(await page.locator('.coach .ns-card .move-ingest[hidden]').count() >= 1, 'each card carries an inline ingestion box (collapsed by default)');
+  await page.locator('.coach .ns-card.selected .btn-pasteback').first().click();
+  await page.waitForSelector('.coach .ns-card.selected .move-ingest:not([hidden]) .mi-text', { timeout: 3000 });
   ok(true, 'the Paste Output button expands the inline ingestion box in place (no route jump)');
-  await page.locator('.coach .move .move-ingest:not([hidden]) .mi-text').fill('PORT      STATE SERVICE\n5985/tcp  open  wsman\n');
-  await page.locator('.coach .move .move-ingest:not([hidden]) .mi-go').click();
+  await page.locator('.coach .ns-card.selected .move-ingest:not([hidden]) .mi-text').fill('PORT      STATE SERVICE\n5985/tcp  open  wsman\n');
+  await page.locator('.coach .ns-card.selected .move-ingest:not([hidden]) .mi-go').click();
   await page.waitForTimeout(500);
   const actsAfter = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
   ok(actsAfter === actsBefore + 1, 'inline ingestion records exactly ONE activity — no duplicate from re-bound listeners (' + actsBefore + '→' + actsAfter + ')');
-  // Paste Output must still TOGGLE OPEN after the ingest (guards the stacked-delegated-listener
-  // regression where a click nets to a no-op). Force a known-closed state first — the ingest may or
-  // may not have re-rendered depending on whether the pasted output minted facts for the top move.
-  await page.evaluate(() => { document.querySelectorAll('.coach .move .move-ingest:not([hidden])').forEach(function (b) { b.setAttribute('hidden', ''); }); });
-  await page.locator('.coach .move .btn-pasteback').first().click();
+  // Paste Output must still TOGGLE OPEN after the ingest (guards the stacked-delegated-listener regression).
+  await page.evaluate(() => { document.querySelectorAll('.coach .ns-card .move-ingest:not([hidden])').forEach(function (b) { b.setAttribute('hidden', ''); }); });
+  await page.locator('.coach .ns-card.selected .btn-pasteback').first().click();
   await page.waitForTimeout(120);
-  ok(await page.locator('.coach .move .move-ingest:not([hidden])').count() >= 1, 'Paste Output still opens the box after a re-render (no listener stacking)');
+  ok(await page.locator('.coach .ns-card.selected .move-ingest:not([hidden])').count() >= 1, 'Paste Output still opens the box after a re-render (no listener stacking)');
 
   // nmap XML output (-oX -) must parse in-browser (DOMParser path). nmap always emits
   // `<!DOCTYPE nmaprun>`, which the XXE guard used to reject — so real nmap XML never parsed.
@@ -502,13 +495,18 @@ function serve() {
   // substitutes into the shown command (and the copy button) live — no trip to Tools required.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(250);
-  const cmdFill = page.locator('.coach .cmd-fillable .cmd-fill[data-tok="command"]').first();
-  ok(await cmdFill.count() >= 1, 'an exec move with a {{command}} placeholder offers an inline fill box on the coach');
+  // the fill box lives in a card body, so open the card holding it first, then type into it.
+  const fillCard = page.locator('.ns-card:has(.cmd-fill[data-tok="command"])').first();
+  ok(await fillCard.count() >= 1, 'an exec move with a {{command}} placeholder exists on the coach');
+  await fillCard.locator('.ns-title').click();
+  await page.waitForTimeout(150);
+  const cmdFill = fillCard.locator('.cmd-fill[data-tok="command"]').first();
+  ok(await cmdFill.count() >= 1, 'opening that card reveals its inline {{command}} fill box');
   await cmdFill.fill('whoami /all');
   await page.waitForTimeout(60);
   const filledCmd = await cmdFill.evaluate((inp) => {
-    const cmd = inp.closest('.cmd');
-    return { code: cmd.querySelector('.cmd-run code').textContent, copy: cmd.querySelector('.btn-copy').getAttribute('data-copy') };
+    const cmd = inp.closest('.ns-cmd');
+    return { code: cmd.querySelector('.cmd-run-code').textContent, copy: cmd.querySelector('.btn-copy').getAttribute('data-copy') };
   });
   ok(filledCmd.code.indexOf('whoami /all') !== -1 && filledCmd.code.indexOf('{{command}}') === -1, 'typing fills {{command}} into the shown command live');
   ok(filledCmd.copy.indexOf('whoami /all') !== -1, 'the copy button now yields the filled command');
