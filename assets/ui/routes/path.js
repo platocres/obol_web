@@ -657,9 +657,12 @@
       nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus);
       // glow + expand follow the selection
       Array.prototype.forEach.call(mount.querySelectorAll('.ns-card.selected'), function (o) {
-        o.classList.remove('selected', 'is-glow'); o.setAttribute('aria-expanded', 'false');
+        o.classList.remove('selected', 'is-glow', 'ns-bloom'); o.setAttribute('aria-expanded', 'false');
       });
       card.classList.add('selected', 'is-glow'); card.setAttribute('aria-expanded', 'true');
+      // one-shot bloom shimmer ONLY on an explicit open — never on toggle/command clicks or re-render
+      card.classList.remove('ns-bloom'); void card.offsetWidth; card.classList.add('ns-bloom');
+      setTimeout(function () { card.classList.remove('ns-bloom'); }, 3600);
       // apply the move's default locus to its command rows + mark the first active
       syncCardLocus(card, nsSel.locus);
       repaintCanvas();
