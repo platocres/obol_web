@@ -23,6 +23,7 @@ function facts(cmd, out) {
 }
 var PAYOFF = /^(foothold\.|access\.|loot\.|credential\.(available|plaintext|candidate)|hash\.)/;
 var D = 'SMB 10.10.10.10 445 DC '; // nxc banner prefix (no [+] auth line, so informational output mints no payoff)
+var L = 'LDAP 10.10.10.10 389 DC ';
 
 // sample[id] = { cmd, ok: <success output>, neg: <denied output> }
 var sample = {
@@ -47,7 +48,22 @@ var sample = {
   'smb-sessions':      { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --sessions", ok: D + 'Enumerated sessions\n' + D + '\\\\10.10.10.50 user: jdoe', neg: D + '[-] access denied' },
   'smb-disks':         { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --disks", ok: D + 'C$', neg: D + '[-] access denied' },
   'smb-computers':     { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --computers", ok: D + 'DC01$\n' + D + 'WEB01$', neg: D + '[-] access denied' },
-  'smb-pass-pol':      { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --pass-pol", ok: D + 'Minimum password length: 7', neg: D + '[-] access denied' }
+  'smb-pass-pol':      { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --pass-pol", ok: D + 'Minimum password length: 7', neg: D + '[-] access denied' },
+
+  'ldap-auth':         { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021", ok: L + '[+] corp.local\\jdoe:Winter2021', neg: L + '[-] corp.local\\jdoe:Winter2021 STATUS_LOGON_FAILURE' },
+  'ldap-users':        { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --users", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + '-Username-     -Last PW Set-\n' + L + 'administrator  2021-01-02\n' + L + 'svc-sql        2020-05-05', neg: L + '[-] STATUS_ACCESS_DENIED' },
+  'ldap-asreproast':   { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --asreproast o.txt", ok: L + '$krb5asrep$23$svc-x@CORP.LOCAL:abcd1234$ef567890abcdef1234567890abcdef', neg: L + '[-] no AS-REP roastable users' },
+  'ldap-kerberoasting':{ cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --kerberoasting o.txt", ok: L + '$krb5tgs$23$*svc-sql$CORP.LOCAL$MSSQL/sql*$abcdef1234567890abcdef1234567890', neg: L + '[-] no kerberoastable users' },
+  'ldap-bloodhound':   { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --bloodhound -c All --dns-server 10.10.10.10", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + 'Compressing output into /tmp/corp.local_bloodhound.zip', neg: L + '[-] bloodhound collection failed' },
+  'ldap-laps':         { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 -M laps", ok: L + 'Computer: PC01$ ms-mcs-admpwd: Summer2021Pass!', neg: L + '[-] no read access to LAPS' },
+  'ldap-admin-count':  { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --admin-count", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + 'administrator\n' + L + 'svc-adm', neg: L + '[-] access denied' },
+  'ldap-trusted-for-delegation': { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --trusted-for-delegation", ok: L + 'WEB01$ (unconstrained)', neg: L + '[-] access denied' },
+  'ldap-find-delegation': { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --find-delegation", ok: L + 'SVC01$ constrained delegation to CIFS/dc01', neg: L + '[-] access denied' },
+  'ldap-gmsa':         { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --gmsa", ok: L + '[+] Found 1 gMSA account\n' + L + 'Account: svc_gmsa$ NTLM: 5835048ce94ad0564e29a924a03510ef', neg: L + '[-] no gMSA read access' },
+  'ldap-daclread':     { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 -M daclread -o TARGET=Domain\\ Admins ACTION=read", ok: L + 'Trustee: CORP\\svc-web\n' + L + 'Access mask: WriteDacl', neg: L + '[-] access denied' },
+  'ldap-group':        { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 -M group -o GROUP=Domain\\ Admins", ok: L + 'Members of Domain Admins:\n' + L + 'administrator\n' + L + 'svc-adm', neg: L + '[-] access denied' },
+  'ldap-password-not-required': { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --password-not-required", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + 'guest\n' + L + 'kiosk', neg: L + '[-] access denied' },
+  'ldap-maq':          { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 -M maq", ok: L + '[*] MachineAccountQuota: 10', neg: L + '[-] access denied' }
 };
 
 CAT.forEach(function (e) {

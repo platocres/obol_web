@@ -143,7 +143,76 @@
     { id: 'smb-sessions', proto: 'smb', flag: '--sessions', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
     { id: 'smb-disks', proto: 'smb', flag: '--disks', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
     { id: 'smb-computers', proto: 'smb', flag: '--computers', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
-    { id: 'smb-pass-pol', proto: 'smb', flag: '--pass-pol', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] }
+    { id: 'smb-pass-pol', proto: 'smb', flag: '--pass-pol', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
+
+    // ========================= LDAP =========================
+    { id: 'ldap-auth', proto: 'ldap', validate: true, produces: ['credential.available'], existing: true,
+      gate: ['ldap.reachable', 'port:389', 'credential.candidate', 'credential.available'] },
+    { id: 'ldap-users', proto: 'ldap', flag: '--users', produces: ['ad.user_list'], existing: true,
+      gate: ['ldap.reachable', 'port:389'] },
+    { id: 'ldap-asreproast', proto: 'ldap', flag: '--asreproast', produces: ['hash.asrep', 'credential.candidate'], existing: true,
+      gate: ['ad.user_list', 'ldap.reachable'] },
+    { id: 'ldap-kerberoasting', proto: 'ldap', flag: '--kerberoasting', produces: ['hash.tgs', 'credential.candidate'], existing: true,
+      gate: ['credential.available', 'ldap.reachable'] },
+    { id: 'ldap-bloodhound', proto: 'ldap', flag: '--bloodhound', produces: ['ad.graph.collected', 'ad.attack_paths'], existing: true,
+      gate: ['credential.available'] },
+    { id: 'ldap-laps', proto: 'ldap', module: 'laps', produces: ['credential.candidate'], existing: true,
+      gate: ['credential.available', 'ldap.reachable', 'ad.control_paths'] },
+
+    // --- LDAP gaps the hand-written parsers miss ---
+    { id: 'ldap-admin-count', proto: 'ldap', flag: '--admin-count', produces: ['ad.user_list'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) {
+        var users = C._usernames(text);
+        return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-admin-count', note: 'adminCount=1 privileged accounts (high-value targets)' } }] : [];
+      } },
+    { id: 'ldap-trusted-for-delegation', proto: 'ldap', flag: '--trusted-for-delegation', produces: ['ad.unconstrained', 'ad.attack_paths'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) {
+        var out = [], lines = payloadLines(text);
+        var unconstrained = lines.some(function (l) { return /unconstrained/i.test(l); });
+        var any = lines.some(function (l) { return /\$|delegat|constrained/i.test(l); });
+        if (unconstrained) out.push({ kind: 'ad.unconstrained', scope: dom(ws), value: { detail: 'accounts trusted for unconstrained delegation', tool: 'nxc' } });
+        else if (any) out.push({ kind: 'ad.attack_paths', scope: dom(ws), value: { kind: 'delegation', detail: 'constrained/RBCD delegation accounts', tool: 'nxc' } });
+        return out;
+      } },
+    { id: 'ldap-find-delegation', proto: 'ldap', flag: '--find-delegation', produces: ['ad.unconstrained', 'ad.attack_paths'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) { return CAT_BY_ID['ldap-trusted-for-delegation'].extract(text, ws); } },
+    { id: 'ldap-gmsa', proto: 'ldap', flag: '--gmsa', produces: ['ad.gmsa', 'credential.candidate'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) {
+        var out = [], lines = payloadLines(text);
+        if (lines.some(function (l) { return /gmsa|managedpassword|msDS-ManagedPassword/i.test(l); })) {
+          out.push({ kind: 'ad.gmsa', scope: dom(ws), value: { detail: 'gMSA accounts present', tool: 'nxc' } });
+          lines.forEach(function (l) {
+            var m = l.match(/Account:\s*(\S+)\s+NTLM:\s*([a-f0-9]{32})/i);
+            if (m) out.push({ kind: 'credential.candidate', scope: dom(ws), value: { kind: 'gmsa', user: m[1], nthash: m[2].toLowerCase(), tool: 'nxc' } });
+          });
+        }
+        return out;
+      } },
+    { id: 'ldap-daclread', proto: 'ldap', module: 'daclread', produces: ['ad.acl_lead'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) {
+        return /WriteDacl|GenericAll|GenericWrite|WriteOwner|ForceChangePassword|AllExtendedRights|WriteProperty|trustee/i.test(text)
+          ? [{ kind: 'ad.acl_lead', scope: dom(ws), value: { detail: 'DACL abuse right found via nxc daclread', tool: 'nxc' } }] : [];
+      } },
+    { id: 'ldap-group', proto: 'ldap', module: 'group', produces: ['ad.user_list'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) {
+        var users = C._usernames(text);
+        return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-group', note: 'members of the queried group' } }] : [];
+      } },
+    { id: 'ldap-password-not-required', proto: 'ldap', flag: '--password-not-required', produces: ['ad.user_list'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) {
+        var users = C._usernames(text);
+        return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-passnotreq', note: 'PASSWD_NOTREQD accounts (try a blank password)' } }] : [];
+      } },
+
+    // --- LDAP informational ---
+    { id: 'ldap-maq', proto: 'ldap', module: 'maq', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] }
   ];
 
   var CAT_BY_ID = {}; CAT.forEach(function (e) { CAT_BY_ID[e.id] = e; });
