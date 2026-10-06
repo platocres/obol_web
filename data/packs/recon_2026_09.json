@@ -1709,6 +1709,87 @@
           "note": "The PoC sends unauthenticated file-exec events to run a reverse shell; start nc -lvnp 4444 first."
         }
       ]
+    },
+    {
+      "id": "nmap-host-unresponsive",
+      "title": "Nmap Says Host Is Down — Make It Answer",
+      "tool": "nmap",
+      "tools": [
+        "nmap"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.host_down"
+      ],
+      "produces": [
+        "ports.open"
+      ],
+      "priority": 95,
+      "hypothesis": "\"Host seems down\" almost never means down — it means the box drops the ICMP ping nmap uses to decide a host is alive. Skip the ping with -Pn and it answers. This is the single most common reason a beginner thinks a live target is dead. While here, remember UDP and filtered-TCP need their own scan types.",
+      "proves": "the real open-port surface once host discovery is taken out of nmap's way",
+      "does_not_prove": "that nothing is filtered; a firewall can still drop specific probes",
+      "report": {
+        "finding": "Host alive behind ICMP filtering",
+        "severity": "info"
+      },
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -Pn -p- --min-rate 5000 {{target}}",
+          "note": "-Pn = treat the host as up, skip ping. This is the fix 90% of the time."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -Pn -sU --top-ports 50 {{target}}",
+          "note": "If TCP is bare, the service may be UDP (SNMP/TFTP/IKE/DNS). -sU scans it (slow; top-ports keeps it sane)."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -Pn -sT --source-port 53 {{target}}",
+          "note": "If SYN scans are filtered, a full-connect scan (-sT) or a trusted source port (53/443) can slip past a stateless firewall."
+        }
+      ]
+    },
+    {
+      "id": "fix-name-resolution",
+      "title": "Could Not Resolve Host — Add It to /etc/hosts",
+      "tool": "sh",
+      "tools": [
+        "sh"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.name_resolution"
+      ],
+      "produces": [
+        "advice.hosts"
+      ],
+      "priority": 94,
+      "hypothesis": "\"Could not resolve host\" means a tool was handed a name (box.htb, dc01.corp.local) with nothing to resolve it. Map the name to the IP in /etc/hosts and everything that failed just works — and many web apps and all of Kerberos REQUIRE the name, not the IP, so this unblocks virtual hosts and TGT requests at the same time.",
+      "proves": "nothing attack-wise; it makes name-addressed tools and vhosts reachable",
+      "does_not_prove": "that the name is the only vhost; enumerate others once resolution works",
+      "report": {
+        "finding": "Hostname mapping required (/etc/hosts)",
+        "severity": "info"
+      },
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "echo '{{target}} {{hostname}} {{domain}}' | sudo tee -a /etc/hosts",
+          "note": "Map the IP to the name(s) the app/DC uses. Read the names from TLS certs, redirects, LDAP, or SMB. Re-run the command that failed."
+        },
+        {
+          "tool": "sh",
+          "run": "curl -s -H 'Host: {{hostname}}' http://{{target}}/",
+          "note": "If a name resolves but the site shows a default page, it is virtual-host routed: the real site only answers to the right Host header — feed that name to vhost/content discovery."
+        }
+      ]
     }
   ]
 }

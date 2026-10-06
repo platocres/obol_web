@@ -2235,6 +2235,85 @@
       ]
     },
     {
+      "id": "ntlm-disabled-kerberos",
+      "title": "NTLM Disabled — Switch to Kerberos",
+      "tool": "nxc",
+      "tools": [
+        "nxc",
+        "impacket-getTGT"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.ntlm_disabled"
+      ],
+      "produces": [
+        "credential.available"
+      ],
+      "priority": 86,
+      "hypothesis": "STATUS_NOT_SUPPORTED on an SMB/LDAP login is not a bad credential — the DC has NTLM turned off and only speaks Kerberos. The exact same credential works the moment you add -k (and point at the DC by name, not IP). A hardened-auth lab banks on you reading this as 'login failed' and giving up.",
+      "proves": "the credential authenticating over Kerberos once NTLM is taken out of the picture",
+      "does_not_prove": "a new credential — it is the one you already have, spoken the way the DC accepts",
+      "report": {
+        "finding": "NTLM disabled; Kerberos authentication used",
+        "severity": "info"
+      },
+      "refs": [
+        "https://www.thehacker.recipes/ad/movement/kerberos"
+      ],
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{dc_fqdn}} -u {{user}} -p {{password}} -k",
+          "note": "Add -k for Kerberos and use the DC's FQDN (put it in /etc/hosts first). The login that returned STATUS_NOT_SUPPORTED now succeeds."
+        },
+        {
+          "tool": "impacket-getTGT",
+          "run": "impacket-getTGT {{domain}}/{{user}}:{{password}} && export KRB5CCNAME={{user}}.ccache",
+          "note": "Or grab a TGT once and reuse the ccache with -k -no-pass across the impacket suite."
+        }
+      ]
+    },
+    {
+      "id": "auth-account-blocked",
+      "title": "Account Locked or Restricted — What Now",
+      "tool": "nxc",
+      "tools": [
+        "nxc"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "blocker.lockout",
+        "blocker.account_restricted"
+      ],
+      "produces": [
+        "advice.account"
+      ],
+      "priority": 70,
+      "hypothesis": "The credential is real but the account cannot log in right now: a spray tripped the lockout threshold, or the account is disabled / not permitted this logon type. This is a STOP-and-redirect, not a dead end — hammering it makes things worse.",
+      "proves": "nothing new; it tells you to change approach before you cause damage",
+      "does_not_prove": "that the credential is wrong",
+      "report": {
+        "finding": "Account lockout / logon restriction encountered",
+        "severity": "info"
+      },
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{dc}} -u {{user}} -p {{password}} --pass-pol",
+          "note": "LOCKOUT: read the lockout policy (threshold + observation window). Stop spraying, wait out the window, and from now on spray ONE password across many users with a long --delay — never many passwords at one user."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc ldap {{dc}} -u {{user}} -p {{password}} --query \"(userAccountControl:1.2.840.113556.1.4.803:=2)\" \"\"",
+          "note": "RESTRICTED: the account may be disabled (UAC flag 2), expired, or denied this logon type. Confirm, then pivot to a different account or a different service the account IS allowed (e.g. not WinRM but SMB)."
+        }
+      ]
+    },
+    {
       "id": "bloodyad-acl",
       "title": "ACL Abuse with bloodyAD",
       "hypothesis": "In modern AD, the privilege paths are ACL paths: GenericAll, WriteDacl, WriteOwner, or group-membership write rights on an object let you escalate by editing the directory itself, join groups, seize ownership, grant yourself control, force password resets, or plant shadow credentials. BloodHound reveals which edges you possess; bloodyAD carries them out from Linux with no RSAT.",

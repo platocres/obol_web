@@ -28,7 +28,7 @@ var A = PK.loadPacks(Object.keys(bundle).map(function (k) { return bundle[k]; })
 OBOL.packs = { actions: function () { return A; }, packData: function () { return bundle; } };
 req('data/tools-install.js'); req('data/study-fixtures.js'); req('assets/engine/study.js');
 req('assets/engine/parsers/common.js');
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'blockers', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
 req('data/decision-forks.js'); req('data/parser-signatures.js'); req('data/coverage-expected.js');
 req('assets/engine/decisionmap.js');
@@ -74,6 +74,10 @@ if (VERIFY || CHECK) {
   fs.readdirSync(path.join(ROOT, 'assets/engine/parsers')).filter(function (f) { return f.endsWith('.js'); }).forEach(function (f) {
     var s = fs.readFileSync(path.join(ROOT, 'assets/engine/parsers', f), 'utf8');
     (s.match(/mkFact\('[a-z][a-z0-9._]+'/g) || []).forEach(function (m) { srcKinds[m.slice(8, -1)] = 1; });
+    // data-driven parsers (e.g. blockers.js) declare the kind they emit in a `kind: 'blocker.*'` table
+    // and mint it with mkFact(entry.kind, …); harvest just those so the drift check sees them without
+    // sweeping up the kind: fields of ordinary extract-return objects.
+    (s.match(/\bkind:\s*'(?:blocker|advice)\.[a-z0-9._]+'/g) || []).forEach(function (m) { srcKinds[m.replace(/.*'([^']+)'.*/, '$1')] = 1; });
   });
   // live corpus-minted kinds (parser fixtures exercise diverse real outputs)
   var minted = {};

@@ -16,7 +16,7 @@ fs.readdirSync(pdir).filter(function (f) { return f.endsWith('.json'); }).forEac
 var A = PK.loadPacks(Object.keys(bundle).map(function (k) { return bundle[k]; }));
 var by = {}; A.forEach(function (m) { by[m.id] = m; });
 req('assets/engine/parsers/common.js');
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'blockers', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
 
 var fail = 0;

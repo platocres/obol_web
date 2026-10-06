@@ -9,7 +9,7 @@ function req(p) { return require(path.join(R, p)); }
 req('assets/engine/facts.js'); req('assets/engine/phases.js'); req('assets/engine/pack.js');
 req('assets/engine/profile.js'); req('assets/engine/command.js'); req('assets/engine/workspace.js');
 req('assets/engine/parsers/common.js');
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'blockers', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
 var OBOL = globalThis.OBOL, fail = 0;
 function ok(c, m) { if (!c) { console.error('  FAIL:', m); fail++; } else { console.log('  ok  :', m); } }
@@ -32,6 +32,21 @@ ok(kinds('ssh bob@t', 'Welcome to Ubuntu 22.04').indexOf('ssh.key_rejected') < 0
 // niche shell-landing moves mint foothold.linux from a pasted id (actionId-routed)
 ok(has(kinds('curl http://t/shell.php?c=id', 'uid=33(www-data) gid=33(www-data) groups=33(www-data)', 'tftp-write-shell'), 'foothold.linux'), 'tftp webshell id → foothold.linux');
 ok(has(kinds('id', 'uid=1000(bob) gid=1000(bob) groups=1000(bob)', 'vnc-desktop-shell'), 'foothold.linux'), 'vnc desktop terminal id → foothold.linux');
+
+// ---- auth + operational blockers: each cryptic wall mints its blocker fact (and a benign paste none) ----
+function hasKind(cmd, out, kind) { return kinds(cmd, out).indexOf(kind) >= 0; }
+ok(hasKind('nxc smb dc -u bob -p x', 'SMB  dc  [-] corp\\bob:x STATUS_NOT_SUPPORTED', 'blocker.ntlm_disabled'), 'STATUS_NOT_SUPPORTED → blocker.ntlm_disabled');
+ok(hasKind('nxc smb dc -u bob -p x', '[-] corp\\bob:x STATUS_ACCOUNT_LOCKED_OUT', 'blocker.lockout'), 'STATUS_ACCOUNT_LOCKED_OUT → blocker.lockout');
+ok(hasKind('nxc smb dc -u bob -p x', '[-] corp\\bob:x STATUS_ACCOUNT_DISABLED', 'blocker.account_restricted'), 'STATUS_ACCOUNT_DISABLED → blocker.account_restricted');
+ok(hasKind('nmap 10.10.10.10', 'Note: Host seems down. If it is really up, but blocking our ping probes, try -Pn', 'blocker.host_down'), 'nmap host-seems-down → blocker.host_down');
+ok(hasKind('curl http://box.htb/', 'curl: (6) Could not resolve host: box.htb', 'blocker.name_resolution'), 'could-not-resolve-host → blocker.name_resolution');
+ok(hasKind('./enum.sh', '/bin/bash^M: bad interpreter: No such file or directory', 'blocker.crlf'), 'CRLF bad interpreter → blocker.crlf');
+ok(hasKind('sudo -l', 'sudo: no tty present and no askpass program specified', 'blocker.no_tty'), 'sudo no-tty → blocker.no_tty');
+ok(hasKind('powershell iex ...', 'At line:1 : This script contains malicious content and has been blocked by your antivirus software', 'blocker.amsi'), 'AMSI block → blocker.amsi');
+ok(hasKind('JuicyPotato.exe', '[-] CreateProcessWithTokenW failed: the handle is invalid', 'blocker.potato'), 'potato failure → blocker.potato');
+ok(hasKind('ffuf -u http://t/FUZZ', ':: Progress ... 429 Too Many Requests', 'blocker.rate_limited'), '429 → blocker.rate_limited');
+ok(hasKind('curl https://t:80/', 'curl: (35) error:0A00010B:SSL routines::wrong version number', 'blocker.tls_scheme'), 'wrong-version-number → blocker.tls_scheme');
+ok(kinds('nmap 10.10.10.10', 'Nmap scan report for 10.10.10.10\nHost is up (0.012s latency).').filter(function (x) { return /^blocker\./.test(x); }).length === 0, 'a healthy scan mints no blocker');
 
 console.log('\nSSH KEY DOCTOR SMOKE: ' + (fail ? fail + ' FAILURE(S)' : 'all passed'));
 process.exit(fail ? 1 : 0);

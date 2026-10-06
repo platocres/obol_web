@@ -125,9 +125,11 @@
     // Grade each move on CAPABILITY, not on its one fixture: can any parser read each produced fact?
     actions().forEach(function (m) {
       var e = out[m.id] || (out[m.id] = { id: m.id, produces: produces(m), minted: [], selfRead: false });
-      var prod = e.produces || [];
+      // advice.* are guidance receipts (a troubleshooter's "here is the fix"), not facts a parser reads
+      // back from pasted output — so they are never a parse gap; grade only the real produced facts.
+      var prod = (e.produces || []).filter(function (f) { return !/^advice\./.test(f); });
       var readq = prod.filter(readable);
-      if (!prod.length) e.status = 'noproduce';                // enum/terminal move, declares no fact
+      if (!prod.length) e.status = 'noproduce';                // enum/terminal/guidance move, no parseable fact
       else if (readq.length === prod.length) e.status = 'verified';
       else if (readq.length) e.status = 'partial';
       else e.status = 'gap';                                   // runs, but obol can read NONE of its result
@@ -260,7 +262,7 @@
         // terminal/report facts: loot, proof, observations, and recorded credential MATERIAL whose
         // usable form (credential.available / .candidate) is emitted alongside — the material fact
         // itself feeds the report, not another move, so it is not a wiring dead-end.
-        var term = /^(objective|flag|proof|loot\.|config\.review|defense\.|snmp\.info|host\.|web\.(server|tech|title|content_map|source)|dns\.|tls\.|persistence\.|credential\.plaintext$|db\.creds$)/.test(f);
+        var term = /^(objective|flag|proof|loot\.|config\.review|defense\.|advice\.|snmp\.info|host\.|web\.(server|tech|title|content_map|source)|dns\.|tls\.|persistence\.|credential\.plaintext$|db\.creds$)/.test(f);
         if (!consumed && !hand && !term) wiring.deadEnd.push({ id: m.id, fact: f });
       });
     });

@@ -102,6 +102,46 @@
       ]
     },
     {
+      "id": "web-access-blocked",
+      "title": "Web Request Blocked — WAF, Rate Limit, or Wrong Scheme",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "ffuf"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_any": [
+        "blocker.rate_limited",
+        "blocker.tls_scheme"
+      ],
+      "produces": [
+        "advice.web_access"
+      ],
+      "priority": 58,
+      "hypothesis": "A 429 / \"Too Many Requests\" is a rate limiter or WAF throttling your fuzzing, and a \"wrong version number\" SSL error is just http-vs-https confusion — neither is the app refusing you for real. Slow the scan, soften the fingerprint, or flip the scheme, and enumeration continues.",
+      "proves": "nothing attack-wise; it gets your requests flowing again",
+      "does_not_prove": "that there is no WAF rule on the actual payloads; tune those separately",
+      "report": {
+        "finding": "Request throttled / scheme mismatch",
+        "severity": "info"
+      },
+      "commands": [
+        {
+          "tool": "ffuf",
+          "run": "ffuf -u {{url}}/FUZZ -w {{wordlist}} -t 5 -p 0.3 -H \"User-Agent: Mozilla/5.0\"",
+          "note": "RATE LIMIT/429: drop the thread count (-t 5), add a delay (-p), and send a real User-Agent. A slower scan that completes beats a fast one that gets you blocked."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sk https://{{target}}/  # or plain http://",
+          "note": "WRONG_VERSION_NUMBER: you spoke TLS to a plaintext port (or vice-versa). Flip the scheme; add -k for a self-signed cert so the handshake is not the thing that stops you."
+        }
+      ]
+    },
+    {
       "id": "param-discovery",
       "title": "Parameter Discovery (arjun)",
       "hypothesis": "A form or endpoint often accepts far more parameters than its HTML reveals, and the hidden one is frequently the injectable one. Fuzzing a known parameter dictionary against the endpoint (arjun) surfaces the accepted GET/POST parameters, so the injection probes have a concrete parameter to test instead of a guess.",

@@ -414,6 +414,14 @@
       _add(facts, mkFact('blocker.password_change', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
     if (/KRB_AP_ERR_SKEW|clock skew too great|kerberos[^\n]*\bskew\b|time difference too large/i.test(t))
       _add(facts, mkFact('blocker.clock_skew', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+    // NTLM refused but the credential is valid — a DC with NTLM disabled answers SMB auth with
+    // STATUS_NOT_SUPPORTED; the same credential works over Kerberos (-k).
+    if (/STATUS_NOT_SUPPORTED/i.test(t) && /\b(smb|ldap|nxc|SMBv|NTLM)\b/i.test(t))
+      _add(facts, mkFact('blocker.ntlm_disabled', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+    if (/STATUS_ACCOUNT_LOCKED_OUT|account (?:is |has been )?locked out|lockoutThreshold reached/i.test(t))
+      _add(facts, mkFact('blocker.lockout', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+    if (/STATUS_ACCOUNT_DISABLED|STATUS_ACCOUNT_RESTRICTION|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_ACCOUNT_EXPIRED|STATUS_INVALID_LOGON_HOURS/i.test(t))
+      _add(facts, mkFact('blocker.account_restricted', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
   }
   C._parse_auth_blockers = _parse_auth_blockers;
 

