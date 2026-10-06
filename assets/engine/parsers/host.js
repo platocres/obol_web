@@ -66,6 +66,27 @@
   }
   C._parse_ssh_exec = _parse_ssh_exec;
 
+  // SSH key login FAILED — the cryptic errors OffSec lab authors lean on to stall people who do not know
+  // the trick. Recognize each cause from the pasted client output and mint ssh.key_rejected (carrying the
+  // cause) so the troubleshooter move surfaces the exact fix. Conservative: a successful login (uid= in
+  // the same paste) mints nothing here.
+  var _SSH_KEY_CAUSES = [
+    { cause: 'unprotected', re: /UNPROTECTED PRIVATE KEY FILE|permissions\s+0?\d{3,4}\s+for\s+.*are too open|bad permissions|it is required that your private key files are NOT accessible/i },
+    { cause: 'passphrase', re: /enter passphrase for key|load key.*incorrect passphrase|bad passphrase/i },
+    { cause: 'legacy_algo', re: /no mutual signature (?:algorithm|supported)|send_pubkey_test:\s*no mutual|sign_and_send_pubkey:\s*signing failed|userauth_pubkey:\s*unsupported public key algorithm/i },
+    { cause: 'bad_format', re: /Load key .*:\s*(?:invalid format|error in libcrypto)|Load key .*:\s*format not supported|key_load_private/i },
+    { cause: 'publickey_denied', re: /Permission denied\s*\(publickey/i },
+  ];
+  function _parse_ssh_key_diagnostics(text, ws, source, facts) {
+    var t = String(text || '');
+    if (reSearch(C._LINUX_ID_RE, t)) return;                 // a uid= line means it actually logged in
+    var causes = [];
+    _SSH_KEY_CAUSES.forEach(function (c) { if (c.re.test(t)) causes.push(c.cause); });
+    if (!causes.length) return;
+    _add(facts, mkFact('ssh.key_rejected', 'host:' + ws.target, { cause: causes[0], causes: causes }, S, source));
+  }
+  C._parse_ssh_key_diagnostics = _parse_ssh_key_diagnostics;
+
   function _parse_nxc_rdp(text, ws, command, source, facts) {
     if (text.indexOf('[+]') < 0) return;
     var h = 'host:' + ws.target;

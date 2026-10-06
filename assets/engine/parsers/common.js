@@ -180,7 +180,7 @@
   // Service moves that land a *nix shell but whose command tool is not one the command-keyed dispatch
   // recognises (curl to the Elasticsearch API, rsync, an NFS mount + ssh): keyed by actionId so a pasted
   // `uid=` proof still mints foothold.linux through the shared ssh-exec reader.
-  C._LINUX_SHELL_ACTION_IDS = new Set(['rsync-write-shell', 'nfs-to-foothold', 'elasticsearch-rce']);
+  C._LINUX_SHELL_ACTION_IDS = new Set(['rsync-write-shell', 'nfs-to-foothold', 'elasticsearch-rce', 'tftp-write-shell', 'vnc-desktop-shell']);
   C._WEB_SQLI_ACTION_IDS = new Set(['sqli-basics']);
   C._WEB_SSRF_ACTION_IDS = new Set(['ssrf', 'xxe']);
   C._WEB_NOSQLI_ACTION_IDS = new Set(['nosql-injection']);

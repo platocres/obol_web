@@ -174,6 +174,11 @@
       regex: 'uid=0(root), nt authority\\system',
       emits: ['access.shell', 'foothold.linux', 'foothold.windows', 'access.system', 'host.os_family', 'host.kernel'],
     },
+    'ssh-key-rejected': {
+      looksFor: "an SSH key login that failed, and why — unprotected key perms, a passphrase prompt, the OpenSSH 8.8+ ssh-rsa block (no mutual signature algorithm), an invalid key format, or a bare \"Permission denied (publickey)\" (often target-side StrictModes).",
+      regex: 'UNPROTECTED PRIVATE KEY FILE | permissions are too open | no mutual signature algorithm | enter passphrase for key | Load key …: invalid format | Permission denied (publickey)',
+      emits: ['ssh.key_rejected'],
+    },
     'files': {
       looksFor: 'a file or directory listing — an FTP/rsync/SMB-spider listing or a loot hunt, naming files worth taking (configs, backups, keys).',
       regex: '-rw-r--r-- … file, drwxr-xr-x … dir',

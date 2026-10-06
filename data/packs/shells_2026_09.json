@@ -167,6 +167,70 @@
       ]
     },
     {
+      "id": "ssh-key-troubleshoot",
+      "title": "SSH Key Rejected — Fix It",
+      "hypothesis": "A found or planted SSH key that SSH refuses is a puzzle lab authors use to stall you, not a dead end — the key is fine, something around it is wrong. Match the exact error to its fix: local key permissions, a passphrase, the modern ssh-rsa block, a mangled format, or — the sneaky one — the TARGET's own ~/.ssh permissions, which you can only correct from a foothold you already hold. Work the list and the key logs you in.",
+      "tool": "ssh",
+      "tools": [
+        "ssh",
+        "ssh2john",
+        "john"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "ssh.key_rejected"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 80,
+      "sequence": true,
+      "proves": "a working SSH key login once the surrounding blocker is fixed — a foothold",
+      "does_not_prove": "that the key is valid at all; if every fix fails, the key may be for a different user or host",
+      "report": {
+        "finding": "SSH Key Authentication (recovered after fixing a blocker)",
+        "severity": "high"
+      },
+      "refs": [
+        "https://man.openbsd.org/ssh_config",
+        "https://www.openssh.com/legacy.html"
+      ],
+      "commands": [
+        {
+          "tool": "ssh",
+          "run": "chmod 600 {{keyfile}}",
+          "note": "\"UNPROTECTED PRIVATE KEY FILE\" / \"permissions are too open\": SSH ignores a world-readable key. This is CLIENT-side (your Kali). Fix and retry."
+        },
+        {
+          "tool": "ssh",
+          "run": "ssh -i {{keyfile}} -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa {{user}}@{{target}}",
+          "note": "\"Permission denied (publickey)\" with \"no mutual signature algorithm\": OpenSSH 8.8+ disabled ssh-rsa by default, so a valid RSA key is refused. Re-enable it with these two options — the single most common silent failure on older lab keys."
+        },
+        {
+          "tool": "ssh2john",
+          "run": "ssh2john {{keyfile}} > key.hash && john --wordlist={{wordlist}} key.hash",
+          "note": "\"Enter passphrase for key\": the key is encrypted. Crack the passphrase offline, then use it. (A leaked passphrase, e.g. via Heartbleed, skips the crack.)"
+        },
+        {
+          "tool": "ssh",
+          "run": "dos2unix {{keyfile}}; ssh-keygen -y -f {{keyfile}}",
+          "note": "\"Load key: invalid format\": usually CRLF line endings from a Windows copy/paste, a missing -----BEGIN/END----- line, or a PuTTY .ppk (convert with `puttygen {{keyfile}} -O private-openssh -o id_rsa`). ssh-keygen -y validates the fixed key."
+        },
+        {
+          "tool": "ssh",
+          "run": "chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys && chown {{user}}:{{user}} ~/.ssh ~/.ssh/authorized_keys",
+          "note": "THE PUZZLE: \"Permission denied (publickey)\" when the key SHOULD work. SSH StrictModes refuses a key whose ~/.ssh / authorized_keys on the TARGET is group/world-writable or wrongly owned. Run THIS on the target through the foothold you already have (web shell, another account), then retry the key login for a stable session."
+        },
+        {
+          "tool": "ssh",
+          "run": "ssh -i {{keyfile}} {{user}}@{{target}} id",
+          "note": "Retry after the matching fix. `uid=...` means the key now works — you have your foothold."
+        }
+      ]
+    },
+    {
       "id": "linux-remote-exec",
       "title": "Authenticated Remote Command (SSH)",
       "hypothesis": "With a Linux credential (a password or a private key) and SSH reachable, you can run any command on the box without holding an interactive session, enumerate, hunt privesc, grab flags. The web crafter's Linux 'run on host' menu fills {{command}} (id, sudo -l, SUID find…) and you edit it freely.",

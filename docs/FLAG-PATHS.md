@@ -77,9 +77,9 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
 
 ### `69` — TFTP
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** TFTP Write to Shell
+- **User flag:** TFTP Write to Shell → Hunt for Flags (Linux)
+- **Root/Admin:** TFTP Write to Shell → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `79` — Finger
 - **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)

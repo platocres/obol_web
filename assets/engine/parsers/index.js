@@ -140,6 +140,10 @@
 
     var isSsh = C._is_ssh_command(command);
     if (isSsh) C._parse_ssh_exec(text, ws, command, source, facts);
+    // An SSH key login that FAILED (any client, any cause) → mint ssh.key_rejected so the troubleshooter
+    // surfaces the fix. Keyed on the output, so it also catches a bare pasted error with no command.
+    if ((isSsh || /\bssh\b/.test(lc) || /Permission denied \(publickey|UNPROTECTED PRIVATE KEY|no mutual signature/i.test(text)) && C._parse_ssh_key_diagnostics)
+      C._parse_ssh_key_diagnostics(text, ws, source, facts);
     // Service login / DB-RCE that lands a *nix shell (telnet, rlogin/rsh, psql/odat/sqlplus COPY..PROGRAM
     // and friends): the proof is the same Linux id output, so reuse the ssh-exec reader to mint the
     // foothold from a pasted uid=... line.
