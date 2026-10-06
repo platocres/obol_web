@@ -602,6 +602,45 @@
       ]
     },
     {
+      "id": "telnet-login",
+      "title": "Log In Over Telnet",
+      "hypothesis": "Telnet is a cleartext login shell — the moment you have a username and password (from the banner, a spray, or a reused credential), logging in IS the foothold. Default and reused passwords are the norm on the devices that still run it. Confirm the login with id/hostname so obol records the shell.",
+      "tool": "telnet",
+      "tools": [
+        "telnet",
+        "hydra"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:23",
+        "telnet.reachable"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 60,
+      "proves": "an interactive login shell on the target over telnet — a foothold",
+      "does_not_prove": "privilege beyond that account; escalate from the shell for the root flag",
+      "report": {
+        "finding": "Cleartext Telnet Login",
+        "severity": "high"
+      },
+      "commands": [
+        {
+          "tool": "telnet",
+          "run": "telnet {{target}} 23",
+          "note": "Log in with the credential you have (banner default, a spray hit, or a reused password). Once in, run `id; hostname; ip -4 addr` so the shell and host identity are captured together."
+        },
+        {
+          "tool": "hydra",
+          "run": "hydra -L {{userlist}} -P {{wordlist}} telnet://{{target}}",
+          "note": "No credential yet? Brute it — telnet boxes lean on weak/default logins. A [23][telnet] host: ... login: ... password: ... line is your way in; then use the first command."
+        }
+      ]
+    },
+    {
       "id": "recon-rservices",
       "title": "BSD r-services (rexec/rlogin/rsh) Trust Abuse",
       "phase": "recon",
@@ -645,6 +684,48 @@
           "tool": "rsh",
           "run": "rsh -l root {{target}} id",
           "note": "Run one command over rsh: if a trust entry covers you, this returns uid=0 with no password prompt."
+        }
+      ]
+    },
+    {
+      "id": "rservices-login",
+      "title": "Log In via r-services (rlogin/rsh)",
+      "hypothesis": "The Berkeley r-services trust logins outright: a permissive ~/.rhosts or /etc/hosts.equiv lets you rlogin or rsh in as a named user — root included — with NO password at all. When recon showed 512/513/514 open, try the trusted-login path; it is frequently a direct root shell.",
+      "tool": "rlogin",
+      "tools": [
+        "rlogin",
+        "rsh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:512",
+        "port:513",
+        "port:514",
+        "rservices.reachable"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.admin"
+      ],
+      "priority": 60,
+      "proves": "a trusted-login shell over rlogin/rsh — a foothold, and root directly when the trust names root",
+      "does_not_prove": "a shell when no .rhosts trust exists for your source; then fall back to a credential login",
+      "report": {
+        "finding": "Passwordless r-services Trust Login",
+        "severity": "critical"
+      },
+      "commands": [
+        {
+          "tool": "rlogin",
+          "run": "rlogin -l root {{target}}",
+          "note": "If a .rhosts trusts your host you land a root shell with no password. Try -l <user> for each enumerated user too. Run `id; hostname` to capture it."
+        },
+        {
+          "tool": "rsh",
+          "run": "rsh {{target}} -l root id",
+          "note": "The rsh form runs a single command across the trust; `uid=0(root)` confirms a passwordless root foothold."
         }
       ]
     },

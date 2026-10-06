@@ -140,6 +140,10 @@
 
     var isSsh = C._is_ssh_command(command);
     if (isSsh) C._parse_ssh_exec(text, ws, command, source, facts);
+    // Service login / DB-RCE that lands a *nix shell (telnet, rlogin/rsh, psql/odat/sqlplus COPY..PROGRAM
+    // and friends): the proof is the same Linux id output, so reuse the ssh-exec reader to mint the
+    // foothold from a pasted uid=... line.
+    if (!isSsh && /\b(telnet|rlogin|rsh|rexec|psql|sqlplus|odat)\b/.test(lc)) C._parse_ssh_exec(text, ws, command, source, facts);
 
     if (isNxc && (' ' + lc + ' ').indexOf(' rdp ') >= 0) C._parse_nxc_rdp(text, ws, command, source, facts);
 

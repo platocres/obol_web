@@ -62,9 +62,9 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
 
 ### `23` — Telnet
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Log In Over Telnet
+- **User flag:** Log In Over Telnet → Hunt for Flags (Linux)
+- **Root/Admin:** Log In Over Telnet → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `25/110/143` — SMTP, POP3, IMAP
 - **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
@@ -125,9 +125,9 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
 
 ### `512/513/514` — r-services (rexec, rlogin, rsh)
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Log In via r-services (rlogin/rsh)
+- **User flag:** Log In via r-services (rlogin/rsh) → Hunt for Flags (Linux)
+- **Root/Admin:** Log In via r-services (rlogin/rsh)
 
 ### `873` — rsync
 - **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
@@ -140,9 +140,9 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **Root/Admin:** MSSQL Login → MSSQL xp_cmdshell Command Execution → DLL Search-Order / Phantom DLL Hijack
 
 ### `1521` — Oracle TNS
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Oracle TNS Enumeration & Login → Oracle to Command Execution
+- **User flag:** Oracle TNS Enumeration & Login → Oracle to Command Execution → Hunt for Flags (Linux)
+- **Root/Admin:** Oracle TNS Enumeration & Login → Oracle to Command Execution → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `3306` — MySQL, MariaDB
 - **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
@@ -155,9 +155,9 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **Root/Admin:** BlueKeep RDP Pre-Auth RCE (CVE-2019-0708)
 
 ### `5432` — PostgreSQL
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** PostgreSQL Login → PostgreSQL to Command Execution
+- **User flag:** PostgreSQL Login → PostgreSQL to Command Execution → Hunt for Flags (Linux)
+- **Root/Admin:** PostgreSQL Login → PostgreSQL to Command Execution → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `5900` — VNC
 - **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)

@@ -149,6 +149,46 @@ gaps.forEach(function (g) { console.log('  ' + String(g.port).padEnd(16) + ' can
 if (CHECK && gaps.length) { console.error('\nFLAG-PATHS CHECK FAIL: ' + gaps.length + ' entry/milestone pair(s) cannot reach the flag.'); process.exit(1); }
 console.log(gaps.length ? '' : '\nFLAG PATHS OK: every by-port entry reaches a foothold, the user flag, and root.');
 
+// --robust: fragility lens. For each port, how many DISTINCT moves can produce a foothold reachably?
+// A port with only one is a single point of failure — if that one technique does not work on the box,
+// the user is stranded with no alternative. Also names chokepoints: a move whose removal makes the
+// foothold unreachable from that port (every path depends on it). This is the "prepare for exceptions"
+// view: the thin paths are where a disabled user most needs a second option.
+if (argv.indexOf('--robust') >= 0) {
+  var FOOT = { 'foothold.linux': 1, 'foothold.windows': 1, 'access.shell': 1, 'foothold.webshell': 1, 'access.desktop': 1 };
+  function reachWithout(seed, dropId) {
+    var have = {}, k; for (k in seed) have[k] = 1; var changed = true;
+    while (changed) { changed = false; var fam = osFamOf(have);
+      for (var i = 0; i < A.length; i++) { var a = A[i]; if (a.id === dropId || !osOk(a, fam)) continue;
+        var all = a.requires_all || [], any = a.requires_any || [], ok = true, j;
+        for (j = 0; j < all.length; j++) if (!have[all[j]]) { ok = false; break; }
+        if (ok && any.length) { ok = false; for (j = 0; j < any.length; j++) if (have[any[j]]) { ok = true; break; } }
+        if (!ok) continue; (a.produces || []).forEach(function (p) { if (!have[p]) { have[p] = 1; changed = true; } }); } }
+    return have;
+  }
+  function footReachable(have) { for (var f in FOOT) if (have[f]) return true; return false; }
+  console.log('\nROBUSTNESS (foothold path diversity)\n');
+  var thin = [];
+  ev.forEach(function (e) {
+    var seed = seedFor(e), clo = reachClosure(seed);
+    // distinct foothold-producing moves that are reachable (their gates hold within the closure)
+    var footMoves = A.filter(function (a) {
+      if (!(a.produces || []).some(function (p) { return FOOT[p]; })) return false;
+      var all = a.requires_all || [], any = a.requires_any || [];
+      if (!all.every(function (r) { return clo.have[r]; })) return false;
+      if (any.length && !any.some(function (r) { return clo.have[r]; })) return false;
+      return true;
+    }).map(function (a) { return a.id; });
+    var choke = footReachable(clo.have) ? footMoves.filter(function (id) { return !footReachable(reachWithout(seed, id)); }) : [];
+    var flag = footMoves.length <= 1 || choke.length;
+    if (flag) thin.push({ port: e.port, label: e.label, n: footMoves.length, moves: footMoves, choke: choke });
+  });
+  if (!thin.length) console.log('  every entry has at least two independent ways to a foothold, no chokepoints.');
+  thin.forEach(function (t) {
+    console.log('  ' + String(t.port).padEnd(14) + ' ' + t.n + ' foothold option(s): ' + (t.moves.join(', ') || '(none direct)') + (t.choke.length ? '   CHOKEPOINT: ' + t.choke.join(', ') : ''));
+  });
+}
+
 // --emit: write the shared map (docs/FLAG-PATHS.md) and the app badge data (data/flag-reach.js), both
 // generated from the live graph so they never drift from the moves.
 if (argv.indexOf('--emit') >= 0) {
