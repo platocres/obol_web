@@ -75,6 +75,53 @@
     return 'R'; // default: the remote-first assumption
   }
 
+  // ---- per-COMMAND locus, for the Next Steps Remote/On-Host toggle ---------------------------------
+  // This is a DIFFERENT axis from the move-level ranking locus above. The ranking locus asks "where is it
+  // launched from" (prefer off-host). This asks the question a learner actually cares about: "does this
+  // command put me ON the host?" — because OSCP only counts a flag read from a session on the target. By
+  // this axis a tool that hands you a shell (ssh, evil-winrm, rdp, psexec) is ON-HOST even though it is
+  // launched from Kali; a tool that only interrogates or acts on the host from Kali (nmap, nxc, hydra) is
+  // REMOTE. A command may pin its own locus with d.locus on the command object for the rare odd case.
+  var CMD_ONHOST_SESSION = { // hands you an interactive session ON the box
+    ssh: 1, sshpass: 1, 'evil-winrm': 1, winrs: 1, telnet: 1, rlogin: 1, rsh: 1,
+    xfreerdp: 1, rdesktop: 1, 'xfreerdp3': 1, mstsc: 1,
+    psexec: 1, wmiexec: 1, smbexec: 1, atexec: 1, dcomexec: 1,
+    'impacket-psexec': 1, 'impacket-wmiexec': 1, 'impacket-smbexec': 1, 'impacket-atexec': 1, 'impacket-dcomexec': 1,
+    'psexec.py': 1, 'wmiexec.py': 1, 'smbexec.py': 1,
+  };
+  var CMD_ONHOST_RUN = { // a command you type once you already hold a session on the box
+    cmd: 1, sh: 1, bash: 1, zsh: 1, powershell: 1, pwsh: 1, 'cmd.exe': 1,
+    cat: 1, type: 1, find: 1, ls: 1, dir: 1, whoami: 1, id: 1, hostname: 1, ipconfig: 1, ifconfig: 1,
+    net: 1, 'net.exe': 1, nltest: 1, klist: 1, reg: 1, schtasks: 1, sc: 1, wmic: 1, dsquery: 1,
+    mimikatz: 1, rubeus: 1, 'rubeus.exe': 1, powerview: 1, sharphound: 1, 'sharphound.exe': 1,
+    winpeas: 1, 'winpeas.exe': 1, linpeas: 1, 'linpeas.sh': 1, privesccheck: 1, powerup: 1, seatbelt: 1, 'les.sh': 1,
+    pspy: 1, pspy64: 1, godpotato: 1, printspoofer: 1, juicypotato: 1, 'comsvcs.dll': 1, rundll32: 1,
+  };
+  // on-host if the command (or its tool) pins it, or its tool grants / runs within a session; else remote.
+  function commandLocus(cmd) {
+    if (!cmd) return 'remote';
+    if (cmd.locus === 'onhost' || cmd.locus === 'remote') return cmd.locus;
+    var t = String((cmd.tool || cmd.tools && cmd.tools[0] || '')).toLowerCase();
+    if (CMD_ONHOST_SESSION[t] || CMD_ONHOST_RUN[t]) return 'onhost';
+    return 'remote';
+  }
+  function commandIsOnHost(cmd) { return commandLocus(cmd) === 'onhost'; }
+  // A move's command loci at a glance: does it offer remote commands, on-host commands, or both? The
+  // Remote/On-Host toggle only appears when a move genuinely spans both.
+  function moveCommandLoci(move) {
+    var r = false, h = false, cs = (move && move.commands) || [];
+    for (var i = 0; i < cs.length; i++) { if (commandIsOnHost(cs[i])) h = true; else r = true; if (r && h) break; }
+    return { remote: r, onhost: h, both: r && h };
+  }
+  // The toggle's default side: Remote everywhere (off-host is faster and safer) EXCEPT a flag-capture move,
+  // which must default On-Host because a remote flag read scores zero on the exam.
+  var OBJECTIVE_FLAG_RE = /^objective\.(flag|local_flag|root_flag)$/;
+  function defaultCommandLocus(move) {
+    var prod = (move && move.produces) || [];
+    for (var i = 0; i < prod.length; i++) if (OBJECTIVE_FLAG_RE.test(prod[i])) return 'onhost';
+    return 'remote';
+  }
+
   // scope — where a technique sits in the OSCP syllabus, for a newcomer-safe lens:
   //   'oscp' core exam material · 'oscp+' modern AD past the core · 'beyond' exotic / legacy / edge CVEs.
   // Default is 'oscp'; a move escalates only when its id, tool, or an earned gate fact matches a curated
@@ -346,6 +393,36 @@
     'web.param_candidate': 'a discovered request parameter', 'web.params_discovered': 'parameter fuzzing completed for an endpoint',
     'web.param_probed': 'an injection probe tried against a parameter', 'web.injectable_param': 'a confirmed injectable parameter',
     'web.param_exploited': 'an injectable parameter handed off for exploitation',
+    // service reachability leads (consumed by the service-to-foothold conversions)
+    'nfs.reachable': 'a reachable NFS export', 'rsync.reachable': 'a reachable rsync module',
+    'telnet.reachable': 'a reachable Telnet login', 'rservices.reachable': 'reachable Berkeley r-services',
+    'tftp.reachable': 'a reachable TFTP service', 'x11.reachable': 'an open X11 display',
+    'cloud.credential': 'a cloud credential', 'privesc.cron': 'a writable or hijackable cron job',
+    'ssh.key_rejected': 'an SSH key the server refuses',
+    // operational blockers (diagnostic walls a pasted error reveals — each surfaces its fix doctor)
+    'blocker.host_down': 'a host-unreachable result from a ping-gated scan',
+    'blocker.name_resolution': 'a name-resolution failure', 'blocker.clock_skew': 'a Kerberos clock-skew error',
+    'blocker.crlf': 'a CRLF / bad-interpreter error', 'blocker.no_tty': 'a no-TTY / no-terminal error',
+    'blocker.amsi': 'an AMSI block', 'blocker.potato': 'a potato / SeImpersonate failure',
+    'blocker.rate_limited': 'a rate-limit / WAF throttle', 'blocker.tls_scheme': 'a TLS / scheme mismatch',
+    'blocker.hash_format': 'a hash-format / cracking-mode error', 'blocker.hashcat_env': 'a hashcat environment error',
+    'blocker.egress_blocked': 'an egress-blocked callback', 'blocker.smb_signing': 'an SMB-signing-required relay target',
+    'blocker.kerberos_spn': 'a Kerberos SPN error', 'blocker.responder_quiet': 'a quiet Responder (no hashes captured)',
+    'blocker.web_wildcard': 'a wildcard / catch-all web response', 'blocker.ntlm_disabled': 'an NTLM-disabled login',
+    'blocker.password_change': 'a password-change-required login', 'blocker.lockout': 'an account lockout',
+    'blocker.account_restricted': 'a restricted account',
+    // known-exploit fingerprints (each gates its matching exploit module)
+    'vuln.vsftpd_234': 'the vsftpd 2.3.4 backdoor fingerprint', 'vuln.proftpd_modcopy': 'the ProFTPD mod_copy fingerprint',
+    'vuln.samba_usermap': 'the Samba usermap_script fingerprint', 'vuln.smbghost': 'the SMBGhost fingerprint',
+    'vuln.bluekeep': 'the BlueKeep fingerprint', 'vuln.shellshock': 'the Shellshock fingerprint',
+    'vuln.heartbleed': 'the Heartbleed fingerprint', 'vuln.drupalgeddon2': 'the Drupalgeddon2 fingerprint',
+    'vuln.phpmyadmin_lfi': 'the phpMyAdmin LFI fingerprint', 'vuln.webmin': 'the Webmin RCE fingerprint',
+    'vuln.usermin': 'the Usermin RCE fingerprint', 'vuln.ofbiz': 'the Apache OFBiz fingerprint',
+    'vuln.cacti': 'the Cacti fingerprint', 'vuln.zabbix': 'the Zabbix fingerprint',
+    'vuln.splunk': 'the Splunk RCE fingerprint', 'vuln.text4shell': 'the Text4Shell fingerprint',
+    'vuln.freeswitch': 'the FreeSWITCH fingerprint', 'vuln.jdwp': 'an open JDWP debug port',
+    'vuln.aerospike': 'the Aerospike UDF fingerprint', 'vuln.wifi_mouse': 'the WiFi Mouse Server fingerprint',
+    'vuln.jenkins': 'the Jenkins RCE fingerprint', 'vuln.nosqli': 'a NoSQL-injection fingerprint',
   };
 
   function friendly(kind) {
@@ -353,6 +430,60 @@
     if (kind.indexOf('port:') === 0) return 'port ' + kind.split(':')[1] + ' open';
     if (kind.indexOf('service.') === 0) return kind.split('.')[1] + ' service evidence';
     return kind;
+  }
+  // A SHORT Title-Case label for a fact chip ("Needs: Usable Credential"): the friendly phrase with a
+  // leading article dropped and each significant word capitalised. Short connectors stay lowercase.
+  var CHIP_SMALL = { a: 1, an: 1, the: 1, of: 1, or: 1, to: 1, 'in': 1, on: 1, and: 1, 'for': 1 };
+  function chipLabel(kind) {
+    var s = friendly(kind).replace(/^(a|an|the)\s+/i, '');
+    return s.split(/\s+/).map(function (w, i) {
+      if (i > 0 && CHIP_SMALL[w.toLowerCase()]) return w.toLowerCase();
+      // keep already-capitalised / acronym tokens (SMB, ADCS, NTDS, SYSTEM) as-is
+      if (/[A-Z]/.test(w.slice(1)) || w === w.toUpperCase()) return w;
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    }).join(' ');
+  }
+
+  // ---- "Opens Up Next": the aspirational roadmap of locked moves ----------------------------------
+  // Only CAPABILITY-unlocks belong here — moves you work TOWARD (a credential, a shell, admin, a user
+  // list, a reachable service). Contingency moves (the blocker.* trap doctors, the vuln.* fingerprint
+  // exploits) are not a roadmap — you don't pursue "my clock is skewed" — so they are excluded; they
+  // surface reactively elsewhere. Report-only writeup checks are excluded too. The rest sort by how CLOSE
+  // they are to unlocking (fewest unmet prerequisites first), each carrying the fact-chips it still needs.
+  function isContingencyMove(a) {
+    var prod = a.produces || [];
+    if (prod.length && prod.every(function (k) { return /^advice\./.test(k); })) return true; // a guidance doctor
+    var gates = (a.requires_all || []).concat(a.requires_any || []);
+    if (gates.length && gates.every(function (k) { return /^(blocker|vuln)\./.test(k); })) return true;
+    return false;
+  }
+  function opensUpNext(facts, pack, opts) {
+    opts = opts || {};
+    var locked = lockedActions(facts, pack); // already OS-compatible
+    var out = [];
+    locked.forEach(function (p) {
+      var a = p.action;
+      if (isContingencyMove(a)) return;
+      if (isReportOnly(a, pack)) return;
+      // the unmet prerequisites, as fact kinds: every missing requires_all, plus the requires_any group
+      // (shown as one "any of" need) when none of its alternatives is held.
+      var needs = [], steps = 0;
+      (a.requires_all || []).forEach(function (k) { if (!facts.has(k)) { needs.push(k); steps++; } });
+      var anyGroup = (a.requires_any || []);
+      if (anyGroup.length) {
+        var met = false; for (var i = 0; i < anyGroup.length; i++) if (facts.has(anyGroup[i])) { met = true; break; }
+        if (!met) { anyGroup.forEach(function (k) { if (needs.indexOf(k) < 0) needs.push(k); }); steps++; }
+      }
+      // skip a move that needs a contingency fact to unlock (it isn't something you aspire toward)
+      if (needs.some(function (k) { return /^(blocker|vuln)\./.test(k); })) return;
+      out.push({ action: a, needs: needs, steps: Math.max(1, steps) });
+    });
+    out.sort(function (x, y) {
+      if (x.steps !== y.steps) return x.steps - y.steps;          // closest to unlocking first
+      if (y.action.priority !== x.action.priority) return y.action.priority - x.action.priority;
+      return x.action.id < y.action.id ? -1 : 1;
+    });
+    return out;
   }
 
   // -------------------------------------------------------------- OS helpers --
@@ -821,8 +952,14 @@
     deriveLocus: deriveLocus,
     deriveScope: deriveScope,
     locusRank: locusRank,
+    commandLocus: commandLocus,
+    commandIsOnHost: commandIsOnHost,
+    moveCommandLoci: moveCommandLoci,
+    defaultCommandLocus: defaultCommandLocus,
     friendly: friendly,
+    chipLabel: chipLabel,
     FRIENDLY: FRIENDLY,
+    opensUpNext: opensUpNext,
     hostOsFamily: hostOsFamily,
     osCompatible: osCompatible,
     normalizeOsName: normalizeOsName,
