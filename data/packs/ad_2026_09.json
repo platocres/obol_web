@@ -686,7 +686,8 @@
         "credential.available",
         "smb.null_session",
         "smb.guest_session",
-        "smb.authenticated"
+        "smb.authenticated",
+        "smb.shares"
       ],
       "produces": [
         "loot.files"

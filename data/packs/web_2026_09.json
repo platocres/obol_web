@@ -247,7 +247,8 @@
       "requires_all": [],
       "requires_any": [
         "web.parameterized",
-        "web.content_map"
+        "web.content_map",
+        "web.param_candidate"
       ],
       "produces": [
         "web.sqli_confirmed"
@@ -497,7 +498,8 @@
       "os": [],
       "requires_all": [],
       "requires_any": [
-        "http.reachable"
+        "http.reachable",
+        "web.param_candidate"
       ],
       "produces": [
         "web.ssrf_confirmed",
@@ -543,7 +545,8 @@
       "os": [],
       "requires_all": [],
       "requires_any": [
-        "http.reachable"
+        "http.reachable",
+        "web.param_candidate"
       ],
       "produces": [
         "web.ssti_confirmed",
@@ -589,7 +592,8 @@
       "os": [],
       "requires_all": [],
       "requires_any": [
-        "http.reachable"
+        "http.reachable",
+        "web.param_candidate"
       ],
       "produces": [
         "loot.files",
@@ -736,7 +740,8 @@
       "requires_all": [],
       "requires_any": [
         "http.reachable",
-        "vuln.nosqli"
+        "vuln.nosqli",
+        "web.param_candidate"
       ],
       "produces": [
         "web.authz_bypass",
@@ -969,7 +974,8 @@
       "requires_all": [],
       "requires_any": [
         "web.parameterized",
-        "http.reachable"
+        "http.reachable",
+        "web.param_candidate"
       ],
       "produces": [
         "web.cmdi_confirmed",
@@ -1022,7 +1028,8 @@
       "requires_all": [],
       "requires_any": [
         "web.parameterized",
-        "web.content_map"
+        "web.content_map",
+        "web.param_candidate"
       ],
       "produces": [
         "web.idor_candidate"
