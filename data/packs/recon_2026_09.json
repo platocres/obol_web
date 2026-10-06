@@ -280,8 +280,9 @@
       "id": "recon-vnc",
       "title": "VNC Enumeration",
       "hypothesis": "An exposed VNC service (5900/5901) is worth checking for no-auth access or a known auth bypass. Read the authentication mode first, a passwordless VNC is a straight desktop, but you confirm that by connecting, not by assuming.",
-      "tool": "nmap",
+      "tool": "nxc",
       "tools": [
+        "nxc",
         "nmap",
         "vncviewer"
       ],
@@ -304,6 +305,11 @@
         "https://book.hacktricks.xyz/network-services-pentesting/pentesting-vnc"
       ],
       "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc vnc {{target}} -p '{{password}}'",
+          "note": "PREFERRED, from Kali: nxc checks VNC auth and connects; a [+]/(Pwn3d!) or 'No password required' means a usable desktop (obol records access.desktop). Drop -p for the no-auth check. Point {{target}} at a subnet to find every open VNC at once."
+        },
         {
           "tool": "nmap",
           "run": "nmap -p 5900,5901 --script vnc-info,realvnc-auth-bypass {{target}}",
@@ -519,7 +525,9 @@
       "requires_any": [
         "port:2049"
       ],
-      "produces": [],
+      "produces": [
+        "loot.files"
+      ],
       "priority": 52,
       "phase": "enum",
       "proves": "the exported NFS shares and their access options (e.g. no_root_squash)",

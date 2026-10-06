@@ -170,8 +170,9 @@
       "id": "linux-remote-exec",
       "title": "Authenticated Remote Command (SSH)",
       "hypothesis": "With a Linux credential (a password or a private key) and SSH reachable, you can run any command on the box without holding an interactive session, enumerate, hunt privesc, grab flags. The web crafter's Linux 'run on host' menu fills {{command}} (id, sudo -l, SUID find…) and you edit it freely.",
-      "tool": "sshpass",
+      "tool": "nxc",
       "tools": [
+        "nxc",
         "sshpass",
         "ssh"
       ],
@@ -203,6 +204,11 @@
         "https://man.openbsd.org/ssh"
       ],
       "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc ssh {{target}} -u {{user}} -p '{{password}}' -x '{{command}}'",
+          "note": "PREFERRED, from Kali: validate the credential over SSH and run {{command}} in one shot, and point {{target}} at a subnet/targets file to spray-and-exec the same cred across every Linux host at once. Swap -p for --key-file id_rsa to use a recovered private key. For a full interactive shell, use the raw ssh below."
+        },
         {
           "tool": "sshpass",
           "run": "sshpass -p '{{password}}' ssh -o StrictHostKeyChecking=no {{user}}@{{target}} '{{command}}'",
