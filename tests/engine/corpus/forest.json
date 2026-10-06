@@ -18,9 +18,10 @@
     {
       "after": "anonymous LDAP enumerates 31 users (incl. svc-alfresco)",
       "add": ["ad.anonymous_bind", "ad.base_dn", { "kind": "ad.user_list", "value": { "users": ["Administrator", "Guest", "krbtgt", "svc-alfresco", "sebastien", "lucinda", "andy", "mark", "santi", "SM_2c8eef0a09b545acb", "HealthMailboxc3d7722", "FOREST$"], "count": 31 } }],
+      "top": "asrep-roast",
       "present": ["asrep-roast"],
       "prep": ["asrep-roast"],
-      "absentTop": ["check-dns-email"]
+      "absentTop": ["check-dns-email", "password-spray"]
     },
     {
       "after": "AS-REP roast svc-alfresco → $krb5asrep hash",
@@ -33,9 +34,9 @@
       "present": ["lateral-exec"]
     },
     {
-      "after": "evil-winrm foothold as svc-alfresco",
+      "after": "evil-winrm foothold as svc-alfresco (no ACL lead yet → enumerate first)",
       "add": ["foothold.windows", "winrm.authenticated"],
-      "present": ["bloodyad-acl", "ad-path-manual"]
+      "present": ["ad-path-manual"]
     },
     {
       "after": "BloodHound: Account Operators → Exchange Windows Permissions (WriteDacl)",

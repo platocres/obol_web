@@ -48,10 +48,10 @@ function top(stepIdx) { return PK.nextActionsV2(factSetAt(stepIdx), PACK, {}).ma
 const SPECULATIVE = ['coerce-auth', 'zerologon-check', 'zerologon-exploit', 'lateral-exec', 'responder-poison', 'ntlm-relay-attack'];
 const expect = [
   { any: ['ad-anon-ldap-enum', 'ad-user-enum'] },
-  { any: ['password-spray', 'asrep-roast'] },
+  { is: 'asrep-roast' },   // deterministic no-cred path leads; blind password-spray is capped (speculative)
   { is: 'crack-asrep' },
   { any: ['ad-path-manual', 'bloodhound-collect', 'bloodyad-acl', 'kerberos-tickets'] }, // "work your new creds / analyze paths"
-  { is: 'ad-acl-abuse' },
+  { is: 'bloodyad-acl' },  // ACL abuse unlocks on the lead; the REMOTE twin wins over on-host ad-acl-abuse
   { is: 'dcsync' },
   { is: 'own-domain-pth' },
 ];

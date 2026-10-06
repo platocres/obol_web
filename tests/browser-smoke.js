@@ -273,8 +273,12 @@ function serve() {
   await page.waitForTimeout(120);
   ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) === 0, 'a produced fact-kind from an UNRELATED move does not un-retire (the sccm regression)');
   // New evidence: a run attributed to THIS move produces a fact → un-retire (the chain is recoverable).
+  // The get-writable run yields an ACL lead, so mint that fact too (ACL abuse is gated on a known abusable
+  // ACL — see docs/MOVE-ENGINE.md), which is also what makes the move eligible again.
   await page.evaluate(() => {
-    window.OBOL.store.update((e) => { e.activities = e.activities || []; e.activities.unshift({ at: Date.now(), action_id: 'bloodyad-acl', produced: ['ad.acl_lead'], command: "bloodyAD -d corp.local --host 10.10.10.9 -u alice -p x get writable" }); }, 'activity');
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([F.makeFact({ kind: 'ad.acl_lead', scope: 'domain:corp.local', value: { right: 'WriteDacl' }, state: F.ProofState.SUPPORTED, source: 'bloodyad-acl' })], 'test');
+    S.update((e) => { e.activities = e.activities || []; e.activities.unshift({ at: Date.now(), action_id: 'bloodyad-acl', produced: ['ad.acl_lead'], command: "bloodyAD -d corp.local --host 10.10.10.9 -u alice -p x get writable" }); }, 'activity');
     window.OBOL.router.render();
   });
   await page.waitForTimeout(120);

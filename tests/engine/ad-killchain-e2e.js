@@ -61,7 +61,9 @@ ok(s.has('credential.available'), 'creds: the crack yields a usable credential')
 // 6. Validate the credential over SMB → authenticated foothold.
 s = step("nxc smb 10.0.0.5 -u svc-web -p 'Password1'", 'SMB 10.0.0.5 445 DC01 [+] corp.local\\svc-web:Password1');
 ok(s.has('smb.authenticated'), 'access: the credential validates over SMB');
-ok(s.ready['bloodyad-acl'], 'access → the ACL-abuse move is reachable with a credential');
+// Honest gating: ACL abuse needs a KNOWN abusable ACL (a lead), not just a credential — you enumerate the
+// writable ACLs first. It unlocks at step 7 once get-writable surfaces the lead, not here.
+ok(!s.ready['bloodyad-acl'], 'access → ACL abuse is NOT offered on a bare credential (no ACL lead yet — enumerate first)');
 
 // 7. bloodyAD get writable → an ACL lead.
 s = step("bloodyAD -d corp.local --host 10.0.0.5 -u svc-web -p 'Password1' get writable --detail",

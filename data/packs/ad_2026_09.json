@@ -746,6 +746,8 @@
         "ad.user_list"
       ],
       "requires_any": [
+        "credential.candidate",
+        "credential.available",
         "ad.domain_known",
         "ad.dc_candidate",
         "ldap.reachable",
@@ -1851,9 +1853,9 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "credential.available",
         "ad.attack_paths",
-        "ad.acl_lead"
+        "ad.acl_lead",
+        "ad.control_paths"
       ],
       "obsoleted_by": [
         "loot.ntds"
@@ -2341,9 +2343,9 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "foothold.windows",
         "ad.attack_paths",
-        "ad.acl_lead"
+        "ad.acl_lead",
+        "ad.control_paths"
       ],
       "obsoleted_by": [
         "loot.ntds"
@@ -2724,8 +2726,7 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "ad.control_paths",
-        "ad.attack_paths"
+        "ad.control_paths"
       ],
       "obsoleted_by": [
         "loot.ntds"

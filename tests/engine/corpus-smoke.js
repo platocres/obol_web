@@ -59,13 +59,17 @@ files.forEach(function (file) {
   console.log('\n# ' + (box.name || file));
   var focus = box.machine_type && OBOL.profile ? OBOL.profile.machineFocus(box.machine_type) : [];
   var target = box.target || '10.10.10.10';
-  var have = [], t = 1700000000000;
+  // Steps happen over time on a real box, so stamp each step's facts in its own batch an hour apart. This
+  // keeps the recency tier meaningful (a move that JUST unlocked at this step is surfaced, exactly as the
+  // live coach does) instead of collapsing every fact into one instant.
+  var have = [], BASE = 1700000000000, HOUR = 3600000;
   (box.steps || []).forEach(function (step, si) {
+    var t = BASE + (si + 1) * HOUR, n = 0;
     // An "add" entry is a fact kind (string) or { kind, value } when a checkpoint needs the payload
     // (e.g. ad.user_list with its users, so the AS-REP prep command has names to write).
     (step.add || []).forEach(function (k) {
-      if (typeof k === 'string') have.push({ kind: k, value: {}, t: ++t });
-      else have.push({ kind: k.kind, value: k.value || {}, t: ++t });
+      if (typeof k === 'string') have.push({ kind: k, value: {}, t: t + (++n) });
+      else have.push({ kind: k.kind, value: k.value || {}, t: t + (++n) });
     });
     var flist = have.map(function (p) { return F.makeFact({ kind: p.kind, scope: { target: target }, value: p.value, source: 'corpus', created_at: p.t }); });
     var fset = new F.FactSet(flist);

@@ -501,7 +501,11 @@
   // control/loot facts like ad.control_paths/ad.gpo_control are already in V2_SPECIFIC.)
   var V2_AD_LEAD = { 'ad.attack_paths': 1, 'ad.acl_lead': 1, 'ad.delegation': 1, 'ad.trusts': 1 };
   var V2_FOOTHOLD = { 'foothold.linux': 1, 'foothold.windows': 1, 'foothold.webshell': 1, 'access.shell': 1, 'access.admin': 1, 'access.system': 1, 'access.root': 1 };
-  function v2EvidenceFact(g) { return !!V2_SPECIFIC[g] || !!V2_AD_LEAD[g] || V2_EVIDENCE_RE.test(g); }
+  // Evidence = something you PROVED (a vuln verdict, a credential, a hash, a foothold, a control lead) —
+  // never a mere "service reachable" recon fact. kerberos.reachable matched /^kerberos\./ and so was wrongly
+  // treated as evidence, which let blind password-spray look "indicated" (reliable) and headline over the
+  // deterministic AS-REP roast. A reachable port proves nothing about a credential or a vuln.
+  function v2EvidenceFact(g) { if (/\.reachable$/.test(g)) return false; return !!V2_SPECIFIC[g] || !!V2_AD_LEAD[g] || V2_EVIDENCE_RE.test(g); }
   function v2ProducesFoothold(a) { for (var i = 0; i < a.produces.length; i++) { var k = a.produces[i]; if (V2_FOOTHOLD[k] || /_confirmed$/.test(k)) return true; } return false; }
   function v2Indicated(a, haveObj) { var g = a.requires_all.concat(a.requires_any), i; for (i = 0; i < g.length; i++) if (haveObj[g[i]] && v2EvidenceFact(g[i])) return true; return false; }
 
@@ -511,8 +515,15 @@
       var k = a.produces[i];
       if (k === 'exploit.candidate' || k === 'ad.coerced_auth' || k === 'credential.netntlm') return true;
     }
-    // an exploit/foothold move eligible without any proven indicator (fingerprint, cred, foothold) is a gamble
-    if (haveObj && v2ProducesFoothold(a) && !v2Indicated(a, haveObj)) return true;
+    // A move that claims a real PAYOFF — a foothold/privilege, or a VALIDATED credential — while eligible
+    // without any proven indicator (a fingerprint, a held credential/hash, a foothold) is a gamble: blind
+    // password spraying or default-cred guessing against a bare user list, or firing an exploit at an open
+    // port. Cap it below evidenced moves so the deterministic path (AS-REP roast, crack a captured hash)
+    // leads. Once you actually hold material to work with, the move is indicated and promotes normally.
+    if (haveObj && !v2Indicated(a, haveObj)) {
+      if (v2ProducesFoothold(a)) return true;
+      for (var j = 0; j < a.produces.length; j++) if (a.produces[j] === 'credential.available' || a.produces[j] === 'credential.plaintext') return true;
+    }
     return false;
   }
   // Minimal steps from a set of held fact-kinds to any goal, through the produce/require graph:

@@ -15,8 +15,11 @@
  *                coach files it under Report Checks) or give it a real, consumed effect.
  *
  * WARN (review, never blocks) — judgment calls worth a human glance:
- *   BARE-FOOTHOLD a move that produces a foothold/privilege fact without any evidence gate — it can only
- *                 ever fire speculatively (the ranker caps it); make sure that's intended.
+ *   UNINDICATED-PAYOFF a move that produces a real payoff (foothold/privilege, or a VALIDATED credential)
+ *                 without any evidence gate — it can only ever fire as a gamble (blind spray, exploit at a
+ *                 bare port). The ranker caps it; gate it on the fact that actually yields the payoff
+ *                 (a found credential.candidate to spray, a hash to crack) or confirm it's meant to be
+ *                 speculative.
  *   SHORTCUT      a move that produces a privilege fact (access.admin/system/root/loot.ntds) straight
  *                 from a soft AD lead (ad.attack_paths/acl_lead/control_paths/delegation) with no
  *                 credential/hash/ticket in hand — an over-claimed one-step jump to DA. Prefer modeling
@@ -93,10 +96,14 @@ A.forEach(function (a) {
     }
   }
 
-  // BARE-FOOTHOLD — produces a foothold/priv fact with no evidence gate (always speculative).
-  if (PK.producesFoothold(a)) {
+  // UNINDICATED-PAYOFF — produces a real payoff (a foothold/priv fact, or a VALIDATED credential) with no
+  // evidence gate, so it can only ever fire as a gamble (blind spray, default-cred guess, exploit at a bare
+  // port). The ranker caps it; the author should make sure that's intended, or gate it on the fact that
+  // actually produces the payoff (e.g. a found credential.candidate for spraying, a hash for cracking).
+  var producesValidatedCred = produces.some(function (k) { return k === 'credential.available' || k === 'credential.plaintext'; });
+  if (PK.producesFoothold(a) || producesValidatedCred) {
     var hasEvidenceGate = gates.some(function (g) { return PK.isEvidenceFact(g); });
-    if (!hasEvidenceGate) warn.bareFoothold.push(a.id + '  (produces ' + produces.filter(function (k) { return /^(foothold\.|access\.)/.test(k); }).join(', ') + '; gates: ' + (gates.join(', ') || 'none') + ')');
+    if (!hasEvidenceGate) warn.bareFoothold.push(a.id + '  (produces ' + produces.filter(function (k) { return /^(foothold\.|access\.)/.test(k) || k === 'credential.available' || k === 'credential.plaintext'; }).join(', ') + '; gates: ' + (gates.join(', ') || 'none') + ')');
   }
 
   // SHORTCUT — produces a privilege fact straight from a soft AD lead, no credential/hash/ticket held.
@@ -118,7 +125,7 @@ function section(title, arr) {
 console.log('OBOL move-contract lint — ' + A.length + ' moves');
 section('FAIL · FIELDS — missing/invalid locus or phase', fail.fields);
 section('FAIL · INFO-DEADEND — informational move not tagged report-only', fail.infoDead);
-section('WARN · BARE-FOOTHOLD — foothold/priv with no evidence gate (speculative-only)', warn.bareFoothold);
+section('WARN · UNINDICATED-PAYOFF — foothold/priv/validated-credential with no evidence gate (speculative-only)', warn.bareFoothold);
 section('WARN · SHORTCUT — privilege claimed straight from a soft AD lead', warn.shortcut);
 
 var failCount = fail.fields.length + fail.infoDead.length;

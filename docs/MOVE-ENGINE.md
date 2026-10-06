@@ -51,8 +51,11 @@ places sanely.
   move, not an evidence fact, not a **registered terminal**) yet isn't tagged `severity: info`. This is the
   class that let *Email DNS Review (SPF/DMARC)* headline a live box. The terminal-facts allow-list lives in
   the tool, explicit and documented — see "adding a fact" below.
-- **WARN · BARE-FOOTHOLD** — produces a foothold/priv fact with no evidence gate (speculative-only; the
-  ranker caps it — make sure that's intended).
+- **WARN · UNINDICATED-PAYOFF** — produces a real payoff (foothold/privilege, or a **validated
+  credential**) with no evidence gate, so it can only fire as a gamble (blind password spraying,
+  default-cred guessing, an exploit at a bare port). The ranker caps it — gate it on the fact that
+  actually yields the payoff (a found `credential.candidate` to spray, a `hash.*` to crack) or confirm it's
+  meant to be speculative.
 - **WARN · SHORTCUT** — produces a privilege fact straight from a soft AD lead with nothing in hand (an
   over-claimed one-step jump to DA; prefer modeling the honest intermediate).
 
@@ -87,8 +90,12 @@ standalone (exploit-gating). **Grow it: every box you walk, encode it.**
    `tools/move-lint.js`), or the move is tagged `severity: info`.
 2. If it's a remote twin of an existing on-host move (or vice-versa), give them **equal priority** and set
    `locus` correctly — do not out-prioritize the remote one.
-3. If it produces a foothold/privilege fact, gate it on an **evidence** fact (a proven fingerprint/verdict),
-   not a bare port — or accept it's speculative and will be capped.
+3. **Gate the payoff behind the fact that produces it.** If it produces a foothold/privilege fact *or a
+   validated credential*, gate it on an **evidence** fact (a proven fingerprint/verdict, a held
+   credential/hash) — not a bare port or a `*.reachable` recon fact — or accept it's speculative and will be
+   capped. (Reachability is recon, never evidence: a reachable port proves nothing about a cred or a vuln.
+   Blind `password-spray` is gated on `credential.candidate` so it's reliable only once you actually hold a
+   password to spray; with nothing in hand it's a capped gamble, below the deterministic AS-REP roast.)
 4. Run `node tools/build-packs.js && node tools/move-lint.js --check && node tools/gap-report.js --check`.
 5. If you walked a box to design it, **add it to the corpus** (`tests/engine/corpus/<box>.json`).
 6. Run the engine suite + browser smoke (see AGENTS.md).
