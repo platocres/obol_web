@@ -122,6 +122,26 @@
   }
   C._parse_cracked_credentials = _parse_cracked_credentials;
 
+  // hydra (and medusa/ncrack, same shape) success lines:
+  //   [22][ssh] host: 10.10.10.10   login: bob   password: Summer2024
+  //   [80][http-post-form] host: 10.10.10.10   login: admin   password: Summer2024!
+  // A hit is a VALIDATED online credential, so mint credential.available (+ plaintext) per login.
+  // Conservative: only the bracketed-service success shape counts; a status/attempt line mints nothing.
+  var _HYDRA_RE = /\[(?<port>\d{1,5})\]\[(?<svc>[A-Za-z][\w-]*)\][^\n]*?\blogin:\s*(?<user>\S+)\s+password:\s*(?<pw>\S.*?)\s*$/gim;
+  function _parse_hydra(text, ws, command, source, facts) {
+    var h = 'host:' + ws.target, m, seen = {}, n = 0;
+    _HYDRA_RE.lastIndex = 0;
+    while ((m = _HYDRA_RE.exec(text))) {
+      var g = m.groups, key = g.svc + '|' + g.user + '|' + g.pw;
+      if (seen[key]) continue; seen[key] = 1; n++;
+      var cred = { user: g.user, password: g.pw, service: g.svc, port: +g.port, via: 'online-brute' };
+      _add(facts, mkFact('credential.available', h, cred, S, source));
+      _add(facts, mkFact('credential.plaintext', h, cred, S, source));
+    }
+    return n;
+  }
+  C._parse_hydra = _parse_hydra;
+
   function _parse_ntlm_dump(text, ws, command, source, facts) {
     var entries = [], seen = {}, krbtgtNt = '', domCounts = {};
     reAll(C._NTDS_HASH_RE, text).forEach(function (m) {

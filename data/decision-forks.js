@@ -58,6 +58,8 @@
     'ssti-to-rce': { cond: 'Does the engine-specific gadget return command output (uid=/whoami)?', onFail: 'No output → wrong engine gadget or a sandbox; re-fingerprint and try the matching payload.' },
     'http-put-webshell': { cond: 'Does the PUT write a file you can then request and execute?', onFail: 'Write rejected or not under the web root → PUT is not usable here; try WebDAV verbs or another upload.' },
     'authz-abuse': { cond: 'Does the privileged surface expose a dump or an upload/config feature you can turn into creds or a shell?', onFail: 'Read-only admin → harvest what data you can and note it; no code-exec path here.' },
+    'web-login-brute': { cond: 'Does a password from the list validate for one of the enumerated users?', onFail: 'No hit → widen the wordlist, or the lockout policy is biting; spray slower against more users.' },
+    'idor-harvest': { cond: 'Does walking the object range return other users’ records (names, tokens, secrets)?', onFail: 'Only your own object comes back → the reference is access-checked after all; look for a different parameter.' },
     'web-shells': { cond: 'Does the planted shell return command output?', onFail: 'No execution → the drop point is not served as code.' },
     'tomcat-deploy': { cond: 'Do the manager credentials deploy a WAR?', onFail: 'No manager access → try Ghostcat on 8009, or default creds.' },
     'jenkins-access': { cond: 'Can you reach the script console or a build step?', onFail: 'Locked down → check for the unauth CLI file-read.' },
