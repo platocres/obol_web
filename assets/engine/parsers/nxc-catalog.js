@@ -256,6 +256,20 @@
       gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'rdcman'); } },
     { id: 'smb-iis', proto: 'smb', module: 'iis', produces: ['credential.candidate'],
       gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'iis_apppool'); } },
+    { id: 'smb-firefox', proto: 'smb', module: 'firefox', produces: ['credential.candidate'],
+      gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'firefox'); } },
+    { id: 'smb-powershell-history', proto: 'smb', module: 'powershell_history', produces: ['credential.candidate'],
+      gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'ps_history'); } },
+    { id: 'smb-met-inject', proto: 'smb', module: 'met_inject', produces: ['foothold.windows'],
+      gate: ['access.admin', 'access.system'],
+      extract: function (text, ws) { return /\(Pwn3d!\)|injected|meterpreter|session opened/i.test(text) && !hasDenied(text) ? [{ kind: 'foothold.windows', scope: host(ws), value: { method: 'met_inject', tool: 'nxc' } }] : []; } },
+    // SCF/URL/LNK drop on a writable share → captures SMB auth from any user who browses it (pair with Responder).
+    { id: 'smb-slinky', proto: 'smb', module: 'slinky', produces: ['config.review'],
+      gate: ['smb.authenticated', 'credential.available'],
+      extract: function (text, ws) { return /added|\.url|\.lnk|dropped|\[\+\]/i.test(text) && !hasDenied(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'malicious_file_drop', detail: 'URL/LNK planted on a writable share — run Responder to capture browsing users’ NetNTLM', tool: 'nxc' } }] : []; } },
+    { id: 'smb-scuffy', proto: 'smb', module: 'scuffy', produces: ['config.review'],
+      gate: ['smb.authenticated', 'credential.available'],
+      extract: function (text, ws) { return CAT_BY_ID['smb-slinky'].extract(text, ws); } },
 
     // --- SMB informational enumeration (recognized, no graph-actionable fact) ---
     { id: 'smb-groups', proto: 'smb', flag: '--groups', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },

