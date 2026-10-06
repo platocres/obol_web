@@ -637,6 +637,15 @@
     'fix-name-resolution': { what: 'A tool failed because it was handed a name it could not look up. This teaches your machine that name so the step works, unblocking web apps and Windows or Kerberos logins.' },
   };
 
+  // "Once You Are In": the first-breath orientation commands a learner needs the moment a shell lands and
+  // often forgets. Surfaced automatically by the canvas for any move that produces a shell / foothold (see
+  // path.js), so it generalizes to every lane with no per-move authoring. Standard, benign situational
+  // awareness only; the PTY fix itself is reused from the Shells lane's shell-pty-upgrade move.
+  OBOL.ORIENT = {
+    linux: { label: 'Confirm who and where you are, and whether sudo is an easy win', cmd: 'id; whoami; hostname; ip -4 a; sudo -l' },
+    windows: { label: 'Confirm who you are, your privileges, the host, and the network', cmd: 'whoami /all & hostname & ipconfig /all' },
+  };
+
   // Reactive doctors — surfaced in the canvas when a pasted error has minted the matching blocker.* fact,
   // regardless of which command is selected. Concise fixes; the full fix move still exists in the engine.
   OBOL.FIELD_DOCTORS = {

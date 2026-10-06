@@ -321,6 +321,28 @@
     var cmd = (filled[0] && filled[0].filled) || ((m.commands || [])[0] || {}).run || '';
     return cmd ? nsSetupStep(m.title, cmd, 'reused') : '';
   }
+  // Does this move land a shell / foothold? Drives the automatic "Once You Are In" block, so every
+  // shell-landing move across every lane gets the first-breath orientation with no per-move authoring.
+  function moveLandsShell(move) {
+    return (move.produces || []).some(function (k) { return /^foothold\.|^access\.(shell|admin|system|root)/.test(k); });
+  }
+  // The first-breath block the moment a shell lands: confirm who/where you are, fix a broken shell (the PTY
+  // upgrade is reused from the Shells lane, not restated here), and check sudo. Reactive PTY/auth walls are
+  // still handled by the blocker.* doctors when an error is pasted; this is the proactive counterpart.
+  function nsOnceYouAreIn(move, facts, params) {
+    if (!move || !moveLandsShell(move)) return '';
+    var O = OBOL.ORIENT || {}, p = move.produces || [];
+    var isWin = p.indexOf('foothold.windows') >= 0, isLin = p.indexOf('foothold.linux') >= 0;
+    if (!isWin && !isLin) { if (p.indexOf('access.system') >= 0) isWin = true; else isLin = true; }
+    var steps = '';
+    if (isLin && O.linux) steps += nsSetupStep(O.linux.label, O.linux.cmd);
+    if (isLin) steps += nsReuseSteps('shell-pty-upgrade', facts, params);
+    if (isWin && O.windows) steps += nsSetupStep(O.windows.label, O.windows.cmd);
+    if (!steps) return '';
+    return '<p class="ns-cn-h">Once You Are In</p>'
+      + '<p class="ns-oyi-lead">You have a shell. Get your bearings first, then the coach ranks your next moves. Do not forget to grab the flag.</p>'
+      + '<div class="ns-setup">' + steps + '</div>';
+  }
   function nsDoctorBlock(d) {
     return '<div class="ns-doctor"><div class="ns-doctor-h">' + OBOL.ic('shield') + ' ' + esc(d.title) + '</div>'
       + '<p>' + esc(d.body) + '</p>' + (d.code ? '<pre class="ns-doctor-code"><code>' + esc(d.code) + '</code></pre>'
@@ -377,6 +399,9 @@
         + note.mistakes.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
       if (note.doctor) html += nsDoctorBlock(note.doctor);
     }
+    // Automatic (derived from the move's produces, not authored per move): the first-breath orientation
+    // once a shell lands, reusing the Shells lane's PTY upgrade.
+    html += nsOnceYouAreIn(move, facts, params);
     html += stagingGuide(move, params);
     html += '</div>';
     return html;
