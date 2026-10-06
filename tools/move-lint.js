@@ -47,7 +47,9 @@ function req(p) { return require(path.join(ROOT, p)); }
 req('assets/engine/facts.js'); req('assets/engine/phases.js'); req('assets/engine/pack.js');
 req('assets/engine/profile.js'); req('assets/engine/command.js'); req('assets/engine/workspace.js');
 req('data/toolset.js');
+req('assets/engine/parsers/common.js'); req('assets/engine/parsers/nxc-catalog.js');
 var OBOL = globalThis.OBOL, PK = OBOL.pack, PH = OBOL.phases;
+var NXC_CAT = OBOL._nxcCatalog || [];
 var pdir = path.join(ROOT, 'data/packs');
 var A = PK.loadPacks(fs.readdirSync(pdir).filter(function (f) { return f.endsWith('.json'); })
   .map(function (f) { try { return JSON.parse(fs.readFileSync(path.join(pdir, f), 'utf8')); } catch (e) { return {}; } }));
@@ -84,10 +86,32 @@ var VALID_LOCUS = { R: 1, F: 1, I: 1 };
 var PHASES = {}; (PH.PHASES || []).forEach(function (p) { PHASES[p] = 1; });
 var AD_LEAD = { 'ad.attack_paths': 1, 'ad.acl_lead': 1, 'ad.control_paths': 1, 'ad.delegation': 1, 'ad.trusts': 1, 'foothold.windows': 1, 'foothold.linux': 1 };
 
-var fail = { fields: [], infoDead: [], nxcFirst: [], nxcCoverage: [] };
+var fail = { fields: [], infoDead: [], nxcFirst: [], nxcCoverage: [], nxcUncat: [] };
 var warn = { bareFoothold: [], shortcut: [], selfSat: [] };
 function cmdTool(c) { return String((c && c.tool) || '').toLowerCase(); }
 function isNxcTool(t) { return t === 'nxc' || t === 'netexec'; }
+// Option/connection flags that configure a run but are NOT capabilities (don't change what's produced), so
+// they need no catalog entry. Everything else (a -M module, or a capability --flag) must be catalogued.
+var NXC_OPTION_FLAGS = { '--local-auth': 1, '--continue-on-success': 1, '--dns-server': 1, '--kdcHost': 1,
+  '--kdchost': 1, '--use-kcache': 1, '--port': 1, '--threads': 1, '--timeout': 1, '--jitter': 1, '--verbose': 1,
+  '--debug': 1, '--log': 1, '--no-bruteforce': 1, '--key-file': 1, '--kerberos': 1, '--aesKey': 1,
+  '--regex': 1, '--content': 1, '--pattern': 1, '--exclude-dirs': 1, '--depth': 1 };
+function nxcCatHas(proto, token) {
+  return NXC_CAT.some(function (e) { return e.proto === proto && (('-M ' + e.module) === token || e.flag === token || (e.validate && token === '@validate')); });
+}
+// Extract (proto, capability-tokens) a single nxc command invokes.
+function nxcTokens(run) {
+  var m = String(run).match(/\bn(?:xc|etexec)\s+(smb|ldap|winrm|mssql|rdp|ftp|ssh|wmi|vnc|nfs)\b/i);
+  if (!m) return null;
+  var proto = m[1].toLowerCase(), toks = [];
+  (run.match(/-M\s+([a-z0-9_]+)/gi) || []).forEach(function (x) { toks.push('-M ' + x.replace(/-M\s+/i, '')); });
+  (run.match(/(^|\s)(--[a-z][a-z0-9-]+)/gi) || []).forEach(function (x) { var f = x.trim(); if (!NXC_OPTION_FLAGS[f]) toks.push(f); });
+  if (/(^|\s)-x(\s|$)/.test(run)) toks.push('-x');
+  if (/(^|\s)-X(\s|$)/.test(run)) toks.push('-X');
+  if (/(^|\s)-q(\s|$)/.test(run)) toks.push('-q');
+  if (!toks.length) toks.push('@validate'); // bare auth
+  return { proto: proto, toks: toks };
+}
 
 A.forEach(function (a) {
   var gates = (a.requires_all || []).concat(a.requires_any || []);
@@ -131,6 +155,18 @@ A.forEach(function (a) {
       fail.nxcFirst.push(a.id + '  nxc command at index ' + nxcIdx + ' of ' + cmds.length + ' (pos0=' + (cmdTool(cmds[0]) || '?') + ') — lead with the nxc variant, or tag sequence:true if these are ordered steps');
     }
   }
+
+  // NXC-UNCATALOGUED — an nxc command a move OFFERS whose protocol+capability has no catalog entry (hence
+  // no parser): pasting its output would mint nothing. Every offered nxc switch/module must be in
+  // nxc-catalog.js so the switch→parser test covers it. Keeps "exhaustive + parsed" from silently drifting.
+  (a.commands || []).forEach(function (c) {
+    if (!isNxcTool(cmdTool(c))) return;
+    var t = nxcTokens(c.run || ''); if (!t) return;
+    t.toks.forEach(function (tok) {
+      if (tok === '@validate') return; // bare auth handled by _parse_nxc_common for every protocol
+      if (!nxcCatHas(t.proto, tok)) fail.nxcUncat.push(a.id + '  offers `nxc ' + t.proto + ' … ' + tok + '` with no catalog entry (add it to nxc-catalog.js + a switch→parser sample)');
+    });
+  });
 
   // SELF-SATISFIED — a (non-report) move whose produced facts are ALL already in its own gates. Once that
   // gate fact exists the move is `settled()` and vanishes, so it can only ever run in the narrow window
@@ -202,11 +238,12 @@ section('FAIL · FIELDS — missing/invalid locus or phase', fail.fields);
 section('FAIL · INFO-DEADEND — informational move not tagged report-only', fail.infoDead);
 section('FAIL · NXC-FIRST — nxc command variant present but not leading (not at index 0)', fail.nxcFirst);
 section('FAIL · NXC-COVERAGE — a NetExec capability/protocol taught by tb-nxc with no backing move', fail.nxcCoverage);
+section('FAIL · NXC-UNCATALOGUED — a move offers an nxc switch/module with no catalog entry (no parser)', fail.nxcUncat);
 section('WARN · UNINDICATED-PAYOFF — foothold/priv/validated-credential with no evidence gate (speculative-only)', warn.bareFoothold);
 section('WARN · SHORTCUT — privilege claimed straight from a soft AD lead', warn.shortcut);
 section('WARN · SELF-SATISFIED — move produces only facts it already requires (settles immediately)', warn.selfSat);
 
-var failCount = fail.fields.length + fail.infoDead.length + fail.nxcFirst.length + fail.nxcCoverage.length;
+var failCount = fail.fields.length + fail.infoDead.length + fail.nxcFirst.length + fail.nxcCoverage.length + fail.nxcUncat.length;
 var warnCount = warn.bareFoothold.length + warn.shortcut.length + warn.selfSat.length;
 console.log('\n' + A.length + ' moves · ' + failCount + ' FAIL · ' + warnCount + ' WARN');
 if (CHECK && failCount) { console.error('MOVE LINT FAIL: ' + failCount + ' contract breach(es).'); process.exit(1); }

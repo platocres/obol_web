@@ -147,6 +147,17 @@
         return /enable|success|\[\+\]/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'wdigest_uselogoncredential', detail: 'WDigest cleartext-credential caching toggled (re-dump LSASS after a logon)', tool: 'nxc' } }] : [];
       } },
 
+    { id: 'smb-spider', proto: 'smb', flag: '--spider', produces: ['loot.files', 'credential.candidate'],
+      gate: ['smb.reachable', 'credential.available'],
+      extract: function (text, ws) { return CAT_BY_ID['smb-spider-plus'].extract(text, ws); } },
+    { id: 'smb-coerce-plus', proto: 'smb', module: 'coerce_plus', produces: ['ad.coerced_auth'],
+      gate: ['ad.dc_candidate', 'credential.available'],
+      extract: function (text, ws) {
+        return /vulnerable|attack success|received connection|coerc|petitpotam|printerbug|dfscoerce|efsr|\[\+\]/i.test(text)
+          ? [{ kind: 'ad.coerced_auth', scope: dom(ws), value: { detail: 'authentication coerced via nxc coerce_plus', tool: 'nxc' } }] : [];
+      } },
+    { id: 'smb-gen-relay-list', proto: 'smb', flag: '--gen-relay-list', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
+
     // --- SMB informational enumeration (recognized, no graph-actionable fact) ---
     { id: 'smb-groups', proto: 'smb', flag: '--groups', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
     { id: 'smb-local-groups', proto: 'smb', flag: '--local-groups', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
@@ -223,6 +234,7 @@
 
     // --- LDAP informational ---
     { id: 'ldap-maq', proto: 'ldap', module: 'maq', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
+    { id: 'ldap-query', proto: 'ldap', flag: '--query', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
 
     // ========================= WINRM =========================
     { id: 'winrm-auth', proto: 'winrm', validate: true, produces: ['credential.available', 'foothold.windows'], existing: true,
