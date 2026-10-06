@@ -24,6 +24,10 @@ function facts(cmd, out) {
 var PAYOFF = /^(foothold\.|access\.|loot\.|credential\.(available|plaintext|candidate)|hash\.)/;
 var D = 'SMB 10.10.10.10 445 DC '; // nxc banner prefix (no [+] auth line, so informational output mints no payoff)
 var L = 'LDAP 10.10.10.10 389 DC ';
+var W = 'WINRM 10.10.10.10 5985 DC ';
+var M = 'MSSQL 10.10.10.10 1433 DC ';
+var R = 'RDP 10.10.10.10 3389 DC ';
+var F = 'FTP 10.10.10.10 21 HOST ';
 
 // sample[id] = { cmd, ok: <success output>, neg: <denied output> }
 var sample = {
@@ -63,7 +67,20 @@ var sample = {
   'ldap-daclread':     { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 -M daclread -o TARGET=Domain\\ Admins ACTION=read", ok: L + 'Trustee: CORP\\svc-web\n' + L + 'Access mask: WriteDacl', neg: L + '[-] access denied' },
   'ldap-group':        { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 -M group -o GROUP=Domain\\ Admins", ok: L + 'Members of Domain Admins:\n' + L + 'administrator\n' + L + 'svc-adm', neg: L + '[-] access denied' },
   'ldap-password-not-required': { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --password-not-required", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + 'guest\n' + L + 'kiosk', neg: L + '[-] access denied' },
-  'ldap-maq':          { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 -M maq", ok: L + '[*] MachineAccountQuota: 10', neg: L + '[-] access denied' }
+  'ldap-maq':          { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 -M maq", ok: L + '[*] MachineAccountQuota: 10', neg: L + '[-] access denied' },
+
+  'winrm-auth':        { cmd: "nxc winrm 10.10.10.10 -u jdoe -p Winter2021", ok: W + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)', neg: W + '[-] corp.local\\jdoe:Winter2021' },
+  'winrm-exec':        { cmd: "nxc winrm 10.10.10.10 -u jdoe -p Winter2021 -x whoami", ok: W + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)\n' + W + 'corp\\jdoe', neg: W + '[-] corp.local\\jdoe:Winter2021' },
+  'winrm-exec-ps':     { cmd: "nxc winrm 10.10.10.10 -u jdoe -p Winter2021 -X '$PSVersionTable'", ok: W + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)\n' + W + 'Major  Minor', neg: W + '[-] corp.local\\jdoe:Winter2021' },
+  'mssql-auth':        { cmd: "nxc mssql 10.10.10.10 -u sa -p P", ok: M + '[+] corp.local\\sa:P (Pwn3d!)', neg: M + '[-] corp.local\\sa:P Login failed' },
+  'mssql-exec':        { cmd: "nxc mssql 10.10.10.10 -u sa -p P -x whoami", ok: M + '[+] corp.local\\sa:P (Pwn3d!)\n' + M + 'nt service\\mssqlserver', neg: M + '[-] login failed' },
+  'mssql-exec-ps':     { cmd: "nxc mssql 10.10.10.10 -u sa -p P -X 'whoami'", ok: M + '[+] corp.local\\sa:P (Pwn3d!)\n' + M + 'nt service\\mssqlserver', neg: M + '[-] login failed' },
+  'mssql-query':       { cmd: "nxc mssql 10.10.10.10 -u sa -p P -q 'SELECT name FROM sys.databases'", ok: M + '[+] corp.local\\sa:P\n' + M + 'master\n' + M + 'appdb', neg: M + '[-] login failed' },
+  'rdp-auth':          { cmd: "nxc rdp 10.10.10.10 -u jdoe -p Winter2021", ok: R + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)', neg: R + '[-] corp.local\\jdoe:Winter2021' },
+  'rdp-screenshot':    { cmd: "nxc rdp 10.10.10.10 --screenshot", ok: R + 'Screenshot saved /tmp/10.10.10.10.png', neg: R + '[-] connection failed' },
+  'rdp-nla-screenshot':{ cmd: "nxc rdp 10.10.10.10 --nla-screenshot", ok: R + 'Screenshot (no NLA) saved /tmp/10.10.10.10.png', neg: R + '[-] connection failed' },
+  'ftp-auth':          { cmd: "nxc ftp 10.10.10.10 -u anonymous -p ''", ok: F + '[+] anonymous:\n' + F + 'drwxr-xr-x  2 0  0  4096 Jan 01 backup', neg: F + '[-] anonymous: STATUS login incorrect' },
+  'ftp-ls':            { cmd: "nxc ftp 10.10.10.10 -u anonymous -p '' --ls", ok: F + '-rw-r--r-- 1 0 0 1024 Jan 01 config.bak\n' + F + 'drwxr-xr-x 2 0 0 4096 Jan 01 pub', neg: F + '[-] not permitted' }
 };
 
 CAT.forEach(function (e) {

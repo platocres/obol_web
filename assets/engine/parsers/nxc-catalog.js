@@ -212,7 +212,42 @@
       } },
 
     // --- LDAP informational ---
-    { id: 'ldap-maq', proto: 'ldap', module: 'maq', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] }
+    { id: 'ldap-maq', proto: 'ldap', module: 'maq', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
+
+    // ========================= WINRM =========================
+    { id: 'winrm-auth', proto: 'winrm', validate: true, produces: ['credential.available', 'foothold.windows'], existing: true,
+      gate: ['winrm.reachable', 'port:5985', 'credential.available', 'hash.ntlm'] },
+    { id: 'winrm-exec', proto: 'winrm', flag: '-x', produces: ['foothold.windows'], existing: true,
+      gate: ['credential.available', 'hash.ntlm', 'winrm.reachable'] },
+    { id: 'winrm-exec-ps', proto: 'winrm', flag: '-X', produces: ['foothold.windows'], existing: true,
+      gate: ['credential.available', 'hash.ntlm', 'winrm.reachable'] },
+
+    // ========================= MSSQL =========================
+    { id: 'mssql-auth', proto: 'mssql', validate: true, produces: ['db.session'], existing: true,
+      gate: ['service.ms-sql-s', 'port:1433', 'credential.available', 'credential.candidate'] },
+    { id: 'mssql-exec', proto: 'mssql', flag: '-x', produces: ['foothold.windows'], existing: true,
+      gate: ['db.session'] },
+    { id: 'mssql-exec-ps', proto: 'mssql', flag: '-X', produces: ['foothold.windows'], existing: true,
+      gate: ['db.session'] },
+    { id: 'mssql-query', proto: 'mssql', flag: '-q', informational: true, produces: [], gate: ['db.session'] },
+
+    // ========================= RDP =========================
+    { id: 'rdp-auth', proto: 'rdp', validate: true, produces: ['rdp.authenticated'], existing: true,
+      gate: ['rdp.reachable', 'port:3389', 'credential.available', 'hash.ntlm'] },
+    { id: 'rdp-screenshot', proto: 'rdp', flag: '--screenshot', informational: true, produces: [], gate: ['rdp.reachable', 'port:3389'] },
+    { id: 'rdp-nla-screenshot', proto: 'rdp', flag: '--nla-screenshot', informational: true, produces: [], gate: ['rdp.reachable', 'port:3389'] },
+
+    // ========================= FTP =========================
+    { id: 'ftp-auth', proto: 'ftp', validate: true, produces: ['loot.files'],
+      gate: ['ftp.reachable', 'port:21'],
+      extract: function (text, ws) {
+        // nxc ftp login success often prints a directory listing; a readable listing is loot to pull.
+        var listing = payloadLines(text).some(function (l) { return /^[-dlpscbr][-rwxsStT]{9}\s|\d{2}:\d{2}\s|\b(?:drwx|<DIR>)\b/.test(l); });
+        return listing ? [{ kind: 'loot.files', scope: host(ws), value: { kind: 'ftp_listing', detail: 'readable FTP directory via nxc', tool: 'nxc' } }] : [];
+      } },
+    { id: 'ftp-ls', proto: 'ftp', flag: '--ls', produces: ['loot.files'],
+      gate: ['ftp.reachable', 'port:21'],
+      extract: function (text, ws) { return CAT_BY_ID['ftp-auth'].extract(text, ws); } }
   ];
 
   var CAT_BY_ID = {}; CAT.forEach(function (e) { CAT_BY_ID[e.id] = e; });
@@ -229,7 +264,11 @@
       if (e.proto !== proto) return false;
       if (e.module) return new RegExp('-m\\s+' + e.module + '\\b', 'i').test(lc);
       if (e.flag) { var f = e.flag.replace(/[-]/g, '\\-'); return new RegExp('(^|\\s)' + f + '(\\s|$|=)', 'i').test(command); }
-      return false; // validate-only entries don't self-trigger here (auth handled by _parse_nxc_common)
+      // A validate-only entry with its own extractor (e.g. ftp-auth → loot.files from a listing) runs when
+      // no flag/module is present on the command; plain auth-success (credential.available) stays with
+      // _parse_nxc_common, so these two don't collide.
+      if (e.validate && e.extract) return !/(^|\s)(-M\s|--)/.test(command);
+      return false;
     });
   }
 
