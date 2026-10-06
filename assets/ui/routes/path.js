@@ -244,6 +244,176 @@
       + intro + OBOL.renderTunnelSteps(s, params) + '</details>';
   }
 
+  // ===================================================================================================
+  // Next Steps redesign — a ranked card grid (left) + a field-notes canvas (right). Cards are compact and
+  // scannable; selecting one morphs it wider, reveals its commands with a Remote/On-Host toggle, and loads
+  // the field notes for the selected command into the canvas. Glow follows selection; #1 keeps a persistent
+  // "Suggested Start" tag. See docs/mockups/next-steps-redesign.html for the agreed design.
+  // ===================================================================================================
+
+  // Which card is open, which command inside it, which locus tab. Module-level so it survives the route's
+  // full re-renders (a fact change re-renders the whole coach); validated against the live set each render.
+  var nsSel = { id: null, idx: 0, locus: null };
+  var NS_INFRA = { 'target.configured': 1, 'host.up': 1, 'ports.open': 1, 'scan.nmap.quick': 1 };
+
+  function firstCmdIndexForLocus(move, locus) {
+    var cs = (move && move.commands) || [];
+    for (var i = 0; i < cs.length; i++) if (OBOL.pack.commandLocus(cs[i]) === locus) return i;
+    return 0;
+  }
+  // "Because <held gate> → expect <first payoff>" — the attack-graph cause/effect in one plain line.
+  function nsNarrative(a, facts) {
+    var because = '', gates = (a.requires_all || []).concat(a.requires_any || []);
+    for (var i = 0; i < gates.length; i++) {
+      var g = gates[i];
+      if (facts.has(g) && !NS_INFRA[g] && g.indexOf('port:') !== 0) { because = OBOL.pack.chipLabel(g); break; }
+    }
+    var expect = (a.produces && a.produces.length) ? OBOL.pack.chipLabel(a.produces[0]) : '';
+    var out = '';
+    if (because) out += 'Because <span class="ns-k">' + esc(because) + '</span>';
+    if (expect) out += (out ? ' <span class="ns-arrow">→</span> ' : '') + 'expect <span class="ns-k">' + esc(expect) + '</span>';
+    return out || esc(U.firstSentence(a.hypothesis || ''));
+  }
+
+  // The command rows inside an expanded card: flush-left commands (no tool badge), each selectable and
+  // tagged with its own locus + original index so the canvas and the toggle can address it. Reuses the
+  // token-fill / "Needs:" / missing-tool logic from commandsBlock.
+  function nsCommandRows(action, filled, selLocus, selIdx, spansBoth) {
+    var eng = OBOL.store.active() || {}, acts = eng.activities || [], params = eng.params || {};
+    return (action.commands || []).map(function (cmdObj, i) {
+      var v = filled[i] || {};
+      var locus = OBOL.pack.commandLocus(cmdObj);
+      var hidden = spansBoth && locus !== selLocus;
+      var ran = OBOL.command.commandWasRun(v.run || v.filled, acts, params);
+      var unfilled = OBOL.command.unfilledTokens(v.filled || '');
+      var derived = unfilled.filter(function (t) { return DERIVED_TOKENS[t]; });
+      var fillable = unfilled.filter(function (t) { return !DERIVED_TOKENS[t]; });
+      var warn = derived.length
+        ? '<div class="cmd-needs">Needs: ' + derived.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(', ') + '</div>' : '';
+      var fillRow = fillable.length
+        ? '<div class="cmd-fill-row">' + fillable.map(function (t) {
+            return '<label class="cmd-fill-lbl"><span>' + esc(FILL_LABEL[t] || t) + '</span>'
+              + '<input class="cmd-fill" data-tok="' + esc(t) + '" placeholder="' + esc(FILL_PH[t] || ('value for ' + t)) + '" autocomplete="off" spellcheck="false"></label>';
+          }).join('') + '</div>' : '';
+      var step = action.sequence ? ('<span class="ns-cmd-step">' + (i + 1) + '</span>') : '';
+      var ranTag = ran ? '<span class="ns-cmd-ran" title="obol saw this in your run ledger">Ran</span>' : '';
+      return '<div class="ns-cmd' + (i === selIdx ? ' active' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
+        + ' data-cmd-index="' + i + '" data-locus="' + locus + '"' + (hidden ? ' hidden' : '')
+        + (fillable.length ? ' data-tmpl="' + U.attr(v.filled || '') + '"' : '') + '>'
+        + '<div class="ns-cmd-line">' + step
+        + '<code class="cmd-run-code">' + esc(v.filled || '') + '</code>' + ranTag
+        + '<button class="btn-copy ns-cmd-copy" data-copy="' + U.attr(v.filled || '') + '" title="Copy command" aria-label="Copy command">' + OBOL.ic('clip') + '</button></div>'
+        + fillRow + warn + missingToolHint(action, v) + '</div>';
+    }).join('');
+  }
+
+  // One ranked card. opts: { rank, selected, suggested }. The expanded body is always in the DOM (shown via
+  // CSS when .selected) so the delegated fill / paste-back / copy listeners work without a re-render.
+  function nsCard(action, facts, params, opts) {
+    opts = opts || {};
+    var famClass = ' ns-ph-' + OBOL.phases.phaseOfAction(action);
+    var dirs = OBOL.workspace.tokens(OBOL.store.active());
+    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: dirs });
+    var loci = OBOL.pack.moveCommandLoci(action);
+    var selLocus = opts.selected ? (nsSel.locus || OBOL.pack.defaultCommandLocus(action)) : OBOL.pack.defaultCommandLocus(action);
+    var selIdx = opts.selected ? nsSel.idx : firstCmdIndexForLocus(action, selLocus);
+    var nCmd = (action.commands || []).length;
+    var toggle = loci.both
+      ? '<div class="ns-toggle" role="group" aria-label="Where to run this">'
+        + '<button type="button" data-locus="remote" class="' + (selLocus === 'remote' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'remote') + '">Remote</button>'
+        + '<button type="button" data-locus="onhost" class="' + (selLocus === 'onhost' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'onhost') + '">On-Host</button>'
+        + '</div>' : '';
+    var body = '<div class="ns-body">'
+      + toggle
+      + prepBlock(action, facts, dirs)
+      + '<div class="ns-cmds">' + nsCommandRows(action, filled, selLocus, selIdx, loci.both) + '</div>'
+      + '<div class="ns-card-actions">'
+      + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output</button>'
+      + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
+      + ((action.tool || (action.tools && action.tools[0])) ? '<a class="btn-ghost" href="#/tools/' + esc(action.tool || action.tools[0]) + '">Build In Tools</a>' : '')
+      + '</div>'
+      + '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr((filled[0] && filled[0].filled) || '') + '" hidden>'
+      + '<textarea class="mi-text" placeholder="Paste this command\'s full output here, prompt and all. The coach reads it, mints only what it proves, and advances." spellcheck="false"></textarea>'
+      + '<div class="mi-row"><button class="btn-primary mi-go" data-action="' + esc(action.id) + '">Ingest to Facts</button>'
+      + '<a class="mi-evlink" href="#/evidence/' + esc(action.id) + '">Big output or a screenshot? Full Evidence</a>'
+      + '<span class="mi-result" role="status"></span></div></div>'
+      + '</div>';
+    return '<article class="ns-card' + famClass + (opts.selected ? ' selected is-glow' : '') + '" tabindex="0" role="button"'
+      + ' aria-expanded="' + (opts.selected ? 'true' : 'false') + '" data-action="' + esc(action.id) + '">'
+      + (opts.rank ? '<span class="ns-rank">#' + opts.rank + '</span>' : '')
+      + '<div class="ns-card-head">'
+      + (opts.suggested ? '<span class="ns-suggested">Suggested Start</span>' : '')
+      + '<span class="ns-chip ns-phase ph-' + esc(OBOL.phases.phaseOfAction(action)) + '">' + esc(U.titleCase(OBOL.phases.phaseOfAction(action))) + '</span>'
+      + '</div>'
+      + '<h3 class="ns-title">' + esc(action.title) + '</h3>'
+      + '<p class="ns-narr">' + nsNarrative(action, facts) + '</p>'
+      + body
+      + '<div class="ns-foot">' + nCmd + ' Command' + (nCmd === 1 ? '' : 's') + '</div>'
+      + '</article>';
+  }
+
+  // The field-notes canvas for a (move, command): reactive doctors on top (if a pasted error minted a
+  // blocker), then the command echo, How To Land It, You'll Know It Worked, Common Mistakes, an authored
+  // per-command doctor, and the pivot setup guide for tunnel moves.
+  function nsLiveDoctors(facts) {
+    var docs = OBOL.FIELD_DOCTORS || {}, out = [];
+    Object.keys(docs).forEach(function (k) { if (facts.has(k)) out.push(docs[k]); });
+    return out;
+  }
+  function nsDoctorBlock(d) {
+    return '<div class="ns-doctor"><div class="ns-doctor-h">' + OBOL.ic('shield') + ' ' + esc(d.title) + '</div>'
+      + '<p>' + esc(d.body) + '</p>' + (d.code ? '<pre class="ns-doctor-code"><code>' + esc(d.code) + '</code></pre>'
+        + '<div class="ns-doctor-actions"><button class="btn-copy" data-copy="' + U.attr(d.code) + '">Copy Fix</button></div>' : '') + '</div>';
+  }
+  function nsCanvasHtml(move, idx, facts, params) {
+    if (!move) return '<div class="ns-canvas-head"><span class="ns-canvas-kick">Field Notes</span></div>'
+      + '<div class="ns-canvas-empty">Pick a move on the left to see how to land it, step by step.</div>';
+    var filled = OBOL.command.fillAll(move, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+    var cmdText = (filled[idx] && filled[idx].filled) || '';
+    var note = OBOL.fieldNote ? OBOL.fieldNote(move, idx) : null;
+    var live = nsLiveDoctors(facts);
+    var html = '<div class="ns-canvas-head"><span class="ns-canvas-kick">Field Notes</span>'
+      + '<span class="ns-canvas-move" title="' + U.attr(move.title) + '">' + esc(move.title) + '</span></div>'
+      + '<div class="ns-canvas-body">';
+    live.forEach(function (d) { html += nsDoctorBlock(d); });
+    if (cmdText) html += '<div class="ns-canvas-cmd">' + esc(cmdText) + '</div>';
+    if (note) {
+      if (note.land && note.land.length) html += '<p class="ns-cn-h">How To Land It</p><ul class="ns-cn-list">'
+        + note.land.map(function (l) { return '<li>' + l + '</li>'; }).join('') + '</ul>';
+      if (note.win) html += '<div class="ns-cn-win"><span class="ns-tick" aria-hidden="true">✓</span><span>' + esc(note.win) + '</span></div>';
+      if (note.mistakes && note.mistakes.length) html += '<p class="ns-cn-h">Common Mistakes</p><ul class="ns-cn-list warn">'
+        + note.mistakes.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
+      if (note.doctor) html += nsDoctorBlock(note.doctor);
+    }
+    html += stagingGuide(move, params);
+    html += '</div>';
+    return html;
+  }
+
+  // The aspirational "Opens Up Next" strip: capability-unlocks only, nearest first, each with its fact
+  // chips. Capped to a peek with a "+N more" expander so it invites rather than overwhelms.
+  function nsOpensStrip(opens) {
+    if (!opens.length) return '';
+    var CAP = 8;
+    function card(o) {
+      var famClass = ' ns-ph-' + OBOL.phases.phaseOfAction(o.action);
+      var chips = o.needs.slice(0, 3).map(function (k) { return '<span class="ns-factchip">' + esc(OBOL.pack.chipLabel(k)) + '</span>'; }).join('');
+      return '<div class="ns-ocard' + famClass + '">' + OBOL.ic('lock')
+        + '<div class="ns-ocard-t">' + esc(o.action.title) + '</div>'
+        + '<div class="ns-needs"><span class="ns-needs-l">Needs</span>' + chips + '</div>'
+        + '<div class="ns-ocard-near">' + o.steps + ' Step' + (o.steps === 1 ? '' : 's') + ' Away</div></div>';
+    }
+    var peek = opens.slice(0, CAP), more = opens.slice(CAP);
+    return '<section class="ns-opens"><div class="ns-opens-head">'
+      + '<span class="ns-opens-kick">Opens Up Next</span>'
+      + '<span class="ns-opens-sub">What a little more progress unlocks, closest first.</span>'
+      + '<span class="ns-opens-n">' + opens.length + '</span></div>'
+      + '<div class="ns-opens-peek">' + peek.map(card).join('') + '</div>'
+      + (more.length ? '<details class="ns-opens-more"><summary>' + more.length + ' more, further out</summary>'
+          + '<div class="ns-opens-peek">' + more.map(card).join('') + '</div></details>' : '')
+      + '</section>';
+  }
+
   function moveCard(action, facts, params, opts) {
     opts = opts || {};
     var why = U.firstSentence(action.hypothesis || action.proves || action.title);
@@ -432,7 +602,8 @@
     var onFlow = c.onFlow, comingUp = c.comingUp, reportChecks = c.reportChecks, locked = c.locked;
     var frontier = c.frontier, lens = c.lens, hiddenBy = c.hiddenBy, factCount = c.factCount, phaseName = c.phaseName;
 
-    var html = '<div class="withrail"><section class="coach">';
+    var opensCount = OBOL.pack.opensUpNext ? OBOL.pack.opensUpNext(facts, pack).length : locked.length;
+    var html = '<section class="coach ns-coach-wrap">';
     // hero
     html += '<div class="coach-hero">'
       + '<div class="coach-hero-main">'
@@ -443,7 +614,7 @@
       + '<div class="coach-metrics">'
       + '<div class="metric"><span class="metric-n">' + onFlow.length + '</span><span class="metric-l">Ready</span></div>'
       + '<div class="metric"><span class="metric-n">' + comingUp.length + '</span><span class="metric-l">Coming Up</span></div>'
-      + '<div class="metric"><span class="metric-n">' + locked.length + '</span><span class="metric-l">Blocked</span></div>'
+      + '<div class="metric"><span class="metric-n">' + opensCount + '</span><span class="metric-l">Opens Up Next</span></div>'
       + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">Facts</span></div>'
       + '</div></div>';
 
@@ -501,56 +672,64 @@
         + '</div>';
     }
 
-    // ready (on-flow) moves — cap the visible list to the top few so a late-game frontier (where the whole
-    // pack is technically "ready") doesn't bury the actual next move under an encyclopedia. The rest fold
-    // into a collapsed "More ready moves" so nothing is lost, just quieted.
-    var READY_CAP = 6;
+    // ---- the two-column coach: ranked card grid (left) + field-notes canvas (right) ----
+    // Resolve the open card from the persisted selection, validating it against the live set; default to
+    // the #1 ready move so the canvas is never empty and the recommended path is zero-click.
+    var selectable = onFlow.concat(comingUp).concat(reportChecks);
+    var selMove = nsSel.id ? selectable.filter(function (a) { return a.id === nsSel.id; })[0] : null;
+    if (!selMove) {
+      selMove = onFlow[0] || selectable[0] || null;
+      nsSel.id = selMove ? selMove.id : null;
+      nsSel.locus = selMove ? OBOL.pack.defaultCommandLocus(selMove) : null;
+      nsSel.idx = selMove ? firstCmdIndexForLocus(selMove, nsSel.locus) : 0;
+    } else {
+      if (!nsSel.locus) nsSel.locus = OBOL.pack.defaultCommandLocus(selMove);
+      if (nsSel.idx >= (selMove.commands || []).length) nsSel.idx = firstCmdIndexForLocus(selMove, nsSel.locus);
+    }
+    function cardOpts(a, i, section) {
+      return { rank: section === 'ready' ? (i + 1) : 0, selected: a.id === nsSel.id, suggested: section === 'ready' && i === 0 };
+    }
+
+    html += '<div class="ns-coach"><div class="ns-main">';
+
+    var READY_CAP = 8;
     if (onFlow.length) {
       var top = onFlow.slice(0, READY_CAP), rest = onFlow.slice(READY_CAP);
-      html += '<div class="coach-section"><h2 class="coach-sec-h">Ready Now</h2>';
-      top.forEach(function (a, i) { html += moveCard(a, facts, params, { primary: i === 0 }); });
+      html += '<div class="ns-railhead"><h2>Ready Now</h2><span class="ns-count">' + onFlow.length + ' move' + (onFlow.length === 1 ? '' : 's') + '</span></div>';
+      html += '<div class="ns-grid">';
+      top.forEach(function (a, i) { html += nsCard(a, facts, params, cardOpts(a, i, 'ready')); });
       html += '</div>';
       if (rest.length) {
-        html += '<details class="coach-section coach-more"><summary class="coach-sec-h">More ready moves, lower priority right now (' + rest.length + ')</summary>';
-        rest.forEach(function (a) { html += moveCard(a, facts, params, {}); });
-        html += '</details>';
+        html += '<details class="ns-more"' + (rest.some(function (a) { return a.id === nsSel.id; }) ? ' open' : '') + '><summary>' + rest.length + ' more ready, lower priority right now</summary><div class="ns-grid">';
+        rest.forEach(function (a, i) { html += nsCard(a, facts, params, cardOpts(a, i + READY_CAP, 'ready-rest')); });
+        html += '</div></details>';
       }
     } else {
-      html += '<div class="coach-empty">No on-flow moves yet. Start with a scan on the Evidence route, or add a target fact.</div>';
+      html += '<div class="ns-empty">No ready moves yet. Paste a scan on the Evidence route, or add a target fact, and the coach will rank your next commands here.</div>';
     }
 
-    // coming up (premature but eligible)
     if (comingUp.length) {
-      html += '<details class="coach-section coach-comingup"><summary class="coach-sec-h">Coming up, eligible but ahead of your frontier (' + comingUp.length + ')</summary>';
-      comingUp.forEach(function (a) { html += moveCard(a, facts, params, {}); });
-      html += '</details>';
-    }
-
-    // report checks (info-only writeup findings) — pulled out of the live list so they never headline;
-    // still here, collapsed, as quick wins for the report. See OBOL.pack.isReportOnly.
-    if (reportChecks.length) {
-      html += '<details class="coach-section coach-reportchecks"><summary class="coach-sec-h">Report Checks, For The Writeup (' + reportChecks.length + ')</summary>'
-        + '<p class="coach-reportchecks-note">Info-only checks that don’t move the box forward (SPF/DMARC, security headers, TLS, CORS…). They won’t headline your next move — run them when you’re tidying up the report.</p>';
-      reportChecks.forEach(function (a) { html += moveCard(a, facts, params, {}); });
-      html += '</details>';
-    }
-
-    // blocked with reasons
-    if (locked.length) {
-      // Group by the prerequisite that unlocks them, most-unlocking first: one "prove X" can
-      // open many moves, so the operator sees what to hunt for instead of a flat 60-row wall.
-      var groups = {};
-      locked.forEach(function (p) { (groups[p.reason] = groups[p.reason] || []).push(p.action); });
-      var groupList = Object.keys(groups).map(function (r) { return { reason: r, actions: groups[r] }; })
-        .sort(function (a, b) { return b.actions.length - a.actions.length; });
-      html += '<details class="coach-section coach-blocked"><summary class="coach-sec-h">Blocked, grouped by what unlocks them ('
-        + locked.length + ' moves · ' + groupList.length + ' prerequisite' + (groupList.length === 1 ? '' : 's') + ')</summary>'
-        + '<div class="blocked-groups">';
-      groupList.forEach(function (g) { html += blockedGroup(g); });
+      html += '<details class="ns-section ns-comingup"' + (comingUp.some(function (a) { return a.id === nsSel.id; }) ? ' open' : '') + '><summary>Coming Up, eligible but ahead of your frontier (' + comingUp.length + ')</summary><div class="ns-grid">';
+      comingUp.forEach(function (a, i) { html += nsCard(a, facts, params, cardOpts(a, i, 'coming')); });
       html += '</div></details>';
     }
 
-    html += '</section>' + buildRail(eng, facts, onFlow[0]) + '</div>';
+    if (reportChecks.length) {
+      html += '<details class="ns-section ns-reportchecks"' + (reportChecks.some(function (a) { return a.id === nsSel.id; }) ? ' open' : '') + '><summary>Report Checks, for the writeup (' + reportChecks.length + ')</summary>'
+        + '<p class="ns-section-note">Info-only checks that do not move the box forward (SPF/DMARC, security headers, TLS, CORS). Run them when you are tidying up the report.</p><div class="ns-grid">';
+      reportChecks.forEach(function (a, i) { html += nsCard(a, facts, params, cardOpts(a, i, 'report')); });
+      html += '</div></details>';
+    }
+
+    // the aspirational roadmap of capability-unlocks (contingency doctors/vulns excluded by the engine)
+    html += nsOpensStrip(OBOL.pack.opensUpNext(facts, pack));
+
+    html += '</div>'; // .ns-main
+    html += '<aside class="ns-canvas" id="ns-canvas" aria-label="Field notes for the selected move">'
+      + nsCanvasHtml(selMove, nsSel.idx, facts, params) + '</aside>';
+    html += '</div>'; // .ns-coach
+
+    html += '</section>';
     return html;
   }
 
@@ -559,7 +738,79 @@
     // listeners bound on it would stack on every re-render — the Paste-Output toggle would then fire
     // an even number of times (open→closed = no-op) and ingests would duplicate. Bind on the coach's
     // own container instead: it's recreated on each render, so its listeners die with the old DOM.
-    var mount = ctx.mount.querySelector('.withrail') || ctx.mount;
+    var mount = ctx.mount.querySelector('.coach') || ctx.mount;
+
+    // ---- Next Steps card grid: select a card (glow follows), toggle Remote/On-Host, pick a command.
+    // These update the DOM and the canvas IN PLACE (no full re-render) so scroll and focus are preserved.
+    function freshCtx() {
+      return { facts: OBOL.store.factSet(), pack: OBOL.packs.actions(), params: (OBOL.store.active() || {}).params || {} };
+    }
+    function moveById(pack, id) { return pack.filter(function (a) { return a.id === id; })[0]; }
+    function repaintCanvas() {
+      var el = mount.querySelector('#ns-canvas'); if (!el) return;
+      var fx = freshCtx(); var m = moveById(fx.pack, nsSel.id);
+      el.innerHTML = nsCanvasHtml(m, nsSel.idx, fx.facts, fx.params);
+    }
+    function selectCard(card) {
+      var id = card.getAttribute('data-action'); if (!id) return;
+      var fx = freshCtx(); var m = moveById(fx.pack, id); if (!m) return;
+      nsSel.id = id;
+      nsSel.locus = OBOL.pack.defaultCommandLocus(m);
+      nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus);
+      // glow + expand follow the selection
+      Array.prototype.forEach.call(mount.querySelectorAll('.ns-card.selected'), function (o) {
+        o.classList.remove('selected', 'is-glow'); o.setAttribute('aria-expanded', 'false');
+      });
+      card.classList.add('selected', 'is-glow'); card.setAttribute('aria-expanded', 'true');
+      // apply the move's default locus to its command rows + mark the first active
+      syncCardLocus(card, nsSel.locus);
+      repaintCanvas();
+    }
+    function syncCardLocus(card, locus) {
+      var tgl = card.querySelector('.ns-toggle');
+      if (tgl) Array.prototype.forEach.call(tgl.querySelectorAll('button'), function (b) {
+        var on = b.getAttribute('data-locus') === locus;
+        b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      var spans = !!tgl, first = -1;
+      Array.prototype.forEach.call(card.querySelectorAll('.ns-cmd'), function (row) {
+        var rl = row.getAttribute('data-locus');
+        var show = !spans || rl === locus;
+        if (show) { row.removeAttribute('hidden'); if (first < 0) first = parseInt(row.getAttribute('data-cmd-index'), 10); }
+        else row.setAttribute('hidden', '');
+        row.classList.remove('active');
+      });
+      if (first >= 0) {
+        nsSel.idx = first;
+        var active = card.querySelector('.ns-cmd[data-cmd-index="' + first + '"]');
+        if (active) active.classList.add('active');
+      }
+    }
+    // click a card (but not an interactive control inside it) to open it
+    U.on(mount, 'click', '.ns-card', function (e, t) {
+      if (e.target.closest('.ns-cmd') || e.target.closest('.ns-toggle') || e.target.closest('button') || e.target.closest('a') || e.target.closest('input') || e.target.closest('textarea')) return;
+      if (!t.classList.contains('selected')) selectCard(t);
+    });
+    U.on(mount, 'keydown', '.ns-card', function (e, t) {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button, a, input, textarea')) { e.preventDefault(); if (!t.classList.contains('selected')) selectCard(t); }
+    });
+    // Remote / On-Host toggle inside the open card
+    U.on(mount, 'click', '.ns-toggle button', function (e, t) {
+      var card = t.closest('.ns-card'); if (!card) return;
+      nsSel.locus = t.getAttribute('data-locus');
+      syncCardLocus(card, nsSel.locus);
+      repaintCanvas();
+    });
+    // pick a command row → it drives the canvas field notes
+    U.on(mount, 'click', '.ns-cmd', function (e, t) {
+      if (e.target.closest('.btn-copy') || e.target.closest('.cmd-fill')) return;
+      var card = t.closest('.ns-card'); if (!card) return;
+      Array.prototype.forEach.call(card.querySelectorAll('.ns-cmd'), function (x) { x.classList.remove('active'); });
+      t.classList.add('active');
+      nsSel.idx = parseInt(t.getAttribute('data-cmd-index'), 10) || 0;
+      repaintCanvas();
+    });
+
     // copy buttons
     U.on(mount, 'click', '.rail-flag-val', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Flag copied' : 'Copy failed', ok ? '' : 'err'); });
