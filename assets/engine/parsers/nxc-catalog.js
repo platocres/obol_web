@@ -299,11 +299,11 @@
         return /WriteDacl|GenericAll|GenericWrite|WriteOwner|ForceChangePassword|AllExtendedRights|WriteProperty|trustee/i.test(text)
           ? [{ kind: 'ad.acl_lead', scope: dom(ws), value: { detail: 'DACL abuse right found via nxc daclread', tool: 'nxc' } }] : [];
       } },
-    { id: 'ldap-group', proto: 'ldap', module: 'group', produces: ['ad.user_list'],
+    { id: 'ldap-group-mem', proto: 'ldap', module: 'group-mem', produces: ['ad.user_list'],
       gate: ['credential.available', 'ldap.reachable'],
       extract: function (text, ws) {
         var users = C._usernames(text);
-        return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-group', note: 'members of the queried group' } }] : [];
+        return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-group-mem', note: 'members of the queried group' } }] : [];
       } },
     { id: 'ldap-password-not-required', proto: 'ldap', flag: '--password-not-required', produces: ['ad.user_list'],
       gate: ['credential.available', 'ldap.reachable'],
@@ -336,9 +336,6 @@
     { id: 'ldap-enum-trusts', proto: 'ldap', module: 'enum_trusts', produces: ['ad.trusts'],
       gate: ['credential.available', 'ldap.reachable'],
       extract: function (text, ws) { return /trust|forest|outbound|inbound|bidirectional/i.test(text) ? [{ kind: 'ad.trusts', scope: dom(ws), value: { detail: 'domain/forest trusts via nxc enum_trusts', tool: 'nxc' } }] : []; } },
-    { id: 'ldap-groupmembership', proto: 'ldap', module: 'groupmembership', produces: ['ad.user_list'],
-      gate: ['credential.available', 'ldap.reachable'],
-      extract: function (text, ws) { var u = C._usernames(text); return u.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: u, count: u.length, method: 'nxc-groupmembership' } }] : []; } },
     { id: 'ldap-ldap-checker', proto: 'ldap', module: 'ldap-checker', produces: ['config.review'],
       gate: ['ldap.reachable', 'port:389'],
       extract: function (text, ws) { return /signing\s*(?:not|is not|none)|channel binding\s*(?:not|never)|not (?:enforced|required)/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'ldap_signing_not_enforced', detail: 'LDAP signing / channel binding not enforced — relayable', tool: 'nxc' } }] : []; } },

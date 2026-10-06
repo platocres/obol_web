@@ -104,7 +104,7 @@ function nxcTokens(run) {
   var m = String(run).match(/\bn(?:xc|etexec)\s+(smb|ldap|winrm|mssql|rdp|ftp|ssh|wmi|vnc|nfs)\b/i);
   if (!m) return null;
   var proto = m[1].toLowerCase(), toks = [];
-  (run.match(/-M\s+([a-z0-9_]+)/gi) || []).forEach(function (x) { toks.push('-M ' + x.replace(/-M\s+/i, '')); });
+  (run.match(/-M\s+([a-z0-9_-]+)/gi) || []).forEach(function (x) { toks.push('-M ' + x.replace(/-M\s+/i, '')); });
   (run.match(/(^|\s)(--[a-z][a-z0-9-]+)/gi) || []).forEach(function (x) { var f = x.trim(); if (!NXC_OPTION_FLAGS[f]) toks.push(f); });
   if (/(^|\s)-x(\s|$)/.test(run)) toks.push('-x');
   if (/(^|\s)-X(\s|$)/.test(run)) toks.push('-X');
