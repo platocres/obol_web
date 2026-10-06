@@ -44,7 +44,12 @@ jobs:
         run: |
           node tools/stamp-assets.js
           git diff --exit-code index.html assets/ui/lazy.js || (echo "cache-bust stamps out of sync — run node tools/build-packs.js && node tools/stamp-assets.js" && exit 1)
-      - name: Engine unit tests
+      - name: Move-contract lint + decision-map gap check (ranking guardrails)
+        run: |
+          set -e
+          node tools/move-lint.js --check
+          node tools/gap-report.js --check
+      - name: Engine unit tests (includes the golden-path corpus)
         run: |
           set -e
           for t in tests/engine/*.js; do echo "== $t =="; node "$t"; done

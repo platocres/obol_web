@@ -1,0 +1,22 @@
+{
+  "name": "Web standalone — exploit-gating (unconfirmed exploits never headline)",
+  "target": "10.10.10.5",
+  "steps": [
+    {
+      "after": "nmap: 22/80 open, HTTP up",
+      "add": ["target.configured", "host.up", "ports.open", "scan.nmap.quick", "port:22", "port:80", "http.reachable", "web.server"],
+      "topIn": ["nmap-version-scripts", "content-discovery", "recon-web-triage"],
+      "absentTop": ["nosql-injection", "jenkins-access", "smbghost", "eternalblue", "check-dns-email"]
+    },
+    {
+      "after": "SQL injection confirmed on a parameter",
+      "add": ["web.parameterized", "web.content_map", "web.sqli_confirmed"],
+      "present": ["sqlmap-automation", "manual-sqli-exploitation"]
+    },
+    {
+      "after": "webshell dropped via the injection",
+      "add": ["foothold.webshell"],
+      "present": ["web-shells"]
+    }
+  ]
+}
