@@ -329,7 +329,7 @@
     var CAP = 8;
     function card(o) {
       var famClass = ' ns-ph-' + OBOL.phases.phaseOfAction(o.action);
-      var chips = o.needs.slice(0, 3).map(function (k) { return '<span class="ns-factchip">' + esc(OBOL.pack.chipLabel(k)) + '</span>'; }).join('');
+      var chips = o.needs.slice(0, 3).map(function (k) { var lbl = OBOL.pack.chipLabel(k); return '<span class="ns-factchip" title="' + U.attr(lbl) + '">' + esc(lbl) + '</span>'; }).join('');
       return '<div class="ns-ocard' + famClass + '">' + OBOL.ic('lock')
         + '<div class="ns-ocard-t">' + esc(o.action.title) + '</div>'
         + '<div class="ns-needs"><span class="ns-needs-l">Needs</span>' + chips + '</div>'
