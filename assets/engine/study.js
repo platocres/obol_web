@@ -357,6 +357,12 @@
       var where = (primary && primary.locus === 'ON-TARGET') ? 'host' : 'local';
       steps = [{ where: where, tool: out.tool || (primary ? primary.tool : ''), command: pcmd, outputLines: lines2, note: primary ? primary.note : '' }];
     }
+    // No sample-output fixture? Still make a navigable replay from the move's own remote-first command, so
+    // every move (including freshly-added ones with no fixture yet) is a complete cell — output is a nicety,
+    // not a requirement (the Watch pane simply shows the command with no canned result until a fixture lands).
+    if (!steps.length && primary) {
+      steps = [{ where: primary.locus === 'ON-TARGET' ? 'host' : 'local', tool: primary.tool || '', command: primary.run || '', outputLines: [], note: primary.note || '' }];
+    }
     var first = steps[0] || {};
     return {
       id: cell.id, title: cell.title, phase: cell.phase, laneKey: cell.laneKey,

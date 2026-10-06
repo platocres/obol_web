@@ -32,6 +32,8 @@
     }).filter(Boolean);
   }
   function hasDenied(text) { return /\[-\]|access[_ ]denied|logon failure|STATUS_|authentication failed|error/i.test(text); }
+  // Filenames that routinely hold credentials/secrets — the "useful results" filter for a spider dump.
+  var LOOT_HINT_RE = /passw|pwd|cred|secret|unattend|sysprep|web\.config|\.config\b|id_rsa|id_ed25519|\.ppk|\.kdbx|\.key\b|vnc|vpn|\.bak\b|backup|\.vmdk|\.ovpn|\.pfx\b|\.ps1\b|connection|database|\.kee?pass|autologin|\.gpg|\.pgp/i;
 
   // ─────────────────────────── the catalog ───────────────────────────
   // Each entry: { id, proto, flag|module, produces:[...], locus:'R',
@@ -121,15 +123,23 @@
     { id: 'smb-nanodump', proto: 'smb', module: 'nanodump', produces: ['hash.ntlm', 'credential.plaintext'],
       gate: ['access.admin', 'access.system'],
       extract: function (text, ws) { return CAT_BY_ID['smb-lsassy'].extract(text, ws); } },
-    { id: 'smb-spider-plus', proto: 'smb', module: 'spider_plus', produces: ['loot.files'],
+    { id: 'smb-spider-plus', proto: 'smb', module: 'spider_plus', produces: ['loot.files', 'credential.candidate'],
       gate: ['smb.reachable', 'credential.available'],
       extract: function (text, ws) {
         // spider_plus crawls readable shares and writes a JSON manifest; its output names the saved file and
-        // the interesting files it found. Either is loot worth surfacing for triage.
+        // the files found. The manifest itself is loot.files; any found file whose NAME matches the
+        // credential-material hints is a candidate secret worth pulling (the "filter for useful results"
+        // signal — see the spider-secrets move).
+        var out = [];
         if (/spider_plus|saved\s+(?:output|share)|found:|\.json\b/i.test(text)) {
-          return [{ kind: 'loot.files', scope: host(ws), value: { kind: 'spider_manifest', detail: 'nxc spider_plus crawl of readable shares', tool: 'nxc' } }];
+          out.push({ kind: 'loot.files', scope: host(ws), value: { kind: 'spider_manifest', detail: 'nxc spider_plus crawl of readable shares', tool: 'nxc' } });
         }
-        return [];
+        var hits = [];
+        payloadLines(text).forEach(function (l) {
+          if (LOOT_HINT_RE.test(l)) { var m = l.match(/[^\s\/\\]+\.[A-Za-z0-9]{1,8}\b|[^\s\/\\]*(?:passw|cred|secret|unattend|backup)[^\s\/\\]*/i); if (m) hits.push(m[0]); }
+        });
+        if (hits.length) out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: 'spider_secret_file', files: hits.slice(0, 50), count: hits.length, tool: 'nxc', note: 'filenames matching credential-material hints — pull and inspect' } });
+        return out;
       } },
     { id: 'smb-wdigest', proto: 'smb', module: 'wdigest', produces: ['config.review'],
       gate: ['access.admin', 'access.system'],

