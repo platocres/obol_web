@@ -172,7 +172,11 @@
   C._LINUX_PRIVESC_ACTION_IDS = new Set(['linux-enum', 'sudo-abuse', 'writable-passwd', 'nfs-squash', 'lxc-lxd-escape', 'docker-socket', 'suid-gtfobins', 'pspy-monitor', 'cron-abuse', 'capabilities', 'linux-loot-hunt', 'linux-persistence']);
   C._WINDOWS_PRIVESC_ACTION_IDS = new Set(Array.from(C._PRIVESC_ACTION_IDS).filter(function (x) { return !C._LINUX_PRIVESC_ACTION_IDS.has(x); }));
   C._WEB_LFI_ACTION_IDS = new Set(['lfi-probe', 'xxe']);
-  C._WEB_CMDI_ACTION_IDS = new Set(['command-injection', 'ssti', 'web-shells', 'file-upload', 'verb-tampering', 'deserialization', 'tomcat-deploy', 'jenkins-access', 'check-struts2']);
+  C._WEB_CMDI_ACTION_IDS = new Set(['command-injection', 'ssti', 'web-shells', 'file-upload', 'verb-tampering', 'deserialization', 'tomcat-deploy', 'jenkins-access', 'check-struts2', 'ssti-to-rce', 'http-put-webshell', 'authz-abuse']);
+  // The web-exploit moves whose whole point IS landing code execution: when their paste shows command
+  // output (uid=/whoami/nt authority), that IS a web foothold, so _parse_web_cmdi mints foothold.webshell
+  // for these (not for the confirm-only probes, whose foothold is a separate follow-up move).
+  C._WEB_RCE_FOOTHOLD_IDS = new Set(['ssti-to-rce', 'http-put-webshell', 'authz-abuse']);
   C._WEB_SQLI_ACTION_IDS = new Set(['sqli-basics']);
   C._WEB_SSRF_ACTION_IDS = new Set(['ssrf', 'xxe']);
   C._WEB_NOSQLI_ACTION_IDS = new Set(['nosql-injection']);

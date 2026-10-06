@@ -307,6 +307,9 @@
     if (method === 'template_injection') _add(facts, mkFact('web.ssti_confirmed', h, { method: 'template_injection', evidence: evidence }, S, source));
     else if (method === 'insecure_deserialization') _add(facts, mkFact('web.deserial_confirmed', h, { method: 'insecure_deserialization', evidence: evidence }, S, source));
     if (actionId === 'file-upload') _add(facts, mkFact('web.upload_confirmed', h, { method: 'executable_upload', evidence: evidence }, S, source));
+    // For the moves whose purpose is to land a shell (SSTI→RCE, a PUT'd webshell, abusing an authz
+    // bypass into an upload), command output in the paste is the foothold itself.
+    if (C._WEB_RCE_FOOTHOLD_IDS && C._WEB_RCE_FOOTHOLD_IDS.has(actionId)) _add(facts, mkFact('foothold.webshell', h, { os: osFamily, method: method, evidence: evidence }, S, source));
     C._add_os_observation(facts, ws, source, osFamily, evidence, 'medium', 'web-' + actionId, false);
   }
   C._parse_web_cmdi = _parse_web_cmdi;

