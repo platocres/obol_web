@@ -1196,12 +1196,11 @@
         "rdp.authenticated"
       ],
       "produces": [
-        "foothold.windows",
-        "access.admin"
+        "foothold.windows"
       ],
       "priority": 92,
-      "proves": "produces a Windows foothold and administrative access",
-      "does_not_prove": "administrative access on this host or context, not control of the domain unless that is demonstrated on its own",
+      "proves": "produces a Windows foothold — authenticated code execution as the credentialed user",
+      "does_not_prove": "administrative access: a cracked service/user credential gets you a shell, not domain admin. Admin is established on its own (an admin whoami, or a dumped admin hash via DCSync → own-domain-pth), not assumed from a login.",
       "report": {
         "finding": "Lateral Movement via Exposed Credentials",
         "severity": "high"
@@ -1800,9 +1799,9 @@
       "produces": [
         "kerberos.tickets"
       ],
-      "priority": 78,
+      "priority": 55,
       "proves": "produces Kerberos tickets",
-      "does_not_prove": "context and enumeration only, no access, credential, or privilege",
+      "does_not_prove": "context and enumeration only, no access, credential, or privilege — it's a hygiene/context reminder, not a frontier move, so it should never headline over actually using the credential you just earned",
       "report": {
         "finding": "",
         "severity": "informational"
@@ -2083,12 +2082,12 @@
         "loot.ntds"
       ],
       "produces": [
-        "access.admin",
+        "foothold.windows",
         "lateral.movement"
       ],
       "priority": 92,
-      "proves": "produces administrative access and lateral.movement",
-      "does_not_prove": "administrative access on this host or context, not control of the domain unless that is demonstrated on its own",
+      "proves": "produces authenticated access as the ticket's principal (a foothold) and lateral movement",
+      "does_not_prove": "administrative access: reusing a ticket authenticates you AS that principal — it only yields admin if the ticket belongs to an admin, which is established on its own, not assumed",
       "report": {
         "finding": "Kerberos Ticket Theft and Reuse",
         "severity": "critical"
@@ -3055,6 +3054,9 @@
         "certipy",
         "nxc",
         "secretsdump"
+      ],
+      "requires_all": [
+        "adcs.vulnerable"
       ],
       "requires_any": [
         "credential.available"

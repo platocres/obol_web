@@ -29,9 +29,11 @@
       "present": ["crack-asrep"]
     },
     {
-      "after": "cracked svc-alfresco:s3rvice",
+      "after": "cracked svc-alfresco:s3rvice (use the creds → foothold)",
       "add": ["credential.available"],
-      "present": ["lateral-exec"]
+      "top": "lateral-exec",
+      "present": ["lateral-exec"],
+      "absentTop": ["kerberos-tickets", "certifried"]
     },
     {
       "after": "evil-winrm foothold as svc-alfresco (no ACL lead yet → enumerate first)",
