@@ -34,6 +34,19 @@
   function hasDenied(text) { return /\[-\]|access[_ ]denied|logon failure|STATUS_|authentication failed|error/i.test(text); }
   // Filenames that routinely hold credentials/secrets — the "useful results" filter for a spider dump.
   var LOOT_HINT_RE = /passw|pwd|cred|secret|unattend|sysprep|web\.config|\.config\b|id_rsa|id_ed25519|\.ppk|\.kdbx|\.key\b|vnc|vpn|\.bak\b|backup|\.vmdk|\.ovpn|\.pfx\b|\.ps1\b|connection|database|\.kee?pass|autologin|\.gpg|\.pgp/i;
+  // Stored-credential modules (mRemoteNG, WinSCP, PuTTY, Veeam, KeePass trigger, registry autologon…) all
+  // print recovered user/password pairs in a handful of shapes. Pull them as candidate credentials.
+  function modCreds(text, ws, kind) {
+    var out = [], seen = {};
+    payloadLines(text).forEach(function (l) {
+      var m = l.match(/(?:user(?:name)?|login)\s*[:=]\s*(\S+).*?(?:pass(?:word)?|pwd)\s*[:=]\s*(\S+)/i)
+        || l.match(/^(\S+):([^:\s]{3,})$/);
+      var pw = l.match(/(?:pass(?:word)?|pwd)\s*[:=]\s*(\S{3,})/i);
+      if (m && !seen[l]) { seen[l] = 1; out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: kind, user: m[1], password: m[2], tool: 'nxc' } }); }
+      else if (pw && !m && !seen[l]) { seen[l] = 1; out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: kind, password: pw[1], tool: 'nxc' } }); }
+    });
+    return out;
+  }
 
   // ─────────────────────────── the catalog ───────────────────────────
   // Each entry: { id, proto, flag|module, produces:[...], locus:'R',
@@ -158,6 +171,73 @@
       } },
     { id: 'smb-gen-relay-list', proto: 'smb', flag: '--gen-relay-list', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
 
+    // --- SMB LSASS-dump family (all emit domain\user → hash/plaintext like lsassy) ---
+    { id: 'smb-handlekatz', proto: 'smb', module: 'handlekatz', produces: ['hash.ntlm', 'credential.plaintext'],
+      gate: ['access.admin', 'access.system'], extract: function (text, ws) { return CAT_BY_ID['smb-lsassy'].extract(text, ws); } },
+    { id: 'smb-procdump', proto: 'smb', module: 'procdump', produces: ['hash.ntlm', 'credential.plaintext'],
+      gate: ['access.admin', 'access.system'], extract: function (text, ws) { return CAT_BY_ID['smb-lsassy'].extract(text, ws); } },
+    { id: 'smb-masky', proto: 'smb', module: 'masky', produces: ['hash.ntlm', 'credential.plaintext'],
+      gate: ['access.admin', 'access.system'], extract: function (text, ws) { return CAT_BY_ID['smb-lsassy'].extract(text, ws); } },
+
+    // --- SMB privileged dumps / registry secrets ---
+    { id: 'smb-backup-operator', proto: 'smb', module: 'backup_operator', produces: ['loot.ntds', 'hash.ntlm'],
+      gate: ['privesc.windows_privilege', 'access.admin'],
+      extract: function (text, ws) {
+        // SeBackupPrivilege → remote registry-hive / NTDS dump: emits the same user:rid:lm:nt::: lines.
+        var out = [], seen = {};
+        payloadLines(text).forEach(function (l) {
+          var m = l.match(/^([^\s:]+):\d+:[a-f0-9]{32}:([a-f0-9]{32}):::/i);
+          if (m && !seen[m[2]]) { seen[m[2]] = 1; out.push({ kind: 'hash.ntlm', scope: host(ws), value: { user: m[1], nthash: m[2].toLowerCase(), tool: 'nxc', via: 'backup_operator' } }); }
+        });
+        if (out.length || /ntds|sam\s+dumped|backupoperator|SeBackup/i.test(text)) out.push({ kind: 'loot.ntds', scope: host(ws), value: { method: 'backup_operator', tool: 'nxc' } });
+        return out;
+      } },
+    { id: 'smb-reg-winlogon', proto: 'smb', module: 'reg-winlogon', produces: ['credential.candidate'],
+      gate: ['access.admin', 'access.system'], extract: function (text, ws) { return modCreds(text, ws, 'autologon'); } },
+    { id: 'smb-reg-query', proto: 'smb', module: 'reg-query', produces: ['credential.candidate'],
+      gate: ['access.admin', 'access.system'], extract: function (text, ws) { return modCreds(text, ws, 'registry_secret'); } },
+
+    // --- SMB stored-application credentials ---
+    { id: 'smb-veeam', proto: 'smb', module: 'veeam', produces: ['credential.candidate'],
+      gate: ['access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'veeam'); } },
+    { id: 'smb-mremoteng', proto: 'smb', module: 'mremoteng', produces: ['credential.candidate'],
+      gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'mremoteng'); } },
+    { id: 'smb-winscp', proto: 'smb', module: 'winscp', produces: ['credential.candidate'],
+      gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'winscp'); } },
+    { id: 'smb-putty', proto: 'smb', module: 'putty', produces: ['credential.candidate'],
+      gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'putty'); } },
+    { id: 'smb-keepass-discover', proto: 'smb', module: 'keepass_discover', informational: true, produces: [], gate: ['foothold.windows', 'access.admin'] },
+    { id: 'smb-keepass-trigger', proto: 'smb', module: 'keepass_trigger', produces: ['credential.candidate'],
+      gate: ['access.admin', 'access.system'], extract: function (text, ws) { return modCreds(text, ws, 'keepass_master'); } },
+
+    // --- SMB privilege / downgrade leads ---
+    { id: 'smb-install-elevated', proto: 'smb', module: 'install_elevated', produces: ['privesc.always_install_elevated'],
+      gate: ['foothold.windows'],
+      extract: function (text, ws) {
+        return /alwaysinstallelevated.*(?:1|enabled|vulnerable)|both.*registry keys|\[\+\].*elevated/i.test(text)
+          ? [{ kind: 'privesc.always_install_elevated', scope: host(ws), value: { detail: 'AlwaysInstallElevated set in both HKLM+HKCU', tool: 'nxc' } }] : [];
+      } },
+    { id: 'smb-pre2k', proto: 'smb', module: 'pre2k', produces: ['credential.candidate'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) {
+        // pre-created (pre-Win2000) computer accounts authenticate with the lowercased machine name as the
+        // password — a usable credential candidate.
+        var out = [];
+        payloadLines(text).forEach(function (l) { var m = l.match(/([A-Za-z0-9_-]+\$)\s*:\s*([A-Za-z0-9_-]+)/); if (m) out.push({ kind: 'credential.candidate', scope: dom(ws), value: { kind: 'pre2k_computer', user: m[1], password: m[2], tool: 'nxc' } }); });
+        return out;
+      } },
+    { id: 'smb-ntlmv1', proto: 'smb', module: 'ntlmv1', produces: ['config.review'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) { return /ntlmv1.*(?:enabled|allow|vulnerable)|lmcompatibilitylevel\s*[:=]\s*[0-2]/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'ntlmv1_enabled', detail: 'NTLMv1 permitted — crackable/relayable', tool: 'nxc' } }] : []; } },
+
+    // --- SMB defensive / coercion-enabler checks (informational leads) ---
+    { id: 'smb-enum-av', proto: 'smb', module: 'enum_av', produces: ['defense.control'],
+      gate: ['access.admin', 'access.system'],
+      extract: function (text, ws) { return /defender|antivirus|edr|crowdstrike|carbon|sentinel|\bav\b/i.test(text) ? [{ kind: 'defense.control', scope: host(ws), value: { kind: 'av_edr', detail: payloadLines(text).slice(0, 10).join('; '), tool: 'nxc' } }] : []; } },
+    { id: 'smb-spooler', proto: 'smb', module: 'spooler', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
+    { id: 'smb-webdav', proto: 'smb', module: 'webdav', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
+    { id: 'smb-runasppl', proto: 'smb', module: 'runasppl', informational: true, produces: [], gate: ['access.admin', 'access.system'] },
+
     // --- SMB informational enumeration (recognized, no graph-actionable fact) ---
     { id: 'smb-groups', proto: 'smb', flag: '--groups', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
     { id: 'smb-local-groups', proto: 'smb', flag: '--local-groups', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
@@ -232,9 +312,43 @@
         return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-passnotreq', note: 'PASSWD_NOTREQD accounts (try a blank password)' } }] : [];
       } },
 
+    { id: 'ldap-adcs', proto: 'ldap', module: 'adcs', produces: ['adcs.vulnerable'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) {
+        // nxc ldap -M adcs lists CAs / templates; a vulnerable ESC template is the ADCS lead (→ adcs-esc /
+        // certifried / cert-authenticate). A plain CA listing with no ESC verdict is just enumeration.
+        return /ESC\d|vulnerable|enrollee supplies subject|ENROLLEE_SUPPLIES_SUBJECT|EDITF_ATTRIBUTESUBJECTALTNAME/i.test(text)
+          ? [{ kind: 'adcs.vulnerable', scope: dom(ws), value: { detail: 'vulnerable ADCS template/CA via nxc adcs', tool: 'nxc' } }] : [];
+      } },
+    { id: 'ldap-user-desc', proto: 'ldap', module: 'user-desc', produces: ['credential.candidate'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) {
+        // Passwords left in the AD 'description' attribute — a classic. Mint any description that looks like
+        // it carries a secret as a candidate credential.
+        var out = [];
+        payloadLines(text).forEach(function (l) { if (/pass|pwd|cred|login|temp|welcome|changeme|default/i.test(l) && /[:=]|description/i.test(l)) out.push({ kind: 'credential.candidate', scope: dom(ws), value: { kind: 'ad_description', detail: l.slice(0, 160), tool: 'nxc' } }); });
+        return out;
+      } },
+    { id: 'ldap-get-desc-users', proto: 'ldap', module: 'get-desc-users', produces: ['credential.candidate'],
+      gate: ['credential.available', 'ldap.reachable'], extract: function (text, ws) { return CAT_BY_ID['ldap-user-desc'].extract(text, ws); } },
+    { id: 'ldap-pre2k', proto: 'ldap', module: 'pre2k', produces: ['credential.candidate'],
+      gate: ['ldap.reachable', 'port:389'], extract: function (text, ws) { return CAT_BY_ID['smb-pre2k'].extract(text, ws); } },
+    { id: 'ldap-enum-trusts', proto: 'ldap', module: 'enum_trusts', produces: ['ad.trusts'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) { return /trust|forest|outbound|inbound|bidirectional/i.test(text) ? [{ kind: 'ad.trusts', scope: dom(ws), value: { detail: 'domain/forest trusts via nxc enum_trusts', tool: 'nxc' } }] : []; } },
+    { id: 'ldap-groupmembership', proto: 'ldap', module: 'groupmembership', produces: ['ad.user_list'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) { var u = C._usernames(text); return u.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: u, count: u.length, method: 'nxc-groupmembership' } }] : []; } },
+    { id: 'ldap-ldap-checker', proto: 'ldap', module: 'ldap-checker', produces: ['config.review'],
+      gate: ['ldap.reachable', 'port:389'],
+      extract: function (text, ws) { return /signing\s*(?:not|is not|none)|channel binding\s*(?:not|never)|not (?:enforced|required)/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'ldap_signing_not_enforced', detail: 'LDAP signing / channel binding not enforced — relayable', tool: 'nxc' } }] : []; } },
+
     // --- LDAP informational ---
     { id: 'ldap-maq', proto: 'ldap', module: 'maq', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
     { id: 'ldap-query', proto: 'ldap', flag: '--query', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
+    { id: 'ldap-whoami', proto: 'ldap', module: 'whoami', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
+    { id: 'ldap-subnets', proto: 'ldap', module: 'subnets', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
+    { id: 'ldap-sid-brute', proto: 'ldap', flag: '--sid-brute', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
 
     // ========================= WINRM =========================
     { id: 'winrm-auth', proto: 'winrm', validate: true, produces: ['credential.available', 'foothold.windows'], existing: true,
@@ -252,6 +366,10 @@
     { id: 'mssql-exec-ps', proto: 'mssql', flag: '-X', produces: ['foothold.windows'], existing: true,
       gate: ['db.session'] },
     { id: 'mssql-query', proto: 'mssql', flag: '-q', informational: true, produces: [], gate: ['db.session'] },
+    { id: 'mssql-priv', proto: 'mssql', module: 'mssql_priv', informational: true, produces: [], gate: ['db.session'] },
+    { id: 'mssql-coerce', proto: 'mssql', module: 'mssql_coerce', produces: ['ad.coerced_auth'],
+      gate: ['db.session'],
+      extract: function (text, ws) { return /received connection|coerc|\[\+\].*success|ntlmv2/i.test(text) ? [{ kind: 'ad.coerced_auth', scope: dom(ws), value: { detail: 'auth coerced via MSSQL (xp_dirtree/xp_fileexist)', tool: 'nxc' } }] : []; } },
 
     // ========================= RDP =========================
     { id: 'rdp-auth', proto: 'rdp', validate: true, produces: ['rdp.authenticated'], existing: true,
