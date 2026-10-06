@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en" data-skin="obol" data-motion="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Next Steps — Redesign Mockup</title>
+<style>
+/* ---- real obol tokens (default "obol" skin), copied from assets/css/obol.css ---- */
+:root{
+  --bg:#020617; --bg1:#0B1120; --bg2:#121A2E; --bg3:#1B2540; --bg4:#26314c;
+  --surf1:var(--bg1); --surf2:var(--bg2); --surf3:var(--bg3);
+  --line:#26304c; --line-hot:#3a4870;
+  --accent:#22C55E; --accent-2:#4ADE80; --accent-soft:rgba(34,197,94,0.14); --on-accent:#08120a;
+  --text:#F1F5FB; --text-2:#AEBBD0; --muted:#7E8EA9;
+  --ph-recon:#38BDF8; --ph-enum:#818CF8; --ph-creds:#F59E0B; --ph-access:#34D399; --ph-escalate:#F472B6; --ph-loot:#A855F7;
+  --g-next:#F5A623; --g-next-line:#B9770E; --g-next-ink:#1c1400;
+  --g-locked-line:#64748B; --g-locked-ink:#7C8AA3;
+  --amber:#F59E0B;
+  --radius:11px;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"Nunito Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  /* family accents for move cards */
+  --fam-access:var(--accent); --fam-creds:var(--ph-creds); --fam-ad:#c06cf0; --fam-privesc:var(--ph-escalate); --fam-pivot:#2fb6a8;
+}
+*{box-sizing:border-box}
+body{margin:0;background:
+    radial-gradient(1200px 600px at 80% -10%, color-mix(in srgb,var(--accent) 7%, transparent), transparent 60%),
+    var(--bg);
+  color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.5;padding:22px clamp(16px,3vw,34px) 60px;}
+h1,h2,h3{margin:0}
+.mocknote{max-width:1180px;margin:0 auto 18px;font-size:12.5px;color:var(--muted);border:1px dashed var(--line-hot);border-radius:9px;padding:9px 13px;background:color-mix(in srgb,var(--accent) 4%, transparent)}
+.mocknote b{color:var(--text-2)}
+.wrap{max-width:1180px;margin:0 auto}
+
+/* ---- hero ---- */
+.hero{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;padding:16px 20px;border:1px solid var(--line);border-radius:var(--radius);
+  background:linear-gradient(135deg,var(--accent-soft),transparent 70%),var(--surf2);margin-bottom:16px}
+.hero-h{font-size:22px;letter-spacing:-.01em}
+.hero-sub{font-size:13px;color:var(--text-2);margin-top:3px;max-width:62ch}
+.hero-metrics{display:flex;gap:18px;flex:none}
+.metric{text-align:center}
+.metric-n{display:block;font:800 22px var(--mono)}
+.metric-l{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.m-ready .metric-n{color:var(--g-next)} .m-soon .metric-n{color:var(--ph-enum)} .m-open .metric-n{color:var(--accent-2)}
+
+.spine{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:18px;font-size:11px;font-family:var(--mono)}
+.spine b{padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--text-2);font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+.spine b.reached{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:var(--accent-soft)}
+.spine b.frontier{color:var(--g-next-ink);background:var(--g-next);border-color:var(--g-next-line)}
+.spine .sep{color:var(--muted)}
+
+/* ---- the two-column coach ---- */
+.coach{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+.railhead{display:flex;align-items:baseline;gap:10px;margin:2px 0 12px}
+.railhead h2{font-size:15px;font-weight:800}
+.railhead .count{font:600 11px var(--mono);color:var(--text-2)}
+.railhead .scope{margin-left:auto;display:flex;gap:4px}
+.scope button{font:600 11px var(--sans);color:var(--text-2);background:transparent;border:1px solid var(--line);border-radius:999px;padding:3px 11px;cursor:pointer}
+.scope button.on{color:var(--on-accent);background:var(--accent);border-color:var(--accent)}
+
+/* ---- the card grid (4–5 per row by min-width) ---- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(188px,1fr));gap:13px;align-items:start}
+.move{position:relative;grid-column:span 1;display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;font-family:var(--sans);
+  border:1px solid var(--line);border-left:3px solid var(--fam,var(--accent));border-radius:var(--radius);padding:13px 14px;min-height:150px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--fam,var(--accent)) 9%,var(--surf1)),var(--surf1));transition:.16s;overflow:hidden}
+.move:hover{border-color:var(--fam,var(--accent));box-shadow:0 0 0 3px color-mix(in srgb,var(--fam,var(--accent)) 16%,transparent);transform:translateY(-1px)}
+.move:focus-visible{outline:2px solid var(--fam,var(--accent));outline-offset:2px}
+.move.fam-access{--fam:var(--fam-access)} .move.fam-creds{--fam:var(--fam-creds)} .move.fam-ad{--fam:var(--fam-ad)} .move.fam-privesc{--fam:var(--fam-privesc)} .move.fam-pivot{--fam:var(--fam-pivot)}
+
+/* #1 glow + selected glow (glow follows selection) */
+.move.is-glow{border-color:var(--g-next);box-shadow:0 0 0 1px var(--g-next),0 0 26px -4px color-mix(in srgb,var(--g-next) 65%,transparent)}
+.move.selected{border-color:var(--fam,var(--accent));box-shadow:0 0 0 1px var(--fam,var(--accent)),0 0 30px -4px color-mix(in srgb,var(--fam,var(--accent)) 60%,transparent)}
+/* selected widens and shows its body, neighbours reflow around it */
+.move.selected{grid-column:span 2}
+
+.move-rank{position:absolute;top:10px;right:11px;font:800 12px var(--mono);color:color-mix(in srgb,var(--fam,var(--accent)) 60%,var(--text-2))}
+.move-head{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.chip{font:700 9px var(--mono);letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:5px;white-space:nowrap}
+.chip-phase{color:var(--ph-access);border:1px solid color-mix(in srgb,var(--ph-access) 45%,var(--line));background:color-mix(in srgb,var(--ph-access) 10%,transparent)}
+.chip-locus{color:var(--text-2);border:1px solid var(--line);background:color-mix(in srgb,var(--text) 5%,transparent)}
+.suggested{font:800 9px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--g-next-ink);background:var(--g-next);border-radius:999px;padding:2px 8px;white-space:nowrap}
+.move-title{font-size:13.5px;font-weight:800;color:var(--text);line-height:1.25;padding-right:22px}
+/* the because → now → expect micro-narrative */
+.narr{font-size:11.5px;line-height:1.55;color:var(--text-2)}
+.narr .k{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,var(--fam,var(--accent)) 12%,transparent);color:color-mix(in srgb,var(--fam,var(--accent)) 55%,var(--text))}
+.narr .arrow{color:var(--muted);padding:0 3px}
+.move-foot{margin-top:auto;font:700 11px var(--mono);color:color-mix(in srgb,var(--fam,var(--accent)) 60%,var(--text))}
+
+/* ---- expanded body (only in selected card) ---- */
+.move-body{display:none;margin-top:4px;border-top:1px solid var(--line);padding-top:11px;flex-direction:column;gap:10px}
+.move.selected .move-body{display:flex}
+.move.selected .move-foot{display:none}
+.toggle{display:inline-flex;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px;align-self:flex-start}
+.toggle button{font:700 10.5px var(--sans);color:var(--text-2);background:transparent;border:0;border-radius:999px;padding:4px 12px;cursor:pointer}
+.toggle button.on{color:var(--on-accent);background:var(--accent)}
+.toggle .reason{font:600 10px var(--sans)}
+.cmds{display:flex;flex-direction:column;gap:7px}
+.cmd{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg);cursor:pointer;transition:.13s}
+.cmd:hover{border-color:var(--line-hot)}
+.cmd.active{border-color:var(--fam,var(--accent));box-shadow:0 0 0 2px color-mix(in srgb,var(--fam,var(--accent)) 20%,transparent)}
+.cmd-step{font:800 10px var(--mono);color:var(--muted);flex:none;width:16px;text-align:center}
+.cmd-tool{font:800 9.5px var(--mono);text-transform:uppercase;letter-spacing:.03em;flex:none;padding:2px 6px;border-radius:5px}
+.tool-remote{color:var(--ph-recon);background:color-mix(in srgb,var(--ph-recon) 12%,transparent)}
+.tool-onhost{color:var(--ph-access);background:color-mix(in srgb,var(--ph-access) 13%,transparent)}
+.cmd code{font-family:var(--mono);font-size:11.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.cmd-copy{flex:none;font-size:12px;color:var(--muted);background:transparent;border:0;cursor:pointer}
+.cmd[hidden]{display:none}
+.cmd-more{align-self:flex-start;font:700 11px var(--sans);color:var(--accent-2);background:transparent;border:0;cursor:pointer;padding:2px 0}
+
+/* ---- the "opens up next" preview strip ---- */
+.opens{margin-top:22px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent-2) 7%,var(--surf1)),var(--surf1))}
+.opens-head{display:flex;align-items:center;gap:11px;width:100%;text-align:left;cursor:pointer;border:0;background:transparent;color:inherit;font-family:var(--sans);padding:13px 16px}
+.opens-kick{font:800 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2)}
+.opens-sub{font-size:12px;color:var(--text-2)}
+.opens-n{margin-left:auto;font:700 11px var(--mono);color:var(--text-2);border:1px solid var(--line);border-radius:999px;padding:2px 10px}
+.opens-caret{color:var(--muted);transition:.16s}
+.opens.open .opens-caret{transform:rotate(90deg)}
+.opens-peek{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:11px;padding:0 16px 16px}
+.opens.open .opens-peek{padding-top:2px}
+.ocard{position:relative;display:flex;flex-direction:column;gap:7px;border:1px solid var(--line);border-radius:10px;padding:12px 13px;
+  background:color-mix(in srgb,var(--fam,var(--accent)) 5%,var(--surf1));opacity:.92}
+.ocard .lock{position:absolute;top:11px;right:12px;font-size:12px;opacity:.5}
+.ocard.fam-access{--fam:var(--fam-access)} .ocard.fam-creds{--fam:var(--fam-creds)} .ocard.fam-ad{--fam:var(--fam-ad)} .ocard.fam-privesc{--fam:var(--fam-privesc)}
+.ocard-t{font-size:12.5px;font-weight:800;color:var(--text);padding-right:18px}
+.needs{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.needs-l{font:700 9px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.factchip{font:700 10px var(--mono);color:color-mix(in srgb,var(--fam,var(--accent)) 60%,var(--text));background:color-mix(in srgb,var(--fam,var(--accent)) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--fam,var(--accent)) 35%,var(--line));border-radius:999px;padding:2px 9px;white-space:nowrap}
+.ocard-near{margin-top:auto;font:600 10.5px var(--sans);color:var(--muted)}
+
+/* ---- the field-notes canvas (right ~30%) ---- */
+.canvas{position:sticky;top:16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surf1);overflow:hidden;min-height:420px}
+.canvas-head{display:flex;align-items:center;gap:9px;padding:13px 15px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 8%,var(--surf2)),var(--surf2))}
+.canvas-kick{font:800 9.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2)}
+.canvas-tool{margin-left:auto;font:800 9px var(--mono);text-transform:uppercase;padding:2px 7px;border-radius:5px}
+.canvas-body{padding:15px}
+.cn-cmd{font-family:var(--mono);font-size:11.5px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;white-space:pre-wrap;word-break:break-word;margin-bottom:14px}
+.cn-h{font:800 10.5px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--text-2);margin:0 0 7px}
+.cn-list{margin:0 0 15px;padding-left:17px;font-size:12.5px;color:var(--text-2);line-height:1.6}
+.cn-list li{margin-bottom:4px}
+.cn-win{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--text);background:color-mix(in srgb,var(--accent) 8%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line));border-radius:8px;padding:9px 11px;margin-bottom:14px}
+.cn-win .tick{color:var(--accent-2);font-weight:800;flex:none}
+/* a reactive doctor, amber (matches the pivot-troubleshooter convention) */
+.cn-doctor{border:1px solid color-mix(in srgb,var(--amber) 45%,var(--line));border-left:3px solid var(--amber);border-radius:8px;padding:10px 12px;background:color-mix(in srgb,var(--amber) 9%,transparent)}
+.cn-doctor-h{display:flex;align-items:center;gap:7px;font:800 10.5px var(--mono);letter-spacing:.03em;text-transform:uppercase;color:var(--amber);margin-bottom:6px}
+.cn-doctor p{margin:0 0 8px;font-size:12.5px;color:var(--text-2);line-height:1.55}
+.cn-doctor code{font-family:var(--mono);font-size:11.5px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;display:block;white-space:pre-wrap}
+.cn-empty{color:var(--muted);font-size:13px;text-align:center;padding:40px 10px}
+
+/* prism shimmer on the selected/expanding card — reused from .sl-tag */
+.move.selected::after{content:"";position:absolute;top:0;bottom:0;left:-70%;width:55%;transform:skewX(-18deg);pointer-events:none;mix-blend-mode:screen;filter:blur(3px);
+  background:linear-gradient(100deg,transparent,rgba(255,90,90,.4),rgba(255,210,90,.4),rgba(120,235,160,.4),rgba(110,180,255,.4),rgba(205,130,255,.4),transparent);
+  animation:prism 2.2s ease-out 1}
+@keyframes prism{0%{left:-70%;opacity:0}15%{opacity:1}100%{left:120%;opacity:0}}
+
+@media (max-width:920px){.coach{grid-template-columns:1fr}.canvas{position:static}.move.selected{grid-column:span 2}}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important}
+  .move.selected::after{display:none}
+  .move:hover{transform:none}
+}
+</style>
+</head>
+<body>
+<div class="mocknote">
+  <b>Mockup — Next Steps redesign.</b> Click any card: the glow follows your selection, the card widens and shows its commands, and the field-notes canvas on the right reloads for the selected command. Try the <b>Remote / On-host</b> toggle on the flag-capture card, and expand <b>“Opens up next.”</b> Scenario: a Windows foothold just landed, no flags captured yet. Default obol skin.
+</div>
+
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <h1 class="hero-h">Capture the User Flag (Windows)</h1>
+      <p class="hero-sub">Any Windows shell reads the user flag, no credential required. Grab it first and mark the local objective done — the root flag is its own step once you're SYSTEM.</p>
+    </div>
+    <div class="hero-metrics">
+      <div class="metric m-ready"><span class="metric-n">5</span><span class="metric-l">Ready</span></div>
+      <div class="metric m-soon"><span class="metric-n">3</span><span class="metric-l">Coming up</span></div>
+      <div class="metric m-open"><span class="metric-n">6</span><span class="metric-l">Opens up next</span></div>
+    </div>
+  </header>
+
+  <div class="spine">
+    <b class="reached">Recon</b><span class="sep">›</span>
+    <b class="reached">Enum</b><span class="sep">›</span>
+    <b class="reached">Creds</b><span class="sep">›</span>
+    <b class="frontier">Access</b><span class="sep">›</span>
+    <b>Escalate</b><span class="sep">›</span>
+    <b>Loot</b>
+  </div>
+
+  <div class="coach">
+    <div>
+      <div class="railhead">
+        <h2>Ready now</h2><span class="count">5 moves</span>
+        <div class="scope"><button class="on">OSCP+</button><button>OSCP</button><button>All</button></div>
+      </div>
+
+      <div class="grid" id="grid">
+        <!-- #1 selected + suggested + glow, EXPANDED with commands + toggle -->
+        <article class="move fam-access selected is-glow" tabindex="0" data-fam="access" data-default="onhost">
+          <span class="move-rank">#1</span>
+          <div class="move-head"><span class="suggested">Suggested start</span><span class="chip chip-phase">Access</span></div>
+          <h3 class="move-title">Capture the User Flag (Windows)</h3>
+          <p class="narr">Because <span class="k">Foothold</span><span class="arrow">→</span>grab the flag<span class="arrow">→</span>expect <span class="k">User Flag</span></p>
+          <div class="move-body">
+            <div class="toggle" data-toggle>
+              <button data-locus="onhost" class="on">On-host <span class="reason">(counts)</span></button>
+              <button data-locus="remote">Remote <span class="reason">(locate only)</span></button>
+            </div>
+            <div class="cmds">
+              <div class="cmd active" data-locus="onhost" data-note="winrm">
+                <span class="cmd-step">1</span><span class="cmd-tool tool-onhost">evil-winrm</span>
+                <code>evil-winrm -i 10.0.0.5 -u svc-web -H &lt;hash&gt;</code><button class="cmd-copy">⧉</button>
+              </div>
+              <div class="cmd" data-locus="onhost" data-note="type">
+                <span class="cmd-step">2</span><span class="cmd-tool tool-onhost">cmd</span>
+                <code>hostname; ipconfig; type %flag_local%</code><button class="cmd-copy">⧉</button>
+              </div>
+              <div class="cmd" data-locus="remote" data-note="spider" hidden>
+                <span class="cmd-step">–</span><span class="cmd-tool tool-remote">nxc</span>
+                <code>nxc smb 10.0.0.5 -u svc-web -H &lt;hash&gt; --spider C$</code><button class="cmd-copy">⧉</button>
+              </div>
+            </div>
+            <button class="cmd-more">+1 more command</button>
+          </div>
+          <div class="move-foot">3 commands · on-host</div>
+        </article>
+
+        <article class="move fam-privesc" tabindex="0" data-fam="privesc" data-default="onhost">
+          <span class="move-rank">#2</span>
+          <div class="move-head"><span class="chip chip-phase" style="color:var(--ph-escalate);border-color:color-mix(in srgb,var(--ph-escalate) 45%,var(--line));background:color-mix(in srgb,var(--ph-escalate) 10%,transparent)">Escalate</span><span class="chip chip-locus">On-host</span></div>
+          <h3 class="move-title">Dump LSASS Credentials</h3>
+          <p class="narr">Because <span class="k">Foothold</span><span class="arrow">→</span>dump secrets<span class="arrow">→</span>expect <span class="k">Credential</span></p>
+          <div class="move-body">
+            <div class="cmds">
+              <div class="cmd active" data-locus="onhost" data-note="lsass"><span class="cmd-step">1</span><span class="cmd-tool tool-onhost">cmd</span><code>comsvcs.dll MiniDump …</code><button class="cmd-copy">⧉</button></div>
+            </div>
+          </div>
+          <div class="move-foot">2 commands · on-host</div>
+        </article>
+
+        <article class="move fam-ad" tabindex="0" data-fam="ad" data-default="remote">
+          <span class="move-rank">#3</span>
+          <div class="move-head"><span class="chip chip-phase" style="color:var(--ph-creds);border-color:color-mix(in srgb,var(--ph-creds) 45%,var(--line));background:color-mix(in srgb,var(--ph-creds) 10%,transparent)">Creds</span><span class="chip chip-locus">Remote</span></div>
+          <h3 class="move-title">Kerberoast Service Accounts</h3>
+          <p class="narr">Because <span class="k">Credential</span><span class="arrow">→</span>request SPN tickets<span class="arrow">→</span>expect <span class="k">TGS Hash</span></p>
+          <div class="move-body">
+            <div class="cmds">
+              <div class="cmd active" data-locus="remote" data-note="kerb"><span class="cmd-step">1</span><span class="cmd-tool tool-remote">nxc</span><code>nxc ldap 10.0.0.5 -u svc-web -p … --kerberoasting out</code><button class="cmd-copy">⧉</button></div>
+            </div>
+          </div>
+          <div class="move-foot">2 commands · remote</div>
+        </article>
+
+        <article class="move fam-privesc" tabindex="0" data-fam="privesc" data-default="onhost">
+          <span class="move-rank">#4</span>
+          <div class="move-head"><span class="chip chip-phase" style="color:var(--ph-escalate);border-color:color-mix(in srgb,var(--ph-escalate) 45%,var(--line));background:color-mix(in srgb,var(--ph-escalate) 10%,transparent)">Escalate</span><span class="chip chip-locus">On-host</span></div>
+          <h3 class="move-title">SeImpersonate → SYSTEM</h3>
+          <p class="narr">Because <span class="k">Service Token</span><span class="arrow">→</span>abuse the privilege<span class="arrow">→</span>expect <span class="k">SYSTEM</span></p>
+          <div class="move-body"><div class="cmds"><div class="cmd active" data-locus="onhost" data-note="potato"><span class="cmd-step">1</span><span class="cmd-tool tool-onhost">cmd</span><code>GodPotato -cmd "…"</code><button class="cmd-copy">⧉</button></div></div></div>
+          <div class="move-foot">3 commands · on-host</div>
+        </article>
+
+        <article class="move fam-ad" tabindex="0" data-fam="ad" data-default="remote">
+          <span class="move-rank">#5</span>
+          <div class="move-head"><span class="chip chip-phase" style="color:var(--ph-enum);border-color:color-mix(in srgb,var(--ph-enum) 45%,var(--line));background:color-mix(in srgb,var(--ph-enum) 10%,transparent)">Enum</span><span class="chip chip-locus">Remote</span></div>
+          <h3 class="move-title">Enumerate Domain Users</h3>
+          <p class="narr">Because <span class="k">Credential</span><span class="arrow">→</span>list the directory<span class="arrow">→</span>expect <span class="k">User List</span></p>
+          <div class="move-body"><div class="cmds"><div class="cmd active" data-locus="remote" data-note="users"><span class="cmd-step">1</span><span class="cmd-tool tool-remote">nxc</span><code>nxc ldap 10.0.0.5 -u svc-web -p … --users</code><button class="cmd-copy">⧉</button></div></div></div>
+          <div class="move-foot">2 commands · remote</div>
+        </article>
+      </div>
+
+      <!-- opens up next -->
+      <section class="opens" id="opens">
+        <button class="opens-head" id="opensToggle">
+          <span class="opens-caret">▸</span>
+          <span><span class="opens-kick">Opens up next</span><br><span class="opens-sub">What a little more progress unlocks — sorted by what's closest.</span></span>
+          <span class="opens-n">6</span>
+        </button>
+        <div class="opens-peek">
+          <div class="ocard fam-access"><span class="lock">🔒</span>
+            <div class="ocard-t">Capture the Root / Proof Flag</div>
+            <div class="needs"><span class="needs-l">Needs</span><span class="factchip">Admin or SYSTEM</span></div>
+            <div class="ocard-near">1 step away — escalate first</div></div>
+          <div class="ocard fam-creds"><span class="lock">🔒</span>
+            <div class="ocard-t">Pass-the-Hash Lateral Move</div>
+            <div class="needs"><span class="needs-l">Needs</span><span class="factchip">Admin Credential</span></div>
+            <div class="ocard-near">1 step away</div></div>
+          <div class="ocard fam-ad"><span class="lock">🔒</span>
+            <div class="ocard-t">AS-REP Roast</div>
+            <div class="needs"><span class="needs-l">Needs</span><span class="factchip">Domain User List</span></div>
+            <div class="ocard-near">1 step away</div></div>
+          <div class="ocard fam-ad"><span class="lock">🔒</span>
+            <div class="ocard-t">DCSync the Domain</div>
+            <div class="needs"><span class="needs-l">Needs</span><span class="factchip">Domain Admin</span></div>
+            <div class="ocard-near">2 steps away</div></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- field-notes canvas -->
+    <aside class="canvas" id="canvas"><!-- filled by JS --></aside>
+  </div>
+</div>
+
+<script>
+/* per-command field notes: keyed by the command's data-note. This is the authored (move,command) content. */
+var NOTES = {
+  winrm: {
+    tool:'onhost', toolLabel:'On-host',
+    cmd:'evil-winrm -i 10.0.0.5 -u svc-web -H <hash>',
+    land:['Use the NT hash you dumped — no password needed (<code>-H</code>, not <code>-p</code>).',
+          'This drops you into a real session <b>on the box</b>. That is the whole point: OSCP only counts a flag you read from a shell on the target.'],
+    win:'You see a PS prompt like <b>*Evil-WinRM* PS C:\\Users\\svc-web&gt;</b> — you are now on the host.',
+    doctor:{ title:'If the login is refused', body:'<b>WinRM access denied</b> usually means the user isn\'t in <i>Remote Management Users</i>. Confirm the hash validates over SMB first:', code:'nxc smb 10.0.0.5 -u svc-web -H <hash>' }
+  },
+  type: {
+    tool:'onhost', toolLabel:'On-host',
+    cmd:'hostname; ipconfig; type %flag_local%',
+    land:['Run this <b>inside</b> the evil-winrm session, not from Kali.',
+          'Print hostname + ipconfig <i>next to</i> the flag so one screenshot proves identity and value together — the exam wants both in frame.'],
+    win:'The flag value prints under your hostname and the target IP. Screenshot the whole frame.',
+    doctor:null
+  },
+  spider: {
+    tool:'remote', toolLabel:'Remote',
+    cmd:'nxc smb 10.0.0.5 -u svc-web -H <hash> --spider C$',
+    land:['This runs from Kali, so it only <b>locates</b> the flag file — it does not capture it.',
+          'Use it when you have a hash but no shell yet, to find the exact path before you get on the host.'],
+    win:'You see a path like <b>Users\\svc-web\\Desktop\\user.txt</b> in the output. Now switch to the On-host tab to actually grab it.',
+    doctor:{ title:'Why this doesn\'t count', body:'A flag read remotely scores <b>zero</b> on OSCP. The spider is for finding the path only — the capture must happen in a session on the box.', code:null }
+  },
+  lsass:{tool:'onhost',toolLabel:'On-host',cmd:'rundll32 comsvcs.dll MiniDump …',land:['Run in your on-host session.','Dump then exfil the file to Kali to parse offline.'],win:'You get an lsass.dmp you can run pypykatz against.',doctor:null},
+  kerb:{tool:'remote',toolLabel:'Remote',cmd:'nxc ldap 10.0.0.5 -u svc-web -p … --kerberoasting out',land:['Runs from Kali against the DC.','No shell needed — any domain credential works.'],win:'A $krb5tgs$ hash lands in your output file, ready to crack.',doctor:null},
+  potato:{tool:'onhost',toolLabel:'On-host',cmd:'GodPotato -cmd "whoami"',land:['Match the potato to the Windows build <i>before</i> you run it.','Needs a service identity carrying SeImpersonate.'],win:'whoami returns <b>nt authority\\system</b>.',doctor:{title:'If the potato errors',body:'"The handle is invalid" usually means wrong potato for this build. Check the build and pick the matching one:',code:'systeminfo | findstr /B /C:"OS Version"'}},
+  users:{tool:'remote',toolLabel:'Remote',cmd:'nxc ldap 10.0.0.5 -u svc-web -p … --users',land:['Runs from Kali.','Feeds the user list into AS-REP roasting next.'],win:'A column of sAMAccountNames prints — that\'s your spray/roast list.',doctor:null}
+};
+
+function renderCanvas(note){
+  var c=document.getElementById('canvas');
+  var n=NOTES[note];
+  if(!n){c.innerHTML='<div class="cn-empty">Select a command to see how to land it.</div>';return;}
+  var toolCls=n.tool==='remote'?'tool-remote':'tool-onhost';
+  var html='<div class="canvas-head"><span class="canvas-kick">Field notes</span>'
+    +'<span class="canvas-tool '+toolCls+'">'+n.toolLabel+'</span></div><div class="canvas-body">';
+  html+='<div class="cn-cmd">'+n.cmd+'</div>';
+  html+='<p class="cn-h">How to land it</p><ul class="cn-list">'+n.land.map(function(l){return '<li>'+l+'</li>';}).join('')+'</ul>';
+  html+='<div class="cn-win"><span class="tick">✓</span><span>'+n.win+'</span></div>';
+  if(n.doctor){html+='<div class="cn-doctor"><div class="cn-doctor-h">⚠ '+n.doctor.title+'</div><p>'+n.doctor.body+'</p>'+(n.doctor.code?'<code>'+n.doctor.code+'</code>':'')+'</div>';}
+  html+='</div>';
+  c.innerHTML=html;
+}
+
+function selectMove(card){
+  document.querySelectorAll('.move').forEach(function(m){m.classList.remove('selected','is-glow');});
+  card.classList.add('selected','is-glow');
+  // load the active command's note (respect the card's default locus)
+  var active=card.querySelector('.cmd.active:not([hidden])')||card.querySelector('.cmd:not([hidden])');
+  if(active){active&&card.querySelectorAll('.cmd').forEach(function(x){x.classList.remove('active');});active.classList.add('active');renderCanvas(active.getAttribute('data-note'));}
+}
+
+document.querySelectorAll('.move').forEach(function(card){
+  card.addEventListener('click',function(e){
+    if(e.target.closest('.cmd')||e.target.closest('.toggle')||e.target.closest('.cmd-more')) return;
+    selectMove(card);
+  });
+  card.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();selectMove(card);}});
+  // command row selection
+  card.querySelectorAll('.cmd').forEach(function(cmd){
+    cmd.addEventListener('click',function(e){
+      if(e.target.closest('.cmd-copy'))return;
+      card.querySelectorAll('.cmd').forEach(function(x){x.classList.remove('active');});
+      cmd.classList.add('active');renderCanvas(cmd.getAttribute('data-note'));
+    });
+  });
+  // remote/on-host toggle
+  var tg=card.querySelector('[data-toggle]');
+  if(tg){tg.querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click',function(){
+      var loc=b.getAttribute('data-locus');
+      tg.querySelectorAll('button').forEach(function(x){x.classList.remove('on');});b.classList.add('on');
+      var first=null;
+      card.querySelectorAll('.cmd').forEach(function(cmd){
+        var show=cmd.getAttribute('data-locus')===loc; cmd.hidden=!show;
+        if(show&&!first)first=cmd;
+      });
+      card.querySelectorAll('.cmd').forEach(function(x){x.classList.remove('active');});
+      if(first){first.classList.add('active');renderCanvas(first.getAttribute('data-note'));}
+    });
+  });}
+});
+
+// opens-up-next expand
+document.getElementById('opensToggle').addEventListener('click',function(){
+  document.getElementById('opens').classList.toggle('open');
+});
+
+// boot: canvas shows #1's first on-host command
+renderCanvas('winrm');
+</script>
+</body>
+</html>
