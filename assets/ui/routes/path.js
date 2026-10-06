@@ -317,6 +317,10 @@
       + '<div class="ns-canvas-body">';
     live.forEach(function (d) { html += nsDoctorBlock(d); });
     if (cmdText) html += '<div class="ns-canvas-cmd">' + esc(cmdText) + '</div>';
+    // "When" — one line of situational context: where in a box this move sits (an opener, post-foothold,
+    // only after creds, needs a pivot...). Sets the frame before the how-to, the way the tunnel wizard's
+    // "when" line does on the hub.
+    if (note && note.when) html += '<div class="ns-cn-when"><span class="ns-cn-when-l">When</span><span>' + esc(note.when) + '</span></div>';
     // If this command runs a tool that must first be staged onto the host (PowerView, winPEAS, mimikatz...),
     // show the serve -> fetch -> load recipe. This fills the "how do I get it there?" gap no command answers.
     var selCmd = (move.commands || [])[idx] || {};
@@ -336,7 +340,11 @@
         html += '</div>';
       }
       if (note.land && note.land.length) html += '<p class="ns-cn-h">How To Land It</p><ul class="ns-cn-list">'
-        + note.land.map(function (l) { return '<li>' + l + '</li>'; }).join('') + '</ul>';
+        + note.land.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
+      // "What To Look For" — the signals worth scanning the output for. This is the heart of an
+      // enumeration note, where restating the command adds nothing but reading the result is everything.
+      if (note.look && note.look.length) html += '<p class="ns-cn-h">What To Look For</p><ul class="ns-cn-list look">'
+        + note.look.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
       if (note.win) html += '<div class="ns-cn-win"><span class="ns-tick" aria-hidden="true">✓</span><span>' + esc(note.win) + '</span></div>';
       if (note.mistakes && note.mistakes.length) html += '<p class="ns-cn-h">Common Mistakes</p><ul class="ns-cn-list warn">'
         + note.mistakes.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
@@ -603,6 +611,10 @@
     function cardOpts(a, i, section) {
       return { rank: section === 'ready' ? (i + 1) : 0, selected: a.id === nsSel.id, suggested: section === 'ready' && i === 0 };
     }
+
+    // Narrow screens are best-effort: the two-column coach + canvas really wants width. Say so plainly
+    // (shown only under the single-column breakpoint) and tell a phone user where the field notes land.
+    html += '<p class="ns-mobile-note">The coach is designed for a larger screen. On a phone it still works: tap a move to expand its commands, and its full field notes appear lower down.</p>';
 
     html += '<div class="ns-coach"><div class="ns-main">';
 

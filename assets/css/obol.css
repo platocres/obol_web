@@ -3126,8 +3126,13 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .ns-canvas-body { padding: 15px; }
 .ns-canvas-cmd { font-family: var(--mono); font-size: 12px; color: var(--text); background: var(--bg); border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line)); border-radius: 8px; padding: 9px 11px; white-space: pre-wrap; word-break: break-word; margin-bottom: 15px; }
 .ns-cn-h { font: 800 11px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--accent-2); margin: 0 0 8px; }
+/* "When" context line: a quiet, labelled one-liner under the command echo. */
+.ns-cn-when { display: flex; gap: 9px; align-items: baseline; font-size: 13px; color: var(--text-2); line-height: 1.55; margin: -2px 0 15px; }
+.ns-cn-when .ns-cn-when-l { flex: none; font: 800 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent-2);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: 5px; padding: 2px 6px; }
 .ns-cn-list { margin: 0 0 16px; padding-left: 18px; font-size: 13.5px; color: var(--text); line-height: 1.6; }
 .ns-cn-list li { margin-bottom: 5px; } .ns-cn-list.warn li { color: var(--text-2); }
+.ns-cn-list.look li::marker { color: var(--accent-2); }
 .ns-cn-win { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; color: var(--text); margin-bottom: 16px;
   background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line)); border-radius: 9px; padding: 11px 13px; }
 .ns-cn-win .ns-tick { color: var(--accent-2); font-weight: 800; flex: none; font-size: 15px; }
@@ -3144,7 +3149,10 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
   background: linear-gradient(100deg, transparent, rgba(255,90,90,.4), rgba(255,210,90,.4), rgba(120,235,160,.4), rgba(110,180,255,.4), rgba(205,130,255,.4), transparent); animation: ns-prism 3.4s ease-out 1 both; }
 @keyframes ns-prism { 0% { left: -70%; opacity: 0; } 18% { opacity: 1; } 100% { left: 122%; opacity: 0; } }
 
-@media (max-width: 1040px) { .ns-coach { grid-template-columns: 1fr; } .ns-canvas { position: static; order: 2; } }
+.ns-mobile-note { display: none; }
+@media (max-width: 1040px) { .ns-coach { grid-template-columns: 1fr; } .ns-canvas { position: static; order: 2; }
+  .ns-mobile-note { display: block; margin: 0 0 14px; padding: 9px 12px; font-size: 12.5px; line-height: 1.5; color: var(--text-2);
+    background: color-mix(in srgb, var(--accent) 7%, var(--surf2)); border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); border-radius: 9px; } }
 @media (max-width: 560px) { .ns-card, .ns-card.selected { max-width: none; flex-basis: 100%; } }
 @media (prefers-reduced-motion: reduce) {
   .ns-card { transition: box-shadow .01s, border-color .01s; }
