@@ -2765,6 +2765,11 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 /* the ranked spine is lit in the methodology lens */
 .dt-stage[data-lens="methodology"] .dt-node.dt-spine .dt-box { stroke: var(--accent); stroke-width: 2.2; fill: color-mix(in srgb, var(--accent) 12%, var(--surf2)); }
 .dt-node.dt-folded .dt-box { stroke-dasharray: 5 3; }
+/* flag-reachability chips on a port node: U(ser flag) R(oot flag) D(omain control) */
+.dt-chip { stroke-width: 1; }
+.dt-chip-ok { fill: color-mix(in srgb, var(--ok, #2ea043) 32%, var(--surf2)); stroke: var(--ok, #2ea043); }
+.dt-chip-gap { fill: color-mix(in srgb, var(--bad, #d1242f) 32%, var(--surf2)); stroke: var(--bad, #d1242f); }
+.dt-chip-t { font-family: var(--mono, monospace); font-size: 9px; font-weight: 800; fill: var(--text); text-anchor: middle; pointer-events: none; }
 /* the fold caret */
 .dt-caret { fill: var(--surf3); stroke: var(--line-hot); stroke-width: 1; }
 .dt-node:hover .dt-caret { stroke: var(--accent); }

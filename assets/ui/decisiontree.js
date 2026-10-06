@@ -40,7 +40,7 @@
       else { var ys = kids.map(function (k) { return walk(k, depth + 1); }); y = (ys[0] + ys[ys.length - 1]) / 2; }
       var x = PAD + depth * COLX;
       var n = { id: node.id, label: node.label, kind: node.kind, lane: node.lane || '', spine: !!node.spine,
-        parse: node.parse || '', meta: node.meta || '', x: x, y: y, cx: x + NW / 2, cy: y + NH / 2,
+        parse: node.parse || '', meta: node.meta || '', reach: node.reach || null, x: x, y: y, cx: x + NW / 2, cy: y + NH / 2,
         hasKids: kids.length > 0, collapsed: !!isCollapsed, count: kids.length, children: kids };
       nodeById[node.id] = n; nodes.push(n);
       return y;
@@ -74,7 +74,7 @@
           return { id: id, label: n.title, kind: 'move', lane: n.laneKey || laneOf(n), spine: !!spine[id], parse: n.parse, meta: n.fork || '', children: kids };
         }
         return { id: 'port:' + p.key, label: (p.port ? p.port + '  ' : '') + p.label, kind: 'port', lane: p.fam || '',
-          spine: true, children: (p.roots || []).map(moveNode) };
+          spine: true, reach: (OBOL.FLAG_REACH || {})[p.key] || null, children: (p.roots || []).map(moveNode) };
       });
     return { id: 'scan', label: 'Port scan', kind: 'scan', spine: true, children: portNodes };
   }
@@ -86,10 +86,23 @@
     var label = n.collapsed ? (n.label + '  (+' + n.count + ')') : n.label;
     var caret = n.hasKids ? '<circle class="dt-caret" cx="' + (n.x + NW - 9) + '" cy="' + n.cy + '" r="7"/>'
       + '<text class="dt-caret-t" x="' + (n.x + NW - 9) + '" y="' + (n.cy + 3.5) + '">' + (n.collapsed ? '+' : '−') + '</text>' : '';
+    // Flag-reachability badge on a port node: three chips (User flag / Root flag / Domain control),
+    // each green when the engine proves that milestone reachable from this port, red on a gap. This is
+    // the by-port → flag map made visible: a red chip is a user who would be stranded here.
+    var badge = '';
+    if (n.kind === 'port' && n.reach) {
+      var chips = [['U', n.reach.userFlag], ['R', n.reach.rootFlag]];
+      if (n.reach.domain !== null && n.reach.domain !== undefined) chips.push(['D', n.reach.domain]);
+      badge = '<g class="dt-reach" aria-label="flag reachability">' + chips.map(function (c, i) {
+        var bx = n.x + NW + 4 + i * 15, ok = c[1];
+        return '<rect class="dt-chip dt-chip-' + (ok ? 'ok' : 'gap') + '" x="' + bx + '" y="' + (n.cy - 7) + '" width="13" height="14" rx="3"/>'
+          + '<text class="dt-chip-t" x="' + (bx + 6.5) + '" y="' + (n.cy + 3.5) + '">' + c[0] + '</text>';
+      }).join('') + '</g>';
+    }
     return '<g class="' + cls + '" data-dtnode="' + esc(n.id) + '" data-cx="' + n.cx + '" data-cy="' + n.cy + '" data-kind="' + n.kind + '">'
       + '<rect class="dt-box" x="' + n.x + '" y="' + n.y + '" width="' + NW + '" height="' + NH + '" rx="5"/>'
       + '<text class="dt-label" x="' + (n.x + 8) + '" y="' + (n.cy + 3.5) + '">' + esc(label.length > 26 ? label.slice(0, 25) + '…' : label) + '</text>'
-      + caret + '</g>';
+      + caret + badge + '</g>';
   }
   function edgeD(e) {
     var mx = (e.x1 + e.x2) / 2;
