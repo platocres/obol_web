@@ -768,6 +768,13 @@
     nextActionsV2: nextActionsV2,
     rankActions: rankActions,
     isReportOnly: isReportOnly,
+    // Shared fact-classification — the move linter (tools/move-lint.js) uses the SAME predicates the
+    // ranker does, so a move that passes the lint is, by construction, one the ranker places sanely.
+    GOALS: V2_GOALS,
+    isEvidenceFact: v2EvidenceFact,
+    producesFoothold: v2ProducesFoothold,
+    producesPrivilege: function (a) { for (var i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return true; return false; },
+    isIndicated: v2Indicated,
     planPath: planPath,
     ranker: 'v2',
     lockedActions: lockedActions,
