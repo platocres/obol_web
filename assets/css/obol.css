@@ -3134,6 +3134,12 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
    point of the move reads first. Same pill shape, so the two labels sit as a consistent pair. */
 .ns-cn-what { color: var(--text); margin-bottom: 16px; }
 .ns-oyi-lead { font-size: 13px; color: var(--text-2); line-height: 1.55; margin: 0 0 10px; }
+/* "Learn More": clickable reference chips to the canonical source for the technique. */
+.ns-learn { display: flex; flex-wrap: wrap; gap: 7px; }
+.ns-learn-link { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--accent-2); text-decoration: none;
+  padding: 4px 11px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ns-learn-link:hover, .ns-learn-link:focus-visible { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.ns-learn-ext { font-size: 10px; opacity: .7; }
 /* PTY upgrade: ordered, machine-labelled steps (reuses the ns-stage vocabulary). A key press and a
    kali-side step are called out so it is never mistaken for one copy-paste block. */
 .ns-pty { border: 1px solid color-mix(in srgb, var(--ph-enum) 42%, var(--line)); border-left: 3px solid var(--ph-enum); border-radius: 9px; padding: 11px 13px; margin-bottom: 16px; background: color-mix(in srgb, var(--ph-enum) 10%, transparent); }

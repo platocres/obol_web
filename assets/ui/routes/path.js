@@ -360,6 +360,36 @@
       + '<p class="ns-oyi-lead">Capture the proof flag with your new identity in the same window. One screenshot proves all of it, and that is what the exam grades.</p>'
       + '<div class="ns-setup">' + nsReuseSteps(flagMove, facts, params) + '</div>';
   }
+  // "Learn More": the canonical, comprehensive source for the whole technique family, so a learner is never
+  // left with just the one example command. Reuses the pack's own `refs` (the same links the Learn tab uses,
+  // one source of truth) plus a curated best-pick per move (OBOL.FIELD_MOVE[id].refs), including the
+  // interactive "back ends" that beat any static command (revshells.com, CrackStation, GTFOBins).
+  var REF_HOSTS = {
+    'gtfobins.github.io': 'GTFOBins', 'book.hacktricks.wiki': 'HackTricks', 'hacktricks.wiki': 'HackTricks',
+    'portswigger.net': 'PortSwigger Academy', 'swisskyrepo.github.io': 'PayloadsAllTheThings',
+    'github.com': 'GitHub', 'thehacker.recipes': 'The Hacker Recipes', 'netexec.wiki': 'NetExec Wiki',
+    'hashcat.net': 'hashcat', 'crackstation.net': 'CrackStation', 'revshells.com': 'revshells.com',
+    'owasp.org': 'OWASP', 'ired.team': 'ired.team', '0xdf.gitlab.io': '0xdf', 'ippsec.rocks': 'IppSec',
+    'exploit-db.com': 'Exploit-DB', 'attack.mitre.org': 'MITRE ATT&CK',
+  };
+  function refLabel(url) {
+    try { var h = new URL(url).hostname.replace(/^www\./, ''); return REF_HOSTS[h] || h; } catch (e) { return 'reference'; }
+  }
+  function nsLearnMore(move) {
+    if (!move) return '';
+    var out = [], seen = {};
+    var curated = ((OBOL.FIELD_MOVE || {})[move.id] || {}).refs || [];
+    curated.forEach(function (r) { var u = r.url || r; var l = r.label || refLabel(u); if (u && !seen[u]) { seen[u] = 1; out.push({ url: u, label: l }); } });
+    (move.refs || []).forEach(function (u) { if (u && !seen[u]) { seen[u] = 1; out.push({ url: u, label: refLabel(u) }); } });
+    if (!out.length) return '';
+    out = out.slice(0, 5);
+    return '<p class="ns-cn-h">Learn More</p><div class="ns-learn">'
+      + out.map(function (r) {
+          return '<a class="ns-learn-link" href="' + U.attr(r.url) + '" target="_blank" rel="noopener noreferrer">'
+            + esc(r.label) + '<span class="ns-learn-ext" aria-hidden="true">↗</span></a>';
+        }).join('')
+      + '</div>';
+  }
   function nsDoctorBlock(d) {
     return '<div class="ns-doctor"><div class="ns-doctor-h">' + OBOL.ic('shield') + ' ' + esc(d.title) + '</div>'
       + '<p>' + esc(d.body) + '</p>' + (d.code ? '<pre class="ns-doctor-code"><code>' + esc(d.code) + '</code></pre>'
@@ -420,6 +450,7 @@
     // once a shell lands, reusing the Shells lane's PTY upgrade.
     html += nsOnceYouAreIn(move, facts, params);
     html += stagingGuide(move, params);
+    html += nsLearnMore(move);
     html += '</div>';
     return html;
   }
