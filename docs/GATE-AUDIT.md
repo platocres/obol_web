@@ -180,3 +180,58 @@ printnightmare, eternalblue on smb.ms17_010, zerologon-exploit on ad.zerologon):
 primitive their technique needs — OK. password-spray / kerberos-relay / silver-ticket carry the documented
 capped-speculative nuance (OK*). **56/57 OK as-authored, 1 FIX.**
 
+## linux_privesc (23)
+
+Every move gates on either a **specific privesc primitive** (sudo-abuse←privesc.sudo_rights/sudo_binary,
+writable-passwd←privesc.passwd_writable, lxc/docker←group facts, suid-gtfobins←privesc.suid_candidate,
+cron-abuse←privesc.cron_writable/process_lead, capabilities←privesc.capability) — all minted by the
+linux-enum/PEAS parsers — or on **foothold.linux+access.shell** for the speculative kernel/CVE exploits
+(linux-kernel-exploit, dirtycow, dirtypipe, baron-samedit, polkit-abuse, systemd-timer-abuse,
+container-escape, python-library-hijack). The latter produce access.admin from a bare foothold — intentional
+capped speculation (you try them once on the box; the ranker ranks them below primitive-gated wins).
+**23/23 OK.**
+
+## windows_privesc (19)
+
+Same shape: primitive-gated wins (seimpersonate←privesc.windows_privilege, unquoted-service-path,
+weak-service-permissions, alwaysinstallelevated, windows-dll-hijack/schtask/service-dacl←their primitive,
+windows-patch-exploit←privesc.patch_gap/exploit.candidate) vs. speculative-from-foothold (uac-bypass,
+com-hijack, windows-namedpipe-impersonation — the 3 SHORTCUT advisories, capped). Credential/loot moves
+(dpapi-secrets, stored-credentials, windows-old-hives, lsass-dump-onbox) gate on foothold/admin correctly.
+**19/19 OK.**
+
+## pivoting (7)
+
+tunnel builders gate on a foothold/shell or SSH creds (chisel/ligolo←foothold/multihomed, sshuttle/ssh-dynamic/
+ssh-portforward←credential.available/foothold.linux); pivot-scan-through←tunnel.socks; dns-tunnel←foothold.
+**7/7 OK.**
+
+## obol_local_pivot (8)
+
+local recon from a foothold — each requires BOTH a credential AND the foothold (requires_all
+[credential.available, foothold.linux] or [credential.available, winrm.authenticated]) → scan.local.*.
+Correct: these run once on the box. **8/8 OK.**
+
+## obol_flag_hunt (2)
+
+flag-hunt-linux (credential.available + foothold.linux) and flag-hunt-windows (credential.available +
+winrm.authenticated/access.admin/foothold.windows) → objective.flag. **2/2 OK.**
+
+---
+## Summary
+
+All **237 moves** reviewed by hand, both directions. **7 gate faults found and fixed:**
+
+| # | move | fault | direction | fix |
+|---|---|---|---|---|
+| 1 | crack-identify | dead `hash.type` OR-option (nothing mints it) | wiring | dropped the option |
+| 2 | mssql-xp-cmdshell | fired on any engine's `db.session` | over-surface | AND the MSSQL service/port |
+| 3 | mssql-linked-server | fired on any engine's `db.session` | over-surface | AND the MSSQL service/port |
+| 4 | mysql-outfile-rce | fired on any engine's `db.session` | over-surface | AND the MySQL service/port |
+| 5 | ssh-key-login | produced nothing → Linux privesc never surfaced after a key login | under-surface | produces foothold.linux+access.shell |
+| 6 | nosql-injection | claimed access.admin (win GOAL) from a web auth bypass | effect honesty | produces web.authz_bypass+credential.candidate |
+| 7 | delegation-abuse | circular gate on `ad.computer_added` → RBCD unreachable via the coach | under-surface | gate on ad.control_paths/ad.attack_paths |
+
+The remaining 230 gates are correct as authored. The advisory classes (capped-speculative exploits, 3
+foothold-only privesc shortcuts, 3 self-satisfied report checks) are documented and intended; the mechanical
+backstops (`gate-audit.js`, `move-lint.js`, `gap-report.js`, corpus) enforce the structural half going forward.
