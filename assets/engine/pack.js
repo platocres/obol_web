@@ -477,6 +477,14 @@
   // so they never bury the evidenced next step. Pure function of facts (+ fact timestamps).
   var V2_INF = 1e6;
   var V2_GOALS = ['objective.flag', 'access.admin', 'access.system', 'access.root', 'loot.ntds'];
+  // Keystone weighting (gate-wiring aware): `enable` already rewards the single BEST door a move opens
+  // (Math.max over newly-unlocked moves). Keystone adds the BREADTH — how many currently-blocked moves a
+  // move's produced facts unblock, goal-tempered — so a pivotal fact (credential.available unblocks the whole
+  // authenticated surface; loot.ntds unblocks the endgame) is favoured over a narrow lead of equal
+  // goal-distance, WITHOUT a hand-tuned priority bump. Kept small + capped: a refinement that breaks ties
+  // toward the keystone, never a term that overrides a clearly-better-progress move. Tune against the corpus.
+  var V2_KEYSTONE_W = 0.15;    // weight of the breadth term in the score
+  var V2_KEYSTONE_CAP = 4;     // max accumulated breadth before the weight applies (bounds its influence)
   // Specific EARNED control/loot/credential facts: a move gated on one of these is a deterministic
   // cash-in (DCSync given control paths, a crack given a hash), not a gamble — full reliability.
   var V2_SPECIFIC = {
@@ -628,13 +636,34 @@
       a.produces.forEach(function (p) { h2[p] = 1; });
       var dH2 = v2GoalDistance(h2, producers);
       var progA = d0 >= V2_INF ? (dH2 >= V2_INF ? 0 : 5) : Math.max(0, d0 - dH2);
-      // enablement: best tempered value among moves newly-eligible after doing a (1-step lookahead).
-      var enable = 0;
+      // enablement + keystone in one forward pass over the moves this one unblocks (1-step lookahead):
+      //   enable   = the single BEST door a opens (goal-tempered) — the deepest unlock.
+      //   keystone = the BREADTH of doors it opens — how many blocked moves become eligible, each tempered
+      //              by its reliability and whether it advances toward a goal (0.5 floor for being unblocked
+      //              at all). Capped so a fact that unblocks the whole authenticated surface is favoured as
+      //              the pivot, without letting raw fan-out dominate a better-progress move.
+      var enable = 0, keystone = 0;
       pack.forEach(function (b) {
         if (b.id === a.id || v2EligAgainst(b, haveObj) || !v2EligAgainst(b, h2)) return;
-        enable = Math.max(enable, v2Reliability(b, h2) * v2ProgressFrom(dH2, h2, b.produces, producers));
+        var relB = v2Reliability(b, h2), progB = v2ProgressFrom(dH2, h2, b.produces, producers);
+        enable = Math.max(enable, relB * progB);
+        keystone += relB * (0.5 + progB);
       });
-      var score = v2Reliability(a, haveObj) * (progA + 0.6 * enable) + (onType(a) === -1 ? 0.5 : 0);
+      if (keystone > V2_KEYSTONE_CAP) keystone = V2_KEYSTONE_CAP;
+      // Keystone is a MIDDLE-GAME term: it helps you reach a winning position, it does not adjudicate the
+      // win itself. Once a move directly produces a privilege/goal fact it is a cash-in — rank it by
+      // progress + hand-tuned priority (the canonical endgame), never by how many further doors it opens,
+      // so e.g. own-domain-pth (PtH, p99) is not displaced by silver-ticket just because forging a ticket
+      // also unblocks ticket-reuse.
+      var aCashIn = false;
+      for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) { aCashIn = true; break; }
+      // Also suppress keystone for a side-quest the pack deprioritizes in the current state (e.g. the
+      // golden/silver/diamond ticket persistence moves once loot.ntds is already held): forging a ticket
+      // "unblocks" more moves, but post-win persistence must not out-rank the actual endgame cash-in.
+      var aSideQuest = false;
+      for (i = 0; i < a.deprioritize_when.length; i++) if (haveObj[a.deprioritize_when[i]]) { aSideQuest = true; break; }
+      if (aCashIn || aSideQuest) keystone = 0;
+      var score = v2Reliability(a, haveObj) * (progA + 0.6 * enable + V2_KEYSTONE_W * keystone) + (onType(a) === -1 ? 0.5 : 0);
       return { a: a, tier: tier, score: score };
     });
     scored.sort(function (x, y) {

@@ -38,8 +38,17 @@ Two consumers of the graph:
 
 - **`nextActionsV2` / `rankActions`** (`assets/engine/pack.js`) — the coach's ranker. Orders eligible,
   non-settled moves by: **tier** (recency: a move that *just* became possible is surfaced; speculative
-  moves are capped) → **score** (goal-distance progress + 1-step enablement, weighted by reliability) →
-  **priority** (hand-tuned, a tiebreak) → **locus** (remote-first) → id.
+  moves are capped) → **score** (goal-distance progress + 1-step enablement + a **keystone** term, weighted
+  by reliability) → **priority** (hand-tuned, a tiebreak) → **locus** (remote-first) → id.
+  - **Keystone weighting** (gate-wiring-aware): `enable` rewards the single deepest door a move opens;
+    `keystone` adds the *breadth* — how many currently-blocked moves its produced facts unblock, each
+    goal-tempered — so a pivotal fact (a credential unblocking the authenticated surface) is favoured over a
+    narrow lead of equal goal-distance, computed from the wiring rather than a hand-tuned priority bump. It
+    is a **middle-game** term: suppressed for direct cash-ins (a move producing a privilege/goal fact) and
+    for side-quests the pack deprioritizes in the current state, so it never displaces the endgame. Small +
+    capped (`V2_KEYSTONE_W`, `V2_KEYSTONE_CAP`); pinned by `tests/engine/ranker-keystone-smoke.js` and the
+    corpus. This is the mechanism for shrinking hand-tuned `priority` over time — move structural value into
+    the wiring, not into per-move numbers.
 - **`planPath`** (A* in `assets/engine/pack.js`) — the lowest-cost dependable route to a goal. Costs
   (`v2ActionCost`) encode preference: evidenced step = 1, ordinary = 1.5, privilege shortcut = 8,
   speculative = 12, **plus a small locus surcharge so the route prefers Kali-side steps**.
