@@ -24,6 +24,16 @@ declares:
 - `phase` — recon · enum · creds · access · escalate · loot (derived from `produces` if omitted).
 - `report.severity` — `info` marks a **report-only** writeup check (SPF/DMARC, headers, TLS…).
 
+**Operator preferences (hold these when tuning):**
+- **Remote-first, always.** Running a command from Kali beats getting on the host — faster, lower
+  footprint. A remote (R) move is preferred over an on-host (F/I) twin that reaches the same objective.
+- **Prefer NetExec (`nxc`) wherever possible, to its fullest.** It's the quickest, smoothest, most
+  parseable tool we have — one remote tool spanning SMB/LDAP/WinRM/MSSQL/RDP/WMI/SSH, authentication checks,
+  enumeration, and command execution. When a move can be done with `nxc`, its `nxc` command variant should
+  lead, and an `nxc`-backed move is preferred over heavier or on-host equivalents (standalone impacket
+  one-offs, PowerView/SharpHound run on the box). Use it across the kill chain: spray/validate creds,
+  enumerate users/shares/sessions, pass-the-hash exec, dump secrets — all through `nxc` first.
+
 Two consumers of the graph:
 
 - **`nextActionsV2` / `rankActions`** (`assets/engine/pack.js`) — the coach's ranker. Orders eligible,
