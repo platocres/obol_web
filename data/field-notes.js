@@ -591,6 +591,52 @@
         mistakes: ['Testing only the IP. The real site may answer only to the right name.'] } ],
   };
 
+  // Move-level "What": the goal of the move in plain language, with NO assumed knowledge, and how it moves
+  // the learner toward the flag. Authored once per move; OBOL.fieldNote() applies it to every command. These
+  // are distilled from the Learn section's longer "why this, why now" teaching notes to one or two sentences,
+  // so the canvas gives the point without overloading. Same voice as Learn, shorter.
+  OBOL.FIELD_MOVE = {
+    'recon-smb-anon': { what: 'SMB is Windows file sharing. You are trying to log in as nobody, an anonymous session, to read shared folders and the user list for free. A readable share full of configs, or a list of usernames, is often your first real lead toward a way in.' },
+    'recon-web-triage': { what: 'You are finding out exactly what software runs the website, because the way in is completely different for WordPress, a custom app, or a Java server. This does not get you onto the box; it aims every slower step that follows at the right target.' },
+    'recon-dns': { what: 'You are asking the name server for its full list of hosts. When it is misconfigured it hands over the whole internal map, and every hostname you collect is a new machine or website to attack on the way to a flag.' },
+    'recon-snmp': { what: 'SNMP is a device-management service that often answers to the default word public with no login. If it does, it can leak running processes, accounts, and sometimes passwords, any of which can become your way onto the box.' },
+    'recon-ike-vpn': { what: 'A VPN endpoint here can be tricked into leaking a password hash during its handshake. Crack that hash offline and you may hold a credential that logs in, which is real progress toward a flag.' },
+    'recon-finger': { what: 'You are asking an old service to list the accounts on the machine. Real usernames are the raw material for guessing a password later, which is how many boxes are first opened.' },
+    'recon-vnc': { what: 'VNC is remote desktop. The blunt question is whether it even asks for a password; if not, you are looking at the screen of the box, and a desktop is one short step from a shell and the flag.' },
+    'vnc-desktop-shell': { what: 'You already have the target desktop in front of you. This turns that desktop into a real command shell, the foothold you need to start hunting the flag.' },
+    'recon-smtp': { what: 'You are asking the mail server which usernames are real. A confirmed list of names makes a later password-guessing attack far more likely to land a working login.' },
+    'recon-ftp': { what: 'FTP is file transfer. You are trying the free anonymous login, because an open FTP often exposes source code, backups, or a config file with a password in it, a foothold sitting in plain sight.' },
+    'recon-mail': { what: 'You are reading what the mail service reveals about itself and the domain. Mailboxes also hold passwords and reset links, so a login here can hand you a credential toward the flag.' },
+    'rdp-enum': { what: 'RDP is Windows remote desktop. You are reading the machine name and checking whether a password or hash you hold can log in, which would give you a full desktop on the box.' },
+    'nfs-enum': { what: 'NFS shares a filesystem over the network. You are listing what it exports and to whom; a world-readable share, or one exported with no_root_squash, is a common route to a key or even to root.' },
+    'nfs-to-foothold': { what: 'You are turning a shared NFS folder into an actual login, usually by reading or planting an SSH key. That gives you a foothold to hunt the flag from.' },
+    'recon-telnet': { what: 'Telnet is an old, unencrypted remote login, almost always on something legacy like a router or printer. Those devices ship with documented default passwords, so the banner plus a default login can be an immediate foothold.' },
+    'telnet-login': { what: 'You hold a username and password, and telnet is a login shell, so logging in here is the foothold you need to start finding the flag.' },
+    'recon-rservices': { what: 'These old trust services can log you in with no password at all if the machine trusts your host. When they are open, that can be a direct shortcut to a shell, sometimes as root.' },
+    'rservices-login': { what: 'You are using that trust to log in with no password, often straight to a root shell, which can be the whole box in a single step.' },
+    'recon-rsync': { what: 'rsync serves folders over the network. Listing and downloading them often turns up source code, backups, and passwords you can reuse to get in.' },
+    'rsync-write-shell': { what: 'A writable rsync folder that lands in the right place lets you plant an SSH key and log in, turning file-write access into a real foothold.' },
+    'recon-tftp': { what: 'TFTP is a tiny file service with no login. On network devices it hands out config files that carry passwords and hashes you can reuse elsewhere.' },
+    'tftp-write-shell': { what: 'If you can write a file where the web server will run it, you turn the no-login TFTP upload into code execution, which is a foothold.' },
+    'recon-x11': { what: 'An open X11 display is the user live screen over the network. With it open you can photograph what is on screen and read every keystroke, so simply looking can hand you a password.' },
+    'x11-keylog': { what: 'You are watching the screen and keystrokes to catch a password as it is typed, including the sudo password, which can take you all the way to root.' },
+    'ftp-upload-webshell': { what: 'If the FTP folder is the same one the website serves, a file you upload can be run by the web server, turning write access into code execution and a foothold.' },
+    'ssh-user-enum': { what: 'An old SSH version leaks which usernames are real. That turns a hopeless blind password guess into a targeted one against accounts you know exist.' },
+    'smtp-open-relay': { what: 'You are testing whether the mail server will send mail for anyone, which is a reportable misconfiguration and a lever for phishing. It is a finding for the report, not a shell by itself.' },
+    'ftp-bounce': { what: 'An old FTP trick makes the server scan machines you cannot reach directly, mapping a hidden network segment on the way to deeper targets.' },
+    'vsftpd-backdoor': { what: 'One specific, backdoored version of this FTP server opens a root shell on demand. The whole skill is reading the banner: the moment it says vsftpd 2.3.4, the box is yours.' },
+    'proftpd-modcopy': { what: 'A flaw in this FTP server lets you copy a file you control into the website folder with no login, which you then run for code execution.' },
+    'samba-usermap': { what: 'A flaw in old Samba runs whatever you put in the username field as a command, as root. When the version matches, it is a direct root shell with no credentials.' },
+    'smbghost': { what: 'A flaw in a specific Windows file-sharing version can be pushed to full SYSTEM control. It is powerful but unstable, so it is a lab-only, snapshot-first move.' },
+    'bluekeep': { what: 'A flaw in old Windows remote desktop can be driven to SYSTEM with no login. It crashes often, so treat it as a lab-only, snapshot-first move.' },
+    'freeswitch-esl': { what: 'This phone server has a control port with a default password that runs commands. If it is open, that is a straight line to a shell.' },
+    'jdwp-debug': { what: 'A Java debug port lets anyone who can reach it run code inside the program. That is a foothold, usually reached through a tunnel from another box.' },
+    'aerospike-udf': { what: 'This database lets an unauthenticated user load a small function that runs commands. If the version matches, that is a shell as the database service user.' },
+    'wifi-mouse-rce': { what: 'This remote-control app trusts anyone who connects and will run a program for them, so reaching its port can hand you a shell as the logged-in user.' },
+    'nmap-host-unresponsive': { what: 'Your scan said the host is down, but it almost certainly is not. This gets the box to answer so you can see its open ports and keep moving toward the flag.' },
+    'fix-name-resolution': { what: 'A tool failed because it was handed a name it could not look up. This teaches your machine that name so the step works, unblocking web apps and Windows or Kerberos logins.' },
+  };
+
   // Reactive doctors — surfaced in the canvas when a pasted error has minted the matching blocker.* fact,
   // regardless of which command is selected. Concise fixes; the full fix move still exists in the engine.
   OBOL.FIELD_DOCTORS = {
@@ -624,8 +670,13 @@
     var land = isAuthored ? (authored.land || [])
       : (cmd.note ? [String(cmd.note)] : (move.hypothesis ? [firstSentence(move.hypothesis)] : []));
     var locus = (OBOL.pack && OBOL.pack.commandLocus) ? OBOL.pack.commandLocus(cmd) : 'remote';
+    // "What" is move-level (the goal is the same for every command of a move), authored once in
+    // OBOL.FIELD_MOVE; a per-command entry may still override it. It answers, in plain language with no
+    // assumed knowledge, what this move is trying to achieve and how it moves the learner toward the flag.
+    var moveMeta = (OBOL.FIELD_MOVE || {})[move.id] || {};
     return {
       when: authored.when || '',
+      what: authored.what || moveMeta.what || '',
       setup: (authored.setup && authored.setup.length) ? authored.setup : null,
       // `use` references OTHER moves by id (e.g. 'shell-listener') whose commands the canvas surfaces as
       // prerequisite "Set Up First" steps, pulled live from the packs. Reuse, not re-authoring: the Shells

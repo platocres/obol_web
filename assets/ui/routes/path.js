@@ -342,6 +342,10 @@
     // only after creds, needs a pivot...). Sets the frame before the how-to, the way the tunnel wizard's
     // "when" line does on the hub.
     if (note && note.when) html += '<div class="ns-cn-when"><span class="ns-cn-when-l">When</span><span>' + esc(note.when) + '</span></div>';
+    // "What" — the goal of this move in plain language, and how it gets you closer to the flag. Comes
+    // after When and before the how-to, so a learner who does not already know the service or technique
+    // gets the point of the move before any setup or command detail.
+    if (note && note.what) html += '<div class="ns-cn-when ns-cn-what"><span class="ns-cn-when-l">What</span><span>' + esc(note.what) + '</span></div>';
     // If this command runs a tool that must first be staged onto the host (PowerView, winPEAS, mimikatz...),
     // show the serve -> fetch -> load recipe. This fills the "how do I get it there?" gap no command answers.
     var selCmd = (move.commands || [])[idx] || {};

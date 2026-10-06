@@ -3130,6 +3130,9 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .ns-cn-when { display: flex; gap: 9px; align-items: baseline; font-size: 13px; color: var(--text-2); line-height: 1.55; margin: -2px 0 15px; }
 .ns-cn-when .ns-cn-when-l { flex: none; font: 800 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent-2);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: 5px; padding: 2px 6px; }
+/* "What" (the goal) is the orienting line: its body text is primary while "When" stays secondary, so the
+   point of the move reads first. Same pill shape, so the two labels sit as a consistent pair. */
+.ns-cn-what { color: var(--text); margin-bottom: 16px; }
 .ns-cn-list { margin: 0 0 16px; padding-left: 18px; font-size: 13.5px; color: var(--text); line-height: 1.6; }
 .ns-cn-list li { margin-bottom: 5px; } .ns-cn-list.warn li { color: var(--text-2); }
 .ns-cn-list.look li::marker { color: var(--accent-2); }
