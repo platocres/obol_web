@@ -257,7 +257,42 @@
       } },
     { id: 'ftp-ls', proto: 'ftp', flag: '--ls', produces: ['loot.files'],
       gate: ['ftp.reachable', 'port:21'],
-      extract: function (text, ws) { return CAT_BY_ID['ftp-auth'].extract(text, ws); } }
+      extract: function (text, ws) { return CAT_BY_ID['ftp-auth'].extract(text, ws); } },
+
+    // ========================= SSH =========================
+    { id: 'ssh-auth', proto: 'ssh', validate: true, produces: ['credential.available'], existing: true,
+      gate: ['ssh.reachable', 'port:22', 'credential.candidate', 'credential.available'] },
+    { id: 'ssh-exec', proto: 'ssh', flag: '-x', produces: ['foothold.linux', 'access.shell'], existing: true,
+      gate: ['credential.available', 'ssh.reachable'] },
+    { id: 'ssh-sudo-check', proto: 'ssh', flag: '--sudo-check', informational: true, produces: [], gate: ['credential.available', 'ssh.reachable'] },
+
+    // ========================= WMI =========================
+    { id: 'wmi-exec', proto: 'wmi', flag: '-x', produces: ['foothold.windows'], existing: true,
+      gate: ['credential.available', 'hash.ntlm'] },
+    { id: 'wmi-exec-ps', proto: 'wmi', flag: '-X', produces: ['foothold.windows'],
+      gate: ['credential.available', 'hash.ntlm'],
+      extract: function (text, ws) {
+        // nxc wmi -X runs PowerShell; its output is arbitrary (not always an identity line), so key the
+        // foothold on the exec-success marker (Pwn3d!) rather than on recognising the command output.
+        return /\(Pwn3d!\)/i.test(text) ? [{ kind: 'foothold.windows', scope: host(ws), value: { service: 'wmi', method: 'wmiexec-ps', tool: 'nxc' } }] : [];
+      } },
+
+    // ========================= NFS =========================
+    { id: 'nfs-shares', proto: 'nfs', flag: '--shares', produces: ['loot.files'],
+      gate: ['port:2049', 'nfs.reachable'],
+      extract: function (text, ws) {
+        var exports = payloadLines(text).filter(function (l) { return /^\//.test(l) || /\s(?:rw|ro)\b/.test(l); });
+        return exports.length ? [{ kind: 'loot.files', scope: host(ws), value: { kind: 'nfs_exports', exports: exports.slice(0, 50), count: exports.length, tool: 'nxc', note: 'NFS exports — mount and read (watch for no_root_squash)' } }] : [];
+      } },
+
+    // ========================= VNC =========================
+    { id: 'vnc-auth', proto: 'vnc', validate: true, produces: ['access.desktop'],
+      gate: ['port:5900', 'port:5901', 'vnc.reachable'],
+      extract: function (text, ws) {
+        // nxc vnc [+] ... (Pwn3d!) / "No password" means a usable desktop (no-auth or a working VNC password).
+        return (/\(Pwn3d!\)|no password|\[\+\]/i.test(text) && !hasDenied(text))
+          ? [{ kind: 'access.desktop', scope: host(ws), value: { service: 'vnc', detail: 'reachable VNC desktop (no-auth or valid password)', tool: 'nxc' } }] : [];
+      } }
   ];
 
   var CAT_BY_ID = {}; CAT.forEach(function (e) { CAT_BY_ID[e.id] = e; });

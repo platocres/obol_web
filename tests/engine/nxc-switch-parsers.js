@@ -28,6 +28,10 @@ var W = 'WINRM 10.10.10.10 5985 DC ';
 var M = 'MSSQL 10.10.10.10 1433 DC ';
 var R = 'RDP 10.10.10.10 3389 DC ';
 var F = 'FTP 10.10.10.10 21 HOST ';
+var SS = 'SSH 10.10.10.10 22 HOST ';
+var WM = 'WMI 10.10.10.10 135 DC ';
+var NF = 'NFS 10.10.10.10 2049 HOST ';
+var VN = 'VNC 10.10.10.10 5900 HOST ';
 
 // sample[id] = { cmd, ok: <success output>, neg: <denied output> }
 var sample = {
@@ -80,7 +84,15 @@ var sample = {
   'rdp-screenshot':    { cmd: "nxc rdp 10.10.10.10 --screenshot", ok: R + 'Screenshot saved /tmp/10.10.10.10.png', neg: R + '[-] connection failed' },
   'rdp-nla-screenshot':{ cmd: "nxc rdp 10.10.10.10 --nla-screenshot", ok: R + 'Screenshot (no NLA) saved /tmp/10.10.10.10.png', neg: R + '[-] connection failed' },
   'ftp-auth':          { cmd: "nxc ftp 10.10.10.10 -u anonymous -p ''", ok: F + '[+] anonymous:\n' + F + 'drwxr-xr-x  2 0  0  4096 Jan 01 backup', neg: F + '[-] anonymous: STATUS login incorrect' },
-  'ftp-ls':            { cmd: "nxc ftp 10.10.10.10 -u anonymous -p '' --ls", ok: F + '-rw-r--r-- 1 0 0 1024 Jan 01 config.bak\n' + F + 'drwxr-xr-x 2 0 0 4096 Jan 01 pub', neg: F + '[-] not permitted' }
+  'ftp-ls':            { cmd: "nxc ftp 10.10.10.10 -u anonymous -p '' --ls", ok: F + '-rw-r--r-- 1 0 0 1024 Jan 01 config.bak\n' + F + 'drwxr-xr-x 2 0 0 4096 Jan 01 pub', neg: F + '[-] not permitted' },
+
+  'ssh-auth':          { cmd: "nxc ssh 10.10.10.10 -u jdoe -p Winter2021", ok: SS + '[+] jdoe:Winter2021', neg: SS + '[-] jdoe:Winter2021 Authentication failed' },
+  'ssh-exec':          { cmd: "nxc ssh 10.10.10.10 -u jdoe -p Winter2021 -x id", ok: SS + '[+] jdoe:Winter2021\n' + SS + 'uid=1000(jdoe) gid=1000(jdoe)', neg: SS + '[-] Authentication failed' },
+  'ssh-sudo-check':    { cmd: "nxc ssh 10.10.10.10 -u jdoe -p Winter2021 --sudo-check", ok: SS + 'Determining if jdoe can run sudo via a sudo -l test', neg: SS + '[-] Authentication failed' },
+  'wmi-exec':          { cmd: "nxc wmi 10.10.10.10 -u jdoe -p Winter2021 -x whoami", ok: WM + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)\n' + WM + 'nt authority\\system', neg: WM + '[-] corp.local\\jdoe:Winter2021' },
+  'wmi-exec-ps':       { cmd: "nxc wmi 10.10.10.10 -u jdoe -p Winter2021 -X '$env:COMPUTERNAME'", ok: WM + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)\n' + WM + 'DC01', neg: WM + '[-] corp.local\\jdoe:Winter2021' },
+  'nfs-shares':        { cmd: "nxc nfs 10.10.10.10 --shares", ok: NF + '[+] Enumerated shares\n' + NF + '/export/home  *  rw\n' + NF + '/srv/backup  10.0.0.0/8  ro', neg: NF + '[-] no exports' },
+  'vnc-auth':          { cmd: "nxc vnc 10.10.10.10 -p password", ok: VN + '[+] No password required (Pwn3d!)', neg: VN + '[-] Authentication failed' }
 };
 
 CAT.forEach(function (e) {
