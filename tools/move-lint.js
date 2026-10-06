@@ -13,6 +13,11 @@
  *                not an evidence/loot fact) yet is NOT tagged report-only (severity: info). This is the
  *                class that let "Email DNS Review (SPF/DMARC)" headline a live box. Tag it info (so the
  *                coach files it under Report Checks) or give it a real, consumed effect.
+ *   NXC-FIRST    a move that offers an nxc (NetExec) command variant but does NOT lead with it (the nxc
+ *                command sits at a later index than 0). NetExec is the preferred tool (docs/MOVE-ENGINE.md
+ *                "Operator preferences") — when a move can be done with nxc, its nxc command leads. Exempt:
+ *                moves tagged sequence:true, where commands are ordered pipeline steps (build-then-load,
+ *                confirm-then-act), not interchangeable alternatives.
  *
  * WARN (review, never blocks) — judgment calls worth a human glance:
  *   UNINDICATED-PAYOFF a move that produces a real payoff (foothold/privilege, or a VALIDATED credential)
@@ -71,8 +76,10 @@ var VALID_LOCUS = { R: 1, F: 1, I: 1 };
 var PHASES = {}; (PH.PHASES || []).forEach(function (p) { PHASES[p] = 1; });
 var AD_LEAD = { 'ad.attack_paths': 1, 'ad.acl_lead': 1, 'ad.control_paths': 1, 'ad.delegation': 1, 'ad.trusts': 1, 'foothold.windows': 1, 'foothold.linux': 1 };
 
-var fail = { fields: [], infoDead: [] };
+var fail = { fields: [], infoDead: [], nxcFirst: [] };
 var warn = { bareFoothold: [], shortcut: [] };
+function cmdTool(c) { return String((c && c.tool) || '').toLowerCase(); }
+function isNxcTool(t) { return t === 'nxc' || t === 'netexec'; }
 
 A.forEach(function (a) {
   var gates = (a.requires_all || []).concat(a.requires_any || []);
@@ -106,6 +113,17 @@ A.forEach(function (a) {
     if (!hasEvidenceGate) warn.bareFoothold.push(a.id + '  (produces ' + produces.filter(function (k) { return /^(foothold\.|access\.)/.test(k) || k === 'credential.available' || k === 'credential.plaintext'; }).join(', ') + '; gates: ' + (gates.join(', ') || 'none') + ')');
   }
 
+  // NXC-FIRST — nxc is the preferred tool; when a move offers an nxc command variant it must lead (index 0).
+  // Commands are interchangeable alternatives here; sequence:true moves (ordered pipeline steps) are exempt.
+  if (!a.sequence) {
+    var cmds = a.commands || [];
+    var nxcIdx = -1;
+    for (var ci = 0; ci < cmds.length; ci++) { if (isNxcTool(cmdTool(cmds[ci]))) { nxcIdx = ci; break; } }
+    if (nxcIdx > 0) {
+      fail.nxcFirst.push(a.id + '  nxc command at index ' + nxcIdx + ' of ' + cmds.length + ' (pos0=' + (cmdTool(cmds[0]) || '?') + ') — lead with the nxc variant, or tag sequence:true if these are ordered steps');
+    }
+  }
+
   // SHORTCUT — produces a privilege fact straight from a soft AD lead, no credential/hash/ticket held.
   if (PK.producesPrivilege(a)) {
     var hardGate = gates.some(function (g) { return /^(credential\.|hash\.|kerberos\.tickets|access\.)/.test(g); });
@@ -125,10 +143,11 @@ function section(title, arr) {
 console.log('OBOL move-contract lint — ' + A.length + ' moves');
 section('FAIL · FIELDS — missing/invalid locus or phase', fail.fields);
 section('FAIL · INFO-DEADEND — informational move not tagged report-only', fail.infoDead);
+section('FAIL · NXC-FIRST — nxc command variant present but not leading (not at index 0)', fail.nxcFirst);
 section('WARN · UNINDICATED-PAYOFF — foothold/priv/validated-credential with no evidence gate (speculative-only)', warn.bareFoothold);
 section('WARN · SHORTCUT — privilege claimed straight from a soft AD lead', warn.shortcut);
 
-var failCount = fail.fields.length + fail.infoDead.length;
+var failCount = fail.fields.length + fail.infoDead.length + fail.nxcFirst.length;
 console.log('\n' + A.length + ' moves · ' + failCount + ' FAIL · ' + (warn.bareFoothold.length + warn.shortcut.length) + ' WARN');
 if (CHECK && failCount) { console.error('MOVE LINT FAIL: ' + failCount + ' contract breach(es).'); process.exit(1); }
 if (CHECK) console.log('MOVE LINT OK: every move satisfies the contract (warnings are advisory).');

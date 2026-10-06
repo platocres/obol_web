@@ -61,6 +61,11 @@ places sanely.
   move, not an evidence fact, not a **registered terminal**) yet isn't tagged `severity: info`. This is the
   class that let *Email DNS Review (SPF/DMARC)* headline a live box. The terminal-facts allow-list lives in
   the tool, explicit and documented — see "adding a fact" below.
+- **FAIL · NXC-FIRST** — a move offers an `nxc` (NetExec) command variant but doesn't lead with it (the
+  `nxc` command sits at a later index than 0). NetExec is the preferred tool (see Operator preferences
+  above), so when a move *can* be done with `nxc`, its `nxc` command leads. **Exempt:** moves tagged
+  `sequence: true`, where the commands are ordered pipeline steps (build-then-load, confirm-then-act), not
+  interchangeable alternatives — there `nxc` legitimately sits at whatever step it runs.
 - **WARN · UNINDICATED-PAYOFF** — produces a real payoff (foothold/privilege, or a **validated
   credential**) with no evidence gate, so it can only fire as a gamble (blind password spraying,
   default-cred guessing, an exploit at a bare port). The ranker caps it — gate it on the fact that

