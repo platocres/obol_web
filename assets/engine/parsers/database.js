@@ -14,6 +14,7 @@
   var _DB_HASH_ROW_RE = /\b(?<user>[A-Za-z0-9_.@-]{2,64})\b[^\n|]*[|:]\s*(?<hash>\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}|[a-f0-9]{32,128})/;
 
   function _db_tool(low) {
+    if (/\bnxc\b|netexec|crackmapexec/.test(low)) return 'nxc';
     var tools = ['mssqlclient', 'mysql', 'psql', 'pymongo', 'mongosh', 'mongo', 'redis-cli'];
     for (var i = 0; i < tools.length; i++) if (low.indexOf(tools[i]) >= 0) return tools[i];
     return 'database';
@@ -24,11 +25,15 @@
     var h = 'host:' + ws.target, low = command.toLowerCase();
     var denied = reSearch(_DB_ACCESS_DENIED_RE, text);
 
-    if (text.toLowerCase().indexOf('xp_cmdshell') >= 0) {
+    // NetExec MSSQL: nxc runs xp_cmdshell for you (auto-enables it), so its -x/-X/-q output is a command
+    // result with no literal "xp_cmdshell" banner. Treat an nxc-mssql exec whose output carries a shell
+    // identity (NT AUTHORITY\SYSTEM, DOMAIN\user, uid=) as the same foothold the mssqlclient path mints.
+    var nxcMssql = /\bnxc\s+mssql\b|\bnetexec\s+mssql\b|\bcrackmapexec\s+mssql\b/.test(low);
+    if (text.toLowerCase().indexOf('xp_cmdshell') >= 0 || (nxcMssql && /\s-[xXq]\b/.test(command))) {
       var m = reSearch(_MSSQL_WHOAMI_RE, text);
       if (m) {
         var ident = C._line_for_match(text, m).trim();
-        var val = { service: 'mssql', method: 'xp_cmdshell', identity: ident, tool: 'mssqlclient' };
+        var val = { service: 'mssql', method: 'xp_cmdshell', identity: ident, tool: nxcMssql ? 'nxc' : 'mssqlclient' };
         _add(facts, mkFact('foothold.windows', h, val, S, source));
         C._add_os_observation(facts, ws, source, 'windows', 'xp_cmdshell command execution (' + ident + ')', 'high', 'mssql', true);
       }
@@ -62,6 +67,8 @@
           (/\bmysql\s*>/.test(text) || /mariadb\s*\[/i.test(text) || tlow.indexOf('information_schema') >= 0 ||
            /server version:\s*\S/i.test(text) || /^\s*\d+\.\d+\.\d+(?:-mariadb)?\b/im.test(text))) svc = 'mysql';
       else if (low.indexOf('mssqlclient') >= 0 && (/\bSQL\s*[>(]/.test(text) || /microsoft sql server/i.test(text))) svc = 'mssql';
+      // NetExec MSSQL auth success: the protocol banner line "MSSQL <ip> <port> <host> [+] dom\user:pw (Pwn3d!)".
+      else if (nxcMssql && (/MSSQL\b[^\n]*\[\+\]/i.test(text) || /\(Pwn3d!\)/i.test(text))) svc = 'mssql';
       else if (low.indexOf('psql') >= 0 && (/list of databases/i.test(text) || /^\s*\w+=[#>]/m.test(text) || tlow.indexOf('template0') >= 0)) svc = 'postgresql';
       else if ((low.indexOf('sqlplus') >= 0 || low.indexOf('odat') >= 0) && (/connected to:/i.test(text) || /^\s*SQL>/m.test(text))) svc = 'oracle';
       if (svc) _add(facts, mkFact('db.session', h, { service: svc, tool: _db_tool(low), detail: 'authenticated database session established' }, S, source));

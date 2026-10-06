@@ -1574,6 +1574,51 @@
       ]
     },
     {
+      "id": "db_nxc_mssql_login_pwn3d",
+      "tool": "nxc",
+      "action_id": "mssql-login",
+      "command": "nxc mssql 10.10.10.10 -u sa -p 'Sql_Server_2019!'",
+      "stdout": "outputs/nxc_mssql_login_pwn3d.txt",
+      "expected_supported_kinds": [
+        "db.session"
+      ],
+      "forbidden_supported_kinds": [
+        "foothold.windows"
+      ],
+      "expected_facts": [
+        {
+          "kind": "db.session",
+          "value_contains": {
+            "service": "mssql",
+            "tool": "nxc"
+          }
+        }
+      ]
+    },
+    {
+      "id": "db_nxc_mssql_exec_whoami",
+      "tool": "nxc",
+      "action_id": "mssql-xp-cmdshell",
+      "command": "nxc mssql 10.10.10.10 -u sa -p 'Sql_Server_2019!' -x whoami",
+      "stdout": "outputs/nxc_mssql_exec_whoami.txt",
+      "expected_supported_kinds": [
+        "foothold.windows"
+      ],
+      "allow_default_forbidden_supported_kinds": [
+        "foothold.windows"
+      ],
+      "expected_facts": [
+        {
+          "kind": "foothold.windows",
+          "value_contains": {
+            "service": "mssql",
+            "method": "xp_cmdshell",
+            "tool": "nxc"
+          }
+        }
+      ]
+    },
+    {
       "id": "web_sqli_union_echoed_negative",
       "tool": "curl",
       "action_id": "sqli-basics",

