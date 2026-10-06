@@ -292,6 +292,14 @@
     Object.keys(docs).forEach(function (k) { if (facts.has(k)) out.push(docs[k]); });
     return out;
   }
+  // Fill a companion-command template through the real pipeline (tokens + Loadout arsenal rewrite), so a
+  // field-note setup command carries the operator's actual IP / wordlist paths / tool invocations.
+  function nsFill(tmpl, facts, params) {
+    try {
+      return OBOL.command.fillCommand({ commands: [{ run: String(tmpl && tmpl.cmd || tmpl) }] }, facts,
+        { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) }, 0).filled;
+    } catch (e) { return String(tmpl && tmpl.cmd || tmpl); }
+  }
   function nsDoctorBlock(d) {
     return '<div class="ns-doctor"><div class="ns-doctor-h">' + OBOL.ic('shield') + ' ' + esc(d.title) + '</div>'
       + '<p>' + esc(d.body) + '</p>' + (d.code ? '<pre class="ns-doctor-code"><code>' + esc(d.code) + '</code></pre>'
@@ -315,6 +323,18 @@
     var stage = (OBOL.stagingFor && OBOL.pack.commandIsOnHost(selCmd)) ? OBOL.stagingFor(selCmd.tool) : null;
     if (stage && OBOL.renderToolStaging) html += OBOL.renderToolStaging(stage, params);
     if (note) {
+      // Companion setup commands authored for this command, filled through the real token/arsenal pipeline
+      // so they carry the operator's actual IP, wordlist paths and tool invocations.
+      if (note.setup && note.setup.length) {
+        html += '<p class="ns-cn-h">Set Up First</p><div class="ns-setup">';
+        note.setup.forEach(function (s) {
+          var cmd = nsFill(s.cmd || s, facts, params);
+          html += '<div class="ns-setup-step">' + (s.label ? '<div class="ns-setup-l">' + esc(s.label) + '</div>' : '')
+            + '<div class="ns-setup-cmd"><code>' + esc(cmd) + '</code>'
+            + '<button class="btn-copy ns-setup-copy" data-copy="' + U.attr(cmd) + '" title="Copy" aria-label="Copy command">' + OBOL.ic('clip') + '</button></div></div>';
+        });
+        html += '</div>';
+      }
       if (note.land && note.land.length) html += '<p class="ns-cn-h">How To Land It</p><ul class="ns-cn-list">'
         + note.land.map(function (l) { return '<li>' + l + '</li>'; }).join('') + '</ul>';
       if (note.win) html += '<div class="ns-cn-win"><span class="ns-tick" aria-hidden="true">✓</span><span>' + esc(note.win) + '</span></div>';
