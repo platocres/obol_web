@@ -2277,7 +2277,7 @@
         "blocker.clock_skew"
       ],
       "produces": [
-        "credential.available"
+        "advice.kerberos"
       ],
       "priority": 88,
       "sequence": true,
@@ -2325,14 +2325,14 @@
         "blocker.password_change"
       ],
       "produces": [
-        "credential.available"
+        "advice.password"
       ],
       "priority": 86,
       "proves": "a usable credential after setting a new password on the must-change account",
       "does_not_prove": "any privilege beyond that account; use it like any validated credential",
       "report": {
-        "finding": "Expired Credential Rotated to Usable",
-        "severity": "high"
+        "finding": "Expired credential rotated",
+        "severity": "info"
       },
       "refs": [
         "https://github.com/fortra/impacket"
@@ -2370,14 +2370,14 @@
         "blocker.ntlm_disabled"
       ],
       "produces": [
-        "credential.available"
+        "advice.kerberos"
       ],
       "priority": 86,
       "hypothesis": "STATUS_NOT_SUPPORTED on an SMB/LDAP login is not a bad credential — the DC has NTLM turned off and only speaks Kerberos. The exact same credential works the moment you add -k (and point at the DC by name, not IP). A hardened-auth lab banks on you reading this as 'login failed' and giving up.",
       "proves": "the credential authenticating over Kerberos once NTLM is taken out of the picture",
       "does_not_prove": "a new credential — it is the one you already have, spoken the way the DC accepts",
       "report": {
-        "finding": "NTLM disabled; Kerberos authentication used",
+        "finding": "NTLM disabled; Kerberos used",
         "severity": "info"
       },
       "refs": [

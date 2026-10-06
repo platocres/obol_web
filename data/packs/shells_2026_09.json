@@ -163,8 +163,7 @@
         "stty"
       ],
       "requires_any": [
-        "access.shell",
-        "blocker.no_tty"
+        "access.shell"
       ],
       "produces": [],
       "priority": 58,
@@ -178,6 +177,49 @@
         {
           "tool": "python3",
           "run": "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'  # then Ctrl-Z; stty raw -echo; fg; export TERM=xterm"
+        }
+      ]
+    },
+    {
+      "id": "fix-no-tty",
+      "title": "No TTY — Upgrade to a Real Shell",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "script",
+        "stty"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "blocker.no_tty"
+      ],
+      "produces": [
+        "advice.tty"
+      ],
+      "priority": 66,
+      "sequence": true,
+      "hypothesis": "'sudo: no tty present' / 'must be run from a terminal' means your shell is a dumb pipe (a web/reverse shell) with no controlling terminal — sudo, su, ssh and many interactive tools refuse to run. Spawn a PTY and they work. This is the first thing to do on nearly every raw reverse shell.",
+      "proves": "nothing attack-wise; it turns a dumb shell into an interactive PTY so terminal-only commands run",
+      "does_not_prove": "a better privilege — same user, now with a usable terminal",
+      "report": {
+        "finding": "Dumb shell upgraded to a PTY",
+        "severity": "info"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/generic-methodologies-and-resources/shells/full-ttys"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'",
+          "note": "Spawn a PTY (python2: same with python). If python is absent: `script -qc /bin/bash /dev/null`."
+        },
+        {
+          "tool": "stty",
+          "run": "# Ctrl-Z, then on Kali: stty raw -echo; fg ; then in the shell: export TERM=xterm; stty rows 50 cols 200",
+          "note": "Full upgrade: background the shell, set your terminal raw, foreground it, and fix TERM/size so arrow keys, tab-complete, and clear work. Now sudo/su run."
         }
       ]
     },
@@ -310,15 +352,15 @@
         "ssh.key_rejected"
       ],
       "produces": [
-        "foothold.linux"
+        "advice.ssh"
       ],
       "priority": 80,
       "sequence": true,
       "proves": "a working SSH key login once the surrounding blocker is fixed — a foothold",
       "does_not_prove": "that the key is valid at all; if every fix fails, the key may be for a different user or host",
       "report": {
-        "finding": "SSH Key Authentication (recovered after fixing a blocker)",
-        "severity": "high"
+        "finding": "SSH key blocker resolved",
+        "severity": "info"
       },
       "refs": [
         "https://man.openbsd.org/ssh_config",

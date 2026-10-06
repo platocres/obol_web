@@ -521,6 +521,10 @@
   function v2Indicated(a, haveObj) { var g = a.requires_all.concat(a.requires_any), i; for (i = 0; i < g.length; i++) if (haveObj[g[i]] && v2EvidenceFact(g[i])) return true; return false; }
 
   function v2Speculative(a, haveObj) {
+    // A guidance/troubleshooter move produces only advice.* — it mints no attack fact, so it can never
+    // be a "try-if-vulnerable" gamble. Exempt it before the id-regex/payoff checks (otherwise a doctor
+    // whose id merely contains "relay"/"responder"/"check" would be wrongly capped below everything).
+    if (a.produces.length && a.produces.every(function (k) { return /^advice\./.test(k); })) return false;
     if (V2_SPEC_RE.test(a.id)) return true;
     for (var i = 0; i < a.produces.length; i++) {
       var k = a.produces[i];
