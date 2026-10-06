@@ -75,6 +75,8 @@
     "bypass-amsi": { cond: "Does the payload load after the AMSI patch or obfuscation?", onFail: "Still caught → the patch is signatured too; rewrite/obfuscate or use a LOLBAS path." },
     "potato-select": { cond: "Does the build-matched potato return a SYSTEM shell?", onFail: "None work but you hold SeImpersonate → try GodPotato last; otherwise re-confirm the privilege." },
     "web-access-blocked": { cond: "Do requests flow again after slowing down / flipping the scheme?", onFail: "Still blocked → a WAF rule on the payloads themselves; tune those, or find another entry." },
+    "crack-hash-troubleshoot": { cond: "Does the cracker load the hash once the mode/prefix/line-endings are fixed?", onFail: "Still no hashes loaded → the hash type is misidentified; re-run hashid and match -m exactly." },
+    "egress-blocked-shell": { cond: "Does a shell land on 443/53 or via a bind shell?", onFail: "Nothing on any port → full egress lock; pivot through an existing foothold or use a different channel (DNS/ICMP)." },
     'ssh-key-troubleshoot': { cond: 'Does the matching fix (perms / ssh-rsa / passphrase / format / target StrictModes) make the key log in?', onFail: 'Still refused after every fix → the key is likely for a different user or host; re-check who it belongs to.' },
     'x11-keylog': { cond: 'Does the screen grab or keylog reveal a secret (a typed password)?', onFail: 'Nothing sensitive on screen and no password typed yet → keep the keylogger running and re-check.' },
     'tftp-write-shell': { cond: 'Does a PUT land in a served/executed path you can trigger?', onFail: 'The TFTP root is isolated → use it for file read/transfer only.' },

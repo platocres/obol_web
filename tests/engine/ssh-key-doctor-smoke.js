@@ -46,6 +46,8 @@ ok(hasKind('powershell iex ...', 'At line:1 : This script contains malicious con
 ok(hasKind('JuicyPotato.exe', '[-] CreateProcessWithTokenW failed: the handle is invalid', 'blocker.potato'), 'potato failure → blocker.potato');
 ok(hasKind('ffuf -u http://t/FUZZ', ':: Progress ... 429 Too Many Requests', 'blocker.rate_limited'), '429 → blocker.rate_limited');
 ok(hasKind('curl https://t:80/', 'curl: (35) error:0A00010B:SSL routines::wrong version number', 'blocker.tls_scheme'), 'wrong-version-number → blocker.tls_scheme');
+ok(hasKind('hashcat -m 1000 h.txt rockyou', 'Token length exception\nNo hashes loaded.', 'blocker.hash_format'), 'hashcat token-length/no-hashes → blocker.hash_format');
+ok(hasKind('nc -nv 10.10.14.9 4444', 'nc: connect to 10.10.14.9 port 4444 (tcp) failed: Connection refused', 'blocker.egress_blocked'), 'nc connection refused → blocker.egress_blocked');
 ok(kinds('nmap 10.10.10.10', 'Nmap scan report for 10.10.10.10\nHost is up (0.012s latency).').filter(function (x) { return /^blocker\./.test(x); }).length === 0, 'a healthy scan mints no blocker');
 
 console.log('\nSSH KEY DOCTOR SMOKE: ' + (fail ? fail + ' FAILURE(S)' : 'all passed'));

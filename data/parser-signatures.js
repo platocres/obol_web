@@ -182,7 +182,7 @@
     'op-blocker': {
       looksFor: "a classic operational wall from a pasted error — nmap 'host seems down' (needs -Pn), 'could not resolve host' (needs /etc/hosts), a CRLF 'bad interpreter', 'sudo: no tty present', Defender/AMSI blocking a payload, a SeImpersonate potato that failed, HTTP fuzzing rate-limited (429), or an http/https scheme mismatch (WRONG_VERSION_NUMBER).",
       regex: 'Host seems down | Could not resolve host | bad interpreter | no tty present | contains malicious content | the handle is invalid | 429 Too Many Requests | WRONG_VERSION_NUMBER',
-      emits: ['blocker.host_down', 'blocker.name_resolution', 'blocker.crlf', 'blocker.no_tty', 'blocker.amsi', 'blocker.potato', 'blocker.rate_limited', 'blocker.tls_scheme'],
+      emits: ['blocker.host_down', 'blocker.name_resolution', 'blocker.crlf', 'blocker.no_tty', 'blocker.amsi', 'blocker.potato', 'blocker.rate_limited', 'blocker.tls_scheme', 'blocker.hash_format', 'blocker.egress_blocked'],
     },
     'ssh-key-rejected': {
       looksFor: "an SSH key login that failed, and why — unprotected key perms, a passphrase prompt, the OpenSSH 8.8+ ssh-rsa block (no mutual signature algorithm), an invalid key format, or a bare \"Permission denied (publickey)\" (often target-side StrictModes).",

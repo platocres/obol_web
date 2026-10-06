@@ -34,6 +34,50 @@
       ]
     },
     {
+      "id": "crack-hash-troubleshoot",
+      "title": "Hashcat/John Won't Load the Hash — Fix It",
+      "tool": "hashcat",
+      "tools": [
+        "hashcat",
+        "john",
+        "hashid"
+      ],
+      "requires_all": [
+        "blocker.hash_format"
+      ],
+      "produces": [
+        "advice.hash"
+      ],
+      "priority": 62,
+      "hypothesis": "'No hashes loaded' or 'Token length exception' is not a tough hash — the file or mode is wrong. The usual culprits: a username: prefix left on the line (or missing when the mode wants it), the wrong -m mode for the hash type, CRLF line endings from a Windows copy, or stray whitespace. Fix the file and it cracks.",
+      "proves": "nothing attack-wise; it gets the cracker to actually load and run on your hash",
+      "does_not_prove": "that the password is in your wordlist — that is a separate question",
+      "report": {
+        "finding": "Hash format/mode mismatch resolved",
+        "severity": "info"
+      },
+      "refs": [
+        "https://hashcat.net/wiki/doku.php?id=example_hashes"
+      ],
+      "commands": [
+        {
+          "tool": "hashid",
+          "run": "hashid -m '{{hash}}'   # or: nth --text '{{hash}}'",
+          "note": "Identify the type and the exact hashcat -m / john --format. 'Token length exception' almost always means the -m mode does not match the hash you pasted."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m {{mode}} hash.txt {{wordlist}}   # strip/keep the user: prefix to match the mode",
+          "note": "NetNTLMv2/Kerberos modes WANT user$realm in the line; raw-MD5/NTLM modes do NOT — 'No hashes loaded' is usually a prefix mismatch. Also run `dos2unix hash.txt` and remove trailing spaces."
+        },
+        {
+          "tool": "john",
+          "run": "john --list=formats | grep -i {{type}}; john --format={{fmt}} hash.txt --wordlist={{wordlist}}",
+          "note": "The john equivalent: pick the matching --format. 'No password hashes loaded' means the format is wrong or the line is malformed."
+        }
+      ]
+    },
+    {
       "id": "crack-kerberoast",
       "title": "Crack a Kerberoast (TGS) Hash",
       "hypothesis": "Service accounts frequently use weak, human-chosen passwords, so a cracked $krb5tgs$ ticket hands you the service account's plaintext.",

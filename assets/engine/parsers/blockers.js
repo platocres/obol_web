@@ -34,6 +34,10 @@
     { kind: 'blocker.rate_limited', re: /\b429\b\s*(?:Too Many Requests)?|Too Many Requests|rate.?limit(?:ed|ing)?|temporarily blocked|request(?:s)? (?:have been )?throttled/i },
     // http vs https mismatch: curl/tooling hitting the wrong scheme.
     { kind: 'blocker.tls_scheme', re: /SSL.*WRONG_VERSION_NUMBER|wrong version number|record layer failure|sslv3 alert handshake failure|routines::?(?:unexpected eof|wrong version)/i },
+    // hashcat/john refusing the hash: wrong mode, a username: prefix left on, or CRLF in the hash file.
+    { kind: 'blocker.hash_format', re: /Token length exception|No hashes loaded|No password hashes loaded(?: with these settings)?|Separator unmatched|Signature unmatched|Line-length exception|Hashfile '[^']*' on line \d+/i },
+    // a reverse shell that never calls back — the payload ran but egress is filtered.
+    { kind: 'blocker.egress_blocked', re: /nc:.*(?:Connection refused|No route to host|Network is unreachable)|Ncat: (?:Connection refused|TIMEOUT|No route to host)|socat.*(?:Connection refused|refused)|curl:\s*\(7\)\s*Failed to connect/i },
   ];
 
   function _parse_op_blockers(text, ws, command, source, facts) {

