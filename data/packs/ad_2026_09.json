@@ -2140,6 +2140,101 @@
       ]
     },
     {
+      "id": "fix-clock-skew",
+      "title": "Kerberos Clock Skew — Sync and Retry",
+      "hypothesis": "KRB_AP_ERR_SKEW / \"clock skew too great\" is not a broken credential — Kerberos simply refuses tickets when your clock and the DC's differ by more than ~5 minutes. Sync your box to the DC and the exact same command works. This one error strands more people in AD than any real defence does.",
+      "tool": "ntpdate",
+      "tools": [
+        "ntpdate",
+        "rdate",
+        "faketime"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.clock_skew"
+      ],
+      "produces": [
+        "credential.available"
+      ],
+      "priority": 88,
+      "sequence": true,
+      "proves": "a credential that authenticates over Kerberos once the clock is synced to the DC",
+      "does_not_prove": "a new credential — it unblocks the one you already have",
+      "report": {
+        "finding": "Kerberos clock skew resolved",
+        "severity": "info"
+      },
+      "refs": [
+        "https://www.thehacker.recipes/ad/movement/kerberos"
+      ],
+      "commands": [
+        {
+          "tool": "ntpdate",
+          "run": "sudo ntpdate {{target}}",
+          "note": "Sync your Kali clock to the DC. Re-run the failing command immediately afterwards; the skew error is gone."
+        },
+        {
+          "tool": "rdate",
+          "run": "sudo rdate -n {{target}}",
+          "note": "When ntpdate is not installed, rdate -n does the same over TCP."
+        },
+        {
+          "tool": "faketime",
+          "run": "faketime -f '+Ns' {{kerberos_command}}",
+          "note": "If you must not change the host clock, wrap just the one command with faketime offset by the skew (N seconds, from the KRB error or `ntpdate -q {{target}}`). {{kerberos_command}} is your impacket/nxc Kerberos call."
+        }
+      ]
+    },
+    {
+      "id": "account-password-change",
+      "title": "Change an Expired Password to Use It",
+      "hypothesis": "STATUS_PASSWORD_MUST_CHANGE means the credential is VALID — the account simply must set a new password on first use. Change it remotely (no shell needed) and the account is yours. Lab authors plant this on freshly-created or reset accounts to stall you; it is a one-command fix, not a dead end.",
+      "tool": "smbpasswd",
+      "tools": [
+        "smbpasswd",
+        "impacket-changepasswd",
+        "rpcclient"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.password_change"
+      ],
+      "produces": [
+        "credential.available"
+      ],
+      "priority": 86,
+      "proves": "a usable credential after setting a new password on the must-change account",
+      "does_not_prove": "any privilege beyond that account; use it like any validated credential",
+      "report": {
+        "finding": "Expired Credential Rotated to Usable",
+        "severity": "high"
+      },
+      "refs": [
+        "https://github.com/fortra/impacket"
+      ],
+      "commands": [
+        {
+          "tool": "smbpasswd",
+          "run": "smbpasswd -r {{target}} -U {{user}}",
+          "note": "Prompts for the old (expired) password, then your new one, straight over SMB — no shell required. The account now logs in with the new password."
+        },
+        {
+          "tool": "impacket-changepasswd",
+          "run": "impacket-changepasswd {{domain}}/{{user}}@{{target}} -newpass {{newpass}}",
+          "note": "The impacket form (supports -p rpc-samr / -p kpasswd when SMB is filtered)."
+        },
+        {
+          "tool": "rpcclient",
+          "run": "rpcclient -U {{user}}%{{password}} {{target}} -c \"setuserinfo2 {{user}} 23 {{newpass}}\"",
+          "note": "The rpcclient fallback when the above are blocked."
+        }
+      ]
+    },
+    {
       "id": "bloodyad-acl",
       "title": "ACL Abuse with bloodyAD",
       "hypothesis": "In modern AD, the privilege paths are ACL paths: GenericAll, WriteDacl, WriteOwner, or group-membership write rights on an object let you escalate by editing the directory itself, join groups, seize ownership, grant yourself control, force password resets, or plant shadow credentials. BloodHound reveals which edges you possess; bloodyAD carries them out from Linux with no RSAT.",

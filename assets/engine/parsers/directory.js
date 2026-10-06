@@ -405,6 +405,18 @@
   }
   C._parse_auth_failures = _parse_auth_failures;
 
+  // Auth BLOCKERS: a credential that is valid but refused for a fixable reason — the cryptic walls that
+  // strand people mid-authentication. A forced password change (STATUS_PASSWORD_MUST_CHANGE) and
+  // Kerberos clock skew (KRB_AP_ERR_SKEW) each mint a blocker.* fact so the matching fix move surfaces.
+  function _parse_auth_blockers(text, ws, source, facts) {
+    var t = String(text || '');
+    if (/STATUS_PASSWORD_MUST_CHANGE|STATUS_PASSWORD_EXPIRED|password must (?:be )?change|must change (?:your )?password|password has expired/i.test(t))
+      _add(facts, mkFact('blocker.password_change', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+    if (/KRB_AP_ERR_SKEW|clock skew too great|kerberos[^\n]*\bskew\b|time difference too large/i.test(t))
+      _add(facts, mkFact('blocker.clock_skew', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+  }
+  C._parse_auth_blockers = _parse_auth_blockers;
+
   function _parse_evil_winrm(text, ws, command, source, facts) {
     var low = text.toLowerCase();
     if (low.indexOf('winrmauthorizationerror') >= 0 || low.indexOf('winrmhttptransporterror') >= 0 || /\b401\b/.test(text) || low.indexOf('unauthorized') >= 0) return;

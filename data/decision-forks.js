@@ -70,6 +70,8 @@
     'ssh-key-troubleshoot': { cond: 'Does the matching fix (perms / ssh-rsa / passphrase / format / target StrictModes) make the key log in?', onFail: 'Still refused after every fix → the key is likely for a different user or host; re-check who it belongs to.' },
     'x11-keylog': { cond: 'Does the screen grab or keylog reveal a secret (a typed password)?', onFail: 'Nothing sensitive on screen and no password typed yet → keep the keylogger running and re-check.' },
     'tftp-write-shell': { cond: 'Does a PUT land in a served/executed path you can trigger?', onFail: 'The TFTP root is isolated → use it for file read/transfer only.' },
+    'fix-clock-skew': { cond: 'After syncing the clock to the DC, does the Kerberos command work?', onFail: 'Still skewed → sync failed (try rdate/faketime), or the error is not actually skew.' },
+    'account-password-change': { cond: 'Does changing the password let the account authenticate?', onFail: 'Change rejected → the old password is wrong, or policy blocks the new one; re-check the credential.' },
     'vnc-desktop-shell': { cond: 'Can you open a terminal in the VNC desktop and run commands?', onFail: 'Locked-down kiosk desktop → try keyboard shortcuts to a run dialog, or use the session only for what is on screen.' },
     'web-shells': { cond: 'Does the planted shell return command output?', onFail: 'No execution → the drop point is not served as code.' },
     'tomcat-deploy': { cond: 'Do the manager credentials deploy a WAR?', onFail: 'No manager access → try Ghostcat on 8009, or default creds.' },

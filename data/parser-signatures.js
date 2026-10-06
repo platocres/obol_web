@@ -174,6 +174,11 @@
       regex: 'uid=0(root), nt authority\\system',
       emits: ['access.shell', 'foothold.linux', 'foothold.windows', 'access.system', 'host.os_family', 'host.kernel'],
     },
+    'auth-blocker': {
+      looksFor: "a credential that is valid but refused for a fixable reason — a forced password change (STATUS_PASSWORD_MUST_CHANGE / expired) or Kerberos clock skew (KRB_AP_ERR_SKEW / clock skew too great).",
+      regex: 'STATUS_PASSWORD_MUST_CHANGE | password has expired | KRB_AP_ERR_SKEW | clock skew too great',
+      emits: ['blocker.password_change', 'blocker.clock_skew'],
+    },
     'ssh-key-rejected': {
       looksFor: "an SSH key login that failed, and why — unprotected key perms, a passphrase prompt, the OpenSSH 8.8+ ssh-rsa block (no mutual signature algorithm), an invalid key format, or a bare \"Permission denied (publickey)\" (often target-side StrictModes).",
       regex: 'UNPROTECTED PRIVATE KEY FILE | permissions are too open | no mutual signature algorithm | enter passphrase for key | Load key …: invalid format | Permission denied (publickey)',

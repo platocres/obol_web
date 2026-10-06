@@ -144,6 +144,10 @@
     // surfaces the fix. Keyed on the output, so it also catches a bare pasted error with no command.
     if ((isSsh || /\bssh\b/.test(lc) || /Permission denied \(publickey|UNPROTECTED PRIVATE KEY|no mutual signature/i.test(text)) && C._parse_ssh_key_diagnostics)
       C._parse_ssh_key_diagnostics(text, ws, source, facts);
+    // Auth blockers (a valid credential refused for a fixable reason) can come from any auth tool —
+    // nxc, impacket, smbclient, ssh — so recognize them content-first, not tool-gated.
+    if (C._parse_auth_blockers && /STATUS_PASSWORD_(?:MUST_CHANGE|EXPIRED)|must change .*password|password has expired|KRB_AP_ERR_SKEW|clock skew too great|time difference too large/i.test(text))
+      C._parse_auth_blockers(text, ws, source, facts);
     // Service login / DB-RCE that lands a *nix shell (telnet, rlogin/rsh, psql/odat/sqlplus COPY..PROGRAM
     // and friends): the proof is the same Linux id output, so reuse the ssh-exec reader to mint the
     // foothold from a pasted uid=... line.
