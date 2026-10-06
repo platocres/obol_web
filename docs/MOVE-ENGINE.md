@@ -117,6 +117,30 @@ Schema and assertion keys (`top`, `topIn`, `present`, `absentTop`, `prep`) are d
 co-leads). Seeded with Forest (full anon-LDAP → AS-REP → BloodHound → WriteDacl/DCSync chain) and a web
 standalone (exploit-gating). **Grow it: every box you walk, encode it.**
 
+## The NetExec (nxc) capability catalog
+
+nxc is the preferred tool, so its coverage is held to a stronger, machine-enforced contract than any other
+tool: **every nxc protocol × flag × module we offer has a catalog entry, a parser that mints its fact, and a
+bidirectional test.** The pieces:
+
+- **`assets/engine/parsers/nxc-catalog.js`** — the catalog: one entry per capability (`{proto, flag|module,
+  produces, gate, locus:R, extract | existing | informational}`) plus a data-driven driver that fills the
+  switches the hand-written parsers don't. 100+ capabilities across smb/ldap/winrm/mssql/rdp/ftp/ssh/wmi/
+  vnc/nfs. An `existing` entry defers to a hand-written parser; an `informational` entry is a recognized
+  enumeration that mints no payoff; everything else carries an `extract(text, ws)` the driver runs.
+- **`tests/engine/nxc-switch-parsers.js`** — for EVERY catalog entry, pastes real nxc output and asserts
+  success mints the declared fact (or no payoff, for informational) and denied/empty mints nothing. Every
+  entry must have a sample or the test fails, so coverage can't silently drift.
+- **move-lint `NXC-UNCATALOGUED`** — fails CI if a move offers an `nxc` command whose protocol+switch/module
+  has no catalog entry (hence no parser). This is what keeps "exhaustive + parsed" true: add an nxc command
+  with no parser and the lint stops you.
+
+**To add an nxc capability:** add a catalog entry (with an `extract` or `existing`/`informational`), add a
+sample to the switch→parser test, and — if a move should offer it — add the command to the right move
+(nxc-first applies). The value chain matters: make the `extract` mint the *specific* fact that lights the
+natural follow-up (a found key → `credential.certificate` → `ssh-key-login`; a vuln verdict → the fact that
+promotes the exploit), never a generic blob that dead-ends.
+
 ## Adding a move — the checklist
 
 1. Declare `requires_*`, `produces`, `locus`, `phase` honestly. Every produced fact must be a **goal**,
