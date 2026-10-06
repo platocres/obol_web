@@ -119,3 +119,40 @@ the originating service/port. (committed)
 
 **Batch: 4 FIXES** (3 DB engine-scoping over-surface, 1 ssh-key-login under-surface). 50/50 remaining gates OK.
 
+## web (35)
+
+Gate pattern: discovery moves on `http.reachable`/ports; exploit-class moves on a lead
+(`web.parameterized`, `web.content_map`, `web.*_confirmed`, `web.upload_form`) or capped-speculative on bare
+`http.reachable`. Reviewed each; the speculative web menu is intentional (offered, ranked below evidenced
+moves). One effect-honesty fault:
+
+| move | gate | verdict |
+|---|---|---|
+| vhost-discovery, content-discovery, param-discovery | http/ports/leads | OK |
+| lfi-probe, sqli-basics, idor | web.parameterized/web.content_map | OK (lead-gated) |
+| manual-sqli-exploitation, sqlmap-automation | web.sqli_confirmed | OK |
+| file-upload | web.upload_form/http.reachable | OK* (lead + speculative) |
+| git-exposed, svn-exposed, ssrf, ssti, xxe, jwt-attacks, xss-basics, wordpress, nikto-scan, verb-tampering, deserialization, tomcat-deploy | http.reachable (+ web.server/tech) | OK* intentional capped-speculative web menu |
+| command-injection | web.parameterized/http.reachable | OK* |
+| web-shells | web.upload_confirmed/foothold.webshell/web.lfi_confirmed | OK |
+| nosql-injection | http.reachable/vuln.nosqli | **FIX** produced access.admin (a win GOAL) + validated creds from a web auth bypass; its own does_not_prove said "application only". Now produces web.authz_bypass + credential.candidate |
+| ajp-ghostcat, java-rmi | service/port | OK* (service-gated) |
+| lfi-secret-harvest | web.lfi_confirmed | OK |
+| aws-credential-abuse | cloud.credential | OK |
+| graphql-abuse, http-request-smuggling, prototype-pollution, mass-assignment | web.content_map/http.reachable | OK* |
+| azure-imds, gcp-metadata | web.ssrf_confirmed/cloud.credential | OK (SSRF-gated) |
+
+## web_exploit_checks (13)
+
+All are the intended offer-at-web / promote-on-`vuln.<product>` pattern (SEQ; cmd0 fingerprints the version
+→ vulnmatch mints the vuln → the exploit promotes). check-log4shell / check-struts2 are canary checks.
+**13/13 OK** (capped-speculative until the fingerprint lands).
+
+## findings_checks (11)
+
+Report/finding checks keyed to the right surface: web checks on http/web indicators, check-subdomain-takeover
+on a hostname (host.fqdn/domain/hostname), check-dns-email on a known domain. check-web-components /
+check-cms-version carry the documented advisory SELF-SATISFIED nuance (report-only, benign). **11/11 OK.**
+
+**Web batch: 1 FIX (nosql-injection effect honesty). 58/59 gates OK as-authored.**
+

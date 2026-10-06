@@ -739,13 +739,12 @@
         "vuln.nosqli"
       ],
       "produces": [
-        "access.admin",
-        "credential.plaintext",
-        "credential.available"
+        "web.authz_bypass",
+        "credential.candidate"
       ],
       "priority": 44,
-      "proves": "confirms administrative access and a cleartext password",
-      "does_not_prove": "admin rights inside the application only, not an OS shell or system-level privilege unless proven on its own",
+      "proves": "a NoSQL auth bypass (application-admin login) and, via $regex extraction, candidate password material",
+      "does_not_prove": "admin rights inside the application only, not an OS shell or system-level privilege (access.admin/system) — and an extracted password is a candidate until a login validates it",
       "report": {
         "finding": "NoSQL Injection (Auth Bypass)",
         "severity": "high"
