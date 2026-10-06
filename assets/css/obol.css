@@ -3038,7 +3038,8 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .ns-ph-recon { --fam: var(--ph-recon); } .ns-ph-enum { --fam: var(--ph-enum); } .ns-ph-creds { --fam: var(--ph-creds); }
 .ns-ph-access { --fam: var(--ph-access); } .ns-ph-escalate { --fam: var(--ph-escalate); } .ns-ph-loot { --fam: var(--ph-loot); }
 
-.ns-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; }
+/* flex-start so a sibling of the expanded card keeps its natural height instead of ballooning to match */
+.ns-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
 .ns-card { position: relative; flex: 1 1 210px; min-width: 200px; max-width: 288px; display: flex; flex-direction: column; gap: 9px;
   text-align: left; cursor: pointer; font-family: var(--sans); border: 1px solid color-mix(in srgb, var(--fam, var(--accent)) 24%, var(--line));
   border-left: 3px solid var(--fam, var(--accent)); border-radius: var(--radius); padding: 14px 15px; min-height: 150px; overflow: hidden;
@@ -3157,3 +3158,4 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .ns-wall .ic { width: 17px; height: 17px; flex: none; color: var(--orange); }
 .ns-wall a { color: var(--accent-2); font-weight: 700; text-decoration: none; }
 .ns-wall a:hover { text-decoration: underline; }
+.ns-cmd:focus-visible { outline: 2px solid var(--fam, var(--accent)); outline-offset: 2px; }
