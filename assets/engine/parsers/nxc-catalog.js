@@ -1,0 +1,178 @@
+/*!
+ * obol engine — parsers/nxc-catalog.js
+ *
+ * The NetExec (nxc) CAPABILITY CATALOG + a generic, data-driven parser driver. nxc is the preferred tool,
+ * and the goal is EXHAUSTIVE coverage: every protocol × flag × module we offer as a move/command has (1) a
+ * declared fact it produces (or is marked informational), (2) a gate + locus for move generation, and (3) a
+ * parser that mints that fact from the command's real output — proven by tests/engine/nxc-switch-parsers.js,
+ * which pastes real output (success → fact, denied/empty → nothing).
+ *
+ * Design: ONE catalog, ONE driver. Capabilities already covered by the hand-written parsers
+ * (directory.js / creds.js — shares, --ntds/--sam, roasting, laps, rid-brute, coerce, exec) carry
+ * `existing: true` and the driver leaves them to those parsers (facts dedupe either way); the test still
+ * verifies them end-to-end. Capabilities the hand-written parsers miss carry an `extract(text, ws, C)` the
+ * driver runs. Informational enumeration (group/disk/session listings with no graph-actionable fact) carries
+ * `informational: true`: recognized, mints nothing, and the test asserts it mints no payoff.
+ *
+ * locus is R for every nxc capability (remote, run from Kali) by definition.
+ */
+(function (root) {
+  'use strict';
+  var OBOL = root.OBOL = root.OBOL || {};
+  var C = OBOL._parserCommon;
+  var mkFact = C.mkFact, _add = C._add, S = C.ProofState.SUPPORTED;
+
+  function dom(ws) { return C._scope_for_domain(ws, C._domain_from_facts ? C._domain_from_facts(ws) : ''); }
+  function host(ws) { return 'host:' + ws.target; }
+  // nxc output lines are "PROTO  host  port  hostname  <status> message"; strip the banner prefix to read
+  // the payload, and only act on success lines ([+] / module OK), never on [-]/denied/error lines.
+  function payloadLines(text) {
+    return String(text || '').split(/\r?\n/).map(function (l) {
+      return l.replace(/^\s*(?:SMB|LDAP|WINRM|MSSQL|RDP|FTP|SSH|WMI|VNC|NFS|[A-Z_]+)\s+\S+\s+\d+\s+\S+\s+/i, '').trim();
+    }).filter(Boolean);
+  }
+  function hasDenied(text) { return /\[-\]|access[_ ]denied|logon failure|STATUS_|authentication failed|error/i.test(text); }
+
+  // ─────────────────────────── the catalog ───────────────────────────
+  // Each entry: { id, proto, flag|module, produces:[...], locus:'R',
+  //   existing?:true | informational?:true | extract:fn(text,ws,C)->[{kind,value}] , gate:[...] (for moves) }
+  var CAT = [
+
+    // ========================= SMB =========================
+    { id: 'smb-auth', proto: 'smb', validate: true, produces: ['credential.available'], existing: true,
+      gate: ['smb.reachable', 'port:445', 'credential.candidate', 'credential.available'] },
+    { id: 'smb-shares', proto: 'smb', flag: '--shares', produces: ['smb.shares'], existing: true,
+      gate: ['smb.reachable', 'port:445'] },
+    { id: 'smb-rid-brute', proto: 'smb', flag: '--rid-brute', produces: ['ad.user_list'], existing: true,
+      gate: ['smb.reachable', 'port:445'] },
+    { id: 'smb-ntds', proto: 'smb', flag: '--ntds', produces: ['loot.ntds', 'hash.ntlm', 'hash.krbtgt'], existing: true,
+      gate: ['access.admin', 'ad.control_paths'] },
+    { id: 'smb-sam', proto: 'smb', flag: '--sam', produces: ['hash.ntlm', 'credential.candidate'], existing: true,
+      gate: ['access.admin', 'access.system'] },
+    { id: 'smb-exec', proto: 'smb', flag: '-x', produces: ['foothold.windows'], existing: true,
+      gate: ['credential.available', 'hash.ntlm'] },
+
+    // --- SMB gaps the hand-written parsers miss (driver fills these) ---
+    { id: 'smb-users', proto: 'smb', flag: '--users', produces: ['ad.user_list'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) {
+        var users = C._usernames(text);
+        return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-smb' } }] : [];
+      } },
+    { id: 'smb-lsa', proto: 'smb', flag: '--lsa', produces: ['credential.candidate'],
+      gate: ['access.admin', 'access.system'],
+      extract: function (text, ws) {
+        // LSA secrets: DCC2 cached hashes ($DCC2$) and cleartext service-account secrets (DOMAIN\svc$:plaintext,
+        // _SC_<svc>:password). The NT-hash lines are already minted by the secretsdump parser; here we add the
+        // cleartext/cached material as candidate credentials.
+        var out = [], seen = {};
+        payloadLines(text).forEach(function (l) {
+          var m = l.match(/^([A-Za-z0-9_.$\\-]+)\s*:\s*(\$DCC2\$\S+|[^:\s]{4,})$/);
+          if (m && !/^[a-f0-9]{32}$/i.test(m[2]) && !seen[l]) { seen[l] = 1; out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: 'lsa_secret', principal: m[1], material: m[2], tool: 'nxc' } }); }
+        });
+        return out;
+      } },
+    { id: 'smb-dpapi', proto: 'smb', flag: '--dpapi', produces: ['credential.candidate', 'credential.plaintext'],
+      gate: ['access.admin', 'access.system'],
+      extract: function (text, ws) {
+        var out = [];
+        payloadLines(text).forEach(function (l) {
+          var m = l.match(/\[(?:SYSTEM|CREDENTIAL|CHROME|.*)\].*?(?:password|secret)\s*:\s*(\S+)/i) || l.match(/\b([^\s:]+):([^\s:]{4,})\s*$/);
+          if (m) out.push({ kind: 'credential.plaintext', scope: host(ws), value: { kind: 'dpapi', detail: l, tool: 'nxc' } });
+        });
+        return out;
+      } },
+    { id: 'smb-loggedon', proto: 'smb', flag: '--loggedon-users', produces: ['ad.user_list'],
+      gate: ['smb.reachable', 'credential.available'],
+      extract: function (text, ws) {
+        var users = C._usernames(text);
+        return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-loggedon', note: 'users with a live session on this host (lateral-movement targets)' } }] : [];
+      } },
+    { id: 'smb-gpp-password', proto: 'smb', module: 'gpp_password', produces: ['credential.candidate'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) {
+        // nxc -M gpp_password prints decrypted creds: "Usernames: ['svc']" / "Passwords: ['pw']" (or user:pass).
+        var us = (text.match(/Usernames?\s*:\s*\[?['"]?([^'"\]\n]+)/i) || [])[1];
+        var ps = (text.match(/Passwords?\s*:\s*\[?['"]?([^'"\]\n]+)/i) || [])[1];
+        if (us || ps) return [{ kind: 'credential.candidate', scope: host(ws), value: { kind: 'gpp_cpassword', user: us && us.trim(), password: ps && ps.trim(), tool: 'nxc', via: 'gpp_password' } }];
+        return [];
+      } },
+    { id: 'smb-gpp-autologin', proto: 'smb', module: 'gpp_autologin', produces: ['credential.candidate'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) {
+        var us = (text.match(/Usernames?\s*:\s*\[?['"]?([^'"\]\n]+)/i) || [])[1];
+        var ps = (text.match(/Passwords?\s*:\s*\[?['"]?([^'"\]\n]+)/i) || [])[1];
+        return (us || ps) ? [{ kind: 'credential.candidate', scope: host(ws), value: { kind: 'gpp_autologin', user: us && us.trim(), password: ps && ps.trim(), tool: 'nxc' } }] : [];
+      } },
+    { id: 'smb-lsassy', proto: 'smb', module: 'lsassy', produces: ['hash.ntlm', 'credential.plaintext'],
+      gate: ['access.admin', 'access.system'],
+      extract: function (text, ws) {
+        // lsassy lines: "[+] domain\user  <nthash>" or "domain\user  lm:nt" or "domain\user  <plaintext>".
+        var out = [], seen = {};
+        payloadLines(text).forEach(function (l) {
+          l = l.replace(/^\[[-+*!]\]\s*/, '');
+          var m = l.match(/^([A-Za-z0-9_.-]+\\[^\s]+)\s+(?:[a-f0-9]{32}:)?([a-f0-9]{32})\b/i);
+          if (m && !seen[m[2]]) { seen[m[2]] = 1; out.push({ kind: 'hash.ntlm', scope: host(ws), value: { user: m[1], nthash: m[2].toLowerCase(), tool: 'nxc', via: 'lsassy' } }); return; }
+          var p = l.match(/^([A-Za-z0-9_.-]+\\[^\s]+)\s+([^\s:][^\s]{2,})$/);
+          if (p && !/^[a-f0-9]{32}$/i.test(p[2]) && !seen[l]) { seen[l] = 1; out.push({ kind: 'credential.plaintext', scope: host(ws), value: { user: p[1], password: p[2], tool: 'nxc', via: 'lsassy' } }); }
+        });
+        return out;
+      } },
+    { id: 'smb-nanodump', proto: 'smb', module: 'nanodump', produces: ['hash.ntlm', 'credential.plaintext'],
+      gate: ['access.admin', 'access.system'],
+      extract: function (text, ws) { return CAT_BY_ID['smb-lsassy'].extract(text, ws); } },
+    { id: 'smb-spider-plus', proto: 'smb', module: 'spider_plus', produces: ['loot.files'],
+      gate: ['smb.reachable', 'credential.available'],
+      extract: function (text, ws) {
+        // spider_plus crawls readable shares and writes a JSON manifest; its output names the saved file and
+        // the interesting files it found. Either is loot worth surfacing for triage.
+        if (/spider_plus|saved\s+(?:output|share)|found:|\.json\b/i.test(text)) {
+          return [{ kind: 'loot.files', scope: host(ws), value: { kind: 'spider_manifest', detail: 'nxc spider_plus crawl of readable shares', tool: 'nxc' } }];
+        }
+        return [];
+      } },
+    { id: 'smb-wdigest', proto: 'smb', module: 'wdigest', produces: ['config.review'],
+      gate: ['access.admin', 'access.system'],
+      extract: function (text, ws) {
+        return /enable|success|\[\+\]/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'wdigest_uselogoncredential', detail: 'WDigest cleartext-credential caching toggled (re-dump LSASS after a logon)', tool: 'nxc' } }] : [];
+      } },
+
+    // --- SMB informational enumeration (recognized, no graph-actionable fact) ---
+    { id: 'smb-groups', proto: 'smb', flag: '--groups', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
+    { id: 'smb-local-groups', proto: 'smb', flag: '--local-groups', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
+    { id: 'smb-sessions', proto: 'smb', flag: '--sessions', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
+    { id: 'smb-disks', proto: 'smb', flag: '--disks', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
+    { id: 'smb-computers', proto: 'smb', flag: '--computers', informational: true, produces: [], gate: ['smb.reachable', 'credential.available'] },
+    { id: 'smb-pass-pol', proto: 'smb', flag: '--pass-pol', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] }
+  ];
+
+  var CAT_BY_ID = {}; CAT.forEach(function (e) { CAT_BY_ID[e.id] = e; });
+  OBOL._nxcCatalog = CAT;
+  OBOL._nxcCatalogById = CAT_BY_ID;
+
+  // Which capabilities does a command invoke? Matches the protocol + each flag/module token present.
+  function match(command) {
+    var lc = String(command || '').toLowerCase();
+    var protoM = lc.match(/\bnxc\s+(smb|ldap|winrm|mssql|rdp|ftp|ssh|wmi|vnc|nfs)\b/) || lc.match(/\bnetexec\s+(smb|ldap|winrm|mssql|rdp|ftp|ssh|wmi|vnc|nfs)\b/);
+    var proto = protoM ? protoM[1] : null;
+    if (!proto) return [];
+    return CAT.filter(function (e) {
+      if (e.proto !== proto) return false;
+      if (e.module) return new RegExp('-m\\s+' + e.module + '\\b', 'i').test(lc);
+      if (e.flag) { var f = e.flag.replace(/[-]/g, '\\-'); return new RegExp('(^|\\s)' + f + '(\\s|$|=)', 'i').test(command); }
+      return false; // validate-only entries don't self-trigger here (auth handled by _parse_nxc_common)
+    });
+  }
+
+  function _parse_nxc_capability(text, command, ws, source, facts) {
+    if (hasDenied(text) && !/\[\+\]/.test(text)) return; // a pure failure/denied paste mints nothing
+    match(command).forEach(function (e) {
+      if (!e.extract || e.existing || e.informational) return;
+      var got;
+      try { got = e.extract(text, ws, C) || []; } catch (x) { got = []; }
+      got.forEach(function (f) { _add(facts, mkFact(f.kind, f.scope || host(ws), f.value || {}, S, source)); });
+    });
+  }
+  C._parse_nxc_capability = _parse_nxc_capability;
+
+})(typeof globalThis !== 'undefined' ? globalThis : this);

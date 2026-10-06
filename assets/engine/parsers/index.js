@@ -69,9 +69,13 @@
       if (has('_parse_nmap')) C._parse_nmap(text, ws, source, facts, actionId);
     }
 
-    var isNxc = lc.indexOf('nxc ') >= 0 || lc.indexOf('nxc ') === 0;
+    var isNxc = lc.indexOf('nxc ') >= 0 || lc.indexOf('nxc ') === 0 || lc.indexOf('netexec ') >= 0;
     if (isNxc) {
       C._parse_nxc_common(text, ws, source, facts);
+      // Data-driven capability catalog (nxc-catalog.js): fills the switches the hand-written parsers below
+      // don't cover (--users on smb, --lsa cleartext, -M gpp_password/lsassy/…). Facts dedupe, so running it
+      // alongside the existing parsers is safe. See docs + tests/engine/nxc-switch-parsers.js.
+      if (has('_parse_nxc_capability')) C._parse_nxc_capability(text, command, ws, source, facts);
       if (C._is_ldap_command(command) && (actionId === 'ad-anon-ldap-enum' || lc.indexOf('--users') >= 0)) {
         C._parse_user_list(text, ws, source, facts, { prove_anonymous_ldap: C._looks_anonymous_ldap_command(command, actObj), domain_hint: domainHint });
         if (lc.indexOf('--users') >= 0 && has('_parse_ldap_descriptions')) C._parse_ldap_descriptions(text, ws, source, facts, { domain_hint: domainHint });
