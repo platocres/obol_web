@@ -83,8 +83,9 @@
     var esc = (OBOL.util && OBOL.util.esc) ? OBOL.util.esc : function (s) { return String(s == null ? '' : s); };
     var attr = (OBOL.util && OBOL.util.attr) ? OBOL.util.attr : esc;
     function step(label, where, cmd) {
+      var whereCls = 'ns-stage-where' + (/kali|local|your box/i.test(where) ? ' ns-where-local' : '');
       return '<div class="ns-stage-step">'
-        + '<div class="ns-stage-step-h"><span class="ns-stage-where">' + esc(where) + '</span>' + esc(label) + '</div>'
+        + '<div class="ns-stage-step-h"><span class="' + whereCls + '">' + esc(where) + '</span>' + esc(label) + '</div>'
         + '<div class="ns-stage-cmd"><code>' + esc(cmd) + '</code>'
         + '<button class="btn-copy ns-stage-copy" data-copy="' + attr(cmd) + '" title="Copy" aria-label="Copy command">' + (OBOL.ic ? OBOL.ic('clip') : 'copy') + '</button></div></div>';
     }

@@ -321,29 +321,44 @@
     var cmd = (filled[0] && filled[0].filled) || ((m.commands || [])[0] || {}).run || '';
     return cmd ? nsSetupStep(m.title, cmd, 'reused') : '';
   }
-  // Does this move land a shell / foothold? Drives the automatic "Once You Are In" block, so every
-  // shell-landing move across every lane gets the first-breath orientation with no per-move authoring.
-  function moveLandsShell(move) {
-    return (move.produces || []).some(function (k) { return /^foothold\.|^access\.(shell|admin|system|root)/.test(k); });
-  }
-  // The first-breath block the moment a shell lands: confirm who/where you are, fix a broken shell (the PTY
-  // upgrade is reused from the Shells lane, not restated here), and check sudo. Reactive PTY/auth walls are
-  // still handled by the blocker.* doctors when an error is pasted; this is the proactive counterpart.
+  // The automatic post-success block. Two distinct cases, because the right orientation differs:
+  //   - a NEW shell (foothold / access.shell): get your bearings and fix the half-broken shell; or
+  //   - an ELEVATION to root / SYSTEM (access.admin/root/system, no new shell): confirm the new identity and
+  //     grab the proof flag in the same window.
+  // Derived from the move's produces, so it covers every lane with no per-move authoring, and a privesc move
+  // never wrongly tells a root user to fix their PTY.
+  var NEW_SHELL_RE = /^foothold\.|^access\.shell$/;
+  var ELEVATED_RE = /^access\.(admin|system|root)$/;
   function nsOnceYouAreIn(move, facts, params) {
-    if (!move || !moveLandsShell(move)) return '';
-    var O = OBOL.ORIENT || {}, p = move.produces || [];
-    var isWin = p.indexOf('foothold.windows') >= 0, isLin = p.indexOf('foothold.linux') >= 0;
-    if (!isWin && !isLin) { if (p.indexOf('access.system') >= 0) isWin = true; else isLin = true; }
-    var orient = '';
-    if (isLin && O.linux) orient += nsSetupStep(O.linux.label, O.linux.cmd);
-    if (isWin && O.windows) orient += nsSetupStep(O.windows.label, O.windows.cmd);
-    var html = '<p class="ns-cn-h">Once You Are In</p>'
-      + '<p class="ns-oyi-lead">You have a shell. Get your bearings first, then the coach ranks your next moves. Do not forget to grab the flag.</p>';
-    if (orient) html += '<div class="ns-setup">' + orient + '</div>';
-    // The PTY stabilization is a real multi-step, two-machine sequence, so it is NOT crammed into one copy
-    // box: it renders as ordered, machine-labelled steps (Linux shells only; Windows needs no PTY fix).
-    if (isLin && OBOL.renderPtySteps) html += OBOL.renderPtySteps();
-    return html;
+    if (!move) return '';
+    var p = move.produces || [];
+    var newShell = p.some(function (k) { return NEW_SHELL_RE.test(k); });
+    var elevated = !newShell && p.some(function (k) { return ELEVATED_RE.test(k); });
+    if (!newShell && !elevated) return '';
+    var O = OBOL.ORIENT || {};
+
+    if (newShell) {
+      var isWin = p.indexOf('foothold.windows') >= 0;
+      var isLin = p.indexOf('foothold.linux') >= 0 || p.indexOf('access.shell') >= 0;
+      if (!isWin && !isLin) isLin = true;
+      var orient = '';
+      if (isLin && O.linux) orient += nsSetupStep(O.linux.label, O.linux.cmd);
+      if (isWin && O.windows) orient += nsSetupStep(O.windows.label, O.windows.cmd);
+      var html = '<p class="ns-cn-h">Once You Are In</p>'
+        + '<p class="ns-oyi-lead">You have a shell. Get your bearings first, then the coach ranks your next moves. Do not forget to grab the flag.</p>';
+      if (orient) html += '<div class="ns-setup">' + orient + '</div>';
+      // The PTY stabilization is a real multi-step, two-machine sequence, so it is NOT crammed into one copy
+      // box: it renders as ordered, machine-labelled steps (Linux shells only; Windows needs no PTY fix).
+      if (isLin && OBOL.renderPtySteps) html += OBOL.renderPtySteps();
+      return html;
+    }
+    // Elevation: you already have a working shell and just became root/SYSTEM. No PTY to fix. Reuse the
+    // proof-flag move, whose command confirms the new identity and reads the flag in one frame.
+    var win = p.indexOf('access.system') >= 0;
+    var flagMove = win ? 'flag-hunt-root-windows' : 'flag-hunt-root-linux';
+    return '<p class="ns-cn-h">You Have ' + (win ? 'SYSTEM' : 'Root') + ' Now</p>'
+      + '<p class="ns-oyi-lead">Capture the proof flag with your new identity in the same window. One screenshot proves all of it, and that is what the exam grades.</p>'
+      + '<div class="ns-setup">' + nsReuseSteps(flagMove, facts, params) + '</div>';
   }
   function nsDoctorBlock(d) {
     return '<div class="ns-doctor"><div class="ns-doctor-h">' + OBOL.ic('shield') + ' ' + esc(d.title) + '</div>'
