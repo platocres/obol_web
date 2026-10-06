@@ -284,6 +284,7 @@
       gate: ['ldap.reachable', 'port:389', 'credential.candidate', 'credential.available'] },
     { id: 'ldap-users', proto: 'ldap', flag: '--users', produces: ['ad.user_list'], existing: true,
       gate: ['ldap.reachable', 'port:389'] },
+    { id: 'ldap-groups', proto: 'ldap', flag: '--groups', informational: true, produces: [], gate: ['ldap.reachable', 'port:389'] },
     { id: 'ldap-asreproast', proto: 'ldap', flag: '--asreproast', produces: ['hash.asrep', 'credential.candidate'], existing: true,
       gate: ['ad.user_list', 'ldap.reachable'] },
     { id: 'ldap-kerberoasting', proto: 'ldap', flag: '--kerberoasting', produces: ['hash.tgs', 'credential.candidate'], existing: true,

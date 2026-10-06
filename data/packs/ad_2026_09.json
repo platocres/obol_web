@@ -318,6 +318,64 @@
       ]
     },
     {
+      "id": "ldap-deep-enum",
+      "title": "Deep LDAP Enumeration (Base-DN Scoped)",
+      "hypothesis": "Once you can read the directory — with a credential or through an anonymous bind — and you know the base DN, LDAP itself is a goldmine you query precisely rather than dumping blindly. Pull the description fields (admins stash passwords there constantly), the adminCount=1 principals, the accounts with an SPN (kerberoastable) or DONT_REQ_PREAUTH (AS-REP-roastable), and the delegation flags. This is the targeted enumeration that turns 'I can bind' into a user list and a fistful of candidate credentials, before you ever touch a hash.",
+      "tool": "nxc",
+      "tools": [
+        "nxc",
+        "ldapsearch",
+        "windapsearch"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "ad.base_dn"
+      ],
+      "requires_any": [
+        "credential.available",
+        "ad.anonymous_bind"
+      ],
+      "produces": [
+        "ad.user_list",
+        "credential.candidate"
+      ],
+      "priority": 72,
+      "proves": "the directory's users and any secrets exposed in their attributes (descriptions, SPNs, preauth and delegation flags) read against the known base DN",
+      "does_not_prove": "a validated credential, a description password or roastable account is a candidate until spraying/cracking confirms it",
+      "report": {
+        "finding": "Sensitive Information Exposed via LDAP",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://www.netexec.wiki/",
+        "https://www.thehacker.recipes/ad/recon/ldap"
+      ],
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M get-desc-users",
+          "note": "PREFERRED: pull every user's description field — admins leave 'Default pwd: ...' and service-account passwords here more often than they should. Swap -u/-p for -u '' -p '' when an anonymous bind is open."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --query \"(&(objectCategory=person)(adminCount=1))\" \"sAMAccountName description\"",
+          "note": "A targeted query scoped to the directory: protected/admin accounts here. Change the filter for SPNs (servicePrincipalName=*), AS-REP (userAccountControl:1.2.840.113556.1.4.803:=4194304), or unconstrained delegation."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --users --groups",
+          "note": "The full user and group inventory when you want breadth; the handoff awk one-liner on the anonymous-enum card tidies it into users.txt the same way."
+        },
+        {
+          "tool": "ldapsearch",
+          "run": "ldapsearch -x -H ldap://{{target}} -D '{{user}}@{{domain}}' -w '{{password}}' -b '{{base_dn}}' \"(objectClass=user)\" sAMAccountName description servicePrincipalName",
+          "note": "The raw form scoped to {{base_dn}} (from the DC-identify card). Drop -D/-w for an anonymous bind. description and servicePrincipalName are the two highest-value attributes to eyeball."
+        }
+      ]
+    },
+    {
       "id": "ad-user-enum",
       "title": "User Enumeration (Kerberos and RPC)",
       "hypothesis": "Kerberos behaves as a username oracle: the KDC responds one way for real accounts and another for fake ones. On lenient DCs, null SMB sessions can also list users over RPC. A confirmed user list is the feedstock for AS-REP roasting, Kerberoasting, and spraying, the launch point for most AD attacks.",

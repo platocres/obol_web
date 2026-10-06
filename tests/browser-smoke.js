@@ -884,7 +884,7 @@ function serve() {
   const beforeFold = await page.locator('.atlas-node').count();
   await page.locator('.atlas-band[data-band="ad"] .ab-chev').click();
   await page.waitForTimeout(200);
-  ok((await page.locator('.atlas-node').count()) === beforeFold - 56, 'folding the AD band collapses its 56 steps');
+  ok((await page.locator('.atlas-node').count()) === beforeFold - 57, 'folding the AD band collapses its 57 steps');
   await page.locator('.atlas-band[data-band="ad"] .ab-chev').click();   // unfold
   await page.waitForTimeout(200);
   ok((await page.locator('.atlas-node').count()) === beforeFold, 'unfolding the AD band brings its steps back');
@@ -909,7 +909,7 @@ function serve() {
   // deep-link straight into a node to exercise the cell + replay
   await page.goto(`http://localhost:${PORT}/index.html#/study/asrep-roast`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.study-cols', { timeout: 6000 }).catch(() => {});
-  ok((await page.locator('.study-gnode').count()) === 56, 'node view renders the full 56-step AD lane rail');
+  ok((await page.locator('.study-gnode').count()) === 57, 'node view renders the full 57-step AD lane rail');
   ok((await page.locator('.study-cell-title').first().textContent().catch(() => '') || '').indexOf('AS-REP') !== -1, 'the node cell is AS-REP Roasting');
   ok((await page.locator('.study-cmd').first().locator('.study-loc').textContent().catch(() => '') || '').indexOf('REMOTE') !== -1, 'cell lists commands remote-first (first is REMOTE)');
   // the replay: Skip jumps straight to the finished output with the signal highlighted
