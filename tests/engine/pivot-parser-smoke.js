@@ -63,5 +63,33 @@ ok(has(kinds('', 'dnscat2> New window created: 1\nSession established!'), 'tunne
 // conservative: an unrelated mention of a tool name with no success token mints no tunnel
 ok(!has(kinds('man chisel', 'chisel is a fast TCP/UDP tunnel. Usage: chisel server|client'), 'tunnel.socks'), 'a chisel help/man page mints no tunnel');
 
+// ---- neighbours: Linux `ip neigh` → adjacent hosts (scan.local.neighbors), only resolved entries ----
+function hostsOf(cmd, out) { var f = run(cmd, out).filter(function (x) { return x.kind === 'scan.local.neighbors'; }); var s = {}; f.forEach(function (x) { (x.value.hosts || []).forEach(function (n) { s[n] = 1; }); }); return Object.keys(s); }
+var ipneigh = '10.10.14.1 dev eth0 lladdr aa:bb:cc:dd:ee:01 REACHABLE\n172.16.5.1 dev eth1 lladdr aa:bb:cc:dd:ee:02 STALE\n172.16.5.99 dev eth1  INCOMPLETE\n127.0.0.1 dev lo lladdr 00:00:00:00:00:00 PERMANENT';
+ok(has(kinds('ip neigh show', ipneigh), 'scan.local.neighbors'), 'ip neigh mints scan.local.neighbors');
+ok(has(hostsOf('ip neigh show', ipneigh), '172.16.5.1') && has(hostsOf('ip neigh show', ipneigh), '10.10.14.1'), 'ip neigh yields the resolved adjacent hosts');
+ok(!has(hostsOf('ip neigh show', ipneigh), '172.16.5.99') && !has(hostsOf('ip neigh show', ipneigh), '127.0.0.1'), 'ip neigh drops the INCOMPLETE slot and loopback');
+// Windows arp -a
+var arpa = 'Interface: 172.16.5.10 --- 0x5\n  Internet Address      Physical Address      Type\n  172.16.5.1            aa-bb-cc-dd-ee-02     dynamic\n  172.16.5.255          ff-ff-ff-ff-ff-ff     static';
+ok(has(hostsOf('arp -a', arpa), '172.16.5.1'), 'Windows arp -a yields the dynamic neighbour');
+ok(kinds('ip neigh show', 'Nothing to show.').length === 0, 'an empty neighbour cache mints nothing');
+
+// ---- listeners: Windows `netstat -ano` → listening ports (scan.local.listeners), LISTEN rows only ----
+function portsOf(cmd, out) { var f = run(cmd, out).filter(function (x) { return x.kind === 'scan.local.listeners'; }); var s = {}; f.forEach(function (x) { (x.value.ports || []).forEach(function (n) { s[n] = 1; }); }); return Object.keys(s).map(Number); }
+var nstat = 'Active Connections\n  Proto  Local Address          Foreign Address        State           PID\n  TCP    0.0.0.0:445            0.0.0.0:0              LISTENING       4\n  TCP    127.0.0.1:5985         0.0.0.0:0              LISTENING       4\n  TCP    172.16.5.10:3389       10.10.14.9:51000      ESTABLISHED     1200';
+ok(has(portsOf('netstat -ano', nstat), 445) && has(portsOf('netstat -ano', nstat), 5985), 'netstat -ano yields the listening ports (0.0.0.0 and localhost-only)');
+ok(!has(portsOf('netstat -ano', nstat), 51000), 'netstat -ano does not count an ESTABLISHED connection as a listener');
+// Linux ss -tlnp
+var ss = 'State    Recv-Q   Send-Q   Local Address:Port   Peer Address:Port\nLISTEN   0        128      127.0.0.1:3306       0.0.0.0:*\nLISTEN   0        128      0.0.0.0:22           0.0.0.0:*';
+ok(has(portsOf('ss -tlnp', ss), 3306) && has(portsOf('ss -tlnp', ss), 22), 'ss -tlnp yields the listening ports incl. the localhost-only 3306');
+
+// ---- resolvers: /etc/resolv.conf and Windows DNS Servers → scan.local.dns ----
+function dnsOf(cmd, out) { var f = run(cmd, out).filter(function (x) { return x.kind === 'scan.local.dns'; }); var s = {}; f.forEach(function (x) { (x.value.servers || []).forEach(function (n) { s[n] = 1; }); }); return Object.keys(s); }
+var resolv = '# generated\nsearch acme.local\nnameserver 10.10.14.2\nnameserver 127.0.0.53';
+ok(has(dnsOf('cat /etc/resolv.conf', resolv), '10.10.14.2') && !has(dnsOf('cat /etc/resolv.conf', resolv), '127.0.0.53'), 'resolv.conf yields the internal resolver and drops the loopback stub');
+var winDns = '   Connection-specific DNS Suffix  . : acme.local\n   DNS Servers . . . . . . . . . . . : 10.10.14.2\n                                       10.10.14.3';
+ok(has(dnsOf('ipconfig /all', winDns), '10.10.14.2') && has(dnsOf('ipconfig /all', winDns), '10.10.14.3'), 'Windows DNS Servers yields both resolvers');
+ok(kinds('cat /etc/resolv.conf', '# all commented out\n#nameserver 1.1.1.1').length === 0, 'a fully-commented resolv.conf mints nothing');
+
 console.log('\nPIVOT PARSER SMOKE: ' + (fail ? fail + ' FAILURE(S)' : 'all passed'));
 process.exit(fail ? 1 : 0);

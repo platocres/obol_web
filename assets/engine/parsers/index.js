@@ -262,6 +262,14 @@
       C._parse_local_net(text, ws, source, facts);
     if (has('_parse_tunnel') && (/\bchisel\b|\bligolo\b|\bsshuttle\b|\bdnscat|ssh\s+[^\n]*-[a-z]*d\b/.test(lc) || /\bchisel\b|ligolo|sshuttle|dnscat|Agent joined/i.test(text)))
       C._parse_tunnel(text, ws, source, facts, command);
+    // Adjacent hosts (ARP/neighbour cache), listening services, and internal resolvers from the foothold
+    // — the leads that tell the operator what to aim the pivot at. Command-keyed, with a shape fallback.
+    if (has('_parse_local_neighbors') && (/\bip\s+neigh|\barp\s+-a\b/.test(lc) || /\blladdr\b|\bdynamic\b/i.test(text)))
+      C._parse_local_neighbors(text, ws, source, facts);
+    if (has('_parse_local_listeners') && (/\bnetstat\s+-[a-z]*[alno]|\bss\s+-[a-z]*l/.test(lc) || /\bLISTEN(?:ING)?\b/.test(text)))
+      C._parse_local_listeners(text, ws, source, facts);
+    if (has('_parse_local_dns') && (/\bresolv\.conf\b|\bresolvectl\b|ipconfig\s+\/all/.test(lc) || /^\s*nameserver\s+\d|DNS Servers[^\n:]*:/im.test(text)))
+      C._parse_local_dns(text, ws, source, facts);
 
     // Output-shape fallback (runs last): recognize common output by its shape when the command-keyed
     // dispatch above did not key on it. Strictly additive and guarded, so it only fills gaps (a bare

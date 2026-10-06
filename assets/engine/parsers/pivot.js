@@ -12,6 +12,11 @@
  *   routes     — Linux `ip route`, `netstat -rn` (Destination/Gateway/Genmask), Windows `route print`
  *                (Network Destination/Netmask) — the last two carry the netmask as a dotted quad in a
  *                column, so a netmask-aware row reader handles both without caring about column order
+ *   neighbours — Linux `ip neigh`, Linux/Windows `arp -a`: the adjacent hosts the foothold has talked
+ *                to (scan.local.neighbors) — the shortlist to aim a pivot scan at
+ *   listeners  — Windows `netstat -ano`, Linux `netstat -tlnp`/`ss -tlnp`: services it is listening on,
+ *                internal-bound ones included (scan.local.listeners) — the classic pivot targets
+ *   resolvers  — `/etc/resolv.conf`, Windows DNS Servers: the internal DNS (scan.local.dns)
  *   tunnels    — chisel (reverse SOCKS), ssh -D (dynamic SOCKS), ligolo-ng + sshuttle (routed),
  *                dnscat2 (DNS) — recognized from the command AND from the tool's own success banner,
  *                so pasting just the output still lights the connectivity edge.
@@ -105,6 +110,58 @@
       _add(facts, mkFact('tunnel.dns', h, { via: 'dnscat2' }, S, source));
   }
 
+  // Adjacent hosts from the foothold's own ARP/neighbour cache — the machines it has actually talked to
+  // on its segments, which is the shortlist to aim a pivot scan at. Linux `ip neigh` ("10.0.0.1 dev eth0
+  // lladdr aa:.. REACHABLE"), Linux `arp -a` ("? (10.0.0.1) at aa:.. [ether] on eth0"), Windows `arp -a`
+  // ("  10.0.0.1    aa-bb-..  dynamic"). Conservative: only routable unicast IPs, and only a line that
+  // also carries a MAC (a real cache entry), so a bare address list or an error paste mints nothing.
+  function _parse_local_neighbors(text, ws, source, facts) {
+    var h = 'host:' + ws.target, hosts = {}, mac = /[0-9a-f]{2}([:-])[0-9a-f]{2}(?:\1[0-9a-f]{2}){4}/i;
+    String(text).split(/\r?\n/).forEach(function (line) {
+      if (!mac.test(line)) return;                       // a neighbour entry resolves to a MAC
+      if (/\b(?:INCOMPLETE|FAILED)\b/i.test(line)) return; // an unresolved cache slot is not a reachable host
+      var ip = (line.match(/(\d{1,3}(?:\.\d{1,3}){3})/) || [])[1];
+      if (ip && isRoutable(ip)) hosts[ip] = 1;
+    });
+    var list = Object.keys(hosts);
+    if (list.length) _add(facts, mkFact('scan.local.neighbors', h, { hosts: list.slice(0, 32) }, S, source));
+  }
+
+  // Services the foothold is listening on — including ones bound to an internal interface that are
+  // invisible from outside, so reaching them means pivoting. Windows `netstat -ano`, Linux `netstat
+  // -tlnp` / `ss -tlnp`. Only rows in a LISTEN(ING) state; a listener on 0.0.0.0 / :: / 127.0.0.1 is
+  // recorded too (a localhost-only service is the classic pivot target). Conservative: no state token,
+  // no fact.
+  function _parse_local_listeners(text, ws, source, facts) {
+    var h = 'host:' + ws.target, ports = {};
+    String(text).split(/\r?\n/).forEach(function (line) {
+      if (!/\bLISTEN(?:ING)?\b/i.test(line)) return;
+      // the local address is the one before the state; take the last :port on the local side
+      var m = line.match(/(?:\b|\[)(?:\d{1,3}(?:\.\d{1,3}){3}|\*|::|[0-9a-f:]*\]?):(\d{1,5})\b/gi);
+      if (!m) return;
+      var first = m[0], port = +((first.match(/:(\d{1,5})\b/) || [])[1]);
+      if (port >= 1 && port <= 65535) ports[port] = 1;
+    });
+    var list = Object.keys(ports).map(Number).sort(function (a, b) { return a - b; });
+    if (list.length) _add(facts, mkFact('scan.local.listeners', h, { ports: list.slice(0, 48) }, S, source));
+  }
+
+  // The foothold's own resolvers — the internal DNS servers (often a DC) that name the rest of the
+  // estate. Linux `/etc/resolv.conf` ("nameserver 10.0.0.2"), Windows ipconfig /all ("DNS Servers . . :
+  // 10.0.0.2"). Conservative: only routable unicast servers; a commented or empty file mints nothing.
+  function _parse_local_dns(text, ws, source, facts) {
+    var h = 'host:' + ws.target, servers = {}, m;
+    var reNs = /^\s*nameserver\s+(\d{1,3}(?:\.\d{1,3}){3})/gim;
+    while ((m = reNs.exec(text))) { if (isRoutable(m[1])) servers[m[1]] = 1; }
+    var reWin = /DNS Servers[^\n:]*:\s*((?:\d{1,3}\.){3}\d{1,3}(?:[\s\S]{0,40}?\d{1,3}(?:\.\d{1,3}){3})*)/gi;
+    while ((m = reWin.exec(text))) { (m[1].match(/\d{1,3}(?:\.\d{1,3}){3}/g) || []).forEach(function (ip) { if (isRoutable(ip)) servers[ip] = 1; }); }
+    var list = Object.keys(servers);
+    if (list.length) _add(facts, mkFact('scan.local.dns', h, { servers: list.slice(0, 8) }, S, source));
+  }
+
   C._parse_local_net = _parse_local_net;
   C._parse_tunnel = _parse_tunnel;
+  C._parse_local_neighbors = _parse_local_neighbors;
+  C._parse_local_listeners = _parse_local_listeners;
+  C._parse_local_dns = _parse_local_dns;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

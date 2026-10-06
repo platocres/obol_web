@@ -195,9 +195,9 @@
       emits: ['sccm.enumerated'],
     },
     'connectivity': {
-      looksFor: "a foothold's own interface / route dump (ip a, ifconfig, ipconfig, ip route, route print) — the subnets it sits on, and whether it is a dual-homed pivot; and a pivot tool's setup or status output that confirms a live tunnel (chisel R:socks, ssh -D, ligolo agent-joined, sshuttle connected, dnscat2 session).",
-      regex: 'inet <ip>/<pfx> | Subnet Mask | <net>/<pfx> dev|via | Agent joined | R:socks | Connected to server',
-      emits: ['scan.local.interfaces', 'scan.local.routes', 'host.multihomed', 'tunnel.socks', 'tunnel.route', 'tunnel.dns'],
+      looksFor: "a foothold's own interface / route dump (ip a, ifconfig, ipconfig, ip route, route print) — the subnets it sits on, and whether it is a dual-homed pivot; its ARP/neighbour cache (ip neigh, arp -a) for adjacent hosts, its listening services (netstat -ano, ss -tlnp) and its internal resolvers (resolv.conf, DNS Servers); and a pivot tool's setup or status output that confirms a live tunnel (chisel R:socks, ssh -D, ligolo agent-joined, sshuttle connected, dnscat2 session).",
+      regex: 'inet <ip>/<pfx> | Subnet Mask | <net>/<pfx> dev|via | <ip> ... lladdr|dynamic | LISTENING | nameserver <ip> | Agent joined | R:socks | Connected to server',
+      emits: ['scan.local.interfaces', 'scan.local.routes', 'scan.local.neighbors', 'scan.local.listeners', 'scan.local.dns', 'host.multihomed', 'tunnel.socks', 'tunnel.route', 'tunnel.dns'],
     },
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

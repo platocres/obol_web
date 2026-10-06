@@ -1907,7 +1907,6 @@
         "loot.ntds"
       ],
       "produces": [
-        "enum.deep",
         "credential.candidate"
       ],
       "priority": 74,

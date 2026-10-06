@@ -260,7 +260,7 @@
         // terminal/report facts: loot, proof, observations, and recorded credential MATERIAL whose
         // usable form (credential.available / .candidate) is emitted alongside — the material fact
         // itself feeds the report, not another move, so it is not a wiring dead-end.
-        var term = /^(objective|flag|proof|loot\.|config\.review|defense\.|snmp\.info|host\.|web\.(server|tech|title|content_map|source)|dns\.|tls\.|persistence\.|credential\.plaintext$|db\.creds$)/.test(f);
+        var term = /^(objective|flag|proof|loot\.|config\.review|defense\.|snmp\.info|host\.|scan\.local\.|web\.(server|tech|title|content_map|source)|dns\.|tls\.|persistence\.|credential\.plaintext$|db\.creds$)/.test(f);
         if (!consumed && !hand && !term) wiring.deadEnd.push({ id: m.id, fact: f });
       });
     });
