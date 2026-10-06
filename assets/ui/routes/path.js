@@ -309,6 +309,11 @@
       + '<div class="ns-canvas-body">';
     live.forEach(function (d) { html += nsDoctorBlock(d); });
     if (cmdText) html += '<div class="ns-canvas-cmd">' + esc(cmdText) + '</div>';
+    // If this command runs a tool that must first be staged onto the host (PowerView, winPEAS, mimikatz...),
+    // show the serve -> fetch -> load recipe. This fills the "how do I get it there?" gap no command answers.
+    var selCmd = (move.commands || [])[idx] || {};
+    var stage = (OBOL.stagingFor && OBOL.pack.commandIsOnHost(selCmd)) ? OBOL.stagingFor(selCmd.tool) : null;
+    if (stage && OBOL.renderToolStaging) html += OBOL.renderToolStaging(stage, params);
     if (note) {
       if (note.land && note.land.length) html += '<p class="ns-cn-h">How To Land It</p><ul class="ns-cn-list">'
         + note.land.map(function (l) { return '<li>' + l + '</li>'; }).join('') + '</ul>';

@@ -3162,3 +3162,17 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .ns-wall a { color: var(--accent-2); font-weight: 700; text-decoration: none; }
 .ns-wall a:hover { text-decoration: underline; }
 .ns-cmd:focus-visible { outline: 2px solid var(--fam, var(--accent)); outline-offset: 2px; }
+
+/* on-host tool staging block in the field-notes canvas (serve -> fetch -> load) */
+.ns-stage { border: 1px solid color-mix(in srgb, var(--ph-enum) 42%, var(--line)); border-left: 3px solid var(--ph-enum); border-radius: 9px; padding: 12px 13px; margin-bottom: 16px; background: color-mix(in srgb, var(--ph-enum) 10%, transparent); }
+.ns-stage-h { display: flex; align-items: center; gap: 8px; font: 800 11px var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--ph-enum); margin-bottom: 6px; }
+.ns-stage-h .ic { width: 15px; height: 15px; }
+.ns-stage-why { margin: 0 0 10px; font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+.ns-stage-step { margin-bottom: 9px; }
+.ns-stage-step-h { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.ns-stage-where { font: 800 9px var(--mono); letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; color: var(--on-accent); background: var(--ph-enum); }
+.ns-stage-cmd { display: flex; align-items: flex-start; gap: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; }
+.ns-stage-cmd code { flex: 1; min-width: 0; font-family: var(--mono); font-size: 11.5px; color: var(--text); white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; line-height: 1.5; }
+.ns-stage-copy { flex: none; background: transparent; border: 0; color: var(--text-2); cursor: pointer; padding: 1px; display: inline-flex; }
+.ns-stage-copy .ic { width: 14px; height: 14px; }
+.ns-stage-note { margin: 2px 0 0; font-size: 12px; color: var(--accent-2); font-weight: 600; }
