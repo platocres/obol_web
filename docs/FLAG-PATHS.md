@@ -98,9 +98,9 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **Domain control:** Own the Domain, Pass-the-Hash as Administrator → DCSync
 
 ### `111/2049` — NFS
-- **Foothold:** NFS no_root_squash → On-Box LSASS Memory Dump → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** NFS no_root_squash → On-Box LSASS Memory Dump → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** NFS no_root_squash → WSUS Abuse
+- **Foothold:** NFS Export to Shell
+- **User flag:** NFS no_root_squash → Hunt for Flags (Windows)
+- **Root/Admin:** NFS no_root_squash
 
 ### `135/139/445` — SMB, RPC  _(domain control is a milestone on the way to the flag)_
 - **Foothold:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Usermin Authenticated RCE (EDB-50234)
@@ -130,9 +130,9 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **Root/Admin:** Log In via r-services (rlogin/rsh)
 
 ### `873` — rsync
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Rsync Writable Module to Shell
+- **User flag:** Rsync Writable Module to Shell → Hunt for Flags (Linux)
+- **Root/Admin:** Rsync Writable Module to Shell → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `1433` — MSSQL
 - **Foothold:** MSSQL Login → MSSQL xp_cmdshell Command Execution → Stored Credential Hunting (Windows) → Usermin Authenticated RCE (EDB-50234)
@@ -200,8 +200,8 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **Root/Admin:** Jenkins Exploitation → DLL Search-Order / Phantom DLL Hijack
 
 ### `9200` — Elasticsearch
-- **Foothold:** Jenkins Exploitation
-- **User flag:** Jenkins Exploitation → Hunt for Flags (Windows)
+- **Foothold:** Elasticsearch to Command Execution
+- **User flag:** Elasticsearch to Command Execution → Hunt for Flags (Linux)
 - **Root/Admin:** Jenkins Exploitation → DLL Search-Order / Phantom DLL Hijack
 
 ### `11211` — Memcached

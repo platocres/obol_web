@@ -177,6 +177,10 @@
   // output (uid=/whoami/nt authority), that IS a web foothold, so _parse_web_cmdi mints foothold.webshell
   // for these (not for the confirm-only probes, whose foothold is a separate follow-up move).
   C._WEB_RCE_FOOTHOLD_IDS = new Set(['ssti-to-rce', 'http-put-webshell', 'authz-abuse']);
+  // Service moves that land a *nix shell but whose command tool is not one the command-keyed dispatch
+  // recognises (curl to the Elasticsearch API, rsync, an NFS mount + ssh): keyed by actionId so a pasted
+  // `uid=` proof still mints foothold.linux through the shared ssh-exec reader.
+  C._LINUX_SHELL_ACTION_IDS = new Set(['rsync-write-shell', 'nfs-to-foothold', 'elasticsearch-rce']);
   C._WEB_SQLI_ACTION_IDS = new Set(['sqli-basics']);
   C._WEB_SSRF_ACTION_IDS = new Set(['ssrf', 'xxe']);
   C._WEB_NOSQLI_ACTION_IDS = new Set(['nosql-injection']);

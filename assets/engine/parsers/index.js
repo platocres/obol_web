@@ -144,6 +144,7 @@
     // and friends): the proof is the same Linux id output, so reuse the ssh-exec reader to mint the
     // foothold from a pasted uid=... line.
     if (!isSsh && /\b(telnet|rlogin|rsh|rexec|psql|sqlplus|odat)\b/.test(lc)) C._parse_ssh_exec(text, ws, command, source, facts);
+    if (!isSsh && C._LINUX_SHELL_ACTION_IDS && C._LINUX_SHELL_ACTION_IDS.has(actionId)) C._parse_ssh_exec(text, ws, command, source, facts);
 
     if (isNxc && (' ' + lc + ' ').indexOf(' rdp ') >= 0) C._parse_nxc_rdp(text, ws, command, source, facts);
 

