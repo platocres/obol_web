@@ -48,7 +48,14 @@ ok(hasKind('ffuf -u http://t/FUZZ', ':: Progress ... 429 Too Many Requests', 'bl
 ok(hasKind('curl https://t:80/', 'curl: (35) error:0A00010B:SSL routines::wrong version number', 'blocker.tls_scheme'), 'wrong-version-number → blocker.tls_scheme');
 ok(hasKind('hashcat -m 1000 h.txt rockyou', 'Token length exception\nNo hashes loaded.', 'blocker.hash_format'), 'hashcat token-length/no-hashes → blocker.hash_format');
 ok(hasKind('nc -nv 10.10.14.9 4444', 'nc: connect to 10.10.14.9 port 4444 (tcp) failed: Connection refused', 'blocker.egress_blocked'), 'nc connection refused → blocker.egress_blocked');
+ok(hasKind('impacket-ntlmrelayx -t smb://dc', '[-] Signing is required, attack will not work', 'blocker.smb_signing'), 'SMB signing required → blocker.smb_signing');
+ok(hasKind('impacket-getST', 'Kerberos SessionError: KDC_ERR_S_PRINCIPAL_UNKNOWN', 'blocker.kerberos_spn'), 'KDC_ERR_S_PRINCIPAL_UNKNOWN → blocker.kerberos_spn');
+ok(hasKind('responder -I eth0', '[+] Servers:\n    HTTP server                [OFF]\n    SMB server                 [OFF]', 'blocker.responder_quiet'), 'Responder servers OFF → blocker.responder_quiet');
+ok(hasKind('gobuster dir -u http://t', 'Error: the server returns a status code that matches the provided options for non existing urls. => 301', 'blocker.web_wildcard'), 'gobuster wildcard → blocker.web_wildcard');
+ok(hasKind('hashcat -m 1000 h rockyou', 'No devices found/left. You can use --force to override', 'blocker.hashcat_env'), 'hashcat no-devices → blocker.hashcat_env');
 ok(kinds('nmap 10.10.10.10', 'Nmap scan report for 10.10.10.10\nHost is up (0.012s latency).').filter(function (x) { return /^blocker\./.test(x); }).length === 0, 'a healthy scan mints no blocker');
+// nxc's normal "signing:True" enum line must NOT trip the relay blocker (false-positive guard)
+ok(!hasKind('nxc smb 10.10.10.10', 'SMB  10.10.10.10  445  DC  [*] Windows Server 2019 (name:DC) (signing:True) (SMBv1:False)', 'blocker.smb_signing'), 'nxc enum signing:True does NOT false-trip the relay blocker');
 
 console.log('\nSSH KEY DOCTOR SMOKE: ' + (fail ? fail + ' FAILURE(S)' : 'all passed'));
 process.exit(fail ? 1 : 0);

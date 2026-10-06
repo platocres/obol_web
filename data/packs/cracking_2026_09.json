@@ -42,9 +42,7 @@
         "john",
         "hashid"
       ],
-      "requires_all": [
-        "blocker.hash_format"
-      ],
+      "requires_all": [],
       "produces": [
         "advice.hash"
       ],
@@ -74,7 +72,16 @@
           "tool": "john",
           "run": "john --list=formats | grep -i {{type}}; john --format={{fmt}} hash.txt --wordlist={{wordlist}}",
           "note": "The john equivalent: pick the matching --format. 'No password hashes loaded' means the format is wrong or the line is malformed."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m {{mode}} hash.txt {{wordlist}} --force -D 1   # CPU fallback",
+          "note": "GPU/OPENCL ERROR (common in a VM): 'No devices found/left' means no usable GPU. --force runs anyway and -D 1 uses the CPU. Slower, but it cracks; or crack on the host, not the VM."
         }
+      ],
+      "requires_any": [
+        "blocker.hash_format",
+        "blocker.hashcat_env"
       ]
     },
     {

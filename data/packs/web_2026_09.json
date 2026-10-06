@@ -115,7 +115,8 @@
       ],
       "requires_any": [
         "blocker.rate_limited",
-        "blocker.tls_scheme"
+        "blocker.tls_scheme",
+        "blocker.web_wildcard"
       ],
       "produces": [
         "advice.web_access"
@@ -138,6 +139,11 @@
           "tool": "curl",
           "run": "curl -sk https://{{target}}/  # or plain http://",
           "note": "WRONG_VERSION_NUMBER: you spoke TLS to a plaintext port (or vice-versa). Flip the scheme; add -k for a self-signed cert so the handshake is not the thing that stops you."
+        },
+        {
+          "tool": "ffuf",
+          "run": "ffuf -u {{url}}/FUZZ -w {{wordlist}} -fs {{wildcard_size}}   # or gobuster -b 404,302 / --wildcard",
+          "note": "WILDCARD/CATCH-ALL: the server answers every path (a soft 404 or catch-all route), so the fuzzer refuses to run. Filter the decoy response by size/words (-fs/-fw), or blacklist its status (gobuster -b), and real paths stand out again."
         }
       ]
     },
