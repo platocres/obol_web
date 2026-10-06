@@ -3149,3 +3149,11 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
   .ns-coach-wrap::before { display: none; }
 }
 :root[data-focus="1"] .ns-card.selected::after { display: none; }
+
+/* live-wall alert at the top of Next Steps (a pasted error minted a blocker) */
+.ns-wall { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; padding: 11px 14px; border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--orange) 50%, var(--line)); border-left: 3px solid var(--orange);
+  background: color-mix(in srgb, var(--orange) 13%, var(--surf1)); color: var(--text); font-size: 13.5px; }
+.ns-wall .ic { width: 17px; height: 17px; flex: none; color: var(--orange); }
+.ns-wall a { color: var(--accent-2); font-weight: 700; text-decoration: none; }
+.ns-wall a:hover { text-decoration: underline; }

@@ -562,7 +562,18 @@
     var frontier = OBOL.phases.frontierIndex(facts);
     var onFlow = [], comingUp = [], reportChecks = [];
     function reportOnly(a) { return !!(OBOL.pack.isReportOnly && OBOL.pack.isReportOnly(a, pack)); }
+    // Trap-doctor moves (gated on a pasted-error blocker.* fact, or producing only advice.*) are NOT cards
+    // in the rail — their fix surfaces reactively in the field-notes canvas the moment the blocker mints.
+    // Keeping them out of the grid is the de-clutter the redesign calls for; real exploit moves that happen
+    // to key on a vuln.* fingerprint stay, because running them IS the next attack step.
+    function isCanvasDoctor(a) {
+      var gates = (a.requires_all || []).concat(a.requires_any || []);
+      if (gates.some(function (k) { return /^blocker\./.test(k); })) return true;
+      var prod = a.produces || [];
+      return prod.length > 0 && prod.every(function (k) { return /^advice\./.test(k); });
+    }
     ranked.forEach(function (a) {
+      if (isCanvasDoctor(a)) return;                                       // doctor → canvas only, never a card
       if (reportOnly(a)) { reportChecks.push(a); return; }                 // writeup check → own group, never headlines
       if (OBOL.phases.prematurity(a, facts) === 0) onFlow.push(a); else comingUp.push(a);
     });
@@ -692,6 +703,15 @@
 
     html += '<div class="ns-coach"><div class="ns-main">';
 
+    // If a pasted error minted a wall, say so at the top of the column (visible on every screen size,
+    // including mobile where the canvas sits below) and point to the fix in Field Notes.
+    var liveDocs = nsLiveDoctors(facts);
+    if (liveDocs.length) {
+      html += '<div class="ns-wall" role="alert">' + OBOL.ic('shield')
+        + '<span>A wall was detected: <strong>' + esc(liveDocs.map(function (d) { return d.title; }).join(', '))
+        + '</strong>. The fix is in <a href="#ns-canvas">Field Notes</a>.</span></div>';
+    }
+
     var READY_CAP = 8;
     if (onFlow.length) {
       var top = onFlow.slice(0, READY_CAP), rest = onFlow.slice(READY_CAP);
@@ -725,7 +745,7 @@
     html += nsOpensStrip(OBOL.pack.opensUpNext(facts, pack));
 
     html += '</div>'; // .ns-main
-    html += '<aside class="ns-canvas" id="ns-canvas" aria-label="Field notes for the selected move">'
+    html += '<aside class="ns-canvas" id="ns-canvas" aria-label="Field notes for the selected move" aria-live="polite">'
       + nsCanvasHtml(selMove, nsSel.idx, facts, params) + '</aside>';
     html += '</div>'; // .ns-coach
 
