@@ -66,6 +66,16 @@ places sanely.
   above), so when a move *can* be done with `nxc`, its `nxc` command leads. **Exempt:** moves tagged
   `sequence: true`, where the commands are ordered pipeline steps (build-then-load, confirm-then-act), not
   interchangeable alternatives — there `nxc` legitimately sits at whatever step it runs.
+- **FAIL · NXC-COVERAGE** — a NetExec capability or protocol the `tb-nxc` toolbuilder teaches
+  (`data/toolset.js`, the "teach" surface) that **no ranked move backs**, so it appears in teach but never
+  in Next Steps. Derived from the builder itself (every action's distinctive `--flag`/`-M module`, every
+  protocol), so it stays honest as the builder grows. Clear it by adding a move that uses that nxc
+  capability (and a parser, if the output isn't already read). This is the teach↔moves parity the move set
+  is meant to hold: anything we teach for our preferred tool, we also rank.
+- **WARN · SELF-SATISFIED** — a non-report move whose produced facts are all already among its own gates, so
+  it `settled()`s the instant that gate fact exists and can only ever fire through some *other* gate.
+  Usually the `produces` or a gate is mis-modeled — give it a distinct effect, or drop the redundant gate.
+  Report-only checks are exempt.
 - **WARN · UNINDICATED-PAYOFF** — produces a real payoff (foothold/privilege, or a **validated
   credential**) with no evidence gate, so it can only fire as a gamble (blind password spraying,
   default-cred guessing, an exploit at a bare port). The ranker caps it — gate it on the fact that

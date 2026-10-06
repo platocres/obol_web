@@ -18,6 +18,9 @@
  *                "Operator preferences") — when a move can be done with nxc, its nxc command leads. Exempt:
  *                moves tagged sequence:true, where commands are ordered pipeline steps (build-then-load,
  *                confirm-then-act), not interchangeable alternatives.
+ *   NXC-COVERAGE a NetExec capability or protocol the tb-nxc toolbuilder teaches (data/toolset.js — the
+ *                "teach" surface) that no ranked MOVE backs, so it shows in teach but never in Next Steps.
+ *                Derived from the builder itself; add a move using that nxc capability to clear it.
  *
  * WARN (review, never blocks) — judgment calls worth a human glance:
  *   UNINDICATED-PAYOFF a move that produces a real payoff (foothold/privilege, or a VALIDATED credential)
@@ -29,6 +32,10 @@
  *                 from a soft AD lead (ad.attack_paths/acl_lead/control_paths/delegation) with no
  *                 credential/hash/ticket in hand — an over-claimed one-step jump to DA. Prefer modeling
  *                 the honest intermediate (→ ad.control_paths → dcsync) so the remote twin wins by cost.
+ *   SELF-SATISFIED a non-report move whose produced facts are all already among its own gates, so it
+ *                 `settled()`s the instant that gate fact exists and can only fire through some other gate.
+ *                 Usually the produces or the gate is mis-modeled (give it a distinct effect, or drop the
+ *                 redundant gate). Report-only checks are exempt.
  *
  * Run:  node tools/move-lint.js           (full report)
  *       node tools/move-lint.js --check   (exit 1 on any FAIL)
@@ -39,6 +46,7 @@ var ROOT = path.join(__dirname, '..');
 function req(p) { return require(path.join(ROOT, p)); }
 req('assets/engine/facts.js'); req('assets/engine/phases.js'); req('assets/engine/pack.js');
 req('assets/engine/profile.js'); req('assets/engine/command.js'); req('assets/engine/workspace.js');
+req('data/toolset.js');
 var OBOL = globalThis.OBOL, PK = OBOL.pack, PH = OBOL.phases;
 var pdir = path.join(ROOT, 'data/packs');
 var A = PK.loadPacks(fs.readdirSync(pdir).filter(function (f) { return f.endsWith('.json'); })
@@ -76,8 +84,8 @@ var VALID_LOCUS = { R: 1, F: 1, I: 1 };
 var PHASES = {}; (PH.PHASES || []).forEach(function (p) { PHASES[p] = 1; });
 var AD_LEAD = { 'ad.attack_paths': 1, 'ad.acl_lead': 1, 'ad.control_paths': 1, 'ad.delegation': 1, 'ad.trusts': 1, 'foothold.windows': 1, 'foothold.linux': 1 };
 
-var fail = { fields: [], infoDead: [], nxcFirst: [] };
-var warn = { bareFoothold: [], shortcut: [] };
+var fail = { fields: [], infoDead: [], nxcFirst: [], nxcCoverage: [] };
+var warn = { bareFoothold: [], shortcut: [], selfSat: [] };
 function cmdTool(c) { return String((c && c.tool) || '').toLowerCase(); }
 function isNxcTool(t) { return t === 'nxc' || t === 'netexec'; }
 
@@ -124,6 +132,14 @@ A.forEach(function (a) {
     }
   }
 
+  // SELF-SATISFIED — a (non-report) move whose produced facts are ALL already in its own gates. Once that
+  // gate fact exists the move is `settled()` and vanishes, so it can only ever run in the narrow window
+  // where some OTHER gate admits it — usually a sign the produces or the gate is mis-modeled. Report-only
+  // checks are exempt (they live in the collapsed group and re-running them to refine a fact is fine).
+  if (produces.length && !PK.isReportOnly(a, A) && produces.every(function (k) { return gates.indexOf(k) >= 0; })) {
+    warn.selfSat.push(a.id + '  produces ' + produces.join(', ') + ' ⊆ gates (' + gates.join(', ') + ') — settles as soon as that gate holds');
+  }
+
   // SHORTCUT — produces a privilege fact straight from a soft AD lead, no credential/hash/ticket held.
   if (PK.producesPrivilege(a)) {
     var hardGate = gates.some(function (g) { return /^(credential\.|hash\.|kerberos\.tickets|access\.)/.test(g); });
@@ -133,6 +149,43 @@ A.forEach(function (a) {
     }
   }
 });
+
+// NXC-COVERAGE — teach↔moves parity. The tb-nxc toolbuilder (data/toolset.js) is the "teach" surface: it
+// offers a protocol + an action for every NetExec capability we teach. nxc being the preferred tool, every
+// capability the builder teaches must have at least one ranked MOVE backing it — otherwise it shows up in
+// teach but never in Next Steps (the exact gap the operator flagged). Derived from the builder itself (not a
+// hand-list) so it stays honest as the builder grows: each action's distinctive arg token (--flag or
+// `-M module`) and each protocol must appear in some move's nxc command.
+(function () {
+  var TS = (OBOL.TOOLSET || []).filter(Boolean);
+  var nxc = TS.filter(function (t) { return t.id === 'tb-nxc'; })[0];
+  if (!nxc || !nxc.command) return;
+  var tokFor = function (field) { return (nxc.command.tokens || []).filter(function (t) { return t.field === field; })[0] || { choices: [] }; };
+  // every nxc command string across all moves, lowercased
+  var nxcCmds = [];
+  A.forEach(function (a) { (a.commands || []).forEach(function (c) { if (isNxcTool(cmdTool(c))) nxcCmds.push(String(c.run || '').toLowerCase()); }); });
+  var haystack = nxcCmds.join('\n');
+  // capability signatures: the first `--flag` or `-M module` in each action's arg (validate/exec handled below)
+  (tokFor('action').choices || []).forEach(function (ch) {
+    var arg = String(ch.arg || '').toLowerCase();
+    var sig = null;
+    var mod = arg.match(/-m\s+([a-z0-9_]+)/); var flag = arg.match(/--[a-z0-9-]+/);
+    if (mod) sig = '-m ' + mod[1]; else if (flag) sig = flag[0];
+    else if (ch.value === 'exec-cmd' || ch.value === 'exec-ps') sig = null; // exec checked separately
+    else return; // validate = bare auth, trivially covered if any nxc move exists
+    if (sig && haystack.indexOf(sig) < 0) fail.nxcCoverage.push('capability "' + ch.value + '" (' + sig + ') is taught by tb-nxc but no move uses it');
+  });
+  // exec: at least one move must run nxc with -x or -X
+  if (!/\s-x\s|\s-x'|\s-x"|\s-x$|\s-X\s/.test(haystack)) fail.nxcCoverage.push('capability "exec" (-x/-X) is taught by tb-nxc but no move uses it');
+  // protocols
+  (tokFor('protocol').choices || []).forEach(function (ch) {
+    var proto = String(ch.arg || ch.value || '').toLowerCase();
+    if (!proto) return;
+    if (haystack.indexOf('nxc ' + proto) < 0 && haystack.indexOf('netexec ' + proto) < 0) {
+      fail.nxcCoverage.push('protocol "' + proto + '" is offered by tb-nxc but no move runs `nxc ' + proto + '`');
+    }
+  });
+})();
 
 function section(title, arr) {
   console.log('\n== ' + title + ' (' + arr.length + ') ==');
@@ -144,10 +197,13 @@ console.log('OBOL move-contract lint — ' + A.length + ' moves');
 section('FAIL · FIELDS — missing/invalid locus or phase', fail.fields);
 section('FAIL · INFO-DEADEND — informational move not tagged report-only', fail.infoDead);
 section('FAIL · NXC-FIRST — nxc command variant present but not leading (not at index 0)', fail.nxcFirst);
+section('FAIL · NXC-COVERAGE — a NetExec capability/protocol taught by tb-nxc with no backing move', fail.nxcCoverage);
 section('WARN · UNINDICATED-PAYOFF — foothold/priv/validated-credential with no evidence gate (speculative-only)', warn.bareFoothold);
 section('WARN · SHORTCUT — privilege claimed straight from a soft AD lead', warn.shortcut);
+section('WARN · SELF-SATISFIED — move produces only facts it already requires (settles immediately)', warn.selfSat);
 
-var failCount = fail.fields.length + fail.infoDead.length + fail.nxcFirst.length;
-console.log('\n' + A.length + ' moves · ' + failCount + ' FAIL · ' + (warn.bareFoothold.length + warn.shortcut.length) + ' WARN');
+var failCount = fail.fields.length + fail.infoDead.length + fail.nxcFirst.length + fail.nxcCoverage.length;
+var warnCount = warn.bareFoothold.length + warn.shortcut.length + warn.selfSat.length;
+console.log('\n' + A.length + ' moves · ' + failCount + ' FAIL · ' + warnCount + ' WARN');
 if (CHECK && failCount) { console.error('MOVE LINT FAIL: ' + failCount + ' contract breach(es).'); process.exit(1); }
 if (CHECK) console.log('MOVE LINT OK: every move satisfies the contract (warnings are advisory).');
