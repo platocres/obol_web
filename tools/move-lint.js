@@ -140,9 +140,13 @@ A.forEach(function (a) {
     warn.selfSat.push(a.id + '  produces ' + produces.join(', ') + ' ⊆ gates (' + gates.join(', ') + ') — settles as soon as that gate holds');
   }
 
-  // SHORTCUT — produces a privilege fact straight from a soft AD lead, no credential/hash/ticket held.
+  // SHORTCUT — produces a privilege fact straight from a soft AD lead with nothing proven in hand. "In hand"
+  // = a held credential/hash/ticket, an existing access, OR a PROVEN primitive the ranker counts as evidence
+  // (ad.control_paths/adcs.vulnerable, a privesc.* primitive, a vuln.* fingerprint, a *_confirmed verdict).
+  // A move gated on one of those is evidenced, not a one-step jump — only a bare soft lead with none of them
+  // is the over-claim this flags.
   if (PK.producesPrivilege(a)) {
-    var hardGate = gates.some(function (g) { return /^(credential\.|hash\.|kerberos\.tickets|access\.)/.test(g); });
+    var hardGate = gates.some(function (g) { return /^(credential\.|hash\.|kerberos\.tickets|access\.|privesc\.|adcs\.|vuln\.)/.test(g) || g === 'ad.control_paths' || /_confirmed$/.test(g); });
     var softLead = gates.some(function (g) { return AD_LEAD[g]; });
     if (!hardGate && softLead) {
       warn.shortcut.push(a.id + '  → ' + produces.filter(function (k) { return PK.producesPrivilege({ produces: [k] }); }).join(', ') + ' from soft lead (gates: ' + gates.join(', ') + ')');
