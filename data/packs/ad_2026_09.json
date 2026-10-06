@@ -1862,7 +1862,7 @@
         "ad.control_paths",
         "credential.candidate"
       ],
-      "priority": 84,
+      "priority": 92,
       "proves": "produces object-control paths and candidate credentials",
       "does_not_prove": "candidate material only, not yet a validated credential, and not access",
       "report": {
@@ -2350,11 +2350,11 @@
       ],
       "produces": [
         "ad.control_paths",
-        "access.admin"
+        "credential.candidate"
       ],
       "priority": 92,
-      "proves": "produces object-control paths and administrative access",
-      "does_not_prove": "administrative access on this host or context, not control of the domain unless that is demonstrated on its own",
+      "proves": "produces object-control paths (and, via a password reset, candidate credentials)",
+      "does_not_prove": "administrative access on its own — the control path still has to be cashed in (e.g. grant DCSync, then dump), which is why this hands off to DCSync rather than claiming admin directly",
       "report": {
         "finding": "Excessive AD Object Permissions (GenericAll/WriteDACL)",
         "severity": "high"

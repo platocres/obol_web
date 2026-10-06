@@ -681,10 +681,14 @@
   function v2ActionCost(a, haveObj) {
     var gates = a.requires_all.concat(a.requires_any), i, earned = false;
     for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) { earned = true; break; }
-    if (v2Speculative(a) && !earned) return 12;
-    if (earned) return 1;
-    for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return 8;
-    return 1.5;
+    var base;
+    if (v2Speculative(a) && !earned) base = 12;
+    else if (earned) base = 1;
+    else { base = 1.5; for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) { base = 8; break; } }
+    // Remote-first: a small surcharge for stepping onto the host (R +0, F +0.3, I +0.6) so the planner
+    // prefers the Kali-side route when steps otherwise tie — never enough to reorder a genuinely cheaper
+    // path. Running a command from Kali beats getting on the box: faster, and it leaves nothing behind.
+    return base + locusRank(a.locus) * 0.3;
   }
   function planPath(facts, pack, opts) {
     opts = opts || {};
