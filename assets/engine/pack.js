@@ -505,7 +505,10 @@
   // never a mere "service reachable" recon fact. kerberos.reachable matched /^kerberos\./ and so was wrongly
   // treated as evidence, which let blind password-spray look "indicated" (reliable) and headline over the
   // deterministic AS-REP roast. A reachable port proves nothing about a credential or a vuln.
-  function v2EvidenceFact(g) { if (/\.reachable$/.test(g)) return false; return !!V2_SPECIFIC[g] || !!V2_AD_LEAD[g] || V2_EVIDENCE_RE.test(g); }
+  // A `*_confirmed` fact is a PROVEN vulnerability verdict (web.sqli_confirmed, web.cmdi_confirmed, …) — the
+  // same class of evidence as a vuln.* fingerprint, so a move gated on one is evidenced, not a bare-port
+  // gamble. Without this a confirmed SQLi left sqlmap-automation capped as speculative, below weaker leads.
+  function v2EvidenceFact(g) { if (/\.reachable$/.test(g)) return false; return !!V2_SPECIFIC[g] || !!V2_AD_LEAD[g] || V2_EVIDENCE_RE.test(g) || /_confirmed$/.test(g); }
   function v2ProducesFoothold(a) { for (var i = 0; i < a.produces.length; i++) { var k = a.produces[i]; if (V2_FOOTHOLD[k] || /_confirmed$/.test(k)) return true; } return false; }
   function v2Indicated(a, haveObj) { var g = a.requires_all.concat(a.requires_any), i; for (i = 0; i < g.length; i++) if (haveObj[g[i]] && v2EvidenceFact(g[i])) return true; return false; }
 

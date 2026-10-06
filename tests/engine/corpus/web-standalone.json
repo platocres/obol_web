@@ -11,6 +11,7 @@
     {
       "after": "SQL injection confirmed on a parameter",
       "add": ["web.parameterized", "web.content_map", "web.sqli_confirmed"],
+      "topIn": ["sqlmap-automation", "manual-sqli-exploitation"],
       "present": ["sqlmap-automation", "manual-sqli-exploitation"]
     },
     {
