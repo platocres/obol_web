@@ -27,7 +27,7 @@
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=b4a40b19', 'assets/engine/report.js?v=885cb4fb', 'assets/ui/routes/report.js?v=217e6ca7'],
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=70b2d005', 'assets/ui/routes/tools.js?v=aff6dc97'],
     loadout: ['assets/engine/arsenal.js?v=9a46d3b8', 'assets/ui/routes/loadout.js?v=f6d299e1'],
-    workbench: ['assets/engine/workbench.js?v=4a188987', 'assets/ui/routes/workbench.js?v=13d9b6e6'],
+    workbench: ['assets/engine/workbench.js?v=612d98f8', 'assets/ui/routes/workbench.js?v=b67f0247'],
     study: ['data/study-fixtures.js?v=7af7d7ca', 'assets/engine/study.js?v=5175f80f', 'assets/ui/routes/study.js?v=6030fff7'],
     decisionmap: ['data/decision-forks.js?v=abde552b', 'data/parser-signatures.js?v=b5ba2cc9', 'data/coverage-expected.js?v=afdb39b5', 'data/flag-reach.js?v=e8d6c84a', 'assets/engine/decisionmap.js?v=8986cb18', 'assets/ui/decisiontree.js?v=b97043a7'],
     checklist: ['assets/ui/routes/checklist.js?v=68b05ed8'],

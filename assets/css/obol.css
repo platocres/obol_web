@@ -3321,3 +3321,11 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-john { font: 600 11px var(--mono); color: var(--text-2); background: var(--surf3); border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; }
 .wb-hash-note { margin: 2px 0 9px; font-size: 12px; color: var(--text-2); line-height: 1.5; max-width: 74ch; }
 .wb-hash-card .wb-cmd { margin-top: 7px; }
+
+/* Workbench Encoder (mini CyberChef) + JWT output rows */
+.wb-enc-out, .wb-jwt-out { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.wb-xform { display: flex; flex-direction: column; gap: 5px; }
+.wb-xform-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.wb-xform-l { font: 800 10.5px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--accent-2); }
+.wb-xform-note { font-size: 11.5px; color: var(--muted); }
+.wb-enc-out .wb-cmd code, .wb-jwt-out .wb-cmd code { white-space: pre-wrap; }

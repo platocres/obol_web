@@ -91,5 +91,24 @@ ok(/john --format=nt /.test(W.johnCmd('nt')), 'john command forms');
 ok(W.identifyHash('not a hash at all').candidates.length === 0, 'non-hash yields no candidates (with a note)');
 ok(W.identifyHash('').candidates.length === 0, 'empty input is safe');
 
+// ── encoder round-trips + JWT ────────────────────────────────────────────────────────────────
+ok(W.hexDecode(W.hexEnc('Hello /etc/passwd')) === 'Hello /etc/passwd', 'hex round-trips');
+ok(W.hexDecode('zz') === null, 'hexDecode rejects non-hex');
+ok(W.hexDecode('abc') === null, 'hexDecode rejects odd length');
+ok(W.urlDecode(W.urlEnc('a b&c=d')) === 'a b&c=d', 'url round-trips');
+ok(W.urlDecode('%ZZ') === null, 'urlDecode handles bad input safely');
+
+// JWT: decode a real HS256 token (header {alg:HS256,typ:JWT}, payload {user:admin})
+const jwt = Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url') + '.'
+  + Buffer.from('{"user":"admin","role":"guest"}').toString('base64url') + '.sIgNaTuRe';
+const dj = W.decodeJwt(jwt);
+ok(dj.ok && dj.header.alg === 'HS256', 'JWT header decodes');
+ok(dj.payload.user === 'admin' && dj.payload.role === 'guest', 'JWT payload decodes');
+ok(dj.flags.some(function (f) { return /HMAC/.test(f); }), 'HS256 raises the weak-secret flag');
+const none = Buffer.from('{"alg":"none"}').toString('base64url') + '.' + Buffer.from('{"u":1}').toString('base64url') + '.';
+ok(W.decodeJwt(none).flags.some(function (f) { return /none/.test(f); }), 'alg:none raises its flag');
+ok(W.decodeJwt('not.a.jwt').ok === false, 'garbage JWT reports not ok');
+ok(W.decodeJwt('onlyonepart').ok === false, 'a token without dots is rejected');
+
 console.log(fail ? ('\nWORKBENCH: ' + fail + ' FAILURES') : '\nWORKBENCH: all passed');
 process.exit(fail ? 1 : 0);

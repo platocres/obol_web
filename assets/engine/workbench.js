@@ -84,6 +84,22 @@
   // sidestep quoting and bad characters on the command line.
   W.psEnc = function (script) { return bytesToB64(utf16leBytes(script)); };
 
+  W.hexDecode = function (hex) {
+    hex = String(hex == null ? '' : hex).replace(/\s+/g, '');
+    if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2 !== 0) return null;
+    var bytes = [];
+    for (var i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+    var out = '', j = 0;
+    while (j < bytes.length) {
+      var b = bytes[j++];
+      if (b < 0x80) out += String.fromCharCode(b);
+      else if (b >= 0xc0 && b < 0xe0) out += String.fromCharCode(((b & 0x1f) << 6) | (bytes[j++] & 0x3f));
+      else if (b >= 0xe0 && b < 0xf0) out += String.fromCharCode(((b & 0x0f) << 12) | ((bytes[j++] & 0x3f) << 6) | (bytes[j++] & 0x3f));
+      else { var u = ((b & 0x07) << 18) | ((bytes[j++] & 0x3f) << 12) | ((bytes[j++] & 0x3f) << 6) | (bytes[j++] & 0x3f); u -= 0x10000; out += String.fromCharCode(0xd800 + (u >> 10), 0xdc00 + (u & 0x3ff)); }
+    }
+    return out;
+  };
+  W.urlDecode = function (str) { try { return decodeURIComponent(String(str == null ? '' : str).replace(/\+/g, ' ')); } catch (e) { return null; } };
   W.urlEnc = function (str) { return encodeURIComponent(String(str == null ? '' : str)); };
   W.urlEncAll = function (str) {
     // Encode EVERY byte (%NN), the aggressive form useful when a filter blocks specific characters.
@@ -99,6 +115,37 @@
   // ${IFS} whitespace evasion: replace spaces with ${IFS} so a space-filtering filter still runs the
   // command. A teaching aid, shown beside a plain-language note about when it helps.
   W.ifsEvade = function (str) { return String(str == null ? '' : str).replace(/ /g, '${IFS}'); };
+
+  // base64url (JWT) decode: the URL-safe alphabet, no padding.
+  W.b64urlDecode = function (s) {
+    s = String(s == null ? '' : s).replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    return W.b64decode(s);
+  };
+
+  // Decode (not verify) a JWT. Verification needs the secret/key, which obol never has; this is a reader,
+  // and that distinction is the teaching point: a decoded token is not a trusted token.
+  W.decodeJwt = function (token) {
+    token = String(token == null ? '' : token).trim();
+    var parts = token.split('.');
+    if (parts.length < 2) return { ok: false, error: 'Not a JWT. A JWT has three parts separated by dots: header.payload.signature.' };
+    function parseSeg(seg, which) {
+      try { return { ok: true, obj: JSON.parse(W.b64urlDecode(seg)) }; }
+      catch (e) { return { ok: false, error: 'The ' + which + ' is not valid base64url JSON.' }; }
+    }
+    var h = parseSeg(parts[0], 'header'), p = parseSeg(parts[1], 'payload');
+    if (!h.ok) return { ok: false, error: h.error };
+    if (!p.ok) return { ok: false, error: p.error };
+    var alg = h.obj && h.obj.alg;
+    var flags = [];
+    if (alg && String(alg).toLowerCase() === 'none') flags.push('alg is "none": if the server honours it, the signature is not checked at all. Try sending the token with an empty signature.');
+    if (alg && /^hs/i.test(String(alg))) flags.push('alg is HMAC (' + alg + '): the signature uses a shared secret. If that secret is weak, it can be brute-forced offline (hashcat -m 16500), then you can forge any token.');
+    if (alg && /^rs/i.test(String(alg))) flags.push('alg is RSA (' + alg + '): signed with a private key. Watch for an algorithm-confusion trick (RS256 to HS256 using the public key as the HMAC secret).');
+    return {
+      ok: true, header: h.obj, payload: p.obj, signature: parts[2] || '', alg: alg || null,
+      flags: flags, hasSig: !!(parts[2] && parts[2].length),
+    };
+  };
 
   // A Linux one-liner that decodes and runs a base64 payload. OffSec teaches base64-wrapping a reverse
   // shell so a tricky character set (quotes, &, redirects) survives being pasted into a target field.

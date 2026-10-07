@@ -187,6 +187,85 @@
       + '</div>';
   }
 
+  // Encoder (mini CyberChef).
+  function isMostlyPrintable(s) {
+    if (!s) return false;
+    var good = 0;
+    for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); if (c === 9 || c === 10 || c === 13 || (c >= 32 && c < 127) || c >= 160) good++; }
+    return good / s.length >= 0.85;
+  }
+  function xformRow(label, note, val) {
+    return '<div class="wb-xform">'
+      + '<div class="wb-xform-h"><span class="wb-xform-l">' + esc(label) + '</span>'
+      + '<span class="wb-xform-note">' + esc(note) + '</span></div>'
+      + '<div class="wb-cmd"><code>' + esc(val) + '</code>'
+      + '<button class="btn-copy" data-copy="' + U.attr(val) + '" aria-label="Copy ' + U.attr(label) + '">copy</button></div></div>';
+  }
+  function encoderOutHtml(value) {
+    var wb = W();
+    if (!value) return '<p class="wb-note">Type or paste anything above. obol shows every common encoding at once, and the matching decode when the input looks encoded.</p>';
+    var rows = '';
+    rows += xformRow('Base64', 'The everyday encoding. Good for the OSCP base64-then-decode trick.', wb.b64(value));
+    rows += xformRow('URL Encode', 'Percent-encode the characters a URL would choke on.', wb.urlEnc(value));
+    rows += xformRow('URL Encode (Every Byte)', 'Aggressive: encode every byte. Useful when a filter blocks specific characters.', wb.urlEncAll(value));
+    rows += xformRow('Hex', 'Raw bytes as hex.', wb.hexEnc(value));
+    rows += xformRow('ROT13', 'A simple letter rotation (not encryption, just obfuscation).', wb.rot13(value));
+    rows += xformRow('${IFS} Spaces', 'Swap spaces for ${IFS} so a space-filtering command injection still runs.', wb.ifsEvade(value));
+
+    // decodes, only when the input actually looks like that format
+    var dec = '';
+    if (/^[A-Za-z0-9+/=\s]+$/.test(value) && value.replace(/\s/g, '').length >= 4) {
+      var b = wb.b64decode(value);
+      if (b && isMostlyPrintable(b)) dec += xformRow('Base64 Decode', 'Your input looked like base64, so here it is decoded.', b);
+    }
+    if (wb.hexDecode(value) !== null && value.replace(/\s/g, '').length >= 2) {
+      var h = wb.hexDecode(value);
+      if (h && isMostlyPrintable(h)) dec += xformRow('Hex Decode', 'Your input looked like hex, so here it is decoded.', h);
+    }
+    if (value.indexOf('%') >= 0) {
+      var u = wb.urlDecode(value);
+      if (u !== null && u !== value) dec += xformRow('URL Decode', 'Your input had percent-encoding, so here it is decoded.', u);
+    }
+    return rows + (dec ? '<div class="wb-field-l">Looks Encoded: Decoded For You</div>' + dec : '');
+  }
+  function encoderPanel() {
+    return '<div class="wb-panel wb-encoder">'
+      + '<div class="wb-field-l">Input</div>'
+      + '<textarea id="wb-enc-in" class="wb-textarea" rows="2" placeholder="Type or paste anything" autocomplete="off" spellcheck="false"></textarea>'
+      + '<div id="wb-enc-out" class="wb-enc-out">' + encoderOutHtml('') + '</div></div>';
+  }
+
+  // JWT decoder.
+  var JWT_REFS = '<div class="wb-refs"><span class="wb-refs-l">Learn More</span>'
+    + '<a href="https://jwt.io/" target="_blank" rel="noopener">jwt.io</a>'
+    + '<a href="https://portswigger.net/web-security/jwt" target="_blank" rel="noopener">PortSwigger: JWT attacks</a></div>';
+  function jwtSeg(label, obj) {
+    var json;
+    try { json = JSON.stringify(obj, null, 2); } catch (e) { json = String(obj); }
+    return '<div class="wb-field-l">' + esc(label) + '</div>'
+      + '<div class="wb-cmd"><code>' + esc(json) + '</code>'
+      + '<button class="btn-copy" data-copy="' + U.attr(json) + '" aria-label="Copy ' + U.attr(label) + '">copy</button></div>';
+  }
+  function jwtOutHtml(value) {
+    if (!value || !value.trim()) return '<p class="wb-note">Paste a JWT (it starts with eyJ...). obol decodes the header and payload and flags what is worth attacking. It decodes, it does not verify: a decoded token is not a trusted token.</p>';
+    var r = W().decodeJwt(value);
+    if (!r.ok) return '<p class="wb-note">' + esc(r.error) + '</p>' + JWT_REFS;
+    var flags = r.flags.length
+      ? '<div class="wb-field-l">Worth A Look</div>' + r.flags.map(function (f) { return '<p class="wb-enc-note">' + esc(f) + '</p>'; }).join('')
+      : '';
+    return jwtSeg('Header', r.header) + jwtSeg('Payload', r.payload)
+      + '<div class="wb-field-l">Signature</div><div class="wb-cmd"><code>' + esc(r.signature || '(none)') + '</code></div>'
+      + flags
+      + '<p class="wb-note">This is a decode, not a verification. obol never has the signing key, so it cannot tell you the token is genuine, only what it claims.</p>'
+      + JWT_REFS;
+  }
+  function jwtPanel() {
+    return '<div class="wb-panel wb-jwt">'
+      + '<div class="wb-field-l">Token</div>'
+      + '<textarea id="wb-jwt-in" class="wb-textarea" rows="3" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...." autocomplete="off" spellcheck="false"></textarea>'
+      + '<div id="wb-jwt-out" class="wb-jwt-out">' + jwtOutHtml('') + '</div></div>';
+  }
+
   function stubPanel(label) {
     return '<div class="wb-panel wb-stub"><p class="wb-note">' + esc(label)
       + ' is coming online in this build. The Reverse Shell Builder is ready now, the rest land next.</p></div>';
@@ -195,6 +274,8 @@
   function panelFor(tab) {
     if (tab === 'revshell') return revshellPanel();
     if (tab === 'hashid') return hashidPanel();
+    if (tab === 'encoder') return encoderPanel();
+    if (tab === 'jwt') return jwtPanel();
     var t = TABS.filter(function (x) { return x.id === tab; })[0];
     return stubPanel(t ? t.label : 'This tool');
   }
@@ -269,6 +350,18 @@
       var out = document.getElementById('wb-hash-out');
       if (out) out.innerHTML = hashOutHtml(box.value);
       box.focus();
+    });
+
+    // encoder: recompute every transform on input
+    U.on(mount, 'input', '#wb-enc-in', function (e, t) {
+      var out = document.getElementById('wb-enc-out');
+      if (out) out.innerHTML = encoderOutHtml(t.value);
+    });
+
+    // jwt: decode on input
+    U.on(mount, 'input', '#wb-jwt-in', function (e, t) {
+      var out = document.getElementById('wb-jwt-out');
+      if (out) out.innerHTML = jwtOutHtml(t.value);
     });
   }
 
