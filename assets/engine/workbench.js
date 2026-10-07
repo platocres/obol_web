@@ -189,6 +189,93 @@
     },
   ];
 
+  // ── hash identifier ─────────────────────────────────────────────────────────────────────────
+  // Deterministic, rule-based (like hashid / name-that-hash), so it stays exam-legal: no guessing
+  // model, just structure. Each rule yields {name, mode (hashcat -m, or null), john, note}. Structured
+  // prefixes are unambiguous; bare hex is ranked by OSCP-likelihood with the alternatives shown, because
+  // a 32-char hex string is genuinely NTLM or MD5 and only context tells which.
+  function hc(name, mode, john, note) { return { name: name, mode: mode, john: john, note: note || '' }; }
+
+  var HASH_PREFIX_RULES = [
+    { re: /^\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{53}$/, c: [hc('bcrypt', 3200, 'bcrypt', 'Slow by design. CrackStation will not help, crack offline with a good wordlist and patience.')] },
+    { re: /^\$6\$/, c: [hc('sha512crypt (Linux /etc/shadow)', 1800, 'sha512crypt', 'A Linux shadow hash. Slow. Offline wordlist crack only.')] },
+    { re: /^\$5\$/, c: [hc('sha256crypt (Linux /etc/shadow)', 7400, 'sha256crypt', 'A Linux shadow hash. Slow. Offline wordlist crack only.')] },
+    { re: /^\$1\$/, c: [hc('md5crypt (Linux /etc/shadow)', 500, 'md5crypt', 'Old Linux shadow hash. Slow, salted. Offline crack.')] },
+    { re: /^\$apr1\$/, c: [hc('Apache md5apr1 (.htpasswd)', 1600, 'md5crypt', 'Apache htpasswd MD5. Salted. Offline crack.')] },
+    { re: /^\$(P|H)\$/, c: [hc('phpass (WordPress / phpBB / Joomla)', 400, 'phpass', 'The CMS hash family. Salted and stretched. Offline crack.')] },
+    { re: /^\{SSHA\}/, c: [hc('LDAP {SSHA} (salted SHA-1)', 111, 'ssha', 'Common in LDAP directories. Salted.')] },
+    { re: /^\{SHA\}/, c: [hc('LDAP {SHA} (base64 SHA-1)', 101, 'nsldap', 'Unsalted base64 SHA-1. CrackStation may know it.')] },
+    { re: /^\$krb5asrep\$(23)\$/i, c: [hc('Kerberos AS-REP (RC4)', 18200, 'krb5asrep', 'From AS-REP roasting (a user with "do not require preauth"). RC4, fast to crack. Try a wordlist first.')] },
+    { re: /^\$krb5asrep\$(17|18)\$/i, c: [hc('Kerberos AS-REP (AES)', 18200, 'krb5asrep', 'AES variant of AS-REP roast. Slower than RC4. Offline wordlist crack.')] },
+    { re: /^\$krb5tgs\$23\$/i, c: [hc('Kerberoast TGS-REP (RC4)', 13100, 'krb5tgs', 'From Kerberoasting a service account. RC4, fast. Service accounts often have weak passwords, so this is high value.')] },
+    { re: /^\$krb5tgs\$17\$/i, c: [hc('Kerberoast TGS-REP (AES128)', 19600, 'krb5tgs', 'AES128 Kerberoast. Slower than RC4. Offline wordlist crack.')] },
+    { re: /^\$krb5tgs\$18\$/i, c: [hc('Kerberoast TGS-REP (AES256)', 19700, 'krb5tgs', 'AES256 Kerberoast. Slower than RC4. Offline wordlist crack.')] },
+    { re: /^\$DCC2\$/i, c: [hc('Domain Cached Credentials 2 (mscash2)', 2100, 'mscash2', 'Cached domain logon from a workstation. Very slow. Low iteration wordlist only.')] },
+    { re: /^\$krb5pa\$/i, c: [hc('Kerberos pre-auth (PA-ENC-TIMESTAMP)', 7500, 'krb5pa-md5', 'From sniffed pre-auth. RC4, fast.')] },
+    { re: /^0x0100[0-9a-f]+$/i, c: [hc('MSSQL 2000', 131, 'mssql', 'Legacy SQL Server hash.')] },
+    { re: /^0x0200[0-9a-f]+$/i, c: [hc('MSSQL 2012 / 2014+', 1731, 'mssql12', 'Modern SQL Server hash (SHA-512 based).')] },
+    { re: /^\*[A-F0-9]{40}$/i, c: [hc('MySQL 4.1+ (SHA1(SHA1(pw)))', 300, 'mysql-sha1', 'The leading * marks it. Unsalted, fast.')] },
+    { re: /^[^:\s]+::[^:]*:[0-9a-f]{16}:[0-9a-f]{32}:[0-9a-f]+$/i, c: [hc('NetNTLMv2 (Responder / relay capture)', 5600, 'netntlmv2', 'Captured off the wire by Responder or an SMB relay. Crack it offline, or relay it live instead.')] },
+    { re: /^[^:\s]+::[^:]*:[0-9a-f]{48}:[0-9a-f]{48}:[0-9a-f]{16}$/i, c: [hc('NetNTLMv1 (Responder capture)', 5500, 'netntlm', 'The v1 capture. Can sometimes be cracked to NTLM via rainbow tables (crack.sh).')] },
+    { re: /^\$argon2[id]{1,2}\$/i, c: [hc('Argon2', null, 'argon2', 'Modern, memory-hard. hashcat has no stable mode; use john --format=argon2. Expect it to be slow.')] },
+    { re: /^\$y\$/, c: [hc('yescrypt (modern Linux /etc/shadow)', null, 'crypt', 'Default on recent Debian/Ubuntu. hashcat has no mode yet; use john. Very slow.')] },
+  ];
+
+  // pwdump / secretsdump line: user:rid:LM:NT:::  → identify the NT (and flag the LM if not blank).
+  var PWDUMP_RE = /^[^:\s]+:\d+:([0-9a-fA-F]{32}):([0-9a-fA-F]{32}):::\s*$/;
+  var LM_EMPTY = 'aad3b435b51404eeaad3b435b51404ee';
+
+  function hexCandidates(len) {
+    switch (len) {
+      case 16: return [hc('MySQL < 4.1 (MySQL323)', 200, 'mysql', 'Very old MySQL. Unsalted.'), hc('Half-LM / DES fragment', 3000, 'lm', 'Could be half of an LM hash.')];
+      case 32: return [hc('NTLM (Windows account hash)', 1000, 'nt', 'If it came from a Windows / AD dump, this is almost certainly NTLM. Unsalted and fast, and usable directly in pass-the-hash without cracking.'), hc('MD5', 0, 'raw-md5', 'If it came from a web app or database, MD5 is likely. Unsalted, so CrackStation may already know it.'), hc('MD4', 900, 'raw-md4', 'Less common.')];
+      case 40: return [hc('SHA-1', 100, 'raw-sha1', 'Unsalted. CrackStation may know it. Check for a leading * (that would make it MySQL).')];
+      case 56: return [hc('SHA-224', 1300, 'raw-sha224', 'Unsalted.')];
+      case 64: return [hc('SHA-256', 1400, 'raw-sha256', 'Unsalted. CrackStation may know it.'), hc('SHA3-256 / Keccak-256', 17400, 'raw-keccak', 'Less common.')];
+      case 96: return [hc('SHA-384', 10800, 'raw-sha384', 'Unsalted.')];
+      case 128: return [hc('SHA-512', 1700, 'raw-sha512', 'Unsalted. CrackStation may know it.'), hc('Whirlpool', 6100, 'whirlpool', 'Less common.')];
+      default: return [];
+    }
+  }
+
+  // Identify a single hash string. Returns {input, candidates:[...], lm?:bool, note?}.
+  W.identifyHash = function (raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!s) return { input: '', candidates: [] };
+
+    var pd = s.match(PWDUMP_RE);
+    if (pd) {
+      var out = { input: s, candidates: [hc('NTLM (from a pwdump / secretsdump line)', 1000, 'nt', 'The 4th field is the NT hash. Use it directly for pass-the-hash, or crack it. Feed just the 32-hex NT hash to hashcat.')], nt: pd[2].toLowerCase() };
+      if (pd[1].toLowerCase() !== LM_EMPTY) out.candidates.push(hc('LM (the 3rd field is set)', 3000, 'lm', 'The LM half is present (not the empty AAD3B4... value). LM is weak and worth cracking fast.'));
+      return out;
+    }
+
+    for (var i = 0; i < HASH_PREFIX_RULES.length; i++) {
+      if (HASH_PREFIX_RULES[i].re.test(s)) return { input: s, candidates: HASH_PREFIX_RULES[i].c.slice() };
+    }
+
+    if (/^[0-9a-fA-F]+$/.test(s)) {
+      var cands = hexCandidates(s.length);
+      if (cands.length) return { input: s, candidates: cands };
+      return { input: s, candidates: [], note: 'A ' + s.length + '-character hex string that does not match a common length. Paste it into the hashcat example-hashes wiki to compare.' };
+    }
+    return { input: s, candidates: [], note: 'No confident match. Compare it against the hashcat example-hashes wiki, or try name-that-hash locally.' };
+  };
+
+  // The hashcat crack command for a candidate (canonical rockyou path; the Loadout rewrite can retarget it).
+  W.hashcatCmd = function (mode, hashfile, wordlist) {
+    if (mode == null) return null;
+    hashfile = hashfile || 'hash.txt';
+    wordlist = wordlist || '/usr/share/wordlists/rockyou.txt';
+    return 'hashcat -m ' + mode + ' ' + hashfile + ' ' + wordlist;
+  };
+  W.johnCmd = function (format, hashfile, wordlist) {
+    if (!format) return null;
+    hashfile = hashfile || 'hash.txt';
+    wordlist = wordlist || '/usr/share/wordlists/rockyou.txt';
+    return 'john --format=' + format + ' --wordlist=' + wordlist + ' ' + hashfile;
+  };
+
   W.revShell = function (id) {
     for (var i = 0; i < W.REVSHELLS.length; i++) if (W.REVSHELLS[i].id === id) return W.REVSHELLS[i];
     return null;

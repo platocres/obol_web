@@ -3293,3 +3293,31 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
   .wb-param input { min-width: 0; width: 100%; }
   .wb-param { flex: 1 1 140px; }
 }
+
+/* Workbench shared controls: quick-fill chips, textarea, reference links (used across tools) */
+.wb-fill-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+.wb-fill-chip { font: 600 11.5px var(--mono); color: var(--accent-2); background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 7px; padding: 5px 11px; cursor: pointer; }
+.wb-fill-chip:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.wb-fill-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wb-textarea { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; font: 12.5px var(--mono); line-height: 1.5; resize: vertical;
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.wb-textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.wb-refs { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.wb-refs-l { font: 800 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.wb-refs a { font-size: 12.5px; color: var(--accent-2); }
+.wb-refs a:hover { text-decoration: underline; }
+
+/* Hash Identifier results */
+.wb-hash-out { margin-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+.wb-hash-card { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px 13px; }
+.wb-hash-card.top { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent); }
+.wb-hash-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+.wb-likely { font: 800 9px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--on-accent, #fff); background: var(--accent); border-radius: 4px; padding: 2px 7px; }
+.wb-hash-name { font: 700 13.5px var(--sans); color: var(--text); }
+.wb-mode { font: 700 11px var(--mono); color: var(--accent-2); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: 5px; padding: 2px 8px; }
+.wb-mode-none { color: var(--muted); background: var(--surf3); border-color: var(--line); }
+.wb-john { font: 600 11px var(--mono); color: var(--text-2); background: var(--surf3); border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; }
+.wb-hash-note { margin: 2px 0 9px; font-size: 12px; color: var(--text-2); line-height: 1.5; max-width: 74ch; }
+.wb-hash-card .wb-cmd { margin-top: 7px; }

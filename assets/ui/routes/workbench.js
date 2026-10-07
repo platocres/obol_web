@@ -123,6 +123,70 @@
       + '</div>';
   }
 
+  // Hash Identifier.
+  // Gather the hashes this engagement has already captured, so the student can identify one with a tap.
+  function engagementHashes() {
+    var out = [], fs;
+    try { fs = OBOL.store.factSet(); } catch (e) { return out; }
+    if (!fs || !fs.values) return out;
+    fs.values('hash.ntlm').forEach(function (v) { if (v.nthash) out.push({ label: (v.user || 'user') + ' (NTLM)', hash: v.nthash }); });
+    fs.values('hash.krbtgt').forEach(function (v) { if (v.nthash) out.push({ label: 'krbtgt (NTLM)', hash: v.nthash }); });
+    fs.values('hash.asrep').forEach(function (v) { (v.hashes || []).forEach(function (h, i) { out.push({ label: 'AS-REP #' + (i + 1), hash: h }); }); });
+    fs.values('hash.tgs').forEach(function (v) { (v.hashes || []).forEach(function (h, i) { out.push({ label: 'TGS #' + (i + 1), hash: h }); }); });
+    ['credential.available', 'credential.plaintext'].forEach(function (k) {
+      fs.values(k).forEach(function (v) { var h = v.nthash || v.hash; if (h && /^[0-9a-fA-F]{32}$/.test(h)) out.push({ label: (v.user || 'cred') + ' (NTLM)', hash: h }); });
+    });
+    var seen = {};
+    return out.filter(function (x) { if (seen[x.hash]) return false; seen[x.hash] = 1; return true; });
+  }
+
+  var HASH_REFS = '<div class="wb-refs"><span class="wb-refs-l">Learn More</span>'
+    + '<a href="https://hashcat.net/wiki/doku.php?id=example_hashes" target="_blank" rel="noopener">hashcat example hashes</a>'
+    + '<a href="https://crackstation.net/" target="_blank" rel="noopener">CrackStation (unsalted lookup)</a></div>';
+
+  function hashOutHtml(value) {
+    var wb = W();
+    if (!value || !value.trim()) return '<p class="wb-note">Paste a hash above and obol will name it, give you the hashcat mode and a ready crack command.</p>';
+    var r = wb.identifyHash(value);
+    if (!r.candidates.length) return '<p class="wb-note">' + esc(r.note || 'No confident match.') + '</p>' + HASH_REFS;
+
+    var cards = r.candidates.map(function (c, i) {
+      var modeBadge = (c.mode != null)
+        ? '<span class="wb-mode">hashcat -m ' + esc(c.mode) + '</span>'
+        : '<span class="wb-mode wb-mode-none">no hashcat mode</span>';
+      var johnBadge = c.john ? '<span class="wb-john">john: ' + esc(c.john) + '</span>' : '';
+      var hcCmd = wb.hashcatCmd(c.mode);
+      var jnCmd = wb.johnCmd(c.john);
+      var cmds = '';
+      if (hcCmd) cmds += '<div class="wb-cmd"><code>' + esc(hcCmd) + '</code><button class="btn-copy" data-copy="' + U.attr(hcCmd) + '" aria-label="Copy hashcat command">copy</button></div>';
+      if (jnCmd) cmds += '<div class="wb-cmd"><code>' + esc(jnCmd) + '</code><button class="btn-copy" data-copy="' + U.attr(jnCmd) + '" aria-label="Copy john command">copy</button></div>';
+      return '<div class="wb-hash-card' + (i === 0 ? ' top' : '') + '">'
+        + '<div class="wb-hash-head">' + (i === 0 ? '<span class="wb-likely">Most Likely</span>' : '')
+        + '<span class="wb-hash-name">' + esc(c.name) + '</span>' + modeBadge + johnBadge + '</div>'
+        + (c.note ? '<p class="wb-hash-note">' + esc(c.note) + '</p>' : '')
+        + cmds + '</div>';
+    }).join('');
+    var multi = r.candidates.length > 1 ? '<p class="wb-note">More than one hash has this shape. The most likely is first; the context (where you found it) decides.</p>' : '';
+    return multi + cards + HASH_REFS;
+  }
+
+  function hashidPanel() {
+    var hashes = engagementHashes();
+    var chips = hashes.length
+      ? '<div class="wb-field-l">From This Engagement</div><div class="wb-fill-chips">'
+        + hashes.map(function (h) {
+          return '<button type="button" class="wb-fill-chip" data-hash="' + U.attr(h.hash) + '">' + esc(h.label) + '</button>';
+        }).join('') + '</div>'
+      : '';
+    return '<div class="wb-panel wb-hashid">'
+      + '<p class="wb-linked">' + linkedNote() + '</p>'
+      + chips
+      + '<div class="wb-field-l">Hash</div>'
+      + '<textarea id="wb-hash-in" class="wb-textarea" rows="2" placeholder="Paste a hash (or a full user:rid:lm:nt::: line)" autocomplete="off" spellcheck="false"></textarea>'
+      + '<div id="wb-hash-out" class="wb-hash-out">' + hashOutHtml('') + '</div>'
+      + '</div>';
+  }
+
   function stubPanel(label) {
     return '<div class="wb-panel wb-stub"><p class="wb-note">' + esc(label)
       + ' is coming online in this build. The Reverse Shell Builder is ready now, the rest land next.</p></div>';
@@ -130,6 +194,7 @@
 
   function panelFor(tab) {
     if (tab === 'revshell') return revshellPanel();
+    if (tab === 'hashid') return hashidPanel();
     var t = TABS.filter(function (x) { return x.id === tab; })[0];
     return stubPanel(t ? t.label : 'This tool');
   }
@@ -191,6 +256,20 @@
     // reverse-shell: LHOST / LPORT edits recompute and save back to the engagement
     U.on(mount, 'input', '#wb-rs-lhost', function (e, t) { syncParam('lhost', t.value); refreshRsOut(); });
     U.on(mount, 'input', '#wb-rs-lport', function (e, t) { syncParam('lport', t.value); refreshRsOut(); });
+
+    // hash identifier: identify on input; quick-fill chips drop a captured hash into the box
+    U.on(mount, 'input', '#wb-hash-in', function (e, t) {
+      var out = document.getElementById('wb-hash-out');
+      if (out) out.innerHTML = hashOutHtml(t.value);
+    });
+    U.on(mount, 'click', '.wb-fill-chip', function (e, t) {
+      var box = document.getElementById('wb-hash-in');
+      if (!box) return;
+      box.value = t.getAttribute('data-hash') || '';
+      var out = document.getElementById('wb-hash-out');
+      if (out) out.innerHTML = hashOutHtml(box.value);
+      box.focus();
+    });
   }
 
   OBOL.routes = OBOL.routes || {};

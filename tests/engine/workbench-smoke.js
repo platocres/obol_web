@@ -51,5 +51,45 @@ W.REVSHELLS.forEach(function (e) {
 });
 ok(W.revShell('ps-tcp').enc.indexOf('psenc') >= 0, 'the PowerShell TCP shell offers -EncodedCommand');
 
+// ── hash identifier ──────────────────────────────────────────────────────────────────────────
+function topName(h) { return (W.identifyHash(h).candidates[0] || {}).name || ''; }
+function topMode(h) { return (W.identifyHash(h).candidates[0] || {}).mode; }
+
+ok(/bcrypt/.test(topName('$2b$12$' + 'a'.repeat(53))), 'bcrypt recognised by prefix');
+ok(topMode('$2b$12$' + 'a'.repeat(53)) === 3200, 'bcrypt is mode 3200');
+ok(/sha512crypt/.test(topName('$6$abc$def')), 'sha512crypt ($6$) recognised');
+ok(topMode('$6$abc$def') === 1800, 'sha512crypt is mode 1800');
+ok(/md5crypt/.test(topName('$1$abc$def')), 'md5crypt ($1$) recognised');
+ok(/phpass/i.test(topName('$P$Babcdefghijklmnop')), 'phpass ($P$) recognised');
+ok(topMode('$krb5tgs$23$*svc*' ) === 13100, 'Kerberoast RC4 is mode 13100');
+ok(topMode('$krb5asrep$23$user@DOM') === 18200, 'AS-REP RC4 is mode 18200');
+ok(topMode('$krb5tgs$18$*svc*') === 19700, 'Kerberoast AES256 is mode 19700');
+
+// bare hex: NTLM/MD5 ambiguity for 32 hex, NTLM ranked first with MD5 offered
+const h32 = W.identifyHash('b4b9b02e6f09a9bd760f388b67351e2b');
+ok(h32.candidates.length >= 2 && /NTLM/.test(h32.candidates[0].name), '32-hex ranks NTLM first');
+ok(h32.candidates.some(function (c) { return /MD5/.test(c.name) && c.mode === 0; }), '32-hex also offers MD5 (mode 0)');
+ok(topMode('a'.repeat(40)) === 100, '40-hex is SHA-1 (mode 100)');
+ok(topMode('a'.repeat(64)) === 1400, '64-hex is SHA-256 (mode 1400)');
+ok(topMode('a'.repeat(128)) === 1700, '128-hex is SHA-512 (mode 1700)');
+
+// NetNTLMv2 capture
+ok(topMode('user::DOMAIN:1122334455667788:' + 'a'.repeat(32) + ':' + 'b'.repeat(40)) === 5600, 'NetNTLMv2 capture is mode 5600');
+
+// pwdump line: identify the NT hash, flag the LM only when set
+const pw = W.identifyHash('Administrator:500:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::');
+ok(/NTLM/.test(pw.candidates[0].name) && pw.candidates.length === 1, 'pwdump with empty LM yields NT only');
+const pw2 = W.identifyHash('bob:1001:' + 'a'.repeat(32) + ':' + 'b'.repeat(32) + ':::');
+ok(pw2.candidates.some(function (c) { return /^LM/.test(c.name); }), 'pwdump with a set LM flags the LM too');
+
+// crack command builders
+ok(W.hashcatCmd(1000) === 'hashcat -m 1000 hash.txt /usr/share/wordlists/rockyou.txt', 'hashcat command forms');
+ok(W.hashcatCmd(null) === null, 'no hashcat command for a null mode');
+ok(/john --format=nt /.test(W.johnCmd('nt')), 'john command forms');
+
+// unknown input is handled gracefully
+ok(W.identifyHash('not a hash at all').candidates.length === 0, 'non-hash yields no candidates (with a note)');
+ok(W.identifyHash('').candidates.length === 0, 'empty input is safe');
+
 console.log(fail ? ('\nWORKBENCH: ' + fail + ' FAILURES') : '\nWORKBENCH: all passed');
 process.exit(fail ? 1 : 0);
