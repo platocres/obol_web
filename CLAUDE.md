@@ -194,3 +194,23 @@ Loadout, your installed tools). Easy to rename.
   unlocks" narrative) already lives in Explain Output via the findings engine. Tests: locus-scope-smoke.js
   extended (toolkit rank, switchless-probe detection, settled skipping, across-move tiebreak). All
   guardrails green; headless-verified on a seeded Forest-like state with 0 console errors.
+- 2026-10-07: Orient before exploit + progressive command disclosure + switchless LDAP. (1) Ranking:
+  after a port scan the coach leads with the thorough service scan, then the orient steps, then
+  enumeration. Mechanism: a fresh-tier recon-first rule in nextActionsV2 scoped to the opening (scanned
+  but no scan.nmap.version, no foothold/credential), so it fixes the port-scan->service-scan transition
+  and never buries the AS-REP roast. (2) Hide-gated-commands: a command still needing an EARNED token
+  (basedn, domain, a credential, the scanned ports) is hidden behind a "more unlocks once you have ..."
+  line, never the default; a move whose every command is gated drops to Coming Up. (3) Switchless LDAP
+  probe on ad-anon-ldap-enum. ranker-smoke restructured; mssql corpus reframed post-service-scan.
+- 2026-10-07: Credential tier, "validate a found credential before you use it". New fact
+  credential.validated, minted when a credential becomes trustworthy (john/hashcat crack, online-brute,
+  a successful nxc/evil-winrm/kerbrute login); a dumped/found plaintext is NOT auto-validated. New move
+  validate-credential (switchless nxc over SMB/LDAP/WinRM, -H for a found hash) settles on
+  credential.validated, so it only ever shows for a FOUND credential and leads via a bounded
+  "validate before use" ranker tie-break. Full field-note + study-fixtures coverage.
+- 2026-10-07: Two real-box parser fixes. (a) hostname/domain from an nmap -oX scan: the domain/hostname
+  regexes required nmap's text "| " pipe, but the browser's DOMParser decodes the <script output> to
+  un-piped lines, so smb-os-discovery never matched; made the pipe optional, so FOREST / htb.local now
+  mint and the target card flips its name to the hostname (hostDomain also fixed to read the domain's
+  `name` key). (b) WinRM's "Microsoft-HTTPAPI/2.0" server header on 5985/47001 no longer mints
+  web.server, so a vuln scan on an AD box stops ranking the web-exploit lane above the real LDAP move.
