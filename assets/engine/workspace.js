@@ -43,12 +43,15 @@
   function rootFor(eng) { return (eng && eng.workspace && eng.workspace.root) ? sanitizeRoot(eng.workspace.root) : ''; }
   function isConfigured(eng) { return !!rootFor(eng); }
 
-  // Concrete output directories as {{token}} values. With no workspace set they fall back to
-  // relative dirs (scans/, loot/…) so commands still form, just not absolute.
+  // Concrete output directories as {{token}} values, used to fill a command's output paths (-oN, -o…).
+  // The scaffold cds INTO root and every obol command is meant to run from there (the snapshot cds in
+  // too), so these are RELATIVE to root: `scans/`, `loot/`, … . That is correct whether root is absolute
+  // (`~/engagements/box`, where after `cd` the relative `scans/` resolves under it) OR relative
+  // (`10.129.102.107`, where a root-prefixed `10.129.102.107/scans/` would double-nest after the cd and
+  // the file write would fail). `root` stays the full path for display and for the scaffold / capture.
   function dirs(eng) {
     var r = rootFor(eng);
-    function d(k) { return r ? join(r, LAYOUT[k]) : LAYOUT[k]; }
-    return { root: r || '.', scandir: d('scans'), lootdir: d('loot'), exploitdir: d('exploit'), wwwdir: d('www'), proofdir: d('proof') };
+    return { root: r || '.', scandir: LAYOUT.scans, lootdir: LAYOUT.loot, exploitdir: LAYOUT.exploit, wwwdir: LAYOUT.www, proofdir: LAYOUT.proof };
   }
   var tokens = dirs;
 
