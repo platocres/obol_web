@@ -585,3 +585,24 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   violations), full engine suite + ranker-smoke + corpus-smoke + ad-killchain-e2e + locus-scope-smoke +
   guardrails + browser-smoke all green. Engine-only change (no pack-data edit, no bundle rebuild); assets
   stamped.
+- 2026-10-07: Residual triage, discovery-vs-spray user list + scoreboard accuracy (owner rule: fix only
+  what a user would see and be confused by; never-seen gated tokens are fine). Ran the full gated-command
+  picture, not just the two flagged moves. Findings and decisions, all at once: (1) asrep-roast / hashfile
+  was a SCOREBOARD ARTIFACT, not a user-facing bug: ranker-sim.js and ranker-sweep.js never require loot.js,
+  so {{hashfile}} (an OUTPUT path) never resolved in the sim; in the live app loot.js resolves it to
+  loot/asrep.hashes, the Rubeus and the three crack commands are runnable, and the move is Ready Now. No
+  fix to the move; instead loaded loot.js in ranker-sim.js (ranker-sweep.js inherits it) so command_sanity
+  now sees the loot-resolved commands the user actually sees. (2) recon-smtp was a GENUINE dead card:
+  SMTP VRFY enumeration DISCOVERS users, but its command keyed on {{userlist}}, which loot deliberately
+  leaves unfilled until a list is proven (the right signal for a SPRAY), so every command was gated and the
+  move could only ever show as a backwards "unlocks once you have a user list" card on a move whose job is
+  to FIND users. Fixed as a GENERAL rule in the one filler (assets/engine/loot.js, tokensFor): a command
+  that uses {{userlist}} but is NOT gated on a proven list (ad.user_list / web.users) is a discovery move,
+  so it seeds a default names list (seclists top-usernames-shortlist, matching the blind brute) and is
+  runnable at once; a spray move keeps pointing at the materialized list and stays an honest dependency
+  signal. Verified: recon-smtp is now Ready Now with a runnable VRFY command (the swaks command still
+  hides, correctly, until the domain is known); the brute sprays are unchanged (gated until users are
+  enumerated, then resolve to loot/users.txt). loot-smoke.js updated to lock in the discovery-vs-spray
+  distinction. Result: sim 0/42, broad sweep now 0.0% (clean), full engine suite + guardrails + browser-smoke
+  all green, 0 console errors driving the live recon-smtp card. Engine + test + sim change; no pack-data
+  edit, no bundle rebuild; assets stamped.

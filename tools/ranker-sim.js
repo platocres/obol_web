@@ -17,6 +17,7 @@ require('../assets/engine/pack.js');
 require('../assets/engine/profile.js');
 require('../assets/engine/command.js');
 require('../assets/engine/workspace.js');
+require('../assets/engine/loot.js');   // so command_sanity sees {{userlist}}/{{hashfile}} resolved to their loot paths, as the live app does
 require('../data/parser-signatures.js');
 require('../data/stuck-catalog.js');
 require('../assets/engine/stuck.js');

@@ -73,10 +73,17 @@ var filled = OBOL.command.fillCommand(action, facts, { params: { target: '10.129
 ok(filled.filled.indexOf('-u ~/e/forest/loot/users.txt') >= 0, 'fillCommand resolves {{userlist}} to the loot path');
 ok(filled.filled.indexOf('--asreproast ~/e/forest/loot/asrep.hashes') >= 0, 'fillCommand resolves {{hashfile}} to loot/asrep.hashes');
 ok(OBOL.command.unfilledTokens(filled.filled).indexOf('userlist') === -1, 'no {{userlist}} left unfilled once proven');
-// and a bare enum move (no proven list) keeps {{userlist}} visible as a dependency
+// A DISCOVERY move (produces a user list, is NOT gated on one) seeds a default names list so it is
+// runnable at once: its whole job is to FIND users, so waiting on a proven list would be backwards.
 var enumAct = { id: 'ad-user-enum', produces: ['ad.user_list'], commands: [{ tool: 'kerbrute', run: 'kerbrute userenum --dc {{target}} -d {{domain}} {{userlist}}' }] };
 var enumFilled = OBOL.command.fillCommand(enumAct, fs_([]), { params: { target: '10.129.95.210', domain: 'corp.local' }, workspace: dirs }, 0);
-ok(enumFilled.filled.indexOf('{{userlist}}') >= 0, 'before a list is proven, {{userlist}} stays literal (dependency still visible)');
+ok(enumFilled.filled.indexOf('/usr/share/seclists/Usernames/top-usernames-shortlist.txt') >= 0, 'a discovery move seeds a default names list, so it is runnable before any user is proven');
+ok(OBOL.command.unfilledTokens(enumFilled.filled).indexOf('userlist') === -1, 'discovery {{userlist}} does not stay literal');
+// A SPRAY move (gated on ad.user_list / web.users) must NOT run before enumeration: {{userlist}} stays
+// literal as a real dependency signal until the proven list is materialized.
+var sprayAct = { id: 'online-brute-ssh', requires_any: ['ad.user_list', 'web.users'], commands: [{ tool: 'hydra', run: 'hydra -L {{userlist}} -P {{wordlist}} ssh://{{target}}' }] };
+var sprayFilled = OBOL.command.fillCommand(sprayAct, fs_([]), { params: { target: '10.129.95.210' }, workspace: dirs }, 0);
+ok(sprayFilled.filled.indexOf('{{userlist}}') >= 0, 'a spray move keeps {{userlist}} literal until a list is proven (dependency still visible)');
 
 console.log(fail ? ('\nLOOT SMOKE: ' + fail + ' FAILURES') : '\nLOOT SMOKE: all passed');
 process.exit(fail ? 1 : 0);

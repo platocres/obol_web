@@ -23,6 +23,12 @@
   var OBOL = root.OBOL = root.OBOL || {};
 
   var DEFAULT_WORDLIST = '/usr/share/wordlists/rockyou.txt';
+  // A user DISCOVERY command (SMTP VRFY enum, an RID/finger sweep) uses {{userlist}} to FIND users, not
+  // to spray a list you already hold, so it must be runnable before any user is proven. It seeds a short
+  // common-names list (the same shortlist the blind brute uses), which the operator can widen. A SPRAY
+  // move is told apart by being gated on a proven user list (ad.user_list / web.users); that one keeps
+  // pointing at the materialized list and stays an honest "unlocks once you have a user list" signal.
+  var DEFAULT_NAMES = '/usr/share/seclists/Usernames/top-usernames-shortlist.txt';
 
   function join(dir, name) {
     dir = String(dir == null ? '' : dir).replace(/\/+$/, '');
@@ -86,14 +92,26 @@
   // from proven facts even when the roast printed the hash to stdout instead of a file).
   var _HASHFILE_FACT_KIND = { asrep: 'hash.asrep', tgs: 'hash.tgs' };
 
+  // Is this move a SPRAY (it is gated on a proven user list) rather than a DISCOVERY move? A spray must
+  // not run before enumeration, so its {{userlist}} stays unfilled (the dependency signal) until the
+  // list is materialized; a discovery move seeds a default names list so it is runnable from the start.
+  function spraysUserList(action) {
+    var g = [].concat((action && action.requires_all) || [], (action && action.requires_any) || []);
+    return g.indexOf('ad.user_list') >= 0 || g.indexOf('web.users') >= 0;
+  }
+
   // The loot-derived {{token}} values for an action. Operator-pinned inputs win, so this only
-  // supplies a token the operator has not set. `userlist` resolves only once a user list is PROVEN
-  // (nothing to point at otherwise, so the placeholder stays as a live dependency signal);
-  // `hashfile`/`wordlist` always resolve to their stable paths.
+  // supplies a token the operator has not set. `userlist` resolves to the PROVEN list once enumerated;
+  // before that it stays unfilled for a spray move (a live dependency signal) but seeds a default names
+  // list for a discovery move (so VRFY enum and friends are runnable at once); `hashfile`/`wordlist`
+  // always resolve to their stable paths.
   function tokensFor(action, facts, dirs, inputs) {
     inputs = inputs || {};
     var out = {};
-    if (!inputs.userlist && usernames(facts).length) out.userlist = userlistPath(dirs);
+    if (!inputs.userlist) {
+      if (usernames(facts).length) out.userlist = userlistPath(dirs);
+      else if (!spraysUserList(action)) out.userlist = DEFAULT_NAMES;
+    }
     if (!inputs.hashfile) out.hashfile = hashfilePath(dirs, action);
     if (!inputs.wordlist) out.wordlist = wordlistPath(inputs);
     return out;
