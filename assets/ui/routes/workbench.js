@@ -27,6 +27,7 @@
     { id: 'gtfobins', label: 'GTFOBins' },
     { id: 'wordlists', label: 'Wordlists' },
     { id: 'sqli', label: 'Manual SQLi' },
+    { id: 'explain', label: 'Explain Output' },
   ];
   function tabIds() { return TABS.map(function (t) { return t.id; }); }
 
@@ -431,6 +432,42 @@
       + '</div>';
   }
 
+  // Explain This Output (parser annotate mode).
+  function explainOutHtml(text, facts) {
+    var wb = W();
+    if (!facts || !facts.length) {
+      return '<p class="wb-note">obol did not mint any facts from that. Either it is not output from a tool obol parses, or the command line that produced it would help routing. Add the command above and try again. This is honest: if the engine would record nothing, there is nothing to annotate.</p>';
+    }
+    var ann = wb.annotateOutput(text, facts);
+    var src = '<div class="wb-ex-src" role="img" aria-label="Your output with the fact-producing lines highlighted">'
+      + ann.lines.map(function (ln) {
+          var hit = ln.factIdxs.length;
+          var badge = hit ? '<span class="wb-ex-badge">' + esc(ln.factIdxs.map(function (i) { return '#' + (i + 1); }).join(' ')) + '</span>' : '';
+          return '<div class="wb-ex-line' + (hit ? ' hit' : '') + '">' + badge + '<code>' + esc(ln.text || ' ') + '</code></div>';
+        }).join('') + '</div>';
+    var cards = ann.facts.map(function (a) {
+      var from = a.lineNos.length
+        ? 'From line' + (a.lineNos.length > 1 ? 's' : '') + ' ' + a.lineNos.map(function (n) { return n + 1; }).join(', ')
+        : 'Derived (no single line)';
+      return '<div class="wb-ex-fact"><div class="wb-ex-fh"><span class="wb-ex-num">#' + (a.index + 1) + '</span>'
+        + '<code>' + esc(a.kind) + '</code><span class="wb-ex-from">' + esc(from) + '</span></div>'
+        + '<p class="wb-ex-proves"><strong>Proves:</strong> ' + esc(a.explain.proves) + '</p>'
+        + '<p class="wb-ex-caveat"><strong>Does Not Prove:</strong> ' + esc(a.explain.caveat) + '</p></div>';
+    }).join('');
+    return '<div class="wb-field-l">Your Output (' + facts.length + ' fact' + (facts.length === 1 ? '' : 's') + ' minted)</div>' + src
+      + '<div class="wb-field-l">What obol Learned</div><div class="wb-ex-facts">' + cards + '</div>';
+  }
+  function explainPanel() {
+    return '<div class="wb-panel wb-explain">'
+      + '<p class="wb-linked">Paste tool output and obol shows which lines mint which facts, what each one proves in plain language, and what it does not. It annotates the real facts the engine would record, it never invents one.</p>'
+      + '<div class="wb-field-l">Command (Optional, Helps Routing)</div>'
+      + '<input id="wb-ex-cmd" class="wb-input" type="text" placeholder="e.g. nmap -sC -sV 10.10.10.5" autocomplete="off" spellcheck="false">'
+      + '<div class="wb-field-l">Output</div>'
+      + '<textarea id="wb-ex-in" class="wb-textarea" rows="8" placeholder="Paste the tool output here" autocomplete="off" spellcheck="false"></textarea>'
+      + '<button id="wb-ex-go" class="wb-go" type="button">Explain This Output</button>'
+      + '<div id="wb-ex-out" class="wb-ex-out"></div></div>';
+  }
+
   function stubPanel(label) {
     return '<div class="wb-panel wb-stub"><p class="wb-note">' + esc(label)
       + ' is coming online in this build. The Reverse Shell Builder is ready now, the rest land next.</p></div>';
@@ -444,6 +481,7 @@
     if (tab === 'gtfobins') return gtfobinsPanel();
     if (tab === 'wordlists') return wordlistsPanel();
     if (tab === 'sqli') return sqliPanel();
+    if (tab === 'explain') return explainPanel();
     var t = TABS.filter(function (x) { return x.id === tab; })[0];
     return stubPanel(t ? t.label : 'This tool');
   }
@@ -569,6 +607,27 @@
     U.on(mount, 'input', '#wb-sqli-cols', sqliRefresh);
     U.on(mount, 'input', '#wb-sqli-vis', sqliRefresh);
     U.on(mount, 'input', '#wb-sqli-table', sqliRefresh);
+
+    // explain output: load the real parser bundle on demand, parse the paste, then annotate it
+    U.on(mount, 'click', '#wb-ex-go', function () {
+      var out = document.getElementById('wb-ex-out');
+      var inEl = document.getElementById('wb-ex-in');
+      var cmdEl = document.getElementById('wb-ex-cmd');
+      var text = inEl ? inEl.value : '';
+      if (!text.trim()) { if (out) out.innerHTML = '<p class="wb-note">Paste some output first.</p>'; return; }
+      if (out) out.innerHTML = '<p class="wb-note">Parsing...</p>';
+      var done = function () {
+        if (!OBOL.parsers || !OBOL.parsers.analyzeTerminal) { if (out) out.innerHTML = '<p class="wb-note">The parser bundle did not load. Check your connection and try again.</p>'; return; }
+        var scope = 'host:' + (activeParams().target || 'target');
+        var res;
+        try { res = OBOL.parsers.analyzeTerminal(text, { command: (cmdEl && cmdEl.value) || '', scope: scope }); }
+        catch (e) { if (out) out.innerHTML = '<p class="wb-note">The parser hit an error on that input.</p>'; return; }
+        if (out) out.innerHTML = explainOutHtml(text, (res && res.facts) || []);
+      };
+      if (OBOL.parsers && OBOL.parsers.analyzeTerminal) { done(); }
+      else if (OBOL.lazy && OBOL.lazy.loadGroup) { OBOL.lazy.loadGroup('parsers').then(done, done); }
+      else { done(); }
+    });
 
     // wordlists: switch task, re-rank
     U.on(mount, 'click', '.wb-chip[data-wl-task]', function (e, t) {

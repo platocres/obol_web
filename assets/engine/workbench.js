@@ -541,5 +541,98 @@
   };
   function markerAt(pos, expr) { var m = {}; m[pos] = expr; return m; }
 
+  // ── explain this output (parser annotate mode) ──────────────────────────────────────────────
+  // After the real parsers mint facts from a paste, obol shows WHICH lines produced each fact, what the
+  // fact proves in plain language, and what it does NOT prove. The parsers carry no line numbers, so we
+  // match each fact's distinctive values back onto the lines. Honest by construction: it annotates the
+  // real facts the engine minted, it never invents one.
+  var FACT_EXPLAIN = {
+    'port:': { proves: 'This port is open and was reachable when you scanned.', caveat: 'It does not prove which service truly runs there, or that it is exploitable. Confirm the service with a version scan.' },
+    'ports.open': { proves: 'These TCP ports answered the scan.', caveat: 'Open is not vulnerable. The work is deciding which one is the way in.' },
+    'service.': { proves: 'A service of this type was identified on the host.', caveat: 'The banner can lie or be out of date. Verify the version before trusting an exploit to it.' },
+    'ldap.reachable': { proves: 'LDAP answered, so this is almost certainly a domain controller.', caveat: 'It does not prove you can read anything without credentials. Try an anonymous bind next.' },
+    'smb.': { proves: 'SMB responded with this detail.', caveat: 'A readable share or a null session is a lead, not loot. Check what you can actually access.' },
+    'ad.domain_known': { proves: 'You have confirmed the domain name.', caveat: 'Knowing the domain is not access to it. You still need a credential or a roastable account.' },
+    'credential.available': { proves: 'This credential was validated against a service, it works.', caveat: 'It works HERE. The same password may be reused elsewhere, or may not. Spray carefully to avoid lockout.' },
+    'credential.plaintext': { proves: 'You hold a cleartext password for this account.', caveat: 'Holding it is not the same as it being valid now. Validate it before you rely on it.' },
+    'credential.candidate': { proves: 'A possible username or password was observed.', caveat: 'Unvalidated. It is a guess until a service accepts it. Do not assume it works.' },
+    'hash.ntlm': { proves: 'You recovered an NTLM hash for this account.', caveat: 'You can often pass-the-hash with it directly, no cracking needed. Cracking only matters if you need the cleartext (reuse).' },
+    'hash.asrep': { proves: 'An AS-REP roastable hash: this account does not require Kerberos pre-auth.', caveat: 'The hash is not the password. Crack it offline (it is RC4, fast) to get the cleartext.' },
+    'hash.tgs': { proves: 'A Kerberoast hash for a service account.', caveat: 'Still needs cracking offline. Service accounts often have weak passwords, which is why this is worth the time.' },
+    'foothold.': { proves: 'You have code execution or a shell on this host.', caveat: 'A foothold is the start, not the flag. Stabilize it, orient, then look to escalate.' },
+    'access.shell': { proves: 'You have an interactive shell.', caveat: 'It may be an unstable or limited shell. Upgrade the PTY and confirm who you are before trusting it.' },
+    'access.admin': { proves: 'You have administrative or root access on this host.', caveat: 'Local admin is not domain admin. Grab the proof, then see what this access unlocks next.' },
+    'privesc.sudo_binary': { proves: 'You can run this binary via sudo.', caveat: 'Only useful if the binary has a known escape (check GTFOBins). Many sudo rights are harmless.' },
+    'privesc.suid_candidate': { proves: 'This binary is SUID, so it runs as its owner.', caveat: 'The stock SUID files are expected and safe. Only a non-standard one is a real lead.' },
+    'web.': { proves: 'This was observed about the web application.', caveat: 'An observation is not a vulnerability. Confirm it does something before chasing it.' },
+    'host.': { proves: 'This was learned about the host.', caveat: 'Context, not access. Use it to aim the next step.' },
+  };
+  function explainKind(kind) {
+    if (FACT_EXPLAIN[kind]) return FACT_EXPLAIN[kind];
+    var keys = Object.keys(FACT_EXPLAIN);
+    for (var i = 0; i < keys.length; i++) { if (keys[i].slice(-1) === ':' || keys[i].slice(-1) === '.') { if (kind.indexOf(keys[i]) === 0) return FACT_EXPLAIN[keys[i]]; } }
+    return { proves: 'obol minted a fact from this line.', caveat: 'Read it as a lead to weigh, not a guarantee. The coach ranks what it unlocks.' };
+  }
+  W.explainKind = explainKind;
+
+  // Distinctive string needles from a fact's value, used to find the lines that produced it.
+  function factNeedles(fact) {
+    var out = [], seen = {};
+    function push(v) {
+      if (v == null) return;
+      var s = String(v).trim();
+      if (s.length < 2 || s.length > 120) return;
+      if (/^(true|false|null|undefined|yes|no)$/i.test(s)) return;
+      if (seen[s]) return; seen[s] = 1; out.push(s);
+    }
+    function walk(v, depth) {
+      if (depth > 3 || v == null) return;
+      if (Array.isArray(v)) { v.forEach(function (x) { walk(x, depth + 1); }); return; }
+      if (typeof v === 'object') { Object.keys(v).forEach(function (k) { walk(v[k], depth + 1); }); return; }
+      push(v);
+    }
+    // a port:NNN kind carries its number in the kind itself
+    var m = String(fact.kind || '').match(/^port:(\d+)$/);
+    if (m) push(m[1]);
+    walk(fact.value, 0);
+    return out;
+  }
+  W.factNeedles = factNeedles;
+
+  // Annotate: for each line, which facts it produced; for each fact, its lines + plain explanation.
+  W.annotateOutput = function (text, facts) {
+    var rawLines = String(text == null ? '' : text).split('\n');
+    var lineLc = rawLines.map(function (l) { return l.toLowerCase(); });
+    var lineHits = rawLines.map(function () { return []; });
+    function matcher(needle) {
+      // A number (a port, a RID) must match as a whole token, so "22" does not light up "2.4.41" or
+      // "0.0.22x". Text needles (hostnames, hashes, share names) match as substrings.
+      if (/^\d+$/.test(needle)) {
+        var re = new RegExp('(^|[^0-9.])' + needle + '([^0-9.]|$)');
+        return function (lineLcStr, lineRaw) { return re.test(lineRaw); };
+      }
+      var nl = needle.toLowerCase();
+      return function (lineLcStr) { return lineLcStr.indexOf(nl) >= 0; };
+    }
+    var annotated = (facts || []).map(function (f, fi) {
+      var needles = factNeedles(f), lineNos = [], seenLn = {};
+      needles.forEach(function (n) {
+        var test = matcher(n);
+        for (var i = 0; i < lineLc.length; i++) {
+          if (lineLc[i] && test(lineLc[i], rawLines[i])) {
+            if (!seenLn[i]) { seenLn[i] = 1; lineNos.push(i); }
+            if (lineHits[i].indexOf(fi) < 0) lineHits[i].push(fi);
+          }
+        }
+      });
+      lineNos.sort(function (a, b) { return a - b; });
+      return { index: fi, kind: f.kind, lineNos: lineNos, explain: explainKind(f.kind) };
+    });
+    return {
+      lines: rawLines.map(function (t, i) { return { text: t, factIdxs: lineHits[i] }; }),
+      facts: annotated,
+    };
+  };
+
   OBOL.workbench = W;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

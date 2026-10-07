@@ -77,7 +77,7 @@ screenshot the changed surface and read it for sense.
   checks and "Build in Workbench" affordances on cards (presentation only; pack commands untouched).
 - [x] **P5.** Manual-SQLi guided builder (manual, exam-legal; the parser reads each pasted result to
   fill the next query).
-- [ ] **P6.** "Explain This Output" (parser annotate mode: highlight the lines that mint facts, say
+- [x] **P6.** "Explain This Output" (parser annotate mode: highlight the lines that mint facts, say
   what each proves in plain language, and what it does not prove).
 - [ ] **P7.** Finish the remaining field-note lanes: ad, windows, web_exploit_checks, database,
   pivot (and obol_local_pivot), creds (and credential_access), shells, cracking, findings_checks.
@@ -132,3 +132,13 @@ Loadout, your installed tools). Easy to rename.
   information_schema vs sqlite_master, CAST for MSSQL UNION). Engine in OBOL.workbench.sqliBuild,
   tested in workbench-smoke.js; links to PortSwigger. All guardrails green; screenshot-verified with
   0 console errors.
+- 2026-10-07: P6, Explain This Output (eighth Workbench tab). Paste tool output; obol runs the REAL
+  parser bundle (OBOL.parsers.analyzeTerminal, lazy-loaded on demand), then annotates: it highlights
+  the lines that minted each fact and, per fact, says what it proves and what it does not prove in
+  plain language (green / orange). Honest by construction: it annotates the facts the engine actually
+  minted, never an invented one, and says so when nothing minted. The parsers carry no line numbers,
+  so facts map to lines by matching their distinctive values, with whole-token matching for numbers
+  so a port like 22 does not light up 2.4.41. Per-kind explanation table (OBOL.workbench.explainKind)
+  with a safe fallback; annotateOutput + factNeedles tested in workbench-smoke.js. Verified headless
+  on a real nmap paste (15 facts, correct line attribution, 0 console errors). The Workbench now has
+  all eight tools.

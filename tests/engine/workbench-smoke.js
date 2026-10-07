@@ -153,5 +153,28 @@ ok(/pg_sleep/.test(payloads({ dbms: 'postgres', ctx: 'string' }, 'detect').join(
 ok(/sqlite_master/.test(payloads({ dbms: 'sqlite', ctx: 'string', cols: 2, vis: 1 }, 'tables')[0]), 'SQLite lists from sqlite_master');
 ok(W.SQLI_DBMS.sqlite.time === null, 'SQLite has no time-based payload (correctly omitted)');
 
+// ── explain this output (annotate) ───────────────────────────────────────────────────────────
+ok(/open/.test(W.explainKind('port:445').proves), 'port kind explains "open"');
+ok(/pass-the-hash/i.test(W.explainKind('hash.ntlm').caveat), 'NTLM caveat mentions pass-the-hash');
+ok(W.explainKind('service.smb').proves.length > 0, 'prefix match resolves service.*');
+ok(W.explainKind('some.unknown.kind').caveat.length > 0, 'unknown kind has a fallback caveat');
+
+// needles pull distinctive values, and skip booleans
+const nd = W.factNeedles({ kind: 'port:445', value: { port: 445, service: 'microsoft-ds', open: true } });
+ok(nd.indexOf('445') >= 0 && nd.indexOf('microsoft-ds') >= 0, 'needles include the port and service');
+ok(nd.indexOf('true') < 0, 'needles skip booleans');
+
+// annotate maps facts onto the lines that contain their values
+const sample = 'PORT   STATE SERVICE\n445/tcp open  microsoft-ds\n80/tcp open  http';
+const facts = [
+  { kind: 'port:445', value: { port: 445, service: 'microsoft-ds' } },
+  { kind: 'port:80', value: { port: 80, service: 'http' } },
+];
+const ann = W.annotateOutput(sample, facts);
+ok(ann.lines.length === 3, 'annotate keeps every line');
+ok(ann.facts[0].lineNos.indexOf(1) >= 0, 'the 445 fact maps to the 445 line');
+ok(ann.lines[1].factIdxs.length >= 1, 'the 445 line is marked as a hit');
+ok(ann.lines[0].factIdxs.length === 0, 'the header line is not a false hit');
+
 console.log(fail ? ('\nWORKBENCH: ' + fail + ' FAILURES') : '\nWORKBENCH: all passed');
 process.exit(fail ? 1 : 0);

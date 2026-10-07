@@ -3374,3 +3374,24 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-sqli-phase .wb-hash-note { margin: 0 0 9px; }
 .wb-sqli-item { margin-top: 8px; }
 .wb-sqli-item .wb-xform-note { margin-bottom: 4px; }
+
+/* Workbench Explain Output (parser annotate mode) */
+.wb-go { margin-top: 12px; font: 700 13px var(--sans); color: var(--on-accent, #fff); background: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 9px 18px; cursor: pointer; }
+.wb-go:hover { background: color-mix(in srgb, var(--accent) 85%, var(--text)); }
+.wb-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wb-ex-out { margin-top: 16px; }
+.wb-ex-src { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 4px; overflow-x: auto; margin-bottom: 4px; }
+.wb-ex-line { display: flex; align-items: flex-start; gap: 8px; padding: 1px 10px; }
+.wb-ex-line code { font: 12px var(--mono); color: var(--text-2); white-space: pre; }
+.wb-ex-line.hit { background: var(--accent-soft); border-left: 3px solid var(--accent); padding-left: 7px; }
+.wb-ex-line.hit code { color: var(--text); }
+.wb-ex-badge { flex: none; font: 800 9.5px var(--mono); color: var(--on-accent, #fff); background: var(--accent); border-radius: 4px; padding: 1px 5px; margin-top: 1px; }
+.wb-ex-facts { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.wb-ex-fact { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; }
+.wb-ex-fh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+.wb-ex-num { font: 800 11px var(--mono); color: var(--on-accent, #fff); background: var(--accent); border-radius: 4px; padding: 1px 7px; }
+.wb-ex-fh code { font: 700 12.5px var(--mono); color: var(--accent-2); }
+.wb-ex-from { font-size: 11px; color: var(--muted); margin-left: auto; }
+.wb-ex-proves, .wb-ex-caveat { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.wb-ex-proves strong { color: var(--accent-2); }
+.wb-ex-caveat strong { color: var(--orange); }
