@@ -339,3 +339,144 @@ maintenance surface (new facts need authored likelihoods).
 Once the corpus/scoreboard exists: if the current ranker already scores well on it (expert move in
 top-3 at the decision points), DROP the probabilistic-ranker idea entirely and redirect the saved
 energy to parser correctness and move-graph coverage, which the evidence says are the real levers.
+
+---
+
+## Active build: the Stuck? tab (in progress, PR #302 branch)
+
+**Plan of record. If this chat is lost, resume from this section. Work on branch
+`claude/obol-web-overhaul-local-59ttbx`. Commit frequently.**
+
+### Intention
+
+A global **Stuck?** tab for exam-takers (OSCP lab, not neophytes) who are stuck in a box and want to
+see their options FAST without pasting terminal output. They assert attributes about their target by
+clicking human-phrased binary buttons (neon glass, multicolor), and obol shows ranked move cards,
+the SAME ranker as Next Steps, that expand to commands with field notes. Progressive disclosure: the
+more facts they give, the more relevant fact options and moves appear, never everything at once. It
+is NOT meant to run a whole engagement, just to hand a stuck student a path forward. Advisory by
+construction: everything is framed as "based on what you told me," deterministic and explainable,
+same as the coach.
+
+### Decisions locked (owner-approved)
+
+- **Full curated fact catalog across ALL lanes up front** (not a vertical slice). The catalog is the
+  real cost; the UI is quick.
+- **Global primary nav** item (alongside Workbench and Playbooks, plus the mobile More sheet),
+  standalone, works with no engagement.
+- **Sandbox by default.** Stuck? runs in its own ephemeral in-memory FactSet and NEVER writes to the
+  active engagement. Two opt-ins only: "Start from my active engagement" (seed from real facts) and
+  "Save these to an engagement."
+- **Triage first.** One opening question ("What do you have right now?": nothing yet / open ports /
+  services known / a foothold shell / a working credential / local admin) sets the phase, then the
+  relevant binary facts reveal.
+- **"I tried it / ruled out" toggles in v1** (see mechanism below, this is load-bearing for
+  un-sticking: stuck means the obvious thing already failed).
+- **Single target in v1.** Multi-target (pivot/AD-wide) is a later iteration (needs relationships
+  between targets that buttons model poorly).
+- **Typing is contextual, never upfront.** Binary buttons mint presence facts (enough to rank);
+  typed fields appear only when a selected command needs a token to fill (lhost, domain), tied to a
+  concrete payoff.
+
+### The REFUTED finding and the "I tried it" mechanism (critical)
+
+The coach ranker (`nextActionsV2`) is **SUPPORTED-facts-only**. `FactSet.has/.values/.kinds` all hard
+-filter to `ProofState.SUPPORTED`, so a `REFUTED` fact is INERT: it cannot prune or demote a move.
+Therefore "I tried it, didn't work" must NOT be modeled as a REFUTED fact. Instead:
+
+- **"I tried this MOVE, it failed"** (per move card) maps to the ranker's existing `opts.doneIds`
+  (`{id:true}`), a local, per-call exclusion that removes that move and floats up the next option.
+  No ranker change, no store write.
+- **"This CONDITION is ruled out"** (signing on, no anon access, filtered port) maps to the POSITIVE
+  SUPPORTED fact the pack already uses in a move's `obsoleted_by` (drops the move) or
+  `deprioritize_when` (-40 priority), where that edge exists. Where the pack does not yet model a
+  condition negatively, v1 falls back to the per-move "didn't work" doneIds exclusion. Enriching pack
+  edges later is a pack-data change, never a ranker fork.
+
+### Engine APIs to build on (confirmed)
+
+- `OBOL.pack.rankActions(facts, pack, opts)` is PURE over its args (no `OBOL.store` reads). Default
+  dispatches to `nextActionsV2`. Returns a sorted `Action[]` (best first); fields per Action: id,
+  title, tool(s), command(s) `[{tool,run,note,settled_by?}]`, priority, phase, requires_all,
+  requires_any, produces, obsoleted_by, deprioritize_when, proves, does_not_prove, locus, scope,
+  refs. `opts = { doneIds, focusPrefixes }`.
+- `pack = OBOL.packs.actions()` (cached shared `Action[]`, read-only, do not mutate).
+- Sandbox: `new OBOL.facts.FactSet()`, then `fs.add(OBOL.facts.makeFact({kind,scope,value,state}))`.
+  `makeFact` defaults state to SUPPORTED. `add` dedups on (kind,scope,value); same key, new state
+  supersedes in place.
+- Companion planners: `OBOL.pack.lockedActions(facts,pack)` -> `[{action, reason}]` (OS-ok but not
+  yet eligible, with the unmet-prereq reason), `blockedActions`, both pure.
+- Frontier/phase: `OBOL.phases.targetPhase(fs)`, `frontierIndex(fs)`, `phaseOfKind(kind)`,
+  `phaseOfAction(action)`. Phases: recon, enum, creds, access, escalate, loot.
+- Labels for the catalog (reuse, author the gaps): `OBOL.pack.friendly(kind)` (broadest short
+  kind->noun-phrase map), `OBOL.workbench.explainKind(kind)` -> `{proves,caveat}`,
+  `OBOL.workbench.explainFact(fact)` (value-aware echo). Kind universe:
+  `OBOL.PARSER_SIGNATURES` emits (+ pack produces). Only ~40 kinds have hand-written explain text;
+  author the rest.
+
+### Reveal-from-graph (the core algorithm, derive, do not hand-maintain a menu tree)
+
+The facts worth asking about next = the facts the near-frontier moves REQUIRE or PRODUCE. For each
+non-settled, non-obsolete move: if it is eligible, its `produces` are mild candidates (asserting them
+advances); if it is NOT eligible, its unmet `requires_all` / unmet `requires_any` are candidates,
+weighted higher the closer the move is to eligible (gap of 1 unmet strongest). Exclude kinds already
+SUPPORTED. Rank candidates by information gain (how many moves each would help unlock), group by
+phase, show a bounded batch. This keeps the catalog in lockstep with the move graph and self-prunes
+to only the questions that would change the suggestions.
+
+### Acceptance criteria (hard, not polish)
+
+- **Responsive and fills the width at EVERY size: 4K, 1920x1080, tablet, phone to ~320px.** No wasted
+  gutters: the fact-button grid reflows to MORE columns as width grows (so 1080p and 4K pack with
+  buttons, not empty margin), and the move-cards region uses the real available width beside the
+  sidebar, never a fixed skinny center column. Screenshot-verify 4K, 1080p, tablet, mobile; confirm
+  1080p specifically is packed, not guttered.
+- **House style: no em or en dashes anywhere** (commas, colons, periods). Proper capitalization,
+  Title Case for the tab, every label, heading, and binary-button phrase, and any field notes.
+- **Aesthetic:** neon glass, multicolor, glowing, rainbow shimmer that intensifies as more facts
+  light up, BUT the shimmer is gated behind `prefers-reduced-motion` (off cleanly for that audience),
+  and colour is NEVER the sole signal (a "ruled out" fact carries a shape/label, not just a red glow).
+  11px font floor.
+- **Advisory framing:** every suggestion labeled "based on what you told me." Deterministic and
+  explainable; no opaque prediction.
+- **Boundaries unchanged:** sandbox never writes the active engagement unless the user opts to save;
+  pack commands stay the source of truth; the ranker is not forked.
+
+### Phases (check off as completed)
+
+- [ ] **ST0.** This plan in CLAUDE.md + task tracking.
+- [ ] **ST1.** Engine foundation `assets/engine/stuck.js` (pure, headless-tested): sandbox helpers,
+  `suggestFacts` (reveal-from-graph), `rankedMoves` (rankActions + doneIds), triage seeds, the
+  ruled-out -> doneIds/positive-fact mapping. Smoke test `tests/engine/stuck-smoke.js`.
+- [ ] **ST2.** The FULL curated fact catalog across all lanes: human-phrased binary label per
+  user-assertable kind, grouped, reusing friendly()/explainKind() and authoring the gaps. Commit per
+  lane.
+- [ ] **ST3.** UI route `assets/ui/routes/stuck.js` + global nav (index.html desktop nav + mobile
+  More sheet) + lazy group (assets/ui/lazy.js). Triage-first flow, progressive neon-glass fact
+  picker, ruled-out/tried toggles (visually distinct), move cards (reuse ranker, expand to commands,
+  Build In Workbench deep links, field notes), contextual typed-param fields, sandbox with seed/save
+  opt-ins.
+- [ ] **ST4.** Aesthetic + responsive pass (the acceptance criteria above). Screenshot-verify 4K,
+  1080p, tablet, mobile; 0 console errors headless.
+- [ ] **ST5.** Verify all guardrails, stamp assets, commit/push.
+
+### Synergy with the deferred ranker-corpus open item
+
+The curated catalog + the manual state-builder in Stuck? are nearly the exact tooling the ranking
+regression corpus would need (construct a fact-state, see the ranked moves). Building Stuck? gets us
+most of that fixture-authoring surface for free, and is a natural place to notice when the ranker
+gives a weird answer on a hand-built mid-game state.
+
+### Verify each phase (same as the project)
+
+`node tools/field-notes-coverage.js` · `node tools/lint-study.js --check` ·
+`node tools/gap-report.js --check` · `for t in tests/engine/*.js; do node "$t"; done` ·
+`NODE_PATH=/opt/node-tools/node_modules node tests/browser-smoke.js` ·
+`node tools/stamp-assets.js` (after any asset edit) · drive the app headless (0 console errors) ·
+screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for sense and width use.
+
+### Status log (update per commit)
+
+- 2026-10-07: ST0, plan documented. Engine APIs mapped (rankActions pure over FactSet; REFUTED inert
+  so "I tried it" uses doneIds / positive-fact edges; labels from friendly()/explainKind(); kind
+  universe from PARSER_SIGNATURES).
