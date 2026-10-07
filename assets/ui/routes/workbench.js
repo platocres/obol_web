@@ -26,6 +26,7 @@
     { id: 'jwt', label: 'JWT' },
     { id: 'gtfobins', label: 'GTFOBins' },
     { id: 'wordlists', label: 'Wordlists' },
+    { id: 'sqli', label: 'Manual SQLi' },
   ];
   function tabIds() { return TABS.map(function (t) { return t.id; }); }
 
@@ -380,6 +381,56 @@
       + '<div id="wb-wl-out" class="wb-wl-out">' + wlOutHtml() + '</div></div>';
   }
 
+  // Manual SQLi builder.
+  var _sqli = { dbms: 'mysql', ctx: 'string' };
+  function sqliState() {
+    function iv(id) { var el = document.getElementById(id); var n = el ? parseInt(el.value, 10) : NaN; return n > 0 ? n : 0; }
+    var tEl = document.getElementById('wb-sqli-table');
+    return { dbms: _sqli.dbms, ctx: _sqli.ctx, cols: iv('wb-sqli-cols'), vis: iv('wb-sqli-vis'), table: tEl ? tEl.value.trim() : '' };
+  }
+  function sqliOutHtml() {
+    var wb = W();
+    var b = wb.sqliBuild(sqliState());
+    var intro = '<p class="wb-note">' + esc(b.dbms.note) + '</p>';
+    var cards = b.phases.map(function (ph) {
+      var items = ph.items.map(function (it) {
+        return '<div class="wb-sqli-item"><div class="wb-xform-note">' + esc(it.label) + '</div>'
+          + '<div class="wb-cmd"><code>' + esc(it.payload) + '</code>'
+          + '<button class="btn-copy" data-copy="' + U.attr(it.payload) + '" aria-label="Copy payload">copy</button></div></div>';
+      }).join('');
+      return '<div class="wb-sqli-phase"><div class="wb-field-l">' + esc(ph.title) + '</div>'
+        + '<p class="wb-hash-note">' + esc(ph.note) + '</p>' + items + '</div>';
+    }).join('');
+    return intro + cards;
+  }
+  function sqliPanel() {
+    var dbmsBtns = W().sqliDbmsList().map(function (d) {
+      var on = d.id === _sqli.dbms;
+      return '<button type="button" class="wb-chip' + (on ? ' on' : '') + '" data-sqli-dbms="' + esc(d.id) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(d.name) + '</button>';
+    }).join('');
+    var ctxBtns = [['string', 'String (quoted)'], ['numeric', 'Numeric']].map(function (c) {
+      var on = c[0] === _sqli.ctx;
+      return '<button type="button" class="wb-chip' + (on ? ' on' : '') + '" data-sqli-ctx="' + c[0] + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(c[1]) + '</button>';
+    }).join('');
+    return '<div class="wb-panel wb-sqli">'
+      + '<p class="wb-linked">Manual by design: you run every query yourself and paste the result back, so obol builds the next payload. No automation, no sqlmap, which keeps it OSCP exam-legal.</p>'
+      + '<div class="wb-field-l">Database Engine</div>'
+      + '<div class="wb-enc-row" role="group" aria-label="Database engine">' + dbmsBtns + '</div>'
+      + '<div class="wb-field-l">Injection Context</div>'
+      + '<div class="wb-enc-row" role="group" aria-label="Injection context">' + ctxBtns + '</div>'
+      + '<div class="wb-field-l">What You Have Found (Fill As You Go)</div>'
+      + '<div class="wb-params">'
+      + '<label class="wb-param"><span>Columns</span><input id="wb-sqli-cols" type="text" inputmode="numeric" placeholder="e.g. 3" autocomplete="off"></label>'
+      + '<label class="wb-param"><span>Visible Column</span><input id="wb-sqli-vis" type="text" inputmode="numeric" placeholder="e.g. 2" autocomplete="off"></label>'
+      + '<label class="wb-param"><span>Table</span><input id="wb-sqli-table" type="text" placeholder="e.g. users" autocomplete="off" spellcheck="false"></label>'
+      + '</div>'
+      + '<div id="wb-sqli-out" class="wb-sqli-out">' + sqliOutHtml() + '</div>'
+      + '<div class="wb-refs"><span class="wb-refs-l">Learn More</span>'
+      + '<a href="https://portswigger.net/web-security/sql-injection" target="_blank" rel="noopener">PortSwigger: SQL injection</a>'
+      + '<a href="https://portswigger.net/web-security/sql-injection/cheat-sheet" target="_blank" rel="noopener">SQLi cheat sheet</a></div>'
+      + '</div>';
+  }
+
   function stubPanel(label) {
     return '<div class="wb-panel wb-stub"><p class="wb-note">' + esc(label)
       + ' is coming online in this build. The Reverse Shell Builder is ready now, the rest land next.</p></div>';
@@ -392,6 +443,7 @@
     if (tab === 'jwt') return jwtPanel();
     if (tab === 'gtfobins') return gtfobinsPanel();
     if (tab === 'wordlists') return wordlistsPanel();
+    if (tab === 'sqli') return sqliPanel();
     var t = TABS.filter(function (x) { return x.id === tab; })[0];
     return stubPanel(t ? t.label : 'This tool');
   }
@@ -499,6 +551,24 @@
       if (out) out.innerHTML = gtfoOutHtml(box.value);
       box.focus();
     });
+
+    // manual sqli: DBMS + context buttons re-render the phases; the found-values inputs refine them
+    function sqliRefresh() { var out = document.getElementById('wb-sqli-out'); if (out) out.innerHTML = sqliOutHtml(); }
+    U.on(mount, 'click', '.wb-chip[data-sqli-dbms]', function (e, t) {
+      _sqli.dbms = t.getAttribute('data-sqli-dbms') || 'mysql';
+      var btns = mount.querySelectorAll('.wb-chip[data-sqli-dbms]');
+      for (var i = 0; i < btns.length; i++) { var on = btns[i] === t; btns[i].classList.toggle('on', on); btns[i].setAttribute('aria-pressed', on ? 'true' : 'false'); }
+      sqliRefresh();
+    });
+    U.on(mount, 'click', '.wb-chip[data-sqli-ctx]', function (e, t) {
+      _sqli.ctx = t.getAttribute('data-sqli-ctx') || 'string';
+      var btns = mount.querySelectorAll('.wb-chip[data-sqli-ctx]');
+      for (var i = 0; i < btns.length; i++) { var on = btns[i] === t; btns[i].classList.toggle('on', on); btns[i].setAttribute('aria-pressed', on ? 'true' : 'false'); }
+      sqliRefresh();
+    });
+    U.on(mount, 'input', '#wb-sqli-cols', sqliRefresh);
+    U.on(mount, 'input', '#wb-sqli-vis', sqliRefresh);
+    U.on(mount, 'input', '#wb-sqli-table', sqliRefresh);
 
     // wordlists: switch task, re-rank
     U.on(mount, 'click', '.wb-chip[data-wl-task]', function (e, t) {

