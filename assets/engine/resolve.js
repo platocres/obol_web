@@ -57,6 +57,47 @@
       context: context === 'suid' ? 'suid' : 'sudo', known: R.gtfoKnown(key) };
   };
 
+  // The full per-function listing for a binary, for the Workbench GTFOBins browser (not just sudo/suid).
+  // Returns {bin, url, known, inlined, functions:[{name, codes:[...]}]}. functions is [] for a known binary
+  // whose escapes could not be inlined (the `inherit` cases) so the caller shows the link only.
+  var FUNC_ORDER = ['shell', 'command', 'reverse-shell', 'non-interactive-reverse-shell', 'bind-shell',
+    'file-upload', 'file-download', 'file-write', 'file-read', 'library-load', 'sudo', 'suid', 'capabilities',
+    'limited-suid', 'download', 'upload'];
+  R.gtfoFunctions = function (binOrPath) {
+    var key = R.binKey(binOrPath);
+    var g = (OBOL.GTFOBINS || {})[key];
+    var known = R.gtfoKnown(key);
+    var url = R.gtfobinsUrl(key);
+    if (!g) return { bin: key, url: url, known: known, inlined: false, functions: [] };
+    var names = Object.keys(g);
+    names.sort(function (a, b) {
+      var ia = FUNC_ORDER.indexOf(a), ib = FUNC_ORDER.indexOf(b);
+      if (ia < 0) ia = 999; if (ib < 0) ib = 999;
+      return ia - ib || (a < b ? -1 : 1);
+    });
+    var functions = names.map(function (n) { return { name: n, codes: (g[n] || []).slice() }; })
+      .filter(function (f) { return f.codes.length; });
+    return { bin: key, url: url, known: known, inlined: functions.length > 0, functions: functions };
+  };
+
+  // Binary-name suggestions for the browser's search box: known names (inlined first) that match a query.
+  R.gtfoSuggest = function (query, limit) {
+    limit = limit || 24;
+    var q = R.binKey(query);
+    if (!q) return [];
+    var inlined = OBOL.GTFOBINS || {}, all = OBOL.GTFOBINS_ALL || [];
+    var starts = [], contains = [], seen = {};
+    all.forEach(function (name) {
+      if (seen[name]) return;
+      var idx = name.indexOf(q);
+      if (idx === 0) { starts.push(name); seen[name] = 1; }
+      else if (idx > 0) { contains.push(name); seen[name] = 1; }
+    });
+    function rank(a, b) { var ia = inlined[a] ? 0 : 1, ib = inlined[b] ? 0 : 1; return ia - ib || (a < b ? -1 : 1); }
+    starts.sort(rank); contains.sort(rank);
+    return starts.concat(contains).slice(0, limit);
+  };
+
   // Which moves get a GTFOBins resolver block, and in which context.
   var MOVE_CTX = { 'sudo-abuse': 'sudo', 'suid-gtfobins': 'suid' };
 

@@ -3329,3 +3329,30 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-xform-l { font: 800 10.5px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--accent-2); }
 .wb-xform-note { font-size: 11.5px; color: var(--muted); }
 .wb-enc-out .wb-cmd code, .wb-jwt-out .wb-cmd code { white-space: pre-wrap; }
+
+/* Workbench single-line input (GTFOBins search) */
+.wb-input { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 9px 12px; font: 13px var(--mono); }
+.wb-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+
+/* GTFOBins browser */
+.wb-gtfo-out { margin-top: 14px; }
+.wb-gtfo-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+.wb-gtfo-bin { font: 800 16px var(--mono); color: var(--accent-2); }
+.wb-gtfo-link { font-size: 12.5px; color: var(--accent-2); }
+.wb-gtfo-link:hover { text-decoration: underline; }
+.wb-gtfo-fn { margin-top: 10px; }
+.wb-gtfo-fn .wb-field-l { margin: 10px 0 5px; color: var(--accent-2); }
+.wb-gtfo-sug { font: 600 12px var(--mono); color: var(--text-2); background: var(--surf3); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 11px; cursor: pointer; }
+.wb-gtfo-sug:hover { color: var(--accent-2); border-color: var(--accent); background: var(--accent-soft); }
+.wb-gtfo-sug:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Wordlist picker */
+.wb-wl-out { margin-top: 14px; }
+.wb-wl-list { display: flex; flex-direction: column; gap: 12px; }
+.wb-wl-card { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px 13px; }
+.wb-wl-card.top { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent); }
+.wb-wl-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 5px; }
+.wb-wl-name { font: 700 13.5px var(--mono); color: var(--text); }
+.wb-wl-card .wb-cmd { margin-top: 7px; }

@@ -266,6 +266,120 @@
       + '<div id="wb-jwt-out" class="wb-jwt-out">' + jwtOutHtml('') + '</div></div>';
   }
 
+  // GTFOBins browser.
+  var GTFO_FN_LABELS = {
+    shell: 'Shell', command: 'Command', 'reverse-shell': 'Reverse Shell',
+    'non-interactive-reverse-shell': 'Reverse Shell (non-interactive)', 'bind-shell': 'Bind Shell',
+    'file-read': 'File Read', 'file-write': 'File Write', 'file-download': 'File Download',
+    'file-upload': 'File Upload', 'library-load': 'Library Load', sudo: 'Sudo', suid: 'SUID',
+    capabilities: 'Capabilities', 'limited-suid': 'Limited SUID', download: 'Download', upload: 'Upload',
+  };
+  function gtfoFnLabel(n) { return GTFO_FN_LABELS[n] || U.titleCase(String(n).replace(/-/g, ' ')); }
+
+  function engagementBins() {
+    var out = [], fs;
+    try { fs = OBOL.store.factSet(); } catch (e) { return out; }
+    if (!fs || !fs.values) return out;
+    (fs.values('privesc.sudo_binary') || []).forEach(function (v) { if (v && v.bin) out.push({ label: v.bin + ' (sudo)', bin: v.bin }); });
+    (fs.values('privesc.suid_candidate') || []).forEach(function (v) { (v && v.paths || []).forEach(function (p) { out.push({ label: (OBOL.resolve.binKey(p)) + ' (SUID)', bin: p }); }); });
+    var seen = {};
+    return out.filter(function (x) { var k = OBOL.resolve.binKey(x.bin); if (seen[k]) return false; seen[k] = 1; return true; });
+  }
+
+  function gtfoOutHtml(value) {
+    var R = OBOL.resolve;
+    if (!value || !value.trim()) return '<p class="wb-note">Type a binary you can run as sudo, or one that is SUID, and obol shows the exact GTFOBins escapes with the authoritative page one tap away.</p>';
+    var q = value.trim();
+    var fns = R.gtfoFunctions(q);
+    var link = '<a class="wb-gtfo-link" href="' + U.attr(fns.url) + '" target="_blank" rel="noopener">Open ' + esc(fns.bin) + ' on GTFOBins</a>';
+    if (fns.known && fns.inlined) {
+      var blocks = fns.functions.map(function (f) {
+        var codes = f.codes.map(function (c) {
+          return '<div class="wb-cmd"><code>' + esc(c) + '</code><button class="btn-copy" data-copy="' + U.attr(c) + '" aria-label="Copy">copy</button></div>';
+        }).join('');
+        return '<div class="wb-gtfo-fn"><div class="wb-field-l">' + esc(gtfoFnLabel(f.name)) + '</div>' + codes + '</div>';
+      }).join('');
+      return '<div class="wb-gtfo-head"><span class="wb-gtfo-bin">' + esc(fns.bin) + '</span>' + link + '</div>'
+        + '<p class="wb-note">Replace any path or filename with your own. For a sudo escape, prefix with sudo; for SUID, GTFOBins marks the privilege-keeping form.</p>'
+        + blocks;
+    }
+    if (fns.known) {
+      return '<div class="wb-gtfo-head"><span class="wb-gtfo-bin">' + esc(fns.bin) + '</span>' + link + '</div>'
+        + '<p class="wb-note">GTFOBins knows this binary, but its escape uses an inherit directive obol will not inline (guessing it could be wrong). Open the page above for the exact, current steps.</p>';
+    }
+    // not an exact match: suggest names
+    var sug = R.gtfoSuggest(q);
+    if (sug.length) {
+      return '<p class="wb-note">No exact match for "' + esc(q) + '". Did you mean:</p>'
+        + '<div class="wb-fill-chips">' + sug.map(function (n) {
+          return '<button type="button" class="wb-gtfo-sug" data-bin="' + U.attr(n) + '">' + esc(n) + '</button>';
+        }).join('') + '</div>';
+    }
+    return '<p class="wb-note">GTFOBins has no entry for "' + esc(q) + '". Not every binary is exploitable, that is normal. Check the SUID/sudo list again, or try a different one.</p>';
+  }
+  function gtfobinsPanel() {
+    var bins = engagementBins();
+    var chips = bins.length
+      ? '<div class="wb-field-l">From This Engagement</div><div class="wb-fill-chips">'
+        + bins.map(function (b) { return '<button type="button" class="wb-gtfo-sug" data-bin="' + U.attr(b.bin) + '">' + esc(b.label) + '</button>'; }).join('')
+        + '</div>'
+      : '';
+    return '<div class="wb-panel wb-gtfobins">'
+      + '<p class="wb-linked">' + linkedNote() + '</p>'
+      + chips
+      + '<div class="wb-field-l">Binary</div>'
+      + '<input id="wb-gtfo-in" class="wb-input" type="text" placeholder="e.g. find, vim, python, tar" autocomplete="off" spellcheck="false">'
+      + '<div id="wb-gtfo-out" class="wb-gtfo-out">' + gtfoOutHtml('') + '</div></div>';
+  }
+
+  // Wordlist picker.
+  var STACK_TAGS = ['iis', 'apache', 'nginx', 'php', 'aspnet', 'wordpress', 'api', 'rest', 'windows', 'linux'];
+  function detectStack() {
+    var tags = {}, fs;
+    try { fs = OBOL.store.factSet(); } catch (e) { return []; }
+    if (!fs || !fs.facts) return [];
+    var blob = '';
+    fs.facts.forEach(function (f) { try { blob += ' ' + f.kind + ' ' + JSON.stringify(f.value || {}); } catch (e) {} });
+    blob = blob.toLowerCase();
+    if (/asp\.net|aspnet|\.aspx/.test(blob)) tags.aspnet = 1;
+    STACK_TAGS.forEach(function (t) { if (blob.indexOf(t) >= 0) tags[t] = 1; });
+    return Object.keys(tags);
+  }
+
+  var _wl = { task: 'dirs' };
+  function wlOutHtml() {
+    var wb = W();
+    var stack = detectStack();
+    var target = activeParams().target || '';
+    var lists = wb.pickWordlists(_wl.task, stack);
+    var anyMatch = lists.some(function (l) { return l.matched; });
+    var head = anyMatch
+      ? '<p class="wb-note">Ranked for your detected stack (' + esc(stack.join(', ')) + '). The best fit is first.</p>'
+      : '';
+    var rows = lists.map(function (l) {
+      var cmd = wb.wordlistCmd(_wl.task, l.path, target);
+      return '<div class="wb-wl-card' + (l.matched ? ' top' : '') + '">'
+        + '<div class="wb-wl-head">' + (l.matched ? '<span class="wb-likely">Your Stack</span>' : '') + '<span class="wb-wl-name">' + esc(l.name) + '</span></div>'
+        + '<p class="wb-hash-note">' + esc(l.note) + '</p>'
+        + '<div class="wb-cmd"><code>' + esc(l.path) + '</code><button class="btn-copy" data-copy="' + U.attr(l.path) + '" aria-label="Copy path">copy</button></div>'
+        + '<div class="wb-cmd"><code>' + esc(cmd) + '</code><button class="btn-copy" data-copy="' + U.attr(cmd) + '" aria-label="Copy command">copy</button></div>'
+        + '</div>';
+    }).join('');
+    return head + '<div class="wb-wl-list">' + rows + '</div>';
+  }
+  function wordlistsPanel() {
+    var wb = W();
+    var tabs = (wb.WORDLIST_TASKS || []).map(function (t) {
+      var on = t.id === _wl.task;
+      return '<button type="button" class="wb-chip' + (on ? ' on' : '') + '" data-wl-task="' + esc(t.id) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(t.label) + '</button>';
+    }).join('');
+    return '<div class="wb-panel wb-wordlists">'
+      + '<p class="wb-linked">' + linkedNote() + '</p>'
+      + '<div class="wb-field-l">What Are You Attacking?</div>'
+      + '<div class="wb-enc-row" role="group" aria-label="Wordlist task">' + tabs + '</div>'
+      + '<div id="wb-wl-out" class="wb-wl-out">' + wlOutHtml() + '</div></div>';
+  }
+
   function stubPanel(label) {
     return '<div class="wb-panel wb-stub"><p class="wb-note">' + esc(label)
       + ' is coming online in this build. The Reverse Shell Builder is ready now, the rest land next.</p></div>';
@@ -276,6 +390,8 @@
     if (tab === 'hashid') return hashidPanel();
     if (tab === 'encoder') return encoderPanel();
     if (tab === 'jwt') return jwtPanel();
+    if (tab === 'gtfobins') return gtfobinsPanel();
+    if (tab === 'wordlists') return wordlistsPanel();
     var t = TABS.filter(function (x) { return x.id === tab; })[0];
     return stubPanel(t ? t.label : 'This tool');
   }
@@ -329,7 +445,7 @@
     });
 
     // reverse-shell: encoding toggle (delegated: the chips live inside the refreshed region)
-    U.on(mount, 'click', '.wb-chip', function (e, t) {
+    U.on(mount, 'click', '.wb-chip[data-rs-enc]', function (e, t) {
       _rs.enc = t.getAttribute('data-rs-enc') || 'plain';
       refreshRsOut();
     });
@@ -362,6 +478,33 @@
     U.on(mount, 'input', '#wb-jwt-in', function (e, t) {
       var out = document.getElementById('wb-jwt-out');
       if (out) out.innerHTML = jwtOutHtml(t.value);
+    });
+
+    // gtfobins: look up on input; suggestion / engagement chips fill the box
+    U.on(mount, 'input', '#wb-gtfo-in', function (e, t) {
+      var out = document.getElementById('wb-gtfo-out');
+      if (out) out.innerHTML = gtfoOutHtml(t.value);
+    });
+    U.on(mount, 'click', '.wb-gtfo-sug', function (e, t) {
+      var box = document.getElementById('wb-gtfo-in');
+      if (!box) return;
+      box.value = t.getAttribute('data-bin') || '';
+      var out = document.getElementById('wb-gtfo-out');
+      if (out) out.innerHTML = gtfoOutHtml(box.value);
+      box.focus();
+    });
+
+    // wordlists: switch task, re-rank
+    U.on(mount, 'click', '.wb-chip[data-wl-task]', function (e, t) {
+      _wl.task = t.getAttribute('data-wl-task') || 'dirs';
+      var chips = mount.querySelectorAll('.wb-chip[data-wl-task]');
+      for (var i = 0; i < chips.length; i++) {
+        var on = chips[i] === t;
+        chips[i].classList.toggle('on', on);
+        chips[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+      var out = document.getElementById('wb-wl-out');
+      if (out) out.innerHTML = wlOutHtml();
     });
   }
 

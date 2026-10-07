@@ -348,5 +348,79 @@
     return 'nc -lvnp ' + lport;
   };
 
+  // ── wordlist picker ─────────────────────────────────────────────────────────────────────────
+  // A curated map of "what am I attacking" to the right SecLists / rockyou file, with a plain note. Paths
+  // are the standard Kali SecLists locations (the Loadout rewrite can retarget them per box). `tags` let a
+  // detected stack (from web.tech facts, wired in P4) float the right list to the top.
+  var SL = '/usr/share/seclists/';
+  W.WORDLISTS = [
+    // content discovery (directories/files)
+    { task: 'dirs', name: 'raft-medium-directories', path: SL + 'Discovery/Web-Content/raft-medium-directories.txt', note: 'The reliable first sweep for directories. Start here on almost any web box.', tags: [] },
+    { task: 'dirs', name: 'directory-list-2.3-medium', path: SL + 'Discovery/Web-Content/directory-list-2.3-medium.txt', note: 'The classic big list. Slower but thorough when raft finds little.', tags: [] },
+    { task: 'dirs', name: 'common.txt', path: SL + 'Discovery/Web-Content/common.txt', note: 'Small and fast. Good for a quick first look or a slow target.', tags: [] },
+    { task: 'dirs', name: 'IIS.fuzz.txt', path: SL + 'Discovery/Web-Content/IIS.fuzz.txt', note: 'IIS-specific paths. Reach for this when the server header says Microsoft-IIS.', tags: ['iis', 'windows', 'aspnet'] },
+    { task: 'dirs', name: 'Common-DB-Backups', path: SL + 'Discovery/Web-Content/Common-DB-Backups.txt', note: 'Backups and DB dumps left in web roots. A frequent easy win.', tags: ['apache', 'php'] },
+    // files / extensions
+    { task: 'files', name: 'raft-medium-files', path: SL + 'Discovery/Web-Content/raft-medium-files.txt', note: 'Files rather than directories. Pair with the right -x extension for the stack.', tags: [] },
+    { task: 'files', name: 'web-extensions', path: SL + 'Discovery/Web-Content/web-extensions.txt', note: 'A list of extensions to feed gobuster -x / ffuf. Match it to the stack (php, asp, aspx, jsp).', tags: [] },
+    // CMS-specific
+    { task: 'dirs', name: 'CMS/wordpress', path: SL + 'Discovery/Web-Content/CMS/wordpress.fuzz.txt', note: 'WordPress paths. Use wpscan too once you confirm WordPress.', tags: ['wordpress', 'php'] },
+    // subdomains / vhosts
+    { task: 'subdomains', name: 'subdomains-top1million-5000', path: SL + 'Discovery/DNS/subdomains-top1million-5000.txt', note: 'Fast subdomain / vhost sweep. Good default for ffuf -H "Host: FUZZ.target".', tags: [] },
+    { task: 'subdomains', name: 'subdomains-top1million-110000', path: SL + 'Discovery/DNS/subdomains-top1million-110000.txt', note: 'The larger sweep when the small one finds nothing.', tags: [] },
+    // usernames
+    { task: 'users', name: 'xato-net-10-million-usernames', path: SL + 'Usernames/xato-net-10-million-usernames.txt', note: 'The go-to username list for spraying and brute force.', tags: [] },
+    { task: 'users', name: 'top-usernames-shortlist', path: SL + 'Usernames/top-usernames-shortlist.txt', note: 'Tiny, high-hit list. Try this before the big one to avoid lockouts.', tags: [] },
+    // passwords
+    { task: 'passwords', name: 'rockyou.txt', path: '/usr/share/wordlists/rockyou.txt', note: 'The default password list. Cracking and web login brute force alike.', tags: [] },
+    { task: 'passwords', name: 'probable-v2-top12000', path: SL + 'Passwords/Common-Credentials/probable-v2-top12000.txt', note: 'A focused list for spraying when rockyou is too big or lockout is a risk.', tags: [] },
+    { task: 'passwords', name: 'default-passwords (SecLists)', path: SL + 'Passwords/Default-Credentials/default-passwords.csv', note: 'Vendor defaults. Try these first on appliances and admin panels.', tags: [] },
+    // parameters
+    { task: 'params', name: 'burp-parameter-names', path: SL + 'Discovery/Web-Content/burp-parameter-names.txt', note: 'Fuzz hidden GET/POST parameter names (ffuf ...?FUZZ=1).', tags: [] },
+    // LFI / traversal
+    { task: 'lfi', name: 'LFI-Jhaddix', path: SL + 'Fuzzing/LFI/LFI-Jhaddix.txt', note: 'Path-traversal and LFI payloads. Confirm with /etc/passwd or win.ini first.', tags: [] },
+    { task: 'lfi', name: 'LFI-gracefulsecurity-linux', path: SL + 'Fuzzing/LFI/LFI-gracefulsecurity-linux.txt', note: 'Linux-focused interesting files to read once you have LFI.', tags: ['linux'] },
+    // API
+    { task: 'api', name: 'api/objects', path: SL + 'Discovery/Web-Content/api/objects.txt', note: 'Common API object names. Combine with /api/ and a version prefix.', tags: ['api', 'rest'] },
+    { task: 'api', name: 'api/api-endpoints', path: SL + 'Discovery/Web-Content/api/api-endpoints.txt', note: 'Endpoint names for API discovery.', tags: ['api', 'rest'] },
+  ];
+
+  W.WORDLIST_TASKS = [
+    { id: 'dirs', label: 'Directories' }, { id: 'files', label: 'Files' },
+    { id: 'subdomains', label: 'Subdomains / VHosts' }, { id: 'users', label: 'Usernames' },
+    { id: 'passwords', label: 'Passwords' }, { id: 'params', label: 'Parameters' },
+    { id: 'lfi', label: 'LFI / Traversal' }, { id: 'api', label: 'API' },
+  ];
+
+  // Rank a task's lists, floating any whose tags match the detected stack to the top (stable otherwise).
+  W.pickWordlists = function (task, stackTags) {
+    stackTags = (stackTags || []).map(function (t) { return String(t).toLowerCase(); });
+    var items = W.WORDLISTS.filter(function (w) { return w.task === task; });
+    return items.map(function (w, i) {
+      var match = w.tags.some(function (tg) { return stackTags.indexOf(tg) >= 0; });
+      return { w: w, i: i, match: match };
+    }).sort(function (a, b) {
+      if (a.match !== b.match) return a.match ? -1 : 1;
+      return a.i - b.i;
+    }).map(function (x) { return Object.assign({ matched: x.match }, x.w); });
+  };
+
+  // A sample command for a task + wordlist, filled with the target when there is one. Presentation only:
+  // these are learning scaffolds, not pack commands.
+  W.wordlistCmd = function (task, path, target, ext) {
+    var tgt = target || '<target>';
+    switch (task) {
+      case 'dirs': return 'gobuster dir -u http://' + tgt + '/ -w ' + path + (ext ? ' -x ' + ext : '') + ' -t 40';
+      case 'files': return 'ffuf -u http://' + tgt + '/FUZZ -w ' + path + (ext ? ' -e ' + ext : '');
+      case 'subdomains': return 'ffuf -u http://' + tgt + '/ -H "Host: FUZZ.' + tgt + '" -w ' + path + ' -fs 0';
+      case 'users': return '# feed as the user list, e.g.  nxc smb ' + tgt + ' -u ' + path + ' -p <password>';
+      case 'passwords': return '# feed as the password list, e.g.  hydra -l <user> -P ' + path + ' ' + tgt + ' http-post-form ...';
+      case 'params': return 'ffuf -u "http://' + tgt + '/page?FUZZ=1" -w ' + path + ' -fs 0';
+      case 'lfi': return 'ffuf -u "http://' + tgt + '/index.php?page=FUZZ" -w ' + path + ' -fr "could not"';
+      case 'api': return 'ffuf -u http://' + tgt + '/api/FUZZ -w ' + path;
+      default: return path;
+    }
+  };
+
   OBOL.workbench = W;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -110,5 +110,17 @@ ok(W.decodeJwt(none).flags.some(function (f) { return /none/.test(f); }), 'alg:n
 ok(W.decodeJwt('not.a.jwt').ok === false, 'garbage JWT reports not ok');
 ok(W.decodeJwt('onlyonepart').ok === false, 'a token without dots is rejected');
 
+// ── wordlist picker ──────────────────────────────────────────────────────────────────────────
+ok(W.WORDLISTS.length >= 15, 'wordlist catalogue is populated (' + W.WORDLISTS.length + ')');
+W.WORDLISTS.forEach(function (w) { ok(w.task && w.name && w.path && w.note && Array.isArray(w.tags), 'wordlist ' + w.name + ' is well formed'); });
+const dirs = W.pickWordlists('dirs', []);
+ok(dirs.length >= 3 && dirs[0].name === 'raft-medium-directories', 'dirs default ranks raft-medium first');
+const dirsIis = W.pickWordlists('dirs', ['iis']);
+ok(dirsIis[0].tags.indexOf('iis') >= 0 && dirsIis[0].matched === true, 'an IIS stack floats the IIS list to the top');
+ok(W.pickWordlists('passwords', [])[0].name === 'rockyou.txt', 'passwords default is rockyou');
+ok(/gobuster dir -u http:\/\/10\.10\.10\.5\//.test(W.wordlistCmd('dirs', '/wl.txt', '10.10.10.5')), 'dirs sample command fills the target');
+ok(W.wordlistCmd('dirs', '/wl.txt').indexOf('<target>') >= 0, 'sample command shows <target> when none is set');
+ok(/-x php/.test(W.wordlistCmd('dirs', '/wl.txt', 't', 'php')), 'an extension is threaded into the dirs command');
+
 console.log(fail ? ('\nWORKBENCH: ' + fail + ' FAILURES') : '\nWORKBENCH: all passed');
 process.exit(fail ? 1 : 0);

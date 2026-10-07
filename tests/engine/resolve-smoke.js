@@ -40,5 +40,21 @@ const r = R.gtfobinsForMove('sudo-abuse', fs);
 ok(r && r.context === 'sudo' && r.items.length === 2, 'sudo-abuse resolves both identified binaries');
 ok(R.gtfobinsForMove('recon-smb-anon', fs) === null, 'a non-GTFOBins move returns null');
 
+// gtfoFunctions: the full per-function listing for the Workbench browser
+const findFns = R.gtfoFunctions('find');
+ok(findFns.known === true && findFns.inlined === true, 'find has inlined functions');
+ok(findFns.functions.some(function (f) { return f.name === 'shell' && f.codes.length; }), 'find lists its shell function with code');
+ok(findFns.functions[0].name === 'shell' || findFns.functions[0].name === 'command', 'functions are ordered shell/command first');
+// a binary present in GTFOBINS_ALL but with no inlined functions (link-only, e.g. an inherit-only entry)
+const linkOnly = (OBOL.GTFOBINS_ALL || []).filter(function (n) { return !(OBOL.GTFOBINS || {})[n]; })[0];
+const loFns = R.gtfoFunctions(linkOnly);
+ok(loFns.known === true && loFns.inlined === false && loFns.functions.length === 0, 'a link-only binary (' + linkOnly + ') is known but not inlined');
+ok(R.gtfoFunctions('definitely-not-a-binary').known === false, 'unknown binary is not known');
+
+// gtfoSuggest: name search, inlined binaries first
+const sug = R.gtfoSuggest('pyth');
+ok(sug.indexOf('python') >= 0, 'suggest finds python for "pyth"');
+ok(R.gtfoSuggest('').length === 0, 'empty query suggests nothing');
+
 console.log(fail ? ('\nRESOLVE: ' + fail + ' FAILURES') : '\nRESOLVE: all passed');
 process.exit(fail ? 1 : 0);

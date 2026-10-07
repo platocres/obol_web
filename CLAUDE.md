@@ -69,7 +69,7 @@ screenshot the changed surface and read it for sense.
   closed loop surfaced in Next Steps. Bundle GTFOBins data (GPL-3.0, attributed) as compact JSON.
 - [x] **P2.** Add `lport` (and a shell-type preference) to engagement params, the context and
   parameter bar, and the command filler.
-- [ ] **P3.** **Workbench**: a new global section (neon glass, sub-tabs), credential and parameter
+- [x] **P3.** **Workbench**: a new global section (neon glass, sub-tabs), credential and parameter
   aware, working standalone with no engagement. Tools: hash identifier, reverse-shell builder
   (including base64 and PowerShell `-EncodedCommand`), encoder or mini CyberChef (base64, url, hex,
   rot, IFS evasion), JWT decoder, wordlist picker, GTFOBins browser.
@@ -96,3 +96,20 @@ Loadout, your installed tools). Easy to rename.
   live lookup box. tools/build-gtfobins.js, tests/engine/resolve-smoke.js. All guardrails green.
 - 2026-10-07: P2, lport is now a persistent param (sidebar field, default 4444, overridable) and the
   command filler pins it, so reverse-shell and listener commands are complete out of the box.
+- 2026-10-07: P3, the Workbench shipped (global route, neon-glass panel, six sub-tabs, lazy-loaded,
+  in the primary nav and the mobile More sheet). Pure engine in assets/engine/workbench.js
+  (tests/engine/workbench-smoke.js). Built across four sub-commits:
+  - P3a: Reverse Shell Builder. Curated OSCP catalogue as {{lhost}}/{{lport}} templates with notes and
+    matching listeners. Base64 runner (Linux) and PowerShell -EncodedCommand (UTF-16LE then base64,
+    byte-exact vs node Buffer). LHOST/LPORT seed from the engagement and save back to the one store.
+  - P3b: Hash Identifier. Deterministic, rule-based. Structured prefixes resolve exactly; bare hex is
+    ranked by OSCP-likelihood (NTLM-first) with alternatives; pwdump lines parse the NT and flag a set
+    LM. Hashcat -m mode + john format + ready crack command per candidate. Auto-fills from captured
+    hash facts (NTLM, krbtgt, AS-REP, TGS). Links to the hashcat wiki and CrackStation.
+  - P3c: Encoder (mini CyberChef) and JWT decoder. Encoder shows every encoding at once plus a gated
+    decode when the input looks encoded. JWT decodes header/payload, flags alg:none, HMAC weak-secret
+    (hashcat -m 16500), RS256->HS256 confusion, and states plainly it is a decode, not a verification.
+  - P3d: GTFOBins browser (reuses OBOL.resolve; gtfoFunctions + gtfoSuggest added) and a stack-aware
+    Wordlist picker (task catalogue, tech-tag ranking, sample commands filled from the target).
+  All guardrails green throughout; every surface driven headless (0 console errors) and
+  screenshot-verified for readability, continuity, and full mobile stacking.
