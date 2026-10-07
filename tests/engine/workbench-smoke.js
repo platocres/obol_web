@@ -2,6 +2,10 @@
  * base64 (round-trips), the PowerShell -EncodedCommand (UTF-16LE then base64), template filling, and
  * that every catalogue entry is well formed. Pure, generic data. */
 'use strict';
+require('../../assets/engine/facts.js');
+require('../../data/findings-catalog.js');
+require('../../data/narratives.js');
+require('../../assets/engine/findings.js');
 require('../../assets/engine/workbench.js');
 const OBOL = globalThis.OBOL, W = OBOL.workbench;
 
@@ -189,6 +193,37 @@ ok(W.sprayPlan({ threshold: 5, passwords: 5 }).ok === false, 'missing window is 
 ok(W.sprayPlan({ threshold: 2, windowMin: 30, passwords: 10, margin: 1 }).warnings.some(function (w) { return /one attempt per window/i.test(w); }), 'one-per-window warns');
 ok(W.fmtDuration(90) === '1h 30m', 'fmtDuration 90 -> 1h 30m');
 ok(W.fmtDuration(45) === '45m', 'fmtDuration 45 -> 45m');
+
+// ── value-aware fact explanation ──────────────────────────────────────────────────────────────
+ok(/Windows Server 2016/.test(W.explainFact({ kind: 'host.os_hint', value: { os: 'Windows Server 2016 Standard 14393' } }).proves), 'os_hint surfaces the real OS string');
+ok(/htb\.local/.test(W.explainFact({ kind: 'ad.domain_known', value: { name: 'htb.local' } }).proves), 'domain fact surfaces the domain name');
+ok(/DC=htb,DC=local/.test(W.explainFact({ kind: 'ad.domain_known', value: { name: 'htb.local' } }).caveat), 'domain fact derives the base DN');
+ok(/445/.test(W.explainFact({ kind: 'port:445', value: { service: 'microsoft-ds' } }).proves), 'port fact names the port');
+ok(/svc-alfresco/.test(W.explainFact({ kind: 'hash.ntlm', value: { user: 'svc-alfresco' } }).proves), 'ntlm fact names the account');
+ok(/pass-the-hash/i.test(W.explainFact({ kind: 'hash.ntlm', value: {} }).caveat), 'ntlm caveat mentions pass-the-hash');
+ok(W.explainFact({ kind: 'some.unknown' }).proves.length > 0, 'unknown kind still falls back to a non-empty explanation');
+
+// ── output signal scan ────────────────────────────────────────────────────────────────────────
+const nxcLine = 'SMB  10.129.102.107  445  FOREST  [*] Windows Server 2016 Standard 14393 x64 (name:FOREST) (domain:htb.local) (signing:True) (SMBv1:True) (Null Auth:True)\nSMB  10.129.102.107  445  FOREST  [-] Error enumerating shares: STATUS_ACCESS_DENIED';
+const sigs = W.scanSignals(nxcLine);
+const sigIds = sigs.map(function (s) { return s.id; });
+ok(sigIds.indexOf('signon') >= 0, 'scan flags signing:True (no relay here)');
+ok(sigIds.indexOf('smbv1') >= 0, 'scan flags SMBv1 (EternalBlue candidate)');
+ok(sigIds.indexOf('nullauth') >= 0, 'scan flags Null Auth (anonymous enum)');
+ok(sigIds.indexOf('sharesdenied') >= 0, 'scan flags the ACCESS_DENIED on shares');
+ok(sigIds.indexOf('os') >= 0, 'scan surfaces the OS build line');
+ok(sigs.filter(function (s) { return s.id === 'os'; })[0].label.indexOf('Windows Server 2016') >= 0, 'the OS signal label carries the real OS string');
+ok(W.scanSignals('SMB ... (signing:False)').map(function (s) { return s.id; }).indexOf('signoff') >= 0, 'signing:False flags a relay target');
+ok(W.scanSignals('[+] admin (Pwn3d!)').map(function (s) { return s.id; }).indexOf('pwned') >= 0, 'Pwn3d! flags admin access');
+ok(W.scanSignals('nothing interesting here').length === 0, 'plain text yields no false signals');
+
+// ── finding narratives ────────────────────────────────────────────────────────────────────────
+const nfs = new OBOL.facts.FactSet();
+try { nfs.add(OBOL.facts.makeFact({ kind: 'smb.null_session', scope: 'host:1', value: {}, source: 't' })); } catch (e) {}
+const narrs = W.findingNarratives(nfs, { domain: 'htb.local' });
+ok(Array.isArray(narrs), 'findingNarratives returns an array');
+ok(narrs.length === 0 || (narrs[0].title && narrs[0].severity !== undefined), 'each narrative carries a title and severity');
+ok(W.findingNarratives(new OBOL.facts.FactSet()).length === 0, 'no facts yields no narratives');
 
 console.log(fail ? ('\nWORKBENCH: ' + fail + ' FAILURES') : '\nWORKBENCH: all passed');
 process.exit(fail ? 1 : 0);

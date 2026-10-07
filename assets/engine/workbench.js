@@ -680,5 +680,100 @@
     return (h ? h + 'h ' : '') + (m || !h ? m + 'm' : '').trim();
   };
 
+  // ── value-aware fact explanation ────────────────────────────────────────────────────────────
+  // explainKind (above) is a generic per-kind fallback. explainFact reads the fact's ACTUAL value and
+  // says something specific and actionable: the real OS string, the domain and its base DN, which
+  // binary is SUID, whose hash was dumped. This is what keeps Explain Output from reading as boilerplate.
+  function baseDn(d) { return String(d || '').split('.').filter(Boolean).map(function (p) { return 'DC=' + p; }).join(','); }
+  W.explainFact = function (f) {
+    f = f || {}; var k = String(f.kind || ''), v = f.value || {};
+    if (k === 'host.os_hint' || k === 'host.os_family' || k === 'os.windows' || k === 'os.linux') {
+      var os = v.os || v.name || v.family || v.version || '';
+      var fam = /^(windows|linux|unix|macos|bsd)$/i.test(os);  // a bare family word, not a full version string
+      var proves = os ? (fam ? ('The target is a ' + os.charAt(0).toUpperCase() + os.slice(1).toLowerCase() + ' host.') : ('The target is running ' + os + '.')) : 'The target operating system was fingerprinted.';
+      return { proves: proves, caveat: 'Use the version and build to aim patch-level and kernel-LPE checks. This is context, not access.' };
+    }
+    if (k === 'host.hostname') return { proves: 'The host is named ' + (v.name || v.hostname || '(this host)') + '.', caveat: 'A name, not access. On a DC it doubles as the NetBIOS name Kerberos needs.' };
+    if (k === 'host.domain' || k === 'ad.domain_known') {
+      var d = v.name || v.domain || '';
+      return { proves: d ? ('The domain is ' + d + '.') : 'The domain name was confirmed.',
+        caveat: d ? ('Your base DN is ' + baseDn(d) + '. Knowing the domain is not access to it: you still need a credential or a roastable account.') : 'Knowing the domain is not access to it.' };
+    }
+    if (k === 'ad.base_dn') return { proves: 'The LDAP base DN is ' + (v.base_dn || v.basedn || '(derived from the domain)') + '.', caveat: 'Use it to scope ldapsearch and nxc LDAP queries.' };
+    if (k.indexOf('port:') === 0) {
+      var port = k.split(':')[1], svc = v.service || '';
+      return { proves: 'Port ' + port + ' is open' + (svc ? (' (' + svc + ')') : '') + '.', caveat: 'Open is not vulnerable. Fingerprint the version, then decide if it is the way in.' };
+    }
+    if (k.indexOf('service.') === 0) return { proves: 'A ' + k.slice(8).toUpperCase() + ' service is present on the host.', caveat: 'The banner can lie or be out of date. Verify the version before trusting an exploit to it.' };
+    if (k === 'hash.ntlm') return { proves: 'An NTLM hash for ' + (v.user || 'an account') + ' was recovered.', caveat: 'You can pass-the-hash with the NT half directly, no cracking needed. Crack only if you need the cleartext for reuse.' };
+    if (k === 'hash.asrep') return { proves: 'An AS-REP roastable hash' + (v.count ? (' (x' + v.count + ')') : '') + ' was captured.', caveat: 'The account has pre-auth disabled. Crack it offline, hashcat -m 18200 (RC4, fast).' };
+    if (k === 'hash.tgs') return { proves: 'A Kerberoast hash' + (v.count ? (' (x' + v.count + ')') : '') + ' was captured.', caveat: 'Crack it offline, hashcat -m 13100. Service accounts often have weak passwords.' };
+    if (k === 'hash.krbtgt') return { proves: 'The krbtgt account hash was recovered.', caveat: 'This is the golden-ticket key. You effectively own the domain: forge a TGT for any user.' };
+    if (k === 'credential.available') return { proves: (v.user ? (v.user + "'s") : 'A') + ' credential validated against a service, it works here.', caveat: 'It works HERE. Spray it elsewhere carefully (mind the lockout policy); reuse is common but not guaranteed.' };
+    if (k === 'credential.plaintext') return { proves: 'A cleartext password for ' + (v.user || 'an account') + '.', caveat: 'Holding it is not the same as it being valid now. Validate it before you rely on it.' };
+    if (k === 'credential.candidate') return { proves: 'A possible credential' + (v.user ? (' for ' + v.user) : '') + ' was observed.', caveat: 'Unvalidated, a guess until a service accepts it. Do not assume it works.' };
+    if (k === 'privesc.sudo_binary') return { proves: 'You can run ' + (v.bin || 'a binary') + ' via sudo.', caveat: 'Useful only if GTFOBins has an escape for it. Check the GTFOBins tab; many sudo rights are harmless.' };
+    if (k === 'privesc.suid_candidate') return { proves: 'SUID binaries were found: ' + ((v.paths || []).join(', ') || '(see output)') + '.', caveat: 'The stock SUID files are expected. Only a non-standard one is a real lead.' };
+    if (k.indexOf('foothold.') === 0 || k === 'access.shell') return { proves: 'You have code execution or a shell on this host.', caveat: 'A foothold is the start. Stabilize it, orient (id / whoami), then look to escalate.' };
+    if (k === 'access.admin' || k === 'access.system' || k === 'access.root') return { proves: 'You have administrative or root access on this host.', caveat: 'Local admin is not domain admin. Grab the proof, then see what this access unlocks next.' };
+    if (k === 'smb.null_session' || k === 'smb.anonymous') return { proves: 'An anonymous (null) SMB session is allowed.', caveat: 'Enumerate with no credentials: RID cycling, shares, and the password policy.' };
+    if (k.indexOf('smb.') === 0) return { proves: 'SMB revealed this detail.', caveat: 'A readable share or a null session is a lead, not loot. Check what you can actually access.' };
+    if (k === 'ldap.reachable') return { proves: 'LDAP answered, so this is almost certainly a domain controller.', caveat: 'It does not prove you can read anything. Try an anonymous bind next.' };
+    return explainKind(k);
+  };
+
+  // ── output signal scan (the "what stands out" layer) ─────────────────────────────────────────
+  // The parser mints facts, but a lot of the gold is in the raw line itself (signing:True, SMBv1:True,
+  // Null Auth:True, STATUS_ACCESS_DENIED, a Kerberos error). This scans the pasted output for those
+  // high-value signals and, for each, says what it means and the concrete next move. Ordered, deduped.
+  function sig(id, re, tone, label, meaning, next) { return { id: id, re: re, tone: tone, label: label, meaning: meaning, next: next }; }
+  var OUTPUT_SIGNALS = [
+    sig('pwned', /\(Pwn3d!\)|Pwn3d!/, 'win', 'Administrative access (Pwn3d!)', 'This credential is local admin on this host.', 'Dump the local hashes (--sam / --lsa) or get a SYSTEM shell. On a DC, go for the domain (--ntds or DCSync).'),
+    sig('signoff', /signing\s*[:=]\s*False/i, 'win', 'SMB signing is OFF', 'This host accepts a relayed NTLM authentication.', 'Add it to your relay target list and relay a coerced auth here (ntlmrelayx).'),
+    sig('signon', /signing\s*[:=]\s*True/i, 'info', 'SMB signing is required', 'An NTLM relay will not work against this host.', 'Skip the relay here. Crack or pass the hash instead, or relay to a signing-off host.'),
+    sig('smbv1', /SMBv1\s*[:=]\s*True/i, 'warn', 'SMBv1 is enabled', 'Legacy SMBv1 often means an unpatched host.', 'Check MS17-010 (EternalBlue) if it is in scope.'),
+    sig('nullauth', /Null\s*Auth\s*[:=]\s*True/i, 'win', 'Anonymous (null) SMB auth is allowed', 'You can talk to SMB with no credentials.', 'RID-cycle for users, list shares, and read the password policy, all unauthenticated.'),
+    sig('sharesdenied', /enumerating shares:\s*STATUS_ACCESS_DENIED/i, 'info', 'Shares could not be listed (ACCESS_DENIED)', 'The session connected but is too limited to list shares.', 'Try RID or LDAP enumeration anonymously, or come back with a credential.'),
+    sig('logonfail', /STATUS_LOGON_FAILURE/i, 'warn', 'The credential was rejected (LOGON_FAILURE)', 'Wrong password, or the account is not valid on this host.', 'Re-check the username, the domain, and whether it is a local vs domain account.'),
+    sig('locked', /STATUS_ACCOUNT_LOCKED_OUT|account (?:is |has been )?locked/i, 'warn', 'An account is locked out', 'A spray or brute crossed the lockout threshold.', 'Stop. Read the lockout policy and wait out the window (use the Spray Planner).'),
+    sig('pwexpired', /STATUS_PASSWORD_EXPIRED|STATUS_PASSWORD_MUST_CHANGE/i, 'info', 'The password is expired', 'The credential is valid but must be changed before use.', 'Change it over SMB (the account-password-change move) and keep going.'),
+    sig('asrep', /\$krb5asrep\$/, 'win', 'An AS-REP hash was captured', 'An account with Kerberos pre-auth disabled was roasted.', 'Crack it offline (hashcat -m 18200). Confirm the mode in Hash ID.'),
+    sig('tgs', /\$krb5tgs\$/, 'win', 'A Kerberoast hash was captured', 'A service account ticket was roasted.', 'Crack it offline (hashcat -m 13100).'),
+    sig('ntds', /[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::/, 'win', 'NTLM hashes were dumped', 'Accounts are in pwdump form (user:rid:lm:nt:::).', 'Pass-the-hash with the NT half, or crack it. Identify it in Hash ID.'),
+    sig('vuln', /\bVULNERABLE\b/, 'win', 'A check reported VULNERABLE', 'An NSE script or scanner flagged a known weakness.', 'Verify it yourself before trusting it, then line up the matching exploit.'),
+    sig('skew', /KRB_AP_ERR_SKEW|clock skew too great/i, 'warn', 'Kerberos clock skew', 'Your clock is too far from the DC for Kerberos.', 'Sync to the DC and retry (fix-clock-skew).'),
+    sig('spnunknown', /KDC_ERR_S_PRINCIPAL_UNKNOWN|PRINCIPAL_UNKNOWN/i, 'warn', 'Kerberos principal unknown', 'The SPN or name is wrong, or you used an IP.', 'Use the exact FQDN or SPN, not an IP (kerberos-spn-fix).'),
+    sig('os', /(Windows(?:\s+Server)?\s+\d{4}[^)\n]*?\b\d{4,5}\b)/i, 'info', null, 'The exact OS and build date the host.', 'Note the build for patch-level and kernel-LPE triage.'),
+  ];
+  W.scanSignals = function (text) {
+    text = String(text == null ? '' : text);
+    var out = [], seen = {};
+    for (var i = 0; i < OUTPUT_SIGNALS.length; i++) {
+      var s = OUTPUT_SIGNALS[i], m = text.match(s.re);
+      if (m && !seen[s.id]) { seen[s.id] = 1; out.push({ id: s.id, tone: s.tone, label: s.label || m[1] || m[0], meaning: s.meaning, next: s.next }); }
+    }
+    return out;
+  };
+
+  // ── finding narratives (what the facts add up to) ────────────────────────────────────────────
+  // Reuse the real findings engine (OBOL.findings.assess) + the technique narratives + the catalog so a
+  // paste or a run turns into "here is what you found, why it matters, and what to do," not just a fact.
+  W.findingNarratives = function (factset, opts) {
+    opts = opts || {};
+    if (!(OBOL.findings && OBOL.findings.assess)) return [];
+    var matched;
+    try { matched = OBOL.findings.assess(factset) || []; } catch (e) { return []; }
+    var domain = opts.domain || '';
+    function fill(s) { return String(s || '').replace(/\{\{domain\}\}/g, domain || 'the domain'); }
+    return matched.map(function (m) {
+      var narr = (OBOL.narratives || {})[m.key] || {};
+      return {
+        key: m.key, title: m.title || m.key, severity: String(m.severity || '').toLowerCase(), category: m.category || '',
+        triggers: m.trigger_kinds || [],
+        means: fill(narr.explanation || ''), impact: fill(narr.impact || ''), remediation: m.remediation || '',
+      };
+    });
+  };
+
   OBOL.workbench = W;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

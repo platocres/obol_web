@@ -434,38 +434,81 @@
       + '</div>';
   }
 
-  // Explain This Output (parser annotate mode).
+  // Explain This Output. Paste a whole terminal block (prompt, command and output together, like the
+  // Evidence route); obol derives the command itself. Three layers: the high-value signals that stand
+  // out of the raw lines, the facts the engine records, and what it all adds up to.
+  var SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+  function findingNarrativesFor(facts, domain) {
+    try {
+      if (!OBOL.facts || !OBOL.facts.FactSet || !W().findingNarratives) return [];
+      var fs = new OBOL.facts.FactSet(facts || []);
+      var ns = W().findingNarratives(fs, { domain: domain }) || [];
+      return ns.sort(function (a, b) { return (SEV_RANK[a.severity] == null ? 5 : SEV_RANK[a.severity]) - (SEV_RANK[b.severity] == null ? 5 : SEV_RANK[b.severity]); });
+    } catch (e) { return []; }
+  }
   function explainOutHtml(text, facts) {
     var wb = W();
-    if (!facts || !facts.length) {
-      return '<p class="wb-note">obol did not mint any facts from that. Either it is not output from a tool obol parses, or the command line that produced it would help routing. Add the command above and try again. This is honest: if the engine would record nothing, there is nothing to annotate.</p>';
+    var signals = wb.scanSignals(text);
+    if ((!facts || !facts.length) && !signals.length) {
+      return '<p class="wb-note">obol did not recognize anything in that. Either it is not output from a tool obol parses, or it is too fragmentary to route. Paste the whole block, including the command line you ran, and try again. This is honest: if the engine would record nothing, there is nothing to explain.</p>';
     }
-    var ann = wb.annotateOutput(text, facts);
-    var src = '<div class="wb-ex-src" role="img" aria-label="Your output with the fact-producing lines highlighted">'
-      + ann.lines.map(function (ln) {
-          var hit = ln.factIdxs.length;
-          var badge = hit ? '<span class="wb-ex-badge">' + esc(ln.factIdxs.map(function (i) { return '#' + (i + 1); }).join(' ')) + '</span>' : '';
-          return '<div class="wb-ex-line' + (hit ? ' hit' : '') + '">' + badge + '<code>' + esc(ln.text || ' ') + '</code></div>';
-        }).join('') + '</div>';
-    var cards = ann.facts.map(function (a) {
-      var from = a.lineNos.length
-        ? 'From line' + (a.lineNos.length > 1 ? 's' : '') + ' ' + a.lineNos.map(function (n) { return n + 1; }).join(', ')
-        : 'Derived (no single line)';
-      return '<div class="wb-ex-fact"><div class="wb-ex-fh"><span class="wb-ex-num">#' + (a.index + 1) + '</span>'
-        + '<code>' + esc(a.kind) + '</code><span class="wb-ex-from">' + esc(from) + '</span></div>'
-        + '<p class="wb-ex-proves"><strong>Proves:</strong> ' + esc(a.explain.proves) + '</p>'
-        + '<p class="wb-ex-caveat"><strong>Does Not Prove:</strong> ' + esc(a.explain.caveat) + '</p></div>';
-    }).join('');
-    return '<div class="wb-field-l">Your Output (' + facts.length + ' fact' + (facts.length === 1 ? '' : 's') + ' minted)</div>' + src
-      + '<div class="wb-field-l">What obol Learned</div><div class="wb-ex-facts">' + cards + '</div>';
+    var html = '';
+
+    // 1. Signals: what stands out of the raw lines, with the concrete next move.
+    if (signals.length) {
+      html += '<div class="wb-field-l">What Stands Out</div><div class="wb-sig-list">'
+        + signals.map(function (s) {
+            return '<div class="wb-sig wb-sig-' + esc(s.tone) + '">'
+              + '<div class="wb-sig-label">' + esc(s.label) + '</div>'
+              + '<p class="wb-sig-mean">' + esc(s.meaning) + '</p>'
+              + '<p class="wb-sig-next"><span class="wb-sig-next-l">Do next</span> ' + esc(s.next) + '</p></div>';
+          }).join('') + '</div>';
+    }
+
+    // 2. The facts obol recorded, value-aware, with the line highlighting.
+    if (facts && facts.length) {
+      var ann = wb.annotateOutput(text, facts);
+      var src = '<div class="wb-ex-src" role="img" aria-label="Your output with the fact-producing lines highlighted">'
+        + ann.lines.map(function (ln) {
+            var hit = ln.factIdxs.length;
+            var badge = hit ? '<span class="wb-ex-badge">' + esc(ln.factIdxs.map(function (i) { return '#' + (i + 1); }).join(' ')) + '</span>' : '';
+            return '<div class="wb-ex-line' + (hit ? ' hit' : '') + '">' + badge + '<code>' + esc(ln.text || ' ') + '</code></div>';
+          }).join('') + '</div>';
+      var cards = facts.map(function (f, i) {
+        var a = ann.facts[i] || { lineNos: [] };
+        var ex = wb.explainFact(f);
+        var from = a.lineNos.length
+          ? 'From line' + (a.lineNos.length > 1 ? 's' : '') + ' ' + a.lineNos.map(function (n) { return n + 1; }).join(', ')
+          : 'Derived';
+        return '<div class="wb-ex-fact"><div class="wb-ex-fh"><span class="wb-ex-num">#' + (i + 1) + '</span>'
+          + '<code>' + esc(f.kind) + '</code><span class="wb-ex-from">' + esc(from) + '</span></div>'
+          + '<p class="wb-ex-proves"><strong>Proves:</strong> ' + esc(ex.proves) + '</p>'
+          + '<p class="wb-ex-caveat"><strong>Does Not Prove:</strong> ' + esc(ex.caveat) + '</p></div>';
+      }).join('');
+      html += '<div class="wb-field-l">What obol Recorded (' + facts.length + ' fact' + (facts.length === 1 ? '' : 's') + ')</div>' + src
+        + '<div class="wb-ex-facts">' + cards + '</div>';
+    }
+
+    // 3. What it adds up to: real findings from the facts (reuses the findings engine + narratives).
+    var dom = activeParams().domain || '';
+    var narrs = findingNarrativesFor(facts, dom);
+    if (narrs.length) {
+      html += '<div class="wb-field-l">What This Adds Up To</div><div class="wb-nar-list">'
+        + narrs.map(function (n) {
+            return '<div class="wb-nar"><div class="wb-nar-head"><span class="wb-sev wb-sev-' + esc(n.severity || 'info') + '">' + esc((n.severity || 'info').toUpperCase()) + '</span>'
+              + '<span class="wb-nar-title">' + esc(n.title) + '</span></div>'
+              + (n.means ? '<p class="wb-nar-means">' + esc(n.means) + '</p>' : '')
+              + (n.impact ? '<p class="wb-nar-impact"><strong>Why it matters:</strong> ' + esc(n.impact) + '</p>' : '')
+              + '</div>';
+          }).join('') + '</div>';
+    }
+    return html;
   }
   function explainPanel() {
     return '<div class="wb-panel wb-explain">'
-      + '<p class="wb-linked">Paste tool output and obol shows which lines mint which facts, what each one proves in plain language, and what it does not. It annotates the real facts the engine would record, it never invents one.</p>'
-      + '<div class="wb-field-l">Command (Optional, Helps Routing)</div>'
-      + '<input id="wb-ex-cmd" class="wb-input" type="text" placeholder="e.g. nmap -sC -sV 10.10.10.5" autocomplete="off" spellcheck="false">'
-      + '<div class="wb-field-l">Output</div>'
-      + '<textarea id="wb-ex-in" class="wb-textarea" rows="8" placeholder="Paste the tool output here" autocomplete="off" spellcheck="false"></textarea>'
+      + '<p class="wb-linked">Paste a whole terminal block, the command and its output together, and obol reads it the way the Evidence route does: it flags what stands out and the next move, records the facts, and says what it adds up to. It explains the real output, it never invents a result.</p>'
+      + '<div class="wb-field-l">Paste The Command And Its Output</div>'
+      + '<textarea id="wb-ex-in" class="wb-textarea" rows="9" placeholder="Paste here, for example:\n$ nxc smb 10.10.10.5 -u svc -p pass --shares\nSMB  10.10.10.5  445  DC01  [*] Windows Server 2019 ... (signing:True) (SMBv1:False)" autocomplete="off" spellcheck="false"></textarea>'
       + '<button id="wb-ex-go" class="wb-go" type="button">Explain This Output</button>'
       + '<div id="wb-ex-out" class="wb-ex-out"></div></div>';
   }
@@ -529,14 +572,29 @@
     }
     var wb = W();
     var rows = fresh.map(function (f) {
-      var ex = wb.explainKind(f.kind);
+      var ex = wb.explainFact(f);
       var when = f.created_at ? new Date(f.created_at).toLocaleTimeString() : '';
       return '<div class="wb-ch-fact"><div class="wb-ch-head"><code>' + esc(f.kind) + '</code>'
         + '<span class="wb-ch-scope">' + esc(f.scope || '') + '</span>'
         + (when ? '<span class="wb-ch-when">' + esc(when) + '</span>' : '') + '</div>'
         + '<p class="wb-ex-proves"><strong>Proves:</strong> ' + esc(ex.proves) + '</p></div>';
     }).join('');
-    return header + '<div class="wb-field-l">' + fresh.length + ' New</div><div class="wb-ch-list">' + rows + '</div>' + btn;
+    // What the new evidence unlocks: run the findings engine over EVERYTHING proven, then keep the
+    // findings whose triggers the fresh facts touched, so this reads as "what you just opened up."
+    var unlocked = '';
+    var freshKinds = {}; fresh.forEach(function (f) { freshKinds[f.kind] = 1; });
+    var narrs = findingNarrativesFor(all, (OBOL.store.active().params || {}).domain || '')
+      .filter(function (n) { return (n.triggers || []).some(function (t) { return freshKinds[t]; }); });
+    if (narrs.length) {
+      unlocked = '<div class="wb-field-l">What This Unlocks</div><div class="wb-nar-list">'
+        + narrs.map(function (n) {
+            return '<div class="wb-nar"><div class="wb-nar-head"><span class="wb-sev wb-sev-' + esc(n.severity || 'info') + '">' + esc((n.severity || 'info').toUpperCase()) + '</span>'
+              + '<span class="wb-nar-title">' + esc(n.title) + '</span></div>'
+              + (n.means ? '<p class="wb-nar-means">' + esc(n.means) + '</p>' : '')
+              + (n.impact ? '<p class="wb-nar-impact"><strong>Why it matters:</strong> ' + esc(n.impact) + '</p>' : '') + '</div>';
+          }).join('') + '</div>';
+    }
+    return header + '<div class="wb-field-l">' + fresh.length + ' New</div><div class="wb-ch-list">' + rows + '</div>' + unlocked + btn;
   }
   function changedPanel() {
     return '<div class="wb-panel wb-changed">'
@@ -686,23 +744,27 @@
     U.on(mount, 'input', '#wb-sqli-vis', sqliRefresh);
     U.on(mount, 'input', '#wb-sqli-table', sqliRefresh);
 
-    // explain output: load the real parser bundle on demand, parse the paste, then annotate it
+    // explain output: derive the command from the paste (like the Evidence route), parse NON-destructively
+    // (never writes to the engagement), then explain. Loads the parser bundle on demand.
     U.on(mount, 'click', '#wb-ex-go', function () {
       var out = document.getElementById('wb-ex-out');
       var inEl = document.getElementById('wb-ex-in');
-      var cmdEl = document.getElementById('wb-ex-cmd');
       var text = inEl ? inEl.value : '';
       if (!text.trim()) { if (out) out.innerHTML = '<p class="wb-note">Paste some output first.</p>'; return; }
-      if (out) out.innerHTML = '<p class="wb-note">Parsing...</p>';
+      if (out) out.innerHTML = '<p class="wb-note">Reading...</p>';
       var done = function () {
-        if (!OBOL.parsers || !OBOL.parsers.analyzeTerminal) { if (out) out.innerHTML = '<p class="wb-note">The parser bundle did not load. Check your connection and try again.</p>'; return; }
+        if (!OBOL.parsers || !OBOL.parsers.parseActionOutput) { if (out) out.innerHTML = '<p class="wb-note">The parser bundle did not load. Check your connection and try again.</p>'; return; }
         var scope = 'host:' + (activeParams().target || 'target');
+        // Recover the command from the paste's own prompt/command line, and widen the dispatch the way
+        // the ingester does, so routing works without a separate command box.
+        var derived = (OBOL.ingest && OBOL.ingest.deriveCommand) ? OBOL.ingest.deriveCommand(text) : '';
+        var dispatch = (OBOL.ingest && OBOL.ingest.dispatchLabel) ? OBOL.ingest.dispatchLabel(derived, text) : derived;
         var res;
-        try { res = OBOL.parsers.analyzeTerminal(text, { command: (cmdEl && cmdEl.value) || '', scope: scope }); }
+        try { res = OBOL.parsers.parseActionOutput({ command: dispatch || derived, stdout: text, source: 'explain', scope: scope, domain: activeParams().domain || '' }); }
         catch (e) { if (out) out.innerHTML = '<p class="wb-note">The parser hit an error on that input.</p>'; return; }
         if (out) out.innerHTML = explainOutHtml(text, (res && res.facts) || []);
       };
-      if (OBOL.parsers && OBOL.parsers.analyzeTerminal) { done(); }
+      if (OBOL.parsers && OBOL.parsers.parseActionOutput) { done(); }
       else if (OBOL.lazy && OBOL.lazy.loadGroup) { OBOL.lazy.loadGroup('parsers').then(done, done); }
       else { done(); }
     });

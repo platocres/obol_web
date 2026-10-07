@@ -3414,3 +3414,27 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-ch-head code { font: 700 12.5px var(--mono); color: var(--accent-2); }
 .wb-ch-scope { font: 11px var(--mono); color: var(--muted); }
 .wb-ch-when { font: 11px var(--mono); color: var(--muted); margin-left: auto; }
+
+/* Workbench Explain Output: signal cards + finding narratives */
+.wb-sig-list { display: flex; flex-direction: column; gap: 9px; margin-bottom: 4px; }
+.wb-sig { border: 1px solid var(--line); border-left: 3px solid var(--muted); border-radius: 9px; padding: 10px 13px; background: var(--bg); }
+.wb-sig-win { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--bg)); }
+.wb-sig-warn { border-left-color: var(--orange); background: color-mix(in srgb, var(--orange) 7%, var(--bg)); }
+.wb-sig-info { border-left-color: var(--accent-2); }
+.wb-sig-label { font: 700 13px var(--sans); color: var(--text); margin-bottom: 4px; }
+.wb-sig-mean { margin: 0 0 5px; font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+.wb-sig-next { margin: 0; font-size: 12.5px; color: var(--text); line-height: 1.5; }
+.wb-sig-next-l { font: 800 9.5px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--accent-2); margin-right: 6px; }
+.wb-sig-warn .wb-sig-next-l { color: var(--orange); }
+
+.wb-nar-list { display: flex; flex-direction: column; gap: 10px; }
+.wb-nar { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; }
+.wb-nar-head { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-bottom: 6px; }
+.wb-nar-title { font: 700 13.5px var(--sans); color: var(--text); }
+.wb-nar-means { margin: 0 0 6px; font-size: 12.5px; color: var(--text-2); line-height: 1.55; }
+.wb-nar-impact { margin: 0; font-size: 12.5px; color: var(--text-2); line-height: 1.55; }
+.wb-nar-impact strong { color: var(--accent-2); }
+.wb-sev { font: 800 9.5px var(--mono); letter-spacing: .04em; border-radius: 4px; padding: 2px 7px; color: #fff; }
+.wb-sev-critical { background: var(--red); } .wb-sev-high { background: var(--orange); }
+.wb-sev-medium { background: var(--yellow); color: #1a1a1a; } .wb-sev-low { background: var(--teal); }
+.wb-sev-info { background: var(--muted); }
