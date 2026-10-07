@@ -15,9 +15,9 @@
  * House style: no em or en dashes; Title Case labels. These are what the USER tells obol, so the UI
  * frames every resulting suggestion as "based on what you told me."
  *
- * COVERAGE NOTE: this is the first authored sample (Recon + Web lanes) for voice sanction. The
- * remaining lanes (SMB/AD, creds, Linux privesc, Windows privesc, database, pivot, ...) are authored
- * in follow-up commits to match the approved voice.
+ * COVERAGE: all lanes authored in the sanctioned voice: Recon, Web, Windows And AD, Credentials,
+ * Access, Linux Privesc, Windows Privesc, Loot, Pivoting. Database presence lives under Recon (the
+ * service-open buttons). New user-assertable kinds are added here as the pack grows.
  */
 (function (root) {
   'use strict';
@@ -76,6 +76,82 @@
     'web.deserial_confirmed': { group: 'Web', label: 'I Confirmed Insecure Deserialization', help: 'The app deserializes data you control.' },
     'web.authz_bypass': { group: 'Web', label: 'I Bypassed Authorization', help: 'You reached something you should not (IDOR, forced browsing, broken access control).' },
     'web.idor_candidate': { group: 'Web', label: 'I Found An IDOR Candidate', help: 'An object id in a request looks like you can swap it for another user.' },
+
+    // ── Windows And Active Directory ─────────────────────────────────────────────────────────────
+    'ad.domain_known': { group: 'Windows And AD', label: 'I Know The Domain Name', help: 'You have the AD domain (for example htb.local), so the LDAP base DN follows.' },
+    'ad.dc_candidate': { group: 'Windows And AD', label: 'I Found The Domain Controller', help: 'You identified a DC to aim enumeration, roasting, and attacks at.' },
+    'ad.user_list': { group: 'Windows And AD', label: 'I Have A List Of Domain Users', help: 'You enumerated usernames, the handoff for password spraying and roasting.' },
+    'smb.null_session': { group: 'Windows And AD', label: 'Anonymous SMB Works (Null Session)', help: 'You can list shares or users with no login at all.' },
+    'smb.guest_session': { group: 'Windows And AD', label: 'Guest SMB Access Works', help: 'The guest account gets you in without a password.' },
+    'smb.shares': { group: 'Windows And AD', label: 'I Can See SMB Shares', help: 'You listed shares and can hunt them for files and credentials.' },
+    'smb.authenticated': { group: 'Windows And AD', label: 'I Can Log In Over SMB', help: 'A credential authenticates to SMB on this host.' },
+    'smb.ms17_010': { group: 'Windows And AD', label: 'SMB Is Vulnerable To MS17-010', help: 'EternalBlue is in play, the vuln scan flagged it.' },
+    'ad.anonymous_bind': { group: 'Windows And AD', label: 'Anonymous LDAP Bind Works', help: 'You can query LDAP without credentials.' },
+    'ad.graph.collected': { group: 'Windows And AD', label: 'I Ran BloodHound', help: 'You collected the graph and can read the attack paths.' },
+    'ad.attack_paths': { group: 'Windows And AD', label: 'I Have Attack Paths To Follow', help: 'BloodHound found a route toward Domain Admin.' },
+    'ad.acl_lead': { group: 'Windows And AD', label: 'I Found A Writable AD Object', help: 'An ACL lets you reset a password, add to a group, or similar.' },
+    'ad.coerced_auth': { group: 'Windows And AD', label: 'I Coerced Authentication', help: 'You forced a machine to authenticate to you, relay or crack it.' },
+    'ad.unconstrained': { group: 'Windows And AD', label: 'I Found Unconstrained Delegation', help: 'A host can be made to cough up other tickets.' },
+    'ad.trusts': { group: 'Windows And AD', label: 'I Found A Domain Trust', help: 'Another domain trusts this one, a path to cross over.' },
+    'ad.zerologon': { group: 'Windows And AD', label: 'The DC Is Vulnerable To Zerologon', help: 'CVE-2020-1472. If you exploit it, remember the mandatory password restore.' },
+    'kerberos.tickets': { group: 'Windows And AD', label: 'I Have Kerberos Tickets', help: 'You hold TGT or TGS tickets you can use or abuse.' },
+    'winrm.authenticated': { group: 'Windows And AD', label: 'I Can Log In Over WinRM', help: 'A credential gets you a PowerShell shell via evil-winrm.' },
+    'rdp.authenticated': { group: 'Windows And AD', label: 'I Can Log In Over RDP', help: 'A credential gets you a Remote Desktop session.' },
+    'snmp.community': { group: 'Windows And AD', label: 'I Found An SNMP Community String', help: 'A community string (often public) opens up an SNMP info dump.' },
+    'dns.zone': { group: 'Windows And AD', label: 'I Pulled A DNS Zone Transfer', help: 'A full zone leaks internal hostnames.' },
+
+    // ── Credentials And Hashes ───────────────────────────────────────────────────────────────────
+    'credential.candidate': { group: 'Credentials', label: 'I Found A Possible Credential', help: 'A username, password, or hash you have not confirmed works yet.' },
+    'credential.available': { group: 'Credentials', label: 'I Have A Credential', help: 'A username with a password or hash in hand.' },
+    'credential.validated': { group: 'Credentials', label: 'My Credential Actually Logs In', help: 'You confirmed it works, by cracking it or by a successful login somewhere.' },
+    'credential.plaintext': { group: 'Credentials', label: 'I Have A Plaintext Password', help: 'A cleartext password, not just a hash.' },
+    'hash.ntlm': { group: 'Credentials', label: 'I Have An NTLM Hash', help: 'You can pass-the-hash or crack it. obol can open Hash ID.' },
+    'credential.ntlm_hash': { group: 'Credentials', label: 'I Have A User NTLM Hash', help: 'An account hash you can relay, pass, or crack.' },
+    'credential.netntlm': { group: 'Credentials', label: 'I Captured A NetNTLM Hash', help: 'From Responder or a relay. Crack it or relay it onward.' },
+    'hash.asrep': { group: 'Credentials', label: 'I Have An AS-REP Hash', help: 'From AS-REP roasting. Crack it with hashcat mode 18200.' },
+    'hash.tgs': { group: 'Credentials', label: 'I Have A Kerberoast (TGS) Hash', help: 'From Kerberoasting a service account. Crack it with hashcat mode 13100.' },
+    'hash.krbtgt': { group: 'Credentials', label: 'I Have The krbtgt Hash', help: 'Golden ticket territory, you can forge any ticket.' },
+    'hash.mscache': { group: 'Credentials', label: 'I Have Cached Domain Creds', help: 'mscache/DCC2 hashes from a logged-on box. Slow to crack, but offline.' },
+    'credential.certificate': { group: 'Credentials', label: 'I Have A Certificate (PFX)', help: 'A client cert you can authenticate with (PKINIT) or turn into a hash.' },
+
+    // ── Access And Shells ────────────────────────────────────────────────────────────────────────
+    'access.shell': { group: 'Access', label: 'I Have A Shell', help: 'Any command execution on the box, however limited.' },
+    'foothold.linux': { group: 'Access', label: 'My Shell Is On Linux', help: 'You landed on a Linux host.' },
+    'foothold.windows': { group: 'Access', label: 'My Shell Is On Windows', help: 'You landed on a Windows host.' },
+    'foothold.webshell': { group: 'Access', label: 'I Have A Web Shell', help: 'Command execution through the web app, time to upgrade it to a real shell.' },
+    'access.admin': { group: 'Access', label: 'I Have Admin Or Root', help: 'Local admin on Windows, or root on Linux. Time to loot and move on.' },
+    'access.system': { group: 'Access', label: 'I Have SYSTEM', help: 'The highest Windows local account.' },
+
+    // ── Linux Privilege Escalation (what your enum found) ────────────────────────────────────────
+    'privesc.sudo_rights': { group: 'Linux Privesc', label: 'I Can Run Something With Sudo', help: 'sudo -l shows allowed commands. Check GTFOBins for an escape.' },
+    'privesc.suid_candidate': { group: 'Linux Privesc', label: 'I Found An Interesting SUID Binary', help: 'A SUID binary that might escape to root. Check GTFOBins.' },
+    'privesc.capability': { group: 'Linux Privesc', label: 'I Found A Dangerous Capability', help: 'A file capability like cap_setuid that grants root.' },
+    'privesc.cron_writable': { group: 'Linux Privesc', label: 'I Found A Writable Cron Job', help: 'A scheduled task you can edit runs as root.' },
+    'privesc.docker_group': { group: 'Linux Privesc', label: 'My User Is In The Docker Group', help: 'Docker group membership is effectively root.' },
+    'privesc.lxd_group': { group: 'Linux Privesc', label: 'My User Is In The LXD Group', help: 'LXD membership mounts the host disk as root.' },
+    'privesc.nfs_no_root_squash': { group: 'Linux Privesc', label: 'There Is An NFS no_root_squash Export', help: 'Mount it and drop a SUID root binary.' },
+    'privesc.passwd_writable': { group: 'Linux Privesc', label: '/etc/passwd Is Writable', help: 'Add a root user with a known password.' },
+    'privesc.stored_credentials': { group: 'Linux Privesc', label: 'I Found Stored Credentials On The Box', help: 'Config files, history, or keys with a reusable secret.' },
+    'privesc.patch_gap': { group: 'Linux Privesc', label: 'The Box Is Missing Patches', help: 'An out of date kernel or package points at a known exploit.' },
+
+    // ── Windows Privilege Escalation (what your enum found) ──────────────────────────────────────
+    'privesc.windows_privilege': { group: 'Windows Privesc', label: 'I Have A Dangerous Token Privilege', help: 'SeImpersonate, SeBackup, and friends. Potato or token abuse territory.' },
+    'privesc.weak_service_permission': { group: 'Windows Privesc', label: 'I Found A Weak Service Permission', help: 'You can reconfigure a service that runs as SYSTEM.' },
+    'privesc.unquoted_service_path': { group: 'Windows Privesc', label: 'I Found An Unquoted Service Path', help: 'A classic path-hijack to SYSTEM.' },
+    'privesc.always_install_elevated': { group: 'Windows Privesc', label: 'AlwaysInstallElevated Is Set', help: 'Any MSI you craft installs as SYSTEM.' },
+    'privesc.scheduled_task': { group: 'Windows Privesc', label: 'I Found A Writable Scheduled Task', help: 'A task you can edit runs with higher privileges.' },
+
+    // ── Loot ─────────────────────────────────────────────────────────────────────────────────────
+    'loot.ntds': { group: 'Loot', label: 'I Dumped NTDS', help: 'Every domain hash. The domain is effectively yours.' },
+    'loot.shadow': { group: 'Loot', label: 'I Have /etc/shadow', help: 'The Linux password hashes, crack them offline.' },
+    'loot.files': { group: 'Loot', label: 'I Found Interesting Files', help: 'Notes, backups, or configs worth reading for secrets.' },
+    'loot.material': { group: 'Loot', label: 'I Found Loot (Keys, Configs)', help: 'SSH keys, config secrets, or tokens you can reuse.' },
+
+    // ── Pivoting (once you are on a box with a second network) ───────────────────────────────────
+    'host.multihomed': { group: 'Pivoting', label: 'The Box Has A Second Network', help: 'Another interface or subnet, your pivot into internal hosts.' },
+    'scan.local.neighbors': { group: 'Pivoting', label: 'I See Internal Hosts From Here', help: 'Other machines are reachable from this foothold.' },
+    'tunnel.socks': { group: 'Pivoting', label: 'I Have A SOCKS Tunnel Up', help: 'Proxy your tools through this box into the internal net.' },
+    'tunnel.route': { group: 'Pivoting', label: 'I Have A Route To The Internal Net', help: 'Traffic to the internal subnet goes through your pivot.' },
   };
 
   OBOL.STUCK_CATALOG = CATALOG;
