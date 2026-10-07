@@ -638,8 +638,9 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "smb.reachable",
-        "port:445"
+        "credential.available",
+        "smb.null_session",
+        "smb.guest_session"
       ],
       "produces": [
         "credential.candidate",

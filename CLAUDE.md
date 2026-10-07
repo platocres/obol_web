@@ -230,10 +230,15 @@ Loadout, your installed tools). Easy to rename.
 
 ---
 
-## Open item to revisit: make ranker tuning measurable before re-architecting it (NOT STARTED)
+## Open item to revisit: make ranker tuning measurable before re-architecting it (SCOREBOARD BUILT)
 
-**Status: agreed, deferred by the owner. Do not start until the owner asks. This section is the full
-brief: a future chat should be able to execute it from here alone.**
+**Status: the scoreboard now EXISTS: `tools/ranker-sim.js` (42 states = 7 archetypes x 6 stages,
+judged against a methodology rubric). The first measured tuning has landed (see the 2026-10-07 A/B
+entry in the Stuck status log): it confirmed the thesis empirically, two of three real issues were
+move-data, only one was a ranking rule, and the fix took the sim from 3 violations to 0 with zero
+test regressions. The probabilistic-rewrite steps below remain deferred and, per the kill criterion,
+look UNNECESSARY so far (the current ranker scores clean on the rubric once move-data is right). Keep
+using ranker-sim.js as the scoreboard for any future tuning. The brief below stays for reference.**
 
 ### The problem (why this exists)
 
@@ -511,3 +516,20 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   calm port-gated refiner (Open Doors visible, Findings collapsed). Engine (SX-A) committed with tests;
   route+CSS driven headless through the full interview to the board at 4K, 1080p, tablet, mobile with 0
   console errors; all guardrails green. The old flat-picker route was replaced.
+- 2026-10-07: RANKING SIMULATOR + first measured A/B tuning. Built tools/ranker-sim.js (the scoreboard
+  from the deferred open item, realized on the Stuck? state-builder): 42 states (7 archetypes incl. a
+  noisy AD box x 6 stages), ranker run over each, top moves judged against a rubric (AD lane leads on an
+  AD box, no brute in the lead, no unguarded version-CVE lead, no premature loot, no privesc before
+  foothold, validate-first, command sanity). Baseline flagged 3 states and reproduced the real-box
+  SSH-over-AD bug. Owner-sanctioned A/B tuning, measured on the sim AND the full ranker test suite:
+  (Fix 1, ranking rule) the earlyRecon recon-first tiebreak in pack.js now lifts ONLY the thorough
+  service scan (produces scan.nmap.version), not every recon-phase move, so per-service recon
+  (ftp/ssh/dns/udp) stops burying the higher-priority AD orient line on multi-service boxes; the noisy
+  AD box now leads ad-dc-identify > ad-anon-ldap-enum > ... and ssh-user-enum fell to #5 on its own.
+  (Fix 2, SSH priority) proven UNNECESSARY by the sim once Fix 1 landed, dropped (no over-tuning).
+  (Fix 3, move-data) gpp-passwords now requires read access to SYSVOL (credential.available OR a proven
+  null/guest SMB session) instead of just smb.reachable, so it stops surfacing as premature loot at
+  recon. Result: sim 3 -> 0 violations, gap-report clean (gpp still reachable), and every engine test,
+  lint, move-lint, coverage, and browser-smoke green (zero regressions). Bundle regenerated, assets
+  stamped. Validates the open-item thesis: 2 of 3 real issues were move-data, 1 was a ranking rule; no
+  ranker rewrite needed.

@@ -897,9 +897,14 @@
       // user dump. It never reaches back to bury a later evidenced step: the AS-REP roast you unlock from a
       // fresh user list is its own batch with no recon move in it, so this is a no-op there. Above score so
       // it actually leads (a pure scan has ~0 goal-progress and would otherwise always lose to a deeper move).
+      // Only the THOROUGH SERVICE SCAN (the move that produces scan.nmap.version) gets the opening
+      // boost, not every recon-phase move. Promoting all recon moves buried higher-priority orient
+      // moves (e.g. confirm the DC) under per-service recon noise (FTP/SSH/DNS/UDP) on multi-service
+      // boxes. With only the service scan lifted, the rest fall to normal score/priority, so the
+      // evidenced orient line leads once the scan itself is in hand. (ranker-sim.js measures this.)
       if (earlyRecon && x.tier === 2 && y.tier === 2) {
-        var xr = P.phaseOfAction(x.a) === 'recon', yr = P.phaseOfAction(y.a) === 'recon';
-        if (xr !== yr) return xr ? -1 : 1;
+        var xs = x.a.produces.indexOf('scan.nmap.version') >= 0, ys = y.a.produces.indexOf('scan.nmap.version') >= 0;
+        if (xs !== ys) return xs ? -1 : 1;
       }
       // Validate before use: while you hold a credential you have not validated yet (a FOUND credential,
       // not a cracked one), the step that CONFIRMS it authenticates leads over the moves that spend it.
