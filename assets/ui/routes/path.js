@@ -434,6 +434,10 @@
     }
     // JWT
     if (/\bjwt\b|json web token/i.test(idt)) add('jwt', 'Decode The JWT');
+    // manual SQL injection: the Workbench builds the payloads step by step
+    if (/sql injection|sqli|sql-inj/i.test(idt)) add('sqli', 'Build The SQLi');
+    // payloads that often need encoding or evasion (LFI/traversal, command injection, XSS)
+    if (/command inj|cmdi|local file inclusion|\blfi\b|traversal|\bxss\b|cross-site script/i.test(idt)) add('encoder', 'Encode A Payload');
     return out.slice(0, 2);
   }
   function nsWorkbench(move) {

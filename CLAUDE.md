@@ -83,8 +83,14 @@ screenshot the changed surface and read it for sense.
   pivot (and obol_local_pivot), creds (and credential_access), shells, cracking, findings_checks.
   Author with the new capabilities baked in. **Field-note coverage is now 100%: all 278 moves and
   all 848 commands across every lane are authored.**
-- [ ] **P8.** Refine pass over recon, linux, and web; stretch sparks (lockout-aware spray planner,
-  report-snippet generator, proof-screenshot helper, "what changed" fact diff).
+- [x] **P8.** Refine pass over recon, linux, and web; stretch sparks (lockout-aware spray planner,
+  report-snippet generator, proof-screenshot helper, "what changed" fact diff). Delivered: the
+  Lockout-Aware Spray Planner and the "What Changed" fact diff (the two the owner prioritized), plus a
+  refine that wires the web lane to the new tools (Build In Workbench chips for Manual SQLi and the
+  Encoder, and note pointers on the SQLi, command-injection and JWT moves). The report-snippet
+  generator and proof-screenshot helper are left as future sparks: the report route already generates
+  OSCP report content, and the flag-capture field notes already drill the proof-screenshot discipline
+  (id and IP in the same frame as the flag).
 
 Naming: the new global section is **Workbench** (distinct from Tools, the command builders, and
 Loadout, your installed tools). Easy to rename.
@@ -155,3 +161,17 @@ Loadout, your installed tools). Easy to rename.
   No payloads authored in the notes; the pack commands own those. tests/engine/field-notes-smoke.js
   updated: with full coverage there is no real un-authored move, so the fallback test now synthesizes
   one. All guardrails green throughout, lint clean, no em or en dashes.
+- 2026-10-07: P8 COMPLETE, and with it the whole build. Two stretch sparks shipped as Workbench tabs:
+  the Lockout-Aware Spray Planner (turns a lockout policy into a safe spray schedule) and What Changed
+  (the fact diff since you last checked, reusing the Explain Output "Proves" lines). The Workbench now
+  carries ten tools. Refine pass: the Build In Workbench classifier now surfaces Manual SQLi on SQLi
+  moves and the Encoder on LFI/command-injection/XSS moves, and the manual-sqli, command-injection and
+  jwt-attacks notes point at the matching tools. Field notes stay 100% (278 moves, 848 commands). All
+  guardrails green end to end; every new surface screenshot-verified with 0 console errors.
+
+  Build summary (PR #302): P0 plan, P1 GTFOBins resolver, P2 lport param, P3 the Workbench (reverse
+  shell with base64 and PowerShell -EncodedCommand, hash identifier, encoder, JWT decoder, GTFOBins
+  browser, wordlist picker), P4 coach-to-Workbench wiring, P5 manual SQLi builder, P6 Explain This
+  Output, P7 field notes to 100% coverage across all fourteen lanes, P8 the spray planner, the fact
+  diff and the web refine. House style held throughout (no em or en dashes, Title Case), every asset
+  stamped, all tests/lint/gap/browser-smoke green.

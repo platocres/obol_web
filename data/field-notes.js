@@ -960,6 +960,7 @@
         mistakes: ['Guessing the column count instead of raising it until the error clears.'] } ],
     'manual-sqli-exploitation': [
       { when: 'After injection is confirmed, when the exam or the box rules out sqlmap.',
+        land: ['Walk it in the Workbench Manual SQLi tab: pick the engine, fill in the column count and visible column as you learn them, and it writes each next payload for you. Exam-legal, because you run every query.'],
         look: ['The highest ORDER BY index that still returns. That number is the column count.'],
         win: 'The column count is pinned down.',
         mistakes: ['Stopping at the first error without noting the last working index.'] },
@@ -1070,6 +1071,7 @@
         mistakes: ['Picking a chain for a library the app does not load.'] } ],
     'jwt-attacks': [
       { when: 'Whenever authentication rides in a JWT (a token in a cookie or Authorization header).',
+        land: ['Paste the token into the Workbench JWT tab: it decodes the header and payload and flags the attack (alg:none, a weak HMAC secret for hashcat -m 16500, RS256-to-HS256 confusion).'],
         look: ['The role or admin claims in the decoded payload, which are what you will forge.'],
         win: 'The token payload decodes and its claims are readable.',
         mistakes: ['Trying to decode the signature; only the payload segment is base64 data.'] },
@@ -1198,14 +1200,15 @@
         win: 'The response lags by the sleep duration.',
         mistakes: ['Concluding no injection from empty output; test timing.'] },
       { when: 'When spaces or keywords are filtered.',
+        land: ['The Workbench Encoder turns a command into the ${IFS} space-evasion form and URL-encodes it in one place, so a space or character filter stops blocking it.'],
         look: ['The file read succeeding despite the filter (the note lists the evasions: ${IFS}, brace expansion, quoting).'],
         win: 'The evasion gets the command through.',
         mistakes: ['Giving up at the first filter; several evasions usually exist.'] },
       { use: ['shell-listener'],
         when: 'After execution is confirmed, to get a shell.',
-        land: ['Run a reverse shell through the injection and catch it on your listener.'],
+        land: ['Build the reverse shell in the Workbench (base64-wrap it if the field mangles characters), run it through the injection, and catch it on your listener.'],
         win: 'Your listener receives a shell.',
-        mistakes: ['Not URL-encoding the special characters, so the payload breaks.'] } ],
+        mistakes: ['Not URL-encoding the special characters, so the payload breaks (the Workbench Encoder does this for you).'] } ],
     'idor': [
       { when: 'Any time an object is fetched by an id you can see (a profile, invoice, file, message).',
         land: ['Use two accounts: capture a request that returns YOUR object, then replay it with the id changed and compare.'],
