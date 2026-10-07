@@ -278,6 +278,12 @@
       "commands": [
         {
           "tool": "nxc",
+          "run": "nxc ldap {{target}} -u '' -p ''",
+          "note": "Switchless probe first: does the DC even accept an anonymous LDAP bind? A [+] line means yes, and nxc prints the domain so you can confirm the target. Only once that is answered do you spend a query dumping the directory. Once an anonymous bind is proven, this probe drops out so you are not re-asking a question you answered.",
+          "settled_by": ["ad.anonymous_bind", "ldap.authenticated"]
+        },
+        {
+          "tool": "nxc",
           "run": "nxc ldap {{target}} -u '' -p '' --users",
           "web": "nxc ldap {{target}} -u '' -p '' --users | tee {{scandir}}/ldap-users.txt",
           "web_note": "tee saves the full dump to scans/ldap-users.txt and still prints it. Paste it back here, obol reads the names and hands you a one-line command to write the tidy loot/users.txt that every AD move ({{userlist}}) reads.",

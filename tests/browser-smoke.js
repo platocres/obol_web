@@ -496,11 +496,22 @@ function serve() {
 
   // Inline free-text token fill: an exec move's {{command}} placeholder gets a text box that
   // substitutes into the shown command (and the copy button) live — no trip to Tools required.
-  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  // An exec move only shows a runnable command once a usable credential (user + secret) resolves. An earlier
+  // step left a passwordless identity pinned (added, activated, then deleted carol) which would gate every
+  // exec command, so clear that pin: with no pinned user the fill adopts the first COMPLETE credential
+  // (alice, who has a password), making the {{command}} exec command runnable. Bounce through another route
+  // so the coach re-renders from the live store (no full reload, so nothing else is disturbed).
+  await page.evaluate(() => { window.OBOL.store.update(function (eng) { eng.params = eng.params || {}; delete eng.params.username; delete eng.params.nthash; delete eng.params.user; delete eng.params.password; }, 'params'); });
+  await page.evaluate(() => window.OBOL.router.go('home'));
+  await page.waitForTimeout(80);
+  await page.evaluate(() => window.OBOL.router.go('path'));
   await page.waitForTimeout(250);
   // the fill box lives in a card body, so open the card holding it first, then type into it.
   const fillCard = page.locator('.ns-card:has(.cmd-fill[data-tok="command"])').first();
   ok(await fillCard.count() >= 1, 'an exec move with a {{command}} placeholder exists on the coach');
+  // The card may sit inside a collapsed section (Coming Up, or the lower-priority "more ready" fold), so
+  // open any ancestor <details> before clicking its title.
+  await fillCard.evaluate((el) => { let d = el.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } el.scrollIntoView(); });
   await fillCard.locator('.ns-title').click();
   await page.waitForTimeout(150);
   const cmdFill = fillCard.locator('.cmd-fill[data-tok="command"]').first();

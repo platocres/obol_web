@@ -161,14 +161,16 @@
     for (var i = 0; i < sb.length; i++) if (facts.has(sb[i])) return true;
     return false;
   }
-  // The default command index for a move at a given locus: among commands matching the locus and not yet
-  // settled, prefer the house toolkit (nxc), then a switchless probe, then earliest pack order. Falls back
-  // to the first locus-matching command (even if settled) so the toggle always has a target.
-  function preferredCommandIndex(move, locus, facts) {
+  // The default command index for a move at a given locus: among commands matching the locus, not yet
+  // settled, and not skipped (skipFn lets the UI exclude commands gated on facts the operator has not
+  // earned yet), prefer the house toolkit (nxc), then a switchless probe, then earliest pack order. Falls
+  // back to the first locus-matching command (even if settled/gated) so the toggle always has a target.
+  function preferredCommandIndex(move, locus, facts, skipFn) {
     var cs = (move && move.commands) || [], best = -1, bestRank = 99, bestProbe = false, i;
     for (i = 0; i < cs.length; i++) {
       if (commandLocus(cs[i]) !== locus) continue;
       if (commandSettled(cs[i], facts)) continue;
+      if (skipFn && skipFn(cs[i], i)) continue;
       var rank = commandToolkitRank(cs[i]), probe = rank === 0 && isSwitchlessProbe(cs[i]);
       if (best === -1 || rank < bestRank || (rank === bestRank && probe && !bestProbe)) {
         best = i; bestRank = rank; bestProbe = probe;
@@ -825,6 +827,14 @@
     pack.forEach(function (a) { a.produces.forEach(function (k) { (producers[k] = producers[k] || []).push(a); }); });
     var rec = v2Recency(facts, opts);
     var d0 = v2GoalDistance(haveObj, producers);
+    // "Orient before exploit" applies only at the OPENING: you have run a port scan but not yet the thorough
+    // service scan, and you hold no foothold or usable credential. In that window a freshly-unlocked recon
+    // move (the service scan that deepens the ports you just found) leads the enumeration it feeds. The
+    // moment the service scan is done (scan.nmap.version), or you are on the box / hold a working credential,
+    // the rule switches off: enumeration and the objective lead, and the optional extras (vuln/UDP/DNS scans)
+    // never bury them. This is the "finish your service scan before you dump" discipline and nothing more.
+    var earlyRecon = !haveObj['credential.available'] && !haveObj['scan.nmap.version'];
+    if (earlyRecon) for (var _fk in haveObj) { if (/^foothold\./.test(_fk) || /^access\.(shell|admin|system|root|desktop)$/.test(_fk)) { earlyRecon = false; break; } }
 
     function onType(a) {
       if (!focus.length) return 0;
@@ -879,6 +889,16 @@
     });
     scored.sort(function (x, y) {
       if (y.tier !== x.tier) return y.tier - x.tier;
+      // Orient before exploit: within a freshly-unlocked batch (tier 2), finish RECON (scan deeper into what
+      // you just found) before spending it on enumeration/exploitation. Scoped to the fresh tier so it only
+      // reorders moves the SAME ingest unlocked, e.g. after a port scan the thorough service scan leads the
+      // user dump. It never reaches back to bury a later evidenced step: the AS-REP roast you unlock from a
+      // fresh user list is its own batch with no recon move in it, so this is a no-op there. Above score so
+      // it actually leads (a pure scan has ~0 goal-progress and would otherwise always lose to a deeper move).
+      if (earlyRecon && x.tier === 2 && y.tier === 2) {
+        var xr = P.phaseOfAction(x.a) === 'recon', yr = P.phaseOfAction(y.a) === 'recon';
+        if (xr !== yr) return xr ? -1 : 1;
+      }
       if (y.score !== x.score) return y.score - x.score;
       if (y.a.priority !== x.a.priority) return y.a.priority - x.a.priority;
       // House toolkit: among moves equal on goal-progress AND hand-tuned priority, prefer the one that uses

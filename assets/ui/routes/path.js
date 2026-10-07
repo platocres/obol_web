@@ -184,11 +184,38 @@
   var nsSel = { id: null, idx: 0, locus: null };
   var NS_INFRA = { 'target.configured': 1, 'host.up': 1, 'ports.open': 1, 'scan.nmap.quick': 1 };
 
-  // The default command for a move at a locus: the house-toolkit (nxc) pick, a switchless probe first, and
-  // never a command already settled by a held fact (so a run-once probe stops being the default). Delegates
-  // to the engine so the coach and any test share one rule.
+  // Tokens that come from an EARNED fact (you discover them on the box): the domain, the base DN, a
+  // credential, a captured hash, the scanned ports. These GATE a command, because until the fact is proven
+  // the command cannot run. Operator config (target, lhost, lport, wordlist) is deliberately NOT here: the
+  // user sets those, so a command that only needs config still shows with its fill box.
+  var GATE_TOKENS = { domain: 1, basedn: 1, dc: 1, dc_netbios: 1, dc_account: 1, user: 1, password: 1,
+    nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, ca_name: 1, template: 1,
+    pfx: 1, nmap_ports: 1, krbtgt_hash: 1 };
+  // Human phrasing for the "unlocks once you have ..." affordance (deduped). user/password both read as
+  // "a credential" so a command needing both reads once.
+  var GATE_LABEL = { domain: 'the domain', basedn: 'the base DN', dc: 'the DC', dc_netbios: 'the DC name',
+    dc_account: 'the DC account', user: 'a credential', password: 'a credential', nthash: 'an NT hash',
+    userlist: 'a user list', hashfile: 'a captured hash', domain_sid: 'the domain SID', group: 'a group',
+    ca_name: 'the CA name', template: 'a cert template', pfx: 'a certificate', nmap_ports: 'a port scan',
+    krbtgt_hash: 'the krbtgt hash', target_sam: 'the SAM' };
+  // A command is GATED when, after filling from the engagement's facts/params, it still carries an unfilled
+  // EARNED token: a value meant to come from a proven fact the operator has not earned yet. Its time has not
+  // come, so the coach hides it rather than showing a dead "Needs: basedn" line, and it reappears, filled,
+  // the moment the fact that feeds it is proven.
+  function cmdUnmetGates(v) {
+    return OBOL.command.unfilledTokens((v && v.filled) || '').filter(function (t) { return GATE_TOKENS[t]; });
+  }
+  function cmdGated(v) { return cmdUnmetGates(v).length > 0; }
+
+  // The default command for a move at a locus: the house-toolkit (nxc) pick, a switchless probe first, never
+  // a command already settled by a held fact, and never one still gated on an unearned fact. Fills the
+  // move's commands so the gate check sees what actually resolved, then delegates the toolkit/probe/settle
+  // ranking to the engine so the coach and any test share one rule.
   function firstCmdIndexForLocus(move, locus, facts) {
-    return OBOL.pack.preferredCommandIndex(move, locus, facts || null);
+    if (!move) return 0;
+    var eng = OBOL.store.active() || {};
+    var filled = OBOL.command.fillAll(move, facts, { params: eng.params || {}, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
+    return OBOL.pack.preferredCommandIndex(move, locus, facts || null, function (cmd, i) { return cmdGated(filled[i]); });
   }
   // "Because <held gate> → expect <first payoff>" — the attack-graph cause/effect in one plain line.
   function nsNarrative(a, facts) {
@@ -209,19 +236,22 @@
   // token-fill / "Needs:" / missing-tool logic from commandsBlock.
   function nsCommandRows(action, filled, selLocus, selIdx, spansBoth, facts) {
     var eng = OBOL.store.active() || {}, acts = eng.activities || [], params = eng.params || {};
-    return (action.commands || []).map(function (cmdObj, i) {
+    var gatedNeeds = {};   // earned-token -> 1, union across all hidden (gated) commands, for the affordance
+    var rows = (action.commands || []).map(function (cmdObj, i) {
       // A command that has done its job drops out: a run-once probe (the switchless null-session check)
       // disappears once the fact it was there to prove is held, so you never re-run a question you answered.
       if (OBOL.pack.commandSettled(cmdObj, facts)) return '';
       var v = filled[i] || {};
+      // A command whose time has not come drops out too: it still needs an EARNED fact (base DN, domain, a
+      // credential) the operator has not proven yet. Collect what it waits on, then hide it; it returns,
+      // filled, once that fact is minted. (Config tokens like lhost are not gates, see GATE_TOKENS.)
+      var gates = cmdUnmetGates(v);
+      if (gates.length) { gates.forEach(function (t) { gatedNeeds[GATE_LABEL[t] || t] = 1; }); return ''; }
       var locus = OBOL.pack.commandLocus(cmdObj);
       var hidden = spansBoth && locus !== selLocus;
       var ran = OBOL.command.commandWasRun(v.run || v.filled, acts, params);
       var unfilled = OBOL.command.unfilledTokens(v.filled || '');
-      var derived = unfilled.filter(function (t) { return DERIVED_TOKENS[t]; });
       var fillable = unfilled.filter(function (t) { return !DERIVED_TOKENS[t]; });
-      var warn = derived.length
-        ? '<div class="cmd-needs">Needs: ' + derived.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(', ') + '</div>' : '';
       var fillRow = fillable.length
         ? '<div class="cmd-fill-row">' + fillable.map(function (t) {
             return '<label class="cmd-fill-lbl"><span>' + esc(FILL_LABEL[t] || t) + '</span>'
@@ -236,8 +266,22 @@
         + '<div class="ns-cmd-line">' + step
         + '<code class="cmd-run-code">' + esc(v.filled || '') + '</code>' + ranTag
         + '<button class="btn-copy ns-cmd-copy" data-copy="' + U.attr(v.filled || '') + '" title="Copy command" aria-label="Copy command">' + OBOL.ic('clip') + '</button></div>'
-        + fillRow + warn + missingToolHint(action, v) + '</div>';
+        + fillRow + missingToolHint(action, v) + '</div>';
     }).join('');
+    // Progressive disclosure: one quiet line for the commands still waiting on a fact, so the user knows
+    // more unlocks here without seeing commands they cannot run yet.
+    var needs = Object.keys(gatedNeeds);
+    if (needs.length) {
+      rows += '<div class="ns-cmd-locked" role="note">' + OBOL.ic('lock')
+        + '<span>More unlocks once you have ' + esc(humanList(needs)) + '.</span></div>';
+    }
+    return rows;
+  }
+  // "a, b and c" from a short list, for the unlocks affordance.
+  function humanList(a) {
+    if (a.length <= 1) return a[0] || '';
+    if (a.length === 2) return a[0] + ' and ' + a[1];
+    return a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
   }
 
   // One ranked card. opts: { rank, selected, suggested }. The expanded body is always in the DOM (shown via
@@ -677,10 +721,26 @@
       var prod = a.produces || [];
       return prod.length > 0 && prod.every(function (k) { return /^advice\./.test(k); });
     }
+    // A move is actionable NOW only if it has a command you can actually run now: one that is neither
+    // settled (already done) nor gated on a fact you have not earned. A move whose every command still
+    // waits on an unearned fact (e.g. a zone transfer that needs the domain) is eligible but not ready, so
+    // it drops to Coming Up until one of its commands unlocks, rather than taking a Ready Now slot with
+    // nothing you can do. A move with no commands at all is left where it is.
+    function hasRunnableCommand(a) {
+      var cmds = a.commands || []; if (!cmds.length) return true;
+      var eng = OBOL.store.active() || {};
+      var filled = OBOL.command.fillAll(a, facts, { params: eng.params || {}, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
+      for (var i = 0; i < cmds.length; i++) {
+        if (OBOL.pack.commandSettled(cmds[i], facts)) continue;
+        if (cmdGated(filled[i])) continue;
+        return true;
+      }
+      return false;
+    }
     ranked.forEach(function (a) {
       if (isCanvasDoctor(a)) return;                                       // doctor → canvas only, never a card
       if (reportOnly(a)) { reportChecks.push(a); return; }                 // writeup check → own group, never headlines
-      if (OBOL.phases.prematurity(a, facts) === 0) onFlow.push(a); else comingUp.push(a);
+      if (OBOL.phases.prematurity(a, facts) === 0 && hasRunnableCommand(a)) onFlow.push(a); else comingUp.push(a);
     });
     var locked = OBOL.pack.lockedActions(facts, pack);
 
@@ -799,11 +859,13 @@
       nsSel.idx = selMove ? firstCmdIndexForLocus(selMove, nsSel.locus, facts) : 0;
     } else {
       if (!nsSel.locus) nsSel.locus = OBOL.pack.defaultCommandLocus(selMove);
-      // Re-point a stale selection: out of range, OR a command that has since settled (a run-once probe
-      // that is now hidden), OR one that no longer matches the active locus. Without this the canvas would
-      // keep showing a command the card no longer offers, and the selected card would show no active row.
+      // Re-point a stale selection: out of range, OR a command that has since settled (a run-once probe now
+      // hidden), OR one still gated on an unearned fact (now hidden), OR one that no longer matches the
+      // active locus. Without this the canvas would keep showing a command the card no longer offers, and
+      // the selected card would show no active row.
       var selCmds = selMove.commands || [], selCur = selCmds[nsSel.idx];
-      if (nsSel.idx >= selCmds.length || OBOL.pack.commandSettled(selCur, facts) || OBOL.pack.commandLocus(selCur) !== nsSel.locus) {
+      var selFilled = OBOL.command.fillAll(selMove, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+      if (nsSel.idx >= selCmds.length || OBOL.pack.commandSettled(selCur, facts) || cmdGated(selFilled[nsSel.idx]) || OBOL.pack.commandLocus(selCur) !== nsSel.locus) {
         nsSel.idx = firstCmdIndexForLocus(selMove, nsSel.locus, facts);
       }
     }

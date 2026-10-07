@@ -3,8 +3,8 @@
   "target": "10.10.10.125",
   "steps": [
     {
-      "after": "nmap: 1433/tcp MSSQL open",
-      "add": ["target.configured", "host.up", "ports.open", "scan.nmap.quick", "port:1433", "service.ms-sql-s"],
+      "after": "nmap -sV: 1433/tcp MSSQL confirmed (service scan done)",
+      "add": ["target.configured", "host.up", "ports.open", "scan.nmap.quick", "scan.nmap.version", "port:1433", "service.ms-sql-s"],
       "top": "mssql-login",
       "present": ["mssql-login"],
       "absentTop": ["mssql-xp-cmdshell"]

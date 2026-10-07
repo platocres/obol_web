@@ -3085,6 +3085,10 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .ns-cmd-ran { flex: none; font: 700 9.5px var(--mono); text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
 .ns-cmd-copy { flex: none; background: transparent; border: 0; color: var(--text-2); cursor: pointer; padding: 2px; display: inline-flex; }
 .ns-cmd-copy .ic { width: 15px; height: 15px; }
+/* Progressive disclosure: commands still waiting on an earned fact are hidden; this one quiet line says so. */
+.ns-cmd-locked { display: flex; align-items: center; gap: 8px; padding: 7px 11px; color: var(--muted);
+  font-size: 12px; border: 1px dashed var(--line); border-radius: 9px; background: color-mix(in srgb, var(--muted) 5%, transparent); }
+.ns-cmd-locked .ic { width: 14px; height: 14px; flex: none; opacity: .8; }
 .ns-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* "Opens Up Next" — the aspirational roadmap */
