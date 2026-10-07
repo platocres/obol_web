@@ -192,6 +192,8 @@
     var value = { user: user, password: password, method: method };
     if (domain) value.domain = domain;
     _add(facts, mkFact('credential.available', C._scope_for_domain(ws, domain), value, S, source));
+    // kerbrute VALID LOGIN already proved this credential against the KDC, so it is validated.
+    _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, via: method || 'valid-login' }, S, source));
   }
   C._add_valid_login_credential = _add_valid_login_credential;
 
@@ -376,6 +378,9 @@
     if (domainName) value.domain = domainName;
     _add(facts, mkFact('credential.available', C._scope_for_domain(ws, domainName), value, S, source));
     _add(facts, mkFact(proto + '.authenticated', 'host:' + ws.target, value, S, source));
+    // A successful authenticated login PROVES the credential works here, so it is validated: any pending
+    // "validate this found credential" step settles once you have actually logged in with it.
+    _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, service: proto }, S, source));
     if (proto === 'winrm') {
       _add(facts, mkFact('winrm.reachable', 'host:' + ws.target, { tool: 'nxc' }, S, source));
       _add(facts, mkFact('foothold.windows', 'host:' + ws.target, value, S, source));
@@ -440,6 +445,8 @@
     if (domain) value.domain = domain;
     _add(facts, mkFact('winrm.authenticated', h, value, S, source));
     _add(facts, mkFact('foothold.windows', h, value, S, source));
+    // An evil-winrm shell proves the credential works here, so it is validated.
+    if (value.user) _add(facts, mkFact('credential.validated', h, { user: value.user, service: 'winrm' }, S, source));
     C._add_os_observation(facts, ws, source, 'windows', 'evil-winrm authenticated shell', 'high', 'evil-winrm', true);
     if (user && (nthash || (password && C._valid_password(password)))) {
       var cred = { user: C._clean_username(user), service: 'winrm', method: nthash ? 'pth' : 'evil-winrm' };

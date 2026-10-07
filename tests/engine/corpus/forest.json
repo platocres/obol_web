@@ -30,7 +30,7 @@
     },
     {
       "after": "cracked svc-alfresco:s3rvice (use the creds → foothold)",
-      "add": ["credential.available"],
+      "add": ["credential.available", "credential.validated"],
       "top": "lateral-exec",
       "present": ["lateral-exec"],
       "absentTop": ["kerberos-tickets", "certifried"]

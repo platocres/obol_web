@@ -29,7 +29,7 @@ const steps = [
   ['recon done, DC found', ['scan.nmap.version', 'ad.dc_candidate', 'ad.domain_known', 'ad.base_dn', 'ldap.reachable', 'smb.reachable', 'kerberos.reachable']],
   ['→ user list',      ['ad.user_list']],
   ['→ AS-REP hash',    ['hash.asrep', 'credential.candidate']],
-  ['→ cracked creds',  ['credential.available']],
+  ['→ cracked creds',  ['credential.available', 'credential.validated']],
   ['→ BH graph/paths', ['ad.graph.collected', 'ad.attack_paths']],
   ['→ control paths',  ['ad.control_paths']],
   ['→ NTDS + krbtgt',  ['loot.ntds', 'hash.krbtgt']],
@@ -71,6 +71,17 @@ steps.forEach((step, i) => {
   if (i >= 1) ok(first !== 'nmap-version-scripts', step[0] + ' → finished recon does not resurface as #1');
   ok(SPECULATIVE.indexOf(first) < 0 || (e.any && e.any.indexOf(first) >= 0), step[0] + ' → a speculative move is not #1');
 });
+
+// Validate before use: a FOUND credential (credential.available, not yet validated) puts the validation
+// step first, ahead of the moves that spend it. A cracked/validated credential (credential.validated held)
+// skips straight to using it — the Forest progression above already covers that (cracked creds -> lateral).
+(function () {
+  function mk(kinds) { return new F.FactSet(kinds.map(function (k) { return F.makeFact({ kind: k, scope: { target: '10.10.10.5' }, source: 't', created_at: T0 }); })); }
+  var found = PK.nextActionsV2(mk(['target.configured', 'host.up', 'smb.reachable', 'host.os_family', 'credential.available']), PACK, {}).map(function (a) { return a.id; });
+  ok(found[0] === 'validate-credential', 'a FOUND credential leads with validate-credential (got ' + found[0] + ')');
+  var proven = PK.nextActionsV2(mk(['target.configured', 'host.up', 'smb.reachable', 'host.os_family', 'credential.available', 'credential.validated']), PACK, {}).map(function (a) { return a.id; });
+  ok(proven.indexOf('validate-credential') < 0, 'a validated credential drops the validate-credential step (not in the ready list)');
+})();
 
 // Determinism: identical fact set ranks identically.
 const a = PK.nextActionsV2(factSetAt(3), PACK, {}).map((x) => x.id);

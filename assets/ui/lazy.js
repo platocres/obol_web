@@ -12,8 +12,8 @@
   var GROUPS = {
     parsers: [
       'assets/engine/parsers/common.js?v=5f51d591',
-      'assets/engine/parsers/nmap.js?v=75385ff0', 'assets/engine/parsers/directory.js?v=1ef96ac3',
-      'assets/engine/parsers/creds.js?v=9553eed9', 'assets/engine/parsers/host.js?v=1ad4ef44',
+      'assets/engine/parsers/nmap.js?v=75385ff0', 'assets/engine/parsers/directory.js?v=3038d5fa',
+      'assets/engine/parsers/creds.js?v=598c8e00', 'assets/engine/parsers/host.js?v=1ad4ef44',
       'assets/engine/parsers/services.js?v=6808bcc2', 'assets/engine/parsers/database.js?v=43266544',
       'assets/engine/parsers/web.js?v=9f318dea', 'assets/engine/parsers/websource.js?v=6d031c9c',
       'assets/engine/parsers/findings.js?v=0c7eb0d6', 'assets/engine/parsers/shape.js?v=aba67dd4',
@@ -28,8 +28,8 @@
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=70b2d005', 'assets/ui/routes/tools.js?v=aff6dc97'],
     loadout: ['assets/engine/arsenal.js?v=9a46d3b8', 'assets/ui/routes/loadout.js?v=f6d299e1'],
     workbench: ['assets/engine/workbench.js?v=f6ee0549', 'assets/ui/routes/workbench.js?v=14aa0928'],
-    study: ['data/study-fixtures.js?v=7af7d7ca', 'assets/engine/study.js?v=5175f80f', 'assets/ui/routes/study.js?v=6030fff7'],
-    decisionmap: ['data/decision-forks.js?v=abde552b', 'data/parser-signatures.js?v=b5ba2cc9', 'data/coverage-expected.js?v=afdb39b5', 'data/flag-reach.js?v=e8d6c84a', 'assets/engine/decisionmap.js?v=8986cb18', 'assets/ui/decisiontree.js?v=b97043a7'],
+    study: ['data/study-fixtures.js?v=7af7d7ca', 'assets/engine/study.js?v=06f4d35c', 'assets/ui/routes/study.js?v=6030fff7'],
+    decisionmap: ['data/decision-forks.js?v=abde552b', 'data/parser-signatures.js?v=7c8e5159', 'data/coverage-expected.js?v=afdb39b5', 'data/flag-reach.js?v=e8d6c84a', 'assets/engine/decisionmap.js?v=8986cb18', 'assets/ui/decisiontree.js?v=b97043a7'],
     checklist: ['assets/ui/routes/checklist.js?v=68b05ed8'],
     target: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/target.js?v=7cff1a86'],
     creds: ['assets/ui/routes/creds.js?v=c8322951'],

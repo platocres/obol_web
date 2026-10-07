@@ -83,12 +83,12 @@
     'cracked': {
       looksFor: "john/hashcat cracked lines — a recovered 'hash:password' pair.",
       regex: '<hash>:<password> (Cracked)',
-      emits: ['credential.available', 'credential.candidate'],
+      emits: ['credential.available', 'credential.candidate', 'credential.validated'],
     },
     'auth-validation': {
       looksFor: "nxc / evil-winrm auth results — the '[+] domain\\\\user:secret (Pwn3d!)' success and the failure lines, over SMB, WinRM, and RDP.",
       regex: '[+] …:… (Pwn3d!)',
-      emits: ['credential.validation', 'credential.available', 'winrm.authenticated', 'rdp.authenticated',
+      emits: ['credential.validation', 'credential.validated', 'credential.available', 'winrm.authenticated', 'rdp.authenticated',
         'smb.authenticated', 'ftp.authenticated', 'ssh.authenticated', 'access.admin'],
     },
     'responder': {

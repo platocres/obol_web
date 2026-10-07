@@ -55,6 +55,10 @@
     var scope = C._scope_for_domain(ws, domainName);
     _add(facts, mkFact('credential.plaintext', scope, value, S, source));
     _add(facts, mkFact('credential.available', scope, value, S, source));
+    // A credential you CRACKED from a hash (john/hashcat) is validated by construction: the crack proved
+    // the plaintext produces that account's own hash, so it needs no "does it work?" probe. Mark it so the
+    // Validate step settles for it. A dumped/found plaintext (mimikatz) is NOT auto-validated.
+    if (method === 'john' || method === 'hashcat') _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, via: method }, S, source));
   }
   C._add_plaintext_credential = _add_plaintext_credential;
 
@@ -137,6 +141,8 @@
       var cred = { user: g.user, password: g.pw, service: g.svc, port: +g.port, via: 'online-brute' };
       _add(facts, mkFact('credential.available', h, cred, S, source));
       _add(facts, mkFact('credential.plaintext', h, cred, S, source));
+      // An online-brute hit already PROVED the login against the live service, so it is validated.
+      _add(facts, mkFact('credential.validated', h, { user: g.user, service: g.svc, via: 'online-brute' }, S, source));
     }
     return n;
   }

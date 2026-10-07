@@ -835,6 +835,8 @@
     // never bury them. This is the "finish your service scan before you dump" discipline and nothing more.
     var earlyRecon = !haveObj['credential.available'] && !haveObj['scan.nmap.version'];
     if (earlyRecon) for (var _fk in haveObj) { if (/^foothold\./.test(_fk) || /^access\.(shell|admin|system|root|desktop)$/.test(_fk)) { earlyRecon = false; break; } }
+    // "Validate before use" is live while you hold a usable credential you have not yet proven works.
+    var validateFirst = !!haveObj['credential.available'] && !haveObj['credential.validated'];
 
     function onType(a) {
       if (!focus.length) return 0;
@@ -898,6 +900,15 @@
       if (earlyRecon && x.tier === 2 && y.tier === 2) {
         var xr = P.phaseOfAction(x.a) === 'recon', yr = P.phaseOfAction(y.a) === 'recon';
         if (xr !== yr) return xr ? -1 : 1;
+      }
+      // Validate before use: while you hold a credential you have not validated yet (a FOUND credential,
+      // not a cracked one), the step that CONFIRMS it authenticates leads over the moves that spend it.
+      // Mirrors the anonymous probe, a cheap check before you commit. The validating move produces
+      // credential.validated and settles the instant it is proven; a cracked / bruteforced / already-logged-in
+      // credential is validated from the start, so this never fires for those (the move is already gone).
+      if (validateFirst) {
+        var xcv = x.a.produces.indexOf('credential.validated') >= 0, ycv = y.a.produces.indexOf('credential.validated') >= 0;
+        if (xcv !== ycv) return xcv ? -1 : 1;
       }
       if (y.score !== x.score) return y.score - x.score;
       if (y.a.priority !== x.a.priority) return y.a.priority - x.a.priority;
