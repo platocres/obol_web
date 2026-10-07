@@ -64,5 +64,26 @@ ok(gk.indexOf('scan.nmap.quick') >= 0 && gk.indexOf('scan.nmap.version') >= 0,
 var empty = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -Pn -p 9999 10.129.95.210', stdout: 'Nmap scan report for 10.129.95.210\nHost is up.\nAll 1 scanned ports are closed\nNmap done', source: 'nmap', scope: 'host:10.129.95.210', domain: '' });
 ok(kindsOf(empty).indexOf('scan.nmap.quick') === -1, 'a scan with no open ports does NOT claim port discovery');
 
+// smb-os-discovery supplies the hostname + domain. In -oX XML (what the browser's DOMParser decodes from
+// the <script output="…"> attribute) these lines have NO leading "| " pipe, just indentation, so the
+// hostname/domain/FQDN regexes must match the un-piped form too. Regression for a Forest scan where the
+// host and domain read "not captured yet" because only the piped text form matched.
+var smbOsNoPipe = [
+  'Nmap scan report for 10.129.102.107', 'Host is up.',
+  'PORT    STATE SERVICE', '445/tcp open  microsoft-ds',
+  'Host script results:',
+  '  OS: Windows Server 2016 Standard 14393',
+  '  Computer name: FOREST',
+  '  Domain name: htb.local',
+  '  FQDN: FOREST.htb.local',
+  'Nmap done',
+].join('\n');
+var smbRes = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -sC -sV 10.129.102.107', stdout: smbOsNoPipe, source: 'nmap', scope: 'host:10.129.102.107', domain: '' });
+var smbFacts = smbRes.facts || [];
+function fv(kind) { var f = smbFacts.filter(function (x) { return x.kind === kind; })[0]; return f ? f.value : null; }
+ok(fv('host.hostname') && fv('host.hostname').name === 'FOREST', 'un-piped "Computer name: FOREST" mints host.hostname (XML smb-os-discovery)');
+ok(fv('host.domain') && fv('host.domain').domain === 'htb.local', 'un-piped "Domain name: htb.local" mints host.domain');
+ok(fv('ad.domain_known') && fv('ad.domain_known').name === 'htb.local', 'the domain also mints ad.domain_known (base DN derivable)');
+
 console.log(fail ? ('\nNMAP MARKERS: ' + fail + ' FAILURES') : '\nNMAP MARKERS: all passed');
 process.exit(fail ? 1 : 0);

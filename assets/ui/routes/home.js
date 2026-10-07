@@ -388,8 +388,11 @@
     return v.os || v.name || v.family || '';
   }
   function hostDomain(f) {
+    // ad.domain_known carries the domain under `name`; host.domain under `domain`. Check both, and since
+    // ad.domain_known is found first, missing `name` here left the card domain blank while the target page
+    // (which reads name) showed it.
     var v = fval(f, 'ad.domain_known') || fval(f, 'host.domain') || fval(f, 'ad.dc_candidate') || {};
-    return (v && (v.domain || v.fqdn || v.dns_domain)) || '';
+    return (v && (v.domain || v.name || v.fqdn || v.dns_domain)) || '';
   }
   function hostServices(f) {
     var out = [], seen = {};
