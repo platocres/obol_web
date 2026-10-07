@@ -423,8 +423,11 @@
     if (move.id === 'sudo-abuse' || move.id === 'suid-gtfobins' || /gtfobins/i.test(idt)) {
       add('gtfobins', 'Open GTFOBins Browser');
     }
-    // content discovery / vhosts
-    if (WB_DIR_TOOLS[Object.keys(tools).filter(function (k) { return WB_DIR_TOOLS[k]; })[0]] || /content|director|fuzz|discovery|vhost/i.test(idt)) {
+    // WEB content discovery / vhosts only. Gate on the actual tools (gobuster/ffuf/feroxbuster/dirb/
+    // wfuzz), or a title that is unambiguously about web fuzzing. NOT a bare "discovery" (that matched
+    // "Nmap Fast TCP Open-Port Discovery" and wrongly offered a wordlist on the first scan).
+    var usesDirTool = Object.keys(tools).some(function (k) { return WB_DIR_TOOLS[k]; });
+    if (usesDirTool || /content discovery|directory brute|directory fuzz|web.?fuzz|virtual host|vhost|subdomain enum/i.test(idt)) {
       var wlTask = /vhost|virtual host|subdomain/i.test(idt) ? 'subdomains' : 'dirs';
       add('wordlists/' + wlTask, 'Pick A Wordlist');
     }

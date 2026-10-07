@@ -45,6 +45,7 @@ ok(hasKind('sudo -l', 'sudo: no tty present and no askpass program specified', '
 ok(hasKind('powershell iex ...', 'At line:1 : This script contains malicious content and has been blocked by your antivirus software', 'blocker.amsi'), 'AMSI block → blocker.amsi');
 ok(hasKind('JuicyPotato.exe', '[-] CreateProcessWithTokenW failed: the handle is invalid', 'blocker.potato'), 'potato failure → blocker.potato');
 ok(hasKind('ffuf -u http://t/FUZZ', ':: Progress ... 429 Too Many Requests', 'blocker.rate_limited'), '429 → blocker.rate_limited');
+ok(!hasKind('nmap -Pn -p- --min-rate 5000 10.10.10.10', 'Some closed ports may be reported as filtered due to --defeat-rst-ratelimit', 'blocker.rate_limited'), 'nmap --defeat-rst-ratelimit must NOT raise blocker.rate_limited');
 ok(hasKind('curl https://t:80/', 'curl: (35) error:0A00010B:SSL routines::wrong version number', 'blocker.tls_scheme'), 'wrong-version-number → blocker.tls_scheme');
 ok(hasKind('hashcat -m 1000 h.txt rockyou', 'Token length exception\nNo hashes loaded.', 'blocker.hash_format'), 'hashcat token-length/no-hashes → blocker.hash_format');
 ok(hasKind('nc -nv 10.10.14.9 4444', 'nc: connect to 10.10.14.9 port 4444 (tcp) failed: Connection refused', 'blocker.egress_blocked'), 'nc connection refused → blocker.egress_blocked');

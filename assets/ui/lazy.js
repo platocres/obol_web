@@ -18,7 +18,7 @@
       'assets/engine/parsers/web.js?v=9f318dea', 'assets/engine/parsers/websource.js?v=6d031c9c',
       'assets/engine/parsers/findings.js?v=0c7eb0d6', 'assets/engine/parsers/shape.js?v=aba67dd4',
       'assets/engine/parsers/pivot.js?v=0f65c48f', 'assets/engine/parsers/dns.js?v=90a12620',
-      'assets/engine/parsers/blockers.js?v=321fdfca',
+      'assets/engine/parsers/blockers.js?v=ef350845',
       'assets/engine/parsers/nxc-catalog.js?v=48cfcc8d',
       'assets/engine/parsers/index.js?v=bf724090',
     ],

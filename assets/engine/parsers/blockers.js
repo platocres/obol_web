@@ -30,8 +30,10 @@
     { kind: 'blocker.amsi', re: /This script contains malicious content and has been blocked|contains a virus or potentially unwanted software|Operation did not complete successfully because the file contains a virus|AMSI_RESULT_DETECTED|failed with error code 0x80508023/i },
     // SeImpersonate potato that picked the wrong technique for the Windows build.
     { kind: 'blocker.potato', re: /CoGetInstanceFromIStorage|RpcServerRegisterIf.*failed|the handle is invalid|CreateProcessAsUser.*(?:failed|1314)|BITS.*(?:not|disabled)|potato.*fail/i },
-    // web fuzzing throttled by a WAF / rate limiter.
-    { kind: 'blocker.rate_limited', re: /\b429\b\s*(?:Too Many Requests)?|Too Many Requests|rate.?limit(?:ed|ing)?|temporarily blocked|request(?:s)? (?:have been )?throttled/i },
+    // web fuzzing throttled by a WAF / rate limiter. The separator before "limit" must be a space or a
+    // hyphen ("rate limited", "rate-limiting"), NOT nothing: "ratelimit" with no separator is nmap's own
+    // --defeat-rst-ratelimit flag line, which is informational and must never raise this blocker.
+    { kind: 'blocker.rate_limited', re: /\b429\b\s*(?:Too Many Requests)?|Too Many Requests|rate[ -]limit(?:ed|ing)?|temporarily blocked|request(?:s)? (?:have been )?throttled/i },
     // http vs https mismatch: curl/tooling hitting the wrong scheme.
     { kind: 'blocker.tls_scheme', re: /SSL.*WRONG_VERSION_NUMBER|wrong version number|record layer failure|sslv3 alert handshake failure|routines::?(?:unexpected eof|wrong version)/i },
     // hashcat/john refusing the hash: wrong mode, a username: prefix left on, or CRLF in the hash file.
