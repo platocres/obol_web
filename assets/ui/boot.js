@@ -15,6 +15,7 @@
     { key: 'password', label: 'Password', ph: '', secret: true },
     { key: 'nthash', label: 'NT hash', ph: '', secret: true },
     { key: 'lhost', label: 'LHOST', ph: '10.10.14.2' },
+    { key: 'lport', label: 'LPORT', ph: '4444' },
   ];
 
   function esc(s) { return U.esc(s); }

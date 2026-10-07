@@ -88,7 +88,7 @@
   // Tokens that come from proven facts, the engagement params, or the workspace — the operator fills
   // these on the sidebar or by pasting evidence, so they stay a "needs:" hint, not a text box.
   var DERIVED_TOKENS = {
-    target: 1, domain: 1, basedn: 1, dc: 1, user: 1, password: 1, nthash: 1, lhost: 1,
+    target: 1, domain: 1, basedn: 1, dc: 1, user: 1, password: 1, nthash: 1, lhost: 1, lport: 1,
     userlist: 1, hashfile: 1, wordlist: 1, dc_netbios: 1, dc_account: 1, domain_sid: 1,
     target_sam: 1, group: 1, ca_name: 1, template: 1, pfx: 1, nmap_ports: 1, krbtgt_hash: 1,
   };

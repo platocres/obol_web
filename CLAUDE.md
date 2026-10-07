@@ -67,7 +67,7 @@ screenshot the changed surface and read it for sense.
 - [x] **P0.** This plan in CLAUDE.md plus task tracking.
 - [x] **P1.** Reference resolver engine (`fact -> exact, pre-filled knowledge`) plus the GTFOBins
   closed loop surfaced in Next Steps. Bundle GTFOBins data (GPL-3.0, attributed) as compact JSON.
-- [ ] **P2.** Add `lport` (and a shell-type preference) to engagement params, the context and
+- [x] **P2.** Add `lport` (and a shell-type preference) to engagement params, the context and
   parameter bar, and the command filler.
 - [ ] **P3.** **Workbench**: a new global section (neon glass, sub-tabs), credential and parameter
   aware, working standalone with no engagement. Tools: hash identifier, reverse-shell builder
@@ -94,3 +94,5 @@ Loadout, your installed tools). Easy to rename.
 - 2026-10-07: P1, GTFOBins resolver. Bundled 477 binaries (data/gtfobins.js, GPL-3.0),
   OBOL.resolve engine, exact sudo/SUID escape surfaced in Next Steps for the parsed binary, plus a
   live lookup box. tools/build-gtfobins.js, tests/engine/resolve-smoke.js. All guardrails green.
+- 2026-10-07: P2, lport is now a persistent param (sidebar field, default 4444, overridable) and the
+  command filler pins it, so reverse-shell and listener commands are complete out of the box.

@@ -103,6 +103,12 @@
       var lo = firstVal(facts, 'listener.open');
       if (lo && lo.lhost) ctx.lhost = lo.lhost;
     }
+    // lport: params-pinned (set in the sidebar), else a listener fact, else the 4444 convention so a
+    // reverse-shell / listener command is complete out of the box. The operator can change it anywhere.
+    if (!ctx.lport) {
+      var lop = firstVal(facts, 'listener.open');
+      ctx.lport = (lop && lop.lport) || params.lport || '4444';
+    }
     // iface: the operator's attacker interface (responder -I, mitm6 -i, …). Pinned from the engagement's
     // configured VM interface, defaulting to tun0 — the VPN adapter for HTB/OSCP-style labs.
     if (!ctx.iface) ctx.iface = params.lhost_iface || 'tun0';
