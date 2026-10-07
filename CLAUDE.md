@@ -65,7 +65,7 @@ screenshot the changed surface and read it for sense.
 ### Phases (check off as completed)
 
 - [x] **P0.** This plan in CLAUDE.md plus task tracking.
-- [ ] **P1.** Reference resolver engine (`fact -> exact, pre-filled knowledge`) plus the GTFOBins
+- [x] **P1.** Reference resolver engine (`fact -> exact, pre-filled knowledge`) plus the GTFOBins
   closed loop surfaced in Next Steps. Bundle GTFOBins data (GPL-3.0, attributed) as compact JSON.
 - [ ] **P2.** Add `lport` (and a shell-type preference) to engagement params, the context and
   parameter bar, and the command filler.
@@ -91,3 +91,6 @@ Loadout, your installed tools). Easy to rename.
 ### Status log (update per commit)
 
 - 2026-10-07: P0, plan documented in CLAUDE.md.
+- 2026-10-07: P1, GTFOBins resolver. Bundled 477 binaries (data/gtfobins.js, GPL-3.0),
+  OBOL.resolve engine, exact sudo/SUID escape surfaced in Next Steps for the parsed binary, plus a
+  live lookup box. tools/build-gtfobins.js, tests/engine/resolve-smoke.js. All guardrails green.

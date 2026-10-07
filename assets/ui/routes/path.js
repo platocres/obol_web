@@ -375,6 +375,33 @@
   function refLabel(url) {
     try { var h = new URL(url).hostname.replace(/^www\./, ''); return REF_HOSTS[h] || h; } catch (e) { return 'reference'; }
   }
+  // GTFOBins resolver block: for the sudo / SUID moves, surface the EXACT escape for each binary the parser
+  // already identified from pasted output, pre-filled and copy-ready, with the deep link to the exact page.
+  // Also a live lookup box so a learner can type any binary and get the escape, even before a fact exists.
+  function nsGtfoRow(it) {
+    var head = '<div class="ns-gtfo-bin">' + esc(it.bin)
+      + '<a class="ns-gtfo-link" href="' + U.attr(it.url) + '" target="_blank" rel="noopener noreferrer">GTFOBins <span aria-hidden="true">↗</span></a></div>';
+    var body = it.command
+      ? '<div class="ns-setup-cmd"><code>' + esc(it.command) + '</code>'
+        + '<button class="btn-copy ns-setup-copy" data-copy="' + U.attr(it.command) + '" title="Copy" aria-label="Copy command">' + OBOL.ic('clip') + '</button></div>'
+      : '<div class="ns-gtfo-none">GTFOBins lists an escape for this one. Open the page for the exact command (it wraps another tool, so it is best read there).</div>';
+    return '<div class="ns-gtfo-row">' + head + body + '</div>';
+  }
+  function nsGtfobins(move, facts) {
+    if (!move || !OBOL.resolve || !OBOL.resolve.gtfobinsForMove) return '';
+    var r = OBOL.resolve.gtfobinsForMove(move.id, facts);
+    if (!r) return '';
+    var ctxLabel = r.context === 'suid' ? 'SUID' : 'Sudo';
+    var rows = r.items.map(nsGtfoRow).join('');
+    var intro = r.items.length
+      ? '<p class="ns-oyi-lead">obol found ' + r.items.length + ' that GTFOBins can turn into a root shell. Here ' + (r.items.length === 1 ? 'is' : 'are') + ' the exact escape' + (r.items.length === 1 ? '' : 's') + ':</p>'
+      : '<p class="ns-oyi-lead">Paste your ' + (r.context === 'suid' ? 'SUID list' : '<code>sudo -l</code>') + ' output on Evidence and obol fills the exact escape here. Or look one up now:</p>';
+    var lookup = '<div class="ns-gtfo-lookup"><label class="cmd-fill-lbl"><span>Look Up A Binary</span>'
+      + '<input class="ns-gtfo-input" data-ctx="' + r.context + '" placeholder="e.g. find, awk, vim, less" autocomplete="off" spellcheck="false"></label>'
+      + '<div class="ns-gtfo-result" aria-live="polite"></div></div>';
+    return '<p class="ns-cn-h">GTFOBins: Exact ' + ctxLabel + ' Escape</p>' + intro
+      + (rows ? '<div class="ns-setup">' + rows + '</div>' : '') + lookup;
+  }
   function nsLearnMore(move) {
     if (!move) return '';
     var out = [], seen = {};
@@ -415,6 +442,8 @@
     // after When and before the how-to, so a learner who does not already know the service or technique
     // gets the point of the move before any setup or command detail.
     if (note && note.what) html += '<div class="ns-cn-when ns-cn-what"><span class="ns-cn-when-l">What</span><span>' + esc(note.what) + '</span></div>';
+    // The exact, pre-filled GTFOBins escape for the binary the parser identified (sudo / SUID moves only).
+    html += nsGtfobins(move, facts);
     // If this command runs a tool that must first be staged onto the host (PowerView, winPEAS, mimikatz...),
     // show the serve -> fetch -> load recipe. This fills the "how do I get it there?" gap no command answers.
     var selCmd = (move.commands || [])[idx] || {};
@@ -884,6 +913,15 @@
       });
       var code = cmd.querySelector('.cmd-run-code') || cmd.querySelector('.cmd-run code'); if (code) code.textContent = out;
       var copy = cmd.querySelector('.btn-copy'); if (copy) copy.setAttribute('data-copy', out);
+    });
+    // GTFOBins live lookup: type a binary, get its exact escape for this move's context (sudo / SUID).
+    U.on(mount, 'input', '.ns-gtfo-input', function (e, t) {
+      var box = t.closest('.ns-gtfo-lookup'); box = box && box.querySelector('.ns-gtfo-result'); if (!box) return;
+      var val = (t.value || '').trim(), ctx = t.getAttribute('data-ctx') || 'sudo';
+      if (!val) { box.innerHTML = ''; return; }
+      var r = OBOL.resolve && OBOL.resolve.gtfoLookup ? OBOL.resolve.gtfoLookup(val, ctx) : null;
+      box.innerHTML = (r && r.known) ? nsGtfoRow(r)
+        : '<div class="ns-gtfo-none">GTFOBins has no entry for <code>' + esc(val) + '</code>. Check the spelling, or this one may escalate a different way.</div>';
     });
     // scope lens: persist the choice and re-render the coach at the new syllabus level
     U.on(mount, 'click', '.lens-opt', function (e, t) {
