@@ -533,3 +533,20 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   lint, move-lint, coverage, and browser-smoke green (zero regressions). Bundle regenerated, assets
   stamped. Validates the open-item thesis: 2 of 3 real issues were move-data, 1 was a ranking rule; no
   ranker rewrite needed.
+- 2026-10-07: BROAD RANKING SWEEP (tools/ranker-sweep.js) + triage. A fuzzer over ~4,678 states
+  (realistic archetypes x stages, pairwise port coverage, and ~4,000 randomly-sampled port-sets x
+  stages x injected findings), reusing ranker-sim's rubric (exported from ranker-sim.js; one source of
+  truth). First run flagged 7.5% of states, but most were FUZZER ARTIFACTS: unconstrained fact
+  injection (privesc.* with no foothold, smb.* with no SMB port, hash.ntlm on a pure-DB box) invented
+  impossible states. Hardened the generator (canInject preconditions: a finding only lands if the state
+  could produce it) and sharpened the rubric (anonymous-session loot and confirmed-vuln exploitation
+  are NOT premature; a database/web login ahead of AD is a legitimate lead, not noise burying AD). That
+  took the sweep from 7.5% to 1.4%, isolating the one clear real bug: ticket-forge moves
+  (golden-ticket, silver-ticket, ticket-reuse) need the domain to forge but did not require it, so they
+  ranked with an unfillable {{domain}} command. Fix: requires_all += ad.domain_known on those three.
+  Result: sweep 65 -> 45 states (1.0%), curated sim still 0/42, full engine suite + browser-smoke +
+  lint + move-lint + coverage + gap all green, ad-killchain still completes (domain is captured long
+  before any hash). Remaining residual (~45 states) is minor/judgment-call: blind SSH/FTP brute at #3
+  on 2-port boxes, and a couple more domain-gated commands, surfaced to the owner, not auto-fixed.
+  Subagents were considered but not used: the compute is one fast Node process, and the triage
+  collapsed to ~4 patterns, so parallel investigation was not warranted.

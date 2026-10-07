@@ -92,9 +92,13 @@ function judge(state, ranked) {
   // it is surfacing loot you have not earned. Anonymous enum (listing readable shares) is NOT flagged.
   top3.forEach(function (m) {
     var claimsSecret = (m.produces || []).some(function (k) { return /^credential\.|^loot\.ntds|^hash\.(krbtgt|ntlm)/.test(k); });
-    if (claimsSecret && phaseOf(m) === 'loot' && !sb.has('credential.available') && !hasFoothold(sb) && !hasDomainAccess(sb)) {
-      v.push({ p: 'no_premature_loot', detail: m.id + ' claims a credential/secret in top 3 with no cred/foothold/access' });
-    }
+    if (!claimsSecret || phaseOf(m) !== 'loot') return;
+    // You have a basis for the loot if you hold a credential/foothold/admin, OR a proven anonymous
+    // session (null/guest share read is legitimate early loot), OR the move exploits a CONFIRMED vuln
+    // (exploiting web.*_confirmed to get creds is not premature, it is the point).
+    var hasAccess = sb.has('credential.available') || hasFoothold(sb) || hasDomainAccess(sb) || sb.has('smb.null_session') || sb.has('smb.guest_session');
+    var exploitsConfirmedVuln = (m.requires_all || []).concat(m.requires_any || []).some(function (k) { return /_confirmed$/.test(k); });
+    if (!hasAccess && !exploitsConfirmedVuln) v.push({ p: 'no_premature_loot', detail: m.id + ' claims a credential/secret in top 3 with no access basis' });
   });
 
   // P5a: no LOCAL privesc lead before a foothold (a move producing a privesc.* lead). Web exploitation
@@ -112,7 +116,11 @@ function judge(state, ranked) {
   // single-service recon. A scan/orient move leading is fine.
   if (state.arch.ad && (state.stage === 'recon_ports' || state.stage === 'recon_versioned')) {
     var adInTop3 = top3.some(function (m) { return isAdMove(m); });
-    if (!adInTop3 && !isScanMove(top1)) v.push({ p: 'ad_lane_leads', detail: 'AD orient not in top 3 (top: ' + top3.map(function (m) { return m.id; }).join(', ') + ')' });
+    // Only a violation when AD is buried under pure RECON NOISE (scans, single-service ftp/ssh/dns enum).
+    // A high-value service lead (a database or web login/exploitation) ahead of AD is a legitimate choice,
+    // not noise, so it does not count as burying the AD line.
+    var strongNonAd = top3.some(function (m) { return /login|sqli|sql-inj|sqlmap|redis|mongo|elastic|web-|http-|jwt|upload/i.test((m.id || '') + ' ' + (m.title || '')) || (m.produces || []).some(function (k) { return /^db\.|^foothold\.webshell|_confirmed/.test(k); }); });
+    if (!adInTop3 && !isScanMove(top1) && !strongNonAd) v.push({ p: 'ad_lane_leads', detail: 'AD orient buried under recon noise (top: ' + top3.map(function (m) { return m.id; }).join(', ') + ')' });
   }
 
   // P6: command sanity, the #1 move's first command should not sit on an EARNED token whose backing
@@ -136,6 +144,14 @@ function judge(state, ranked) {
   }
   return v;
 }
+
+// Exported so the broad sweep (tools/ranker-sweep.js) reuses this exact rubric + engine, no drift.
+module.exports = {
+  OBOL: OBOL, PK: PK, S: S, F: F, PACK: PACK, ARCHETYPES: ARCHETYPES, STAGES: STAGES,
+  buildState: buildState, stageFacts: stageFacts, judge: judge,
+  isBrute: isBrute, isVersionCve: isVersionCve, isAdMove: isAdMove, isScanMove: isScanMove, phaseOf: phaseOf,
+};
+if (require.main !== module) return;
 
 // ── run the simulation ─────────────────────────────────────────────────────────────────────────
 var states = [], tally = {}, total = 0, dirty = 0;
