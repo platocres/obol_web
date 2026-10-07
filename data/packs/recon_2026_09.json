@@ -40,7 +40,10 @@
           "tool": "nxc",
           "run": "nxc smb {{target}} -u '' -p ''",
           "note": "Switchless probe first: confirm the host even accepts a null session (a [+] line) before you ask it for anything. If the empty user is rejected, retry as guest with an empty password. Once this proves a null or guest session, it drops out so you are not re-running a question you already answered.",
-          "settled_by": ["smb.null_session", "smb.guest_session"]
+          "settled_by": [
+            "smb.null_session",
+            "smb.guest_session"
+          ]
         },
         {
           "tool": "nxc",
@@ -347,7 +350,7 @@
         "foothold.linux"
       ],
       "priority": 52,
-      "proves": "command execution from the VNC desktop session — a foothold",
+      "proves": "command execution from the VNC desktop session \u2014 a foothold",
       "does_not_prove": "privilege beyond the desktop user; escalate from the shell",
       "report": {
         "finding": "Interactive VNC Desktop Access",
@@ -365,7 +368,7 @@
         {
           "tool": "xdotool",
           "run": "id; hostname; ip -4 addr | grep inet",
-          "note": "In the desktop's terminal, run this and screenshot the frame — that captures the foothold with host identity. From here enumerate for root exactly like any shell."
+          "note": "In the desktop's terminal, run this and screenshot the frame \u2014 that captures the foothold with host identity. From here enumerate for root exactly like any shell."
         }
       ]
     },
@@ -499,7 +502,7 @@
         {
           "tool": "curl",
           "run": "curl -k --url \"imaps://{{target}}\" --user '{{user}}:{{password}}'",
-          "note": "With a held credential, list the mailbox (imaps for IMAP, pop3s://…/1 for POP3). Mail is a classic place to find further creds/reset links."
+          "note": "With a held credential, list the mailbox (imaps for IMAP, pop3s://\u2026/1 for POP3). Mail is a classic place to find further creds/reset links."
         }
       ]
     },
@@ -625,7 +628,7 @@
         "foothold.linux"
       ],
       "priority": 58,
-      "proves": "a shell from a reachable NFS export — a looted or planted SSH key, or a webshell on a writable share",
+      "proves": "a shell from a reachable NFS export \u2014 a looted or planted SSH key, or a webshell on a writable share",
       "does_not_prove": "a shell when exports are squashed and hold nothing sensitive; no_root_squash is the stronger, separate privesc",
       "report": {
         "finding": "Sensitive/Writable NFS Export",
@@ -711,7 +714,7 @@
         "foothold.linux"
       ],
       "priority": 60,
-      "proves": "an interactive login shell on the target over telnet — a foothold",
+      "proves": "an interactive login shell on the target over telnet \u2014 a foothold",
       "does_not_prove": "privilege beyond that account; escalate from the shell for the root flag",
       "report": {
         "finding": "Cleartext Telnet Login",
@@ -726,7 +729,7 @@
         {
           "tool": "hydra",
           "run": "hydra -L {{userlist}} -P {{wordlist}} telnet://{{target}}",
-          "note": "No credential yet? Brute it — telnet boxes lean on weak/default logins. A [23][telnet] host: ... login: ... password: ... line is your way in; then use the first command."
+          "note": "No credential yet? Brute it \u2014 telnet boxes lean on weak/default logins. A [23][telnet] host: ... login: ... password: ... line is your way in; then use the first command."
         }
       ]
     },
@@ -800,7 +803,7 @@
         "access.admin"
       ],
       "priority": 60,
-      "proves": "a trusted-login shell over rlogin/rsh — a foothold, and root directly when the trust names root",
+      "proves": "a trusted-login shell over rlogin/rsh \u2014 a foothold, and root directly when the trust names root",
       "does_not_prove": "a shell when no .rhosts trust exists for your source; then fall back to a credential login",
       "report": {
         "finding": "Passwordless r-services Trust Login",
@@ -885,7 +888,7 @@
         "foothold.linux"
       ],
       "priority": 58,
-      "proves": "code execution from a writable rsync module — a foothold via a planted key or webshell",
+      "proves": "code execution from a writable rsync module \u2014 a foothold via a planted key or webshell",
       "does_not_prove": "a shell when every module is read-only or sandboxed away from a useful path",
       "report": {
         "finding": "Writable rsync Module",
@@ -1061,7 +1064,7 @@
         "credential.candidate"
       ],
       "priority": 50,
-      "proves": "secrets visible on the victim's desktop and keystrokes it typed — candidate credentials",
+      "proves": "secrets visible on the victim's desktop and keystrokes it typed \u2014 candidate credentials",
       "does_not_prove": "a shell by itself; the captured password still has to be used on SSH/su/sudo",
       "report": {
         "finding": "Unauthenticated X11 Session Access",
@@ -1074,7 +1077,7 @@
         {
           "tool": "xwd",
           "run": "xwd -root -display {{target}}:0 -out screen.xwd && convert screen.xwd screen.png",
-          "note": "Grab the current screen — terminals, password managers and chat windows routinely show secrets. Eyeball screen.png."
+          "note": "Grab the current screen \u2014 terminals, password managers and chat windows routinely show secrets. Eyeball screen.png."
         },
         {
           "tool": "xdotool",
@@ -1174,6 +1177,9 @@
           "run": "hydra -L valid_users.txt -p '{{password}}' ssh://{{target}}",
           "note": "Spray one password across only the validated users, watching the lockout policy."
         }
+      ],
+      "requires_all": [
+        "scan.nmap.version"
       ]
     },
     {
@@ -1718,7 +1724,7 @@
     },
     {
       "id": "nmap-host-unresponsive",
-      "title": "Nmap Says Host Is Down — Make It Answer",
+      "title": "Nmap Says Host Is Down \u2014 Make It Answer",
       "tool": "nmap",
       "tools": [
         "nmap"
@@ -1761,7 +1767,7 @@
     },
     {
       "id": "fix-name-resolution",
-      "title": "Could Not Resolve Host — Add It to /etc/hosts",
+      "title": "Could Not Resolve Host \u2014 Add It to /etc/hosts",
       "tool": "sh",
       "tools": [
         "sh"
@@ -1793,7 +1799,7 @@
         {
           "tool": "sh",
           "run": "curl -s -H 'Host: {{hostname}}' http://{{target}}/",
-          "note": "If a name resolves but the site shows a default page, it is virtual-host routed: the real site only answers to the right Host header — feed that name to vhost/content discovery."
+          "note": "If a name resolves but the site shows a default page, it is virtual-host routed: the real site only answers to the right Host header \u2014 feed that name to vhost/content discovery."
         }
       ]
     }

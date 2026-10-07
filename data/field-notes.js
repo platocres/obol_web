@@ -1660,11 +1660,17 @@
         win: 'The archive opens with the cracked password.',
         mistakes: ['Stopping at the password instead of looting the contents.'] } ],
     'online-brute-ssh': [
-      { when: 'A last resort, when offline cracking is not an option and you have a user list. Mind the lockout policy.',
-        land: ['Seed users.txt from your enumerated user list. -t 4 keeps SSH stable, -f stops on the first hit. Pick the password list in the Workbench Wordlist picker.'],
+      { when: 'A spray against an ENUMERATED user list, when offline cracking is not an option. This move only appears once you actually have a user list. Mind the lockout policy.',
+        land: ['It fills from your enumerated user list ({{userlist}}). -t 4 keeps SSH stable, -f stops on the first hit. Pick the password list in the Workbench Wordlist picker.'],
         look: ['A green [22][ssh] host login: line on a hit.'],
         win: 'hydra prints a valid user and password.',
         mistakes: ['Hammering with a huge list and locking accounts. Prefer a small, targeted list.'] } ],
+    'blind-brute-ssh': [
+      { when: 'The true last resort: SSH is open, you have NO enumerated user list, and nothing else is panning out. It sits at the bottom of the list on purpose.',
+        land: ['This uses a SHORT common-users wordlist (root, admin, service names), not an enumerated one, so it works precisely when you have no user list. If a login lands, stop and pivot.'],
+        look: ['A green [22][ssh] host login: line on a hit, usually a default or reused account.'],
+        win: 'hydra returns a common-account login.',
+        mistakes: ['Grinding rockyou blindly and locking every common account. Keep the user list short, watch the lockout policy, and treat this as a background throw, not a plan.'] } ],
     'online-brute-ftp': [
       { when: 'An FTP login brute, with a user list and lockout awareness.',
         land: ['Seed users.txt from enumeration. Watch the lockout policy.'],

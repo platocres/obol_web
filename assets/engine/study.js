@@ -131,7 +131,7 @@
     // creds lane
     'crack-identify': 'Hash Cracking', 'crack-ntlm': 'Hash Cracking', 'crack-netntlmv2': 'Hash Cracking', 'crack-kerberoast': 'Hash Cracking',
     'crack-asrep-offline': 'Hash Cracking', 'crack-shadow': 'Hash Cracking', 'crack-mscache2': 'Hash Cracking', 'crack-archive': 'Hash Cracking',
-    'online-brute-ssh': 'Online Brute-Force', 'online-brute-ftp': 'Online Brute-Force', 'online-brute-rdp': 'Online Brute-Force', 'ssh-user-enum': 'Online Brute-Force',
+    'online-brute-ssh': 'Online Brute-Force', 'blind-brute-ssh': 'Online Brute-Force', 'online-brute-ftp': 'Online Brute-Force', 'online-brute-rdp': 'Online Brute-Force', 'ssh-user-enum': 'Online Brute-Force',
     'responder-poison': 'Poisoning & Relay', 'ntlm-relay-attack': 'Poisoning & Relay', 'mitm6-ipv6-takeover': 'Poisoning & Relay',
     // linux lane
     'linux-enum': 'Enumeration', 'pspy-monitor': 'Enumeration', 'linux-loot-hunt': 'Enumeration',
@@ -571,7 +571,7 @@
   var EVIDENCE = [
     { key: 'scan', tier: 'ports', port: 'first', proto: '', fam: 'recon', label: 'Before anything, scan', signal: 'Every engagement opens the same way. Sweep the target so you know which doors exist before you touch any one of them.', seed: ['nmap-fast-open-ports', 'nmap-version-scripts', 'nmap-udp-top', 'nmap-vuln-scripts', 'nmap-host-unresponsive', 'fix-name-resolution'] },
     { key: 'p21', tier: 'ports', port: '21', proto: 'tcp', fam: 'file', label: 'FTP', signal: 'File transfer. Test the anonymous login first because it costs nothing, then brute a known user. Files on FTP routinely hold configs, source, or credentials, and a writable directory that is also the web root is a shell.', seed: ['recon-ftp', 'online-brute-ftp', 'ftp-upload-webshell', 'ftp-bounce', 'vsftpd-backdoor', 'proftpd-modcopy'] },
-    { key: 'p22', tier: 'ports', port: '22', proto: 'tcp', fam: 'remote', label: 'SSH', signal: 'Remote shell. There is no code execution here, but a looted private key or a weak password is a stable foothold, and SSH is your cleanest pivot.', seed: ['ssh-key-login', 'ssh-key-troubleshoot', 'online-brute-ssh', 'ssh-user-enum', 'pivot-ssh-dynamic', 'pivot-sshuttle'] },
+    { key: 'p22', tier: 'ports', port: '22', proto: 'tcp', fam: 'remote', label: 'SSH', signal: 'Remote shell. There is no code execution here, but a looted private key or a weak password is a stable foothold, and SSH is your cleanest pivot.', seed: ['ssh-key-login', 'ssh-key-troubleshoot', 'online-brute-ssh', 'blind-brute-ssh', 'ssh-user-enum', 'pivot-ssh-dynamic', 'pivot-sshuttle'] },
     { key: 'p23', tier: 'ports', port: '23', proto: 'tcp', fam: 'remote', label: 'Telnet', signal: 'Cleartext remote login. The banner often names the OS or device, default and reused passwords log straight in, and nothing on the wire is encrypted.', seed: ['recon-telnet', 'telnet-login'] },
     { key: 'p25', tier: 'ports', port: '25/110/143', proto: 'tcp', fam: 'mail', label: 'SMTP, POP3, IMAP', signal: 'Mail. SMTP VRFY confirms real usernames, and a mailbox credential lets you read mail for secrets and reset links. NTLM auth leaks the domain name.', seed: ['recon-smtp', 'smtp-open-relay', 'recon-mail', 'password-spray'] },
     { key: 'p53', tier: 'ports', port: '53', proto: 'tcp/udp', fam: 'recon', label: 'DNS', signal: 'Name service. A zone transfer (AXFR) can hand you the whole internal host map in one request.', seed: ['recon-dns'] },
@@ -748,6 +748,7 @@
     'ntlm-relay-attack': { level: 'loud', note: 'Active on the wire; logs an authentication on the relayed host.' },
     'mitm6-ipv6-takeover': { level: 'loud', note: 'Rogue DHCPv6 and DNS affect every Windows host on the segment. Scope it carefully.' },
     'online-brute-ssh': { level: 'loud', note: 'Failed logins are logged and can lock accounts. Keep the list small.' },
+    'blind-brute-ssh': { level: 'loud', note: 'Blind common-user brute: the loudest option, logged and lockout-prone. Last resort only, keep the user list short.' },
     'online-brute-ftp': { level: 'loud', note: 'Failed logins are logged and can lock accounts.' },
     'online-brute-rdp': { level: 'loud', note: 'RDP lockout is unforgiving. Use one password at a time.' },
     'password-spray': { level: 'loud', note: 'One password across many users avoids lockout, but the failed logons are still logged. Read the policy first.' },

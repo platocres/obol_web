@@ -1402,6 +1402,17 @@
       signal: '[22][ssh] host: 10.10.10.10   login: bmurphy   password: iloveyou',
       teach: 'When you have a real username but no password, a measured online brute against SSH can find a weak one. Keep the wordlist small and the rate sane (-t 4), lab accounts lock out too, and a found pair is an instant shell.',
     },
+    'blind-brute-ssh': {
+      why: "The true last resort: SSH is open, you have NO enumerated username list, and every quieter path is exhausted. Unlike the targeted spray, this throws a SHORT common-users list (root, admin, service names) at the service on the off chance of a default or reused login. It is the bottom of the list on purpose, loud, slow, and lockout-prone, so keep the user list short and treat a hit as luck, not a plan.",
+      cmd: 'hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/wordlists/rockyou.txt -f -t 4 ssh://10.10.10.10', tool: 'hydra',
+      output: [
+        '[DATA] attacking ssh://10.10.10.10:22/',
+        '[22][ssh] host: 10.10.10.10   login: admin   password: admin',
+        '1 of 1 target successfully completed, 1 valid password found',
+      ].join('\n'),
+      signal: '[22][ssh] host: 10.10.10.10   login: admin   password: admin',
+      teach: 'With no username list, a blind brute leans on common accounts and default passwords. If it lands, you got lucky on a weak default; stop and pivot. If it does not, you have lost little, this was always the move of last resort.',
+    },
     'online-brute-ftp': {
       why: "Once anonymous login and loot have both come up empty, FTP becomes a hydra target of last resort. The appeal is reuse: a recovered FTP password often unlocks SSH or the web too, so the payoff reaches past FTP itself. But this is loud, online brute-forcing that trips lockouts, so keep the user list tight and the password list sensible rather than blasting rockyou at it.",
       cmd: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f ftp://10.10.10.10', tool: 'hydra',

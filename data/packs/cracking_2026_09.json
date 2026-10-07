@@ -1,5 +1,5 @@
 {
-  "name": "Offline password cracking (§3)",
+  "name": "Offline password cracking (\u00a73)",
   "description": "Feed recovered hash material (kerberoast and AS-REP tickets, NTLM/NTDS dumps, captured NetNTLMv2, /etc/shadow entries) to hashcat or john and recover the plaintext. It all runs offline on your own box and touches no target, so these steps auto-advance; a cracked hash stays a candidate secret until a real login proves it.",
   "source": "OSCP methodology (project-authored, obol-local)",
   "actions": [
@@ -35,7 +35,7 @@
     },
     {
       "id": "crack-hash-troubleshoot",
-      "title": "Hashcat/John Won't Load the Hash — Fix It",
+      "title": "Hashcat/John Won't Load the Hash \u2014 Fix It",
       "tool": "hashcat",
       "tools": [
         "hashcat",
@@ -49,7 +49,7 @@
       "priority": 62,
       "hypothesis": "'No hashes loaded' or 'Token length exception' is not a tough hash - the file or mode is wrong. The usual culprits: a username: prefix left on the line (or missing when the mode wants it), the wrong -m mode for the hash type, CRLF line endings from a Windows copy, or stray whitespace. Fix the file and it cracks.",
       "proves": "nothing attack-wise; it gets the cracker to actually load and run on your hash",
-      "does_not_prove": "that the password is in your wordlist — that is a separate question",
+      "does_not_prove": "that the password is in your wordlist \u2014 that is a separate question",
       "report": {
         "finding": "Hash format/mode mismatch resolved",
         "severity": "info"
@@ -66,7 +66,7 @@
         {
           "tool": "hashcat",
           "run": "hashcat -m {{mode}} hash.txt {{wordlist}}   # strip/keep the user: prefix to match the mode",
-          "note": "NetNTLMv2/Kerberos modes WANT user$realm in the line; raw-MD5/NTLM modes do NOT — 'No hashes loaded' is usually a prefix mismatch. Also run `dos2unix hash.txt` and remove trailing spaces."
+          "note": "NetNTLMv2/Kerberos modes WANT user$realm in the line; raw-MD5/NTLM modes do NOT \u2014 'No hashes loaded' is usually a prefix mismatch. Also run `dos2unix hash.txt` and remove trailing spaces."
         },
         {
           "tool": "john",
@@ -281,13 +281,14 @@
     {
       "id": "online-brute-ssh",
       "title": "Online Password Brute over SSH (hydra)",
-      "hypothesis": "When SSH is reachable and no working credential is known yet, a targeted hydra run against an enumerated user list can recover a login, a noisy, lockout-risky attack, so it is approve-tier and never auto-fires in a normal cruise.",
+      "hypothesis": "When SSH is reachable once you hold an enumerated user list, a targeted hydra run against an enumerated user list can recover a login, a noisy, lockout-risky attack, so it is approve-tier and never auto-fires in a normal cruise.",
       "tool": "hydra",
       "tools": [
         "hydra"
       ],
       "requires_any": [
-        "ssh.reachable"
+        "ad.user_list",
+        "web.users"
       ],
       "produces": [],
       "priority": 30,
@@ -297,8 +298,35 @@
       "commands": [
         {
           "tool": "hydra",
-          "run": "hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 4 ssh://{{target}}",
-          "note": "seed users.txt from the enumerated user list; -t 4 keeps SSH stable; -f stops on first hit. Mind lockout policy (policy.lockout)."
+          "run": "hydra -L {{userlist}} -P /usr/share/wordlists/rockyou.txt -f -t 4 ssh://{{target}}",
+          "note": "Fills from your enumerated user list ({{userlist}}); this move only appears once you have one. -f stops on first hit. Mind lockout policy (policy.lockout)."
+        }
+      ],
+      "requires_all": [
+        "ssh.reachable"
+      ]
+    },
+    {
+      "id": "blind-brute-ssh",
+      "title": "Blind SSH Brute (Common Users, Last Resort)",
+      "hypothesis": "When SSH is open, you have NO enumerated user list, and nothing else is panning out, a blind hydra run against a SHORT common-users wordlist (root, admin, common service names) plus a common-password list can occasionally catch a default or weak login. It is a true last resort: slow, noisy, and lockout-prone, so it sits at the bottom and never leads.",
+      "tool": "hydra",
+      "tools": [
+        "hydra"
+      ],
+      "requires_any": [
+        "ssh.reachable"
+      ],
+      "produces": [],
+      "priority": 10,
+      "autonomy": "approve",
+      "proves": "a working SSH login if hydra returns a hit against a common account",
+      "does_not_prove": "anything until hydra actually returns a hit; a clean run just means common creds did not work",
+      "commands": [
+        {
+          "tool": "hydra",
+          "run": "hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/wordlists/rockyou.txt -f -t 4 ssh://{{target}}",
+          "note": "Short COMMON-users list, not an enumerated one. If a login lands, stop and pivot. Do not grind rockyou blindly or you will lock accounts; this is the move of last resort."
         }
       ]
     },
@@ -311,7 +339,8 @@
         "hydra"
       ],
       "requires_any": [
-        "ftp.reachable"
+        "ad.user_list",
+        "web.users"
       ],
       "produces": [],
       "priority": 30,
@@ -321,9 +350,12 @@
       "commands": [
         {
           "tool": "hydra",
-          "run": "hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f ftp://{{target}}",
-          "note": "seed users.txt from enumeration; watch the lockout policy."
+          "run": "hydra -L {{userlist}} -P /usr/share/wordlists/rockyou.txt -f ftp://{{target}}",
+          "note": "Fills from your enumerated user list ({{userlist}}); this move only appears once you have one. -f stops on first hit. Mind lockout policy (policy.lockout)."
         }
+      ],
+      "requires_all": [
+        "ftp.reachable"
       ]
     },
     {
@@ -335,7 +367,8 @@
         "hydra"
       ],
       "requires_any": [
-        "rdp.reachable"
+        "ad.user_list",
+        "web.users"
       ],
       "produces": [],
       "priority": 28,
@@ -345,9 +378,12 @@
       "commands": [
         {
           "tool": "hydra",
-          "run": "hydra -L users.txt -P /usr/share/wordlists/rockyou.txt -f -t 1 rdp://{{target}}",
-          "note": "-t 1 (single thread) is important for RDP; lockout risk is high, prefer a small, targeted list."
+          "run": "hydra -L {{userlist}} -P /usr/share/wordlists/rockyou.txt -f -t 1 rdp://{{target}}",
+          "note": "Fills from your enumerated user list ({{userlist}}); this move only appears once you have one. -f stops on first hit. Mind lockout policy (policy.lockout)."
         }
+      ],
+      "requires_all": [
+        "rdp.reachable"
       ]
     },
     {

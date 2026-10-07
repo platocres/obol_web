@@ -550,3 +550,20 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   on 2-port boxes, and a couple more domain-gated commands, surfaced to the owner, not auto-fixed.
   Subagents were considered but not used: the compute is one fast Node process, and the triage
   collapsed to ~4 patterns, so parallel investigation was not warranted.
+- 2026-10-07: Brute moves, spray-vs-blind split (owner-directed). The owner caught that online-brute-ssh
+  was authored as a spray (its command is `hydra -L users.txt`, hypothesis says "enumerated user
+  list") but gated only on ssh.reachable, so it surfaced before you had any users. (A) Gated
+  online-brute-ssh/ftp/rdp on a userlist: requires_all [service.reachable] + requires_any
+  [ad.user_list, web.users], and the command now fills {{userlist}}. (B) Added blind-brute-ssh, the
+  genuine last resort (priority 10, requires only ssh.reachable, a SHORT common-users wordlist, not an
+  enumerated one) for the case where you have no userlist, with field note, study evidence seed, label,
+  and noise annotation. Second-order effect the sim caught: gating the brutes on ad.user_list made
+  ssh-user-enum (which PRODUCES ad.user_list) more valuable (it now enables the brutes), so it jumped to
+  #1 on Linux boxes. Fixed at the root: ssh-user-enum (a version-specific CVE) now requires
+  scan.nmap.version, so you must do the service scan before a version-CVE, which also permanently
+  satisfies no_unguarded_cve_lead (it can only be eligible once the version is known). The rubric learned
+  the distinction: a userlist spray in the lead without a userlist is a bug; a dedicated blind brute
+  (id "blind") is an exempt last resort. Result: sim 0/42, sweep 43 states (0.9%), full engine suite +
+  browser-smoke + lint + move-lint + coverage + gap all green, ad-killchain intact. Pending: the owner's
+  "check AD first to get oriented, then the SQL" call on DB-vs-AD ordering (realistic single-DB DC already
+  keeps AD in top 3; still queued).

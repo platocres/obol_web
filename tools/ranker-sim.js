@@ -81,8 +81,10 @@ function hasDomainAccess(sb) { return sb.has('credential.validated') || sb.has('
 function judge(state, ranked) {
   var sb = state.sb, v = [], topN = ranked.slice(0, 5), top3 = ranked.slice(0, 3), top1 = ranked[0];
 
-  // P2: no last-resort brute in the top 3 without a userlist
-  top3.forEach(function (m) { if (isBrute(m) && !hasUserlist(sb)) v.push({ p: 'no_brute_in_lead', detail: m.id + ' (brute) in top 3 with no userlist' }); });
+  // P2: no ENUM'D-USERLIST spray in the top 3 without a userlist. A dedicated blind brute (id contains
+  // "blind") is exempt: it uses a common-users wordlist by design and is the legitimate last resort when
+  // you have no enumerated list, kept low-priority so it only surfaces once better options run out.
+  top3.forEach(function (m) { if (isBrute(m) && !/blind/.test(m.id || '') && !hasUserlist(sb)) v.push({ p: 'no_brute_in_lead', detail: m.id + ' (userlist spray) in top 3 with no userlist' }); });
 
   // P3: no unguarded version-specific CVE as #1 when the version is unknown
   if (top1 && isVersionCve(top1) && !hasVersionOrVuln(sb)) v.push({ p: 'no_unguarded_cve_lead', detail: top1.id + ' leads but no version/vuln known' });
