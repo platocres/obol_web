@@ -117,12 +117,14 @@ function judge(state, ranked) {
   // should be in the top 3; a box with LDAP/SMB/Kerberos open should not bury it under FTP/SSH/DNS/web
   // single-service recon. A scan/orient move leading is fine.
   if (state.arch.ad && (state.stage === 'recon_ports' || state.stage === 'recon_versioned')) {
-    var adInTop3 = top3.some(function (m) { return isAdMove(m); });
-    // Only a violation when AD is buried under pure RECON NOISE (scans, single-service ftp/ssh/dns enum).
-    // A high-value service lead (a database or web login/exploitation) ahead of AD is a legitimate choice,
-    // not noise, so it does not count as burying the AD line.
-    var strongNonAd = top3.some(function (m) { return /login|sqli|sql-inj|sqlmap|redis|mongo|elastic|web-|http-|jwt|upload/i.test((m.id || '') + ' ' + (m.title || '')) || (m.produces || []).some(function (k) { return /^db\.|^foothold\.webshell|_confirmed/.test(k); }); });
-    if (!adInTop3 && !isScanMove(top1) && !strongNonAd) v.push({ p: 'ad_lane_leads', detail: 'AD orient buried under recon noise (top: ' + top3.map(function (m) { return m.id; }).join(', ') + ')' });
+    // The "rule out AD first" rule guarantees an AD-ORIENT move a top-3 slot on an AD box in the opening,
+    // so the operator can always get oriented (and rule AD out) before diving into service exploitation.
+    // Only a violation when an orient move is actually ELIGIBLE (somewhere in the ranked list) but is not
+    // in the top 3. If the box has no eligible orient move, there is nothing to pin, so it is not a failure.
+    // An orient move = one that produces a DC/domain/basedn/anon-bind fact you do not yet have.
+    var isOrient = function (m) { return (m.produces || []).some(function (k) { return (k === 'ad.dc_candidate' || k === 'ad.domain_known' || k === 'ad.base_dn' || k === 'ad.anonymous_bind') && !sb.has(k); }); };
+    var orientEligible = ranked.some(isOrient);
+    if (orientEligible && !top3.some(isOrient) && !isScanMove(top1)) v.push({ p: 'ad_lane_leads', detail: 'eligible AD orient not in top 3 (top: ' + top3.map(function (m) { return m.id; }).join(', ') + ')' });
   }
 
   // P6: command sanity, the #1 move's first command should not sit on an EARNED token whose backing

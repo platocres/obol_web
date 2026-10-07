@@ -567,3 +567,21 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   browser-smoke + lint + move-lint + coverage + gap all green, ad-killchain intact. Pending: the owner's
   "check AD first to get oriented, then the SQL" call on DB-vs-AD ordering (realistic single-DB DC already
   keeps AD in top 3; still queued).
+- 2026-10-07: "Rule out AD first", AD-orient holds a top-3 slot (owner-directed). The owner's DB-vs-AD
+  call: on an AD box you want to get oriented and rule AD out before diving into service exploitation
+  (a database or web login), even when several high-value services are open. Added a surgical post-sort
+  promotion in nextActionsV2 (assets/engine/pack.js): on an AD box where the DC/domain is not yet
+  confirmed (no ad.dc_candidate + ad.domain_known) and you have NOT landed a foothold or credential, the
+  top eligible AD-orient move (one that produces ad.dc_candidate / ad.domain_known / ad.base_dn /
+  ad.anonymous_bind you do not yet have) is spliced to position 3 if it is not already top-3; everything
+  else keeps its order. It self-disables the moment you are oriented (the orient move settles) or you are
+  on the box, and it only fires when such a move is actually eligible, so pure-Linux and post-foothold
+  states are untouched. The rubric (ranker-sim.js ad_lane_leads) was made strict-but-precise to match:
+  it flags ONLY when an eligible orient move is not in the top 3 (if no orient move is eligible there is
+  nothing to pin, so it is not a failure), the same condition the rule enforces. Verified: DC + all DBs
+  now shows mssql-login > mysql-login > ad-dc-identify > ... (AD pinned at #3); a plain DC keeps AD at #2
+  naturally; pure-Linux is unaffected. sim 0/42, broad sweep 32 states (0.7%, all pre-existing
+  command_sanity residuals: recon-smtp needs a userlist, asrep-roast needs a hashfile, zero ad_lane_leads
+  violations), full engine suite + ranker-smoke + corpus-smoke + ad-killchain-e2e + locus-scope-smoke +
+  guardrails + browser-smoke all green. Engine-only change (no pack-data edit, no bundle rebuild); assets
+  stamped.

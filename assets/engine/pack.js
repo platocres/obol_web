@@ -931,7 +931,24 @@
       if (lx !== ly) return lx - ly;
       return x.a.id < y.a.id ? -1 : (x.a.id > y.a.id ? 1 : 0);
     });
-    return scored.map(function (s) { return s.a; });
+    var ordered = scored.map(function (s) { return s.a; });
+
+    // "Rule out AD first": on an AD box where the DC/domain is not yet confirmed and you have not landed
+    // a foothold or credential, guarantee the top AD-orient move a top-3 slot, so the operator can always
+    // get oriented (and rule AD out) before diving into service exploitation (a database login, a web
+    // attack). A surgical post-sort promotion of ONE move to position 3; everything else keeps its order.
+    // It self-disables the moment you are oriented (the orient move settles) or you are on the box.
+    // (ranker-sim.js measures this.)
+    var adOriented = haveObj['ad.dc_candidate'] && haveObj['ad.domain_known'];
+    var committed = !!(haveObj['access.shell'] || haveObj['access.admin'] || haveObj['access.system'] || haveObj['credential.available']);
+    if (!committed) for (var _ck in haveObj) { if (/^foothold\./.test(_ck)) { committed = true; break; } }
+    if (!adOriented && !committed) {
+      var isOrient = function (a) { return a.produces.some(function (k) { return (k === 'ad.dc_candidate' || k === 'ad.domain_known' || k === 'ad.base_dn' || k === 'ad.anonymous_bind') && !haveObj[k]; }); };
+      if (!ordered.slice(0, 3).some(isOrient)) {
+        for (var oi = 3; oi < ordered.length; oi++) { if (isOrient(ordered[oi])) { ordered.splice(2, 0, ordered.splice(oi, 1)[0]); break; } }
+      }
+    }
+    return ordered;
   }
 
   // The coach's ranker. Goal-directed v2 by default; set OBOL.pack.ranker = 'v1' for the legacy
