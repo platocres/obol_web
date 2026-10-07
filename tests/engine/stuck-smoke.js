@@ -113,5 +113,40 @@ Object.keys(OBOL.STUCK_CATALOG).forEach(function (k) {
 const gated = S.suggestFacts(S.sandbox(), PACK, { askable: S.isAskable });
 ok(gated.every((c) => S.isAskable(c.kind)), 'catalog-gated reveal surfaces only user-assertable kinds');
 
+// ── port palette + lane gating ───────────────────────────────────────────────────────────────────
+ok(OBOL.STUCK_PORTS && OBOL.STUCK_PORTS.length >= 30, 'port palette is populated (' + (OBOL.STUCK_PORTS || []).length + ')');
+// every NON-port palette fact (the reachable/service kinds) must be real so a pick gates moves;
+// a bare port:N is always a valid record even if no move keys on that exact port.
+var paletteBad = [];
+OBOL.STUCK_PORTS.forEach(function (p) { (p.facts || []).forEach(function (k) { if (k.indexOf('port:') !== 0 && !universe[k]) paletteBad.push(p.port + ':' + k); }); });
+ok(paletteBad.length === 0, 'every service/reachable palette fact is a real pack/parser kind' + (paletteBad.length ? ' (bad: ' + paletteBad.join(', ') + ')' : ''));
+ok(OBOL.STUCK_PORTS.every(function (p) { return (p.facts || []).length > 0; }), 'every port asserts at least one fact');
+
+var pf = S.sandbox();
+ok(!S.portOn(pf, 445), 'port 445 starts off');
+S.togglePort(pf, 445, 'host:1.2.3.4');
+ok(S.portOn(pf, 445) && pf.has('smb.reachable') && pf.has('port:445'), 'toggling 445 asserts smb.reachable + port:445');
+S.togglePort(pf, 445, 'host:1.2.3.4');
+ok(!S.portOn(pf, 445) && !pf.has('smb.reachable'), 'toggling 445 again clears it');
+S.addPortNumber(pf, 50000, 'host:1.2.3.4');
+ok(pf.has('port:50000'), 'a free-typed exotic port asserts port:N');
+
+// palette kinds are excluded from the findings refiner
+ok(S.isPaletteKind('smb.reachable') && !S.isFinding('smb.reachable'), 'service-presence kinds are palette-owned, not refiner findings');
+ok(S.isFinding('web.sqli_confirmed'), 'a real finding is still a refiner finding');
+
+// lane gating: Web hidden until a web port; always-on lanes always on
+var lg = S.sandbox();
+ok(S.laneActive('Credentials', lg) && S.laneActive('Recon', lg), 'depth/recon lanes are always active');
+ok(!S.laneActive('Web', lg), 'Web lane is hidden with no web port');
+S.togglePort(lg, 80, 'host:1');
+ok(S.laneActive('Web', lg), 'picking 80 activates the Web lane');
+ok(!S.laneActive('Windows And AD', lg), 'AD lane still hidden without an AD port');
+S.togglePort(lg, 445, 'host:1');
+ok(S.laneActive('Windows And AD', lg), 'picking 445 activates the Windows And AD lane');
+ok(!S.laneActive('Linux Privesc', lg), 'privesc lane hidden without a foothold');
+S.assert(lg, 'foothold.linux', { scope: 'host:1' });
+ok(S.laneActive('Linux Privesc', lg), 'a Linux foothold activates Linux Privesc');
+
 console.log(fail ? ('\nSTUCK: ' + fail + ' FAILURES') : '\nSTUCK: all passed');
 process.exit(fail ? 1 : 0);

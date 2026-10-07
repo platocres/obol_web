@@ -77,6 +77,61 @@
   };
   S.groupFor = function (kind) { var e = S.entry(kind); return (e && e.group) || ''; };
 
+  // ── port palette + lane gating ──────────────────────────────────────────────────────────────
+  // Ports are foundational, so they are a dedicated step, not reveal candidates. Picking a port asserts
+  // the service/reachable fact(s) the pack gates on. The set of all such kinds is "palette-owned" and is
+  // excluded from the findings refiner (the palette is where you add or remove ports).
+  var _paletteKinds = null;
+  function paletteKinds() {
+    if (_paletteKinds) return _paletteKinds;
+    _paletteKinds = {};
+    (OBOL.STUCK_PORTS || []).forEach(function (p) { (p.facts || []).forEach(function (k) { _paletteKinds[k] = true; }); });
+    return _paletteKinds;
+  }
+  S.isPaletteKind = function (kind) { return !!paletteKinds()[kind]; };
+  // The findings refiner asks only about non-port, user-assertable kinds (ports live in the palette).
+  S.isFinding = function (kind) { return S.isAskable(kind) && !paletteKinds()[kind]; };
+
+  function portEntry(port) { var a = OBOL.STUCK_PORTS || []; for (var i = 0; i < a.length; i++) if (a[i].port === port) return a[i]; return null; }
+  S.portOn = function (fs, port) { var e = portEntry(port); return !!e && (e.facts || []).some(function (k) { return fs.has(k); }); };
+  S.togglePort = function (fs, port, scopeStr) {
+    var e = portEntry(port); if (!e) return false;
+    var on = S.portOn(fs, port);
+    (e.facts || []).forEach(function (k) { if (on) S.retract(fs, k); else S.assert(fs, k, { scope: scopeStr || '', value: { port: port } }); });
+    return !on;
+  };
+  // free-type: an exotic port the palette does not list. Assert a bare port:N (and the palette facts if known).
+  S.addPortNumber = function (fs, port, scopeStr) {
+    port = parseInt(port, 10); if (!port || port < 1 || port > 65535) return false;
+    if (portEntry(port)) { if (!S.portOn(fs, port)) S.togglePort(fs, port, scopeStr); return true; }
+    S.assert(fs, 'port:' + port, { scope: scopeStr || '', value: { port: port } }); return true;
+  };
+
+  // A lane is hidden until the facts that imply it are present. Service lanes gate on their ports; the
+  // depth lanes (Credentials, Access) are always available; privesc/loot/pivot gate on a foothold.
+  var LANE_GATES = {
+    'Recon': null,
+    'Web': ['http.reachable', 'port:80', 'port:443', 'port:8080', 'port:8443'],
+    'Windows And AD': ['smb.reachable', 'ldap.reachable', 'kerberos.reachable', 'winrm.reachable', 'rdp.reachable', 'port:445', 'port:139', 'port:88', 'port:389', 'port:3268', 'port:135'],
+    'Credentials': null,
+    'Access': null,
+    'Linux Privesc': ['foothold.linux'],
+    'Windows Privesc': ['foothold.windows', 'access.system'],
+    'Loot': ['access.admin', 'access.system', 'access.root', 'foothold.linux', 'foothold.windows', 'foothold.webshell'],
+    'Pivoting': ['access.shell', 'foothold.linux', 'foothold.windows', 'access.admin', 'host.multihomed'],
+  };
+  var AD_PREFIXES = ['ad.', 'smb.', 'ldap.', 'kerberos.'];
+  S.laneActive = function (lane, fs) {
+    if (!(lane in LANE_GATES)) return true;
+    var g = LANE_GATES[lane];
+    if (g === null) return true;
+    if (lane === 'Windows And AD') {
+      var kinds = (fs && fs.kinds) ? fs.kinds() : {};
+      if (Object.keys(kinds).some(function (k) { return AD_PREFIXES.some(function (p) { return k.indexOf(p) === 0; }); })) return true;
+    }
+    return g.some(function (k) { return fs.has(k); });
+  };
+
   // ── the kind universe (what facts even exist) ──────────────────────────────────────────────────
   // Every fact kind the pack references (requires/produces) plus every kind the parsers can emit. Used
   // to guard triage seeds and, later, to bound the authored catalog.

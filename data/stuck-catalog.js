@@ -155,4 +155,49 @@
   };
 
   OBOL.STUCK_CATALOG = CATALOG;
+
+  // ── Port palette ────────────────────────────────────────────────────────────────────────────
+  // Ports are foundational, so they get their own curated step (not reveal candidates). Picking a port
+  // asserts the service/reachable fact(s) the pack gates on, which both opens that service's lane and
+  // makes its moves eligible. The common OSCP/HTB set, plus a free-type box in the UI for anything
+  // exotic. `facts` are what the click asserts; `lane` groups the palette visually.
+  OBOL.STUCK_PORTS = [
+    { port: 21, label: 'FTP', lane: 'Common', facts: ['ftp.reachable', 'port:21'] },
+    { port: 22, label: 'SSH', lane: 'Common', facts: ['ssh.reachable', 'port:22'] },
+    { port: 23, label: 'Telnet', lane: 'Common', facts: ['telnet.reachable', 'port:23'] },
+    { port: 25, label: 'SMTP', lane: 'Common', facts: ['port:25'] },
+    { port: 53, label: 'DNS', lane: 'Common', facts: ['dns.reachable', 'port:53'] },
+    { port: 80, label: 'HTTP', lane: 'Web', facts: ['http.reachable', 'port:80'] },
+    { port: 110, label: 'POP3', lane: 'Mail', facts: ['port:110'] },
+    { port: 111, label: 'RPC / NFS', lane: 'Common', facts: ['port:111'] },
+    { port: 135, label: 'MSRPC', lane: 'Windows', facts: ['port:135'] },
+    { port: 139, label: 'NetBIOS', lane: 'Windows', facts: ['smb.reachable', 'port:139'] },
+    { port: 143, label: 'IMAP', lane: 'Mail', facts: ['port:143'] },
+    { port: 161, label: 'SNMP', lane: 'Common', facts: ['snmp.reachable', 'port:161'] },
+    { port: 389, label: 'LDAP', lane: 'Windows', facts: ['ldap.reachable', 'port:389'] },
+    { port: 443, label: 'HTTPS', lane: 'Web', facts: ['http.reachable', 'port:443'] },
+    { port: 445, label: 'SMB', lane: 'Windows', facts: ['smb.reachable', 'port:445'] },
+    { port: 88, label: 'Kerberos', lane: 'Windows', facts: ['kerberos.reachable', 'port:88'] },
+    { port: 464, label: 'Kerberos PW', lane: 'Windows', facts: ['port:464'] },
+    { port: 500, label: 'IKE / VPN', lane: 'Common', facts: ['port:500'] },
+    { port: 587, label: 'SMTP (sub)', lane: 'Mail', facts: ['port:587'] },
+    { port: 593, label: 'RPC / HTTP', lane: 'Windows', facts: ['port:593'] },
+    { port: 636, label: 'LDAPS', lane: 'Windows', facts: ['ldap.reachable', 'port:636'] },
+    { port: 873, label: 'rsync', lane: 'Common', facts: ['rsync.reachable', 'port:873'] },
+    { port: 993, label: 'IMAPS', lane: 'Mail', facts: ['port:993'] },
+    { port: 995, label: 'POP3S', lane: 'Mail', facts: ['port:995'] },
+    { port: 1433, label: 'MSSQL', lane: 'Database', facts: ['port:1433'] },
+    { port: 2049, label: 'NFS', lane: 'Common', facts: ['nfs.reachable', 'port:2049'] },
+    { port: 3268, label: 'Global Catalog', lane: 'Windows', facts: ['ldap.reachable', 'port:3268'] },
+    { port: 3306, label: 'MySQL', lane: 'Database', facts: ['service.mysql', 'port:3306'] },
+    { port: 3389, label: 'RDP', lane: 'Windows', facts: ['rdp.reachable', 'port:3389'] },
+    { port: 5432, label: 'PostgreSQL', lane: 'Database', facts: ['service.postgresql', 'port:5432'] },
+    { port: 5985, label: 'WinRM', lane: 'Windows', facts: ['winrm.reachable', 'port:5985'] },
+    { port: 5986, label: 'WinRM (TLS)', lane: 'Windows', facts: ['winrm.reachable', 'port:5986'] },
+    { port: 6379, label: 'Redis', lane: 'Database', facts: ['service.redis', 'port:6379'] },
+    { port: 8080, label: 'HTTP (alt)', lane: 'Web', facts: ['http.reachable', 'port:8080'] },
+    { port: 8443, label: 'HTTPS (alt)', lane: 'Web', facts: ['http.reachable', 'port:8443'] },
+    { port: 9200, label: 'Elasticsearch', lane: 'Database', facts: ['service.elasticsearch', 'port:9200'] },
+    { port: 27017, label: 'MongoDB', lane: 'Database', facts: ['service.mongodb', 'port:27017'] },
+  ];
 })(typeof globalThis !== 'undefined' ? globalThis : this);
