@@ -634,5 +634,51 @@
     };
   };
 
+  // ── lockout-aware spray planner ─────────────────────────────────────────────────────────────
+  // Password spraying locks accounts when it crosses the domain lockout threshold. This turns the
+  // policy (threshold + observation window) into a safe plan: how many passwords per round, how long to
+  // wait, and the total time, with a margin so you never actually reach the threshold. Pure arithmetic.
+  W.sprayPlan = function (opts) {
+    opts = opts || {};
+    var threshold = parseInt(opts.threshold, 10);
+    var windowMin = parseFloat(opts.windowMin);
+    var passwords = parseInt(opts.passwords, 10);
+    var margin = (opts.margin == null || isNaN(parseInt(opts.margin, 10))) ? 1 : parseInt(opts.margin, 10);
+    if (isNaN(passwords) || passwords < 1) passwords = 1;
+
+    var warnings = [];
+    // threshold 0 means "no lockout" in Windows policy.
+    if (threshold === 0) {
+      return { ok: true, noLockout: true, passwords: passwords, warnings: ['Lockout threshold is 0, so accounts never lock. You can spray freely, but still avoid hammering, which is noisy.'] };
+    }
+    if (isNaN(threshold) || threshold < 1) return { ok: false, warnings: ['Enter the lockout threshold (the bad-password count that locks an account).'] };
+    if (isNaN(windowMin) || windowMin <= 0) return { ok: false, warnings: ['Enter the observation window in minutes (how long the bad-password count takes to reset).'] };
+
+    var safePerWindow = threshold - margin;
+    if (safePerWindow < 1) {
+      return { ok: false, safePerWindow: safePerWindow,
+        warnings: ['A threshold of ' + threshold + ' with a margin of ' + margin + ' leaves no safe attempts. Lower the margin to 1, or spray a single, very likely password only (and even then, carefully).'] };
+    }
+    var rounds = Math.ceil(passwords / safePerWindow);
+    var totalMinutes = (rounds - 1) * windowMin;   // wait the window BETWEEN rounds, not after the last
+    if (margin < 1) warnings.push('A margin of 0 means you spray right up to the threshold. One retry, one failed sync, or one stale attempt, and an account locks. Use at least 1.');
+    if (safePerWindow === 1) warnings.push('Only one attempt per window is safe here. Spray your single best guess first; the full list will take a long time.');
+
+    return {
+      ok: true, noLockout: false,
+      threshold: threshold, windowMin: windowMin, margin: margin, passwords: passwords,
+      safePerWindow: safePerWindow, rounds: rounds, totalMinutes: totalMinutes,
+      warnings: warnings,
+    };
+  };
+
+  // Minutes to a friendly "2h 30m" style string.
+  W.fmtDuration = function (min) {
+    min = Math.round(min);
+    if (min <= 0) return '0m';
+    var h = Math.floor(min / 60), m = min % 60;
+    return (h ? h + 'h ' : '') + (m || !h ? m + 'm' : '').trim();
+  };
+
   OBOL.workbench = W;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

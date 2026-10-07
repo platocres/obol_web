@@ -176,5 +176,19 @@ ok(ann.facts[0].lineNos.indexOf(1) >= 0, 'the 445 fact maps to the 445 line');
 ok(ann.lines[1].factIdxs.length >= 1, 'the 445 line is marked as a hit');
 ok(ann.lines[0].factIdxs.length === 0, 'the header line is not a false hit');
 
+// ── lockout-aware spray planner ──────────────────────────────────────────────────────────────
+const sp = W.sprayPlan({ threshold: 5, windowMin: 30, passwords: 12, margin: 1 });
+ok(sp.ok && sp.safePerWindow === 4, 'threshold 5 margin 1 -> 4 safe attempts per window');
+ok(sp.rounds === 3, '12 passwords at 4 per window -> 3 rounds');
+ok(sp.totalMinutes === 60, '3 rounds, wait between -> 60 minutes');
+ok(W.sprayPlan({ threshold: 0 }).noLockout === true, 'threshold 0 means no lockout');
+ok(W.sprayPlan({ threshold: 1, windowMin: 30, passwords: 5, margin: 1 }).ok === false, 'threshold 1 with margin 1 leaves no safe attempts');
+ok(W.sprayPlan({ threshold: 3, windowMin: 15, passwords: 2, margin: 1 }).safePerWindow === 2, 'threshold 3 margin 1 -> 2 per window');
+ok(W.sprayPlan({ windowMin: 30, passwords: 5 }).ok === false, 'missing threshold is rejected');
+ok(W.sprayPlan({ threshold: 5, passwords: 5 }).ok === false, 'missing window is rejected');
+ok(W.sprayPlan({ threshold: 2, windowMin: 30, passwords: 10, margin: 1 }).warnings.some(function (w) { return /one attempt per window/i.test(w); }), 'one-per-window warns');
+ok(W.fmtDuration(90) === '1h 30m', 'fmtDuration 90 -> 1h 30m');
+ok(W.fmtDuration(45) === '45m', 'fmtDuration 45 -> 45m');
+
 console.log(fail ? ('\nWORKBENCH: ' + fail + ' FAILURES') : '\nWORKBENCH: all passed');
 process.exit(fail ? 1 : 0);

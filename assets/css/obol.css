@@ -3395,3 +3395,13 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-ex-proves, .wb-ex-caveat { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
 .wb-ex-proves strong { color: var(--accent-2); }
 .wb-ex-caveat strong { color: var(--orange); }
+
+/* Workbench Spray Planner */
+.wb-sp-out { margin-top: 14px; }
+.wb-sp-plan { background: var(--bg); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 10px; padding: 14px 15px; }
+.wb-sp-head { font: 800 11px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--accent-2); margin-bottom: 10px; }
+.wb-sp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.wb-sp-tile { background: var(--surf2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.wb-sp-n { font: 800 22px var(--mono); color: var(--accent-2); }
+.wb-sp-l { font: 600 10.5px var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.wb-sp-warn { color: var(--orange); }

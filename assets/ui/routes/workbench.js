@@ -28,6 +28,7 @@
     { id: 'wordlists', label: 'Wordlists' },
     { id: 'sqli', label: 'Manual SQLi' },
     { id: 'explain', label: 'Explain Output' },
+    { id: 'spray', label: 'Spray Planner' },
   ];
   function tabIds() { return TABS.map(function (t) { return t.id; }); }
 
@@ -468,6 +469,42 @@
       + '<div id="wb-ex-out" class="wb-ex-out"></div></div>';
   }
 
+  // Lockout-Aware Spray Planner.
+  function sprayOutHtml() {
+    // On first paint the inputs are not in the DOM yet, so fall back to the same defaults the inputs
+    // carry; after mount, read the live values.
+    function v(id, def) { var el = document.getElementById(id); return el ? el.value : def; }
+    var plan = W().sprayPlan({ threshold: v('wb-sp-thr', '5'), windowMin: v('wb-sp-win', '30'), passwords: v('wb-sp-pw', '100'), margin: v('wb-sp-margin', '1') });
+    var warn = (plan.warnings || []).map(function (w) { return '<p class="wb-enc-note wb-sp-warn">' + esc(w) + '</p>'; }).join('');
+    if (plan.noLockout) {
+      return '<div class="wb-sp-plan ok"><div class="wb-sp-head">No Lockout Policy</div>'
+        + '<p class="wb-hash-note">Threshold is 0, so accounts never lock from bad passwords.</p></div>' + warn;
+    }
+    if (!plan.ok) return warn || '<p class="wb-note">Fill in the policy above and obol builds a safe spray plan.</p>';
+    var wb = W();
+    return '<div class="wb-sp-plan ok"><div class="wb-sp-head">Your Safe Plan</div>'
+      + '<div class="wb-sp-grid">'
+      + '<div class="wb-sp-tile"><span class="wb-sp-n">' + esc(plan.safePerWindow) + '</span><span class="wb-sp-l">Passwords Per Round</span></div>'
+      + '<div class="wb-sp-tile"><span class="wb-sp-n">' + esc(wb.fmtDuration(plan.windowMin)) + '</span><span class="wb-sp-l">Wait Between Rounds</span></div>'
+      + '<div class="wb-sp-tile"><span class="wb-sp-n">' + esc(plan.rounds) + '</span><span class="wb-sp-l">Rounds For ' + esc(plan.passwords) + ' Passwords</span></div>'
+      + '<div class="wb-sp-tile"><span class="wb-sp-n">' + esc(wb.fmtDuration(plan.totalMinutes)) + '</span><span class="wb-sp-l">Total Time</span></div>'
+      + '</div>'
+      + '<p class="wb-hash-note">Spray ONE password across ALL users per attempt. Try up to ' + esc(plan.safePerWindow)
+      + ' passwords, then wait the full ' + esc(wb.fmtDuration(plan.windowMin)) + ' so the bad-password count resets before the next round. The margin of '
+      + esc(plan.margin) + ' keeps you one attempt short of the threshold on purpose.</p></div>' + warn;
+  }
+  function sprayPanel() {
+    return '<div class="wb-panel wb-spray">'
+      + '<p class="wb-linked">Password spraying locks accounts the moment it crosses the domain lockout threshold. Enter the policy you enumerated (net accounts, or the LDAP/SMB policy query) and obol plans a spray that stays safely under it.</p>'
+      + '<div class="wb-params">'
+      + '<label class="wb-param"><span>Lockout Threshold</span><input id="wb-sp-thr" type="text" inputmode="numeric" value="5" placeholder="5" autocomplete="off"></label>'
+      + '<label class="wb-param"><span>Observation Window (Min)</span><input id="wb-sp-win" type="text" inputmode="numeric" value="30" placeholder="30" autocomplete="off"></label>'
+      + '<label class="wb-param"><span>Passwords To Try</span><input id="wb-sp-pw" type="text" inputmode="numeric" value="100" placeholder="100" autocomplete="off"></label>'
+      + '<label class="wb-param"><span>Safety Margin</span><input id="wb-sp-margin" type="text" inputmode="numeric" value="1" placeholder="1" autocomplete="off"></label>'
+      + '</div>'
+      + '<div id="wb-sp-out" class="wb-sp-out">' + sprayOutHtml() + '</div></div>';
+  }
+
   function stubPanel(label) {
     return '<div class="wb-panel wb-stub"><p class="wb-note">' + esc(label)
       + ' is coming online in this build. The Reverse Shell Builder is ready now, the rest land next.</p></div>';
@@ -482,6 +519,7 @@
     if (tab === 'wordlists') return wordlistsPanel();
     if (tab === 'sqli') return sqliPanel();
     if (tab === 'explain') return explainPanel();
+    if (tab === 'spray') return sprayPanel();
     var t = TABS.filter(function (x) { return x.id === tab; })[0];
     return stubPanel(t ? t.label : 'This tool');
   }
@@ -628,6 +666,10 @@
       else if (OBOL.lazy && OBOL.lazy.loadGroup) { OBOL.lazy.loadGroup('parsers').then(done, done); }
       else { done(); }
     });
+
+    // spray planner: recompute on any input
+    function sprayRefresh() { var out = document.getElementById('wb-sp-out'); if (out) out.innerHTML = sprayOutHtml(); }
+    ['#wb-sp-thr', '#wb-sp-win', '#wb-sp-pw', '#wb-sp-margin'].forEach(function (sel) { U.on(mount, 'input', sel, sprayRefresh); });
 
     // wordlists: switch task, re-rank
     U.on(mount, 'click', '.wb-chip[data-wl-task]', function (e, t) {
