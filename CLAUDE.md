@@ -79,9 +79,10 @@ screenshot the changed surface and read it for sense.
   fill the next query).
 - [x] **P6.** "Explain This Output" (parser annotate mode: highlight the lines that mint facts, say
   what each proves in plain language, and what it does not prove).
-- [ ] **P7.** Finish the remaining field-note lanes: ad, windows, web_exploit_checks, database,
+- [x] **P7.** Finish the remaining field-note lanes: ad, windows, web_exploit_checks, database,
   pivot (and obol_local_pivot), creds (and credential_access), shells, cracking, findings_checks.
-  Author with the new capabilities baked in.
+  Author with the new capabilities baked in. **Field-note coverage is now 100%: all 278 moves and
+  all 848 commands across every lane are authored.**
 - [ ] **P8.** Refine pass over recon, linux, and web; stretch sparks (lockout-aware spray planner,
   report-snippet generator, proof-screenshot helper, "what changed" fact diff).
 
@@ -142,3 +143,15 @@ Loadout, your installed tools). Easy to rename.
   with a safe fallback; annotateOutput + factNeedles tested in workbench-smoke.js. Verified headless
   on a real nmap paste (15 facts, correct line attribution, 0 console errors). The Workbench now has
   all eight tools.
+- 2026-10-07: P7 COMPLETE. Authored every remaining field-note lane in committed sub-batches: shells,
+  cracking, credential access, pivoting and local pivot, database, web exploit checks, findings
+  checks, windows privesc, then the 68-move AD lane in five parts (recon/enum/roasting; pathfinding/
+  dumping/lateral; ADCS/delegation/tickets/ACLs; foothold enum and Kerberos troubleshooters;
+  trusts/coercion/relay and the CVE and advanced escalations). Field-note coverage is now 100%: all
+  278 moves and all 848 commands across all 14 lanes carry an authored When / How To Land It / What
+  To Look For / win / Common Mistakes note, in the learner-first voice, with the AD throughline
+  (userlist handoffs, roast-then-crack, coerce-and-relay, the mandatory Zerologon restore) and
+  pointers into the Workbench (Hash ID, reverse-shell builder, encoder, wordlist picker, GTFOBins).
+  No payloads authored in the notes; the pack commands own those. tests/engine/field-notes-smoke.js
+  updated: with full coverage there is no real un-authored move, so the fallback test now synthesizes
+  one. All guardrails green throughout, lint clean, no em or en dashes.

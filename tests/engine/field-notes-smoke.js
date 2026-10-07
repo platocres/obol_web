@@ -36,8 +36,12 @@ const fhw = OBOL.fieldNote(byId('flag-hunt-windows'), 1);
 ok(/locate/i.test(fhw.land.join(' ')) || /scores zero/i.test(fhw.mistakes.join(' ')), 'the windows remote spider note explains it only locates');
 
 // 2. Graceful fallback: an un-authored move still yields non-empty help from its command note/hypothesis.
-const unauthored = pack.filter((a) => !OBOL.FIELD_NOTES[a.id] && (a.commands || []).length > 0)[0];
-ok(unauthored, 'found an un-authored move to test fallback: ' + (unauthored && unauthored.id));
+// Coverage is now 100%, so there is no real un-authored move to probe; synthesize one from a real move
+// (a fake id the FIELD_NOTES map does not carry) to exercise the fallback deterministically.
+const real = pack.filter((a) => (a.commands || []).length > 0 && ((a.commands[0] || {}).note || a.hypothesis))[0];
+ok(real, 'found a pack move with a command note or hypothesis to clone');
+const unauthored = Object.assign({}, real, { id: '__unauthored_probe__' });
+ok(!OBOL.FIELD_NOTES[unauthored.id], 'the probe id is not authored');
 const fb = OBOL.fieldNote(unauthored, 0);
 ok(fb && fb.land.length > 0 && !fb.authored, 'un-authored command falls back to a non-empty note (from the pack command note / hypothesis)');
 
