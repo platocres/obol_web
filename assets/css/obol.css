@@ -3405,3 +3405,12 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-sp-n { font: 800 22px var(--mono); color: var(--accent-2); }
 .wb-sp-l { font: 600 10.5px var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 .wb-sp-warn { color: var(--orange); }
+
+/* Workbench What Changed (fact diff) */
+.wb-ch-out { margin-top: 6px; }
+.wb-ch-list { display: flex; flex-direction: column; gap: 9px; margin: 6px 0 14px; }
+.wb-ch-fact { background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 9px 12px; }
+.wb-ch-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+.wb-ch-head code { font: 700 12.5px var(--mono); color: var(--accent-2); }
+.wb-ch-scope { font: 11px var(--mono); color: var(--muted); }
+.wb-ch-when { font: 11px var(--mono); color: var(--muted); margin-left: auto; }

@@ -29,6 +29,7 @@
     { id: 'sqli', label: 'Manual SQLi' },
     { id: 'explain', label: 'Explain Output' },
     { id: 'spray', label: 'Spray Planner' },
+    { id: 'changed', label: 'What Changed' },
   ];
   function tabIds() { return TABS.map(function (t) { return t.id; }); }
 
@@ -505,6 +506,44 @@
       + '<div id="wb-sp-out" class="wb-sp-out">' + sprayOutHtml() + '</div></div>';
   }
 
+  // What Changed (fact diff since you last checked).
+  function reviewedKey() { var e = OBOL.store.active(); return e ? ('obol.wb-reviewed.' + e.id) : null; }
+  function lastReviewed() { var k = reviewedKey(); if (!k) return 0; try { return parseInt(localStorage.getItem(k), 10) || 0; } catch (e) { return 0; } }
+  function setReviewed(ts) { var k = reviewedKey(); if (!k) return; try { localStorage.setItem(k, String(ts)); } catch (e) {} }
+  function changedOutHtml() {
+    var eng = OBOL.store.active();
+    if (!eng) return '<p class="wb-note">No engagement active. This tool shows what obol learned in an engagement since you last checked, so start or pick one on the Engagements screen.</p>';
+    var fs;
+    try { fs = OBOL.store.factSet(); } catch (e) { return '<p class="wb-note">No facts yet.</p>'; }
+    var since = lastReviewed();
+    var all = (fs && fs.facts) ? fs.facts.slice() : [];
+    var fresh = all.filter(function (f) { return (f.created_at || 0) > since; }).sort(function (a, b) { return (b.created_at || 0) - (a.created_at || 0); });
+    var header = since
+      ? '<p class="wb-note">New facts obol minted since you last marked this reviewed. Paste more output on Evidence and they appear here.</p>'
+      : '<p class="wb-note">Everything obol has learned in this engagement so far. Mark it reviewed and future checks show only what is new.</p>';
+    var btn = '<button id="wb-ch-review" class="wb-go" type="button">Mark All Reviewed</button>';
+    if (!fresh.length) {
+      return (since ? '<p class="wb-note">Nothing new since you last checked. ' + all.length + ' fact' + (all.length === 1 ? '' : 's') + ' total.</p>'
+        : '<p class="wb-note">No facts yet. Paste tool output on Evidence and obol starts recording what it learns.</p>')
+        + (all.length ? btn : '');
+    }
+    var wb = W();
+    var rows = fresh.map(function (f) {
+      var ex = wb.explainKind(f.kind);
+      var when = f.created_at ? new Date(f.created_at).toLocaleTimeString() : '';
+      return '<div class="wb-ch-fact"><div class="wb-ch-head"><code>' + esc(f.kind) + '</code>'
+        + '<span class="wb-ch-scope">' + esc(f.scope || '') + '</span>'
+        + (when ? '<span class="wb-ch-when">' + esc(when) + '</span>' : '') + '</div>'
+        + '<p class="wb-ex-proves"><strong>Proves:</strong> ' + esc(ex.proves) + '</p></div>';
+    }).join('');
+    return header + '<div class="wb-field-l">' + fresh.length + ' New</div><div class="wb-ch-list">' + rows + '</div>' + btn;
+  }
+  function changedPanel() {
+    return '<div class="wb-panel wb-changed">'
+      + '<p class="wb-linked">' + linkedNote() + '</p>'
+      + '<div id="wb-ch-out" class="wb-ch-out">' + changedOutHtml() + '</div></div>';
+  }
+
   function stubPanel(label) {
     return '<div class="wb-panel wb-stub"><p class="wb-note">' + esc(label)
       + ' is coming online in this build. The Reverse Shell Builder is ready now, the rest land next.</p></div>';
@@ -520,6 +559,7 @@
     if (tab === 'sqli') return sqliPanel();
     if (tab === 'explain') return explainPanel();
     if (tab === 'spray') return sprayPanel();
+    if (tab === 'changed') return changedPanel();
     var t = TABS.filter(function (x) { return x.id === tab; })[0];
     return stubPanel(t ? t.label : 'This tool');
   }
@@ -670,6 +710,14 @@
     // spray planner: recompute on any input
     function sprayRefresh() { var out = document.getElementById('wb-sp-out'); if (out) out.innerHTML = sprayOutHtml(); }
     ['#wb-sp-thr', '#wb-sp-win', '#wb-sp-pw', '#wb-sp-margin'].forEach(function (sel) { U.on(mount, 'input', sel, sprayRefresh); });
+
+    // what changed: mark reviewed, then re-render the diff
+    U.on(mount, 'click', '#wb-ch-review', function () {
+      setReviewed(Date.now());
+      var out = document.getElementById('wb-ch-out');
+      if (out) out.innerHTML = changedOutHtml();
+      U.toast('Marked reviewed');
+    });
 
     // wordlists: switch task, re-rank
     U.on(mount, 'click', '.wb-chip[data-wl-task]', function (e, t) {
