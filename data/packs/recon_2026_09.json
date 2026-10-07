@@ -38,6 +38,12 @@
       "commands": [
         {
           "tool": "nxc",
+          "run": "nxc smb {{target}} -u '' -p ''",
+          "note": "Switchless probe first: confirm the host even accepts a null session (a [+] line) before you ask it for anything. If the empty user is rejected, retry as guest with an empty password. Once this proves a null or guest session, it drops out so you are not re-running a question you already answered.",
+          "settled_by": ["smb.null_session", "smb.guest_session"]
+        },
+        {
+          "tool": "nxc",
           "run": "nxc smb {{target}} -u '' -p '' --shares",
           "note": "List shares over a null session; if the empty user is rejected, retry as guest with an empty password."
         },

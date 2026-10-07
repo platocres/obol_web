@@ -175,3 +175,22 @@ Loadout, your installed tools). Easy to rename.
   Output, P7 field notes to 100% coverage across all fourteen lanes, P8 the spray planner, the fact
   diff and the web refine. House style held throughout (no em or en dashes, Title Case), every asset
   stamped, all tests/lint/gap/browser-smoke green.
+
+### Post-build follow-ups (real-box testing on Forest)
+
+- 2026-10-07: House toolkit (NetExec) preference + switchless probe, and What Changed folded into Explain
+  Output. (1) Ranking: added a single global tool-class rule in pack.js (PREFERRED_TOOLKIT = nxc family),
+  expressed as data like LOCUS_REMOTE, never per-move weights. It drives the within-move default command
+  (preferredCommandIndex: prefer nxc, then a switchless probe, then pack order) and an across-move
+  tie-break in nextActionsV2, placed below hand-tuned priority and above the remote-first locus tiebreak so
+  it only decides genuine twins. (2) Switchless probe: the Anonymous SMB move now leads with
+  `nxc smb {{target}} -u '' -p ''` to confirm a null session is even accepted before enumerating shares.
+  It carries a new per-command `settled_by: [smb.null_session, smb.guest_session]`, so once anonymous
+  access is proven the probe drops out of the card (never nag a question you answered); the render also
+  re-points a stale selection off a settled command. Investigation note: the switchless variant never
+  existed in obol_web's pack (git history confirms `--shares` was always command [0]); the owner
+  sanctioned deviating from obol-local, so it was added to the source JSON and the bundle regenerated.
+  (3) What Changed tab removed; its only durable value (the plain-language "what this newly proves /
+  unlocks" narrative) already lives in Explain Output via the findings engine. Tests: locus-scope-smoke.js
+  extended (toolkit rank, switchless-probe detection, settled skipping, across-move tiebreak). All
+  guardrails green; headless-verified on a seeded Forest-like state with 0 console errors.

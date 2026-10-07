@@ -122,6 +122,69 @@
     return 'remote';
   }
 
+  // ---- house toolkit preference ----------------------------------------------------------------
+  // NetExec (nxc) is the house tool for the SMB/LDAP/WinRM/RDP/MSSQL/FTP surface. When a move offers the
+  // same job through nxc AND an overlapping legacy tool (smbmap, enum4linux(-ng), rpcclient, smbclient),
+  // the nxc command is the default shown, and among nxc commands a SWITCHLESS probe (connect + auth, no
+  // action switch) leads so "do I even have anonymous/credentialed access?" is answered before the heavy
+  // enumeration runs. This is ONE global rule expressed as tool-class DATA (the same shape as LOCUS_REMOTE),
+  // applied as a tie-break and a default-pick, never a per-move hand-tuned rank.
+  var PREFERRED_TOOLKIT = { nxc: 1, netexec: 1, crackmapexec: 1, cme: 1 };
+  function commandTool(cmd) {
+    var t = String((cmd && (cmd.tool || (cmd.tools && cmd.tools[0]))) || '').toLowerCase();
+    if (t) return t;
+    var m = String((cmd && cmd.run) || '').trim().match(/^(\S+)/);
+    return m ? m[1].toLowerCase() : '';
+  }
+  function commandToolkitRank(cmd) { return PREFERRED_TOOLKIT[commandTool(cmd)] ? 0 : 1; }
+  // nxc flags that only connect/authenticate (not an action). A command whose only flags are these is a
+  // bare probe. Everything else after the target (--shares, --users, --rid-brute, -M <module>, -x, …) is an
+  // action, so the command is NOT a switchless probe.
+  var NXC_CONN_FLAGS = { '-u': 1, '-p': 1, '-d': 1, '-H': 1, '-k': 1, '--port': 1, '--local-auth': 1,
+    '--hashes': 1, '--aesKey': 1, '--domain': 1, '--kdcHost': 1, '--no-pass': 1 };
+  function isSwitchlessProbe(cmd) {
+    if (commandToolkitRank(cmd) !== 0) return false;
+    var toks = String((cmd && cmd.run) || '').trim().split(/\s+/);
+    for (var i = 3; i < toks.length; i++) {   // 0=nxc 1=proto 2=target; scan the remainder
+      var t = toks[i];
+      if (t.charAt(0) !== '-') continue;       // a value (e.g. '' after -u) or a bare token, not a flag
+      if (!NXC_CONN_FLAGS[t]) return false;    // a real action flag or module -> not a bare probe
+    }
+    return true;
+  }
+  // A command can declare it is answered once a fact exists (settled_by: [kind,…]), so a one-shot probe
+  // drops out of the move after it has done its job: the switchless null-session probe disappears once
+  // smb.null_session / smb.guest_session is proven, rather than nagging you to re-run it every render.
+  function commandSettled(cmd, facts) {
+    if (!facts || !cmd) return false;
+    var sb = cmd.settled_by || cmd.settledBy; if (!sb || !sb.length) return false;
+    for (var i = 0; i < sb.length; i++) if (facts.has(sb[i])) return true;
+    return false;
+  }
+  // The default command index for a move at a given locus: among commands matching the locus and not yet
+  // settled, prefer the house toolkit (nxc), then a switchless probe, then earliest pack order. Falls back
+  // to the first locus-matching command (even if settled) so the toggle always has a target.
+  function preferredCommandIndex(move, locus, facts) {
+    var cs = (move && move.commands) || [], best = -1, bestRank = 99, bestProbe = false, i;
+    for (i = 0; i < cs.length; i++) {
+      if (commandLocus(cs[i]) !== locus) continue;
+      if (commandSettled(cs[i], facts)) continue;
+      var rank = commandToolkitRank(cs[i]), probe = rank === 0 && isSwitchlessProbe(cs[i]);
+      if (best === -1 || rank < bestRank || (rank === bestRank && probe && !bestProbe)) {
+        best = i; bestRank = rank; bestProbe = probe;
+      }
+    }
+    if (best === -1) for (i = 0; i < cs.length; i++) if (commandLocus(cs[i]) === locus) return i;
+    return best === -1 ? 0 : best;
+  }
+  // A move's toolkit rank for the across-move tie-break: 0 if any of its commands is a house-toolkit (nxc)
+  // command, else 1. Prefers the nxc route only among moves the ranker has already tied on progress+priority.
+  function moveToolkitRank(move) {
+    var cs = (move && move.commands) || [];
+    for (var i = 0; i < cs.length; i++) if (commandToolkitRank(cs[i]) === 0) return 0;
+    return 1;
+  }
+
   // scope — where a technique sits in the OSCP syllabus, for a newcomer-safe lens:
   //   'oscp' core exam material · 'oscp+' modern AD past the core · 'beyond' exotic / legacy / edge CVEs.
   // Default is 'oscp'; a move escalates only when its id, tool, or an earned gate fact matches a curated
@@ -818,6 +881,12 @@
       if (y.tier !== x.tier) return y.tier - x.tier;
       if (y.score !== x.score) return y.score - x.score;
       if (y.a.priority !== x.a.priority) return y.a.priority - x.a.priority;
+      // House toolkit: among moves equal on goal-progress AND hand-tuned priority, prefer the one that uses
+      // NetExec (nxc) over an overlapping legacy tool, so "always prefer nxc" holds on genuine twins without
+      // a per-move weight. Placed below priority (never reorders a move the pack ranked higher) and above
+      // the locus tie-break (nxc is remote anyway, so they rarely conflict).
+      var tx = moveToolkitRank(x.a), ty = moveToolkitRank(y.a);
+      if (tx !== ty) return tx - ty;
       // Remote-first: among moves equal on goal-progress AND hand-tuned priority, prefer the lowest-friction
       // locus (R < F < I) so the coach never nudges you onto the box when an off-host move reaches the same
       // objective. Placed below priority so it only decides genuine twins — it never overrides a move the
@@ -956,6 +1025,12 @@
     commandIsOnHost: commandIsOnHost,
     moveCommandLoci: moveCommandLoci,
     defaultCommandLocus: defaultCommandLocus,
+    commandTool: commandTool,
+    commandToolkitRank: commandToolkitRank,
+    isSwitchlessProbe: isSwitchlessProbe,
+    commandSettled: commandSettled,
+    preferredCommandIndex: preferredCommandIndex,
+    moveToolkitRank: moveToolkitRank,
     friendly: friendly,
     chipLabel: chipLabel,
     FRIENDLY: FRIENDLY,

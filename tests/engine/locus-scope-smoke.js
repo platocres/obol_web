@@ -65,5 +65,39 @@ const ri = ranked.findIndex((a) => a.id === 'zz-remote-grab');
 const ii = ranked.findIndex((a) => a.id === 'zz-onhost-grab');
 ok(ri >= 0 && ii >= 0 && ri < ii, 'the remote (R) move is ranked above the on-host (I) move at equal score (R@' + ri + ' < I@' + ii + ')');
 
+console.log('# house toolkit (nxc) preference + switchless probe + run-once settling');
+const smbAnon = byId['recon-smb-anon'];
+ok(!!smbAnon, 'recon-smb-anon is loaded');
+ok(PK.commandToolkitRank(smbAnon.commands[0]) === 0, 'nxc command ranks 0 (preferred)');
+ok(PK.commandToolkitRank(smbAnon.commands[2]) === 1, 'smbmap command ranks 1 (legacy)');
+ok(PK.commandToolkitRank(smbAnon.commands[4]) === 1, 'enum4linux-ng command ranks 1 (legacy)');
+ok(PK.isSwitchlessProbe(smbAnon.commands[0]), "command 0 (nxc smb -u '' -p '') is a switchless probe");
+ok(!PK.isSwitchlessProbe(smbAnon.commands[1]), 'command 1 (--shares) is NOT a switchless probe (it carries an action switch)');
+ok(!PK.isSwitchlessProbe(smbAnon.commands[2]), 'command 2 (smbmap, non-nxc) is NOT a switchless probe');
+ok(PK.moveToolkitRank(smbAnon) === 0, 'the move ranks as a house-toolkit (nxc) move');
+// default command, no facts: the switchless probe leads so "do I even have access?" is answered first
+ok(PK.preferredCommandIndex(smbAnon, 'remote', null) === 0, 'with no facts, the switchless probe is the default command');
+// once a null (or guest) session is proven the probe has done its job: it settles and drops out, and the
+// default advances to the next nxc command (--shares), never a re-run of the question you already answered
+const nullFacts = new F.FactSet([
+  F.makeFact({ kind: 'smb.reachable', scope: { target: '10' }, source: 't' }),
+  F.makeFact({ kind: 'smb.null_session', scope: { target: '10' }, source: 't' }),
+]);
+ok(!PK.commandSettled(smbAnon.commands[0], new F.FactSet([])), 'probe is NOT settled with no facts');
+ok(PK.commandSettled(smbAnon.commands[0], nullFacts), 'probe settles once smb.null_session is proven');
+ok(PK.preferredCommandIndex(smbAnon, 'remote', nullFacts) === 1, 'once settled, the default advances to --shares (skips the probe)');
+
+console.log('# across-move tiebreak: equal moves, the nxc one ranks before the legacy tool');
+const mkJob = (id, tool) => new PK.Action({ id: id, tool: tool, commands: [{ run: tool + ' job', tool: tool }],
+  requires_all: ['smb.reachable'], requires_any: [], produces: ['loot.files'] });
+const nxcJob = mkJob('zz-nxc-job', 'nxc');
+const legacyJob = mkJob('zz-legacy-job', 'smbmap');
+ok(nxcJob.locus === 'R' && legacyJob.locus === 'R', 'both jobs classify remote (R) so locus cannot separate them');
+const reach = new F.FactSet([F.makeFact({ kind: 'smb.reachable', scope: { target: '10' }, source: 't' })]);
+const rankedTk = PK.nextActionsV2(reach, [legacyJob, nxcJob], {});
+const ni = rankedTk.findIndex((a) => a.id === 'zz-nxc-job');
+const li = rankedTk.findIndex((a) => a.id === 'zz-legacy-job');
+ok(ni >= 0 && li >= 0 && ni < li, 'the nxc move ranks above the smbmap move at equal score (nxc@' + ni + ' < smbmap@' + li + ')');
+
 console.log(fail ? ('\nFAILED (' + fail + ')') : '\nALL PASS (' + PACK.length + ' moves)');
 process.exit(fail ? 1 : 0);

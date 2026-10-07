@@ -184,10 +184,11 @@
   var nsSel = { id: null, idx: 0, locus: null };
   var NS_INFRA = { 'target.configured': 1, 'host.up': 1, 'ports.open': 1, 'scan.nmap.quick': 1 };
 
-  function firstCmdIndexForLocus(move, locus) {
-    var cs = (move && move.commands) || [];
-    for (var i = 0; i < cs.length; i++) if (OBOL.pack.commandLocus(cs[i]) === locus) return i;
-    return 0;
+  // The default command for a move at a locus: the house-toolkit (nxc) pick, a switchless probe first, and
+  // never a command already settled by a held fact (so a run-once probe stops being the default). Delegates
+  // to the engine so the coach and any test share one rule.
+  function firstCmdIndexForLocus(move, locus, facts) {
+    return OBOL.pack.preferredCommandIndex(move, locus, facts || null);
   }
   // "Because <held gate> → expect <first payoff>" — the attack-graph cause/effect in one plain line.
   function nsNarrative(a, facts) {
@@ -206,9 +207,12 @@
   // The command rows inside an expanded card: flush-left commands (no tool badge), each selectable and
   // tagged with its own locus + original index so the canvas and the toggle can address it. Reuses the
   // token-fill / "Needs:" / missing-tool logic from commandsBlock.
-  function nsCommandRows(action, filled, selLocus, selIdx, spansBoth) {
+  function nsCommandRows(action, filled, selLocus, selIdx, spansBoth, facts) {
     var eng = OBOL.store.active() || {}, acts = eng.activities || [], params = eng.params || {};
     return (action.commands || []).map(function (cmdObj, i) {
+      // A command that has done its job drops out: a run-once probe (the switchless null-session check)
+      // disappears once the fact it was there to prove is held, so you never re-run a question you answered.
+      if (OBOL.pack.commandSettled(cmdObj, facts)) return '';
       var v = filled[i] || {};
       var locus = OBOL.pack.commandLocus(cmdObj);
       var hidden = spansBoth && locus !== selLocus;
@@ -245,7 +249,7 @@
     var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: dirs });
     var loci = OBOL.pack.moveCommandLoci(action);
     var selLocus = opts.selected ? (nsSel.locus || OBOL.pack.defaultCommandLocus(action)) : OBOL.pack.defaultCommandLocus(action);
-    var selIdx = opts.selected ? nsSel.idx : firstCmdIndexForLocus(action, selLocus);
+    var selIdx = opts.selected ? nsSel.idx : firstCmdIndexForLocus(action, selLocus, facts);
     var nCmd = (action.commands || []).length;
     var toggle = loci.both
       ? '<div class="ns-toggle" role="group" aria-label="Where to run this">'
@@ -255,7 +259,7 @@
     var body = '<div class="ns-body">'
       + toggle
       + prepBlock(action, facts, dirs)
-      + '<div class="ns-cmds">' + nsCommandRows(action, filled, selLocus, selIdx, loci.both) + '</div>'
+      + '<div class="ns-cmds">' + nsCommandRows(action, filled, selLocus, selIdx, loci.both, facts) + '</div>'
       + '<div class="ns-card-actions">'
       + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output</button>'
       + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
@@ -792,10 +796,16 @@
       selMove = onFlow[0] || selectable[0] || null;
       nsSel.id = selMove ? selMove.id : null;
       nsSel.locus = selMove ? OBOL.pack.defaultCommandLocus(selMove) : null;
-      nsSel.idx = selMove ? firstCmdIndexForLocus(selMove, nsSel.locus) : 0;
+      nsSel.idx = selMove ? firstCmdIndexForLocus(selMove, nsSel.locus, facts) : 0;
     } else {
       if (!nsSel.locus) nsSel.locus = OBOL.pack.defaultCommandLocus(selMove);
-      if (nsSel.idx >= (selMove.commands || []).length) nsSel.idx = firstCmdIndexForLocus(selMove, nsSel.locus);
+      // Re-point a stale selection: out of range, OR a command that has since settled (a run-once probe
+      // that is now hidden), OR one that no longer matches the active locus. Without this the canvas would
+      // keep showing a command the card no longer offers, and the selected card would show no active row.
+      var selCmds = selMove.commands || [], selCur = selCmds[nsSel.idx];
+      if (nsSel.idx >= selCmds.length || OBOL.pack.commandSettled(selCur, facts) || OBOL.pack.commandLocus(selCur) !== nsSel.locus) {
+        nsSel.idx = firstCmdIndexForLocus(selMove, nsSel.locus, facts);
+      }
     }
     function cardOpts(a, i, section) {
       return { rank: section === 'ready' ? (i + 1) : 0, selected: a.id === nsSel.id, suggested: section === 'ready' && i === 0 };
@@ -880,7 +890,7 @@
       var fx = freshCtx(); var m = moveById(fx.pack, id); if (!m) return;
       nsSel.id = id;
       nsSel.locus = OBOL.pack.defaultCommandLocus(m);
-      nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus);
+      nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus, fx.facts);
       // glow + expand follow the selection
       Array.prototype.forEach.call(mount.querySelectorAll('.ns-card.selected'), function (o) {
         o.classList.remove('selected', 'is-glow', 'ns-bloom'); o.setAttribute('aria-expanded', 'false');
