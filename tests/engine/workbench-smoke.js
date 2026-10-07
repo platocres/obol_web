@@ -225,5 +225,55 @@ ok(Array.isArray(narrs), 'findingNarratives returns an array');
 ok(narrs.length === 0 || (narrs[0].title && narrs[0].severity !== undefined), 'each narrative carries a title and severity');
 ok(W.findingNarratives(new OBOL.facts.FactSet()).length === 0, 'no facts yields no narratives');
 
-console.log(fail ? ('\nWORKBENCH: ' + fail + ' FAILURES') : '\nWORKBENCH: all passed');
-process.exit(fail ? 1 : 0);
+// ── smart decoder + codec layer (async: gzip/zlib go through the native streams) ───────────────
+(async function () {
+  // codec registry exposes the expected set
+  const codecIds = (W.codecList() || []).map(function (c) { return c.id; });
+  ['base64', 'base64url', 'hex', 'url', 'base32', 'ascii85', 'binary', 'decimal', 'html', 'gzip', 'zlib', 'rot13', 'rot47', 'reverse'].forEach(function (id) {
+    ok(codecIds.indexOf(id) >= 0, 'codec registry has ' + id);
+  });
+
+  // every reversible codec round-trips through runCodec
+  const sample = 'Hello, OSCP! flag{test_123}';
+  const htmlSample = '<b>a</b> & "q"';
+  for (const [id, s] of [['base64', sample], ['base64url', sample], ['hex', sample], ['url', sample], ['base32', sample], ['ascii85', sample], ['binary', sample], ['decimal', sample], ['html', htmlSample], ['rot13', sample], ['rot47', sample], ['reverse', sample], ['gzip', sample], ['zlib', sample], ['deflate-raw', sample]]) {
+    const enc = await W.runCodec(id, 'encode', s);
+    const dec = enc.ok ? await W.runCodec(id, 'decode', enc.out) : { ok: false };
+    ok(dec.ok && dec.out === s, id + ' round-trips through runCodec');
+  }
+
+  // encodeAll returns one result per encodable codec
+  const all = await W.encodeAll('abc');
+  ok(all.length >= 14, 'encodeAll returns every encoding (' + all.length + ')');
+  ok(all.some(function (r) { return r.id === 'base64' && r.out === 'YWJj'; }), 'encodeAll includes the correct base64');
+
+  // decodeAllOnce surfaces the plaintext of a single-layer base64
+  const b64 = (await W.runCodec('base64', 'encode', 'single layer secret')).out;
+  const once = await W.decodeAllOnce(b64);
+  ok(once.some(function (r) { return r.text === 'single layer secret' && r.applies; }), 'decodeAllOnce finds + flags the base64 layer');
+
+  // smartDecode peels a multi-layer chain to completion
+  const hexed = (await W.runCodec('hex', 'encode', 'deep flag{peeled}')).out;
+  const wrapped = (await W.runCodec('base64', 'encode', hexed)).out;
+  const smart = await W.smartDecode(wrapped);
+  ok(smart.found && smart.best.text === 'deep flag{peeled}', 'smartDecode peels base64 then hex to the plaintext');
+  ok(smart.best.chain.length === 2, 'smartDecode reports the two-layer chain');
+
+  // smartDecode peels through gzip (base64-wrapped by the encoder)
+  const gz = await W.runCodec('gzip', 'encode', 'compressed flag{gz}');
+  if (gz.ok) {
+    const sg = await W.smartDecode(gz.out);
+    ok(sg.found && sg.best.text === 'compressed flag{gz}', 'smartDecode inflates a base64-wrapped gzip blob');
+  } else { ok(true, 'gzip unavailable in this runtime (skipped)'); }
+
+  // honest: plain text is not "decoded"
+  const plain = await W.smartDecode('just some ordinary words with nothing hidden');
+  ok(!plain.found, 'smartDecode is honest: plain text yields no decode');
+
+  // runCodec reports a clean reason on invalid input, never throws
+  const bad = await W.runCodec('hex', 'decode', 'zzz');
+  ok(bad.ok === false && /hex/i.test(bad.error), 'runCodec reports invalid hex gracefully');
+
+  console.log(fail ? ('\nWORKBENCH: ' + fail + ' FAILURES') : '\nWORKBENCH: all passed');
+  process.exit(fail ? 1 : 0);
+})();

@@ -214,3 +214,16 @@ Loadout, your installed tools). Easy to rename.
   mint and the target card flips its name to the hostname (hostDomain also fixed to read the domain's
   `name` key). (b) WinRM's "Microsoft-HTTPAPI/2.0" server header on 5985/47001 no longer mints
   web.server, so a vuln scan on an AD box stops ranking the web-exploit lane above the real LDAP move.
+- 2026-10-07: Smart Decoder (eleventh Workbench tab) plus an Encoder expansion. The Encoder now shows every
+  common encoding at once (base64, base64url, hex, URL percent and every-byte, base32, ascii85, binary,
+  decimal, HTML entities, gzip and zlib base64-wrapped, ROT13, ROT47, reverse, and ${IFS} evasion); it went
+  async so the native compression streams can run. The new Smart Decoder is the opposite of the Encoder:
+  paste anything and it (1) peels multi-layer encodings to completion via a bounded, scored BFS over the
+  codecs that pass each layer's applies() guard (base64 of a gzip of hex, and so on), honestly reporting the
+  chain and "nothing decoded cleaner than the input" when that is the truth, (2) shows every single-layer
+  decode at once, flagging the ones whose shape matches, and (3) offers a Manual section with one field per
+  codec so a power user can run a single step either direction by hand. All byte-oriented so compression
+  chains stay binary-safe; all browser-native (atob/btoa, DecompressionStream). Engine in OBOL.workbench
+  (CODECS, codecList, smartDecode, decodeAllOnce, runCodec, encodeAll), tested in workbench-smoke.js. All
+  guardrails green; both surfaces driven headless (0 console errors), screenshot-verified desktop and mobile.
+  The Workbench now carries eleven tools.

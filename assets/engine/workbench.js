@@ -154,6 +154,275 @@
     return 'echo ' + W.b64(cmd) + ' | base64 -d | ' + shellBin;
   };
 
+  // ── universal codecs + the Smart Decoder ─────────────────────────────────────────────────────
+  // A BYTE-oriented codec layer so a stacked chain like base64 -> gzip -> text decodes to completion
+  // without corrupting binary between layers. Each codec declares: encode(text)->string (the reversible
+  // text transforms), decode(bytes)->bytes|Promise, and applies(bytes)->bool (a guard so the recursive
+  // decoder only tries a codec when the input plausibly IS that format). `stack:true` opts a codec into the
+  // automatic multi-layer search; single-layer obfuscations (ROT, reverse) are show-all + manual only.
+  // Everything here is browser-native and deterministic: no backend, no key, no LLM. A decode is a decode,
+  // never a claim that the result is trusted or complete.
+  function toU8(x) { return (x instanceof Uint8Array) ? x : Uint8Array.from(utf8Bytes(x)); }
+  function u8Ascii(bytes) { var s = ''; for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return s; } // latin1 view
+  var _TD = (typeof TextDecoder !== 'undefined') ? new TextDecoder('utf-8', { fatal: false }) : null;
+  function u8Text(bytes) { return _TD ? _TD.decode(bytes) : u8Ascii(bytes); }
+  function printableRatio(bytes) {
+    if (!bytes.length) return 0;
+    var ok = 0;
+    for (var i = 0; i < bytes.length; i++) { var b = bytes[i]; if (b === 9 || b === 10 || b === 13 || (b >= 32 && b <= 126)) ok++; }
+    return ok / bytes.length;
+  }
+
+  // base32 (RFC 4648)
+  var B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  function b32encode(bytes) {
+    var out = '', buf = 0, bits = 0, i;
+    for (i = 0; i < bytes.length; i++) { buf = (buf * 256) + bytes[i]; bits += 8; while (bits >= 5) { bits -= 5; out += B32[Math.floor(buf / Math.pow(2, bits)) & 31]; buf = buf % Math.pow(2, bits); } }
+    if (bits > 0) out += B32[(buf * Math.pow(2, 5 - bits)) & 31];
+    while (out.length % 8) out += '=';
+    return out;
+  }
+  function b32decode(str) {
+    str = String(str).replace(/=+$/, '').replace(/\s+/g, '').toUpperCase();
+    var buf = 0, bits = 0, out = [], i, v;
+    for (i = 0; i < str.length; i++) { v = B32.indexOf(str[i]); if (v < 0) return null; buf = (buf * 32) + v; bits += 5; if (bits >= 8) { bits -= 8; out.push(Math.floor(buf / Math.pow(2, bits)) & 0xff); buf = buf % Math.pow(2, bits); } }
+    return Uint8Array.from(out);
+  }
+
+  // ascii85 / base85 (standard, with optional <~ ~> wrapper)
+  function a85encode(bytes) {
+    var out = '', i, j;
+    for (i = 0; i < bytes.length; i += 4) {
+      var len = Math.min(4, bytes.length - i), n = 0;
+      for (j = 0; j < 4; j++) n = (n * 256) + (j < len ? bytes[i + j] : 0);
+      if (len === 4 && n === 0) { out += 'z'; continue; }
+      var chars = [];
+      for (j = 0; j < 5; j++) { chars.unshift(String.fromCharCode(33 + (n % 85))); n = Math.floor(n / 85); }
+      out += chars.slice(0, len + 1).join('');
+    }
+    return out;
+  }
+  function a85decode(str) {
+    str = String(str).replace(/^<~/, '').replace(/~>\s*$/, '').replace(/\s+/g, '');
+    var out = [], i, tuple = 0, count = 0, c, v, p, q;
+    for (i = 0; i < str.length; i++) {
+      c = str[i];
+      if (c === 'z' && count === 0) { out.push(0, 0, 0, 0); continue; }
+      v = c.charCodeAt(0) - 33; if (v < 0 || v > 84) return null;
+      tuple = tuple * 85 + v; count++;
+      if (count === 5) { if (tuple > 0xffffffff) return null; out.push((Math.floor(tuple / 16777216)) & 0xff, (Math.floor(tuple / 65536)) & 0xff, (Math.floor(tuple / 256)) & 0xff, tuple & 0xff); tuple = 0; count = 0; }
+    }
+    if (count > 0) { for (p = count; p < 5; p++) tuple = tuple * 85 + 84; if (tuple > 0xffffffff) return null; for (q = 0; q < count - 1; q++) out.push((Math.floor(tuple / Math.pow(256, 3 - q))) & 0xff); }
+    return Uint8Array.from(out);
+  }
+
+  // HTML entities
+  var _HTML_NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+  function htmlEncode(str) { return String(str).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
+  function htmlDecode(str) {
+    return String(str).replace(/&#x([0-9a-fA-F]+);/g, function (_, h) { return String.fromCodePoint(parseInt(h, 16)); })
+      .replace(/&#(\d+);/g, function (_, d) { return String.fromCodePoint(parseInt(d, 10)); })
+      .replace(/&([a-zA-Z]+);/g, function (m, n) { return _HTML_NAMED[n.toLowerCase()] != null ? _HTML_NAMED[n.toLowerCase()] : m; });
+  }
+
+  // binary (8-bit, space-grouped) + decimal char codes
+  function binEncode(bytes) { var out = []; for (var i = 0; i < bytes.length; i++) out.push(('0000000' + bytes[i].toString(2)).slice(-8)); return out.join(' '); }
+  function binDecode(str) { var bits = String(str).replace(/[^01]/g, ''); if (!bits.length || bits.length % 8) return null; var out = []; for (var i = 0; i < bits.length; i += 8) out.push(parseInt(bits.substr(i, 8), 2)); return Uint8Array.from(out); }
+  function decDecode(str) { var ns = String(str).trim().split(/[\s,]+/).filter(Boolean); if (!ns.length) return null; var out = []; for (var i = 0; i < ns.length; i++) { if (!/^\d{1,3}$/.test(ns[i])) return null; var n = parseInt(ns[i], 10); if (n > 255) return null; out.push(n); } return Uint8Array.from(out); }
+
+  // base64url
+  function b64urlEnc(str) { return bytesToB64(utf8Bytes(str)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function rot47(str) { return String(str).replace(/[\x21-\x7e]/g, function (c) { return String.fromCharCode(33 + ((c.charCodeAt(0) - 33 + 47) % 94)); }); }
+
+  // compression via the native (W3C) streams, feature-detected so the engine stays portable
+  var _HAS_STREAMS = (typeof DecompressionStream !== 'undefined' && typeof ReadableStream !== 'undefined' && typeof Response !== 'undefined');
+  function streamThrough(bytes, transform) {
+    var rs = new ReadableStream({ start: function (c) { c.enqueue(bytes); c.close(); } });
+    return new Response(rs.pipeThrough(transform)).arrayBuffer().then(function (buf) { return new Uint8Array(buf); });
+  }
+  function inflate(bytes, fmt) { if (!_HAS_STREAMS) return Promise.resolve(null); return streamThrough(bytes, new DecompressionStream(fmt)).catch(function () { return null; }); }
+  // Manual decode is base64-wrapper tolerant: the encoders emit base64 (so the blob is pasteable), and a
+  // learner will paste that straight back. If the bytes are not already a raw stream for this format, try
+  // base64-decoding them first, then inflate. Returns null only when neither the raw nor the unwrapped form
+  // decompresses, so the manual field reports an honest "not valid".
+  function inflateFlexible(bytes, fmt) {
+    if (!_HAS_STREAMS) return Promise.resolve(null);
+    return inflate(bytes, fmt).then(function (r) {
+      if (r && r.length) return r;
+      var unwrapped = b64toBytes(u8Ascii(bytes));
+      if (!unwrapped || !unwrapped.length) return null;
+      return inflate(unwrapped, fmt);
+    });
+  }
+  function deflate(text, fmt) { if (!_HAS_STREAMS) return Promise.resolve(null); return streamThrough(toU8(text), new CompressionStream(fmt)).then(function (b) { return bytesToB64(Array.prototype.slice.call(b)); }).catch(function () { return null; }); }
+
+  // base64 raw bytes (not utf8-decoded) from an ascii base64 string
+  function b64toBytes(s) {
+    s = String(s).replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    var out = [], buf = 0, bits = 0;
+    for (var i = 0; i < s.length; i++) { var ch = s[i]; if (ch === '=') break; var v = B64.indexOf(ch); if (v < 0) return null; buf = (buf << 6) | v; bits += 6; if (bits >= 8) { bits -= 8; out.push((buf >> bits) & 0xff); } }
+    return Uint8Array.from(out);
+  }
+  function hexToBytes(s) { s = String(s).replace(/\s+/g, ''); if (!/^[0-9a-fA-F]*$/.test(s) || s.length % 2) return null; var out = []; for (var i = 0; i < s.length; i += 2) out.push(parseInt(s.substr(i, 2), 16)); return Uint8Array.from(out); }
+
+  // The registry. applies() gates the AUTO search; it reads the latin1 view of the bytes.
+  function _a(bytes) { return u8Ascii(bytes); }
+  var CODECS = [
+    { id: 'base64', label: 'Base64', note: 'The everyday encoding. The OSCP base64-then-decode trick lives here.', stack: true,
+      encode: function (t) { return W.b64(t); }, decode: function (b) { return b64toBytes(_a(b)); },
+      applies: function (b) { var s = _a(b).replace(/\s+/g, ''); return /^[A-Za-z0-9+/]+={0,2}$/.test(s) && s.length >= 8 && s.length % 4 === 0 && /[0-9+/=]/.test(s); } },
+    { id: 'base64url', label: 'Base64 URL', note: 'URL-safe base64 (-_ instead of +/, no padding). JWT segments use this.', stack: true,
+      encode: b64urlEnc, decode: function (b) { return b64toBytes(_a(b)); },
+      applies: function (b) { var s = _a(b).replace(/\s+/g, ''); return /^[A-Za-z0-9_-]+$/.test(s) && s.length >= 8 && /[-_]/.test(s); } },
+    { id: 'hex', label: 'Hex', note: 'Raw bytes as hexadecimal.', stack: true,
+      encode: function (t) { return W.hexEnc(t); }, decode: function (b) { return hexToBytes(_a(b)); },
+      applies: function (b) { var s = _a(b).replace(/\s+/g, ''); return /^[0-9a-fA-F]+$/.test(s) && s.length >= 8 && s.length % 2 === 0; } },
+    { id: 'url', label: 'URL (percent)', note: 'Percent-encode the characters a URL would choke on.', stack: true,
+      encode: function (t) { return W.urlEnc(t); }, decode: function (b) { try { return toU8(decodeURIComponent(_a(b).replace(/\+/g, ' '))); } catch (e) { return null; } },
+      applies: function (b) { return /%[0-9a-fA-F]{2}/.test(_a(b)); } },
+    { id: 'url-all', label: 'URL (every byte)', note: 'Aggressive: percent-encode every byte. Useful when a filter blocks specific characters.',
+      encode: function (t) { return W.urlEncAll(t); } },
+    { id: 'base32', label: 'Base32', note: 'RFC 4648 base32 (A-Z, 2-7).', stack: true,
+      encode: function (t) { return b32encode(utf8Bytes(t)); }, decode: function (b) { return b32decode(_a(b)); },
+      applies: function (b) { var s = _a(b).replace(/\s+/g, '').replace(/=+$/, ''); return /^[A-Za-z2-7]+$/.test(s) && s.length >= 8 && (s.length % 8 === 0 || _a(b).indexOf('=') >= 0); } },
+    { id: 'ascii85', label: 'Ascii85 / Base85', note: 'Adobe/standard base85. The <~ ~> wrapper is optional.', stack: true,
+      encode: function (t) { return a85encode(utf8Bytes(t)); }, decode: function (b) { return a85decode(_a(b)); },
+      applies: function (b) { return /^<~[\s\S]*~>\s*$/.test(_a(b)); } },
+    { id: 'binary', label: 'Binary (8-bit)', note: 'Each byte as eight bits.', stack: true,
+      encode: function (t) { return binEncode(utf8Bytes(t)); }, decode: function (b) { return binDecode(_a(b)); },
+      applies: function (b) { var s = _a(b).replace(/[^01]/g, ''); return /^[01\s]+$/.test(_a(b)) && s.length >= 16 && s.length % 8 === 0; } },
+    { id: 'decimal', label: 'Decimal char codes', note: 'Each byte as a decimal number (0-255).', stack: true,
+      encode: function (t) { return utf8Bytes(t).join(' '); }, decode: function (b) { return decDecode(_a(b)); },
+      applies: function (b) { return /^\d{1,3}([\s,]+\d{1,3})+$/.test(_a(b).trim()); } },
+    { id: 'html', label: 'HTML entities', note: 'Named and numeric HTML entities (&amp; &#x41; &#65;).', stack: true,
+      encode: function (t) { return htmlEncode(t); }, decode: function (b) { var s = _a(b), d = htmlDecode(s); return d === s ? null : toU8(d); },
+      applies: function (b) { return /&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/.test(_a(b)); } },
+    { id: 'gzip', label: 'Gzip (base64)', note: 'gzip-compressed, shown base64-wrapped so it is pasteable. Decodes a gzip stream to completion.',
+      encode: function (t) { return deflate(t, 'gzip'); }, decode: function (b) { return inflateFlexible(b, 'gzip'); },
+      applies: function (b) { return b.length > 2 && b[0] === 0x1f && b[1] === 0x8b; }, stack: true },
+    { id: 'zlib', label: 'Zlib (base64)', note: 'zlib/deflate stream, base64-wrapped on encode.',
+      encode: function (t) { return deflate(t, 'deflate'); }, decode: function (b) { return inflateFlexible(b, 'deflate'); },
+      applies: function (b) { return b.length > 2 && b[0] === 0x78 && [0x01, 0x5e, 0x9c, 0xda].indexOf(b[1]) >= 0; }, stack: true },
+    { id: 'deflate-raw', label: 'Raw deflate', note: 'Headerless deflate. Manual only (no magic bytes to detect it safely).',
+      encode: function (t) { return deflate(t, 'deflate-raw'); }, decode: function (b) { return inflateFlexible(b, 'deflate-raw'); } },
+    { id: 'rot13', label: 'ROT13', note: 'Rotate letters by 13. Obfuscation, not encryption. Self-inverse.',
+      encode: function (t) { return W.rot13(t); }, decode: function (b) { return toU8(W.rot13(u8Text(b))); } },
+    { id: 'rot47', label: 'ROT47', note: 'Rotate printable ASCII by 47. Self-inverse.',
+      encode: function (t) { return rot47(t); }, decode: function (b) { return toU8(rot47(u8Text(b))); } },
+    { id: 'reverse', label: 'Reverse', note: 'Reverse the string. Self-inverse.',
+      encode: function (t) { return String(t).split('').reverse().join(''); }, decode: function (b) { return toU8(u8Text(b).split('').reverse().join('')); } },
+  ];
+  var AUTO = CODECS.filter(function (c) { return c.stack && c.decode && c.applies; });
+  function codecById(id) { for (var i = 0; i < CODECS.length; i++) if (CODECS[i].id === id) return CODECS[i]; return null; }
+  W.CODECS = CODECS;
+  W.codecList = function () { return CODECS.map(function (c) { return { id: c.id, label: c.label, note: c.note, enc: !!c.encode, dec: !!c.decode }; }); };
+
+  // How "decoded" a byte string looks: printable ratio + structure/marker bonuses. Used to pick the best
+  // node in the recursive search. A flag, JSON, a JWT header, a URL, or real words all score high.
+  var _WORDS = /\b(the|and|for|you|are|with|this|that|from|have|not|true|false|null|password|passwd|admin|administrator|user|username|login|flag|secret|key|token|bearer|http|https|root|pass|welcome|error|success|cookie|session|email)\b/gi;
+  function scoreBytes(bytes) {
+    if (!bytes.length) return -1;
+    var pr = printableRatio(bytes), txt = u8Text(bytes), s = pr * 100;
+    if (/\b(flag|HTB|THM|FLAG|picoCTF|CTF)\{[^}]*\}/i.test(txt)) s += 150;
+    if (/^\s*[{\[][\s\S]*[}\]]\s*$/.test(txt)) { try { JSON.parse(txt); s += 60; } catch (e) { s += 8; } }
+    if (/"alg"\s*:/.test(txt) || /"typ"\s*:\s*"JWT"/i.test(txt)) s += 40;
+    if (/https?:\/\/\S+/i.test(txt)) s += 25;
+    var w = (txt.match(_WORDS) || []).length; s += Math.min(w, 8) * 9;
+    if (/�/.test(txt)) s -= 25;
+    if (pr > 0.9 && /\s/.test(txt)) s += 8;
+    return s;
+  }
+  W.scoreText = function (x) { return scoreBytes(toU8(x)); };
+
+  // Recursive "decode to completion": BFS over applicable decodes (applies() keeps branching tight),
+  // bounded by depth + a node budget, deduped, scoring every node and returning the best one with its
+  // full chain. Async because gzip/zlib go through the native streams. Honest: if nothing beats the raw
+  // input it says so, and it never claims the result is the "real" plaintext, only the most-decoded one.
+  W.smartDecode = function (input, opts) {
+    opts = opts || {};
+    var maxDepth = opts.maxDepth || 8, budget = opts.budget || 300;
+    var root = toU8(input), rootScore = scoreBytes(root);
+    var best = { bytes: root, score: rootScore, chain: [] };
+    var seen = {}; seen[u8Ascii(root)] = 1;
+    var queue = [{ bytes: root, chain: [], depth: 0 }], nodes = 0;
+    function step() {
+      while (queue.length && nodes < budget) {
+        var node = queue.shift(); nodes++;
+        var ci = 0;
+        var applicable = [];
+        for (ci = 0; ci < AUTO.length; ci++) { try { if (AUTO[ci].applies(node.bytes)) applicable.push(AUTO[ci]); } catch (e) {} }
+        if (!applicable.length) continue;
+        // resolve all applicable decodes for this node (some async), then enqueue the new ones
+        return Promise.all(applicable.map(function (codec) {
+          var r; try { r = codec.decode(node.bytes); } catch (e) { r = null; }
+          return Promise.resolve(r).then(function (res) { return { codec: codec, res: res }; }, function () { return { codec: codec, res: null }; });
+        })).then(function (results) {
+          results.forEach(function (rc) {
+            var res = rc.res; if (!res || !res.length) return;
+            var key = u8Ascii(res); if (seen[key]) return; seen[key] = 1;
+            var sc = scoreBytes(res), chain = node.chain.concat([rc.codec.id]);
+            if (sc > best.score) best = { bytes: res, score: sc, chain: chain };
+            if (node.depth + 1 < maxDepth) queue.push({ bytes: res, chain: chain, depth: node.depth + 1 });
+          });
+          return step();
+        });
+      }
+      return Promise.resolve();
+    }
+    return step().then(function () {
+      var improved = best.chain.length > 0 && best.score > rootScore + 5;
+      return {
+        input: (typeof input === 'string') ? input : u8Text(root),
+        found: improved,
+        best: { text: u8Text(best.bytes), chain: best.chain.map(labelFor), chainIds: best.chain, printable: printableRatio(best.bytes), score: best.score },
+        rootScore: rootScore, nodes: nodes,
+      };
+    });
+  };
+  function labelFor(id) { var c = codecById(id); return c ? c.label : id; }
+
+  // "Try every decoding at once": one layer, every codec that either applies or yields mostly-printable
+  // output, sorted so the readable results float to the top. Async for the compression codecs.
+  W.decodeAllOnce = function (input) {
+    var bytes = toU8(input), base = u8Text(bytes);
+    return Promise.all(CODECS.map(function (c) {
+      if (!c.decode) return Promise.resolve(null);
+      var r; try { r = c.decode(bytes); } catch (e) { r = null; }
+      return Promise.resolve(r).then(function (res) {
+        if (!res || !res.length) return null;
+        var txt = u8Text(res); if (txt === base) return null;
+        var pr = printableRatio(res), applies = false;
+        try { applies = c.applies ? c.applies(bytes) : false; } catch (e) {}
+        if (!applies && pr < 0.75) return null;
+        return { id: c.id, label: c.label, text: txt, printable: pr, applies: applies };
+      }, function () { return null; });
+    })).then(function (list) {
+      return list.filter(Boolean).sort(function (a, b) { return (b.applies - a.applies) || (b.printable - a.printable); });
+    });
+  };
+
+  // Manual: run ONE codec in ONE direction (the power-user "try it yourself" fields). No guards; it
+  // reports whatever comes out, or a plain reason it could not.
+  W.runCodec = function (id, dir, text) {
+    var c = codecById(id);
+    if (!c) return Promise.resolve({ ok: false, error: 'unknown codec' });
+    try {
+      if (dir === 'encode') {
+        if (!c.encode) return Promise.resolve({ ok: false, error: 'no encoder for ' + c.label });
+        return Promise.resolve(c.encode(String(text == null ? '' : text))).then(function (e) { return e == null ? { ok: false, error: 'could not encode' } : { ok: true, out: e }; }, function (e) { return { ok: false, error: String(e && e.message || e) }; });
+      }
+      return Promise.resolve(c.decode(toU8(text))).then(function (r) { return r == null ? { ok: false, error: 'input is not valid ' + c.label } : { ok: true, out: u8Text(r) }; }, function (e) { return { ok: false, error: String(e && e.message || e) }; });
+    } catch (e) { return Promise.resolve({ ok: false, error: String(e && e.message || e) }); }
+  };
+
+  // Every encoding of an input, for the Encoder tab (async: gzip/zlib go through the streams).
+  W.encodeAll = function (text) {
+    return Promise.all(CODECS.map(function (c) {
+      if (!c.encode) return Promise.resolve(null);
+      return Promise.resolve().then(function () { return c.encode(String(text == null ? '' : text)); }).then(function (out) { return out == null ? null : { id: c.id, label: c.label, note: c.note, out: out }; }, function () { return null; });
+    })).then(function (list) { return list.filter(Boolean); });
+  };
+
   // ── reverse-shell catalogue ─────────────────────────────────────────────────────────────────
   // Templates use {{lhost}} and {{lport}}. `os` groups them for the UI. `enc` flags which encodings
   // make sense to offer for that payload (b64 for Linux shells, psenc for PowerShell). The note is for

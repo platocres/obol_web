@@ -23,6 +23,7 @@
     { id: 'revshell', label: 'Reverse Shell' },
     { id: 'hashid', label: 'Hash ID' },
     { id: 'encoder', label: 'Encoder' },
+    { id: 'decoder', label: 'Smart Decoder' },
     { id: 'jwt', label: 'JWT' },
     { id: 'gtfobins', label: 'GTFOBins' },
     { id: 'wordlists', label: 'Wordlists' },
@@ -190,13 +191,7 @@
       + '</div>';
   }
 
-  // Encoder (mini CyberChef).
-  function isMostlyPrintable(s) {
-    if (!s) return false;
-    var good = 0;
-    for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); if (c === 9 || c === 10 || c === 13 || (c >= 32 && c < 127) || c >= 160) good++; }
-    return good / s.length >= 0.85;
-  }
+  // Encoder (mini CyberChef) and Smart Decoder share the transform-row renderer.
   function xformRow(label, note, val) {
     return '<div class="wb-xform">'
       + '<div class="wb-xform-h"><span class="wb-xform-l">' + esc(label) + '</span>'
@@ -204,38 +199,124 @@
       + '<div class="wb-cmd"><code>' + esc(val) + '</code>'
       + '<button class="btn-copy" data-copy="' + U.attr(val) + '" aria-label="Copy ' + U.attr(label) + '">copy</button></div></div>';
   }
-  function encoderOutHtml(value) {
+  // The Encoder shows every encoding at once. It is async because gzip/zlib go through the native
+  // compression streams; the sync entry point returns a placeholder, and renderEncoder() fills the panel.
+  function encoderPlaceholder() {
+    return '<p class="wb-note">Type or paste anything above. obol shows every common encoding at once. '
+      + 'To go the other way (decode something, even if it was encoded several times), use Smart Decoder.</p>';
+  }
+  function renderEncoder(value) {
+    var out = document.getElementById('wb-enc-out');
+    if (!out) return;
+    if (!value) { out.innerHTML = encoderPlaceholder(); return; }
     var wb = W();
-    if (!value) return '<p class="wb-note">Type or paste anything above. obol shows every common encoding at once, and the matching decode when the input looks encoded.</p>';
-    var rows = '';
-    rows += xformRow('Base64', 'The everyday encoding. Good for the OSCP base64-then-decode trick.', wb.b64(value));
-    rows += xformRow('URL Encode', 'Percent-encode the characters a URL would choke on.', wb.urlEnc(value));
-    rows += xformRow('URL Encode (Every Byte)', 'Aggressive: encode every byte. Useful when a filter blocks specific characters.', wb.urlEncAll(value));
-    rows += xformRow('Hex', 'Raw bytes as hex.', wb.hexEnc(value));
-    rows += xformRow('ROT13', 'A simple letter rotation (not encryption, just obfuscation).', wb.rot13(value));
-    rows += xformRow('${IFS} Spaces', 'Swap spaces for ${IFS} so a space-filtering command injection still runs.', wb.ifsEvade(value));
-
-    // decodes, only when the input actually looks like that format
-    var dec = '';
-    if (/^[A-Za-z0-9+/=\s]+$/.test(value) && value.replace(/\s/g, '').length >= 4) {
-      var b = wb.b64decode(value);
-      if (b && isMostlyPrintable(b)) dec += xformRow('Base64 Decode', 'Your input looked like base64, so here it is decoded.', b);
-    }
-    if (wb.hexDecode(value) !== null && value.replace(/\s/g, '').length >= 2) {
-      var h = wb.hexDecode(value);
-      if (h && isMostlyPrintable(h)) dec += xformRow('Hex Decode', 'Your input looked like hex, so here it is decoded.', h);
-    }
-    if (value.indexOf('%') >= 0) {
-      var u = wb.urlDecode(value);
-      if (u !== null && u !== value) dec += xformRow('URL Decode', 'Your input had percent-encoding, so here it is decoded.', u);
-    }
-    return rows + (dec ? '<div class="wb-field-l">Looks Encoded: Decoded For You</div>' + dec : '');
+    out.innerHTML = '<p class="wb-note">Encoding...</p>';
+    wb.encodeAll(value).then(function (list) {
+      // Guard against a stale async result after the input changed again.
+      var cur = document.getElementById('wb-enc-in');
+      if (cur && cur.value !== value) return;
+      var rows = list.map(function (r) { return xformRow(r.label, r.note, r.out); }).join('');
+      // ${IFS} evasion is OSCP-specific and not a reversible codec, so it rides alongside as an extra.
+      rows += xformRow('${IFS} Spaces', 'Swap spaces for ${IFS} so a space-filtering command injection still runs.', wb.ifsEvade(value));
+      out.innerHTML = rows;
+    }, function () { out.innerHTML = '<p class="wb-note">Something went wrong encoding that input.</p>'; });
   }
   function encoderPanel() {
     return '<div class="wb-panel wb-encoder">'
       + '<div class="wb-field-l">Input</div>'
       + '<textarea id="wb-enc-in" class="wb-textarea" rows="2" placeholder="Type or paste anything" autocomplete="off" spellcheck="false"></textarea>'
-      + '<div id="wb-enc-out" class="wb-enc-out">' + encoderOutHtml('') + '</div></div>';
+      + '<div id="wb-enc-out" class="wb-enc-out">' + encoderPlaceholder() + '</div></div>';
+  }
+
+  // ── Smart Decoder ────────────────────────────────────────────────────────────────────────────
+  // The opposite of the Encoder: paste anything and obol tries every browser-doable decoding at once,
+  // and peels multi-layer encodings to completion (base64 of a gzip of hex, and so on). Honest by
+  // construction: it scores candidates and shows the most-decoded one, says plainly when nothing
+  // decoded cleaner than the input, and never claims a result is the "true" plaintext. A manual section
+  // gives one field per codec so a power user can drive a single step themselves, either direction.
+  var DECODE_REFS = '<div class="wb-refs"><span class="wb-refs-l">Learn More</span>'
+    + '<a href="https://gchq.github.io/CyberChef/" target="_blank" rel="noopener">CyberChef</a>'
+    + '<a href="https://github.com/gchq/CyberChef/wiki/Character-encoding,-EBCDIC,-code-pages-and-casing" target="_blank" rel="noopener">Encodings reference</a></div>';
+  function codeRow(label, value) {
+    return '<div class="wb-cmd"><code>' + esc(value) + '</code>'
+      + '<button class="btn-copy" data-copy="' + U.attr(value) + '" aria-label="Copy ' + U.attr(label) + '">copy</button></div>';
+  }
+  function renderDecoder(value) {
+    var out = document.getElementById('wb-dc-auto');
+    if (!out) return;
+    if (!value || !value.trim()) {
+      out.innerHTML = '<p class="wb-note">Paste something encoded above. obol tries every decoding at once and, '
+        + 'if it was encoded in layers, peels it to completion. Nothing is sent anywhere.</p>';
+      return;
+    }
+    var wb = W();
+    out.innerHTML = '<p class="wb-note">Decoding...</p>';
+    Promise.all([wb.smartDecode(value), wb.decodeAllOnce(value)]).then(function (res) {
+      var cur = document.getElementById('wb-dc-in');
+      if (cur && cur.value !== value) return;
+      var smart = res[0], once = res[1], html = '';
+
+      // (1) Recursive "to completion" best result.
+      if (smart.found && smart.best) {
+        var chain = smart.best.chain.length ? smart.best.chain.join(' then ') : 'direct';
+        var pr = Math.round(smart.best.printable * 100);
+        html += '<div class="wb-dc-best">'
+          + '<div class="wb-field-l">Decoded To Completion</div>'
+          + '<p class="wb-enc-note">obol peeled ' + smart.best.chain.length + ' layer'
+          + (smart.best.chain.length === 1 ? '' : 's') + ' (' + esc(chain) + '), landing on '
+          + pr + '% printable text.</p>'
+          + codeRow('Decoded result', smart.best.text) + '</div>';
+      } else {
+        html += '<div class="wb-field-l">Decoded To Completion</div>'
+          + '<p class="wb-note">No multi-layer decode produced anything cleaner than what you pasted. '
+          + 'It may be plaintext already, encrypted (not just encoded), or a format obol cannot do in the browser. '
+          + 'The single-layer attempts below show what each codec makes of it.</p>';
+      }
+
+      // (2) Every single-layer decode at once.
+      if (once.length) {
+        html += '<div class="wb-field-l">Every Single-Layer Decode</div>';
+        html += once.map(function (r) {
+          var tag = r.applies ? '<span class="wb-dc-tag match">looks like ' + esc(r.label) + '</span>'
+            : '<span class="wb-dc-tag">' + esc(r.label) + '</span>';
+          return '<div class="wb-xform"><div class="wb-xform-h">' + tag
+            + '<span class="wb-xform-note">' + Math.round(r.printable * 100) + '% printable</span></div>'
+            + codeRow(r.label, r.text) + '</div>';
+        }).join('');
+      } else {
+        html += '<div class="wb-field-l">Every Single-Layer Decode</div>'
+          + '<p class="wb-note">No single codec turned this into readable output.</p>';
+      }
+
+      out.innerHTML = html + DECODE_REFS;
+    }, function () { out.innerHTML = '<p class="wb-note">Something went wrong decoding that input.</p>'; });
+  }
+  function manualDecoderHtml() {
+    var list = (W().codecList && W().codecList()) || [];
+    var rows = list.map(function (c) {
+      var btns = (c.dec ? '<button type="button" class="wb-chip wb-dc-run" data-codec="' + esc(c.id) + '" data-dir="decode">Decode</button>' : '')
+        + (c.enc ? '<button type="button" class="wb-chip wb-dc-run" data-codec="' + esc(c.id) + '" data-dir="encode">Encode</button>' : '');
+      return '<div class="wb-dc-man">'
+        + '<div class="wb-xform-h"><span class="wb-xform-l">' + esc(c.label) + '</span>'
+        + '<span class="wb-xform-note">' + esc(c.note || '') + '</span></div>'
+        + '<textarea class="wb-textarea wb-dc-man-in" id="wb-dc-man-' + esc(c.id) + '" rows="1" '
+        + 'placeholder="Text for ' + U.attr(c.label) + '" autocomplete="off" spellcheck="false"></textarea>'
+        + '<div class="wb-dc-man-btns">' + btns + '</div>'
+        + '<div class="wb-dc-man-res" id="wb-dc-res-' + esc(c.id) + '"></div></div>';
+    }).join('');
+    return rows;
+  }
+  function decoderPanel() {
+    return '<div class="wb-panel wb-decoder">'
+      + '<div class="wb-field-l">Input</div>'
+      + '<textarea id="wb-dc-in" class="wb-textarea" rows="3" placeholder="Paste something encoded (base64, hex, a gzip blob, several layers deep...)" autocomplete="off" spellcheck="false"></textarea>'
+      + '<div id="wb-dc-auto" class="wb-dc-auto">'
+      + '<p class="wb-note">Paste something encoded above. obol tries every decoding at once and, if it was encoded in layers, peels it to completion. Nothing is sent anywhere.</p>'
+      + '</div>'
+      + '<details class="wb-dc-manual"><summary>Manual: Try One Codec Yourself</summary>'
+      + '<p class="wb-note">A field per codec. Type, then Decode or Encode just that one step. Useful when you know exactly which transform you want, or to build a layered payload by hand.</p>'
+      + manualDecoderHtml()
+      + '</details></div>';
   }
 
   // JWT decoder.
@@ -562,6 +643,7 @@
     if (tab === 'revshell') return revshellPanel();
     if (tab === 'hashid') return hashidPanel();
     if (tab === 'encoder') return encoderPanel();
+    if (tab === 'decoder') return decoderPanel();
     if (tab === 'jwt') return jwtPanel();
     if (tab === 'gtfobins') return gtfobinsPanel();
     if (tab === 'wordlists') return wordlistsPanel();
@@ -650,10 +732,24 @@
       box.focus();
     });
 
-    // encoder: recompute every transform on input
-    U.on(mount, 'input', '#wb-enc-in', function (e, t) {
-      var out = document.getElementById('wb-enc-out');
-      if (out) out.innerHTML = encoderOutHtml(t.value);
+    // encoder: recompute every transform on input (async: gzip/zlib go through the streams)
+    U.on(mount, 'input', '#wb-enc-in', function (e, t) { renderEncoder(t.value); });
+
+    // smart decoder: recompute the recursive + single-layer attempts on input
+    U.on(mount, 'input', '#wb-dc-in', function (e, t) { renderDecoder(t.value); });
+    // smart decoder, manual: run one codec in one direction on its own field
+    U.on(mount, 'click', '.wb-dc-run', function (e, t) {
+      var id = t.getAttribute('data-codec'), dir = t.getAttribute('data-dir');
+      var inEl = document.getElementById('wb-dc-man-' + id);
+      var resEl = document.getElementById('wb-dc-res-' + id);
+      if (!inEl || !resEl) return;
+      var val = inEl.value;
+      if (!val) { resEl.innerHTML = '<p class="wb-note">Type something in the field first.</p>'; return; }
+      resEl.innerHTML = '<p class="wb-note">Working...</p>';
+      W().runCodec(id, dir, val).then(function (r) {
+        if (!r.ok) { resEl.innerHTML = '<p class="wb-note">' + esc(r.error || 'could not ' + dir) + '</p>'; return; }
+        resEl.innerHTML = codeRow((dir === 'encode' ? 'Encoded' : 'Decoded'), r.out);
+      }, function () { resEl.innerHTML = '<p class="wb-note">That did not work on this input.</p>'; });
     });
 
     // jwt: decode on input

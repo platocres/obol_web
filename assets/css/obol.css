@@ -3334,6 +3334,21 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-xform-note { font-size: 11.5px; color: var(--muted); }
 .wb-enc-out .wb-cmd code, .wb-jwt-out .wb-cmd code { white-space: pre-wrap; }
 
+/* Workbench Smart Decoder */
+.wb-dc-auto { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.wb-dc-auto .wb-cmd code { white-space: pre-wrap; word-break: break-word; }
+.wb-dc-best { border: 1px solid var(--accent); border-radius: 10px; padding: 12px; background: rgba(0, 0, 0, 0.12); }
+.wb-dc-tag { font: 800 10.5px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.wb-dc-tag.match { color: var(--accent-2); }
+.wb-dc-manual { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+.wb-dc-manual > summary { cursor: pointer; font: 800 11px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--accent-2); padding: 4px 0; }
+.wb-dc-manual > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wb-dc-man { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.wb-dc-man:last-child { border-bottom: 0; }
+.wb-dc-man-in { min-height: 34px; }
+.wb-dc-man-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.wb-dc-man-res:empty { display: none; }
+
 /* Workbench single-line input (GTFOBins search) */
 .wb-input { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--line);
   border-radius: 8px; padding: 9px 12px; font: 13px var(--mono); }
