@@ -227,3 +227,115 @@ Loadout, your installed tools). Easy to rename.
   (CODECS, codecList, smartDecode, decodeAllOnce, runCodec, encodeAll), tested in workbench-smoke.js. All
   guardrails green; both surfaces driven headless (0 console errors), screenshot-verified desktop and mobile.
   The Workbench now carries eleven tools.
+
+---
+
+## Open item to revisit: make ranker tuning measurable before re-architecting it (NOT STARTED)
+
+**Status: agreed, deferred by the owner. Do not start until the owner asks. This section is the full
+brief: a future chat should be able to execute it from here alone.**
+
+### The problem (why this exists)
+
+Coach next-move tuning never converges and never feels satisfactory. Worse than it looks from any
+single chat: the owner has attempted ranker tuning across several separate chats, and we keep
+re-refining things already tuned in earlier chats, because no chat can see what a previous one
+decided or measure whether a change helped or quietly regressed other boxes. It is Groundhog Day
+tuning. The dissatisfaction is a MEASUREMENT problem (no scoreboard, no cross-chat memory of what was
+tuned and why) at least as much as an architecture problem.
+
+### The key diagnostic insight (do not skip this)
+
+Before assuming the ranker is the problem, decompose where the tuning pain actually comes from. When
+we decomposed this session's own Forest-driven patch history, four of five "tuning" patches were NOT
+ranking-math problems:
+
+- Web lane outranked AD (Microsoft-HTTPAPI minted web.server): a PARSER bug. The ranker did the right
+  thing with a wrong fact. A probabilistic ranker would not have prevented it.
+- nmap hostname/domain not captured (un-piped XML): a PARSER bug.
+- Gated commands (hide a command whose fill-tokens are not earned yet): a CORRECTNESS FILTER,
+  orthogonal to ranking weights.
+- Prefer nxc (toolkit rank): a genuine PREFERENCE, already expressed cleanly as data.
+- Recon-first before exploit: SEQUENCING / goal-distance. This is the ONLY one that is genuinely a
+  ranking-math gap a planner could absorb structurally.
+
+Conclusion: most churn is fact/parser correctness, correctness filters, and data preferences, not
+ranker weights. The biggest lever on "useful next move" is fact/parser correctness and move-graph
+completeness, which NO ranking architecture touches. Honest odds that a probabilistic rewrite is
+"much more useful" than today's ranker: low (roughly 20 to 30 percent transformative; roughly 50
+percent modestly better on sequencing cases while staying safe elsewhere). Adding moves/commands
+costs about the same under any engine (the cost is authoring requires/produces + field note +
+fixtures, identical in all worlds); a planner may cut the spiky "new move floated to the wrong place,
+add a tiebreak" patches but introduces NON-LOCAL failure modes (a bad edge cost misroutes globally,
+harder to debug than an additive score's local failure). A Bayesian archetype prior strictly ADDS a
+maintenance surface (new facts need authored likelihoods).
+
+### The plan, in strict order
+
+1. **Build a ranking regression corpus + scoreboard FIRST (the actual fix for "never satisfactory").**
+   This is the only step to start with. It is cheap, pure upside, and touches nothing in the live
+   ranker. For each box archetype (Forest-style AD DC, Linux web box, Windows standalone, a few HTB
+   classics), capture the fact-state at each decision point and the expert's expected top-1-to-3
+   moves. Run `nextActionsV2` against every decision point and score "was the expert move in the top
+   N." Make it a guardrail test. Now:
+   - tuning stops being vibes: every weight change shows exactly what improved and what regressed,
+     and you can tell when you are DONE;
+   - it becomes the cross-chat memory: the fixtures ARE the record of what "correct" means, so a new
+     chat cannot silently re-litigate settled orderings (this directly fixes the Groundhog Day
+     problem the owner reported);
+   - it tells you EMPIRICALLY whether the ranker is even the problem or whether the misses are
+     facts/moves.
+   Reuse existing machinery: `tests/engine/corpus-smoke.js` and its fixtures, `ranker-smoke.js`,
+   `locus-scope-smoke.js`, and the seeded-state drivers in the scratchpad (drive-forest.js etc.).
+   Estimate: about a day. No risk to the live ranker.
+
+2. **Only if the corpus shows SYSTEMATIC sequencing failures a greedy 1-step score cannot fix**, try a
+   bounded expected-path-to-goal planner: replace the greedy `enable` score with expected
+   steps-times-reliability to the objective, via weighted Dijkstra / a Viterbi-style trellis over the
+   AUTHORED move graph (requires/produces), never over learned transitions. Add it BEHIND the existing
+   deterministic ordering as a soft tiebreak first (exactly how toolkit-rank went in), prove zero
+   regressions on the corpus, and only then consider giving it more weight. Revert on ANY regression.
+
+3. **Later follow-ons, only if step 2 proves out:** expected-value ranking (score = P(lands) x
+   value-toward-goal - cost, formalizing the reliability weighting we already have) and a Bayesian
+   box-archetype prior (a tiny belief over archetypes, updated by observed facts via naive Bayes with
+   HAND-AUTHORED likelihoods, used only as a low-weight soft prior on lane ordering, surfaced with a
+   visible reason like "obol thinks this is an AD DC, so AD moves lead"). These relocate tuning to a
+   more interpretable place; they do not eliminate it.
+
+### Hard constraints (these kill the tempting shortcuts)
+
+- **No telemetry (AGENTS.md).** This rules out any LEARNED Markov chain / HMM from real playthroughs.
+  Collecting what users do is forbidden and is part of staying exam-legal and trustworthy. Any
+  transition probabilities must be hand-authored from the pack, not learned.
+- **No Pyodide / heavy Python in the browser.** The math that helps (EV, Bayesian update, shortest
+  path over the graph) is light and runs in microseconds in plain JS. Pyodide costs ~10MB+ download
+  and multi-second cold start, spending the one budget we cannot (instant load + "it just works") for
+  this neurodivergent/disabled audience, with no payoff. Hard no.
+- **Deterministic and EXPLAINABLE always.** A "73% confidence" with no reason is worse for this
+  audience than a clear "do this next, because X," and it reads like the AI-chatbot behavior OSCP
+  bans. Probabilities may only shape ordering and reasons, never become an opaque predictor.
+- **Pack commands stay the source of truth.** Any new mechanism enriches ranking/presentation only;
+  it never rewrites the move graph or which command the coach ranks. One store, one filler.
+- Add any ranking change as a soft tiebreak below the hand-tuned priority first, measure on the
+  corpus, and revert on any regression. The ranker is the core of the tool; a clever idea is exactly
+  how ten currently-green boxes break quietly.
+
+### Where the code lives (so a future chat can orient fast)
+
+- Ranker: `OBOL.pack.nextActionsV2` / `rankActions` in `assets/engine/pack.js`. Current sort: tier
+  (recency) -> score (goalProgress + 0.6*enable + V2_KEYSTONE_W*keystone, reliability-weighted) ->
+  priority -> house-toolkit (nxc, PREFERRED_TOOLKIT) -> locus (remote-first R<F<I) -> id. Constants:
+  V2_KEYSTONE_W=0.15, V2_OBJECTIVE_W=3, FOCUS_BONUS=8. The Forest follow-up rules (earlyRecon
+  recon-first tier, validateFirst, toolkit tiebreak) are all here.
+- Command gating / "more unlocks once you have X": `assets/ui/routes/path.js` (GATE_TOKENS,
+  cmdGated, nsCommandRows).
+- Existing ranker/corpus tests to extend: `tests/engine/corpus-smoke.js`, `ranker-smoke.js`,
+  `ranker-*-smoke.js`, `locus-scope-smoke.js`, `decisionmap-smoke.js`, `workflow-preference-smoke.js`.
+- Architecture overview: `ARCHITECTURE.md` (ranker section).
+
+### Kill criterion
+
+Once the corpus/scoreboard exists: if the current ranker already scores well on it (expert move in
+top-3 at the decision points), DROP the probabilistic-ranker idea entirely and redirect the saved
+energy to parser correctness and move-graph coverage, which the evidence says are the real levers.
