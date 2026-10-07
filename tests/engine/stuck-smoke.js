@@ -10,6 +10,7 @@ require('../../assets/engine/profile.js');
 require('../../assets/engine/command.js');
 require('../../assets/engine/workspace.js');
 require('../../data/parser-signatures.js');
+require('../../data/stuck-catalog.js');
 require('../../assets/engine/stuck.js');
 const fs = require('fs'), path = require('path');
 const OBOL = globalThis.OBOL, PK = OBOL.pack, S = OBOL.stuck;
@@ -98,6 +99,19 @@ ok(moves2.length === moves.length - 1 || moves2.length >= 1, 'the next option fl
 
 // ── honesty: rankedMoves does not write the active engagement ─────────────────────────────────────
 ok(S.rankedMoves !== undefined && rm.facts.every((f) => f.source === 'stuck'), 'all sandbox facts are tagged source=stuck (never confused with proven facts)');
+
+// ── catalog wiring ───────────────────────────────────────────────────────────────────────────────
+ok(OBOL.STUCK_CATALOG && Object.keys(OBOL.STUCK_CATALOG).length > 0, 'the stuck catalog is loaded (' + Object.keys(OBOL.STUCK_CATALOG || {}).length + ' kinds)');
+ok(S.isAskable('web.sqli_confirmed') && !S.isAskable('blocker.foo'), 'isAskable gates on catalog membership');
+ok(S.labelFor('http.reachable') === 'A Website Is Up', 'labelFor prefers the catalog label over friendly()');
+ok(S.groupFor('smb.reachable') === 'Recon' && S.groupFor('web.server') === 'Web', 'groupFor returns the lane');
+// every cataloged kind is a real kind the engine knows about (no typos that would never surface)
+Object.keys(OBOL.STUCK_CATALOG).forEach(function (k) {
+  ok(universe[k], 'catalog kind "' + k + '" exists in the pack/parser universe');
+});
+// the reveal, gated by the catalog, only ever surfaces cataloged kinds
+const gated = S.suggestFacts(S.sandbox(), PACK, { askable: S.isAskable });
+ok(gated.every((c) => S.isAskable(c.kind)), 'catalog-gated reveal surfaces only user-assertable kinds');
 
 console.log(fail ? ('\nSTUCK: ' + fail + ' FAILURES') : '\nSTUCK: all passed');
 process.exit(fail ? 1 : 0);

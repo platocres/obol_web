@@ -54,17 +54,28 @@
     return fs;
   };
 
-  // ── labels (reuse the existing human-readable sources) ─────────────────────────────────────────
+  // ── catalog (human-phrased binary attributes; the words, not the logic) ─────────────────────────
+  S.entry = function (kind) { return (OBOL.STUCK_CATALOG || {})[kind] || null; };
+  // A kind is user-assertable only if it is in the curated catalog. The UI passes S.isAskable as the
+  // reveal's askable predicate, so the picker never surfaces a raw internal kind with no human phrasing.
+  S.isAskable = function (kind) { return !!S.entry(kind); };
+
+  // ── labels (catalog first, then the existing human-readable sources) ────────────────────────────
   S.labelFor = function (kind) {
+    var e = S.entry(kind);
+    if (e && e.label) return e.label;
     var pk = OBOL.pack;
     if (pk && pk.friendly) { var fl = pk.friendly(kind); if (fl) return fl; }
     return kind;
   };
   S.detailFor = function (kind) {
+    var e = S.entry(kind);
+    if (e && e.help) return e.help;
     var wb = OBOL.workbench;
-    if (wb && wb.explainKind) { var e = wb.explainKind(kind); if (e && e.proves) return e.proves; }
+    if (wb && wb.explainKind) { var ex = wb.explainKind(kind); if (ex && ex.proves) return ex.proves; }
     return '';
   };
+  S.groupFor = function (kind) { var e = S.entry(kind); return (e && e.group) || ''; };
 
   // ── the kind universe (what facts even exist) ──────────────────────────────────────────────────
   // Every fact kind the pack references (requires/produces) plus every kind the parsers can emit. Used
