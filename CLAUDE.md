@@ -498,3 +498,16 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   guttered. Neon glass, lane hues, shimmer gated by prefers-reduced-motion. Driven headless at 4K, 1080p,
   tablet, mobile with 0 console errors; all guardrails (engine, browser-smoke, lint, gap) green. ST5 is
   owner review on the live site.
+- 2026-10-07: STUCK? REDESIGN (the Ferryman), owner-directed, built A-E. The dense button board became
+  a guided experience. (A) Port palette + lane gating: OBOL.STUCK_PORTS (37 curated ports, grouped),
+  picking a port asserts the service/reachable fact; laneActive() hides a lane until a port/foothold
+  implies it; isFinding() keeps ports out of the findings refiner. (B) Interview state machine (Act 1):
+  one question at a time, host -> pick ports -> credential? -> shell?(+OS) -> admin?, each seeds the
+  sandbox, fully skippable, with "not sure? run this" command hints. (C) Ferryman persona + cyberpunk
+  skin: a warm cyberpunk Charon (an obol pays the ferryman to cross), glowing eye orb, typewriter
+  prompts, neon-glass answer buttons, all motion gated by prefers-reduced-motion, colour never the sole
+  signal. (D) Act 2 board: ranked move TILES reusing the Next Steps mechanic (.ns-card/.ns-grid: select
+  to expand with the --fam glow, is-glow, and the ns-bloom rainbow prism sweep, grow-and-reflow), plus a
+  calm port-gated refiner (Open Doors visible, Findings collapsed). Engine (SX-A) committed with tests;
+  route+CSS driven headless through the full interview to the board at 4K, 1080p, tablet, mobile with 0
+  console errors; all guardrails green. The old flat-picker route was replaced.
