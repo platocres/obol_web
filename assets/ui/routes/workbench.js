@@ -399,6 +399,12 @@
   function render(ctx) {
     var arg = (ctx.args && ctx.args[0]) || '';
     if (tabIds().indexOf(arg) >= 0) _tab = arg;
+    // a deep link may target a specific wordlist task (e.g. #/workbench/wordlists/subdomains)
+    if (_tab === 'wordlists') {
+      var sub = (ctx.args && ctx.args[1]) || '';
+      var okTask = (W().WORDLIST_TASKS || []).some(function (t) { return t.id === sub; });
+      if (okTask) _wl.task = sub;
+    }
 
     var tabbar = TABS.map(function (t) {
       var on = t.id === _tab;

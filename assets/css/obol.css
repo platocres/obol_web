@@ -3356,3 +3356,13 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-wl-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 5px; }
 .wb-wl-name { font: 700 13.5px var(--mono); color: var(--text); }
 .wb-wl-card .wb-cmd { margin-top: 7px; }
+
+/* "Build In Workbench": deep links from a coach move to the matching Workbench tool (presentation only) */
+.ns-wb { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 18px; }
+.ns-wb-l { font: 800 11px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--accent-2); margin-right: 2px; }
+.ns-wb-link { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--on-accent, var(--text)); text-decoration: none;
+  padding: 5px 13px; border: 1px solid var(--accent); border-radius: 999px; background: var(--accent); }
+.ns-wb-link:hover, .ns-wb-link:focus-visible { background: color-mix(in srgb, var(--accent) 82%, var(--text)); }
+.ns-wb-arrow { font-size: 12px; }
+/* "Copy All" bundle on the Set Up First block */
+.ns-setup-all { margin-left: 10px; vertical-align: middle; text-transform: none; letter-spacing: 0; font-weight: 700; }

@@ -73,7 +73,7 @@ screenshot the changed surface and read it for sense.
   aware, working standalone with no engagement. Tools: hash identifier, reverse-shell builder
   (including base64 and PowerShell `-EncodedCommand`), encoder or mini CyberChef (base64, url, hex,
   rot, IFS evasion), JWT decoder, wordlist picker, GTFOBins browser.
-- [ ] **P4.** Stack-aware wordlist picker wired to content discovery; "run all" for *independent*
+- [x] **P4.** Stack-aware wordlist picker wired to content discovery; "run all" for *independent*
   checks and "Build in Workbench" affordances on cards (presentation only; pack commands untouched).
 - [ ] **P5.** Manual-SQLi guided builder (manual, exam-legal; the parser reads each pasted result to
   fill the next query).
@@ -113,3 +113,13 @@ Loadout, your installed tools). Easy to rename.
     Wordlist picker (task catalogue, tech-tag ranking, sample commands filled from the target).
   All guardrails green throughout; every surface driven headless (0 console errors) and
   screenshot-verified for readability, continuity, and full mobile stacking.
+- 2026-10-07: P4, the Workbench is now wired into the coach. Next Steps cards carry "Build In
+  Workbench" deep links, classified by what the move produces and the tools it uses (a hash ->
+  Identify/Crack, sudo/SUID -> GTFOBins browser, gobuster/ffuf or a content/vhost move -> the
+  wordlist picker with the right task preselected, a foothold/listener move -> reverse-shell builder,
+  a JWT move -> the decoder). The wordlist picker reads the engagement's fact ledger to float the
+  detected stack's list to the top, and the deep link can target a specific task
+  (#/workbench/wordlists/subdomains). "Run all": the Set Up First block gains a "Copy All N Steps"
+  bundle when a note has two or more authored setup one-liners (lights up as P7 authors multi-step
+  setups; the orientation block already ships a run-together bundle). Presentation only, no pack
+  command or coach ranking changed. Verified headless on a seeded SUID move (0 console errors).

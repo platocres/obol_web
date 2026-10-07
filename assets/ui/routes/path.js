@@ -402,6 +402,50 @@
     return '<p class="ns-cn-h">GTFOBins: Exact ' + ctxLabel + ' Escape</p>' + intro
       + (rows ? '<div class="ns-setup">' + rows + '</div>' : '') + lookup;
   }
+  // "Build In Workbench": deep links from a move to the Workbench tool that helps with it. Presentation
+  // only, it never changes which command the coach ranks. Classify by what the move PRODUCES and the tools
+  // it uses (both authored in the pack), so it stays correct as the pack evolves.
+  var WB_DIR_TOOLS = { gobuster: 1, ffuf: 1, feroxbuster: 1, dirb: 1, dirbuster: 1, wfuzz: 1 };
+  function nsWorkbenchTargets(move) {
+    if (!move) return [];
+    var tools = {}; if (move.tool) tools[String(move.tool).toLowerCase()] = 1;
+    (move.tools || []).forEach(function (t) { if (t) tools[String(t).toLowerCase()] = 1; });
+    var produces = (move.produces || []).join(' ');
+    var idt = (move.id || '') + ' ' + (move.title || '');
+    var out = [], seen = {};
+    function add(tab, label) { if (!seen[tab]) { seen[tab] = 1; out.push({ tab: tab, label: label }); } }
+
+    // a hash to crack or identify
+    if (/\bhash\./.test(produces) || tools.hashcat || tools.john || /roast|ntds|secretsdump|lsass|\bsam\b|dcsync|hashdump/i.test(idt)) {
+      add('hashid', 'Identify / Crack In Workbench');
+    }
+    // a sudo / SUID escape
+    if (move.id === 'sudo-abuse' || move.id === 'suid-gtfobins' || /gtfobins/i.test(idt)) {
+      add('gtfobins', 'Open GTFOBins Browser');
+    }
+    // content discovery / vhosts
+    if (WB_DIR_TOOLS[Object.keys(tools).filter(function (k) { return WB_DIR_TOOLS[k]; })[0]] || /content|director|fuzz|discovery|vhost/i.test(idt)) {
+      var wlTask = /vhost|virtual host|subdomain/i.test(idt) ? 'subdomains' : 'dirs';
+      add('wordlists/' + wlTask, 'Pick A Wordlist');
+    }
+    // a reverse shell / listener
+    if (/foothold\.|access\.shell/.test(produces) || tools.nc || tools.ncat || tools.socat || tools.msfvenom || /reverse shell|listener|\brevshell\b/i.test(idt)) {
+      add('revshell', 'Build A Reverse Shell');
+    }
+    // JWT
+    if (/\bjwt\b|json web token/i.test(idt)) add('jwt', 'Decode The JWT');
+    return out.slice(0, 2);
+  }
+  function nsWorkbench(move) {
+    var targets = nsWorkbenchTargets(move);
+    if (!targets.length) return '';
+    return '<div class="ns-wb"><span class="ns-wb-l">Build In Workbench</span>'
+      + targets.map(function (t) {
+          return '<a class="ns-wb-link" href="#/workbench/' + esc(t.tab) + '">' + esc(t.label)
+            + '<span class="ns-wb-arrow" aria-hidden="true">→</span></a>';
+        }).join('') + '</div>';
+  }
+
   function nsLearnMore(move) {
     if (!move) return '';
     var out = [], seen = {};
@@ -455,15 +499,23 @@
       //   (b) `use` references to OTHER moves (e.g. the Shells lane's shell-listener), whose commands are
       //       pulled live from the packs so the catcher / reverse-shell / transfer one-liners stay in one
       //       place and never drift. Both render as the same copy-ready step.
-      var setupSteps = '';
+      var setupSteps = '', setupCmds = [];
       (note.setup || []).forEach(function (s) {
         var cmd = nsFill(s.cmd || s, facts, params);
+        if (cmd) setupCmds.push(cmd);
         setupSteps += nsSetupStep(s.label || '', cmd);
       });
       (note.use || []).forEach(function (refId) {
         setupSteps += nsReuseSteps(refId, facts, params);
       });
-      if (setupSteps) html += '<p class="ns-cn-h">Set Up First</p><div class="ns-setup">' + setupSteps + '</div>';
+      if (setupSteps) {
+        // When there are two or more authored setup one-liners, offer a single "Copy All" that bundles
+        // them (newline-joined) so the student can paste the whole prep at once. Presentation only.
+        var allBtn = setupCmds.length >= 2
+          ? '<button class="btn-copy ns-setup-all" data-copy="' + U.attr(setupCmds.join('\n')) + '" title="Copy all setup commands as one block">Copy All ' + setupCmds.length + ' Steps</button>'
+          : '';
+        html += '<p class="ns-cn-h">Set Up First' + allBtn + '</p><div class="ns-setup">' + setupSteps + '</div>';
+      }
       if (note.land && note.land.length) html += '<p class="ns-cn-h">How To Land It</p><ul class="ns-cn-list">'
         + note.land.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
       // "What To Look For" — the signals worth scanning the output for. This is the heart of an
@@ -479,6 +531,7 @@
     // once a shell lands, reusing the Shells lane's PTY upgrade.
     html += nsOnceYouAreIn(move, facts, params);
     html += stagingGuide(move, params);
+    html += nsWorkbench(move);
     html += nsLearnMore(move);
     html += '</div>';
     return html;
