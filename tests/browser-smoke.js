@@ -92,8 +92,11 @@ function serve() {
   ok(wsRoot === '/home/kali/lab/box', 'launch saved the working directory (' + wsRoot + ')');
   ok(await page.locator('.ws-banner').count() === 1 && (await page.locator('.ws-banner .cmd-run code').first().textContent() || '').indexOf('mkdir -p /home/kali/lab/box/{') === 0,
     'coach shows the one-time workspace scaffold command');
-  const cmdHasScandir = await page.evaluate(() => Array.prototype.some.call(document.querySelectorAll('.ns-card .cmd-run-code'), function (c) { return c.textContent.indexOf('/home/kali/lab/box/scans/') !== -1; }));
-  ok(cmdHasScandir, 'coach commands write into the workspace scans/ directory');
+  // Output paths are RELATIVE to root (the scaffold cds into it), so a coach command writes `scans/…`,
+  // never the root-prefixed `/home/kali/lab/box/scans/…` (that would double-nest after the cd).
+  const cmdCodes = await page.evaluate(() => Array.prototype.map.call(document.querySelectorAll('.ns-card .cmd-run-code'), function (c) { return c.textContent; }).join('\n'));
+  ok(cmdCodes.indexOf('scans/') !== -1 && cmdCodes.indexOf('/home/kali/lab/box/scans/') === -1,
+    'coach commands write into the relative scans/ dir, not a root-prefixed path that double-nests');
   // launching configured the default in place (no stray second run) and the home panel now shows it
   const engCount = await page.evaluate(() => window.OBOL.store.listEngagements().length);
   ok(engCount === 1, 'launch configured the default run in place, no stray empty engagement (' + engCount + ')');
@@ -399,12 +402,12 @@ function serve() {
   const roast = page.locator('.ns-card[data-action="asrep-roast"]');
   ok(await roast.count() === 1, 'proving a user list surfaces the AS-REP Roasting move on the coach');
   const roastCmd = (await roast.locator('.cmd-run-code').allTextContents()).join('\n');
-  ok(roastCmd.indexOf('/home/kali/lab/box/loot/users.txt') !== -1, '{{userlist}} now resolves to the workspace loot/users.txt path (not a bare placeholder)');
-  ok(roastCmd.indexOf('/home/kali/lab/box/loot/asrep.hashes') !== -1, '{{hashfile}} resolves to loot/asrep.hashes so roast + crack agree on one file');
+  ok(roastCmd.indexOf('loot/users.txt') !== -1 && roastCmd.indexOf('/home/kali/lab/box/loot/users.txt') === -1, '{{userlist}} resolves to the relative loot/users.txt path (run from inside root)');
+  ok(roastCmd.indexOf('loot/asrep.hashes') !== -1, '{{hashfile}} resolves to loot/asrep.hashes so roast + crack agree on one file');
   const prep = roast.locator('.move-prep');
   ok(await prep.count() === 1, 'the roast move offers a "set up first" materialize block');
   const prepCmd = (await prep.locator('.cmd-run code').first().textContent()) || '';
-  ok(prepCmd.indexOf("cat > /home/kali/lab/box/loot/users.txt <<'EOF'") === 0, 'the materialize command is a heredoc writing the canonical users.txt');
+  ok(prepCmd.indexOf("cat > loot/users.txt <<'EOF'") === 0, 'the materialize command is a heredoc writing the canonical users.txt');
   ok(prepCmd.indexOf('Administrator') !== -1 && prepCmd.indexOf('svc-web') !== -1, 'the heredoc body carries the exact proven usernames');
   const prepBeforeCmds = await roast.evaluate((el) => {
     const prep = el.querySelector('.move-prep'), cmd = el.querySelector('.ns-cmd');
