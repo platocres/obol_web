@@ -444,21 +444,23 @@ to only the questions that would change the suggestions.
 
 ### Phases (check off as completed)
 
-- [ ] **ST0.** This plan in CLAUDE.md + task tracking.
-- [ ] **ST1.** Engine foundation `assets/engine/stuck.js` (pure, headless-tested): sandbox helpers,
+- [x] **ST0.** This plan in CLAUDE.md + task tracking.
+- [x] **ST1.** Engine foundation `assets/engine/stuck.js` (pure, headless-tested): sandbox helpers,
   `suggestFacts` (reveal-from-graph), `rankedMoves` (rankActions + doneIds), triage seeds, the
   ruled-out -> doneIds/positive-fact mapping. Smoke test `tests/engine/stuck-smoke.js`.
-- [ ] **ST2.** The FULL curated fact catalog across all lanes: human-phrased binary label per
-  user-assertable kind, grouped, reusing friendly()/explainKind() and authoring the gaps. Commit per
-  lane.
-- [ ] **ST3.** UI route `assets/ui/routes/stuck.js` + global nav (index.html desktop nav + mobile
-  More sheet) + lazy group (assets/ui/lazy.js). Triage-first flow, progressive neon-glass fact
-  picker, ruled-out/tried toggles (visually distinct), move cards (reuse ranker, expand to commands,
-  Build In Workbench deep links, field notes), contextual typed-param fields, sandbox with seed/save
-  opt-ins.
-- [ ] **ST4.** Aesthetic + responsive pass (the acceptance criteria above). Screenshot-verify 4K,
-  1080p, tablet, mobile; 0 console errors headless.
-- [ ] **ST5.** Verify all guardrails, stamp assets, commit/push.
+- [x] **ST2.** The FULL curated fact catalog across all lanes (`data/stuck-catalog.js`, 107 kinds):
+  human-phrased binary label per user-assertable kind, grouped by lane, reusing friendly()/explainKind()
+  and authoring the gaps. Voice sanctioned by the owner on the Recon + Web sample first.
+- [x] **ST3.** UI route `assets/ui/routes/stuck.js` + global nav (index.html desktop + mobile More
+  sheet) + lazy group (assets/ui/lazy.js). Triage-first flow, progressive neon-glass fact picker
+  (bounded to 18, "Show All N"), per-move "I Tried This" (doneIds), move cards (reuse ranker, expand
+  to filled commands, Build In Workbench deep links, field notes), optional Target/LHOST/LPORT fill,
+  sandbox with seed-from-engagement and save-to-engagement opt-ins.
+- [x] **ST4.** Aesthetic + responsive pass. Two-column grid that fills the width; fact grid reflows
+  to more columns as the viewport grows; `main#view:has(.stuck)` raised to 2600px so 4K is not
+  guttered (1080p already fills); lane hues, rainbow shimmer gated behind prefers-reduced-motion;
+  colour never the sole signal. Screenshot-verified 4K, 1080p, tablet, mobile; 0 console errors.
+- [ ] **ST5.** Final guardrails + owner review on the live site.
 
 ### Synergy with the deferred ranker-corpus open item
 
@@ -480,3 +482,19 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
 - 2026-10-07: ST0, plan documented. Engine APIs mapped (rankActions pure over FactSet; REFUTED inert
   so "I tried it" uses doneIds / positive-fact edges; labels from friendly()/explainKind(); kind
   universe from PARSER_SIGNATURES).
+- 2026-10-07: ST1 engine foundation (assets/engine/stuck.js): sandbox/assert/retract, suggestFacts
+  (reveal-from-graph, frontier-weighted, catalog-gated), suggestByPhase, rankedMoves (rankActions +
+  doneIds for "I tried it"), TRIAGE + triageSeed guarded against the kind universe. tests/engine/
+  stuck-smoke.js. All guardrails green.
+- 2026-10-07: ST2 catalog. data/stuck-catalog.js, 107 user-assertable binary facts across Recon, Web,
+  Windows And AD, Credentials, Access, Linux Privesc, Windows Privesc, Loot, Pivoting. Owner sanctioned
+  the voice on the Recon + Web sample first. The smoke test verifies every cataloged kind is a live
+  pack/parser kind (dropped 8 that loadPacks canonicalizes away, e.g. access.root -> access.admin).
+- 2026-10-07: ST3 + ST4. Shipped the Stuck? tab: global nav (desktop + mobile More sheet), lazy group,
+  the route (triage-first, progressive fact picker bounded to 18 with Show All, per-move I-Tried-This,
+  move cards reusing the ranker with filled commands + field notes + Build In Workbench links, optional
+  Target/LHOST/LPORT fill, sandbox with seed/save opt-ins). Responsive: two-column grid fills the width,
+  fact grid reflows to more columns on wide screens, main#view:has(.stuck) raised to 2600px so 4K is not
+  guttered. Neon glass, lane hues, shimmer gated by prefers-reduced-motion. Driven headless at 4K, 1080p,
+  tablet, mobile with 0 console errors; all guardrails (engine, browser-smoke, lint, gap) green. ST5 is
+  owner review on the live site.

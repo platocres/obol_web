@@ -3448,3 +3448,108 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-sev-critical { background: var(--red); } .wb-sev-high { background: var(--orange); }
 .wb-sev-medium { background: var(--yellow); color: #1a1a1a; } .wb-sev-low { background: var(--teal); }
 .wb-sev-info { background: var(--muted); }
+
+/* ============================================================================================
+   Stuck? tab (routes/stuck.js). Neon glass, multicolor lanes, responsive grids that FILL the
+   width at every size (more columns as the viewport grows, never dead gutters). Rainbow shimmer
+   is a reward gated behind prefers-reduced-motion; colour is never the only signal.
+   ============================================================================================ */
+.stuck { padding: 0 0 48px; width: 100%; box-sizing: border-box; }
+.stuck .route-sub { max-width: 70ch; }
+
+/* lane accent hues, reused by triage cards and lane headers for the "multicolored" feel */
+:root { --stuck-h1: var(--accent); --stuck-h2: var(--accent-2); }
+
+/* ---- triage ---- */
+.stuck-intro { width: 100%; }
+.stuck-q, .stuck-col-h { font: 800 13px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--accent-2); margin: 18px 0 12px; }
+.stuck-tri-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; width: 100%; }
+.stuck-tri { display: flex; flex-direction: column; gap: 7px; text-align: left; padding: 18px; border-radius: 14px;
+  background: linear-gradient(150deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)); border: 1px solid var(--line);
+  color: var(--text); cursor: pointer; transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease; }
+.stuck-tri:hover, .stuck-tri:focus-visible { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 28px rgba(0,0,0,0.35); outline: none; }
+.stuck-tri-l { font: 800 16px/1.2 var(--sans, inherit); color: var(--text); }
+.stuck-tri-n { font-size: 12.5px; color: var(--muted); }
+.stuck-seed { margin-top: 14px; background: none; border: 1px dashed var(--line); color: var(--accent-2); border-radius: 10px; padding: 10px 14px; cursor: pointer; font: 600 13px var(--mono); }
+.stuck-seed:hover { border-color: var(--accent-2); }
+
+/* ---- head + params ---- */
+.stuck-head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.stuck-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.stuck-startover, .stuck-save { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 9px; padding: 8px 14px; cursor: pointer; font: 600 12.5px var(--mono); }
+.stuck-startover:hover, .stuck-save:hover { border-color: var(--accent); color: var(--accent); }
+.stuck-params { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 14px 0 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(0,0,0,0.12); }
+.stuck-params-l { font: 800 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); align-self: center; }
+.stuck-param { display: flex; flex-direction: column; gap: 4px; font: 700 10.5px var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.stuck-param input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: 13px var(--mono); min-width: 140px; }
+.stuck-param input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+
+/* ---- the two-column layout: FILLS the width, more room to the moves ---- */
+.stuck-layout { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 1.5fr); gap: 22px; align-items: start; width: 100%; margin-top: 10px; }
+@media (max-width: 900px) { .stuck-layout { grid-template-columns: 1fr; gap: 24px; } }
+.stuck-col { min-width: 0; }
+
+/* ---- fact picker ---- */
+.stuck-told { margin-bottom: 16px; }
+.stuck-told-l, .stuck-lane-h, .stuck-wb-l, .stuck-fn-l { font: 800 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.stuck-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; }
+.stuck-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); font: 700 12px var(--mono); }
+.stuck-chip:hover { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.stuck-chip-x { font-weight: 800; opacity: .8; }
+.stuck-lane { margin-bottom: 18px; }
+.stuck-lane-h { display: block; margin: 0 0 9px; padding-left: 9px; border-left: 3px solid var(--accent-2); }
+.stuck-fact-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 9px; }
+.stuck-fact { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 10px 12px; border-radius: 10px;
+  background: rgba(255,255,255,0.025); border: 1px solid var(--line); color: var(--text); cursor: pointer; transition: border-color .1s ease, background .1s ease; }
+.stuck-fact:hover, .stuck-fact:focus-visible { border-color: var(--accent); background: rgba(255,255,255,0.05); outline: none; }
+.stuck-fact-l { font: 700 13px/1.25 var(--sans, inherit); color: var(--text); }
+.stuck-fact-h { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+
+/* lane header hues: cycle neon colours so lanes read as distinct (colour is decorative, the text label carries meaning) */
+.stuck-lane:nth-of-type(6n+1) .stuck-lane-h { border-color: var(--accent); color: var(--accent); }
+.stuck-lane:nth-of-type(6n+2) .stuck-lane-h { border-color: var(--accent-2); color: var(--accent-2); }
+.stuck-lane:nth-of-type(6n+3) .stuck-lane-h { border-color: var(--teal, #38e0c8); color: var(--teal, #38e0c8); }
+.stuck-lane:nth-of-type(6n+4) .stuck-lane-h { border-color: var(--purple, #b48cff); color: var(--purple, #b48cff); }
+.stuck-lane:nth-of-type(6n+5) .stuck-lane-h { border-color: var(--yellow, #ffd166); color: var(--yellow, #ffd166); }
+.stuck-lane:nth-of-type(6n+6) .stuck-lane-h { border-color: var(--orange, #ff9f45); color: var(--orange, #ff9f45); }
+
+/* ---- move cards ---- */
+.stuck-card { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; background: rgba(0,0,0,0.14); overflow: hidden; }
+.stuck-card[open] { border-color: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent); }
+.stuck-card-head { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 6px 12px; padding: 13px 15px; }
+.stuck-card-head::-webkit-details-marker { display: none; }
+.stuck-card-title { font: 800 14.5px var(--sans, inherit); color: var(--text); }
+.stuck-card-locus { justify-self: end; font: 700 10px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--accent-2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.stuck-card-why { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.stuck-card-body { padding: 0 15px 15px; display: flex; flex-direction: column; gap: 10px; }
+.stuck-cmd { display: flex; align-items: flex-start; gap: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+.stuck-cmd code { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; font: 12.5px var(--mono); color: var(--text); }
+.stuck-cmd-note { font-size: 11.5px; color: var(--muted); margin: -4px 2px 0; }
+.stuck-fn-l { display: block; margin-bottom: 4px; }
+.stuck-fn ul { margin: 0; padding-left: 18px; }
+.stuck-fn li, .stuck-fn p { font-size: 12.5px; color: var(--text); line-height: 1.45; margin: 2px 0; }
+.stuck-wb { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding-top: 4px; }
+.stuck-wb-link { font: 700 12px var(--mono); color: var(--accent); }
+.stuck-wb-link:hover { text-decoration: underline; }
+.stuck-tried { align-self: flex-start; margin-top: 4px; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 7px 12px; cursor: pointer; font: 600 12px var(--mono); }
+.stuck-tried:hover { border-color: var(--orange, #ff9f45); color: var(--orange, #ff9f45); }
+.stuck-clear-tried { margin-top: 6px; background: none; border: 1px dashed var(--line); color: var(--accent-2); border-radius: 8px; padding: 7px 12px; cursor: pointer; font: 600 12px var(--mono); }
+.stuck-note { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+/* ---- rainbow shimmer: a reward on the triage cards + column headers, motion only ---- */
+@media (prefers-reduced-motion: no-preference) {
+  .stuck-col-h, .stuck-q {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--teal, #38e0c8), var(--purple, #b48cff), var(--accent));
+    background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    animation: stuckShimmer 9s linear infinite;
+  }
+  .stuck-tri:hover { background-image: linear-gradient(150deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--purple, #b48cff) 12%, transparent)); }
+}
+@keyframes stuckShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 300% 50%; } }
+
+/* Stuck? uses much more width on big screens (the two-column layout earns it). Same :has() technique
+   as the study map/bench. At 1080p main#view already fills; this only matters above ~1980px. */
+main#view:has(.stuck) { max-width: 2600px; }
+.stuck-showall { margin-top: 6px; background: none; border: 1px dashed var(--accent-2); color: var(--accent-2); border-radius: 9px; padding: 9px 14px; cursor: pointer; font: 700 12.5px var(--mono); width: 100%; }
+.stuck-showall:hover { background: color-mix(in srgb, var(--accent-2) 10%, transparent); }
