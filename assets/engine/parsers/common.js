@@ -101,6 +101,10 @@
   C._NMAP_SMB_SIGNING_RE = /Message signing enabled(?: and (?<required>required)| but not required)?/i;
   C._NMAP_HTTP_TITLE_RE = /^\|\s*_?http-title:\s*(?<title>.+)$/im;
   C._NMAP_HTTP_SERVER_RE = /^\|\s*_?http-server-header:\s*(?<header>.+)$/im;
+  // "Microsoft-HTTPAPI/2.0" is the Windows HTTP Server API behind WinRM (5985/47001), WSUS and SSDP/UPnP,
+  // NOT a browsable web app. A server header that is ONLY this must never mint web.server, or it unlocks the
+  // whole web-exploit lane (exposed-files, CMS, Log4Shell…) on a plain AD box and buries the real next move.
+  C._isNonWebServerHeader = function (hdr) { return /^microsoft-httpapi\b/i.test(String(hdr || '').trim()); };
   C._NMAP_HTTP_GENERATOR_RE = /^\|\s*_?http-generator:\s*(?<generator>.+)$/im;
   C._NMAP_HTTP_REDIRECT_RE = /^\|\s*_?http-title:\s*Did not follow redirect to (?<location>\S+)/im;
   C._NMAP_FTP_ANON_RE = /ftp-anon:\s*Anonymous FTP login allowed|Anonymous FTP login allowed/i;

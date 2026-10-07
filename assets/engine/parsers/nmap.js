@@ -110,7 +110,8 @@
       titles.push(t);
     });
     if (titles.length) _add(facts, mkFact('web.title', h, { titles: C.uniqueSortedCI(titles).slice(0, 10) }, S, source));
-    var headers = C.uniqueSortedCI(reAll(C._NMAP_HTTP_SERVER_RE, text).map(function (m) { return m.groups.header.trim(); }).filter(Boolean));
+    var headers = C.uniqueSortedCI(reAll(C._NMAP_HTTP_SERVER_RE, text).map(function (m) { return m.groups.header.trim(); })
+      .filter(Boolean).filter(function (hdr) { return !C._isNonWebServerHeader(hdr); }));
     if (headers.length) _add(facts, mkFact('web.server', h, { headers: headers.slice(0, 10) }, S, source));
     var generators = C.uniqueSortedCI(reAll(C._NMAP_HTTP_GENERATOR_RE, text).map(function (m) { return m.groups.generator.trim(); }).filter(Boolean));
     var tech = generators.map(function (item) { return { name: 'generator', value: item }; });

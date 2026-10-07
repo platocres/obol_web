@@ -67,7 +67,8 @@
         var v = l.replace(/^Server:[ \t]*/i, '').trim();
         if (v && servers.indexOf(v) < 0) servers.push(v);
       });
-      if (servers.length) _add(facts, mkFact('web.server', h, { headers: servers.slice(0, 10), via: 'shape' }, S, source));
+      var webServers = servers.filter(function (hdr) { return !(C._isNonWebServerHeader && C._isNonWebServerHeader(hdr)); });
+      if (webServers.length) _add(facts, mkFact('web.server', h, { headers: webServers.slice(0, 10), via: 'shape' }, S, source));
     }
 
     // (3) A crackable-hash blob, pasted without the tool that produced it. The AS-REP / TGS hash tokens

@@ -85,5 +85,19 @@ ok(fv('host.hostname') && fv('host.hostname').name === 'FOREST', 'un-piped "Comp
 ok(fv('host.domain') && fv('host.domain').domain === 'htb.local', 'un-piped "Domain name: htb.local" mints host.domain');
 ok(fv('ad.domain_known') && fv('ad.domain_known').name === 'htb.local', 'the domain also mints ad.domain_known (base DN derivable)');
 
+// "Microsoft-HTTPAPI/2.0" on 5985/47001 is WinRM/WSMan, not a browsable web app, so it must NOT mint
+// web.server (which would unlock the whole web-exploit lane and bury the AD next move). A real web server
+// header still must. Regression for a Forest vuln scan that ranked exposed-files/CMS/Log4Shell above LDAP.
+var httpapi = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -sV --script vuln 10.129.102.107',
+  stdout: ['Nmap scan report for 10.129.102.107', '445/tcp open microsoft-ds', '5985/tcp open http Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)', '|_http-server-header: Microsoft-HTTPAPI/2.0', 'Nmap done'].join('\n'),
+  source: 'nmap', scope: 'host:10.129.102.107', domain: '' });
+var hk = kindsOf(httpapi);
+ok(hk.indexOf('web.server') === -1, 'Microsoft-HTTPAPI (WinRM) does NOT mint web.server (no web-exploit cascade on an AD box)');
+ok(hk.indexOf('winrm.reachable') >= 0, 'the same 5985 line still mints winrm.reachable');
+var apache = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -sV 10.10.10.10',
+  stdout: ['Nmap scan report for 10.10.10.10', '80/tcp open http Apache httpd 2.4.41', '|_http-server-header: Apache/2.4.41 (Ubuntu)', 'Nmap done'].join('\n'),
+  source: 'nmap', scope: 'host:10.10.10.10', domain: '' });
+ok(kindsOf(apache).indexOf('web.server') >= 0, 'a real Apache server header still mints web.server');
+
 console.log(fail ? ('\nNMAP MARKERS: ' + fail + ' FAILURES') : '\nNMAP MARKERS: all passed');
 process.exit(fail ? 1 : 0);
