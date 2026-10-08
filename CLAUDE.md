@@ -734,3 +734,31 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   on the owner's real Forest zip: bridge + route (exact ...->Exchange Windows Permissions->HTB.LOCAL chain)
   + 12-row board + 13 round labelled nodes + 19 matched cards + "32 users"; explore loads on click; 0
   console errors. Full engine suite + browser-smoke + gap green; assets stamped. (Tasks #31-#35.)
+- 2026-10-08: Domain (BloodHound) tab, "explore + own + diff" slice (owner-directed, general to any
+  collection, built after an alignment pass). The tab stops being read-only and becomes a BloodHound
+  replacement you steer. Five pieces, one pass (Tasks #36-#39):
+  (1) Engine (assets/engine/bloodhound.js), five pure additions with smoke coverage: principalProfile
+  (the weaknesses the data carries on one account, SPN/DONT_REQ_PREAUTH/PASSWD_NOTREQD + census roles),
+  acquisitionLines (data-INDICATED ways to acquire a non-owned account, from its own attributes only,
+  no generic host-enum noise), principalList (every principal ranked by closeness to DA, for the
+  dropdown), graphFingerprint + diffCollections (a compact snapshot + a temporal diff: new/removed
+  principals, new/removed abusable+MemberOf edges, census-flag deltas).
+  (2) Inspect dropdown at the top (where the owned principal was): select any account, owned or not, and
+  see its tags, path(s) to DA, and what it controls. Board rows, census buttons, diff names,
+  controlled-object links and graph nodes all drive the one inspect slot; _inspecting survives a re-render.
+  (3) Ownership as ONE set behind THREE doors (owner's refinement): a stored credential, a pasted login
+  (mints a credential, same set), or ticking "I Own This Account Now" (eng.bloodhound.ownedExtra, carried
+  across re-uploads). Runnable abuse commands (walk the path, bloodyAD per hop, DCSync cash-in) stay hidden
+  until you own the account; a non-owned account shows theory (path + controls) + how to acquire it + the
+  gate. Ticking re-derives the whole tab and restores the card.
+  (4) What Changed Since Last Collection: the diff vs the prior upload, new leverage, flag deltas,
+  new/removed principals, each name clickable to inspect. Native BloodHound-CE has no such temporal view.
+  (5) Expandable "+ N more" on the targeting board and the controls list, so nothing is hidden for good.
+  Ingest stores summary.diff + carries ownedExtra. Presentation only: no ranker fork, one store, one filler.
+  Driven headless on the owner's real Forest zip through the full gate -> unlock flow (inspect SVC-ALFRESCO
+  non-owned: AS-REP tag + acquisition + gate, no walk commands; tick "I own this": card restored with the
+  walk commands, gate gone, top route + 13-node graph appear) and the diff panel, desktop + mobile, 0
+  console errors. Full engine suite + browser-smoke + lint + gap all green; assets stamped. House style held
+  (no em or en dashes, Title Case). Still open from the same discussion thread for a later pass: feeding the
+  diff's new-leverage edges into the coach as "a faster route opened", and the bigger "exceed BloodHound"
+  ideas (progress-aware overlay, marginal-value who-to-hunt, what-if owned set).
