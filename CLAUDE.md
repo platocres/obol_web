@@ -803,3 +803,82 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   ownedExtra and clears the banner, 0 console errors. Full engine suite + browser-smoke + lint + gap green;
   assets stamped; house style held. Presentation only: no ranker fork, one store, the what-if touches the
   engagement only on an explicit Commit.
+
+---
+
+## Active build: Frameworks view (ATT&CK / D3FEND / compliance / CVEs) in Findings (PR #302)
+
+**Plan of record. If this chat is lost, resume here. Branch `claude/obol-web-overhaul-local-59ttbx`.
+Commit frequently.**
+
+### Intention
+
+The owner saw Splunk ES map every detection across MITRE ATT&CK + Kill Chain + NIST + CIS + PCI, with
+the ATT&CK matrix as the hero view (tactics columns x technique cells, coloured by coverage). Mirror
+that in obol, flipped to the OFFENSIVE side: your recorded moves and minted findings light up the
+exact matrix cells a blue team's Splunk would try to cover, and D3FEND / the ATT&CK detection notes
+say how a defender catches each one. Dual-use and educational, deterministic, no LLM, exam-legal.
+
+Fold into the **Findings tab** as sub-views (same sub-tab pattern as Workbench), not a new nav item.
+
+### What already exists (do not rebuild)
+
+- `data/findings-catalog.js` (552 findings) already carries per entry: `attack` (ATT&CK Txxxx, 55
+  populated), `nist` (800-53, 87), `cwe` (286), `cve`, `remediation` (all 552), `severity`,
+  `confidence`, `refs`, `match`. Schema add needed: `killchain`, `cis`, `pci` (the coverage pass).
+- `OBOL.findings.assess(factSet)` -> matched findings with all those fields + `trigger_kinds` + `kev`.
+  NOTE: `kev` is STUBBED (`kev = {}`) in the web edition. Un-stub it against `data/packs/cisa_kev_*`.
+- Recorded moves live in `eng.activities` (the Run Log, routes/history.js). A move's produced facts
+  trigger findings, so a recorded move inherits its findings' ATT&CK techniques (+ a lane default for
+  pure-recon moves that mint none). That is the "recorded moves -> ATT&CK" trail, for free.
+- `data/packs/cisa_kev_2026_09.json`, `known_exploits_2026_09.json` (CVE -> exploit).
+- ATT&CK STIX is fetchable (raw.githubusercontent.com/mitre-attack/attack-stix-data, 53MB, 200).
+  D3FEND's inference mapping is NOT cleanly extractable from its static sources (the API is GitHub
+  Pages; the TTL encodes ATT&CK<->D3FEND via reified artifacts, not direct triples), so D3FEND is a
+  curated compact bundle (same pattern as GTFOBins), attributed.
+
+### Decisions locked (owner-approved)
+
+- **Hero view first from existing data** (ATT&CK matrix + kill chain + CVE/KEV), THEN a coverage pass
+  to fill attack/nist/cis/pci across the 552 findings. (Owner: "Agreed.")
+- **D3FEND in v1** (not just ATT&CK's built-in detection guidance). (Owner: "D3FEND in v1.")
+- Frameworks to map: MITRE ATT&CK (hero, offensive matrix), Lockheed Kill Chain, MITRE D3FEND +
+  ATT&CK detection (defensive), NIST 800-53 + NIST CSF + CIS Controls v8 + PCI DSS + CWE + OWASP
+  (compliance/report), CISA KEV + CVSS (vuln prioritization). PCI rendered dim/collapsed unless the
+  engagement touches cardholder-data scope.
+- Boundaries unchanged: presentation only, no ranker fork, one store, pack commands the source of
+  truth. Reference data bundled + attributed (ATT&CK/D3FEND are MITRE; CIS; PCI SSC).
+
+### Phases (check off as completed)
+
+- [ ] **MF0.** This plan in CLAUDE.md + tasks.
+- [ ] **MF1.** Reference data + engine. tools/build-attack.js -> data/attack-catalog.js (14 tactics in
+  matrix order; techniques: name, tactics, detection, data_sources, mitigations, url; sub-technique
+  name lookup). data/d3fend-map.js (curated ATT&CK -> D3FEND countermeasures + names, obol's technique
+  set). Small fixed tables: kill-chain stages + obol-phase mapping, NIST CSF functions, CIS v8 titles,
+  PCI v4 requirement titles. Un-stub KEV against the cisa_kev pack. Engine `assets/engine/frameworks.js`
+  (OBOL.frameworks): from assess()+activities -> {attack matrix model, d3fend countermeasures, compliance
+  rollup, cve/kev list}. Smoke test tests/engine/frameworks-smoke.js.
+- [ ] **MF2.** ATT&CK Matrix hero sub-view in the Findings route (tactics columns, technique cells lit
+  by the engagement, Splunk-style; hover/click = technique detail: what you did, detection, mitigations).
+  Sub-view nav in routes/findings.js.
+- [ ] **MF3.** Defensive sub-view: per technique used, the D3FEND countermeasure + ATT&CK detection and
+  data sources ("how a defender catches this").
+- [ ] **MF4.** Compliance sub-view (NIST 800-53/CSF, CIS, PCI dim-unless-scoped, CWE, OWASP rollup) +
+  CVEs & KEV sub-view (detected CVEs, KEV "actively exploited" flag, exploit availability, remediation).
+- [ ] **MF5.** Coverage pass: add attack/nist/cis/pci across the 552 findings + a move/lane ATT&CK map;
+  verify guardrails, stamp. Screenshot-verify every sub-view desktop + mobile, 0 console errors.
+
+### Verify each phase (same as the project)
+
+`node tools/field-notes-coverage.js` · `node tools/lint-study.js --check` ·
+`node tools/gap-report.js --check` · `for t in tests/engine/*.js; do node "$t"; done` ·
+`NODE_PATH=/opt/node-tools/node_modules node tests/browser-smoke.js` ·
+`node tools/stamp-assets.js` (after any asset edit) · drive the app headless (0 console errors) ·
+screenshot the changed surface at desktop + mobile and read it for sense. House style: no em/en dashes.
+
+### Status log (update per commit)
+
+- 2026-10-08: MF0, plan documented. Confirmed: findings-catalog already carries attack/nist/cwe/cve/
+  remediation; OBOL.findings.assess exposes them; KEV is stubbed (to un-stub); recorded moves are
+  eng.activities; ATT&CK STIX fetchable, D3FEND to be curated.
