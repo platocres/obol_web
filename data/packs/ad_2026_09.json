@@ -939,7 +939,8 @@
       ],
       "produces": [
         "ad.graph.collected",
-        "ad.attack_paths"
+        "ad.attack_paths",
+        "ad.control_paths"
       ],
       "priority": 84,
       "proves": "produces the AD graph and its attack paths",

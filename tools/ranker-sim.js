@@ -46,6 +46,9 @@ function stageFacts(arch, stage) {
   var f = [];
   if (stage === 'recon_ports') return f;
   f.push('scan.nmap.version'); if (stage === 'recon_versioned') return f;
+  // a REMOTE credential with NO foothold yet: you cracked a roast or found creds in a share but have no
+  // shell. Extremely common in AD, and the state the "map/foothold before you specialize" rule is about.
+  if (stage === 'cred_remote') { f.push('credential.available', 'credential.validated'); return f; }
   // a foothold
   f.push('access.shell', arch.os === 'windows' ? 'foothold.windows' : 'foothold.linux');
   if (stage === 'foothold') return f;
@@ -54,7 +57,7 @@ function stageFacts(arch, stage) {
   if (stage === 'admin') { f.push('access.admin'); return f; }
   return f;
 }
-var STAGES = ['recon_ports', 'recon_versioned', 'foothold', 'cred_found', 'cred_valid', 'admin'];
+var STAGES = ['recon_ports', 'recon_versioned', 'cred_remote', 'foothold', 'cred_found', 'cred_valid', 'admin'];
 
 function buildState(archKey, stage) {
   var arch = ARCHETYPES[archKey];
@@ -126,6 +129,16 @@ function judge(state, ranked) {
     var isOrient = function (m) { return (m.produces || []).some(function (k) { return (k === 'ad.dc_candidate' || k === 'ad.domain_known' || k === 'ad.base_dn' || k === 'ad.anonymous_bind') && !sb.has(k); }); };
     var orientEligible = ranked.some(isOrient);
     if (orientEligible && !top3.some(isOrient) && !isScanMove(top1)) v.push({ p: 'ad_lane_leads', detail: 'eligible AD orient not in top 3 (top: ' + top3.map(function (m) { return m.id; }).join(', ') + ')' });
+  }
+
+  // P7: map / foothold before a named misconfiguration. On an AD box where you hold a credential but have
+  // NOT mapped the domain (no attack/control paths, no graph) and have no foothold, a move that ABUSES a
+  // specific named misconfiguration (ADCS ESC, a trust hop, SCCM) should NOT be in the top 3, it is premature
+  // until you confirm the ground. Mirrors the specializeHold rule in nextActionsV2.
+  if (state.arch.ad && sb.has('credential.available')
+      && !(sb.has('ad.attack_paths') || sb.has('ad.control_paths') || sb.has('ad.graph.collected')) && !hasFoothold(sb)) {
+    var SPEC = /^(adcs\.vulnerable|credential\.certificate|ad\.trusts|sccm\.)/;
+    top3.forEach(function (m) { if ((m.produces || []).some(function (k) { return SPEC.test(k); })) v.push({ p: 'specialize_after_map', detail: m.id + ' (named misconfig abuse) in top 3 before mapping/foothold' }); });
   }
 
   // P6: command sanity, the #1 move's first command should not sit on an EARNED token whose backing

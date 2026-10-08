@@ -837,6 +837,19 @@
     if (earlyRecon) for (var _fk in haveObj) { if (/^foothold\./.test(_fk) || /^access\.(shell|admin|system|root|desktop)$/.test(_fk)) { earlyRecon = false; break; } }
     // "Validate before use" is live while you hold a usable credential you have not yet proven works.
     var validateFirst = !!haveObj['credential.available'] && !haveObj['credential.validated'];
+    // "Map and get on the box before you reach for a named misconfiguration." While you hold a credential but
+    // have NOT mapped the domain (no attack/control paths, no graph) and have NO foothold yet, a move that
+    // EXPLOITS A SPECIFIC named AD misconfiguration (ADCS ESC, a trust hop, SCCM) is premature: you have not
+    // confirmed it applies, and it reads as a near-win to the score (it produces a cert / a trust / an SCCM
+    // path) so it buries the moves that get you there. Demote those below the moves that map the domain
+    // (BloodHound or the manual path-finder), get you a foothold, or do the cheap always-worth-it roast.
+    // Self-disables the moment you map (a path/graph fact mints) or land a foothold, so the post-map killchain,
+    // where the named abuse IS the next step, is untouched. (ranker-sim.js measures this.)
+    var v2Mapped = !!(haveObj['ad.attack_paths'] || haveObj['ad.control_paths'] || haveObj['ad.graph.collected']);
+    var v2Foothold = false; for (var _hk in haveObj) { if (/^foothold\./.test(_hk) || /^access\.(shell|admin|system|root|desktop)$/.test(_hk)) { v2Foothold = true; break; } }
+    var specializeHold = !!haveObj['credential.available'] && !v2Mapped && !v2Foothold;
+    var SPECIALIZE_RE = /^(adcs\.vulnerable|credential\.certificate|ad\.trusts|sccm\.)/;
+    function isSpecialize(a) { return (a.produces || []).some(function (k) { return SPECIALIZE_RE.test(k); }); }
 
     function onType(a) {
       if (!focus.length) return 0;
@@ -914,6 +927,13 @@
       if (validateFirst) {
         var xcv = x.a.produces.indexOf('credential.validated') >= 0, ycv = y.a.produces.indexOf('credential.validated') >= 0;
         if (xcv !== ycv) return xcv ? -1 : 1;
+      }
+      // Map / foothold before a named-misconfiguration abuse (see specializeHold above): in this opening a
+      // specialize move sorts after everything that is not one, so the domain map, the foothold and the
+      // roasts lead and the ADCS/trust/SCCM lanes wait until you have confirmed the ground.
+      if (specializeHold) {
+        var xsp = isSpecialize(x.a), ysp = isSpecialize(y.a);
+        if (xsp !== ysp) return xsp ? 1 : -1;
       }
       if (y.score !== x.score) return y.score - x.score;
       if (y.a.priority !== x.a.priority) return y.a.priority - x.a.priority;
