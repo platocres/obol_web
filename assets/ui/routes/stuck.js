@@ -44,12 +44,14 @@
   function reducedMotion() { try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
 
   // ── the ferryman: glowing eye + typewriter line ────────────────────────────────────────────────
-  // Charon's visage: the cyberpunk-ferryman illustration (hero for the intro, a face avatar inline).
+  // Charon's visage: the cyberpunk-ferryman illustration, floating in ring-light. The inline marker
+  // shows the whole (small) figure, not a cropped circle of his face.
   function eyeHtml(small) {
-    return small
-      ? '<img class="charon-av" src="assets/img/charon-avatar.webp?v=2" width="48" height="48" loading="lazy" decoding="async" alt="Charon the ferryman">'
-      : '<div class="charon-fig"><span class="charon-aura"></span><span class="charon-ring"></span><span class="charon-ring r2"></span>'
-        + '<img class="charon-img" src="assets/img/charon.webp?v=2" width="216" height="216" loading="lazy" decoding="async" alt="Charon the ferryman, hooded with glowing red eyes in a skull boat on the green Styx"></div>';
+    var sz = small ? 88 : 216;
+    return '<div class="charon-fig' + (small ? ' charon-fig--sm' : '') + '"><span class="charon-aura"></span>'
+      + (small ? '' : '<span class="charon-ring"></span><span class="charon-ring r2"></span>')
+      + '<img class="charon-img" src="assets/img/charon.webp?v=2" width="' + sz + '" height="' + sz + '" loading="lazy" decoding="async"'
+      + ' alt="Charon the ferryman' + (small ? '' : ', hooded with glowing red eyes in a skull boat on the green Styx') + '"></div>';
   }
   function typeInto(text) {
     var el = _mount && _mount.querySelector('.stuck-say');
