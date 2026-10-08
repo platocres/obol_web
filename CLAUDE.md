@@ -695,3 +695,25 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   (2) House-style Title Case on the Set Up First prep step: the chip is "Write" / "Done", the copy button is
   "Copy". Verified headless: both chips render with correct copy text, prep labels Title Case, 0 console
   errors. Guardrails + engine + browser-smoke green; assets stamped.
+- 2026-10-08: Forest post-credential ranking (owner real-box run) + BloodHound ingest verified + a new
+  structural task. (1) usermin-rce was eligible on ANY credential (a Usermin-specific RCE); gated it on
+  its fingerprint (port:20000 / vuln.usermin) so it stops cluttering every credentialed box. (2) After
+  cracking svc-alfresco (validated domain cred, no shell), the coach led with ADCS abuse at #2 and buried
+  BloodHound at #6 and the foothold. Two measured fixes: bloodhound-collect now produces ad.control_paths
+  (it undervalued itself by omitting the keystone, score 0.14 vs the manual path-finder's 0.96); and a new
+  nextActionsV2 rule (specializeHold) demotes named-misconfiguration abuse (ADCS/Trust/SCCM) below the
+  map/foothold/roast moves while you hold a credential but have NOT mapped and have NO foothold, self-
+  disabling once you map or land a foothold. Owner chose "map first, keep manual-first": manual path-finder
+  stays #1, BloodHound rises to #2 (not ahead), foothold to #3, kerberoast #5. Scoreboard gap closed: added
+  a cred_remote stage (credential, no foothold) to ranker-sim.js (49 states) + a specialize_after_map
+  principle, teeth-checked (rule off -> 3 flagged incl ad_dc/cred_remote; on -> 0/49). sim 0/49, sweep 0.0%,
+  full suite + ad-killchain-e2e + guardrails + browser-smoke green. (3) Verified the BloodHound ingester
+  end to end on the owner's real Forest zip: ownedPaths from SVC-ALFRESCO finds 16 owned->DA paths, the
+  shortest being the exact Forest chain (... -> EXCHANGE WINDOWS PERMISSIONS -> HTB.LOCAL), mints
+  ad.attack_paths, and the coach then leads with ACL Abuse (bloodyAD) / Object ACL Abuse, the real win.
+  It surfaces AND recommends correctly; the only dependency is that the engagement has the owned principal
+  (svc-alfresco) set, which drives the owned->DA path computation. (4) NEW OPEN TASK (#30): an end-to-end
+  command -> real output -> fact -> advance/retire round-trip audit. Every audit so far tests ranking given
+  facts; none test the loop the human actually runs, so parser/retire gaps (e.g. certipy find erroring on
+  a box with no CA and the ADCS move not retiring or acknowledging it) only surface on the real box. This
+  is the structural fix for the recurring "I ran it, pasted it, nothing changed" class.
