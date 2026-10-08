@@ -1143,6 +1143,9 @@ ol.bh-steps li { margin-bottom: 9px; }
 .bh-diff-h.add::before { content: '+ '; }
 .bh-diff-h.rem { color: var(--muted); }
 .bh-diff-h.rem::before { content: '\2212 '; }
+.bh-diff-h.fast { color: var(--critical); font-size: 12.5px; }
+.bh-diff-h.fast::before { content: '\26a1 '; }
+.bh-bridge.fast { border-color: color-mix(in srgb, var(--critical) 50%, var(--line)); background: color-mix(in srgb, var(--critical) 10%, transparent); }
 .bh-diff-names { font-family: var(--mono); font-size: 11px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 3px 8px; }
 .bh-diff .bh-princ { list-style: none; padding: 0; margin: 0; }
 .bh-diff .bh-princ li { padding: 2px 0; }

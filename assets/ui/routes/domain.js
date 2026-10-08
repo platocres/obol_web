@@ -238,13 +238,19 @@
   // New edges are the leverage that opened (re-collect after a foothold and this shows what you earned);
   // flag deltas say who became or stopped being roastable / a DCSync principal. Empty when nothing changed.
   function diffHtml(diff) {
-    if (!diff || !diff.changed) return '';
+    if (!diff || (!diff.changed && !diff.route)) return '';
     function edgeLi(e) {
       return '<li><button class="bh-princ-x" data-explore="' + U.attr(e.from) + '">' + esc(shortName(e.from)) + '</button>'
         + ' <span class="bh-re">' + esc(e.edge) + '</span> '
         + '<button class="bh-princ-x" data-explore="' + U.attr(e.to) + '">' + esc(shortName(e.to)) + '</button></li>';
     }
     var out = '<h2 class="coach-sec-h">What Changed Since Last Collection</h2><div class="bh-diff">';
+    if (diff.route) {
+      out += '<div class="bh-diff-sec"><div class="bh-diff-h fast">A faster route to Domain Admin opened: '
+        + diff.route.now + ' hop' + (diff.route.now === 1 ? '' : 's')
+        + (diff.route.prev ? (' (was ' + diff.route.prev + ')') : ', where there was none before')
+        + '. obol re-ranked your next moves.</div></div>';
+    }
     if (diff.edges.added.length) {
       out += '<div class="bh-diff-sec"><div class="bh-diff-h add">New leverage: ' + diff.edges.added.length + ' edge' + (diff.edges.added.length === 1 ? '' : 's') + '</div>'
         + expandableList(diff.edges.added.map(edgeLi), 8, 'edge') + '</div>';
@@ -314,7 +320,9 @@
       // Bridge: this data became the coach's next moves. Tells the user where the "do this" lives.
       var q = coachQueued();
       if (q.top) {
-        html += '<a class="bh-bridge" href="#/path"><span class="bh-bridge-k">obol turned this graph into your next moves.</span> '
+        var fast = (summary.diff && summary.diff.route) ? true : false;
+        html += '<a class="bh-bridge' + (fast ? ' fast' : '') + '" href="#/path">'
+          + '<span class="bh-bridge-k">' + (fast ? 'A faster route to Domain Admin opened. ' : '') + 'obol turned this graph into your next moves.</span> '
           + '<span class="bh-bridge-top">Next up: ' + esc(q.top.title) + '</span>'
           + '<span class="bh-bridge-go">Open Next Steps →</span></a>';
       }
@@ -408,6 +416,16 @@
       summary.ownedExtra = (prevSummary && prevSummary.ownedExtra) || [];
       var owned = ownedFromEngagement();
       var paths = OBOL.bloodhound.ownedPaths(summary, owned);
+      // Did this collection OPEN A FASTER ROUTE to Domain Admin for the accounts you own? (A re-collect
+      // after a foothold often does.) Compare the shortest owned->DA length now vs in the prior graph;
+      // if it shrank (or a route appeared where there was none), note it so the bridge can say so. The
+      // coach already re-ranks on the new ad.attack_paths fact; this is the visible "it got faster" cue.
+      if (summary.diff && owned.length) {
+        var nowLen = (paths.paths && paths.paths[0]) ? paths.paths[0].length : 0;
+        var prevLen = (prevSummary && prevSummary._graph)
+          ? (function () { var pp = OBOL.bloodhound.ownedPaths(prevSummary, owned); return (pp.paths && pp.paths[0]) ? pp.paths[0].length : 0; })() : 0;
+        if (nowLen && (!prevLen || nowLen < prevLen)) summary.diff.route = { now: nowLen, prev: prevLen || null };
+      }
       var facts = OBOL.bloodhound.toFacts(summary, paths, 'domain:' + (summary.domain || 'domain'));
       // Keep the transient _graph on the persisted summary so the interactive graph + census can
       // be re-derived (and owned-principal recompute works) after reload — obol-local drops it only
