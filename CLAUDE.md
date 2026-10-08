@@ -687,3 +687,11 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   crack-asrep and crack-kerberoast: the CL_PLATFORM error means a GPU-less VM, fix with pocl-opencl-icd
   or the john line (no GPU needed). All guardrails + full engine suite + browser-smoke green; prep-step
   collapse driven headless (Got It collapses the heredoc, persists, 0 console errors); assets stamped.
+- 2026-10-08: Field-note polish (owner feedback on the above). (1) Authored note lines now support inline
+  `backtick` code: a new fmtNote() helper in path.js renders each backtick span as a monospace, click-to-copy
+  <code class="ns-ic"> chip (reusing U.copy), applied to How To Land It / What To Look For / Common Mistakes
+  / the win line. General capability, not a one-off. The two hashcat notes now read the error as a code chip
+  (`CL_PLATFORM_NOT_FOUND`) and offer the fix as a one-click-copy chip (`sudo apt install -y pocl-opencl-icd`).
+  (2) House-style Title Case on the Set Up First prep step: the chip is "Write" / "Done", the copy button is
+  "Copy". Verified headless: both chips render with correct copy text, prep labels Title Case, 0 console
+  errors. Guardrails + engine + browser-smoke green; assets stamped.

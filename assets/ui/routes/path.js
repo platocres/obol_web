@@ -129,14 +129,14 @@
   function prepStep(tag, variant, cmd, note, key, done) {
     if (done) {
       return '<div class="cmd cmd-prep is-prep-done">'
-        + '<div class="cmd-head"><span class="cmd-tag">done</span>'
+        + '<div class="cmd-head"><span class="cmd-tag">Done</span>'
         + '<span class="cmd-variant">' + esc(String(variant).replace(/^creates /, '')) + ' written</span>'
         + '<button class="btn-ghost prep-undo" data-prep="' + esc(key) + '" title="Show this step again">Show</button></div></div>';
     }
     return '<div class="cmd cmd-prep">'
       + '<div class="cmd-head"><span class="cmd-tag">' + esc(tag) + '</span>'
       + '<span class="cmd-variant">' + esc(variant) + '</span>'
-      + '<button class="btn-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button>'
+      + '<button class="btn-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">Copy</button>'
       + '<button class="btn-ghost prep-done" data-prep="' + esc(key) + '" title="Hide this once you have run it">Got It</button></div>'
       + '<pre class="cmd-run"><code>' + esc(cmd) + '</code></pre>'
       + (note ? '<div class="cmd-note">' + esc(note) + '</div>' : '') + '</div>';
@@ -151,7 +151,7 @@
       var ulCmd = OBOL.loot.userlistCommand(facts, dirs);
       if (users.length && ulCmd) {
         var ulKey = 'ul:' + prepHash(ulCmd);
-        steps += prepStep('write', 'creates ' + OBOL.loot.userlistPath(dirs),
+        steps += prepStep('Write', 'creates ' + OBOL.loot.userlistPath(dirs),
           ulCmd, 'Run once, the ' + users.length + ' users obol proved, written where every command below reads them.', ulKey, !!doneMap[ulKey]);
       }
     }
@@ -163,7 +163,7 @@
       var hfCmd = OBOL.loot.hashfileCommand(facts, action, dirs);
       if (hfCmd) {
         var hfKey = 'hf:' + prepHash(hfCmd);
-        steps += prepStep('write', 'creates ' + OBOL.loot.hashfilePath(dirs, action),
+        steps += prepStep('Write', 'creates ' + OBOL.loot.hashfilePath(dirs, action),
           hfCmd, 'Lay the roasted hashes obol captured into the file the crack reads.', hfKey, !!doneMap[hfKey]);
       }
     }
@@ -201,6 +201,20 @@
   // full re-renders (a fact change re-renders the whole coach); validated against the live set each render.
   var nsSel = { id: null, idx: 0, locus: null };
   var NS_INFRA = { 'target.configured': 1, 'host.up': 1, 'ports.open': 1, 'scan.nmap.quick': 1 };
+
+  // Inline formatting for an authored note line: a `backtick` span renders as a monospace, click-to-copy
+  // <code> chip, so an error string reads as code and a fix command lifts in one click. Everything outside
+  // the backticks is escaped as plain text; the chip carries the RAW text in data-copy for an exact copy.
+  function fmtNote(s) {
+    s = String(s == null ? '' : s);
+    var out = '', re = /`([^`]+)`/g, last = 0, m;
+    while ((m = re.exec(s)) !== null) {
+      out += esc(s.slice(last, m.index));
+      out += '<code class="ns-ic" data-copy="' + U.attr(m[1]) + '" title="Click to copy">' + esc(m[1]) + '</code>';
+      last = m.index + m[0].length;
+    }
+    return out + esc(s.slice(last));
+  }
 
   // Tokens that come from an EARNED fact (you discover them on the box): the domain, the base DN, a
   // credential, a captured hash, the scanned ports. These GATE a command, because until the fact is proven
@@ -590,14 +604,14 @@
         html += '<p class="ns-cn-h">Set Up First' + allBtn + '</p><div class="ns-setup">' + setupSteps + '</div>';
       }
       if (note.land && note.land.length) html += '<p class="ns-cn-h">How To Land It</p><ul class="ns-cn-list">'
-        + note.land.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
+        + note.land.map(function (l) { return '<li>' + fmtNote(l) + '</li>'; }).join('') + '</ul>';
       // "What To Look For" — the signals worth scanning the output for. This is the heart of an
       // enumeration note, where restating the command adds nothing but reading the result is everything.
       if (note.look && note.look.length) html += '<p class="ns-cn-h">What To Look For</p><ul class="ns-cn-list look">'
-        + note.look.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
-      if (note.win) html += '<div class="ns-cn-win"><span class="ns-tick" aria-hidden="true">✓</span><span>' + esc(note.win) + '</span></div>';
+        + note.look.map(function (l) { return '<li>' + fmtNote(l) + '</li>'; }).join('') + '</ul>';
+      if (note.win) html += '<div class="ns-cn-win"><span class="ns-tick" aria-hidden="true">✓</span><span>' + fmtNote(note.win) + '</span></div>';
       if (note.mistakes && note.mistakes.length) html += '<p class="ns-cn-h">Common Mistakes</p><ul class="ns-cn-list warn">'
-        + note.mistakes.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
+        + note.mistakes.map(function (l) { return '<li>' + fmtNote(l) + '</li>'; }).join('') + '</ul>';
       if (note.doctor) html += nsDoctorBlock(note.doctor);
     }
     // Automatic (derived from the move's produces, not authored per move): the first-breath orientation
@@ -1052,6 +1066,10 @@
     });
     U.on(mount, 'click', '.cmd-miss-cmd', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Install command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    // inline code chips inside a field note (fmtNote `backtick` spans): click to copy the exact text.
+    U.on(mount, 'click', '.ns-ic', function (e, t) {
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
     });
     // inline free-text token fill ({{command}} etc.): substitute live into the command + copy button.
     U.on(mount, 'input', '.cmd-fill', function (e, t) {

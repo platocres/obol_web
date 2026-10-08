@@ -3175,6 +3175,11 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .ns-stage-where.ns-where-local { background: var(--accent); }
 .ns-cn-list { margin: 0 0 16px; padding-left: 18px; font-size: 13.5px; color: var(--text); line-height: 1.6; }
 .ns-cn-list li { margin-bottom: 5px; } .ns-cn-list.warn li { color: var(--text-2); }
+/* Inline code chip inside a field note (fmtNote `backtick` spans): monospace, subtly boxed, click to copy. */
+.ns-ic { font: 600 12px var(--mono); background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line)); border-radius: 5px; padding: 1px 5px;
+  color: var(--text); cursor: pointer; white-space: nowrap; word-break: break-all; }
+.ns-ic:hover, .ns-ic:focus-visible { background: color-mix(in srgb, var(--accent) 22%, transparent); outline: none; }
 .ns-cn-list.look li::marker { color: var(--accent-2); }
 .ns-cn-win { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; color: var(--text); margin-bottom: 16px;
   background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line)); border-radius: 9px; padding: 11px 13px; }
