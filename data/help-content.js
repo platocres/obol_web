@@ -14,7 +14,7 @@
   var OBOL = root.OBOL = root.OBOL || {};
 
   // Charon introduces himself for the quick-start (H5 expands the card path).
-  var CHARON_INTRO = 'I am Charon. In the old job I rowed the dead across the Styx, one obol a head. '
+  var CHARON_INTRO = 'I am Charon. In my day job I row the dead across the Styx, one obol a head. '
     + 'Off the clock I moonlight here: instead of ferrying souls to the far bank, I ferry the living to root. '
     + 'Same fee, better company. Let me show you the crossing.';
 
