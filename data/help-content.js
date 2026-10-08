@@ -116,6 +116,7 @@
     { id: 'q2', title: 'Read The Next Move', charon: 'The current is mapped. Follow it.', body: 'Next Steps ranks what to do now. Open the top move for the exact command and a field note on how to land it.', goto: '#/path', cta: 'Open Next Steps' },
     { id: 'q3', title: 'Reach For A Tool', charon: 'Every ferryman keeps his tools dry.', body: 'Need a reverse shell, a hash identified, a payload encoded? The Workbench fills from your box and works standalone too.', goto: '#/workbench', cta: 'Open Workbench' },
     { id: 'q4', title: 'Ask When You Are Stuck', charon: 'Lost on the water? Call out. I know these banks.', body: 'Stuck? asks a few quick questions and hands you ranked options, no pasting needed. I will be there.', goto: '#/stuck', cta: 'Open Stuck?' },
+    { id: 'q5', title: 'Learn The Craft', charon: 'Between crossings I sharpen my oar. You should too.', body: 'Learn has study cards and drills that teach the methodology behind every move. Best done away from a live box, so the moves make sense when you meet them.', goto: '#/study', cta: 'Open Learn' },
   ];
 
   OBOL.HELP = { charonIntro: CHARON_INTRO, triage: TRIAGE, sections: SECTIONS, glossary: GLOSSARY, quickstart: QUICKSTART };
