@@ -160,5 +160,15 @@ CAT.forEach(function (e) {
   }
 });
 
+// Anonymous LDAP bind (the ad-anon-ldap-enum probe command settles on ad.anonymous_bind). The empty-user
+// success line is `DOMAIN\:` (one backslash, then the colon), e.g. real Forest output `[+] htb.local\:`.
+// Regression guard: a parser backslash-count bug once required two backslashes, so this never minted and
+// the spent probe never dropped from the card.
+var anonOut = L + '[*] Windows 10 / Server 2016 Build 14393 (name:FOREST) (domain:htb.local) (signing:None)\n' + L + "[+] htb.local\\:";
+ok(facts("nxc ldap 10.10.10.10 -u '' -p ''", anonOut).indexOf('ad.anonymous_bind') >= 0,
+  'anonymous LDAP bind (DOMAIN\\: empty user) mints ad.anonymous_bind, so the probe command settles');
+ok(facts("nxc ldap 10.10.10.10 -u jdoe -p Winter2021", L + '[+] corp.local\\jdoe:Winter2021').indexOf('ad.anonymous_bind') < 0,
+  'an authenticated LDAP bind (DOMAIN\\user:pass) is NOT mistaken for anonymous');
+
 console.log('\nNXC SWITCH→PARSER: ' + CAT.length + ' capabilities · ' + (fail ? fail + ' FAILURE(S)' : 'all passed'));
 process.exit(fail ? 1 : 0);

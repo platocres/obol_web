@@ -49,7 +49,11 @@
       if (['ldap', 'smb', 'winrm', 'rdp', 'ssh', 'ftp'].indexOf(proto) >= 0) _add(facts, mkFact(proto + '.reachable', h, { tool: 'nxc' }, S, source));
       if (proto === 'winrm' || proto === 'rdp') C._add_os_observation(facts, ws, source, 'windows', m[0].trim(), proto === 'winrm' ? 'high' : 'medium', 'nxc', proto === 'winrm');
     });
-    if (/^LDAP\s+.*\[\+\].*(?:\\\\:|anonymous|'')/im.test(text)) _add(facts, mkFact('ad.anonymous_bind', C._scope_for_domain(ws, domain), { tool: 'nxc' }, S, source));
+    // A successful anonymous LDAP bind prints the empty-user signature `DOMAIN\:` (one backslash, then a
+    // colon with no username before it), e.g. nxc's `[+] htb.local\:`. Match a SINGLE backslash before the
+    // colon; an authenticated bind is `DOMAIN\user:pass`, which has no backslash-then-colon, so it is not
+    // mistaken for anonymous.
+    if (/^LDAP\s+.*\[\+\].*(?:\\:|anonymous|'')/im.test(text)) _add(facts, mkFact('ad.anonymous_bind', C._scope_for_domain(ws, domain), { tool: 'nxc' }, S, source));
   }
   C._parse_nxc_common = _parse_nxc_common;
 

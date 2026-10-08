@@ -656,3 +656,18 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   distinction. Result: sim 0/42, broad sweep now 0.0% (clean), full engine suite + guardrails + browser-smoke
   all green, 0 console errors driving the live recon-smtp card. Engine + test + sim change; no pack-data
   edit, no bundle rebuild; assets stamped.
+- 2026-10-08: Real-box parser fix (Forest), anonymous LDAP bind now mints ad.anonymous_bind, so the spent
+  probe drops. The owner noticed on a live Forest run that after pasting `nxc ldap <ip> -u '' -p ''`
+  output (a successful anonymous bind), the ad-anon-ldap-enum card did not change: the bare probe command
+  stayed instead of settling. Root cause was a PARSER backslash-count bug (the "ranker did the right thing
+  with a wrong fact" class, which our scoreboard procedure calls out): the anon-bind regex in
+  parsers/directory.js required TWO backslashes (`\\\\:` in the literal) before the colon, but real nxc
+  prints the empty-user signature with ONE (`[+] htb.local\:`), so ad.anonymous_bind never minted and
+  command [0]'s settled_by:[ad.anonymous_bind, ldap.authenticated] never fired. Fix: match a single
+  backslash (`\\:`); verified it mints on the anon line and does NOT misfire on an authenticated bind
+  `DOMAIN\user:pass` (no backslash-then-colon there). Now the probe settles and drops, and the card
+  advances to lead with the `--users` dump (the move itself stays, correctly, until ad.user_list is
+  proven). Regression test added to nxc-switch-parsers.js (anon mints, auth does not). Noted but NOT
+  fixed (separate, only matters for the authenticated case which already settles via ad.anonymous_bind):
+  ldap.authenticated is produced by a move and mapped in phases/labels but minted by no parser. Full
+  engine suite + guardrails + browser-smoke green, sim 0/42; parser asset stamped.
