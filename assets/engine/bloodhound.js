@@ -412,30 +412,33 @@
     var found = [];
     var types = graph.types || {};
 
-    function dfs(node, path, visited) {
-      if (found.length >= maxPaths || path.length >= maxDepth) return;
-      var out = adj[node] || [];
+    // BREADTH-first over simple paths (FIFO), so goal-reaching paths come out shortest-first: a path
+    // is only ever extended by one hop, and a parent is dequeued before its children, so the first goal
+    // hit is a globally shortest route (its hop count matches nearestToGoal's). A plain DFS could fill
+    // maxPaths with long routes before reaching the short one and report a too-long "shortest". A node-
+    // expansion budget guards a dense graph. Every owned principal seeds the frontier.
+    var budget = opts.budget || 50000;
+    var q = [], spent = 0;
+    owned.forEach(function (sid) { var v = {}; v[sid] = 1; q.push({ node: sid, hops: [], visited: v }); });
+    for (var qi = 0; qi < q.length && found.length < maxPaths && spent < budget; qi++) {
+      var cur = q[qi]; spent++;
+      if (cur.hops.length >= maxDepth) continue;
+      var out = adj[cur.node] || [];
       for (var i = 0; i < out.length; i++) {
         var edge = out[i][0], dst = out[i][1];
-        if (visited[dst]) continue; // simple paths only (no cycles)
-        var hop = { from: names[node] || node, edge: edge, to: names[dst] || dst, to_kind: types[dst] || '' };
+        if (cur.visited[dst]) continue; // simple paths only (no cycles)
+        var hop = { from: names[cur.node] || cur.node, edge: edge, to: names[dst] || dst, to_kind: types[dst] || '' };
         if (goals[dst]) {
-          found.push(path.concat([hop]));
-          if (found.length >= maxPaths) return;
+          found.push(cur.hops.concat([hop]));
+          if (found.length >= maxPaths) break;
           continue; // a goal ends the path; don't extend past it
         }
-        var nv = Object.assign({}, visited); nv[dst] = 1;
-        dfs(dst, path.concat([hop]), nv);
+        var nv = Object.assign({}, cur.visited); nv[dst] = 1;
+        q.push({ node: dst, hops: cur.hops.concat([hop]), visited: nv });
       }
     }
-
-    for (var oi = 0; oi < owned.length; oi++) {
-      if (found.length >= maxPaths) break;
-      var start = {}; start[owned[oi]] = 1;
-      dfs(owned[oi], [], start);
-    }
     if (!found.length) return { paths: [], first: null };
-    found.sort(function (a, b) { return a.length - b.length; });
+    found.sort(function (a, b) { return a.length - b.length; }); // stable; BFS order is already shortest-first
     return { paths: found, first: firstAbusable(found[0]) };
   }
 

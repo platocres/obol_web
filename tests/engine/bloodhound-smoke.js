@@ -136,6 +136,12 @@ BH.parse(files).then(function (summary) {
   ok(/CORP.LOCAL/i.test(goalHop.to) || goalHop.to === 'CORP.LOCAL', 'shortest path ends at the domain/DA goal (got ' + goalHop.to + ')');
   ok(owned.first && owned.first.edge === 'GenericAll', 'first abusable edge on the path is GenericAll (got ' + (owned.first && owned.first.edge) + ')');
 
+  // BFS shortest-first: the reported shortest path's hop count matches nearestToGoal's distance for the
+  // same owned principal (a DFS could report a too-long "shortest"). JEFF -> domain is 1 hop by both.
+  const nearJeff = (BH.nearestToGoal(summary).find(function (r) { return /JEFF/.test(r.name); }) || {}).hops;
+  ok(owned.paths[0].length === nearJeff, 'ownedPaths shortest length == nearestToGoal hops for JEFF (' + owned.paths[0].length + ' == ' + nearJeff + ')');
+  ok(owned.paths.every(function (p, i) { return i === 0 || owned.paths[i - 1].length <= p.length; }), 'ownedPaths are returned shortest-first');
+
   // census-only graceful path: no owned principals → no path derivation, no throw
   const none = BH.ownedPaths(summary, []);
   ok(none.paths.length === 0 && none.first === null, 'no owned principals => census-only (no path), graceful');
