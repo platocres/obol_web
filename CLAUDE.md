@@ -922,3 +922,33 @@ screenshot the changed surface at desktop + mobile and read it for sense. House 
   surfaceable techniques now carry detection text; 0 en/em dashes. Full engine suite + frameworks-smoke +
   browser-smoke + lint + coverage + gap green; assets stamped; driven headless at 1080p in both modes
   (0 console errors), the Detect line now renders. House style held.
+- 2026-10-08: Example obol commands on grayed cells + D3FEND "what this blocks" + the coverage auditor
+  (owner-directed, the whole "show students what a technique looks like, and surface lineup gaps" idea).
+  Built as five commits. (1) BY_MOVE (move-id -> technique) map in attack-move-map.js: the fact-kind map
+  is produce-side and cannot tell a hash dump from a hash pass or label a privesc move that produces only
+  access.*, so BY_MOVE names the ACT each move performs and wins over BY_KIND. Fixed real mislabels the
+  auditor surfaced (password-spray was Valid Accounts, now Password Spraying; PtH, Golden/Silver Ticket,
+  crack-*, the privesc acts, web-shell plants, cloud-metadata SSRF were unmapped). techniqueUse consults
+  it by the activity's action_id. (2) OBOL.frameworks.exampleCommands(technique, pack): the obol move(s)
+  that perform a technique, command filled for teaching (exampleFill: known tokens substituted, unknown
+  left visible, never invented), ordered earliest-phase-first (kerberoast before golden ticket). Returns
+  nothing for a technique obol does not perform, so the UI stays honest. (3) UI: a grayed cell obol can
+  perform carries an accent dot (shape, not just colour; aria-label says so; coverage line counts them);
+  hovering it adds "In obol This Looks Like" with the filled command; clicking opens a detail panel with
+  copyable commands and a "values are placeholders, pack is the source of truth" note. The hover was
+  refactored into a reusable attachHover() serving both matrices. (4) D3FEND Defensive view: hovering a
+  countermeasure shows the ATT&CK techniques it counters and the offensive obol command(s) it would BLOCK
+  (the honest dual-use framing, obol has no defensive lineup), via the same resolver. (5) tools/attack-
+  coverage.js: read-only auditor (ranker-sim pattern). Integrity gate (every BY_MOVE id, technique and
+  findings attack code is real, currently clean) + the gap signal (referenced-technique example coverage,
+  and the inverse: moves that produce a win but map to nothing). It flagged 51 unmapped acts; acted on 44
+  unambiguous ones (the CVE RCEs -> T1210/T1190, kernel LPEs -> T1068, DB RCEs, UAC bypass -> T1548.002,
+  remote logins -> T1021.x, delegation -> T1558, SID history -> T1134.005, WSUS -> T1072, COM hijack ->
+  T1546.015, service DACL -> T1543.003), leaving 7 genuinely ambiguous (writable-passwd, the persistence
+  moves, wildcard-injection, cred-reuse-sweep, tftp/rsync write-to-shell). Referenced techniques 59 -> 69
+  (66 with an example); dotted cells on a modest engagement 31 -> 38. Detection backfill extended to every
+  newly-surfaceable technique (21 added across the two map passes); 0 surfaceable techniques without
+  detection, 0 em/en dashes. attack-coverage added to the verify list. frameworks-smoke extended; full
+  engine suite + browser-smoke + lint + coverage + gap all green; catalog regenerated; assets stamped;
+  driven headless at 1080p (grayed example hover + copyable detail panel + D3FEND "what this blocks", 0
+  console errors). Presentation only: no ranker fork, one store, pack commands the source of truth.

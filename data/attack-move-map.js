@@ -98,6 +98,26 @@
     'web-shells': 'T1505.003', 'http-put-webshell': 'T1505.003', 'ftp-upload-webshell': 'T1505.003',
     'tomcat-deploy': 'T1505.003', 'proftpd-modcopy': 'T1505.003', 'ajp-ghostcat': 'T1505.003',
     'mssql-linked-server': 'T1210',
+    // public-facing web app exploitation
+    'authz-abuse': 'T1190', 'deserialization': 'T1190', 'drupalgeddon2': 'T1190', 'file-upload': 'T1190',
+    'manual-sqli-exploitation': 'T1190', 'ofbiz-deser': 'T1190', 'phpmyadmin-lfi': 'T1190',
+    'sqlmap-automation': 'T1190', 'verb-tampering': 'T1190', 'zabbix-script-rce': 'T1190',
+    // remote-service exploitation (network / DB / RPC RCE)
+    'aerospike-udf': 'T1210', 'bluekeep': 'T1210', 'eternalblue': 'T1210', 'elasticsearch-rce': 'T1210',
+    'freeswitch-esl': 'T1210', 'jdwp-debug': 'T1210', 'jenkins-access': 'T1210', 'oracle-rce': 'T1210',
+    'postgres-rce': 'T1210', 'printnightmare': 'T1210', 'smbghost': 'T1210', 'splunk-app-rce': 'T1210',
+    'wifi-mouse-rce': 'T1210', 'mysql-outfile-rce': 'T1210', 'nfs-to-foothold': 'T1210',
+    'mssql-xp-cmdshell': 'T1505.001',
+    // Linux local privilege-escalation exploits + container escape
+    'dirtycow': 'T1068', 'dirtypipe': 'T1068', 'polkit-abuse': 'T1068', 'container-escape': 'T1611',
+    'capabilities': 'T1548', 'python-library-hijack': 'T1574',
+    // Windows elevation + service abuse + COM
+    'uac-bypass': 'T1548.002', 'alwaysinstallelevated': 'T1548.002',
+    'windows-service-dacl-abuse': 'T1543.003', 'com-hijack': 'T1546.015',
+    // lateral movement + remote-service logins
+    'lateral-exec': 'T1021.002', 'telnet-login': 'T1021', 'rservices-login': 'T1021', 'vnc-desktop-shell': 'T1021.005',
+    // AD delegation / Kerberos forgery / cross-forest + deployment-tool abuse
+    'unconstrained-delegation': 'T1558', 'ms14-068': 'T1558', 'sid-history-abuse': 'T1134.005', 'wsus-abuse': 'T1072',
   };
 
   OBOL.ATTACK_MOVE = { byKind: BY_KIND, byMove: BY_MOVE };

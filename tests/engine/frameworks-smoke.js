@@ -146,6 +146,10 @@ const exSuid = OBOL.frameworks.exampleCommands('T1548.001', PACK2, {});
 ok(exSuid.some(function (e) { return e.moveId === 'suid-gtfobins'; }), 'T1548.001 (Setuid) resolves to the SUID abuse move (consume-side act)');
 const exNone = OBOL.frameworks.exampleCommands('T1203', PACK2, {});
 ok(exNone.length === 0, 'a technique obol does not perform (T1203) resolves to no example command (honest blank)');
+// the BY_MOVE expansion: a CVE LPE and a remote-service RCE now map and resolve to their move
+ok(OBOL.frameworks.exampleCommands('T1068', PACK2, { max: 20 }).some(function (e) { return e.moveId === 'dirtycow'; }), 'T1068 resolves to the DirtyCow LPE move (BY_MOVE expansion)');
+ok(OBOL.frameworks.exampleCommands('T1210', PACK2, { max: 20 }).some(function (e) { return e.moveId === 'eternalblue'; }), 'T1210 resolves to the EternalBlue remote-service exploit (BY_MOVE expansion)');
+ok(OBOL.frameworks.coveredTechniques(PACK2)['T1068'], 'coveredTechniques marks T1068 covered');
 // filler leaves an unknown token visible rather than inventing one
 ok(OBOL.frameworks.exampleFill('run {{target}} {{zzznotatoken}}', { target: 'x' }) === 'run x {{zzznotatoken}}', 'exampleFill substitutes known tokens and leaves unknown ones visible');
 
