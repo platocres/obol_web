@@ -26,7 +26,7 @@
     domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=d8710496', 'assets/ui/bhgraph.js?v=80a0f124', 'assets/ui/routes/domain.js?v=78af2103'],
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=b4a40b19', 'assets/engine/report.js?v=885cb4fb', 'assets/ui/routes/report.js?v=217e6ca7'],
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=70b2d005', 'assets/ui/routes/tools.js?v=aff6dc97'],
-    loadout: ['assets/engine/arsenal.js?v=9a46d3b8', 'assets/ui/routes/loadout.js?v=f6d299e1'],
+    loadout: ['assets/engine/arsenal.js?v=0761fa4f', 'assets/ui/routes/loadout.js?v=f6d299e1'],
     workbench: ['assets/engine/workbench.js?v=335c8fa6', 'assets/ui/routes/workbench.js?v=c698ea13'],
     stuck: ['data/stuck-catalog.js?v=14d96459', 'assets/engine/stuck.js?v=9f3ec324', 'assets/ui/routes/stuck.js?v=48b15250'],
     study: ['data/study-fixtures.js?v=a596d3da', 'assets/engine/study.js?v=303c7964', 'assets/ui/routes/study.js?v=6030fff7'],

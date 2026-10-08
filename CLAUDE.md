@@ -671,3 +671,19 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   fixed (separate, only matters for the authenticated case which already settles via ad.anonymous_bind):
   ldap.authenticated is produced by a move and mapped in phases/labels but minted by no parser. Full
   engine suite + guardrails + browser-smoke green, sim 0/42; parser asset stamped.
+- 2026-10-08: Three real-box fixes from a live Forest run (owner testing on a fresh Kali VM). (1) Set Up
+  First prep steps did not fall away after being run, eating the card with the loot/users.txt and
+  loot/asrep.hashes heredocs. obol can't see the operator's disk, so there is no honest auto-detect
+  (commandWasRun needs 3+ distinctive tool tokens and will not match a cat-heredoc); instead each prep
+  step now carries a "Got It" control that collapses it to a single "done, <file> written [Show]" line,
+  persisted per engagement in eng.ui.prepDone and keyed by a content hash of the exact bytes it writes,
+  so a dismissed step RE-APPEARS if the file obol would write changes (you proved more users). path.js
+  prepStep/prepBlock + two click handlers (mirrors the ws-done pattern), CSS for the collapsed line.
+  (2) hashcat failed on the fresh VM with clGetPlatformIDs(): CL_PLATFORM_NOT_FOUND_KHR: a GPU-less Kali
+  has no OpenCL/CUDA backend, so hashcat exits before cracking. The Loadout arsenal (assets/engine/
+  arsenal.js, buildScript) now installs PoCL (pocl-opencl-icd + ocl-icd-libopencl1) when hashcat is
+  present but `hashcat -I` shows no backend, so cracking works out of the box in a VM; it skips when a
+  real GPU backend exists, so GPU boxes are not bloated. bash -n clean. (3) Field-note hints added to
+  crack-asrep and crack-kerberoast: the CL_PLATFORM error means a GPU-less VM, fix with pocl-opencl-icd
+  or the john line (no GPU needed). All guardrails + full engine suite + browser-smoke green; prep-step
+  collapse driven headless (Got It collapses the heredoc, persists, 0 console errors); assets stamped.

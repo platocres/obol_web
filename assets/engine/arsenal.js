@@ -163,6 +163,20 @@
     out.push('echo "[wordlists] prep"');
     out.push('if [ -f /usr/share/wordlists/rockyou.txt.gz ] && [ ! -f /usr/share/wordlists/rockyou.txt ]; then say "gunzip rockyou"; $SUDO gunzip -k /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || $SUDO gunzip /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || warn "could not gunzip rockyou, run: sudo gunzip -k /usr/share/wordlists/rockyou.txt.gz"; else skip "rockyou"; fi');
     out.push('');
+    // hashcat needs an OpenCL/CUDA/HIP backend to run AT ALL. A plain Kali VM has no GPU and no CPU OpenCL
+    // runtime, so hashcat exits immediately with "clGetPlatformIDs(): CL_PLATFORM_NOT_FOUND_KHR". Install
+    // PoCL (a CPU OpenCL ICD) so cracking works out of the box in a VM; skip when a backend already exists
+    // (a real GPU box), so we never bloat it. `hashcat -I` lists backend devices and fails / says "No devices"
+    // when there is none.
+    out.push('echo "[cracking] hashcat OpenCL backend"');
+    out.push('if have hashcat; then');
+    out.push('  HC_I=$(hashcat -I 2>&1 || true);');
+    out.push('  if printf "%s" "$HC_I" | grep -qiE "Backend Device ID" && ! printf "%s" "$HC_I" | grep -qiE "No devices|CL_PLATFORM_NOT_FOUND"; then skip "hashcat backend present";');
+    out.push('  else ensure_apt; say "pocl (CPU OpenCL so hashcat runs in a VM)";');
+    out.push('    APT_RUN install "${APT_OPTS[@]}" pocl-opencl-icd ocl-icd-libopencl1 >/dev/null 2>&1 || warn "pocl install failed, hashcat needs an OpenCL/CUDA runtime (or use john, which needs none)";');
+    out.push('  fi');
+    out.push('else skip "hashcat not installed"; fi');
+    out.push('');
     // the paste-back block: a single OBOL-ARSENAL v1 line obol-web ingests to learn this box.
     out.push('# ---- paste the block below back into obol-web (Loadout) ----');
     out.push('emit(){ printf "%s" "$1"; }');

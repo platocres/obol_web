@@ -730,6 +730,11 @@ details.lo-fs-node[open] > summary::before { transform: rotate(90deg); }
 .cmd-prep { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
 .cmd-prep .cmd-tag { color: var(--accent); }
 .cmd-prep .cmd-run { max-height: 220px; overflow-y: auto; }
+/* A prep step the operator marked done: one quiet line, the heredoc collapsed away to reclaim the space. */
+.cmd-prep.is-prep-done { opacity: 0.72; }
+.cmd-prep.is-prep-done .cmd-head { margin: 0; }
+.cmd-prep.is-prep-done .cmd-tag::before { content: "\2713\00a0"; }
+.cmd-prep .prep-done, .cmd-prep .prep-undo { margin-left: auto; font-size: 11px; }
 .move-produces, .move-dnp { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; margin-top: 8px; }
 .mini-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 4px; }
 .fact-chip { font-size: 11px; background: var(--accent-soft); color: var(--accent-2); border-radius: 20px; padding: 2px 9px; }

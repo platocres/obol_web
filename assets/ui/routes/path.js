@@ -117,25 +117,42 @@
   // copy-paste heredoc that writes the exact file {{userlist}}/{{hashfile}} now points at. This is
   // the browser stand-in for obol-local materializing loot/users.txt on disk: obol can't write the
   // operator's box, so it gives them the one command that does, with the names it already parsed.
-  function prepStep(tag, variant, cmd, note) {
+  // A stable short id for a prep step, keyed by WHAT it writes AND the exact bytes it writes, so a dismissed
+  // step stays gone while its content is unchanged but RE-APPEARS the moment the content changes (you proved
+  // more users, so the file obol would write is different and worth re-running). djb2 over the command text.
+  function prepHash(s) { var h = 5381; s = String(s || ''); for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+  function prepDoneMap() { var e = OBOL.store.active(); return (e && e.ui && e.ui.prepDone) || {}; }
+
+  // One "Set Up First" step. obol can't see the operator's disk, so a prep step can't auto-detect "done";
+  // instead it carries a "Got It" control that collapses it to a single line (persisted per engagement), and
+  // a "Show" to bring it back. This keeps the big heredoc from eating the card once the file has been written.
+  function prepStep(tag, variant, cmd, note, key, done) {
+    if (done) {
+      return '<div class="cmd cmd-prep is-prep-done">'
+        + '<div class="cmd-head"><span class="cmd-tag">done</span>'
+        + '<span class="cmd-variant">' + esc(String(variant).replace(/^creates /, '')) + ' written</span>'
+        + '<button class="btn-ghost prep-undo" data-prep="' + esc(key) + '" title="Show this step again">Show</button></div></div>';
+    }
     return '<div class="cmd cmd-prep">'
       + '<div class="cmd-head"><span class="cmd-tag">' + esc(tag) + '</span>'
       + '<span class="cmd-variant">' + esc(variant) + '</span>'
-      + '<button class="btn-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button></div>'
+      + '<button class="btn-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button>'
+      + '<button class="btn-ghost prep-done" data-prep="' + esc(key) + '" title="Hide this once you have run it">Got It</button></div>'
       + '<pre class="cmd-run"><code>' + esc(cmd) + '</code></pre>'
       + (note ? '<div class="cmd-note">' + esc(note) + '</div>' : '') + '</div>';
   }
 
   function prepBlock(action, facts, dirs) {
     if (!OBOL.loot) return '';
-    var steps = '';
+    var steps = '', doneMap = prepDoneMap();
     // {{userlist}} — the move reads it and obol has proven users to write into it.
     if (OBOL.loot.actionUsesToken(action, 'userlist')) {
       var users = OBOL.loot.usernames(facts);
       var ulCmd = OBOL.loot.userlistCommand(facts, dirs);
       if (users.length && ulCmd) {
+        var ulKey = 'ul:' + prepHash(ulCmd);
         steps += prepStep('write', 'creates ' + OBOL.loot.userlistPath(dirs),
-          ulCmd, 'Run once, the ' + users.length + ' users obol proved, written where every command below reads them.');
+          ulCmd, 'Run once, the ' + users.length + ' users obol proved, written where every command below reads them.', ulKey, !!doneMap[ulKey]);
       }
     }
     // {{hashfile}} as an INPUT (a crack move) — obol holds the roasted hashes as facts but no file
@@ -145,8 +162,9 @@
     if (cracksHashes && OBOL.loot.actionUsesToken(action, 'hashfile')) {
       var hfCmd = OBOL.loot.hashfileCommand(facts, action, dirs);
       if (hfCmd) {
+        var hfKey = 'hf:' + prepHash(hfCmd);
         steps += prepStep('write', 'creates ' + OBOL.loot.hashfilePath(dirs, action),
-          hfCmd, 'Lay the roasted hashes obol captured into the file the crack reads.');
+          hfCmd, 'Lay the roasted hashes obol captured into the file the crack reads.', hfKey, !!doneMap[hfKey]);
       }
     }
     return steps ? '<div class="move-prep"><span class="mini-label">Set Up First</span>' + steps + '</div>' : '';
@@ -1071,6 +1089,19 @@
     // dismiss the workspace scaffold banner
     U.on(mount, 'click', '.ws-done', function () {
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.wsScaffoldDone = true; }, 'ui');
+      OBOL.router.render();
+    });
+    // "Got It" on a Set Up First prep step: collapse it to one line (obol can't see your disk, so you tell
+    // it the file is written). Keyed by content, so it re-appears if the file obol would write changes.
+    U.on(mount, 'click', '.prep-done', function (e, t) {
+      var key = t.getAttribute('data-prep'); if (!key) return;
+      OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.prepDone = eng.ui.prepDone || {}; eng.ui.prepDone[key] = true; }, 'ui');
+      OBOL.router.render();
+    });
+    // "Show" on a collapsed prep step: bring the full command back.
+    U.on(mount, 'click', '.prep-undo', function (e, t) {
+      var key = t.getAttribute('data-prep'); if (!key) return;
+      OBOL.store.update(function (eng) { if (eng.ui && eng.ui.prepDone) delete eng.ui.prepDone[key]; }, 'ui');
       OBOL.router.render();
     });
     // paste-back: toggle this move's inline ingestion box (no route jump — ingest right here)
