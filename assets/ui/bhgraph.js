@@ -9,7 +9,8 @@
   var OBOL = root.OBOL = root.OBOL || {};
 
   var ICON = { user: '\uD83D\uDC64', group: '\uD83D\uDC65', computer: '\uD83D\uDDA5', domain: '\uD83C\uDF10', object: '\u2b24', gpo: '\uD83D\uDCDC' };
-  var NW = 150, NH = 34, COLW = 210, ROW = 64, PADX = 24, PADY = 30;
+  var NW = 150, NH = 34, COLW = 210, ROW = 74, PADX = 24, PADY = 34;
+  var R = 20;   // node circle radius (BloodHound-style round nodes, label underneath)
 
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function isMemberOf(edge) { return String(edge || '').toLowerCase() === 'memberof'; }
@@ -27,10 +28,14 @@
   }
 
   function center(p) { return { x: p.x + NW / 2, y: p.y + NH / 2 }; }
+  // Draw the edge from circle boundary to circle boundary so the arrowhead sits just outside the target
+  // node (visible), not buried under it.
   function edgePath(pos, e) {
-    var a = center(pos[e.from]), b = center(pos[e.to]);
     if (!pos[e.from] || !pos[e.to]) return '';
-    return 'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y;
+    var a = center(pos[e.from]), b = center(pos[e.to]);
+    var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ux = dx / len, uy = dy / len;
+    return 'M' + (a.x + ux * R) + ',' + (a.y + uy * R) + ' L' + (b.x - ux * R) + ',' + (b.y - uy * R);
   }
 
   // Render the graph into `container`. opts.onNodeClick(nodeId) optional.
@@ -100,14 +105,21 @@
       g.setAttribute('data-id', n.id);
       g.setAttribute('data-paths', (n.paths || []).join(','));
       g.setAttribute('transform', 'translate(' + pos[n.id].x + ',' + pos[n.id].y + ')');
-      var rect = document.createElementNS(svgNS, 'rect');
-      rect.setAttribute('width', NW); rect.setAttribute('height', NH); rect.setAttribute('rx', 7);
-      g.appendChild(rect);
-      var txt = document.createElementNS(svgNS, 'text');
-      txt.setAttribute('x', 10); txt.setAttribute('y', NH / 2 + 4);
-      txt.textContent = (ICON[n.type] || '') + ' ' + trunc(n.label, 15);
+      var cx = NW / 2, cy = NH / 2;
+      // round node (BloodHound-style): a typed circle with its icon centred, and the NAME underneath.
+      var circle = document.createElementNS(svgNS, 'circle');
+      circle.setAttribute('cx', cx); circle.setAttribute('cy', cy); circle.setAttribute('r', R);
+      g.appendChild(circle);
+      var ico = document.createElementNS(svgNS, 'text');
+      ico.setAttribute('class', 'bh-node-ico'); ico.setAttribute('x', cx); ico.setAttribute('y', cy + 6);
+      ico.setAttribute('text-anchor', 'middle'); ico.textContent = ICON[n.type] || '';
+      g.appendChild(ico);
+      var lbl = document.createElementNS(svgNS, 'text');
+      lbl.setAttribute('class', 'bh-node-lbl'); lbl.setAttribute('x', cx); lbl.setAttribute('y', cy + R + 15);
+      lbl.setAttribute('text-anchor', 'middle'); lbl.textContent = trunc(n.label, 20);
+      g.appendChild(lbl);
       var title = document.createElementNS(svgNS, 'title'); title.textContent = n.label + ' (' + n.type + ')';
-      g.appendChild(txt); g.appendChild(title);
+      g.appendChild(title);
       vp.appendChild(g);
     });
 

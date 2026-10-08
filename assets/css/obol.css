@@ -1079,6 +1079,44 @@ svg.obol-graph .g-head-rule { stroke-opacity: .35; stroke-width: 1.5; }
 .bh-detail ul.bh-princ li:last-child { border-bottom: none; }
 .bh-report-frame { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
 
+/* ---- Domain tab: bridge banner, route-to-DA steps, targeting board, explore ---- */
+.bh-bridge { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 14px 0; padding: 12px 14px; text-decoration: none;
+  border: 1px solid color-mix(in srgb, var(--green) 45%, var(--line)); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--green) 10%, transparent); }
+.bh-bridge:hover { background: color-mix(in srgb, var(--green) 16%, transparent); }
+.bh-bridge-k { color: var(--text); font-weight: 600; }
+.bh-bridge-top { color: var(--text-2); font-family: var(--mono); font-size: 12px; }
+.bh-bridge-go { margin-left: auto; color: var(--green); font-weight: 700; white-space: nowrap; }
+.bh-route { border: 1px solid var(--line); border-left: 3px solid var(--critical); border-radius: var(--radius); padding: 12px 14px; margin: 6px 0 18px; background: var(--surf2); }
+.bh-route-head { margin: 0 0 10px; color: var(--text); font-size: 13px; }
+.bh-route-chain { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 10px; }
+.bh-rn { font-family: var(--mono); font-size: 11px; background: var(--bg3); border: 1px solid var(--line-hot); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+.bh-rn.owned { border-color: var(--green); color: var(--green); }
+.bh-rn.goal { border-color: var(--critical); color: var(--critical); font-weight: 700; }
+.bh-re { color: var(--danger); font-size: 10px; font-family: var(--mono); }
+.bh-re::before { content: '─'; } .bh-re::after { content: '▸'; }
+ol.bh-steps { margin: 0; padding-left: 20px; }
+ol.bh-steps li { margin-bottom: 9px; }
+.bh-step-what { font-size: 12px; color: var(--text-2); margin-bottom: 3px; }
+.bh-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); gap: 8px; margin: 8px 0 18px; }
+.bh-brow { display: flex; align-items: center; gap: 8px; text-align: left; cursor: pointer; width: 100%;
+  background: var(--surf2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; color: var(--text); }
+.bh-brow:hover { border-color: var(--accent); }
+.bh-bhops { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--critical); font-size: 12px; white-space: nowrap; }
+.bh-btype { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.bh-bname { font-family: var(--mono); font-size: 11.5px; margin-left: auto; word-break: break-all; }
+.bh-explore-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 8px 0 18px; background: var(--surf2); }
+.bh-explore-card h3 { margin: 0 0 8px; font-size: 13px; font-family: var(--mono); }
+.bh-x-line { font-size: 12.5px; color: var(--text); margin: 8px 0 4px; }
+.bh-x-none { color: var(--muted); font-style: italic; }
+.bh-x-kind { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+.bh-princ-x { background: none; border: none; padding: 0; color: var(--accent-2); font-family: var(--mono); font-size: 11px; cursor: pointer; text-align: left; word-break: break-all; }
+.bh-princ-x:hover { text-decoration: underline; }
+.bh-tag { font-size: 10px; font-weight: 700; border-radius: 5px; padding: 1px 5px; text-transform: uppercase; letter-spacing: .03em; }
+.bh-tag.own { color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 45%, var(--line)); }
+.bh-tag.free { color: var(--orange); border: 1px solid color-mix(in srgb, var(--orange) 45%, var(--line)); }
+.bh-empties > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--accent-2); margin: 6px 0; }
+
 /* ---- checklist ---- */
 .chk-phase { margin-bottom: 18px; }
 .chk-phase-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -1571,14 +1609,18 @@ a.tcard-main:hover .tcard-ip { color: var(--accent-2); }
 .bh-graph-wrap { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg1); height: 460px; }
 svg.bh-graph { width: 100%; height: 100%; touch-action: none; cursor: grab; }
 svg.bh-graph:active { cursor: grabbing; }
-.bh-node rect { fill: var(--bg3); stroke: var(--line-hot); stroke-width: 1.5; cursor: grab; }
-.bh-node text { fill: var(--text); font-size: 12px; pointer-events: none; }
-.bh-type-user rect { stroke: var(--ph-recon); } .bh-type-group rect { stroke: var(--ph-creds); }
-.bh-type-computer rect { stroke: var(--accent-2); } .bh-type-domain rect { stroke: var(--critical); }
-.bh-node.goal rect { fill: color-mix(in srgb, var(--critical) 24%, transparent); stroke: var(--critical); stroke-width: 2; }
-.bh-node.owned rect { fill: color-mix(in srgb, var(--green) 20%, transparent); stroke: var(--green); }
+/* Round BloodHound-style nodes: a typed circle with the name label underneath. */
+.bh-node circle { fill: var(--bg3); stroke: var(--line-hot); stroke-width: 2; cursor: grab; }
+.bh-node .bh-node-ico { font-size: 16px; pointer-events: none; }
+.bh-node .bh-node-lbl { fill: var(--text); font-size: 11.5px; font-weight: 600; pointer-events: none; }
+.bh-type-user circle { stroke: var(--ph-recon); } .bh-type-group circle { stroke: var(--ph-creds); }
+.bh-type-computer circle { stroke: var(--accent-2); } .bh-type-domain circle { stroke: var(--critical); }
+.bh-node.goal circle { fill: color-mix(in srgb, var(--critical) 26%, transparent); stroke: var(--critical); stroke-width: 3; }
+.bh-node.goal .bh-node-lbl { fill: var(--critical); }
+.bh-node.owned circle { fill: color-mix(in srgb, var(--green) 24%, transparent); stroke: var(--green); stroke-width: 3; }
+.bh-node.owned .bh-node-lbl { fill: var(--green); }
 .bh-node.dim { opacity: .25; } .bh-edge.dim { opacity: .12; }
-.bh-node.hot rect { stroke-width: 2.5; }
+.bh-node.hot circle { stroke-width: 3.5; }
 .bh-edge path { fill: none; stroke: var(--line-hot); stroke-width: 1.5; }
 .bh-edge-member path { stroke: var(--muted); stroke-dasharray: 4 4; opacity: .6; }
 .bh-edge-abuse path { stroke: var(--danger); stroke-width: 2; }
