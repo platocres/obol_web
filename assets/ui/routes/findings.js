@@ -193,8 +193,9 @@
     }).join('') + '</div>';
     var cols = A.tactics.map(function (col) {
       var cells = col.cells.map(function (c) {
-        return '<button type="button" class="fw-cell' + (c.used ? ' used' : '') + '" data-tech="' + U.attr(c.id) + '"' + (c.used ? '' : ' tabindex="-1"') + '>'
-          + esc(c.name) + (c.subs.length ? ' <span class="fw-cell-sub">' + c.subs.length + '</span>' : '') + '</button>';
+        return '<button type="button" class="fw-cell' + (c.used ? ' used' : '') + '" data-tech="' + U.attr(c.id) + '"'
+          + ' title="' + U.attr(c.id + '  ' + c.name) + '"' + (c.used ? '' : ' tabindex="-1"') + '>'
+          + '<span class="fw-cell-n">' + esc(c.name) + '</span>' + (c.subs.length ? '<span class="fw-cell-sub">' + c.subs.length + '</span>' : '') + '</button>';
       }).join('');
       return '<div class="fw-col"><div class="fw-col-h"><span class="fw-col-n">' + esc(col.name) + '</span><span class="fw-col-c">' + col.usedCount + '/' + col.total + '</span></div><div class="fw-col-cells">' + cells + '</div></div>';
     }).join('');

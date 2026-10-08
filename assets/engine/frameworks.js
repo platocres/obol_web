@@ -68,7 +68,9 @@
           findings: u ? u.findings.slice() : [],
         });
       });
-      cells.sort(function (a, b) { return (b.used - a.used) || (a.id < b.id ? -1 : 1); });
+      // Stable, ATT&CK-Navigator-like order: alphabetical by technique name (not used-first), so the
+      // grid reads like the standard matrix and used cells show as a heatmap wherever they fall.
+      cells.sort(function (a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
       return { id: ta.id, name: ta.name, cells: cells, usedCount: cells.filter(function (c) { return c.used; }).length, total: cells.length };
     }).filter(function (col) { return col.total > 0; });
     var usedTotal = Object.keys(usedTop).length;

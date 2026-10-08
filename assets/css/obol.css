@@ -1826,19 +1826,22 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .fw-kc-stage.hit { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 45%, var(--line)); background: color-mix(in srgb, var(--critical) 9%, transparent); }
 .fw-kc-stage b { color: var(--critical); }
 .fw-kc-arrow { color: var(--muted); font-size: 13px; }
-/* ATT&CK matrix */
-.fw-matrix-wrap { overflow-x: auto; padding-bottom: 8px; margin-bottom: 14px; }
-.fw-matrix { display: flex; gap: 8px; align-items: flex-start; min-width: min-content; }
-.fw-col { flex: 0 0 150px; width: 150px; }
-.fw-col-h { padding: 6px 7px; border-bottom: 2px solid var(--line-hot); margin-bottom: 5px; }
-.fw-col-n { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--text); line-height: 1.25; }
+/* ATT&CK matrix: tight, ATT&CK-Navigator-style grid (uniform cells, grid lines, sticky headers) */
+.fw-matrix-wrap { overflow: auto; max-height: 72vh; padding-bottom: 2px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); }
+.fw-matrix { display: flex; align-items: stretch; min-width: min-content; }
+.fw-col { flex: 0 0 158px; width: 158px; border-right: 1px solid var(--line); }
+.fw-col:last-child { border-right: none; }
+.fw-col-h { position: sticky; top: 0; z-index: 2; padding: 6px 8px 5px; background: var(--surf1); border-bottom: 2px solid var(--line-hot); }
+.fw-col-n { display: block; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; color: var(--text); line-height: 1.2; }
 .fw-col-c { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.fw-col-cells { display: flex; flex-direction: column; gap: 3px; }
-.fw-cell { text-align: left; font: inherit; font-size: 11px; line-height: 1.25; background: var(--surf2); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; cursor: default; opacity: .5; }
-.fw-cell.used { color: var(--text); opacity: 1; cursor: pointer; border-color: color-mix(in srgb, var(--critical) 55%, var(--line)); background: color-mix(in srgb, var(--critical) 13%, transparent); font-weight: 600; }
-.fw-cell.used:hover { border-color: var(--critical); }
-.fw-cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
-.fw-cell-sub { font-size: 9px; background: var(--critical); color: #fff; border-radius: 8px; padding: 0 5px; margin-left: 2px; }
+.fw-col-cells { display: flex; flex-direction: column; }
+.fw-cell { display: flex; align-items: center; gap: 4px; text-align: left; font: inherit; font-size: 10.5px; line-height: 1.2; min-height: 26px;
+  background: transparent; color: var(--muted); border: 0; border-bottom: 1px solid var(--line); padding: 3px 7px; cursor: default; }
+.fw-cell-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-cell.used { color: var(--text); cursor: pointer; font-weight: 600; background: color-mix(in srgb, var(--critical) 20%, transparent); box-shadow: inset 3px 0 0 var(--critical); }
+.fw-cell.used:hover { background: color-mix(in srgb, var(--critical) 30%, transparent); }
+.fw-cell.sel { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
+.fw-cell-sub { flex: none; font-size: 9px; font-weight: 700; background: var(--critical); color: #fff; border-radius: 8px; padding: 0 5px; }
 .fw-detail { margin-top: 4px; }
 .fw-detail-hint { color: var(--muted); font-size: 12px; font-style: italic; }
 /* defensive / technique cards */
