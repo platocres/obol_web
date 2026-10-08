@@ -105,11 +105,26 @@
     return cand.slice(0, max).map(function (e) { return { moveId: e.moveId, title: e.title, tool: e.tool, run: e.run, why: e.why, more: e.more }; });
   }
 
+  // The set of TOP-LEVEL technique ids obol can perform (has an example command for), so the matrix
+  // can mark a grayed cell as "you have not done this, but obol can show you." Pure over `pack`.
+  function coveredTechniques(pack) {
+    var byKind = (OBOL.ATTACK_MOVE && OBOL.ATTACK_MOVE.byKind) || {};
+    var byMove = (OBOL.ATTACK_MOVE && OBOL.ATTACK_MOVE.byMove) || {};
+    var set = {};
+    function mark(t) { if (!t) return; set[t] = 1; set[parentOf(t)] = 1; }
+    (pack || []).forEach(function (a) {
+      if (byMove[a.id]) { mark(byMove[a.id]); return; }
+      [].concat(a.produces || []).forEach(function (k) { if (byKind[k]) mark(byKind[k]); });
+    });
+    return set;
+  }
+
   // The ATT&CK matrix model: every tactic (in matrix order) with its TOP-LEVEL techniques as cells; a
   // cell is "used" if the technique or any of its sub-techniques was used. Mirrors Splunk's matrix,
   // coloured by what YOU did rather than what a defender can detect.
-  function attackMatrix(use) {
+  function attackMatrix(use, covered) {
     var cat = A();
+    covered = covered || {};
     var usedTop = {};    // top-level technique id -> { subs:{}, findings:[] }
     Object.keys(use).forEach(function (tid) {
       var top = parentOf(tid);
@@ -126,6 +141,7 @@
         var u = usedTop[id];
         cells.push({
           id: id, name: t.n, used: !!u,
+          covered: !!covered[id],              // obol has an example command for this technique
           subs: u ? Object.keys(u.subs).sort() : [],
           findings: u ? u.findings.slice() : [],
         });
@@ -253,10 +269,12 @@
     var findings = opts.findings || (OBOL.findings ? OBOL.findings.assess(fs) : []);
     var use = techniqueUse(findings, opts.activities || []);
     var def = defensive(use);
+    var pack = opts.pack || (OBOL.packs && OBOL.packs.actions ? OBOL.packs.actions() : []);
     return {
       findings: findings,
       use: use,
-      attack: attackMatrix(use),
+      pack: pack,
+      attack: attackMatrix(use, coveredTechniques(pack)),
       killchain: killChain(use),
       defensive: def,
       d3fend: d3fendMatrix(def),
@@ -277,6 +295,7 @@
     cves: cves,
     exampleCommands: exampleCommands,
     exampleFill: exampleFill,
+    coveredTechniques: coveredTechniques,
   };
   if (typeof module !== 'undefined' && module.exports) { module.exports = OBOL.frameworks; }
 })(typeof globalThis !== 'undefined' ? globalThis : this);

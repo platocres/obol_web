@@ -193,11 +193,13 @@
     }).join('') + '</div>';
     var cols = A.tactics.map(function (col) {
       var cells = col.cells.map(function (c) {
-        var aria = c.id + ' ' + c.name + (c.used ? ', used this engagement' + (c.subs.length ? ' (' + c.subs.length + ' sub-technique' + (c.subs.length === 1 ? '' : 's') + ')' : '') : ', not observed');
-        return '<button type="button" class="fw-cell' + (c.used ? ' used' : '') + '" data-tech="' + U.attr(c.id) + '"'
-          + ' aria-label="' + U.attr(aria) + '"' + (c.used ? '' : ' tabindex="-1"') + '>'
+        var canShow = !c.used && c.covered;     // grayed, but obol can show what it looks like
+        var aria = c.id + ' ' + c.name + (c.used ? ', used this engagement' + (c.subs.length ? ' (' + c.subs.length + ' sub-technique' + (c.subs.length === 1 ? '' : 's') + ')' : '') : (canShow ? ', not done yet, obol has an example' : ', not observed'));
+        return '<button type="button" class="fw-cell' + (c.used ? ' used' : (canShow ? ' can-show' : '')) + '" data-tech="' + U.attr(c.id) + '"'
+          + ' aria-label="' + U.attr(aria) + '"' + (c.used || canShow ? '' : ' tabindex="-1"') + '>'
           + '<span class="fw-cell-n">' + esc(c.name) + '</span>'
-          + (c.subs.length ? '<span class="fw-cell-st" aria-hidden="true">' + c.subs.length + '</span>' : '') + '</button>';
+          + (c.subs.length ? '<span class="fw-cell-st" aria-hidden="true">' + c.subs.length + '</span>'
+             : (canShow ? '<span class="fw-cell-dot" aria-hidden="true"></span>' : '')) + '</button>';
       }).join('');
       return '<div class="fw-col"><div class="fw-col-h"><span class="fw-col-n">' + esc(col.name) + '</span>'
         + '<span class="fw-col-c">' + col.total + ' technique' + (col.total === 1 ? '' : 's')
@@ -208,10 +210,12 @@
     var toggle = '<div class="fw-mx-toggle" role="group" aria-label="Matrix density">'
       + '<button type="button" class="fw-mx-btn' + (mode === 'labeled' ? ' active' : '') + '" data-fwmx="labeled">Labeled</button>'
       + '<button type="button" class="fw-mx-btn' + (mode === 'compact' ? ' active' : '') + '" data-fwmx="compact">Compact</button></div>';
-    return '<p class="route-sub">Your ATT&CK coverage this engagement: <b>' + A.usedTotal + '</b> technique' + (A.usedTotal === 1 ? '' : 's') + ' across <b>' + usedCols + '</b> tactic' + (usedCols === 1 ? '' : 's') + '. Coloured by what you did: a blue team’s SIEM would be trying to detect these. Click a lit cell for detail. ATT&CK v' + esc(A.version || '') + '.</p>'
+    var canShowN = A.tactics.reduce(function (n, col) { return n + col.cells.filter(function (c) { return !c.used && c.covered; }).length; }, 0);
+    var canShowNote = canShowN ? ' A dotted cell is a technique you have not done yet that obol can show you: hover or click it for the example command.' : '';
+    return '<p class="route-sub">Your ATT&CK coverage this engagement: <b>' + A.usedTotal + '</b> technique' + (A.usedTotal === 1 ? '' : 's') + ' across <b>' + usedCols + '</b> tactic' + (usedCols === 1 ? '' : 's') + '. Coloured by what you did: a blue team’s SIEM would be trying to detect these. Click a lit cell for detail.' + canShowNote + ' ATT&CK v' + esc(A.version || '') + '.</p>'
       + kcStrip + toggle
       + '<div class="fw-matrix-wrap"><div class="fw-matrix fw-matrix--' + mode + '">' + cols + '</div></div>'
-      + '<div id="fw-detail" class="fw-detail"><p class="fw-detail-hint">Select a lit technique above to see what you did, how it is detected, and how it is countered.</p></div>';
+      + '<div id="fw-detail" class="fw-detail"><p class="fw-detail-hint">Select a lit technique for what you did, how it is detected, and how it is countered. Select a dotted technique for the obol command that performs it.</p></div>';
   }
 
   // The detail for one matrix cell: every used technique under it (the cell id, or its sub-techniques).
@@ -220,6 +224,43 @@
     var defs = ids.map(function (id) { return m.defensive.find(function (d) { return d.id === id; }); }).filter(Boolean);
     if (!defs.length) return '<p class="fw-detail-hint">Nothing recorded for this technique.</p>';
     return defs.map(techCardHtml).join('');
+  }
+
+  // The detail for a grayed-but-covered cell: the obol example command(s), copyable, so a student can
+  // take the exact thing and run it. "You have not done this yet, here is what it looks like in obol."
+  function exampleDetail(m, cellId) {
+    var cat = (OBOL.ATTACK && OBOL.ATTACK.techniques) || {}, t = cat[cellId] || {};
+    var pack = (m && m.pack) || (OBOL.packs && OBOL.packs.actions ? OBOL.packs.actions() : []);
+    var params = {}; try { params = (OBOL.store.active() || {}).params || {}; } catch (e) {}
+    var ex = OBOL.frameworks.exampleCommands(cellId, pack, { params: params, max: 4 });
+    if (!ex.length) return '<p class="fw-detail-hint">No obol example for this technique.</p>';
+    var url = t.url || 'https://attack.mitre.org/techniques/' + cellId.replace('.', '/') + '/';
+    return '<div class="fw-ex-head"><a href="' + U.attr(url) + '" target="_blank" rel="noopener">' + esc(cellId) + '</a> ' + esc(t.n || cellId)
+      + ' <span class="fw-ex-sub">You have not done this yet. Here is what it looks like in obol.</span></div>'
+      + '<div class="fw-ex-grid">' + ex.map(function (e) {
+          return '<div class="fw-ex"><div class="fw-ex-h">' + esc(e.title) + (e.tool ? ' <span class="fw-ex-tool">' + esc(e.tool) + '</span>' : '') + '</div>'
+            + '<div class="fw-ex-cmd"><code>' + esc(e.run) + '</code>'
+            + '<button type="button" class="btn-copy" data-copy="' + U.attr(e.run) + '" title="Copy command" aria-label="Copy command">Copy</button></div></div>';
+        }).join('') + '</div>'
+      + '<p class="fw-ex-note">Example values are placeholders. Fill your own target, LHOST and credentials. Pack commands stay the source of truth.</p>';
+  }
+
+  // Example obol commands for a technique, filled for teaching. Shared by the grayed ATT&CK cell hover
+  // ("here is what this looks like in obol") and the D3FEND "what this blocks" line. Honest: returns
+  // empty when obol performs no such technique, so the caller shows nothing rather than inventing one.
+  function fwExamplesHtml(m, technique, opts) {
+    opts = opts || {};
+    var pack = (m && m.pack) || (OBOL.packs && OBOL.packs.actions ? OBOL.packs.actions() : []);
+    var params = {};
+    try { params = (OBOL.store.active() || {}).params || {}; } catch (e) {}
+    var ex = OBOL.frameworks.exampleCommands(technique, pack, { params: params, max: opts.max || 2 });
+    if (!ex.length) return '';
+    return '<div class="fw-hc-lbl">' + esc(opts.label || 'In obol This Looks Like') + '</div>'
+      + ex.map(function (e) {
+          return '<div class="fw-hc-ex"><div class="fw-hc-exh">' + esc(e.tool || e.title)
+            + (e.tool ? ' <span class="fw-hc-exm">' + esc(e.title) + '</span>' : '') + '</div>'
+            + '<code class="fw-hc-exc">' + esc(e.run) + '</code></div>';
+        }).join('');
   }
 
   // The cursor-following hover card for an ATT&CK matrix cell (works in Labeled and Compact alike).
@@ -236,9 +277,11 @@
       + (tacNames.length ? '<div class="fw-hc-tac">' + tacNames.map(function (n) { return '<span class="fw-hc-tag">' + esc(n) + '</span>'; }).join('') + '</div>' : '');
 
     if (!ids.length) {
-      var un = '<div class="fw-hc-un">Not observed this engagement.</div>';
+      var examples = fwExamplesHtml(m, cellId, { label: 'In obol This Looks Like' });
+      var un = '<div class="fw-hc-un">' + (examples ? 'You have not done this yet.' : 'Not observed this engagement.') + '</div>';
       if (t.det) un += '<div class="fw-hc-row"><span class="fw-hc-lbl">A Defender Spots It By</span> ' + esc(String(t.det).slice(0, 220)) + (String(t.det).length > 220 ? '…' : '') + '</div>';
-      return '<div class="fw-hovercard not-used">' + head + un + '</div>';
+      un += examples;
+      return '<div class="fw-hovercard not-used' + (examples ? ' can-show' : '') + '">' + head + un + '</div>';
     }
 
     var fins = [], moves = [], subs = {}, det = t.det || '', d3names = {};
@@ -271,6 +314,34 @@
     return '<div class="fw-hovercard">' + head + body + '</div>';
   }
 
+  // The hover card for a D3FEND countermeasure: the ATT&CK techniques it counters, then the offensive
+  // obol commands it would BLOCK (dual-use teaching). obol has no defensive lineup, so this is the honest
+  // framing: "this control stops <obol command>," built from the same technique -> command resolver.
+  function fwD3HoverHtml(m, name, counterIds) {
+    var cat = (OBOL.ATTACK && OBOL.ATTACK.techniques) || {};
+    var head = '<div class="fw-hc-h"><span class="fw-hc-n">' + esc(name || 'Countermeasure') + '</span></div>'
+      + '<div class="fw-hc-tac"><span class="fw-hc-tag d3">D3FEND Countermeasure</span></div>';
+    var techNames = counterIds.map(function (id) { return cat[id] && cat[id].n ? (id + ' ' + cat[id].n) : id; });
+    var body = techNames.length ? '<div class="fw-hc-row"><span class="fw-hc-lbl">Counters</span> '
+      + techNames.slice(0, 5).map(function (n) { return '<span class="fw-hc-tag">' + esc(n) + '</span>'; }).join('')
+      + (techNames.length > 5 ? ' <span class="fw-hc-more">plus ' + (techNames.length - 5) + ' more</span>' : '') + '</div>' : '';
+    var pack = (m && m.pack) || (OBOL.packs && OBOL.packs.actions ? OBOL.packs.actions() : []);
+    var params = {}; try { params = (OBOL.store.active() || {}).params || {}; } catch (e) {}
+    var cmds = [], seen = {};
+    counterIds.forEach(function (id) {
+      OBOL.frameworks.exampleCommands(id, pack, { params: params, max: 2 }).forEach(function (e) { if (!seen[e.moveId]) { seen[e.moveId] = 1; cmds.push(e); } });
+    });
+    if (cmds.length) {
+      body += '<div class="fw-hc-lbl">obol Commands This Blocks</div>'
+        + cmds.slice(0, 3).map(function (e) {
+            return '<div class="fw-hc-ex"><div class="fw-hc-exh">' + esc(e.tool || e.title)
+              + (e.tool ? ' <span class="fw-hc-exm">' + esc(e.title) + '</span>' : '') + '</div>'
+              + '<code class="fw-hc-exc">' + esc(e.run) + '</code></div>';
+          }).join('');
+    }
+    return '<div class="fw-hovercard can-show">' + head + body + '</div>';
+  }
+
   var D3_TACTIC_DEF = {
     Model: 'Asset inventory and modelling', Harden: 'Reduce the attack surface before an attack',
     Detect: 'Identify adversary activity', Isolate: 'Contain and limit access',
@@ -278,14 +349,15 @@
   };
   function renderDefensive(m) {
     if (!m.defensive.length) return '<p class="route-sub">No techniques to defend against yet. Prove some findings first.</p>';
-    var out = '<p class="route-sub">How a blue team catches and stops what you did, as the MITRE D3FEND defensive-tactic matrix. Each countermeasure below counters one or more of the ATT&CK techniques you used.</p>';
+    var out = '<p class="route-sub">How a blue team catches and stops what you did, as the MITRE D3FEND defensive-tactic matrix. Each countermeasure below counters one or more of the ATT&CK techniques you used. Hover a countermeasure to see the obol command it would block.</p>';
     // the D3FEND matrix: coloured tactic columns with the countermeasures that answer your findings
     var d3 = m.d3fend || { tactics: [] };
     if (d3.tactics.length) {
       out += '<div class="fw-d3-wrap"><div class="fw-d3-matrix">' + d3.tactics.map(function (col) {
         var cls = 'd3t-' + col.tactic.toLowerCase();
         var cells = col.items.map(function (it) {
-          return '<div class="fw-d3-cell ' + cls + '" title="' + U.attr(it.id + '  ' + it.name + '  (counters ' + it.counters.join(', ') + ')') + '">'
+          return '<div class="fw-d3-cell ' + cls + '" data-d3name="' + U.attr(it.name) + '" data-counters="' + U.attr(it.counters.join(',')) + '"'
+            + ' aria-label="' + U.attr(it.name + ', D3FEND countermeasure, counters ' + it.counters.length + ' technique' + (it.counters.length === 1 ? '' : 's')) + '">'
             + '<span class="fw-d3-n">' + esc(it.name) + '</span>'
             + '<span class="fw-d3-c">' + it.counters.length + '</span></div>';
         }).join('');
@@ -405,24 +477,29 @@
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.fwMatrixMode = mode; }, 'ui');
     });
 
-    // matrix cell -> technique detail (ATT&CK view), rendered in place without a full re-render
-    U.on(mount, 'click', '.fw-cell.used', function (e, t) {
+    // matrix cell -> detail panel (ATT&CK view), rendered in place without a full re-render. A used cell
+    // shows what you did + the blue-team view; a grayed-but-covered cell shows the copyable obol example.
+    U.on(mount, 'click', '.fw-cell.used, .fw-cell.can-show', function (e, t) {
       var id = t.getAttribute('data-tech'); if (!id) return;
       var slot = document.getElementById('fw-detail'); if (!slot) return;
       var m = fwModel(); if (!m) return;
       mount.querySelectorAll('.fw-cell.sel').forEach(function (c) { c.classList.remove('sel'); });
       t.classList.add('sel');
-      slot.innerHTML = techDetail(m, id);
+      slot.innerHTML = t.classList.contains('used') ? techDetail(m, id) : exampleDetail(m, id);
       try { slot.scrollIntoView({ block: 'nearest' }); } catch (x) {}
     });
+    // copy an example command (grayed-cell detail panel + D3FEND "what this blocks")
+    U.on(mount, 'click', '.fw-ex-cmd .btn-copy', function (e, b) {
+      U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
 
-    // Rich cursor-following hover card over ATT&CK cells (Labeled and Compact). Built from the cached
-    // model; the card lives on <body> (so it floats above the scroll container) and follows the pointer.
-    (function () {
-      var wrap = mount.querySelector('.fw-matrix-wrap'); if (!wrap) return;
-      // drop any stale float from a prior mount so the body node never accumulates
+    // Cursor-following hover card, reused by the ATT&CK matrix (what a cell is / looks like in obol) and
+    // the D3FEND matrix (the offensive obol command a countermeasure blocks). The card lives on <body>
+    // so it floats above the scroll container; `htmlFor(model, cell)` builds the content per cell.
+    function attachHover(wrap, cellSel, keyAttr, htmlFor) {
+      if (!wrap) return;
       document.querySelectorAll('.fw-hovercard-float').forEach(function (n) { n.remove(); });
-      var card = null, curId = null, model = null;
+      var card = null, curKey = null, model = null;
       function ensure() { if (!card) { card = document.createElement('div'); card.className = 'fw-hovercard-float'; card.setAttribute('aria-hidden', 'true'); document.body.appendChild(card); } return card; }
       function place(x, y) {
         var c = card; if (!c) return;
@@ -432,18 +509,24 @@
         c.style.left = left + 'px'; c.style.top = top + 'px';
       }
       function show(cell, x, y) {
-        var id = cell.getAttribute('data-tech'); if (!id) { hide(); return; }
+        var key = cell.getAttribute(keyAttr); if (!key) { hide(); return; }
         if (!model) model = fwModel(); if (!model) return;
-        if (id !== curId) { ensure().innerHTML = fwHoverHtml(model, id); curId = id; }
+        if (key !== curKey) { var html = htmlFor(model, cell); if (!html) { hide(); return; } ensure().innerHTML = html; curKey = key; }
         card.classList.add('on'); place(x, y);
       }
-      function hide() { if (card) card.classList.remove('on'); curId = null; }
+      function hide() { if (card) card.classList.remove('on'); curKey = null; }
       wrap.addEventListener('mousemove', function (e) {
-        var cell = e.target && e.target.closest ? e.target.closest('.fw-cell') : null;
+        var cell = e.target && e.target.closest ? e.target.closest(cellSel) : null;
         if (cell) show(cell, e.clientX, e.clientY); else hide();
       });
       wrap.addEventListener('mouseleave', hide);
-    })();
+    }
+    attachHover(mount.querySelector('.fw-matrix-wrap'), '.fw-cell', 'data-tech', function (m, cell) {
+      return fwHoverHtml(m, cell.getAttribute('data-tech'));
+    });
+    attachHover(mount.querySelector('.fw-d3-wrap'), '.fw-d3-cell', 'data-d3name', function (m, cell) {
+      return fwD3HoverHtml(m, cell.getAttribute('data-d3name'), (cell.getAttribute('data-counters') || '').split(',').filter(Boolean));
+    });
   }
 
   OBOL.routes = OBOL.routes || {};

@@ -1857,6 +1857,31 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .fw-matrix--compact .fw-cell { width: 30px; height: 30px; min-height: 0; padding: 0; align-items: center; justify-content: center; border-radius: 6px; }
 .fw-matrix--compact .fw-cell-n { display: none; }
 .fw-matrix--compact .fw-cell-st { padding: 0 3px; }
+/* grayed but covered: a technique you have not done yet that obol can show. Dot + accent hairline,
+   colour is never the sole signal (the dot shape marks it, and the aria-label says so). */
+.fw-cell.can-show { opacity: .72; cursor: pointer; border-color: color-mix(in srgb, var(--accent) 34%, var(--line)); }
+.fw-cell.can-show:hover { opacity: 1; border-color: var(--accent); box-shadow: 0 0 10px -3px color-mix(in srgb, var(--accent) 55%, transparent); }
+.fw-cell.can-show.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fw-cell-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 5px -1px var(--accent); align-self: center; }
+.fw-matrix--compact .fw-cell.can-show { justify-content: center; }
+.fw-matrix--compact .fw-cell.can-show .fw-cell-dot { width: 7px; height: 7px; }
+/* example-command detail panel (clicking a dotted cell) */
+.fw-ex-head { font-size: 13px; font-weight: 700; margin: 2px 0 9px; }
+.fw-ex-head a { font-family: var(--mono); font-size: 12px; color: var(--accent-2); }
+.fw-ex-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.fw-ex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; }
+.fw-ex { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius); background: var(--surf2); padding: 9px 11px; }
+.fw-ex-h { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.fw-ex-tool { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent-2); background: var(--accent-soft); border-radius: 7px; padding: 1px 6px; margin-left: 4px; }
+.fw-ex-cmd { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; }
+.fw-ex-cmd code { font-family: var(--mono); font-size: 11.5px; color: var(--text-2); flex: 1; word-break: break-all; }
+.fw-ex-note { font-size: 11px; color: var(--muted); margin-top: 9px; font-style: italic; }
+/* example command inside a hover card (grayed ATT&CK cell, D3FEND "what this blocks") */
+.fw-hc-ex { margin-top: 4px; }
+.fw-hc-exh { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent-2); }
+.fw-hc-exm { text-transform: none; letter-spacing: 0; color: var(--muted); font-weight: 400; }
+.fw-hc-exc { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--text-2); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; margin-top: 2px; word-break: break-all; }
+.fw-hovercard.can-show { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-hot)); }
 /* cursor-following hover card over a matrix cell: flips what-you-did to how-a-defender-sees-it */
 .fw-hovercard-float { position: fixed; z-index: 240; left: 0; top: 0; max-width: 320px; min-width: 210px; pointer-events: none;
   opacity: 0; visibility: hidden; transition: opacity .09s ease; }
