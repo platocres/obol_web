@@ -47,8 +47,9 @@
   // Charon's visage: the cyberpunk-ferryman illustration (hero for the intro, a face avatar inline).
   function eyeHtml(small) {
     return small
-      ? '<img class="charon-av" src="assets/img/charon-avatar.webp?v=1" width="46" height="46" loading="lazy" decoding="async" alt="Charon the ferryman">'
-      : '<img class="charon-art" src="assets/img/charon.webp?v=1" width="220" height="220" loading="lazy" decoding="async" alt="Charon the ferryman, hooded with glowing red eyes in a skull boat on the green Styx">';
+      ? '<img class="charon-av" src="assets/img/charon-avatar.webp?v=2" width="48" height="48" loading="lazy" decoding="async" alt="Charon the ferryman">'
+      : '<div class="charon-fig"><span class="charon-aura"></span><span class="charon-ring"></span><span class="charon-ring r2"></span>'
+        + '<img class="charon-img" src="assets/img/charon.webp?v=2" width="216" height="216" loading="lazy" decoding="async" alt="Charon the ferryman, hooded with glowing red eyes in a skull boat on the green Styx"></div>';
   }
   function typeInto(text) {
     var el = _mount && _mount.querySelector('.stuck-say');

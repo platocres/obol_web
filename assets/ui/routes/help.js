@@ -59,8 +59,10 @@
   }
 
   function renderStart(H) {
-    // the cyberpunk Charon illustration, the same ferryman the Stuck? tab shows (continuity)
-    var intro = '<div class="help-charon"><img class="charon-art" src="assets/img/charon.webp?v=1" width="220" height="220" loading="lazy" decoding="async" alt="Charon the ferryman, hooded with glowing red eyes in a skull boat on the green Styx">'
+    // the cyberpunk Charon illustration, floating in emanating ring-light (same ferryman as Stuck?)
+    var intro = '<div class="help-charon">'
+      + '<div class="charon-fig"><span class="charon-aura"></span><span class="charon-ring"></span><span class="charon-ring r2"></span>'
+      + '<img class="charon-img" src="assets/img/charon.webp?v=2" width="216" height="216" loading="lazy" decoding="async" alt="Charon the ferryman, hooded with glowing red eyes in a skull boat on the green Styx"></div>'
       + '<p class="help-charon-say">' + esc(H.charonIntro || '') + '</p></div>';
     var cards = (H.quickstart || []).map(function (q, i) {
       return '<div class="help-qs"><div class="help-qs-n" aria-hidden="true">' + (i + 1) + '</div>'
