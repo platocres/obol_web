@@ -717,3 +717,20 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   facts; none test the loop the human actually runs, so parser/retire gaps (e.g. certipy find erroring on
   a box with no CA and the ADCS move not retiring or acknowledging it) only surface on the real box. This
   is the structural fix for the recurring "I ran it, pasted it, nothing changed" class.
+- 2026-10-08: Domain (BloodHound) tab, major upgrade (owner-directed, general to any collection). The tab
+  computed a rich analysis but rendered only the graph + census; made it answer "so what do I do". (1)
+  Bridge banner: after ingest, names the coach's top queued move and links to Next Steps, closing the seam
+  where users did not know the graph fed the coach. (2) Route To Domain Admin: the derived shortest
+  owned->DA path as numbered steps, each hop's edge with a bloodyAD command (group -> add member, domain
+  control -> grant DCSync, user -> reset), ending in the DCSync dump. (3) Closest To Domain Admin board:
+  new engine nearestToGoal (one reverse BFS) ranks every principal by hops to DA; click a row to explore.
+  (4) Explore An Account: new engine controls() (forward reachability) + ownedPaths for ANY principal, so
+  users theorize from accounts they do not own. (5) Smarter census: matched cards first, empties collapsed,
+  owned principals marked, AS-REP / password-not-required flagged "costs nothing". (6) Graph: BloodHound-
+  style round nodes with the name underneath (owned green, goal red); edges stop at the circle so arrows
+  stay visible. Fixed a latent bug: domain.js mounted() used `mount` without defining it, so copy/report
+  wiring silently threw (now ctx.mount); and the "UNDEFINED USERS" header (users is a count, not an array)
+  plus three missing-space hint glitches. Engine additions covered in bloodhound-smoke.js. Driven headless
+  on the owner's real Forest zip: bridge + route (exact ...->Exchange Windows Permissions->HTB.LOCAL chain)
+  + 12-row board + 13 round labelled nodes + 19 matched cards + "32 users"; explore loads on click; 0
+  console errors. Full engine suite + browser-smoke + gap green; assets stamped. (Tasks #31-#35.)
