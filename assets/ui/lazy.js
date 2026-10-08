@@ -37,7 +37,7 @@
     scoreboard: ['assets/ui/routes/scoreboard.js?v=b9b21413'],
     playbooks: ['data/playbooks-bundle.js?v=31b337d6', 'assets/engine/playbooks.js?v=be235b11', 'assets/ui/routes/playbooks.js?v=db570cba'],
     map: ['assets/engine/engmap.js?v=488914b1', 'assets/ui/routes/map.js?v=b415a554'],
-    findings: ['data/attack-catalog.js?v=89863598', 'data/attack-move-map.js?v=8d0df294', 'data/d3fend-map.js?v=c8b35d9d', 'data/frameworks-tables.js?v=169ba840', 'data/kev-catalog.js?v=e8b4d122', 'assets/engine/frameworks.js?v=a724b3b3', 'assets/ui/routes/findings.js?v=f9e21221'],
+    findings: ['data/attack-catalog.js?v=89863598', 'data/attack-move-map.js?v=8d0df294', 'data/d3fend-map.js?v=c8b35d9d', 'data/frameworks-tables.js?v=169ba840', 'data/kev-catalog.js?v=e8b4d122', 'assets/engine/frameworks.js?v=e5436f9b', 'assets/ui/routes/findings.js?v=e45586b8'],
     history: ['assets/ui/routes/history.js?v=f2888760'],
   };
 

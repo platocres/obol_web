@@ -193,10 +193,11 @@
     }).join('') + '</div>';
     var cols = A.tactics.map(function (col) {
       var cells = col.cells.map(function (c) {
+        var aria = c.id + ' ' + c.name + (c.used ? ', used this engagement' + (c.subs.length ? ' (' + c.subs.length + ' sub-technique' + (c.subs.length === 1 ? '' : 's') + ')' : '') : ', not observed');
         return '<button type="button" class="fw-cell' + (c.used ? ' used' : '') + '" data-tech="' + U.attr(c.id) + '"'
-          + ' title="' + U.attr(c.id + '  ' + c.name + (c.subs.length ? '  (' + c.subs.length + ' sub-technique' + (c.subs.length === 1 ? '' : 's') + ' used)' : '')) + '"' + (c.used ? '' : ' tabindex="-1"') + '>'
+          + ' aria-label="' + U.attr(aria) + '"' + (c.used ? '' : ' tabindex="-1"') + '>'
           + '<span class="fw-cell-n">' + esc(c.name) + '</span>'
-          + (c.subs.length ? '<span class="fw-cell-st" aria-label="' + c.subs.length + ' sub-techniques used">' + c.subs.length + '</span>' : '') + '</button>';
+          + (c.subs.length ? '<span class="fw-cell-st" aria-hidden="true">' + c.subs.length + '</span>' : '') + '</button>';
       }).join('');
       return '<div class="fw-col"><div class="fw-col-h"><span class="fw-col-n">' + esc(col.name) + '</span>'
         + '<span class="fw-col-c">' + col.total + ' technique' + (col.total === 1 ? '' : 's')
@@ -219,6 +220,55 @@
     var defs = ids.map(function (id) { return m.defensive.find(function (d) { return d.id === id; }); }).filter(Boolean);
     if (!defs.length) return '<p class="fw-detail-hint">Nothing recorded for this technique.</p>';
     return defs.map(techCardHtml).join('');
+  }
+
+  // The cursor-following hover card for an ATT&CK matrix cell (works in Labeled and Compact alike).
+  // For a LIT cell it flips to the engagement: the findings that evidence it (severity + CVE/KEV), the
+  // commands you actually ran, its used sub-techniques, then the blue-team view (how it is detected and
+  // countered). For an UNLIT cell it teaches: what the technique is and how a defender would spot it.
+  function fwHoverHtml(m, cellId) {
+    var cat = (OBOL.ATTACK && OBOL.ATTACK.techniques) || {};
+    var tacs = (OBOL.ATTACK && OBOL.ATTACK.tactics) || [];
+    var t = cat[cellId] || {};
+    var ids = Object.keys(m.use).filter(function (u) { return u === cellId || parentOf(u) === cellId; });
+    var tacNames = (t.ta || []).map(function (s) { var ta = tacs.find(function (x) { return x.id === s; }); return ta ? ta.name : s; });
+    var head = '<div class="fw-hc-h"><span class="fw-hc-id">' + esc(cellId) + '</span> <span class="fw-hc-n">' + esc(t.n || cellId) + '</span></div>'
+      + (tacNames.length ? '<div class="fw-hc-tac">' + tacNames.map(function (n) { return '<span class="fw-hc-tag">' + esc(n) + '</span>'; }).join('') + '</div>' : '');
+
+    if (!ids.length) {
+      var un = '<div class="fw-hc-un">Not observed this engagement.</div>';
+      if (t.det) un += '<div class="fw-hc-row"><span class="fw-hc-lbl">A Defender Spots It By</span> ' + esc(String(t.det).slice(0, 220)) + (String(t.det).length > 220 ? '…' : '') + '</div>';
+      return '<div class="fw-hovercard not-used">' + head + un + '</div>';
+    }
+
+    var fins = [], moves = [], subs = {}, det = t.det || '', d3names = {};
+    ids.forEach(function (u) {
+      if (u !== cellId) subs[u] = 1;
+      (m.use[u] || []).forEach(function (c) { if (c.k === 'm') moves.push(c); else fins.push(c); });
+      var d = m.defensive.find(function (x) { return x.id === u; });
+      if (d) { if (!det && d.detection) det = d.detection; (d.d3fend || []).forEach(function (c) { d3names[c.name] = 1; }); }
+    });
+
+    var body = '';
+    if (fins.length) {
+      body += '<div class="fw-hc-lbl">In This Engagement</div><ul class="fw-hc-list">' + fins.slice(0, 6).map(function (c) {
+        return '<li>' + (c.sev ? '<span class="sev-chip sev-' + esc(normSev(c.sev)) + '">' + esc(normSev(c.sev)) + '</span> ' : '') + esc(c.t)
+          + (c.cve ? ' <span class="fw-hc-cve">' + esc(c.cve) + '</span>' : '')
+          + (c.kev ? ' <span class="fw-hc-kev">KEV</span>' : '') + '</li>';
+      }).join('') + '</ul>' + (fins.length > 6 ? '<div class="fw-hc-more">plus ' + (fins.length - 6) + ' more</div>' : '');
+    }
+    if (moves.length) {
+      body += '<div class="fw-hc-lbl">You Ran</div><ul class="fw-hc-cmds">' + moves.slice(0, 4).map(function (c) {
+        return '<li><code>' + esc(String(c.t).slice(0, 72)) + (String(c.t).length > 72 ? '…' : '') + '</code></li>';
+      }).join('') + '</ul>' + (moves.length > 4 ? '<div class="fw-hc-more">plus ' + (moves.length - 4) + ' more</div>' : '');
+    }
+    if (Object.keys(subs).length) {
+      body += '<div class="fw-hc-row"><span class="fw-hc-lbl">Sub-Techniques</span> ' + Object.keys(subs).sort().map(function (s) { return '<span class="fw-hc-tag">' + esc(s) + '</span>'; }).join('') + '</div>';
+    }
+    if (det) body += '<div class="fw-hc-row"><span class="fw-hc-lbl">Blue Team Detects</span> ' + esc(String(det).slice(0, 170)) + (String(det).length > 170 ? '…' : '') + '</div>';
+    if (Object.keys(d3names).length) body += '<div class="fw-hc-row"><span class="fw-hc-lbl">Countered By</span> ' + Object.keys(d3names).slice(0, 4).map(function (n) { return '<span class="fw-hc-tag d3">' + esc(n) + '</span>'; }).join('') + '</div>';
+    body += '<div class="fw-hc-foot">Click for full detail</div>';
+    return '<div class="fw-hovercard">' + head + body + '</div>';
   }
 
   var D3_TACTIC_DEF = {
@@ -365,6 +415,35 @@
       slot.innerHTML = techDetail(m, id);
       try { slot.scrollIntoView({ block: 'nearest' }); } catch (x) {}
     });
+
+    // Rich cursor-following hover card over ATT&CK cells (Labeled and Compact). Built from the cached
+    // model; the card lives on <body> (so it floats above the scroll container) and follows the pointer.
+    (function () {
+      var wrap = mount.querySelector('.fw-matrix-wrap'); if (!wrap) return;
+      // drop any stale float from a prior mount so the body node never accumulates
+      document.querySelectorAll('.fw-hovercard-float').forEach(function (n) { n.remove(); });
+      var card = null, curId = null, model = null;
+      function ensure() { if (!card) { card = document.createElement('div'); card.className = 'fw-hovercard-float'; card.setAttribute('aria-hidden', 'true'); document.body.appendChild(card); } return card; }
+      function place(x, y) {
+        var c = card; if (!c) return;
+        var w = c.offsetWidth || 300, h = c.offsetHeight || 150, vw = window.innerWidth, vh = window.innerHeight;
+        var left = x + 16; if (left + w > vw - 8) left = x - w - 16; if (left < 8) left = 8;
+        var top = y + 18; if (top + h > vh - 8) top = y - h - 18; if (top < 8) top = 8;
+        c.style.left = left + 'px'; c.style.top = top + 'px';
+      }
+      function show(cell, x, y) {
+        var id = cell.getAttribute('data-tech'); if (!id) { hide(); return; }
+        if (!model) model = fwModel(); if (!model) return;
+        if (id !== curId) { ensure().innerHTML = fwHoverHtml(model, id); curId = id; }
+        card.classList.add('on'); place(x, y);
+      }
+      function hide() { if (card) card.classList.remove('on'); curId = null; }
+      wrap.addEventListener('mousemove', function (e) {
+        var cell = e.target && e.target.closest ? e.target.closest('.fw-cell') : null;
+        if (cell) show(cell, e.clientX, e.clientY); else hide();
+      });
+      wrap.addEventListener('mouseleave', hide);
+    })();
   }
 
   OBOL.routes = OBOL.routes || {};

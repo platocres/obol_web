@@ -23,25 +23,25 @@
   // The set of ATT&CK techniques the engagement touched, from the matched findings' `attack` field,
   // each with the findings that evidence it.
   function techniqueUse(findings, activities) {
-    var use = {}; // Txxxx (as authored, may be a sub) -> [labels: finding titles / recorded moves]
+    // Txxxx (as authored, may be a sub) -> [contribution objects] so the matrix, the detail panel and the
+    // hover card can show the real engagement evidence: findings ({k:'f', t:title, sev, cve, kev}) and the
+    // recorded moves that lit the technique ({k:'m', t:command}). `.t` is the display label either way.
+    var use = {};
     var byKind = (OBOL.ATTACK_MOVE && OBOL.ATTACK_MOVE.byKind) || {};
-    function add(tid, label) { if (!tid) return; var arr = use[tid] = use[tid] || []; if (arr.indexOf(label) < 0) arr.push(label); }
+    function add(tid, c) { if (!tid) return; var arr = use[tid] = use[tid] || []; if (!arr.some(function (x) { return x.k === c.k && x.t === c.t; })) arr.push(c); }
     (findings || []).forEach(function (f) {
-      var label = f.title || f.key || '';
       var tid = f.attack;
       if (!tid) { (f.trigger_kinds || []).some(function (k) { if (byKind[k]) { tid = byKind[k]; return true; } return false; }); }
-      add(tid, label);
+      add(tid, { k: 'f', t: f.title || f.key || '', sev: f.severity || '', cve: f.cve || '', kev: !!f.kev });
     });
-    // recorded-moves trail: a Run Log activity's produced fact kinds -> techniques, so the matrix lights
-    // from what you RAN, not only from findings that carry an explicit attack code.
     (activities || []).forEach(function (act) {
       if (!act) return;
       var cmd = String(act.command || act.title || '').trim();
-      var label = cmd ? ('Ran: ' + (cmd.length > 54 ? cmd.slice(0, 53) + '…' : cmd)) : 'Recorded move';
-      (act.produced || []).forEach(function (k) { add(byKind[k], label); });
+      (act.produced || []).forEach(function (k) { if (byKind[k]) add(byKind[k], { k: 'm', t: cmd }); });
     });
     return use;
   }
+  function useLabels(arr) { return (arr || []).map(function (c) { return c.t; }); }
 
   // The ATT&CK matrix model: every tactic (in matrix order) with its TOP-LEVEL techniques as cells; a
   // cell is "used" if the technique or any of its sub-techniques was used. Mirrors Splunk's matrix,
@@ -53,7 +53,7 @@
       var top = parentOf(tid);
       var rec = usedTop[top] = usedTop[top] || { subs: {}, findings: [] };
       if (tid !== top) rec.subs[tid] = 1;
-      use[tid].forEach(function (k) { if (rec.findings.indexOf(k) < 0) rec.findings.push(k); });
+      useLabels(use[tid]).forEach(function (lbl) { if (rec.findings.indexOf(lbl) < 0) rec.findings.push(lbl); });
     });
     var tactics = (cat.tactics || []).map(function (ta) {
       var cells = [];
@@ -105,7 +105,7 @@
       return {
         id: tid, name: t.n || tid, url: t.url || '',
         detection: t.det || '', dataSources: t.ds || [], mitigations: t.mit || [],
-        d3fend: d3fend, findings: use[tid].slice(),
+        d3fend: d3fend, findings: useLabels(use[tid]),
       };
     });
   }

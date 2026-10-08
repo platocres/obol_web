@@ -1857,6 +1857,34 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .fw-matrix--compact .fw-cell { width: 30px; height: 30px; min-height: 0; padding: 0; align-items: center; justify-content: center; border-radius: 6px; }
 .fw-matrix--compact .fw-cell-n { display: none; }
 .fw-matrix--compact .fw-cell-st { padding: 0 3px; }
+/* cursor-following hover card over a matrix cell: flips what-you-did to how-a-defender-sees-it */
+.fw-hovercard-float { position: fixed; z-index: 240; left: 0; top: 0; max-width: 320px; min-width: 210px; pointer-events: none;
+  opacity: 0; visibility: hidden; transition: opacity .09s ease; }
+.fw-hovercard-float.on { opacity: 1; visibility: visible; }
+@media (prefers-reduced-motion: reduce) { .fw-hovercard-float { transition: none; } }
+.fw-hovercard { background: var(--surf1); border: 1px solid var(--line-hot); border-radius: 9px; padding: 9px 11px;
+  box-shadow: 0 14px 34px -10px rgba(0,0,0,0.6); font-size: 11.5px; color: var(--text); line-height: 1.32; }
+.fw-hovercard.not-used { border-color: var(--line); opacity: .97; }
+.fw-hc-h { line-height: 1.25; word-break: break-word; }
+.fw-hc-id { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--accent-2); }
+.fw-hc-n { font-weight: 700; font-size: 12px; }
+.fw-hc-tac { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+.fw-hc-tag { font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; color: var(--text-2);
+  background: var(--surf2); border: 1px solid var(--line); border-radius: 8px; padding: 1px 6px; }
+.fw-hc-tag.d3 { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-soft); }
+.fw-hc-lbl { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; margin: 7px 0 2px; }
+.fw-hc-row { margin-top: 6px; }
+.fw-hc-row .fw-hc-lbl { display: inline; margin: 0 4px 0 0; }
+.fw-hc-list, .fw-hc-cmds { list-style: none; margin: 2px 0 0; padding: 0; }
+.fw-hc-list li { padding: 1px 0; word-break: break-word; }
+.fw-hc-list .sev-chip { font-size: 9px; padding: 0 5px; vertical-align: middle; }
+.fw-hc-cmds li { padding: 1px 0; }
+.fw-hc-cmds code { font-family: var(--mono); font-size: 10.5px; color: var(--text-2); word-break: break-all; }
+.fw-hc-cve { font-family: var(--mono); font-size: 10px; color: var(--accent-2); }
+.fw-hc-kev { font-size: 9px; font-weight: 800; color: #fff; background: var(--critical); border-radius: 5px; padding: 0 4px; }
+.fw-hc-more { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.fw-hc-un { color: var(--muted); font-style: italic; margin-top: 5px; }
+.fw-hc-foot { margin-top: 8px; font-size: 10px; color: var(--accent-2); text-transform: uppercase; letter-spacing: .05em; }
 .fw-detail { margin-top: 4px; }
 .fw-detail-hint { color: var(--muted); font-size: 12px; font-style: italic; }
 /* defensive / technique cards */

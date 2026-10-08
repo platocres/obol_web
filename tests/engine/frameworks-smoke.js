@@ -91,7 +91,7 @@ const withMoves = OBOL.frameworks.compute(new F.FactSet(), {
 });
 ok(Object.keys(withMoves.use).indexOf('T1558.003') >= 0, 'recorded move (produced hash.kerberoast) lights T1558.003');
 ok(Object.keys(withMoves.use).indexOf('T1046') >= 0, 'recorded move (produced ports.open) lights T1046 (Network Service Discovery)');
-ok((withMoves.use['T1046'][0] || '').indexOf('Ran:') === 0, 'recorded-move label reads "Ran: <command>"');
+ok(withMoves.use['T1046'][0] && withMoves.use['T1046'][0].k === 'm' && withMoves.use['T1046'][0].t === 'nmap -p- 10.10.10.10', 'recorded-move contribution carries the ran command (k:m, t:<command>)');
 
 // finding gap-fill: a finding with NO authored attack derives one from its trigger_kind
 const gap = OBOL.frameworks.techniqueUse([{ title: 'Writable cron', trigger_kinds: ['privesc.cron_writable'] }], []);
