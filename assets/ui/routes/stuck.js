@@ -44,7 +44,12 @@
   function reducedMotion() { try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
 
   // ── the ferryman: glowing eye + typewriter line ────────────────────────────────────────────────
-  function eyeHtml(small) { return '<div class="stuck-eye' + (small ? ' sm' : '') + '" aria-hidden="true"><span class="stuck-eye-core"></span><span class="stuck-eye-ring"></span></div>'; }
+  // Charon's visage: the cyberpunk-ferryman illustration (hero for the intro, a face avatar inline).
+  function eyeHtml(small) {
+    return small
+      ? '<img class="charon-av" src="assets/img/charon-avatar.webp?v=1" width="46" height="46" loading="lazy" decoding="async" alt="Charon the ferryman">'
+      : '<img class="charon-art" src="assets/img/charon.webp?v=1" width="220" height="220" loading="lazy" decoding="async" alt="Charon the ferryman, hooded with glowing red eyes in a skull boat on the green Styx">';
+  }
   function typeInto(text) {
     var el = _mount && _mount.querySelector('.stuck-say');
     if (!el) return;

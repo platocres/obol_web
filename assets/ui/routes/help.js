@@ -59,8 +59,8 @@
   }
 
   function renderStart(H) {
-    // the same ferryman eye as the Stuck? tab, for continuity (reuses .stuck-eye from obol.css)
-    var intro = '<div class="help-charon"><div class="stuck-eye" aria-hidden="true"><span class="stuck-eye-core"></span><span class="stuck-eye-ring"></span></div>'
+    // the cyberpunk Charon illustration, the same ferryman the Stuck? tab shows (continuity)
+    var intro = '<div class="help-charon"><img class="charon-art" src="assets/img/charon.webp?v=1" width="220" height="220" loading="lazy" decoding="async" alt="Charon the ferryman, hooded with glowing red eyes in a skull boat on the green Styx">'
       + '<p class="help-charon-say">' + esc(H.charonIntro || '') + '</p></div>';
     var cards = (H.quickstart || []).map(function (q, i) {
       return '<div class="help-qs"><div class="help-qs-n" aria-hidden="true">' + (i + 1) + '</div>'
