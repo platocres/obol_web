@@ -154,8 +154,11 @@
   function parentOf(id) { return String(id).indexOf('.') >= 0 ? String(id).split('.')[0] : String(id); }
 
   function fwModel() {
-    try { return (OBOL.frameworks && OBOL.ATTACK && OBOL.ATTACK.techniques) ? OBOL.frameworks.compute(OBOL.store.factSet()) : null; }
-    catch (e) { return null; }
+    try {
+      if (!(OBOL.frameworks && OBOL.ATTACK && OBOL.ATTACK.techniques)) return null;
+      var acts = (OBOL.store.active() || {}).activities || [];
+      return OBOL.frameworks.compute(OBOL.store.factSet(), { activities: acts });
+    } catch (e) { return null; }
   }
 
   var FW_TABS = [['findings', 'Findings'], ['attack', 'ATT&CK'], ['defensive', 'Defensive'], ['compliance', 'Compliance'], ['cves', 'CVEs']];

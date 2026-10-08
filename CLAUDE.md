@@ -851,22 +851,22 @@ Fold into the **Findings tab** as sub-views (same sub-tab pattern as Workbench),
 
 ### Phases (check off as completed)
 
-- [ ] **MF0.** This plan in CLAUDE.md + tasks.
-- [ ] **MF1.** Reference data + engine. tools/build-attack.js -> data/attack-catalog.js (14 tactics in
+- [x] **MF0.** This plan in CLAUDE.md + tasks.
+- [x] **MF1.** Reference data + engine. tools/build-attack.js -> data/attack-catalog.js (14 tactics in
   matrix order; techniques: name, tactics, detection, data_sources, mitigations, url; sub-technique
   name lookup). data/d3fend-map.js (curated ATT&CK -> D3FEND countermeasures + names, obol's technique
   set). Small fixed tables: kill-chain stages + obol-phase mapping, NIST CSF functions, CIS v8 titles,
   PCI v4 requirement titles. Un-stub KEV against the cisa_kev pack. Engine `assets/engine/frameworks.js`
   (OBOL.frameworks): from assess()+activities -> {attack matrix model, d3fend countermeasures, compliance
   rollup, cve/kev list}. Smoke test tests/engine/frameworks-smoke.js.
-- [ ] **MF2.** ATT&CK Matrix hero sub-view in the Findings route (tactics columns, technique cells lit
+- [x] **MF2.** ATT&CK Matrix hero sub-view in the Findings route (tactics columns, technique cells lit
   by the engagement, Splunk-style; hover/click = technique detail: what you did, detection, mitigations).
   Sub-view nav in routes/findings.js.
-- [ ] **MF3.** Defensive sub-view: per technique used, the D3FEND countermeasure + ATT&CK detection and
+- [x] **MF3.** Defensive sub-view: per technique used, the D3FEND countermeasure + ATT&CK detection and
   data sources ("how a defender catches this").
-- [ ] **MF4.** Compliance sub-view (NIST 800-53/CSF, CIS, PCI dim-unless-scoped, CWE, OWASP rollup) +
+- [x] **MF4.** Compliance sub-view (NIST 800-53/CSF, CIS, PCI dim-unless-scoped, CWE, OWASP rollup) +
   CVEs & KEV sub-view (detected CVEs, KEV "actively exploited" flag, exploit availability, remediation).
-- [ ] **MF5.** Coverage pass: add attack/nist/cis/pci across the 552 findings + a move/lane ATT&CK map;
+- [x] **MF5.** Coverage pass: add attack/nist/cis/pci across the 552 findings + a move/lane ATT&CK map;
   verify guardrails, stamp. Screenshot-verify every sub-view desktop + mobile, 0 console errors.
 
 ### Verify each phase (same as the project)
@@ -882,3 +882,25 @@ screenshot the changed surface at desktop + mobile and read it for sense. House 
 - 2026-10-08: MF0, plan documented. Confirmed: findings-catalog already carries attack/nist/cwe/cve/
   remediation; OBOL.findings.assess exposes them; KEV is stubbed (to un-stub); recorded moves are
   eng.activities; ATT&CK STIX fetchable, D3FEND to be curated.
+- 2026-10-08: MF1-MF5 shipped the Frameworks view in the Findings tab (Splunk-ES style, flipped
+  offensive). MF1 reference data + engine: tools/build-attack.js -> data/attack-catalog.js (ATT&CK
+  Enterprise v19.2 from the STIX, 15 tactics in matrix order, 697 techniques with detection, data
+  sources, mitigations, 133 KB); data/d3fend-map.js (curated ATT&CK -> D3FEND, 42 techniques/26
+  countermeasures, names from the authoritative D3FEND catalog); data/frameworks-tables.js (Kill Chain
+  + ATT&CK-tactic/obol-phase maps, NIST CSF + 800-53 families + family->CSF, CIS v8, PCI v4, and the
+  NIST->CIS/PCI crosswalk); tools/build-kev.js -> data/kev-catalog.js (CISA KEV, 1711 CVEs, 360
+  ransomware); un-stubbed the KEV overlay in findings.js; assets/engine/frameworks.js (OBOL.frameworks
+  .compute: ATT&CK matrix model, kill-chain, defensive lens, compliance rollup, CVE/KEV list), smoke
+  test. MF2-MF4 the UI: five sub-tabs in routes/findings.js (Findings / ATT&CK / Defensive / Compliance
+  / CVEs), all driven by compute(). The ATT&CK matrix is the hero (tactics x techniques, lit by what you
+  did, click a cell for detail); Defensive = D3FEND + ATT&CK detection/mitigations per used technique;
+  Compliance = NIST/CIS/PCI(dim)/CWE/OWASP; CVEs = KEV-flagged, actively-exploited first. MF5 coverage,
+  done DERIVATIONALLY (accurate, no mass catalog edit): data/attack-move-map.js (fact-kind -> technique)
+  lights the matrix from recorded Run Log moves AND gap-fills a finding's technique from the fact that
+  triggered it; the NIST->CIS/PCI crosswalk fills CIS/PCI from an authored NIST control. So coverage is
+  far beyond the 55 explicitly-authored attack codes without guessing. Driven headless on a seeded
+  engagement: matrix lit across 15 columns + kill-chain + cell detail with D3FEND chips; Defensive 5
+  cards; Compliance CIS/PCI populated via crosswalk; CVEs 3, all KEV (PHP-CGI + two Apache), 0 console
+  errors. Full engine suite + browser-smoke + lint + gap green; assets stamped; house style held.
+  Remaining (future, accuracy-first): hand-author explicit attack/nist on more of the 552 catalogue
+  findings to raise the authored (non-derived) coverage; the derivational layer already carries the view.

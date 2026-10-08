@@ -10,6 +10,7 @@
 require('../../assets/engine/facts.js');
 require('../../data/findings-catalog.js');
 require('../../data/attack-catalog.js');
+require('../../data/attack-move-map.js');
 require('../../data/d3fend-map.js');
 require('../../data/frameworks-tables.js');
 require('../../data/kev-catalog.js');
@@ -73,6 +74,26 @@ ok(comp.nist.some(function (e) { return /AC-3/.test(e.title) && /Access Control/
 ok(comp.cis.some(function (e) { return /CIS 6/.test(e.title) && /Access Control Management/.test(e.title); }), 'CIS control labelled with its v8 title');
 ok(comp.pci.some(function (e) { return /PCI Req 7/.test(e.title) && /Need to Know/.test(e.title); }), 'PCI requirement labelled with its v4 title');
 ok(comp.owasp.some(function (e) { return e.key === 'A01'; }), 'OWASP category derived from a reference link');
+
+// ── MF5 derivations: recorded-moves trail + finding gap-fill + NIST->CIS/PCI crosswalk ─────
+// recorded-moves trail: an activity that produced hash.kerberoast lights T1558.003 even with no finding
+const withMoves = OBOL.frameworks.compute(new F.FactSet(), {
+  findings: [],
+  activities: [{ command: 'nxc ldap dc -u u -p p --kerberoasting kerb.hashes', produced: ['hash.kerberoast'] },
+               { command: 'nmap -p- 10.10.10.10', produced: ['ports.open', 'host.up'] }],
+});
+ok(Object.keys(withMoves.use).indexOf('T1558.003') >= 0, 'recorded move (produced hash.kerberoast) lights T1558.003');
+ok(Object.keys(withMoves.use).indexOf('T1046') >= 0, 'recorded move (produced ports.open) lights T1046 (Network Service Discovery)');
+ok((withMoves.use['T1046'][0] || '').indexOf('Ran:') === 0, 'recorded-move label reads "Ran: <command>"');
+
+// finding gap-fill: a finding with NO authored attack derives one from its trigger_kind
+const gap = OBOL.frameworks.techniqueUse([{ title: 'Writable cron', trigger_kinds: ['privesc.cron_writable'] }], []);
+ok(Object.keys(gap).indexOf('T1053.003') >= 0, 'finding with no attack derives T1053.003 from its trigger_kind (cron)');
+
+// NIST -> CIS / PCI crosswalk: a finding with only a NIST control yields CIS + PCI
+const cw = OBOL.frameworks.compliance([{ key: 'z', nist: 'IA-5' }]);
+ok(cw.cis.some(function (e) { return /CIS 5/.test(e.title); }), 'IA-5 crosswalks to CIS 5 (Account Management)');
+ok(cw.pci.some(function (e) { return /PCI Req 8/.test(e.title); }), 'IA-5 crosswalks to PCI Req 8 (Authenticate Access)');
 
 // CVE/KEV overlay
 const kevd = OBOL.frameworks.cves([

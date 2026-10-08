@@ -22,13 +22,23 @@
 
   // The set of ATT&CK techniques the engagement touched, from the matched findings' `attack` field,
   // each with the findings that evidence it.
-  function techniqueUse(findings) {
-    var use = {}; // Txxxx (as authored, may be a sub) -> [finding titles]
+  function techniqueUse(findings, activities) {
+    var use = {}; // Txxxx (as authored, may be a sub) -> [labels: finding titles / recorded moves]
+    var byKind = (OBOL.ATTACK_MOVE && OBOL.ATTACK_MOVE.byKind) || {};
+    function add(tid, label) { if (!tid) return; var arr = use[tid] = use[tid] || []; if (arr.indexOf(label) < 0) arr.push(label); }
     (findings || []).forEach(function (f) {
-      if (!f.attack) return;
       var label = f.title || f.key || '';
-      var arr = use[f.attack] = use[f.attack] || [];
-      if (arr.indexOf(label) < 0) arr.push(label);
+      var tid = f.attack;
+      if (!tid) { (f.trigger_kinds || []).some(function (k) { if (byKind[k]) { tid = byKind[k]; return true; } return false; }); }
+      add(tid, label);
+    });
+    // recorded-moves trail: a Run Log activity's produced fact kinds -> techniques, so the matrix lights
+    // from what you RAN, not only from findings that carry an explicit attack code.
+    (activities || []).forEach(function (act) {
+      if (!act) return;
+      var cmd = String(act.command || act.title || '').trim();
+      var label = cmd ? ('Ran: ' + (cmd.length > 54 ? cmd.slice(0, 53) + '…' : cmd)) : 'Recorded move';
+      (act.produced || []).forEach(function (k) { add(byKind[k], label); });
     });
     return use;
   }
@@ -103,6 +113,8 @@
   function compliance(findings) {
     var tbl = T();
     var nistFam = tbl.NIST_FAMILY || {}, famCsf = tbl.NIST_FAMILY_TO_CSF || {}, cisV8 = tbl.CIS_V8 || {}, pciV4 = tbl.PCI_V4 || {};
+    var nToCis = tbl.NIST_TO_CIS || {}, nToPci = tbl.NIST_TO_PCI || {};
+    function crosswalk(map, nist) { var fam = String(nist).split('-')[0]; return map[nist] || (map._family && map._family[fam]) || []; }
     function group() { return { map: {}, list: [] }; }
     function add(g, key, title, fk) {
       var e = g.map[key]; if (!e) { e = g.map[key] = { key: key, title: title, findings: [] }; g.list.push(e); }
@@ -112,8 +124,12 @@
     (findings || []).forEach(function (f) {
       var fk = f.key || f.title || '';
       if (f.nist) { var fam = String(f.nist).split('-')[0]; add(nist, f.nist, nistFam[fam] ? (f.nist + ': ' + nistFam[fam]) : f.nist, fk); nist.map[f.nist].csf = famCsf[fam] || ''; }
-      if (f.cis) String(f.cis).split(/[,\s]+/).filter(Boolean).forEach(function (c) { var n = c.replace(/^CIS[-\s]?/i, ''); add(cis, n, 'CIS ' + n + (cisV8[n] ? ': ' + cisV8[n] : ''), fk); });
-      if (f.pci) String(f.pci).split(/[,\s]+/).filter(Boolean).forEach(function (p) { var n = p.replace(/^PCI[-\s]?/i, '').split('.')[0]; add(pci, n, 'PCI Req ' + p + (pciV4[n] ? ': ' + pciV4[n] : ''), fk); });
+      // CIS: explicit field, else derived from the authored NIST control via the crosswalk.
+      var cisNums = f.cis ? String(f.cis).split(/[,\s]+/).filter(Boolean).map(function (c) { return c.replace(/^CIS[-\s]?/i, ''); }) : (f.nist ? crosswalk(nToCis, f.nist) : []);
+      cisNums.forEach(function (n) { add(cis, n, 'CIS ' + n + (cisV8[n] ? ': ' + cisV8[n] : ''), fk); });
+      // PCI: explicit field, else derived from the NIST control.
+      var pciNums = f.pci ? String(f.pci).split(/[,\s]+/).filter(Boolean).map(function (p) { return p.replace(/^PCI[-\s]?/i, ''); }) : (f.nist ? crosswalk(nToPci, f.nist) : []);
+      pciNums.forEach(function (p) { var n = String(p).split('.')[0]; add(pci, n, 'PCI Req ' + p + (pciV4[n] ? ': ' + pciV4[n] : ''), fk); });
       if (f.cwe) add(cwe, f.cwe, f.cwe, fk);
       (f.refs || []).forEach(function (r) { var m = /owasp\.org\/.*?(A\d{2})[:_ ]/i.exec(r) || /(A0?\d{1,2})[:_ -]\d{4}/.exec(r); if (m) add(owasp, m[1].toUpperCase(), 'OWASP ' + m[1].toUpperCase(), fk); });
     });
@@ -149,7 +165,7 @@
   function compute(fs, opts) {
     opts = opts || {};
     var findings = opts.findings || (OBOL.findings ? OBOL.findings.assess(fs) : []);
-    var use = techniqueUse(findings);
+    var use = techniqueUse(findings, opts.activities || []);
     return {
       findings: findings,
       use: use,

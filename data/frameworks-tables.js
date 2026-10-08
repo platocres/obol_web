@@ -79,8 +79,26 @@
     '11': 'Test Security of Systems and Networks Regularly', '12': 'Support Information Security With Policies',
   };
 
+  // NIST SP 800-53 control -> CIS Controls v8 numbers and PCI DSS v4 requirement numbers (a pragmatic
+  // crosswalk for the controls obol's findings actually use, so CIS/PCI fill in from an authored NIST
+  // control without hand-editing every finding). Keyed by exact control, then by family as a fallback.
+  var NIST_TO_CIS = {
+    'AC-3': ['6'], 'AC-4': ['13'], 'AC-6': ['5', '6'], 'IA-2': ['6'], 'IA-5': ['5'],
+    'CM-7': ['4'], 'CM-8': ['1', '2'], 'SC-7': ['12', '13'], 'SC-8': ['3'], 'SC-18': ['9'],
+    'SC-23': ['3'], 'SC-30': ['10'], 'SI-2': ['7'], 'SI-7': ['3'], 'SI-10': ['16'], 'SI-16': ['10'],
+    _family: { AC: ['6'], IA: ['5', '6'], SC: ['3'], CM: ['4'], SI: ['7'], AU: ['8'], RA: ['7'], CA: ['18'] },
+  };
+  var NIST_TO_PCI = {
+    'AC-3': ['7'], 'AC-4': ['1'], 'AC-6': ['7'], 'IA-2': ['8'], 'IA-5': ['8'],
+    'CM-7': ['2'], 'CM-8': ['2'], 'SC-7': ['1'], 'SC-8': ['4'], 'SC-18': ['5'],
+    'SC-23': ['4'], 'SC-30': ['6'], 'SI-2': ['6'], 'SI-7': ['11'], 'SI-10': ['6'], 'SI-16': ['5'],
+    _family: { AC: ['7'], IA: ['8'], SC: ['4'], CM: ['2'], SI: ['6'], AU: ['10'], RA: ['11'], CA: ['11'] },
+  };
+
   OBOL.FRAMEWORK_TABLES = {
     KILL_CHAIN: KILL_CHAIN,
+    NIST_TO_CIS: NIST_TO_CIS,
+    NIST_TO_PCI: NIST_TO_PCI,
     ATTACK_TACTIC_TO_KC: ATTACK_TACTIC_TO_KC,
     OBOL_PHASE_TO_KC: OBOL_PHASE_TO_KC,
     NIST_CSF: NIST_CSF,
