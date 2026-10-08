@@ -1,16 +1,17 @@
 /*!
- * data/d3fend-map.js — curated MITRE D3FEND countermeasure map for the Frameworks view.
- * Each offensive ATT&CK technique obol references maps to its D3FEND defensive techniques,
- * so the Defensive view can say how a blue team counters what you did. Names resolved from the
- * authoritative D3FEND catalog (d3fend.mitre.org). D3FEND (C) The MITRE Corporation.
- * Hand-curated (D3FEND's ATT&CK<->D3FEND inference mapping is not cleanly machine-extractable);
- * extend MAP as the findings coverage pass adds techniques.
+ * data/d3fend-map.js - curated MITRE D3FEND countermeasure map for the Frameworks view.
+ * Each offensive ATT&CK technique obol references maps to its D3FEND defensive techniques, grouped by
+ * D3FEND tactic, so the Defensive view renders a recognizable D3FEND defensive-tactic matrix. Names +
+ * tactics resolved from the authoritative D3FEND catalog (d3fend.mitre.org). D3FEND (C) The MITRE Corp.
+ * Hand-curated map; names/tactics generated. Extend MAP as the findings coverage pass adds techniques.
  */
 (function (root) {
   "use strict";
   var OBOL = root.OBOL = root.OBOL || {};
   OBOL.D3FEND = {
+    tacticOrder: ["Model","Harden","Detect","Isolate","Deceive","Evict","Restore"],
     names: {"D3-ACH":"Application Configuration Hardening","D3-AL":"Account Locking","D3-ANCI":"Authentication Cache Invalidation","D3-ANET":"Authentication Event Thresholding","D3-CBAN":"Certificate-based Authentication","D3-CH":"Credential Hardening","D3-CS":"Credential Scrubbing","D3-DAM":"Domain Account Monitoring","D3-EAL":"Executable Allowlisting","D3-FCA":"File Creation Analysis","D3-FE":"File Encryption","D3-FHRA":"File Hash Reputation Analysis","D3-ITF":"Inbound Traffic Filtering","D3-LAM":"Local Account Monitoring","D3-MFA":"Multi-factor Authentication","D3-NTA":"Network Traffic Analysis","D3-OSM":"Operating System Monitoring","D3-PH":"Platform Hardening","D3-PSA":"Process Spawn Analysis","D3-RPA":"Relay Pattern Analysis","D3-RTSD":"Remote Terminal Session Detection","D3-SEA":"Script Execution Analysis","D3-SICA":"System Init Config Analysis","D3-SPP":"Strong Password Policy","D3-SU":"Software Update","D3-UBA":"User Behavior Analysis"},
+    tactics: {"D3-ACH":"Harden","D3-AL":"Evict","D3-ANCI":"Evict","D3-ANET":"Detect","D3-CBAN":"Harden","D3-CH":"Harden","D3-CS":"Harden","D3-DAM":"Detect","D3-EAL":"Isolate","D3-FCA":"Detect","D3-FE":"Harden","D3-FHRA":"Detect","D3-ITF":"Isolate","D3-LAM":"Detect","D3-MFA":"Harden","D3-NTA":"Detect","D3-OSM":"Detect","D3-PH":"Harden","D3-PSA":"Detect","D3-RPA":"Detect","D3-RTSD":"Detect","D3-SEA":"Detect","D3-SICA":"Detect","D3-SPP":"Harden","D3-SU":"Harden","D3-UBA":"Detect"},
     map: {"T1046":["D3-NTA","D3-ITF"],"T1595":["D3-NTA","D3-ITF"],"T1190":["D3-SU","D3-ACH","D3-ITF","D3-NTA"],"T1203":["D3-SU","D3-EAL","D3-SEA"],"T1210":["D3-SU","D3-NTA","D3-ITF","D3-PH"],"T1068":["D3-SU","D3-PH","D3-EAL"],"T1611":["D3-PH","D3-SU","D3-EAL"],"T1059":["D3-PSA","D3-SEA","D3-EAL"],"T1505.003":["D3-FHRA","D3-FCA","D3-NTA","D3-ACH"],"T1053.003":["D3-PSA","D3-SEA","D3-SICA"],"T1057":["D3-PSA","D3-OSM"],"T1087.002":["D3-DAM","D3-UBA"],"T1135":["D3-NTA","D3-UBA"],"T1098":["D3-DAM","D3-LAM","D3-UBA","D3-ANCI"],"T1134.001":["D3-UBA","D3-OSM"],"T1548":["D3-EAL","D3-ACH","D3-PH"],"T1548.001":["D3-ACH","D3-PH"],"T1548.002":["D3-ACH","D3-PH","D3-EAL"],"T1548.003":["D3-ACH","D3-UBA"],"T1110.002":["D3-SPP","D3-CH","D3-ANCI"],"T1110.003":["D3-SPP","D3-MFA","D3-AL","D3-ANET"],"T1550.002":["D3-MFA","D3-CBAN","D3-ANCI","D3-UBA"],"T1558.001":["D3-ANCI","D3-DAM","D3-UBA"],"T1558.003":["D3-SPP","D3-DAM","D3-ANCI"],"T1558.004":["D3-SPP","D3-DAM"],"T1649":["D3-CBAN","D3-DAM"],"T1552":["D3-FE","D3-CS","D3-UBA","D3-ACH"],"T1552.001":["D3-FE","D3-CS","D3-ACH"],"T1552.006":["D3-ACH","D3-FE","D3-DAM"],"T1555":["D3-FE","D3-CS","D3-PH","D3-UBA"],"T1557.001":["D3-NTA","D3-ACH","D3-RPA"],"T1003.006":["D3-DAM","D3-UBA","D3-NTA","D3-ANCI"],"T1574.001":["D3-EAL","D3-ACH","D3-FHRA"],"T1574.009":["D3-ACH","D3-EAL"],"T1574.010":["D3-ACH","D3-EAL"],"T1078":["D3-MFA","D3-DAM","D3-UBA"],"T1021":["D3-MFA","D3-NTA","D3-RTSD"],"T1136":["D3-DAM","D3-LAM"],"T1136.001":["D3-LAM"],"T1136.002":["D3-DAM"],"T1562":["D3-PH","D3-EAL","D3-OSM"],"T1040":["D3-NTA","D3-FE"]}
   };
   if (typeof module !== "undefined" && module.exports) { module.exports = OBOL.D3FEND; }

@@ -110,6 +110,28 @@
     });
   }
 
+  // D3FEND defensive-tactic matrix: the union of the countermeasures across the used ATT&CK techniques,
+  // grouped into the 7 D3FEND tactics (Model/Harden/Detect/Isolate/Deceive/Evict/Restore). Renders as a
+  // recognizable D3FEND matrix, each tactic a coloured column, each countermeasure listing what it counters.
+  function d3fendMatrix(defList) {
+    var d3 = D();
+    var order = d3.tacticOrder || ['Harden', 'Detect', 'Isolate', 'Evict'];
+    var tac = d3.tactics || {};
+    var byCode = {};
+    (defList || []).forEach(function (dfn) {
+      (dfn.d3fend || []).forEach(function (c) {
+        var e = byCode[c.id] || (byCode[c.id] = { id: c.id, name: c.name, tactic: tac[c.id] || '', counters: [] });
+        if (e.counters.indexOf(dfn.id) < 0) e.counters.push(dfn.id);
+      });
+    });
+    var cols = order.map(function (t) {
+      var items = Object.keys(byCode).filter(function (k) { return byCode[k].tactic === t; }).map(function (k) { return byCode[k]; });
+      items.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+      return { tactic: t, items: items };
+    }).filter(function (c) { return c.items.length; });
+    return { tactics: cols, total: Object.keys(byCode).length };
+  }
+
   // Compliance rollup from the matched findings' framework fields. CIS/PCI light up once the coverage
   // pass populates them; NIST/CWE/OWASP are populated today.
   function compliance(findings) {
@@ -168,12 +190,14 @@
     opts = opts || {};
     var findings = opts.findings || (OBOL.findings ? OBOL.findings.assess(fs) : []);
     var use = techniqueUse(findings, opts.activities || []);
+    var def = defensive(use);
     return {
       findings: findings,
       use: use,
       attack: attackMatrix(use),
       killchain: killChain(use),
-      defensive: defensive(use),
+      defensive: def,
+      d3fend: d3fendMatrix(def),
       compliance: compliance(findings),
       cves: cves(findings),
       ready: !!(OBOL.ATTACK && OBOL.ATTACK.techniques),
@@ -186,6 +210,7 @@
     attackMatrix: attackMatrix,
     killChain: killChain,
     defensive: defensive,
+    d3fendMatrix: d3fendMatrix,
     compliance: compliance,
     cves: cves,
   };

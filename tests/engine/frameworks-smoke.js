@@ -75,6 +75,13 @@ ok(comp.cis.some(function (e) { return /CIS 6/.test(e.title) && /Access Control 
 ok(comp.pci.some(function (e) { return /PCI Req 7/.test(e.title) && /Need to Know/.test(e.title); }), 'PCI requirement labelled with its v4 title');
 ok(comp.owasp.some(function (e) { return e.key === 'A01'; }), 'OWASP category derived from a reference link');
 
+// ── D3FEND defensive-tactic matrix (grouped by tactic, MITRE-recognizable) ─────────────────
+ok(m.d3fend && Array.isArray(m.d3fend.tactics), 'compute returns a d3fend matrix');
+ok(m.d3fend.tactics.length >= 1, 'd3fend matrix has at least one tactic column');
+ok(m.d3fend.tactics.every(function (c) { return ['Model', 'Harden', 'Detect', 'Isolate', 'Deceive', 'Evict', 'Restore'].indexOf(c.tactic) >= 0; }), 'd3fend tactic columns are the 7 D3FEND tactics');
+ok(m.d3fend.tactics.some(function (c) { return c.tactic === 'Harden'; }), 'd3fend matrix includes a Harden column (Strong Password Policy etc. for Kerberoast)');
+ok(m.d3fend.tactics.every(function (c) { return c.items.every(function (it) { return it.name && it.counters.length; }); }), 'each d3fend countermeasure names what it counters');
+
 // ── MF5 derivations: recorded-moves trail + finding gap-fill + NIST->CIS/PCI crosswalk ─────
 // recorded-moves trail: an activity that produced hash.kerberoast lights T1558.003 even with no finding
 const withMoves = OBOL.frameworks.compute(new F.FactSet(), {

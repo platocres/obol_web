@@ -194,10 +194,14 @@
     var cols = A.tactics.map(function (col) {
       var cells = col.cells.map(function (c) {
         return '<button type="button" class="fw-cell' + (c.used ? ' used' : '') + '" data-tech="' + U.attr(c.id) + '"'
-          + ' title="' + U.attr(c.id + '  ' + c.name) + '"' + (c.used ? '' : ' tabindex="-1"') + '>'
-          + '<span class="fw-cell-n">' + esc(c.name) + '</span>' + (c.subs.length ? '<span class="fw-cell-sub">' + c.subs.length + '</span>' : '') + '</button>';
+          + ' title="' + U.attr(c.id + '  ' + c.name + (c.subs.length ? '  (' + c.subs.length + ' sub-technique' + (c.subs.length === 1 ? '' : 's') + ' used)' : '')) + '"' + (c.used ? '' : ' tabindex="-1"') + '>'
+          + '<span class="fw-cell-n">' + esc(c.name) + '</span>'
+          + (c.subs.length ? '<span class="fw-cell-st" aria-label="' + c.subs.length + ' sub-techniques used">' + c.subs.length + '</span>' : '') + '</button>';
       }).join('');
-      return '<div class="fw-col"><div class="fw-col-h"><span class="fw-col-n">' + esc(col.name) + '</span><span class="fw-col-c">' + col.usedCount + '/' + col.total + '</span></div><div class="fw-col-cells">' + cells + '</div></div>';
+      return '<div class="fw-col"><div class="fw-col-h"><span class="fw-col-n">' + esc(col.name) + '</span>'
+        + '<span class="fw-col-c">' + col.total + ' technique' + (col.total === 1 ? '' : 's')
+        + (col.usedCount ? '<span class="fw-col-hit">' + col.usedCount + ' used</span>' : '') + '</span></div>'
+        + '<div class="fw-col-cells">' + cells + '</div></div>';
     }).join('');
     return '<p class="route-sub">Your ATT&CK coverage this engagement: <b>' + A.usedTotal + '</b> technique' + (A.usedTotal === 1 ? '' : 's') + ' across <b>' + usedCols + '</b> tactic' + (usedCols === 1 ? '' : 's') + '. Coloured by what you did: a blue team’s SIEM would be trying to detect these. Click a lit cell for detail. ATT&CK v' + esc(A.version || '') + '.</p>'
       + kcStrip
@@ -213,10 +217,32 @@
     return defs.map(techCardHtml).join('');
   }
 
+  var D3_TACTIC_DEF = {
+    Model: 'Asset inventory and modelling', Harden: 'Reduce the attack surface before an attack',
+    Detect: 'Identify adversary activity', Isolate: 'Contain and limit access',
+    Deceive: 'Mislead the adversary', Evict: 'Remove the adversary', Restore: 'Return to a known-good state',
+  };
   function renderDefensive(m) {
     if (!m.defensive.length) return '<p class="route-sub">No techniques to defend against yet. Prove some findings first.</p>';
-    return '<p class="route-sub">How a blue team catches and stops what you did. Each technique you used, with its MITRE D3FEND countermeasures, ATT&CK detection and data sources, and ATT&CK mitigations.</p>'
-      + '<div class="fw-tech-grid">' + m.defensive.map(techCardHtml).join('') + '</div>';
+    var out = '<p class="route-sub">How a blue team catches and stops what you did, as the MITRE D3FEND defensive-tactic matrix. Each countermeasure below counters one or more of the ATT&CK techniques you used.</p>';
+    // the D3FEND matrix: coloured tactic columns with the countermeasures that answer your findings
+    var d3 = m.d3fend || { tactics: [] };
+    if (d3.tactics.length) {
+      out += '<div class="fw-d3-wrap"><div class="fw-d3-matrix">' + d3.tactics.map(function (col) {
+        var cls = 'd3t-' + col.tactic.toLowerCase();
+        var cells = col.items.map(function (it) {
+          return '<div class="fw-d3-cell ' + cls + '" title="' + U.attr(it.id + '  ' + it.name + '  (counters ' + it.counters.join(', ') + ')') + '">'
+            + '<span class="fw-d3-n">' + esc(it.name) + '</span>'
+            + '<span class="fw-d3-c">' + it.counters.length + '</span></div>';
+        }).join('');
+        return '<div class="fw-d3-col"><div class="fw-d3-h ' + cls + '"><span class="fw-d3-tn">' + esc(col.tactic) + '</span>'
+          + '<span class="fw-d3-td">' + esc(D3_TACTIC_DEF[col.tactic] || '') + '</span></div>'
+          + '<div class="fw-d3-cells">' + cells + '</div></div>';
+      }).join('') + '</div></div>';
+    }
+    // per-ATT&CK-technique detail (detection, data sources, mitigations) below the matrix
+    out += '<h2 class="coach-sec-h">Per Technique</h2><div class="fw-tech-grid">' + m.defensive.map(techCardHtml).join('') + '</div>';
+    return out;
   }
 
   function complianceSection(title, list, opts) {

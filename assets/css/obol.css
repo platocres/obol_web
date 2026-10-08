@@ -1831,17 +1831,21 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .fw-matrix { display: flex; align-items: stretch; min-width: min-content; }
 .fw-col { flex: 0 0 158px; width: 158px; border-right: 1px solid var(--line); }
 .fw-col:last-child { border-right: none; }
-.fw-col-h { position: sticky; top: 0; z-index: 2; padding: 6px 8px 5px; background: var(--surf1); border-bottom: 2px solid var(--line-hot); }
+.fw-col-h { position: sticky; top: 0; z-index: 2; padding: 7px 8px 6px; background: var(--surf1); border-bottom: 2px solid var(--line-hot); }
 .fw-col-n { display: block; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; color: var(--text); line-height: 1.2; }
-.fw-col-c { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fw-col-c { display: flex; align-items: baseline; gap: 6px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.fw-col-hit { color: var(--critical); font-weight: 700; }
 .fw-col-cells { display: flex; flex-direction: column; }
-.fw-cell { display: flex; align-items: center; gap: 4px; text-align: left; font: inherit; font-size: 10.5px; line-height: 1.2; min-height: 26px;
-  background: transparent; color: var(--muted); border: 0; border-bottom: 1px solid var(--line); padding: 3px 7px; cursor: default; }
-.fw-cell-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fw-cell.used { color: var(--text); cursor: pointer; font-weight: 600; background: color-mix(in srgb, var(--critical) 20%, transparent); box-shadow: inset 3px 0 0 var(--critical); }
-.fw-cell.used:hover { background: color-mix(in srgb, var(--critical) 30%, transparent); }
-.fw-cell.sel { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 1; }
-.fw-cell-sub { flex: none; font-size: 9px; font-weight: 700; background: var(--critical); color: #fff; border-radius: 8px; padding: 0 5px; }
+.fw-cell { display: flex; align-items: center; gap: 0; text-align: left; font: inherit; font-size: 10.5px; line-height: 1.2; min-height: 32px;
+  background: transparent; color: var(--muted); border: 0; border-bottom: 1px solid var(--line); padding: 0; cursor: default; }
+.fw-cell-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 7px; }
+/* a used ("scored") cell: solid heat fill, like the ATT&CK Navigator */
+.fw-cell.used { color: #fff; cursor: pointer; font-weight: 600; background: color-mix(in srgb, var(--critical) 62%, transparent); }
+.fw-cell.used:hover { background: var(--critical); }
+.fw-cell.sel { outline: 2px solid #fff; outline-offset: -2px; z-index: 1; }
+/* sub-technique sidebar: the Navigator's right-edge marker with the count */
+.fw-cell-st { flex: none; align-self: stretch; display: flex; align-items: center; justify-content: center; min-width: 17px; font-size: 9px; font-weight: 800;
+  color: #fff; background: rgba(0,0,0,.28); border-left: 1px solid rgba(255,255,255,.35); }
 .fw-detail { margin-top: 4px; }
 .fw-detail-hint { color: var(--muted); font-size: 12px; font-style: italic; }
 /* defensive / technique cards */
@@ -1855,6 +1859,26 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .fw-chip { font-size: 10.5px; background: var(--bg3); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--text-2); }
 .fw-chip.you { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 40%, var(--line)); }
 .fw-chip.d3 { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--line)); }
+/* D3FEND defensive-tactic matrix (7 coloured tactic columns, MITRE D3FEND-recognizable) */
+.fw-d3t-model   { --d3: #7a8aa0; }
+.fw-d3t-harden  { --d3: #4f8cff; }
+.fw-d3t-detect  { --d3: #2fbf71; }
+.fw-d3t-isolate { --d3: #9b6cff; }
+.fw-d3t-deceive { --d3: #e05cc0; }
+.fw-d3t-evict   { --d3: #f0872a; }
+.fw-d3t-restore { --d3: #e0c23a; }
+.fw-d3-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); margin-bottom: 18px; }
+.fw-d3-matrix { display: flex; align-items: stretch; min-width: min-content; }
+.fw-d3-col { flex: 0 0 170px; width: 170px; border-right: 1px solid var(--line); }
+.fw-d3-col:last-child { border-right: none; }
+.fw-d3-h { padding: 7px 9px; background: color-mix(in srgb, var(--d3) 24%, transparent); border-bottom: 3px solid var(--d3); }
+.fw-d3-tn { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--d3); }
+.fw-d3-td { display: block; font-size: 9.5px; color: var(--muted); line-height: 1.25; margin-top: 2px; }
+.fw-d3-cells { display: flex; flex-direction: column; }
+.fw-d3-cell { display: flex; align-items: center; gap: 4px; min-height: 30px; padding: 3px 8px; border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--d3) 13%, transparent); box-shadow: inset 3px 0 0 var(--d3); }
+.fw-d3-n { flex: 1; min-width: 0; font-size: 10.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-d3-c { flex: none; font-size: 9px; font-weight: 800; color: #0a0e18; background: var(--d3); border-radius: 8px; padding: 0 5px; }
 /* compliance */
 .fw-comp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px,1fr)); gap: 12px; }
 .fw-comp-sec { border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 13px; background: var(--surf2); }
