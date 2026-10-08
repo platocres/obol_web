@@ -1835,9 +1835,12 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .fw-matrix-wrap { overflow-x: auto; padding-bottom: 8px; margin-bottom: 14px; }
 .fw-matrix { display: flex; gap: 8px; align-items: flex-start; min-width: min-content; }
 .fw-col { flex: 0 0 118px; width: 118px; }
-.fw-col-h { padding: 5px 6px 6px; border-bottom: 2px solid var(--line-hot); margin-bottom: 6px; }
-.fw-col-n { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: var(--text); line-height: 1.2; }
-.fw-col-c { display: flex; flex-wrap: wrap; gap: 0 6px; font-size: 9.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 3px; }
+/* fixed-height header so the underline and the first cell row sit level across every tactic column
+   (names clamp to two lines, the count pins to the bottom edge). */
+.fw-col-h { box-sizing: border-box; height: 54px; display: flex; flex-direction: column; padding: 4px 6px 6px; border-bottom: 2px solid var(--line-hot); margin-bottom: 6px; overflow: hidden; }
+.fw-col-n { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: var(--text); line-height: 1.2;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.fw-col-c { display: flex; align-items: baseline; gap: 0 6px; font-size: 9.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: auto; white-space: nowrap; overflow: hidden; }
 .fw-col-hit { color: var(--critical); font-weight: 700; }
 .fw-col-cells { display: flex; flex-direction: column; gap: 4px; }
 /* chip: neon glass, dim when unused, glowing when used */
