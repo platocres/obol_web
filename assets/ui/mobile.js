@@ -45,6 +45,18 @@
     if (more) more.classList.toggle('active', !matched);
   }
 
+  // Map the current route to the Help section that explains it. Every engagement surface lives under
+  // the one "engagements" section; the global surfaces map to their own section id.
+  var ENG_HELP = { home: 1, targets: 1, path: 1, evidence: 1, map: 1, domain: 1, creds: 1, checklist: 1, findings: 1, history: 1, scoreboard: 1, report: 1, graph: 1, target: 1 };
+  var GLOBAL_HELP = { study: 1, loadout: 1, tools: 1, workbench: 1, stuck: 1, playbooks: 1 };
+  function helpTargetForRoute() {
+    var r = ((root.location.hash || '').replace(/^#\/?/, '').split('/')[0] || '').toLowerCase();
+    if (!r || r === 'help') return '#/help';
+    if (ENG_HELP[r]) return '#/help/engagements';
+    if (GLOBAL_HELP[r]) return '#/help/' + r;
+    return '#/help';
+  }
+
   function wire() {
     var toggleBtn = el('nav-toggle');
     if (toggleBtn) toggleBtn.addEventListener('click', function (e) { e.preventDefault(); var open = !hasCls('drawer-open'); setSheet(false); setDrawer(open); });
@@ -54,6 +66,9 @@
     if (scrim) scrim.addEventListener('click', closeAll);
     var search = el('nav-search');
     if (search) search.addEventListener('click', function (e) { e.preventDefault(); closeAll(); try { if (root.OBOL && root.OBOL.palette) root.OBOL.palette.open(); } catch (x) {} });
+    // Context-aware "?" on-ramp: open Help at the section covering the current screen ("what is this?").
+    var help = el('nav-help');
+    if (help) help.addEventListener('click', function (e) { e.preventDefault(); closeAll(); location.hash = helpTargetForRoute(); });
 
     // Any link tap inside the drawer or the sheet navigates → close everything.
     ['sidebar', 'more-sheet'].forEach(function (id) {

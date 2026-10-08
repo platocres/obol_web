@@ -1055,3 +1055,14 @@ style: no em/en dashes.
   1920 and 390 wide: 3 triage, 9 sections, 27 sub-rows, deep-link opens Workbench's 10 tool rows, Quick
   Start 4 cards + orb, Glossary 10 terms, 0 console errors both sizes. Full engine suite + help-coverage
   + browser-smoke + lint + gap green; assets stamped; house style held.
+- 2026-10-08: H6, the context-aware "?" on-ramp. A new "?" button in the header (visible desktop and
+  mobile, beside Paste and Search) opens Help at the section explaining the CURRENT screen: every
+  engagement surface (Hub, Next Steps, Evidence, Map, Domain, Creds, Checklist, Findings, Run Log,
+  Scoreboard, Report, and the graph/target routes) maps to the one Engagements Help section; a global
+  surface (Workbench, Tools, Stuck?, Playbooks, Learn, Loadout) maps to its own. Wired in mobile.js
+  (helpTargetForRoute reads the route and returns the #/help/<section> deep link, which H1 made open and
+  scroll that section). The Help tab browses; the "?" explains where you stand. Driven headless: from
+  /path it opens #/help/engagements (section open), from /workbench #/help/workbench (section open),
+  visible on desktop and mobile, 0 console errors; mobile header not crowded. browser-smoke + help-
+  coverage green; assets stamped; house style held. Remaining: H2 (deepen per-surface prose), H3
+  (expand glossary), H4 (Help search), H5 (make the Charon quick-start a resumable stepped path).
