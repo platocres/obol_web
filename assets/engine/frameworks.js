@@ -28,6 +28,7 @@
     // recorded moves that lit the technique ({k:'m', t:command}). `.t` is the display label either way.
     var use = {};
     var byKind = (OBOL.ATTACK_MOVE && OBOL.ATTACK_MOVE.byKind) || {};
+    var byMove = (OBOL.ATTACK_MOVE && OBOL.ATTACK_MOVE.byMove) || {};
     function add(tid, c) { if (!tid) return; var arr = use[tid] = use[tid] || []; if (!arr.some(function (x) { return x.k === c.k && x.t === c.t; })) arr.push(c); }
     (findings || []).forEach(function (f) {
       var tid = f.attack;
@@ -37,11 +38,72 @@
     (activities || []).forEach(function (act) {
       if (!act) return;
       var cmd = String(act.command || act.title || '').trim();
+      // Prefer the move's authored technique (BY_MOVE names the ACT). Only fall back to the produced
+      // fact kinds when the move is not named, so a spray lights T1110.003, not also T1078.
+      var mv = act.action_id || act.id || '';
+      if (mv && byMove[mv]) { add(byMove[mv], { k: 'm', t: cmd }); return; }
       (act.produced || []).forEach(function (k) { if (byKind[k]) add(byKind[k], { k: 'm', t: cmd }); });
     });
     return use;
   }
   function useLabels(arr) { return (arr || []).map(function (c) { return c.t; }); }
+
+  // Example-command resolver: for a technique, the obol move(s) whose action performs it, with a
+  // representative command filled for teaching. Powers the grayed-cell hover ("you have not done this
+  // yet, here is what it looks like in obol") and the D3FEND "what this blocks" line. Pure over `pack`.
+  var EXAMPLE_TOKENS = {
+    target: '10.10.10.10', ip: '10.10.10.10', rhost: '10.10.10.10', host: '10.10.10.10',
+    lhost: '10.10.14.2', lport: '4444', domain: 'DOMAIN.LOCAL', dc: 'DC01', dc_ip: '10.10.10.10',
+    user: 'user', username: 'user', password: 'Password123', hash: 'aad3b435b51404ee:<nthash>',
+    hashfile: 'hashes.txt', userlist: 'users.txt', wordlist: '/usr/share/wordlists/rockyou.txt',
+    basedn: 'DC=domain,DC=local', url: 'http://10.10.10.10/', port: '80', share: 'SHARE',
+    binary: '<binary>', service: '<service>', spn: '<spn>', file: '<file>',
+  };
+  function exampleFill(run, params) {
+    params = params || {};
+    return String(run || '').replace(/\{\{(\w+)\}\}/g, function (m, tok) {
+      var v = params[tok];
+      if (v !== undefined && v !== null && String(v).length) return String(v);
+      if (EXAMPLE_TOKENS[tok] !== undefined) return EXAMPLE_TOKENS[tok];
+      return m;   // leave an unknown token visible rather than invent one
+    });
+  }
+  // Earliest-phase-first ordering: show the most ACCESSIBLE way into a technique first (kerberoast
+  // before golden ticket for T1558), not the highest-impact one. Pack priority is a late-game weight,
+  // so phase ordinal (recon<enum<creds<access<escalate<loot) is the right teaching order.
+  var PHASE_ORD = { recon: 0, enum: 1, creds: 2, access: 3, escalate: 4, loot: 5 };
+  function movePhaseOrd(a) {
+    try { if (OBOL.phases && OBOL.phases.phaseOfAction) { var p = OBOL.phases.phaseOfAction(a); if (p in PHASE_ORD) return PHASE_ORD[p]; } } catch (e) {}
+    return 3;   // neutral middle when phases are unavailable
+  }
+  function exampleCommands(technique, pack, opts) {
+    opts = opts || {};
+    var max = opts.max || 2, params = opts.params || {};
+    var byKind = (OBOL.ATTACK_MOVE && OBOL.ATTACK_MOVE.byKind) || {};
+    var byMove = (OBOL.ATTACK_MOVE && OBOL.ATTACK_MOVE.byMove) || {};
+    function underCell(t) { return t === technique || parentOf(t) === technique; }
+    var cand = [], seen = {};
+    function consider(a, why) {
+      if (!a || seen[a.id]) return;
+      var cmds = (a.commands && a.commands.length) ? a.commands : (a.command ? [{ run: a.command, tool: a.tool }] : []);
+      if (!cmds.length) return;
+      var c = cmds[0], run = exampleFill(c.run || a.command || '', params);
+      if (!run) return;
+      seen[a.id] = 1;
+      cand.push({ moveId: a.id, title: a.title || a.id, tool: c.tool || a.tool || '', run: run, why: why,
+        more: cmds.length - 1, ord: movePhaseOrd(a), pri: a.priority || 0 });
+    }
+    // primary: BY_MOVE names the move's act (the authored, correct technique for that move)
+    (pack || []).forEach(function (a) { if (byMove[a.id] && underCell(byMove[a.id])) consider(a, 'act'); });
+    // secondary: a produced fact maps to the technique (skip advice moves and any BY_MOVE-named move,
+    // whose technique is its BY_MOVE one, not a cell its produced fact happens to touch)
+    (pack || []).forEach(function (a) {
+      if (seen[a.id] || byMove[a.id]) return;
+      if ([].concat(a.produces || []).some(function (k) { return byKind[k] && underCell(byKind[k]); })) consider(a, 'proves');
+    });
+    cand.sort(function (a, b) { return a.ord - b.ord || b.pri - a.pri || (a.moveId < b.moveId ? -1 : 1); });
+    return cand.slice(0, max).map(function (e) { return { moveId: e.moveId, title: e.title, tool: e.tool, run: e.run, why: e.why, more: e.more }; });
+  }
 
   // The ATT&CK matrix model: every tactic (in matrix order) with its TOP-LEVEL techniques as cells; a
   // cell is "used" if the technique or any of its sub-techniques was used. Mirrors Splunk's matrix,
@@ -213,6 +275,8 @@
     d3fendMatrix: d3fendMatrix,
     compliance: compliance,
     cves: cves,
+    exampleCommands: exampleCommands,
+    exampleFill: exampleFill,
   };
   if (typeof module !== 'undefined' && module.exports) { module.exports = OBOL.frameworks; }
 })(typeof globalThis !== 'undefined' ? globalThis : this);

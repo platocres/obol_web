@@ -77,6 +77,17 @@ const DET_OVERRIDES = {
   'T1595': 'Port and vulnerability scanning against your perimeter: many connections across ports and hosts from one source, scanner user agents, and IDS scan signatures in firewall and NetFlow data.',
   'T1611': 'A process breaking out of a container to the host: a privileged container, a host mount, or kernel abuse. Watch container-runtime audit logs, unexpected host filesystem writes from a container, and anomalous syscalls.',
   'T1649': 'AD CS abuse: an anomalous certificate request (especially with a subjectAltName for another user), enrollment on a vulnerable template, then a logon with a certificate. Watch CA issuance events 4886/4887 and PKINIT authentications.',
+  'T1003.001': 'A process opening a handle to lsass.exe to read its memory (Sysmon event 10 with a GrantedAccess like 0x1010/0x1410), a MiniDump of lsass via comsvcs.dll, or Mimikatz sekurlsa behaviour. Alert on non-system processes touching lsass.',
+  'T1003.002': 'Reads of the SAM and SYSTEM registry hives, reg save of HKLM\\SAM, or a volume shadow copy created to grab them. Watch event 4656/4663 on the SAM hive and reg.exe saving protected keys.',
+  'T1053.005': 'A new or changed Windows scheduled task (events 4698/4702, the Task Scheduler operational log) running an interpreter or a binary from a user-writable path. Correlate the task author with the action it runs.',
+  'T1053.006': 'A new or edited systemd service or timer unit under /etc/systemd or a user unit directory, especially one with a writable ExecStart or a short OnCalendar. Monitor file writes to unit paths and systemctl daemon-reload.',
+  'T1110.001': 'Online password guessing: repeated logon attempts against a service (SSH, RDP, a web login, SMB) with a wordlist, clustering of 4625 or auth.log failures from one source, then a success. Distinct from offline cracking, which leaves no auth logs.',
+  'T1484': 'Changes to domain or tenant policy that widen privilege: edits to a Group Policy Object or a tenant security setting. Watch directory object-change events (5136) on policy containers and unexpected GPO links.',
+  'T1484.001': 'Edits to a Group Policy Object that push a privileged action (a scheduled task, a script, a new local admin) to linked hosts. Watch event 5136 on GPO objects, changes to SYSVOL policy files, and new GPO links (5141).',
+  'T1550.003': 'Authentication with a stolen or forged Kerberos ticket rather than a password: a TGS or TGT used from a host that never requested it (a 4769 with no matching 4768), or ticket lifetimes and encryption that break policy. Overpass-the-hash shows an RC4 TGT request after a hash theft.',
+  'T1552.005': 'A request to the cloud instance metadata endpoint (169.254.169.254) from a workload that should not call it, often via SSRF in a web app. Watch outbound requests to the metadata IP and app logs showing a server-side fetch of that URL.',
+  'T1558.002': 'A forged service ticket (TGS) encrypted with a service account or computer NTLM hash, used without a corresponding TGS request to the KDC (a service logon 4624 with no 4769). Watch for tickets whose encryption or PAC does not match a real KDC issuance.',
+  'T1574.007': 'A program run with an attacker-controlled PATH so a planted binary resolves ahead of the real one, common with SUID or cron jobs that call a command by bare name. Watch execve of binaries from writable PATH entries and unexpected PATH values in service or cron context.',
 };
 
 function clean(text) {

@@ -113,5 +113,41 @@ const miss = kevd.find(function (c) { return c.cve === 'CVE-1900-0001'; });
 ok(miss && miss.kev === false, 'a non-KEV CVE is not flagged');
 ok(kevd[0].cve === 'CVE-2021-41773', 'CVEs sort KEV-first');
 
+// ── BY_MOVE map accuracy: a run that USES a move lights the move's authored technique, not its fact's ──
+const sprayTrail = OBOL.frameworks.compute(new F.FactSet(), {
+  findings: [],
+  activities: [{ action_id: 'password-spray', command: 'nxc smb dc -u users.txt -p Spring2026', produced: ['credential.available'] }],
+});
+ok(Object.keys(sprayTrail.use).indexOf('T1110.003') >= 0, 'password-spray lights T1110.003 (Password Spraying) via BY_MOVE');
+ok(Object.keys(sprayTrail.use).indexOf('T1078') < 0, 'password-spray does NOT also light T1078 (BY_MOVE wins over the produced-fact map)');
+const pthTrail = OBOL.frameworks.compute(new F.FactSet(), {
+  findings: [], activities: [{ action_id: 'own-domain-pth', command: 'nxc smb dc -u Administrator -H <hash>', produced: ['access.admin'] }],
+});
+ok(Object.keys(pthTrail.use).indexOf('T1550.002') >= 0, 'own-domain-pth lights T1550.002 (Pass the Hash) via BY_MOVE');
+
+// ── exampleCommands: a technique resolves to a real obol move command, filled for teaching ──
+const pdir2 = require('path').join(__dirname, '..', '..', 'data', 'packs');
+let PACK2 = [];
+try {
+  require('../../assets/engine/phases.js'); require('../../assets/engine/pack.js');
+  require('../../assets/engine/profile.js'); require('../../assets/engine/command.js');
+  require('../../assets/engine/workspace.js'); require('../../assets/engine/loot.js');
+  const fsx = require('fs');
+  PACK2 = OBOL.pack.loadPacks(fsx.readdirSync(pdir2).filter(f => f.endsWith('.json'))
+    .map(f => { try { return JSON.parse(fsx.readFileSync(require('path').join(pdir2, f), 'utf8')); } catch (e) { return {}; } }));
+} catch (e) { console.error('  (pack load for exampleCommands failed: ' + e.message + ')'); }
+ok(PACK2.length > 100, 'pack loaded for exampleCommands (' + PACK2.length + ' moves)');
+const exKerb = OBOL.frameworks.exampleCommands('T1558', PACK2, { params: { target: '10.10.10.10' } });
+ok(exKerb.length >= 1 && exKerb.some(function (e) { return /kerberoast/i.test(e.run); }), 'T1558 resolves to a kerberoast example command');
+ok(exKerb.every(function (e) { return e.run.indexOf('{{') < 0 || /\{\{\w+\}\}/.test(e.run); }), 'example command is filled (known tokens substituted)');
+const exSpray = OBOL.frameworks.exampleCommands('T1110.003', PACK2, {});
+ok(exSpray.length >= 1 && exSpray[0].moveId === 'password-spray', 'T1110.003 resolves to the password-spray move');
+const exSuid = OBOL.frameworks.exampleCommands('T1548.001', PACK2, {});
+ok(exSuid.some(function (e) { return e.moveId === 'suid-gtfobins'; }), 'T1548.001 (Setuid) resolves to the SUID abuse move (consume-side act)');
+const exNone = OBOL.frameworks.exampleCommands('T1203', PACK2, {});
+ok(exNone.length === 0, 'a technique obol does not perform (T1203) resolves to no example command (honest blank)');
+// filler leaves an unknown token visible rather than inventing one
+ok(OBOL.frameworks.exampleFill('run {{target}} {{zzznotatoken}}', { target: 'x' }) === 'run x {{zzznotatoken}}', 'exampleFill substitutes known tokens and leaves unknown ones visible');
+
 console.log(fail ? ('\nFRAMEWORKS SMOKE: ' + fail + ' FAILURES') : '\nFRAMEWORKS SMOKE: all passed');
 process.exit(fail ? 1 : 0);
