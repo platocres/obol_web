@@ -59,7 +59,8 @@
   }
 
   function renderStart(H) {
-    var intro = '<div class="help-charon"><div class="help-orb" aria-hidden="true"></div>'
+    // the same ferryman eye as the Stuck? tab, for continuity (reuses .stuck-eye from obol.css)
+    var intro = '<div class="help-charon"><div class="stuck-eye" aria-hidden="true"><span class="stuck-eye-core"></span><span class="stuck-eye-ring"></span></div>'
       + '<p class="help-charon-say">' + esc(H.charonIntro || '') + '</p></div>';
     var cards = (H.quickstart || []).map(function (q, i) {
       return '<div class="help-qs"><div class="help-qs-n" aria-hidden="true">' + (i + 1) + '</div>'
