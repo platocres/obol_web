@@ -150,32 +150,153 @@
     }).join('');
   }
 
-  function render() {
-    var findings = gather();
-    if (!findings.length) {
-      return '<section class="findings-route"><h1 class="route-h1">Findings</h1>'
-        + '<p class="route-sub">No findings yet. Run coach moves and paste the output on Evidence, every move that carries a report finding (anonymous bind, AS-REP roastable, weak password, exposed shares, HTTP/TLS checks…) rolls up here across every host once it is proven.</p></section>';
+  // ── Frameworks sub-views (ATT&CK matrix, Defensive, Compliance, CVEs) ──────────────────────
+  function parentOf(id) { return String(id).indexOf('.') >= 0 ? String(id).split('.')[0] : String(id); }
+
+  function fwModel() {
+    try { return (OBOL.frameworks && OBOL.ATTACK && OBOL.ATTACK.techniques) ? OBOL.frameworks.compute(OBOL.store.factSet()) : null; }
+    catch (e) { return null; }
+  }
+
+  var FW_TABS = [['findings', 'Findings'], ['attack', 'ATT&CK'], ['defensive', 'Defensive'], ['compliance', 'Compliance'], ['cves', 'CVEs']];
+  function fwTabBar(active) {
+    return '<div class="fw-tabs" role="tablist">' + FW_TABS.map(function (t) {
+      return '<button type="button" class="fw-tab' + (t[0] === active ? ' active' : '') + '" data-fwview="' + t[0]
+        + '" role="tab" aria-selected="' + (t[0] === active) + '">' + esc(t[1]) + '</button>';
+    }).join('') + '</div>';
+  }
+
+  // One technique's defensive card: what you did, D3FEND countermeasures, ATT&CK detection, data
+  // sources, mitigations. Reused by the Defensive view and the matrix cell detail.
+  function techCardHtml(def) {
+    return '<div class="fw-tech"><div class="fw-tech-h"><a href="' + U.attr(def.url || 'https://attack.mitre.org/techniques/' + def.id.replace('.', '/') + '/') + '" target="_blank" rel="noopener">' + esc(def.id) + '</a> ' + esc(def.name) + '</div>'
+      + (def.findings && def.findings.length ? '<div class="fw-tech-row"><span class="mini-label">You Did</span> ' + def.findings.map(function (t) { return '<span class="fw-chip you">' + esc(t) + '</span>'; }).join('') + '</div>' : '')
+      + (def.d3fend && def.d3fend.length ? '<div class="fw-tech-row"><span class="mini-label">D3FEND Counters</span> ' + def.d3fend.map(function (c) { return '<span class="fw-chip d3" title="' + U.attr(c.id) + '">' + esc(c.name) + '</span>'; }).join('') + '</div>' : '')
+      + (def.detection ? '<div class="fw-tech-row"><span class="mini-label">Detect</span> <span class="fw-tech-det">' + esc(def.detection) + '</span></div>' : '')
+      + (def.dataSources && def.dataSources.length ? '<div class="fw-tech-row"><span class="mini-label">Data Sources</span> ' + def.dataSources.map(function (d) { return '<span class="fw-chip">' + esc(d) + '</span>'; }).join('') + '</div>' : '')
+      + (def.mitigations && def.mitigations.length ? '<div class="fw-tech-row"><span class="mini-label">ATT&CK Mitigations</span> ' + def.mitigations.map(function (d) { return '<span class="fw-chip">' + esc(d) + '</span>'; }).join('') + '</div>' : '')
+      + '</div>';
+  }
+
+  function renderAttack(m) {
+    var A = m.attack;
+    if (!A.tactics.length || !A.usedTotal) {
+      return '<p class="route-sub">No ATT&CK techniques are mapped from your current findings yet. As you prove more moves (and as the findings coverage grows), the matrix cells light up here. ATT&CK v' + esc(A.version || '') + '.</p>';
     }
+    var usedCols = A.tactics.filter(function (c) { return c.usedCount; }).length;
+    var kcStrip = '<div class="fw-kc">' + m.killchain.map(function (s, i) {
+      var n = s.techniques.length;
+      return (i ? '<span class="fw-kc-arrow">›</span>' : '') + '<span class="fw-kc-stage' + (n ? ' hit' : '') + '">' + esc(s.name) + (n ? ' <b>' + n + '</b>' : '') + '</span>';
+    }).join('') + '</div>';
+    var cols = A.tactics.map(function (col) {
+      var cells = col.cells.map(function (c) {
+        return '<button type="button" class="fw-cell' + (c.used ? ' used' : '') + '" data-tech="' + U.attr(c.id) + '"' + (c.used ? '' : ' tabindex="-1"') + '>'
+          + esc(c.name) + (c.subs.length ? ' <span class="fw-cell-sub">' + c.subs.length + '</span>' : '') + '</button>';
+      }).join('');
+      return '<div class="fw-col"><div class="fw-col-h"><span class="fw-col-n">' + esc(col.name) + '</span><span class="fw-col-c">' + col.usedCount + '/' + col.total + '</span></div><div class="fw-col-cells">' + cells + '</div></div>';
+    }).join('');
+    return '<p class="route-sub">Your ATT&CK coverage this engagement: <b>' + A.usedTotal + '</b> technique' + (A.usedTotal === 1 ? '' : 's') + ' across <b>' + usedCols + '</b> tactic' + (usedCols === 1 ? '' : 's') + '. Coloured by what you did: a blue team’s SIEM would be trying to detect these. Click a lit cell for detail. ATT&CK v' + esc(A.version || '') + '.</p>'
+      + kcStrip
+      + '<div class="fw-matrix-wrap"><div class="fw-matrix">' + cols + '</div></div>'
+      + '<div id="fw-detail" class="fw-detail"><p class="fw-detail-hint">Select a lit technique above to see what you did, how it is detected, and how it is countered.</p></div>';
+  }
+
+  // The detail for one matrix cell: every used technique under it (the cell id, or its sub-techniques).
+  function techDetail(m, cellId) {
+    var ids = Object.keys(m.use).filter(function (u) { return u === cellId || parentOf(u) === cellId; });
+    var defs = ids.map(function (id) { return m.defensive.find(function (d) { return d.id === id; }); }).filter(Boolean);
+    if (!defs.length) return '<p class="fw-detail-hint">Nothing recorded for this technique.</p>';
+    return defs.map(techCardHtml).join('');
+  }
+
+  function renderDefensive(m) {
+    if (!m.defensive.length) return '<p class="route-sub">No techniques to defend against yet. Prove some findings first.</p>';
+    return '<p class="route-sub">How a blue team catches and stops what you did. Each technique you used, with its MITRE D3FEND countermeasures, ATT&CK detection and data sources, and ATT&CK mitigations.</p>'
+      + '<div class="fw-tech-grid">' + m.defensive.map(techCardHtml).join('') + '</div>';
+  }
+
+  function complianceSection(title, list, opts) {
+    opts = opts || {};
+    if (!list.length) {
+      return opts.showEmpty ? '<div class="fw-comp-sec' + (opts.dim ? ' dim' : '') + '"><h3>' + esc(title) + '</h3><p class="fw-empty">' + esc(opts.emptyMsg || 'None mapped from your findings yet.') + '</p></div>' : '';
+    }
+    return '<div class="fw-comp-sec"><h3>' + esc(title) + ' <span class="fw-comp-n">' + list.length + '</span></h3>'
+      + '<ul class="fw-comp-list">' + list.map(function (e) {
+          return '<li><span class="fw-comp-k">' + esc(e.title || e.key) + (e.csf ? ' <span class="fw-csf">' + esc(e.csf) + '</span>' : '') + '</span>'
+            + '<span class="fw-comp-f">' + e.findings.length + ' finding' + (e.findings.length === 1 ? '' : 's') + '</span></li>';
+        }).join('') + '</ul></div>';
+  }
+  function renderCompliance(m) {
+    var c = m.compliance;
+    if (!(c.nist.length || c.cis.length || c.pci.length || c.cwe.length || c.owasp.length)) {
+      return '<p class="route-sub">No compliance mappings from your current findings yet.</p>';
+    }
+    return '<p class="route-sub">Controls and weakness classes your findings map to, for the report and the blue-team conversation. CIS and PCI fill in as the findings coverage grows.</p>'
+      + '<div class="fw-comp-grid">'
+      + complianceSection('NIST SP 800-53', c.nist, { showEmpty: true })
+      + complianceSection('NIST CSF Function', [], { showEmpty: false })
+      + complianceSection('CIS Controls v8', c.cis, { showEmpty: true, emptyMsg: 'Populated as the findings coverage pass maps CIS safeguards.' })
+      + complianceSection('PCI DSS v4', c.pci, { showEmpty: true, dim: true, emptyMsg: 'Shown when the engagement touches cardholder-data scope.' })
+      + complianceSection('CWE (Weakness Class)', c.cwe, { showEmpty: true })
+      + complianceSection('OWASP Top 10', c.owasp, { showEmpty: true })
+      + '</div>';
+  }
+
+  function renderCves(m) {
+    if (!m.cves.length) return '<p class="route-sub">No CVEs detected in your findings yet.</p>';
+    var kevN = m.cves.filter(function (c) { return c.kev; }).length;
+    return '<p class="route-sub"><b>' + m.cves.length + '</b> CVE' + (m.cves.length === 1 ? '' : 's') + ' detected'
+      + (kevN ? ', <b>' + kevN + '</b> actively exploited (CISA KEV)' : '') + '. Actively-exploited first.</p>'
+      + '<div class="fw-cve-list">' + m.cves.map(function (c) {
+          var fix = (c.findings.find(function (x) { return x.remediation; }) || {}).remediation || '';
+          return '<div class="fw-cve' + (c.kev ? ' kev' : '') + '"><div class="fw-cve-h">'
+            + '<a href="https://nvd.nist.gov/vuln/detail/' + U.attr(c.cve) + '" target="_blank" rel="noopener">' + esc(c.cve) + '</a>'
+            + (c.kev ? '<span class="fw-badge kev">Actively Exploited (KEV)</span>' : '')
+            + (c.ransomware ? '<span class="fw-badge rw">Ransomware</span>' : '')
+            + (c.due ? '<span class="fw-cve-due">CISA due ' + esc(c.due) + '</span>' : '') + '</div>'
+            + '<div class="fw-cve-f">' + c.findings.map(function (x) { return '<span class="sev-chip sev-' + esc(normSev(x.severity)) + '">' + esc(normSev(x.severity)) + '</span> ' + esc(x.title); }).join('<br>') + '</div>'
+            + (fix ? '<div class="finding-fix"><span class="mini-label">Fix</span> ' + esc(fix) + '</div>' : '') + '</div>';
+        }).join('') + '</div>';
+  }
+
+  // The classic Findings list (severity/target grouped), extracted so the sub-tab can switch to it.
+  function renderFindingsList(findings) {
     var bySev = {}; SEV_ORDER.forEach(function (s) { bySev[s] = []; });
     findings.forEach(function (f) { (bySev[f.severity] = bySev[f.severity] || []).push(f); });
     var counts = SEV_ORDER.filter(function (s) { return bySev[s].length; })
       .map(function (s) { return '<span class="sev-count sev-' + s + '">' + bySev[s].length + ' ' + s + '</span>'; }).join('');
-
     var hostCount = (function () { var h = {}; findings.forEach(function (f) { h[f.host] = 1; }); return Object.keys(h).length; })();
     var sort = ((OBOL.store.active() || {}).ui || {}).findingsSort === 'target' ? 'target' : 'severity';
     var toggle = hostCount > 1
-      ? '<div class="findings-sort" role="group" aria-label="Group findings by">'
-        + '<span class="mini-label">Group by</span>'
+      ? '<div class="findings-sort" role="group" aria-label="Group findings by"><span class="mini-label">Group by</span>'
         + '<button type="button" class="fsort-btn' + (sort === 'severity' ? ' active' : '') + '" data-fsort="severity">Severity</button>'
-        + '<button type="button" class="fsort-btn' + (sort === 'target' ? ' active' : '') + '" data-fsort="target">Target</button>'
-        + '</div>'
+        + '<button type="button" class="fsort-btn' + (sort === 'target' ? ' active' : '') + '" data-fsort="target">Target</button></div>'
       : '';
     var body = (sort === 'target' && hostCount > 1) ? byTarget(findings) : bySeverity(findings);
-
-    return '<section class="findings-route"><div class="findings-head"><h1 class="route-h1">Findings</h1>' + toggle + '</div>'
+    return toggle
       + '<p class="route-sub">Catalogued, proof-bound findings across ' + hostCount + ' host' + (hostCount === 1 ? '' : 's')
-      + ' (' + findings.length + '). ' + counts + '</p>'
-      + body + '</section>';
+      + ' (' + findings.length + '). ' + counts + '</p>' + body;
+  }
+
+  function render() {
+    var findings = gather();
+    var active = ((OBOL.store.active() || {}).ui || {}).findingsView || 'findings';
+    if (active !== 'findings' && !findings.length) active = 'findings';
+    var head = '<section class="findings-route"><div class="findings-head"><h1 class="route-h1">Findings</h1></div>' + fwTabBar(active);
+
+    if (active === 'findings') {
+      if (!findings.length) {
+        return head + '<p class="route-sub">No findings yet. Run coach moves and paste the output on Evidence, every move that carries a report finding (anonymous bind, AS-REP roastable, weak password, exposed shares, HTTP/TLS checks…) rolls up here across every host once it is proven. The ATT&CK, Defensive, Compliance and CVE views light up from these.</p></section>';
+      }
+      return head + renderFindingsList(findings) + '</section>';
+    }
+    var m = fwModel();
+    if (!m || !m.ready) return head + '<p class="route-sub">Framework data is still loading. Reopen this view in a moment.</p></section>';
+    var body = active === 'attack' ? renderAttack(m)
+      : active === 'defensive' ? renderDefensive(m)
+      : active === 'compliance' ? renderCompliance(m)
+      : active === 'cves' ? renderCves(m) : '';
+    return head + body + '</section>';
   }
 
   function mounted(ctx) {
@@ -184,6 +305,22 @@
       var v = t.getAttribute('data-fsort') === 'target' ? 'target' : 'severity';
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.findingsSort = v; }, 'ui');
       OBOL.router.render();
+    });
+    // sub-view tabs (Findings / ATT&CK / Defensive / Compliance / CVEs)
+    U.on(mount, 'click', '.fw-tab', function (e, t) {
+      var v = t.getAttribute('data-fwview') || 'findings';
+      OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.findingsView = v; }, 'ui');
+      OBOL.router.render();
+    });
+    // matrix cell -> technique detail (ATT&CK view), rendered in place without a full re-render
+    U.on(mount, 'click', '.fw-cell.used', function (e, t) {
+      var id = t.getAttribute('data-tech'); if (!id) return;
+      var slot = document.getElementById('fw-detail'); if (!slot) return;
+      var m = fwModel(); if (!m) return;
+      mount.querySelectorAll('.fw-cell.sel').forEach(function (c) { c.classList.remove('sel'); });
+      t.classList.add('sel');
+      slot.innerHTML = techDetail(m, id);
+      try { slot.scrollIntoView({ block: 'nearest' }); } catch (x) {}
     });
   }
 

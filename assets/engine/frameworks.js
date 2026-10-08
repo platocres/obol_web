@@ -23,9 +23,12 @@
   // The set of ATT&CK techniques the engagement touched, from the matched findings' `attack` field,
   // each with the findings that evidence it.
   function techniqueUse(findings) {
-    var use = {}; // Txxxx (as authored, may be a sub) -> [finding keys]
+    var use = {}; // Txxxx (as authored, may be a sub) -> [finding titles]
     (findings || []).forEach(function (f) {
-      if (f.attack) (use[f.attack] = use[f.attack] || []).push(f.key || f.title || '');
+      if (!f.attack) return;
+      var label = f.title || f.key || '';
+      var arr = use[f.attack] = use[f.attack] || [];
+      if (arr.indexOf(label) < 0) arr.push(label);
     });
     return use;
   }
