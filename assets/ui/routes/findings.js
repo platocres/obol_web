@@ -203,9 +203,13 @@
         + (col.usedCount ? '<span class="fw-col-hit">' + col.usedCount + ' used</span>' : '') + '</span></div>'
         + '<div class="fw-col-cells">' + cells + '</div></div>';
     }).join('');
+    var mode = (((OBOL.store.active() || {}).ui || {}).fwMatrixMode === 'compact') ? 'compact' : 'labeled';
+    var toggle = '<div class="fw-mx-toggle" role="group" aria-label="Matrix density">'
+      + '<button type="button" class="fw-mx-btn' + (mode === 'labeled' ? ' active' : '') + '" data-fwmx="labeled">Labeled</button>'
+      + '<button type="button" class="fw-mx-btn' + (mode === 'compact' ? ' active' : '') + '" data-fwmx="compact">Compact</button></div>';
     return '<p class="route-sub">Your ATT&CK coverage this engagement: <b>' + A.usedTotal + '</b> technique' + (A.usedTotal === 1 ? '' : 's') + ' across <b>' + usedCols + '</b> tactic' + (usedCols === 1 ? '' : 's') + '. Coloured by what you did: a blue team’s SIEM would be trying to detect these. Click a lit cell for detail. ATT&CK v' + esc(A.version || '') + '.</p>'
-      + kcStrip
-      + '<div class="fw-matrix-wrap"><div class="fw-matrix">' + cols + '</div></div>'
+      + kcStrip + toggle
+      + '<div class="fw-matrix-wrap"><div class="fw-matrix fw-matrix--' + mode + '">' + cols + '</div></div>'
       + '<div id="fw-detail" class="fw-detail"><p class="fw-detail-hint">Select a lit technique above to see what you did, how it is detected, and how it is countered.</p></div>';
   }
 
@@ -342,6 +346,15 @@
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.findingsView = v; }, 'ui');
       OBOL.router.render();
     });
+    // ATT&CK matrix density toggle (Labeled chips <-> Compact square heatmap), swapped in place.
+    U.on(mount, 'click', '.fw-mx-btn', function (e, b) {
+      var mode = b.getAttribute('data-fwmx') === 'compact' ? 'compact' : 'labeled';
+      var mx = mount.querySelector('.fw-matrix');
+      if (mx) { mx.classList.remove('fw-matrix--labeled', 'fw-matrix--compact'); mx.classList.add('fw-matrix--' + mode); }
+      mount.querySelectorAll('.fw-mx-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
+      OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.fwMatrixMode = mode; }, 'ui');
+    });
+
     // matrix cell -> technique detail (ATT&CK view), rendered in place without a full re-render
     U.on(mount, 'click', '.fw-cell.used', function (e, t) {
       var id = t.getAttribute('data-tech'); if (!id) return;

@@ -1826,26 +1826,34 @@ svg.obol-engmap .em-dc rect { stroke-dasharray: none; stroke-width: 2.5; }
 .fw-kc-stage.hit { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 45%, var(--line)); background: color-mix(in srgb, var(--critical) 9%, transparent); }
 .fw-kc-stage b { color: var(--critical); }
 .fw-kc-arrow { color: var(--muted); font-size: 13px; }
-/* ATT&CK matrix: tight, ATT&CK-Navigator-style grid (uniform cells, grid lines, sticky headers) */
-.fw-matrix-wrap { overflow: auto; max-height: 72vh; padding-bottom: 2px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); }
-.fw-matrix { display: flex; align-items: stretch; min-width: min-content; }
-.fw-col { flex: 0 0 158px; width: 158px; border-right: 1px solid var(--line); }
-.fw-col:last-child { border-right: none; }
-.fw-col-h { position: sticky; top: 0; z-index: 2; padding: 7px 8px 6px; background: var(--surf1); border-bottom: 2px solid var(--line-hot); }
-.fw-col-n { display: block; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; color: var(--text); line-height: 1.2; }
-.fw-col-c { display: flex; align-items: baseline; gap: 6px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+/* ATT&CK matrix: obol neon chips. Two densities: Labeled (chunky square-ish chips, default) and
+   Compact (a square heatmap, names on hover/click). The tactic columns + heat read as ATT&CK. */
+.fw-mx-toggle { display: inline-flex; gap: 4px; margin: 0 0 10px; }
+.fw-mx-btn { font: inherit; font-size: 11.5px; background: var(--surf2); color: var(--text-2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 12px; cursor: pointer; }
+.fw-mx-btn:hover { border-color: var(--accent); color: var(--text); }
+.fw-mx-btn.active { background: var(--accent-soft); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.fw-matrix-wrap { overflow-x: auto; padding-bottom: 8px; margin-bottom: 14px; }
+.fw-matrix { display: flex; gap: 8px; align-items: flex-start; min-width: min-content; }
+.fw-col { flex: 0 0 118px; width: 118px; }
+.fw-col-h { padding: 5px 6px 6px; border-bottom: 2px solid var(--line-hot); margin-bottom: 6px; }
+.fw-col-n { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: var(--text); line-height: 1.2; }
+.fw-col-c { display: flex; flex-wrap: wrap; gap: 0 6px; font-size: 9.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 3px; }
 .fw-col-hit { color: var(--critical); font-weight: 700; }
-.fw-col-cells { display: flex; flex-direction: column; }
-.fw-cell { display: flex; align-items: center; gap: 0; text-align: left; font: inherit; font-size: 10.5px; line-height: 1.2; min-height: 32px;
-  background: transparent; color: var(--muted); border: 0; border-bottom: 1px solid var(--line); padding: 0; cursor: default; }
-.fw-cell-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 7px; }
-/* a used ("scored") cell: solid heat fill, like the ATT&CK Navigator */
-.fw-cell.used { color: #fff; cursor: pointer; font-weight: 600; background: color-mix(in srgb, var(--critical) 62%, transparent); }
-.fw-cell.used:hover { background: var(--critical); }
-.fw-cell.sel { outline: 2px solid #fff; outline-offset: -2px; z-index: 1; }
-/* sub-technique sidebar: the Navigator's right-edge marker with the count */
-.fw-cell-st { flex: none; align-self: stretch; display: flex; align-items: center; justify-content: center; min-width: 17px; font-size: 9px; font-weight: 800;
-  color: #fff; background: rgba(0,0,0,.28); border-left: 1px solid rgba(255,255,255,.35); }
+.fw-col-cells { display: flex; flex-direction: column; gap: 4px; }
+/* chip: neon glass, dim when unused, glowing when used */
+.fw-cell { display: flex; align-items: flex-start; gap: 4px; min-height: 42px; text-align: left; font: inherit; font-size: 10.5px; line-height: 1.22;
+  background: var(--surf2); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; cursor: default; opacity: .5; }
+.fw-cell-n { flex: 1; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.fw-cell.used { color: var(--text); opacity: 1; cursor: pointer; font-weight: 600; border-color: color-mix(in srgb, var(--critical) 60%, var(--line));
+  background: color-mix(in srgb, var(--critical) 16%, transparent); box-shadow: 0 0 10px -2px color-mix(in srgb, var(--critical) 55%, transparent); }
+.fw-cell.used:hover { border-color: var(--critical); box-shadow: 0 0 15px -1px color-mix(in srgb, var(--critical) 70%, transparent); }
+.fw-cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fw-cell-st { flex: none; font-size: 8.5px; font-weight: 800; color: #fff; background: var(--critical); border-radius: 7px; padding: 0 4px; }
+/* Compact: a heatmap of small rounded squares, wrapped into a block per tactic. */
+.fw-matrix--compact .fw-col-cells { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+.fw-matrix--compact .fw-cell { width: 30px; height: 30px; min-height: 0; padding: 0; align-items: center; justify-content: center; border-radius: 6px; }
+.fw-matrix--compact .fw-cell-n { display: none; }
+.fw-matrix--compact .fw-cell-st { padding: 0 3px; }
 .fw-detail { margin-top: 4px; }
 .fw-detail-hint { color: var(--muted); font-size: 12px; font-style: italic; }
 /* defensive / technique cards */
