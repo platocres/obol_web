@@ -592,6 +592,51 @@
     return out;
   }
 
+  // Marginal-value targeting: of the accounts you do NOT own but could realistically GO GET (an SPN to
+  // Kerberoast, DONT_REQ_PREAUTH to AS-REP, PASSWD_NOTREQD to try blank), which one lands you closest to
+  // Domain Admin? This is the exam move BloodHound does not hand you: it shows paths, but not "which
+  // gettable credential most shortens my route, so that is who I go hunt." Ranked by how many hops owning
+  // the account would SAVE off your current shortest route, then by its own closeness to DA. Restricted to
+  // data-indicated weaknesses so it never becomes generic go-enumerate-everything noise.
+  function bestNextTargets(summary, ownedPrincipals, opts) {
+    opts = opts || {};
+    var limit = opts.limit || 8;
+    summary = summary || {};
+    var ownedSet = {};
+    (ownedPrincipals || []).forEach(function (o) { ownedSet[String(o).split('@')[0].toUpperCase()] = 1; });
+    var cur = ownedPaths(summary, ownedPrincipals || []);
+    var currentBest = (cur.paths && cur.paths[0]) ? cur.paths[0].length : null;
+    var hopMap = {};
+    (nearestToGoal(summary) || []).forEach(function (r) { hopMap[String(r.name).split('@')[0].toUpperCase()] = r.hops; });
+    var out = [], seen = {};
+    function consider(name) {
+      var short = String(name).split('@')[0].toUpperCase();
+      if (!short || seen[short] || ownedSet[short]) return; seen[short] = 1;
+      if (short === 'KRBTGT') return; // the KDC service account is flagged roastable but is never a real hunt target
+      var prof = principalProfile(summary, name);
+      var weaknesses = [];
+      if (prof.asrep_roastable) weaknesses.push('asrep');
+      if (prof.kerberoastable) weaknesses.push('kerberoast');
+      if (prof.password_not_required) weaknesses.push('blankpw');
+      if (!weaknesses.length) return; // only accounts you can actually go get
+      var hops = (short in hopMap) ? hopMap[short] : null;
+      var saves;
+      if (hops == null) saves = 0;
+      else if (currentBest == null) saves = hops; // opens a route where you had none: worth its hop count
+      else saves = Math.max(0, currentBest - hops);
+      out.push({ name: prof.name, short: prof.short, type: prof.type, hops: hops, weaknesses: weaknesses, saves: saves });
+    }
+    (summary.asrep_roastable || []).forEach(consider);
+    (summary.kerberoastable || []).forEach(consider);
+    (summary.password_not_required || []).forEach(consider);
+    out.sort(function (a, b) {
+      var s = b.saves - a.saves; if (s) return s;
+      var ah = a.hops == null ? Infinity : a.hops, bh = b.hops == null ? Infinity : b.hops;
+      return ah - bh || (a.short < b.short ? -1 : 1);
+    });
+    return { currentBest: currentBest, targets: out.slice(0, limit), total: out.length };
+  }
+
   // ── collection diff (temporal: what changed between two SharpHound runs) ──────────────────
   // A compact, comparable snapshot of a collection for diffing: the principals (SID -> name/type),
   // the ABUSABLE control edges and MemberOf edges (the attack surface), and the high-signal census
@@ -1137,6 +1182,7 @@
     principalProfile: principalProfile,
     acquisitionLines: acquisitionLines,
     principalList: principalList,
+    bestNextTargets: bestNextTargets,
     graphFingerprint: graphFingerprint,
     diffCollections: diffCollections,
     pathsToGraph: pathsToGraph,

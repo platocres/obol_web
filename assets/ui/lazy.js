@@ -23,7 +23,7 @@
       'assets/engine/parsers/index.js?v=bf724090',
     ],
     graph: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/graph.js?v=f509cf3e'],
-    domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=af621e2f', 'assets/ui/bhgraph.js?v=c67996b6', 'assets/ui/routes/domain.js?v=45871fc9'],
+    domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=b39b3de5', 'assets/ui/bhgraph.js?v=c67996b6', 'assets/ui/routes/domain.js?v=c256f163'],
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=b4a40b19', 'assets/engine/report.js?v=885cb4fb', 'assets/ui/routes/report.js?v=217e6ca7'],
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=70b2d005', 'assets/ui/routes/tools.js?v=aff6dc97'],
     loadout: ['assets/engine/arsenal.js?v=0761fa4f', 'assets/ui/routes/loadout.js?v=f6d299e1'],

@@ -762,3 +762,27 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   (no em or en dashes, Title Case). Still open from the same discussion thread for a later pass: feeding the
   diff's new-leverage edges into the coach as "a faster route opened", and the bigger "exceed BloodHound"
   ideas (progress-aware overlay, marginal-value who-to-hunt, what-if owned set).
+- 2026-10-08: Domain tab follow-through (owner-directed: the ownedPaths accuracy fix, then the two deferred
+  items). Three commits (Tasks #40-#43):
+  (1) ownedPaths is now BREADTH-first over simple paths (was DFS). A DFS can fill its maxPaths budget with
+  long routes before reaching the short one, so its reported "shortest" could be longer than the true
+  distance (the tab showed "shortest 6 hops" while the dropdown's nearestToGoal, a BFS, said 5). FIFO BFS
+  makes the first goal hit a globally shortest route, so the path length now equals nearestToGoal's hops
+  (confirmed on real Forest: SVC-ALFRESCO is 5, not 6). Node-expansion budget guards a dense graph. Test
+  added; ad-killchain unaffected (domain captured long before any path derivation).
+  (2) Faster-route cue (diff -> coach): at ingest, the shortest owned->DA length is compared against the
+  prior collection's for the same owned set; if it shrank (or a route appeared), summary.diff.route =
+  {now, prev} and the bridge banner leads with "A faster route to Domain Admin opened" plus a bolt-headline
+  in What Changed. The coach already re-ranks on the fresh ad.attack_paths fact; this is the visible cue,
+  not a ranker change. Verified headless across two Forest collections (5 hops -> 1 after a direct edge).
+  (3) "Best Accounts To Hunt Next" (the marginal-value board, the standout "exceed BloodHound" view): new
+  engine bestNextTargets(summary, owned) ranks the accounts you can GO GET right now (their own flags say
+  how: SPN/DONT_REQ_PREAUTH/PASSWD_NOTREQD) by how many hops owning them SAVES off your current route, with
+  a one-line acquisition command each. Restricted to data-indicated weaknesses so it never becomes generic
+  noise; krbtgt excluded (never a real target); self-hides once nothing acquirable is left. Plus owned
+  overlay (an "N owned" head badge, owned markers on the Closest board), and a "ticking is a what-if you
+  can undo" note on the gate. Engine tested; UI driven headless on Forest (hunt board leads with
+  SVC-ALFRESCO "opens a 5-hop route", AS-REP + Shortcut chips, acquisition command; board owned-marks once
+  taken), 0 console errors. Full engine suite + browser-smoke + lint + gap all green; assets stamped; house
+  style held. Remaining from this thread (not built, lower value): a full progress-aware graph overlay and a
+  dedicated what-if sandbox beyond the undoable ownership toggle.

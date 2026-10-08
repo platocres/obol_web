@@ -1149,6 +1149,12 @@ ol.bh-steps li { margin-bottom: 9px; }
 .bh-diff-names { font-family: var(--mono); font-size: 11px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 3px 8px; }
 .bh-diff .bh-princ { list-style: none; padding: 0; margin: 0; }
 .bh-diff .bh-princ li { padding: 2px 0; }
+.bh-owned-count { font-size: 10px; font-weight: 700; color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 45%, var(--line)); border-radius: 5px; padding: 1px 6px; margin-left: 8px; text-transform: uppercase; letter-spacing: .03em; vertical-align: middle; }
+.bh-brow.owned { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
+.bh-hunt { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px,1fr)); gap: 10px; margin: 8px 0 6px; }
+.bh-hunt-row { border: 1px solid var(--line); border-left: 3px solid var(--orange); border-radius: var(--radius); padding: 10px 12px; background: var(--surf2); }
+.bh-hunt-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 5px; }
+.bh-hunt-val { font-size: 11.5px; color: var(--text-2); margin-bottom: 6px; }
 
 /* ---- checklist ---- */
 .chk-phase { margin-bottom: 18px; }

@@ -256,6 +256,19 @@ BH.parse(files).then(function (summary) {
   ok(plist[0].hops != null, 'principalList leads with a principal that has a path to DA');
   ok(plist.some(function (p) { return p.short === 'JEFF' && p.hops === 1; }), 'principalList ranks JEFF at 1 hop to DA');
 
+  // ── bestNextTargets: which gettable account lands you closest to DA ─────────────────────────
+  // With nobody owned, the acquirable accounts (SQLSVC kerberoast, HELPDESK AS-REP, JEFF blank) are all
+  // candidates; JEFF reaches the domain in 1 hop so it leads (opens a route). SQLSVC/HELPDESK have no path.
+  const hunt = BH.bestNextTargets(summary, []);
+  ok(hunt && Array.isArray(hunt.targets), 'bestNextTargets returns a targets list');
+  ok(hunt.targets.some(function (t) { return t.short === 'JEFF' && t.weaknesses.indexOf('blankpw') >= 0; }), 'bestNextTargets includes JEFF (blank password) as acquirable');
+  ok(hunt.targets[0].short === 'JEFF', 'bestNextTargets leads with JEFF (opens a 1-hop route to DA)');
+  ok(hunt.targets.some(function (t) { return t.short === 'SQLSVC' && t.weaknesses.indexOf('kerberoast') >= 0; }), 'bestNextTargets includes SQLSVC (kerberoastable)');
+  ok(hunt.targets.every(function (t) { return t.short !== 'ADMINISTRATOR'; }), 'bestNextTargets excludes accounts with no self-evident weakness');
+  // once JEFF is owned, it drops out of the hunt list (you already have it)
+  const hunt2 = BH.bestNextTargets(summary, ['JEFF']);
+  ok(hunt2.targets.every(function (t) { return t.short !== 'JEFF'; }), 'bestNextTargets excludes an owned account');
+
   // ── graphFingerprint + diffCollections: temporal diff between two runs ───────────────────────
   const fp1 = BH.graphFingerprint(summary);
   ok(fp1 && fp1.principals && fp1.control && fp1.members, 'graphFingerprint captures principals + edges');

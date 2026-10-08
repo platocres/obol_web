@@ -218,7 +218,7 @@
             }).join('') + '</div>';
       }
       out += '<div class="bh-gate"><label class="bh-gate-own"><input type="checkbox" class="bh-own-check" data-own="' + U.attr(shortName(principal)) + '"> I Own This Account Now</label>'
-        + '<p class="bh-gate-note">The commands for walking this account’s path stay hidden until you own it. They unlock when you tick this box, paste proof of the login on Next Steps, or re-upload BloodHound after you take it over.</p></div>';
+        + '<p class="bh-gate-note">The commands for walking this account’s path stay hidden until you own it. They unlock when you tick this box, paste proof of the login on Next Steps, or re-upload BloodHound after you take it over. Ticking is a what-if you can undo: untick to revert.</p></div>';
     }
     return out + '</div>';
   }
@@ -283,6 +283,42 @@
     return out + '</div>';
   }
 
+  // "Best Accounts To Hunt Next": the marginal-value targeting board. The accounts you can go get right
+  // now (their own flags say how), ranked by how close owning them puts you to Domain Admin, each with
+  // its one-line acquisition command. The standout "exceed BloodHound" view: not paths, but who to hunt.
+  function huntHtml(summary, owned, ctx) {
+    var hunt = OBOL.bloodhound.bestNextTargets(summary, owned, { limit: 50 });
+    if (!hunt.targets.length) return '';
+    var acqCtx = Object.assign({}, ctx, { you: (owned && owned[0]) ? shortName(owned[0]) : null });
+    var chipName = { asrep: 'AS-REP', kerberoast: 'Kerberoast', blankpw: 'Blank Password' };
+    function valueLine(t) {
+      if (t.hops == null) return 'A free credential, no direct path to Domain Admin from it.';
+      if (hunt.currentBest == null) return 'Opens a route to Domain Admin: ' + t.hops + ' hop' + (t.hops === 1 ? '' : 's') + '.';
+      if (t.saves > 0) return t.hops + ' hop' + (t.hops === 1 ? '' : 's') + ' to Domain Admin, a shortcut that saves ' + t.saves + ' hop' + (t.saves === 1 ? '' : 's') + '.';
+      return t.hops + ' hop' + (t.hops === 1 ? '' : 's') + ' to Domain Admin.';
+    }
+    function rowHtml(t) {
+      var acq = OBOL.bloodhound.acquisitionLines(summary, t.name, acqCtx)[0];
+      var cmd = acq ? ('<div class="bh-cmd"><code>' + esc(acq.cmd) + '</code><button class="btn-copy" data-copy="' + U.attr(acq.cmd) + '">Copy</button></div>') : '';
+      return '<div class="bh-hunt-row"><div class="bh-hunt-top">'
+        + '<button class="bh-princ-x" data-explore="' + U.attr(t.name) + '">' + esc(t.short) + '</button> <span class="bh-x-kind">' + esc(t.type) + '</span>'
+        + t.weaknesses.map(function (w) { return '<span class="bh-tag warn">' + esc(chipName[w] || w) + '</span>'; }).join('')
+        + (t.saves > 0 ? '<span class="bh-tag crit">Shortcut</span>' : '') + '</div>'
+        + '<div class="bh-hunt-val">' + esc(valueLine(t)) + '</div>' + cmd + '</div>';
+    }
+    var rows = hunt.targets.map(rowHtml);
+    var out = '<h2 class="coach-sec-h">Best Accounts To Hunt Next</h2>'
+      + '<p class="route-sub">Accounts you can go get right now (their own BloodHound flags say how), ranked by how close owning them puts you to Domain Admin. On an exam, go hunt these.</p>';
+    if (rows.length <= 6) {
+      out += '<div class="bh-hunt">' + rows.join('') + '</div>';
+    } else {
+      out += '<div class="bh-hunt">' + rows.slice(0, 6).join('') + '</div>'
+        + '<div class="bh-hunt bh-more" hidden>' + rows.slice(6).join('') + '</div>'
+        + '<button class="bh-more-btn" type="button">+ ' + (rows.length - 6) + ' more target' + (rows.length - 6 === 1 ? '' : 's') + '</button>';
+    }
+    return out;
+  }
+
   function render() {
     var eng = OBOL.store.active();
     var summary = eng && eng.bloodhound;
@@ -309,7 +345,8 @@
       }).join('');
 
       html += '<div class="bh-summary-head"><h2 class="coach-sec-h">' + esc(summary.domain || 'domain')
-        + ': ' + (typeof summary.users === 'number' ? summary.users : (summary.users ? summary.users.length : 0)) + ' users, ' + (summary.computers ? summary.computers.length : 0) + ' computers</h2>'
+        + ': ' + (typeof summary.users === 'number' ? summary.users : (summary.users ? summary.users.length : 0)) + ' users, ' + (summary.computers ? summary.computers.length : 0) + ' computers'
+        + (owned.length ? ('<span class="bh-owned-count">' + owned.length + ' owned</span>') : '') + '</h2>'
         + '<div class="bh-head-controls"><label class="bh-inspect-lbl">Inspect <select id="bh-inspect" class="bh-select">' + opts + '</select></label>'
         + '<button id="bh-report" class="btn-primary">Open Report</button></div></div>'
         + '<div id="bh-inspect-slot" class="bh-inspect-slot"></div>';
@@ -336,13 +373,17 @@
         + (owned.length ? '' : '<div class="coach-empty">Own an account (a credential, or tick "I Own This" on an inspected account) to derive and graph owned→Domain-Admin paths.</div>')
         + '</div>';
 
+      // Best Accounts To Hunt Next: the marginal-value board (who to go get to land closest to DA).
+      html += huntHtml(summary, owned, cmdCtx(owned, true));
+
       // Targeting board: who is closest to Domain Admin. Click a row to inspect that account. The whole
       // list is available behind "+ N more" so you can explore all the data, not just the top 12.
       var near = (OBOL.bloodhound.nearestToGoal(summary) || []).filter(function (r) { return /user|group|computer/.test(r.type); });
       if (near.length) {
         function browHtml(r) {
-          return '<button class="bh-brow" data-explore="' + U.attr(r.name) + '"><span class="bh-bhops">' + r.hops + ' hop' + (r.hops === 1 ? '' : 's') + '</span>'
-            + '<span class="bh-btype">' + esc(r.type) + '</span><span class="bh-bname">' + esc(shortName(r.name)) + '</span></button>';
+          var isOwn = ownedUpper[shortName(r.name).toUpperCase()];
+          return '<button class="bh-brow' + (isOwn ? ' owned' : '') + '" data-explore="' + U.attr(r.name) + '"><span class="bh-bhops">' + r.hops + ' hop' + (r.hops === 1 ? '' : 's') + '</span>'
+            + '<span class="bh-btype">' + esc(r.type) + '</span><span class="bh-bname">' + esc(shortName(r.name)) + (isOwn ? ' <span class="bh-tag own">owned</span>' : '') + '</span></button>';
         }
         html += '<h2 class="coach-sec-h">Closest To Domain Admin</h2>'
           + '<p class="route-sub">Fewest hops to Domain Admin, who to go after next. Click a row to inspect that account’s paths and what it controls.</p>'
