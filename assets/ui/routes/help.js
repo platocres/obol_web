@@ -83,7 +83,7 @@
       + '<div class="help-glossary">' + terms + '</div>';
   }
 
-  var TABS = [['index', 'Index', '#/help'], ['start', 'Quick Start', '#/help/start'], ['glossary', 'Glossary', '#/help/glossary']];
+  var TABS = [['start', 'Quick Start', '#/help/start'], ['index', 'Index', '#/help/index'], ['glossary', 'Glossary', '#/help/glossary']];
   function tabBar(active) {
     return '<div class="help-tabs" role="tablist">' + TABS.map(function (t) {
       return '<a class="help-tab' + (t[0] === active ? ' active' : '') + '" href="' + t[2] + '" role="tab" aria-selected="' + (t[0] === active) + '">' + esc(t[1]) + '</a>';
@@ -95,8 +95,10 @@
   function render(ctx) {
     var H = OBOL.HELP || {};
     var sub = subOf(ctx);
-    var tab = sub === 'start' ? 'start' : sub === 'glossary' ? 'glossary' : 'index';
-    var focus = (tab === 'index' && sub) ? sub : '';
+    // Quick Start leads: a bare #/help opens it. The Index tab is #/help/index; a section id
+    // (#/help/engagements, from the "?" on-ramp) opens the Index focused on that section.
+    var tab = sub === 'glossary' ? 'glossary' : (sub === '' || sub === 'start') ? 'start' : 'index';
+    var focus = (tab === 'index' && sub && sub !== 'index') ? sub : '';
     var head = '<section class="help-route"><div class="help-head"><h1 class="route-h1">Help</h1>'
       + '<p class="route-sub">What each part of obol is for, and when to reach for it. This is the map. For how to pentest, see Learn and the field notes.</p></div>'
       + tabBar(tab);
@@ -117,7 +119,8 @@
       var go = b.getAttribute('data-goto'); if (go) location.hash = go;
     });
     // a deep link to a section opens it (the <details open> above) and scrolls it into view
-    var focus = (subOf(ctx) && subOf(ctx) !== 'start' && subOf(ctx) !== 'glossary') ? subOf(ctx) : '';
+    var s = subOf(ctx);
+    var focus = (s && s !== 'start' && s !== 'glossary' && s !== 'index') ? s : '';
     if (focus) {
       var el = mount.querySelector('#help-' + (window.CSS && CSS.escape ? CSS.escape(focus) : focus));
       if (el) { try { el.open = true; el.scrollIntoView({ block: 'start' }); } catch (x) {} }
