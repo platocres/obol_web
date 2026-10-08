@@ -952,3 +952,106 @@ screenshot the changed surface at desktop + mobile and read it for sense. House 
   engine suite + browser-smoke + lint + coverage + gap all green; catalog regenerated; assets stamped;
   driven headless at 1080p (grayed example hover + copyable detail panel + D3FEND "what this blocks", 0
   console errors). Presentation only: no ranker fork, one store, pack commands the source of truth.
+
+---
+
+## Active build: Help tab (global nav) (in progress, PR #302 branch)
+
+**Plan of record. If this chat is lost, resume here. Branch `claude/obol-web-overhaul-local-59ttbx`.
+Commit frequently.**
+
+### Intention
+
+obol now has 35+ surfaces (7 global nav sections, 12 engagement sub-surfaces grouped Work the Box /
+Analyze / Track & Report, 11 Workbench tools, 5 Findings sub-views, the Domain tab's panels). For a
+neurodivergent and disabled audience that is too much to be intuitive, and a landing-page blurb will
+not carry it. Add a global **Help** tab that breaks obol down by section then sub-section, with an
+index, an obol-vocabulary glossary, search, and a calm Charon quick-start, plus a context-aware "?"
+on-ramp from any screen. Help answers "how do I use obol," never "how do I pentest" (that is Learn and
+the field notes); Help is the MAP, Learn is the curriculum. This boundary keeps Help from becoming a
+second firehose.
+
+### Decisions locked (owner-approved)
+
+- **Help home: triage first, index below.** Three intent cards on top (I'm new -> Charon quick-start;
+  I'm working a box -> the Paste -> Next Steps -> Workbench -> Stuck? workflow; I'm looking for
+  something -> index/search), then the collapsible by-section index. Same triage pattern as Stuck?.
+- **Index: by section then sub-section, accordion, collapsed by default** (progressive disclosure, so
+  the first screen is seven calm cards, not a wall). Each sub-section: a one-line "What it's for" + a
+  "When to use it" + a Go There deep link.
+- **Glossary: obol vocabulary only** (fact, move, the ledger, settled, locus, prematurity, proof-gated,
+  the coach, Next Steps, Workbench, Stuck?, Loadout). Pentest jargon stays in Learn / field notes. Keeps
+  the Help-vs-Learn boundary and limits authoring.
+- **Charon quick-start: a calm, self-paced card path** (NOT a screen-hijacking spotlight tour). Charon
+  introduces the 3-4 first things as clickable cards, at your own pace, skippable and resumable
+  (progress saved per browser). Charon briefly introduces himself in character: in the old job he rowed
+  the dead across the Styx for an obol a head; off the clock he moonlights here rowing the living to
+  root, same fee, better company. Warm and brief; house style (no em or en dashes).
+- **Context-aware "?" on-ramp: yes.** A "?" affordance that, from any screen, opens Help at that
+  screen's section ("What is this?"). The Help tab is home; the "?" is the on-ramp from wherever you
+  stand. The biggest discoverability win.
+
+### Boundaries (unchanged)
+
+- Static, browser-local, no backend, no execution, no telemetry. Presentation only: Help documents the
+  app, it never changes the ranker, the move graph, the one store, or the one filler.
+- Accessibility is acceptance: accordions keyboard-operable, colour never the sole signal, 11px font
+  floor, `prefers-reduced-motion` honoured (the Charon orb and any shimmer), works 4K down to ~320px.
+- House style: no em or en dashes; Title Case for the tab, labels, headings.
+
+### Derive-don't-duplicate (the honesty lever)
+
+The index SKELETON is already data: the global nav list and the ctxbar `SUBNAV` groups and the
+Workbench tool list. Author the Help tree in `data/help-content.js`, then a coverage smoke test
+(`tests/engine/help-coverage.js`, the guardrail) asserts every real route and nav surface has a Help
+entry, so Help cannot silently drift from the app (the field-notes-coverage pattern). Half the glossary
+can reuse `OBOL.pack.friendly(kind)` / `OBOL.workbench.explainKind()`; the rest is a hand-authored
+supplement.
+
+### Phases (check off as completed)
+
+- [ ] **H1.** Help route + global nav item (desktop + mobile More sheet) + lazy group. Derived index
+  accordion (sections -> subs, each a one-line What + Go There deep link), deep-linkable
+  (#/help, #/help/<section>, #/help/glossary, #/help/start). Coverage smoke test. Triage cards on top.
+- [ ] **H2.** Authored What / When prose per surface (field-note voice), the full Workbench and Findings
+  sub-trees.
+- [ ] **H3.** Glossary (obol vocabulary), reusing friendly()/explainKind() + a hand-authored supplement,
+  cross-linked to the sections that use each term.
+- [ ] **H4.** Search across Help (section names, sub-sections, glossary) that jumps you there; unify
+  with or complement the existing nav-search.
+- [ ] **H5.** Charon quick-start card path (reuse the Ferryman persona + reduced-motion gating),
+  skippable and resumable, with the in-character intro.
+- [ ] **H6.** Context-aware "?" on-ramp in the header that opens Help at the current screen's section.
+
+### Verify each phase (same as the project)
+
+`node tools/field-notes-coverage.js` · `node tools/lint-study.js --check` · `node tools/gap-report.js
+--check` · `node tools/attack-coverage.js` · `node tools/help-coverage.js` (once H1 lands) ·
+`for t in tests/engine/*.js; do node "$t"; done` · `NODE_PATH=/opt/node-tools/node_modules node
+tests/browser-smoke.js` · `node tools/stamp-assets.js` (after any asset edit) · drive the app headless
+(0 console errors) · screenshot the Help surface at desktop + mobile and read it for sense. House
+style: no em/en dashes.
+
+### Status log (update per commit)
+
+- 2026-10-08: H0, plan documented. Nav inventory confirmed (7 global; SUBNAV groups Work the box /
+  Analyze / Track & report in ctxbar.js; 10-11 Workbench tools; 5 Findings sub-views). Owner locked:
+  triage+index home, obol-vocabulary glossary, calm Charon card-path quick-start with an in-character
+  moonlighting intro, context-aware "?" on-ramp.
+- 2026-10-08: H1 shipped the Help tab skeleton. New global route assets/ui/routes/help.js + content in
+  data/help-content.js (OBOL.HELP: triage, sections, glossary, quickstart, Charon intro), lazy `help`
+  group, Help in the primary nav and the mobile More sheet. Three sub-views (Index / Quick Start /
+  Glossary), deep-linkable: #/help, #/help/<sectionId> (Index with that section open + scrolled),
+  #/help/start, #/help/glossary. Index = three triage cards (I Am New / Working A Box / Looking For
+  Something) over a collapsible <details> accordion of all 9 top sections (Engagements with its Work
+  the Box / Analyze / Track & Report groups, Learn, Loadout, Tools, Workbench with its 10 tools, Stuck?,
+  Playbooks, Paste, Search), each row a one-line What + a Go There deep link (Findings sub-views carry a
+  `set` that flips eng.ui.findingsView before navigating). Quick Start = Charon's glowing orb + his
+  in-character moonlighting intro + the four first-things cards. Glossary = 10 obol-vocabulary terms
+  (H3 expands). Coverage guardrail tests/engine/help-coverage.js asserts every real nav surface + every
+  Workbench tool + every Findings sub-view has an entry, and no em/en dashes (added to the verify list).
+  Fixed a self-caught bug: the triage cards reused the .help-go class whose white-space:nowrap made the
+  body text overflow and overlap; decoupled behavior (bind [data-goto]) from styling. Driven headless at
+  1920 and 390 wide: 3 triage, 9 sections, 27 sub-rows, deep-link opens Workbench's 10 tool rows, Quick
+  Start 4 cards + orb, Glossary 10 terms, 0 console errors both sizes. Full engine suite + help-coverage
+  + browser-smoke + lint + gap green; assets stamped; house style held.

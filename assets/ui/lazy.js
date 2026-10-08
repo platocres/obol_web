@@ -39,6 +39,7 @@
     map: ['assets/engine/engmap.js?v=488914b1', 'assets/ui/routes/map.js?v=b415a554'],
     findings: ['data/attack-catalog.js?v=2c0cff09', 'data/attack-move-map.js?v=38c74367', 'data/d3fend-map.js?v=c8b35d9d', 'data/frameworks-tables.js?v=169ba840', 'data/kev-catalog.js?v=e8b4d122', 'assets/engine/frameworks.js?v=50ac05e2', 'assets/ui/routes/findings.js?v=3657fdb9'],
     history: ['assets/ui/routes/history.js?v=f2888760'],
+    help: ['data/help-content.js?v=30e9e30e', 'assets/ui/routes/help.js?v=aca8ece5'],
   };
 
   var _loaded = {};   // group -> Promise
@@ -73,7 +74,7 @@
 
   // Register placeholder routes that lazy-load their group then delegate to the real route.
   function registerLazyRoutes(R) {
-    ['loadout', 'workbench', 'stuck', 'study', 'tools', 'domain', 'report', 'checklist', 'graph', 'target', 'creds', 'scoreboard', 'playbooks', 'map', 'findings', 'history'].forEach(function (name) {
+    ['loadout', 'workbench', 'stuck', 'study', 'tools', 'domain', 'report', 'checklist', 'graph', 'target', 'creds', 'scoreboard', 'playbooks', 'map', 'findings', 'history', 'help'].forEach(function (name) {
       R.register(name, {
         ensure: function () { return loadGroup(name); },
         render: function (ctx) {
