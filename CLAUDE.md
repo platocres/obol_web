@@ -872,7 +872,8 @@ Fold into the **Findings tab** as sub-views (same sub-tab pattern as Workbench),
 ### Verify each phase (same as the project)
 
 `node tools/field-notes-coverage.js` · `node tools/lint-study.js --check` ·
-`node tools/gap-report.js --check` · `for t in tests/engine/*.js; do node "$t"; done` ·
+`node tools/gap-report.js --check` · `node tools/attack-coverage.js` (ATT&CK map integrity + gap list) ·
+`for t in tests/engine/*.js; do node "$t"; done` ·
 `NODE_PATH=/opt/node-tools/node_modules node tests/browser-smoke.js` ·
 `node tools/stamp-assets.js` (after any asset edit) · drive the app headless (0 console errors) ·
 screenshot the changed surface at desktop + mobile and read it for sense. House style: no em/en dashes.
