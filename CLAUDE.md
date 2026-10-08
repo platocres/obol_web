@@ -240,6 +240,53 @@ test regressions. The probabilistic-rewrite steps below remain deferred and, per
 look UNNECESSARY so far (the current ranker scores clean on the rubric once move-data is right). Keep
 using ranker-sim.js as the scoreboard for any future tuning. The brief below stays for reference.**
 
+### How to run the scoreboard (procedure for a future chat, follow this)
+
+This is the exact loop this session used to find and fix ranking / move-data problems. Reproduce it
+whenever a move seems to rank wrong, or before and after ANY ranker or move-data change.
+
+1. **Two tools, both read-only (they never touch the ranker):**
+   - `node tools/ranker-sim.js` (add `--verbose` for every violation). The curated scoreboard: 42
+     states (7 archetypes x 6 stages). This is the gate. It must print `0 / 42`.
+   - `node tools/ranker-sweep.js [--n 4000] [--seed 1] [--show 3]`. The broad fuzzer: thousands of
+     sampled port-sets x stages x injected findings, judged by ranker-sim's SAME rubric (exported, one
+     source of truth) and CLUSTERED by (principle + leading move), so the output is "N issue patterns,"
+     not a wall. Use it to catch what the 42 curated states miss.
+2. **Read the board.** Each violation names a rubric PRINCIPLE (ad_lane_leads, no_brute_in_lead,
+   no_unguarded_cve_lead, no_premature_loot, no_privesc_before_foothold, validate_first,
+   command_sanity) and an example state (its archetype, stage, ports, and the top moves). A clean run
+   is `0` violations.
+3. **Triage each pattern BEFORE touching the ranker.** The thesis this project proved repeatedly: most
+   "ranking" problems are NOT ranking-math. Sort every violation into one of:
+   - **move-data** (a move's requires/produces is wrong, so it is eligible when it should not be, or
+     its command keys on a token it should not): fix the pack JSON, regenerate the bundle.
+   - **parser / fact correctness** (the ranker did the right thing with a wrong fact): fix the parser.
+   - **a correctness filter** (a command should be hidden until a token is earned): that is path.js
+     gating, not a weight.
+   - **a genuine ranking rule** (sequencing / a real preference): only THIS is a ranker change, and it
+     goes in as a soft tiebreak BELOW the hand-tuned priority (see nextActionsV2), measured on the sim,
+     reverted on any regression.
+   Expect ~2 of every 3 real issues to be move-data, not ranking.
+4. **Two gotchas that cost this session real time, do not repeat them:**
+   - **Load the FULL engine, including `assets/engine/loot.js`, in any harness.** ranker-sim.js now
+     requires it (ranker-sweep.js inherits it). Without loot.js, output-path and discovery tokens
+     ({{hashfile}}, a discovery {{userlist}}) never resolve, so command_sanity flags violations the
+     LIVE app never shows. A sim that does not mirror the real filler cries wolf.
+   - **Fix only what a user would actually SEE and be confused by.** A command hidden by path.js
+     gating until a token is earned is fine (the user never sees it). A move that can only ever render
+     as a dead or backwards card is not. Confirm which by driving the real app headless (below), not by
+     reading raw ranker output.
+5. **Verify every change against ALL of:** `node tools/ranker-sim.js` (must stay `0 / 42`), the broad
+   sweep (must not regress), the full engine suite (`for t in tests/engine/*.js; do node "$t"; done`,
+   especially ranker-smoke, corpus-smoke, ad-killchain-e2e, locus-scope-smoke), the guardrails
+   (field-notes-coverage, lint-study, gap-report, browser-smoke), then stamp assets. Finally, drive the
+   app headless on the relevant seeded state and read the card for sense (0 console errors): a scratchpad
+   driver that serves the repo and parses evidence into facts is the pattern (see the drive-*.js helpers
+   this session wrote; they seed via OBOL.store.setParam + the Evidence paste box).
+6. **To extend coverage:** add an archetype or stage to ARCHETYPES / STAGES in ranker-sim.js (the
+   curated gate), or widen the sampler in ranker-sweep.js. The rubric lives ONCE in ranker-sim.js and is
+   exported to the sweep, so change a principle in one place only.
+
 ### The problem (why this exists)
 
 Coach next-move tuning never converges and never feels satisfactory. Worse than it looks from any
@@ -337,6 +384,9 @@ maintenance surface (new facts need authored likelihoods).
   cmdGated, nsCommandRows).
 - Existing ranker/corpus tests to extend: `tests/engine/corpus-smoke.js`, `ranker-smoke.js`,
   `ranker-*-smoke.js`, `locus-scope-smoke.js`, `decisionmap-smoke.js`, `workflow-preference-smoke.js`.
+- Scoreboard tools (the measured-tuning loop, see "How to run the scoreboard" above):
+  `tools/ranker-sim.js` (curated 42-state gate) and `tools/ranker-sweep.js` (broad fuzzer, reuses the
+  sim's rubric). Both read-only; both carry a usage header.
 - Architecture overview: `ARCHITECTURE.md` (ranker section).
 
 ### Kill criterion
