@@ -904,3 +904,20 @@ screenshot the changed surface at desktop + mobile and read it for sense. House 
   errors. Full engine suite + browser-smoke + lint + gap green; assets stamped; house style held.
   Remaining (future, accuracy-first): hand-author explicit attack/nist on more of the 552 catalogue
   findings to raise the authored (non-derived) coverage; the derivational layer already carries the view.
+- 2026-10-08: ATT&CK matrix hover cards + detection backfill (owner-directed). (1) Cursor-following
+  hover card on every matrix cell in BOTH densities (Labeled and Compact, where the squares carry no
+  label): a lit cell flips what-you-did to engagement insight (the findings that mint it with severity
+  + CVE/KEV, the commands you ran, its used sub-techniques, then the blue-team view: how it is detected
+  and the D3FEND countermeasures that answer it); an unlit cell teaches (what it is + how a defender
+  spots it). The engine's techniqueUse now returns contribution objects ({k:'f',t:title,sev,cve,kev} /
+  {k:'m',t:command}); the matrix cells + defensive lens keep label arrays via a useLabels() view. Card
+  lives on <body>, follows the pointer, flips to stay on-screen, fade honours prefers-reduced-motion;
+  the verbose native title is dropped for an aria-label. (2) Detection backfill: ATT&CK v19.2 ships NO
+  x_mitre_detection text at all (0/697, the field was dropped for detection analytics), so the hover's
+  "Blue Team Detects" line and the Defensive cards were blank. Added DET_OVERRIDES in tools/build-attack.js
+  (48 obol-authored blue-team detection blurbs, one per technique the Frameworks view surfaces), applied
+  ONLY where ATT&CK carries none (|| fallback, so a future ATT&CK restore wins), attributed as obol's own
+  content (not MITRE's) in the generated-file header. Catalog regenerated (133 -> 143 KB). All 48
+  surfaceable techniques now carry detection text; 0 en/em dashes. Full engine suite + frameworks-smoke +
+  browser-smoke + lint + coverage + gap green; assets stamped; driven headless at 1080p in both modes
+  (0 console errors), the Detect line now renders. House style held.
