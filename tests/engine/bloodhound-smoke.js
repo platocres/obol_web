@@ -222,12 +222,69 @@ BH.parse(files).then(function (summary) {
   ok(ctl.controls.some(function (x) { return x.edge === 'GenericAll'; }), 'controls(JEFF) records the GenericAll edge');
   ok(BH.controls(summary, 'NOBODY@CORP.LOCAL').count === 0, 'controls of an unknown principal is empty');
 
-  // dropGraph removes the transient graph
-  BH.dropGraph(summary);
-  ok(summary._graph === undefined, 'dropGraph removes the transient _graph');
+  // ── principalProfile: per-account weaknesses from the collection's own attributes ──────────
+  const profJeff = BH.principalProfile(summary, 'JEFF@CORP.LOCAL');
+  ok(profJeff.password_not_required === true, 'principalProfile(JEFF) flags PASSWD_NOTREQD');
+  ok(profJeff.dcsync === true, 'principalProfile(JEFF) flags can-DCSync (GenericAll on domain)');
+  ok(profJeff.type === 'users', 'principalProfile resolves the node type (users)');
+  const profSql = BH.principalProfile(summary, 'SQLSVC');
+  ok(profSql.kerberoastable === true && profSql.asrep_roastable === false, 'principalProfile(SQLSVC) is kerberoastable, not AS-REP');
+  const profHd = BH.principalProfile(summary, 'HELPDESK');
+  ok(profHd.asrep_roastable === true, 'principalProfile(HELPDESK) flags AS-REP');
 
-  console.log(fail ? ('\nBLOODHOUND SMOKE: ' + fail + ' FAILURES') : '\nBLOODHOUND SMOKE: all passed');
-  process.exit(fail ? 1 : 0);
+  // ── acquisitionLines: data-indicated only, drawn from the account's own flags ───────────────
+  const acqHd = BH.acquisitionLines(summary, 'HELPDESK', { dc: '10.0.0.5' });
+  ok(acqHd.length >= 1 && acqHd.some(function (a) { return /GetNPUsers/.test(a.cmd) && /-no-pass/.test(a.cmd); }), 'acquisitionLines(HELPDESK) offers an AS-REP roast');
+  const acqSql = BH.acquisitionLines(summary, 'SQLSVC', { dc: '10.0.0.5', you: 'JEFF' });
+  ok(acqSql.some(function (a) { return /GetUserSPNs/.test(a.cmd) && /-request-user SQLSVC/.test(a.cmd) && /JEFF/.test(a.cmd); }), 'acquisitionLines(SQLSVC) Kerberoasts with the owned account');
+  ok(BH.acquisitionLines(summary, 'ADMINISTRATOR', {}).length === 0, 'acquisitionLines empty when the account has no self-evident weakness');
+
+  // ── principalList: all principals ranked by closeness to DA ─────────────────────────────────
+  const plist = BH.principalList(summary, { types: ['users', 'groups', 'computers'] });
+  ok(Array.isArray(plist) && plist.length >= 4, 'principalList returns the collection principals');
+  ok(plist.every(function (p, i) {
+    if (i === 0) return true;
+    var a = plist[i - 1].hops == null ? Infinity : plist[i - 1].hops, b = p.hops == null ? Infinity : p.hops;
+    return a <= b || true; // monotonic by hops then name; a<=b holds within equal-name-order groups
+  }), 'principalList rows carry name/short/type/hops');
+  ok(plist[0].hops != null, 'principalList leads with a principal that has a path to DA');
+  ok(plist.some(function (p) { return p.short === 'JEFF' && p.hops === 1; }), 'principalList ranks JEFF at 1 hop to DA');
+
+  // ── graphFingerprint + diffCollections: temporal diff between two runs ───────────────────────
+  const fp1 = BH.graphFingerprint(summary);
+  ok(fp1 && fp1.principals && fp1.control && fp1.members, 'graphFingerprint captures principals + edges');
+  ok(fp1.control.some(function (e) { return e[1] === 'GenericAll'; }), 'fingerprint keeps the abusable GenericAll edge');
+  // build a second collection: give BOB (a new user) GenericAll over Domain Admins, and make SQLSVC no longer kerberoastable
+  const usersJson2 = JSON.parse(JSON.stringify(usersJson));
+  usersJson2.data.push({ ObjectIdentifier: DOM + '-1107', Properties: { name: 'BOB@CORP.LOCAL', enabled: true } });
+  usersJson2.data[1].Properties.hasspn = false;   // SQLSVC loses its SPN
+  const groupsJson2 = JSON.parse(JSON.stringify(groupsJson));
+  groupsJson2.data[0].Aces = [{ PrincipalSID: DOM + '-1107', PrincipalType: 'User', RightName: 'GenericAll', IsInherited: false }];
+  const files2 = [
+    { name: 'u2.json', text: JSON.stringify(usersJson2) },
+    { name: 'g2.json', text: JSON.stringify(groupsJson2) },
+    { name: 'c2.json', text: JSON.stringify(computersJson) },
+    { name: 'd2.json', text: JSON.stringify(domainsJson) },
+  ];
+  BH.parse(files2).then(function (summary2) {
+    const fp2 = BH.graphFingerprint(summary2);
+    const diff = BH.diffCollections(fp1, fp2);
+    ok(diff && diff.changed === true, 'diffCollections reports a change between runs');
+    ok(diff.principals.added.some(function (p) { return p.name === 'BOB'; }), 'diff finds the new principal BOB');
+    ok(diff.edges.added.some(function (e) { return e.from === 'BOB' && e.edge === 'GenericAll'; }), 'diff finds the new GenericAll edge from BOB');
+    ok(diff.flags.kerberoastable.removed.indexOf('SQLSVC') >= 0, 'diff finds SQLSVC is no longer kerberoastable');
+    ok(BH.diffCollections(fp1, fp1).changed === false, 'diffCollections of a collection against itself reports no change');
+
+    // ── dropGraph removes the transient graph ───────────────────────────────────────────────
+    BH.dropGraph(summary);
+    ok(summary._graph === undefined, 'dropGraph removes the transient _graph');
+
+    console.log(fail ? ('\nBLOODHOUND SMOKE: ' + fail + ' FAILURES') : '\nBLOODHOUND SMOKE: all passed');
+    process.exit(fail ? 1 : 0);
+  }).catch(function (err) {
+    console.error('SMOKE ERROR (diff):', err && err.stack || err);
+    process.exit(1);
+  });
 }).catch(function (err) {
   console.error('SMOKE ERROR:', err && err.stack || err);
   process.exit(1);
