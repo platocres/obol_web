@@ -786,3 +786,20 @@ screenshot the changed surface at 4K, 1080p, tablet, and mobile and read it for 
   taken), 0 console errors. Full engine suite + browser-smoke + lint + gap all green; assets stamped; house
   style held. Remaining from this thread (not built, lower value): a full progress-aware graph overlay and a
   dedicated what-if sandbox beyond the undoable ownership toggle.
+- 2026-10-08: Domain tab, the last two "exceed BloodHound" items the owner asked to finish (Tasks #44-#46).
+  (1) Progress-aware graph overlay: bhgraph.renderInto now takes opts.owned + opts.reached (maps of UPPER
+  short name) and colours EVERY node on the canvas by status, not just the path source: owned green, reached
+  (a node an owned account already controls, computed from controls() over the owned set) a dashed accent
+  ring, Domain Admin red, with a legend under the graph and a "reached" tag on the hover card. So the graph
+  shows how far you have actually gotten, at a glance. (2) What-If sandbox: an EPHEMERAL hypothetical-owned
+  set (_whatIf, module scope, never written to the engagement), layered on the real owned set by a new
+  effectiveOwned() that now drives every derivation on the tab (route, graph, hunt, census, dropdown, inspect
+  gating). "Try As What-If" on a non-owned inspect card adds it; a banner says "showing the picture as if you
+  also owned X" with Commit To Engagement (moves them into the real ownedExtra) and Clear; a what-if account
+  shows its walk commands under a "What-If" tag with Remove; the head carries an "N what-if" badge and the
+  dropdown marks "(what-if)". Distinct from real ownership (the three doors), so a hypothesis never silently
+  becomes a claim. Driven headless on Forest: Try As What-If flips the card to the walk commands + banner +
+  "What-If" tag, the graph shows 1 owned + 4 reached with the legend, Commit persists SVC-ALFRESCO to
+  ownedExtra and clears the banner, 0 console errors. Full engine suite + browser-smoke + lint + gap green;
+  assets stamped; house style held. Presentation only: no ranker fork, one store, the what-if touches the
+  engagement only on an explicit Commit.

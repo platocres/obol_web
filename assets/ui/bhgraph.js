@@ -47,7 +47,19 @@
     }
     var pos = layout(graph);
     var goalIds = {}; graph.nodes.forEach(function (n) { if (n.type === 'domain') goalIds[n.id] = 1; });
-    var ownedIds = {}; graph.nodes.forEach(function (n) { if (n.depth === 0) ownedIds[n.id] = 1; });
+    // Progress overlay: colour every node on the canvas by your real/what-if status, not just the path
+    // source. opts.owned (a map of UPPER short name -> 1) marks the accounts you hold; opts.reached marks
+    // the ones an owned account already controls. With no overlay given, fall back to the old depth-0 rule.
+    var ownedSet = opts.owned || null, reachedSet = opts.reached || null;
+    var ownedIds = {}; graph.nodes.forEach(function (n) {
+      var up = String(n.id).toUpperCase();
+      if (ownedSet ? ownedSet[up] : (n.depth === 0)) ownedIds[n.id] = 1;
+    });
+    var reachedIds = {};
+    if (reachedSet) graph.nodes.forEach(function (n) {
+      var up = String(n.id).toUpperCase();
+      if (reachedSet[up] && !ownedIds[n.id] && !goalIds[n.id]) reachedIds[n.id] = 1;
+    });
 
     // Per-node lookup + outgoing edges, for the hover card (full name, role, and what it can abuse).
     var nodeById = {}; graph.nodes.forEach(function (n) { nodeById[n.id] = n; });
@@ -70,7 +82,9 @@
       + '<defs><marker id="bh-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
       + '<path d="M0,0 L10,5 L0,10 z" class="bh-arrowhead"/></marker></defs>'
       + '<g class="bh-viewport"></g></svg></div>'
-      + '<div class="bh-hint">Drag nodes to rearrange · scroll to zoom · drag the background to pan · red edges are abusable control, grey is MemberOf.</div>';
+      + '<div class="bh-hint">Drag nodes to rearrange · scroll to zoom · drag the background to pan · red edges are abusable control, grey is MemberOf.'
+      + ((ownedSet || reachedSet) ? ' <span class="bh-leg"><span class="bh-leg-d owned"></span>owned</span> <span class="bh-leg"><span class="bh-leg-d reached"></span>reached (you already control)</span> <span class="bh-leg"><span class="bh-leg-d goal"></span>Domain Admin</span>' : '')
+      + '</div>';
 
     var svg = container.querySelector('svg.bh-graph');
     var vp = container.querySelector('.bh-viewport');
@@ -101,7 +115,7 @@
     // nodes
     graph.nodes.forEach(function (n) {
       var g = document.createElementNS(svgNS, 'g');
-      g.setAttribute('class', 'bh-node bh-type-' + n.type + (goalIds[n.id] ? ' goal' : '') + (ownedIds[n.id] ? ' owned' : ''));
+      g.setAttribute('class', 'bh-node bh-type-' + n.type + (goalIds[n.id] ? ' goal' : '') + (ownedIds[n.id] ? ' owned' : '') + (reachedIds[n.id] ? ' reached' : ''));
       g.setAttribute('data-id', n.id);
       g.setAttribute('data-paths', (n.paths || []).join(','));
       g.setAttribute('transform', 'translate(' + pos[n.id].x + ',' + pos[n.id].y + ')');
@@ -130,7 +144,7 @@
     card.style.display = 'none';
     container.appendChild(card);
 
-    wire(svg, vp, pos, opts, { card: card, nodeById: nodeById, outEdges: outEdges, goalIds: goalIds, ownedIds: ownedIds });
+    wire(svg, vp, pos, opts, { card: card, nodeById: nodeById, outEdges: outEdges, goalIds: goalIds, ownedIds: ownedIds, reachedIds: reachedIds });
   }
 
   var TYPE_NAME = { user: 'User', group: 'Group', computer: 'Computer', domain: 'Domain', gpo: 'GPO', object: 'Object' };
@@ -139,6 +153,7 @@
   function nodeCardHtml(n, ctx) {
     var roles = '';
     if (ctx.ownedIds[n.id]) roles += '<span class="bh-nc-tag owned">owned</span>';
+    if (ctx.reachedIds && ctx.reachedIds[n.id]) roles += '<span class="bh-nc-tag reached">reached</span>';
     if (ctx.goalIds[n.id]) roles += '<span class="bh-nc-tag goal">domain goal</span>';
     var out = (ctx.outEdges[n.id] || []);
     var rels = out.slice(0, 6).map(function (e) {

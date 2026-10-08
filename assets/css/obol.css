@@ -1150,6 +1150,12 @@ ol.bh-steps li { margin-bottom: 9px; }
 .bh-diff .bh-princ { list-style: none; padding: 0; margin: 0; }
 .bh-diff .bh-princ li { padding: 2px 0; }
 .bh-owned-count { font-size: 10px; font-weight: 700; color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 45%, var(--line)); border-radius: 5px; padding: 1px 6px; margin-left: 8px; text-transform: uppercase; letter-spacing: .03em; vertical-align: middle; }
+.bh-owned-count.whatif { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.bh-whatif-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 12px 0; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-left: 3px solid var(--accent); border-radius: var(--radius); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.bh-whatif-k { color: var(--text); font-size: 12.5px; flex: 1; min-width: 220px; }
+.bh-whatif-note { color: var(--accent); }
+.bh-whatif-x { background: none; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); font-size: 11px; font-weight: 600; border-radius: 6px; padding: 2px 8px; cursor: pointer; margin-left: 6px; }
+.bh-whatif-x:hover { border-color: var(--accent); }
 .bh-brow.owned { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
 .bh-hunt { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px,1fr)); gap: 10px; margin: 8px 0 6px; }
 .bh-hunt-row { border: 1px solid var(--line); border-left: 3px solid var(--orange); border-radius: var(--radius); padding: 10px 12px; background: var(--surf2); }
@@ -1658,6 +1664,8 @@ svg.bh-graph:active { cursor: grabbing; }
 .bh-node.goal .bh-node-lbl { fill: var(--critical); }
 .bh-node.owned circle { fill: color-mix(in srgb, var(--green) 24%, transparent); stroke: var(--green); stroke-width: 3; }
 .bh-node.owned .bh-node-lbl { fill: var(--green); }
+.bh-node.reached circle { fill: color-mix(in srgb, var(--accent) 20%, transparent); stroke: var(--accent); stroke-width: 3; stroke-dasharray: 3 2; }
+.bh-node.reached .bh-node-lbl { fill: var(--accent); }
 .bh-node.dim { opacity: .25; } .bh-edge.dim { opacity: .12; }
 .bh-node.hot circle { stroke-width: 3.5; }
 .bh-edge path { fill: none; stroke: var(--line-hot); stroke-width: 1.5; }
@@ -1674,7 +1682,13 @@ svg.bh-graph:active { cursor: grabbing; }
 .bh-nc-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 3px; color: var(--text-2); font-size: 11px; }
 .bh-nc-tag { text-transform: uppercase; letter-spacing: .04em; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 9px; }
 .bh-nc-tag.owned { background: color-mix(in srgb, var(--green) 26%, transparent); color: var(--green); }
+.bh-nc-tag.reached { background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--accent); }
 .bh-nc-tag.goal { background: color-mix(in srgb, var(--critical) 26%, transparent); color: var(--critical); }
+.bh-leg { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
+.bh-leg-d { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 2px solid; }
+.bh-leg-d.owned { border-color: var(--green); background: color-mix(in srgb, var(--green) 24%, transparent); }
+.bh-leg-d.reached { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.bh-leg-d.goal { border-color: var(--critical); background: color-mix(in srgb, var(--critical) 26%, transparent); }
 .bh-nc-paths { margin-top: 4px; font-size: 11px; color: var(--accent-2); }
 .bh-nc-rels-h { margin-top: 7px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .bh-nc-rels { margin: 3px 0 0; padding: 0; list-style: none; }

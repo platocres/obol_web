@@ -14,6 +14,22 @@
   // (ticking "I Own This" re-renders the tab; we restore the card afterwards).
   var _inspecting = null;
 
+  // What-If sandbox: a hypothetical-owned set layered on top of the real owned set, EPHEMERAL (module
+  // scope, never written to the engagement) so you can ask "what if I also had these?" and see the whole
+  // picture (route, graph, hunt, reach) recompute, then Commit the ones you really took, or Clear. Keyed
+  // by UPPER short name -> the full principal name. Distinct from real ownership (the three doors), which
+  // persists in eng.bloodhound.ownedExtra.
+  var _whatIf = {};
+  function whatIfList() { return Object.keys(_whatIf).map(function (k) { return _whatIf[k]; }); }
+  function isWhatIf(principal) { return !!_whatIf[shortName(principal).toUpperCase()]; }
+  // The owned set that DRIVES every derivation on the tab: the real owned accounts plus the what-if ones.
+  function effectiveOwned() {
+    var all = ownedFromEngagement().concat(whatIfList());
+    var seen = {}, out = [];
+    all.forEach(function (o) { var k = shortName(o).toUpperCase(); if (k && !seen[k]) { seen[k] = 1; out.push(o); } });
+    return out;
+  }
+
   // The accounts you own, from three doors into one set: a stored credential, the engagement's
   // username param, and the principals you manually asserted ("I own this now") on the Domain tab
   // (eng.bloodhound.ownedExtra). A pasted login/crack mints a credential, so that door feeds the
@@ -169,13 +185,16 @@
   // do not). Lets a user theorize and target from any account, not only the creds they hold.
   function inspectHtml(principal, summary, owned, ctx) {
     if (!principal || !summary) return '';
-    var isOwned = isOwnedPrincipal(principal, owned);
+    var isReal = isOwnedPrincipal(principal, ownedFromEngagement());
+    var isWI = !isReal && isWhatIf(principal);
+    var isOwned = isReal || isWI; // either counts for showing the walk; the tag/gate tell them apart
     var prof = OBOL.bloodhound.principalProfile(summary, principal);
     var paths = OBOL.bloodhound.ownedPaths(summary, [principal]) || { paths: [] };
     var ctl = OBOL.bloodhound.controls(summary, principal) || { controls: [], groups: [], count: 0 };
 
     var tags = [];
-    if (isOwned) tags.push('<span class="bh-tag own">Owned</span>');
+    if (isReal) tags.push('<span class="bh-tag own">Owned</span>');
+    else if (isWI) tags.push('<span class="bh-tag crit">What-If</span>');
     if (prof.dcsync) tags.push('<span class="bh-tag crit">Can DCSync</span>');
     if (prof.unconstrained) tags.push('<span class="bh-tag crit">Unconstrained Delegation</span>');
     if (prof.high_value) tags.push('<span class="bh-tag crit">High Value</span>');
@@ -205,7 +224,11 @@
       out += '<p class="bh-x-line bh-x-none">Controls nothing abusable in this collection.</p>';
     }
 
-    if (isOwned) {
+    if (isWI) {
+      out += '<p class="bh-x-line bh-whatif-note">What-If: the commands below assume you own this account. '
+        + '<button class="bh-whatif-x" data-whatif-remove="' + U.attr(shortName(principal)) + '">Remove From What-If</button></p>';
+      out += ownedRouteCommands(principal, paths, summary, ctx);
+    } else if (isReal) {
       out += ownedRouteCommands(principal, paths, summary, ctx);
     } else {
       var acqCtx = Object.assign({}, ctx, { you: (owned && owned[0]) ? shortName(owned[0]) : null });
@@ -218,7 +241,8 @@
             }).join('') + '</div>';
       }
       out += '<div class="bh-gate"><label class="bh-gate-own"><input type="checkbox" class="bh-own-check" data-own="' + U.attr(shortName(principal)) + '"> I Own This Account Now</label>'
-        + '<p class="bh-gate-note">The commands for walking this account’s path stay hidden until you own it. They unlock when you tick this box, paste proof of the login on Next Steps, or re-upload BloodHound after you take it over. Ticking is a what-if you can undo: untick to revert.</p></div>';
+        + ' <button class="bh-whatif-x" data-whatif-add="' + U.attr(shortName(principal)) + '">Try As What-If</button>'
+        + '<p class="bh-gate-note">The commands for walking this account’s path stay hidden until you own it. Tick the box when you really do (or paste proof on Next Steps, or re-upload BloodHound). "Try As What-If" layers it on hypothetically, without touching the engagement, so you can see how the picture would change.</p></div>';
     }
     return out + '</div>';
   }
@@ -330,8 +354,11 @@
       + '<div id="bh-status" class="route-sub"></div>';
 
     if (summary) {
-      var owned = ownedFromEngagement();
+      var realOwned = ownedFromEngagement();
+      var owned = effectiveOwned();   // real + what-if; drives every derivation on the tab
       var ownedUpper = {}; owned.forEach(function (o) { ownedUpper[shortName(o).toUpperCase()] = 1; });
+      var realUpper = {}; realOwned.forEach(function (o) { realUpper[shortName(o).toUpperCase()] = 1; });
+      var whatIfN = whatIfList().length;
       var view = OBOL.bloodhound.domainView(summary, owned, cmdCtx(owned, true));
 
       // Inspect dropdown: every principal, ranked by closeness to Domain Admin, so you can select any
@@ -339,17 +366,28 @@
       // commands gated until you own them. This is the "select a user and see their paths" control.
       var plist = OBOL.bloodhound.principalList(summary, { types: ['users', 'groups', 'computers'] });
       var opts = '<option value="">Select an account to inspect…</option>' + plist.map(function (p) {
-        var mk = ownedUpper[p.short.toUpperCase()] ? ' (owned)' : '';
+        var up = p.short.toUpperCase();
+        var mk = realUpper[up] ? ' (owned)' : (_whatIf[up] ? ' (what-if)' : '');
         var hop = (p.hops != null) ? (' · ' + p.hops + ' hop' + (p.hops === 1 ? '' : 's') + ' to DA') : '';
         return '<option value="' + U.attr(p.name) + '">' + esc(p.short) + mk + ' · ' + esc(p.type) + hop + '</option>';
       }).join('');
 
       html += '<div class="bh-summary-head"><h2 class="coach-sec-h">' + esc(summary.domain || 'domain')
         + ': ' + (typeof summary.users === 'number' ? summary.users : (summary.users ? summary.users.length : 0)) + ' users, ' + (summary.computers ? summary.computers.length : 0) + ' computers'
-        + (owned.length ? ('<span class="bh-owned-count">' + owned.length + ' owned</span>') : '') + '</h2>'
+        + (realOwned.length ? ('<span class="bh-owned-count">' + realOwned.length + ' owned</span>') : '')
+        + (whatIfN ? ('<span class="bh-owned-count whatif">' + whatIfN + ' what-if</span>') : '') + '</h2>'
         + '<div class="bh-head-controls"><label class="bh-inspect-lbl">Inspect <select id="bh-inspect" class="bh-select">' + opts + '</select></label>'
         + '<button id="bh-report" class="btn-primary">Open Report</button></div></div>'
         + '<div id="bh-inspect-slot" class="bh-inspect-slot"></div>';
+
+      // What-If banner: when a hypothetical owned set is in play, the whole tab reflects it. Say so,
+      // and offer to commit the ones you really took to the engagement, or clear the sandbox.
+      if (whatIfN) {
+        html += '<div class="bh-whatif-banner"><span class="bh-whatif-k">What-If: showing the picture as if you also owned '
+          + whatIfList().map(function (w) { return '<b>' + esc(shortName(w)) + '</b>'; }).join(', ') + '.</span>'
+          + '<button id="bh-whatif-commit" class="btn-ghost">Commit To Engagement</button>'
+          + '<button id="bh-whatif-clear" class="btn-ghost">Clear What-If</button></div>';
+      }
 
       // What Changed Since Last Collection: the temporal diff from the prior upload (if any).
       html += diffHtml(summary.diff);
@@ -498,12 +536,20 @@
     // render the interactive attack-path graph
     var eng0 = OBOL.store.active();
     if (eng0 && eng0.bloodhound && OBOL.bhgraph) {
-      var owned0 = ownedFromEngagement();
+      var owned0 = effectiveOwned();
       var view0 = OBOL.bloodhound.domainView(eng0.bloodhound, owned0);
       var host = document.getElementById('bh-graph');
       var g = view0.analysis && view0.analysis.graph;
       if (host && g && g.nodes && g.nodes.length) {
-        OBOL.bhgraph.renderInto(host, g, { onNodeClick: function (id) { doInspect(id); } });
+        // Progress overlay: mark every owned node, and every node an owned account already controls
+        // (reached), not just the path source. So the canvas shows how far you have actually gotten.
+        var ownedSet = {}; owned0.forEach(function (o) { ownedSet[shortName(o).toUpperCase()] = 1; });
+        var reachedSet = {};
+        owned0.forEach(function (o) {
+          var c = OBOL.bloodhound.controls(eng0.bloodhound, o) || { controls: [] };
+          (c.controls || []).forEach(function (x) { reachedSet[shortName(x.name).toUpperCase()] = 1; });
+        });
+        OBOL.bhgraph.renderInto(host, g, { onNodeClick: function (id) { doInspect(id); }, owned: ownedSet, reached: reachedSet });
       }
     }
     // copy buttons on the query cards
@@ -555,6 +601,38 @@
       if (more) more.hidden = false;
       b.remove();
     });
+
+    // What-If sandbox: add/remove a hypothetical owned account (ephemeral, never touches the engagement),
+    // re-render so the whole tab reflects it, and restore the inspect card. Commit moves the hypotheticals
+    // into the real owned set; Clear discards them.
+    U.on(mount, 'click', '[data-whatif-add]', function (e, b) {
+      var who = b.getAttribute('data-whatif-add'); if (!who) return;
+      _whatIf[shortName(who).toUpperCase()] = who;
+      U.toast('What-If: added ' + shortName(who));
+      OBOL.router.render();
+    });
+    U.on(mount, 'click', '[data-whatif-remove]', function (e, b) {
+      var who = b.getAttribute('data-whatif-remove'); if (!who) return;
+      delete _whatIf[shortName(who).toUpperCase()];
+      U.toast('What-If: removed ' + shortName(who));
+      OBOL.router.render();
+    });
+    var wiCommit = document.getElementById('bh-whatif-commit');
+    if (wiCommit) wiCommit.addEventListener('click', function () {
+      var list = whatIfList();
+      OBOL.store.update(function (eng) {
+        eng.bloodhound = eng.bloodhound || {};
+        var set = eng.bloodhound.ownedExtra || [];
+        var have = {}; set.forEach(function (x) { have[shortName(x).toUpperCase()] = 1; });
+        list.forEach(function (w) { if (!have[shortName(w).toUpperCase()]) set.push(w); });
+        eng.bloodhound.ownedExtra = set;
+      }, 'bloodhound-owned');
+      _whatIf = {};
+      U.toast('Committed ' + list.length + ' account' + (list.length === 1 ? '' : 's') + ' to the engagement');
+      OBOL.router.render();
+    });
+    var wiClear = document.getElementById('bh-whatif-clear');
+    if (wiClear) wiClear.addEventListener('click', function () { _whatIf = {}; U.toast('What-If cleared'); OBOL.router.render(); });
 
     var rep = document.getElementById('bh-report');
     if (rep) rep.addEventListener('click', function () {
