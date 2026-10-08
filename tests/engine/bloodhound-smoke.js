@@ -209,6 +209,19 @@ BH.parse(files).then(function (summary) {
   ok(html.indexOf('<style>') >= 0 && html.indexOf('--accent') >= 0, 'report has embedded CSS (self-contained)');
   ok(html.indexOf('not a claim it was walked') >= 0, 'report keeps the conservative footer');
 
+  // ── nearestToGoal: who is closest to Domain Admin (the targeting board) ─────────────────────
+  const near = BH.nearestToGoal(summary);
+  ok(Array.isArray(near) && near.length > 0, 'nearestToGoal returns ranked principals');
+  ok(near.every(function (r, i) { return i === 0 || near[i - 1].hops <= r.hops; }), 'nearestToGoal is sorted nearest-first');
+  ok(near.some(function (r) { return /JEFF/.test(r.name) && r.hops === 1; }), 'nearestToGoal puts JEFF (GenericAll on domain) at 1 hop');
+  ok(near.every(function (r) { return typeof r.hops === 'number' && r.name && 'type' in r; }), 'nearestToGoal rows carry name/type/hops');
+
+  // ── controls: forward reachability, what a principal can abuse ──────────────────────────────
+  const ctl = BH.controls(summary, 'JEFF@CORP.LOCAL');
+  ok(ctl && ctl.count >= 1, 'controls(JEFF) finds at least one controlled object');
+  ok(ctl.controls.some(function (x) { return x.edge === 'GenericAll'; }), 'controls(JEFF) records the GenericAll edge');
+  ok(BH.controls(summary, 'NOBODY@CORP.LOCAL').count === 0, 'controls of an unknown principal is empty');
+
   // dropGraph removes the transient graph
   BH.dropGraph(summary);
   ok(summary._graph === undefined, 'dropGraph removes the transient _graph');

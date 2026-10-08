@@ -439,6 +439,70 @@
     return { paths: found, first: firstAbusable(found[0]) };
   }
 
+  // Shortest hop-count from every node to a Domain-Admin goal, via ONE reverse BFS over the same
+  // member+control adjacency ownedPaths walks (goal SIDs outward along reversed edges). This powers the
+  // "who is closest to Domain Admin" targeting board, general to any collection: it ranks which account to
+  // go after next. Returns [{name, type, hops}] nearest-first; the goals themselves are excluded.
+  function nearestToGoal(summary, opts) {
+    opts = opts || {};
+    var graph = (summary && summary._graph) || {};
+    var names = graph.names || {}, types = graph.types || {};
+    var goals = {};
+    if (graph.da_sid) goals[graph.da_sid] = 1;
+    if (graph.domain_sid) goals[graph.domain_sid] = 1;
+    var radj = {};
+    (graph.members || []).forEach(function (e) { (radj[e[1]] = radj[e[1]] || []).push(e[0]); });
+    (graph.control || []).forEach(function (e) { (radj[e[2]] = radj[e[2]] || []).push(e[0]); });
+    var dist = {}, q = [];
+    Object.keys(goals).forEach(function (g) { dist[g] = 0; q.push(g); });
+    for (var qi = 0; qi < q.length; qi++) {
+      var node = q[qi], d = dist[node];
+      (radj[node] || []).forEach(function (src) { if (dist[src] === undefined) { dist[src] = d + 1; q.push(src); } });
+    }
+    var out = [];
+    Object.keys(dist).forEach(function (sid) {
+      if (goals[sid] || dist[sid] === 0) return;
+      var t = types[sid] || '';
+      if (opts.types && opts.types.indexOf(t) < 0) return;
+      out.push({ name: names[sid] || sid, type: t, hops: dist[sid] });
+    });
+    out.sort(function (a, b) { return a.hops - b.hops || (a.name < b.name ? -1 : 1); });
+    return out;
+  }
+
+  // Forward reachability: everything a principal CONTROLS, directly or transitively (it is a member of a
+  // group that holds an abusable ACE, then that group's control, and so on). Mirrors ownedPaths' adjacency
+  // but walks OUTWARD from one principal and collects the control targets, so the tab can answer "if I owned
+  // X, what could I abuse" for ANY account in the collection, not just the creds you hold. Returns
+  // { principal, controls: [{name, type, edge, hops}], groups: [name], count }.
+  function controls(summary, principal, opts) {
+    opts = opts || {};
+    var maxDepth = opts.maxDepth || 8;
+    var graph = (summary && summary._graph) || {};
+    var names = graph.names || {}, types = graph.types || {};
+    var nameToSid = {};
+    Object.keys(names).forEach(function (sid) { var k = String(names[sid]).split('@')[0].toLowerCase(); if (!(k in nameToSid)) nameToSid[k] = sid; });
+    var start = nameToSid[String(principal == null ? '' : principal).split('@')[0].toLowerCase()];
+    if (!start) return { principal: principal, controls: [], groups: [], count: 0 };
+    var adj = {};
+    (graph.members || []).forEach(function (e) { (adj[e[0]] = adj[e[0]] || []).push(['MemberOf', e[1]]); });
+    (graph.control || []).forEach(function (e) { (adj[e[0]] = adj[e[0]] || []).push([e[1], e[2]]); });
+    var seen = {}; seen[start] = 1;
+    var q = [{ sid: start, hops: 0 }], ctrl = {}, groups = {};
+    for (var qi = 0; qi < q.length; qi++) {
+      var cur = q[qi]; if (cur.hops >= maxDepth) continue;
+      (adj[cur.sid] || []).forEach(function (pair) {
+        var edge = pair[0], dst = pair[1];
+        if (edge === 'MemberOf') { if (/group/.test(String(types[dst] || ''))) groups[names[dst] || dst] = 1; }
+        else if (!ctrl[dst] || ctrl[dst].hops > cur.hops + 1) ctrl[dst] = { name: names[dst] || dst, type: types[dst] || '', edge: edge, hops: cur.hops + 1 };
+        if (!seen[dst]) { seen[dst] = 1; q.push({ sid: dst, hops: cur.hops + 1 }); }
+      });
+    }
+    var list = Object.keys(ctrl).map(function (k) { return ctrl[k]; });
+    list.sort(function (a, b) { return a.hops - b.hops || (a.name < b.name ? -1 : 1); });
+    return { principal: principal, controls: list, groups: Object.keys(groups).sort(), count: list.length };
+  }
+
   // ── graph projection for the tab / report ────────────────────────────────────────────────
   var NODE_TYPE = {
     users: 'user', user: 'user', groups: 'group', group: 'group',
@@ -583,8 +647,7 @@
         + 'a host with a credential you hold.', summary.can_rdp, 'xfreerdp / nxc rdp');
     sec('winrm', 'Can WinRM', 'Principals who can open a WinRM / evil-winrm shell (Remote Management Users).',
         summary.can_winrm, 'evil-winrm / nxc winrm');
-    sec('rdp_reach', 'Broad RDP Reach → Host', 'Hosts where a broad, low-privilege group can RDP in'
-        + 'instant lateral movement with any domain credential.', summary.rdp_reach, 'xfreerdp / nxc rdp to that host');
+    sec('rdp_reach', 'Broad RDP Reach → Host', 'Hosts where a broad, low-privilege group can RDP in, instant lateral movement with any domain credential.', summary.rdp_reach, 'xfreerdp / nxc rdp to that host');
     sec('psremote_reach', 'Broad PSRemote Reach → Host', 'Hosts where a broad group can open a WinRM / '
         + 'PSRemote shell, a shell on that host with any domain credential.', summary.psremote_reach,
         'evil-winrm / nxc winrm to that host');
@@ -599,8 +662,7 @@
         summary.esc_templates, 'certipy req → PKINIT / UnPAC-the-hash');
     sec('passwordnotreqd', 'Password Not Required', 'Accounts flagged PASSWD_NOTREQD, may authenticate '
         + 'with a BLANK password. Try it first, it costs nothing.', summary.password_not_required, "nxc with -p ''");
-    sec('pwdneverexpires', 'Password Never Expires', 'Accounts whose password never expires, stale'
-        + 'high-value crack/spray targets.', summary.pwd_never_expires);
+    sec('pwdneverexpires', 'Password Never Expires', 'Accounts whose password never expires, stale high-value crack/spray targets.', summary.pwd_never_expires);
     sec('highvalue', 'High-Value Targets', 'Objects BloodHound marks high-value.', summary.high_value);
     sec('computers', 'Computers', 'Domain-joined hosts in the collection.', summary.computers);
 
@@ -621,7 +683,7 @@
     var headline;
     if (paths.length) {
       var goal = paths[0].hops[paths[0].hops.length - 1].to;
-      headline = paths.length + ' path(s) from a principal you own to ' + goal + 'the shortest is '
+      headline = paths.length + ' path(s) from a principal you own to ' + goal + '. The shortest is '
         + paths[0].length + ' hop(s). obol’s ACL-abuse move walks it automatically.';
     } else if (summary.domain || (summary.files && summary.files.length) || summary.users) {
       headline = 'No owned→Domain-Admins path derived from this collection, start from the high-value '
@@ -914,6 +976,8 @@
     // analysis (pure)
     deriveCensus: deriveCensus,
     ownedPaths: ownedPaths,
+    nearestToGoal: nearestToGoal,
+    controls: controls,
     pathsToGraph: pathsToGraph,
     domainView: domainView,
     domainActionCommands: domainActionCommands,
