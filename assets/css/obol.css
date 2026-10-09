@@ -1165,6 +1165,15 @@ ol.bh-steps li { margin-bottom: 9px; }
 /* ---- checklist ---- */
 /* checklist: phase (collapsible) -> move (collapsible sub-group) -> command rows */
 .checklist { padding-bottom: 80px; }
+.chk-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.chk-top .route-h1 { margin: 0; }
+.chk-scope { display: inline-flex; align-items: center; gap: 4px; }
+.chk-scope .mini-label { margin-right: 2px; }
+.cks-btn { font: 700 12px var(--sans, inherit); color: var(--text-2); background: var(--surf1); border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+.cks-btn + .cks-btn { margin-left: 2px; }
+.cks-btn:hover:not(.active) { color: var(--text); border-color: var(--accent); }
+.cks-btn.active { color: var(--on-accent, #06210f); background: var(--accent); border-color: var(--accent); }
+.chk-scope-note { color: var(--accent-2); }
 .chk-ran-k { color: var(--muted); font-style: italic; }
 .chk-phase { margin-bottom: 12px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surf1); }
 .chk-phase-h { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; list-style: none; background: var(--surf2); }

@@ -21,6 +21,10 @@
   function isOpen(id, def) { try { var v = localStorage.getItem(openKey(id)); return v == null ? def : v === '1'; } catch (e) { return def; } }
   function pbOpen() { try { var v = localStorage.getItem('obol.pb.open:' + engId()); return v === '1'; } catch (e) { return false; } }
   function setPbOpen(on) { try { localStorage.setItem('obol.pb.open:' + engId(), on ? '1' : '0'); } catch (e) {} }
+  // command scope: "all" (every inventoried command) or "oscp" (hide out-of-scope / exam-illegal moves).
+  function ckScope() { try { return localStorage.getItem('obol.ck.scope:' + engId()) === 'oscp' ? 'oscp' : 'all'; } catch (e) { return 'all'; } }
+  function setCkScope(s) { try { localStorage.setItem('obol.ck.scope:' + engId(), s === 'oscp' ? 'oscp' : 'all'); } catch (e) {} }
+  function inScope(id) { return !(OBOL.OSCP_SCOPE && OBOL.OSCP_SCOPE.exclude && OBOL.OSCP_SCOPE.exclude[id]); }
 
   function cmdsOf(a) { return (a.commands && a.commands.length) ? a.commands : [{ run: a.command, tool: a.tool }]; }
 
@@ -63,22 +67,32 @@
     var ticks = (eng && eng.checkTicks) || {};
     var activities = (eng && eng.activities) || [];
     var pbSet = {}; ((eng && eng.playbook) || []).forEach(function (p) { pbSet[p.id + '#' + p.idx] = 1; });
-    var pack = OBOL.packs.actions();
+    var fullPack = OBOL.packs.actions();
     var ws = OBOL.workspace.tokens(eng);
+    var scope = ckScope();
+    var pack = scope === 'oscp' ? fullPack.filter(function (a) { return inScope(a.id); }) : fullPack;
+    var hidden = fullPack.length - pack.length;
 
     var byPhase = {}; OBOL.phases.PHASES.forEach(function (p) { byPhase[p] = []; });
     pack.forEach(function (a) { (byPhase[OBOL.phases.phaseOfAction(a)] = byPhase[OBOL.phases.phaseOfAction(a)] || []).push(a); });
 
-    var totalCmds = 0, doneCmds = 0, ranCmds = 0;
+    var totalCmds = 0, doneCmds = 0;
     pack.forEach(function (a) {
       var cs = cmdsOf(a);
       totalCmds += cs.length;
       for (var i = 0; i < cs.length; i++) { if (ticks[a.id + '#' + i]) doneCmds++; }
     });
 
+    var toggle = '<div class="chk-scope" role="group" aria-label="Command scope"><span class="mini-label">Show</span>'
+      + '<button type="button" class="cks-btn' + (scope === 'all' ? ' active' : '') + '" data-ckscope="all">All</button>'
+      + '<button type="button" class="cks-btn' + (scope === 'oscp' ? ' active' : '') + '" data-ckscope="oscp">OSCP</button></div>';
+
+    var scopeNote = scope === 'oscp'
+      ? ' <span class="chk-scope-note">OSCP view: hiding ' + hidden + ' moves that are out of the PEN-200 exam scope or exam-illegal.</span>'
+      : '';
     var html = '<section class="checklist">'
-      + '<h1 class="route-h1">Checklist</h1>'
-      + '<p class="route-sub">Every command obol has inventoried, grouped by attack-chain phase then by move. Tick a command when you run it; a command obol already saw in your Run Log is <span class="chk-ran-k">grayed</span>. Add any command to the <strong>Playbook</strong> (lower right) to build a runnable script. ' + totalCmds + ' commands across ' + pack.length + ' moves, ' + doneCmds + ' ticked.</p>';
+      + '<div class="chk-top"><h1 class="route-h1">Checklist</h1>' + toggle + '</div>'
+      + '<p class="route-sub">Every command obol has inventoried, grouped by attack-chain phase then by move. Tick a command when you run it; a command obol already saw in your Run Log is <span class="chk-ran-k">grayed</span>. Add any command to the <strong>Playbook</strong> (lower right) to build a runnable script. ' + totalCmds + ' commands across ' + pack.length + ' moves, ' + doneCmds + ' ticked.' + scopeNote + '</p>';
 
     OBOL.phases.PHASES.forEach(function (p) {
       var moves = (byPhase[p] || []).slice().sort(function (a, b) { return b.priority - a.priority; });
@@ -112,7 +126,7 @@
             + '<button type="button" class="chk-add' + (inPb ? ' on' : '') + '" data-pb-add="' + attr(key) + '" title="' + (inPb ? 'In the playbook' : 'Add to playbook') + '" aria-label="Add to playbook">' + ic('chain') + (inPb ? '<span class="chk-add-k">In</span>' : '') + '</button></div>'
             + '</div>';
         }).join('');
-        html += '<details class="chk-move" data-ck="mv:' + esc(a.id) + '"' + (isOpen('mv:' + a.id, true) ? ' open' : '') + '>'
+        html += '<details class="chk-move" data-ck="mv:' + esc(a.id) + '"' + (isOpen('mv:' + a.id, false) ? ' open' : '') + '>'
           + '<summary class="chk-move-h"><span class="chk-mv-t">' + esc(a.title) + '</span>'
           + '<span class="chk-mv-n">' + moveDone + '/' + n + '</span>'
           + '<button type="button" class="chk-addall" data-pb-addmove="' + attr(a.id) + '" title="Add every command in this move to the playbook">' + ic('chain') + ' All</button></summary>'
@@ -189,6 +203,7 @@
     var mount = ctx.mount;
     if (!mount._ckBound) {
       mount._ckBound = true;
+      U.on(mount, 'click', '[data-ckscope]', function (e, t) { e.preventDefault(); e.stopPropagation(); setCkScope(t.getAttribute('data-ckscope')); OBOL.router.render(); });
       U.on(mount, 'change', 'input[data-chk]', function (e, t) {
         var id = t.getAttribute('data-chk'), on = t.checked;
         OBOL.store.update(function (eng) { eng.checkTicks = eng.checkTicks || {}; if (on) eng.checkTicks[id] = true; else delete eng.checkTicks[id]; }, 'checklist');
