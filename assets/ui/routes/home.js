@@ -104,7 +104,6 @@
     var preset = (OBOL.profile.PRESETS[prof.platform] || OBOL.profile.PRESETS.custom);
     var exam = OBOL.profile.isExamPlatform(prof.platform);
     var facts = OBOL.store.factSet();
-    var ranked = OBOL.pack.nextActions(facts, OBOL.packs.actions());
     // Nothing is "reached" until something is actually known. With no facts yet (a brand-new run,
     // no targets), recon isn't done — it's simply where you start, so mark it the frontier and
     // leave every phase unlit rather than lighting recon/enum on an empty engagement.
@@ -115,8 +114,25 @@
       return '<span class="spine-node ph-' + p + (i <= reached ? ' reached' : '') + (i === frontier ? ' frontier' : '') + '">' + U.titleCase(p) + '</span>';
     }).join('<span class="spine-sep">›</span>');
     var mt = prof.machine_type ? (OBOL.profile.MACHINE_TYPES[prof.machine_type] || {}).name : '';
-    var nt = (eng.targets || []).length, nf = Object.keys(facts.kinds()).length;
+    var nf = Object.keys(facts.kinds()).length;
     var isCustom = !prof.platform || prof.platform === 'custom';
+    // at-a-glance counters, folded into the summary box so there's no separate vitals row and the
+    // empty right side of the phase-spine row carries real engagement state instead of dead space.
+    var infos = targetInfos(eng);
+    var owned = infos.filter(function (i) { return i.lvl === 'privileged'; }).length;
+    var totFlags = infos.reduce(function (a, i) { return a + i.flags; }, 0);
+    var creds = (OBOL.creds && OBOL.creds.gather()) || [];
+    function stat(href, cls, val, label, sub) {
+      var inner = '<span class="eng-stat-v ' + cls + '">' + val + '</span>'
+        + '<span class="eng-stat-k">' + esc(label) + (sub ? '<span class="eng-stat-sub">' + esc(sub) + '</span>' : '') + '</span>';
+      return href ? '<a class="eng-stat" href="' + href + '">' + inner + '</a>' : '<span class="eng-stat">' + inner + '</span>';
+    }
+    var stats = '<div class="eng-stats">'
+      + stat('#/targets', 'es-targets', infos.length, infos.length === 1 ? 'Target' : 'Targets', owned ? (owned + ' Owned') : '')
+      + stat('', 'es-flags', totFlags, totFlags === 1 ? 'Flag' : 'Flags', '')
+      + stat('#/creds', 'es-creds', creds.length, creds.length === 1 ? 'Credential' : 'Credentials', '')
+      + stat('', 'es-facts', nf, nf === 1 ? 'Fact' : 'Facts', '')
+      + '</div>';
     return '<div class="eng-active">'
       + '<div class="eng-active-head">'
       + '<div><div class="eng-active-name">' + esc(OBOL.store.runLabel(eng)) + '</div>'
@@ -125,13 +141,10 @@
       + (isCustom ? '' : '<span class="pf-badge ' + (exam ? 'exam' : 'lab') + '">' + esc(preset.name) + (exam ? ' · exam' : '') + '</span>')
       + (mt ? '<span class="pill">' + esc(mt) + '</span>' : '')
       + (prof.osid ? '<span class="pill">OSID ' + esc(prof.osid) + '</span>' : '')
-      + '<span class="pill">' + nt + ' Target' + (nt === 1 ? '' : 's') + '</span>'
-      + '<span class="pill">' + nf + ' Fact' + (nf === 1 ? '' : 's') + '</span>'
       + '</div></div>'
       + '<a class="btn-primary" href="#/path">Open Coach →</a>'
       + '</div>'
-      + '<div class="home-spine">' + spine + '</div>'
-      + (ranked.length ? ('<div class="eng-nextmove"><span class="mini-label">Next Move</span> ' + esc(ranked[0].title) + '</div>') : '')
+      + '<div class="eng-mid"><div class="home-spine">' + spine + '</div>' + stats + '</div>'
       + engagementPath()
       + '</div>';
   }
@@ -605,10 +618,6 @@
   function hubDashboard() {
     var eng = OBOL.store.active();
     var infos = targetInfos(eng);
-    // aggregate access breakdown
-    var owned = 0, foot = 0, untouched = 0;
-    infos.forEach(function (i) { if (i.lvl === 'privileged') owned++; else if (i.lvl === 'foothold' || i.lvl === 'credentialed') foot++; else untouched++; });
-    var totFlags = infos.reduce(function (a, i) { return a + i.flags; }, 0);
     var creds = (OBOL.creds && OBOL.creds.gather()) || [];
 
     // the "your next move" anchor — the SAME top move the coach (Next Steps) shows. Uses the shared
@@ -638,16 +647,11 @@
     }).join('');
 
     // Targets live in their own tab now, so the hub drops the board. The engagement summary (phase
-    // spine + attack path) is the hero, the Workspace fills the main column (readily visible, not
-    // buried below the fold), and the engagement-wide surfaces sit in the rail. The vitals Targets
-    // tile and a Surfaces card both deep-link to the Targets tab so nothing is lost.
+    // spine + folded-in counters + attack path) is the hero, the Workspace fills the main column
+    // (readily visible, not buried below the fold), and the engagement-wide surfaces sit in the
+    // rail. The summary's Targets counter and a Surfaces card both deep-link to the Targets tab.
     return '<section class="hub" aria-label="Engagement hub">'
       + nmHtml
-      + '<div class="hb-vitals">'
-      + '<a class="hb-tile hb-tile-go" href="#/targets"><div class="hb-k">Targets</div><div class="hb-v">' + infos.length + '</div><div class="hb-d">' + owned + ' Owned · ' + foot + ' Foothold · ' + untouched + ' Untouched</div></a>'
-      + '<div class="hb-tile"><div class="hb-k">Flags</div><div class="hb-v">' + totFlags + '</div><div class="hb-d">Captured across all boxes</div></div>'
-      + '<div class="hb-tile"><div class="hb-k">Credentials</div><div class="hb-v">' + creds.length + '</div><div class="hb-d">Usable across the engagement</div></div>'
-      + '</div>'
       + activePanel()
       + '<div class="hb-grid">'
       + '<section class="hb-col-main" aria-label="Workspace">' + workspacePanel() + '</section>'
