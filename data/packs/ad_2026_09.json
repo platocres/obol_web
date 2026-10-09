@@ -1334,6 +1334,7 @@
         {
           "tool": "evil-winrm",
           "run": "evil-winrm -i {{target}} -u {{dauser}} -H {{dahash}}",
+          "win": true,
           "note": "Interactive PowerShell via WinRM. If evil-winrm fails the instant it connects with `Net::NTLM::Client::SessionCrypto::CLIENT_TO_SERVER_SEALING`, that is the rubyntlm 0.6.7 bug on a fresh Kali (auth already succeeded, the first sealed message throws), not your hash: run `sudo gem install rubyntlm` to get 0.6.8 and re-run. The Loadout arsenal script applies this fix automatically."
         }
       ]

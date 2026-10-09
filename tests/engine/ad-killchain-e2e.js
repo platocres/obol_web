@@ -102,7 +102,12 @@ ok(!ready.some(function (a) { return a.id === 'coerce-auth'; }), 'LOOT → the c
 // the endgame move's win command carries the kill-shot cash-in and pass-the-hash form
 var endgame = pack.filter(function (a) { return a.id === 'own-domain-pth'; })[0];
 ok(endgame && (endgame.commands || []).some(function (c) { return c.win && /evil-winrm/.test(c.run); }), 'the endgame move flags a win (Pwn This Target) command');
-ok(endgame && (endgame.commands || []).some(function (c) { return /-H \{\{nthash\}\}|:\{\{nthash\}\}/.test(c.run); }), 'the endgame commands pass the NT hash (fills from the surfaced Administrator credential)');
+ok(endgame && (endgame.commands || []).some(function (c) { return /-H \{\{(dahash|nthash)\}\}|:\{\{(dahash|nthash)\}\}/.test(c.run); }), 'the endgame commands pass the NT hash (never a password)');
+// And it fills the DUMPED Administrator hash WITHOUT you swapping your active credential: with svc-web still
+// active (the account you ran secretsdump as), own-domain-pth resolves {{dauser}}/{{dahash}} from the DCSync
+// loot, so the confirm command is Administrator + Administrator's hash, no manual credential swap.
+var ogConfirm = OBOL.command.fillCommand(endgame, facts, { params: { target: '10.0.0.5', username: 'svc-web' } }, 0).filled;
+ok(/-u Administrator /.test(ogConfirm) && /32693b11e6aa90eb43d32c72a07ceea6/.test(ogConfirm), 'the endgame auto-fills the dumped Administrator hash with svc-web still active (no credential swap): ' + ogConfirm);
 
 // The clutter test: owning the domain retires the credential-harvest + this-domain escalation routes, but
 // KEEPS shell access, persistence, cross-domain and mapping moves (useful in a larger lab).
