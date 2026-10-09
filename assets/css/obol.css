@@ -475,6 +475,21 @@ main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-widt
 /* ---- coach ---- */
 .coach-hero { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; padding: 18px 20px; background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 22px; }
 .coach-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+/* "What obol learned" flash after a paste mints facts: a calm, high-contrast banner, never colour-only
+   (the flag glyph + the "Here is what obol learned" heading carry the meaning), honours reduced motion. */
+.coach-flash { position: relative; border: 1px solid var(--accent); border-left: 3px solid var(--accent); background: linear-gradient(135deg, var(--accent-soft), transparent 80%), var(--surf2); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px; animation: coachFlashIn .25s ease-out; }
+@media (prefers-reduced-motion: reduce) { .coach-flash { animation: none; } }
+@keyframes coachFlashIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.coach-flash-h { display: flex; align-items: center; gap: 7px; font-weight: 600; color: var(--accent-2); font-size: 13px; }
+.coach-flash-h .ic { flex: 0 0 auto; }
+.coach-flash-h span { flex: 1 1 auto; }
+.coach-flash-x { flex: 0 0 auto; background: none; border: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 4px; border-radius: 4px; }
+.coach-flash-x:hover { color: var(--text); background: var(--surf3); }
+.coach-flash-list { list-style: none; margin: 7px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.coach-flash-list li { font-size: 12px; color: var(--text); background: var(--surf3); border: 1px solid var(--line); border-radius: 20px; padding: 3px 11px; }
+.coach-flash-list li.coach-flash-more { background: none; border: none; color: var(--muted); padding: 3px 0; }
+.coach-flash-next { margin-top: 9px; font-size: 12px; color: var(--text-2); }
+.coach-flash-next strong { color: var(--accent-2); }
 .coach-kicker strong { color: var(--accent-2); }
 .coach-h1 { font-size: 24px; margin: 6px 0 6px; }
 .coach-sub { color: var(--text-2); margin: 0; max-width: 64ch; }
@@ -870,6 +885,10 @@ details.lo-fs-node[open] > summary::before { transform: rotate(90deg); }
 .ev-result { margin-top: 14px; }
 .ev-added { color: var(--green); font-weight: 600; margin-bottom: 8px; }
 .ev-none { color: var(--muted); font-style: italic; }
+.ev-learned { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.ev-learned li { font-size: 12.5px; color: var(--text); background: var(--bg2); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 20px; padding: 3px 11px; }
+.ev-learned li.ev-learned-more { background: none; border: none; color: var(--muted); padding: 3px 0; }
+.ev-factraw summary { font-size: 11.5px; color: var(--muted); cursor: pointer; margin-bottom: 6px; }
 .ev-factlist { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .ev-factlist li { background: var(--bg2); border: 1px solid var(--line); border-left: 3px solid var(--green); border-radius: 6px; padding: 4px 8px; font-size: 12px; }
 .ev-factlist li.refuted { border-left-color: var(--red); }

@@ -150,11 +150,19 @@
           + (r.parseError ? 'The parser skipped part of this output (see the browser console). ' : '')
           + 'Set the command above if the output is on its own, or add a fact manually.</div>';
       } else {
+        // Plain-language, value-aware lead (shared with the coach's paste flash): say what obol LEARNED
+        // before the raw kind list, so the summary reads to a human, not just a fact dump.
+        var sum = (OBOL.coach && OBOL.coach.pasteSummary) ? OBOL.coach.pasteSummary(r.facts) : null;
+        var plain = sum ? ('<ul class="ev-learned">' + sum.phrases.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('')
+          + (sum.extra ? ('<li class="ev-learned-more">and ' + sum.extra + ' more</li>') : '') + '</ul>'
+          + (sum.next ? ('<div class="ev-imp-next">Next move: <strong>' + esc(sum.next) + '</strong></div>') : '')) : '';
         resEl.innerHTML = '<div class="ev-added">Minted ' + r.added + ' new fact' + (r.added === 1 ? '' : 's') + ' (' + r.facts.length + ' recognized)'
           + (origin ? (' from ' + origin) : '') + ':</div>'
+          + plain
+          + '<details class="ev-factraw"' + (sum ? '' : ' open') + '><summary>Fact details</summary>'
           + '<ul class="ev-factlist">' + r.facts.map(function (f) {
             return '<li class="' + esc(f.state) + '"><code>' + esc(f.kind) + '</code> <span class="ev-fscope">' + esc(f.scope) + '</span></li>';
-          }).join('') + '</ul>'
+          }).join('') + '</ul></details>'
           + '<a class="btn-primary" href="#/path">See Updated Coach →</a>';
       }
     }

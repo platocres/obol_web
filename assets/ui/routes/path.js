@@ -801,7 +801,92 @@
     topMove: function () { return computeCoach().onFlow[0] || null; },
     topMoveFor: function (facts) { return rankFor(facts).onFlow[0] || null; },
     prepBlock: prepBlock,
+    pasteSummary: pasteSummary,
   };
+
+  // ── Positive feedback on paste ───────────────────────────────────────────────────────────────
+  // After a paste mints facts, the old feedback was a 2-second toast ("Minted 9 facts, recomputing")
+  // and a silent re-render, so for this audience it read as "nothing happened" even when the engine
+  // learned plenty. pasteSummary turns the recognized facts into a plain-language, value-aware line of
+  // what obol LEARNED (the flag captured, the credential validated, the writable groups found) plus the
+  // next move it unlocked, so the tool visibly says what it did. Presentation only, no new facts.
+  // _pasteFlash carries that summary across the ingest-triggered re-render (the toast element is wiped);
+  // render() emits it once at the top of the coach, then clears it.
+  var _pasteFlash = null;
+  // Rank a fact kind by how much the operator cares to hear it announced (0 = loudest).
+  function flashRank(k) {
+    if (/^objective\.(root_flag|local_flag|flag)$/.test(k)) return 0;
+    if (k === 'objective.flag_located') return 1;
+    if (/^access\.(admin|system|root)$/.test(k)) return 2;
+    if (k === 'loot.ntds' || /^hash\.(krbtgt|ntlm|asrep|tgs)$/.test(k)) return 3;
+    if (/^credential\.(validated|available)$/.test(k)) return 4;
+    if (/^(ad\.acl_lead|ad\.control_paths|ad\.attack_paths|ad\.group_joined|loot\.)/.test(k)) return 5;
+    if (/^foothold\.|^access\.shell$/.test(k)) return 6;
+    if (/^(ad\.user_list|ad\.domain_known|ad\.dc_candidate|ad\.anonymous_bind|smb\.null_session|smb\.guest_session)/.test(k)) return 7;
+    if (/^(host\.|ad\.base_dn)/.test(k)) return 8;
+    if (/^(service\.|port:|ports\.)/.test(k)) return 10;
+    return 9;
+  }
+  // A short, value-aware phrase for one newly learned fact. Reads the fact's own value, never invents.
+  function flashPhrase(f) {
+    var k = String(f.kind || ''), v = f.value || {};
+    var who = v.user || v.username || v.account || '';
+    if (k === 'objective.root_flag') return 'Captured the root flag';
+    if (k === 'objective.local_flag') return 'Captured the user flag';
+    if (k === 'objective.flag') return 'Captured a flag';
+    if (k === 'objective.flag_located') return 'Located the ' + (v.slot === 'root' ? 'root' : (v.slot === 'local' ? 'user' : '')) + ' flag' + (v.path ? (' at ' + v.path) : '');
+    if (k === 'access.admin' || k === 'access.system' || k === 'access.root') return 'Gained administrative access';
+    if (k === 'loot.ntds') return 'Dumped the NTDS (every domain hash)';
+    if (k === 'hash.krbtgt') return 'Recovered the krbtgt hash (golden-ticket key)';
+    if (k === 'hash.ntlm') return 'Recovered an NTLM hash' + (who ? (' for ' + who) : '');
+    if (k === 'hash.asrep') return 'Captured an AS-REP roastable hash' + (who ? (' for ' + who) : '');
+    if (k === 'hash.tgs') return 'Captured a Kerberoast hash' + (who ? (' for ' + who) : '');
+    if (k === 'credential.validated') return 'Validated the credential' + (who ? (' for ' + who) : '') + ' (it works here)';
+    if (k === 'credential.available') return 'A working credential' + (who ? (' for ' + who) : '');
+    if (k === 'ad.acl_lead') {
+      var tg = (v.targets || []).slice(0, 3);
+      return 'Found writable objects' + (tg.length ? (': ' + tg.join(', ') + ((v.targets || []).length > tg.length ? (', +' + ((v.targets || []).length - tg.length) + ' more') : '')) : '');
+    }
+    if (k === 'ad.control_paths') return 'Gained a control path' + ((v.rights || []).length ? (' (' + (v.rights || []).join(', ') + ')') : '');
+    if (k === 'ad.attack_paths') return 'Mapped an attack path to Domain Admin';
+    if (k === 'ad.group_joined') return 'Joined the group ' + (v.group || '(a group)');
+    if (k === 'ad.user_list') return 'Enumerated the domain user list' + (v.count ? (' (' + v.count + ' users)') : '');
+    if (k === 'ad.domain_known') return 'Confirmed the domain ' + (v.name || v.domain || '');
+    if (k === 'ad.dc_candidate') return 'Identified the domain controller';
+    if (k === 'ad.anonymous_bind') return 'Confirmed an anonymous LDAP bind';
+    if (k === 'ad.base_dn') return 'Derived the LDAP base DN';
+    if (k === 'smb.null_session') return 'Confirmed an anonymous (null) SMB session';
+    if (k === 'smb.guest_session') return 'Confirmed guest SMB access';
+    if (/^foothold\.|^access\.shell$/.test(k)) return 'Landed a foothold on the target';
+    if (k === 'host.hostname') return 'Learned the hostname ' + (v.name || v.hostname || '');
+    // generic fallback: the friendly noun phrase for the kind, Title Cased
+    try { if (OBOL.pack && OBOL.pack.friendly) return U.titleCase(OBOL.pack.friendly(k) || k.replace(/[._]/g, ' ')); } catch (e) {}
+    return k.replace(/[._]/g, ' ');
+  }
+  // Build the summary object from the recognized facts of a paste. Dedup by kind (one line per kind,
+  // keeping the richest value), rank, take the top few. Returns null when there is nothing worth saying.
+  function pasteSummary(facts) {
+    if (!facts || !facts.length) return null;
+    var byKind = {};
+    facts.forEach(function (f) {
+      var k = f.kind; if (!k) return;
+      // keep the value with the most targets/richest, else the first
+      if (!byKind[k]) byKind[k] = f;
+      else {
+        var a = (byKind[k].value && (byKind[k].value.targets || []).length) || 0;
+        var b = (f.value && (f.value.targets || []).length) || 0;
+        if (b > a) byKind[k] = f;
+      }
+    });
+    var uniq = Object.keys(byKind).map(function (k) { return byKind[k]; });
+    uniq.sort(function (a, b) { return flashRank(a.kind) - flashRank(b.kind); });
+    var top = uniq.slice(0, 4).map(flashPhrase).filter(Boolean);
+    if (!top.length) return null;
+    var extra = uniq.length - top.length;
+    var next = '';
+    try { var m = computeCoach().onFlow[0]; next = m ? m.title : ''; } catch (e) {}
+    return { phrases: top, extra: extra > 0 ? extra : 0, total: facts.length, next: next };
+  }
 
   function render(ctx) {
     var c = computeCoach();
@@ -811,6 +896,17 @@
 
     var opensCount = OBOL.pack.opensUpNext ? OBOL.pack.opensUpNext(facts, pack).length : locked.length;
     var html = '<section class="coach ns-coach-wrap">';
+    // Positive feedback: a plain-language banner of what the last paste LEARNED + the move it unlocked,
+    // so a paste that minted facts never reads as "nothing happened". Shown once, then cleared.
+    if (_pasteFlash) {
+      var fl = _pasteFlash; _pasteFlash = null;
+      html += '<div class="coach-flash" role="status">'
+        + '<div class="coach-flash-h">' + OBOL.ic('flag') + '<span>Parsed ' + fl.total + ' fact' + (fl.total === 1 ? '' : 's') + '. Here is what obol learned:</span>'
+        + '<button class="coach-flash-x" aria-label="Dismiss">×</button></div>'
+        + '<ul class="coach-flash-list">' + fl.phrases.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('')
+        + (fl.extra ? ('<li class="coach-flash-more">and ' + fl.extra + ' more detail' + (fl.extra === 1 ? '' : 's') + '</li>') : '') + '</ul>'
+        + (fl.next ? ('<div class="coach-flash-next">Next move: <strong>' + esc(fl.next) + '</strong></div>') : '') + '</div>';
+    }
     // hero
     html += '<div class="coach-hero">'
       + '<div class="coach-hero-main">'
@@ -1017,6 +1113,10 @@
         if (active) active.classList.add('active');
       }
     }
+    // dismiss the "what obol learned" flash banner
+    U.on(mount, 'click', '.coach-flash-x', function (e, t) {
+      var fl = t.closest('.coach-flash'); if (fl) fl.remove();
+    });
     // click a card (but not an interactive control inside it) to open it
     U.on(mount, 'click', '.ns-card', function (e, t) {
       if (e.target.closest('.ns-cmd') || e.target.closest('.ns-toggle') || e.target.closest('button') || e.target.closest('a') || e.target.closest('input') || e.target.closest('textarea')) return;
@@ -1145,7 +1245,11 @@
           actionId: box.getAttribute('data-action') || '', source: 'paste' });
         if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
         if (r.added) {
-          U.toast('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + 'recomputing');
+          // Positive, value-aware feedback: say what obol learned + the next move, so the paste never
+          // reads as silent. The flash survives the re-render below (the toast element gets wiped).
+          _pasteFlash = pasteSummary(r.facts);
+          var lead = _pasteFlash && _pasteFlash.phrases[0] ? _pasteFlash.phrases[0] : ('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's'));
+          U.toast(lead + ' · coach updated');
           OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
         } else {
           var aid = box.getAttribute('data-action') || '';
