@@ -38,14 +38,23 @@
   function openKey(id) { return 'obol.cv:' + (OBOL.store.activeId() || '') + ':' + id; }
   function isOpen(id, def) { try { var v = localStorage.getItem(openKey(id)); return v == null ? def : v === '1'; } catch (e) { return def; } }
 
+  // Per-credential status on a host. ADMIN is only claimed when THIS user is the one proven admin
+  // (an access.admin/credential.admin fact whose identity/user matches), never just because someone
+  // owns the box: on HTB Forest svc-alfresco is a valid foothold you escalate FROM, not an admin.
   function cellStatus(cred, host) {
     var f = OBOL.store.factSetForTarget(host.ip);
-    var admin = f.has('access.admin') || f.has('access.system') || f.has('access.root');
-    var validHere = f.facts.some(function (x) {
-      return x.state === 'supported' && (x.kind === 'credential.available' || x.kind.indexOf('.authenticated') > 0)
-        && String((x.value || {}).user || '').toLowerCase() === String(cred.user || '').toLowerCase();
+    var u = String(cred.user || '').toLowerCase();
+    if (!u) return { level: '' };
+    function ident(v) { return String((v && (v.identity || v.user)) || '').toLowerCase(); }
+    var adminHere = false, validHere = false;
+    (f.facts || []).forEach(function (x) {
+      if (x.state !== 'supported') return;
+      var v = x.value || {};
+      if ((x.kind === 'access.admin' || x.kind === 'access.system' || x.kind === 'access.root') && ident(v) === u) adminHere = true;
+      else if (x.kind === 'credential.admin' && String(v.user || '').toLowerCase() === u) adminHere = true;
+      else if ((x.kind === 'credential.available' || x.kind.indexOf('.authenticated') > 0) && String(v.user || '').toLowerCase() === u) validHere = true;
     });
-    if (validHere && admin) return { level: 'admin' };
+    if (adminHere) return { level: 'admin' };
     if (validHere) return { level: 'valid' };
     return { level: '' };
   }
@@ -285,7 +294,10 @@
     }
     var hostCards = vault.hosts.map(function (h) {
       var rows = byHost[h.ip]; if (!rows.length) return '';
-      var owned = rows.some(function (e) { return (e.worksOn || []).some(function (w) { return w.ip === h.ip && w.level === 'admin'; }); });
+      // the host badge is host-LEVEL: the box is Owned if anything got admin on it, even when no single
+      // credential in this list is the proven admin (e.g. admin reached via ACL abuse / DCSync).
+      var hf = OBOL.store.factSetForTarget(h.ip);
+      var owned = hf.has('access.admin') || hf.has('access.system') || hf.has('access.root');
       var valid = rows.some(function (e) { return (e.worksOn || []).some(function (w) { return w.ip === h.ip; }); });
       var badge = owned ? '<span class="cv-hbadge adm">Owned</span>' : valid ? '<span class="cv-hbadge ok">Access</span>' : '<span class="cv-hbadge found">Loot</span>';
       var title = (h.hostname || h.ip) + (h.hostname ? '  ' + h.ip : '');
