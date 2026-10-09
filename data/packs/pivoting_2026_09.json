@@ -88,7 +88,6 @@
         "sshuttle"
       ],
       "requires_any": [
-        "credential.available",
         "foothold.linux"
       ],
       "produces": [
@@ -117,7 +116,6 @@
         "ssh"
       ],
       "requires_any": [
-        "credential.available",
         "foothold.linux"
       ],
       "produces": [
@@ -230,7 +228,6 @@
         "ssh"
       ],
       "requires_any": [
-        "credential.available",
         "foothold.linux",
         "host.multihomed",
         "scan.local.routes",

@@ -177,6 +177,19 @@
     out.push('  fi');
     out.push('else skip "hashcat not installed"; fi');
     out.push('');
+    // evil-winrm WinRM fix: a fresh Kali right now ships the rubyntlm 0.6.7 gem, which has a regression
+    // (SessionCrypto constants left in session.rb) that throws
+    // `NameError: ... CLIENT_TO_SERVER_SEALING` the instant evil-winrm connects with a hash — auth
+    // actually succeeded, the first sealed message is what blows up. 0.6.8 carries the fix (PR #80).
+    // Bump it so evil-winrm just works out of the box, same spirit as the pocl-for-hashcat fix above.
+    out.push('echo "[winrm] evil-winrm rubyntlm sealing fix"');
+    out.push('if have evil-winrm; then');
+    out.push('  if gem list rubyntlm 2>/dev/null | grep -q "0.6.8"; then skip "rubyntlm 0.6.8+";');
+    out.push('  elif gem list rubyntlm 2>/dev/null | grep -q "0.6.7"; then say "rubyntlm 0.6.7 breaks WinRM sealing, installing 0.6.8";');
+    out.push('    $SUDO gem install rubyntlm -v ">= 0.6.8" >/dev/null 2>&1 || gem install --user-install rubyntlm -v ">= 0.6.8" >/dev/null 2>&1 || warn "rubyntlm update failed, run: sudo gem install rubyntlm";');
+    out.push('  else skip "rubyntlm (not the buggy 0.6.7)"; fi');
+    out.push('else skip "evil-winrm not installed"; fi');
+    out.push('');
     // the paste-back block: a single OBOL-ARSENAL v1 line obol-web ingests to learn this box.
     out.push('# ---- paste the block below back into obol-web (Loadout) ----');
     out.push('emit(){ printf "%s" "$1"; }');

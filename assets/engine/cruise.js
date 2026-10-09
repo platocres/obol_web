@@ -101,7 +101,7 @@
   // filled once the feeding fact is pasted in.
   var GATE_TOKENS = { domain: 1, basedn: 1, dc: 1, dc_netbios: 1, dc_account: 1, user: 1, password: 1,
     nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, ca_name: 1, template: 1,
-    pfx: 1, nmap_ports: 1, krbtgt_hash: 1 };
+    pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1 };
 
   function cmdGated(filledCmd) {
     var s = (filledCmd && filledCmd.filled) || '';

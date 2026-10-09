@@ -178,6 +178,36 @@ Loadout, your installed tools). Easy to rename.
 
 ### Post-build follow-ups (real-box testing on Forest)
 
+- 2026-10-09: Forest end-to-end run audit (owner: "get all the way to the end of the Forest test smoothly
+  next time, without digging for the right move or scrolling past ten commands to the one I needed"). Replayed
+  the owner's real Forest session stage by stage against the GATED Ready-Now view (OBOL.coach.compute, what the
+  user actually sees, not raw rankActions), and fixed the two places the run went non-obvious. (1) DA-ownership
+  auto-fill, no credential swap: {{dahash}}/{{dauser}} now resolve from the credential.available RID-500 dcsync
+  fact independently of the active credential (command.js, mirroring the {{krbtgt_hash}} pattern; added to
+  GATE_TOKENS in path.js and cruise.js so a command still missing them hides rather than printing a dead token).
+  own-domain-pth rewritten to lead with `nxc smb {{target}} -u {{dauser}} -H {{dahash}}` (confirm) then the
+  -x whoami, impacket-psexec and evil-winrm variants, all pre-filled with the Administrator hash the NTDS dump
+  just minted, so the operator never swaps their active credential to Administrator. flag-hunt-root-windows /
+  flag-hunt-windows got the same remote hash-read commands first (lab flag read with no shell needed).
+  (2) Move ordering after the NTDS dump: own-domain-pth (priority 99) was ranking #5 in the gated view behind
+  spider-secrets and three SSH pivots because the ranker sorts score before priority. Root-caused as MOVE-DATA,
+  not ranking-math (the scoreboard thesis again): the three SSH pivots (pivot-sshuttle, pivot-ssh-dynamic,
+  pivot-ssh-portforward) required a bare `credential.available`, so they were eligible on a pure-Windows box with
+  no SSH foothold at all, out of line with pivot-chisel-socks / pivot-ligolo which correctly gate on
+  foothold.linux/foothold.windows; dropped `credential.available` from their requires_any so an SSH pivot needs a
+  Linux foothold to pivot THROUGH (methodologically correct, and they vanish from Forest). spider-secrets got
+  `deprioritize_when: [loot.ntds]` (re-spidering shares for candidate creds is pointless once you hold every
+  domain hash); lateral-exec already had the same. Result, gated replay: the whole run is now a clean top-1 path,
+  nmap -> ad-anon-ldap-enum -> asrep-roast -> crack-asrep -> ad-path-manual(map) -> dcsync -> own-domain-pth ->
+  flag-hunt-root-windows, each leading move's first command the one to run. (3) evil-winrm on fresh Kali: the
+  "CLIENT_TO_SERVER_SEALING" crash is a rubyntlm 0.6.7 regression (key-derivation moved to a SessionCrypto mixin,
+  constants left in session.rb; auth succeeds, the first sealed message throws), fixed in rubyntlm 0.6.8
+  (WinRb/rubyntlm PR #80, issue #81). arsenal.js buildScript now installs rubyntlm >= 0.6.8 when evil-winrm is
+  present and on the buggy 0.6.7; the own-domain-pth WinRM field note and the two crack notes carry the one-line
+  `sudo gem install rubyntlm` fix as a copy chip. Scoreboard clean throughout (ranker-sim 0/49, sweep 0.0%),
+  full engine suite + corpus + ranker + cruise + browser-smoke + lint + gap + attack-coverage + help-coverage all
+  green, bundle rebuilt, assets stamped.
+
 - 2026-10-07: House toolkit (NetExec) preference + switchless probe, and What Changed folded into Explain
   Output. (1) Ranking: added a single global tool-class rule in pack.js (PREFERRED_TOOLKIT = nxc family),
   expressed as data like LOCUS_REMOTE, never per-move weights. It drives the within-move default command

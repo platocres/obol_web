@@ -145,6 +145,22 @@
       if (kt && kt.nthash) ctx.krbtgt_hash = kt.nthash;
     }
 
+    // Domain-admin hash from a DCSync/NTDS dump, resolved INDEPENDENTLY of the active credential (like
+    // krbtgt_hash). So the moment you dump NTDS, the "read the flag / own the box with the DA hash"
+    // commands fill with the built-in Administrator (RID 500) hash, with NO manual credential swap.
+    if (!ctx.dahash) {
+      var avs = facts.values('credential.available');
+      for (var ai = 0; ai < avs.length; ai++) {
+        var v = avs[ai];
+        if (v && v.method === 'dcsync' && (v.nthash || v.hash)) {
+          ctx.dahash = v.nthash || v.hash;
+          ctx.dauser = v.user || 'Administrator';
+          if (!ctx.domain && v.domain) ctx.domain = v.domain;
+          break;
+        }
+      }
+    }
+
     // ADCS ca/template/pfx
     var adcs = firstVal(facts, 'adcs.vulnerable');
     if (adcs) {
