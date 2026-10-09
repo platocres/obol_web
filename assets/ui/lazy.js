@@ -33,7 +33,7 @@
     decisionmap: ['data/decision-forks.js?v=abde552b', 'data/parser-signatures.js?v=7c8e5159', 'data/coverage-expected.js?v=afdb39b5', 'data/flag-reach.js?v=e8d6c84a', 'assets/engine/decisionmap.js?v=8986cb18', 'assets/ui/decisiontree.js?v=b97043a7'],
     checklist: ['assets/ui/routes/checklist.js?v=68b05ed8'],
     target: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/target.js?v=7cff1a86'],
-    creds: ['assets/ui/routes/creds.js?v=c8322951'],
+    creds: ['assets/ui/routes/creds.js?v=5a242a11'],
     scoreboard: ['assets/ui/routes/scoreboard.js?v=7fa2dd83'],
     playbooks: ['data/playbooks-bundle.js?v=31b337d6', 'assets/engine/playbooks.js?v=be235b11', 'assets/ui/routes/playbooks.js?v=db570cba'],
     map: ['assets/engine/engmap.js?v=488914b1', 'assets/ui/routes/map.js?v=b415a554'],
