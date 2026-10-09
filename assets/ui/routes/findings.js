@@ -170,14 +170,18 @@
   }
 
   // One technique's defensive card: what you did, D3FEND countermeasures, ATT&CK detection, data
-  // sources, mitigations. Reused by the Defensive view and the matrix cell detail.
-  function techCardHtml(def) {
-    return '<div class="fw-tech"><div class="fw-tech-h"><a href="' + U.attr(def.url || 'https://attack.mitre.org/techniques/' + def.id.replace('.', '/') + '/') + '" target="_blank" rel="noopener">' + esc(def.id) + '</a> ' + esc(def.name) + '</div>'
-      + (def.findings && def.findings.length ? '<div class="fw-tech-row"><span class="mini-label">You Did</span> ' + def.findings.map(function (t) { return '<span class="fw-chip you">' + esc(t) + '</span>'; }).join('') + '</div>' : '')
-      + (def.d3fend && def.d3fend.length ? '<div class="fw-tech-row"><span class="mini-label">D3FEND Counters</span> ' + def.d3fend.map(function (c) { return '<span class="fw-chip d3" title="' + U.attr(c.id) + '">' + esc(c.name) + '</span>'; }).join('') + '</div>' : '')
-      + (def.detection ? '<div class="fw-tech-row"><span class="mini-label">Detect</span> <span class="fw-tech-det">' + esc(def.detection) + '</span></div>' : '')
-      + (def.dataSources && def.dataSources.length ? '<div class="fw-tech-row"><span class="mini-label">Data Sources</span> ' + def.dataSources.map(function (d) { return '<span class="fw-chip">' + esc(d) + '</span>'; }).join('') + '</div>' : '')
-      + (def.mitigations && def.mitigations.length ? '<div class="fw-tech-row"><span class="mini-label">ATT&CK Mitigations</span> ' + def.mitigations.map(function (d) { return '<span class="fw-chip">' + esc(d) + '</span>'; }).join('') + '</div>' : '')
+  // sources, mitigations. Reused by the Defensive view and the matrix cell detail. A rotating hue per
+  // card (fw-tc-<n>) gives the grid the multicolour neon-glass look; section labels are role-coloured.
+  function techCardHtml(def, i) {
+    function row(labelCls, label, inner) { return '<div class="fw-tech-row"><span class="mini-label ' + labelCls + '">' + label + '</span><div class="fw-tech-vals">' + inner + '</div></div>'; }
+    function chips(list, cls) { return list.map(function (d) { return '<span class="fw-chip' + (cls ? ' ' + cls : '') + '">' + esc(d) + '</span>'; }).join(''); }
+    var hue = 'fw-tc-' + ((i || 0) % 6);
+    return '<div class="fw-tech ' + hue + '"><div class="fw-tech-h"><a href="' + U.attr(def.url || 'https://attack.mitre.org/techniques/' + def.id.replace('.', '/') + '/') + '" target="_blank" rel="noopener">' + esc(def.id) + '</a> ' + esc(def.name) + '</div>'
+      + (def.findings && def.findings.length ? row('fw-lbl-you', 'You Did', def.findings.map(function (t) { return '<span class="fw-chip you">' + esc(t) + '</span>'; }).join('')) : '')
+      + (def.d3fend && def.d3fend.length ? row('fw-lbl-d3', 'D3FEND Counters', def.d3fend.map(function (c) { return '<span class="fw-chip d3" title="' + U.attr(c.id) + '">' + esc(c.name) + '</span>'; }).join('')) : '')
+      + (def.detection ? row('fw-lbl-det', 'Detect', '<span class="fw-tech-det">' + esc(def.detection) + '</span>') : '')
+      + (def.dataSources && def.dataSources.length ? row('fw-lbl-data', 'Data Sources', chips(def.dataSources, 'data')) : '')
+      + (def.mitigations && def.mitigations.length ? row('fw-lbl-mit', 'ATT&CK Mitigations', chips(def.mitigations, 'mit')) : '')
       + '</div>';
   }
 
@@ -354,14 +358,14 @@
     var d3 = m.d3fend || { tactics: [] };
     if (d3.tactics.length) {
       out += '<div class="fw-d3-wrap"><div class="fw-d3-matrix">' + d3.tactics.map(function (col) {
-        var cls = 'd3t-' + col.tactic.toLowerCase();
+        // the tactic hue lives on the card (fw-d3t-<tactic> sets --d3); header and cells inherit it.
         var cells = col.items.map(function (it) {
-          return '<div class="fw-d3-cell ' + cls + '" data-d3name="' + U.attr(it.name) + '" data-counters="' + U.attr(it.counters.join(',')) + '"'
+          return '<div class="fw-d3-cell" data-d3name="' + U.attr(it.name) + '" data-counters="' + U.attr(it.counters.join(',')) + '"'
             + ' aria-label="' + U.attr(it.name + ', D3FEND countermeasure, counters ' + it.counters.length + ' technique' + (it.counters.length === 1 ? '' : 's')) + '">'
             + '<span class="fw-d3-n">' + esc(it.name) + '</span>'
             + '<span class="fw-d3-c">' + it.counters.length + '</span></div>';
         }).join('');
-        return '<div class="fw-d3-col"><div class="fw-d3-h ' + cls + '"><span class="fw-d3-tn">' + esc(col.tactic) + '</span>'
+        return '<div class="fw-d3-col fw-d3t-' + esc(col.tactic.toLowerCase()) + '"><div class="fw-d3-h"><span class="fw-d3-tn">' + esc(col.tactic) + '</span>'
           + '<span class="fw-d3-td">' + esc(D3_TACTIC_DEF[col.tactic] || '') + '</span></div>'
           + '<div class="fw-d3-cells">' + cells + '</div></div>';
       }).join('') + '</div></div>';
