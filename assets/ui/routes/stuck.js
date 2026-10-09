@@ -67,7 +67,7 @@
 
   // ── interview copy ─────────────────────────────────────────────────────────────────────────────
   var SAY = {
-    intro: 'Hello, friend. You look stranded on the near shore. I am the ferryman, and I have carried a great many across to root. Tell me where you stand, and I will light the way.',
+    intro: 'Hello, friend. You look stranded on the near shore. I am Charon The Ferryman, and I have carried a great many across to root. Tell me where you stand, and I will light the way.',
     host: 'First: is there even a far shore? Does the host answer a ping or a scan?',
     ports: 'Every crossing begins with the open doors. Mark each port you have found open. These decide which paths I can show you.',
     cred: 'Do you carry a key? A credential that truly turns a lock?',
@@ -100,7 +100,7 @@
           'Begin with everything obol already knows about your current box, then mark what fails to refine it.') : '';
       return '<div class="stuck-answers stuck-intro">'
         + opt(' data-goto="host"', 'Carry Me Across',
-          'Answer a few quick questions about your target, and I lay out ranked moves to try, in order.')
+          'Answer a few quick questions about your target, and Charon lays out moves to try, in order.')
         + opt(' data-skip="1" data-goto="board"', 'I Know The Way, Show The Board',
           'Skip the questions and go straight to the board. Add your open ports and findings there yourself.')
         + seed + '</div>';

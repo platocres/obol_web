@@ -28,7 +28,7 @@
     tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=70b2d005', 'assets/ui/routes/tools.js?v=aff6dc97'],
     loadout: ['assets/engine/arsenal.js?v=0761fa4f', 'assets/ui/routes/loadout.js?v=f6d299e1'],
     workbench: ['assets/engine/workbench.js?v=335c8fa6', 'assets/ui/routes/workbench.js?v=c698ea13'],
-    stuck: ['data/stuck-catalog.js?v=14d96459', 'assets/engine/stuck.js?v=9f3ec324', 'assets/ui/routes/stuck.js?v=245da4ba'],
+    stuck: ['data/stuck-catalog.js?v=14d96459', 'assets/engine/stuck.js?v=9f3ec324', 'assets/ui/routes/stuck.js?v=014448d3'],
     study: ['data/study-fixtures.js?v=a596d3da', 'assets/engine/study.js?v=303c7964', 'assets/ui/routes/study.js?v=6030fff7'],
     decisionmap: ['data/decision-forks.js?v=abde552b', 'data/parser-signatures.js?v=7c8e5159', 'data/coverage-expected.js?v=afdb39b5', 'data/flag-reach.js?v=e8d6c84a', 'assets/engine/decisionmap.js?v=8986cb18', 'assets/ui/decisiontree.js?v=b97043a7'],
     checklist: ['data/oscp-scope.js?v=b211d828', 'assets/ui/routes/checklist.js?v=d649c597'],
