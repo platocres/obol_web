@@ -83,9 +83,12 @@
       for (var i = 0; i < cs.length; i++) { if (ticks[a.id + '#' + i]) doneCmds++; }
     });
 
-    var toggle = '<div class="chk-scope" role="group" aria-label="Command scope"><span class="mini-label">Show</span>'
+    var toggle = '<div class="chk-tools">'
+      + '<button type="button" class="chk-xa" data-ckall="collapse" title="Collapse every phase and move">Collapse All</button>'
+      + '<button type="button" class="chk-xa" data-ckall="expand" title="Expand every phase and move">Expand All</button>'
+      + '<div class="chk-scope" role="group" aria-label="Command scope"><span class="mini-label">Show</span>'
       + '<button type="button" class="cks-btn' + (scope === 'all' ? ' active' : '') + '" data-ckscope="all">All</button>'
-      + '<button type="button" class="cks-btn' + (scope === 'oscp' ? ' active' : '') + '" data-ckscope="oscp">OSCP</button></div>';
+      + '<button type="button" class="cks-btn' + (scope === 'oscp' ? ' active' : '') + '" data-ckscope="oscp">OSCP</button></div></div>';
 
     var scopeNote = scope === 'oscp'
       ? ' <span class="chk-scope-note">OSCP view: hiding ' + hidden + ' moves that are out of the PEN-200 exam scope or exam-illegal.</span>'
@@ -94,11 +97,13 @@
       + '<div class="chk-top"><h1 class="route-h1">Checklist</h1>' + toggle + '</div>'
       + '<p class="route-sub">Every command obol has inventoried, grouped by attack-chain phase then by move. Tick a command when you run it; a command obol already saw in your Run Log is <span class="chk-ran-k">grayed</span>. Add any command to the <strong>Playbook</strong> (lower right) to build a runnable script. ' + totalCmds + ' commands across ' + pack.length + ' moves, ' + doneCmds + ' ticked.' + scopeNote + '</p>';
 
+    var railItems = [];
     OBOL.phases.PHASES.forEach(function (p) {
       var moves = (byPhase[p] || []).slice().sort(function (a, b) { return b.priority - a.priority; });
       if (!moves.length) return;
       var phaseCmds = 0; moves.forEach(function (a) { phaseCmds += cmdsOf(a).length; });
-      html += '<details class="chk-phase" data-ck="ph:' + p + '"' + (isOpen('ph:' + p, true) ? ' open' : '') + '>'
+      railItems.push({ p: p, moves: moves.length, cmds: phaseCmds });
+      html += '<details class="chk-phase" data-ck="ph:' + p + '"' + (isOpen('ph:' + p, false) ? ' open' : '') + '>'
         + '<summary class="chk-phase-h"><span class="ph-chip ph-' + p + '">' + p + '</span>'
         + '<span class="chk-ph-n">' + moves.length + ' move' + (moves.length === 1 ? '' : 's') + ' &middot; ' + phaseCmds + ' command' + (phaseCmds === 1 ? '' : 's') + '</span></summary>'
         + '<div class="chk-phase-body">';
@@ -135,9 +140,29 @@
       html += '</div></details>';
     });
 
+    html += phaseRail(railItems);
     html += playbookPanel(eng, facts, params);
     html += '</section>';
     return html;
+  }
+
+  // a sticky left rail to jump between phases: a collapsed tab that expands to the phase list. Teal
+  // neon glass, a hue no phase pill uses, so it reads as navigation chrome, not another phase.
+  function railOpen() { try { return localStorage.getItem('obol.ck.rail:' + engId()) === '1'; } catch (e) { return false; } }
+  function setRailOpen(on) { try { localStorage.setItem('obol.ck.rail:' + engId(), on ? '1' : '0'); } catch (e) {} }
+  function phaseRail(items) {
+    if (!items.length) return '';
+    var open = railOpen();
+    var list = items.map(function (it) {
+      return '<button type="button" class="chk-rail-item" data-jump="ph:' + it.p + '">'
+        + '<span class="ph-chip ph-' + it.p + '">' + it.p + '</span>'
+        + '<span class="chk-rail-n">' + it.moves + '</span></button>';
+    }).join('');
+    return '<div class="chk-rail' + (open ? ' open' : '') + '" id="chk-rail">'
+      + '<button type="button" class="chk-rail-tab" data-rail-toggle aria-label="Jump to phase" title="Jump to phase">' + ic('branch') + '<span class="chk-rail-tabt">Phases</span></button>'
+      + '<div class="chk-rail-panel"><div class="chk-rail-h"><span>Jump To Phase</span>'
+      + '<button type="button" class="chk-rail-x" data-rail-toggle aria-label="Close" title="Close">&#10005;</button></div>'
+      + '<div class="chk-rail-list">' + list + '</div></div></div>';
   }
 
   // ---- store mutations (then re-render; the panel/collapse state lives in localStorage so it holds) ----
@@ -204,6 +229,22 @@
     if (!mount._ckBound) {
       mount._ckBound = true;
       U.on(mount, 'click', '[data-ckscope]', function (e, t) { e.preventDefault(); e.stopPropagation(); setCkScope(t.getAttribute('data-ckscope')); OBOL.router.render(); });
+      // collapse / expand every phase and move at once (set each node's state + persist, no re-render)
+      U.on(mount, 'click', '[data-ckall]', function (e, t) {
+        e.preventDefault(); e.stopPropagation();
+        var want = t.getAttribute('data-ckall') === 'expand';
+        Array.prototype.forEach.call(mount.querySelectorAll('details[data-ck]'), function (d) {
+          d.open = want; try { localStorage.setItem(openKey(d.getAttribute('data-ck')), want ? '1' : '0'); } catch (x) {}
+        });
+      });
+      // phase jump rail: toggle open/closed; jump to a phase (open it + scroll it into view)
+      U.on(mount, 'click', '[data-rail-toggle]', function (e, t) { e.preventDefault(); e.stopPropagation(); setRailOpen(!railOpen()); var r = mount.querySelector('#chk-rail'); if (r) r.classList.toggle('open', railOpen()); });
+      U.on(mount, 'click', '[data-jump]', function (e, t) {
+        e.preventDefault(); e.stopPropagation();
+        var key = t.getAttribute('data-jump');
+        var ph = mount.querySelector('details[data-ck="' + key + '"]');
+        if (ph) { ph.open = true; try { localStorage.setItem(openKey(key), '1'); } catch (x) {} try { ph.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (y) { ph.scrollIntoView(); } }
+      });
       U.on(mount, 'change', 'input[data-chk]', function (e, t) {
         var id = t.getAttribute('data-chk'), on = t.checked;
         OBOL.store.update(function (eng) { eng.checkTicks = eng.checkTicks || {}; if (on) eng.checkTicks[id] = true; else delete eng.checkTicks[id]; }, 'checklist');

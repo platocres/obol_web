@@ -1167,6 +1167,9 @@ ol.bh-steps li { margin-bottom: 9px; }
 .checklist { padding-bottom: 80px; }
 .chk-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
 .chk-top .route-h1 { margin: 0; }
+.chk-tools { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chk-xa { font: 700 12px var(--sans, inherit); color: var(--text-2); background: var(--surf1); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.chk-xa:hover { color: var(--text); border-color: var(--accent); }
 .chk-scope { display: inline-flex; align-items: center; gap: 4px; }
 .chk-scope .mini-label { margin-right: 2px; }
 .cks-btn { font: 700 12px var(--sans, inherit); color: var(--text-2); background: var(--surf1); border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
@@ -1217,6 +1220,31 @@ ol.bh-steps li { margin-bottom: 9px; }
 .chk-add.on { color: var(--on-accent, #06210f); background: var(--green); border-color: var(--green); }
 .chk-add .ic { font-size: 12px; }
 .chk-add-k { font-size: 9.5px; }
+
+/* phase jump rail: sticky on the left, collapsed to a tab, teal neon glass (a hue no phase pill uses) */
+.chk-rail { --rl: var(--teal); position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 55; }
+.chk-rail-tab { display: inline-flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 7px; cursor: pointer;
+  color: var(--rl); background: linear-gradient(180deg, color-mix(in srgb, var(--rl) 22%, var(--surf1)), var(--surf1));
+  border: 1px solid color-mix(in srgb, var(--rl) 45%, var(--line)); border-left: none; border-radius: 0 12px 12px 0;
+  box-shadow: 4px 0 20px -8px color-mix(in srgb, var(--rl) 60%, transparent); }
+.chk-rail-tab:hover { background: linear-gradient(180deg, color-mix(in srgb, var(--rl) 34%, var(--surf1)), var(--surf1)); }
+.chk-rail-tab .ic { font-size: 15px; }
+.chk-rail-tabt { writing-mode: vertical-rl; transform: rotate(180deg); font: 800 11px var(--mono); text-transform: uppercase; letter-spacing: .1em; text-shadow: 0 0 10px color-mix(in srgb, var(--rl) 55%, transparent); }
+.chk-rail.open .chk-rail-tab { display: none; }
+.chk-rail-panel { display: none; width: 210px; max-width: 72vw;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--rl) 12%, var(--surf1)), var(--surf1) 62%);
+  border: 1px solid color-mix(in srgb, var(--rl) 45%, var(--line)); border-left: none; border-radius: 0 14px 14px 0;
+  box-shadow: 10px 0 34px -12px color-mix(in srgb, var(--rl) 55%, transparent), inset 0 0 26px -18px var(--rl); overflow: hidden; }
+.chk-rail.open .chk-rail-panel { display: block; }
+.chk-rail-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 13px; border-bottom: 1px solid color-mix(in srgb, var(--rl) 30%, var(--line));
+  font: 800 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--rl); text-shadow: 0 0 10px color-mix(in srgb, var(--rl) 45%, transparent); }
+.chk-rail-x { background: transparent; border: none; color: var(--muted); font-size: 14px; cursor: pointer; line-height: 1; }
+.chk-rail-x:hover { color: var(--text); }
+.chk-rail-list { display: flex; flex-direction: column; gap: 5px; padding: 9px; max-height: 60vh; overflow-y: auto; }
+.chk-rail-item { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: 1px solid transparent; border-radius: 8px; background: transparent; cursor: pointer; text-align: left; }
+.chk-rail-item:hover { border-color: color-mix(in srgb, var(--rl) 45%, var(--line)); background: color-mix(in srgb, var(--rl) 10%, transparent); }
+.chk-rail-n { margin-left: auto; font: 700 10.5px var(--mono); color: var(--text-2); }
+@media (max-width: 860px) { .chk-rail { top: auto; bottom: 86px; transform: none; } }
 
 /* playbook builder: floating toggle + slide-out panel from the right */
 .pb-fab { position: fixed; right: 70px; bottom: 18px; z-index: 60; display: inline-flex; align-items: center; gap: 7px; font: 800 13px var(--sans, inherit); color: var(--on-accent, #06210f); background: var(--accent); border: none; border-radius: 24px; padding: 11px 17px; cursor: pointer; box-shadow: 0 10px 28px -8px color-mix(in srgb, var(--accent) 65%, transparent); }
