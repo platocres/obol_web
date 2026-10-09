@@ -1,11 +1,11 @@
 /*!
- * obol ui — routes/creds.js — the engagement's credential ledger / ops center.
- * The ONE place every credential of every kind obol has seen lives: working creds, found-but-untested,
- * captured hashes to crack, and enumerated usernames. For each: its secret (shown + copy), where it came
- * from, which hosts it works on, and which flag its access level unlocked. Plus live per-type lists
- * (usernames, passwords, NT hashes, AS-REP, Kerberoast, combos) you can copy or write to loot/, and a
- * one-click Load that arms the whole console with ANY credential (the nav dropdown stays proven-only).
- * Presentation only: everything is derived from the fact ledger; the matrix/retarget reuse the store.
+ * obol ui — routes/creds.js — the engagement's credential ledger, organized BY HOST.
+ * The one place every credential of every kind obol has seen lives. Working and found creds are grouped
+ * under the host they work on / were collected from; domain-roasted hashes to crack and bare enumerated
+ * usernames get their own sections. For each cred: its secret (shown + copy), type, where it came from,
+ * and which flag its access unlocked. A one-click Load arms the whole console with ANY credential (the
+ * nav dropdown stays proven-only). Plus always-visible, copyable per-type lists (usernames, passwords,
+ * NT hashes, AS-REP, Kerberoast, combos) you can copy or write to loot/. Derived from the fact ledger.
  */
 (function (root) {
   'use strict';
@@ -14,13 +14,18 @@
   function esc(s) { return U.esc(s); }
   function attr(s) { return U.attr(s); }
 
-  // Pull the account out of a Kerberos hash string so a roasted hash still names who it is.
   function asrepUser(h) { var m = /\$krb5asrep\$(?:\d+\$)?([^@*$\s:]+)@/i.exec(h || ''); return m ? m[1] : ''; }
   function tgsUser(h) { var m = /\$krb5tgs\$(?:\d+\$)?\*([^$*\s]+)\$/i.exec(h || ''); return m ? m[1] : ''; }
   function hostFromScope(scope) { return String(scope || '').indexOf('host:') === 0 ? scope.slice(5) : ''; }
+  function domFromScope(scope) { return String(scope || '').indexOf('domain:') === 0 ? scope.slice(7) : ''; }
+  function isRealUser(u) { return u && u.charAt(0) !== '('; }
+  // machine / service / built-in accounts, folded away so a host's human accounts read clean.
+  function isMachineAccount(u) {
+    u = String(u || ''); var lu = u.toLowerCase();
+    return /\$$/.test(u) || /^sm_/i.test(u) || /^\$/.test(u) || /^healthmailbox/i.test(u)
+      || lu === 'guest' || lu === 'defaultaccount' || lu === 'krbtgt';
+  }
 
-  // cred × host status, conservative: valid if a proven credential/auth fact names this user on the host,
-  // admin if the host is also owned. (The existing matrix semantics, reused for the "works on" column.)
   function cellStatus(cred, host) {
     var f = OBOL.store.factSetForTarget(host.ip);
     var admin = f.has('access.admin') || f.has('access.system') || f.has('access.root');
@@ -32,16 +37,12 @@
     if (validHere) return { c: '✓', cls: 'cell-ok', level: 'valid' };
     return { c: '·', cls: 'cell-none', level: '' };
   }
-
   function worksOnFor(e, hosts) {
-    if (!e.user || (e.type !== 'PW' && e.type !== 'NT')) return [];
+    if (!e.user || (e.type !== 'PW' && e.type !== 'NT' && e.type !== 'KRBTGT')) return [];
     var out = [];
     hosts.forEach(function (h) { var s = cellStatus(e, h); if (s.level) out.push({ ip: h.ip, hostname: h.hostname || '', level: s.level }); });
     return out;
   }
-
-  // Which flag's required access level this credential provided, from the hosts it works on. Local needs
-  // a valid login; root needs admin. Honest: "had the access this flag needed on this host", derived.
   function unlockedFor(e, hosts) {
     var out = [];
     (e.worksOn || []).forEach(function (w) {
@@ -59,8 +60,6 @@
     arr.forEach(function (x) { x = String(x == null ? '' : x).trim(); if (x && !s[x]) { s[x] = 1; o.push(x); } });
     return o.sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
   }
-  function isRealUser(u) { return u && u.charAt(0) !== '('; }
-
   function buildLists(entries) {
     var users = [], pws = [], ntlm = [], asrep = [], tgs = [], combos = [];
     entries.forEach(function (e) {
@@ -71,194 +70,212 @@
       if (e.type === 'AS-REP' && e.krbhash) asrep.push(e.krbhash);
       if (e.type === 'TGS' && e.krbhash) tgs.push(e.krbhash);
     });
-    return {
-      users: uniqSort(users), passwords: uniqSort(pws), ntlm: uniqSort(ntlm),
-      asrep: uniqSort(asrep), kerberoast: uniqSort(tgs), combos: uniqSort(combos),
-    };
+    return { users: uniqSort(users), passwords: uniqSort(pws), ntlm: uniqSort(ntlm), asrep: uniqSort(asrep), kerberoast: uniqSort(tgs), combos: uniqSort(combos) };
   }
 
-  // The full ledger: every credential-ish thing, deduped, enriched with worksOn/status/unlocked.
   function buildVault() {
     var eng = OBOL.store.active() || {};
     var fs = OBOL.store.factSet();
     var hosts = eng.targets || [];
+    var hostMap = {}; hosts.forEach(function (h) { hostMap[h.ip] = h.hostname || h.ip; });
     var facts = (fs.facts || []).filter(function (f) { return f.state === 'supported'; });
     var entries = [], seen = {};
-    function add(e) {
+    function add(e, scope) {
       e.user = (e.user || '').trim();
       if (!e.user && !e.secret && !e.nthash && !e.krbhash) return;
-      var k = e.user.toLowerCase() + '|' + (e.domain || '').toLowerCase() + '|' + (e.secret || e.nthash || e.krbhash || '') + '|' + (e.type || '');
+      // Kerberos hashes dedupe by (type, user): the salt/nonce differs per capture, but you only crack
+      // the account once, so two AS-REPs for the same user are one line here.
+      var isKrb = e.type === 'AS-REP' || e.type === 'TGS';
+      var k = isKrb ? (e.type + '|' + e.user.toLowerCase())
+        : (e.user.toLowerCase() + '|' + (e.domain || '').toLowerCase() + '|' + (e.secret || e.nthash || '') + '|' + e.type);
       if (seen[k]) return; seen[k] = 1;
+      e.scopeHost = hostFromScope(scope);
+      e.scopeDom = domFromScope(scope);
       entries.push(e);
     }
-    // 1) proven + logged creds (plaintext / NT)
     (OBOL.creds.gather(eng, fs) || []).forEach(function (c) {
-      add({ user: c.user, domain: c.domain, secret: c.secret || '', nthash: c.nthash || '',
-        type: (c.nthash && !c.secret) ? 'NT' : 'PW', from: hostFromScope(c.scope), src: c.source || '' });
+      add({ user: c.user, domain: c.domain, secret: c.secret || '', nthash: c.nthash || '', type: (c.nthash && !c.secret) ? 'NT' : 'PW', src: c.source || '' }, c.scope);
     });
-    // 2) NT hashes (secretsdump / SAM entries) — pass-the-hash usable
     facts.filter(function (f) { return f.kind === 'hash.ntlm'; }).forEach(function (f) {
-      ((f.value || {}).entries || []).forEach(function (e) {
-        if (!e.user) return;
-        add({ user: e.user, domain: e.domain || '', secret: '', nthash: e.nthash || '', type: 'NT', from: hostFromScope(f.scope), src: 'dump' });
-      });
+      ((f.value || {}).entries || []).forEach(function (e) { if (e.user) add({ user: e.user, domain: e.domain || '', secret: '', nthash: e.nthash || '', type: 'NT', src: 'dump' }, f.scope); });
     });
-    // 3) AS-REP / Kerberoast — crackable
     facts.filter(function (f) { return f.kind === 'hash.asrep'; }).forEach(function (f) {
-      ((f.value || {}).hashes || []).forEach(function (h) { add({ user: asrepUser(h) || '(as-rep)', domain: '', krbhash: h, type: 'AS-REP', from: '', src: 'roast' }); });
+      ((f.value || {}).hashes || []).forEach(function (h) { add({ user: asrepUser(h) || '(as-rep)', domain: '', krbhash: h, type: 'AS-REP', src: 'roast' }, f.scope); });
     });
     facts.filter(function (f) { return f.kind === 'hash.tgs'; }).forEach(function (f) {
-      ((f.value || {}).hashes || []).forEach(function (h) { add({ user: tgsUser(h) || '(tgs)', domain: '', krbhash: h, type: 'TGS', from: '', src: 'roast' }); });
+      ((f.value || {}).hashes || []).forEach(function (h) { add({ user: tgsUser(h) || '(tgs)', domain: '', krbhash: h, type: 'TGS', src: 'roast' }, f.scope); });
     });
-    // 4) krbtgt (golden-ticket material)
     facts.filter(function (f) { return f.kind === 'hash.krbtgt'; }).forEach(function (f) {
-      if ((f.value || {}).nthash) add({ user: 'krbtgt', domain: '', nthash: f.value.nthash, type: 'KRBTGT', from: hostFromScope(f.scope), src: 'dump' });
+      if ((f.value || {}).nthash) add({ user: 'krbtgt', domain: '', nthash: f.value.nthash, type: 'KRBTGT', src: 'dump' }, f.scope);
     });
-    // 5) candidates that carry a real secret (machine account, GPP)
     facts.filter(function (f) { return f.kind === 'credential.candidate'; }).forEach(function (f) {
       var v = f.value || {};
-      if (v.kind === 'machine_account' && v.user) add({ user: v.user, domain: v.domain || '', secret: v.password || '', type: 'PW', from: hostFromScope(f.scope), src: 'addcomputer' });
-      if (v.kind === 'gpp_cpassword') (v.values || []).forEach(function (pw) { add({ user: v.user || '(gpp)', domain: v.domain || '', secret: pw, type: 'PW', from: hostFromScope(f.scope), src: 'gpp' }); });
+      if (v.kind === 'machine_account' && v.user) add({ user: v.user, domain: v.domain || '', secret: v.password || '', type: 'PW', src: 'addcomputer' }, f.scope);
+      if (v.kind === 'gpp_cpassword') (v.values || []).forEach(function (pw) { add({ user: v.user || '(gpp)', domain: v.domain || '', secret: pw, type: 'PW', src: 'gpp' }, f.scope); });
     });
-    // 6) enumerated usernames with no secret yet
     var userSeen = {}; entries.forEach(function (e) { if (e.user) userSeen[e.user.toLowerCase()] = 1; });
     facts.filter(function (f) { return f.kind === 'ad.user_list'; }).forEach(function (f) {
       ((f.value || {}).users || []).forEach(function (u) {
         var lu = String(u || '').toLowerCase();
-        if (u && !userSeen[lu]) { userSeen[lu] = 1; add({ user: u, domain: '', type: 'USER', from: '', src: 'enum' }); }
+        if (u && !userSeen[lu]) { userSeen[lu] = 1; add({ user: u, domain: '', type: 'USER', src: 'enum' }, f.scope); }
       });
     });
 
+    // users we hold a plaintext password for — their Kerberos hashes are already cracked, so they drop
+    // out of "To Crack" (honest: derived from the ledger, since the plaintext is the crack result).
+    var cracked = {};
+    entries.forEach(function (e) { if (e.secret && isRealUser(e.user)) cracked[e.user.toLowerCase()] = 1; });
+
+    var out = [];
     entries.forEach(function (e) {
+      if ((e.type === 'AS-REP' || e.type === 'TGS') && cracked[e.user.toLowerCase()]) return; // already cracked
       e.worksOn = worksOnFor(e, hosts);
       e.status = e.type === 'USER' ? 'user'
-        : (e.type === 'AS-REP' || e.type === 'TGS' || e.type === 'KRBTGT') ? 'crack'
+        : (e.type === 'AS-REP' || e.type === 'TGS') ? 'crack'
           : (e.worksOn.length ? 'working' : 'found');
       e.unlocked = unlockedFor(e, hosts);
+      e.from = e.scopeHost ? (hostMap[e.scopeHost] || e.scopeHost) : (e.scopeDom ? e.scopeDom : (e.src === 'logged' ? 'by hand' : ''));
+      out.push(e);
     });
-    return { entries: entries, lists: buildLists(entries), hosts: hosts };
+    return { entries: out, lists: buildLists(out), hosts: hosts, hostMap: hostMap };
   }
 
-  // ---- rendering ----
+  // ---- lists (always visible + directly copyable) ----
   var LIST_META = [
     ['users', 'Usernames', 'users.txt'], ['passwords', 'Passwords', 'passwords.txt'],
     ['ntlm', 'NT Hashes', 'ntlm.txt'], ['asrep', 'AS-REP', 'asrep.hashes'],
     ['kerberoast', 'Kerberoast', 'kerberoast.hashes'], ['combos', 'Combos', 'combos.txt'],
   ];
-  function listsStrip(lists) {
-    var chips = LIST_META.filter(function (m) { return (lists[m[0]] || []).length; }).map(function (m) {
-      var n = lists[m[0]].length;
-      return '<button type="button" class="cv-list-chip" data-list="' + m[0] + '" aria-expanded="false">'
-        + '<span class="cv-list-k">' + esc(m[1]) + '</span><span class="cv-list-n">' + n + '</span></button>';
-    }).join('');
-    if (!chips) return '';
-    return '<div class="cv-lists"><div class="cv-lists-h">Lists, as you go</div><div class="cv-lists-row">' + chips + '</div>'
-      + '<div class="cv-list-panel" id="cv-list-panel" hidden></div></div>';
+  function lootDir() {
+    var wd = ((OBOL.store.active() || {}).params || {}).workdir || '';
+    return (wd && wd !== '.') ? wd.replace(/\/+$/, '') + '/loot' : 'loot';
   }
-  function listPanelHtml(key, lists) {
-    var meta = LIST_META.filter(function (m) { return m[0] === key; })[0]; if (!meta) return '';
-    var items = lists[key] || [];
-    var joined = items.join('\n');
-    var workdir = ((OBOL.store.active() || {}).params || {}).workdir || '';
-    var dir = (workdir && workdir !== '.') ? workdir.replace(/\/+$/, '') + '/loot' : 'loot';
-    var fileCmd = 'cat > ' + dir + '/' + meta[2] + " <<'EOF'\n" + joined + '\nEOF';
-    return '<div class="cv-list-panel-in"><div class="cv-list-panel-h"><span>' + esc(meta[1]) + ' · ' + items.length + '</span>'
-      + '<span class="cv-list-acts"><button type="button" class="cv-mini" data-copyval="' + attr(joined) + '">Copy List</button>'
-      + '<button type="button" class="cv-mini" data-copyval="' + attr(fileCmd) + '">Copy As ' + esc(meta[2]) + '</button></span></div>'
-      + '<pre class="cv-list-pre">' + esc(joined) + '</pre></div>';
+  function listsBlock(lists) {
+    var rows = LIST_META.filter(function (m) { return (lists[m[0]] || []).length; }).map(function (m) {
+      var items = lists[m[0]], joined = items.join('\n');
+      var fileCmd = 'cat > ' + lootDir() + '/' + m[2] + " <<'EOF'\n" + joined + '\nEOF';
+      var preview = items.slice(0, 4).join(', ') + (items.length > 4 ? ', …' : '');
+      return '<div class="cv-list-row">'
+        + '<div class="cv-list-main"><span class="cv-list-k">' + esc(m[1]) + '</span><span class="cv-list-n">' + items.length + '</span>'
+        + '<span class="cv-list-prev">' + esc(preview) + '</span></div>'
+        + '<div class="cv-list-acts"><button type="button" class="cv-mini" data-copyval="' + attr(joined) + '">Copy</button>'
+        + '<button type="button" class="cv-mini cv-mini-ghost" data-copyval="' + attr(fileCmd) + '" title="Copy a heredoc that writes it to ' + esc(lootDir()) + '/' + esc(m[2]) + '">Copy As File</button></div></div>';
+    }).join('');
+    if (!rows) return '';
+    return '<div class="cv-lists"><div class="cv-lists-h">Copyable Lists<span class="cv-lists-sub">one click to the clipboard, grows as you go</span></div>' + rows + '</div>';
   }
 
+  // ---- a credential row ----
   function flagChip(u) {
     return '<span class="cv-flag"><span class="cv-flag-slot ' + esc(u.slot) + '">' + OBOL.ic('flag') + ' ' + esc(u.slot) + '</span> '
-      + esc(u.host) + ' <code class="cv-copy" data-copyval="' + attr(u.flag) + '" title="Copy flag">' + esc(u.flag.length > 20 ? u.flag.slice(0, 18) + '…' : u.flag) + '</code></span>';
+      + '<code class="cv-copy" data-copyval="' + attr(u.flag) + '" title="Copy flag value">' + esc(u.flag.length > 20 ? u.flag.slice(0, 18) + '…' : u.flag) + '</code></span>';
   }
   function secretCell(e) {
     if (e.secret) return '<code class="cv-copy" data-copyval="' + attr(e.secret) + '" title="Copy password">' + esc(e.secret) + '</code>';
     if (e.nthash) return '<code class="cv-copy" data-copyval="' + attr(e.nthash) + '" title="Copy NT hash">' + esc(e.nthash) + '</code>';
-    if (e.krbhash) return '<code class="cv-copy cv-krb" data-copyval="' + attr(e.krbhash) + '" title="Copy hash">' + esc(e.krbhash.length > 42 ? e.krbhash.slice(0, 40) + '…' : e.krbhash) + '</code>';
+    if (e.krbhash) return '<code class="cv-copy cv-krb" data-copyval="' + attr(e.krbhash) + '" title="Copy hash">' + esc(e.krbhash.length > 46 ? e.krbhash.slice(0, 44) + '…' : e.krbhash) + '</code>';
     return '<span class="cv-none">no secret yet</span>';
   }
-  function worksCell(e) {
-    if (e.type === 'USER') return '<span class="cv-none">—</span>';
-    if (!e.worksOn.length) return '<span class="cv-none">untested</span>';
-    return e.worksOn.map(function (w) {
-      return '<span class="cv-host ' + (w.level === 'admin' ? 'adm' : 'ok') + '">' + esc(w.hostname || w.ip) + (w.level === 'admin' ? ' ADM' : '') + '</span>';
-    }).join(' ');
+  function typeBadge(t) { return '<span class="cv-type cv-type-' + esc(t.toLowerCase().replace(/[^a-z]/g, '')) + '">' + esc(t) + '</span>'; }
+  function loadBtn(e) {
+    if (e.type === 'AS-REP' || e.type === 'TGS') return '<a class="cv-load crack" href="#/workbench/hashid">Crack →</a>';
+    return '<button type="button" class="cv-load" data-load="' + e._i + '">Load</button>';
   }
-  function loadBtn(e, i) {
-    if (e.type === 'AS-REP' || e.type === 'TGS') return '<a class="cv-load crack" href="#/workbench/hash">Crack →</a>';
-    return '<button type="button" class="cv-load" data-load="' + i + '">Load</button>';
+  function placeBadge(e) {
+    if (e._place === 'admin') return '<span class="cv-place adm">Admin here</span>';
+    if (e._place === 'valid') return '<span class="cv-place ok">Valid here</span>';
+    if (e._place === 'found') return '<span class="cv-place found">Collected here, untested</span>';
+    return '';
   }
-
-  var GROUPS = [
-    ['working', 'Working'], ['found', 'Found, Untested'], ['crack', 'To Crack'], ['user', 'Usernames Seen'],
-  ];
-  function row(e, i) {
-    var ident = '<span class="cv-user">' + esc(e.user || '(unknown)') + '</span>'
-      + (e.domain ? '<span class="cv-dom">@' + esc(e.domain) + '</span>' : '');
-    var combo = (isRealUser(e.user) && (e.secret || e.nthash)) ? '<button type="button" class="cv-chip" data-copyval="'
-      + attr(e.user + ':' + (e.secret || e.nthash)) + '" title="Copy user:secret">user:secret</button>' : '';
+  function hostRow(e, thisIp) {
+    var ident = '<span class="cv-user">' + esc(e.user || '(unknown)') + '</span>' + (e.domain ? '<span class="cv-dom">@' + esc(e.domain) + '</span>' : '');
+    var combo = (isRealUser(e.user) && (e.secret || e.nthash)) ? '<button type="button" class="cv-chip" data-copyval="' + attr(e.user + ':' + (e.secret || e.nthash)) + '" title="Copy user:secret">user:secret</button>' : '';
+    var fromNote = (e.scopeHost && e.scopeHost !== thisIp && e._place !== 'found') ? '<div class="cv-fromnote">from ' + esc(e.from) + '</div>' : '';
     return '<tr>'
-      + '<td class="cv-id">' + ident + combo + '</td>'
+      + '<td class="cv-id">' + ident + combo + fromNote + '</td>'
       + '<td class="cv-sec">' + secretCell(e) + '</td>'
-      + '<td><span class="cv-type cv-type-' + esc(e.type.toLowerCase().replace(/[^a-z]/g, '')) + '">' + esc(e.type) + '</span></td>'
-      + '<td class="cv-from">' + (e.from ? esc(e.from) : '<span class="cv-none">' + (e.src === 'logged' ? 'by hand' : '—') + '</span>') + '</td>'
-      + '<td class="cv-works">' + worksCell(e) + '</td>'
+      + '<td>' + typeBadge(e.type) + '</td>'
+      + '<td>' + placeBadge(e) + '</td>'
       + '<td class="cv-unlocked">' + (e.unlocked.length ? e.unlocked.map(flagChip).join(' ') : '<span class="cv-none">—</span>') + '</td>'
-      + '<td class="cv-act">' + loadBtn(e, i) + '</td>'
-      + '</tr>';
+      + '<td class="cv-act">' + loadBtn(e) + '</td></tr>';
   }
-
-  function matrixHtml(entries, hosts) {
-    var creds = entries.filter(function (e) { return e.type === 'PW' || e.type === 'NT'; });
-    if (!creds.length || !hosts.length) return '';
-    var head = '<th class="cm-corner">cred \\ host</th>' + hosts.map(function (h) {
-      return '<th class="cm-host"><button class="cm-hostbtn" data-host="' + esc(h.ip) + '">' + esc(h.hostname || h.ip) + '</button></th>';
-    }).join('');
-    var rows = creds.map(function (c) {
-      var cells = hosts.map(function (h) {
-        var s = cellStatus(c, h);
-        return '<td class="cm-cell ' + s.cls + '"><button class="cm-cellbtn ' + s.cls + '" data-load-cred="' + c._i + '" data-host="' + esc(h.ip) + '">' + s.c + '</button></td>';
-      }).join('');
-      return '<tr><th class="cm-cred"><button class="cm-credbtn" data-load-cred="' + c._i + '"><span class="cm-user">' + esc(c.user) + '</span><span class="cm-type">' + esc(c.type) + '</span></button></th>' + cells + '</tr>';
-    }).join('');
-    return '<details class="cv-matrix"><summary>Reuse Matrix (cred × host)</summary>'
-      + '<div class="cm-scroll"><table class="cm-table"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div></details>';
+  function hostTable(rows, thisIp) {
+    var human = rows.filter(function (e) { return !isMachineAccount(e.user); });
+    var machine = rows.filter(function (e) { return isMachineAccount(e.user); });
+    var head = '<tr><th>Identity</th><th>Secret</th><th>Type</th><th>On This Host</th><th>Unlocked</th><th></th></tr>';
+    var body = human.map(function (e) { return hostRow(e, thisIp); }).join('')
+      || '<tr><td colspan="6" class="cv-none">Only machine / service accounts here.</td></tr>';
+    var mach = machine.length
+      ? '<details class="cv-machine"><summary>Machine &amp; Service Accounts (' + machine.length + ')</summary>'
+        + '<div class="cv-tablewrap"><table class="cv-table"><thead>' + head + '</thead><tbody>'
+        + machine.map(function (e) { return hostRow(e, thisIp); }).join('') + '</tbody></table></div></details>'
+      : '';
+    return '<div class="cv-tablewrap"><table class="cv-table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' + mach;
   }
 
   function render() {
     var vault = buildVault();
     vault.entries.forEach(function (e, i) { e._i = i; });
     render._entries = vault.entries;
-    render._lists = vault.lists;
     if (!vault.entries.length) {
       return '<section class="creds-route"><h1 class="route-h1">Credentials</h1>'
-        + '<p class="route-sub">The engagement\'s credential ledger. Nothing captured yet, add a credential in the sidebar params, or paste tool output that proves one, dumps hashes, or enumerates users on Evidence, and everything collects here.</p></section>';
+        + '<p class="route-sub">The engagement\'s credential ledger, grouped by host. Nothing captured yet, add a credential in the sidebar params, or paste tool output that proves one, dumps hashes, or enumerates users on Evidence, and everything collects here.</p></section>';
     }
-    var byGroup = {};
-    vault.entries.forEach(function (e) { (byGroup[e.status] = byGroup[e.status] || []).push(e); });
-    var tables = GROUPS.filter(function (g) { return byGroup[g[0]] && byGroup[g[0]].length; }).map(function (g) {
-      var list = byGroup[g[0]];
-      var head = g[0] === 'user'
-        ? '<tr><th>User</th><th>Type</th><th>From</th><th></th></tr>'
-        : '<tr><th>Identity</th><th>Secret</th><th>Type</th><th>From</th><th>Works On</th><th>Unlocked</th><th></th></tr>';
-      var body = list.map(function (e) {
-        if (g[0] === 'user') {
-          return '<tr><td class="cv-id"><span class="cv-user">' + esc(e.user) + '</span></td>'
-            + '<td><span class="cv-type cv-type-user">USER</span></td><td class="cv-from"><span class="cv-none">—</span></td>'
-            + '<td class="cv-act"><button type="button" class="cv-load" data-load="' + e._i + '">Load User</button></td></tr>';
-        }
-        return row(e, e._i);
-      }).join('');
-      return '<div class="cv-group"><h2 class="cv-group-h cv-g-' + g[0] + '">' + esc(g[1]) + '<span class="cv-group-n">' + list.length + '</span></h2>'
-        + '<div class="cv-tablewrap"><table class="cv-table cv-table-' + g[0] + '"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div></div>';
-    }).join('');
+    // group working / found under a host (works-on hosts, else the host it was collected from)
+    var byHost = {}; vault.hosts.forEach(function (h) { byHost[h.ip] = []; });
+    var crack = [], users = [], other = [];
+    vault.entries.forEach(function (e) {
+      if (e.status === 'user') { users.push(e); return; }
+      if (e.status === 'crack') { crack.push(e); return; }
+      if (e.worksOn && e.worksOn.length) {
+        e.worksOn.forEach(function (w) { if (byHost[w.ip]) byHost[w.ip].push(Object.assign({}, e, { _place: w.level })); else other.push(e); });
+      } else if (e.scopeHost && byHost[e.scopeHost]) {
+        byHost[e.scopeHost].push(Object.assign({}, e, { _place: 'found' }));
+      } else { other.push(e); }
+    });
+
+    function hostCard(h) {
+      var rows = byHost[h.ip]; if (!rows || !rows.length) return '';
+      var owned = rows.some(function (e) { return e._place === 'admin'; });
+      var valid = rows.some(function (e) { return e._place === 'valid'; });
+      var badge = owned ? '<span class="cv-hbadge adm">Owned</span>' : valid ? '<span class="cv-hbadge ok">Access</span>' : '<span class="cv-hbadge found">Loot</span>';
+      return '<div class="cv-host"><div class="cv-host-h"><span class="cv-host-name">' + esc(h.hostname || h.ip) + '</span>'
+        + (h.hostname ? '<span class="cv-host-ip">' + esc(h.ip) + '</span>' : '') + badge
+        + '<span class="cv-host-n">' + rows.length + ' cred' + (rows.length === 1 ? '' : 's') + '</span></div>'
+        + hostTable(rows, h.ip) + '</div>';
+    }
+    var hostCards = vault.hosts.map(hostCard).join('');
+
+    var crackSec = crack.length ? ('<div class="cv-sec-block"><h2 class="cv-sec-h cv-s-crack">To Crack<span class="cv-sec-n">' + crack.length + '</span></h2>'
+      + '<p class="cv-sec-sub">Roasted hashes that need cracking (they leave this list once you hold the plaintext). <a href="#/workbench/hashid">Open the cracker →</a></p>'
+      + '<div class="cv-tablewrap"><table class="cv-table"><thead><tr><th>Identity</th><th>Hash</th><th>Type</th><th>From</th><th></th></tr></thead><tbody>'
+      + crack.map(function (e) {
+        return '<tr><td class="cv-id"><span class="cv-user">' + esc(e.user) + '</span></td><td class="cv-sec">' + secretCell(e) + '</td>'
+          + '<td>' + typeBadge(e.type) + '</td><td class="cv-from">' + (e.from ? esc(e.from) : '<span class="cv-none">—</span>') + '</td>'
+          + '<td class="cv-act">' + loadBtn(e) + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>') : '';
+
+    var otherSec = other.length ? ('<div class="cv-sec-block"><h2 class="cv-sec-h cv-s-found">Not Tied To A Host<span class="cv-sec-n">' + other.length + '</span></h2>'
+      + '<div class="cv-tablewrap"><table class="cv-table"><thead><tr><th>Identity</th><th>Secret</th><th>Type</th><th>From</th><th>Unlocked</th><th></th></tr></thead><tbody>'
+      + other.map(function (e) {
+        return '<tr><td class="cv-id"><span class="cv-user">' + esc(e.user) + '</span>' + (e.domain ? '<span class="cv-dom">@' + esc(e.domain) + '</span>' : '') + '</td>'
+          + '<td class="cv-sec">' + secretCell(e) + '</td><td>' + typeBadge(e.type) + '</td><td class="cv-from">' + (e.from ? esc(e.from) : '<span class="cv-none">—</span>') + '</td>'
+          + '<td class="cv-unlocked">' + (e.unlocked.length ? e.unlocked.map(flagChip).join(' ') : '<span class="cv-none">—</span>') + '</td>'
+          + '<td class="cv-act">' + loadBtn(e) + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>') : '';
+
+    var userSec = users.length ? ('<div class="cv-sec-block"><h2 class="cv-sec-h cv-s-user">Usernames Seen<span class="cv-sec-n">' + users.length + '</span></h2>'
+      + '<p class="cv-sec-sub">Accounts enumerated with no secret yet. Grab the full list from Usernames above, or Load one to target it.</p>'
+      + '<div class="cv-userchips">' + users.map(function (e) {
+        return '<span class="cv-userchip"><button type="button" class="cv-copy" data-copyval="' + attr(e.user) + '" title="Copy username">' + esc(e.user) + '</button>'
+          + '<button type="button" class="cv-userload" data-load="' + e._i + '" title="Target this user">use</button></span>';
+      }).join('') + '</div></div>') : '';
 
     return '<section class="creds-route"><h1 class="route-h1">Credentials</h1>'
-      + '<p class="route-sub">Every credential of every kind obol has seen this engagement: its secret, where it came from, which hosts it works on, and which flag its access unlocked. Click a secret or flag to copy it, <strong>Load</strong> arms the whole console with any credential.</p>'
-      + listsStrip(vault.lists)
-      + tables
-      + matrixHtml(vault.entries, vault.hosts)
+      + '<p class="route-sub">Every credential of every kind obol has seen this engagement, grouped by the host it works on or came from. Click a secret or flag to copy it. <strong>Load</strong> arms the whole console with any credential.</p>'
+      + listsBlock(vault.lists)
+      + (hostCards || '')
+      + crackSec + otherSec + userSec
       + '</section>';
   }
 
@@ -268,7 +285,6 @@
       eng.params = eng.params || {};
       eng.params.username = e.user || '';
       if (e.domain) eng.params.domain = e.domain;
-      // plaintext fills password (and clears a stale hash); an NT hash fills nthash for pass-the-hash.
       if (e.secret) { eng.params.password = e.secret; eng.params.nthash = ''; }
       else if (e.nthash) { eng.params.nthash = e.nthash; eng.params.password = ''; }
     }, 'params');
@@ -277,35 +293,11 @@
   }
 
   function mounted(ctx) {
-    var mount = ctx.mount;
-    var entries = render._entries || [], lists = render._lists || {};
-    // copy any value
+    var mount = ctx.mount, entries = render._entries || [];
     U.on(mount, 'click', '[data-copyval]', function (e, t) {
       U.copy(t.getAttribute('data-copyval')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
     });
-    // expand / collapse a list panel
-    U.on(mount, 'click', '.cv-list-chip', function (e, t) {
-      var key = t.getAttribute('data-list');
-      var panel = mount.querySelector('#cv-list-panel');
-      var open = t.getAttribute('aria-expanded') === 'true';
-      mount.querySelectorAll('.cv-list-chip').forEach(function (c) { c.setAttribute('aria-expanded', 'false'); });
-      if (open) { panel.hidden = true; panel.innerHTML = ''; return; }
-      t.setAttribute('aria-expanded', 'true');
-      panel.innerHTML = listPanelHtml(key, lists);
-      panel.hidden = false;
-    });
-    // Load any credential into the console
     U.on(mount, 'click', '[data-load]', function (e, t) { loadEntry(entries[+t.getAttribute('data-load')]); });
-    U.on(mount, 'click', '[data-load-cred]', function (e, t) {
-      loadEntry(entries[+t.getAttribute('data-load-cred')]);
-      var ip = t.getAttribute('data-host');
-      if (ip) OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = ip; }, 'params');
-    });
-    U.on(mount, 'click', '.cm-hostbtn', function (e, t) {
-      OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = t.getAttribute('data-host'); }, 'params');
-      if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
-      U.toast('Target → ' + t.getAttribute('data-host'));
-    });
   }
 
   OBOL.routes = OBOL.routes || {};
