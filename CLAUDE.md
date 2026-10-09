@@ -200,7 +200,49 @@ Pair it with a few golden "run -> paste -> expect card delta" fixtures (extend s
 the drive-*.js pattern) so the round-trip is a guardrail, not a vibe. Until then, when one surfaces,
 fix it AND note it here so the eventual auditor has the catalog.
 
+**First concrete guardrail landed: `tests/engine/forest-e2e-replay.js` (2026-10-09).** A pure-Node test
+(no Playwright, runs in CI with the rest of the engine suite) that replays the whole Forest kill chain as
+the OPERATOR runs it, command -> real output -> parser -> fact -> advance/retire, and asserts the
+round-trip at every rung: recon mints the AD surface and an orient move leads; anon LDAP --users mints
+the user list and AS-REP roast becomes ready; roast+crack yield a credential; the validate mints
+credential.validated; Manual AD Path-Finding leads with a path-finder (daclread), NOT the admin-count
+check; the `get writable` paste mints ad.acl_lead, RETIRES the get-writable command, and the derived
+{{group}} is the highest-value writable group (Exchange Windows Permissions) from PARSED data; the group
+join / DCSync grant / NTDS dump mint their facts; PtH as the recovered DA mints access.admin; and a
+single two-read evil-winrm paste captures BOTH the user flag (local) and the root flag (root). This is
+the "run -> paste -> expect card delta" fixture the brief asked for; extend it (more archetypes) rather
+than one-offing the next regression. The read-only AUDITOR (derive-the-minted-fact, flag missing
+settled_by across ALL moves) is still worth building; this test pins the Forest path meanwhile.
+
 ### Post-build follow-ups (real-box testing on Forest)
+
+- 2026-10-09: Forest real-box run #31 (owner: "far from smooth, still had to dig for the right command,
+  worse toward the end, and the root flag was not catalogued again"). Built the end-to-end replay harness
+  from the owner's actual session (commands + output + the exported engagement facts) and fixed what it
+  surfaced, each verified, not guessed. (1) ROOT FLAG (parser, general): a paste holding TWO reads (the
+  operator read user.txt then root.txt in one evil-winrm session, or a promptless whole-blob) attributed
+  EVERY flag value to the FIRST read's slot, so both minted as local and the root flag was lost.
+  _parse_flags now walks the lines once and binds each value to the NEAREST PRECEDING read, so user ->
+  local and root -> root. Regression test in flag-capture-smoke.js. (2) ad-path-manual lead order
+  (move-data): the move led with `nxc ldap --admin-count` (a weak check that HUNG on the box, the owner
+  Ctrl-C'd it) while the path-finders were buried (get writable was #10). Reordered so daclread leads
+  (nxc, credential-only, so command_sanity stays clean on domain-less states) then get writable, with
+  admin-count dropped to #4; field notes reordered in lockstep (verified pairing). sim 0/49, sweep 0.0%.
+  (3) "it parsed silently" (UI feedback): a paste that minted facts flashed a buggy 2-second toast
+  ("Minted 9 factsrecomputing") then re-rendered silently. Added OBOL.coach.pasteSummary -> a
+  plain-language, value-aware banner of what obol LEARNED (flags, creds, "Found writable objects: ...")
+  plus the next move, shown as a dismissible flash that survives the re-render; the Evidence route leads
+  with the same summary. (4) INVESTIGATION (owner challenge, "did we hardcode Exchange Windows
+  Permissions?"): NO. Confirmed end-to-end on the owner's real 1.4MB `get writable` output that the parser
+  mints ad.acl_lead with the writable targets, and command.js fills {{group}} by ranking THOSE parsed
+  targets against the high-value list, so Exchange Windows Permissions is DERIVED (it beat Domain Admins
+  precisely because DA was not in the parsed targets and EWP was). The earlier replay that showed "0
+  facts" was MY harness feeding the ~20-line snippet from the log, not the full 1.4MB file, a reminder to
+  replay the real artifact. The root flag miss on the run itself was the version timing: the run ended
+  22:17 UTC, the get-writable settled_by fix (b6e4fb0) deployed 22:21, so the card could not retire yet;
+  it does now. All guardrails green (new forest-e2e-replay + full engine suite + ranker-sim 0/49 + sweep
+  0.0% + lint + gap + browser-smoke); assets stamped.
+
 
 - 2026-10-09: Two more post-parse-advance one-offs (owner live Forest run; see the OPEN ITEM above, the
   owner asked that we stop fixing these individually and build an auditor). (1) lateral-exec
