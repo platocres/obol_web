@@ -275,6 +275,13 @@
         pn.style.top = top + 'px'; pn.style.height = (window.innerHeight - top) + 'px';
       } else { pn.style.top = ''; pn.style.height = ''; }
     }
+    // pin the phase rail to the LEFT EDGE OF THE CHECKLIST content (not the viewport), so it lives on the
+    // checklist border rather than floating over the app's left sidebar. Mobile keeps the CSS fallback.
+    var rail = mount.querySelector('#chk-rail');
+    if (rail) {
+      if (window.innerWidth > 860) { rail.style.left = Math.max(0, Math.round(mount.getBoundingClientRect().left)) + 'px'; }
+      else { rail.style.left = ''; }
+    }
     // persist each collapsible's open state (toggle does not bubble); bind once per node.
     Array.prototype.forEach.call(mount.querySelectorAll('details[data-ck]'), function (d) {
       if (d._ckToggle) return; d._ckToggle = true;

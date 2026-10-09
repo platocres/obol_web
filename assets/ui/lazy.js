@@ -31,7 +31,7 @@
     stuck: ['data/stuck-catalog.js?v=14d96459', 'assets/engine/stuck.js?v=9f3ec324', 'assets/ui/routes/stuck.js?v=245da4ba'],
     study: ['data/study-fixtures.js?v=a596d3da', 'assets/engine/study.js?v=303c7964', 'assets/ui/routes/study.js?v=6030fff7'],
     decisionmap: ['data/decision-forks.js?v=abde552b', 'data/parser-signatures.js?v=7c8e5159', 'data/coverage-expected.js?v=afdb39b5', 'data/flag-reach.js?v=e8d6c84a', 'assets/engine/decisionmap.js?v=8986cb18', 'assets/ui/decisiontree.js?v=b97043a7'],
-    checklist: ['data/oscp-scope.js?v=b211d828', 'assets/ui/routes/checklist.js?v=6c3af351'],
+    checklist: ['data/oscp-scope.js?v=b211d828', 'assets/ui/routes/checklist.js?v=6bd53d6f'],
     target: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/target.js?v=7cff1a86'],
     creds: ['assets/ui/routes/creds.js?v=a87fc780'],
     scoreboard: ['assets/ui/routes/scoreboard.js?v=7fa2dd83'],
