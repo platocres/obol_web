@@ -404,9 +404,8 @@
     return out;
   }
   function pinnedSet(eng) { return ((eng.ui || {}).pinnedTargets) || []; }
-  function boardMode() { try { return localStorage.getItem('obol.hubBoard') || 'all'; } catch (e) { return 'all'; } }
 
-  // gather per-target projection used by the board + vitals
+  // gather per-target projection used by the vitals + the Targets tab
   function targetInfos(eng) {
     var pack = OBOL.packs.actions();
     var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
@@ -433,25 +432,6 @@
   OBOL.targets = OBOL.targets || {};
   OBOL.targets.all = function (eng) { return targetInfos(eng || OBOL.store.active() || { targets: [] }); };
   OBOL.targets.ACC_BADGE = ACC_BADGE;
-
-  function targetCard(info) {
-    var b = info.badge;
-    var ports = info.ports.slice(0, 7).map(function (p) { return '<span class="hb-port">' + p + '</span>'; }).join('')
-      + (info.ports.length > 7 ? '<span class="hb-port hb-port-more">+' + (info.ports.length - 7) + '</span>' : '');
-    var flags = info.flags ? '<span class="hb-flags">' + OBOL.ic('flag') + ' ' + info.flags + ' Flag' + (info.flags === 1 ? '' : 's') + '</span>' : '<span class="hb-flags hb-noflag">No Flags Yet</span>';
-    return '<article class="hb-tcard hb-lvl-' + info.lvl + (info.pinned ? ' is-pinned' : '') + '">'
-      + '<button class="hb-pin" type="button" data-hub-pin="' + U.attr(info.t.id) + '" aria-pressed="' + (info.pinned ? 'true' : 'false') + '" aria-label="' + (info.pinned ? 'Unpin' : 'Pin') + ' ' + U.attr(info.ip) + '" title="' + (info.pinned ? 'Unpin' : 'Pin') + ' this target">' + OBOL.ic('pin') + '</button>'
-      + '<a class="hb-tcard-main" href="#/target/' + U.attr(info.ip) + '">'
-      + '<div class="hb-tcard-top"><span class="hb-tname">' + esc(info.host || info.ip) + '</span>'
-      + (info.host ? '<span class="hb-tip">' + esc(info.ip) + '</span>' : '')
-      + '<span class="hb-acc ' + b.cls + '">' + b.label + '</span></div>'
-      + (info.os ? '<div class="hb-tos">' + esc(U.titleCase(info.os)) + '</div>' : '<div class="hb-tos hb-tos-empty">Not Yet Fingerprinted</div>')
-      + '<div class="hb-ports">' + (ports || '<span class="hb-port-none">No Ports Yet</span>') + '</div>'
-      + '<div class="hb-tfoot">' + flags
-      + (info.next ? '<span class="hb-next" title="' + U.attr(info.next) + '">→ ' + esc(info.next) + '</span>'
-          : (info.lvl === 'privileged' ? '<span class="hb-next hb-next-done">Owned</span>' : ''))
-      + '</div></a></article>';
-  }
 
   function surfaceCard(href, ic, name, count, desc) {
     return '<a class="hb-surf" href="' + href + '"><span class="hb-surf-ic">' + OBOL.ic(ic) + '</span>'
@@ -625,7 +605,6 @@
   function hubDashboard() {
     var eng = OBOL.store.active();
     var infos = targetInfos(eng);
-    var mode = boardMode();
     // aggregate access breakdown
     var owned = 0, foot = 0, untouched = 0;
     infos.forEach(function (i) { if (i.lvl === 'privileged') owned++; else if (i.lvl === 'foothold' || i.lvl === 'credentialed') foot++; else untouched++; });
@@ -653,43 +632,29 @@
         + '<a class="hb-anchor-more" href="#/evidence">Go to Evidence →</a></div>';
     }
 
-    // target board, filtered by the Show control
-    var shown = infos.slice();
-    if (mode === 'pinned') shown = infos.filter(function (i) { return i.pinned; });
-    else if (mode === 'attention') shown = infos.filter(function (i) { return i.lvl !== 'privileged' && i.next; });
-    // always put pinned first, then by access rank (most progressed first), stable otherwise
-    shown.sort(function (a, b) { return (b.pinned - a.pinned) || (b.badge.rank - a.badge.rank); });
-    var board = infos.length
-      ? (shown.length ? '<div class="hb-board">' + shown.map(targetCard).join('') + '</div>'
-          : '<div class="coach-empty">No targets match this filter. <button class="hb-show-all" type="button">Show all</button></div>')
-      : '<div class="coach-empty">No targets yet. <a href="#/targets">Add one</a> or paste a scan on <a href="#/evidence">Evidence</a> and obol files new hosts automatically.</div>';
-
-    var showCtl = ['all', 'pinned', 'attention'].map(function (m) {
-      var lbl = m === 'all' ? 'All' : (m === 'pinned' ? 'Pinned' : 'Needs Attention');
-      return '<button type="button" class="hb-show' + (m === mode ? ' on' : '') + '" data-hub-show="' + m + '" aria-pressed="' + (m === mode ? 'true' : 'false') + '">' + lbl + '</button>';
-    }).join('');
-
     // recent activity (last few run-log entries)
     var acts = (eng.activities || []).slice(-5).reverse().map(function (a) {
       return '<li><span class="hb-log-t">' + esc(ago(a.at) || '') + '</span>' + esc(a.title || a.summary || a.cmd || 'activity') + '</li>';
     }).join('');
 
+    // Targets live in their own tab now, so the hub drops the board. The engagement summary (phase
+    // spine + attack path) is the hero, the Workspace fills the main column (readily visible, not
+    // buried below the fold), and the engagement-wide surfaces sit in the rail. The vitals Targets
+    // tile and a Surfaces card both deep-link to the Targets tab so nothing is lost.
     return '<section class="hub" aria-label="Engagement hub">'
       + nmHtml
       + '<div class="hb-vitals">'
-      + '<div class="hb-tile"><div class="hb-k">Targets</div><div class="hb-v">' + infos.length + '</div><div class="hb-d">' + owned + ' Owned · ' + foot + ' Foothold · ' + untouched + ' Untouched</div></div>'
+      + '<a class="hb-tile hb-tile-go" href="#/targets"><div class="hb-k">Targets</div><div class="hb-v">' + infos.length + '</div><div class="hb-d">' + owned + ' Owned · ' + foot + ' Foothold · ' + untouched + ' Untouched</div></a>'
       + '<div class="hb-tile"><div class="hb-k">Flags</div><div class="hb-v">' + totFlags + '</div><div class="hb-d">Captured across all boxes</div></div>'
       + '<div class="hb-tile"><div class="hb-k">Credentials</div><div class="hb-v">' + creds.length + '</div><div class="hb-d">Usable across the engagement</div></div>'
       + '</div>'
+      + activePanel()
       + '<div class="hb-grid">'
-      + '<section class="hb-col-main" aria-label="Targets">'
-      + '<div class="hb-sec-h"><h2>Targets</h2><span class="hb-sec-n">' + infos.length + ' Total</span>'
-      + '<span class="hb-show-seg" role="group" aria-label="Show">' + showCtl + '</span>'
-      + '<a class="hb-sec-more" href="#/targets">All Targets →</a></div>'
-      + board + '</section>'
+      + '<section class="hb-col-main" aria-label="Workspace">' + workspacePanel() + '</section>'
       + '<aside class="hb-col-rail" aria-label="Engagement surfaces">'
       + '<div class="hb-sec-h"><h2>Surfaces</h2></div>'
       + '<div class="hb-surfs">'
+      + surfaceCard('#/targets', 'crosshair', 'Targets', infos.length, 'Every host, its access level, and its next move.')
       + surfaceCard('#/map', 'host', 'Map', infos.length, 'Hosts, services, creds and the domain as one graph.')
       + surfaceCard('#/domain', 'shield', 'Domain', null, 'SharpHound census and the owned-to-DA attack paths.')
       + surfaceCard('#/creds', 'lock', 'Creds', creds.length, 'The credential reuse matrix across every host.')
@@ -713,8 +678,9 @@
       + '<h1 class="route-h1">Engagements</h1>'
       + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.'
       + ' <span class="kbd-hint">Tip: press <kbd>' + (navigator.platform && /mac/i.test(navigator.platform) ? '⌘' : 'Ctrl') + '</kbd>+<kbd>K</kbd> anywhere to search commands.</span></p>'
-      + (configured ? hubDashboard() : '')
-      + '<div class="eng-top">' + (configured ? activePanel() : gettingStarted()) + workspacePanel() + '</div>'
+      + (configured
+          ? hubDashboard()
+          : '<div class="eng-top">' + gettingStarted() + workspacePanel() + '</div>')
       + '<div class="eng-library"><div class="eng-library-head"><h2 class="coach-sec-h">Engagement Library</h2>'
       + '<details class="eng-danger-toggle"><summary>Manage / Reset</summary>'
       + '<div class="eng-danger"><div class="eng-danger-item"><div class="eng-danger-txt"><strong>Delete All Engagements</strong>'
@@ -784,24 +750,6 @@
     U.on(mount, 'click', '.btn-copy', function (e, b) {
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
-    // hub: pin / unpin a target (stored per engagement; the board floats pinned first)
-    U.on(mount, 'click', '[data-hub-pin]', function (e, t) {
-      e.preventDefault(); e.stopPropagation();
-      var id = t.getAttribute('data-hub-pin');
-      OBOL.store.update(function (eng) {
-        eng.ui = eng.ui || {};
-        var pins = eng.ui.pinnedTargets = eng.ui.pinnedTargets || [];
-        var i = pins.indexOf(id);
-        if (i >= 0) pins.splice(i, 1); else pins.push(id);
-      }, 'ui');
-      OBOL.router.render();
-    });
-    // hub: the Show control (All / Pinned / Needs attention), remembered per browser
-    U.on(mount, 'click', '[data-hub-show]', function (e, t) {
-      try { localStorage.setItem('obol.hubBoard', t.getAttribute('data-hub-show')); } catch (x) {}
-      OBOL.router.render();
-    });
-    U.on(mount, 'click', '.hb-show-all', function () { try { localStorage.setItem('obol.hubBoard', 'all'); } catch (x) {} OBOL.router.render(); });
 
     // connectivity handlers. Bound ONCE on the persistent #view: the router re-runs mounted() on
     // every in-place render, so a delegated U.on would stack up — harmless for idempotent handlers,

@@ -236,6 +236,10 @@ main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-widt
 .hb-tile .hb-k { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .hb-tile .hb-v { font-family: var(--mono); font-size: 26px; font-weight: 800; color: var(--accent-2); margin-top: 3px; }
 .hb-tile .hb-d { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+/* the Targets stat tile deep-links to the Targets tab (the board left the hub, the glance stayed) */
+a.hb-tile-go { display: block; text-decoration: none; color: inherit; transition: border-color .15s, background .15s; }
+a.hb-tile-go:hover { border-color: var(--line-hot); background: var(--surf2); }
+a.hb-tile-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .hb-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 22px; align-items: start; }
 @media (max-width: 1080px) { .hb-grid { grid-template-columns: minmax(0, 1fr); gap: 26px; } }
@@ -3156,10 +3160,11 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 /* 7 ── Surfaces rail: a distinct neon per destination icon tile (Map · Domain ·
    Creds · Findings · Report), matching the phase language used across obol. */
 .hb-surfs .hb-surf:nth-child(1) .hb-surf-ic { color: var(--ph-recon); background: color-mix(in srgb, var(--ph-recon) 16%, var(--surf3)); }
-.hb-surfs .hb-surf:nth-child(2) .hb-surf-ic { color: var(--ph-escalate); background: color-mix(in srgb, var(--ph-escalate) 16%, var(--surf3)); }
-.hb-surfs .hb-surf:nth-child(3) .hb-surf-ic { color: var(--ph-creds); background: color-mix(in srgb, var(--ph-creds) 16%, var(--surf3)); }
-.hb-surfs .hb-surf:nth-child(4) .hb-surf-ic { color: var(--ph-loot); background: color-mix(in srgb, var(--ph-loot) 16%, var(--surf3)); }
-.hb-surfs .hb-surf:nth-child(5) .hb-surf-ic { color: var(--ph-access); background: color-mix(in srgb, var(--ph-access) 16%, var(--surf3)); }
+.hb-surfs .hb-surf:nth-child(2) .hb-surf-ic { color: var(--teal); background: color-mix(in srgb, var(--teal) 16%, var(--surf3)); }
+.hb-surfs .hb-surf:nth-child(3) .hb-surf-ic { color: var(--ph-escalate); background: color-mix(in srgb, var(--ph-escalate) 16%, var(--surf3)); }
+.hb-surfs .hb-surf:nth-child(4) .hb-surf-ic { color: var(--ph-creds); background: color-mix(in srgb, var(--ph-creds) 16%, var(--surf3)); }
+.hb-surfs .hb-surf:nth-child(5) .hb-surf-ic { color: var(--ph-loot); background: color-mix(in srgb, var(--ph-loot) 16%, var(--surf3)); }
+.hb-surfs .hb-surf:nth-child(6) .hb-surf-ic { color: var(--ph-access); background: color-mix(in srgb, var(--ph-access) 16%, var(--surf3)); }
 
 /* 8 ── Pills: give the plain .pill a faint accent wash + brighter ink so a
    "2 Targets / 3 Facts" chip reads as a badge, not gray filler. */
