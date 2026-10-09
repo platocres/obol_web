@@ -9,6 +9,11 @@
   var OBOL = root.OBOL = root.OBOL || {};
   var U = OBOL.util;
   function esc(s) { return U.esc(s); }
+  function attr(s) { return U.attr(s); }
+  // per-host collapse state for the by-target grouping, remembered per browser, per engagement.
+  function fhKey(host) { return 'obol.fh:' + ((OBOL.store && OBOL.store.activeId && OBOL.store.activeId()) || '') + ':' + host; }
+  function fhOpen(host) { try { var v = localStorage.getItem(fhKey(host)); return v == null ? true : v === '1'; } catch (e) { return true; } }
+  function fhSetOpen(host, open) { try { localStorage.setItem(fhKey(host), open ? '1' : '0'); } catch (e) {} }
 
   var SEV_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
   function normSev(s) { s = String(s || '').toLowerCase(); return SEV_ORDER.indexOf(s) >= 0 ? s : 'info'; }
@@ -141,12 +146,13 @@
       var breakdown = SEV_ORDER.filter(function (s) { return group.some(function (f) { return f.severity === s; }); })
         .map(function (s) { var n = group.filter(function (f) { return f.severity === s; }).length;
           return '<span class="sev-count sev-' + s + '">' + n + ' ' + s + '</span>'; }).join('');
-      return '<div class="finding-host-group">'
-        + '<div class="finding-host-h"><span class="fhh-ip">' + esc(host) + '</span>'
+      var open = fhOpen(host);
+      return '<details class="finding-host-group" data-fhkey="' + attr(host) + '"' + (open ? ' open' : '') + '>'
+        + '<summary class="finding-host-h"><span class="fhh-ip">' + esc(host) + '</span>'
         + (hn ? '<span class="fhh-name">' + esc(hn) + '</span>' : '')
         + '<span class="fhh-count">' + group.length + ' finding' + (group.length === 1 ? '' : 's') + '</span>'
-        + '<span class="fhh-sevs">' + breakdown + '</span></div>'
-        + '<div class="finding-group">' + group.map(function (f) { return findingCard(f, false); }).join('') + '</div></div>';
+        + '<span class="fhh-sevs">' + breakdown + '</span></summary>'
+        + '<div class="finding-group">' + group.map(function (f) { return findingCard(f, false); }).join('') + '</div></details>';
     }).join('');
   }
 
@@ -426,13 +432,13 @@
     var counts = SEV_ORDER.filter(function (s) { return bySev[s].length; })
       .map(function (s) { return '<span class="sev-count sev-' + s + '">' + bySev[s].length + ' ' + s + '</span>'; }).join('');
     var hostCount = (function () { var h = {}; findings.forEach(function (f) { h[f.host] = 1; }); return Object.keys(h).length; })();
-    var sort = ((OBOL.store.active() || {}).ui || {}).findingsSort === 'target' ? 'target' : 'severity';
-    var toggle = hostCount > 1
-      ? '<div class="findings-sort" role="group" aria-label="Group findings by"><span class="mini-label">Group by</span>'
-        + '<button type="button" class="fsort-btn' + (sort === 'severity' ? ' active' : '') + '" data-fsort="severity">Severity</button>'
-        + '<button type="button" class="fsort-btn' + (sort === 'target' ? ' active' : '') + '" data-fsort="target">Target</button></div>'
-      : '';
-    var body = (sort === 'target' && hostCount > 1) ? byTarget(findings) : bySeverity(findings);
+    // group by target by default (each box is a collapsible section); the toggle offers a flat,
+    // severity-ordered view (the report ordering) for anyone who prefers it.
+    var sort = ((OBOL.store.active() || {}).ui || {}).findingsSort === 'severity' ? 'severity' : 'target';
+    var toggle = '<div class="findings-sort" role="group" aria-label="Group findings by"><span class="mini-label">Group by</span>'
+      + '<button type="button" class="fsort-btn' + (sort === 'target' ? ' active' : '') + '" data-fsort="target">Target</button>'
+      + '<button type="button" class="fsort-btn' + (sort === 'severity' ? ' active' : '') + '" data-fsort="severity">Severity</button></div>';
+    var body = sort === 'severity' ? bySeverity(findings) : byTarget(findings);
     return toggle
       + '<p class="route-sub">Catalogued, proof-bound findings across ' + hostCount + ' host' + (hostCount === 1 ? '' : 's')
       + ' (' + findings.length + '). ' + counts + '</p>' + body;
@@ -462,9 +468,14 @@
   function mounted(ctx) {
     var mount = (ctx && ctx.mount) || document;
     U.on(mount, 'click', '.fsort-btn', function (e, t) {
-      var v = t.getAttribute('data-fsort') === 'target' ? 'target' : 'severity';
+      var v = t.getAttribute('data-fsort') === 'severity' ? 'severity' : 'target';
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.findingsSort = v; }, 'ui');
       OBOL.router.render();
+    });
+    // remember each per-target group's open/closed state (the toggle event does not bubble).
+    Array.prototype.forEach.call(mount.querySelectorAll('details.finding-host-group[data-fhkey]'), function (d) {
+      if (d._fhBound) return; d._fhBound = true;
+      d.addEventListener('toggle', function () { fhSetOpen(d.getAttribute('data-fhkey'), d.open); });
     });
     // sub-view tabs (Findings / ATT&CK / Defensive / Compliance / CVEs)
     U.on(mount, 'click', '.fw-tab', function (e, t) {
