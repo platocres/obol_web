@@ -402,7 +402,23 @@
       var pbase = winPath.split(/[\\/]/).pop() || '';
       mintPath(winPath, _slot_for_flagfile(pbase));
     }
+    // 3b) LOCATE from a RECURSIVE SEARCH that prints BARE local paths, one per line: Windows
+    // `where /r C:\Users\ user.txt` / `Get-ChildItem -Recurse | % FullName` / `dir /s /b`, and Linux
+    // `find / -name user.txt`. These print a real path with no UNC `\\host\C$` lead, so _SPIDER_PATH_RE
+    // misses them and (before this) locating a flag on-host minted nothing, leaving the capture step to
+    // guess a wrong path. A bare path is only taken when it STANDS ALONE on its line (after the shell
+    // prompt is stripped), so a `type …\user.txt` command echo or an `===FLAG:` marker is never caught here.
+    String(text || '').split(/\r?\n/).forEach(function (l) {
+      var t = _strip_prompt(String(l)).trim();
+      if (!t || /[<>|]/.test(t)) return;                       // not a redirection/pipe line
+      if (_BARE_WIN_FLAGPATH_RE.test(t)) { mintPath(t.replace(/[/]+/g, '\\'), _slot_for_flagfile(t.split(/[\\/]/).pop())); return; }
+      if (_BARE_NIX_FLAGPATH_RE.test(t)) { mintPath(t, _slot_for_flagfile(t.split(/[\\/]/).pop())); }
+    });
   }
+  // A bare flag-file path on its own line, as a recursive search prints it. Anchored start-to-end so only a
+  // whole-line path matches (never a path embedded in a `type`/`cat` command echo or an `===FLAG:` marker).
+  var _BARE_WIN_FLAGPATH_RE = /^[A-Za-z]:[\\/](?:[^\\/\r\n]+[\\/])+(?:local|proof|user|root|flag\d?)\.txt$/i;
+  var _BARE_NIX_FLAGPATH_RE = /^\/(?:[^/\r\n]+\/)+(?:local|proof|user|root|flag\d?)\.txt$/i;
   C._parse_flags = _parse_flags;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -55,6 +55,26 @@ ok(captured(parse('nxc smb 10.0.0.5 -u administrator -H aaaa --spider C$', spide
 ok(sp.some(function (f) { return f.value.slot === 'root' && f.value.path === 'C:\\Users\\Administrator\\Desktop\\root.txt'; }), 'spider locates root.txt with its exact Windows path');
 ok(sp.some(function (f) { return f.value.slot === 'local' && f.value.path === 'C:\\Users\\svc-user\\Desktop\\user.txt'; }), 'spider locates user.txt (local slot) at the right user Desktop');
 
+// 1c-bis. LOCATE via a RECURSIVE SEARCH that prints BARE local paths (no UNC, no C$), as `where /r`,
+// `Get-ChildItem -Recurse | % FullName`, or `dir /s /b` do. This is what the operator runs ON the host to
+// find a flag that is not where a guess would put it (the Forest user flag lives on svc-alfresco's Desktop,
+// not Administrator's). Before, these bare paths minted nothing, so the capture kept guessing a dead path.
+var whereOut = [
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> Get-ChildItem C:\\Users -Recurse -Include user.txt,root.txt | Select -Expand FullName',
+  'C:\\Users\\svc-alfresco\\Desktop\\user.txt',
+  'C:\\Users\\Administrator\\Desktop\\root.txt',
+].join('\n');
+var wloc = located(parse('Get-ChildItem C:\\Users -Recurse -Force -Include user.txt,root.txt -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName', whereOut));
+ok(wloc.some(function (f) { return f.value.slot === 'local' && f.value.path === 'C:\\Users\\svc-alfresco\\Desktop\\user.txt'; }), 'a recursive search locates the user flag on the REAL user Desktop (svc-alfresco), from a bare path');
+ok(wloc.some(function (f) { return f.value.slot === 'root' && f.value.path === 'C:\\Users\\Administrator\\Desktop\\root.txt'; }), 'the same search locates root.txt from its bare path');
+ok(captured(parse('Get-ChildItem C:\\Users -Recurse | % FullName', whereOut)).length === 0, 'a bare-path search LOCATES only, captures nothing (no value read)');
+// Linux find output (bare absolute paths) locates too.
+var findOut = ['/home/jdoe/user.txt', '/root/root.txt'].join('\n');
+var floc = located(parse('find / -xdev -name user.txt -o -name root.txt 2>/dev/null', findOut));
+ok(floc.some(function (f) { return f.value.slot === 'local' && f.value.path === '/home/jdoe/user.txt'; }), 'Linux find locates the user flag from a bare /home path');
+// A `type …\user.txt` command echo is NOT a locate (it is a read attempt, no standalone path line).
+ok(located(parse('hostname; ipconfig; type C:\\Users\\Administrator\\Desktop\\user.txt', 'FOREST\nCannot find path')).length === 0, 'a `type …user.txt` echo with no path output locates nothing (not a false locate)');
+
 // 1d. PASTED INTERACTIVE FRAME: the operator pastes a whole evil-winrm frame — the prompt echoes the read
 // and the paste box may attach a DIFFERENT command (the spider) or none. The read + on-host verdict must be
 // recovered from the echoed prompt line, so the flag is captured and the ipconfig noise is not.

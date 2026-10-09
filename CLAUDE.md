@@ -178,6 +178,29 @@ Loadout, your installed tools). Easy to rename.
 
 ### Post-build follow-ups (real-box testing on Forest)
 
+- 2026-10-09: Flag hunt made LOCATE-FIRST, profile-aware, and honest (owner real-box: the Forest flag hunt
+  failed because it typed a GUESSED path, `type C:\Users\Administrator\Desktop\user.txt`, which does not
+  exist, and it was not profile-clean). Four coordinated fixes so the hunt searches, you paste the result,
+  then it reads the real file, remotely or on-host. (1) Parser (parsers/creds.js): recognize BARE local flag
+  paths from a recursive search (`where /r`, `Get-ChildItem -Recurse | % FullName`, `dir /s /b`, Linux
+  `find`), not only UNC `\\host\C$` spider output, so locating a flag on-host actually mints
+  objective.flag_located. Anchored start-to-end so a `type …user.txt` echo or an `===FLAG:` marker is never a
+  false locate; regression tests in flag-capture-smoke.js. (2) Filler (command.js): the USER/local flag path
+  fills from a LOCATED path, else an UNPRIVILEGED active user's own Desktop, else is LEFT UNFILLED so the
+  capture GATES behind "locate it first" (flag_path_local added to GATE_TOKENS in path.js + cruise.js). A
+  privileged user is not the flag owner, so a `Administrator\Desktop\user.txt` guess is never emitted. The
+  ROOT/proof flag keeps its reliable Administrator-Desktop default. (3) Pack (obol_flag_hunt): both Windows
+  moves are profile-aware (`{{flag_names_windows}}`, not a hardcoded `proof.txt root.txt` mix) and lead with a
+  clean LOCATE (`Get-ChildItem -Include {{flag_names_windows}}`); the on-host capture (`type {{flag_path_*}}`)
+  follows and fills the real located path; a lab-only remote one-shot read and the OSCP-honest evil-winrm
+  get-on-host path round it out, each with explicit locus for the Remote/On-Host toggle. (4) Field notes
+  rewritten per-command for the locate-then-capture flow, with the evil-winrm rubyntlm 0.6.7 fix as the
+  get-shell doctor. Verified headless on a seeded admin Forest state: before locating, the user-flag capture
+  GATES and the Get-ChildItem locate leads; after pasting the search output, the capture fills the REAL
+  `C:\Users\svc-alfresco\Desktop\user.txt` (not Administrator's), 0 console errors. Full engine suite +
+  flag-capture-smoke + flag-path-fill-smoke + field-notes-smoke + ad-killchain-e2e + ranker-sim 0/49 + sweep
+  0.0% + lint + gap + browser-smoke all green; bundle rebuilt, assets stamped; house style held.
+
 - 2026-10-09: Forest end-to-end run audit (owner: "get all the way to the end of the Forest test smoothly
   next time, without digging for the right move or scrolling past ten commands to the one I needed"). Replayed
   the owner's real Forest session stage by stage against the GATED Ready-Now view (OBOL.coach.compute, what the

@@ -31,9 +31,12 @@ function ok(cond, msg) { if (!cond) { console.error('  FAIL:', msg); fail++; } e
   });
 });
 
-// the windows flag move's remote spider note explains it only locates (the on-host distinction).
-const fhw = OBOL.fieldNote(byId('flag-hunt-windows'), 1);
-ok(/locate/i.test(fhw.land.join(' ')) || /scores zero/i.test(fhw.mistakes.join(' ')), 'the windows remote spider note explains it only locates');
+// the windows flag move's remote spider note explains it only locates (the on-host distinction). Find the
+// spider command by its text so the check survives command reordering (locate-first put capture ahead of it).
+const fhwMove = byId('flag-hunt-windows');
+const spiderIdx = (fhwMove.commands || []).findIndex((c) => /--spider/.test(c.run || ''));
+const fhw = OBOL.fieldNote(fhwMove, spiderIdx);
+ok(spiderIdx >= 0 && (/locate/i.test(fhw.land.join(' ')) || /scores zero/i.test(fhw.mistakes.join(' '))), 'the windows remote spider note explains it only locates');
 
 // 2. Graceful fallback: an un-authored move still yields non-empty help from its command note/hypothesis.
 // Coverage is now 100%, so there is no real un-authored move to probe; synthesize one from a real move

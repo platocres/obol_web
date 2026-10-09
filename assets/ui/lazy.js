@@ -13,7 +13,7 @@
     parsers: [
       'assets/engine/parsers/common.js?v=50012df7',
       'assets/engine/parsers/nmap.js?v=f1b2bcf7', 'assets/engine/parsers/directory.js?v=e5a7d193',
-      'assets/engine/parsers/creds.js?v=598c8e00', 'assets/engine/parsers/host.js?v=3a0b02ab',
+      'assets/engine/parsers/creds.js?v=a2a6c09d', 'assets/engine/parsers/host.js?v=3a0b02ab',
       'assets/engine/parsers/services.js?v=0ffaee56', 'assets/engine/parsers/database.js?v=43266544',
       'assets/engine/parsers/web.js?v=9f318dea', 'assets/engine/parsers/websource.js?v=6d031c9c',
       'assets/engine/parsers/findings.js?v=0c7eb0d6', 'assets/engine/parsers/shape.js?v=d183ceb9',
@@ -36,7 +36,7 @@
     creds: ['assets/ui/routes/creds.js?v=a87fc780'],
     scoreboard: ['assets/ui/routes/scoreboard.js?v=7fa2dd83'],
     playbooks: ['data/playbooks-bundle.js?v=31b337d6', 'assets/engine/playbooks.js?v=be235b11', 'assets/ui/routes/playbooks.js?v=db570cba'],
-    cruise: ['data/playbooks-bundle.js?v=31b337d6', 'assets/engine/playbooks.js?v=be235b11', 'assets/engine/cruise.js?v=ec5602f2', 'assets/ui/routes/cruise.js?v=c74e6726'],
+    cruise: ['data/playbooks-bundle.js?v=31b337d6', 'assets/engine/playbooks.js?v=be235b11', 'assets/engine/cruise.js?v=4a60e786', 'assets/ui/routes/cruise.js?v=c74e6726'],
     map: ['assets/engine/engmap.js?v=488914b1', 'assets/ui/routes/map.js?v=b415a554'],
     findings: ['data/attack-catalog.js?v=2c0cff09', 'data/attack-move-map.js?v=0de35ccd', 'data/d3fend-map.js?v=c8b35d9d', 'data/frameworks-tables.js?v=169ba840', 'data/kev-catalog.js?v=e8b4d122', 'assets/engine/frameworks.js?v=50ac05e2', 'assets/ui/routes/findings.js?v=053cb276'],
     history: ['assets/ui/routes/history.js?v=f2888760'],

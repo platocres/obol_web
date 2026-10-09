@@ -222,14 +222,14 @@
   // user sets those, so a command that only needs config still shows with its fill box.
   var GATE_TOKENS = { domain: 1, basedn: 1, dc: 1, dc_netbios: 1, dc_account: 1, user: 1, password: 1,
     nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, ca_name: 1, template: 1,
-    pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1 };
+    pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1, flag_path_local: 1 };
   // Human phrasing for the "unlocks once you have ..." affordance (deduped). user/password both read as
   // "a credential" so a command needing both reads once.
   var GATE_LABEL = { domain: 'the domain', basedn: 'the base DN', dc: 'the DC', dc_netbios: 'the DC name',
     dc_account: 'the DC account', user: 'a credential', password: 'a credential', nthash: 'an NT hash',
     userlist: 'a user list', hashfile: 'a captured hash', domain_sid: 'the domain SID', group: 'a group',
     ca_name: 'the CA name', template: 'a cert template', pfx: 'a certificate', nmap_ports: 'a port scan',
-    krbtgt_hash: 'the krbtgt hash', target_sam: 'the SAM' };
+    krbtgt_hash: 'the krbtgt hash', target_sam: 'the SAM', flag_path_local: 'the located user flag' };
   // A command is GATED when, after filling from the engagement's facts/params, it still carries an unfilled
   // EARNED token: a value meant to come from a proven fact the operator has not earned yet. Its time has not
   // come, so the coach hides it rather than showing a dead "Needs: basedn" line, and it reappears, filled,

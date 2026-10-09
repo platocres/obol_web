@@ -260,11 +260,23 @@
       };
       var _isLinux = facts && facts.has && (facts.has('foothold.linux') || facts.has('access.shell') || facts.has('os.linux'))
         && !facts.has('foothold.windows') && !facts.has('os.windows');
+      // The USER/local flag lives on SOME user's Desktop, which you cannot guess once you are privileged:
+      // as Administrator/SYSTEM/root the active user is NOT the flag owner, so a `C:\Users\Administrator\
+      // Desktop\user.txt` guess is confidently wrong (it was the Forest failure). So the local path fills
+      // from a LOCATED path, else the active user's own Desktop ONLY when that user is unprivileged (you
+      // are that user), else it is LEFT UNFILLED so the on-host capture GATES behind "locate it first"
+      // (flag_path_local is a gate token) instead of handing you a path that does not exist.
+      var _priv = /^(administrator|admin|system|localsystem|nt\s*authority\\?system|root)$/i.test(String(ctx.user || '').trim());
       if (ctx.flag_path_local === undefined) {
-        ctx.flag_path_local = _locatedPath('local') || (_isLinux
-          ? ('/home/' + (ctx.user || '<user>') + '/' + _flagName('local'))
-          : ('C:\\Users\\' + (ctx.user || '<user>') + '\\Desktop\\' + _flagName('local')));
+        var _locL = _locatedPath('local');
+        if (_locL) ctx.flag_path_local = _locL;
+        else if (ctx.user && !_priv) ctx.flag_path_local = _isLinux
+          ? ('/home/' + ctx.user + '/' + _flagName('local'))
+          : ('C:\\Users\\' + ctx.user + '\\Desktop\\' + _flagName('local'));
+        // else: leave {{flag_path_local}} unfilled → the capture gates until you LOCATE the user flag.
       }
+      // The ROOT/proof flag is reliably on Administrator's (or /root) Desktop once you hold admin, so a
+      // located path wins but the default guess is safe to offer immediately.
       if (ctx.flag_path_root === undefined) {
         ctx.flag_path_root = _locatedPath('root') || (_isLinux
           ? ('/root/' + _flagName('root'))
