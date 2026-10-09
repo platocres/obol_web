@@ -20,6 +20,21 @@
 
   function esc(s) { return U.esc(s); }
 
+  // The sidebar Target switcher: a compact dropdown of the engagement's known targets (plus the current
+  // value if it is not among them). Shown only when there are two or more to switch between; otherwise the
+  // text field alone is enough. Selecting one makes it the active target (fills {{target}} everywhere).
+  function targetSwitcherHtml(eng, cur) {
+    var raw = ((eng && eng.targets) || []).map(function (t) { return t.ip || t.target || ''; }).filter(Boolean);
+    if (cur && raw.indexOf(cur) < 0) raw.unshift(cur);
+    var seen = {}, uniq = [];
+    raw.forEach(function (ip) { if (!seen[ip]) { seen[ip] = 1; uniq.push(ip); } });
+    if (uniq.length < 2) return '';
+    var opts = uniq.map(function (ip) {
+      return '<option value="' + U.attr(ip) + '"' + (ip === cur ? ' selected' : '') + '>' + esc(ip) + '</option>';
+    }).join('');
+    return '<select class="param-target-switch" aria-label="Switch active target" title="Switch active target">' + opts + '</select>';
+  }
+
   function renderSidebar() {
     var eng = OBOL.store.active();
     if (!eng) return;
@@ -48,15 +63,23 @@
       var redact = !!(eng.ui || {}).reportRedact;
       paramsEl.innerHTML = PARAM_FIELDS.map(function (f) {
         var v = params[f.key] || '';
-        return '<label class="param"><span>' + esc(f.label) + '</span>'
-          + '<input data-param="' + esc(f.key) + '" type="' + (f.secret && redact ? 'password' : 'text') + '" '
+        var input = '<input data-param="' + esc(f.key) + '" type="' + (f.secret && redact ? 'password' : 'text') + '" '
           + 'value="' + U.attr(v) + '" placeholder="' + esc(f.ph) + '" autocomplete="off" spellcheck="false"'
-          + (f.secret ? ' data-secret="1"' : '') + '></label>';
+          + (f.secret ? ' data-secret="1"' : '') + '>';
+        // The Target field carries the engagement's target switcher (the dropdown promoted here from the
+        // old context strip): pick any known target to make it active and re-fill every {{target}}.
+        if (f.key === 'target') {
+          return '<label class="param param-target"><span>' + esc(f.label) + '</span>'
+            + '<div class="param-target-row">' + input + targetSwitcherHtml(eng, v) + '</div></label>';
+        }
+        return '<label class="param"><span>' + esc(f.label) + '</span>' + input + '</label>';
       }).join('');
     }
 
     // credential switcher (collected creds → click to fill commands)
     if (OBOL.credbar) OBOL.credbar.render();
+    var credsCountEl = document.getElementById('creds-count');
+    if (credsCountEl) { var nc = (OBOL.creds && OBOL.creds.gather) ? OBOL.creds.gather().length : 0; credsCountEl.textContent = nc ? String(nc) : ''; }
 
     // facts panel (collapsible, collapsed by default: a dev/power-user surface, kept but out of the way)
     var factsEl = document.getElementById('facts-list');
@@ -127,6 +150,12 @@
       var key = t.getAttribute('data-param'), val = t.value;
       OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params[key] = val; }, 'params');
     });
+    // target switcher (dropdown) -> set active target + re-rank
+    if (paramsEl) paramsEl.addEventListener('change', function (e) {
+      var sel = e.target.closest('.param-target-switch'); if (!sel) return;
+      OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = sel.value; }, 'params');
+      renderSidebar(); OBOL.router.render();
+    });
 
     // guided fact picker (sidebar) — friendly labels + an advanced raw-kind escape hatch
     var fpEl = document.getElementById('fact-pick');
@@ -195,6 +224,7 @@
       if (OBOL.palette) OBOL.palette.init();
       OBOL.router.start();
       if (OBOL.ctxbar) OBOL.ctxbar.init();   // global engagement context strip (after the route is known)
+      if (OBOL.tips) OBOL.tips.mount();       // calm tip feed in the header (next to Focus)
       document.documentElement.classList.remove('obol-booting');
       document.documentElement.setAttribute('data-obol-boot', 'ready');
     }).catch(function (err) {

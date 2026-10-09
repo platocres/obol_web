@@ -22,6 +22,7 @@
     'The Loadout tab builds one script that stocks your Kali box with the exact tools obol references.',
     'Paste into Explain This Output, in the Workbench, to see what each line proves, and what it does not.',
     'The Creds tab can show Proven So Far only, flag a credential as tried and failed, and export to CSV.',
+    'Click a credential in the sidebar to make it active, and every command fills with that login.',
     'New to a screen? The Help tab maps every part of obol, section by section.',
     // Gentle pitfall nudges
     'obol never runs anything. It hands you commands to review and run yourself, which keeps it exam legal.',

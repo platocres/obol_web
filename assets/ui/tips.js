@@ -70,28 +70,27 @@
   }
   function restartTimer() { stopTimer(); ensureTimer(); }
 
-  // Called by ctxbar after each render: sync the text to the current tip and make sure the cycle runs.
-  function refresh() {
+  // Render (or re-render) the feed into its header slot, then make sure the cycle is running. Called once
+  // at boot and again whenever the user toggles tips off/on (the 20s cycle itself just swaps the text).
+  function mount() {
+    var slot = document.getElementById('tip-slot');
+    if (slot) slot.innerHTML = html();
     wire();
-    var el = document.querySelector('.tipfeed-text');
-    if (el) el.textContent = current();
     ensureTimer();
   }
-
-  function rerenderBar() { try { if (OBOL.ctxbar && OBOL.ctxbar.render) OBOL.ctxbar.render(); } catch (e) {} }
 
   function wire() {
     if (_wired) return; _wired = true;
     document.addEventListener('click', function (e) {
       var t = e.target;
       if (t.closest && t.closest('.tipfeed-next')) { e.preventDefault(); advance(true); return; }
-      if (t.closest && t.closest('.tipfeed-off')) { e.preventDefault(); setOff(true); stopTimer(); rerenderBar(); return; }
-      if (t.closest && t.closest('.tipfeed-on')) { e.preventDefault(); setOff(false); rerenderBar(); return; }
+      if (t.closest && t.closest('.tipfeed-off')) { e.preventDefault(); setOff(true); stopTimer(); mount(); return; }
+      if (t.closest && t.closest('.tipfeed-on')) { e.preventDefault(); setOff(false); mount(); return; }
     });
     // pause the cycle while the pointer is over the feed
     document.addEventListener('mouseover', function (e) { if (e.target.closest && e.target.closest('.tipfeed')) _hover = true; });
     document.addEventListener('mouseout', function (e) { if (e.target.closest && e.target.closest('.tipfeed')) _hover = false; });
   }
 
-  OBOL.tips = { html: html, refresh: refresh, isOff: isOff };
+  OBOL.tips = { html: html, mount: mount, refresh: mount, isOff: isOff };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

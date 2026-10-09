@@ -31,7 +31,10 @@
 
   function ic(n) { return OBOL.ic ? OBOL.ic(n) : ''; }
   function focusOn() { try { return localStorage.getItem('obol.focus') === '1'; } catch (e) { return false; } }
-  function applyFocus() { try { document.documentElement.setAttribute('data-focus', focusOn() ? '1' : '0'); } catch (e) {} }
+  function applyFocus() { try { document.documentElement.setAttribute('data-focus', focusOn() ? '1' : '0'); } catch (e) {} syncFocusButton(); }
+  // Focus now lives in the global header (#nav-focus), so keep its pressed state in sync with the toggle.
+  function syncFocusButton() { var b = document.getElementById('nav-focus'); if (b) b.setAttribute('aria-pressed', focusOn() ? 'true' : 'false'); }
+  function toggleFocus() { try { localStorage.setItem('obol.focus', focusOn() ? '0' : '1'); } catch (x) {} applyFocus(); render(); }
   function routeName() { return (location.hash || '').replace(/^#\/?/, '').split('/')[0] || ''; }
   function isEngRoute(n) { return ENG_ROUTES.indexOf(n) >= 0; }
 
@@ -85,37 +88,40 @@
   function render() {
     var bar = document.getElementById('ctxbar');
     if (!bar) return;
-    var name = routeName(), onEng = isEngRoute(name);
-    var cred = credOptions(), tgt = targetOptions();
-    var html = '<div class="ctx-context">'
-      + '<label class="ctx-pill ctx-eng" title="Active engagement"><span class="ctx-ic" aria-hidden="true">◆</span>'
-      + '<span class="ctx-k">Engagement</span>'
-      + '<select id="ctx-eng" aria-label="Active engagement">' + engOptions() + '</select></label>'
-      + '<label class="ctx-pill ctx-cred' + (cred.disabled ? ' is-empty' : '') + '" title="Active credential, fills commands everywhere, Learn included">'
-      + '<span class="ctx-ic" aria-hidden="true">' + ic('lock') + '</span><span class="ctx-k">Credential</span>'
-      + '<select id="ctx-cred" aria-label="Active credential"' + (cred.disabled ? ' disabled' : '') + '>' + cred.html + '</select></label>'
-      + '<label class="ctx-pill ctx-target' + (tgt.disabled ? ' is-empty' : '') + '" title="Active target, fills {{target}} and routes anchorless pastes">'
-      + '<span class="ctx-ic" aria-hidden="true">' + ic('crosshair') + '</span><span class="ctx-k">Target</span>'
-      + '<select id="ctx-target" aria-label="Active target"' + (tgt.disabled ? ' disabled' : '') + '>' + tgt.html + '</select></label>'
-      + (OBOL.tips ? OBOL.tips.html() : '')
-      + '<button type="button" class="ctx-focus" data-ctx-focus aria-pressed="' + (focusOn() ? 'true' : 'false') + '" title="Focus mode: hide secondary panels for low-distraction work">' + ic('spark') + '<span>Focus</span></button>'
-      + '</div>';
-    html += '<nav class="ctx-subnav" aria-label="Engagement surfaces"' + (onEng ? '' : ' hidden') + '>' + (onEng ? subnavHtml(name) : '') + '</nav>';
+    var name = routeName(), onEng = isEngRoute(name), onLearn = (name === 'study');
+    syncFocusButton();
+    // The engagement / credential / target context lives in the left parameter bar on every surface that
+    // shows it. Learn is the one full-bleed route with no sidebar, so the context pills exist ONLY there.
+    // The engagement sub-nav shows on engagement routes. Every other global route (Workbench, Stuck,
+    // Cruise, ...) needs neither, so the whole bar hides and its grid row collapses.
+    var html = '';
+    if (onLearn) {
+      var cred = credOptions(), tgt = targetOptions();
+      html += '<div class="ctx-context">'
+        + '<label class="ctx-pill ctx-eng" title="Active engagement"><span class="ctx-ic" aria-hidden="true">◆</span>'
+        + '<span class="ctx-k">Engagement</span>'
+        + '<select id="ctx-eng" aria-label="Active engagement">' + engOptions() + '</select></label>'
+        + '<label class="ctx-pill ctx-cred' + (cred.disabled ? ' is-empty' : '') + '" title="Active credential, fills commands everywhere, Learn included">'
+        + '<span class="ctx-ic" aria-hidden="true">' + ic('lock') + '</span><span class="ctx-k">Credential</span>'
+        + '<select id="ctx-cred" aria-label="Active credential"' + (cred.disabled ? ' disabled' : '') + '>' + cred.html + '</select></label>'
+        + '<label class="ctx-pill ctx-target' + (tgt.disabled ? ' is-empty' : '') + '" title="Active target, fills {{target}} and routes anchorless pastes">'
+        + '<span class="ctx-ic" aria-hidden="true">' + ic('crosshair') + '</span><span class="ctx-k">Target</span>'
+        + '<select id="ctx-target" aria-label="Active target"' + (tgt.disabled ? ' disabled' : '') + '>' + tgt.html + '</select></label>'
+        + '</div>';
+    }
+    if (onEng) html += '<nav class="ctx-subnav" aria-label="Engagement surfaces">' + subnavHtml(name) + '</nav>';
     bar.innerHTML = html;
     bar.setAttribute('data-eng', onEng ? '1' : '0');
-    if (OBOL.tips && OBOL.tips.refresh) OBOL.tips.refresh();
+    bar.hidden = !html;
   }
 
   function wire() {
     var bar = document.getElementById('ctxbar');
     if (!bar || bar._wired) return;
     bar._wired = true;
-    bar.addEventListener('click', function (e) {
-      if (e.target.closest && e.target.closest('[data-ctx-focus]')) {
-        try { localStorage.setItem('obol.focus', focusOn() ? '0' : '1'); } catch (x) {}
-        applyFocus(); render();
-      }
-    });
+    // Focus toggle lives in the header now (static element, wired once).
+    var focusBtn = document.getElementById('nav-focus');
+    if (focusBtn && !focusBtn._wired) { focusBtn._wired = true; focusBtn.addEventListener('click', function (e) { e.preventDefault(); toggleFocus(); }); }
     bar.addEventListener('change', function (e) {
       var t = e.target;
       if (t.id === 'ctx-eng') {

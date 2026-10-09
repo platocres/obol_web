@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OBOL: Offensive Box Operations Ledger</title>
   <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the obol engine: proof-gated next-move coach, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
-  <link rel="stylesheet" href="assets/css/obol.css?v=9b62c82e">
+  <link rel="stylesheet" href="assets/css/obol.css?v=d5a18a22">
   <script>
     /* Pre-paint skin: set before first paint so there is no flash. Tiny + synchronous. */
     (function () {
@@ -54,6 +54,11 @@
         <a data-nav data-nav-match="cruise playbooks" href="#/cruise" class="nav-cruise">Cruise<span class="nav-exp">Experimental</span></a>
         <a data-nav href="#/help">Help</a>
       </nav>
+      <div id="tip-slot" class="tip-slot"><!-- calm tip feed (assets/ui/tips.js) --></div>
+      <button id="nav-focus" class="nav-focus" type="button" aria-pressed="false" title="Focus mode: hide secondary panels for low-distraction work">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="3.2"/></svg>
+        <span class="nav-focus-l">Focus</span>
+      </button>
       <button id="nav-paste" class="nav-paste" type="button" aria-label="Paste evidence" title="Paste evidence (mint facts from any output)">
         <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"/><path d="M9 12h6M9 16h4"/></svg>
         <span class="nav-paste-l">Paste</span>
@@ -75,8 +80,10 @@
       <div class="side-h">Parameters</div>
       <div id="params"></div>
 
-      <div class="side-h">Credentials</div><span class="side-h-note">click to use in commands</span>
-      <div id="cred-switch" class="cred-switch"></div>
+      <details id="creds-panel" class="side-creds" open>
+        <summary class="side-h side-creds-h">Credentials<span id="creds-count" class="side-creds-n"></span></summary>
+        <div id="cred-switch" class="cred-switch"></div>
+      </details>
 
       <details id="facts-panel" class="side-facts">
         <summary class="side-h side-facts-h">Facts<span id="facts-count" class="side-facts-n"></span></summary>
@@ -148,9 +155,9 @@
   <script defer src="assets/ui/factpick.js?v=012097b2"></script>
   <script defer src="assets/ui/store.js?v=57ef19d9"></script>
   <script defer src="assets/ui/credbar.js?v=90944c50"></script>
-  <script defer src="data/tips.js?v=3d216107"></script>
-  <script defer src="assets/ui/tips.js?v=675d94ba"></script>
-  <script defer src="assets/ui/ctxbar.js?v=a6a73314"></script>
+  <script defer src="data/tips.js?v=32bcd855"></script>
+  <script defer src="assets/ui/tips.js?v=b8095865"></script>
+  <script defer src="assets/ui/ctxbar.js?v=75a87236"></script>
   <script defer src="assets/ui/quickpaste.js?v=1fee55fa"></script>
   <script defer src="assets/ui/chainview.js?v=3b7e3f4c"></script>
   <script defer src="assets/ui/graphview.js?v=2cd81edc"></script>
@@ -163,7 +170,7 @@
   <script defer src="assets/ui/routes/targets.js?v=8d31ba54"></script>
   <script defer src="assets/ui/routes/evidence.js?v=82f42dc5"></script>
   <script defer src="assets/ui/routes/path.js?v=a4f12aea"></script>
-  <script defer src="assets/ui/boot.js?v=ba7dd230"></script>
+  <script defer src="assets/ui/boot.js?v=bcdf2628"></script>
 
   <!-- Presentation-only, loaded after the critical path so the boot budget is untouched:
        motion background, coin bursts on genuine proof, and the appearance settings. -->
