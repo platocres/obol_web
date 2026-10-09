@@ -56,11 +56,14 @@
     var threshold = proof.pass_threshold || 0;
     var passing = threshold ? total >= threshold : null;
 
-    var scoreLine = threshold
-      ? '<div class="score-total ' + (passing ? 'pass' : 'fail') + '"><span class="score-n">' + total + '</span> / ' + threshold + ' to pass' + (passing ? ' · passing ✓' : '') + '</div>'
-      : '<div class="score-total"><span class="score-n">' + total + '</span> points captured</div>';
+    // The point total is OSCP-exam scoring, meaningless on a lab box, so it surfaces only in exam mode.
+    var exam = OBOL.profile.isExamPlatform((eng.profile || {}).platform);
+    var scoreLine = !exam ? ''
+      : threshold
+        ? '<div class="score-total ' + (passing ? 'pass' : 'fail') + '"><span class="score-n">' + total + '</span> / ' + threshold + ' to pass' + (passing ? ' · passing ✓' : '') + '</div>'
+        : '<div class="score-total"><span class="score-n">' + total + '</span> points captured</div>';
 
-    return '<section class="score-route"><h1 class="route-h1">Scoreboard</h1>'
+    return '<section class="score-route"><h1 class="route-h1">Flags</h1>'
       + '<p class="route-sub">' + (proof.platform_name ? esc(proof.platform_name) + ' · ' : '') + 'Captured flags per target. Click a flag to copy its value.'
       + (proof.required ? ' This platform requires a compliant proof screenshot (flag + host-identity in one frame) for each slot, capture it in your report.' : '')
       + (adSet.length ? ' The AD set (' + esc(adSet.join(', ')) + ') scores all-or-nothing (' + (proof.ad_set_points || 0) + ').' : '')

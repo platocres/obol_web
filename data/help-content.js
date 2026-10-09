@@ -54,7 +54,7 @@
               { id: 'findings-cves', title: 'CVEs And KEV', goto: '#/findings', set: { findingsView: 'cves' }, what: 'Detected CVEs, the actively-exploited ones (CISA KEV) first, with remediation.' },
             ] },
           { id: 'history', title: 'Run Log', goto: '#/history', what: 'Everything you have run this engagement, in order, so nothing is lost.' },
-          { id: 'scoreboard', title: 'Scoreboard', goto: '#/scoreboard', what: 'Your progress against the box: phases reached, flags captured, what is left.' },
+          { id: 'scoreboard', title: 'Flags', goto: '#/scoreboard', what: 'Every captured flag per target, with its real value one click from the clipboard. Points show only in exam mode.' },
           { id: 'report', title: 'Report', goto: '#/report', what: 'Generates OSCP-style report content from your proven findings.' },
         ] },
       ] },

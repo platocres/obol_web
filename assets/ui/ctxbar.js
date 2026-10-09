@@ -26,7 +26,7 @@
   var SUBNAV = [
     { group: 'Work the box', items: [['home', 'Hub'], ['targets', 'Targets'], ['path', 'Next Steps'], ['evidence', 'Evidence']] },
     { group: 'Analyze', items: [['map', 'Map'], ['domain', 'Domain'], ['creds', 'Creds']] },
-    { group: 'Track & report', items: [['checklist', 'Checklist'], ['findings', 'Findings'], ['history', 'Run Log'], ['scoreboard', 'Scoreboard'], ['report', 'Report']] },
+    { group: 'Track & report', items: [['checklist', 'Checklist'], ['findings', 'Findings'], ['history', 'Run Log'], ['scoreboard', 'Flags'], ['report', 'Report']] },
   ];
 
   function ic(n) { return OBOL.ic ? OBOL.ic(n) : ''; }
