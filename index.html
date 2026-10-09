@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OBOL: Offensive Box Operations Ledger</title>
   <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the obol engine: proof-gated next-move coach, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
-  <link rel="stylesheet" href="assets/css/obol.css?v=71338266">
+  <link rel="stylesheet" href="assets/css/obol.css?v=171ab2d4">
   <script>
     /* Pre-paint skin: set before first paint so there is no flash. Tiny + synchronous. */
     (function () {
@@ -17,6 +17,7 @@
         var a = parseFloat(localStorage.getItem('obol.surface-alpha'));
         if (isNaN(a)) a = 0.5; /* fade surfaces so the motion background shows through, but keep panels readable */
         if (a >= 0 && a <= 1) document.documentElement.style.setProperty('--surface-alpha', String(a));
+        if (localStorage.getItem('obol.params-collapsed') === '1') document.documentElement.setAttribute('data-params-collapsed', '1');
       } catch (e) {}
     })();
     /* Boot guard: if boot never commits, reveal the page anyway so it can't hang hidden. */
@@ -72,6 +73,9 @@
     <div id="ctxbar" class="ctxbar" aria-label="Engagement context"><!-- global context strip: engagement · credential · target + engagement sub-nav (ctxbar.js) --></div>
 
     <aside id="sidebar">
+      <button id="params-collapse" class="params-collapse" type="button" title="Collapse the parameter bar" aria-label="Collapse the parameter bar">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg>
+      </button>
       <div class="side-h">Engagement</div>
       <div class="eng-row">
         <select id="eng-select" aria-label="Active engagement"></select>
@@ -92,6 +96,11 @@
         <div id="fact-pick" class="fact-pick"></div>
       </details>
     </aside>
+
+    <button id="params-reopen" class="params-reopen" type="button" title="Show the parameter bar" aria-label="Show the parameter bar">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m10 6 6 6-6 6"/></svg>
+      <span class="params-reopen-l">Parameters</span>
+    </button>
 
     <main id="view" role="main"><!-- routes render here (once per navigation) --></main>
   </div>
@@ -171,7 +180,7 @@
   <script defer src="assets/ui/routes/targets.js?v=8d31ba54"></script>
   <script defer src="assets/ui/routes/evidence.js?v=82f42dc5"></script>
   <script defer src="assets/ui/routes/path.js?v=a4f12aea"></script>
-  <script defer src="assets/ui/boot.js?v=bcdf2628"></script>
+  <script defer src="assets/ui/boot.js?v=166d7059"></script>
 
   <!-- Presentation-only, loaded after the critical path so the boot budget is untouched:
        motion background, coin bursts on genuine proof, and the appearance settings. -->

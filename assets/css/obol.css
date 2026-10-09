@@ -100,7 +100,30 @@ nav.mainnav a.active { background: var(--accent-soft); color: var(--accent-2); }
 .appbar-right { display: flex; align-items: center; gap: 8px; }
 .appbar-right select { background: var(--surf2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: 12px var(--sans); }
 
-aside#sidebar { grid-area: side; border-right: 1px solid var(--line); background: var(--surf1); backdrop-filter: blur(6px); padding: 14px; overflow-y: auto; }
+aside#sidebar { grid-area: side; position: relative; border-right: 1px solid var(--line); background: var(--surf1); backdrop-filter: blur(6px); padding: 14px; overflow-y: auto; }
+
+/* ── Collapsible parameter bar: tuck the whole sidebar off-screen, leave a re-open tab ───────────── */
+.params-collapse { position: absolute; top: 10px; right: 8px; z-index: 3; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; cursor: pointer; color: var(--text-2); background: var(--surf1); border: 1px solid var(--line); border-radius: 7px; }
+.params-collapse:hover { color: var(--g-next); border-color: color-mix(in srgb, var(--g-next) 45%, var(--line)); }
+.params-collapse:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* the little re-open tab on the left edge, shown only while collapsed (desktop) */
+.params-reopen { display: none; }
+@media (min-width: 861px) {
+  :root[data-params-collapsed="1"] #app { grid-template-columns: 0 minmax(0, 1fr); }
+  :root[data-params-collapsed="1"] aside#sidebar { display: none; }   /* fully hidden, so nothing can stick out */
+  :root[data-params-collapsed="1"] .params-reopen {
+    display: inline-flex; flex-direction: column; align-items: center; gap: 9px; position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+    z-index: 15; cursor: pointer; padding: 13px 5px; color: var(--g-next); background: color-mix(in srgb, var(--g-next) 13%, var(--surf1));
+    border: 1px solid color-mix(in srgb, var(--g-next) 42%, var(--line)); border-left: none; border-radius: 0 11px 11px 0;
+    box-shadow: 0 0 18px -5px color-mix(in srgb, var(--g-next) 50%, transparent); }
+  :root[data-params-collapsed="1"] .params-reopen:hover { background: color-mix(in srgb, var(--g-next) 22%, var(--surf1)); }
+}
+.params-reopen-l { writing-mode: vertical-rl; font: 800 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: color-mix(in srgb, var(--g-next) 85%, var(--text)); }
+.params-reopen:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* no sidebar to collapse on Learn (full-bleed) or on the mobile drawer shell */
+:root[data-route="study"] .params-collapse, :root[data-route="study"] .params-reopen { display: none !important; }
+@media (max-width: 860px) { .params-collapse, .params-reopen { display: none !important; } }
 .side-h { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 14px 0 8px; }
 .side-h:first-child { margin-top: 0; }
 .eng-row { display: flex; gap: 6px; }

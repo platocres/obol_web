@@ -120,7 +120,19 @@
     }
   }
 
+  function setParamsCollapsed(on) {
+    try { on ? localStorage.setItem('obol.params-collapsed', '1') : localStorage.removeItem('obol.params-collapsed'); } catch (e) {}
+    if (on) document.documentElement.setAttribute('data-params-collapsed', '1');
+    else document.documentElement.removeAttribute('data-params-collapsed');
+  }
+
   function wireShell() {
+    // collapse / re-open the parameter bar (persisted; the pre-paint script applies it on load)
+    var pc = document.getElementById('params-collapse');
+    if (pc) pc.addEventListener('click', function (e) { e.preventDefault(); setParamsCollapsed(true); });
+    var pr = document.getElementById('params-reopen');
+    if (pr) pr.addEventListener('click', function (e) { e.preventDefault(); setParamsCollapsed(false); });
+
     // engagement switch / new
     var engSel = document.getElementById('eng-select');
     if (engSel) engSel.addEventListener('change', function () { OBOL.store.setActive(engSel.value).then(function () { OBOL.router.render(); }); });
