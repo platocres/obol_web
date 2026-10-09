@@ -134,6 +134,8 @@ function serve() {
   ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.rail && window.OBOL.rail.html)), 'rail module still exposed for the per-target view');
 
   // Guided fact picker (sidebar): a friendly labelled option adds the underlying fact kind.
+  // The Facts section is a collapsed-by-default <details>; open it before touching the picker.
+  await page.evaluate(() => { var d = document.getElementById('facts-panel'); if (d) d.open = true; });
   ok(await page.locator('#fact-pick .fp-sel').count() === 1, 'sidebar guided fact picker rendered');
   const beforePick = await page.evaluate(() => window.OBOL.store.factSet().has('smb.reachable'));
   await page.selectOption('#fact-pick .fp-sel', 'smb.reachable');
