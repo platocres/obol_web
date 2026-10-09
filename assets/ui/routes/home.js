@@ -346,11 +346,55 @@
       + '</div>';
   }
 
-  // The engagement-wide Attack Path ribbon (identical to a single target's when scope is one host).
+  // per-target last-activity timestamp, from the Run Log entries tagged to that host (best-effort:
+  // an activity carries target/scope only when it was captured against a known host).
+  function lastActivityAt(ip, acts) {
+    var t = 0;
+    (acts || []).forEach(function (a) {
+      if (a && a.at && a.at > t && (a.target === ip || a.scope === 'host:' + ip)) t = a.at;
+    });
+    return t;
+  }
+
+  // The engagement Attack Path, one COLLAPSIBLE row per target. The summary line carries that box's
+  // identity + access + OS/ports + flags + its own next move + last activity, all at a glance; expand
+  // a row to see its full "what led to what" ribbon (reused from chainview.hostFlow, so a single-box
+  // run is byte-for-byte that target's page). A single target opens by default; with several, they
+  // collapse to scannable rows. The per-target open/closed choice is remembered per browser.
   function engagementPath() {
-    var flow = OBOL.chainview ? OBOL.chainview.engagement() : '';
-    if (!flow) return '';
-    return '<div class="eng-apath"><h2 class="coach-sec-h">Attack Path: What Led To What</h2>' + flow + '</div>';
+    var eng = OBOL.store.active(); if (!eng) return '';
+    var infos = targetInfos(eng);
+    if (!infos.length) return '';
+    var acts = eng.activities || [];
+    var engId = OBOL.store.activeId();
+    var single = infos.length === 1;
+    var rows = infos.map(function (info) {
+      var ip = info.ip, b = info.badge;
+      var idn = OBOL.store.targetIdentity ? OBOL.store.targetIdentity(ip) : { ip: ip, hostname: info.host, domain: info.domain };
+      var name = idn.hostname || info.host || ip;
+      var idHtml = '<span class="apath-row-name">' + esc(name) + '</span>'
+        + (idn.hostname ? '<span class="apath-row-ip">' + esc(ip) + '</span>' : '')
+        + (idn.domain ? '<span class="apath-row-dom">' + esc(idn.domain) + '</span>' : '');
+      var acc = '<span class="hb-acc ' + b.cls + '">' + b.label + '</span>';
+      var osPorts = (info.os ? esc(U.titleCase(info.os)) : 'OS Unknown')
+        + (info.ports.length ? ' · ' + info.ports.length + ' Port' + (info.ports.length === 1 ? '' : 's') : '');
+      var flags = '<span class="apath-row-flags' + (info.flags ? '' : ' none') + '">' + OBOL.ic('flag') + ' ' + (info.flags || 0) + '</span>';
+      var next = info.next ? '<span class="apath-row-next" title="' + U.attr(info.next) + '">&rarr; ' + esc(info.next) + '</span>'
+        : (info.lvl === 'privileged' ? '<span class="apath-row-next done">Owned</span>' : '');
+      var la = lastActivityAt(ip, acts);
+      var when = la ? '<span class="apath-row-when" title="Last recorded activity on this box">' + esc(ago(la)) + '</span>' : '';
+      var meta = '<span class="apath-row-meta">' + acc
+        + '<span class="apath-row-os">' + osPorts + '</span>' + flags + next + when + '</span>';
+      var flow = OBOL.chainview ? OBOL.chainview.hostFlow(ip, acts) : '';
+      var body = flow || '<div class="apath-empty">No moves recorded on this box yet. Run a move and paste its output on <a href="#/evidence">Evidence</a>, and its path fills in here.</div>';
+      var key = 'obol.apath:' + engId + ':' + ip;
+      var remembered = null; try { remembered = localStorage.getItem(key); } catch (e) {}
+      var open = remembered == null ? single : remembered === '1';
+      return '<details class="apath-host apath-row"' + (open ? ' open' : '') + ' data-apath-key="' + U.attr(key) + '">'
+        + '<summary class="apath-row-sum"><span class="apath-row-id">' + idHtml + '</span>' + meta + '</summary>'
+        + '<div class="apath-row-body">' + body + '</div></details>';
+    }).join('');
+    return '<div class="eng-apath"><h2 class="coach-sec-h">Attack Path: What Led To What</h2><div class="apath-rows">' + rows + '</div></div>';
   }
 
   function libraryList() {
@@ -397,7 +441,7 @@
   function fval(f, k) { try { return (f.values(k) || [])[0] || null; } catch (e) { return null; } }
   function hostOs(f, t) {
     if (t && t.os) return t.os;
-    var v = fval(f, 'host.os_hint') || fval(f, 'host.os') || {};
+    var v = fval(f, 'host.os_hint') || fval(f, 'host.os') || fval(f, 'host.os_family') || {};
     return v.os || v.name || v.family || '';
   }
   function hostDomain(f) {
@@ -753,6 +797,16 @@
     // hub: copy the next-move anchor command
     U.on(mount, 'click', '.btn-copy', function (e, b) {
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+
+    // hub: remember each per-target Attack Path row's open/closed state per browser. The `toggle`
+    // event does not bubble, so bind it directly on each <details>; a re-render recreates the nodes,
+    // and the guard flag stops a double-bind if the same node somehow survives.
+    Array.prototype.forEach.call(mount.querySelectorAll('details[data-apath-key]'), function (d) {
+      if (d._apathBound) return; d._apathBound = true;
+      d.addEventListener('toggle', function () {
+        try { localStorage.setItem(d.getAttribute('data-apath-key'), d.open ? '1' : '0'); } catch (e) {}
+      });
     });
 
     // connectivity handlers. Bound ONCE on the persistent #view: the router re-runs mounted() on
