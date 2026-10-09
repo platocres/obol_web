@@ -84,6 +84,15 @@ function fv(kind) { var f = smbFacts.filter(function (x) { return x.kind === kin
 ok(fv('host.hostname') && fv('host.hostname').name === 'FOREST', 'un-piped "Computer name: FOREST" mints host.hostname (XML smb-os-discovery)');
 ok(fv('host.domain') && fv('host.domain').domain === 'htb.local', 'un-piped "Domain name: htb.local" mints host.domain');
 ok(fv('ad.domain_known') && fv('ad.domain_known').name === 'htb.local', 'the domain also mints ad.domain_known (base DN derivable)');
+// the smb-os-discovery "OS:" line carries the SPECIFIC product, not just the family — surfaced on the hub
+ok(fv('host.os_hint') && fv('host.os_hint').family === 'windows', 'smb-os-discovery mints the Windows os family');
+ok(fv('host.os_hint') && fv('host.os_hint').os === 'Windows Server 2016 Standard 14393', 'the specific OS version is carved from the "OS:" line (value.os)');
+// a noisy service banner with no labelled OS line stays family-only (no garbage version)
+var bannerOnly = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -sV 10.10.10.11',
+  stdout: ['Nmap scan report for 10.10.10.11', '445/tcp open microsoft-ds Windows Server 2016 Standard 14393 microsoft-ds', 'Nmap done'].join('\n'),
+  source: 'nmap', scope: 'host:10.10.10.11', domain: '' });
+var bo = (bannerOnly.facts || []).filter(function (x) { return x.kind === 'host.os_hint'; })[0];
+ok(bo && bo.value.family === 'windows', 'a bare -sV service banner still mints the Windows family');
 
 // "Microsoft-HTTPAPI/2.0" on 5985/47001 is WinRM/WSMan, not a browsable web app, so it must NOT mint
 // web.server (which would unlock the whole web-exploit lane and bury the AD next move). A real web server

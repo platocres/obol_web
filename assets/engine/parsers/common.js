@@ -331,10 +331,32 @@
   }
   C._line_for_match = _line_for_match;
 
-  function _add_os_observation(facts, ws, source, family, evidence, confidence, tool, promote) {
+  // Pull a SPECIFIC OS product ("Windows Server 2016 Standard 14393", "Ubuntu 20.04") out of an
+  // authoritative LABELLED line only: smb-os-discovery / nmap OS detection / systeminfo (OS: / OS
+  // details: / Running:). Service banners are too noisy to carve a version from, so an unlabelled
+  // match stays family-only and nothing wrong is ever shown.
+  function _os_product_from_label(text, family) {
+    var re = /\b(?:OS(?:\s*details)?|Running)\s*:\s*([^\n|]+)/gi;
+    var m;
+    while ((m = re.exec(text || ''))) {
+      var p = m[1].trim()
+        .replace(/\s+(microsoft-ds|netbios-ssn|msrpc|microsoft-rpc|workgroup)\b.*$/i, '')
+        .replace(/[.,;]+\s*$/, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      if (p && p.toLowerCase().indexOf(family) >= 0) return p.slice(0, 80);
+    }
+    return '';
+  }
+  C._os_product_from_label = _os_product_from_label;
+
+  function _add_os_observation(facts, ws, source, family, evidence, confidence, tool, promote, product) {
     family = (family || '').trim().toLowerCase();
     if (family !== 'windows' && family !== 'linux') return;
     var value = { family: family, confidence: confidence, tool: tool, evidence: (evidence || '').trim().slice(0, 220) };
+    var prod = (product || '').trim();
+    // only keep a product that is richer than the bare family word (a real version string)
+    if (prod && prod.toLowerCase() !== family) value.os = prod.slice(0, 80);
     _add(facts, mkFact('host.os_hint', 'host:' + ws.target, value, ProofState.SUPPORTED, source));
     if (promote) _add(facts, mkFact('host.os_family', 'host:' + ws.target, value, ProofState.SUPPORTED, source));
   }
@@ -353,7 +375,7 @@
     var keys = Object.keys(matches);
     var promoteSingle = promote && keys.length === 1;
     keys.forEach(function (family) {
-      _add_os_observation(facts, ws, source, family, matches[family], confidence, tool, promoteSingle);
+      _add_os_observation(facts, ws, source, family, matches[family], confidence, tool, promoteSingle, _os_product_from_label(text, family));
     });
   }
   C._add_os_from_text = _add_os_from_text;

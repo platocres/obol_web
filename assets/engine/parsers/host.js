@@ -288,7 +288,7 @@
       var osName = sysinfo['os name'] || '', osVersion = sysinfo['os version'] || '';
       if (osName || osVersion) {
         _add_host_privesc_fact(facts, ws, source, 'host.kernel', { kernel: [osName, osVersion].filter(Boolean).join(' '), tool: 'systeminfo' }, leadKinds);
-        C._add_os_observation(facts, ws, source, 'windows', (osName || osVersion), 'high', 'systeminfo', true);
+        C._add_os_observation(facts, ws, source, 'windows', (osName || osVersion), 'high', 'systeminfo', true, (osName || ('Windows ' + osVersion)).trim());
       }
       if (sysinfo['system type']) _add_host_privesc_fact(facts, ws, source, 'host.arch', { arch: sysinfo['system type'], tool: 'systeminfo' }, leadKinds);
     }

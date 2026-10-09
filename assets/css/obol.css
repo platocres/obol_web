@@ -1622,15 +1622,18 @@ a.eng-stat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .apath-row[open] > summary::before { transform: rotate(90deg); }
 .apath-row > summary:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .apath-row > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.apath-row-id { display: flex; align-items: baseline; gap: 7px 16px; flex-wrap: wrap; min-width: 0; }
+.apath-row-id { display: flex; align-items: baseline; gap: 7px 16px; flex-wrap: wrap; min-width: 0; flex: 1 1 auto; }
 .apath-id-pair { display: inline-flex; align-items: baseline; gap: 5px; }
 .apath-id-k { color: var(--muted); font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; }
 .apath-id-v { color: var(--accent-2); font: 700 13px var(--mono); }
 /* the per-target attack-path header, inside the expanded row body */
 .apath-body-h { font: 700 10.5px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 2px 0 9px; }
-.apath-row-meta { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin-left: auto; font-size: 12px; }
+/* meta justifies right while it fits beside the identity (identity grows to push it over); when the
+   row runs out of room it drops to a new line WITHIN the same target row, left-aligned. */
+.apath-row-meta { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; flex: 0 1 auto; font-size: 12px; }
 .apath-row-meta .hb-acc { margin-left: 0; }
-.apath-row-os { color: var(--text-2); font-family: var(--mono); font-size: 11.5px; }
+.apath-ports { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 5px; }
+.apath-port { font: 11px var(--mono); color: var(--text-2); background: var(--surf3); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
 .apath-row-flags { display: inline-flex; align-items: center; gap: 4px; color: #ffcf3a; font-weight: 700; font-family: var(--mono); font-size: 12px; }
 .apath-row-flags.none { color: var(--muted); font-weight: 400; }
 .apath-row-next { color: var(--g-next); font-size: 12px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

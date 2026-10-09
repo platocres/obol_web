@@ -373,17 +373,21 @@
       var idn = OBOL.store.targetIdentity ? OBOL.store.targetIdentity(ip) : { ip: ip, hostname: info.host, domain: info.domain };
       var host = idn.hostname || info.host || '';
       function idPair(k, v) { return '<span class="apath-id-pair"><span class="apath-id-k">' + k + '</span><span class="apath-id-v">' + esc(v) + '</span></span>'; }
-      var idHtml = (host ? idPair('Hostname', host) : '') + idPair('IP', ip) + (idn.domain ? idPair('Domain', idn.domain) : '');
+      var portsHtml = info.ports.length
+        ? '<span class="apath-id-pair apath-ports"><span class="apath-id-k">Open Ports</span>'
+            + info.ports.map(function (p) { return '<span class="apath-port">' + esc(p) + '</span>'; }).join('') + '</span>'
+        : '';
+      var idHtml = (host ? idPair('Hostname', host) : '') + idPair('IP', ip)
+        + (idn.domain ? idPair('Domain', idn.domain) : '')
+        + (info.os ? idPair('OS', info.os) : '')
+        + portsHtml;
       var acc = '<span class="hb-acc ' + b.cls + '">' + b.label + '</span>';
-      var osPorts = (info.os ? esc(U.titleCase(info.os)) : 'OS Unknown')
-        + (info.ports.length ? ' · ' + info.ports.length + ' Port' + (info.ports.length === 1 ? '' : 's') : '');
       var flags = '<span class="apath-row-flags' + (info.flags ? '' : ' none') + '">' + OBOL.ic('flag') + ' ' + (info.flags || 0) + '</span>';
       var next = info.next ? '<span class="apath-row-next" title="' + U.attr(info.next) + '">&rarr; ' + esc(info.next) + '</span>'
         : (info.lvl === 'privileged' ? '<span class="apath-row-next done">Owned</span>' : '');
       var la = lastActivityAt(ip, acts);
       var when = la ? '<span class="apath-row-when" title="Last recorded activity on this box">' + esc(ago(la)) + '</span>' : '';
-      var meta = '<span class="apath-row-meta">' + acc
-        + '<span class="apath-row-os">' + osPorts + '</span>' + flags + next + when + '</span>';
+      var meta = '<span class="apath-row-meta">' + acc + flags + next + when + '</span>';
       var flow = OBOL.chainview ? OBOL.chainview.hostFlow(ip, acts) : '';
       var body = flow
         ? '<h3 class="apath-body-h">Attack Path: What Led To What</h3>' + flow
@@ -442,8 +446,19 @@
   function fval(f, k) { try { return (f.values(k) || [])[0] || null; } catch (e) { return null; } }
   function hostOs(f, t) {
     if (t && t.os) return t.os;
-    var v = fval(f, 'host.os_hint') || fval(f, 'host.os') || fval(f, 'host.os_family') || {};
-    return v.os || v.name || v.family || '';
+    // Prefer a SPECIFIC product string ("Windows Server 2016 Standard 14393") that a parser carved
+    // from an authoritative labelled line; fall back to the bare family, capitalized.
+    var specific = '', fam = '';
+    ['host.os_hint', 'host.os', 'host.os_family'].forEach(function (k) {
+      (f.values(k) || []).forEach(function (v) {
+        v = v || {};
+        var os = (v.os || '').trim();
+        if (!specific && os && /[\s\d]/.test(os)) specific = os;
+        if (!fam) fam = (v.family || v.name || (/^(windows|linux)$/i.test(os) ? os : '')).trim();
+      });
+    });
+    if (specific) return specific;
+    return fam ? fam.charAt(0).toUpperCase() + fam.slice(1) : '';
   }
   function hostDomain(f) {
     // ad.domain_known carries the domain under `name`; host.domain under `domain`. Check both, and since
