@@ -58,10 +58,12 @@
     // credential switcher (collected creds → click to fill commands)
     if (OBOL.credbar) OBOL.credbar.render();
 
-    // facts panel
+    // facts panel (collapsible, collapsed by default: a dev/power-user surface, kept but out of the way)
     var factsEl = document.getElementById('facts-list');
     if (factsEl) {
       var fs = OBOL.store.factSet();
+      var countEl = document.getElementById('facts-count');
+      if (countEl) countEl.textContent = fs.facts.length ? String(fs.facts.length) : '';
       if (!fs.facts.length) {
         factsEl.innerHTML = '<li class="facts-empty">No facts yet. Add one below, or paste tool output on Evidence.</li>';
       } else {

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OBOL: Offensive Box Operations Ledger</title>
   <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the obol engine: proof-gated next-move coach, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
-  <link rel="stylesheet" href="assets/css/obol.css?v=1cae2e5c">
+  <link rel="stylesheet" href="assets/css/obol.css?v=de7a87ef">
   <script>
     /* Pre-paint skin: set before first paint so there is no flash. Tiny + synchronous. */
     (function () {
@@ -81,9 +81,11 @@
       <div class="side-h">Credentials</div><span class="side-h-note">click to use in commands</span>
       <div id="cred-switch" class="cred-switch"></div>
 
-      <div class="side-h">Facts</div>
-      <ul id="facts-list"></ul>
-      <div id="fact-pick" class="fact-pick"></div>
+      <details id="facts-panel" class="side-facts">
+        <summary class="side-h side-facts-h">Facts<span id="facts-count" class="side-facts-n"></span></summary>
+        <ul id="facts-list"></ul>
+        <div id="fact-pick" class="fact-pick"></div>
+      </details>
     </aside>
 
     <main id="view" role="main"><!-- routes render here (once per navigation) --></main>
@@ -162,7 +164,7 @@
   <script defer src="assets/ui/routes/targets.js?v=8d31ba54"></script>
   <script defer src="assets/ui/routes/evidence.js?v=82f42dc5"></script>
   <script defer src="assets/ui/routes/path.js?v=a4f12aea"></script>
-  <script defer src="assets/ui/boot.js?v=04a56bb9"></script>
+  <script defer src="assets/ui/boot.js?v=ba7dd230"></script>
 
   <!-- Presentation-only, loaded after the critical path so the boot budget is untouched:
        motion background, coin bursts on genuine proof, and the appearance settings. -->
