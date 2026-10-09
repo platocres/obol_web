@@ -118,6 +118,17 @@
     'lateral-exec': 'T1021.002', 'telnet-login': 'T1021', 'rservices-login': 'T1021', 'vnc-desktop-shell': 'T1021.005',
     // AD delegation / Kerberos forgery / cross-forest + deployment-tool abuse
     'unconstrained-delegation': 'T1558', 'ms14-068': 'T1558', 'sid-history-abuse': 'T1134.005', 'wsus-abuse': 'T1072',
+    // credential reuse across the network: one valid account probed against many hosts (T1078)
+    'cred-reuse-sweep': 'T1078',
+    // writable file-sync / transfer services abused into a foothold, and new local root accounts
+    'rsync-write-shell': 'T1098.004',   // plant an SSH authorized_keys over a writable rsync module
+    'tftp-write-shell': 'T1505.003',    // PUT a web shell into a writable, served TFTP root
+    'writable-passwd': 'T1136.001',     // append a root-equivalent entry to a world-writable /etc/passwd
+    // wildcard injection into a privileged cron/script (the move rides a root cron)
+    'wildcard-injection': 'T1053.003',
+    // post-exploitation persistence bundles (lead command names the act: SSH key / local admin account)
+    'linux-persistence': 'T1098.004',   // cmd[0] drops an SSH authorized_keys for the root account
+    'windows-persistence': 'T1136.001', // cmd[0] creates a local admin account
   };
 
   OBOL.ATTACK_MOVE = { byKind: BY_KIND, byMove: BY_MOVE };

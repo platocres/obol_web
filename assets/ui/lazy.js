@@ -37,7 +37,7 @@
     scoreboard: ['assets/ui/routes/scoreboard.js?v=7fa2dd83'],
     playbooks: ['data/playbooks-bundle.js?v=31b337d6', 'assets/engine/playbooks.js?v=be235b11', 'assets/ui/routes/playbooks.js?v=db570cba'],
     map: ['assets/engine/engmap.js?v=488914b1', 'assets/ui/routes/map.js?v=b415a554'],
-    findings: ['data/attack-catalog.js?v=2c0cff09', 'data/attack-move-map.js?v=38c74367', 'data/d3fend-map.js?v=c8b35d9d', 'data/frameworks-tables.js?v=169ba840', 'data/kev-catalog.js?v=e8b4d122', 'assets/engine/frameworks.js?v=50ac05e2', 'assets/ui/routes/findings.js?v=ac431805'],
+    findings: ['data/attack-catalog.js?v=2c0cff09', 'data/attack-move-map.js?v=0de35ccd', 'data/d3fend-map.js?v=c8b35d9d', 'data/frameworks-tables.js?v=169ba840', 'data/kev-catalog.js?v=e8b4d122', 'assets/engine/frameworks.js?v=50ac05e2', 'assets/ui/routes/findings.js?v=ac431805'],
     history: ['assets/ui/routes/history.js?v=f2888760'],
     help: ['data/help-content.js?v=001bc5c9', 'assets/ui/routes/help.js?v=08468aaf'],
   };
