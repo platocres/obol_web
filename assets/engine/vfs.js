@@ -237,8 +237,13 @@
       var p = (typeof a === 'string') ? a : (a && a.path);
       if (!p || byPath[p]) return; // never let a hand-add shadow a real captured run
       var synced = a && a.source === 'synced';
-      file(p, { origin: synced ? 'synced' : 'manual', manual: !synced, synced: synced, unknown: !!(a && a.unknown),
-        confirmed: true, at: (a && a.at) || 0, size: (a && a.size) || 0, mtime: (a && a.mtime) || '' });
+      // a hand-added file may carry its CONTENT (e.g. a wordlist obol generated and the operator wrote
+      // to loot/): then it reads as captured and its body shows in the hover preview, like a pasted run.
+      var content = (a && a.content) || '';
+      var patch = { origin: synced ? 'synced' : 'manual', manual: !synced, synced: synced, unknown: !!(a && a.unknown),
+        confirmed: true, at: (a && a.at) || 0, size: (a && a.size) || (content ? content.length : 0), mtime: (a && a.mtime) || '' };
+      if (content) { patch.output = content; patch.status = 'captured'; }
+      file(p, patch);
     });
 
     // 3) the moves the coach is recommending RIGHT NOW. obol assumes the operator is probably about to
