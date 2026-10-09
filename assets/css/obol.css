@@ -1240,10 +1240,19 @@ ol.bh-steps li { margin-bottom: 9px; }
   font: 800 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--rl); text-shadow: 0 0 10px color-mix(in srgb, var(--rl) 45%, transparent); }
 .chk-rail-x { background: transparent; border: none; color: var(--muted); font-size: 14px; cursor: pointer; line-height: 1; }
 .chk-rail-x:hover { color: var(--text); }
-.chk-rail-list { display: flex; flex-direction: column; gap: 5px; padding: 9px; max-height: 60vh; overflow-y: auto; }
-.chk-rail-item { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: 1px solid transparent; border-radius: 8px; background: transparent; cursor: pointer; text-align: left; }
-.chk-rail-item:hover { border-color: color-mix(in srgb, var(--rl) 45%, var(--line)); background: color-mix(in srgb, var(--rl) 10%, transparent); }
-.chk-rail-n { margin-left: auto; font: 700 10.5px var(--mono); color: var(--text-2); }
+.chk-rail-list { display: flex; flex-direction: column; gap: 8px; padding: 10px; max-height: 64vh; overflow-y: auto; }
+/* phase rows modelled on the Creds-tab neon-glass headers (.cv-shead): per-phase hue left bar, tinted
+   fill, glow, and a glowing label. --rh is the phase hue. */
+.chk-rail-item { --rh: var(--teal); display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; text-align: left;
+  border: 1px solid color-mix(in srgb, var(--rh) 40%, var(--line)); border-left: 3px solid var(--rh); border-radius: 10px;
+  background: color-mix(in srgb, var(--rh) 10%, var(--surf1));
+  box-shadow: 0 0 16px -7px color-mix(in srgb, var(--rh) 45%, transparent), inset 0 0 20px -14px var(--rh);
+  transition: transform .12s ease, box-shadow .12s ease; }
+.chk-rail-item:hover { transform: translateX(2px); box-shadow: 0 0 20px -5px color-mix(in srgb, var(--rh) 60%, transparent), inset 0 0 20px -12px var(--rh); }
+.chk-rail-l { font: 800 11.5px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, var(--rh) 80%, var(--text)); text-shadow: 0 0 9px color-mix(in srgb, var(--rh) 50%, transparent); }
+.chk-rail-n { margin-left: auto; font: 700 10.5px var(--mono); color: color-mix(in srgb, var(--rh) 70%, var(--text-2)); }
+.cri-recon { --rh: var(--ph-recon); } .cri-enum { --rh: var(--ph-enum); } .cri-creds { --rh: var(--ph-creds); }
+.cri-access { --rh: var(--ph-access); } .cri-escalate { --rh: var(--ph-escalate); } .cri-loot { --rh: var(--ph-loot); }
 @media (max-width: 860px) { .chk-rail { top: auto; bottom: 86px; transform: none; } }
 
 /* playbook builder: floating toggle + slide-out panel from the right */

@@ -154,8 +154,8 @@
     if (!items.length) return '';
     var open = railOpen();
     var list = items.map(function (it) {
-      return '<button type="button" class="chk-rail-item" data-jump="ph:' + it.p + '">'
-        + '<span class="ph-chip ph-' + it.p + '">' + it.p + '</span>'
+      return '<button type="button" class="chk-rail-item cri-' + it.p + '" data-jump="ph:' + it.p + '">'
+        + '<span class="chk-rail-l">' + it.p + '</span>'
         + '<span class="chk-rail-n">' + it.moves + '</span></button>';
     }).join('');
     return '<div class="chk-rail' + (open ? ' open' : '') + '" id="chk-rail">'
