@@ -112,7 +112,7 @@
 
   // The Charon quick-start card path (H5 expands; these are the first four things that matter).
   var QUICKSTART = [
-    { id: 'q1', title: 'Show obol What You See', charon: 'Hand me a coin, or in your case, some output.', body: 'Run a scan, then hit Paste in the header and drop the output in. obol reads it and mints facts. You never type what you found, you show it.', goto: '#/evidence', cta: 'Open Evidence' },
+    { id: 'q1', title: 'Show Charon What You See', charon: 'Hand me a coin, or in your case, some output.', body: 'Run a scan, then hit Paste in the header and drop the output in. obol reads it and mints facts. You never type what you found, you show it.', goto: '#/evidence', cta: 'Open Evidence' },
     { id: 'q2', title: 'Read The Next Move', charon: 'The current is mapped. Follow it.', body: 'Next Steps ranks what to do now. Open the top move for the exact command and a field note on how to land it.', goto: '#/path', cta: 'Open Next Steps' },
     { id: 'q3', title: 'Reach For A Tool', charon: 'Every ferryman keeps his tools dry.', body: 'Need a reverse shell, a hash identified, a payload encoded? The Workbench fills from your box and works standalone too.', goto: '#/workbench', cta: 'Open Workbench' },
     { id: 'q4', title: 'Ask When You Are Stuck', charon: 'Lost on the water? Call out. I know these banks.', body: 'Stuck? asks a few quick questions and hands you ranked options, no pasting needed. I will be there.', goto: '#/stuck', cta: 'Open Stuck?' },
