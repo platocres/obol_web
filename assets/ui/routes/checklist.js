@@ -103,7 +103,7 @@
       if (!moves.length) return;
       var phaseCmds = 0; moves.forEach(function (a) { phaseCmds += cmdsOf(a).length; });
       railItems.push({ p: p, moves: moves.length, cmds: phaseCmds });
-      html += '<details class="chk-phase" data-ck="ph:' + p + '"' + (isOpen('ph:' + p, false) ? ' open' : '') + '>'
+      html += '<details class="chk-phase cri-' + p + '" data-ck="ph:' + p + '"' + (isOpen('ph:' + p, false) ? ' open' : '') + '>'
         + '<summary class="chk-phase-h"><span class="ph-chip ph-' + p + '">' + p + '</span>'
         + '<span class="chk-ph-n">' + moves.length + ' move' + (moves.length === 1 ? '' : 's') + ' &middot; ' + phaseCmds + ' command' + (phaseCmds === 1 ? '' : 's') + '</span></summary>'
         + '<div class="chk-phase-body">';

@@ -1178,12 +1178,17 @@ ol.bh-steps li { margin-bottom: 9px; }
 .cks-btn.active { color: var(--on-accent, #06210f); background: var(--accent); border-color: var(--accent); }
 .chk-scope-note { color: var(--accent-2); }
 .chk-ran-k { color: var(--muted); font-style: italic; }
-.chk-phase { margin-bottom: 12px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surf1); }
-.chk-phase-h { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; list-style: none; background: var(--surf2); }
+/* phase bars modelled on the Creds-tab neon-glass headers, hued per phase via --rh (set by .cri-<phase>) */
+.chk-phase { --rh: var(--accent); margin-bottom: 12px; overflow: hidden; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--rh) 38%, var(--line)); border-left: 3px solid var(--rh);
+  background: linear-gradient(170deg, color-mix(in srgb, var(--rh) 9%, var(--surf1)), var(--surf1) 60%);
+  box-shadow: 0 0 22px -13px var(--rh), inset 0 0 28px -20px var(--rh); }
+.chk-phase-h { display: flex; align-items: center; gap: 10px; padding: 11px 15px; cursor: pointer; list-style: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--rh) 15%, transparent), transparent); }
 .chk-phase-h::-webkit-details-marker { display: none; }
-.chk-phase-h::before { content: '\25B8'; color: var(--muted); font-size: 11px; flex: none; transition: transform .15s; }
+.chk-phase-h::before { content: '\25B8'; color: var(--rh); font-size: 11px; flex: none; transition: transform .15s; }
 .chk-phase[open] > .chk-phase-h::before { transform: rotate(90deg); }
-.chk-ph-n { font-size: 11.5px; color: var(--muted); margin-left: auto; }
+.chk-ph-n { font-size: 11.5px; color: color-mix(in srgb, var(--rh) 55%, var(--text-2)); margin-left: auto; }
 .chk-phase-body { padding: 6px 10px 10px; }
 
 .chk-move { border-top: 1px solid var(--line); }
