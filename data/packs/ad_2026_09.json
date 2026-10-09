@@ -1104,6 +1104,7 @@
         {
           "tool": "bloodyad",
           "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
+          "settled_by": ["ad.acl_lead", "ad.control_paths", "ad.attack_paths"],
           "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
           "web_note": "In a large domain --detail can run to tens of thousands of lines, too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence, obol only needs the writable-object lines.",
           "note": "LANE 1 companion to the nxc queries above (also remote, no foothold): the single highest-signal writable-objects question, what objects can THIS account write to? Every writable group/user/computer is a candidate edge (join a group, reset a password, add a shadow cred, grant DCSync). Reach for this when nxc's daclread needs a wider sweep."
@@ -1380,7 +1381,8 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}'",
-          "note": "Start by validating the credential and seeing what is owned. Replace {{target}} with a subnet (10.10.11.0/24) or a targets file to test every host at once, [+] marks a valid credential, Pwn3d! marks local admin."
+          "settled_by": ["credential.validated", "foothold.windows"],
+          "note": "Start by validating the credential and seeing what is owned. Replace {{target}} with a subnet (10.10.11.0/24) or a targets file to test every host at once, [+] marks a valid credential, Pwn3d! marks local admin. This confirm drops once the credential is validated."
         },
         {
           "tool": "nxc",
@@ -2498,6 +2500,7 @@
         {
           "tool": "bloodyad",
           "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
+          "settled_by": ["ad.acl_lead", "ad.control_paths", "ad.attack_paths"],
           "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
           "web_note": "In a large domain --detail can run to tens of thousands of lines, too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence, obol only needs the writable-object lines.",
           "note": "Begin here: what can your account genuinely write to? The detailed output is your menu of options."

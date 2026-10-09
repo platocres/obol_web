@@ -176,7 +176,52 @@ Loadout, your installed tools). Easy to rename.
   diff and the web refine. House style held throughout (no em or en dashes, Title Case), every asset
   stamped, all tests/lint/gap/browser-smoke green.
 
+### OPEN ITEM (owner-flagged, do NOT one-off anymore): systematic "post-parse advance" audit
+
+Across several real-box runs the SAME class of bug keeps surfacing one at a time: a command runs, the
+operator pastes its output, the parser mints the right fact, but the CARD does not advance because the
+command (usually a switchless confirm/probe at index 0) has no `settled_by`, or the move has no
+`obsoleted_by`/`deprioritize_when` for the state it just proved, so the exact command sits there asking
+to be re-run, or the next-needed command is buried far down the list. Examples fixed one-off so far:
+anon-SMB/LDAP probes (settled_by added), own-domain-pth confirm, lateral-exec [0] (2026-10-09),
+ad-path-manual lead-command order (2026-10-09). This is task #30 (the command -> real output -> fact ->
+advance/retire round-trip) and it is NOT done by fixing them individually.
+
+**Build a tool for this (a future session, when there are tokens).** The pattern: a read-only auditor
+(ranker-sim / attack-coverage shape) that, for every move command, derives what fact(s) a SUCCESS paste
+would mint (from the parser signatures / known output shapes), then flags:
+(1) a confirm/probe command (no -x/-X/-M payload, a bare auth or a count) whose minted fact is NOT in
+its `settled_by` (so it can never retire);
+(2) a move whose produced/implied end-state has no `obsoleted_by`/`settled`/`deprioritize_when`, so it
+re-offers after it is done;
+(3) a move where the command most likely to be the operator's actual next step is not near the top
+(lead-command order).
+Pair it with a few golden "run -> paste -> expect card delta" fixtures (extend session-import-smoke /
+the drive-*.js pattern) so the round-trip is a guardrail, not a vibe. Until then, when one surfaces,
+fix it AND note it here so the eventual auditor has the catalog.
+
 ### Post-build follow-ups (real-box testing on Forest)
+
+- 2026-10-09: Two more post-parse-advance one-offs (owner live Forest run; see the OPEN ITEM above, the
+  owner asked that we stop fixing these individually and build an auditor). (1) lateral-exec
+  ("Authenticated Remote Execution") command [0], the switchless `nxc smb -u -p` confirm, had NO
+  settled_by, so after the operator ran it and pasted `[+] domain\user:pass` (which the parser correctly
+  turns into credential.validated + smb.authenticated) the same command just sat there. Added
+  `settled_by: [credential.validated, foothold.windows]` so the confirm retires once the credential is
+  proven. (2) The `bloodyAD get writable --detail` command (the giant "what can THIS account modify"
+  path-finder, present in BOTH bloodyad-acl and ad-path-manual) had no settled_by, so after the operator
+  ran it and pasted its output (which _parse_bloodyad_writable in directory.js correctly turns into
+  ad.acl_lead), the same command stayed at the top of both cards asking to be re-run. Added
+  `settled_by: [ad.acl_lead, ad.control_paths, ad.attack_paths]` to it in both moves, so once the
+  writable-objects output is parsed the command retires from both cards (verified: commandSettled is
+  false on an empty ledger, true once ad.acl_lead is minted). NOTE on the lead-command ORDER: the owner
+  also observed ad-path-manual buries the get-writable path-finder at command #10 behind nine generic
+  enumerations. The obvious fix (swap command [0] and [9]) was tried and REVERTED: it put bloodyAD, which
+  needs {{domain}}, at index 0, so on a domain-less state the lead command printed a dead {{domain}}
+  token and ranker-sim flagged 7/49 command_sanity violations. Per scoreboard discipline the swap was
+  dropped; the settle-based retirement (above) is the shipped fix, so the command now at least falls away
+  after it is run. Proper lead-command reordering (pick a non-gated lead, or gate-aware ordering) is
+  folded into the task #30 auditor. Rebuild + stamp; sim back to 0/49; all guardrails green.
 
 - 2026-10-09: Two real-box flag-capture bugs (owner Forest run, after the locate-first change). (1) The
   on-host root capture used cmd.exe `&` separators (`whoami & hostname & ipconfig & type ...`), which
