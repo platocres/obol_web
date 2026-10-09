@@ -371,10 +371,9 @@
     var rows = infos.map(function (info) {
       var ip = info.ip, b = info.badge;
       var idn = OBOL.store.targetIdentity ? OBOL.store.targetIdentity(ip) : { ip: ip, hostname: info.host, domain: info.domain };
-      var name = idn.hostname || info.host || ip;
-      var idHtml = '<span class="apath-row-name">' + esc(name) + '</span>'
-        + (idn.hostname ? '<span class="apath-row-ip">' + esc(ip) + '</span>' : '')
-        + (idn.domain ? '<span class="apath-row-dom">' + esc(idn.domain) + '</span>' : '');
+      var host = idn.hostname || info.host || '';
+      function idPair(k, v) { return '<span class="apath-id-pair"><span class="apath-id-k">' + k + '</span><span class="apath-id-v">' + esc(v) + '</span></span>'; }
+      var idHtml = (host ? idPair('Hostname', host) : '') + idPair('IP', ip) + (idn.domain ? idPair('Domain', idn.domain) : '');
       var acc = '<span class="hb-acc ' + b.cls + '">' + b.label + '</span>';
       var osPorts = (info.os ? esc(U.titleCase(info.os)) : 'OS Unknown')
         + (info.ports.length ? ' · ' + info.ports.length + ' Port' + (info.ports.length === 1 ? '' : 's') : '');
@@ -386,7 +385,9 @@
       var meta = '<span class="apath-row-meta">' + acc
         + '<span class="apath-row-os">' + osPorts + '</span>' + flags + next + when + '</span>';
       var flow = OBOL.chainview ? OBOL.chainview.hostFlow(ip, acts) : '';
-      var body = flow || '<div class="apath-empty">No moves recorded on this box yet. Run a move and paste its output on <a href="#/evidence">Evidence</a>, and its path fills in here.</div>';
+      var body = flow
+        ? '<h3 class="apath-body-h">Attack Path: What Led To What</h3>' + flow
+        : '<div class="apath-empty">No moves recorded on this box yet. Run a move and paste its output on <a href="#/evidence">Evidence</a>, and its path fills in here.</div>';
       var key = 'obol.apath:' + engId + ':' + ip;
       var remembered = null; try { remembered = localStorage.getItem(key); } catch (e) {}
       var open = remembered == null ? single : remembered === '1';
@@ -394,7 +395,7 @@
         + '<summary class="apath-row-sum"><span class="apath-row-id">' + idHtml + '</span>' + meta + '</summary>'
         + '<div class="apath-row-body">' + body + '</div></details>';
     }).join('');
-    return '<div class="eng-apath"><h2 class="coach-sec-h">Attack Path: What Led To What</h2><div class="apath-rows">' + rows + '</div></div>';
+    return '<div class="eng-apath"><h2 class="coach-sec-h">Engagement Targets</h2><div class="apath-rows">' + rows + '</div></div>';
   }
 
   function libraryList() {
