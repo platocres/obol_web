@@ -967,12 +967,24 @@
         return head + body;
       }
       function place(row) {
-        var r = row.getBoundingClientRect();
         card.style.visibility = 'hidden'; card.hidden = false;
         var cw = card.offsetWidth, ch = card.offsetHeight;
-        var left = r.left - cw - 12;                 // prefer left of the right-rail row
-        if (left < 8) left = Math.min(r.right + 12, window.innerWidth - cw - 8);
-        var top = Math.min(Math.max(8, r.top), window.innerHeight - ch - 8);
+        var r = row.getBoundingClientRect();
+        var panel = row.closest('.ws-panel');
+        var left, top;
+        if (panel) {
+          // Dock the preview into the empty space inside the workspace, to the RIGHT of the file names,
+          // rather than floating it over the Surfaces rail. Right-align it within the panel and track
+          // the hovered row vertically.
+          var pr = panel.getBoundingClientRect();
+          left = pr.right - cw - 16;
+          if (left < pr.left + 8) left = pr.left + 8;   // narrow panel: keep it inside
+          top = Math.min(Math.max(8, r.top - 2), window.innerHeight - ch - 8);
+        } else {
+          left = r.left - cw - 12;                       // fallback: left of the row
+          if (left < 8) left = Math.min(r.right + 12, window.innerWidth - cw - 8);
+          top = Math.min(Math.max(8, r.top), window.innerHeight - ch - 8);
+        }
         card.style.left = Math.max(8, left) + 'px'; card.style.top = top + 'px';
         card.style.visibility = '';
       }

@@ -1451,7 +1451,7 @@ a.eng-stat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .ws-sync .btn-primary { font-size: 12px; padding: 6px 14px; }
 .ws-file-desc { font-size: 11px; color: var(--text-2); margin-bottom: 5px; font-style: italic; }
 /* floating hover preview card (desktop) */
-.ws-preview { position: fixed; z-index: 60; width: 320px; max-width: 92vw; background: var(--bg1, var(--bg2)); border: 1px solid var(--line-hot, var(--line));
+.ws-preview { position: fixed; z-index: 60; width: 420px; max-width: 92vw; background: var(--bg1, var(--bg2)); border: 1px solid var(--line-hot, var(--line));
   border-radius: 9px; box-shadow: 0 10px 34px rgba(0,0,0,.5); padding: 10px 12px; pointer-events: auto; }
 .ws-preview[hidden] { display: none; }
 .ws-pv-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
