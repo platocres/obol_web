@@ -380,21 +380,20 @@
     // 2) a direct read of a named flag file (`type …\proof.txt`, `cat …/root.txt`) — from the attached
     //    command, else from the read echoed after a shell prompt in the pasted frame. The flag must stand
     //    ALONE on its own output line, so a 32-hex in an auth banner or a hash-dump line is never a flag.
-    var readFile = null, readOnHost = false;
+    //    A single paste can hold MORE THAN ONE read (a promptless whole-blob capture, or an interactive
+    //    frame where the operator read user.txt then root.txt), so walk the lines in order and attribute
+    //    each flag value to the NEAREST PRECEDING read: the user flag is local, the root flag is root,
+    //    never both collapsed onto the first file's slot. The attached command seeds the initial read for
+    //    the case where the value is pasted with no echoed `type` line.
+    var curFile = null, curSlot = null, curOnHost = false;
     var fm = _FLAG_FILE_IN_CMD_RE.exec(command || '');
-    if (fm) { readFile = fm.groups.file; readOnHost = !cmdRemote; }
-    else {
-      var ls = String(text || '').split(/\r?\n/);
-      for (var li = 0; li < ls.length; li++) {
-        var bare = _strip_prompt(ls[li]);
-        var fx = _FLAG_FILE_IN_CMD_RE.exec(bare);
-        if (fx) { readFile = fx.groups.file; readOnHost = !_REMOTE_LEAD_RE.test(bare); break; }
-      }
-    }
-    if (readFile) {
-      var slot = _slot_for_flagfile(readFile);
-      String(text || '').split(/\r?\n/).forEach(function (l) { var t = l.trim(); if (_FLAG_VALUE_ANCHORED.test(t)) mint(readFile, t, slot, readOnHost); });
-    }
+    if (fm) { curFile = fm.groups.file; curSlot = _slot_for_flagfile(curFile); curOnHost = !cmdRemote; }
+    String(text || '').split(/\r?\n/).forEach(function (l) {
+      var bare = _strip_prompt(l);
+      var fx = _FLAG_FILE_IN_CMD_RE.exec(bare);
+      if (fx) { curFile = fx.groups.file; curSlot = _slot_for_flagfile(curFile); curOnHost = !_REMOTE_LEAD_RE.test(bare); return; }
+      if (curFile && _FLAG_VALUE_ANCHORED.test(bare.trim())) mint(curFile, bare.trim(), curSlot, curOnHost);
+    });
     // 3) LOCATE: a spider/dir listing of flag-file paths (no value) → record each location + its exact path.
     var sp; _SPIDER_PATH_RE.lastIndex = 0;
     while ((sp = _SPIDER_PATH_RE.exec(text))) {

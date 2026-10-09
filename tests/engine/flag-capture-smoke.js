@@ -93,6 +93,23 @@ var frNone = captured(parse('', frame));
 ok(frNone.length === 1 && frNone[0].value.flag === '480c594d4c140ae84a74a3168cc0d46e', 'a pasted on-host frame captures the flag even with no command attached');
 ok(located(parse('', frame)).length === 0, 'the on-host frame is a capture, not a locate');
 
+// 1d-bis. A SINGLE paste holding TWO reads (the operator read user.txt then root.txt in one interactive
+// session) must attribute EACH flag to the nearest preceding read: the user flag is local, the root flag is
+// root. The promptless whole-blob path (no segmentation) used to apply the FIRST read's slot to every value,
+// so a run that read user.txt then root.txt lost the root flag (both minted as local). Each value now binds
+// to the read that precedes it.
+var twoReads = [
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> hostname; ipconfig; type C:\\Users\\svc-user\\Desktop\\user.txt',
+  'DC01', '   IPv4 Address. . . . . . . . . . . : 10.0.0.5',
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> whoami; hostname; type C:\\Users\\Administrator\\Desktop\\root.txt',
+  'corp\\administrator', 'DC01',
+  'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+].join('\n');
+var two = captured(parse('', twoReads));   // promptless whole-blob (no command attached)
+ok(two.some(function (f) { return f.kind === 'objective.local_flag' && f.value.flag === 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; }), 'two reads in one blob: the user.txt value is captured as the LOCAL flag');
+ok(two.some(function (f) { return f.kind === 'objective.root_flag' && f.value.flag === 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'; }), 'two reads in one blob: the root.txt value is captured as the ROOT flag (not collapsed onto the first read)');
+
 // 1e. INVERSE: a Kali frame that echoes a REMOTE read (nxc -x type) after the kali prompt only LOCATES it —
 // the echoed transport lead is honored, so a remote read pasted whole never counts as captured.
 var kaliFrame = [
