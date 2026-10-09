@@ -353,8 +353,11 @@
 
     U.on(_mount, 'click', '.btn-copy', function (e, t) { U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); }); });
 
-    // interview answers
+    // interview answers. The seed button is also a .stuck-ans (so it matches visually), but its action
+    // lives in the [data-seed] handler below; skip it here, or this handler's rebuild() would detach the
+    // node before the seed handler runs and container.contains() would drop it (a no-op click).
     U.on(_mount, 'click', '.stuck-ans', function (e, t) {
+      if (t.hasAttribute('data-seed')) return;
       applyAnswer(t.getAttribute('data-assert'), t.getAttribute('data-goto'), t.getAttribute('data-skip'));
     });
     U.on(_mount, 'click', '[data-seed]', function () { seedFromEngagement(); rebuild(); });
