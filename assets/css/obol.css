@@ -2866,8 +2866,16 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 .tipfeed { flex: 1 1 auto; min-width: 0; margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
   justify-content: flex-end; color: var(--text-2); font-size: 12px; overflow: hidden; }
 .tipfeed-ic { flex: none; color: var(--g-next); opacity: .9; display: inline-flex; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--g-next) 45%, transparent)); }
-.tipfeed-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity .16s ease; }
+.tipfeed-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity .16s ease;
+  background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.tipfeed-text:hover { color: var(--text); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--g-next) 55%, transparent); text-underline-offset: 2px; }
+.tipfeed-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
 .tipfeed-text.is-fade { opacity: 0; }
+/* expand-to-read popover for a tip that got chopped off in a tight header */
+.tip-pop { position: fixed; z-index: 60; box-sizing: border-box; background: var(--surf1);
+  border: 1px solid color-mix(in srgb, var(--g-next) 45%, var(--line)); border-radius: 10px; padding: 10px 13px;
+  font-size: 12.5px; line-height: 1.45; color: var(--text); box-shadow: 0 8px 26px rgba(0,0,0,.4), 0 0 18px color-mix(in srgb, var(--g-next) 14%, transparent); }
+.tip-pop[hidden] { display: none; }
 .tipfeed-next, .tipfeed-off, .tipfeed-on { flex: none; display: inline-flex; align-items: center; justify-content: center;
   background: none; border: 1px solid transparent; border-radius: 6px; color: var(--text-2); cursor: pointer; padding: 3px; line-height: 0; }
 .tipfeed-next:hover, .tipfeed-on:hover { color: var(--g-next); border-color: color-mix(in srgb, var(--g-next) 40%, var(--line)); }
@@ -2877,7 +2885,8 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 .tipfeed-on:hover { opacity: 1; }
 /* keep tips out of the way where space is tight or distraction is unwanted */
 :root[data-focus="1"] .tipfeed, :root[data-focus="1"] .tipfeed-on { display: none; }
-@media (max-width: 820px) { .tipfeed, .tipfeed-on { display: none; } }
+.tipfeed { min-width: 120px; }  /* keep a readable, clickable strip; below this the header is too tight */
+@media (max-width: 1100px) { .tipfeed, .tipfeed-on, .tip-slot { display: none; } }
 @media (prefers-reduced-motion: reduce) { .tipfeed-text { transition: none; } }
 .qp-overlay { position: fixed; inset: 0; z-index: 210; display: none; align-items: flex-start; justify-content: center; padding: 8vh 16px 16px; background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
 .qp-overlay.open { display: flex; }
