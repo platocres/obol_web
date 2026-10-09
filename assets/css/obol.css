@@ -4352,3 +4352,109 @@ main#view:has(.stuck) { max-width: 2600px; }
 .help-term-see a { color: var(--accent-2); text-decoration: none; }
 .help-term-see a:hover { text-decoration: underline; }
 @media (max-width: 560px) { .help-sec-body { padding-left: 16px; } .help-sub { flex-wrap: wrap; } }
+
+/* ── Cruise tab (experimental): neon-glass autopilot loop, modelled on the Creds .cv-shead bands ──── */
+/* nav "Experimental" fine print under the Cruise label */
+.nav-cruise { display: inline-flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 0; line-height: 1.04; padding-top: 4px !important; padding-bottom: 4px !important; }
+.nav-exp { font: 700 8.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--g-next); opacity: .9; margin-top: 1px; }
+
+.cruise { max-width: 1200px; }
+.cr-top { display: flex; align-items: center; gap: 12px; }
+.cr-exp { font: 700 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--g-next);
+  border: 1px solid color-mix(in srgb, var(--g-next) 45%, var(--line)); background: color-mix(in srgb, var(--g-next) 12%, transparent);
+  border-radius: 20px; padding: 2px 10px; box-shadow: 0 0 12px -3px color-mix(in srgb, var(--g-next) 45%, transparent); vertical-align: middle; }
+
+/* mode toggle, two neon-glass segments */
+.cr-modes { display: flex; gap: 12px; flex-wrap: wrap; margin: 6px 0 16px; }
+.cr-mode { flex: 1 1 260px; text-align: left; cursor: pointer; display: block; border-radius: 12px; padding: 11px 15px;
+  border: 1px solid var(--line); background: var(--surf1); color: var(--text-2); transition: border-color .15s, box-shadow .15s, background .15s; }
+.cr-mode:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.cr-mode.is-on { --sh: var(--ph-recon); border-color: color-mix(in srgb, var(--sh) 55%, var(--line)); background: color-mix(in srgb, var(--sh) 10%, var(--surf1));
+  box-shadow: 0 0 20px color-mix(in srgb, var(--sh) 16%, transparent), inset 0 0 22px color-mix(in srgb, var(--sh) 6%, transparent); }
+.cr-mode[data-cr-mode="lab"].is-on { --sh: var(--orange); }
+.cr-mode-t { display: block; font-weight: 800; font-size: 14px; color: var(--text); }
+.cr-mode.is-on .cr-mode-t { color: color-mix(in srgb, var(--sh) 80%, var(--text)); text-shadow: 0 0 9px color-mix(in srgb, var(--sh) 45%, transparent); }
+.cr-mode-s { display: block; font-size: 11.5px; margin-top: 2px; }
+
+/* the 1-2-3-4 loop explainer */
+.cr-loop { list-style: none; margin: 0 0 18px; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.cr-loop-step { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 11px; padding: 11px 13px; background: var(--surf1); }
+.cr-loop-n { flex: none; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font: 800 12px var(--mono); color: var(--on-accent); background: var(--accent); box-shadow: 0 0 12px -2px color-mix(in srgb, var(--accent) 60%, transparent); }
+.cr-loop-t { font-weight: 700; font-size: 12.5px; color: var(--text); }
+.cr-loop-d { font-size: 11.5px; color: var(--text-2); margin-top: 2px; line-height: 1.35; }
+
+/* phase batch header band (per-phase hue, cv-shead pattern) */
+.cr-band { --sh: var(--ph-recon); display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 4px 0 12px;
+  border: 1px solid color-mix(in srgb, var(--sh) 40%, var(--line)); border-left: 3px solid var(--sh); border-radius: 12px; padding: 11px 15px;
+  background: color-mix(in srgb, var(--sh) 9%, var(--surf1)); box-shadow: 0 0 20px color-mix(in srgb, var(--sh) 13%, transparent), inset 0 0 22px color-mix(in srgb, var(--sh) 6%, transparent); }
+.cr-ph-recon { --sh: var(--ph-recon); } .cr-ph-enum { --sh: var(--ph-enum); } .cr-ph-creds { --sh: var(--ph-creds); }
+.cr-ph-access { --sh: var(--ph-access); } .cr-ph-escalate { --sh: var(--ph-escalate); } .cr-ph-loot { --sh: var(--ph-loot); }
+.cr-band-l { font: 800 12px var(--mono); text-transform: uppercase; letter-spacing: .08em; flex: none; color: color-mix(in srgb, var(--sh) 82%, var(--text)); text-shadow: 0 0 9px color-mix(in srgb, var(--sh) 50%, transparent); }
+.cr-band-d { font-size: 12px; color: var(--text-2); flex: 1 1 200px; }
+.cr-band-act { display: flex; gap: 8px; flex: none; align-items: center; }
+
+/* command rows */
+.cr-cmds { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cr-cmd { border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; background: var(--surf1); }
+.cr-cmd-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 7px; }
+.cr-cmd-n { flex: none; width: 21px; height: 21px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font: 800 11px var(--mono); color: var(--text-2); border: 1px solid var(--line); }
+.cr-cmd-title { font-weight: 700; font-size: 13px; color: var(--text); }
+.cr-cmd-id { font: 11px var(--mono); color: var(--muted); margin-left: auto; }
+.cr-tier { font: 700 9.5px var(--mono); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 20px; }
+.cr-tier-safe { color: var(--ph-recon); background: color-mix(in srgb, var(--ph-recon) 14%, transparent); border: 1px solid color-mix(in srgb, var(--ph-recon) 40%, transparent); }
+.cr-tier-active { color: var(--orange); background: color-mix(in srgb, var(--orange) 14%, transparent); border: 1px solid color-mix(in srgb, var(--orange) 40%, transparent); }
+.cr-tier-manual { color: var(--purple); background: color-mix(in srgb, var(--purple) 14%, transparent); border: 1px solid color-mix(in srgb, var(--purple) 40%, transparent); }
+
+/* unlocks preview */
+.cr-unlocks { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; padding: 9px 13px; border-radius: 11px;
+  border: 1px dashed color-mix(in srgb, var(--teal) 40%, var(--line)); background: color-mix(in srgb, var(--teal) 7%, var(--surf1)); }
+.cr-unlocks-l { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, var(--teal) 82%, var(--text)); display: inline-flex; align-items: center; gap: 6px; }
+.cr-unlocks-l svg { width: 14px; height: 14px; }
+.cr-unlock { font-size: 12px; color: var(--text); padding: 2px 9px; border-radius: 20px; background: color-mix(in srgb, var(--teal) 10%, var(--surf2)); border: 1px solid color-mix(in srgb, var(--teal) 28%, var(--line)); }
+
+/* checkpoint card (gold, "you decide here") */
+.cr-checkpoint { --sh: var(--g-next); border: 1px solid color-mix(in srgb, var(--sh) 45%, var(--line)); border-left: 3px solid var(--sh); border-radius: 12px;
+  padding: 13px 15px; margin: 0 0 16px; background: color-mix(in srgb, var(--sh) 9%, var(--surf1));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--sh) 15%, transparent), inset 0 0 22px color-mix(in srgb, var(--sh) 6%, transparent); }
+.cr-cp-head { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; }
+.cr-cp-l { font: 800 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: color-mix(in srgb, var(--sh) 85%, var(--text)); text-shadow: 0 0 9px color-mix(in srgb, var(--sh) 50%, transparent); flex: none; }
+.cr-cp-title { font-weight: 800; font-size: 14px; color: var(--text); }
+.cr-cp-why { font-size: 12.5px; color: var(--text-2); margin: 7px 0 9px; line-height: 1.4; }
+.cr-cp-lab { margin-top: 9px; }
+
+/* paste-back panel */
+.cr-paste { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 12px; padding: 13px 15px; background: color-mix(in srgb, var(--accent) 6%, var(--surf1)); }
+.cr-paste-l { display: block; font-weight: 700; font-size: 13px; color: var(--text); margin-bottom: 8px; }
+.cr-paste-box { width: 100%; min-height: 110px; resize: vertical; box-sizing: border-box; background: var(--surf0, #0a0e18); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 10px; font: 12px var(--mono); }
+.cr-paste-box:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cr-paste-row { display: flex; align-items: center; gap: 12px; margin-top: 9px; }
+.cr-paste-msg { font-size: 12px; color: var(--text-2); }
+.cr-paste-msg.err { color: var(--red); }
+
+.cr-nobatch, .cr-empty { font-size: 13px; color: var(--text-2); border: 1px dashed var(--line); border-radius: 11px; padding: 14px 16px; margin: 0 0 14px; line-height: 1.5; }
+
+/* recipes (curated runbooks) */
+.cr-recipes { margin-top: 26px; border-top: 1px solid var(--line); padding-top: 14px; }
+.cr-recipes-sum { cursor: pointer; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; list-style: none; }
+.cr-recipes-sum::-webkit-details-marker { display: none; }
+.cr-recipes-l { font: 800 13px var(--sans); color: var(--text); }
+.cr-recipes-l::before { content: "\25B8"; color: var(--muted); margin-right: 7px; font-size: 11px; }
+.cr-recipes[open] .cr-recipes-l::before { content: "\25BE"; }
+.cr-recipes-d { font-size: 12px; color: var(--text-2); }
+.cr-recipes-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.cr-recipe { border: 1px solid var(--line); border-radius: 11px; background: var(--surf1); padding: 4px 12px; }
+.cr-recipe-sum { cursor: pointer; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; list-style: none; }
+.cr-recipe-sum::-webkit-details-marker { display: none; }
+.cr-recipe-t { font-weight: 700; font-size: 13px; color: var(--text); }
+.cr-recipe-app { font: 700 9.5px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--accent-2); background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: 20px; padding: 2px 8px; }
+.cr-recipe-n { font: 11px var(--mono); color: var(--muted); margin-left: auto; }
+.cr-recipe-body { padding: 4px 0 12px; }
+.cr-recipe-desc { font-size: 12.5px; color: var(--text-2); margin: 2px 0 10px; }
+.cr-recipe-bar { margin-bottom: 11px; }
+
+@media (max-width: 760px) {
+  .cr-loop { grid-template-columns: 1fr 1fr; }
+  .cr-modes { gap: 8px; }
+}
+@media (max-width: 440px) { .cr-loop { grid-template-columns: 1fr; } }

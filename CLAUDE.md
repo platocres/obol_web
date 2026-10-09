@@ -1066,3 +1066,143 @@ style: no em/en dashes.
   visible on desktop and mobile, 0 console errors; mobile header not crowded. browser-smoke + help-
   coverage green; assets stamped; house style held. Remaining: H2 (deepen per-surface prose), H3
   (expand glossary), H4 (Help search), H5 (make the Charon quick-start a resumable stepped path).
+
+---
+
+## Active build: Cruise (was Playbooks) global tab (in progress, PR #302 branch)
+
+**Plan of record. If this chat is lost, resume here. Branch `claude/obol-web-overhaul-local-59ttbx`.
+Commit frequently.** Marked **Experimental** in the UI (fine print under the nav label).
+
+### Intention
+
+Bring obol-local's **cruise control** concept to obol_web, exam-legally and without execution. In
+obol-local, cruise is a supervised auto-advance loop: drain async facts, re-rank the move frontier,
+run the single top SAFE move through the real runner, re-rank, and STOP at the first move that needs
+approval / is manual / is objective-complete, emitting a resumable "pause briefing." obol_web cannot
+and must not execute. So obol_web's Cruise is the same loop with the HUMAN as the execution channel:
+obol hands you a phase-scoped batch script, you run it on your Kali box, you paste the output back,
+facts update, and the next batch generates, round after round, until flags. The Playbooks tab (static
+pre-authored runbooks) is reworked into Cruise; the curated runbooks live on inside it as "Recipes."
+
+### The ONE reframe (why cruise here is a BATCH, not one-move-at-a-time)
+
+obol-local runs exactly one move per iteration because command execution is free and instant there,
+so re-ranking after every command is optimal. In obol_web the expensive operation is the PASTE
+round-trip (run, copy, switch windows, paste). One-move-at-a-time would be unusable. So obol_web
+cruise batches the moves that are INDEPENDENT of each other's output and checkpoints where output
+genuinely changes what comes next. That batch is a **frontier cut** over the move graph, derivable
+from data we already have (`requires_*` / `produces`): the batch = eligible, mode-permitted moves
+whose required inputs are already satisfied, MINUS any move that requires a fact-kind another
+EARLIER-ranked batched move produces (those dependents defer to the next round, after the paste).
+This is the reconciliation of the owner's "phase-oriented script that does several steps at once"
+with obol-local's "re-rank between steps": independent steps now, dependent steps next.
+
+### Exam-legal by construction (the load-bearing rule)
+
+OSCP bans automated exploitation and mass scanners. Cruise stays legal because it only ever BATCHES
+SAFE ENUMERATION and ALWAYS checkpoints before anything that lands a shell, sprays/brutes creds, or
+fires an exploit. The human reviews and runs every command; obol never executes. Batches are scoped
+to KNOWN hosts/facts, never a /24 sweep. This mirrors obol-local's `exam` mode (autopwn impossible,
+stop at manual). Two modes (owner-approved, lab explicitly wanted):
+
+- **Exam (default):** batch only `safe`-tier moves (explicit `autonomy:auto`, or phase recon/enum
+  that does not produce a foothold and is not a spray/brute). Everything else is a checkpoint.
+- **Lab (opt-in, labeled "not exam-legal"):** also batch `active`-tier moves (explicit
+  `autonomy:approve`, foothold/safe-exploit setup), pushing past a foothold. Still stops at
+  `manual`-tier and at anything a batched move's output is a prerequisite for.
+
+Tier classifier `cruise.tierOf(action)`: explicit `action.autonomy` wins (auto->safe, approve->
+active, manual->manual); else derive from phase + produces (foothold-producer or phase
+access/escalate/loot or a spray/brute id -> active or manual; recon/enum -> safe). ~143/312 pack
+actions carry explicit autonomy; the derivation covers the rest.
+
+### Self-delimiting script (the highest-leverage detail)
+
+The generated cruise script emits an `echo "===== OBOL STEP n: <id> ====="` marker before each
+command, so the pasted-back blob is self-segmenting and each output chunk attributes to the move that
+produced it, with no dependence on the Loadout prompt-stamp. Plus the usual parameterized `$VAR`
+header, `set -o pipefail`, and `tee` logging (reuse `OBOL.playbook` variabilization). The script is a
+copy/download artifact the human runs; obol never runs it.
+
+### Pivot auto-setup (later phase, highest value + risk)
+
+Feasible because `arsenal.js` gives the checksum-verified cached agent binary + path, the machine
+profile says what's installed, and facts give target/creds/lhost. Port obol-local's TRANSPORT_HALVES
+as data (which half runs locally vs on the target per transport: ligolo = proxy local + agent staged
+on target; chisel = server local + client on target; sshuttle/ssh-forward = all local; netsh = all
+on target). Emit a script that does both halves + a liveness check + fallback egress ports; on
+failure the operator pastes output and obol regenerates. Best-effort + checkpoint. Deferred to CR3.
+
+### Boundaries (unchanged)
+
+Static, browser-local, no backend, no execution, no telemetry. Presentation only: Cruise is a view
+over the ONE store, the fact ledger, `OBOL.pack.rankActions`, and `OBOL.command` filler. It never
+forks the ranker or rewrites the move graph. Pack commands stay the source of truth. Accessibility is
+acceptance (neon glass, colour never the sole signal, 11px floor, prefers-reduced-motion, 4K to
+~320px). House style: no em or en dashes; Title Case.
+
+### Aesthetic
+
+Colourful neon glass like Learn / Hub / Creds / Checklist (the `.cv-shead`/`--sh` hue pattern): the
+mode toggle, the phase-batch header band (per-phase hue via the phase colour tokens), the batch
+command rows, the checkpoint card, and the briefing. Multicolor, glowing, not monochrome green.
+
+### Engine API (assets/engine/cruise.js, pure, Node-safe, tested)
+
+- `OBOL.cruise.MODES` = ['exam','lab']; `tierOf(action)` -> 'safe'|'active'|'manual';
+  `allowsTier(mode, tier)`.
+- `OBOL.cruise.plan(facts, pack, opts)` where opts = {mode, doneIds, cap} ->
+  `{ mode, phase, frontier, batch:[{action, cmdIndex}], deferred:[{action, waitsOn}], checkpoint:
+  {action, reason, tier} | null, counts }`. batch = frontier cut (above). checkpoint = the top ranked
+  move NOT permitted by the mode (what you stop before), with a plain-language reason.
+- `OBOL.cruise.buildScript(batch, ctx)` -> the self-delimiting bash (markers + vars + tee log).
+- Smoke test tests/engine/cruise-smoke.js: exam batch is enum-only, a foothold-producer is never in
+  an exam batch (is the checkpoint), lab batches further, a dependent move defers, script has the
+  shebang + step markers + no `{{token}}` leaks.
+
+### Phases (check off as completed)
+
+- [x] **CR0.** This plan in CLAUDE.md.
+- [x] **CR1.** Engine assets/engine/cruise.js (plan/tierOf/buildScript) + cruise-smoke.js.
+- [x] **CR2.** Route assets/ui/routes/cruise.js: nav rename Playbooks -> Cruise (+ Experimental fine
+  print), lazy group, neon-glass UI (mode toggle, phase-batch header, reviewable batch commands with
+  copy/download/copy-all, paste-back that ingests + regenerates, checkpoint card, briefing), curated
+  runbooks folded in as a "Recipes" section. Help entry + coverage updated. Deep-link #/cruise
+  (#/playbooks kept as an alias).
+- [ ] **CR3.** Pivot auto-setup scripts (arsenal + profile + TRANSPORT_HALVES). Later.
+
+### Verify each phase (same as the project)
+
+`node tools/field-notes-coverage.js` · `node tools/lint-study.js --check` · `node tools/gap-report.js
+--check` · `node tools/attack-coverage.js` · `node tests/engine/help-coverage.js` ·
+`for t in tests/engine/*.js; do node "$t"; done` · `NODE_PATH=/opt/node-tools/node_modules node
+tests/browser-smoke.js` · `node tools/stamp-assets.js` (after any asset edit) · drive the app headless
+(0 console errors) · screenshot Cruise at desktop + mobile and read it for sense. House style: no
+em/en dashes.
+
+### Status log (update per commit)
+
+- 2026-10-09: CR0, plan documented. Grounded in a full read of obol-local cruise.py/moves.py/
+  autonomy.py/phases.py/dispatch.py and obol_web's existing primitives (rankActions pure; arsenal
+  cache + machine profile; playbook.js variabilizer; quickpaste ingest loop). Confirmed the reframe
+  (batch = frontier cut, not one-at-a-time, because the paste round-trip is the expensive op) and the
+  exam-legal rule (batch safe enumeration only, checkpoint before shell/spray/exploit).
+- 2026-10-09: CR1 + CR2 shipped. Engine assets/engine/cruise.js (tierOf classifier: explicit pack
+  autonomy wins, else derive from phase + produces, foothold-producers and spray/brute ids are never
+  safe; plan() = mode-gated batch of eligible moves + the top not-permitted move as the checkpoint +
+  a forward-looking "unlocks" preview from lockedActions whose unmet prereq a batched move produces;
+  buildScript() = self-delimiting bash with ===== OBOL STEP markers, $VAR header, tee log, mode
+  caveat). cruise-smoke.js green (tier classifier, exam-is-enum-only, foothold-is-the-checkpoint, lab
+  batches further, unlocks preview, script markers + no token leaks). Route assets/ui/routes/cruise.js:
+  neon-glass UI (gold Experimental pill, Exam/Lab mode toggle persisted in eng.ui.cruiseMode, the
+  1-2-3-4 loop strip, per-phase-hue batch band with Copy All + Download .sh, safe/active/manual tier
+  chips, teal unlocks strip, gold checkpoint card with a Switch-To-Lab shortcut, inline paste-back that
+  ingests + re-renders, curated runbooks folded in as a collapsed Recipes section reusing
+  OBOL.cruise.buildScript). Nav: Playbooks -> Cruise with an Experimental sub-label (data-nav-match
+  keeps #/playbooks highlighting Cruise); mobile More sheet updated; lazy `cruise` group added and the
+  route registered (#/playbooks kept registered as an alias). Help entry + help-coverage updated
+  (playbooks -> cruise). Driven headless at 1500 and 390: nav shows Cruise + Experimental, exam batch
+  5 steps enum-only with the SMB-share checkpoint, lab 9 steps, unlocks + paste + recipes present, 0
+  console errors both sizes. Full engine suite + cruise-smoke + help-coverage + browser-smoke + lint +
+  gap all green; assets stamped; house style held. CR3 (pivot auto-setup) deferred.

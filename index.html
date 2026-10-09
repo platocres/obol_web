@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OBOL: Offensive Box Operations Ledger</title>
   <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the obol engine: proof-gated next-move coach, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
-  <link rel="stylesheet" href="assets/css/obol.css?v=780b54cc">
+  <link rel="stylesheet" href="assets/css/obol.css?v=9f845127">
   <script>
     /* Pre-paint skin: set before first paint so there is no flash. Tiny + synchronous. */
     (function () {
@@ -51,7 +51,7 @@
         <a data-nav href="#/tools">Tools</a>
         <a data-nav href="#/workbench">Workbench</a>
         <a data-nav href="#/stuck">Stuck?</a>
-        <a data-nav href="#/playbooks">Playbooks</a>
+        <a data-nav data-nav-match="cruise playbooks" href="#/cruise" class="nav-cruise">Cruise<span class="nav-exp">Experimental</span></a>
         <a data-nav href="#/help">Help</a>
       </nav>
       <span class="nav-paste-hint">Paste terminal output on any screen, obol reads it and tailors every suggestion to your box.</span>
@@ -107,7 +107,7 @@
       <a href="#/workbench" role="menuitem">Workbench</a>
       <a href="#/stuck" role="menuitem">Stuck?</a>
       <a href="#/targets" role="menuitem">Targets</a>
-      <a href="#/playbooks" role="menuitem">Playbooks</a>
+      <a href="#/cruise" role="menuitem">Cruise</a>
       <a href="#/map" role="menuitem">Map</a>
       <a href="#/domain" role="menuitem">Domain</a>
       <a href="#/creds" role="menuitem">Creds</a>
@@ -156,7 +156,7 @@
   <script defer src="assets/ui/graphtip.js?v=bb9b0267"></script>
   <script defer src="assets/ui/ingest.js?v=7ac4b3d4"></script>
   <script defer src="assets/ui/router.js?v=4dfb140d"></script>
-  <script defer src="assets/ui/lazy.js?v=a9e9429c"></script>
+  <script defer src="assets/ui/lazy.js?v=569662af"></script>
   <script defer src="assets/ui/palette.js?v=7810a48c"></script>
   <script defer src="assets/ui/routes/home.js?v=72a5f7ed"></script>
   <script defer src="assets/ui/routes/targets.js?v=8d31ba54"></script>
