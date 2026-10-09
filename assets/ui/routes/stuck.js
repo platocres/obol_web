@@ -279,7 +279,7 @@
     var save = (OBOL.store && OBOL.store.active && OBOL.store.active()) ? '<button type="button" class="stuck-ghost" data-save>Save To My Engagement</button>' : '';
     return '<div class="stuck-board-head">'
       + '<div class="stuck-ferry sm">' + eyeHtml(true)
-      + '<div class="stuck-ferry-text"><p class="stuck-say" data-say="' + U.attr('Here is the water. These are the crossings I would try, in order. Mark anything that fails and I will show you the next.') + '"></p></div></div>'
+      + '<div class="stuck-ferry-text"><p class="stuck-say" data-say="' + U.attr('These are the crossings I would try, in order. Mark anything that fails and I will show you the next possibility.') + '"></p></div></div>'
       + '<div class="stuck-board-actions">' + save + '<button type="button" class="stuck-ghost" data-restart>Back To Questions</button><button type="button" class="stuck-ghost" data-startover>Start Over</button></div>'
       + '</div>'
       + paramsHtml()
