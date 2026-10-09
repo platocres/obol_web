@@ -1720,7 +1720,10 @@ a.tcard-main:hover .tcard-ip { color: var(--accent-2); }
 .cv-hbadge.found { color: var(--muted); border: 1px solid var(--line); }
 
 .cv-tablewrap { overflow-x: auto; }
-.cv-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.cv-table { border-collapse: collapse; width: 100%; font-size: 13px; table-layout: fixed; }
+/* one shared fixed column layout so the Proven / Untested / Machine tables line up exactly */
+.cv-c-id { width: 17%; } .cv-c-sec { width: 23%; } .cv-c-type { width: 7%; }
+.cv-c-st { width: 14%; } .cv-c-unl { width: 13%; } .cv-c-act { width: 26%; }
 .cv-table th { font: 700 10.5px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); text-align: left; padding: 8px 14px; border-bottom: 1px solid var(--line); }
 .cv-table td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .cv-table tbody tr:last-child td { border-bottom: none; }
@@ -1730,7 +1733,8 @@ a.tcard-main:hover .tcard-ip { color: var(--accent-2); }
 .cv-fromnote { font: 11px var(--mono); color: var(--muted); margin-top: 3px; }
 .cv-copy { display: inline-block; font-family: var(--mono); font-size: 12px; color: var(--text); background: var(--surf2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; word-break: break-all; transition: border-color .15s, background .15s; }
 .cv-copy:hover { border-color: var(--accent); background: var(--accent-soft); }
-.cv-krb { max-width: 340px; }
+/* the secret cell never wraps: it trails off with an ellipsis; a click still copies the full value */
+.cv-sec .cv-copy { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; word-break: normal; }
 .cv-chip { display: inline-block; margin-left: 8px; font: 600 10.5px var(--sans, inherit); color: var(--text-2); background: var(--surf3); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; cursor: pointer; }
 .cv-chip:hover { border-color: var(--accent); color: var(--accent); }
 .cv-type { font: 800 10px var(--mono); letter-spacing: .04em; border-radius: 6px; padding: 2px 7px; white-space: nowrap; border: 1px solid transparent; }
@@ -1745,6 +1749,7 @@ a.tcard-main:hover .tcard-ip { color: var(--accent-2); }
 .cv-place.ok { color: #06210f; background: var(--green); }
 .cv-place.found { color: var(--g-next); border: 1px solid color-mix(in srgb, var(--g-next) 45%, transparent); }
 .cv-place.crack { color: var(--orange); border: 1px solid color-mix(in srgb, var(--orange) 45%, transparent); }
+.cv-place.fail { color: var(--critical); border: 1px solid color-mix(in srgb, var(--critical) 50%, transparent); }
 .cv-flag { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-2); }
 .cv-flag-slot { font: 700 10px var(--mono); text-transform: uppercase; color: var(--green); }
 .cv-flag-slot.root { color: #ffcf3a; }
@@ -1758,12 +1763,52 @@ a.tcard-main:hover .tcard-ip { color: var(--accent-2); }
 .cv-tgl:hover:not([disabled]) { border-color: var(--accent); color: var(--text); }
 .cv-tgl.on { color: #06210f; background: var(--green); border-color: var(--green); }
 .cv-tgl[data-mark="used"].on { color: #241400; background: var(--orange); border-color: var(--orange); }
+.cv-tgl[data-mark="failed"].on { color: #fff; background: var(--critical); border-color: var(--critical); }
 .cv-tgl[disabled] { opacity: .7; cursor: default; }
 .cv-r-used .cv-user { text-decoration: line-through; opacity: .7; }
-.cv-machine { border-top: 1px solid var(--line); }
-.cv-machine > summary { cursor: pointer; font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 9px 14px; }
-.cv-machine > summary:hover { color: var(--text); }
-.cv-machine[open] > summary { color: var(--text); }
+.cv-r-failed { opacity: .72; }
+.cv-r-failed .cv-user { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--critical) 70%, transparent); }
+
+/* proven / untested / machine bands inside a host group. Every band labels itself and the "why" in
+   plain language, so the three kinds are obvious, not something to infer. */
+.cv-subhead { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px 10px; padding: 9px 14px; border-top: 1px solid var(--line); }
+.cv-subhead-t { font: 800 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); }
+.cv-subhead-n { font: 700 10.5px var(--mono); color: var(--text-2); background: var(--surf3); border-radius: 12px; padding: 1px 9px; align-self: center; }
+.cv-subhead-d { flex: 1 1 100%; font: 400 11.5px var(--sans, inherit); color: var(--muted); letter-spacing: 0; text-transform: none; }
+.cv-subhead-proven { border-left: 3px solid var(--green); background: linear-gradient(90deg, color-mix(in srgb, var(--green) 12%, transparent), transparent 60%); box-shadow: inset 0 0 18px -8px var(--green); }
+.cv-subhead-proven .cv-subhead-t { color: var(--green); text-shadow: 0 0 10px color-mix(in srgb, var(--green) 45%, transparent); }
+.cv-subhead-user { border-left: 3px solid var(--accent-2); }
+.cv-subhead-user > .cv-subhead-t, .cv-band.cv-subhead-user > summary .cv-subhead-t { color: var(--accent-2); }
+.cv-empty-note { padding: 10px 14px; font: 400 11.5px var(--sans, inherit); color: var(--muted); font-style: italic; }
+
+/* a collapsible band (untested users, machine accounts): disclosure triangle on the label */
+.cv-band { border-top: 1px solid var(--line); }
+.cv-band > summary.cv-subhead { cursor: pointer; border-top: none; list-style: none; }
+.cv-band > summary.cv-subhead::-webkit-details-marker { display: none; }
+.cv-band > summary.cv-subhead .cv-subhead-t::before { content: '\25B8\00a0'; display: inline-block; font-size: 10px; transition: transform .15s; }
+.cv-band[open] > summary.cv-subhead .cv-subhead-t::before { transform: translateY(1px) rotate(90deg); }
+.cv-band > summary.cv-subhead:hover .cv-subhead-t { filter: brightness(1.25); }
+
+/* Proven So Far / Show All segmented toggle */
+.cv-viewtgl { display: inline-flex; gap: 0; margin: 0 0 12px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--surf1); }
+.cv-vbtn { font: 700 11.5px var(--sans, inherit); color: var(--muted); background: transparent; border: none; padding: 7px 15px; cursor: pointer; }
+.cv-vbtn + .cv-vbtn { border-left: 1px solid var(--line); }
+.cv-vbtn:hover:not(.on) { color: var(--text); background: var(--surf2); }
+.cv-vbtn.on { color: var(--on-accent, #06210f); background: var(--green); }
+
+/* top row: the H1 and the Export CSV control, pinned top-right */
+.cv-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.cv-top .route-h1 { margin: 0; }
+.cv-export { position: relative; }
+.cv-export > summary { display: inline-flex; align-items: center; gap: 7px; list-style: none; cursor: pointer; font: 700 12px var(--sans, inherit); color: var(--text); background: var(--surf1); border: 1px solid var(--line); border-radius: 9px; padding: 8px 14px; }
+.cv-export > summary::-webkit-details-marker { display: none; }
+.cv-export > summary:hover { border-color: var(--accent); color: var(--accent); }
+.cv-export[open] > summary { border-color: var(--accent); color: var(--accent); }
+.cv-export-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 300px; max-width: 86vw; background: var(--surf1); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px -10px rgba(0,0,0,.6), inset 0 0 20px -14px var(--accent); padding: 6px; }
+.cv-xitem { display: block; width: 100%; text-align: left; background: transparent; border: none; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.cv-xitem:hover { background: var(--surf2); }
+.cv-xitem-k { display: block; font: 700 12.5px var(--sans, inherit); color: var(--text); }
+.cv-xitem-d { display: block; font: 400 11px var(--sans, inherit); color: var(--muted); margin-top: 1px; }
 
 /* usernames-seen (collapsible) */
 .cv-userbox { margin-top: 8px; margin-bottom: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surf1); overflow: hidden; }

@@ -37,6 +37,16 @@
   }
   function openKey(id) { return 'obol.cv:' + (OBOL.store.activeId() || '') + ':' + id; }
   function isOpen(id, def) { try { var v = localStorage.getItem(openKey(id)); return v == null ? def : v === '1'; } catch (e) { return def; } }
+  // "Proven So Far" vs "Show All": the default is Proven Only, which keeps each host's confirmed keys in
+  // view and folds the untested / machine piles away. Persisted per browser, per engagement.
+  function provenOnlyView() { try { var v = localStorage.getItem(openKey('view')); return v == null ? true : v === '1'; } catch (e) { return true; } }
+  function setProvenOnly(on) { try { localStorage.setItem(openKey('view'), on ? '1' : '0'); } catch (e) {} }
+  function viewToggle(provenOnly) {
+    return '<div class="cv-viewtgl" role="group" aria-label="Which credentials to show">'
+      + '<button type="button" class="cv-vbtn' + (provenOnly ? ' on' : '') + '" data-view="proven"' + (provenOnly ? ' aria-pressed="true"' : '') + '>Proven So Far</button>'
+      + '<button type="button" class="cv-vbtn' + (provenOnly ? '' : ' on') + '" data-view="all"' + (provenOnly ? '' : ' aria-pressed="true"') + '>Show All</button>'
+      + '</div>';
+  }
 
   // Per-credential status on a host. ADMIN is only claimed when THIS user is the one proven admin
   // (an access.admin/credential.admin fact whose identity/user matches), never just because someone
@@ -155,6 +165,7 @@
       e.autoCracked = isKrb && !!plain[e.user.toLowerCase()];
       e.cracked = e.autoCracked || !!m.cracked;
       e.used = !!m.used;
+      e.failed = !!m.failed;
       out.push(e);
     });
     return { entries: out, lists: buildLists(out), hosts: hosts, hostMap: hostMap, domain: (eng.params || {}).domain || '' };
@@ -186,6 +197,64 @@
   function shead(label, desc) {
     return '<div class="cv-shead"><span class="cv-shead-l">' + esc(label) + '</span><span class="cv-shead-d">' + esc(desc) + '</span></div>';
   }
+
+  // ---- CSV export (top-right of the tab). All client-side: build the text, download a Blob. Categories
+  // mirror the copyable lists plus the full ledger, so you can keep records off-app for any one kind. ----
+  var EXPORT_MENU = [
+    ['all', 'All Credentials', 'The full ledger: every row with its status, source, and what it unlocked.'],
+    ['usernames', 'Usernames', 'Every account name seen, one per row.'],
+    ['passwords', 'Passwords', 'Every plaintext password.'],
+    ['ntlm', 'NT Hashes', 'username and NT hash.'],
+    ['combos', 'Combos', 'username and password.'],
+    ['asrep', 'AS-REP Hashes', 'Roastable AS-REP blobs.'],
+    ['kerberoast', 'Kerberoast Hashes', 'Roastable service-ticket blobs.'],
+  ];
+  function csvCell(v) { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  function csvRows(rows) { return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n') + '\r\n'; }
+  function statusText(e) {
+    if (e.worksOn && e.worksOn.length) return e.worksOn.map(function (w) { return (w.hostname || w.ip) + ' (' + w.level + ')'; }).join('; ');
+    if (e.failed) return 'tried, failed';
+    if (e.type === 'AS-REP' || e.type === 'TGS') return e.cracked ? 'cracked' : 'needs crack';
+    if (e.status === 'user') return 'username only';
+    return 'untested';
+  }
+  function buildCsv(kind, entries, lists) {
+    if (kind === 'all') {
+      var head = ['Identity', 'Domain', 'Type', 'Secret', 'Status', 'Found On', 'Unlocked', 'Cracked', 'Used', 'Failed'];
+      var body = entries.map(function (e) {
+        return [e.user || '', e.domain || '', e.type || '', e.secret || e.nthash || e.krbhash || '', statusText(e),
+          e.from || '', (e.unlocked || []).map(function (u) { return u.slot + ':' + u.host; }).join('; '),
+          e.cracked ? 'yes' : '', e.used ? 'yes' : '', e.failed ? 'yes' : ''];
+      });
+      return csvRows([head].concat(body));
+    }
+    var items = (lists[kind] || []);
+    if (kind === 'ntlm' || kind === 'combos') {
+      var h2 = kind === 'ntlm' ? ['Username', 'NT Hash'] : ['Username', 'Password'];
+      var b2 = items.map(function (s) { var i = String(s).indexOf(':'); return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)]; });
+      return csvRows([h2].concat(b2));
+    }
+    var h1 = kind === 'usernames' ? 'Username' : kind === 'passwords' ? 'Password' : 'Hash';
+    return csvRows([[h1]].concat(items.map(function (s) { return [s]; })));
+  }
+  function downloadCsv(name, text) {
+    try {
+      var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a'); a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 1200);
+      return true;
+    } catch (e) { return false; }
+  }
+  function exportMenu(lists) {
+    var items = EXPORT_MENU.filter(function (m) { return m[0] === 'all' || (lists[m[0]] || []).length; }).map(function (m) {
+      return '<button type="button" class="cv-xitem" data-export="' + m[0] + '"><span class="cv-xitem-k">' + esc(m[1]) + '</span>'
+        + '<span class="cv-xitem-d">' + esc(m[2]) + '</span></button>';
+    }).join('');
+    return '<details class="cv-export"><summary class="cv-export-sum">' + OBOL.ic('download') + ' Export CSV</summary>'
+      + '<div class="cv-export-menu">' + items + '</div></details>';
+  }
   function listsBlock(lists) {
     var rows = LIST_META.filter(function (m) { return (lists[m[0]] || []).length; }).map(function (m) {
       var items = lists[m[0]], joined = items.join('\n');
@@ -212,10 +281,13 @@
     return '<span class="cv-flag"><span class="cv-flag-slot ' + esc(u.slot) + '">' + OBOL.ic('flag') + ' ' + esc(u.slot) + '</span> '
       + '<code class="cv-copy" data-copyval="' + attr(u.flag) + '" title="Copy flag value">' + esc(u.flag.length > 20 ? u.flag.slice(0, 18) + '…' : u.flag) + '</code></span>';
   }
+  // Secrets never wrap to a second line: the cell is a fixed-width column and long values (an AS-REP /
+  // Kerberoast blob) trail off with a CSS ellipsis. The full value is always in data-copyval and the
+  // title, so a click still copies the whole thing. A short NT hash or password shows in full.
   function secretCell(e) {
     if (e.secret) return '<code class="cv-copy" data-copyval="' + attr(e.secret) + '" title="Copy password">' + esc(e.secret) + '</code>';
     if (e.nthash) return '<code class="cv-copy" data-copyval="' + attr(e.nthash) + '" title="Copy NT hash">' + esc(e.nthash) + '</code>';
-    if (e.krbhash) return '<code class="cv-copy cv-krb" data-copyval="' + attr(e.krbhash) + '" title="Copy hash">' + esc(e.krbhash.length > 46 ? e.krbhash.slice(0, 44) + '…' : e.krbhash) + '</code>';
+    if (e.krbhash) return '<code class="cv-copy cv-krb" data-copyval="' + attr(e.krbhash) + '" title="Copy the full hash">' + esc(e.krbhash) + '</code>';
     return '<span class="cv-none">no secret yet</span>';
   }
   function typeBadge(t) { return '<span class="cv-type cv-type-' + esc(t.toLowerCase().replace(/[^a-z]/g, '')) + '">' + esc(t) + '</span>'; }
@@ -224,6 +296,7 @@
     if (here) return '<span class="cv-place ' + (here.level === 'admin' ? 'adm' : 'ok') + '">' + (here.level === 'admin' ? 'Admin here' : 'Valid here') + '</span>';
     var elsewhere = (e.worksOn || []).map(function (w) { return w.hostname || w.ip; });
     if (elsewhere.length) return '<span class="cv-place ok">Works on ' + esc(elsewhere.join(', ')) + '</span>';
+    if (e.failed) return '<span class="cv-place fail">Tried, failed</span>';
     if (e.type === 'AS-REP' || e.type === 'TGS') return e.cracked ? '<span class="cv-place ok">Cracked</span>' : '<span class="cv-place crack">Needs crack</span>';
     return '<span class="cv-place found">Untested</span>';
   }
@@ -232,41 +305,90 @@
     var primary = (e.type === 'AS-REP' || e.type === 'TGS') && !e.cracked
       ? '<a class="cv-load crack" href="#/workbench/hashid">Crack &rarr;</a>'
       : '<button type="button" class="cv-load" data-load="' + e._i + '">Load</button>';
+    function t(mark, label, on, extra) {
+      return '<button type="button" class="cv-tgl' + (on ? ' on' : '') + '" data-mark="' + mark + '" data-key="' + attr(k) + '"'
+        + (on ? ' aria-pressed="true"' : '') + (extra || '') + '>' + label + '</button>';
+    }
     var tgl = '<span class="cv-tgls">'
-      + '<button type="button" class="cv-tgl' + (e.cracked ? ' on' : '') + '" data-mark="cracked" data-key="' + attr(k) + '"' + (e.autoCracked ? ' disabled title="Plaintext is known, so this is cracked"' : '') + '>Cracked</button>'
-      + '<button type="button" class="cv-tgl' + (e.used ? ' on' : '') + '" data-mark="used" data-key="' + attr(k) + '">Used</button></span>';
+      + t('cracked', 'Cracked', e.cracked, e.autoCracked ? ' disabled title="Plaintext is known, so this is cracked"' : '')
+      + t('used', 'Used', e.used, '')
+      + t('failed', 'Failed', e.failed, ' title="Mark that you tried this credential and it did not work"')
+      + '</span>';
     return primary + tgl;
   }
   function credRow(e, groupIp) {
     var ident = '<span class="cv-user">' + esc(e.user || '(unknown)') + '</span>' + (e.domain ? '<span class="cv-dom">@' + esc(e.domain) + '</span>' : '');
-    var combo = (isRealUser(e.user) && (e.secret || e.nthash)) ? '<button type="button" class="cv-chip" data-copyval="' + attr(e.user + ':' + (e.secret || e.nthash)) + '" title="Copy user:secret">user:secret</button>' : '';
     var fromNote = (e.scopeHost && e.scopeHost !== groupIp) ? '<div class="cv-fromnote">from ' + esc(e.from) + '</div>' : '';
-    return '<tr class="' + (e.used ? 'cv-r-used' : '') + '">'
-      + '<td class="cv-id">' + ident + combo + fromNote + '</td>'
+    var cls = (e.used ? 'cv-r-used ' : '') + (e.failed ? 'cv-r-failed' : '');
+    return '<tr class="' + cls.trim() + '">'
+      + '<td class="cv-id">' + ident + fromNote + '</td>'
       + '<td class="cv-sec">' + secretCell(e) + '</td>'
       + '<td>' + typeBadge(e.type) + '</td>'
       + '<td>' + statusCell(e, groupIp) + '</td>'
-      + '<td class="cv-unlocked">' + (e.unlocked.length ? e.unlocked.map(flagChip).join(' ') : '<span class="cv-none">—</span>') + '</td>'
+      + '<td class="cv-unlocked">' + (e.unlocked.length ? e.unlocked.map(flagChip).join(' ') : '<span class="cv-none">·</span>') + '</td>'
       + '<td class="cv-act">' + actionsCell(e) + '</td></tr>';
   }
-  function credTable(rows, groupIp) {
-    var human = rows.filter(function (e) { return !isMachineAccount(e.user); });
-    var machine = rows.filter(function (e) { return isMachineAccount(e.user); });
-    var head = '<tr><th>Identity</th><th>Secret</th><th>Type</th><th>Status</th><th>Unlocked</th><th>Actions</th></tr>';
-    var body = human.map(function (e) { return credRow(e, groupIp); }).join('')
-      || '<tr><td colspan="6" class="cv-none">Only machine / service accounts here.</td></tr>';
-    var mach = machine.length
-      ? '<details class="cv-machine"><summary>Machine &amp; Service Accounts (' + machine.length + ')</summary>'
-        + '<div class="cv-tablewrap"><table class="cv-table"><thead>' + head + '</thead><tbody>'
-        + machine.map(function (e) { return credRow(e, groupIp); }).join('') + '</tbody></table></div></details>'
-      : '';
-    return '<div class="cv-tablewrap"><table class="cv-table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' + mach;
+  // Every table on the tab shares ONE fixed column layout (the colgroup below + table-layout: fixed in
+  // CSS), so the Proven, Untested and Machine tables line up column-for-column no matter their contents.
+  var CV_COLS = '<colgroup><col class="cv-c-id"><col class="cv-c-sec"><col class="cv-c-type"><col class="cv-c-st"><col class="cv-c-unl"><col class="cv-c-act"></colgroup>';
+  function credTableHtml(list, groupIp, noHead) {
+    var head = noHead ? '' : '<thead><tr><th>Identity</th><th>Secret</th><th>Type</th><th>Status</th><th>Unlocked</th><th>Actions</th></tr></thead>';
+    return '<div class="cv-tablewrap"><table class="cv-table">' + CV_COLS + head + '<tbody>'
+      + list.map(function (e) { return credRow(e, groupIp); }).join('') + '</tbody></table></div>';
+  }
+  // A credential has "proven useful" once it works somewhere (validated / admin) or a roastable hash has
+  // been cracked, or you marked it Used. Everything else is not proven yet, which includes anything you
+  // marked tried-and-failed. The Proven Only view keeps the first group open and folds the rest away.
+  function credProven(e) {
+    if (e.worksOn && e.worksOn.length) return true;
+    if ((e.type === 'AS-REP' || e.type === 'TGS') && e.cracked) return true;
+    if (e.used) return true;
+    return false;
+  }
+  function band(cls, label, count, desc, bodyHtml, collapsible, open) {
+    var headInner = '<span class="cv-subhead-t">' + label + '</span><span class="cv-subhead-n">' + count + '</span>'
+      + '<span class="cv-subhead-d">' + desc + '</span>';
+    if (!collapsible) return '<div class="cv-subhead ' + cls + '">' + headInner + '</div>' + bodyHtml;
+    return '<details class="cv-band' + (cls ? ' ' + cls : '') + '"' + (open ? ' open' : '') + '>'
+      + '<summary class="cv-subhead">' + headInner + '</summary>' + bodyHtml + '</details>';
+  }
+  function credTable(rows, groupIp, provenOnly) {
+    var proven = [], userUntested = [], machine = [];
+    rows.forEach(function (e) {
+      if (credProven(e)) proven.push(e);
+      else if (isMachineAccount(e.user)) machine.push(e);
+      else userUntested.push(e);
+    });
+    var anyNotProven = userUntested.length + machine.length > 0;
+    // the column header rides the first table rendered; the later bands reuse the same fixed columns.
+    var headShown = false;
+    function tbl(list) { var h = credTableHtml(list, groupIp, headShown); headShown = true; return h; }
+    var out = '';
+    if (proven.length) {
+      out += band('cv-subhead-proven', 'Proven So Far', proven.length,
+        'Credentials confirmed to work, or a hash you have cracked. Your live keys.',
+        tbl(proven), false, true);
+    } else if (provenOnly && anyNotProven) {
+      out += '<div class="cv-empty-note">Nothing proven here yet. Expand a group below, or switch to Show All.</div>';
+    }
+    if (userUntested.length) {
+      out += band('cv-subhead-user', 'User Accounts, Untested', userUntested.length,
+        'Real accounts you have not confirmed yet. Worth a spray, a crack, or a login. Anything you marked tried and failed sits here too.',
+        tbl(userUntested), true, !provenOnly);
+    }
+    if (machine.length) {
+      out += band('cv-machine', 'Machine &amp; Service Accounts', machine.length,
+        'Computer accounts (name ends $), Exchange system mailboxes (SM_ / HealthMailbox) and built-ins (Guest, krbtgt), rarely used for login.',
+        tbl(machine), true, !provenOnly);
+    }
+    return out;
   }
 
   function render() {
     var vault = buildVault();
     vault.entries.forEach(function (e, i) { e._i = i; });
     render._entries = vault.entries;
+    render._lists = vault.lists;
     if (!vault.entries.length) {
       return '<section class="creds-route"><h1 class="route-h1">Credentials</h1>'
         + '<p class="route-sub">The engagement\'s credential ledger, grouped by host. Nothing captured yet, add a credential in the sidebar params, or paste tool output that proves one, dumps hashes, or enumerates users on Evidence, and everything collects here.</p></section>';
@@ -283,14 +405,19 @@
       else domainRows.push(e);
     });
 
+    var provenOnly = provenOnlyView();
     function group(id, title, ip, rows, badge, defOpen) {
       if (!rows.length) return '';
       var open = isOpen('g:' + id, defOpen);
+      var provenN = rows.filter(credProven).length;
+      var countTxt = provenOnly && provenN !== rows.length
+        ? provenN + ' proven · ' + rows.length + ' total'
+        : rows.length + ' cred' + (rows.length === 1 ? '' : 's');
       return '<details class="cv-host" data-cvkey="g:' + id + '"' + (open ? ' open' : '') + '>'
         + '<summary class="cv-host-h"><span class="cv-host-name">' + esc(title) + '</span>'
         + (ip && vault.hostMap[ip] && vault.hostMap[ip] !== title ? '' : '') + badge
-        + '<span class="cv-host-n">' + rows.length + ' cred' + (rows.length === 1 ? '' : 's') + '</span></summary>'
-        + credTable(rows, ip || '') + '</details>';
+        + '<span class="cv-host-n">' + countTxt + '</span></summary>'
+        + credTable(rows, ip || '', provenOnly) + '</details>';
     }
     var hostCards = vault.hosts.map(function (h) {
       var rows = byHost[h.ip]; if (!rows.length) return '';
@@ -318,10 +445,11 @@
           + '<button type="button" class="cv-userload" data-load="' + e._i + '" title="Target this user">use</button></span>';
       }).join('') + '</div></details>') : '';
 
-    return '<section class="creds-route"><h1 class="route-h1">Credentials</h1>'
-      + '<p class="route-sub">Every credential of every kind obol has seen this engagement, grouped by the host it works on or came from. Click a secret or flag to copy it. <strong>Load</strong> arms the whole console with any credential; <strong>Cracked</strong> / <strong>Used</strong> are yours to set and obol remembers them.</p>'
+    return '<section class="creds-route">'
+      + '<div class="cv-top"><h1 class="route-h1">Credentials</h1>' + exportMenu(vault.lists) + '</div>'
+      + '<p class="route-sub">Every credential of every kind obol has seen this engagement, grouped by the host it works on or came from. Click a secret or flag to copy it. <strong>Load</strong> arms the whole console with any credential; <strong>Cracked</strong> / <strong>Used</strong> / <strong>Failed</strong> are yours to set and obol remembers them.</p>'
       + listsBlock(vault.lists)
-      + ((hostCards || domainCard || handCard) ? shead('Credentials By Host', 'Grouped by the host each credential works on, or the host it was collected from.') : '')
+      + ((hostCards || domainCard || handCard) ? (shead('Credentials By Host', 'Grouped by the host each credential works on, or the host it was collected from.') + viewToggle(provenOnly)) : '')
       + (hostCards || '') + domainCard + handCard + userSec
       + '</section>';
   }
@@ -360,12 +488,29 @@
         t.classList.toggle('on', on); t.textContent = on ? '✓ In loot/' : 'Mark Created';
         U.toast(on ? 'Tracked in Workspace, loot/' + file : 'Removed from Workspace');
       });
-      // cracked / used toggles (persisted, then re-render so status/actions update)
+      // cracked / used / failed toggles (persisted, then re-render so status/actions update)
       U.on(mount, 'click', '[data-mark]', function (e, t) {
         e.preventDefault(); e.stopPropagation();
         if (t.disabled) return;
         toggleMark(t.getAttribute('data-key'), t.getAttribute('data-mark'));
         OBOL.router.render();
+      });
+      // Proven So Far / Show All view toggle (persisted per engagement, then re-render)
+      U.on(mount, 'click', '[data-view]', function (e, t) {
+        e.preventDefault(); e.stopPropagation();
+        setProvenOnly(t.getAttribute('data-view') === 'proven');
+        OBOL.router.render();
+      });
+      // Export a category to a CSV file (client-side Blob download)
+      U.on(mount, 'click', '[data-export]', function (e, t) {
+        e.preventDefault(); e.stopPropagation();
+        var kind = t.getAttribute('data-export');
+        var csv = buildCsv(kind, render._entries || [], render._lists || {});
+        var eng = OBOL.store.active() || {};
+        var stem = (String(eng.name || 'engagement').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'engagement');
+        var ok = downloadCsv('obol-creds-' + stem + '-' + kind + '.csv', csv);
+        U.toast(ok ? 'Exported ' + kind + '.csv' : 'Export failed', ok ? '' : 'err');
+        var det = t.closest('details.cv-export'); if (det) det.open = false;
       });
     }
     // remember each collapsible group / list open state per browser (toggle does not bubble); these are

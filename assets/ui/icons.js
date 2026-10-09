@@ -38,7 +38,9 @@
     // a small node-and-edge graph (the attack graph / atlas)
     graph: '<path d="M5 4.6 10.7 5.3M5.2 5.6 6.7 10.4M8.7 11.1 10.9 6.4"/><circle cx="4" cy="4.2" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="5.4" r="1.7" fill="currentColor" stroke="none"/><circle cx="7.4" cy="11.6" r="1.7" fill="currentColor" stroke="none"/>',
     // a list of open ports (browse by open port)
-    ports: '<circle cx="3.4" cy="4" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.4" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.4" cy="12" r="1.1" fill="currentColor" stroke="none"/><path d="M6.2 4h6.4M6.2 8h6.4M6.2 12h4"/>'
+    ports: '<circle cx="3.4" cy="4" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.4" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.4" cy="12" r="1.1" fill="currentColor" stroke="none"/><path d="M6.2 4h6.4M6.2 8h6.4M6.2 12h4"/>',
+    // download / export (arrow into a tray)
+    download: '<path d="M8 2v7M5 6.3 8 9.3l3-3M3 11.5v1.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1.5"/>'
   };
   // icons that look best filled rather than stroked
   var FILLED = { shield: 1, skull: 1, pin: 1, spark: 1, bolt: 1, stop: 1, flagfill: 1, play: 1 };
