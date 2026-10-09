@@ -35,7 +35,12 @@
 
     // params
     var paramsEl = document.getElementById('params');
-    if (paramsEl) {
+    // renderSidebar() runs on EVERY store change, and typing in a param fires a store update per
+    // keystroke, so rebuilding these inputs mid-type would blow away focus and the caret (the field
+    // "deselects" after every character). When the user is typing in one of them, leave the block
+    // alone, its values are already current; rebuild only when focus is elsewhere.
+    var typingInParams = paramsEl && document.activeElement && paramsEl.contains(document.activeElement);
+    if (paramsEl && !typingInParams) {
       // Redaction is opt-in across obol: a secret you recovered shows in cleartext by default so you can
       // read the password you just selected, and is masked (type=password) only when the report's Redact
       // Secrets toggle is on. This matches the credential switcher and the coach rail — no field hides a
