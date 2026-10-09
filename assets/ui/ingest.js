@@ -278,7 +278,7 @@
   var _PROMPT_LINE = [
     /^\s*(?:┌──.*)?└─[#$]\s+(\S.*)$/,                                   // Kali two-line prompt (cmd on └─$)
     /^[\w.\-]+@[\w.\-]+:[^\s#$]*\s*[#$]\s+(\S.*)$/,                      // user@host:cwd$ cmd
-    /^PS\s+[A-Za-z]:[^>]*>\s+(\S.*)$/,                                   // PowerShell PS C:\...> cmd
+    /^(?:\*?Evil-WinRM\*?\s+)?PS\s+[A-Za-z]:[^>]*>\s+(\S.*)$/,           // PowerShell PS C:\...> cmd, incl. *Evil-WinRM* PS prefix
   ];
   var _BARE_PROMPT = /^\s*[#$]\s+(\S.*)$/;                              // bare "$ cmd" / "# cmd" (last resort)
   // A Cruise batch script fences each command's output with an echo marker ("===== OBOL STEP n: <id> =====").
@@ -440,6 +440,10 @@
     var all = [];
     texts.forEach(function (t, fi) {
       var segs = splitSession(t), carry = null;
+      // No prompt recognized (an unusual or stripped shell, or output pasted without its prompt line): do
+      // not silently import nothing. Parse the whole blob as one capture, exactly as a raw paste would, so
+      // the flag read, the service banner, whatever it is, still mints its facts.
+      if (!segs.length && String(t || '').trim()) segs = [{ command: '', stdout: t, ts: null }];
       segs.forEach(function (s, li) {
         if (s.ts == null) s.ts = carry; else carry = s.ts;
         all.push({ command: s.command, stdout: s.stdout, ts: s.ts, ord: fi * 100000 + li });

@@ -177,7 +177,7 @@
           "locus": "onhost",
           "win": true,
           "note": "ON THE HOST as SYSTEM/Administrator, capture the ROOT/proof flag with its identity in the same frame (whoami + hostname + ipconfig + the flag) for the report. obol records this as the captured root flag, the box's final objective.",
-          "run": "whoami & hostname & ipconfig & type {{flag_path_root}}"
+          "run": "whoami; hostname; ipconfig; type {{flag_path_root}}"
         },
         {
           "tool": "impacket-wmiexec",

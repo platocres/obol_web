@@ -178,6 +178,29 @@ Loadout, your installed tools). Easy to rename.
 
 ### Post-build follow-ups (real-box testing on Forest)
 
+- 2026-10-09: Two real-box flag-capture bugs (owner Forest run, after the locate-first change). (1) The
+  on-host root capture used cmd.exe `&` separators (`whoami & hostname & ipconfig & type ...`), which
+  PowerShell (the evil-winrm shell) rejects with "The ampersand (&) character is not allowed". Changed to
+  `;` (the owner confirmed `hostname; ipconfig; type ...root.txt` works), and fixed the same cmd-vs-PS
+  separator on ad-path-manual's on-host whoami/net block. (2) THE BIG ONE: pasting the evil-winrm flag read
+  into Evidence captured NOTHING. Root cause in assets/ui/ingest.js splitSession: the PowerShell prompt
+  regex was `^PS ...>` so it did not recognize the `*Evil-WinRM* PS C:\...>` prefix, returned zero segments,
+  and importSession imported nothing (while the raw parser captured the flag fine). Fixed the regex to allow
+  the `*Evil-WinRM*` prefix, and added a defense-in-depth fallback: when splitSession finds no prompt in a
+  non-empty paste, importSession now parses the whole blob (what a raw paste does) instead of silently
+  importing zero. Regression tests in session-import-smoke.js (evil-winrm frame segments + mints
+  objective.root_flag; prompt-less blob still imports). Investigated the owner's "flag moves ranked too low"
+  (they showed #4 behind delegation/PtT/silver in the screenshot): could NOT reproduce in any consistent
+  fact state (flag-hunt-root/windows rank #1-2 in every probe and in the gated Forest replay once
+  access.admin is held, with or without a DC focus, with or without the user flag captured). The #4 was the
+  stale/partial fact state the ingest bug produced (the on-host evil-winrm pastes that mint access.admin /
+  foothold.windows / the flags were being dropped), so the coach was ranking on an incomplete picture. Fixing
+  ingest is the cure. Tried classifying objective.* as the loot phase to harden it, but that made the USER
+  flag premature with only a foothold (loot phase > escalate frontier -> Coming Up), a regression, and the
+  ranking was already correct, so reverted it per the scoreboard discipline (no speculative tuning against an
+  unreproducible state). ranker-sim 0/49, sweep 0.0%, full engine suite + session-import-smoke +
+  ad-killchain-e2e + lint + gap + browser-smoke all green; bundle rebuilt, assets stamped.
+
 - 2026-10-09: Flag hunt made LOCATE-FIRST, profile-aware, and honest (owner real-box: the Forest flag hunt
   failed because it typed a GUESSED path, `type C:\Users\Administrator\Desktop\user.txt`, which does not
   exist, and it was not profile-clean). Four coordinated fixes so the hunt searches, you paste the result,

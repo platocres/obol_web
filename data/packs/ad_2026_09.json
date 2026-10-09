@@ -1135,7 +1135,7 @@
         },
         {
           "tool": "cmd",
-          "run": "whoami /groups & whoami /priv & net user {{user}} /domain & net group \"Domain Admins\" /domain",
+          "run": "whoami /groups; whoami /priv; net user {{user}} /domain; net group \"Domain Admins\" /domain",
           "note": "LANE 3 (built-in, nothing to upload): your group memberships + privileges (SeImpersonate/SeBackup/SeRestore are instant local-SYSTEM leads), plus the account and DA roster. Always available, even on a locked-down box where you can't run PowerView."
         }
       ]
