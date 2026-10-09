@@ -2835,10 +2835,9 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 .nav-paste:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .nav-paste svg { color: var(--accent-2); }
 @media (max-width: 980px) { .nav-paste-l { display: none; } .nav-paste { padding: 6px 8px; } }
-/* context-aware "?" on-ramp: visible on desktop and mobile, "what is this screen" */
-.nav-help { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 38px; height: 38px; padding: 0; margin-left: 6px; cursor: pointer; color: var(--text-2); background: transparent; border: 1px solid var(--line); border-radius: 9px; }
-.nav-help:hover { color: var(--accent-2); border-color: var(--accent); background: var(--accent-soft); }
-.nav-help:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Gold hint beside Paste: evidence from any screen makes obol more helpful. Readable, never tiny. */
+.nav-paste-hint { flex: 0 1 auto; min-width: 0; text-align: right; color: var(--g-next, #F5A623); font: 600 13px/1.3 var(--sans); max-width: 30ch; }
+@media (max-width: 1280px) { .nav-paste-hint { display: none; } }
 .qp-overlay { position: fixed; inset: 0; z-index: 210; display: none; align-items: flex-start; justify-content: center; padding: 8vh 16px 16px; background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
 .qp-overlay.open { display: flex; }
 .qp-panel { width: 100%; max-width: 680px; background: var(--bg1); border: 1px solid var(--line-hot); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.5); padding: 18px 20px 20px; }
