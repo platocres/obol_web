@@ -4357,7 +4357,7 @@ main#view:has(.stuck) { max-width: 2600px; }
 /* nav "Experimental" fine print under the Cruise label. Keep the "Cruise" word on the SAME baseline as
    the other tabs (so it reads as one row); the sub-label is taken out of flow and hangs just below it. */
 .nav-cruise { position: relative; }
-.nav-exp { position: absolute; left: 0; right: 0; top: 100%; margin-top: -5px; text-align: center; white-space: nowrap;
+.nav-exp { position: absolute; left: 0; right: 0; top: 100%; margin-top: 1px; text-align: center; white-space: nowrap;
   font: 700 8px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--g-next); opacity: .9; pointer-events: none; }
 
 .cruise { max-width: 1200px; }
