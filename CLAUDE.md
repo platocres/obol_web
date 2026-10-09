@@ -1206,3 +1206,19 @@ em/en dashes.
   5 steps enum-only with the SMB-share checkpoint, lab 9 steps, unlocks + paste + recipes present, 0
   console errors both sizes. Full engine suite + cruise-smoke + help-coverage + browser-smoke + lint +
   gap all green; assets stamped; house style held. CR3 (pivot auto-setup) deferred.
+- 2026-10-09: CR2 refinements (owner feedback, same session). (1) Parser/ingest: VERIFIED the paste-back
+  loop end to end and found the ===== OBOL STEP markers were decorative (splitSession only split on shell
+  prompts, which a non-interactive cruise script never prints). Measured on a realistic 3-command nxc blob:
+  importSession segmented 0 -> minted 0; the rawPaste fallback minted 12 but MISSED 4 (smb.guest_session,
+  smb.null_session, smb.shares, config.review) and risks cross-command misattribution on multi-host pastes.
+  Fix: taught splitSession to treat "===== OBOL STEP n: <id> =====" as a hard segment boundary (command =
+  the move id), so each move's output parses in isolation with no prompt-stamp dependency. After: importSession
+  segments 3 -> mints 18 facts, each attributed to its move (Run Log shows the right names). (2) tierOf inverted
+  to DEFAULT-SAFE per owner request (more enumeration auto-batches in exam): safe unless a positive
+  "lands a shell / sprays / exploits" signal (producesFoothold now catches any access/foothold/session.*
+  produce; SPRAY_RE + a new EXPLOIT_RE on the id). Explicit pack autonomy still wins. Loot-phase reads like
+  share inventory now auto-batch (exam batch 5 -> 6 on the Forest-like seed). (3) Nav: "Cruise" now sits on
+  the same baseline as the other tabs (Experimental sub-label taken out of flow, absolutely positioned below).
+  cruise-smoke extended (default-safe loot read, exploit-id active, any-phase foothold active); full engine
+  suite + browser-smoke + lint + gap + help-coverage green; driven headless (18-fact paste advance, aligned
+  nav, 6-step exam batch, 0 console errors); assets stamped.

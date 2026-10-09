@@ -28,33 +28,40 @@
     'foothold.linux': 1, 'foothold.windows': 1, 'foothold.webshell': 1,
     'access.shell': 1, 'access.admin': 1, 'access.system': 1, 'access.root': 1,
   };
-  // A move whose id/tool reads as a credential spray or brute: noisy, run it deliberately, never batched.
-  var SPRAY_RE = /spray|brute|bruteforce|hydra|kerbrute|guess|cred-?stuff|password-?spray/i;
+  // A move whose id/tool reads as a credential spray or brute: noisy, lockout risk, run it deliberately.
+  var SPRAY_RE = /spray|brute|bruteforce|hydra|medusa|ncrack|kerbrute|guess|cred-?stuff|password-?spray/i;
+  // A move whose id reads as running an exploit / gaining code execution: never auto-batched.
+  var EXPLOIT_RE = /exploit|rce|overflow|deserial|payload|revshell|reverse-?shell|eternalblue|bluekeep|zerologon|nopac|petitpotam|printnightmare|smbghost|log4shell|shellshock|struts|dirtycow|pwnkit|ms\d\d-\d\d\d|cve-\d/i;
 
   function phaseOf(action) { try { return (P && P.phaseOfAction) ? P.phaseOfAction(action) : (action.phase || ''); } catch (e) { return action.phase || ''; } }
 
+  // A move that would gain or escalate access (a shell/session/foothold/credentialed login that lands you
+  // ON the box). Keyed on produced fact kinds, so it catches footholds however the move is named.
   function producesFoothold(action) {
     var pr = (action && action.produces) || [];
-    for (var i = 0; i < pr.length; i++) { if (FOOTHOLD_KINDS[pr[i]] || /_confirmed$/.test(pr[i])) return true; }
+    for (var i = 0; i < pr.length; i++) {
+      var k = pr[i];
+      if (FOOTHOLD_KINDS[k] || /^(access|foothold|session)\./.test(k) || /_confirmed$/.test(k)) return true;
+    }
     return false;
   }
 
-  // The Cruise tier of a move. Explicit pack autonomy wins; otherwise derive from phase + what it
-  // produces. 'safe' = pure enumeration/discovery (batchable in both modes). 'active' = lands or
-  // escalates access, or sprays (batchable only in lab, a checkpoint in exam). 'manual' = interactive
-  // or flagged manual (always a checkpoint).
+  // The Cruise tier of a move. Explicit pack autonomy wins (auto/approve/manual, the pack author's call).
+  // Otherwise DEFAULT TO SAFE (enumeration and discovery, including reading shares/LDAP/loot), and only
+  // lift to 'active' on a positive "lands a shell / sprays / exploits" signal. So safe enumeration across
+  // every phase auto-batches in exam mode; the dangerous classes (foothold, spray/brute, exploit/RCE)
+  // still hard-stop at a checkpoint. 'manual' is only ever an explicit pack flag.
   function tierOf(action) {
     if (!action) return 'manual';
     var au = String(action.autonomy || '').toLowerCase();
     if (au === 'auto') return 'safe';
     if (au === 'approve') return 'active';
     if (au === 'manual') return 'manual';
-    if (producesFoothold(action)) return 'active';
-    if (SPRAY_RE.test(action.id || '')) return 'active';
-    var ph = phaseOf(action);
-    if (ph === 'recon' || ph === 'enum') return 'safe';
-    // creds / access / escalate / loot without an explicit tier: treat as active (a checkpoint in exam).
-    return 'active';
+    var id = action.id || '';
+    if (producesFoothold(action)) return 'active';   // gains/escalates access
+    if (SPRAY_RE.test(id)) return 'active';           // sprays or brute-forces credentials
+    if (EXPLOIT_RE.test(id)) return 'active';         // runs an exploit / gains code execution
+    return 'safe';                                    // everything else is enumeration: auto-batch it
   }
 
   function allowsTier(mode, tier) {

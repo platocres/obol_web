@@ -37,8 +37,11 @@ ok(C.tierOf({ autonomy: 'auto', phase: 'recon', produces: [] }) === 'safe', 'exp
 ok(C.tierOf({ autonomy: 'approve', produces: [] }) === 'active', 'explicit autonomy:approve -> active');
 ok(C.tierOf({ autonomy: 'manual', produces: [] }) === 'manual', 'explicit autonomy:manual -> manual');
 ok(C.tierOf({ id: 'x', phase: 'enum', produces: ['ad.user_list'] }) === 'safe', 'enum move, no foothold -> safe (derived)');
+ok(C.tierOf({ id: 'smb-share-inventory', phase: 'loot', produces: ['loot.share'] }) === 'safe', 'a loot-phase enumeration read defaults safe (auto-batches)');
 ok(C.tierOf({ id: 'x', phase: 'enum', produces: ['access.shell'] }) === 'active', 'a foothold producer is never safe');
+ok(C.tierOf({ id: 'x', phase: 'creds', produces: ['foothold.linux'] }) === 'active', 'any access/foothold/session produce -> active, whatever the phase');
 ok(C.tierOf({ id: 'online-brute-ssh', phase: 'creds', produces: [] }) === 'active', 'a brute/spray id -> active');
+ok(C.tierOf({ id: 'eternalblue-exploit', phase: 'access', produces: ['vuln.ms17010'] }) === 'active', 'an exploit/RCE id -> active');
 ok(C.allowsTier('exam', 'safe') && !C.allowsTier('exam', 'active'), 'exam allows only safe');
 ok(C.allowsTier('lab', 'safe') && C.allowsTier('lab', 'active') && !C.allowsTier('lab', 'manual'), 'lab allows safe+active, not manual');
 

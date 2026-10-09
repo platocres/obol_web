@@ -281,6 +281,11 @@
     /^PS\s+[A-Za-z]:[^>]*>\s+(\S.*)$/,                                   // PowerShell PS C:\...> cmd
   ];
   var _BARE_PROMPT = /^\s*[#$]\s+(\S.*)$/;                              // bare "$ cmd" / "# cmd" (last resort)
+  // A Cruise batch script fences each command's output with an echo marker ("===== OBOL STEP n: <id> =====").
+  // The script runs non-interactively (no shell prompt to split on), so the marker IS the segment boundary:
+  // it starts a new segment whose command is the move id, so each move's output parses in isolation (correct
+  // per-move facts, no cross-command misattribution) with no dependence on the Loadout prompt stamp.
+  var _CRUISE_MARK = /^\s*={3,}\s*OBOL STEP\s+\d+:\s*(\S.*?)\s*={3,}\s*$/;
   var _TS_RE = /\[(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/;          // a prompt timestamp → epoch ms
   function _promptCmd(raw) {
     for (var i = 0; i < _PROMPT_LINE.length; i++) { var m = _PROMPT_LINE[i].exec(raw); if (m) return m[1].trim(); }
@@ -298,6 +303,9 @@
     for (var i = 0; i < lines.length; i++) {
       var raw = lines[i];
       if (heredoc !== null) { if (cur) cur.stdout.push(raw); if (raw.trim() === heredoc) heredoc = null; prev2 = prev; prev = raw; continue; }
+      // Cruise step marker: a hard segment boundary. The marker line itself is not output.
+      var mk = _CRUISE_MARK.exec(raw);
+      if (mk) { if (cur) segs.push(cur); cur = { command: mk[1].trim(), stdout: [], ts: _ts(raw) }; prev2 = prev; prev = raw; continue; }
       var cmd = _promptCmd(raw);
       // A bare "$ cmd" / "# cmd" is a weak signal — tool output is full of lines that start with "# "
       // (config/comment dumps) or "$ " — so accept one only when what follows leads with a tool obol
