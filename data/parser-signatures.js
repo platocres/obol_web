@@ -176,8 +176,8 @@
     },
     'auth-blocker': {
       looksFor: "a credential that is valid but refused for a fixable reason — a forced password change (STATUS_PASSWORD_MUST_CHANGE / expired), Kerberos clock skew (KRB_AP_ERR_SKEW), NTLM disabled (STATUS_NOT_SUPPORTED → use -k), account lockout (STATUS_ACCOUNT_LOCKED_OUT) or a disabled/restricted account.",
-      regex: 'STATUS_PASSWORD_MUST_CHANGE | password has expired | KRB_AP_ERR_SKEW | clock skew too great | STATUS_NOT_SUPPORTED | STATUS_ACCOUNT_LOCKED_OUT | STATUS_ACCOUNT_DISABLED | STATUS_LOGON_TYPE_NOT_GRANTED',
-      emits: ['blocker.password_change', 'blocker.clock_skew', 'blocker.ntlm_disabled', 'blocker.lockout', 'blocker.account_restricted'],
+      regex: 'STATUS_PASSWORD_MUST_CHANGE | password has expired | KRB_AP_ERR_SKEW | clock skew too great | STATUS_NOT_SUPPORTED | STATUS_ACCOUNT_LOCKED_OUT | STATUS_ACCOUNT_DISABLED | STATUS_LOGON_TYPE_NOT_GRANTED | insufficientAccessRights',
+      emits: ['blocker.password_change', 'blocker.clock_skew', 'blocker.ntlm_disabled', 'blocker.lockout', 'blocker.account_restricted', 'blocker.acl_reauth'],
     },
     'op-blocker': {
       looksFor: "a classic operational wall from a pasted error — nmap 'host seems down' (needs -Pn), 'could not resolve host' (needs /etc/hosts), a CRLF 'bad interpreter', 'sudo: no tty present', Defender/AMSI blocking a payload, a SeImpersonate potato that failed, HTTP fuzzing rate-limited (429), or an http/https scheme mismatch (WRONG_VERSION_NUMBER).",

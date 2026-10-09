@@ -12,7 +12,7 @@
   var GROUPS = {
     parsers: [
       'assets/engine/parsers/common.js?v=50012df7',
-      'assets/engine/parsers/nmap.js?v=f1b2bcf7', 'assets/engine/parsers/directory.js?v=e5a7d193',
+      'assets/engine/parsers/nmap.js?v=f1b2bcf7', 'assets/engine/parsers/directory.js?v=2bae595d',
       'assets/engine/parsers/creds.js?v=0c151381', 'assets/engine/parsers/host.js?v=3a0b02ab',
       'assets/engine/parsers/services.js?v=0ffaee56', 'assets/engine/parsers/database.js?v=43266544',
       'assets/engine/parsers/web.js?v=9f318dea', 'assets/engine/parsers/websource.js?v=6d031c9c',
@@ -20,7 +20,7 @@
       'assets/engine/parsers/pivot.js?v=0f65c48f', 'assets/engine/parsers/dns.js?v=90a12620',
       'assets/engine/parsers/blockers.js?v=ef350845',
       'assets/engine/parsers/nxc-catalog.js?v=48cfcc8d',
-      'assets/engine/parsers/index.js?v=bf724090',
+      'assets/engine/parsers/index.js?v=9410e4ea',
     ],
     graph: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/graph.js?v=f509cf3e'],
     domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=b39b3de5', 'assets/ui/bhgraph.js?v=c7a65cf7', 'assets/ui/routes/domain.js?v=bb4a6969'],
@@ -29,8 +29,8 @@
     loadout: ['assets/engine/arsenal.js?v=3050a066', 'assets/ui/routes/loadout.js?v=f6d299e1'],
     workbench: ['assets/engine/workbench.js?v=335c8fa6', 'assets/ui/routes/workbench.js?v=c698ea13'],
     stuck: ['data/stuck-catalog.js?v=14d96459', 'assets/engine/stuck.js?v=9f3ec324', 'assets/ui/routes/stuck.js?v=014448d3'],
-    study: ['data/study-fixtures.js?v=a596d3da', 'assets/engine/study.js?v=303c7964', 'assets/ui/routes/study.js?v=6030fff7'],
-    decisionmap: ['data/decision-forks.js?v=abde552b', 'data/parser-signatures.js?v=7c8e5159', 'data/coverage-expected.js?v=afdb39b5', 'data/flag-reach.js?v=e8d6c84a', 'assets/engine/decisionmap.js?v=8986cb18', 'assets/ui/decisiontree.js?v=b97043a7'],
+    study: ['data/study-fixtures.js?v=a596d3da', 'assets/engine/study.js?v=b3f1423e', 'assets/ui/routes/study.js?v=6030fff7'],
+    decisionmap: ['data/decision-forks.js?v=abde552b', 'data/parser-signatures.js?v=92f80090', 'data/coverage-expected.js?v=afdb39b5', 'data/flag-reach.js?v=e8d6c84a', 'assets/engine/decisionmap.js?v=8986cb18', 'assets/ui/decisiontree.js?v=b97043a7'],
     checklist: ['data/oscp-scope.js?v=b211d828', 'assets/ui/routes/checklist.js?v=d649c597'],
     target: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/target.js?v=7cff1a86'],
     creds: ['assets/ui/routes/creds.js?v=a87fc780'],

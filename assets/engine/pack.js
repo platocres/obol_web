@@ -476,6 +476,7 @@
     'blocker.web_wildcard': 'a wildcard / catch-all web response', 'blocker.ntlm_disabled': 'an NTLM-disabled login',
     'blocker.password_change': 'a password-change-required login', 'blocker.lockout': 'an account lockout',
     'blocker.account_restricted': 'a restricted account',
+    'blocker.acl_reauth': 'an access-denied on an ACL write (re-authenticate after the grant)',
     // known-exploit fingerprints (each gates its matching exploit module)
     'vuln.vsftpd_234': 'the vsftpd 2.3.4 backdoor fingerprint', 'vuln.proftpd_modcopy': 'the ProFTPD mod_copy fingerprint',
     'vuln.samba_usermap': 'the Samba usermap_script fingerprint', 'vuln.smbghost': 'the SMBGhost fingerprint',

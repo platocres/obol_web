@@ -431,6 +431,13 @@
       _add(facts, mkFact('blocker.lockout', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
     if (/STATUS_ACCOUNT_DISABLED|STATUS_ACCOUNT_RESTRICTION|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_ACCOUNT_EXPIRED|STATUS_INVALID_LOGON_HOURS/i.test(t))
       _add(facts, mkFact('blocker.account_restricted', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+    // An LDAP WRITE denied (bloodyAD/dacledit `insufficientAccessRights` when granting DCSync, setting an
+    // owner, or adding a group member) right after you GRANTED yourself that right is the classic AD wall:
+    // the right exists but your CURRENT session's token predates it, so re-authenticate and retry. Keyed on
+    // the LDAP-modify signature (insufficientAccessRights), not a bare ACCESS_DENIED, so it never fires on
+    // the NTDS replication denial (rpc_s_access_denied), which has its own grant-first field note.
+    if (/insufficientAccessRights|insufficient access rights/i.test(t))
+      _add(facts, mkFact('blocker.acl_reauth', C._scope_for_domain(ws), { tool: 'ldap' }, S, source));
   }
   C._parse_auth_blockers = _parse_auth_blockers;
 
@@ -576,6 +583,12 @@
     var alreadyMemberRe = /already a member|entryalreadyexists|member_in_alias/i;
     var hasJoinLine = operation === 'group_member_write' && (/(?:\badded to\b|^\s*\[\+\]\s*joined:)/im.test(text) || alreadyMemberRe.test(text));
     var success = hasJoinLine || evidence.length > 0 || !!reSearch(C._AD_CONTROL_SUCCESS_RE, text) || (!!operation && !!text.trim() && !opError);
+    // A non-group write that ERRORED (insufficientAccessRights / access denied / a traceback) is NOT a
+    // granted control path, even though the echoed command names the right (so `evidence` picked up the
+    // `add dcsync` line). Without this veto a FAILED DCSync grant minted ad.control_paths and the coach
+    // wrongly believed you owned the domain. A real join line, an "already a member", or a success marker
+    // still wins (the group sweep prints wins and failures together).
+    if (opError && !hasJoinLine && !reSearch(C._AD_CONTROL_SUCCESS_RE, text) && !alreadyMemberRe.test(text)) success = false;
     if (!success) return;
 
     var successMatch = reSearch(C._AD_CONTROL_SUCCESS_RE, text);

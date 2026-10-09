@@ -146,7 +146,7 @@
       C._parse_ssh_key_diagnostics(text, ws, source, facts);
     // Auth blockers (a valid credential refused for a fixable reason) can come from any auth tool —
     // nxc, impacket, smbclient, ssh — so recognize them content-first, not tool-gated.
-    if (C._parse_auth_blockers && /STATUS_PASSWORD_(?:MUST_CHANGE|EXPIRED)|must change .*password|password has expired|KRB_AP_ERR_SKEW|clock skew too great|time difference too large|STATUS_NOT_SUPPORTED|STATUS_ACCOUNT_(?:LOCKED_OUT|DISABLED|RESTRICTION|EXPIRED)|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_INVALID_LOGON_HOURS|locked out/i.test(text))
+    if (C._parse_auth_blockers && /STATUS_PASSWORD_(?:MUST_CHANGE|EXPIRED)|must change .*password|password has expired|KRB_AP_ERR_SKEW|clock skew too great|time difference too large|STATUS_NOT_SUPPORTED|STATUS_ACCOUNT_(?:LOCKED_OUT|DISABLED|RESTRICTION|EXPIRED)|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_INVALID_LOGON_HOURS|locked out|insufficientAccessRights|insufficient access rights/i.test(text))
       C._parse_auth_blockers(text, ws, source, facts);
     // Operational blockers (recon/exec/privesc/web traps) — all content-first, any tool.
     if (C._parse_op_blockers) C._parse_op_blockers(text, ws, command, source, facts);

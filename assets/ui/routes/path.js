@@ -858,6 +858,8 @@
     if (k === 'smb.null_session') return 'Confirmed an anonymous (null) SMB session';
     if (k === 'smb.guest_session') return 'Confirmed guest SMB access';
     if (/^foothold\.|^access\.shell$/.test(k)) return 'Landed a foothold on the target';
+    if (k === 'blocker.acl_reauth') return 'Hit an access-denied wall on the ACL write (the fix is below: re-authenticate)';
+    if (/^blocker\./.test(k)) { try { return 'Hit a known wall: ' + (OBOL.pack.friendly(k) || 'see the fix below'); } catch (e) { return 'Hit a known wall (see the fix below)'; } }
     if (k === 'host.hostname') return 'Learned the hostname ' + (v.name || v.hostname || '');
     // generic fallback: the friendly noun phrase for the kind, Title Cased
     try { if (OBOL.pack && OBOL.pack.friendly) return U.titleCase(OBOL.pack.friendly(k) || k.replace(/[._]/g, ' ')); } catch (e) {}
