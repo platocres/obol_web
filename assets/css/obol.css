@@ -1685,6 +1685,13 @@ a.tcard-main:hover .tcard-ip { color: var(--accent-2); }
 .score-chip.got { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
 .score-chip.miss { color: var(--muted); border: 1px dashed var(--line); }
 .score-note { font-size: 12px; margin-top: 12px; }
+/* the captured flag's real value, shown and click-to-copy */
+.score-flag { display: inline-flex; align-items: center; gap: 7px; color: var(--green); }
+.score-flag .ic { color: var(--green); }
+.score-flag-h { font-family: var(--mono); font-size: 12.5px; color: var(--text); background: color-mix(in srgb, var(--green) 12%, var(--surf2));
+  border: 1px solid color-mix(in srgb, var(--green) 35%, var(--line)); border-radius: 6px; padding: 2px 8px; cursor: pointer; word-break: break-all; transition: background .15s, border-color .15s; }
+.score-flag-h:hover { background: color-mix(in srgb, var(--green) 22%, var(--surf2)); border-color: var(--green); }
+.score-flag-note { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 
 /* ---- playbooks / engagement map (styles for the parity surfaces) ---- */
 .pb-card, .map-legend { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; }
