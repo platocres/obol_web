@@ -194,8 +194,8 @@
   }
   // a neon-glass section header (the "Your Next Move" border treatment): an accent left bar, a glowing
   // label, and a one-line explanation of the section.
-  function shead(label, desc) {
-    return '<div class="cv-shead"><span class="cv-shead-l">' + esc(label) + '</span><span class="cv-shead-d">' + esc(desc) + '</span></div>';
+  function shead(label, desc, hue) {
+    return '<div class="cv-shead' + (hue ? ' cv-sh-' + hue : '') + '"><span class="cv-shead-l">' + esc(label) + '</span><span class="cv-shead-d">' + esc(desc) + '</span></div>';
   }
 
   // ---- CSV export (top-right of the tab). All client-side: build the text, download a Blob. Categories
@@ -272,14 +272,14 @@
         + '<pre class="cv-list-pre">' + esc(joined) + '</pre></details>';
     }).join('');
     if (!rows) return '';
-    return shead('Copyable Lists', 'One click to the clipboard, grows as you go. Click a list to inspect it in full, then copy, save to loot/, or mark it written.')
+    return shead('Copyable Lists', 'One click to the clipboard, grows as you go. Click a list to inspect it in full, then copy, save to loot/, or mark it written.', 'teal')
       + '<div class="cv-lists">' + rows + '</div>';
   }
 
   // ---- a credential row ----
   function flagChip(u) {
-    return '<span class="cv-flag"><span class="cv-flag-slot ' + esc(u.slot) + '">' + OBOL.ic('flag') + ' ' + esc(u.slot) + '</span> '
-      + '<code class="cv-copy" data-copyval="' + attr(u.flag) + '" title="Copy flag value">' + esc(u.flag.length > 20 ? u.flag.slice(0, 18) + '…' : u.flag) + '</code></span>';
+    return '<span class="cv-flag"><span class="cv-flag-slot ' + esc(u.slot) + '">' + OBOL.ic('flag') + ' ' + esc(u.slot) + '</span>'
+      + '<code class="cv-copy" data-copyval="' + attr(u.flag) + '" title="Copy flag value (' + attr(u.flag) + ')">' + esc(u.flag) + '</code></span>';
   }
   // Secrets never wrap to a second line: the cell is a fixed-width column and long values (an AS-REP /
   // Kerberoast blob) trail off with a CSS ellipsis. The full value is always in data-copyval and the
@@ -345,14 +345,16 @@
     if (e.used) return true;
     return false;
   }
-  function band(cls, label, count, desc, bodyHtml, collapsible, open) {
-    var headInner = '<span class="cv-subhead-t">' + label + '</span><span class="cv-subhead-n">' + count + '</span>'
-      + '<span class="cv-subhead-d">' + desc + '</span>';
-    if (!collapsible) return '<div class="cv-subhead ' + cls + '">' + headInner + '</div>' + bodyHtml;
-    return '<details class="cv-band' + (cls ? ' ' + cls : '') + '"' + (open ? ' open' : '') + '>'
-      + '<summary class="cv-subhead">' + headInner + '</summary>' + bodyHtml + '</details>';
+  // Every band is the same collapsible shape (left hue bar, disclosure triangle, count pill, one-line
+  // description), modelled on the Untested band. Only the hue differs, so the full palette is in play.
+  function band(hue, extraCls, label, count, desc, bodyHtml, open, key) {
+    return '<details class="cv-band cv-hue-' + hue + (extraCls ? ' ' + extraCls : '') + '"'
+      + (key ? ' data-cvkey="' + attr(key) + '"' : '') + (open ? ' open' : '') + '>'
+      + '<summary class="cv-subhead"><span class="cv-subhead-t">' + label + '</span>'
+      + '<span class="cv-subhead-n">' + count + '</span><span class="cv-subhead-d">' + desc + '</span></summary>'
+      + bodyHtml + '</details>';
   }
-  function credTable(rows, groupIp, provenOnly) {
+  function credTable(rows, groupIp, provenOnly, groupId) {
     var proven = [], userUntested = [], machine = [];
     rows.forEach(function (e) {
       if (credProven(e)) proven.push(e);
@@ -365,21 +367,22 @@
     function tbl(list) { var h = credTableHtml(list, groupIp, headShown); headShown = true; return h; }
     var out = '';
     if (proven.length) {
-      out += band('cv-subhead-proven', 'Proven So Far', proven.length,
+      // the Proven band remembers its own open state (collapse it if you like); default open.
+      out += band('green', 'cv-band-proven', 'Proven So Far', proven.length,
         'Credentials confirmed to work, or a hash you have cracked. Your live keys.',
-        tbl(proven), false, true);
+        tbl(proven), isOpen('pb:' + groupId, true), 'pb:' + groupId);
     } else if (provenOnly && anyNotProven) {
       out += '<div class="cv-empty-note">Nothing proven here yet. Expand a group below, or switch to Show All.</div>';
     }
     if (userUntested.length) {
-      out += band('cv-subhead-user', 'User Accounts, Untested', userUntested.length,
+      out += band('blue', '', 'User Accounts, Untested', userUntested.length,
         'Real accounts you have not confirmed yet. Worth a spray, a crack, or a login. Anything you marked tried and failed sits here too.',
-        tbl(userUntested), true, !provenOnly);
+        tbl(userUntested), !provenOnly);
     }
     if (machine.length) {
-      out += band('cv-machine', 'Machine &amp; Service Accounts', machine.length,
+      out += band('purple', '', 'Machine &amp; Service Accounts', machine.length,
         'Computer accounts (name ends $), Exchange system mailboxes (SM_ / HealthMailbox) and built-ins (Guest, krbtgt), rarely used for login.',
-        tbl(machine), true, !provenOnly);
+        tbl(machine), !provenOnly);
     }
     return out;
   }
@@ -417,7 +420,7 @@
         + '<summary class="cv-host-h"><span class="cv-host-name">' + esc(title) + '</span>'
         + (ip && vault.hostMap[ip] && vault.hostMap[ip] !== title ? '' : '') + badge
         + '<span class="cv-host-n">' + countTxt + '</span></summary>'
-        + credTable(rows, ip || '', provenOnly) + '</details>';
+        + credTable(rows, ip || '', provenOnly, id) + '</details>';
     }
     var hostCards = vault.hosts.map(function (h) {
       var rows = byHost[h.ip]; if (!rows.length) return '';
@@ -449,7 +452,7 @@
       + '<div class="cv-top"><h1 class="route-h1">Credentials</h1>' + exportMenu(vault.lists) + '</div>'
       + '<p class="route-sub">Every credential of every kind obol has seen this engagement, grouped by the host it works on or came from. Click a secret or flag to copy it. <strong>Load</strong> arms the whole console with any credential; <strong>Cracked</strong> / <strong>Used</strong> / <strong>Failed</strong> are yours to set and obol remembers them.</p>'
       + listsBlock(vault.lists)
-      + ((hostCards || domainCard || handCard) ? (shead('Credentials By Host', 'Grouped by the host each credential works on, or the host it was collected from.') + viewToggle(provenOnly)) : '')
+      + ((hostCards || domainCard || handCard) ? (shead('Credentials By Host', 'Grouped by the host each credential works on, or the host it was collected from.', 'purple') + viewToggle(provenOnly)) : '')
       + (hostCards || '') + domainCard + handCard + userSec
       + '</section>';
   }
