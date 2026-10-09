@@ -1222,3 +1222,18 @@ em/en dashes.
   cruise-smoke extended (default-safe loot read, exploit-id active, any-phase foothold active); full engine
   suite + browser-smoke + lint + gap + help-coverage green; driven headless (18-fact paste advance, aligned
   nav, 6-step exam batch, 0 console errors); assets stamped.
+- 2026-10-09: Cruise fill-gating + attack-move tiering (owner caught Golden Ticket showing with
+  "needs: domain_sid" on a credentialed Forest state). Two fixes: (1) Cruise now applies the same
+  fill-gating as Next Steps (path.js GATE_TOKENS): plan() picks each move's preferred NON-gated command
+  (readyCmdIndex via preferredCommandIndex + a cmdGated skip) and DROPS a move whose every command still
+  needs an unearned fact (domain_sid, krbtgt_hash, basedn, ...), so it never prints a dead <token>; it
+  returns, filled, in a later batch once the feeding fact is pasted in. Threaded the fill context
+  (params/profile/workspace) through every plan() call. (2) tierOf now treats attack produces as active,
+  not safe: added ATTACK_PRODUCE (persistence.*, lateral.movement, loot.ntds, hash.krbtgt,
+  kerberos.tickets, ad.computer_added) so Golden Ticket, DCSync and delegation abuse checkpoint even when
+  their tokens are earned, while roasting (hash.asrep/hash.tgs, offline crack) and BloodHound (ad.graph.*)
+  stay safe. cruise-smoke extended (gated-move excluded, no batched command carries an unmet earned token
+  on a credentialed real-pack state, attack-produce -> active, roasting stays safe). Driven headless on the
+  owner's credentialed Forest state: batch is all enumeration with zero needs rows, golden-ticket/dcsync
+  gone, checkpoint is Authenticated Remote Execution, 0 console errors. Full engine suite + browser-smoke +
+  lint + gap green; assets stamped.

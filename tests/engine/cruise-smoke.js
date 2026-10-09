@@ -40,6 +40,8 @@ ok(C.tierOf({ id: 'x', phase: 'enum', produces: ['ad.user_list'] }) === 'safe', 
 ok(C.tierOf({ id: 'smb-share-inventory', phase: 'loot', produces: ['loot.share'] }) === 'safe', 'a loot-phase enumeration read defaults safe (auto-batches)');
 ok(C.tierOf({ id: 'x', phase: 'enum', produces: ['access.shell'] }) === 'active', 'a foothold producer is never safe');
 ok(C.tierOf({ id: 'x', phase: 'creds', produces: ['foothold.linux'] }) === 'active', 'any access/foothold/session produce -> active, whatever the phase');
+ok(C.tierOf({ id: 'golden-ticket', produces: ['persistence.domain'] }) === 'active', 'an attack produce (persistence/forge/dump/lateral) -> active, not safe');
+ok(C.tierOf({ id: 'asrep-roast', produces: ['hash.asrep', 'credential.candidate'] }) === 'safe', 'roasting (offline-crack hashes) stays safe');
 ok(C.tierOf({ id: 'online-brute-ssh', phase: 'creds', produces: [] }) === 'active', 'a brute/spray id -> active');
 ok(C.tierOf({ id: 'eternalblue-exploit', phase: 'access', produces: ['vuln.ms17010'] }) === 'active', 'an exploit/RCE id -> active');
 ok(C.allowsTier('exam', 'safe') && !C.allowsTier('exam', 'active'), 'exam allows only safe');
@@ -73,6 +75,8 @@ const miniRaw = [{
   name: 'mini', version: '1', actions: [
     { id: 'mini-a', title: 'Mini A', phase: 'enum', autonomy: 'auto', requires_all: ['seed.x'], produces: ['mini.y', 'mini.extra'], commands: [{ tool: 'echo', run: 'echo a {{target}}' }] },
     { id: 'mini-b', title: 'Mini B', phase: 'enum', autonomy: 'auto', requires_all: ['seed.x', 'mini.y'], produces: ['mini.z'], commands: [{ tool: 'echo', run: 'echo b {{target}}' }] },
+    // eligible on seed.x, but its only command needs the (unearned) domain SID: it must be fill-gated out.
+    { id: 'mini-gated', title: 'Mini Gated', phase: 'enum', autonomy: 'auto', requires_all: ['seed.x'], produces: ['mini.g'], commands: [{ tool: 'echo', run: 'echo {{domain_sid}}' }] },
   ],
 }];
 const MINI = PK.loadPacks(miniRaw);
@@ -89,6 +93,32 @@ ok(!inBatch('mini-b'), 'the still-blocked move (mini-b) is not in the batch');
 ok(inUnlocks('mini-b'), 'the batch previews mini-b as a move it unlocks');
 const u = miniPlan.unlocks.find((x) => x.action.id === 'mini-b');
 ok(u && u.via === 'mini.y', 'the unlock preview records which produced fact (mini.y) unlocks it');
+ok(!inBatch('mini-gated'), 'a move whose only command needs an unearned fact (domain_sid) is fill-gated out of the batch');
+
+// ── fill-gating on the real pack: no batched command carries an unmet EARNED token ──────────────────
+// A credentialed state makes AD escalation moves (Golden Ticket etc.) eligible, but they need the domain
+// SID / krbtgt hash, which are not proven. None of those gated commands may appear in the batch.
+const GATE = { domain: 1, basedn: 1, dc: 1, dc_netbios: 1, dc_account: 1, user: 1, password: 1, nthash: 1,
+  userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, ca_name: 1, template: 1, pfx: 1,
+  nmap_ports: 1, krbtgt_hash: 1 };
+const credFacts = fsWith([
+  { kind: 'target.configured', scope: 'host:10.129.95.66', value: {} },
+  { kind: 'scan.ports.open', scope: 'host:10.129.95.66', value: { ports: [53, 88, 139, 389, 445, 636, 5985] } },
+  { kind: 'ad.domain_known', scope: 'host:10.129.95.66', value: { domain: 'htb.local' } },
+  { kind: 'ad.dc_candidate', scope: 'host:10.129.95.66', value: {} },
+  { kind: 'smb.reachable', scope: 'host:10.129.95.66', value: {} },
+  { kind: 'credential.available', scope: 'host:10.129.95.66', value: { user: 'svc-alfresco', password: 's3rvice', domain: 'htb.local' } },
+  { kind: 'credential.validated', scope: 'host:10.129.95.66', value: { user: 'svc-alfresco' } },
+]);
+const credFill = { params: { target: '10.129.95.66', domain: 'htb.local', username: 'svc-alfresco', password: 's3rvice' } };
+['exam', 'lab'].forEach((m) => {
+  const pl = C.plan(credFacts, PACK, { mode: m, fill: credFill });
+  const leaky = pl.batch.filter((b) => {
+    const v = OBOL.command.fillAll(b.action, credFacts, credFill)[b.cmdIndex];
+    return (OBOL.command.unfilledTokens((v && v.filled) || '') || []).some((t) => GATE[t]);
+  }).map((b) => b.action.id);
+  ok(leaky.length === 0, m + ' batch has no command with an unmet earned token' + (leaky.length ? ' (leaked: ' + leaky.join(',') + ')' : ''));
+});
 
 // ── buildScript: shebang, markers, var header, no token leaks ───────────────────────────────────────
 const ctx = { pack: PACK, facts: facts, params: { target: '10.10.10.5', domain: 'htb.local' }, phase: exam.phase, mode: 'exam' };

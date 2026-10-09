@@ -174,7 +174,7 @@
     var opts = optsFor(eng);
     var mode = modeOf(eng);
     var pack = OBOL.packs.actions();
-    var plan = OBOL.cruise.plan(facts, pack, { mode: mode });
+    var plan = OBOL.cruise.plan(facts, pack, { mode: mode, fill: opts });
 
     var html = '<section class="cruise">';
     html += '<div class="cr-top"><h1 class="route-h1">Cruise <span class="cr-exp">Experimental</span></h1></div>';
@@ -243,7 +243,7 @@
     U.on(mount, 'click', '.cr-dl', function (e) {
       e.preventDefault();
       var c = currentCtx();
-      var plan = OBOL.cruise.plan(c.facts, c.pack, { mode: c.mode });
+      var plan = OBOL.cruise.plan(c.facts, c.pack, { mode: c.mode, fill: c.opts });
       if (!plan.batch.length) { U.toast('No batch to export', 'err'); return; }
       var script = OBOL.cruise.buildScript(plan.batch, { pack: c.pack, facts: c.facts, params: c.opts.params, profile: c.opts.profile, workspace: c.opts.workspace, mode: c.mode, phase: plan.phase });
       download('cruise-' + (plan.phase || 'batch') + '-' + c.mode + '.sh', script);
@@ -253,7 +253,7 @@
     U.on(mount, 'click', '.cr-copyall', function (e) {
       e.preventDefault();
       var c = currentCtx();
-      var plan = OBOL.cruise.plan(c.facts, c.pack, { mode: c.mode });
+      var plan = OBOL.cruise.plan(c.facts, c.pack, { mode: c.mode, fill: c.opts });
       var lines = plan.batch.map(function (it) { return fill(it.action, c.facts, c.opts, it.cmdIndex).filled; }).filter(Boolean);
       U.copy(lines.join('\n')).then(function (ok) { U.toast(ok ? (lines.length + ' commands copied') : 'Copy failed', ok ? '' : 'err'); });
     });

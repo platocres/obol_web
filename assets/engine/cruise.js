@@ -32,6 +32,14 @@
   var SPRAY_RE = /spray|brute|bruteforce|hydra|medusa|ncrack|kerbrute|guess|cred-?stuff|password-?spray/i;
   // A move whose id reads as running an exploit / gaining code execution: never auto-batched.
   var EXPLOIT_RE = /exploit|rce|overflow|deserial|payload|revshell|reverse-?shell|eternalblue|bluekeep|zerologon|nopac|petitpotam|printnightmare|smbghost|log4shell|shellshock|struts|dirtycow|pwnkit|ms\d\d-\d\d\d|cve-\d/i;
+  // Produced fact kinds that mean the move ATTACKS rather than enumerates: it forges/replays tickets,
+  // establishes persistence, moves laterally, creates an AD object, or dumps domain secrets (DCSync /
+  // NTDS). These are checkpoints even though they do not produce an access.* kind. (Roasting produces
+  // hash.asrep/hash.tgs for offline cracking and BloodHound produces ad.graph.*, so those stay safe.)
+  var ATTACK_PRODUCE = {
+    'persistence.domain': 1, 'persistence.windows': 1, 'persistence.linux': 1, 'lateral.movement': 1,
+    'loot.ntds': 1, 'hash.krbtgt': 1, 'kerberos.tickets': 1, 'ad.computer_added': 1,
+  };
 
   function phaseOf(action) { try { return (P && P.phaseOfAction) ? P.phaseOfAction(action) : (action.phase || ''); } catch (e) { return action.phase || ''; } }
 
@@ -41,7 +49,7 @@
     var pr = (action && action.produces) || [];
     for (var i = 0; i < pr.length; i++) {
       var k = pr[i];
-      if (FOOTHOLD_KINDS[k] || /^(access|foothold|session)\./.test(k) || /_confirmed$/.test(k)) return true;
+      if (FOOTHOLD_KINDS[k] || ATTACK_PRODUCE[k] || /^(access|foothold|session)\./.test(k) || /_confirmed$/.test(k)) return true;
     }
     return false;
   }
@@ -86,14 +94,39 @@
     return out;
   }
 
-  function cmdIndexFor(action, facts) {
+  // EARNED tokens: values meant to come from a proven fact the operator has NOT earned yet. A command
+  // still carrying one of these after filling is "gated" (its time has not come), exactly as Next Steps
+  // treats it (path.js GATE_TOKENS, keep in sync). Cruise must never batch a gated command: it would
+  // print a dead `<domain_sid>` the operator cannot fill, so the move waits for a later batch, surfacing
+  // filled once the feeding fact is pasted in.
+  var GATE_TOKENS = { domain: 1, basedn: 1, dc: 1, dc_netbios: 1, dc_account: 1, user: 1, password: 1,
+    nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, ca_name: 1, template: 1,
+    pfx: 1, nmap_ports: 1, krbtgt_hash: 1 };
+
+  function cmdGated(filledCmd) {
+    var s = (filledCmd && filledCmd.filled) || '';
+    var un = (OBOL.command && OBOL.command.unfilledTokens) ? (OBOL.command.unfilledTokens(s) || []) : [];
+    for (var i = 0; i < un.length; i++) { if (GATE_TOKENS[un[i]]) return true; }
+    return false;
+  }
+
+  // The command index to batch for a move: the preferred (house-toolkit / switchless) command that is NOT
+  // gated on an unearned fact. Returns -1 when EVERY command is gated, i.e. the move is eligible but NOT
+  // ready, so Cruise drops it from the batch (it reappears, filled, in a later batch). Mirrors Next Steps'
+  // firstCmdIndexForLocus so the two surfaces hide the same dead commands.
+  function readyCmdIndex(action, facts, fillOpts) {
+    var filled = null;
+    try { filled = OBOL.command.fillAll(action, facts, fillOpts || {}); } catch (e) { filled = null; }
+    if (!filled || !filled.length) return 0;   // no command variants to gate: batch as-is
+    var anyUngated = false;
+    for (var i = 0; i < filled.length; i++) { if (!cmdGated(filled[i])) { anyUngated = true; break; } }
+    if (!anyUngated) return -1;                // every command waits on an unearned fact: not ready
     try {
-      if (OBOL.pack && OBOL.pack.preferredCommandIndex) {
-        var idx = OBOL.pack.preferredCommandIndex(action, action.locus, facts);
-        return (typeof idx === 'number' && idx >= 0) ? idx : 0;
-      }
+      var idx = OBOL.pack.preferredCommandIndex(action, action.locus, facts || null, function (cmd, j) { return cmdGated(filled[j]); });
+      if (typeof idx === 'number' && idx >= 0 && !cmdGated(filled[idx])) return idx;
     } catch (e) {}
-    return 0;
+    for (var k = 0; k < filled.length; k++) { if (!cmdGated(filled[k])) return k; }
+    return -1;
   }
 
   function reasonFor(action, tier, mode) {
@@ -129,6 +162,7 @@
     try { ranked = OBOL.pack.rankActions(facts, pack, { doneIds: doneIds }) || []; } catch (e) { ranked = []; }
 
     var fp = frontierPhase(facts);
+    var fillOpts = opts.fill || {};
     var batch = [], checkpoint = null, produced = {};
 
     for (var i = 0; i < ranked.length; i++) {
@@ -139,8 +173,13 @@
         if (!checkpoint) checkpoint = { action: a, tier: tier, reason: reasonFor(a, tier, mode) };
         continue;   // keep scanning: a lower-ranked safe move can still batch
       }
+      // Fill-gate: skip a move whose every command still needs an unearned fact (e.g. a Golden Ticket
+      // waiting on the domain SID). It is not ready, so it is not batched; it returns in a later batch
+      // once the feeding fact is pasted in.
+      var idx = readyCmdIndex(a, facts, fillOpts);
+      if (idx < 0) continue;
       if (batch.length < cap) {
-        batch.push({ action: a, cmdIndex: cmdIndexFor(a, facts), tier: tier });
+        batch.push({ action: a, cmdIndex: idx, tier: tier });
         (a.produces || []).forEach(function (k) { produced[k] = 1; });
       }
     }
