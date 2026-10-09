@@ -272,19 +272,6 @@
       ? '<div class="ws-root">' + (rootStr ? '<code>' + esc(rootStr) + '</code>' : '') + syncedStamp + '</div>'
       : '';
     var loInsight = loadoutInsight();
-    // WS2: exam-readiness — the report scores ZERO without proof, so surface proof coverage up front.
-    var proofFiles = 0;
-    vfs.folders.forEach(function (fo) { fo.files.forEach(function (f) { if (f.flag && f.status === 'captured') proofFiles++; }); });
-    var shots = (eng.screenshots || []).length;
-    var nTargets = (eng.targets || []).length;
-    var proofN = proofFiles + shots;
-    var proofStrip = nTargets ? ('<div class="ws-proof ' + (proofN ? 'ws-proof-ok' : 'ws-proof-warn') + '">'
-      + '<div class="ws-proof-top"><span class="ws-proof-h">' + (proofN ? '✓ Report Proof' : '⚠ Report Proof') + '</span>'
-      + '<span class="ws-proof-v">' + shots + ' shot' + (shots === 1 ? '' : 's') + ' · ' + proofFiles + ' flag file' + (proofFiles === 1 ? '' : 's') + ' · ' + nTargets + ' target' + (nTargets === 1 ? '' : 's') + '</span></div>'
-      + '<div class="ws-proof-note">' + (proofN
-          ? 'Every owned target needs a flag file + an interactive screenshot showing the flag AND your IP, or the report scores it zero.'
-          : 'No proof captured yet, the OSCP report scores zero without a flag + an interactive screenshot per target.')
-      + ' <a class="ws-file-link" href="#/report">Open Report →</a></div></div>') : '';
     var invite = started
       ? '<p class="ws-invite">A live picture of your Kali working directory. obol pencils in the files the coach\'s next moves'
         + ' will create, then confirms each one once you run it and paste the output on <a href="#/evidence">Evidence</a>.'
@@ -328,7 +315,7 @@
         + (fo.key === 'www' ? wwwHelper(fo.files.length) : '') + '</div>';
     }).join('');
     var footer = hidden ? ('<div class="ws-foot"><button type="button" class="ws-restore" data-x>' + hidden + ' Hidden · Restore</button></div>') : '';
-    return '<aside class="ws-panel">' + head + rootLine + proofStrip + loInsight + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
+    return '<aside class="ws-panel">' + head + rootLine + loInsight + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
   }
 
   // Per-engagement Workspace, enriched with GLOBAL Loadout insight: what your synced box can drop into
