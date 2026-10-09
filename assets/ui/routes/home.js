@@ -727,8 +727,7 @@
     var configured = isConfigured(active, factCount);
     return '<section class="engscreen">'
       + '<h1 class="route-h1">Engagements</h1>'
-      + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.'
-      + ' <span class="kbd-hint">Tip: press <kbd>' + (navigator.platform && /mac/i.test(navigator.platform) ? '⌘' : 'Ctrl') + '</kbd>+<kbd>K</kbd> anywhere to search commands.</span></p>'
+      + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.</p>'
       + (configured
           ? hubDashboard()
           : '<div class="eng-top">' + gettingStarted() + workspacePanel() + '</div>')

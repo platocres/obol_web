@@ -97,11 +97,13 @@
       + '<label class="ctx-pill ctx-target' + (tgt.disabled ? ' is-empty' : '') + '" title="Active target, fills {{target}} and routes anchorless pastes">'
       + '<span class="ctx-ic" aria-hidden="true">' + ic('crosshair') + '</span><span class="ctx-k">Target</span>'
       + '<select id="ctx-target" aria-label="Active target"' + (tgt.disabled ? ' disabled' : '') + '>' + tgt.html + '</select></label>'
+      + (OBOL.tips ? OBOL.tips.html() : '')
       + '<button type="button" class="ctx-focus" data-ctx-focus aria-pressed="' + (focusOn() ? 'true' : 'false') + '" title="Focus mode: hide secondary panels for low-distraction work">' + ic('spark') + '<span>Focus</span></button>'
       + '</div>';
     html += '<nav class="ctx-subnav" aria-label="Engagement surfaces"' + (onEng ? '' : ' hidden') + '>' + (onEng ? subnavHtml(name) : '') + '</nav>';
     bar.innerHTML = html;
     bar.setAttribute('data-eng', onEng ? '1' : '0');
+    if (OBOL.tips && OBOL.tips.refresh) OBOL.tips.refresh();
   }
 
   function wire() {
