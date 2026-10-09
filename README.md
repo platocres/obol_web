@@ -81,6 +81,35 @@ you are.
 
 ---
 
+## Learn the methodology, with a why for every move
+
+New to this, or want to drill a lane? The **Learn** tab teaches offensive security as a decision
+graph: 280 moves across 11 lanes (recon, web, credentials, Linux and Windows privesc, shells,
+pivoting, AD, and more), each one a card you can study at your own pace. No box required.
+
+<p align="center">
+  <img src="screenshots/learn.png" alt="The Learn landing: Run A Cold Box, Walk The Attack Graph, Walk The Decision Tree, Browse By Open Port, Setup Your Box, Start An Engagement, over the by-lane methodology grid" width="100%">
+</p>
+
+Open any move and you get the real teaching: a plain-language **why this, why now**, the lead-ups that
+would have gotten you here, and a **Watch It Run** replay that plays the command and its output one
+line at a time, then reads the result back to you in plain English.
+
+<p align="center">
+  <img src="screenshots/learn-move.png" alt="A Learn module for Crack a Kerberoast Hash: the why box, the lead-up chain, and the Watch It Run replay showing hashcat cracking the ticket" width="92%">
+</p>
+
+Every move carries a **field-notes bench**, the handful of ways you'd actually do it in the field,
+each a tabbed technique with a filled command, its own replay, and an honest note on what you walk
+away with and what to watch out for. The same notes appear beside the live coach when you're working
+a real box, so what you learn is exactly what you run.
+
+<p align="center">
+  <img src="screenshots/learn-train.png" alt="A Learn module's field-notes bench: hashcat vs john guidance, what the move unlocks, and tabbed techniques each with a filled command and replay" width="92%">
+</p>
+
+---
+
 ## Turn a SharpHound dump into a route to Domain Admin
 
 Drop a SharpHound `.zip` (or BloodHound-CE `.json` files) on the **Domain** tab and OBOL parses the
