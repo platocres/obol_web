@@ -132,7 +132,7 @@
         "font:700 20px ui-monospace,monospace;letter-spacing:.04em;color:#FFD34D;text-shadow:0 2px 10px rgba(0,0,0,.6),0 0 18px rgba(255,211,77,.5);opacity:0;transition:opacity .18s ease;white-space:nowrap;";
       (document.body || document.documentElement).appendChild(bannerEl);
     }
-    bannerEl.textContent = loot ? ("✨ loot found — " + m.label) : ("◉ PWNED — " + m.label);
+    bannerEl.innerHTML = loot ? (OBOL.ic('spark') + " loot found: " + m.label) : ("◉ PWNED: " + m.label);
     bannerEl.style.color = loot ? "#FFE9A8" : "#FFD34D"; bannerEl.style.opacity = "1";
     clearTimeout(bannerTimer); bannerTimer = setTimeout(function () { if (bannerEl) bannerEl.style.opacity = "0"; }, 1400);
   }
@@ -159,7 +159,7 @@
         "font:800 44px ui-monospace,monospace;letter-spacing:.06em;text-align:center;opacity:0;transition:opacity .16s ease,transform .28s cubic-bezier(.2,1.4,.4,1);text-shadow:0 2px 18px rgba(0,0,0,.7);white-space:nowrap;";
       (document.body || document.documentElement).appendChild(levelEl);
     }
-    levelEl.innerHTML = '<div style="color:#FFD34D">★ LEVEL UP! ★</div><div style="font-size:20px;margin-top:6px;color:#7CF6C8">privilege escalation — ' + (label || "") + '</div>';
+    levelEl.innerHTML = '<div style="color:#FFD34D">★ LEVEL UP! ★</div><div style="font-size:20px;margin-top:6px;color:#7CF6C8">privilege escalation' + (label ? ': ' + label : "") + '</div>';
     void levelEl.offsetWidth; levelEl.style.opacity = "1"; levelEl.style.transform = "translate(-50%,-50%) scale(1)";
     spawn({ tier: "jackpot", label: "LEVEL UP", coins: 18 });
     setTimeout(function () { spawn({ tier: "jackpot", label: "LEVEL UP", coins: 14 }); }, 180);

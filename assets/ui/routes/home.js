@@ -11,6 +11,18 @@
   var U = OBOL.util;
   function esc(s) { return U.esc(s); }
 
+  // Which tunnel tool the connectivity chooser is showing. Ligolo-ng is the recommended default
+  // (a real routed interface). Lives for the session; the selection just re-renders the panel.
+  var _tunnelSel = 'ligolo';
+  // Which troubleshooter symptom is open (null = none). Session-lived; picking one re-renders.
+  var _ptrSym = null;
+  // A diagnosed-but-unresolved pivot problem turns the connectivity edge amber. Keyed per engagement
+  // so it does not bleed across runs; set when the doctor returns a non-healthy verdict, cleared on a
+  // healthy one or when the operator dismisses it.
+  function troubleKey() { var e = OBOL.store.active() || {}; return 'obol.pivotTrouble:' + (e.id || 'x'); }
+  function troubleOn() { try { return localStorage.getItem(troubleKey()) === '1'; } catch (e) { return false; } }
+  function setTrouble(on) { try { if (on) localStorage.setItem(troubleKey(), '1'); else localStorage.removeItem(troubleKey()); } catch (e) {} }
+
   // Extract IPs and CIDRs from arbitrary pasted text (obol-local `scope paste` filter).
   var IP_RE = /\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b/g;
   function extractScope(text) {
@@ -44,8 +56,16 @@
   }
 
   function machineOptions(selected) {
-    return '<option value="">— machine type (optional) —</option>' + OBOL.profile.listMachineTypes().map(function (m) {
-      return '<option value="' + esc(m.id) + '"' + (m.id === selected ? ' selected' : '') + '>' + esc(m.name) + '</option>';
+    return '<option value="">Machine Type (Optional)</option>' + OBOL.profile.listMachineTypes().map(function (m) {
+      return '<option value="' + esc(m.id) + '"' + (m.id === selected ? ' selected' : '') + '>' + esc(OBOL.store.runLabel(m)) + '</option>';
+    }).join('');
+  }
+  // The learner's personal attack-order preference. Defaults to 'balanced' (no nudge). See WORKFLOWS in
+  // profile.js — this only nudges Next Steps within a phase, it never overrides an evidence-driven #1.
+  function workflowOptions(selected) {
+    var sel = (OBOL.profile.normalizeWorkflow && OBOL.profile.normalizeWorkflow(selected)) || OBOL.profile.DEFAULT_WORKFLOW;
+    return (OBOL.profile.listWorkflows ? OBOL.profile.listWorkflows() : []).map(function (w) {
+      return '<option value="' + esc(w.id) + '"' + (w.id === sel ? ' selected' : '') + '>' + esc(w.name) + '</option>';
     }).join('');
   }
 
@@ -66,11 +86,11 @@
   // First-run guidance shown in place of the active-run panel until the engagement is set up.
   function gettingStarted() {
     return '<div class="eng-welcome">'
-      + '<div class="eng-welcome-h">Set up your first engagement</div>'
-      + '<p class="eng-welcome-sub">obol coaches your next move from the evidence you collect — no run is configured yet. Set one up below and the coach takes over from there.</p>'
+      + '<div class="eng-welcome-h">Set Up Your First Engagement</div>'
+      + '<p class="eng-welcome-sub">obol coaches your next move from the evidence you collect, no run is configured yet. Set one up below and the coach takes over from there.</p>'
       + '<ol class="eng-steps">'
-      + '<li><span class="eng-step-n">1</span><div><b>Pick a platform</b><span>Hack The Box, OffSec OSCP, CTF… it decides the flags, proof rules, and report shape.</span></div></li>'
-      + '<li><span class="eng-step-n">2</span><div><b>Set your scope</b><span>Paste the target IPs / CIDRs for the box or lab (junk is filtered).</span></div></li>'
+      + '<li><span class="eng-step-n">1</span><div><b>Pick A Platform</b><span>Hack The Box, OffSec OSCP, CTF… it decides the flags, proof rules, and report shape.</span></div></li>'
+      + '<li><span class="eng-step-n">2</span><div><b>Set Your Scope</b><span>Paste the target IPs / CIDRs for the box or lab (junk is filtered).</span></div></li>'
       + '<li><span class="eng-step-n">3</span><div><b>Launch</b><span>obol opens the coach and ranks your first commands. The phase bar lights up as you collect facts.</span></div></li>'
       + '</ol>'
       + '<button type="button" class="btn-primary eng-jump">Set It Up Below ↓</button>'
@@ -84,7 +104,6 @@
     var preset = (OBOL.profile.PRESETS[prof.platform] || OBOL.profile.PRESETS.custom);
     var exam = OBOL.profile.isExamPlatform(prof.platform);
     var facts = OBOL.store.factSet();
-    var ranked = OBOL.pack.nextActions(facts, OBOL.packs.actions());
     // Nothing is "reached" until something is actually known. With no facts yet (a brand-new run,
     // no targets), recon isn't done — it's simply where you start, so mark it the frontier and
     // leave every phase unlit rather than lighting recon/enum on an empty engagement.
@@ -92,26 +111,40 @@
     var reached = started ? OBOL.phases.phaseIndex(OBOL.phases.targetPhase(facts)) : -1;
     var frontier = started ? OBOL.phases.frontierIndex(facts) : 0;
     var spine = OBOL.phases.PHASES.map(function (p, i) {
-      return '<span class="spine-node ph-' + p + (i <= reached ? ' reached' : '') + (i === frontier ? ' frontier' : '') + '">' + p + '</span>';
+      return '<span class="spine-node ph-' + p + (i <= reached ? ' reached' : '') + (i === frontier ? ' frontier' : '') + '">' + U.titleCase(p) + '</span>';
     }).join('<span class="spine-sep">›</span>');
     var mt = prof.machine_type ? (OBOL.profile.MACHINE_TYPES[prof.machine_type] || {}).name : '';
-    var nt = (eng.targets || []).length, nf = Object.keys(facts.kinds()).length;
+    var nf = Object.keys(facts.kinds()).length;
     var isCustom = !prof.platform || prof.platform === 'custom';
+    // at-a-glance counters, folded into the summary box so there's no separate vitals row and the
+    // empty right side of the phase-spine row carries real engagement state instead of dead space.
+    var infos = targetInfos(eng);
+    var owned = infos.filter(function (i) { return i.lvl === 'privileged'; }).length;
+    var totFlags = infos.reduce(function (a, i) { return a + i.flags; }, 0);
+    var creds = (OBOL.creds && OBOL.creds.gather()) || [];
+    function stat(href, cls, val, label, sub) {
+      var inner = '<span class="eng-stat-v ' + cls + '">' + val + '</span>'
+        + '<span class="eng-stat-k">' + esc(label) + (sub ? '<span class="eng-stat-sub">' + esc(sub) + '</span>' : '') + '</span>';
+      return href ? '<a class="eng-stat" href="' + href + '">' + inner + '</a>' : '<span class="eng-stat">' + inner + '</span>';
+    }
+    var stats = '<div class="eng-stats">'
+      + stat('#/targets', 'es-targets', infos.length, infos.length === 1 ? 'Target' : 'Targets', owned ? (owned + ' Owned') : '')
+      + stat('', 'es-flags', totFlags, totFlags === 1 ? 'Flag' : 'Flags', '')
+      + stat('#/creds', 'es-creds', creds.length, creds.length === 1 ? 'Credential' : 'Credentials', '')
+      + stat('', 'es-facts', nf, nf === 1 ? 'Fact' : 'Facts', '')
+      + '</div>';
     return '<div class="eng-active">'
       + '<div class="eng-active-head">'
-      + '<div><div class="eng-active-name">' + esc(eng.name) + '</div>'
+      + '<div><div class="eng-active-name">' + esc(OBOL.store.runLabel(eng)) + '</div>'
       + '<div class="eng-badges">'
       // only show a platform badge for a real platform — "Custom" told the user nothing
       + (isCustom ? '' : '<span class="pf-badge ' + (exam ? 'exam' : 'lab') + '">' + esc(preset.name) + (exam ? ' · exam' : '') + '</span>')
       + (mt ? '<span class="pill">' + esc(mt) + '</span>' : '')
       + (prof.osid ? '<span class="pill">OSID ' + esc(prof.osid) + '</span>' : '')
-      + '<span class="pill">' + nt + ' Target' + (nt === 1 ? '' : 's') + '</span>'
-      + '<span class="pill">' + nf + ' Fact' + (nf === 1 ? '' : 's') + '</span>'
       + '</div></div>'
       + '<a class="btn-primary" href="#/path">Open Coach →</a>'
       + '</div>'
-      + '<div class="home-spine">' + spine + '</div>'
-      + (ranked.length ? ('<div class="eng-nextmove"><span class="mini-label">Next Move</span> ' + esc(ranked[0].title) + '</div>') : '')
+      + '<div class="eng-mid"><div class="home-spine">' + spine + '</div>' + stats + '</div>'
       + engagementPath()
       + '</div>';
   }
@@ -141,11 +174,14 @@
     var rel = OBOL.vfs.relOf(f.path, root);
     var badge = f.facts.length ? ('<span class="ws-badge">' + f.facts.length + ' Fact' + (f.facts.length === 1 ? '' : 's') + '</span>') : '';
     var suggested = f.status === 'expected' && f.origin === 'suggested';
+    // WS4: a captured file that proved credential/hash facts flows straight into the Creds tracker.
+    var credsLink = (f.facts || []).some(function (k) { return /^(credential\.|hash\.)/.test(k); })
+      ? '<a class="ws-file-link" href="#/creds">Use these in Creds →</a>' : '';
     // a one-word state tag so the tree reads at a glance without expanding a row.
-    var tag = f.status === 'captured' ? '' : suggested ? '<span class="ws-tag ws-tag-sugg">suggested</span>'
-      : f.unknown ? '<span class="ws-tag ws-tag-unk">on disk</span>'
-      : f.manual ? '<span class="ws-tag ws-tag-man">added</span>'
-      : f.confirmed ? '<span class="ws-tag ws-tag-conf">on disk</span>' : '<span class="ws-tag ws-tag-exp">expected</span>';
+    var tag = f.status === 'captured' ? '' : suggested ? '<span class="ws-tag ws-tag-sugg">Suggested</span>'
+      : f.unknown ? '<span class="ws-tag ws-tag-unk">On Disk</span>'
+      : f.manual ? '<span class="ws-tag ws-tag-man">Added</span>'
+      : f.confirmed ? '<span class="ws-tag ws-tag-conf">On Disk</span>' : '<span class="ws-tag ws-tag-exp">Expected</span>';
     var cmdBlock = f.command ? '<div class="ws-file-cmd"><span class="mini-label">Command</span><code>' + esc(f.command) + '</code></div>' : '';
     var body;
     if (f.image) {
@@ -153,22 +189,23 @@
     } else if (f.status === 'captured') {
       // drill-down: the raw command output as a mini terminal, plus what it proved and where to review it.
       var out = String(f.output || '').replace(/\s+$/, '');
-      var capped = out.length > 4000 ? out.slice(0, 4000) + '\n… (truncated — full output in the Run Log)' : out;
+      var capped = out.length > 4000 ? out.slice(0, 4000) + '\n… (truncated, full output in the Run Log)' : out;
       body = cmdBlock
-        + (capped ? '<pre class="ws-mini-term">' + esc(capped) + '</pre>' : '<div class="ws-file-note">Captured — no text body.</div>')
+        + (capped ? '<pre class="ws-mini-term">' + esc(capped) + '</pre>' : '<div class="ws-file-note">Captured, no text body.</div>')
         + factLine(f.facts)
-        + '<a class="ws-file-link" href="#/history">Review in the Run Log →</a>';
+        + '<div class="ws-file-links"><a class="ws-file-link" href="#/history">Review in the Run Log →</a>' + credsLink + '</div>';
     } else if (suggested) {
       // anticipated: the coach is recommending a move that writes this file. obol assumes you are
       // probably about to create it and pencils it in — it becomes real once you run and paste it.
       body = '<div class="ws-file-note">The coach is suggesting a move that creates this file'
-        + (f.title ? ' (<strong>' + esc(f.title) + '</strong>)' : '') + '. Pencilled in — run it, then paste the output to capture it.</div>'
+        + (f.title ? ' (<strong>' + esc(f.title) + '</strong>)' : '') + '. Pencilled in, run it, then paste the output to capture it.</div>'
         + cmdBlock
-        + '<a class="ws-file-link" href="' + captureHref(f) + '">Run it, then capture it here →</a>';
+        + '<div class="ws-file-links"><a class="ws-file-link" href="#/path">Open the move in Next Steps →</a>'
+        + '<a class="ws-file-link" href="' + captureHref(f) + '">Capture its output →</a></div>';
     } else if (f.unknown) {
       // a disk-sync turned this up but obol has no move that made it — stay on the same page, invite it.
       body = '<div class="ws-file-note">Found on your disk by a workspace sync. obol doesn\'t know this one yet'
-        + (f.size ? ' (' + esc(fsize(f.size)) + ')' : '') + ' — paste its contents and the parsers will read whatever they recognize.</div>'
+        + (f.size ? ' (' + esc(fsize(f.size)) + ')' : '') + '. Paste its contents and the parsers will read whatever they recognize.</div>'
         + '<a class="ws-file-link" href="#/evidence">Paste its contents on Evidence →</a>';
     } else if (f.manual) {
       body = '<div class="ws-file-note">You added this file by hand. Paste its contents on Evidence to mint any facts it proves.</div>'
@@ -187,9 +224,14 @@
     var desc = OBOL.vfs.describe ? ('<div class="ws-file-desc">' + esc(OBOL.vfs.describe(f)) + '</div>') : '';
     var cls = 'ws-file ws-' + f.status + (suggested ? ' ws-suggested' : '') + (f.confirmed ? ' ws-confirmed' : '')
       + (f.unknown ? ' ws-unknown' : '') + (f.manual ? ' ws-manual' : '') + (f.flag ? ' ws-flag' : '');
+    // WS1: a suggested file reads as a to-do — show the move that creates it right in the row.
+    var fromTag = (suggested && f.title) ? '<span class="ws-from" title="' + U.attr('Created by: ' + f.title) + '">↪ ' + esc(f.title) + '</span>' : '';
+    // WS5: copy the file's full path without expanding.
+    var copyPath = '<button type="button" class="ws-copy-path" data-copy="' + U.attr(f.path || rel) + '" title="Copy path">⧉</button>';
     return '<details class="' + cls + '" data-rel="' + U.attr(rel) + '">'
-      + '<summary><span class="ws-dot"></span><span class="ws-file-name">' + esc(f.name) + '</span>' + tag + badge
+      + '<summary><span class="ws-dot"></span><span class="ws-file-name">' + esc(f.name) + '</span>' + tag + badge + fromTag
       + (f.at ? '<span class="ws-when">' + esc(ago(f.at)) + '</span>' : '')
+      + copyPath
       + '<button type="button" class="ws-rm" data-rel="' + U.attr(rel) + '" title="Remove from workspace" aria-label="Remove ' + U.attr(f.name) + '">×</button>'
       + '</summary>'
       + '<div class="ws-file-body">' + desc + body + '</div></details>';
@@ -199,7 +241,7 @@
   function syncBlock(eng) {
     var cmd = (OBOL.workspace && OBOL.workspace.snapshotCmd) ? OBOL.workspace.snapshotCmd(eng) : '';
     if (!cmd) return '';
-    return '<details class="ws-sync"><summary>Sync From Your Disk <span class="ws-sync-tag">bulk-match the whole folder</span></summary>'
+    return '<details class="ws-sync"><summary>Sync From Your Disk <span class="ws-sync-tag">Bulk-Match The Whole Folder</span></summary>'
       + '<p class="ws-sync-hint">Run this in your working directory and paste the output back. obol confirms the files it predicted and adopts any it didn\'t know about (you can then paste their contents to mint facts). Nothing is executed here.</p>'
       + '<div class="ws-sync-cmd"><code id="ws-snap-code">' + esc(cmd) + '</code>'
       + '<button type="button" class="btn-copy ws-snap-copy" data-copy="ws-snap-code">copy</button></div>'
@@ -222,8 +264,14 @@
       + (vfs.total ? ('<span class="ws-counts"><span class="ws-c-cap">' + vfs.captured + ' File' + (vfs.captured === 1 ? '' : 's') + ' Captured</span>'
           + (vfs.expected ? ' · <span class="ws-c-exp">' + vfs.expected + ' Pending</span>' : '') + '</span>') : '')
       + '</div>';
-    var rootLine = '<div class="ws-root"><code>' + esc(vfs.root) + '</code>'
-      + (ov.syncedAt ? '<span class="ws-synced-at">Synced ' + esc(ago(ov.syncedAt)) + '</span>' : '') + '</div>';
+    // Only show the root path when it's a real directory — an unconfigured run defaults to ".", which rendered
+    // as a lone stray dot. When there's nothing to show, drop the line entirely (keep a synced-at stamp if any).
+    var rootStr = (vfs.root && vfs.root !== '.') ? vfs.root : '';
+    var syncedStamp = ov.syncedAt ? '<span class="ws-synced-at">Synced ' + esc(ago(ov.syncedAt)) + '</span>' : '';
+    var rootLine = (rootStr || syncedStamp)
+      ? '<div class="ws-root">' + (rootStr ? '<code>' + esc(rootStr) + '</code>' : '') + syncedStamp + '</div>'
+      : '';
+    var loInsight = loadoutInsight();
     var invite = started
       ? '<p class="ws-invite">A live picture of your Kali working directory. obol pencils in the files the coach\'s next moves'
         + ' will create, then confirms each one once you run it and paste the output on <a href="#/evidence">Evidence</a>.'
@@ -231,23 +279,114 @@
       : '<p class="ws-invite">This mirrors your Kali working directory. It\'s empty until you start: run a move from'
         + ' <a href="#/path">Next Steps</a> and paste its output on <a href="#/evidence">Evidence</a>, and the files you'
         + ' generate show up here as you go.</p>';
+    // what each skeleton folder is for — shown in place of a bare "Empty" so an empty workspace still teaches.
+    var WS_PURPOSE = {
+      scans: 'Scan + enumeration output (nmap, gobuster, enum4linux…)',
+      loot: 'Creds, hashes, and files pulled off targets',
+      exploit: 'Exploit code + payloads you build or fetch',
+      www: 'Files you host and serve to targets',
+      proof: 'Flags + proof screenshots for the report',
+      other: 'Anything else in your working directory',
+    };
+    // WS3: www/ is the serve directory — give it a one-click serve command + a "stage your Loadout payloads
+    // into www/" copy, closing the Loadout → serve → deliver loop in the place you actually serve from.
+    var wwwDir = (vfs.root && vfs.root !== '.') ? (vfs.root.replace(/\/+$/, '') + '/www') : 'www';
+    function wwwHelper(hasFiles) {
+      var serveCmd = 'cd ' + wwwDir + ' && python3 -m http.server 80';
+      var stageCmd = 'cp ~/.obol/arsenal/win/* ' + wwwDir + '/ 2>/dev/null';
+      // Collapsed by default: at the start of a run there's nothing to serve, so keep it out of the way;
+      // when you reach delivery, the summary tells you it's here and one click reveals the commands.
+      return '<details class="ws-www"' + (hasFiles ? ' open' : '') + '>'
+        + '<summary class="ws-www-sum">Serve To Targets <span class="ws-www-hint">Host &amp; Stage Payloads</span></summary>'
+        + '<div class="ws-www-body">'
+        + '<div class="ws-www-row"><span class="ws-www-l">Start Server</span>'
+        + '<code class="ws-copyval" data-copy="' + U.attr(serveCmd) + '" title="Click to copy">' + esc(serveCmd) + '</code></div>'
+        + '<div class="ws-www-row"><span class="ws-www-l">Stage Loadout Payloads</span>'
+        + '<code class="ws-copyval" data-copy="' + U.attr(stageCmd) + '" title="Click to copy">' + esc(stageCmd) + '</code></div></div></details>';
+    }
     var tree = vfs.folders.map(function (fo) {
       var files = fo.files.map(function (f) { return fileRow(f, vfs.root); }).join('');
+      var emptyHint = WS_PURPOSE[fo.key] || 'Empty';
       return '<div class="ws-folder' + (fo.files.length ? '' : ' ws-empty') + '">'
         + '<div class="ws-folder-h"><span class="ws-folder-name">' + esc(fo.label) + '</span>'
         + (fo.files.length ? '<span class="ws-folder-count">' + fo.files.length + '</span>' : '')
         + '<button type="button" class="ws-add" data-folder="' + U.attr(fo.key) + '" title="Add a file to ' + esc(fo.label) + '" aria-label="Add a file to ' + esc(fo.label) + '">+</button></div>'
-        + (files || '<div class="ws-folder-empty">Empty</div>') + '</div>';
+        + (files || '<div class="ws-folder-empty">' + esc(emptyHint) + '</div>')
+        + (fo.key === 'www' ? wwwHelper(fo.files.length) : '') + '</div>';
     }).join('');
     var footer = hidden ? ('<div class="ws-foot"><button type="button" class="ws-restore" data-x>' + hidden + ' Hidden · Restore</button></div>') : '';
-    return '<aside class="ws-panel">' + head + rootLine + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
+    return '<aside class="ws-panel">' + head + rootLine + loInsight + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
   }
 
-  // The engagement-wide Attack Path ribbon (identical to a single target's when scope is one host).
+  // Per-engagement Workspace, enriched with GLOBAL Loadout insight: what your synced box can drop into
+  // this engagement's www/ (staged binaries) and which wordlists are on disk. Read-only, from the
+  // per-browser arsenal profile; absent until the operator syncs a box on the Loadout tab.
+  function loadoutInsight() {
+    var p; try { p = JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { p = null; }
+    if (!p) return '';
+    var staged = (p.staged || []).slice(0, 10), wl = Object.keys(p.wordlists || {});
+    if (!staged.length && !wl.length) return '';
+    var chips = staged.map(function (f) { return '<span class="ws-lo-chip">' + esc(f) + '</span>'; }).join('');
+    return '<div class="ws-lo"><a class="ws-lo-h" href="#/loadout">From Your Loadout ↗</a>'
+      + (staged.length ? '<div class="ws-lo-grp"><span class="ws-lo-lbl">Staged, Ready To Serve</span>' + chips + '</div>' : '')
+      + (wl.length ? '<div class="ws-lo-grp"><span class="ws-lo-lbl">Wordlists</span>' + wl.map(function (w) { return '<span class="ws-lo-chip">' + esc(w) + '</span>'; }).join('') + '</div>' : '')
+      + '</div>';
+  }
+
+  // per-target last-activity timestamp, from the Run Log entries tagged to that host (best-effort:
+  // an activity carries target/scope only when it was captured against a known host).
+  function lastActivityAt(ip, acts) {
+    var t = 0;
+    (acts || []).forEach(function (a) {
+      if (a && a.at && a.at > t && (a.target === ip || a.scope === 'host:' + ip)) t = a.at;
+    });
+    return t;
+  }
+
+  // The engagement Attack Path, one COLLAPSIBLE row per target. The summary line carries that box's
+  // identity + access + OS/ports + flags + its own next move + last activity, all at a glance; expand
+  // a row to see its full "what led to what" ribbon (reused from chainview.hostFlow, so a single-box
+  // run is byte-for-byte that target's page). A single target opens by default; with several, they
+  // collapse to scannable rows. The per-target open/closed choice is remembered per browser.
   function engagementPath() {
-    var flow = OBOL.chainview ? OBOL.chainview.engagement() : '';
-    if (!flow) return '';
-    return '<div class="eng-apath"><h2 class="coach-sec-h">Attack Path — What Led to What</h2>' + flow + '</div>';
+    var eng = OBOL.store.active(); if (!eng) return '';
+    var infos = targetInfos(eng);
+    if (!infos.length) return '';
+    var acts = eng.activities || [];
+    var engId = OBOL.store.activeId();
+    var single = infos.length === 1;
+    var rows = infos.map(function (info) {
+      var ip = info.ip, b = info.badge;
+      var idn = OBOL.store.targetIdentity ? OBOL.store.targetIdentity(ip) : { ip: ip, hostname: info.host, domain: info.domain };
+      var host = idn.hostname || info.host || '';
+      function idPair(k, v) { return '<span class="apath-id-pair"><span class="apath-id-k">' + k + '</span><span class="apath-id-v">' + esc(v) + '</span></span>'; }
+      var portsHtml = info.ports.length
+        ? '<span class="apath-id-pair apath-ports"><span class="apath-id-k">Open Ports</span>'
+            + info.ports.map(function (p) { return '<span class="apath-port">' + esc(p) + '</span>'; }).join('') + '</span>'
+        : '';
+      var idHtml = (host ? idPair('Hostname', host) : '') + idPair('IP', ip)
+        + (idn.domain ? idPair('Domain', idn.domain) : '')
+        + (info.os ? idPair('OS', info.os) : '')
+        + portsHtml;
+      var acc = '<span class="hb-acc ' + b.cls + '">' + b.label + '</span>';
+      var flags = '<span class="apath-row-flags' + (info.flags ? '' : ' none') + '">' + OBOL.ic('flag') + ' ' + (info.flags || 0) + '</span>';
+      var next = info.next ? '<span class="apath-row-next" title="' + U.attr(info.next) + '">&rarr; ' + esc(info.next) + '</span>'
+        : (info.lvl === 'privileged' ? '<span class="apath-row-next done">Owned</span>' : '');
+      var la = lastActivityAt(ip, acts);
+      var when = la ? '<span class="apath-row-when" title="Last recorded activity on this box">' + esc(ago(la)) + '</span>' : '';
+      var meta = '<span class="apath-row-meta">' + acc + flags + next + when + '</span>';
+      var flow = OBOL.chainview ? OBOL.chainview.hostFlow(ip, acts) : '';
+      var body = flow
+        ? '<h3 class="apath-body-h">Attack Path: What Led To What</h3>' + flow
+        : '<div class="apath-empty">No moves recorded on this box yet. Run a move and paste its output on <a href="#/evidence">Evidence</a>, and its path fills in here.</div>';
+      var key = 'obol.apath:' + engId + ':' + ip;
+      var remembered = null; try { remembered = localStorage.getItem(key); } catch (e) {}
+      var open = remembered == null ? single : remembered === '1';
+      return '<details class="apath-host apath-row"' + (open ? ' open' : '') + ' data-apath-key="' + U.attr(key) + '">'
+        + '<summary class="apath-row-sum"><span class="apath-row-id">' + idHtml + '</span>' + meta + '</summary>'
+        + '<div class="apath-row-body">' + body + '</div></details>';
+    }).join('');
+    return '<div class="eng-apath"><h2 class="coach-sec-h">Engagement Targets</h2><div class="apath-rows">' + rows + '</div></div>';
   }
 
   function libraryList() {
@@ -256,12 +395,328 @@
       var preset = (OBOL.profile.PRESETS[prof.platform] || OBOL.profile.PRESETS.custom);
       var active = e.id === OBOL.store.activeId();
       return '<li class="lib-row' + (active ? ' active' : '') + '">'
-        + '<button class="lib-open" data-eng="' + esc(e.id) + '"><span class="lib-name">' + esc(e.name) + '</span>'
+        + '<button class="lib-open" data-eng="' + esc(e.id) + '"><span class="lib-name">' + esc(OBOL.store.runLabel(e)) + '</span>'
         + '<span class="pill">' + esc(preset.name) + '</span>'
         + '<span class="lib-meta">' + (e.targets || []).length + ' Targets · ' + (e.facts || []).length + ' Facts</span></button>'
         + '<button class="lib-del" data-eng="' + esc(e.id) + '" title="Delete">×</button></li>';
     }).join('');
     return '<ul class="lib-list">' + rows + '</ul>';
+  }
+
+  // ---- the engagement hub: the active engagement at a glance (all targets + engagement-wide
+  //      surfaces). Everything below is a projection of the fact ledger, so nothing is invented. ----
+  var ACC_BADGE = {
+    privileged: { label: 'OWNED', cls: 'hb-acc-root', rank: 4 },
+    foothold: { label: 'FOOTHOLD', cls: 'hb-acc-foot', rank: 3 },
+    credentialed: { label: 'CREDS', cls: 'hb-acc-cred', rank: 2 },
+    enumerated: { label: 'ENUM', cls: 'hb-acc-enum', rank: 1 },
+    discovered: { label: 'SCAN', cls: 'hb-acc-disc', rank: 0 },
+  };
+  function hostLevel(f) {
+    if (f.has('access.system') || f.has('access.admin') || f.has('access.root')) return 'privileged';
+    if (f.has('foothold.windows') || f.has('foothold.linux') || f.has('access.shell') || f.has('winrm.authenticated') || f.has('foothold.webshell')) return 'foothold';
+    if (f.has('credential.available') || f.has('credential.candidate')) return 'credentialed';
+    if (f.facts.some(function (x) { return x.state === 'supported' && x.kind.indexOf('target.') !== 0 && x.kind.indexOf('host.') !== 0; })) return 'enumerated';
+    return 'discovered';
+  }
+  function hostPorts(f) {
+    var seen = {}, out = [];
+    f.facts.forEach(function (x) { if (x.state !== 'supported') return; var p = (x.value || {}).port; if (p != null && !seen[p]) { seen[p] = 1; out.push(+p); } });
+    return out.sort(function (a, b) { return a - b; });
+  }
+  function hostFlags(f) {
+    var n = 0; ['objective.root_flag', 'objective.local_flag', 'objective.flag'].forEach(function (k) { n += f.values(k).length; });
+    return n;
+  }
+  // Readable OS, domain, and reachable-service facts for a target's dossier (shared by the hub board
+  // and the Targets screen). All read-only projections of proven facts — nothing is invented.
+  function fval(f, k) { try { return (f.values(k) || [])[0] || null; } catch (e) { return null; } }
+  function hostOs(f, t) {
+    if (t && t.os) return t.os;
+    // Prefer a SPECIFIC product string ("Windows Server 2016 Standard 14393") that a parser carved
+    // from an authoritative labelled line; fall back to the bare family, capitalized.
+    var specific = '', fam = '';
+    ['host.os_hint', 'host.os', 'host.os_family'].forEach(function (k) {
+      (f.values(k) || []).forEach(function (v) {
+        v = v || {};
+        var os = (v.os || '').trim();
+        if (!specific && os && /[\s\d]/.test(os)) specific = os;
+        if (!fam) fam = (v.family || v.name || (/^(windows|linux)$/i.test(os) ? os : '')).trim();
+      });
+    });
+    if (specific) return specific;
+    return fam ? fam.charAt(0).toUpperCase() + fam.slice(1) : '';
+  }
+  function hostDomain(f) {
+    // ad.domain_known carries the domain under `name`; host.domain under `domain`. Check both, and since
+    // ad.domain_known is found first, missing `name` here left the card domain blank while the target page
+    // (which reads name) showed it.
+    var v = fval(f, 'ad.domain_known') || fval(f, 'host.domain') || fval(f, 'ad.dc_candidate') || {};
+    return (v && (v.domain || v.name || v.fqdn || v.dns_domain)) || '';
+  }
+  function hostServices(f) {
+    var out = [], seen = {};
+    (f.facts || []).forEach(function (x) {
+      if (x.state !== 'supported') return;
+      var m = /^([a-z0-9]+)\.reachable$/.exec(x.kind);
+      if (m) { var s = m[1].toUpperCase(); if (!seen[s]) { seen[s] = 1; out.push(s); } }
+    });
+    return out;
+  }
+  function pinnedSet(eng) { return ((eng.ui || {}).pinnedTargets) || []; }
+
+  // gather per-target projection used by the vitals + the Targets tab
+  function targetInfos(eng) {
+    var pack = OBOL.packs.actions();
+    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
+    var pins = pinnedSet(eng);
+    return (eng.targets || []).map(function (t) {
+      var ip = t.ip || t.id;
+      var f = OBOL.store.factSetForTarget(ip);
+      var lvl = hostLevel(f);
+      // Same ranker as the coach (v2), report-only writeup checks excluded, frontier-ready preferred —
+      // so a target card's "→ next" matches what the coach would actually tell you to do on that box.
+      var moves = OBOL.pack.rankActions(f, pack, { focusPrefixes: focus })
+        .filter(function (a) { return !(OBOL.pack.isReportOnly && OBOL.pack.isReportOnly(a, pack)); });
+      var nextMove = moves.filter(function (a) { return OBOL.phases.prematurity(a, f) === 0; })[0] || moves[0];
+      return {
+        t: t, ip: ip, host: t.hostname || '', os: hostOs(f, t),
+        lvl: lvl, badge: ACC_BADGE[lvl], ports: hostPorts(f), flags: hostFlags(f),
+        domain: hostDomain(f), svcs: hostServices(f),
+        next: nextMove ? nextMove.title : '', pinned: pins.indexOf(t.id) >= 0,
+      };
+    });
+  }
+  // Shared so the Targets screen can show the same rich per-target dossier (OS, domain, ports, access,
+  // next move) the hub board shows, from one projection — the two never drift.
+  OBOL.targets = OBOL.targets || {};
+  OBOL.targets.all = function (eng) { return targetInfos(eng || OBOL.store.active() || { targets: [] }); };
+  OBOL.targets.ACC_BADGE = ACC_BADGE;
+
+  function surfaceCard(href, ic, name, count, desc) {
+    return '<a class="hb-surf" href="' + href + '"><span class="hb-surf-ic">' + OBOL.ic(ic) + '</span>'
+      + '<span class="hb-surf-t">' + esc(name) + (count != null ? '<span class="hb-surf-n">' + esc(count) + '</span>' : '') + '</span>'
+      + '<span class="hb-surf-d">' + esc(desc) + '</span></a>';
+  }
+
+  // ── Connectivity: the pivots obol has charted + a tunnel-setup chooser ──
+  // Read the pivot-lane facts (minted by parsers/pivot.js) into one per-host projection.
+  function connData(eng) {
+    var fs = OBOL.store.factSet();
+    var SUP = OBOL.facts.ProofState.SUPPORTED;
+    var names = {};
+    (eng.targets || []).forEach(function (t) { names[t.ip || t.id] = t.hostname || ''; });
+    var byHost = {};
+    function host(ip) { return byHost[ip] || (byHost[ip] = { ip: ip, hostname: names[ip] || '', subnets: {}, multihomed: false, tunnels: [] }); }
+    (fs.facts || []).forEach(function (f) {
+      if (f.state !== SUP) return;
+      var ip = (f.scope || '').indexOf('host:') === 0 ? f.scope.slice(5) : '';
+      if (!ip) return;
+      if (f.kind === 'scan.local.interfaces' || f.kind === 'scan.local.routes') {
+        var h = host(ip); (f.value.subnets || []).forEach(function (s) { h.subnets[s] = 1; });
+      } else if (f.kind === 'host.multihomed') {
+        host(ip).multihomed = true;
+      } else if (f.kind === 'tunnel.socks' || f.kind === 'tunnel.route' || f.kind === 'tunnel.dns') {
+        host(ip).tunnels.push({ kind: f.kind.split('.')[1], via: f.value.via || '' });
+      }
+    });
+    return Object.keys(byHost).map(function (ip) {
+      var h = byHost[ip]; h.subnetList = Object.keys(h.subnets); return h;
+    }).filter(function (h) { return h.subnetList.length || h.tunnels.length || h.multihomed; });
+  }
+
+  // The tool picker: Ligolo-ng first and flagged "recommended", the rest swappable. Shows the
+  // selected tool's when-to-use line, a before-you-start prereq, and its setup steps. The steps
+  // are rendered by the shared OBOL.renderTunnelSteps (data/tunnels.js) on the SAME data-stage keys
+  // the coach's staging guide uses, so a step ticked here shows ticked there and vice-versa.
+  function tunnelChooser(params) {
+    var tools = OBOL.TUNNELS || [];
+    if (!tools.length || !OBOL.renderTunnelSteps) return '';
+    var sel = tools.filter(function (t) { return t.key === _tunnelSel; })[0] || tools[0];
+    var tabs = tools.map(function (t) {
+      var on = t.key === sel.key;
+      return '<button type="button" class="conn-tool' + (on ? ' on' : '') + '" data-tunnel-sel="' + esc(t.key) + '" aria-pressed="' + (on ? 'true' : 'false') + '">'
+        + '<span class="conn-tool-n">' + esc(t.name) + '</span>'
+        + (t.rec ? '<span class="conn-rec">Recommended</span>' : '')
+        + '</button>';
+    }).join('');
+    return '<div class="conn-chooser">'
+      + '<div class="conn-tool-row" role="group" aria-label="Choose a tunnel tool">' + tabs + '</div>'
+      + '<div class="conn-sel"><p class="conn-sel-when">' + esc(sel.when || sel.summary) + '</p>'
+      + (sel.prereq ? '<p class="stage-prereq"><span class="stage-prereq-l">Before You Start:</span> ' + esc(sel.prereq) + '</p>' : '')
+      // The full step-by-step guide is long; keep it collapsed so the hub rail stays compact (the coach's
+      // Setup guide works the same way). The shared tick state is preserved across both.
+      + '<details class="conn-steps"><summary><span class="stage-sum-l">Setup Steps</span>'
+      + '<span class="stage-sum-d">step by step, on your box and the host</span></summary>'
+      + OBOL.renderTunnelSteps(sel, params) + '</details>'
+      + '</div></div>';
+  }
+
+  // You → pivot host → reachable subnet, rendered as nodes carrying their own text (so the graphic
+  // is never the only carrier of meaning). The glow on a live edge is decorative CSS; the tunnel
+  // state is also written as a text tag ("via ligolo" / "no tunnel yet").
+  function connMap(pivots, params) {
+    var lhost = (params && params.lhost) || 'your box';
+    // The amber "needs attention" state is carried by a single container class on .hb-conn (set from
+    // the persisted trouble flag at render, toggled live by the troubleshooter), so there is one source
+    // of truth for it, not per-row logic that could disagree.
+    return '<div class="conn-map" role="group" aria-label="Pivot connectivity map">' + pivots.map(function (h) {
+      var label = h.hostname || h.ip;
+      var subs = h.subnetList.length ? h.subnetList.join(', ') : 'Subnet Unknown';
+      var via = h.tunnels.length ? ('Via ' + h.tunnels.map(function (t) { return t.via || t.kind; }).join(', ')) : '';
+      var live = h.tunnels.length;
+      return '<div class="conn-row">'
+        + '<span class="conn-node conn-you">' + OBOL.ic('box') + '<span class="conn-node-l">You</span><span class="conn-node-s">' + esc(lhost) + '</span></span>'
+        + '<span class="conn-edge' + (live ? ' conn-edge-live' : '') + '"><span class="conn-edge-line" aria-hidden="true"></span>'
+        + '<span class="conn-edge-tag' + (live ? '' : ' conn-edge-off') + '">' + esc(via || 'No Tunnel Yet') + '</span>'
+        + '<span class="conn-edge-warntag" aria-hidden="true">Needs Attention</span></span>'
+        + '<span class="conn-node conn-pivot">' + OBOL.ic('host') + '<span class="conn-node-l">' + esc(label) + '</span>'
+        + (h.hostname ? '<span class="conn-node-s">' + esc(h.ip) + '</span>' : '') + (h.multihomed ? '<span class="conn-tag-mh">Multihomed</span>' : '') + '</span>'
+        + '<span class="conn-edge"><span class="conn-edge-line" aria-hidden="true"></span></span>'
+        + '<span class="conn-node conn-net">' + OBOL.ic('disk') + '<span class="conn-node-l">' + esc(subs) + '</span><span class="conn-node-s">Reachable Subnet</span></span>'
+        + '</div>';
+    }).join('') + '</div>';
+  }
+
+  // ── The pivot troubleshooter: a calm, symptom-first diagnostic that expands off this panel ──
+  // You pick what you SEE in plain language (not the cause); it hands machine-labelled probe
+  // commands; you paste the result; OBOL.pivotDoctor returns a verdict with the problem line and a
+  // fix. It only claims what the output supports, and stands down to a checklist when it cannot tell.
+  function troubleProbe(p, params) {
+    var cmd = OBOL.pivotDoctor.fill(p.cmd, params);
+    var whereLbl = p.where === 'host' ? 'On The Target Host' : 'On Your Kali Box';
+    return '<li class="stage-step stage-' + (p.where === 'host' ? 'host' : 'local') + '">'
+      + '<div class="stage-body" style="margin-left:0"><div class="stage-wl">'
+      + '<span class="stage-where stage-where-' + (p.where === 'host' ? 'host' : 'local') + '">' + esc(whereLbl) + '</span>'
+      + '<span class="stage-title">' + esc(p.label) + '</span></div>'
+      + '<div class="stage-why">' + esc(p.why) + '</div>'
+      + '<div class="stage-cmd"><code>' + esc(cmd) + '</code><button class="btn-copy stage-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button></div>'
+      + '</div></li>';
+  }
+  function troublePanel(params) {
+    if (!OBOL.pivotDoctor) return '';
+    var syms = OBOL.pivotDoctor.symptoms();
+    var chips = syms.map(function (s) {
+      var on = s.key === _ptrSym;
+      return '<button type="button" class="ptr-sym' + (on ? ' on' : '') + '" data-ptr-sym="' + esc(s.key) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(s.symptom) + '</button>';
+    }).join('');
+    var body = '';
+    var sel = _ptrSym ? OBOL.pivotDoctor.get(_ptrSym) : null;
+    if (sel) {
+      var probes = '<ol class="stage-steps ptr-probes">' + sel.probes.map(function (p) { return troubleProbe(p, params); }).join('') + '</ol>';
+      body = '<div class="ptr-body">'
+        + '<p class="ptr-hint">' + esc(sel.hint) + '</p>'
+        + '<div class="ptr-probe-h">Run one of these, then paste what it prints:</div>'
+        + probes
+        + '<textarea class="ptr-paste" data-ptr-paste placeholder="Paste the probe output here. obol reads it and tells you what is wrong and how to fix it." spellcheck="false"></textarea>'
+        + '<div class="ptr-row"><button type="button" class="btn-primary ptr-go" data-ptr-go="' + esc(sel.key) + '">Diagnose</button>'
+        + '<button type="button" class="btn-ghost ptr-clear" data-ptr-clear>Clear</button></div>'
+        + '<div class="ptr-verdict" role="status" aria-live="polite"></div>'
+        + '</div>';
+    }
+    return '<details class="conn-trouble"' + (_ptrSym ? ' open' : '') + '><summary><span class="ct-sum-l">Pivot Not Working?</span>'
+      + '<span class="ct-sum-d">Describe what you see — obol diagnoses it.</span></summary>'
+      + '<p class="ptr-lead">Pick what you are seeing. You do not need to know the cause.</p>'
+      + '<div class="ptr-syms" role="group" aria-label="What are you seeing?">' + chips + '</div>'
+      + body + '</details>';
+  }
+
+  // Render the doctor's verdict: a healthy all-clear, a likely-cause box with the highlighted line
+  // from the paste and a copy-ready fix, or an honest "could not pin it" with the plain checklist.
+  function verdictHtml(res) {
+    if (!res) return '';
+    if (res.empty) return '<div class="ptr-v ptr-v-note">' + esc(res.verdict) + '</div>';
+    if (!res.matched) {
+      var items = (res.checklist || []).map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('');
+      return '<div class="ptr-v ptr-v-note"><p class="ptr-v-say">' + esc(res.verdict) + '</p>'
+        + (items ? '<ul class="ptr-checklist">' + items + '</ul>' : '') + '</div>';
+    }
+    var cls = res.healthy ? 'ptr-v-ok' : 'ptr-v-bad';
+    var lbl = res.healthy ? 'Looks healthy' : 'Likely cause';
+    var line = res.line ? '<div class="ptr-line"><span class="ptr-line-l">From Your Output</span> <code>' + esc(res.line) + '</code></div>' : '';
+    var fix = res.fix ? '<div class="ptr-fix"><span class="ptr-fix-l">' + (res.healthy ? 'Next' : 'Try This Fix') + '</span>'
+      + '<div class="stage-cmd"><code>' + esc(res.fix) + '</code><button class="btn-copy stage-copy" data-copy="' + U.attr(res.fix) + '" title="Copy command">copy</button></div></div>' : '';
+    return '<div class="ptr-v ' + cls + '"><div class="ptr-v-h">' + esc(lbl) + '</div>'
+      + '<p class="ptr-v-say">' + esc(res.verdict) + '</p>' + line + fix + '</div>';
+  }
+  function setConnWarn(mount, on) { var hb = mount.querySelector('.hb-conn'); if (hb) hb.classList.toggle('hb-conn--warn', on); }
+
+  function connPanel() {
+    var eng = OBOL.store.active();
+    var params = eng.params || {};
+    var pivots = connData(eng);
+    // No pivot yet → keep this compact: a single slim hint, NOT the full tunnel chooser + step guide +
+    // troubleshooter, which otherwise make the hub rail enormously tall (and shove the rest of the page
+    // down). The chooser appears only once there's an actual pivot to set up.
+    if (!pivots.length) {
+      return '<div class="hb-conn"><div class="hb-sec-h"><h2>Connectivity</h2></div>'
+        + '<div class="conn-empty">No Pivots Charted Yet. Paste <code>ip a</code> or <code>ip route</code> from a foothold and obol maps the subnets it can reach — a tunnel chooser appears here once there’s a pivot to set up.</div></div>';
+    }
+    return '<div class="hb-conn' + (troubleOn() ? ' hb-conn--warn' : '') + '"><div class="hb-sec-h"><h2>Connectivity</h2>'
+      + '<span class="hb-sec-n">' + pivots.length + ' pivot' + (pivots.length > 1 ? 's' : '') + '</span>'
+      + '<span class="conn-warnchip">' + OBOL.ic('bolt') + 'Needs Attention</span>'
+      + '</div>' + connMap(pivots, params)
+      + '<div class="conn-chooser-h"><h3>Set Up A Tunnel</h3><span class="conn-chooser-sub">Pick a tool, then follow the steps on each machine.</span></div>'
+      + tunnelChooser(params)
+      + troublePanel(params)
+      + '</div>';
+  }
+
+  function hubDashboard() {
+    var eng = OBOL.store.active();
+    var infos = targetInfos(eng);
+    var creds = (OBOL.creds && OBOL.creds.gather()) || [];
+
+    // the "your next move" anchor — the SAME top move the coach (Next Steps) shows. Uses the shared
+    // OBOL.coach.topMove() so the Hub and the coach can never disagree (and report-only writeup checks
+    // are already excluded there), rather than the old v1 ranker which drifted from the coach's v2.
+    var pack = OBOL.packs.actions();
+    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
+    var nm = (OBOL.coach && OBOL.coach.topMove) ? OBOL.coach.topMove()
+      : OBOL.pack.rankActions(OBOL.store.factSet(), pack, { focusPrefixes: focus })[0];
+    var nmHtml;
+    if (nm) {
+      var v = OBOL.command.fillCommand(nm, OBOL.store.factSet(), { params: eng.params || {}, profile: eng.profile }, 0);
+      nmHtml = '<div class="hb-anchor"><div class="hb-anchor-l">Your Next Move</div>'
+        + '<div class="hb-anchor-body"><span class="hb-anchor-t">' + esc(nm.title) + '</span>'
+        + '<code class="hb-anchor-cmd">' + esc(v.filled) + '</code>'
+        + '<button class="btn-copy hb-copy" data-copy="' + U.attr(v.filled) + '">copy</button></div>'
+        + '<a class="hb-anchor-more" href="#/path">Full Coach →</a></div>';
+    } else {
+      nmHtml = '<div class="hb-anchor hb-anchor-empty"><div class="hb-anchor-l">Your Next Move</div>'
+        + '<div class="hb-anchor-body">Paste some evidence and the coach will rank your next command here.</div>'
+        + '<a class="hb-anchor-more" href="#/evidence">Go to Evidence →</a></div>';
+    }
+
+    // recent activity (last few run-log entries)
+    var acts = (eng.activities || []).slice(-5).reverse().map(function (a) {
+      return '<li><span class="hb-log-t">' + esc(ago(a.at) || '') + '</span>' + esc(a.title || a.summary || a.cmd || 'activity') + '</li>';
+    }).join('');
+
+    // Targets live in their own tab now, so the hub drops the board. The engagement summary (phase
+    // spine + folded-in counters + attack path) is the hero, the Workspace fills the main column
+    // (readily visible, not buried below the fold), and the engagement-wide surfaces sit in the
+    // rail. The summary's Targets counter and a Surfaces card both deep-link to the Targets tab.
+    return '<section class="hub" aria-label="Engagement hub">'
+      + nmHtml
+      + activePanel()
+      + '<div class="hb-grid">'
+      + '<section class="hb-col-main" aria-label="Workspace">' + workspacePanel() + '</section>'
+      + '<aside class="hb-col-rail" aria-label="Engagement surfaces">'
+      + '<div class="hb-sec-h"><h2>Surfaces</h2></div>'
+      + '<div class="hb-surfs">'
+      + surfaceCard('#/targets', 'crosshair', 'Targets', infos.length, 'Every host, its access level, and its next move.')
+      + surfaceCard('#/map', 'host', 'Map', infos.length, 'Hosts, services, creds and the domain as one graph.')
+      + surfaceCard('#/domain', 'shield', 'Domain', null, 'SharpHound census and the owned-to-DA attack paths.')
+      + surfaceCard('#/creds', 'lock', 'Creds', creds.length, 'The credential reuse matrix across every host.')
+      + surfaceCard('#/findings', 'spark', 'Findings', null, 'Proof-bound findings, grouped for the report.')
+      + surfaceCard('#/report', 'disk', 'Report', null, 'The OSCP writeup, exported md / PDF / docx.')
+      + '</div>'
+      + connPanel()
+      + '<div class="hb-recent"><div class="hb-sec-h"><h2>Recent Activity</h2><a class="hb-sec-more" href="#/history">Run Log →</a></div>'
+      + (acts ? '<ul class="hb-log">' + acts + '</ul>' : '<div class="hb-log-empty">Nothing yet. Your commands and proofs will log here.</div>')
+      + '</div></aside>'
+      + '</div></section>';
   }
 
   function render() {
@@ -272,34 +727,38 @@
     var configured = isConfigured(active, factCount);
     return '<section class="engscreen">'
       + '<h1 class="route-h1">Engagements</h1>'
-      + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.'
-      + ' <span class="kbd-hint">Tip: press <kbd>' + (navigator.platform && /mac/i.test(navigator.platform) ? '⌘' : 'Ctrl') + '</kbd>+<kbd>K</kbd> anywhere to search commands.</span></p>'
-      + '<div class="eng-top">' + (configured ? activePanel() : gettingStarted()) + workspacePanel() + '</div>'
+      + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.</p>'
+      + (configured
+          ? hubDashboard()
+          : '<div class="eng-top">' + gettingStarted() + workspacePanel() + '</div>')
       + '<div class="eng-library"><div class="eng-library-head"><h2 class="coach-sec-h">Engagement Library</h2>'
       + '<details class="eng-danger-toggle"><summary>Manage / Reset</summary>'
       + '<div class="eng-danger"><div class="eng-danger-item"><div class="eng-danger-txt"><strong>Delete All Engagements</strong>'
       + '<span>Remove every saved run and its evidence. Keeps your skin &amp; appearance settings.</span></div>'
       + '<button class="btn-danger" id="eng-clear">Delete All Engagements</button></div>'
       + '<div class="eng-danger-item"><div class="eng-danger-txt"><strong>Full Reset</strong>'
-      + '<span>Erase <em>everything</em> obol saved in this browser — engagements, screenshots, and settings — and start completely fresh. A hard refresh (Ctrl+F5) does not do this.</span></div>'
-      + '<button class="btn-danger btn-danger-strong" id="eng-reset">Full Reset — Erase All Data</button></div>'
+      + '<span>Erase <em>everything</em> obol saved in this browser (engagements, screenshots, and settings) and start completely fresh. A hard refresh (Ctrl+F5) does not do this.</span></div>'
+      + '<button class="btn-danger btn-danger-strong" id="eng-reset">Full Reset, Erase All Data</button></div>'
       + '</div></details></div>'
       + libraryList() + '</div>'
-      + '<div class="eng-create" id="eng-setup"><h2 class="coach-sec-h">' + (configured ? 'New Engagement' : 'Set up your run') + '</h2>'
-      + '<label class="eng-field"><span>Name</span><input id="eng-name" placeholder="Name this run — e.g. “OSCP prep” or “Lab night 3”" autocomplete="off"></label>'
-      + '<div class="eng-field"><span>Platform profile</span><div class="pf-grid" id="pf-grid">' + platformCards(sel) + '</div></div>'
+      + '<div class="eng-create" id="eng-setup"><h2 class="coach-sec-h">' + (configured ? 'New Engagement' : 'Set Up Your Run') + '</h2>'
+      + '<label class="eng-field"><span>Name</span><input id="eng-name" placeholder="Name this run, e.g. “OSCP prep” or “Lab night 3”" autocomplete="off"></label>'
+      + '<div class="eng-field"><span>Platform Profile</span><div class="pf-grid" id="pf-grid">' + platformCards(sel) + '</div></div>'
       + '<div class="eng-row2">'
-      + '<label class="eng-field"><span>Machine type</span><select id="eng-mt">' + machineOptions(prof.machine_type || '') + '</select></label>'
-      + '<label class="eng-field pf-osid" id="pf-osid-wrap" style="display:none"><span>OSID (OffSec exam)</span><input id="eng-osid" placeholder="OS-XXXXX"></label>'
+      + '<label class="eng-field"><span>Machine Type</span><select id="eng-mt">' + machineOptions(prof.machine_type || '') + '</select></label>'
+      + '<label class="eng-field pf-osid" id="pf-osid-wrap" style="display:none"><span>OSID (OffSec Exam)</span><input id="eng-osid" placeholder="OS-XXXXX"></label>'
       + '<label class="eng-field pf-osid" id="pf-cand-wrap" style="display:none"><span>Candidate</span><input id="eng-cand" placeholder="Your name"></label>'
       + '</div>'
-      + '<label class="eng-field"><span>Scope / targets — paste IPs &amp; CIDRs (junk is filtered)</span>'
+      + '<label class="eng-field"><span>Your Workflow <span class="eng-field-opt">(how you like to attack a box)</span></span>'
+      + '<select id="eng-wf">' + workflowOptions(prof.workflow || '') + '</select></label>'
+      + '<div class="eng-field-hint">A gentle, predictable nudge to Next Steps — not a cage. <strong>Flags first</strong> keeps the user and admin flags ahead of pivoting (grab both, mark them off, then pivot); <strong>Map the network early</strong> surfaces multi-homing and tunnels as soon as they appear. The coach still leads with a clear evidence-driven move when there is one. Change it any time.</div>'
+      + '<label class="eng-field"><span>Scope / Targets <span class="eng-field-opt">(paste IPs &amp; CIDRs, junk is filtered)</span></span>'
       + '<textarea id="eng-scope" class="ev-textarea" style="min-height:90px" placeholder="10.10.10.10  10.10.10.20&#10;10.10.10.0/24"></textarea></label>'
-      + '<label class="eng-field"><span>Working directory <span class="eng-field-opt">(on your Kali box — optional)</span></span>'
+      + '<label class="eng-field"><span>Working Directory <span class="eng-field-opt">(on your Kali box, optional)</span></span>'
       + '<input id="eng-workdir" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
       + '<div class="eng-field-hint">obol fills output paths from this (<code>scans/</code>, <code>loot/</code>, <code>proof/</code>…) and gives you a one-line setup command. Leave blank for a sensible default.</div>'
       + '<div class="eng-row2">'
-      + '<label class="eng-field"><span>Your VM IP <span class="eng-field-opt">(attacker box — optional)</span></span>'
+      + '<label class="eng-field"><span>Your VM IP <span class="eng-field-opt">(attacker box, optional)</span></span>'
       + '<input id="eng-lhost" autocomplete="off" spellcheck="false" inputmode="decimal" placeholder="e.g. 10.10.14.9"></label>'
       + '<label class="eng-field"><span>Interface</span><select id="eng-iface">'
       + ['tun0', 'tun1', 'tap0', 'eth0', 'wlan0', 'vpn0', 'wg0'].map(function (i) { return '<option value="' + i + '"' + (i === 'tun0' ? ' selected' : '') + '>' + i + '</option>'; }).join('')
@@ -337,6 +796,65 @@
       if (nm) setTimeout(function () { try { nm.focus(); } catch (e) {} }, 300);
     });
 
+    // hub: copy the next-move anchor command
+    U.on(mount, 'click', '.btn-copy', function (e, b) {
+      U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+
+    // hub: remember each per-target Attack Path row's open/closed state per browser. The `toggle`
+    // event does not bubble, so bind it directly on each <details>; a re-render recreates the nodes,
+    // and the guard flag stops a double-bind if the same node somehow survives.
+    Array.prototype.forEach.call(mount.querySelectorAll('details[data-apath-key]'), function (d) {
+      if (d._apathBound) return; d._apathBound = true;
+      d.addEventListener('toggle', function () {
+        try { localStorage.setItem(d.getAttribute('data-apath-key'), d.open ? '1' : '0'); } catch (e) {}
+      });
+    });
+
+    // connectivity handlers. Bound ONCE on the persistent #view: the router re-runs mounted() on
+    // every in-place render, so a delegated U.on would stack up — harmless for idempotent handlers,
+    // but a stacked *toggle* (the step tick) fires an even number of times and cancels itself out.
+    if (!mount._obolConnBound) {
+      mount._obolConnBound = true;
+      // swap the selected tunnel tool (re-renders to show its setup steps)
+      U.on(mount, 'click', '[data-tunnel-sel]', function (e, t) {
+        _tunnelSel = t.getAttribute('data-tunnel-sel');
+        OBOL.router.render();
+      });
+      // tick a setup step done, in place (shared localStorage key with the coach's staging guide)
+      U.on(mount, 'click', '[data-stage]', function (e, t) {
+        var id = t.getAttribute('data-stage'), i = t.getAttribute('data-stage-i'), key = 'obol.stage:' + id + ':' + i;
+        var was; try { was = localStorage.getItem(key) === '1'; localStorage.setItem(key, was ? '0' : '1'); } catch (x) { was = false; }
+        var on = !was;
+        t.setAttribute('aria-checked', on ? 'true' : 'false');
+        t.innerHTML = on ? '✓' : '';
+        var li = t.closest('.stage-step'); if (li) li.classList.toggle('done', on);
+      });
+      // troubleshooter: pick a symptom (re-renders to reveal its probes + paste box)
+      U.on(mount, 'click', '[data-ptr-sym]', function (e, t) {
+        var k = t.getAttribute('data-ptr-sym');
+        _ptrSym = (_ptrSym === k) ? null : k;   // toggle off if re-clicked
+        OBOL.router.render();
+      });
+      // diagnose the pasted probe output, in place (so the paste and verdict survive); set/clear the
+      // amber "needs attention" edge state live via the container class.
+      U.on(mount, 'click', '[data-ptr-go]', function (e, t) {
+        var key = t.getAttribute('data-ptr-go');
+        var body = t.closest('.ptr-body'); if (!body) return;
+        var ta = body.querySelector('[data-ptr-paste]'), out = body.querySelector('.ptr-verdict');
+        var res = OBOL.pivotDoctor.diagnose(key, ta ? ta.value : '', (OBOL.store.active() || {}).params || {});
+        if (out) out.innerHTML = verdictHtml(res);
+        // a real, unresolved problem lights the edge amber; a healthy verdict clears it
+        if (res && res.matched && !res.healthy) { setTrouble(true); setConnWarn(mount, true); }
+        else if (res && res.matched && res.healthy) { setTrouble(false); setConnWarn(mount, false); }
+      });
+      // clear the current paste + verdict and drop the amber state (keeps the symptom open)
+      U.on(mount, 'click', '[data-ptr-clear]', function (e, t) {
+        setTrouble(false);
+        OBOL.router.render();
+      });
+    }
+
     // library: open / delete
     U.on(mount, 'click', '.lib-open', function (e, t) {
       OBOL.store.setActive(t.getAttribute('data-eng')).then(function () { OBOL.app.renderSidebar(); OBOL.router.render(); });
@@ -349,11 +867,11 @@
     // danger zone: delete all engagements (keeps prefs) / full reset (erase all browser data)
     U.on(mount, 'click', '#eng-clear', function () {
       if (!confirm('Delete ALL engagements and their evidence?\n\nThis cannot be undone. Your appearance settings are kept.')) return;
-      OBOL.store.clearEngagements().then(function () { try { U.toast('All engagements deleted — reloading'); } catch (e) {} setTimeout(function () { location.reload(); }, 150); });
+      OBOL.store.clearEngagements().then(function () { try { U.toast('All engagements deleted, reloading'); } catch (e) {} setTimeout(function () { location.reload(); }, 150); });
     });
     U.on(mount, 'click', '#eng-reset', function () {
-      if (!confirm('FULL RESET\n\nErase everything obol saved in this browser — every engagement, screenshot, and setting — and start completely fresh.\n\nThis cannot be undone. Continue?')) return;
-      OBOL.store.resetAll().then(function () { try { U.toast('All data cleared — reloading fresh'); } catch (e) {} setTimeout(function () { location.reload(); }, 200); });
+      if (!confirm('FULL RESET\n\nErase everything obol saved in this browser (every engagement, screenshot, and setting) and start completely fresh.\n\nThis cannot be undone. Continue?')) return;
+      OBOL.store.resetAll().then(function () { try { U.toast('All data cleared, reloading fresh'); } catch (e) {} setTimeout(function () { location.reload(); }, 200); });
     });
 
     // ── virtual workspace: keep the file tree in sync with the operator's real disk ──
@@ -379,7 +897,7 @@
     U.on(mount, 'click', '.ws-add', function (e, t) {
       e.preventDefault();
       var folder = t.getAttribute('data-folder') || 'other';
-      var raw = (window.prompt('Add a file to ' + folder + '/ — name it exactly as it is on your disk:', '') || '').trim();
+      var raw = (window.prompt('Add a file to ' + folder + '/, name it exactly as it is on your disk:', '') || '').trim();
       if (!raw) return;
       var lay = (OBOL.workspace && OBOL.workspace.LAYOUT) || {};
       var name = raw.replace(/^\/+/, '');
@@ -390,7 +908,7 @@
           ov.added.push({ path: rel, source: 'manual', at: Date.now() });
         }
       }, 'ws-add');
-      U.toast('Added ' + rel + ' — paste its contents on Evidence to mint facts');
+      U.toast('Added ' + rel + '. Paste its contents on Evidence to mint facts');
     });
     // restore everything the operator hid.
     U.on(mount, 'click', '.ws-restore', function (e) {
@@ -398,6 +916,11 @@
       updateOverrides(function (ov) { ov.removed = {}; }, 'ws-restore');
     });
     // copy the snapshot command.
+    U.on(mount, 'click', '.ws-copyval, .ws-copy-path', function (e, t) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (e && e.stopPropagation) e.stopPropagation();
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
     U.on(mount, 'click', '.ws-snap-copy', function (e, t) {
       var el = document.getElementById(t.getAttribute('data-copy'));
       if (el) U.copy(el.textContent).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
@@ -410,32 +933,44 @@
       var card = document.getElementById('ws-preview'), fresh = false;
       if (!card) { card = document.createElement('div'); card.id = 'ws-preview'; card.className = 'ws-preview'; card.hidden = true; document.body.appendChild(card); fresh = true; }
       function previewHtml(f) {
-        var tag = f.status === 'captured' ? 'captured' : f.origin === 'suggested' ? 'suggested'
-          : f.unknown ? 'on disk' : f.manual ? 'added' : f.confirmed ? 'on disk' : 'expected';
-        var head = '<div class="ws-pv-head"><span class="ws-pv-name">' + esc(f.name) + '</span><span class="ws-pv-tag ws-pv-' + esc(tag.replace(/\s+/g, '')) + '">' + esc(tag) + '</span></div>'
+        var tag = f.status === 'captured' ? 'Captured' : f.origin === 'suggested' ? 'Suggested'
+          : f.unknown ? 'On Disk' : f.manual ? 'Added' : f.confirmed ? 'On Disk' : 'Expected';
+        var head = '<div class="ws-pv-head"><span class="ws-pv-name">' + esc(f.name) + '</span><span class="ws-pv-tag ws-pv-' + esc(tag.replace(/\s+/g, '').toLowerCase()) + '">' + esc(tag) + '</span></div>'
           + '<div class="ws-pv-desc">' + esc(OBOL.vfs.describe(f)) + '</div>';
         // the capture bridge: a clear, clickable pointer to paste the file's CONTENTS on Evidence — the
         // only way a file's facts get minted (a directory sync confirms existence, never contents).
-        var cta = '<a class="ws-pv-cta" href="' + captureHref(f) + '">Paste Its Contents on Evidence →</a>';
+        var cta = '<a class="ws-pv-cta" href="' + captureHref(f) + '">Paste Its Contents On Evidence →</a>';
         var body;
         if (f.image) body = '<img class="ws-pv-img" src="' + esc(f.image) + '" alt="">';
         else if (f.status === 'captured' && f.output) {
           var lines = String(f.output).replace(/\s+$/, '').split(/\n/);
           var shown = lines.slice(0, 16).join('\n') + (lines.length > 16 ? '\n… ' + (lines.length - 16) + ' more line' + (lines.length - 16 === 1 ? '' : 's') : '');
           body = '<pre class="ws-pv-term">' + esc(shown) + '</pre>';
-        } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the coach — run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
+        } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the coach, run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
         else if (f.unknown) body = '<div class="ws-pv-note">Found on your disk by a sync. obol knows it exists but not what\'s inside.</div>' + cta;
-        else if (f.manual) body = '<div class="ws-pv-note">Added by hand. Syncing only confirms it exists — to mint facts, paste what\'s inside.</div>' + cta;
+        else if (f.manual) body = '<div class="ws-pv-note">Added by hand. Syncing only confirms it exists, to mint facts, paste what\'s inside.</div>' + cta;
         else body = '<div class="ws-pv-note">obol expects this file but hasn\'t received its output yet.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
         return head + body;
       }
       function place(row) {
-        var r = row.getBoundingClientRect();
         card.style.visibility = 'hidden'; card.hidden = false;
         var cw = card.offsetWidth, ch = card.offsetHeight;
-        var left = r.left - cw - 12;                 // prefer left of the right-rail row
-        if (left < 8) left = Math.min(r.right + 12, window.innerWidth - cw - 8);
-        var top = Math.min(Math.max(8, r.top), window.innerHeight - ch - 8);
+        var r = row.getBoundingClientRect();
+        var panel = row.closest('.ws-panel');
+        var left, top;
+        if (panel) {
+          // Dock the preview into the empty space inside the workspace, to the RIGHT of the file names,
+          // rather than floating it over the Surfaces rail. Right-align it within the panel and track
+          // the hovered row vertically.
+          var pr = panel.getBoundingClientRect();
+          left = pr.right - cw - 16;
+          if (left < pr.left + 8) left = pr.left + 8;   // narrow panel: keep it inside
+          top = Math.min(Math.max(8, r.top - 2), window.innerHeight - ch - 8);
+        } else {
+          left = r.left - cw - 12;                       // fallback: left of the row
+          if (left < 8) left = Math.min(r.right + 12, window.innerWidth - cw - 8);
+          top = Math.min(Math.max(8, r.top), window.innerHeight - ch - 8);
+        }
         card.style.left = Math.max(8, left) + 'px'; card.style.top = top + 'px';
         card.style.visibility = '';
       }
@@ -471,6 +1006,7 @@
       var name = (document.getElementById('eng-name').value || '').trim();
       var platform = (document.querySelector('input[name="pf-platform"]:checked') || {}).value || 'custom';
       var mt = (document.getElementById('eng-mt').value || '');
+      var wf = ((document.getElementById('eng-wf') || {}).value || '');
       var osid = (document.getElementById('eng-osid') || {}).value || '';
       var cand = (document.getElementById('eng-cand') || {}).value || '';
       var scopeText = (document.getElementById('eng-scope').value || '');
@@ -479,7 +1015,7 @@
       var lhostRaw = ((document.getElementById('eng-lhost') || {}).value || '').trim();
       var lhost = /^(\d{1,3}\.){3}\d{1,3}$/.test(lhostRaw) ? lhostRaw : '';
       var iface = ((document.getElementById('eng-iface') || {}).value || '').trim();
-      if (lhostRaw && !lhost) { U.toast('That VM IP doesn\'t look like an IPv4 address — ignoring it', 'err'); }
+      if (lhostRaw && !lhost) { U.toast('That VM IP doesn\'t look like an IPv4 address, ignoring it', 'err'); }
       if (!name) { name = (OBOL.profile.PRESETS[platform] || {}).name || 'Engagement'; }
 
       // If the active engagement is still the untouched default, configure it in place rather than
@@ -499,7 +1035,7 @@
         OBOL.store.update(function (e) {
           if (reuse) {
             e.name = name;
-            e.profile = Object.assign(e.profile || {}, { platform: platform, machine_type: mt, osid: osid.trim(), candidate: cand.trim(), scope: scope });
+            e.profile = Object.assign(e.profile || {}, { platform: platform, machine_type: mt, workflow: wf, osid: osid.trim(), candidate: cand.trim(), scope: scope });
             e.params = e.params || {}; e.params.platform = platform;
           }
           e.workspace = { root: root };
@@ -515,12 +1051,12 @@
         }, 'launch');
         if (facts.length) OBOL.store.addFacts(facts, 'launch');
         OBOL.app.renderSidebar();
-        U.toast(hosts.length ? ('Launched — ' + hosts.length + ' target(s) scoped') : 'Engagement created — add targets to begin');
+        U.toast(hosts.length ? ('Launched ' + hosts.length + ' target(s) scoped') : 'Engagement created, add targets to begin');
         OBOL.router.go('path');
       };
 
       if (reuse) { seed(); }
-      else { OBOL.store.createEngagement(name, { platform: platform, machine_type: mt, osid: osid.trim(), candidate: cand.trim(), scope: scope }).then(seed); }
+      else { OBOL.store.createEngagement(name, { platform: platform, machine_type: mt, workflow: wf, osid: osid.trim(), candidate: cand.trim(), scope: scope }).then(seed); }
     });
   }
 

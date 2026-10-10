@@ -55,6 +55,10 @@
     var scope = C._scope_for_domain(ws, domainName);
     _add(facts, mkFact('credential.plaintext', scope, value, S, source));
     _add(facts, mkFact('credential.available', scope, value, S, source));
+    // A credential you CRACKED from a hash (john/hashcat) is validated by construction: the crack proved
+    // the plaintext produces that account's own hash, so it needs no "does it work?" probe. Mark it so the
+    // Validate step settles for it. A dumped/found plaintext (mimikatz) is NOT auto-validated.
+    if (method === 'john' || method === 'hashcat') _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, via: method }, S, source));
   }
   C._add_plaintext_credential = _add_plaintext_credential;
 
@@ -122,6 +126,28 @@
   }
   C._parse_cracked_credentials = _parse_cracked_credentials;
 
+  // hydra (and medusa/ncrack, same shape) success lines:
+  //   [22][ssh] host: 10.10.10.10   login: bob   password: Summer2024
+  //   [80][http-post-form] host: 10.10.10.10   login: admin   password: Summer2024!
+  // A hit is a VALIDATED online credential, so mint credential.available (+ plaintext) per login.
+  // Conservative: only the bracketed-service success shape counts; a status/attempt line mints nothing.
+  var _HYDRA_RE = /\[(?<port>\d{1,5})\]\[(?<svc>[A-Za-z][\w-]*)\][^\n]*?\blogin:\s*(?<user>\S+)\s+password:\s*(?<pw>\S.*?)\s*$/gim;
+  function _parse_hydra(text, ws, command, source, facts) {
+    var h = 'host:' + ws.target, m, seen = {}, n = 0;
+    _HYDRA_RE.lastIndex = 0;
+    while ((m = _HYDRA_RE.exec(text))) {
+      var g = m.groups, key = g.svc + '|' + g.user + '|' + g.pw;
+      if (seen[key]) continue; seen[key] = 1; n++;
+      var cred = { user: g.user, password: g.pw, service: g.svc, port: +g.port, via: 'online-brute' };
+      _add(facts, mkFact('credential.available', h, cred, S, source));
+      _add(facts, mkFact('credential.plaintext', h, cred, S, source));
+      // An online-brute hit already PROVED the login against the live service, so it is validated.
+      _add(facts, mkFact('credential.validated', h, { user: g.user, service: g.svc, via: 'online-brute' }, S, source));
+    }
+    return n;
+  }
+  C._parse_hydra = _parse_hydra;
+
   function _parse_ntlm_dump(text, ws, command, source, facts) {
     var entries = [], seen = {}, krbtgtNt = '', domCounts = {};
     reAll(C._NTDS_HASH_RE, text).forEach(function (m) {
@@ -167,6 +193,103 @@
     }
   }
   C._parse_ntlm_dump = _parse_ntlm_dump;
+
+  // ── mimikatz credential dumps ────────────────────────────────────────────────────
+  // sekurlsa::logonpasswords blocks (`* Username : X` / `* NTLM : <32hex>` / `* Password : <clear>`)
+  // and lsadump::sam / lsadump::lsa output (`RID : … (nnn)` + `User : X` + `Hash NTLM: <32hex>` /
+  // `* NTLM : <hash>`). Mint hash.ntlm for every recovered NT hash and credential.plaintext for every
+  // cleartext password present; a full SAM/LSA/DCSync dump also earns loot.ntds. Conservative: a hash
+  // is recorded only when an accompanying username line set the current account, and `(null)` is skipped.
+  var _MIMI_SIG_RE = /sekurlsa::|lsadump::|crypto::capi|mimikatz\s+#|pypykatz|^Hash NTLM:/im;
+  var _MIMI_USERNAME_RE = /^\s*\*\s*Username\s*:\s*(?<user>.+?)\s*$/i;   // sekurlsa section user
+  var _MIMI_LSA_USER_RE = /^\s*User\s*:\s*(?<user>.+?)\s*$/i;            // lsadump RID-block user (not "User Name :")
+  var _MIMI_DOMAIN_RE = /^\s*\*\s*Domain\s*:\s*(?<dom>.+?)\s*$/i;
+  var _MIMI_RID_RE = /^\s*RID\s*:\s*[0-9a-fA-F]+\s*\((?<rid>\d+)\)/i;
+  var _MIMI_NTLM_RE = /^\s*(?:\*\s*)?(?:Hash\s+)?NTLM\s*:\s*(?<nt>[0-9a-fA-F]{32})\b/i;
+  var _MIMI_PASSWORD_RE = /^\s*\*\s*Password\s*:\s*(?<pw>.+?)\s*$/i;
+
+  function _looks_like_mimikatz(text) { return !!reSearch(_MIMI_SIG_RE, text || ''); }
+  C._looks_like_mimikatz = _looks_like_mimikatz;
+
+  function _parse_mimikatz(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    var h = 'host:' + ws.target, lc = (command || '').toLowerCase(), lowered = text.toLowerCase();
+    var entries = [], seen = {}, plainSeen = {}, curUser = '', curDomain = '', curRid = null;
+    text.split(/\r?\n/).forEach(function (raw) {
+      var um = _MIMI_USERNAME_RE.exec(raw) || _MIMI_LSA_USER_RE.exec(raw);
+      if (um) {
+        var u = um.groups.user.trim();
+        if (u.indexOf('\\') >= 0) curDomain = u.split('\\')[0].trim(); // lsadump `User : HTB\bob`
+        curUser = C._clean_username(u);
+        return;
+      }
+      var dm = _MIMI_DOMAIN_RE.exec(raw);
+      if (dm) { curDomain = dm.groups.dom.trim(); return; }
+      var rm = _MIMI_RID_RE.exec(raw);
+      if (rm) { curRid = parseInt(rm.groups.rid, 10); return; }
+      var nm = _MIMI_NTLM_RE.exec(raw);
+      if (nm && curUser && C._valid_username(curUser)) {
+        var nt = nm.groups.nt.toLowerCase(), key = curUser.toLowerCase() + '|' + nt;
+        if (!seen[key]) {
+          seen[key] = true;
+          var e = { user: curUser, nthash: nt };
+          if (curRid !== null) e.rid = curRid;
+          if (curDomain && curDomain !== '(null)') e.domain = curDomain;
+          entries.push(e);
+        }
+        return;
+      }
+      var pm = _MIMI_PASSWORD_RE.exec(raw);
+      if (pm && curUser && C._valid_username(curUser)) {
+        var pw = pm.groups.pw.trim();
+        if (pw && pw !== '(null)' && C._valid_password(pw)) {
+          var pk = curUser.toLowerCase() + '|' + pw;
+          if (!plainSeen[pk]) {
+            plainSeen[pk] = true;
+            var dom = (curDomain && curDomain.indexOf('.') >= 0) ? curDomain : '';
+            _add_plaintext_credential(facts, ws, source, curUser, pw, dom, 'mimikatz', '');
+          }
+        }
+      }
+    });
+    if (!entries.length) return;
+    _add(facts, mkFact('hash.ntlm', h, { count: entries.length, entries: entries, via: 'mimikatz' }, S, source));
+    _add(facts, mkFact('credential.candidate', h, { kind: 'ntlm_hash', count: entries.length, via: 'mimikatz' }, S, source));
+    // A full SAM/LSA/DCSync dump hands you every local/domain account hash — surface it as loot.ntds.
+    if (lc.indexOf('lsadump') >= 0 || lowered.indexOf('lsadump::') >= 0) {
+      _add(facts, mkFact('loot.ntds', h, { count: entries.length, method: 'lsadump' }, S, source));
+    }
+  }
+  C._parse_mimikatz = _parse_mimikatz;
+
+  // ── MSCache2 / DCC2 cached domain-logon hashes ───────────────────────────────────
+  // secretsdump `-o`/cached output and mimikatz `lsadump::cache` surface domain creds that were cached
+  // for offline logon as `$DCC2$<iters>#<user>#<32hex>` (hashcat mode 2100). These crack offline only
+  // (no PtH), so they unlock the crack-mscache2 move rather than a direct login. Conservative: require
+  // the literal `$DCC2$` token with its well-formed `#user#hash` tail — we never mint from a bare mention.
+  var _DCC2_RE = /\$DCC2\$\d+#([^#\s:]+)#([0-9a-fA-F]{32})\b/g;
+  function _looks_like_mscache(text) { return !!text && text.indexOf('$DCC2$') >= 0; }
+  C._looks_like_mscache = _looks_like_mscache;
+
+  function _parse_mscache(text, ws, command, source, facts) {
+    if (!text || text.indexOf('$DCC2$') < 0) return;
+    text = text.replace(C._ANSI_RE, '');
+    var h = 'host:' + ws.target, entries = [], seen = {}, m;
+    _DCC2_RE.lastIndex = 0;
+    while ((m = _DCC2_RE.exec(text)) !== null) {
+      var user = C._clean_username(m[1]), hash = m[2].toLowerCase();
+      if (!C._valid_username(user, false)) continue;
+      var key = user.toLowerCase() + '|' + hash;
+      if (seen[key]) continue;
+      seen[key] = true;
+      entries.push({ user: user, mscache: m[0] });
+    }
+    if (!entries.length) return;
+    _add(facts, mkFact('hash.mscache', h, { count: entries.length, entries: entries, mode: 2100, via: 'cache-dump' }, S, source));
+    _add(facts, mkFact('credential.candidate', h, { kind: 'mscache2', count: entries.length }, S, source));
+  }
+  C._parse_mscache = _parse_mscache;
 
   var _RESPONDER_HASH_RE = /NTLMv2-SSP Hash\s*:\s*(?<hash>(?<user>[^:\s]+)::[^\s]+:[0-9A-Fa-f]{16,}:[0-9A-Fa-f]+:[0-9A-Fa-f]+)/;
 
@@ -257,21 +380,20 @@
     // 2) a direct read of a named flag file (`type …\proof.txt`, `cat …/root.txt`) — from the attached
     //    command, else from the read echoed after a shell prompt in the pasted frame. The flag must stand
     //    ALONE on its own output line, so a 32-hex in an auth banner or a hash-dump line is never a flag.
-    var readFile = null, readOnHost = false;
+    //    A single paste can hold MORE THAN ONE read (a promptless whole-blob capture, or an interactive
+    //    frame where the operator read user.txt then root.txt), so walk the lines in order and attribute
+    //    each flag value to the NEAREST PRECEDING read: the user flag is local, the root flag is root,
+    //    never both collapsed onto the first file's slot. The attached command seeds the initial read for
+    //    the case where the value is pasted with no echoed `type` line.
+    var curFile = null, curSlot = null, curOnHost = false;
     var fm = _FLAG_FILE_IN_CMD_RE.exec(command || '');
-    if (fm) { readFile = fm.groups.file; readOnHost = !cmdRemote; }
-    else {
-      var ls = String(text || '').split(/\r?\n/);
-      for (var li = 0; li < ls.length; li++) {
-        var bare = _strip_prompt(ls[li]);
-        var fx = _FLAG_FILE_IN_CMD_RE.exec(bare);
-        if (fx) { readFile = fx.groups.file; readOnHost = !_REMOTE_LEAD_RE.test(bare); break; }
-      }
-    }
-    if (readFile) {
-      var slot = _slot_for_flagfile(readFile);
-      String(text || '').split(/\r?\n/).forEach(function (l) { var t = l.trim(); if (_FLAG_VALUE_ANCHORED.test(t)) mint(readFile, t, slot, readOnHost); });
-    }
+    if (fm) { curFile = fm.groups.file; curSlot = _slot_for_flagfile(curFile); curOnHost = !cmdRemote; }
+    String(text || '').split(/\r?\n/).forEach(function (l) {
+      var bare = _strip_prompt(l);
+      var fx = _FLAG_FILE_IN_CMD_RE.exec(bare);
+      if (fx) { curFile = fx.groups.file; curSlot = _slot_for_flagfile(curFile); curOnHost = !_REMOTE_LEAD_RE.test(bare); return; }
+      if (curFile && _FLAG_VALUE_ANCHORED.test(bare.trim())) mint(curFile, bare.trim(), curSlot, curOnHost);
+    });
     // 3) LOCATE: a spider/dir listing of flag-file paths (no value) → record each location + its exact path.
     var sp; _SPIDER_PATH_RE.lastIndex = 0;
     while ((sp = _SPIDER_PATH_RE.exec(text))) {
@@ -279,7 +401,23 @@
       var pbase = winPath.split(/[\\/]/).pop() || '';
       mintPath(winPath, _slot_for_flagfile(pbase));
     }
+    // 3b) LOCATE from a RECURSIVE SEARCH that prints BARE local paths, one per line: Windows
+    // `where /r C:\Users\ user.txt` / `Get-ChildItem -Recurse | % FullName` / `dir /s /b`, and Linux
+    // `find / -name user.txt`. These print a real path with no UNC `\\host\C$` lead, so _SPIDER_PATH_RE
+    // misses them and (before this) locating a flag on-host minted nothing, leaving the capture step to
+    // guess a wrong path. A bare path is only taken when it STANDS ALONE on its line (after the shell
+    // prompt is stripped), so a `type …\user.txt` command echo or an `===FLAG:` marker is never caught here.
+    String(text || '').split(/\r?\n/).forEach(function (l) {
+      var t = _strip_prompt(String(l)).trim();
+      if (!t || /[<>|]/.test(t)) return;                       // not a redirection/pipe line
+      if (_BARE_WIN_FLAGPATH_RE.test(t)) { mintPath(t.replace(/[/]+/g, '\\'), _slot_for_flagfile(t.split(/[\\/]/).pop())); return; }
+      if (_BARE_NIX_FLAGPATH_RE.test(t)) { mintPath(t, _slot_for_flagfile(t.split(/[\\/]/).pop())); }
+    });
   }
+  // A bare flag-file path on its own line, as a recursive search prints it. Anchored start-to-end so only a
+  // whole-line path matches (never a path embedded in a `type`/`cat` command echo or an `===FLAG:` marker).
+  var _BARE_WIN_FLAGPATH_RE = /^[A-Za-z]:[\\/](?:[^\\/\r\n]+[\\/])+(?:local|proof|user|root|flag\d?)\.txt$/i;
+  var _BARE_NIX_FLAGPATH_RE = /^\/(?:[^/\r\n]+\/)+(?:local|proof|user|root|flag\d?)\.txt$/i;
   C._parse_flags = _parse_flags;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -15,9 +15,25 @@
     { key: 'password', label: 'Password', ph: '', secret: true },
     { key: 'nthash', label: 'NT hash', ph: '', secret: true },
     { key: 'lhost', label: 'LHOST', ph: '10.10.14.2' },
+    { key: 'lport', label: 'LPORT', ph: '4444' },
   ];
 
   function esc(s) { return U.esc(s); }
+
+  // The sidebar Target switcher: a compact dropdown of the engagement's known targets (plus the current
+  // value if it is not among them). Shown only when there are two or more to switch between; otherwise the
+  // text field alone is enough. Selecting one makes it the active target (fills {{target}} everywhere).
+  function targetSwitcherHtml(eng, cur) {
+    var raw = ((eng && eng.targets) || []).map(function (t) { return t.ip || t.target || ''; }).filter(Boolean);
+    if (cur && raw.indexOf(cur) < 0) raw.unshift(cur);
+    var seen = {}, uniq = [];
+    raw.forEach(function (ip) { if (!seen[ip]) { seen[ip] = 1; uniq.push(ip); } });
+    if (uniq.length < 2) return '';
+    var opts = uniq.map(function (ip) {
+      return '<option value="' + U.attr(ip) + '"' + (ip === cur ? ' selected' : '') + '>' + esc(ip) + '</option>';
+    }).join('');
+    return '<select class="param-target-switch" aria-label="Switch active target" title="Switch active target">' + opts + '</select>';
+  }
 
   function renderSidebar() {
     var eng = OBOL.store.active();
@@ -28,13 +44,18 @@
     var engSel = document.getElementById('eng-select');
     if (engSel) {
       engSel.innerHTML = OBOL.store.listEngagements().map(function (e) {
-        return '<option value="' + esc(e.id) + '"' + (e.id === OBOL.store.activeId() ? ' selected' : '') + '>' + esc(e.name) + '</option>';
+        return '<option value="' + esc(e.id) + '"' + (e.id === OBOL.store.activeId() ? ' selected' : '') + '>' + esc(OBOL.store.runLabel(e)) + '</option>';
       }).join('');
     }
 
     // params
     var paramsEl = document.getElementById('params');
-    if (paramsEl) {
+    // renderSidebar() runs on EVERY store change, and typing in a param fires a store update per
+    // keystroke, so rebuilding these inputs mid-type would blow away focus and the caret (the field
+    // "deselects" after every character). When the user is typing in one of them, leave the block
+    // alone, its values are already current; rebuild only when focus is elsewhere.
+    var typingInParams = paramsEl && document.activeElement && paramsEl.contains(document.activeElement);
+    if (paramsEl && !typingInParams) {
       // Redaction is opt-in across obol: a secret you recovered shows in cleartext by default so you can
       // read the password you just selected, and is masked (type=password) only when the report's Redact
       // Secrets toggle is on. This matches the credential switcher and the coach rail — no field hides a
@@ -42,20 +63,30 @@
       var redact = !!(eng.ui || {}).reportRedact;
       paramsEl.innerHTML = PARAM_FIELDS.map(function (f) {
         var v = params[f.key] || '';
-        return '<label class="param"><span>' + esc(f.label) + '</span>'
-          + '<input data-param="' + esc(f.key) + '" type="' + (f.secret && redact ? 'password' : 'text') + '" '
+        var input = '<input data-param="' + esc(f.key) + '" type="' + (f.secret && redact ? 'password' : 'text') + '" '
           + 'value="' + U.attr(v) + '" placeholder="' + esc(f.ph) + '" autocomplete="off" spellcheck="false"'
-          + (f.secret ? ' data-secret="1"' : '') + '></label>';
+          + (f.secret ? ' data-secret="1"' : '') + '>';
+        // The Target field carries the engagement's target switcher (the dropdown promoted here from the
+        // old context strip): pick any known target to make it active and re-fill every {{target}}.
+        if (f.key === 'target') {
+          return '<label class="param param-target"><span>' + esc(f.label) + '</span>'
+            + '<div class="param-target-row">' + input + targetSwitcherHtml(eng, v) + '</div></label>';
+        }
+        return '<label class="param"><span>' + esc(f.label) + '</span>' + input + '</label>';
       }).join('');
     }
 
     // credential switcher (collected creds → click to fill commands)
     if (OBOL.credbar) OBOL.credbar.render();
+    var credsCountEl = document.getElementById('creds-count');
+    if (credsCountEl) { var nc = (OBOL.creds && OBOL.creds.gather) ? OBOL.creds.gather().length : 0; credsCountEl.textContent = nc ? String(nc) : ''; }
 
-    // facts panel
+    // facts panel (collapsible, collapsed by default: a dev/power-user surface, kept but out of the way)
     var factsEl = document.getElementById('facts-list');
     if (factsEl) {
       var fs = OBOL.store.factSet();
+      var countEl = document.getElementById('facts-count');
+      if (countEl) countEl.textContent = fs.facts.length ? String(fs.facts.length) : '';
       if (!fs.facts.length) {
         factsEl.innerHTML = '<li class="facts-empty">No facts yet. Add one below, or paste tool output on Evidence.</li>';
       } else {
@@ -89,7 +120,19 @@
     }
   }
 
+  function setParamsCollapsed(on) {
+    try { on ? localStorage.setItem('obol.params-collapsed', '1') : localStorage.removeItem('obol.params-collapsed'); } catch (e) {}
+    if (on) document.documentElement.setAttribute('data-params-collapsed', '1');
+    else document.documentElement.removeAttribute('data-params-collapsed');
+  }
+
   function wireShell() {
+    // collapse / re-open the parameter bar (persisted; the pre-paint script applies it on load)
+    var pc = document.getElementById('params-collapse');
+    if (pc) pc.addEventListener('click', function (e) { e.preventDefault(); setParamsCollapsed(true); });
+    var pr = document.getElementById('params-reopen');
+    if (pr) pr.addEventListener('click', function (e) { e.preventDefault(); setParamsCollapsed(false); });
+
     // engagement switch / new
     var engSel = document.getElementById('eng-select');
     if (engSel) engSel.addEventListener('change', function () { OBOL.store.setActive(engSel.value).then(function () { OBOL.router.render(); }); });
@@ -119,6 +162,12 @@
       var key = t.getAttribute('data-param'), val = t.value;
       OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params[key] = val; }, 'params');
     });
+    // target switcher (dropdown) -> set active target + re-rank
+    if (paramsEl) paramsEl.addEventListener('change', function (e) {
+      var sel = e.target.closest('.param-target-switch'); if (!sel) return;
+      OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = sel.value; }, 'params');
+      renderSidebar(); OBOL.router.render();
+    });
 
     // guided fact picker (sidebar) — friendly labels + an advanced raw-kind escape hatch
     var fpEl = document.getElementById('fact-pick');
@@ -142,7 +191,7 @@
     // credential switcher click/keyboard handling (delegated, wired once)
     if (OBOL.credbar) OBOL.credbar.mount();
 
-    // (skin/motion/opacity live in the bottom-right ⚙ settings panel — see settings.js)
+    // (skin/motion/opacity live in the bottom-right settings panel — see settings.js)
 
     // re-render sidebar whenever state changes
     OBOL.store.onChange(function () { renderSidebar(); });
@@ -156,7 +205,24 @@
     });
     // Lazy routes (tools, domain, checklist, report, graph) register themselves when loaded.
     if (OBOL.lazy) OBOL.lazy.registerLazyRoutes(R);
-    R.setDefault('home');
+    // First-run routing: a brand-new visitor (no synced Loadout AND no engagement work yet) lands on
+    // Learn — the teaching front door (pick a path, set up a box, or start an engagement from there).
+    // Anyone who has synced a box or started an engagement lands on Engagements as before. A specific
+    // hash in the URL always wins over this default.
+    R.setDefault(isFirstRun() ? 'study' : 'home');
+  }
+
+  function isFirstRun() {
+    try {
+      if (JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null')) return false; // already set up a box
+    } catch (e) {}
+    var engs = (OBOL.store.listEngagements && OBOL.store.listEngagements()) || [];
+    if (engs.length > 1) return false;
+    var e = engs[0];
+    if (!e) return true;
+    var touched = (e.targets && e.targets.length) || (e.facts && e.facts.length)
+      || (e.activities && e.activities.length) || (e.credentials && e.credentials.length);
+    return !touched;
   }
 
   function boot() {
@@ -169,6 +235,8 @@
       registerRoutes();
       if (OBOL.palette) OBOL.palette.init();
       OBOL.router.start();
+      if (OBOL.ctxbar) OBOL.ctxbar.init();   // global engagement context strip (after the route is known)
+      if (OBOL.tips) OBOL.tips.mount();       // calm tip feed in the header (next to Focus)
       document.documentElement.classList.remove('obol-booting');
       document.documentElement.setAttribute('data-obol-boot', 'ready');
     }).catch(function (err) {

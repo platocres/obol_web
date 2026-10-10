@@ -22,11 +22,18 @@ ok(W.defaultRoot('~/htb', { name: '', targets: [{ ip: '10.0.0.5' }] }) === '~/ht
 
 const eng = { name: 'x', workspace: { root: '/home/kali/ctf/boxy' } };
 const t = W.tokens(eng);
-ok(t.scandir === '/home/kali/ctf/boxy/scans' && t.lootdir === '/home/kali/ctf/boxy/loot' && t.proofdir === '/home/kali/ctf/boxy/proof',
-  'tokens resolve to absolute output dirs under the root');
+// The scaffold cds INTO root, so output-dir tokens are RELATIVE to it (correct whether root is absolute
+// or relative; a root-prefixed path would double-nest after the cd when root is a relative dir).
+ok(t.scandir === 'scans' && t.lootdir === 'loot' && t.proofdir === 'proof',
+  'output-dir tokens are relative to root (the scaffold cds into it)');
+ok(t.root === '/home/kali/ctf/boxy', 'root stays the full path for display and the scaffold');
 ok(W.scaffold(eng) === 'mkdir -p /home/kali/ctf/boxy/{scans,loot,exploit,www,proof} && cd /home/kali/ctf/boxy',
   'scaffold builds a one-line mkdir + cd');
 ok(W.isConfigured(eng) === true && W.isConfigured({ name: 'y' }) === false, 'isConfigured tracks whether a root is set');
+// a RELATIVE root (box-centric, the user keeps a dir per IP) must still produce a runnable path: after
+// `cd 10.129.102.107`, the output must be `scans/…`, never `10.129.102.107/scans/…` (that double-nests).
+const relEng = { name: 'forest', workspace: { root: '10.129.102.107' } };
+ok(W.tokens(relEng).scandir === 'scans', 'a relative root yields a relative scandir, not a double-nested path');
 
 // sanitizeRoot: shell metacharacters in a typed/pasted working directory never reach a command
 ok(W.sanitizeRoot('~/CTF/HTB/boxes/Windows/forest]') === '~/CTF/HTB/boxes/Windows/forest', 'a stray ] in the workdir is stripped');
@@ -34,13 +41,13 @@ ok(W.sanitizeRoot('~/lab; rm -rf ~').indexOf(';') === -1 && W.sanitizeRoot('~/la
 ok(W.sanitizeRoot('~/box $(whoami)/`id`').indexOf('$') === -1 && W.sanitizeRoot('~/box $(whoami)/`id`').indexOf('`') === -1, 'command-substitution characters are stripped');
 ok(W.sanitizeRoot('~/ok_dir-1.2/proof') === '~/ok_dir-1.2/proof', 'ordinary POSIX path characters are preserved');
 // a root saved with junk auto-heals when read (an existing broken engagement fixes itself)
-ok(W.rootFor({ workspace: { root: '~/a]/b' } }) === '~/a/b' && W.tokens({ workspace: { root: '~/a]/b' } }).scandir === '~/a/b/scans',
+ok(W.rootFor({ workspace: { root: '~/a]/b' } }) === '~/a/b' && W.tokens({ workspace: { root: '~/a]/b' } }).root === '~/a/b',
   'a previously-saved unsafe root is sanitized on read (auto-heal)');
 
-// command fill: {{scandir}} resolves from opts.workspace; falls back to a relative dir with none
+// command fill: {{scandir}} resolves from opts.workspace to a relative scans/ dir (run from inside root)
 const nmap = { commands: [{ tool: 'nmap', run: 'nmap -oN {{scandir}}/nmap.txt {{target}}' }] };
 const withWs = C.fillCommand(nmap, new OBOL.facts.FactSet([]), { params: { target: '10.0.0.5' }, workspace: t }, 0);
-ok(withWs.filled === 'nmap -oN /home/kali/ctf/boxy/scans/nmap.txt 10.0.0.5', 'command writes into the absolute scans/ dir with a workspace');
+ok(withWs.filled === 'nmap -oN scans/nmap.txt 10.0.0.5', 'command writes into the relative scans/ dir (same from the hub and every surface)');
 const noWs = C.fillCommand(nmap, new OBOL.facts.FactSet([]), { params: { target: '10.0.0.5' } }, 0);
 ok(noWs.filled === 'nmap -oN scans/nmap.txt 10.0.0.5', 'command still forms with a relative scans/ dir when no workspace is set');
 

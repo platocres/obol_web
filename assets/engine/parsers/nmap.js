@@ -51,11 +51,14 @@
       _add(facts, mkFact('rdp.reachable', h, value, S, source));
       C._add_os_observation(facts, ws, source, 'windows', port + '/' + proto + ' ' + (service || 'rdp'), 'medium', 'nmap', false);
     }
-    if ([5985, 5986].indexOf(port) >= 0 || sl.indexOf('wsman') >= 0 || sl.indexOf('winrm') >= 0) {
+    var isWinrmPort = [5985, 5986, 47001].indexOf(port) >= 0 || sl.indexOf('wsman') >= 0 || sl.indexOf('winrm') >= 0;
+    if (isWinrmPort) {
       _add(facts, mkFact('winrm.reachable', h, value, S, source));
       C._add_os_observation(facts, ws, source, 'windows', port + '/' + proto + ' ' + (service || 'winrm'), 'medium', 'nmap', false);
     }
-    if ([80, 443, 8080, 8000, 8443].indexOf(port) >= 0 || sl === 'http' || sl === 'https' || sl === 'ssl/http') _add(facts, mkFact('http.reachable', h, value, S, source));
+    // WS-Management / HTTPAPI on 5985/5986/47001 is WinRM, not a browsable web app, so it must not
+    // mint http.reachable (nmap labels it "http") or it would unlock the web-exploit moves on an AD box.
+    if (!isWinrmPort && ([80, 443, 8080, 8000, 8443].indexOf(port) >= 0 || sl === 'http' || sl === 'https' || sl === 'ssl/http')) _add(facts, mkFact('http.reachable', h, value, S, source));
   }
   C._parse_service_reachability = _parse_service_reachability;
 
@@ -107,7 +110,8 @@
       titles.push(t);
     });
     if (titles.length) _add(facts, mkFact('web.title', h, { titles: C.uniqueSortedCI(titles).slice(0, 10) }, S, source));
-    var headers = C.uniqueSortedCI(reAll(C._NMAP_HTTP_SERVER_RE, text).map(function (m) { return m.groups.header.trim(); }).filter(Boolean));
+    var headers = C.uniqueSortedCI(reAll(C._NMAP_HTTP_SERVER_RE, text).map(function (m) { return m.groups.header.trim(); })
+      .filter(Boolean).filter(function (hdr) { return !C._isNonWebServerHeader(hdr); }));
     if (headers.length) _add(facts, mkFact('web.server', h, { headers: headers.slice(0, 10) }, S, source));
     var generators = C.uniqueSortedCI(reAll(C._NMAP_HTTP_GENERATOR_RE, text).map(function (m) { return m.groups.generator.trim(); }).filter(Boolean));
     var tech = generators.map(function (item) { return { name: 'generator', value: item }; });
@@ -268,6 +272,9 @@
     if (scanSeen && (actionId.indexOf('version') >= 0 || cmdL.indexOf('-sc') >= 0 || cmdL.indexOf('-sv') >= 0 || hasVersionInfo)) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
     if (scanSeen && (actionId.indexOf('udp') >= 0 || cmdL.indexOf(' -su') >= 0)) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
     if (scanSeen && (actionId.indexOf('vuln') >= 0 || srcL.indexOf('--script vuln') >= 0 || srcL.indexOf('-script vuln') >= 0)) _add(facts, mkFact('scan.nmap.vuln', h, { profile: 'nse-vuln' }, S, source));
+    // specific CVE verdict: smb-vuln-ms17-010 flagging the host VULNERABLE unlocks the EternalBlue move.
+    // Conservative — require the positive NSE verdict and skip any "NOT VULNERABLE" result.
+    if (/ms17-?010/i.test(text) && /\bVULNERABLE\b/i.test(text) && !/NOT\s+VULNERABLE/i.test(text)) _add(facts, mkFact('smb.ms17_010', h, { cve: 'CVE-2017-0144', via: 'nmap-nse' }, S, source));
 
     var summary = [];
     Object.keys(openPorts).sort().forEach(function (k) {

@@ -75,7 +75,7 @@
     var cols = P.PHASES.filter(function (p) { return byPhase[p] && byPhase[p].length; });
     if (!cols.length) {
       return '<svg viewBox="0 0 320 60" width="320" height="60" xmlns="http://www.w3.org/2000/svg">'
-        + '<text x="12" y="34" class="g-empty" font-size="13">Nothing on the path yet — add a target or paste a scan.</text></svg>';
+        + '<text x="12" y="34" class="g-empty" font-size="13">Nothing on the path yet, add a target or paste a scan.</text></svg>';
     }
     var pos = {};
     cols.forEach(function (p, ci) {
@@ -150,20 +150,20 @@
         var a = byAction[n.action_id]; if (!a) return;
         info[n.id] = {
           title: tc(a.title), kind: 'action', phase: n.phase, state: n.state,
-          note: n.state === 'done' ? 'Completed — this move’s result is proven.'
-            : (n.state === 'next' ? 'Ready now — run this to advance.' : 'Locked — prerequisites not yet proven.'),
+          note: n.state === 'done' ? 'Completed, this move’s result is proven.'
+            : (n.state === 'next' ? 'Ready now, run this to advance.' : 'Locked, prerequisites not yet proven.'),
           explain: a.hypothesis || '', command: actionCommand(a, facts, opts), command_label: '', refs: (a.refs || []).slice(0, 3),
         };
       } else {
         var ent = techniqueEntryForKind(n.kind);
         var narr = ent && root.OBOL && root.OBOL.narratives && root.OBOL.narratives[ent.key];
         var explain = (narr && narr.explanation) ? stripTokens(narr.explanation)
-          : (ent ? (ent.title + ' — see the Findings section for detail.') : ('A proven fact on the path: ' + tc(friendly(n.kind)) + '.'));
+          : (ent ? (ent.title + 'see the Findings section for detail.') : ('A proven fact on the path: ' + tc(friendly(n.kind)) + '.'));
         var nextA = null;
         for (var i = 0; i < live.length; i++) { if (live[i].requires_all.concat(live[i].requires_any).indexOf(n.kind) >= 0) { nextA = live[i]; break; } }
         info[n.id] = {
           title: tc(n.label), kind: 'fact', phase: n.phase, state: n.state,
-          note: n.state === 'proven' ? 'Proven on this engagement.' : 'Not yet proven — the pending goal of the move that produces it.',
+          note: n.state === 'proven' ? 'Proven on this engagement.' : 'Not yet proven, the pending goal of the move that produces it.',
           explain: explain, command: nextA ? actionCommand(nextA, facts, opts) : '',
           command_label: nextA ? ('Run next: ' + tc(nextA.title)) : '', refs: ent ? (ent.refs || []).slice(0, 3) : [],
         };

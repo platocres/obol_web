@@ -74,6 +74,28 @@
     wireless: { name: 'Wireless / Wi-Fi target', aliases: ['wifi', 'wlan', 'wireless', 'oswp'], focus: ['wifi.', 'credential.'] },
   };
 
+  // ── Learner workflow presets ────────────────────────────────────────────────
+  // Neurodivergent and disabled learners differ in the ORDER they like to attack a box, and a coach that
+  // fights that order is exhausting. These presets express a personal workflow as a set of focus prefixes,
+  // fed to the ranker as a NUDGE (the same modest, within-phase bonus the machine-type focus uses) — never an
+  // override: a clearly evidence-driven #1 (a fresh keystone, the endgame cash-in) always stays #1. They let a
+  // learner tell the coach "I grab both flags before I ever pivot" or "surface the pivot the moment a second
+  // network shows" and have Next Steps lean that way, predictably, every box.
+  //   'balanced'    — no personal nudge; pure evidence/phase order (the engine's own judgement).
+  //   'flags-first' — capture the user flag, then escalate to the admin/root flag, BEFORE committing to a
+  //                   pivot. Nudges the flag hunts + the privesc that unlocks the root flag above pivoting,
+  //                   so "mark the admin flag off my list, then pivot" is the path of least resistance.
+  //   'pivot-aware' — surface multi-homing / tunnelling as soon as a second network or a route appears, so a
+  //                   learner who likes to map the whole lab before escalating sees the pivot early.
+  var WORKFLOWS = {
+    balanced: { name: 'Balanced (let the coach decide)', aliases: ['balanced', 'default', 'auto', 'none'], focus: [] },
+    'flags-first': { name: 'Flags first, pivot last', aliases: ['flags-first', 'flags', 'flag-first', 'objective-first', 'admin-first'],
+      focus: ['objective.', 'access.admin', 'access.system', 'access.root', 'privesc.'] },
+    'pivot-aware': { name: 'Map the network early', aliases: ['pivot-aware', 'pivot', 'pivot-first', 'network-first', 'multihomed'],
+      focus: ['scan.local', 'pivot.', 'route.', 'tunnel.'] },
+  };
+  var DEFAULT_WORKFLOW = 'balanced';
+
   function slug(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
 
   var ALIAS_TO_ID = {};
@@ -86,10 +108,25 @@
     MACHINE_ALIAS[mid] = mid;
     (MACHINE_TYPES[mid].aliases || []).forEach(function (a) { MACHINE_ALIAS[a] = mid; });
   });
+  var WORKFLOW_ALIAS = {};
+  Object.keys(WORKFLOWS).forEach(function (wid) {
+    WORKFLOW_ALIAS[wid] = wid;
+    (WORKFLOWS[wid].aliases || []).forEach(function (a) { WORKFLOW_ALIAS[a] = wid; WORKFLOW_ALIAS[slug(a)] = wid; });
+  });
 
   function normalizePlatform(v) { var k = slug(v); return ALIAS_TO_ID[k] || ALIAS_TO_ID[String(v || '').trim().toLowerCase()] || ''; }
   function normalizeMachineType(v) { return MACHINE_ALIAS[slug(v)] || ''; }
   function machineFocus(mt) { var m = MACHINE_TYPES[normalizeMachineType(mt)]; return m ? m.focus.slice() : []; }
+  // A normalized workflow id, defaulting to 'balanced' so an unset or unknown preference never nudges.
+  function normalizeWorkflow(v) { return WORKFLOW_ALIAS[slug(v)] || ''; }
+  function workflowFocus(wf) { var w = WORKFLOWS[normalizeWorkflow(wf)]; return w ? w.focus.slice() : []; }
+  // The combined ranker nudge for an engagement profile: machine-type focus + the learner's workflow
+  // preference. The one place the UI and tests should ask for "what focus does this profile imply", so the
+  // two never drift apart.
+  function profileFocus(profile) {
+    var prof = profile || {};
+    return machineFocus(prof.machine_type).concat(workflowFocus(prof.workflow));
+  }
   function isExamPlatform(p) { return !!EXAM_PLATFORMS[normalizePlatform(p)]; }
   function counterpartPlatform(p) {
     var pid = normalizePlatform(p) || DEFAULT_PLATFORM;
@@ -116,6 +153,7 @@
     });
   }
   function listMachineTypes() { return Object.keys(MACHINE_TYPES).map(function (mid) { return { id: mid, name: MACHINE_TYPES[mid].name }; }); }
+  function listWorkflows() { return Object.keys(WORKFLOWS).map(function (wid) { return { id: wid, name: WORKFLOWS[wid].name }; }); }
 
   function normalizeProfile(data) {
     data = data || {};
@@ -126,6 +164,8 @@
     if (formats.length) out.flag_formats = formats;
     var mt = normalizeMachineType(data.machine_type);
     if (mt) out.machine_type = mt;
+    var wf = normalizeWorkflow(data.workflow);
+    if (wf && wf !== DEFAULT_WORKFLOW) out.workflow = wf;
     ['candidate', 'osid'].forEach(function (k) { if (data[k] != null && data[k] !== '') out[k] = String(data[k]).trim(); });
     if (Array.isArray(data.ad_set)) out.ad_set = data.ad_set.map(function (h) { return String(h).trim(); }).filter(Boolean);
     if (Array.isArray(data.scope)) out.scope = data.scope.map(function (s) { return String(s).trim(); }).filter(Boolean);
@@ -165,10 +205,12 @@
 
   OBOL.profile = {
     PRESETS: PRESETS, DEFAULT_PLATFORM: DEFAULT_PLATFORM, MACHINE_TYPES: MACHINE_TYPES,
+    WORKFLOWS: WORKFLOWS, DEFAULT_WORKFLOW: DEFAULT_WORKFLOW,
     FORMAT_PATTERNS: FORMAT_PATTERNS, DEFAULT_FLAG_NAMES: DEFAULT_FLAG_NAMES, DEFAULT_FORMATS: DEFAULT_FORMATS,
-    normalizePlatform: normalizePlatform, normalizeMachineType: normalizeMachineType,
-    machineFocus: machineFocus, isExamPlatform: isExamPlatform, counterpartPlatform: counterpartPlatform,
-    toggledPlatform: toggledPlatform, listPresets: listPresets, listMachineTypes: listMachineTypes,
+    normalizePlatform: normalizePlatform, normalizeMachineType: normalizeMachineType, normalizeWorkflow: normalizeWorkflow,
+    machineFocus: machineFocus, workflowFocus: workflowFocus, profileFocus: profileFocus,
+    isExamPlatform: isExamPlatform, counterpartPlatform: counterpartPlatform,
+    toggledPlatform: toggledPlatform, listPresets: listPresets, listMachineTypes: listMachineTypes, listWorkflows: listWorkflows,
     normalizeProfile: normalizeProfile, resolveFlagConfig: resolveFlagConfig, resolveProofConfig: resolveProofConfig,
     linuxInameExpr: linuxInameExpr, windowsNameList: windowsNameList,
   };

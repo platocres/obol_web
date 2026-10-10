@@ -203,7 +203,7 @@
 
     var html = '<section class="tools-route">';
     html += '<h1 class="route-h1">Tools</h1>';
-    html += '<p class="route-sub">Command builders for the ' + builders.length + ' equipped tools obol-local carries. Pick a tool, tune the controls, and copy the generated command — it is never executed here. Fields autofill from your engagement params and proven facts.</p>';
+    html += '<p class="route-sub">Command builders for the ' + builders.length + ' equipped tools obol-local carries. Pick a tool, tune the controls, and copy the generated command, it is never executed here. Fields autofill from your engagement params and proven facts.</p>';
 
     // category jump nav
     var present = CATS.filter(function (c) { return byCat[c.id] && byCat[c.id].length; });

@@ -1,4 +1,4 @@
-# Obol: Your OSCP prep companion in the browser
+# OBOL: the browser coach that works the box with you
 
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-2ea44f?style=flat-square)](LICENSE)
 ![Backend: none](https://img.shields.io/badge/backend-none-informational?style=flat-square)
@@ -7,212 +7,258 @@
 ![Runs in: browser](https://img.shields.io/badge/runs%20in-browser-8a2be2?style=flat-square)
 [![Live demo](https://img.shields.io/badge/live-demo-0aa0ff?style=flat-square)](https://platocres.github.io/obol/)
 
-**Obol is a free, browser-based sidekick for hacking practice boxes and exams.** You still do
-the hacking in your own terminal. Obol is the calm voice next to you that says *"here's the
-next command to try, and here's why,"* as it keeps track of what you've actually proven about a box,
-and quietly assembles your report as you go.
+**OBOL (Offensive Box Operations Ledger) is a free, browser-based companion for hacking practice
+boxes and prepping for the OSCP.** You hack in your own terminal. OBOL is the calm voice beside you
+that says *"here's the exact next command, and here's why,"* tracks everything you've actually proven
+about a target, turns a SharpHound dump into a route to Domain Admin, and assembles your exam report
+as you go. No install, no login, no backend. Nothing you type ever leaves your browser.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/9494289d-84bf-4169-86eb-86ad1362e5d9" alt="Obol running in the browser: the coach, live context rail, and attack path" width="100%">
+  <img src="screenshots/coach.png" alt="The OBOL coach: ranked, copy-ready next moves with a one-line why, the live context rail, and per-move field notes" width="100%">
 </p>
-
-No install. No login. No backend. Nothing you type ever leaves your browser. Open the page and
-start.
 
 **Live site: https://platocres.github.io/obol/**
 
+> OBOL **never runs commands for you.** It builds them so *you* can review and run them in an
+> authorized lab or exam. You stay in control, and every command lands in your own terminal history
+> as evidence.
+
 ---
 
-## What To Expect
+## Why OBOL
 
-Studying for the OSCP (or grinding HTB / TryHackMe) is really an exercise in *not getting
-lost*: you're staring at an open port wondering what to run, forgetting which creds worked where,
-and panicking about screenshots the night before the exam. Obol takes that load off you:
+Studying for the OSCP (or grinding HTB / PG / TryHackMe) is really an exercise in *not getting lost*:
+you stare at an open port wondering what to run, forget which cred worked where, scroll a 500-line
+cheatsheet for the one command you need, and panic about proof screenshots the night before. OBOL
+takes that load off you:
 
-- **Tells you what to do next.** Instead of a giant cheatsheet, Obol looks at what you've proven
-  about a target so far and gives you a short, ranked list of the *next* commands worth running,
-  each ready to copy, with a one-line "why" and an honest note on what it does **not** prove.
-- **Keeps you honest.** Obol only marks something as true when your tool output actually shows it.
-  An open port is not a shell. A crackable hash is not a login. This is exactly the discipline the
-  exam graders (and good pentesters) expect.
-- **Remembers everything.** Which hosts are up, which services are open, which creds are valid where,
-  what you've already tried, all tracked so you don't re-scan the same box at 3am.
-- **Shows you the whole path.** A pan-and-zoom attack-path graph lays out what you've proven and what
-  each next move would unlock, with hover cards that explain each step and hand you the command.
-- **Writes your report.** As you capture flags and findings, Obol assembles an OSCP-style report and
-  exports it as Markdown, HTML, PDF, or Word, with the proof discipline and redaction the exam
+- **It tells you what to do next.** Instead of a cheatsheet, OBOL looks at what you've *proven* about
+  a target and hands you a short, ranked list of the next commands worth running, each copy-ready and
+  pre-filled with your target, creds, and LHOST, with a one-line "why" and an honest note on what it
+  does **not** prove.
+- **It only believes your output.** An open port is not a shell. A crackable hash is not a login.
+  OBOL mints a fact only when your pasted tool output actually demonstrates it. That is the exact
+  discipline the exam graders (and good pentesters) expect.
+- **It remembers everything.** Hosts, services, which cred is valid where, what you've already tried,
+  flags captured, all tracked, so you never re-scan the same box at 3am.
+- **It reads your SharpHound dump.** Drop a BloodHound collection and OBOL draws your owned-to-Domain
+  Admin attack paths, answers the high-value queries, and feeds the whole thing back into the coach.
+- **It carries a whole workbench.** Reverse-shell builder, hash identifier, encoders, a JWT decoder,
+  GTFOBins, a wordlist picker, a manual-SQLi guide, all client-side, all filled from your engagement.
+- **It writes your report.** As you capture flags and findings, OBOL assembles an OSCP-style report
+  and exports it as Markdown, HTML, PDF, or Word, with the proof discipline and redaction the exam
   requires.
-- **Runs entirely on your machine.** It's a static web page. Your targets, creds, and notes live in
-  your browser only. You can even save the page and use it offline.
-
-> Obol **never runs commands for you.** It builds them so *you* can review and run them in an
-> authorized lab or exam. That's on purpose: you stay in control, and every command lands in your
-> own terminal history as evidence.
+- **It runs entirely on your machine.** A static web page. Your targets, creds, and notes live in
+  your browser only. Save the page and it works offline, even during the exam.
 
 ---
 
-## A Look Inside
+## The loop: run, paste, get the next move
 
-**Next Steps: Your ranked, copy-ready next moves**
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/3ab788be-066e-4b31-bed6-6ab2f87e33bc" alt="The coach ranking the next moves for a target, each with a copy button and a one-line why" width="92%">
-</p>
-
-**Feeding Obol: paste your whole terminal, and only the proven facts are minted.**
+OBOL watches one thing: **proof**. You run a command in your terminal, paste the output, and OBOL's
+conservative parsers mint *facts*, but only for what the output genuinely shows. Every fact is
+timestamped, attributed to the command that proved it, and drives everything else, the coach, the
+attack graph, the findings, and the report all recompute the instant a new fact lands.
 
 <p align="center">
-  <img src="screenshots/evidence.png" alt="The Evidence page: paste a command and its full output, and conservative parsers mint only the facts the output proves" width="92%">
+  <img src="screenshots/runlog.png" alt="The Run Log: every command with the exact facts it proved, shown as chips, newest first, with full saved output" width="92%">
 </p>
-
-**Proof-Gated: Obol only records what your output actually shows**
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/b85ed760-afb8-4b2e-ae40-e26951d59e47" alt="Evidence view turning pasted tool output into proven facts" width="92%">
-</p>
-
-**Everything Tracked: Hosts, services, credentials, and domain**
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/68b70b94-7450-4ca7-a1d6-58b3d8208c3e" alt="The engagement map of hosts, services, credentials and domain" width="92%">
-</p>
-
-**Findings: catalogued and proof-bound, grouped by severity or target**
-
-<p align="center">
-  <img src="screenshots/findings.png" alt="The Findings view listing catalogued findings with severity, evidence, and remediation" width="92%">
-</p>
-
-**The Attack-Path Graph: The Next Steps and per-target pages render a live attack-path graph, projected from your facts
-and the methodology packs:**
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/044370ca-e4ad-4404-9bad-2f398c9a576c" alt="Attack-path graph with technique-named nodes, a filter legend, and hover cards" width="75%">
-</p>
-
----
-
-## How it works
-
-Obol watches one thing: **proof**. You run a command, paste the output, and Obol's parsers mint
-*facts*, but only for what the output genuinely demonstrates. Those facts drive everything else:
-the next-move coach (the **Next Steps** tab), the attack-path graph, the findings list, and the
-report all recompute the instant a new fact lands. Nothing is asserted without evidence, and
-nothing is executed for you.
 
 ```mermaid
 flowchart LR
     s["Set target<br/>and platform"] --> scan["Run a command<br/>in your terminal"]
-    scan --> paste["Paste the output<br/>into Evidence"]
-    paste --> mint["Obol mints only<br/>the proven facts"]
+    scan --> paste["Paste the output<br/>(Evidence, or Paste anywhere)"]
+    paste --> mint["OBOL mints only<br/>the proven facts"]
     mint --> coach["Coach re-ranks<br/>your next moves"]
     coach --> scan
     mint --> flags["Capture flags<br/>and findings"]
     flags --> report["Export the<br/>OSCP report"]
 ```
 
-The loop is deliberately tight: **run, paste, get the next move**, over and over, until the box
-is rooted. Findings and flags accumulate as you go, so the report is essentially finished the
-moment you are.
+The loop is deliberately tight: **run, paste, get the next move**, over and over, until the box is
+rooted. Findings and flags accumulate as you go, so your report is essentially finished the moment
+you are.
 
 ---
 
-## A Quick Walkthrough
+## Learn the methodology, with a why for every move
 
-1. **Start an engagement.** On the **Engagements** screen, pick the platform you're working on:
-   HTB, OffSec/OSCP, OffSec Labs (PWK), TryHackMe, HTB CPTS, CTF, or OSWP. Your choice tunes Obol
-   to that platform's flags, proof rules, and report style. Paste your target IP(s) (junk and CIDR
-   ranges are filtered automatically) and select **Create & launch**.
-2. **Get your first move.** You land on **Next Steps**, the coach. For a fresh box it suggests an
-   nmap scan first. Select **copy**, paste it into *your* terminal, and run it.
-3. **Feed Obol what you found.** Copy your tool's output and paste it into **Evidence**. The parsers
-   read it and record only what is actually proven: open ports, reachable services, a valid
-   credential. Nothing is invented.
-4. **Watch the path open up.** Next Steps recomputes instantly, and new moves unlock (found LDAP?
-   the Active Directory moves appear). Blocked moves are listed too, each naming the exact fact that
-   would unlock it, so you always know what to hunt for next.
-5. **Repeat until rooted.** Along the way: build a specific command with every flag on the **Tools**
-   tab; open a box's own attack-path page from **Targets**; drop a SharpHound zip on **Domain** for
-   instant attack-path analysis; and track where each credential works on **Creds**.
-6. **Capture flags and report.** The **Scoreboard** tracks your local/root flags and OSCP points.
-   When you're done, **Report** exports an OSCP-style writeup (secrets redacted by default).
+New to this, or want to drill a lane? The **Learn** tab teaches offensive security as a decision
+graph: 280 moves across 11 lanes (recon, web, credentials, Linux and Windows privesc, shells,
+pivoting, AD, and more), each one a card you can study at your own pace. No box required.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/bde12604-c628-4950-b96d-ee3b1f255d09" alt="An exported OSCP-style report with terminal transcript and redacted secrets" width="70%">
+  <img src="screenshots/learn.png" alt="The Learn landing: Run A Cold Box, Walk The Attack Graph, Walk The Decision Tree, Browse By Open Port, Setup Your Box, Start An Engagement, over the by-lane methodology grid" width="100%">
+</p>
+
+Open any move and you get the real teaching: a plain-language **why this, why now**, the lead-ups that
+would have gotten you here, and a **Watch It Run** replay that plays the command and its output one
+line at a time, then reads the result back to you in plain English.
+
+<p align="center">
+  <img src="screenshots/learn-move.png" alt="A Learn module for Crack a Kerberoast Hash: the why box, the lead-up chain, and the Watch It Run replay showing hashcat cracking the ticket" width="92%">
+</p>
+
+Every move carries a **field-notes bench**, the handful of ways you'd actually do it in the field,
+each a tabbed technique with a filled command, its own replay, and an honest note on what you walk
+away with and what to watch out for. The same notes appear beside the live coach when you're working
+a real box, so what you learn is exactly what you run.
+
+<p align="center">
+  <img src="screenshots/learn-train.png" alt="A Learn module's field-notes bench: hashcat vs john guidance, what the move unlocks, and tabbed techniques each with a filled command and replay" width="92%">
+</p>
+
+---
+
+## Turn a SharpHound dump into a route to Domain Admin
+
+Drop a SharpHound `.zip` (or BloodHound-CE `.json` files) on the **Domain** tab and OBOL parses the
+whole collection in your browser, nothing is uploaded anywhere. From that one export it derives and
+**draws every owned-to-Domain-Admin attack path** as an interactive graph you can pan, zoom, and
+rearrange. Owned accounts glow green, nodes you already control are ringed, Domain Admin is red, and
+each edge is labelled with the abuse that walks it.
+
+<p align="center">
+  <img src="screenshots/domain-graph.png" alt="The attack-path graph: several owned accounts funnelling through nested groups to the Domain Admin node, each edge labelled with its abuse" width="100%">
+</p>
+
+Then it does what a raw BloodHound dump does not: it **hands you the route as numbered, copy-ready
+commands** (grant yourself DCSync, dump the Administrator hash, pass it), flags who is Kerberoastable,
+AS-REP roastable, or can DCSync, ranks the accounts worth hunting next by how many hops they save, and
+bridges the whole thing back to the coach, all pre-filled with your target and credentials.
+
+<p align="center">
+  <img src="screenshots/domain.png" alt="The Domain tab: census of the collection, owned count, and the Route To Domain Admin as numbered bloodyAD and DCSync commands" width="92%">
+</p>
+
+---
+
+## The Workbench: borrowed back-ends, no network
+
+A global **Workbench** of client-side utilities that answer your situation right now, each filling
+from your active engagement and working standalone: a reverse-shell builder (every language, plus
+one-click Base64 and PowerShell `-EncodedCommand` the way OffSec teaches it), a rule-based hash
+identifier with ready crack commands, an all-at-once encoder and a multi-layer smart decoder, a JWT
+decoder, a GTFOBins browser, a stack-aware wordlist picker, a manual (exam-legal) SQLi guide, an
+"Explain This Output" annotator, and a lockout-aware spray planner.
+
+<p align="center">
+  <img src="screenshots/workbench.png" alt="The Workbench reverse-shell builder with LHOST and LPORT filled from the engagement, language presets, and a copy-ready payload plus its catcher" width="92%">
+</p>
+
+---
+
+## Stuck? Ask the Ferryman
+
+Hit a wall and don't want to paste anything? The **Stuck?** tab is a guided, sandboxed advisor.
+Charon, OBOL's namesake ferryman, asks a few quick questions about your target, then lays out ranked
+moves to try, in order, using the exact same coach as Next Steps. It never touches your real
+engagement unless you ask it to.
+
+<p align="center">
+  <img src="screenshots/stuck.png" alt="The Stuck tab: a glowing cyberpunk Charon the Ferryman inviting you to answer a few questions so he can lay out ranked moves" width="92%">
+</p>
+
+---
+
+## Cruise: hands-off, but exam-legal
+
+**Cruise** is OBOL on autopilot. It hands you a batch of the *safe* enumeration moves you can run
+right now, independent of each other; you run them on your own box and paste the output back; OBOL
+learns the new facts and hands you the next batch, round after round. It always stops and asks before
+anything that lands a shell, sprays credentials, or fires an exploit, so Exam mode stays exam-legal.
+A Lab mode batches further for practice.
+
+<p align="center">
+  <img src="screenshots/cruise.png" alt="The Cruise tab: Exam and Lab mode toggle, the run-paste-advance loop, and a batch of safe steps with copy-all and download-script" width="92%">
+</p>
+
+---
+
+## See it the way a blue team would: ATT&CK, D3FEND, compliance
+
+The **Findings** tab carries a Splunk-ES-style framework view, flipped to the offensive side: your
+recorded moves and minted findings light up the exact **MITRE ATT&CK** matrix cells a defender's SIEM
+would try to detect, with the kill chain across the top. A Defensive sub-view maps each technique to
+its **D3FEND** countermeasure and ATT&CK detection; Compliance rolls findings up to NIST / CIS / PCI /
+CWE / OWASP; and CVEs flags the CISA KEV "actively exploited" list. Dual-use and educational: it shows
+you both the attack and the catch.
+
+<p align="center">
+  <img src="screenshots/attack-matrix.png" alt="The offensive ATT&CK matrix: tactic columns and technique cells lit by what you did this engagement, with the kill chain across the top" width="100%">
+</p>
+
+Every finding stays proof-bound: catalogued, grouped by severity or target, each with the fact that
+proved it, a remediation, and a CWE reference.
+
+<p align="center">
+  <img src="screenshots/findings.png" alt="The Findings list: proof-bound findings grouped by target, each with the proven fact, a fix, and a CWE link" width="92%">
+</p>
+
+---
+
+## Everything tracked, and an exam-ready report
+
+The **Map** draws the whole engagement from proven evidence alone: scope and domains, every target
+coloured by access level, services, credentials, and findings, all hanging from the scope they belong
+to.
+
+<p align="center">
+  <img src="screenshots/map.png" alt="The engagement Map: scope and domains, targets by access level, services, credentials, and findings, all from proven evidence" width="92%">
+</p>
+
+When you're done, **Report** exports an OSCP-style writeup with the proof discipline and redaction the
+exam requires, in Markdown, HTML, PDF, or Word. It even calls out readiness gaps, like a flag that
+still needs a compliant proof screenshot, before you submit.
+
+<p align="center">
+  <img src="screenshots/report.png" alt="The Report tab: profile, candidate and OSID fields, redaction toggle, export formats, readiness-gap warnings, and the rendered OSCP report" width="92%">
 </p>
 
 ---
 
 ## The tabs, in plain terms
 
+**Global** (always available, no engagement needed)
+
 | Tab | What it's for |
 |---|---|
-| **Engagements** | Start/switch a run; pick your platform; set your scope. |
-| **Targets** | Your boxes. Select one for its personal attack-path page. |
-| **Evidence** | Paste tool output here and Obol turns it into proven facts. Also attach **proof screenshots** that embed into your report. |
-| **Next Steps** | The coach: your ranked, copy-ready next commands. |
-| **Playbooks** | Ready-made command sequences (for example, AD recon) for common flows. |
+| **Learn** | The methodology as a curriculum: study the moves, the field notes, the decision map. |
+| **Loadout** | Your attack box. Generates a setup script that installs and pins your toolkit (fixes the common gotchas, like the evil-winrm sealing bug). |
+| **Engagements** | Start/switch a run; pick your platform (HTB, OSCP, PWK, TryHackMe, CPTS, CTF, OSWP); set scope. |
 | **Tools** | Build a specific tool's command with every flag, presets, and your values filled in. |
-| **Map** | The whole engagement at a glance: hosts, services, creds, domain. |
-| **Domain** | Upload a SharpHound zip to see who is Kerberoastable, paths to Domain Admin, and a printable report. |
+| **Workbench** | Client-side utilities: reverse shells, hash ID, encoders, JWT, GTFOBins, wordlists, manual SQLi, and more. |
+| **Stuck?** | Charon the Ferryman: answer a few questions, get ranked moves, without pasting anything. |
+| **Cruise** | Hands-off, exam-legal batches of safe enumeration; run, paste, advance. *(Experimental.)* |
+| **Help** | A map of the whole app, a glossary, and a context-aware `?` on any screen. |
+
+**Inside an engagement**
+
+| Tab | What it's for |
+|---|---|
+| **Hub** | The box at a glance: what's proven, what's next, where you are. |
+| **Targets** | Your boxes. Select one for its personal attack-path page. |
+| **Next Steps** | The coach: your ranked, copy-ready next commands with field notes. |
+| **Evidence** | Paste tool output and OBOL turns it into proven facts. Also attach proof screenshots. |
+| **Map** | The whole engagement: scope, hosts, services, creds, domain, findings. |
+| **Domain** | Drop a SharpHound zip for owned-to-DA paths, high-value queries, and a printable report. |
 | **Creds** | Which credential works on which host; one-click retarget. |
 | **Checklist** | The full methodology, tickable, so nothing gets missed. |
-| **Findings** | Every catalogued finding across all your hosts, grouped by severity or by target, each with a remediation. |
-| **Scoreboard** | Flags captured and OSCP points vs. the pass threshold. |
+| **Findings** | Proof-bound findings, plus the ATT&CK / D3FEND / compliance / CVE framework views. |
+| **Run Log** | Every command you ran, what it proved, and its full saved output. |
+| **Flags** | Local/root flags captured and OSCP points vs. the pass threshold. |
 | **Report** | Your exportable OSCP/CTF report, with proof discipline and redaction. |
 
-**Pro tip:** press **⌘K / Ctrl+K** anywhere to fuzzy-search every command; Enter copies it with
-your target and creds already filled in. A skin picker in the settings menu (bottom-right) lets you set
-the console green, amber, or several other themes.
+**Pro tip:** hit **Paste** (top-right) on any screen to drop in terminal output, or press
+**⌘K / Ctrl+K** to fuzzy-search every command and copy it pre-filled. A skin picker (bottom-right)
+sets the console green, amber, or several other themes.
 
 ---
 
-## BloodHound Domain Analysis
+## How it works
 
-Drop a SharpHound `.zip` (or BloodHound-CE `.json` files) on the **Domain** tab and Obol parses the
-whole collection in your browser, with nothing uploaded anywhere. From that one export it does two
-things a raw BloodHound dump does not.
-
-First, it derives and draws the **owned-to-Domain-Admin attack paths** as an interactive graph you
-can pan, zoom, and rearrange. Hover any node for a card that gives you the full name (even when the
-label is truncated on the canvas), what the object is, how many paths run through it, and the exact
-edges it can abuse, so a chain like *Exchange Windows Permissions holds WriteDacl over the domain*
-reads at a glance.
-
-<p align="center">
-  <img width="2072" height="884" alt="image" src="https://github.com/user-attachments/assets/3ed9ce5c-0fcf-441e-9151-503e7d35a1a4" />
-</p>
-
-Second, it answers a board of **PlumHound-style high-value queries** from the same data: who can
-DCSync, who is Kerberoastable or AS-REP roastable, unconstrained delegation, local-admin and shell
-reach, vulnerable certificate templates, blank-password accounts, and more. Each card shows the
-count, expands to the exact principals behind it, and hands you copy-ready commands pre-filled with
-your target (and your credentials when you hold them).
-
-<p align="center">
-  <img width="2072" height="3070" alt="image" src="https://github.com/user-attachments/assets/5d1646c6-5ebd-49d8-98aa-8ebc38f902bc" />
-</p>
-
----
-
-## A note for exam day
-
-Obol models the OSCP scoring rules: local + proof flags per machine, the 70-point pass threshold,
-and the Active-Directory set's all-or-nothing block. It also reminds you when a flag needs a
-**compliant proof screenshot** (the flag *and* `ip a` / `hostname` in the same window), which is the
-most common way students lose points they earned. Obol can't take the screenshot for you, but it
-won't let you forget it, and it gives you a one-click slot to attach it to the right flag.
-
-Everything is browser-local, so keep the tab open (or save the page) during your exam. Nothing is
-sent anywhere.
-
----
-
-## Architecture
-
-Obol is a **static single-page app**: plain HTML, CSS, and vanilla JavaScript, with no framework,
-no build step, and no server. Modules attach to a single global namespace and are loaded directly
-by the browser. The engine (facts, parsers, methodology packs, findings, report, and path graph) is
+OBOL is a **static single-page app**: plain HTML, CSS, and vanilla JavaScript, no framework, no build
+step, no server. The engine (facts, parsers, methodology packs, findings, report, attack graph) is
 pure and UI-independent; the UI routes are thin views over it. All state lives in your browser's
 IndexedDB, so an engagement survives a refresh and never leaves the machine.
 
@@ -221,9 +267,9 @@ flowchart TB
     term["Your Kali terminal<br/>(you run every command)"]
     subgraph browser["Runs entirely in your browser, no backend, nothing leaves the page"]
         direction TB
-        ui["UI routes<br/>coach · evidence · graph · findings · report"]
-        engine["Engine<br/>facts · parsers · packs · findings · report · path graph"]
-        packs["Methodology packs<br/>bundled JSON: recon, AD, web, privesc, cracking, …"]
+        ui["UI routes<br/>coach · evidence · domain · workbench · findings · report"]
+        engine["Engine<br/>facts · parsers · packs · bloodhound · frameworks · report · path graph"]
+        packs["Methodology packs<br/>bundled JSON: recon, AD, web, privesc, cracking, pivot, …"]
         db[("IndexedDB<br/>engagements · facts · evidence · screenshots")]
         ui --> engine
         engine --> packs
@@ -238,54 +284,65 @@ flowchart TB
 
 - **Proof-gated.** Facts are only minted from real tool output; the coach, graph, findings, and
   report are all projections of that fact ledger.
-- **No execution, no telemetry.** Obol builds commands for you to run; it never runs them, and it
-  makes no network calls.
+- **No execution, no telemetry.** OBOL builds commands for you to run; it never runs them, and it
+  makes no network calls. That is also why it stays exam-legal: it is a deterministic reference and
+  notes tool, with no LLM.
 - **Offline-first.** Everything is client-side, so the app works from `file://` and keeps running
   with no connection.
 
 ---
 
+## A note for exam day
+
+OBOL models the OSCP scoring rules: local + proof flags per machine, the 70-point pass threshold, and
+the Active-Directory set's all-or-nothing block. It reminds you when a flag needs a **compliant proof
+screenshot** (the flag *and* `ip a` / `hostname` in the same window), which is the most common way
+students lose points they earned. OBOL can't take the screenshot for you, but it won't let you forget
+it. Everything is browser-local, so keep the tab open (or save the page) during your exam. Nothing is
+sent anywhere.
+
+---
+
 ## Run it yourself
 
-Open `index.html` in any modern browser: no server, no build step, no dependencies. It works
-offline. To host your own copy, drop the folder on any static host (GitHub Pages, Netlify, or even
-`file://`). Your engagement data is stored in your browser's local database (IndexedDB); clearing
-site data resets it, and different browsers or devices keep separate copies.
+Open `index.html` in any modern browser: no server, no build step, no dependencies. It works offline.
+To host your own copy, drop the folder on any static host (GitHub Pages, Netlify, or even `file://`).
+Your engagement data is stored in your browser's local database (IndexedDB); clearing site data resets
+it, and different browsers or devices keep separate copies.
 
 Tests live in `tests/` (a pure-Node engine suite and a headless-browser smoke of the real app).
 
 ---
 
-## Status and Direction
+## Status and direction
 
-Obol is under active development, a growing companion rather than a finished product. The methodology
-packs, parsers, and coaching keep improving, and you should expect the occasional rough edge in the
-meantime.
+OBOL is under active development, a growing companion rather than a finished product. The methodology
+packs, parsers, and coaching keep improving, and you should expect the occasional rough edge.
 
-One thing won't change: **Obol will never pwn a box for you.** It doesn't run exploits, and it can't
+One thing won't change: **OBOL will never pwn a box for you.** It doesn't run exploits, and it can't
 guarantee an end-to-end path to root on every machine, by design. It's a coach that keeps you
 oriented, honest, and organized while *you* do the hacking, which is exactly the skill the OSCP is
-testing. Where Obol doesn't yet have a move for some niche service or unusual chain, it won't invent
-one; it points you at the next reasonable step and stays out of your way.
+testing. Where OBOL doesn't yet have a move for some niche service, it won't invent one; it points you
+at the next reasonable step and stays out of your way.
 
-The long-term goal is to map **every attribute of a quality penetration test** into Obol's workflow:
+The long-term goal is to map **every attribute of a quality penetration test** into OBOL's workflow:
 disciplined enumeration, proof-gated findings, the full attack-path methodology, credential and pivot
-tracking, and exam-grade reporting, so that working a box in Obol mirrors how a strong operator
-actually thinks and documents. That target keeps expanding, and the tool grows toward it with every
-engagement.
+tracking, and exam-grade reporting, so that working a box in OBOL mirrors how a strong operator
+actually thinks and documents.
 
 ---
 
-## Legal and Ethics
+## Legal and ethics
 
-Obol is for **authorized** labs, training, CTFs, exam preparation, and engagements where you have
-explicit permission to test. Don't point it at anything you're not allowed to touch.
+OBOL is for **authorized** labs, training, CTFs, exam preparation, and engagements where you have
+explicit permission to test. Don't point it at anything you're not allowed to touch. The ACME.CORP
+data in the screenshots above is entirely fictional.
 
 ## License
 
 Copyright (C) 2026 platocres.
 
-Obol is free software, released under the [GNU Affero General Public License v3.0](LICENSE). You may
+OBOL is free software, released under the [GNU Affero General Public License v3.0](LICENSE). You may
 use, study, modify, and share it under those terms; any distributed or network-served derivative must
 remain open under the same license. See [CONTRIBUTING.md](CONTRIBUTING.md) for how contributions are
 licensed.

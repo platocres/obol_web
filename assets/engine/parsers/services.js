@@ -42,7 +42,8 @@
     });
     var titleMatch = /\bTitle\[(?<title>[^\]\r\n]+)\]/.exec(text);
     if (titleMatch && titleMatch.groups.title.trim()) _add(facts, mkFact('web.title', h, { titles: [titleMatch.groups.title.trim()] }, S, source));
-    if (Object.keys(servers).length) _add(facts, mkFact('web.server', h, { headers: C.uniqueSortedCI(Object.keys(servers)).slice(0, 10) }, S, source));
+    var svHeaders = C.uniqueSortedCI(Object.keys(servers)).filter(function (hdr) { return !(C._isNonWebServerHeader && C._isNonWebServerHeader(hdr)); });
+    if (svHeaders.length) _add(facts, mkFact('web.server', h, { headers: svHeaders.slice(0, 10) }, S, source));
     if (Object.keys(redirects).length) _add(facts, mkFact('http.redirect', h, { locations: C.uniqueSortedCI(Object.keys(redirects)).slice(0, 10) }, S, source));
     if (Object.keys(contentTypes).length) C.uniqueSortedCI(Object.keys(contentTypes)).forEach(function (item) { tech.push({ name: 'content-type', value: item }); });
     if (tech.length) {

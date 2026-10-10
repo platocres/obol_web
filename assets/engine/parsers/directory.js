@@ -49,7 +49,11 @@
       if (['ldap', 'smb', 'winrm', 'rdp', 'ssh', 'ftp'].indexOf(proto) >= 0) _add(facts, mkFact(proto + '.reachable', h, { tool: 'nxc' }, S, source));
       if (proto === 'winrm' || proto === 'rdp') C._add_os_observation(facts, ws, source, 'windows', m[0].trim(), proto === 'winrm' ? 'high' : 'medium', 'nxc', proto === 'winrm');
     });
-    if (/^LDAP\s+.*\[\+\].*(?:\\\\:|anonymous|'')/im.test(text)) _add(facts, mkFact('ad.anonymous_bind', C._scope_for_domain(ws, domain), { tool: 'nxc' }, S, source));
+    // A successful anonymous LDAP bind prints the empty-user signature `DOMAIN\:` (one backslash, then a
+    // colon with no username before it), e.g. nxc's `[+] htb.local\:`. Match a SINGLE backslash before the
+    // colon; an authenticated bind is `DOMAIN\user:pass`, which has no backslash-then-colon, so it is not
+    // mistaken for anonymous.
+    if (/^LDAP\s+.*\[\+\].*(?:\\:|anonymous|'')/im.test(text)) _add(facts, mkFact('ad.anonymous_bind', C._scope_for_domain(ws, domain), { tool: 'nxc' }, S, source));
   }
   C._parse_nxc_common = _parse_nxc_common;
 
@@ -77,6 +81,112 @@
   }
   C._parse_user_list = _parse_user_list;
 
+  // ── PowerView / AD PowerShell object listings (from a Windows foothold) ───────────
+  // PowerView emits PowerShell "Name : Value" objects with PADDED spaces before the colon, which the
+  // LDAP `sAMAccountName:` regex misses — so Get-NetUser/Get-DomainUser/Get-ADUser enum minted NOTHING.
+  // Parse ONLY user-query output into ad.user_list; Get-NetGroup/Get-NetComputer put NON-account values
+  // under cn/dnshostname, so a command gate keeps those out (a group name must never be a user).
+  var _PV_SAM_RE = /^\s*samaccountname\s*:\s*(?<v>[^\s,;]+)\s*$/im;
+  var _PV_CN_RE = /^\s*cn\s*:\s*(?<v>[^\s,;]+)\s*$/im;
+  var _PV_USER_QUERY_RE = /get-(?:net|domain|ad)user/i;
+  var _PV_OTHER_QUERY_RE = /get-(?:net|domain)(?:group|computer)/i;
+
+  function _parse_powerview(text, ws, command, source, facts, opts) {
+    opts = opts || {};
+    if (!reSearch(_PV_USER_QUERY_RE, command)) return;
+    var usersSet = {};
+    reAll(_PV_SAM_RE, text).forEach(function (m) {
+      var u = C._clean_username(m.groups.v);
+      if (C._valid_username(u)) usersSet[u.toLowerCase()] = u;
+    });
+    // samAccountName is authoritative; fall back to cn only on a PURE user query (no group/computer
+    // query in the same one-liner), since a user object's cn is often a display name.
+    if (!Object.keys(usersSet).length && !reSearch(_PV_OTHER_QUERY_RE, command)) {
+      reAll(_PV_CN_RE, text).forEach(function (m) {
+        var u = C._clean_username(m.groups.v);
+        if (C._valid_username(u)) usersSet[u.toLowerCase()] = u;
+      });
+    }
+    var users = C.uniqueSortedCI(Object.keys(usersSet).map(function (k) { return usersSet[k]; }));
+    if (!users.length) return;
+    var domain = opts.domain_hint || C._domain_from_facts(ws);
+    _add(facts, mkFact('ad.user_list', C._scope_for_domain(ws, domain), { users: users, count: users.length, method: 'powerview' }, S, source));
+  }
+  C._parse_powerview = _parse_powerview;
+
+  // PowerView GROUP / COMPUTER / ACL object shapes → ad.group_list / ad.computer_list / ad.acl_lead.
+  // Group names carry spaces ("Domain Admins"), so these capture the FULL line value. Command-gated per
+  // object type so a combined one-liner can't cross-pollute. The ACL lead is INFORMATIONAL (an enumerated
+  // control right) and never false-opens the DCSync gate — distinct from the ad.control_paths a write earns.
+  var _PV_GROUP_QUERY_RE = /get-(?:net|domain)group/i;
+  var _PV_COMPUTER_QUERY_RE = /get-(?:net|domain)computer/i;
+  var _PV_ACL_QUERY_RE = /get-(?:net|domain)?\w*objectacl|get-acl\b|get-domainobjectacl/i;
+  var _PV_SAM_FULL_RE = /^\s*samaccountname\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_NAME_FULL_RE = /^\s*name\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_CN_FULL_RE = /^\s*cn\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_DNSHOST_RE = /^\s*dnshostname\s*:\s*(?<v>[^\s,;]+)\s*$/im;
+  var _PV_OS_RE = /^\s*operatingsystem\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_ADRIGHTS_RE = /^\s*activedirectoryrights\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_ACL_TARGET_RE = /^\s*(?:objectdn|objectidentity|objectname)\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_ACL_ID_RE = /^\s*(?:securityidentifier|identityreference|identitysid)\s*:\s*(?<v>.+?)\s*$/im;
+  var _PV_ABUSABLE_RIGHT_RE = /^(?:GenericAll|GenericWrite|WriteDacl|WriteOwner|WriteProperty|AllExtendedRights|ForceChangePassword|Self|WriteMembers|ExtendedRight)$/i;
+
+  // The values for the FIRST of `regexes` that matches anything, deduped case-insensitively in
+  // first-seen order — so a group list prefers samaccountname, falling back to name/cn.
+  function _pv_values(text) {
+    for (var i = 1; i < arguments.length; i++) {
+      var rx = arguments[i], seen = {}, out = [];
+      reAll(rx, text).forEach(function (m) {
+        var v = (m.groups.v || '').trim();
+        if (v && !seen[v.toLowerCase()] && v.charAt(0) !== '{') { seen[v.toLowerCase()] = true; out.push(v); } // skip GUID/SDDL blobs
+      });
+      if (out.length) return out;
+    }
+    return [];
+  }
+
+  function _parse_powerview_objects(text, ws, command, source, facts, opts) {
+    opts = opts || {};
+    var lc = command.toLowerCase();
+    var domain = opts.domain_hint || C._domain_from_facts(ws);
+    var scope = C._scope_for_domain(ws, domain);
+    if (reSearch(_PV_GROUP_QUERY_RE, lc)) {
+      var groups = _pv_values(text, _PV_SAM_FULL_RE, _PV_NAME_FULL_RE, _PV_CN_FULL_RE);
+      if (groups.length) _add(facts, mkFact('ad.group_list', scope, { groups: groups, count: groups.length, method: 'powerview' }, S, source));
+    }
+    if (reSearch(_PV_COMPUTER_QUERY_RE, lc)) {
+      var comps = _pv_values(text, _PV_DNSHOST_RE, _PV_SAM_FULL_RE, _PV_NAME_FULL_RE);
+      if (comps.length) {
+        var value = { computers: comps, count: comps.length, method: 'powerview' };
+        var oses = _pv_values(text, _PV_OS_RE);
+        if (oses.length) value.operating_systems = oses;
+        _add(facts, mkFact('ad.computer_list', scope, value, S, source));
+      }
+    }
+    if (reSearch(_PV_ACL_QUERY_RE, lc)) {
+      var rightsSet = {};
+      text.split(/\r?\n/).forEach(function (line) {
+        reAll(_PV_ADRIGHTS_RE, line).forEach(function (m) {
+          m.groups.v.split(/[,\s]+/).forEach(function (r) {
+            r = r.trim();
+            if (r && _PV_ABUSABLE_RIGHT_RE.test(r)) rightsSet[r] = true;
+          });
+        });
+      });
+      var rights = C.uniqueSortedCI(Object.keys(rightsSet));
+      if (rights.length) {
+        _add(facts, mkFact('ad.acl_lead', scope, {
+          rights: rights,
+          targets: _pv_values(text, _PV_ACL_TARGET_RE).slice(0, 8),
+          principals: _pv_values(text, _PV_ACL_ID_RE).slice(0, 8),
+          method: 'powerview',
+          note: 'enumerated control right (lead), cash it in with the ACL-abuse move; not a granted control path yet',
+        }, S, source));
+      }
+    }
+  }
+  C._parse_powerview_objects = _parse_powerview_objects;
+
   var _KERBRUTE_USER_RE = /\[\+\]\s+VALID USERNAME:\s*(?<u>[A-Za-z0-9._-]+)(?:@(?<dom>[A-Za-z0-9.-]+))?/;
   var _KERBRUTE_LOGIN_RE = /\[\+\]\s+VALID LOGIN:\s*(?<u>[A-Za-z0-9._-]+)(?:@(?<dom>[A-Za-z0-9.-]+))?:(?<p>\S.*?)\s*$/m;
 
@@ -86,6 +196,8 @@
     var value = { user: user, password: password, method: method };
     if (domain) value.domain = domain;
     _add(facts, mkFact('credential.available', C._scope_for_domain(ws, domain), value, S, source));
+    // kerbrute VALID LOGIN already proved this credential against the KDC, so it is validated.
+    _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, via: method || 'valid-login' }, S, source));
   }
   C._add_valid_login_credential = _add_valid_login_credential;
 
@@ -270,6 +382,9 @@
     if (domainName) value.domain = domainName;
     _add(facts, mkFact('credential.available', C._scope_for_domain(ws, domainName), value, S, source));
     _add(facts, mkFact(proto + '.authenticated', 'host:' + ws.target, value, S, source));
+    // A successful authenticated login PROVES the credential works here, so it is validated: any pending
+    // "validate this found credential" step settles once you have actually logged in with it.
+    _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, service: proto }, S, source));
     if (proto === 'winrm') {
       _add(facts, mkFact('winrm.reachable', 'host:' + ws.target, { tool: 'nxc' }, S, source));
       _add(facts, mkFact('foothold.windows', 'host:' + ws.target, value, S, source));
@@ -299,6 +414,33 @@
   }
   C._parse_auth_failures = _parse_auth_failures;
 
+  // Auth BLOCKERS: a credential that is valid but refused for a fixable reason — the cryptic walls that
+  // strand people mid-authentication. A forced password change (STATUS_PASSWORD_MUST_CHANGE) and
+  // Kerberos clock skew (KRB_AP_ERR_SKEW) each mint a blocker.* fact so the matching fix move surfaces.
+  function _parse_auth_blockers(text, ws, source, facts) {
+    var t = String(text || '');
+    if (/STATUS_PASSWORD_MUST_CHANGE|STATUS_PASSWORD_EXPIRED|password must (?:be )?change|must change (?:your )?password|password has expired/i.test(t))
+      _add(facts, mkFact('blocker.password_change', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+    if (/KRB_AP_ERR_SKEW|clock skew too great|kerberos[^\n]*\bskew\b|time difference too large/i.test(t))
+      _add(facts, mkFact('blocker.clock_skew', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+    // NTLM refused but the credential is valid — a DC with NTLM disabled answers SMB auth with
+    // STATUS_NOT_SUPPORTED; the same credential works over Kerberos (-k).
+    if (/STATUS_NOT_SUPPORTED/i.test(t) && /\b(smb|ldap|nxc|SMBv|NTLM)\b/i.test(t))
+      _add(facts, mkFact('blocker.ntlm_disabled', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+    if (/STATUS_ACCOUNT_LOCKED_OUT|account (?:is |has been )?locked out|lockoutThreshold reached/i.test(t))
+      _add(facts, mkFact('blocker.lockout', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+    if (/STATUS_ACCOUNT_DISABLED|STATUS_ACCOUNT_RESTRICTION|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_ACCOUNT_EXPIRED|STATUS_INVALID_LOGON_HOURS/i.test(t))
+      _add(facts, mkFact('blocker.account_restricted', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+    // An LDAP WRITE denied (bloodyAD/dacledit `insufficientAccessRights` when granting DCSync, setting an
+    // owner, or adding a group member) right after you GRANTED yourself that right is the classic AD wall:
+    // the right exists but your CURRENT session's token predates it, so re-authenticate and retry. Keyed on
+    // the LDAP-modify signature (insufficientAccessRights), not a bare ACCESS_DENIED, so it never fires on
+    // the NTDS replication denial (rpc_s_access_denied), which has its own grant-first field note.
+    if (/insufficientAccessRights|insufficient access rights/i.test(t))
+      _add(facts, mkFact('blocker.acl_reauth', C._scope_for_domain(ws), { tool: 'ldap' }, S, source));
+  }
+  C._parse_auth_blockers = _parse_auth_blockers;
+
   function _parse_evil_winrm(text, ws, command, source, facts) {
     var low = text.toLowerCase();
     if (low.indexOf('winrmauthorizationerror') >= 0 || low.indexOf('winrmhttptransporterror') >= 0 || /\b401\b/.test(text) || low.indexOf('unauthorized') >= 0) return;
@@ -314,6 +456,8 @@
     if (domain) value.domain = domain;
     _add(facts, mkFact('winrm.authenticated', h, value, S, source));
     _add(facts, mkFact('foothold.windows', h, value, S, source));
+    // An evil-winrm shell proves the credential works here, so it is validated.
+    if (value.user) _add(facts, mkFact('credential.validated', h, { user: value.user, service: 'winrm' }, S, source));
     C._add_os_observation(facts, ws, source, 'windows', 'evil-winrm authenticated shell', 'high', 'evil-winrm', true);
     if (user && (nthash || (password && C._valid_password(password)))) {
       var cred = { user: C._clean_username(user), service: 'winrm', method: nthash ? 'pth' : 'evil-winrm' };
@@ -439,6 +583,12 @@
     var alreadyMemberRe = /already a member|entryalreadyexists|member_in_alias/i;
     var hasJoinLine = operation === 'group_member_write' && (/(?:\badded to\b|^\s*\[\+\]\s*joined:)/im.test(text) || alreadyMemberRe.test(text));
     var success = hasJoinLine || evidence.length > 0 || !!reSearch(C._AD_CONTROL_SUCCESS_RE, text) || (!!operation && !!text.trim() && !opError);
+    // A non-group write that ERRORED (insufficientAccessRights / access denied / a traceback) is NOT a
+    // granted control path, even though the echoed command names the right (so `evidence` picked up the
+    // `add dcsync` line). Without this veto a FAILED DCSync grant minted ad.control_paths and the coach
+    // wrongly believed you owned the domain. A real join line, an "already a member", or a success marker
+    // still wins (the group sweep prints wins and failures together).
+    if (opError && !hasJoinLine && !reSearch(C._AD_CONTROL_SUCCESS_RE, text) && !alreadyMemberRe.test(text)) success = false;
     if (!success) return;
 
     var successMatch = reSearch(C._AD_CONTROL_SUCCESS_RE, text);
@@ -695,7 +845,7 @@
     memberT.concat(daclT, ownerT).forEach(function (t) { if (!seenT[t]) { seenT[t] = 1; targets.push(t); } });
     var rightList = Object.keys(rights);
     if (!(rightList.length && targets.length)) return;
-    if (!notes.length) notes.push('enumerated control right (lead) — cash it in with the ACL-abuse move; not a granted control path yet');
+    if (!notes.length) notes.push('enumerated control right (lead), cash it in with the ACL-abuse move; not a granted control path yet');
     _add(facts, mkFact('ad.acl_lead', C._scope_for_domain(ws), {
       rights: rightList.sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : 1; }),
       targets: targets.slice(0, 10), method: 'bloodyad', note: notes.join(' · '),
@@ -789,5 +939,144 @@
     _parse_laps_material(text, ws, command, source, facts);
   }
   C._parse_ad_abuse_output = _parse_ad_abuse_output;
+
+  // ── klist → kerberos.tickets (cached ticket inventory from a Windows/MIT foothold) ──
+  // Windows `klist` prints `Cached Tickets: (N)` then per-ticket `Client:`/`Server:` lines; MIT
+  // `klist` prints `Default principal:` then a `krbtgt/REALM` service-principal column. A krbtgt
+  // ticket means a usable TGT. The command-/action-gated _parse_kerberos_ticket_material only fires
+  // on a `Default principal:` klist; this covers the Windows cached-ticket form (and an attached
+  // paste with no command). Content-gated so only genuine ticket output mints.
+  var _KLIST_CACHED_RE = /Cached Tickets:\s*\((?<n>\d+)\)/i;
+  var _KLIST_CLIENT_RE = /^\s*(?:#\d+>\s*)?Client:\s*(?<user>\S+)\s*@\s*(?<realm>\S+)/im;
+  var _KLIST_SERVER_RE = /^\s*Server:\s*(?<spn>\S+)\s*@\s*(?<realm>\S+)/im;
+  var _KLIST_DEFAULT_PRINCIPAL_RE = /Default principal:\s*(?<user>[^@\s]+)(?:@(?<realm>\S+))?/i;
+
+  function _looks_like_klist(text) {
+    var t = text || '';
+    if (reSearch(_KLIST_CACHED_RE, t)) return true;
+    if (/^\s*Server:\s*krbtgt\//im.test(t)) return true;
+    if (reSearch(_KLIST_DEFAULT_PRINCIPAL_RE, t) && /krbtgt\//i.test(t)) return true;
+    return false;
+  }
+  C._looks_like_klist = _looks_like_klist;
+
+  function _parse_klist(text, ws, command, source, facts) {
+    if (!text || !text.trim()) return;
+    text = text.replace(C._ANSI_RE, '');
+    if (!_looks_like_klist(text)) return;
+    var value = { tool: 'klist' }, realm = '';
+    var cm = reSearch(_KLIST_CLIENT_RE, text) || reSearch(_KLIST_DEFAULT_PRINCIPAL_RE, text);
+    if (cm) {
+      var u = C._clean_username(cm.groups.user || '');
+      if (u) value.principal = u;
+      if (cm.groups.realm) realm = cm.groups.realm.toLowerCase().replace(/\.$/, '');
+    }
+    var cnt = reSearch(_KLIST_CACHED_RE, text);
+    if (cnt) value.count = parseInt(cnt.groups.n, 10);
+    var servers = C.uniqueSortedCI(reAll(_KLIST_SERVER_RE, text).map(function (m) { return m.groups.spn; }));
+    if (servers.length) value.services = servers.slice(0, 20);
+    if (/krbtgt\//i.test(text)) value.tgt = true;
+    _add(facts, mkFact('kerberos.tickets', C._scope_for_domain(ws, realm), value, S, source));
+  }
+  C._parse_klist = _parse_klist;
+
+  // --- Domain / forest trusts (nltest /domain_trusts, PowerView Get-DomainTrust, nxc --domain_trusts,
+  //     Get-ADTrust). A named trusted domain or an explicit trust-direction row -> ad.trusts, so the
+  //     map can open the cross-domain/forest path. Conservative: a trust keyword OR a parsed trust row. ---
+  function _parse_domain_trusts(text, ws, source, facts) {
+    if (!text) return;
+    var low = text.toLowerCase();
+    var trustWord = /domain_trusts|list of domain trusts|trustdirection|trustattributes|forest tree root|trusted domain|get-domaintrust|get-adtrust/.test(low) ||
+      (/\btrust\b/.test(low) && /\b(bidirectional|inbound|outbound|one-way|two-way|forest_transitive|within_forest)\b/.test(low));
+    var names = {}, order = [];
+    function add(d) { if (!d) return; d = d.toLowerCase().replace(/[.,]$/, ''); if (!names[d] && /\.[a-z]{2,}$/.test(d)) { names[d] = 1; order.push(d); } }
+    // nltest: "    0: ACME acme.local (NT 5) (Forest Tree Root) ..."
+    reAll(/^\s*\d+:\s+\S+\s+([A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,})/gm, text).forEach(function (m) { add(m[1]); });
+    // PowerView: "TargetName : child.acme.local"   /  Get-ADTrust: "Target : ..."
+    reAll(/\b(?:TargetName|Target|SourceName)\s*:\s*([A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,})/gi, text).forEach(function (m) { add(m[1]); });
+    // nxc / generic arrow notation: "acme.local -> child.acme.local"
+    reAll(/->\s*([A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,})/g, text).forEach(function (m) { add(m[1]); });
+    if (!trustWord && !order.length) return;
+    _add(facts, mkFact('ad.trusts', C._scope_for_domain(ws), { count: order.length, domains: order.slice(0, 20) }, S, source));
+  }
+  C._parse_domain_trusts = _parse_domain_trusts;
+
+  // --- Zerologon (CVE-2020-1472) scan verdict -> ad.zerologon, so zerologon-exploit lights up. Only a
+  //     clear "vulnerable/success" and not a patched/failed line (a negative run must mint nothing). ---
+  function _parse_zerologon_scan(text, ws, source, facts) {
+    if (!text) return;
+    var low = text.toLowerCase();
+    if (!/zerologon|cve-2020-1472|netlogon/.test(low)) return;
+    if (/not vulnerable|target is patched|is not vulnerable|attack failed|exploit failed|patched!|STATUS_ACCESS_DENIED/i.test(text)) return;
+    if (/success!|is vulnerable|target vulnerable|can be fully compromised|exploitable|performing attack.*success/i.test(low)) {
+      _add(facts, mkFact('ad.zerologon', C._scope_for_domain(ws), { cve: 'CVE-2020-1472', vulnerable: true }, S, source));
+    }
+  }
+  C._parse_zerologon_scan = _parse_zerologon_scan;
+
+  // --- ADCS via certipy/pywhisker. `certipy find -vulnerable` names ESC-vulnerable templates
+  //     -> adcs.vulnerable; `certipy req` / pywhisker save a .pfx -> credential.certificate (the cert
+  //     you can exchange for a TGT/NT hash). Conservative: a real ESC marker, or a saved-PFX line. ---
+  var _ESC_RE = /\bESC(?:1[0-6]|[1-9])\b/g;
+  function _parse_adcs(text, ws, command, source, facts) {
+    if (!text) return;
+    var escs = {}, order = [], m;
+    _ESC_RE.lastIndex = 0;
+    while ((m = _ESC_RE.exec(text)) !== null) { var e = m[0].toUpperCase(); if (!escs[e]) { escs[e] = 1; order.push(e); } }
+    var vulnWord = /\[!\]\s*vulnerabilit|is vulnerable to|vulnerable templates|ESC\d/i.test(text);
+    if (order.length || vulnWord) {
+      var tmpls = C.uniqueSortedCI(reAll(/\b(?:Template Name|Template)\s*:\s*([^\n\r]{1,64})/gi, text).map(function (x) { return (x[1] || '').trim(); }).filter(Boolean));
+      _add(facts, mkFact('adcs.vulnerable', C._scope_for_domain(ws), { esc: order.slice(0, 16), templates: tmpls.slice(0, 10) }, S, source));
+    }
+    // a saved certificate/private key (certipy req, pywhisker --action add)
+    var pfx = reSearch(/Saved (?:certificate and private key|PFX)[^\n]*?(?:to|at)\s*'?([^\s'"]+\.pfx)'?/i, text) ||
+      reSearch(/'?([A-Za-z0-9_.-]+\.pfx)'?\s*(?:saved|written)/i, text);
+    if (pfx) _add(facts, mkFact('credential.certificate', C._scope_for_domain(ws), { pfx: pfx[1], via: /pywhisker/i.test(command) ? 'shadow-credentials' : 'adcs' }, S, source));
+  }
+  C._parse_adcs = _parse_adcs;
+
+  // --- certipy auth: a PKINIT/cert auth that returns the account's NT hash (and a usable credential). ---
+  var _CERT_HASH_RE = /Got hash for\s+'?[^:'"\n]+'?\s*:\s*(?:[a-f0-9]{32}:)?([a-f0-9]{32})/i;
+  function _parse_certipy_auth(text, ws, command, source, facts) {
+    if (!text) return;
+    var hm = reSearch(_CERT_HASH_RE, text);
+    if (hm) {
+      _add(facts, mkFact('hash.ntlm', C._scope_for_domain(ws), { nthash: hm[1].toLowerCase(), via: 'certipy-auth' }, S, source));
+      _add(facts, mkFact('credential.available', C._scope_for_domain(ws), { kind: 'cert_auth_nt_hash', via: 'certipy-auth' }, S, source));
+    } else if (/Got TGT|Saved credential cache|\.ccache/i.test(text)) {
+      _add(facts, mkFact('credential.available', C._scope_for_domain(ws), { kind: 'cert_auth_tgt', via: 'certipy-auth' }, S, source));
+    }
+  }
+  C._parse_certipy_auth = _parse_certipy_auth;
+
+  // --- late-game AD recording facts (the move already lands the access; these record the specific
+  //     primitive for the report and the map's parser lens). All content-gated on a success marker. ---
+  function _parse_lateral_movement(text, ws, source, facts) {
+    if (/nt authority\\system|Microsoft Windows \[Version|^[A-Z]:\\[^\n]*>|\bpwned\b|Access granted/i.test(text)) {
+      _add(facts, mkFact('lateral.movement', C._scope_for_domain(ws), { via: /rubeus|ptt|ticket/i.test(text) ? 'ticket-reuse' : 'lateral-exec' }, S, source));
+    }
+  }
+  C._parse_lateral_movement = _parse_lateral_movement;
+
+  function _parse_coerced_auth(text, ws, source, facts) {
+    if (/received connection|smb.*ntlmv2|attack worked|triggered|rpc.*success|\[\+\].*(?:coerc|petitpotam|printerbug|dfscoerce)/i.test(text)) {
+      _add(facts, mkFact('ad.coerced_auth', C._scope_for_domain(ws), { note: 'authentication coerced from the target' }, S, source));
+    }
+  }
+  C._parse_coerced_auth = _parse_coerced_auth;
+
+  function _parse_gpo_control(text, ws, source, facts) {
+    if (/version(?:Number)? (?:updated|incremented)|scheduled task created|immediate task|gPCMachineExtensionNames|GPO .* modified|\[\+\].*gpo/i.test(text)) {
+      _add(facts, mkFact('ad.gpo_control', C._scope_for_domain(ws), { note: 'a writable GPO was modified' }, S, source));
+    }
+  }
+  C._parse_gpo_control = _parse_gpo_control;
+
+  function _parse_sid_history(text, ws, source, facts) {
+    if (/ExtraSids|sid-?history|SID History (?:added|injected)|-extra-sid/i.test(text)) {
+      _add(facts, mkFact('ad.sid_history', C._scope_for_domain(ws), { note: 'SID history abused for cross-domain privilege' }, S, source));
+    }
+  }
+  C._parse_sid_history = _parse_sid_history;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

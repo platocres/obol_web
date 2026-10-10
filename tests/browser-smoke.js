@@ -39,13 +39,16 @@ function serve() {
 
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
+  // First-run routing: a brand-new visitor (no synced Loadout + only the untouched seed engagement)
+  // lands on Learn — the teaching front door — not on the empty engagement.
+  ok(page.url().indexOf('#/study') >= 0, 'first-run lands on Learn (got ' + page.url().split('#')[1] + ')');
   // a first-time visitor lands on the plain Obol skin, in a clean untitled run — never an
-  // "Imported engagement" with a stale seed target. (Neon and the rest stay selectable in ⚙.)
+  // "Imported engagement" with a stale seed target. (Neon and the rest stay selectable in settings.)
   ok(await page.getAttribute('html', 'data-skin') === 'obol', 'default skin is obol for a fresh visitor');
   const firstEng = await page.evaluate(() => { var e = window.OBOL.store.active(); return { name: e && e.name, target: (e && e.params && e.params.target) || '' }; });
   ok(firstEng.name !== 'Imported engagement' && firstEng.target !== '10.129.85.48', 'fresh engagement is not the legacy import (' + JSON.stringify(firstEng) + ')');
 
-  // presentation modules loaded (motion background, coin bursts, ⚙ settings)
+  // presentation modules loaded (motion background, coin bursts, settings panel)
   ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.backdrop && window.OBOL.coins)), 'backdrop + coin modules attached');
   ok(await page.locator('#obol-settings-toggle').count() === 1, 'bottom-right settings button rendered');
   ok(await page.locator('#skin-select').count() === 0, 'legacy appbar skin select removed (moved into settings)');
@@ -54,7 +57,7 @@ function serve() {
 
   // engine present + packs loaded
   const actionCount = await page.evaluate(() => window.OBOL && window.OBOL.packs ? window.OBOL.packs.actions().length : 0);
-  ok(actionCount === 161, 'packs loaded in browser (161 actions, got ' + actionCount + ')');
+  ok(actionCount >= 174, 'packs loaded in browser (>=174 actions, got ' + actionCount + ')');
 
   // Engagement screen is the default landing; launch an OSCP run with a scoped target.
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
@@ -89,20 +92,25 @@ function serve() {
   ok(wsRoot === '/home/kali/lab/box', 'launch saved the working directory (' + wsRoot + ')');
   ok(await page.locator('.ws-banner').count() === 1 && (await page.locator('.ws-banner .cmd-run code').first().textContent() || '').indexOf('mkdir -p /home/kali/lab/box/{') === 0,
     'coach shows the one-time workspace scaffold command');
-  const cmdHasScandir = await page.evaluate(() => Array.prototype.some.call(document.querySelectorAll('.move .cmd-run code'), function (c) { return c.textContent.indexOf('/home/kali/lab/box/scans/') !== -1; }));
-  ok(cmdHasScandir, 'coach commands write into the workspace scans/ directory');
+  // Output paths are RELATIVE to root (the scaffold cds into it), so a coach command writes `scans/…`,
+  // never the root-prefixed `/home/kali/lab/box/scans/…` (that would double-nest after the cd).
+  const cmdCodes = await page.evaluate(() => Array.prototype.map.call(document.querySelectorAll('.ns-card .cmd-run-code'), function (c) { return c.textContent; }).join('\n'));
+  ok(cmdCodes.indexOf('scans/') !== -1 && cmdCodes.indexOf('/home/kali/lab/box/scans/') === -1,
+    'coach commands write into the relative scans/ dir, not a root-prefixed path that double-nests');
   // launching configured the default in place (no stray second run) and the home panel now shows it
   const engCount = await page.evaluate(() => window.OBOL.store.listEngagements().length);
   ok(engCount === 1, 'launch configured the default run in place, no stray empty engagement (' + engCount + ')');
   const scopedTargets = await page.evaluate(() => window.OBOL.store.active().targets.length);
   ok(scopedTargets === 1, 'scope paste kept the bare IP as a target, filtered junk+CIDR (' + scopedTargets + ')');
   await page.waitForTimeout(200);
-  const moveCount = await page.locator('.move').count();
-  ok(moveCount >= 1, 'coach renders at least one move after adding a target (' + moveCount + ')');
-  const firstMove = (await page.locator('.move-title').first().textContent()) || '';
-  ok(/nmap/i.test(firstMove), 'top coach move is nmap recon ("' + firstMove.trim() + '")');
-  ok(await page.locator('.move .cmd-run code').count() >= 1, 'move shows a copy-ready command (no toggles)');
-  ok(await page.locator('.move input, .move select').count() === 0, 'coach move has NO form toggles/switches');
+  const moveCount = await page.locator('.ns-card').count();
+  ok(moveCount >= 1, 'coach renders at least one move card after adding a target (' + moveCount + ')');
+  const firstMove = (await page.locator('.ns-card .ns-title').first().textContent()) || '';
+  ok(/nmap/i.test(firstMove), 'top coach card is nmap recon ("' + firstMove.trim() + '")');
+  ok(await page.locator('.ns-card .cmd-run-code').count() >= 1, 'card shows a copy-ready command');
+  ok(await page.locator('.ns-card.selected').count() === 1, 'exactly one card is selected (the #1 move, auto-opened)');
+  ok(await page.locator('.ns-card .ns-suggested').count() === 1, 'the #1 card carries a single Suggested Start tag');
+  ok(await page.locator('.ns-card select').count() === 0, 'no command-builder dropdowns on the coach (building lives in Tools)');
   // now that the run is configured, the home panel shows the active run + phase bar (not the guide)
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(200);
@@ -111,14 +119,23 @@ function serve() {
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(200);
 
-  // Blocked list present
-  ok(await page.locator('.coach-blocked').count() >= 1, 'blocked-with-reasons section present');
+  // "Opens Up Next" — the aspirational roadmap of capability-unlocks replaces the old blocked wall.
+  ok(await page.locator('.ns-opens').count() >= 1, 'the Opens Up Next roadmap is present');
+  ok(await page.locator('.ns-opens .ns-factchip').count() >= 1, 'roadmap cards carry capitalized fact chips (what they need)');
 
-  // Live context rail is present on the coach (shown at >=1500px; element always rendered).
-  ok(await page.locator('.withrail .context-rail').count() === 1, 'coach live context rail rendered');
-  ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.rail && window.OBOL.rail.html)), 'rail module exposed for reuse');
+  // The field-notes canvas is the coach's right column (the old context rail moved to the per-target view).
+  ok(await page.locator('#ns-canvas .ns-canvas-kick').count() === 1, 'the field-notes canvas renders for the selected move');
+
+  // Scope lens: the newcomer-safe syllabus filter renders with its three levels and a default selection.
+  ok(await page.locator('.coach-lens .lens-opt').count() === 3, 'scope lens renders OSCP / OSCP+ / All');
+  // coach → Loadout status strip: with no synced profile it shows the set-up CTA linking to Loadout
+  ok(await page.locator('.coach .lo-strip-cta[href="#/loadout"]').count() === 1, 'coach shows the Loadout set-up CTA strip when no box is synced');
+  ok(await page.locator('.coach-lens .lens-opt.on').count() === 1, 'scope lens has exactly one active level');
+  ok(await page.evaluate(() => !!(window.OBOL && window.OBOL.rail && window.OBOL.rail.html)), 'rail module still exposed for the per-target view');
 
   // Guided fact picker (sidebar): a friendly labelled option adds the underlying fact kind.
+  // The Facts section is a collapsed-by-default <details>; open it before touching the picker.
+  await page.evaluate(() => { var d = document.getElementById('facts-panel'); if (d) d.open = true; });
   ok(await page.locator('#fact-pick .fp-sel').count() === 1, 'sidebar guided fact picker rendered');
   const beforePick = await page.evaluate(() => window.OBOL.store.factSet().has('smb.reachable'));
   await page.selectOption('#fact-pick .fp-sel', 'smb.reachable');
@@ -171,7 +188,7 @@ function serve() {
   // The coach should now surface more moves than before parsing.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
-  ok(await page.locator('.move').count() >= 2, 'coach recomputed: more moves unlocked after evidence (' + (await page.locator('.move').count()) + ')');
+  ok(await page.locator('.ns-card').count() >= 2, 'coach recomputed: more move cards unlocked after evidence (' + (await page.locator('.ns-card').count()) + ')');
 
   // Per-target attack-path page (scoped to the launched target's facts).
   await page.goto(`http://localhost:${PORT}/index.html#/target/10.10.10.10`, { waitUntil: 'networkidle' });
@@ -187,7 +204,7 @@ function serve() {
   // attack path: dense horizontal block ribbon (this target has recon facts from the earlier nmap paste)
   ok(await page.locator('.apath-flow .apath-block').count() >= 1, 'target page shows the attack-path ribbon (' + (await page.locator('.apath-flow .apath-block').count()) + ' blocks)');
   ok(await page.locator('.apath-block .ph-chip').count() >= 1, 'attack-path blocks carry a phase category chip');
-  ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Attack Path — What Led to What') !== -1; }), 'attack-path heading is Title Case');
+  ok((await page.locator('.target-route .coach-sec-h').allTextContents()).some(function (h) { return h.indexOf('Attack Path: What Led to What') !== -1; }), 'attack-path heading is Title Case');
   // A proven hostname is reflected onto the target record and shown alongside the IP in the header.
   await page.evaluate(() => {
     const S = window.OBOL.store, F = window.OBOL.facts;
@@ -219,11 +236,8 @@ function serve() {
   // Redaction is opt-in: a recovered password shows in cleartext by default (not dots).
   const aliceSecret = (await page.locator('#cred-switch .cred-row', { hasText: 'alice' }).locator('.cred-secret').textContent()) || '';
   ok(aliceSecret.indexOf('S3cret!') !== -1 && aliceSecret.indexOf('•') === -1, 'the credential switcher shows the real password by default (redaction is opt-in), got "' + aliceSecret + '"');
-  // the live context RAIL's Credentials card also shows the recovered secret (not just user@domain).
-  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(150);
-  const railSecret = (await page.locator('.context-rail .rail-secret').first().textContent().catch(() => '')) || '';
-  ok(railSecret.indexOf('S3cret!') !== -1, 'the coach rail Credentials card shows the recovered password, got "' + railSecret + '"');
+  // (The old coach context rail was removed in the Next Steps redesign; credential visibility is covered by
+  // the switcher above, so the rail-specific secret/dedup checks retire with the element.)
   // …and the report's Redact Secrets toggle masks it here too.
   await page.evaluate(() => { window.OBOL.store.update((e) => { e.ui = e.ui || {}; e.ui.reportRedact = true; }, 'ui'); window.OBOL.app.renderSidebar(); });
   await page.waitForTimeout(80);
@@ -236,16 +250,10 @@ function serve() {
   const swapped = await page.evaluate(() => { const p = window.OBOL.store.active().params; return p.username === 'bob' && p.nthash === 'aabbccddeeff00112233445566778899'; });
   ok(swapped, 'clicking a credential fills the engagement params (bob + NT hash)');
   ok(await page.locator('#cred-switch .cred-row.active', { hasText: 'bob' }).count() === 1, 'the chosen credential is marked active');
-  // The right-rail Credentials card dedupes: one credential proven on two scopes must show ONCE, not twice.
-  await page.evaluate(() => {
-    const S = window.OBOL.store, F = window.OBOL.facts;
-    S.addFacts([F.makeFact({ kind: 'credential.available', scope: 'host:10.10.10.7', value: { user: 'alice', domain: 'corp.local', password: 'S3cret!' }, state: F.ProofState.SUPPORTED, source: 'test2' })], 'test');
-  });
+
+  // Retire/un-retire is judged PER MOVE (its own runs), not per fact-kind. Run on the coach route.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(150);
-  ok((await page.locator('.context-rail .rail-list li', { hasText: 'alice@corp.local' }).count()) === 1, 'the coach rail lists a credential proven on two scopes only once (deduped)');
-
-  // Retire/un-retire is judged PER MOVE (its own runs), not per fact-kind.
   await page.evaluate(() => {
     const S = window.OBOL.store, F = window.OBOL.facts;
     S.update((e) => { e.checklist = e.checklist || {}; e.checklist['bloodyad-acl'] = 'empty'; }, 'done');
@@ -253,7 +261,7 @@ function serve() {
     window.OBOL.router.render();
   });
   await page.waitForTimeout(120);
-  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) === 0, 'a move retired empty (none of its own runs produced a fact) stays out of the coach');
+  ok((await page.locator('.ns-card[data-action="bloodyad-acl"]').count()) === 0, 'a move retired empty (none of its own runs produced a fact) stays out of the coach');
   // The sccm bug: a fact-KIND this move produces (credential.candidate) exists from an UNRELATED source —
   // that must NOT un-retire it.
   await page.evaluate(() => {
@@ -262,14 +270,18 @@ function serve() {
     window.OBOL.router.render();
   });
   await page.waitForTimeout(120);
-  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) === 0, 'a produced fact-kind from an UNRELATED move does not un-retire (the sccm regression)');
+  ok((await page.locator('.ns-card[data-action="bloodyad-acl"]').count()) === 0, 'a produced fact-kind from an UNRELATED move does not un-retire (the sccm regression)');
   // New evidence: a run attributed to THIS move produces a fact → un-retire (the chain is recoverable).
+  // The get-writable run yields an ACL lead, so mint that fact too (ACL abuse is gated on a known abusable
+  // ACL — see docs/MOVE-ENGINE.md), which is also what makes the move eligible again.
   await page.evaluate(() => {
-    window.OBOL.store.update((e) => { e.activities = e.activities || []; e.activities.unshift({ at: Date.now(), action_id: 'bloodyad-acl', produced: ['ad.acl_lead'], command: "bloodyAD -d corp.local --host 10.10.10.9 -u alice -p x get writable" }); }, 'activity');
+    const S = window.OBOL.store, F = window.OBOL.facts;
+    S.addFacts([F.makeFact({ kind: 'ad.acl_lead', scope: 'domain:corp.local', value: { right: 'WriteDacl' }, state: F.ProofState.SUPPORTED, source: 'bloodyad-acl' })], 'test');
+    S.update((e) => { e.activities = e.activities || []; e.activities.unshift({ at: Date.now(), action_id: 'bloodyad-acl', produced: ['ad.acl_lead'], command: "bloodyAD -d corp.local --host 10.10.10.9 -u alice -p x get writable" }); }, 'activity');
     window.OBOL.router.render();
   });
   await page.waitForTimeout(120);
-  ok((await page.locator('.move[data-action="bloodyad-acl"]').count()) >= 1, 'the move RE-APPEARS once one of ITS OWN runs produced a fact (un-retired)');
+  ok((await page.locator('.ns-card[data-action="bloodyad-acl"]').count()) >= 1, 'the move RE-APPEARS once one of ITS OWN runs produced a fact (un-retired)');
 
   // Run Log: every command run is recorded and reviewable (with a filter), not just the attack-path moves.
   await page.evaluate(() => {
@@ -322,6 +334,61 @@ function serve() {
   ok(await page.locator('.eng-apath .apath-flow .apath-block').count() >= 1, 'engagement screen shows the engagement-wide Attack Path (' + (await page.locator('.eng-apath .apath-block').count()) + ' blocks)');
   ok(await page.locator('.eng-apath .apath-host').count() === 1, 'the engagement Attack Path carries a per-host IP·hostname header (shown even for one target)');
 
+  // Seed a pivot so the Connectivity panel surfaces its tunnel chooser + troubleshooter. The hub keeps
+  // Connectivity compact until a pivot is actually charted (routes/home.js connPanel), so without a pivot
+  // the chooser/guide/troubleshooter are intentionally absent to keep the rail short.
+  await page.evaluate(() => {
+    const O = window.OBOL, F = O.facts;
+    const eng = O.store.active();
+    const ip = (eng.targets && eng.targets[0] && (eng.targets[0].ip || eng.targets[0].id)) || (eng.params && eng.params.target) || '10.10.10.10';
+    O.store.addFacts([
+      F.makeFact({ kind: 'host.multihomed', scope: 'host:' + ip, source: 'scan' }),
+      F.makeFact({ kind: 'scan.local.interfaces', scope: 'host:' + ip, source: 'scan', value: { subnets: ['172.16.5.0/24'] } }),
+    ], 'facts');
+    O.router.render(); // re-render in place (a full reload would race the async fact persistence)
+  });
+  await page.waitForSelector('.hb-conn .conn-tool', { timeout: 5000 }).catch(() => {});
+
+  // Connection wizard: the hub's Connectivity panel carries the tunnel chooser, and the recommended
+  // Ligolo path is a thorough, phased, both-machine staging guide (the finished wizard).
+  ok(await page.locator('.hb-conn .conn-tool').count() >= 5, 'the connectivity panel offers at least five tunnel tools');
+  ok((await page.locator('.hb-conn .conn-tool.on').innerText()).toLowerCase().indexOf('ligolo') !== -1, 'Ligolo-ng is the default selected tunnel');
+  // the full step guide is collapsed by default (keeps the hub rail compact) — open it to inspect the steps
+  await page.locator('.hb-conn .conn-steps > summary').click();
+  await page.waitForTimeout(80);
+  ok(await page.locator('.hb-conn .stage-phase').count() >= 3, 'the Ligolo wizard groups its steps into phases (prepare / stage / open / use / clean up)');
+  ok(await page.locator('.hb-conn .stage-where-local').count() >= 1 && await page.locator('.hb-conn .stage-where-host').count() >= 1, 'the wizard labels steps on BOTH your Kali box and the target host');
+  ok((await page.locator('.hb-conn .stage-alt-l').allInnerTexts()).some(t => /windows/i.test(t)), 'the agent-transfer step spells out a Windows variant, not just Linux');
+  ok(await page.locator('.hb-conn .stage-verify').count() >= 1, 'wizard steps carry a "you will know it worked" checkpoint');
+  // swapping to another tool re-renders its own steps
+  await page.locator('.hb-conn [data-tunnel-sel="sshuttle"]').click();
+  await page.waitForTimeout(120);
+  ok((await page.locator('.hb-conn .conn-tool.on').innerText()).toLowerCase().indexOf('sshuttle') !== -1, 'the chooser swaps the selected tunnel tool');
+
+  // Pivot troubleshooter: symptom-first diagnosis expands off the same connectivity panel.
+  await page.locator('.conn-trouble > summary').click();
+  await page.waitForTimeout(80);
+  ok(await page.locator('.ptr-sym').count() >= 6, 'the troubleshooter offers plain-language symptom chips');
+  await page.locator('.ptr-sym[data-ptr-sym="all-filtered"]').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('.ptr-probes .stage-step').count() >= 1, 'picking a symptom reveals its machine-labelled probe commands');
+  await page.locator('.ptr-paste').fill('proxychains nmap -sS -p- 172.16.5.10');
+  await page.locator('.ptr-go').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('.ptr-verdict .ptr-v-bad').count() === 1, 'a SYN-over-SOCKS paste returns a likely-cause verdict');
+  ok((await page.locator('.ptr-fix code').first().innerText()).indexOf('-sT') !== -1, 'the verdict hands a copy-ready fix (-sT)');
+  ok(await page.locator('.hb-conn--warn').count() === 1, 'an unresolved problem lights the connectivity edge amber');
+  await page.locator('.ptr-paste').fill('proxychains -q nmap -sT -Pn -p 445 172.16.5.10');
+  await page.locator('.ptr-go').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('.ptr-verdict .ptr-v-ok').count() === 1, 'correct -sT -Pn flags read as healthy');
+  ok(await page.locator('.hb-conn--warn').count() === 0, 'a healthy verdict clears the amber state');
+  // unrecognized output stands down to the checklist rather than guessing
+  await page.locator('.ptr-paste').fill('just some unrelated noise');
+  await page.locator('.ptr-go').click();
+  await page.waitForTimeout(120);
+  ok(await page.locator('.ptr-verdict .ptr-v-note .ptr-checklist').count() === 1, 'unrecognized output hands over the general checklist');
+
   // Loot glue: proving a user list resolves {{userlist}}/{{hashfile}} to workspace paths and offers
   // a "set up first" heredoc that writes the exact proven names to loot/users.txt.
   await page.evaluate(() => {
@@ -334,42 +401,41 @@ function serve() {
   });
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(250);
-  const roast = page.locator('.move[data-action="asrep-roast"]');
+  const roast = page.locator('.ns-card[data-action="asrep-roast"]');
   ok(await roast.count() === 1, 'proving a user list surfaces the AS-REP Roasting move on the coach');
-  const roastCmd = (await roast.locator('.cmd-run code').allTextContents()).join('\n');
-  ok(roastCmd.indexOf('/home/kali/lab/box/loot/users.txt') !== -1, '{{userlist}} now resolves to the workspace loot/users.txt path (not a bare placeholder)');
-  ok(roastCmd.indexOf('/home/kali/lab/box/loot/asrep.hashes') !== -1, '{{hashfile}} resolves to loot/asrep.hashes so roast + crack agree on one file');
+  const roastCmd = (await roast.locator('.cmd-run-code').allTextContents()).join('\n');
+  ok(roastCmd.indexOf('loot/users.txt') !== -1 && roastCmd.indexOf('/home/kali/lab/box/loot/users.txt') === -1, '{{userlist}} resolves to the relative loot/users.txt path (run from inside root)');
+  ok(roastCmd.indexOf('loot/asrep.hashes') !== -1, '{{hashfile}} resolves to loot/asrep.hashes so roast + crack agree on one file');
   const prep = roast.locator('.move-prep');
   ok(await prep.count() === 1, 'the roast move offers a "set up first" materialize block');
   const prepCmd = (await prep.locator('.cmd-run code').first().textContent()) || '';
-  ok(prepCmd.indexOf("cat > /home/kali/lab/box/loot/users.txt <<'EOF'") === 0, 'the materialize command is a heredoc writing the canonical users.txt');
+  ok(prepCmd.indexOf("cat > loot/users.txt <<'EOF'") === 0, 'the materialize command is a heredoc writing the canonical users.txt');
   ok(prepCmd.indexOf('Administrator') !== -1 && prepCmd.indexOf('svc-web') !== -1, 'the heredoc body carries the exact proven usernames');
   const prepBeforeCmds = await roast.evaluate((el) => {
-    const prep = el.querySelector('.move-prep'), cmd = el.querySelector('.cmd:not(.cmd-prep)');
+    const prep = el.querySelector('.move-prep'), cmd = el.querySelector('.ns-cmd');
     return !!(prep && cmd && (prep.compareDocumentPosition(cmd) & Node.DOCUMENT_POSITION_FOLLOWING));
   });
   ok(prepBeforeCmds, 'the "set up first" block renders ABOVE the roast commands it must precede');
 
-  // Inline per-command ingestion on the coach: open a move's paste box, ingest its output in place.
+  // Inline per-command ingestion on the coach: open the OPEN card's paste box, ingest its output in place.
+  // (The paste box lives in the expanded card body, so it is the selected #1 card's that is interactive.)
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('.coach .move .btn-pasteback', { timeout: 6000 });
+  await page.waitForSelector('.coach .ns-card.selected .btn-pasteback', { timeout: 6000 });
   const actsBefore = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
-  ok(await page.locator('.coach .move .move-ingest[hidden]').count() >= 1, 'each move carries an inline ingestion box (collapsed by default)');
-  await page.locator('.coach .move .btn-pasteback').first().click();
-  await page.waitForSelector('.coach .move .move-ingest:not([hidden]) .mi-text', { timeout: 3000 });
+  ok(await page.locator('.coach .ns-card .move-ingest[hidden]').count() >= 1, 'each card carries an inline ingestion box (collapsed by default)');
+  await page.locator('.coach .ns-card.selected .btn-pasteback').first().click();
+  await page.waitForSelector('.coach .ns-card.selected .move-ingest:not([hidden]) .mi-text', { timeout: 3000 });
   ok(true, 'the Paste Output button expands the inline ingestion box in place (no route jump)');
-  await page.locator('.coach .move .move-ingest:not([hidden]) .mi-text').fill('PORT      STATE SERVICE\n5985/tcp  open  wsman\n');
-  await page.locator('.coach .move .move-ingest:not([hidden]) .mi-go').click();
+  await page.locator('.coach .ns-card.selected .move-ingest:not([hidden]) .mi-text').fill('PORT      STATE SERVICE\n5985/tcp  open  wsman\n');
+  await page.locator('.coach .ns-card.selected .move-ingest:not([hidden]) .mi-go').click();
   await page.waitForTimeout(500);
   const actsAfter = await page.evaluate(() => (window.OBOL.store.active().activities || []).length);
   ok(actsAfter === actsBefore + 1, 'inline ingestion records exactly ONE activity — no duplicate from re-bound listeners (' + actsBefore + '→' + actsAfter + ')');
-  // Paste Output must still TOGGLE OPEN after the ingest (guards the stacked-delegated-listener
-  // regression where a click nets to a no-op). Force a known-closed state first — the ingest may or
-  // may not have re-rendered depending on whether the pasted output minted facts for the top move.
-  await page.evaluate(() => { document.querySelectorAll('.coach .move .move-ingest:not([hidden])').forEach(function (b) { b.setAttribute('hidden', ''); }); });
-  await page.locator('.coach .move .btn-pasteback').first().click();
+  // Paste Output must still TOGGLE OPEN after the ingest (guards the stacked-delegated-listener regression).
+  await page.evaluate(() => { document.querySelectorAll('.coach .ns-card .move-ingest:not([hidden])').forEach(function (b) { b.setAttribute('hidden', ''); }); });
+  await page.locator('.coach .ns-card.selected .btn-pasteback').first().click();
   await page.waitForTimeout(120);
-  ok(await page.locator('.coach .move .move-ingest:not([hidden])').count() >= 1, 'Paste Output still opens the box after a re-render (no listener stacking)');
+  ok(await page.locator('.coach .ns-card.selected .move-ingest:not([hidden])').count() >= 1, 'Paste Output still opens the box after a re-render (no listener stacking)');
 
   // nmap XML output (-oX -) must parse in-browser (DOMParser path). nmap always emits
   // `<!DOCTYPE nmaprun>`, which the XXE guard used to reject — so real nmap XML never parsed.
@@ -432,15 +498,31 @@ function serve() {
 
   // Inline free-text token fill: an exec move's {{command}} placeholder gets a text box that
   // substitutes into the shown command (and the copy button) live — no trip to Tools required.
-  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  // An exec move only shows a runnable command once a usable credential (user + secret) resolves. An earlier
+  // step left a passwordless identity pinned (added, activated, then deleted carol) which would gate every
+  // exec command, so clear that pin: with no pinned user the fill adopts the first COMPLETE credential
+  // (alice, who has a password), making the {{command}} exec command runnable. Bounce through another route
+  // so the coach re-renders from the live store (no full reload, so nothing else is disturbed).
+  await page.evaluate(() => { window.OBOL.store.update(function (eng) { eng.params = eng.params || {}; delete eng.params.username; delete eng.params.nthash; delete eng.params.user; delete eng.params.password; }, 'params'); });
+  await page.evaluate(() => window.OBOL.router.go('home'));
+  await page.waitForTimeout(80);
+  await page.evaluate(() => window.OBOL.router.go('path'));
   await page.waitForTimeout(250);
-  const cmdFill = page.locator('.coach .cmd-fillable .cmd-fill[data-tok="command"]').first();
-  ok(await cmdFill.count() >= 1, 'an exec move with a {{command}} placeholder offers an inline fill box on the coach');
+  // the fill box lives in a card body, so open the card holding it first, then type into it.
+  const fillCard = page.locator('.ns-card:has(.cmd-fill[data-tok="command"])').first();
+  ok(await fillCard.count() >= 1, 'an exec move with a {{command}} placeholder exists on the coach');
+  // The card may sit inside a collapsed section (Coming Up, or the lower-priority "more ready" fold), so
+  // open any ancestor <details> before clicking its title.
+  await fillCard.evaluate((el) => { let d = el.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } el.scrollIntoView(); });
+  await fillCard.locator('.ns-title').click();
+  await page.waitForTimeout(150);
+  const cmdFill = fillCard.locator('.cmd-fill[data-tok="command"]').first();
+  ok(await cmdFill.count() >= 1, 'opening that card reveals its inline {{command}} fill box');
   await cmdFill.fill('whoami /all');
   await page.waitForTimeout(60);
   const filledCmd = await cmdFill.evaluate((inp) => {
-    const cmd = inp.closest('.cmd');
-    return { code: cmd.querySelector('.cmd-run code').textContent, copy: cmd.querySelector('.btn-copy').getAttribute('data-copy') };
+    const cmd = inp.closest('.ns-cmd');
+    return { code: cmd.querySelector('.cmd-run-code').textContent, copy: cmd.querySelector('.btn-copy').getAttribute('data-copy') };
   });
   ok(filledCmd.code.indexOf('whoami /all') !== -1 && filledCmd.code.indexOf('{{command}}') === -1, 'typing fills {{command}} into the shown command live');
   ok(filledCmd.copy.indexOf('whoami /all') !== -1, 'the copy button now yields the filled command');
@@ -712,7 +794,7 @@ function serve() {
   ok(await page.locator('.eng-library .eng-danger-toggle').count() === 1, 'engagement library carries a Manage / Reset disclosure near the top');
   await page.locator('.eng-danger-toggle > summary').click();
   ok(await page.locator('#eng-clear').isVisible() && await page.locator('#eng-reset').isVisible(), 'Delete-All-Engagements and Full-Reset buttons are present');
-  ok(await page.locator('.obol-set-danger').count() === 1, 'the ⚙ settings panel carries an always-reachable Full Reset');
+  ok(await page.locator('.obol-set-danger').count() === 1, 'the settings panel carries an always-reachable Full Reset');
   // Delete All Engagements clears every run; init() reseeds one fresh engagement.
   const cleared = await page.evaluate(async () => { await window.OBOL.store.createEngagement('temp-run'); await window.OBOL.store.clearEngagements(); await window.OBOL.store.init(); return window.OBOL.store.listEngagements().length; });
   ok(cleared === 1, 'Delete All Engagements clears every run; a fresh one is seeded (' + cleared + ')');
@@ -741,6 +823,229 @@ function serve() {
     { timeout: 6000 }).then(() => true).catch(() => false);
   ok(bootedBlocked, 'boot completes via fallback when IndexedDB.open is blocked (no infinite hang)');
   await blocked.close();
+
+  // Nav order: Learn (the teaching front door) is leftmost, Loadout (box setup) second. Both are
+  // primary nav items ahead of the engagement surfaces.
+  ok((await page.locator('header.appbar .mainnav a[href="#/loadout"]').count()) === 1, 'Loadout is a primary nav item');
+  ok(await page.evaluate(() => {
+    var links = Array.from(document.querySelectorAll('header.appbar .mainnav a[data-nav]')).map(function (a) { return a.getAttribute('href'); });
+    return links.length >= 2 && links[0] === '#/study' && links[1] === '#/loadout';
+  }), 'Learn is the LEFTMOST nav item, Loadout second');
+  await page.goto(`http://localhost:${PORT}/index.html#/loadout`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.lo-route', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.lo-route .lo-steps .lo-download').count()) === 1, 'Loadout empty-state shows the guided quickstart with a download button');
+  ok((await page.locator('.lo-route .lo-paste').count()) === 1, 'Loadout quickstart has the paste-back textarea');
+  ok((await page.locator('.lo-route .lo-tool').count()) >= 10, 'Loadout renders the Arsenal catalog (' + (await page.locator('.lo-route .lo-tool').count()) + ' tool cards)');
+  ok(await page.evaluate(() => !!(window.OBOL.ARSENAL && window.OBOL.arsenal && typeof window.OBOL.arsenal.buildScript === 'function')), 'ARSENAL data + arsenal.js loaded with the route');
+  // the generated script is non-trivial and bash-shaped
+  const script = await page.evaluate(() => window.OBOL.arsenal.buildScript() || '');
+  ok(script.length > 3000, 'buildScript() produces a substantial setup script (' + script.length + ' bytes)');
+  ok(script.indexOf('obol_stamp') >= 0 && script.indexOf('precmd_functions') >= 0, 'the setup script installs the obol prompt stamp when opted in (default)');
+  ok(script.indexOf('$SUDO -v') >= 0, 'the setup script primes sudo once up front');
+  // the prompt-stamp is an explained opt-in, shown before download and honored by the generator
+  ok(await page.locator('.lo-route .lo-stamp-opt').count() === 1, 'Loadout shows the prompt-stamp opt-in checkbox before download');
+  const scriptNoStamp = await page.evaluate(() => window.OBOL.arsenal.buildScript({ promptStamp: false }) || '');
+  ok(scriptNoStamp.indexOf('obol_stamp') < 0, 'unticking the opt-in omits the prompt stamp from the script');
+  // paste-back round-trip: feed an OBOL-ARSENAL block, ingest, and confirm the synced face appears
+  await page.evaluate(() => {
+    var inv = { v: 1, tools: { nxc: { present: true, invocation: 'nxc', path: '/usr/bin/nxc' }, 'impacket-psexec': { present: true, invocation: 'psexec.py', path: '/usr/bin/psexec.py' } }, staged: ['mimikatz.exe', 'Rubeus.exe'], wwwdir: '/home/kali/.obol/arsenal/www', digests: {}, wordlists: { rockyou: '/usr/share/wordlists/rockyou.txt' } };
+    var ta = document.querySelector('.lo-paste'); ta.value = 'noise\nOBOL-ARSENAL v1\n' + JSON.stringify(inv) + '\n$ ';
+    document.querySelector('.lo-ingest').click();
+  });
+  await page.waitForTimeout(150);
+  ok((await page.locator('.lo-route .lo-synced-chip').count()) === 1 && (await page.locator('.lo-route .lo-fs').count()) === 1, 'pasting the OBOL-ARSENAL block flips Loadout to the synced "Your Box" face');
+  ok(await page.evaluate(() => { try { return !!JSON.parse(localStorage.getItem('obol.arsenal-profile')).savedAt; } catch (e) { return false; } }), 'the machine profile is persisted per-browser');
+  // a synced tool shows its resolved invocation when it differs from the canonical form.
+  // impacket ships on Kali so it's under the "hide Kali-defaults" fold — untick to reveal (also exercises the toggle).
+  await page.locator('.lo-route #lo-hidekali').uncheck();
+  await page.waitForTimeout(100);
+  ok(((await page.locator('.lo-route .lo-tool', { hasText: 'impacket-psexec' }).first().textContent().catch(() => '')) || '').indexOf('psexec.py') !== -1, 'a synced tool reflects the box\'s actual invocation (psexec.py)');
+  await page.evaluate(() => { try { localStorage.removeItem('obol.arsenal-profile'); } catch (e) {} });
+
+  // ⌘K palette finds an arsenal tool and surfaces its install one-liner (ARSENAL is critical-path now,
+  // so the palette can index it from any route without opening Loadout first).
+  ok(await page.evaluate(() => !!window.OBOL.ARSENAL), 'ARSENAL registry is loaded at boot (critical path, available to ⌘K + command-rewrite)');
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => window.OBOL.palette.open());
+  await page.waitForSelector('.pal-input', { timeout: 4000 }).catch(() => {});
+  await page.locator('.pal-input').fill('certipy');
+  await page.waitForTimeout(120);
+  const palTool = (await page.locator('.pal-item', { hasText: 'Certipy' }).first().textContent().catch(() => '')) || '';
+  ok(palTool.indexOf('pipx install certipy-ad') !== -1, '⌘K finds a tool and shows its install command (certipy → pipx install certipy-ad)');
+  await page.keyboard.press('Escape');
+
+  // Study mode (milestone 1 — AD vertical slice). Learn opens on the MAP (pick a path); a node then
+  // shows the derived cell with remote-first commands + the replay; "Your turn" scores an answer.
+  await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-route', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.study-map .study-lane-card.active').count()) === 11, 'Learn opens on the map with all 11 pickable lanes');
+  // the Atlas: every lane's steps as one zoomable graph; draw a custom path and study it
+  await page.locator('[data-graph]').click();
+  await page.waitForTimeout(250);
+  ok((await page.locator('.atlas-stage').count()) === 1, 'the Atlas renders a zoomable stage');
+  ok((await page.locator('.atlas-node').count()) === actionCount, 'the Atlas shows all ' + actionCount + ' method steps as nodes');
+  ok((await page.locator('.atlas-band').count()) === 11, 'the Atlas groups steps into 11 lane bands');
+  ok((await page.locator('.atlas-edge-cross').count()) >= 1, 'the Atlas draws cross-lane bridges');
+  // density: search dims the non-matching steps
+  await page.locator('#atlas-search').fill('kerberoast');
+  await page.waitForTimeout(120);
+  ok((await page.locator('.atlas-node.dim').count()) > 100, 'searching the Atlas dims the non-matching steps');
+  ok((await page.locator('.atlas-node.qmatch').count()) >= 1, 'searching the Atlas highlights matches');
+  await page.locator('#atlas-search').fill('');
+  await page.waitForTimeout(100);
+  ok((await page.locator('.atlas-node.dim').count()) === 0, 'clearing the search restores every step');
+  // density: folding a lane band collapses its steps out of the layout
+  const beforeFold = await page.locator('.atlas-node').count();
+  await page.locator('.atlas-band[data-band="ad"] .ab-chev').click();
+  await page.waitForTimeout(200);
+  ok((await page.locator('.atlas-node').count()) === beforeFold - 65, 'folding the AD band collapses its 65 steps');
+  await page.locator('.atlas-band[data-band="ad"] .ab-chev').click();   // unfold
+  await page.waitForTimeout(200);
+  ok((await page.locator('.atlas-node').count()) === beforeFold, 'unfolding the AD band brings its steps back');
+  // fixed scenarios: toggling one loads its steps as the drawn path
+  ok((await page.locator('.atlas-scen').count()) >= 4, 'the Atlas offers fixed common scenarios to toggle');
+  await page.locator('.atlas-scen[data-scen="web-linux"]').click();
+  await page.waitForTimeout(120);
+  ok((await page.locator('.atlas-node.sel').count()) === 7, 'picking the "Web → Linux root" scenario lights its 7 steps');
+  ok((await page.locator('.atlas-scen.on').count()) === 1, 'the active scenario chip is marked');
+  await page.locator('.atlas-scen[data-scen="web-linux"]').click();   // toggle off
+  await page.waitForTimeout(80);
+  ok((await page.locator('.atlas-node.sel').count()) === 0, 're-clicking the scenario clears it');
+  // draw a 2-node custom path, then study it
+  await page.locator('.atlas-node[data-anode="asrep-roast"]').click();
+  await page.locator('.atlas-node[data-anode="crack-asrep"]').click();
+  await page.waitForTimeout(120);
+  ok((await page.locator('.atlas-node.sel').count()) === 2, 'clicking nodes draws a custom path (2 selected)');
+  await page.locator('[data-atlas="study"]').click();
+  await page.waitForTimeout(200);
+  ok((await page.locator('.study-panel-h', { hasText: 'custom path' }).count()) === 1, 'studying a custom path shows it as the rail');
+  ok((await page.locator('.study-cell-title').first().textContent().catch(() => '') || '').indexOf('AS-REP') !== -1, 'the custom path opens on its first step');
+  // deep-link straight into a node to exercise the cell + replay
+  await page.goto(`http://localhost:${PORT}/index.html#/study/asrep-roast`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-cols', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.study-gnode').count()) === 65, 'node view renders the full 65-step AD lane rail');
+  ok((await page.locator('.study-cell-title').first().textContent().catch(() => '') || '').indexOf('AS-REP') !== -1, 'the node cell is AS-REP Roasting');
+  ok((await page.locator('.study-cmd').first().locator('.study-loc').textContent().catch(() => '') || '').indexOf('REMOTE') !== -1, 'cell lists commands remote-first (first is REMOTE)');
+  // the replay: Skip jumps straight to the finished output with the signal highlighted
+  await page.locator('[data-rp="skip"]').click();
+  await page.waitForTimeout(200);
+  ok((await page.locator('.study-replay .rp-line.hot').count()) >= 1, 'the Watch replay highlights the signal line in the output');
+  // "Run it from" toggle: remote (your box) vs on the target, with a connect step
+  ok((await page.locator('.study-runways .rw-tab').count()) === 2, 'the cell offers a remote vs on-target run toggle');
+  await page.locator('.rw-tab[data-runway="onhost"]').click();
+  await page.waitForTimeout(120);
+  ok(!(await page.locator('.rw-pane[data-pane="onhost"]').isHidden()), 'switching to "on the target" reveals the on-host pane with a connect step');
+  ok((await page.locator('.rw-pane[data-pane="onhost"] .rw-connect').count()) === 1, 'the on-target pane shows how to connect first');
+  // the by-port view: a port is open → the moves it unlocks (signal recognition)
+  await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-map', { timeout: 6000 }).catch(() => {});
+  await page.locator('[data-ports]').click();
+  await page.waitForTimeout(200);
+  ok((await page.locator('.port-card').count()) >= 15, 'the by-port view renders a card per open port');
+  ok((await page.locator('.port-move').count()) === 0, 'cards are collapsed by default (no move pills shown yet)');
+  // one card expands on its own; its header is a real button (keyboard + screen-reader friendly)
+  const firstHead = page.locator('.port-head').first();
+  ok((await firstHead.getAttribute('aria-expanded')) === 'false', 'a collapsed card reports aria-expanded=false');
+  await firstHead.click();
+  await page.waitForTimeout(120);
+  ok((await page.locator('.port-head[aria-expanded="true"]').count()) === 1, 'clicking a card header expands just that one card');
+  ok((await page.locator('.port-move').count()) >= 1, 'the expanded card shows its ordered moves');
+  // expand all reveals every move; no connector arrows anymore
+  await page.locator('[data-ev-all]').click();
+  await page.waitForTimeout(150);
+  ok((await page.locator('.port-move').count()) >= 40, 'expand-all reveals the ordered moves each port unlocks');
+  ok((await page.locator('.ev-arrow').count()) === 0, 'no connector arrows between port moves');
+  // the DECISION MAP: flip the by-port view to the derived LTR forest (lazy-loads its engine + renderer)
+  await page.locator('[data-ev-mode="map"]').click();
+  await page.waitForSelector('#dt-view .dt-node', { timeout: 8000 }).catch(() => {});
+  const dtNodes = await page.locator('#dt-view .dt-node').count();
+  ok(dtNodes >= 40, 'the decision map renders the derived forest (' + dtNodes + ' nodes)');
+  ok((await page.locator('#dt-view .dt-node.dt-port').count()) >= 15, 'the forest has a port node per open-port card');
+  ok((await page.locator('#dt-view .dt-edge-spine').count()) >= 1, "the coach's ranked spine is lit on the map");
+  ok((await page.locator('#dt-view .dt-node.dt-handoff').count()) >= 1, 'a foothold move hands off to a post-foothold leaf');
+  // port filter: turn on just one port chip → the forest re-roots to that port only
+  const chip = page.locator('.dt-chip').first();
+  const chipLabel = (await chip.textContent().catch(() => '')) || '';
+  await chip.click();
+  await page.waitForTimeout(150);
+  ok((await page.locator('#dt-view .dt-node.dt-port').count()) === 1, 'a port filter chip re-roots the forest to that one port (' + chipLabel.trim() + ')');
+  await chip.click(); // clear the filter
+  await page.waitForTimeout(120);
+  // parser-coverage lens: flip to the parser lens → the stage recolors by what obol can read
+  await page.locator('[data-dt-lens="parser"]').click();
+  await page.waitForTimeout(120);
+  ok((await page.getAttribute('#dt-stage', 'data-lens')) === 'parser', 'the lens toggle switches the map to parser coverage');
+  ok((await page.locator('#dt-stage[data-lens="parser"] .dt-node.parse-gap, #dt-stage[data-lens="parser"] .dt-node.parse-verified').count()) >= 1, 'the parser lens classifies moves by readability (verified / gap)');
+  await page.locator('[data-dt-lens="methodology"]').click();
+  await page.waitForTimeout(100);
+  // back to the cards so the following move-pill assertions run against the card view
+  await page.locator('[data-dt="cards"]').click();
+  await page.waitForTimeout(150);
+  ok((await page.locator('.port-card').count()) >= 15 && (await page.locator('#dt-view').count()) === 0, 'the Cards button returns to the ordered-move cards');
+  ok((await page.locator('.port-move').count()) >= 40, 'returning to Cards preserves the expanded-move state');
+  await page.locator('.port-move').first().click();
+  await page.waitForTimeout(150);
+  ok((await page.locator('.study-cols').count()) === 1, 'clicking a port move opens its study cell');
+  ok((await page.locator('.study-back', { hasText: 'Open ports' }).count()) === 1, 'the cell can go back to the by-port view');
+  // multi-step replay: a two-sided tool (ligolo) shows per-locus headers in order (on your box / on the target)
+  await page.goto(`http://localhost:${PORT}/index.html#/study/pivot-ligolo`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-replay', { timeout: 6000 }).catch(() => {});
+  await page.locator('[data-rp="skip"]').click();
+  await page.waitForTimeout(250);
+  ok((await page.locator('.rp-step-h').count()) >= 3, 'a multi-step tool replays each setup step with its own locus header');
+  ok((await page.locator('.rp-step-h.rp-local').count()) >= 1 && (await page.locator('.rp-step-h.rp-host').count()) >= 1, 'the multi-step replay labels both "on your box" and "on the target" steps');
+  await page.goto(`http://localhost:${PORT}/index.html#/study/asrep-roast`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-cols', { timeout: 6000 }).catch(() => {});
+  await page.locator('[data-gear="practice"]').click();
+  await page.waitForTimeout(150);
+  await page.locator('.study-choice[data-verdict="correct"]').first().click();
+  await page.waitForTimeout(120);
+  ok((await page.locator('.study-verdict.show.ok').count()) === 1, 'Study "Your turn" scores the correct answer');
+  // the correct answer is recorded as mastery — on a fresh load the map shows progress on the AD lane
+  await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'networkidle' });   // reset the SPA's in-memory view to the map
+  await page.waitForSelector('.study-map', { timeout: 6000 }).catch(() => {});
+  ok((await page.locator('.study-lane-go', { hasText: 'studied' }).count()) >= 1, 'mastery persists: a lane card reports studied progress');
+
+  // Field-notes bench: every item that shows a Play button must actually play something, and a
+  // concept item with no demo must NOT show a dead Play button. (Regression: the last item used to
+  // render Play that did nothing.) xss-basics ends on a no-demo concept ("beat filters and CSP").
+  await page.goto(`http://localhost:${PORT}/index.html#/study/xss-basics`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-bench .bench-item', { timeout: 6000 }).catch(() => {});
+  const benchN = await page.locator('.study-bench .bench-item').count();
+  ok(benchN >= 2, 'field-notes bench lists its techniques (' + benchN + ')');
+  let deadPlay = 0, playable = 0;
+  for (let i = 0; i < benchN; i++) {
+    await page.locator('.study-bench .bench-item').nth(i).click();
+    await page.waitForTimeout(60);
+    const hasPlay = (await page.locator('.study-bench [data-bench-play]').count()) > 0;
+    const hasTermText = ((await page.locator('.study-bench #bench-term').textContent().catch(() => '')) || '').trim().length > 0;
+    if (hasPlay) { playable++; if (!hasTermText) deadPlay++; }           // Play present but nothing to play = dead button
+    else { const note = (await page.locator('.study-bench .bench-note').count()) > 0; if (!note) deadPlay++; } // no Play and no guidance = empty pane
+  }
+  ok(deadPlay === 0, 'no dead field-note item: every Play has output, every no-demo item shows guidance (' + deadPlay + ' bad)');
+  ok(playable >= 1, 'at least one field-note technique is playable (' + playable + ')');
+
+  // Rail keeps your place: scroll the step rail, click a step lower down, the rail must not jump to the top.
+  await page.goto(`http://localhost:${PORT}/index.html#/study/vhost-discovery`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.study-graph .study-gnode', { timeout: 6000 }).catch(() => {});
+  await page.evaluate(() => { const g = document.querySelector('.study-graph'); if (g) g.scrollTop = 320; });
+  const beforeTop = await page.evaluate(() => { const g = document.querySelector('.study-graph'); return g ? g.scrollTop : -1; });
+  // click a step that is currently scrolled into view (not the first one)
+  const visIdx = await page.evaluate(() => {
+    const g = document.querySelector('.study-graph'); const gr = g.getBoundingClientRect();
+    const nodes = [...g.querySelectorAll('.study-gnode')];
+    for (let i = 0; i < nodes.length; i++) { const r = nodes[i].getBoundingClientRect(); if (r.top >= gr.top && r.bottom <= gr.bottom) return i; }
+    return 0;
+  });
+  // click it the way a user does — a plain click on a step already on screen (Playwright's own
+  // .click() would scroll the rail to "action" the element, which a real user never triggers).
+  await page.evaluate((i) => { document.querySelectorAll('.study-graph .study-gnode')[i].click(); }, visIdx);
+  await page.waitForTimeout(150);
+  const afterTop = await page.evaluate(() => { const g = document.querySelector('.study-graph'); return g ? g.scrollTop : -1; });
+  ok(Math.abs(afterTop - beforeTop) <= 24, 'clicking a step keeps the rail scroll (was ' + beforeTop + ', now ' + afterTop + ')');
+  ok((await page.locator('.study-graph .study-gnode.active').count()) === 1, 'the clicked step is highlighted as active');
 
   await browser.close();
   server.close();

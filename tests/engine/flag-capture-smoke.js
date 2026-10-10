@@ -55,6 +55,26 @@ ok(captured(parse('nxc smb 10.0.0.5 -u administrator -H aaaa --spider C$', spide
 ok(sp.some(function (f) { return f.value.slot === 'root' && f.value.path === 'C:\\Users\\Administrator\\Desktop\\root.txt'; }), 'spider locates root.txt with its exact Windows path');
 ok(sp.some(function (f) { return f.value.slot === 'local' && f.value.path === 'C:\\Users\\svc-user\\Desktop\\user.txt'; }), 'spider locates user.txt (local slot) at the right user Desktop');
 
+// 1c-bis. LOCATE via a RECURSIVE SEARCH that prints BARE local paths (no UNC, no C$), as `where /r`,
+// `Get-ChildItem -Recurse | % FullName`, or `dir /s /b` do. This is what the operator runs ON the host to
+// find a flag that is not where a guess would put it (the Forest user flag lives on svc-alfresco's Desktop,
+// not Administrator's). Before, these bare paths minted nothing, so the capture kept guessing a dead path.
+var whereOut = [
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> Get-ChildItem C:\\Users -Recurse -Include user.txt,root.txt | Select -Expand FullName',
+  'C:\\Users\\svc-alfresco\\Desktop\\user.txt',
+  'C:\\Users\\Administrator\\Desktop\\root.txt',
+].join('\n');
+var wloc = located(parse('Get-ChildItem C:\\Users -Recurse -Force -Include user.txt,root.txt -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName', whereOut));
+ok(wloc.some(function (f) { return f.value.slot === 'local' && f.value.path === 'C:\\Users\\svc-alfresco\\Desktop\\user.txt'; }), 'a recursive search locates the user flag on the REAL user Desktop (svc-alfresco), from a bare path');
+ok(wloc.some(function (f) { return f.value.slot === 'root' && f.value.path === 'C:\\Users\\Administrator\\Desktop\\root.txt'; }), 'the same search locates root.txt from its bare path');
+ok(captured(parse('Get-ChildItem C:\\Users -Recurse | % FullName', whereOut)).length === 0, 'a bare-path search LOCATES only, captures nothing (no value read)');
+// Linux find output (bare absolute paths) locates too.
+var findOut = ['/home/jdoe/user.txt', '/root/root.txt'].join('\n');
+var floc = located(parse('find / -xdev -name user.txt -o -name root.txt 2>/dev/null', findOut));
+ok(floc.some(function (f) { return f.value.slot === 'local' && f.value.path === '/home/jdoe/user.txt'; }), 'Linux find locates the user flag from a bare /home path');
+// A `type …\user.txt` command echo is NOT a locate (it is a read attempt, no standalone path line).
+ok(located(parse('hostname; ipconfig; type C:\\Users\\Administrator\\Desktop\\user.txt', 'FOREST\nCannot find path')).length === 0, 'a `type …user.txt` echo with no path output locates nothing (not a false locate)');
+
 // 1d. PASTED INTERACTIVE FRAME: the operator pastes a whole evil-winrm frame — the prompt echoes the read
 // and the paste box may attach a DIFFERENT command (the spider) or none. The read + on-host verdict must be
 // recovered from the echoed prompt line, so the flag is captured and the ipconfig noise is not.
@@ -72,6 +92,23 @@ ok(frSpider.length === 1 && frSpider[0].kind === 'objective.local_flag' && frSpi
 var frNone = captured(parse('', frame));
 ok(frNone.length === 1 && frNone[0].value.flag === '480c594d4c140ae84a74a3168cc0d46e', 'a pasted on-host frame captures the flag even with no command attached');
 ok(located(parse('', frame)).length === 0, 'the on-host frame is a capture, not a locate');
+
+// 1d-bis. A SINGLE paste holding TWO reads (the operator read user.txt then root.txt in one interactive
+// session) must attribute EACH flag to the nearest preceding read: the user flag is local, the root flag is
+// root. The promptless whole-blob path (no segmentation) used to apply the FIRST read's slot to every value,
+// so a run that read user.txt then root.txt lost the root flag (both minted as local). Each value now binds
+// to the read that precedes it.
+var twoReads = [
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> hostname; ipconfig; type C:\\Users\\svc-user\\Desktop\\user.txt',
+  'DC01', '   IPv4 Address. . . . . . . . . . . : 10.0.0.5',
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> whoami; hostname; type C:\\Users\\Administrator\\Desktop\\root.txt',
+  'corp\\administrator', 'DC01',
+  'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+].join('\n');
+var two = captured(parse('', twoReads));   // promptless whole-blob (no command attached)
+ok(two.some(function (f) { return f.kind === 'objective.local_flag' && f.value.flag === 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; }), 'two reads in one blob: the user.txt value is captured as the LOCAL flag');
+ok(two.some(function (f) { return f.kind === 'objective.root_flag' && f.value.flag === 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'; }), 'two reads in one blob: the root.txt value is captured as the ROOT flag (not collapsed onto the first read)');
 
 // 1e. INVERSE: a Kali frame that echoes a REMOTE read (nxc -x type) after the kali prompt only LOCATES it —
 // the echoed transport lead is honored, so a remote read pasted whole never counts as captured.

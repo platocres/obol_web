@@ -22,7 +22,7 @@
     return '<div class="gv-legend" role="group" aria-label="Filter path graph by node type">'
       + '<span class="gv-legend-h">Legend · click to filter</span>'
       + LEGEND.map(function (it) {
-        return '<button type="button" class="gv-lg gv-lg-' + it[0] + '" data-gvfilter="' + it[0] + '" aria-pressed="true" title="' + it[2] + ' — click to hide">'
+        return '<button type="button" class="gv-lg gv-lg-' + it[0] + '" data-gvfilter="' + it[0] + '" aria-pressed="true" title="' + it[2] + 'click to hide">'
           + '<i aria-hidden="true"></i>' + it[1] + '</button>';
       }).join('')
       + '</div>';

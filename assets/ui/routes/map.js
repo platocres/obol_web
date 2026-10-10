@@ -43,8 +43,8 @@
     if (!targets.length) {
       return '<section class="engmap-route">'
         + '<h1 class="route-h1">Engagement map</h1>'
-        + '<p class="route-sub">The engagement-wide picture — scope, domains, targets, services, credentials and BloodHound findings, all from proven evidence.</p>'
-        + '<div class="coach-empty">No targets yet — add one from <a href="#/targets">Targets</a> or paste a scan on the <a href="#/">engagement</a> screen.</div>'
+        + '<p class="route-sub">The engagement-wide picture, scope, domains, targets, services, credentials and BloodHound findings, all from proven evidence.</p>'
+        + '<div class="coach-empty">No targets yet, add one from <a href="#/targets">Targets</a> or paste a scan on the <a href="#/">engagement</a> screen.</div>'
         + '</section>';
     }
     var svg = OBOL.engmap.buildEngagementSvg(eng);

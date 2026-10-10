@@ -89,14 +89,22 @@
   C._JOHN_CRACKED_LIVE_RE = /^(?<pw>\S.*?)\s{2,}\((?<label>[^)]+)\)\s*$/;
   C._CPASSWORD_RE = /\bcpassword\s*=\s*["']?([^"'\s<>]+)/i;
   C._GPP_FILE_RE = /\b(?:Groups|ScheduledTasks|Services|DataSources|Printers|Drives)\.xml\b/i;
-  C._NMAP_OPEN_RE = /^(?<port>\d+)\/(?:tcp|udp)\s+open(?:\|\w+)?\s+(?<service>\S+)?(?:\s+(?<version>.*?))?\s*$/im;
+  // Whitespace is restricted to [ \t] (not \s) so a greedy trailing match cannot eat the line's own
+  // newline and skip the next port row when iterated globally (reAll). A port row is always one line.
+  C._NMAP_OPEN_RE = /^(?<port>\d+)\/(?:tcp|udp)[ \t]+open(?:\|\w+)?(?:[ \t]+(?<service>\S+))?(?:[ \t]+(?<version>.*?))?[ \t]*$/im;
   C._NMAP_DISCOVERED_RE = /Discovered open port (?<port>\d+)\/(?<proto>tcp|udp) on (?<host>\S+)/i;
-  C._NMAP_DOMAIN_NAME_RE = /^\|_?\s*(?:Domain name|DNS_Domain_Name|NetBIOS_Domain_Name):\s*(?<domain>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
-  C._NMAP_FQDN_RE = /^\|_?\s*FQDN:\s*(?<fqdn>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
-  C._NMAP_COMPUTER_NAME_RE = /^\|_?\s*(?:Computer name|NetBIOS computer name):\s*(?<name>[A-Za-z0-9_.-]+)\s*$/im;
+  // The leading "| "/"|_" pipe is nmap's TEXT formatter; the -oX XML carries the same smb-os-discovery
+  // lines WITHOUT it (just indentation) inside the <script output="…"> attribute, so the pipe is optional.
+  C._NMAP_DOMAIN_NAME_RE = /^\s*\|?_?\s*(?:Domain name|DNS_Domain_Name|NetBIOS_Domain_Name):\s*(?<domain>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
+  C._NMAP_FQDN_RE = /^\s*\|?_?\s*FQDN:\s*(?<fqdn>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
+  C._NMAP_COMPUTER_NAME_RE = /^\s*\|?_?\s*(?:Computer name|NetBIOS computer name):\s*(?<name>[A-Za-z0-9_.-]+)\s*$/im;
   C._NMAP_SMB_SIGNING_RE = /Message signing enabled(?: and (?<required>required)| but not required)?/i;
   C._NMAP_HTTP_TITLE_RE = /^\|\s*_?http-title:\s*(?<title>.+)$/im;
   C._NMAP_HTTP_SERVER_RE = /^\|\s*_?http-server-header:\s*(?<header>.+)$/im;
+  // "Microsoft-HTTPAPI/2.0" is the Windows HTTP Server API behind WinRM (5985/47001), WSUS and SSDP/UPnP,
+  // NOT a browsable web app. A server header that is ONLY this must never mint web.server, or it unlocks the
+  // whole web-exploit lane (exposed-files, CMS, Log4Shell…) on a plain AD box and buries the real next move.
+  C._isNonWebServerHeader = function (hdr) { return /^microsoft-httpapi\b/i.test(String(hdr || '').trim()); };
   C._NMAP_HTTP_GENERATOR_RE = /^\|\s*_?http-generator:\s*(?<generator>.+)$/im;
   C._NMAP_HTTP_REDIRECT_RE = /^\|\s*_?http-title:\s*Did not follow redirect to (?<location>\S+)/im;
   C._NMAP_FTP_ANON_RE = /ftp-anon:\s*Anonymous FTP login allowed|Anonymous FTP login allowed/i;
@@ -170,7 +178,15 @@
   C._LINUX_PRIVESC_ACTION_IDS = new Set(['linux-enum', 'sudo-abuse', 'writable-passwd', 'nfs-squash', 'lxc-lxd-escape', 'docker-socket', 'suid-gtfobins', 'pspy-monitor', 'cron-abuse', 'capabilities', 'linux-loot-hunt', 'linux-persistence']);
   C._WINDOWS_PRIVESC_ACTION_IDS = new Set(Array.from(C._PRIVESC_ACTION_IDS).filter(function (x) { return !C._LINUX_PRIVESC_ACTION_IDS.has(x); }));
   C._WEB_LFI_ACTION_IDS = new Set(['lfi-probe', 'xxe']);
-  C._WEB_CMDI_ACTION_IDS = new Set(['command-injection', 'ssti', 'web-shells', 'file-upload', 'verb-tampering', 'deserialization', 'tomcat-deploy', 'jenkins-access', 'check-struts2']);
+  C._WEB_CMDI_ACTION_IDS = new Set(['command-injection', 'ssti', 'web-shells', 'file-upload', 'verb-tampering', 'deserialization', 'tomcat-deploy', 'jenkins-access', 'check-struts2', 'ssti-to-rce', 'http-put-webshell', 'authz-abuse']);
+  // The web-exploit moves whose whole point IS landing code execution: when their paste shows command
+  // output (uid=/whoami/nt authority), that IS a web foothold, so _parse_web_cmdi mints foothold.webshell
+  // for these (not for the confirm-only probes, whose foothold is a separate follow-up move).
+  C._WEB_RCE_FOOTHOLD_IDS = new Set(['ssti-to-rce', 'http-put-webshell', 'authz-abuse']);
+  // Service moves that land a *nix shell but whose command tool is not one the command-keyed dispatch
+  // recognises (curl to the Elasticsearch API, rsync, an NFS mount + ssh): keyed by actionId so a pasted
+  // `uid=` proof still mints foothold.linux through the shared ssh-exec reader.
+  C._LINUX_SHELL_ACTION_IDS = new Set(['rsync-write-shell', 'nfs-to-foothold', 'elasticsearch-rce', 'tftp-write-shell', 'vnc-desktop-shell']);
   C._WEB_SQLI_ACTION_IDS = new Set(['sqli-basics']);
   C._WEB_SSRF_ACTION_IDS = new Set(['ssrf', 'xxe']);
   C._WEB_NOSQLI_ACTION_IDS = new Set(['nosql-injection']);
@@ -315,10 +331,32 @@
   }
   C._line_for_match = _line_for_match;
 
-  function _add_os_observation(facts, ws, source, family, evidence, confidence, tool, promote) {
+  // Pull a SPECIFIC OS product ("Windows Server 2016 Standard 14393", "Ubuntu 20.04") out of an
+  // authoritative LABELLED line only: smb-os-discovery / nmap OS detection / systeminfo (OS: / OS
+  // details: / Running:). Service banners are too noisy to carve a version from, so an unlabelled
+  // match stays family-only and nothing wrong is ever shown.
+  function _os_product_from_label(text, family) {
+    var re = /\b(?:OS(?:\s*details)?|Running)\s*:\s*([^\n|]+)/gi;
+    var m;
+    while ((m = re.exec(text || ''))) {
+      var p = m[1].trim()
+        .replace(/\s+(microsoft-ds|netbios-ssn|msrpc|microsoft-rpc|workgroup)\b.*$/i, '')
+        .replace(/[.,;]+\s*$/, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      if (p && p.toLowerCase().indexOf(family) >= 0) return p.slice(0, 80);
+    }
+    return '';
+  }
+  C._os_product_from_label = _os_product_from_label;
+
+  function _add_os_observation(facts, ws, source, family, evidence, confidence, tool, promote, product) {
     family = (family || '').trim().toLowerCase();
     if (family !== 'windows' && family !== 'linux') return;
     var value = { family: family, confidence: confidence, tool: tool, evidence: (evidence || '').trim().slice(0, 220) };
+    var prod = (product || '').trim();
+    // only keep a product that is richer than the bare family word (a real version string)
+    if (prod && prod.toLowerCase() !== family) value.os = prod.slice(0, 80);
     _add(facts, mkFact('host.os_hint', 'host:' + ws.target, value, ProofState.SUPPORTED, source));
     if (promote) _add(facts, mkFact('host.os_family', 'host:' + ws.target, value, ProofState.SUPPORTED, source));
   }
@@ -337,13 +375,13 @@
     var keys = Object.keys(matches);
     var promoteSingle = promote && keys.length === 1;
     keys.forEach(function (family) {
-      _add_os_observation(facts, ws, source, family, matches[family], confidence, tool, promoteSingle);
+      _add_os_observation(facts, ws, source, family, matches[family], confidence, tool, promoteSingle, _os_product_from_label(text, family));
     });
   }
   C._add_os_from_text = _add_os_from_text;
 
   function _clean_username(user) {
-    user = stripChars((user || '').trim(), ',;:');
+    user = stripChars((user || '').trim(), ';:');
     if (user.indexOf('\\') >= 0) user = user.split('\\').pop();
     if (user.indexOf('@') >= 0) user = user.split('@')[0];
     return user.trim();
@@ -356,7 +394,7 @@
     if (C._NOISE_USERS.has(user.toLowerCase())) return false;
     if (!allowMachine && user.endsWith('$')) return false;
     // A real sAMAccountName never starts with '-' or '.'. A leading dash is the tell of a column
-    // header ('-Username-') or a flag token that leaked out of tabular tool output — never an account.
+    // header ('-Username-') or a flag token that leaked out of tabular tool output, never an account.
     if (/^[-.]/.test(user)) return false;
     return /^[A-Za-z0-9._$-]{2,}$/.test(user);
   }

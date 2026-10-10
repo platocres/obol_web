@@ -250,7 +250,7 @@
     var CAP = 24000;
     var lines = text.split(/\r?\n/).length;
     var stored = text.length > CAP
-      ? (text.slice(0, CAP) + '\n… [truncated — ' + (text.length - CAP) + ' more chars, ' + lines + ' lines total]')
+      ? (text.slice(0, CAP) + '\n… [truncated, ' + (text.length - CAP) + ' more chars, ' + lines + ' lines total]')
       : text;
     OBOL.store.update(function (e) {
       e.activities = e.activities || [];
@@ -278,9 +278,14 @@
   var _PROMPT_LINE = [
     /^\s*(?:┌──.*)?└─[#$]\s+(\S.*)$/,                                   // Kali two-line prompt (cmd on └─$)
     /^[\w.\-]+@[\w.\-]+:[^\s#$]*\s*[#$]\s+(\S.*)$/,                      // user@host:cwd$ cmd
-    /^PS\s+[A-Za-z]:[^>]*>\s+(\S.*)$/,                                   // PowerShell PS C:\...> cmd
+    /^(?:\*?Evil-WinRM\*?\s+)?PS\s+[A-Za-z]:[^>]*>\s+(\S.*)$/,           // PowerShell PS C:\...> cmd, incl. *Evil-WinRM* PS prefix
   ];
   var _BARE_PROMPT = /^\s*[#$]\s+(\S.*)$/;                              // bare "$ cmd" / "# cmd" (last resort)
+  // A Cruise batch script fences each command's output with an echo marker ("===== OBOL STEP n: <id> =====").
+  // The script runs non-interactively (no shell prompt to split on), so the marker IS the segment boundary:
+  // it starts a new segment whose command is the move id, so each move's output parses in isolation (correct
+  // per-move facts, no cross-command misattribution) with no dependence on the Loadout prompt stamp.
+  var _CRUISE_MARK = /^\s*={3,}\s*OBOL STEP\s+\d+:\s*(\S.*?)\s*={3,}\s*$/;
   var _TS_RE = /\[(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/;          // a prompt timestamp → epoch ms
   function _promptCmd(raw) {
     for (var i = 0; i < _PROMPT_LINE.length; i++) { var m = _PROMPT_LINE[i].exec(raw); if (m) return m[1].trim(); }
@@ -298,6 +303,9 @@
     for (var i = 0; i < lines.length; i++) {
       var raw = lines[i];
       if (heredoc !== null) { if (cur) cur.stdout.push(raw); if (raw.trim() === heredoc) heredoc = null; prev2 = prev; prev = raw; continue; }
+      // Cruise step marker: a hard segment boundary. The marker line itself is not output.
+      var mk = _CRUISE_MARK.exec(raw);
+      if (mk) { if (cur) segs.push(cur); cur = { command: mk[1].trim(), stdout: [], ts: _ts(raw) }; prev2 = prev; prev = raw; continue; }
       var cmd = _promptCmd(raw);
       // A bare "$ cmd" / "# cmd" is a weak signal — tool output is full of lines that start with "# "
       // (config/comment dumps) or "$ " — so accept one only when what follows leads with a tool obol
@@ -315,7 +323,7 @@
     return segs.map(function (s) { return { command: s.command, stdout: s.stdout.join('\n').replace(/^\n+|\n+$/g, ''), ts: s.ts }; });
   }
 
-  // The credential a command authenticated WITH — its -u / -H / -p (and -d). Used to activate the identity
+  // The credential a command authenticated WITH, its -u / -H / -p (and -d). Used to activate the identity
   // you actually escalated with, rather than hardcoding "Administrator" or guessing at the first credential.
   function credFromCommand(cmd) {
     cmd = String(cmd || '');
@@ -432,6 +440,10 @@
     var all = [];
     texts.forEach(function (t, fi) {
       var segs = splitSession(t), carry = null;
+      // No prompt recognized (an unusual or stripped shell, or output pasted without its prompt line): do
+      // not silently import nothing. Parse the whole blob as one capture, exactly as a raw paste would, so
+      // the flag read, the service banner, whatever it is, still mints its facts.
+      if (!segs.length && String(t || '').trim()) segs = [{ command: '', stdout: t, ts: null }];
       segs.forEach(function (s, li) {
         if (s.ts == null) s.ts = carry; else carry = s.ts;
         all.push({ command: s.command, stdout: s.stdout, ts: s.ts, ord: fi * 100000 + li });

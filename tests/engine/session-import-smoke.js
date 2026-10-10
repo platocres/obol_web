@@ -66,6 +66,21 @@ ok(bs.length === 2 && bs[0].command === 'id' && bs[1].command === 'whoami', 'a p
 var ps = OBOL.ingest.splitSession(['PS C:\\Users\\svc> whoami', 'corp\\svc', 'PS C:\\Users\\svc> hostname', 'DC01'].join('\n'));
 ok(ps.length === 2 && ps[0].command === 'whoami' && ps[1].command === 'hostname', 'a PowerShell capture splits on the PS ...> prompt');
 
+// evil-winrm prompt (`*Evil-WinRM* PS C:\...>`): the real on-host shell for a pass-the-hash WinRM session.
+// Before, this prefix was not recognized as a prompt, so splitSession returned [] and pasting a flag read
+// into Evidence imported NOTHING (the Forest root-flag miss).
+var ewrm = OBOL.ingest.splitSession([
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> hostname; ipconfig; type C:\\Users\\Administrator\\Desktop\\root.txt',
+  'FOREST', 'ceb825fe43ccafc3ec436905c1257091',
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents>'].join('\n'));
+ok(ewrm.length === 1 && /type C:\\Users\\Administrator\\Desktop\\root\.txt/.test(ewrm[0].command), 'an *Evil-WinRM* PS frame splits on its prompt (command carries the flag read)');
+ok(/ceb825fe43ccafc3ec436905c1257091/.test(ewrm[0].stdout), 'the evil-winrm segment keeps the flag value in its output');
+
+// A paste with NO recognizable prompt yields no segments; importSession then falls back to the whole blob
+// (asserted after the store is wired up below), so a stripped-prompt paste is never silently dropped.
+var noprompt = OBOL.ingest.splitSession('FOREST\nceb825fe43ccafc3ec436905c1257091\n');
+ok(noprompt.length === 0, 'a bare blob has no prompt segments (splitSession)');
+
 // ── 2. importSession runs the segments through the real pipeline and mints the same facts ────────────
 var store = (function () {
   var eng = { params: { target: '10.0.0.5', domain: 'corp.local' }, activities: [], facts: [] };
@@ -90,6 +105,19 @@ ok(store._facts.has('ad.domain_known'), 'facts: the nxc smb segment minted the d
 ok(store.active().params.lhost === '10.10.14.5', 'importSession learns {{lhost}} from the [tun0:IP] stamp');
 // one activity recorded per real command
 ok(store.active().activities.length === 3, 'one activity recorded per imported command (heredoc included) — got ' + store.active().activities.length);
+
+// evil-winrm flag read imports and mints the captured flag through the full importSession path (the Forest
+// miss: it used to return imported:0 because the *Evil-WinRM* prompt was unrecognized).
+var ewRes = OBOL.ingest.importSession([
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> hostname; ipconfig; type C:\\Users\\Administrator\\Desktop\\root.txt',
+  'FOREST', 'ceb825fe43ccafc3ec436905c1257091',
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents>'].join('\n'), { target: '10.0.0.5' });
+ok(ewRes.ok && ewRes.added > 0, 'importSession imports the evil-winrm flag frame (added=' + ewRes.added + ')');
+ok(store._facts.has('objective.root_flag'), 'the pasted evil-winrm root-flag read mints objective.root_flag');
+
+// Defense in depth: a prompt-less blob with a flag still imports (whole-blob fallback), never silent zero.
+var blobRes = OBOL.ingest.importSession('FOREST\nabcdef0123456789abcdef0123456789\n', { target: '10.0.0.5' });
+ok(blobRes.ok && blobRes.imported >= 1, 'a prompt-less blob still runs through the parser (imported=' + blobRes.imported + ')');
 
 // ── 3. Multi-file stitch + de-dupe ──────────────────────────────────────────────────────────────────
 // Two capture files whose commands interleave in time; importing both must order by timestamp and drop a

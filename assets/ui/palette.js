@@ -29,6 +29,13 @@
         out.push({ kind: 'cmd', label: act.title, hint: (c.tool || act.tool || 'cmd'), run: c.run, lane: OBOL.phases.phaseOfAction(act) });
       });
     });
+    // arsenal tools that need setup (not Kali-default) — ⌘K to find a tool + copy its install one-liner
+    var A = OBOL.ARSENAL || {}, seenTool = {};
+    Object.keys(A).forEach(function (k) {
+      var e = A[k]; if (!e || seenTool[e.key] || e.class === 'kali' || e.class === 'builtin') return;
+      seenTool[e.key] = 1;
+      out.push({ kind: 'tool', label: e.label || e.key, hint: e.install ? 'install' : 'stage', run: e.install || '', href: '#/loadout' });
+    });
     cmdIndex = out;
     return out;
   }
@@ -67,8 +74,12 @@
 
   function renderList() {
     list.innerHTML = filtered.map(function (it, i) {
-      var right = it.kind === 'cmd' ? '<code class="pal-run">' + esc(fill(it.run)) + '</code>' : '<span class="pal-go">' + esc(it.href) + '</span>';
-      var tag = it.kind === 'cmd' ? '<span class="ph-chip ph-' + esc(it.lane) + '">' + esc(it.hint) + '</span>' : '<span class="pal-navtag">nav</span>';
+      var right = it.kind === 'cmd' ? '<code class="pal-run">' + esc(fill(it.run)) + '</code>'
+        : it.kind === 'tool' ? (it.run ? '<code class="pal-run">' + esc(it.run) + '</code>' : '<span class="pal-go">Loadout →</span>')
+        : '<span class="pal-go">' + esc(it.href) + '</span>';
+      var tag = it.kind === 'cmd' ? '<span class="ph-chip ph-' + esc(it.lane) + '">' + esc(it.hint) + '</span>'
+        : it.kind === 'tool' ? '<span class="pal-navtag pal-tooltag">' + esc(it.hint) + '</span>'
+        : '<span class="pal-navtag">nav</span>';
       return '<li class="pal-item' + (i === sel ? ' sel' : '') + '" data-i="' + i + '">' + tag
         + '<span class="pal-label">' + esc(it.label) + '</span>' + right + '</li>';
     }).join('') || '<li class="pal-empty">No matches</li>';
@@ -87,7 +98,9 @@
   function activate(i) {
     var it = filtered[i]; if (!it) return;
     if (it.kind === 'nav') { close(); OBOL.router.go(it.href); return; }
-    U.copy(fill(it.run)).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    if (it.kind === 'tool' && !it.run) { close(); OBOL.router.go(it.href); return; }  // staged tool → open Loadout
+    var text = it.kind === 'tool' ? it.run : fill(it.run);
+    U.copy(text).then(function (ok) { U.toast(ok ? (it.kind === 'tool' ? 'Install command copied' : 'Command copied') : 'Copy failed', ok ? '' : 'err'); });
     close();
   }
 

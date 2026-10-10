@@ -9,28 +9,57 @@
   var U = OBOL.util;
   function esc(s) { return U.esc(s); }
 
+  // A rich per-target dossier card: access badge, OS, domain, open ports, reachable services, flags, and
+  // the next move the coach would run on that box. Built from the SHARED projection (OBOL.targets.all) so
+  // it never drifts from the engagement hub's board. Reuses the hub card's styled sub-elements (hb-*).
+  function dossierCard(info) {
+    var b = info.badge || { label: 'SCAN', cls: 'hb-acc-disc' };
+    var ports = info.ports.slice(0, 12).map(function (p) { return '<span class="hb-port">' + p + '</span>'; }).join('')
+      + (info.ports.length > 12 ? '<span class="hb-port hb-port-more">+' + (info.ports.length - 12) + '</span>' : '');
+    var svcs = (info.svcs || []).slice(0, 7).map(function (s) { return '<span class="tgt-svc">' + esc(s) + '</span>'; }).join('');
+    var flags = info.flags
+      ? '<span class="hb-flags">' + OBOL.ic('flag') + ' ' + info.flags + ' Flag' + (info.flags === 1 ? '' : 's') + '</span>'
+      : '<span class="hb-flags hb-noflag">No Flags Yet</span>';
+    var nextHtml = info.next ? '<span class="hb-next" title="' + U.attr(info.next) + '">→ ' + esc(info.next) + '</span>'
+      : (info.lvl === 'privileged' ? '<span class="hb-next hb-next-done">Owned</span>' : '');
+    return '<article class="hb-tcard tgt-card hb-lvl-' + info.lvl + '" data-tid="' + esc(info.t.id) + '">'
+      + '<button class="tcard-del" data-tid="' + esc(info.t.id) + '" title="Remove target" aria-label="Remove target ' + U.attr(info.ip) + '">×</button>'
+      + '<a class="hb-tcard-main tgt-main" href="#/target/' + U.attr(info.ip) + '">'
+      + '<div class="hb-tcard-top"><span class="hb-tname">' + esc(info.host || info.ip) + '</span>'
+      + (info.host ? '<span class="hb-tip">' + esc(info.ip) + '</span>' : '')
+      + '<span class="hb-acc ' + b.cls + '">' + b.label + '</span></div>'
+      + '<div class="tgt-meta">'
+      + '<div class="tgt-row"><span class="tgt-k">OS</span><span class="tgt-v' + (info.os ? '' : ' tgt-empty') + '">' + (info.os ? esc(U.titleCase(info.os)) : 'Not Yet Fingerprinted') + '</span></div>'
+      + '<div class="tgt-row"><span class="tgt-k">Domain</span><span class="tgt-v' + (info.domain ? '' : ' tgt-empty') + '">' + (info.domain ? esc(info.domain) : 'None Known Yet') + '</span></div>'
+      + '</div>'
+      + '<div class="tgt-ports"><span class="tgt-k">Ports</span><div class="hb-ports">' + (ports || '<span class="hb-port-none">No Ports Yet</span>') + '</div></div>'
+      + (svcs ? '<div class="tgt-svcs">' + svcs + '</div>' : '')
+      + '<div class="hb-tfoot">' + flags + nextHtml + '</div>'
+      + '</a></article>';
+  }
+
   function render() {
     var eng = OBOL.store.active();
     var targets = (eng && eng.targets) || [];
-    var rows = targets.length ? targets.map(function (t) {
-      return '<article class="tcard" data-tid="' + esc(t.id) + '">'
-        + '<div class="tcard-dot ' + (t.os ? ('os-' + esc(t.os)) : '') + '"></div>'
-        + '<a class="tcard-main" href="#/target/' + esc(t.ip || t.id) + '"><div class="tcard-ip">' + esc(t.ip || t.hostname || '?') + '</div>'
-        + (t.hostname ? '<div class="tcard-host">' + esc(t.hostname) + '</div>' : '')
-        + '</a>'
-        + '<div class="tcard-meta">' + (t.os ? '<span class="pill">' + esc(t.os) + '</span>' : '') + '</div>'
-        + '<button class="tcard-del" data-tid="' + esc(t.id) + '" title="Remove">×</button>'
-        + '</article>';
-    }).join('') : '<div class="coach-empty">No targets yet. Add one below to start the coach.</div>';
+    var infos = (OBOL.targets && OBOL.targets.all) ? OBOL.targets.all(eng) : [];
+    var rows = targets.length
+      ? '<div class="tgrid">' + (infos.length ? infos.map(dossierCard).join('')
+          : targets.map(function (t) { return dossierCard({ t: t, ip: t.ip || t.id, host: t.hostname || '', os: t.os || '', lvl: 'discovered', badge: { label: 'SCAN', cls: 'hb-acc-disc' }, ports: [], flags: 0, domain: '', svcs: [], next: '' }); }).join('')) + '</div>'
+      : '<div class="coach-empty">No Targets Yet. Add one below and the coach lights up with your first recon move.</div>';
 
+    var count = targets.length;
     return '<section class="targets">'
       + '<h1 class="route-h1">Targets</h1>'
-      + '<div class="ev-row targets-add">'
-      + '<input id="t-ip" class="ev-cmd" placeholder="IP or CIDR, e.g. 10.10.10.10">'
-      + '<input id="t-host" class="ev-cmd" placeholder="hostname (optional)">'
-      + '<button id="t-add" class="btn-primary">Add Target</button>'
-      + '</div>'
-      + '<div class="tgrid">' + rows + '</div>'
+      + '<p class="route-sub">Add the boxes in scope. Each target seeds a fact so the coach immediately surfaces the nmap-first recon move for it.</p>'
+      + '<div class="targets-add">'
+      + '<div class="targets-add-h">Add A Target</div>'
+      + '<div class="targets-add-row">'
+      + '<label class="targets-add-field"><span>IP Or CIDR</span><input id="t-ip" class="ev-cmd" placeholder="e.g. 10.10.10.10" autocomplete="off" spellcheck="false" inputmode="decimal"></label>'
+      + '<label class="targets-add-field"><span>Hostname <span class="targets-add-opt">(Optional)</span></span><input id="t-host" class="ev-cmd" placeholder="e.g. dc01.corp.local" autocomplete="off" spellcheck="false"></label>'
+      + '<button id="t-add" class="btn-primary targets-add-btn">Add Target</button>'
+      + '</div></div>'
+      + '<div class="targets-grid-h"><h2 class="coach-sec-h">In Scope</h2><span class="pill">' + count + ' Target' + (count === 1 ? '' : 's') + '</span></div>'
+      + rows
       + '</section>';
   }
 
@@ -54,7 +83,7 @@
         OBOL.facts.makeFact({ kind: 'target.configured', scope: scope, source: 'targets' }),
       ], 'facts');
       OBOL.app.renderSidebar();
-      U.toast('Target added — coach updated');
+      U.toast('Target added, coach updated');
       OBOL.router.render();
     });
     U.on(mount, 'click', '.tcard-del', function (e, t) {

@@ -193,7 +193,7 @@
 
   function findingView(fnd, evidence, kev) {
     // The client/report-facing dict for a matched finding, with the KEV overlay applied.
-    var hit = fnd.cve ? kev[fnd.cve] : null; // KEV stubbed → always undefined
+    var hit = fnd.cve ? kev[String(fnd.cve).trim().toUpperCase()] : null;
     return {
       key: fnd.key || '', title: fnd.title || '', category: fnd.category || 'other',
       severity: fnd.severity || 'info', confidence: fnd.confidence || 'confirmed',
@@ -224,7 +224,8 @@
   function assess(fs) {
     // Every catalog finding whose rule matches these facts, severity-sorted. A projection —
     // safe to call on read. KEV overlay is stubbed (kev:false). `fs` is an OBOL.facts.FactSet.
-    var kev = {}; // stubbed: no KEV pack in the web edition
+    // CISA KEV overlay, from the bundled lookup (data/kev-catalog.js) when it is loaded; empty otherwise.
+    var kev = (OBOL.KEV && OBOL.KEV.map) || {};
     var out = [];
     if (!fs) return out;
     var catalog = loadCatalog();

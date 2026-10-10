@@ -123,5 +123,18 @@ var cp = { target: '10.129.94.251', domain: 'htb.local', username: 'svc-alfresco
 ok(OBOL.command.commandWasRun("certipy find -u svc-alfresco@htb.local -p 's3rvice' -dc-ip 10.129.94.251 -vulnerable", findActs, cp) === false, 'certipy find is NOT marked run from an sccmhunter find (different tool, and too generic anyway)');
 ok(OBOL.command.commandWasRun("sccmhunter.py find -u svc-alfresco -p 's3rvice' -d htb.local -dc-ip 10.129.94.251", findActs, cp) === false, 'a bare tool+find (2 tokens) is not confidently marked run — the safe, under-marking direction');
 
+// ---- a FAILED DCSync grant is not a control path, and surfaces the re-authenticate doctor ----
+// The classic Forest wall: `add groupMember` stuck, but the immediate `add dcsync` is denied because the
+// session token predates the membership. The echoed command names "dcsync", so the parser must NOT mistake
+// that for success and mint ad.control_paths; instead it mints blocker.acl_reauth so the fix doctor shows.
+function kindsOf(cmd, out) { var r = OBOL.parsers.parseActionOutput({ command: cmd, stdout: out, scope: 'host:10.129.104.137', domain: 'htb.local' }); return (r.facts || []).map(function (f) { return f.kind; }); }
+var denied = kindsOf('bloodyAD -d htb.local --host 10.129.104.137 -u svc-alfresco -p s3rvice add dcsync svc-alfresco',
+  'bloodyad ... add dcsync svc-alfresco\nTraceback (most recent call last):\nbadldap.commons.exceptions.LDAPModifyException: insufficientAccessRights for DC=htb,DC=local (Attr) - Reason:(ERROR_ACCESS_DENIED) Access is denied.');
+ok(denied.indexOf('ad.control_paths') < 0, 'a DENIED add-dcsync does NOT mint ad.control_paths (no false domain ownership)');
+ok(denied.indexOf('blocker.acl_reauth') >= 0, 'a DENIED add-dcsync (insufficientAccessRights) mints blocker.acl_reauth so the re-auth doctor surfaces');
+var granted = kindsOf('bloodyAD -d htb.local --host 10.129.104.137 -u svc-alfresco -p s3rvice add dcsync svc-alfresco', '[+] svc-alfresco is now able to DCSync');
+ok(granted.indexOf('ad.control_paths') >= 0, 'a SUCCESSFUL add-dcsync still mints ad.control_paths');
+ok(granted.indexOf('blocker.acl_reauth') < 0, 'a successful grant does not falsely raise the re-auth blocker');
+
 console.log(fail ? ('\nACL GROUP SWEEP: ' + fail + ' FAILURES') : '\nACL GROUP SWEEP: all passed');
 process.exit(fail ? 1 : 0);

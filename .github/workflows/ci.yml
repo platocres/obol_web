@@ -6,13 +6,23 @@ name: obol CI
 # retired architecture.
 
 on:
+  # Feature branches are covered by the pull_request event (one run per commit). Pushing to a
+  # claude/** branch no longer also fires a push run, which used to double every commit's runs and
+  # leave the redundant one queued or stalled when runners were scarce. main still runs post-merge.
   push:
-    branches: [main, 'claude/**']
+    branches: [main]
   pull_request:
+
+# Supersede an in-progress run when a newer commit lands on the same branch / PR, so rapid pushes do
+# not stack queued runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   engine-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,13 +44,19 @@ jobs:
         run: |
           node tools/stamp-assets.js
           git diff --exit-code index.html assets/ui/lazy.js || (echo "cache-bust stamps out of sync — run node tools/build-packs.js && node tools/stamp-assets.js" && exit 1)
-      - name: Engine unit tests
+      - name: Move-contract lint + decision-map gap check (ranking guardrails)
+        run: |
+          set -e
+          node tools/move-lint.js --check
+          node tools/gap-report.js --check
+      - name: Engine unit tests (includes the golden-path corpus)
         run: |
           set -e
           for t in tests/engine/*.js; do echo "== $t =="; node "$t"; done
 
   browser-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

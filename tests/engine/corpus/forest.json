@@ -1,0 +1,62 @@
+{
+  "name": "Forest (HTB) — anon LDAP → AS-REP → BloodHound → WriteDacl/DCSync",
+  "target": "10.10.10.161",
+  "machine_type": "ad",
+  "steps": [
+    {
+      "after": "target added (recon)",
+      "add": ["target.configured", "host.up"],
+      "topIn": ["nmap-fast-open-ports", "nmap-version-scripts"],
+      "absentTop": ["check-dns-email"]
+    },
+    {
+      "after": "full nmap: DC for htb.local fingerprinted",
+      "add": ["ports.open", "scan.nmap.quick", "port:88", "port:139", "port:389", "port:445", "port:464", "port:636", "port:3268", "port:5985", "smb.reachable", "ldap.reachable", "kerberos.reachable", "winrm.reachable", "ad.dc_candidate", "ad.domain_known", "host.os_hint"],
+      "topIn": ["nmap-version-scripts", "ad-dc-identify", "ad-anon-ldap-enum", "ad-user-enum"],
+      "absentTop": ["check-dns-email", "smbghost", "nosql-injection"]
+    },
+    {
+      "after": "anonymous LDAP enumerates 31 users (incl. svc-alfresco)",
+      "add": ["ad.anonymous_bind", "ad.base_dn", { "kind": "ad.user_list", "value": { "users": ["Administrator", "Guest", "krbtgt", "svc-alfresco", "sebastien", "lucinda", "andy", "mark", "santi", "SM_2c8eef0a09b545acb", "HealthMailboxc3d7722", "FOREST$"], "count": 31 } }],
+      "top": "asrep-roast",
+      "present": ["asrep-roast"],
+      "prep": ["asrep-roast"],
+      "absentTop": ["check-dns-email", "password-spray"]
+    },
+    {
+      "after": "AS-REP roast svc-alfresco → $krb5asrep hash",
+      "add": ["hash.asrep"],
+      "present": ["crack-asrep"]
+    },
+    {
+      "after": "cracked svc-alfresco:s3rvice (use the creds → foothold)",
+      "add": ["credential.available", "credential.validated"],
+      "top": "lateral-exec",
+      "present": ["lateral-exec"],
+      "absentTop": ["kerberos-tickets", "certifried"]
+    },
+    {
+      "after": "evil-winrm foothold as svc-alfresco (no ACL lead yet → enumerate first)",
+      "add": ["foothold.windows", "winrm.authenticated"],
+      "present": ["ad-path-manual"]
+    },
+    {
+      "after": "BloodHound: Account Operators → Exchange Windows Permissions (WriteDacl)",
+      "add": ["ad.graph.collected", "ad.attack_paths", "ad.acl_lead"],
+      "topIn": ["bloodyad-acl", "ad-acl-abuse", "ad-path-manual"],
+      "present": ["bloodyad-acl"]
+    },
+    {
+      "after": "granted DCSync rights (control paths)",
+      "add": ["ad.control_paths"],
+      "topIn": ["dcsync"],
+      "present": ["dcsync"]
+    },
+    {
+      "after": "secretsdump DCSync → NTDS + Administrator/krbtgt NT hashes",
+      "add": ["loot.ntds", "hash.ntlm", "hash.krbtgt"],
+      "topIn": ["own-domain-pth"],
+      "present": ["own-domain-pth"]
+    }
+  ]
+}

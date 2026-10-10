@@ -150,3 +150,70 @@ All three reproduce in current source of both repos.
 5. **Credential-bearing parsers first** (highest analytic value): VCS-token/URI/config (`websource.js`), PuTTY/WinSCP (`host.js`), sqlite-dump + SNMP-loot (`services.js`), john-live-crack (`creds.js`).
 6. **Remaining parsers:** sccmhunter null-match, bloodyAD domain-control, notable-program, exposed-artifact classifier.
 7. **Skip** everything tied to terminal execution: cruise/autopwn/autopilot, the OOB catcher and `_parse_oob_callback`, on-disk archive extraction, ingest, `frontier_moves`, `webprobe.py`, PoC provisioning.
+
+---
+
+## E. Ports & UX overhaul (obol-web → obol-local backport list, 2026-10)
+
+This batch was built in **obol-web first** (per the "build here now, backport later" decision).
+Everything below is data or faithfully-portable logic; nothing here touches terminal execution.
+File:line references are obol-web; the obol-local home is named for each.
+
+### E-1. Eleven new service modules (DATA — ports straight to `obol/packs/*.json`)
+New `actions` added for common ports that had no coverage. Each is a full gold-standard study
+module in obol-web (bespoke `why`, multi-route lead-up, playable field notes, bespoke practice,
+coherent command/output), but for obol-local only the **pack action** ports (the study fixtures
+are a web-only teaching layer). Port the action objects verbatim:
+
+| id | port | obol-web pack | obol-local pack |
+|---|---|---|---|
+| `recon-telnet` | 23/tcp | `data/packs/recon_2026_09.json` | `obol/packs/recon_2026_09.json` |
+| `recon-rservices` | 512/513/514 | recon | recon |
+| `recon-rsync` | 873/tcp | recon | recon |
+| `recon-tftp` | 69/udp | recon | recon |
+| `recon-x11` | 6000/tcp | recon | recon |
+| `ftp-upload-webshell` | 21/tcp | recon | recon |
+| `oracle-tns` | 1521/tcp | `data/packs/database_2026_09.json` | `obol/packs/database_2026_09.json` |
+| `elasticsearch-enum` | 9200/tcp | database | database |
+| `memcached-enum` | 11211/tcp | database | database |
+| `ajp-ghostcat` | 8009/tcp | `data/packs/web_2026_09.json` | `obol/packs/web_2026_09.json` |
+| `java-rmi` | 1099/tcp | web | web |
+
+Each uses `requires_any: ["port:N", ...]` and standard `produces` facts
+(`loot.files`/`loot.material`/`db.session`/`foothold.webshell`/`access.shell`), so obol-local's
+ranker and dynamic builder pick them up with no code change. All three batches were
+adversarially fact-reviewed; notable corrections already applied (port these too): Oracle uses
+`-sV` for the version (there is no `oracle-tns-version` NSE script) and `odat --getFile` takes
+three positional args; Elasticsearch RCE is version-gated to CVE-2015-1427 (Groovy, fixed in
+1.3.8 and 1.4.3) vs CVE-2014-3120 (MVEL, pre-1.2); X11 uses `DISPLAY=<t>:0 xdotool` not a
+`--display` flag; the FTP 226 reply needs `curl -v`.
+
+### E-2. Output-shape parser fallback (LOGIC — port to `obol/parsers/`)
+`assets/engine/parsers/shape.js` + its wiring in `parsers/index.js` (final-pass call) and the
+newline-safe fix to `_NMAP_OPEN_RE` in `parsers/common.js`. It recognizes, by shape alone, a
+command-less paste: a bare `N/tcp open service` port table, a raw HTTP response, and
+`$krb5asrep$`/`$krb5tgs$` hashes — strictly additive, guarded against double-minting, anchored
+so prose mints nothing. obol-local's Python parser dispatch (`obol/parsers/__init__.py`) has the
+same command-keyed shape and the same documented "output-shape fallback" gap, so port
+`shape.js` → a `_parse_shape` in Python called last in `parse_action_output`, and apply the
+same `[ \t]`-not-`\s` fix to the Python nmap open-port row regex (it has the identical
+newline-eating bug when iterated with `re.finditer`).
+
+### E-3. Decorative-emoji purge (LOGIC/UX — obol-local has no HTML UI, mostly N/A)
+obol-web replaced all decorative emoji with a monochrome inline-SVG set (`assets/ui/icons.js`,
+`OBOL.ic()`). obol-local is terminal-first; if it prints any of the same emoji (🎯 🚩 📁 📍 🛡 ☠
+✨ 🪙 ⚡ etc.) in TUI/report output, drop them or swap for plain ASCII/Unicode box glyphs. The
+regression guard `tests/engine/no-decorative-emoji.js` is worth mirroring over obol-local's
+`obol/` package to keep shipped source clean.
+
+### E-4. by-port / "Once you are in" UX redesign (WEB-ONLY — do NOT port)
+Collapse-by-default cards, grouped HTTP/SMB/LDAP mega-cards, numbered move lists, and the
+Evidence-route redesign (`assets/ui/routes/study.js`, `assets/css/obol.css`) are browser-UI
+only and have no obol-local counterpart. Skip.
+
+### Port order for this batch
+1. **E-1 pack actions** (pure JSON, highest value, zero code) — all 11, by pack.
+2. **E-2 shape fallback + nmap regex fix** (self-contained parser loop; big robustness win for
+   paste-back ingest, which obol-local *does* have via `obol/ingest.py`).
+3. **E-3** only if obol-local prints decorative emoji anywhere.
+4. **E-4** skip (web-only).

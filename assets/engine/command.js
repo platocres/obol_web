@@ -103,6 +103,12 @@
       var lo = firstVal(facts, 'listener.open');
       if (lo && lo.lhost) ctx.lhost = lo.lhost;
     }
+    // lport: params-pinned (set in the sidebar), else a listener fact, else the 4444 convention so a
+    // reverse-shell / listener command is complete out of the box. The operator can change it anywhere.
+    if (!ctx.lport) {
+      var lop = firstVal(facts, 'listener.open');
+      ctx.lport = (lop && lop.lport) || params.lport || '4444';
+    }
     // iface: the operator's attacker interface (responder -I, mitm6 -i, …). Pinned from the engagement's
     // configured VM interface, defaulting to tun0 — the VPN adapter for HTB/OSCP-style labs.
     if (!ctx.iface) ctx.iface = params.lhost_iface || 'tun0';
@@ -137,6 +143,22 @@
     if (!ctx.krbtgt_hash) {
       var kt = firstVal(facts, 'hash.krbtgt');
       if (kt && kt.nthash) ctx.krbtgt_hash = kt.nthash;
+    }
+
+    // Domain-admin hash from a DCSync/NTDS dump, resolved INDEPENDENTLY of the active credential (like
+    // krbtgt_hash). So the moment you dump NTDS, the "read the flag / own the box with the DA hash"
+    // commands fill with the built-in Administrator (RID 500) hash, with NO manual credential swap.
+    if (!ctx.dahash) {
+      var avs = facts.values('credential.available');
+      for (var ai = 0; ai < avs.length; ai++) {
+        var v = avs[ai];
+        if (v && v.method === 'dcsync' && (v.nthash || v.hash)) {
+          ctx.dahash = v.nthash || v.hash;
+          ctx.dauser = v.user || 'Administrator';
+          if (!ctx.domain && v.domain) ctx.domain = v.domain;
+          break;
+        }
+      }
     }
 
     // ADCS ca/template/pfx
@@ -221,7 +243,7 @@
       if (!ctx.flag_names_windows) ctx.flag_names_windows = OBOL.profile.windowsNameList(fc.names);
 
       // Per-slot flag file PATHS for the on-host capture step. Prefer a path obol actually LOCATED (a
-      // nxc/smb spider, or a prior read) so step 3/4 fill with the real file — the user's Desktop, the
+      // nxc/smb spider, or a prior read) so step 3/4 fill with the real file, the user's Desktop, the
       // platform's own name — instead of a guessed placeholder; else a profile-aware default.
       var _flagName = function (slot) {
         var ns = fc.names || [];
@@ -238,11 +260,23 @@
       };
       var _isLinux = facts && facts.has && (facts.has('foothold.linux') || facts.has('access.shell') || facts.has('os.linux'))
         && !facts.has('foothold.windows') && !facts.has('os.windows');
+      // The USER/local flag lives on SOME user's Desktop, which you cannot guess once you are privileged:
+      // as Administrator/SYSTEM/root the active user is NOT the flag owner, so a `C:\Users\Administrator\
+      // Desktop\user.txt` guess is confidently wrong (it was the Forest failure). So the local path fills
+      // from a LOCATED path, else the active user's own Desktop ONLY when that user is unprivileged (you
+      // are that user), else it is LEFT UNFILLED so the on-host capture GATES behind "locate it first"
+      // (flag_path_local is a gate token) instead of handing you a path that does not exist.
+      var _priv = /^(administrator|admin|system|localsystem|nt\s*authority\\?system|root)$/i.test(String(ctx.user || '').trim());
       if (ctx.flag_path_local === undefined) {
-        ctx.flag_path_local = _locatedPath('local') || (_isLinux
-          ? ('/home/' + (ctx.user || '<user>') + '/' + _flagName('local'))
-          : ('C:\\Users\\' + (ctx.user || '<user>') + '\\Desktop\\' + _flagName('local')));
+        var _locL = _locatedPath('local');
+        if (_locL) ctx.flag_path_local = _locL;
+        else if (ctx.user && !_priv) ctx.flag_path_local = _isLinux
+          ? ('/home/' + ctx.user + '/' + _flagName('local'))
+          : ('C:\\Users\\' + ctx.user + '\\Desktop\\' + _flagName('local'));
+        // else: leave {{flag_path_local}} unfilled → the capture gates until you LOCATE the user flag.
       }
+      // The ROOT/proof flag is reliably on Administrator's (or /root) Desktop once you hold admin, so a
+      // located path wins but the default guess is safe to offer immediately.
       if (ctx.flag_path_root === undefined) {
         ctx.flag_path_root = _locatedPath('root') || (_isLinux
           ? ('/root/' + _flagName('root'))
@@ -296,6 +330,42 @@
     return cmd.split(LIT_OPEN).join('{{').split(LIT_CLOSE).join('}}');
   }
 
+  // ── Loadout command-rewrite ──────────────────────────────────────────────────────
+  // Once the operator has synced their box (Loadout), rewrite a filled command to THEIR box's reality:
+  //   - tool invocation: impacket-psexec ↔ psexec.py ↔ python3 …/psexec.py; nxc ↔ netexec ↔ crackmapexec
+  //   - wordlist paths: the real rockyou / SecLists location on this box
+  // Conservative + reversible: only a recognized ARSENAL variant appearing as a STANDALONE token is
+  // swapped, and only for the actual invocation the box reported; anything un-synced or unknown is left
+  // exactly as authored (today's behavior). Reads the per-browser profile from localStorage (so it needs
+  // none of the lazy arsenal.js); a profile may be passed explicitly (tests / callers that already have it).
+  function _arsenalProfile() { try { return JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { return null; } }
+  function _reEsc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function applyArsenal(filled, action, prof) {
+    if (!filled) return filled;
+    prof = prof || _arsenalProfile();
+    if (!prof) return filled;
+    var A = (root.OBOL && root.OBOL.ARSENAL) || {};
+    var tools = (action && (action.tools && action.tools.length ? action.tools : [action.tool])) || [];
+    var ptools = prof.tools || {};
+    tools.forEach(function (t) {
+      if (!t) return;
+      var e = A[String(t).toLowerCase()]; if (!e) return;
+      var rec = ptools[e.key]; var inv = rec && rec.present && rec.invocation;
+      if (!inv) return;
+      (e.variants || []).forEach(function (v) {
+        if (!v || v === inv) return;
+        filled = filled.replace(new RegExp('(^|\\s)' + _reEsc(v) + '(?=\\s|$)', 'g'), '$1' + inv);
+      });
+    });
+    var wl = prof.wordlists || {};
+    if (wl.rockyou) {
+      filled = filled.replace(/\/usr\/share\/wordlists\/rockyou\.txt(?:\.gz)?/g, wl.rockyou)
+                     .replace(/(^|\s)rockyou\.txt(?=\s|$)/g, '$1' + wl.rockyou);
+    }
+    if (wl.seclists) filled = filled.replace(/\/usr\/share\/seclists\b/g, wl.seclists);
+    return filled;
+  }
+
   // Fill a command variant of an action (0-based). Returns {tool, run, note, filled, webNote}.
   // obol web is the hands-on edition: where an action carries a web-suited command (`web` on a
   // variant, or `web_command` on the action) — one tuned for a human who must copy/paste or attach
@@ -315,8 +385,9 @@
       webNote: c.web_note || action.web_note || '',
       win: !!c.win,   // a box-ending move — the coach flags it "PWN THIS TARGET"
       run: run,
-      // thread the action so the loot glue can resolve {{userlist}}/{{hashfile}} for THIS move.
-      filled: fillTemplate(run, facts, opts.action === action ? opts : Object.assign({}, opts, { action: action })),
+      // thread the action so the loot glue can resolve {{userlist}}/{{hashfile}} for THIS move, then
+      // rewrite to the operator's synced box (invocation + wordlist paths) — a no-op until they sync.
+      filled: applyArsenal(fillTemplate(run, facts, opts.action === action ? opts : Object.assign({}, opts, { action: action })), action, opts.arsenal),
     };
   }
 
@@ -385,7 +456,7 @@
     var sig = _actionSig(filledCmd, params), keys = Object.keys(sig);
     // Only DISTINCTIVE commands are confidently "already run": a verb+object enumeration or grant has 3+
     // action tokens (`bloodyad get writable`, `nxc ldap --users`, `bloodyad add dcsync`). A generic
-    // tool+mode invocation — `nxc smb` (validate), `evil-winrm`, `impacket-psexec`, `certipy find` — is a
+    // tool+mode invocation, `nxc smb` (validate), `evil-winrm`, `impacket-psexec`, `certipy find`, is a
     // re-runnable check/shell that recurs across many moves; marking it run is high-confusion, low-value,
     // and is exactly what wrongly flagged an UNRUN `nxc smb` as ✓ ran. Bias to under-marking: re-suggesting
     // a command is a mild annoyance, wrongly hiding one you still need is the failure that keeps biting.
@@ -398,7 +469,7 @@
     }
     for (var a = 0; a < (activities || []).length; a++) {
       var act = activities[a] || {};
-      // Match the honest command OR the recovered dispatch label — an ATTACHED dump has no typed command,
+      // Match the honest command OR the recovered dispatch label, an ATTACHED dump has no typed command,
       // so obol's recovered routing signature is the only record of what actually ran.
       if (covers(act.command) || covers(act.dispatch)) return true;
     }
@@ -419,6 +490,7 @@
     fillTemplate: fillTemplate,
     fillCommand: fillCommand,
     fillAll: fillAll,
+    applyArsenal: applyArsenal,
     commandWasRun: commandWasRun,
     unfilledTokens: unfilledTokens,
   };

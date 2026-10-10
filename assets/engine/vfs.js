@@ -51,17 +51,16 @@
   }
 
   // The flag / proof files a command READS or is told to grab: `cat local.txt`, `type …\proof.txt`,
-  // the flag-hunt spider, or an unresolved {{flag_path_*}} token. These are the OSCP objective files —
-  // obol tells the operator to read them, assumes they are creating/saving them, and confirms the flag
+  // the flag-hunt spider, or an unresolved {{flag_path_*}} token. These are the OSCP objective files, // obol tells the operator to read them, assumes they are creating/saving them, and confirms the flag
   // from the paste that follows. Returns canonical proof-folder paths.
-  // ONLY the exact objective filenames (optionally a digit, e.g. local1.txt) — never `users.txt`,
+  // ONLY the exact objective filenames (optionally a digit, e.g. local1.txt), never `users.txt`,
   // `rootkit.txt` or a generic list that merely starts with one of these words.
   var FLAG_TOKEN = /(?:^|[\/\\])((?:local|proof|user|root|flag)\d*\.txt)$/i;
   function flagPaths(cmd) {
     cmd = String(cmd || '');
     var out = [];
     function push(p) { if (p && out.indexOf(p) === -1) out.push(p); }
-    // concrete flag-file tokens the operator will read (skip regex/glob tokens — no ()|*? in a real path).
+    // concrete flag-file tokens the operator will read (skip regex/glob tokens, no ()|*? in a real path).
     cmd.split(/\s+/).forEach(function (tok) {
       tok = tok.replace(/^['"]+/, '').replace(/['";]+$/, '');
       if (/[()|*?]/.test(tok)) return;                    // a --regex / --spider pattern, not a path
@@ -231,19 +230,24 @@
 
     // 2b) files the operator added by hand OR that a disk-sync turned up, to keep the picture in step
     // with their real disk. They are asserted-present (obol has no body), so they read as on-disk until a
-    // paste captures one. A synced file obol has no move for is flagged 'unknown' — obol stays on the same
+    // paste captures one. A synced file obol has no move for is flagged 'unknown'obol stays on the same
     // page for it and simply invites the contents.
     var ov = (eng.workspace && eng.workspace.overrides) || {};
     (ov.added || []).forEach(function (a) {
       var p = (typeof a === 'string') ? a : (a && a.path);
       if (!p || byPath[p]) return; // never let a hand-add shadow a real captured run
       var synced = a && a.source === 'synced';
-      file(p, { origin: synced ? 'synced' : 'manual', manual: !synced, synced: synced, unknown: !!(a && a.unknown),
-        confirmed: true, at: (a && a.at) || 0, size: (a && a.size) || 0, mtime: (a && a.mtime) || '' });
+      // a hand-added file may carry its CONTENT (e.g. a wordlist obol generated and the operator wrote
+      // to loot/): then it reads as captured and its body shows in the hover preview, like a pasted run.
+      var content = (a && a.content) || '';
+      var patch = { origin: synced ? 'synced' : 'manual', manual: !synced, synced: synced, unknown: !!(a && a.unknown),
+        confirmed: true, at: (a && a.at) || 0, size: (a && a.size) || (content ? content.length : 0), mtime: (a && a.mtime) || '' };
+      if (content) { patch.output = content; patch.status = 'captured'; }
+      file(p, patch);
     });
 
     // 3) the moves the coach is recommending RIGHT NOW. obol assumes the operator is probably about to
-    // create these files, so they show as expected/anticipated — unless a real run already owns the path
+    // create these files, so they show as expected/anticipated, unless a real run already owns the path
     // (a run always wins). Confirmed later when a paste uses the file; captured when its output arrives.
     var suggestions = opts.suggested || liveSuggestions(eng);
     suggestions.forEach(function (s) {
@@ -259,8 +263,8 @@
       });
     });
 
-    // 4) confirmation pass. An expected file is confirmed to exist on disk — the honest middle state
-    // between "obol suggested this" and "obol has it" — when: the operator USED its path in a later command
+    // 4) confirmation pass. An expected file is confirmed to exist on disk (the honest middle state
+    // between "obol suggested this" and "obol has it") when: the operator USED its path in a later command
     // (the ledger), a disk-sync SAW it (ov.onDisk), or it is an anticipated flag file and a flag was proven.
     var onDisk = ov.onDisk || {};
     Object.keys(byPath).forEach(function (p) {
@@ -295,7 +299,7 @@
     };
   }
 
-  // A human one-liner for a file — its PURPOSE (from the tool / kind / extension) plus one honest
+  // A human one-liner for a file, its PURPOSE (from the tool / kind / extension) plus one honest
   // metric (facts proved, lines captured, or measured size). Never fabricates a fact from a name; it
   // only names what obol can already see. Feeds the hover preview and the report's workspace appendix.
   var TOOL_PURPOSE = [

@@ -1,5 +1,5 @@
 /*!
- * obol ui — settings.js — the bottom-right ⚙ appearance control.
+ * obol ui — settings.js — the bottom-right appearance control.
  * A single floating button + popover for the things worth letting anyone customise: skin, motion
  * (full/reduced/off), coin bursts, and block opacity (fade the surfaces so the motion background
  * shows through). Presentation-only. Skin persists via OBOL.store prefs (pre-painted in <head>);
@@ -24,7 +24,7 @@
     try { return document.documentElement.getAttribute("data-skin") || (OBOL.store && OBOL.store.pref().skin) || "obol"; } catch (e) { return "obol"; }
   }
   function motionLevel() { var v = lsGet(LS_MOTION); return (v === "full" || v === "reduced" || v === "off") ? v : "full"; }
-  function surfaceAlpha() { var v = parseFloat(lsGet(LS_OPACITY)); return (v >= 0 && v <= 1) ? v : 0.3; }
+  function surfaceAlpha() { var v = parseFloat(lsGet(LS_OPACITY)); return (v >= 0 && v <= 1) ? v : 0.5; }
   function applySurfaceAlpha(v) { try { document.documentElement.style.setProperty("--surface-alpha", String(v)); } catch (e) {} }
   function coinsOn() { return !OBOL.coins || OBOL.coins.enabled(); }
 
@@ -34,7 +34,7 @@
     btn = document.createElement("button");
     btn.id = "obol-settings-toggle"; btn.type = "button"; btn.className = "obol-settings-toggle";
     btn.setAttribute("aria-label", "Appearance settings"); btn.setAttribute("aria-expanded", "false");
-    btn.title = "Appearance"; btn.textContent = "⚙";
+    btn.title = "Appearance"; btn.innerHTML = OBOL.ic("gear");
     btn.addEventListener("click", function (e) { e.stopPropagation(); toggle(); });
 
     panel = document.createElement("div");
@@ -115,16 +115,16 @@
     panel.appendChild(wsWrap); panel.appendChild(fileInput);
 
     // Data: a full factory reset — erase every obol engagement, screenshot and setting in this
-    // browser (a hard refresh doesn't clear IndexedDB). Always reachable from the ⚙, with a confirm.
+    // browser (a hard refresh doesn't clear IndexedDB). Always reachable from the settings panel, with a confirm.
     panel.appendChild(sectionTitle("Data"));
     var dataWrap = document.createElement("div"); dataWrap.className = "obol-set-row";
     var resetBtn = document.createElement("button");
-    resetBtn.type = "button"; resetBtn.className = "obol-set-btn obol-set-danger"; resetBtn.textContent = "⚠ Full Reset — Erase All Data";
+    resetBtn.type = "button"; resetBtn.className = "obol-set-btn obol-set-danger"; resetBtn.textContent = "⚠ Full Reset, Erase All Data";
     resetBtn.addEventListener("click", function (e) {
       e.stopPropagation();
-      if (!confirm("FULL RESET\n\nErase everything obol saved in this browser — every engagement, screenshot, and setting — and start completely fresh.\n\nThis cannot be undone. Continue?")) return;
+      if (!confirm("FULL RESET\n\nErase everything obol saved in this browser (every engagement, screenshot, and setting) and start completely fresh.\n\nThis cannot be undone. Continue?")) return;
       if (!(OBOL.store && OBOL.store.resetAll)) { location.reload(); return; }
-      OBOL.store.resetAll().then(function () { toast("All data cleared — reloading fresh"); setTimeout(function () { location.reload(); }, 200); });
+      OBOL.store.resetAll().then(function () { toast("All data cleared, reloading fresh"); setTimeout(function () { location.reload(); }, 200); });
     });
     dataWrap.appendChild(resetBtn); panel.appendChild(dataWrap);
 
@@ -143,7 +143,7 @@
   }
   function syncSkins() { var cur = currentSkin(); skinBtns.forEach(function (b) { b.classList.toggle("active", b.dataset.skin === cur); }); }
   function syncMotion() { motionBtn.textContent = MOTION_LABEL[motionLevel()]; motionBtn.classList.toggle("active", motionLevel() !== "off"); }
-  function syncCoins() { var on = coinsOn(); coinBtn.textContent = "🪙 Coin bursts: " + (on ? "on" : "off"); coinBtn.classList.toggle("active", on); }
+  function syncCoins() { var on = coinsOn(); coinBtn.innerHTML = OBOL.ic("coin") + " Coin bursts: " + (on ? "on" : "off"); coinBtn.classList.toggle("active", on); }
   function syncAll() { syncSkins(); syncMotion(); syncCoins(); }
   function toggle() { open ? close() : openPanel(); }
   function openPanel() { open = true; panel.hidden = false; btn.setAttribute("aria-expanded", "true"); syncAll(); }

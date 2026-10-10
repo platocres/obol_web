@@ -31,7 +31,7 @@
       if (!title) return;
       var val = { key: 'wordpress', name: title, source: 'wpscan (candidate lead, not confirmed)' };
       if (version) val.version = version.groups.v;
-      _add(facts, mkFact('exploit.candidate', h, val, S, 'wpscan finding — candidate lead, not confirmed (' + source + ')'));
+      _add(facts, mkFact('exploit.candidate', h, val, S, 'wpscan finding, candidate lead, not confirmed (' + source + ')'));
     });
     reAll(C._WPSCAN_LOGIN_RE, text).forEach(function (m) {
       _add(facts, mkFact('credential.candidate', h, { kind: 'wordpress_login', user: m.groups.u.trim(), password: m.groups.p.trim(), via: 'wpscan' }, S, source));
@@ -103,7 +103,7 @@
 
   // arjun (HTTP parameter discovery) → web.param_candidate. The endpoint is the URL arjun was
   // pointed at (`-u`); the parameters are the names it reports finding. Attack surface (a parameter
-  // that exists), never a vulnerability — the probe loop is what proves any of them injectable.
+  // that exists), never a vulnerability, the probe loop is what proves any of them injectable.
   var _ARJUN_URL_RE = /-u\s+['"]?(?<url>https?:\/\/[^\s'"]+)/i;
   var _ARJUN_FOUND_RE = /parameters?\s+found\s*[:\-]?\s*(?<names>[A-Za-z0-9_,\s.\-]+)/gi;
   var _ARJUN_FUZZ_RE = /[?&](?<name>[A-Za-z_][\w.\-]*)=FUZZ/gi;
@@ -307,6 +307,9 @@
     if (method === 'template_injection') _add(facts, mkFact('web.ssti_confirmed', h, { method: 'template_injection', evidence: evidence }, S, source));
     else if (method === 'insecure_deserialization') _add(facts, mkFact('web.deserial_confirmed', h, { method: 'insecure_deserialization', evidence: evidence }, S, source));
     if (actionId === 'file-upload') _add(facts, mkFact('web.upload_confirmed', h, { method: 'executable_upload', evidence: evidence }, S, source));
+    // For the moves whose purpose is to land a shell (SSTI→RCE, a PUT'd webshell, abusing an authz
+    // bypass into an upload), command output in the paste is the foothold itself.
+    if (C._WEB_RCE_FOOTHOLD_IDS && C._WEB_RCE_FOOTHOLD_IDS.has(actionId)) _add(facts, mkFact('foothold.webshell', h, { os: osFamily, method: method, evidence: evidence }, S, source));
     C._add_os_observation(facts, ws, source, osFamily, evidence, 'medium', 'web-' + actionId, false);
   }
   C._parse_web_cmdi = _parse_web_cmdi;
@@ -398,6 +401,10 @@
       var token = reSearch(C._AWS_TOKEN_RE, text);
       if (token) cred.session_token = token.groups.token;
       _add(facts, mkFact('credential.candidate', h, cred, S, source));
+      // also a typed cloud-credential lead, so the cloud post-exploitation move can key on it directly
+      // (the generic credential.candidate still drives the cred loop). NOT cloud.aws_access: a key read
+      // from metadata is a candidate to try with aws-cli, not proof of access, per the proof discipline.
+      _add(facts, mkFact('cloud.credential', h, { provider: 'aws', access_key_id: akid.groups.akid, temporary: /^ASIA/.test(akid.groups.akid), via: method }, S, source));
     }
     mined.forEach(function (cred) {
       var v = {};

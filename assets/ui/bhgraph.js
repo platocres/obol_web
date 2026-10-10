@@ -9,7 +9,8 @@
   var OBOL = root.OBOL = root.OBOL || {};
 
   var ICON = { user: '\uD83D\uDC64', group: '\uD83D\uDC65', computer: '\uD83D\uDDA5', domain: '\uD83C\uDF10', object: '\u2b24', gpo: '\uD83D\uDCDC' };
-  var NW = 150, NH = 34, COLW = 210, ROW = 64, PADX = 24, PADY = 30;
+  var NW = 150, NH = 34, COLW = 210, ROW = 74, PADX = 24, PADY = 34;
+  var R = 20;   // node circle radius (BloodHound-style round nodes, label underneath)
 
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function isMemberOf(edge) { return String(edge || '').toLowerCase() === 'memberof'; }
@@ -27,22 +28,38 @@
   }
 
   function center(p) { return { x: p.x + NW / 2, y: p.y + NH / 2 }; }
+  // Draw the edge from circle boundary to circle boundary so the arrowhead sits just outside the target
+  // node (visible), not buried under it.
   function edgePath(pos, e) {
-    var a = center(pos[e.from]), b = center(pos[e.to]);
     if (!pos[e.from] || !pos[e.to]) return '';
-    return 'M' + a.x + ',' + a.y + ' L' + b.x + ',' + b.y;
+    var a = center(pos[e.from]), b = center(pos[e.to]);
+    var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ux = dx / len, uy = dy / len;
+    return 'M' + (a.x + ux * R) + ',' + (a.y + uy * R) + ' L' + (b.x - ux * R) + ',' + (b.y - uy * R);
   }
 
   // Render the graph into `container`. opts.onNodeClick(nodeId) optional.
   function renderInto(container, graph, opts) {
     opts = opts || {};
     if (!graph || !graph.nodes || !graph.nodes.length) {
-      container.innerHTML = '<div class="coach-empty">No attack path to graph — set an owned principal to derive paths.</div>';
+      container.innerHTML = '<div class="coach-empty">No attack path to graph, set an owned principal to derive paths.</div>';
       return;
     }
     var pos = layout(graph);
     var goalIds = {}; graph.nodes.forEach(function (n) { if (n.type === 'domain') goalIds[n.id] = 1; });
-    var ownedIds = {}; graph.nodes.forEach(function (n) { if (n.depth === 0) ownedIds[n.id] = 1; });
+    // Progress overlay: colour every node on the canvas by your real/what-if status, not just the path
+    // source. opts.owned (a map of UPPER short name -> 1) marks the accounts you hold; opts.reached marks
+    // the ones an owned account already controls. With no overlay given, fall back to the old depth-0 rule.
+    var ownedSet = opts.owned || null, reachedSet = opts.reached || null;
+    var ownedIds = {}; graph.nodes.forEach(function (n) {
+      var up = String(n.id).toUpperCase();
+      if (ownedSet ? ownedSet[up] : (n.depth === 0)) ownedIds[n.id] = 1;
+    });
+    var reachedIds = {};
+    if (reachedSet) graph.nodes.forEach(function (n) {
+      var up = String(n.id).toUpperCase();
+      if (reachedSet[up] && !ownedIds[n.id] && !goalIds[n.id]) reachedIds[n.id] = 1;
+    });
 
     // Per-node lookup + outgoing edges, for the hover card (full name, role, and what it can abuse).
     var nodeById = {}; graph.nodes.forEach(function (n) { nodeById[n.id] = n; });
@@ -65,7 +82,9 @@
       + '<defs><marker id="bh-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
       + '<path d="M0,0 L10,5 L0,10 z" class="bh-arrowhead"/></marker></defs>'
       + '<g class="bh-viewport"></g></svg></div>'
-      + '<div class="bh-hint">Drag nodes to rearrange · scroll to zoom · drag the background to pan · red edges are abusable control, grey is MemberOf.</div>';
+      + '<div class="bh-hint">Drag nodes to rearrange · scroll to zoom · drag the background to pan · red edges are abusable control, grey is MemberOf.'
+      + ((ownedSet || reachedSet) ? ' <span class="bh-leg"><span class="bh-leg-d owned"></span>owned</span> <span class="bh-leg"><span class="bh-leg-d reached"></span>reached (you already control)</span> <span class="bh-leg"><span class="bh-leg-d goal"></span>Domain Admin</span>' : '')
+      + '</div>';
 
     var svg = container.querySelector('svg.bh-graph');
     var vp = container.querySelector('.bh-viewport');
@@ -96,18 +115,25 @@
     // nodes
     graph.nodes.forEach(function (n) {
       var g = document.createElementNS(svgNS, 'g');
-      g.setAttribute('class', 'bh-node bh-type-' + n.type + (goalIds[n.id] ? ' goal' : '') + (ownedIds[n.id] ? ' owned' : ''));
+      g.setAttribute('class', 'bh-node bh-type-' + n.type + (goalIds[n.id] ? ' goal' : '') + (ownedIds[n.id] ? ' owned' : '') + (reachedIds[n.id] ? ' reached' : ''));
       g.setAttribute('data-id', n.id);
       g.setAttribute('data-paths', (n.paths || []).join(','));
       g.setAttribute('transform', 'translate(' + pos[n.id].x + ',' + pos[n.id].y + ')');
-      var rect = document.createElementNS(svgNS, 'rect');
-      rect.setAttribute('width', NW); rect.setAttribute('height', NH); rect.setAttribute('rx', 7);
-      g.appendChild(rect);
-      var txt = document.createElementNS(svgNS, 'text');
-      txt.setAttribute('x', 10); txt.setAttribute('y', NH / 2 + 4);
-      txt.textContent = (ICON[n.type] || '') + ' ' + trunc(n.label, 15);
+      var cx = NW / 2, cy = NH / 2;
+      // round node (BloodHound-style): a typed circle with its icon centred, and the NAME underneath.
+      var circle = document.createElementNS(svgNS, 'circle');
+      circle.setAttribute('cx', cx); circle.setAttribute('cy', cy); circle.setAttribute('r', R);
+      g.appendChild(circle);
+      var ico = document.createElementNS(svgNS, 'text');
+      ico.setAttribute('class', 'bh-node-ico'); ico.setAttribute('x', cx); ico.setAttribute('y', cy + 6);
+      ico.setAttribute('text-anchor', 'middle'); ico.textContent = ICON[n.type] || '';
+      g.appendChild(ico);
+      var lbl = document.createElementNS(svgNS, 'text');
+      lbl.setAttribute('class', 'bh-node-lbl'); lbl.setAttribute('x', cx); lbl.setAttribute('y', cy + R + 15);
+      lbl.setAttribute('text-anchor', 'middle'); lbl.textContent = trunc(n.label, 20);
+      g.appendChild(lbl);
       var title = document.createElementNS(svgNS, 'title'); title.textContent = n.label + ' (' + n.type + ')';
-      g.appendChild(txt); g.appendChild(title);
+      g.appendChild(title);
       vp.appendChild(g);
     });
 
@@ -118,7 +144,7 @@
     card.style.display = 'none';
     container.appendChild(card);
 
-    wire(svg, vp, pos, opts, { card: card, nodeById: nodeById, outEdges: outEdges, goalIds: goalIds, ownedIds: ownedIds });
+    wire(svg, vp, pos, opts, { card: card, nodeById: nodeById, outEdges: outEdges, goalIds: goalIds, ownedIds: ownedIds, reachedIds: reachedIds });
   }
 
   var TYPE_NAME = { user: 'User', group: 'Group', computer: 'Computer', domain: 'Domain', gpo: 'GPO', object: 'Object' };
@@ -127,6 +153,7 @@
   function nodeCardHtml(n, ctx) {
     var roles = '';
     if (ctx.ownedIds[n.id]) roles += '<span class="bh-nc-tag owned">owned</span>';
+    if (ctx.reachedIds && ctx.reachedIds[n.id]) roles += '<span class="bh-nc-tag reached">reached</span>';
     if (ctx.goalIds[n.id]) roles += '<span class="bh-nc-tag goal">domain goal</span>';
     var out = (ctx.outEdges[n.id] || []);
     var rels = out.slice(0, 6).map(function (e) {

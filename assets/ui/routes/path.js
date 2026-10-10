@@ -12,100 +12,147 @@
 
   function esc(s) { return U.esc(s); }
 
-  function phaseChip(phase) {
-    return '<span class="ph-chip ph-' + esc(phase) + '">' + esc(phase) + '</span>';
+  // Scope lens (teaching filter, orthogonal to fact-gating): narrow the visible moves to a syllabus level
+  // so a newcomer isn't handed the whole arsenal at once. Default 'oscp+' hides only the handful of
+  // genuinely out-of-scope edge CVEs (zerologon/noPac/PrintNightmare/MS14-068/SCCM/WSUS); the operator
+  // flips it any time. Persisted per-browser; a read in a private window simply falls back to the default.
+  var LENS_KEY = 'obol.scope-lens', LENS_ORDER = { oscp: 0, 'oscp+': 1, beyond: 2, all: 2 };
+  function lensGet() { try { var v = localStorage.getItem(LENS_KEY); return (v === 'oscp' || v === 'oscp+' || v === 'all') ? v : 'oscp+'; } catch (e) { return 'oscp+'; } }
+  function lensSet(v) { try { localStorage.setItem(LENS_KEY, v); } catch (e) {} }
+  function scopeAllowed(scope, lens) { if (lens === 'all') return true; return LENS_ORDER[scope || 'oscp'] <= LENS_ORDER[lens]; }
+
+  // A slim one-line status strip linking to the global Loadout: not-set-up CTA, or a synced summary that
+  // nudges a re-sync once the box snapshot is stale. Reads the per-browser profile straight from
+  // localStorage (no dependency on the lazy arsenal.js), so it renders on the coach without loading it.
+  var ARSENAL_STALE_DAYS = 21;
+  function arsenalProfile() { try { return JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { return null; } }
+  // Commands ALWAYS render as authored — we never gate a move on what we think the box has. But once the box
+  // is synced, if a command's tool isn't present, add a quiet "install it" nudge beneath it (never hiding it).
+  // Only nudge for tools obol actually PROVISIONS (apt/pipx/git/release/material/staged) — never for base Kali
+  // tools (class 'kali') or shell builtins. Those ship by default, so flagging nmap as "missing" would just
+  // look broken, and there's no install command to offer anyway; the Loadout band handles any true Kali gap.
+  function missingToolHint(action, v) {
+    var prof = arsenalProfile(); if (!prof) return '';
+    var A = (OBOL.ARSENAL) || {};
+    var names = []; if (v && v.tool) names.push(v.tool);
+    if (action && action.tools) names = names.concat(action.tools); if (action && action.tool) names.push(action.tool);
+    var seen = {}, miss = [];
+    names.forEach(function (t) {
+      if (!t) return; var e = A[String(t).toLowerCase()];
+      if (!e || e.class === 'builtin' || e.class === 'kali' || seen[e.key]) return; seen[e.key] = 1;
+      var rec = (prof.tools || {})[e.key];
+      var present = (rec && rec.present) || (prof.cloned && prof.cloned[e.key]) || (prof.digests && prof.digests[e.key])
+        || ((prof.staged || []).indexOf(e.dest || '\0') >= 0);
+      if (!present) miss.push(e);
+    });
+    if (!miss.length) return '';
+    return '<div class="cmd-missing">⚠ Not On Your Box: ' + miss.map(function (e) {
+      var how = e.install ? '<code class="cmd-miss-cmd" data-copy="' + U.attr(e.install) + '" title="Click to copy">' + esc(e.install) + '</code>'
+        : (e.manual_url ? '<a href="' + U.attr(e.manual_url) + '" target="_blank" rel="noopener">get it ↗</a>' : 'see Loadout');
+      return '<b>' + esc(e.label || e.key) + '</b> ' + how;
+    }).join(' · ') + ' · <a href="#/loadout">Loadout →</a></div>';
+  }
+  function arsenalStrip() {
+    var p = arsenalProfile();
+    if (!p) {
+      return '<a class="lo-strip lo-strip-cta" href="#/loadout"><span class="lo-strip-ico">' + OBOL.ic('gear') + '</span>'
+        + '<span class="lo-strip-txt">Set up your attack box, obol tailors every command to the tools you have</span>'
+        + '<span class="lo-strip-go">Loadout →</span></a>';
+    }
+    var present = 0; try { Object.keys(p.tools || {}).forEach(function (k) { if (p.tools[k] && p.tools[k].present) present++; }); } catch (e) {}
+    var ageDays = p.savedAt ? (Date.now() - p.savedAt) / 86400000 : 0;
+    var stale = ageDays > ARSENAL_STALE_DAYS;
+    var txt = stale
+      ? ('Loadout synced ' + Math.round(ageDays) + 'd ago, re-sync your box?')
+      : ('Loadout: ' + present + ' tools · ' + (p.staged || []).length + ' staged ready');
+    return '<a class="lo-strip ' + (stale ? 'lo-strip-stale' : 'lo-strip-ok') + '" href="#/loadout">'
+      + '<span class="lo-strip-ico">' + (stale ? '⚠' : '✓') + '</span>'
+      + '<span class="lo-strip-txt">' + esc(txt) + '</span><span class="lo-strip-go">Loadout →</span></a>';
   }
 
-  function producesChips(action) {
-    if (!action.produces.length) return '';
-    var chips = action.produces.map(function (k) {
-      return '<span class="fact-chip" title="' + esc(k) + '">' + esc(OBOL.util.titleCase(OBOL.pack.friendly(k))) + '</span>';
-    }).join('');
-    return '<div class="move-produces"><span class="mini-label">Proves</span>' + chips + '</div>';
+  // When defense-enum has proven endpoint controls, warn the operator (remote-first) rather than nudging
+  // them onto a monitored host. Detection only — obol surfaces the posture, it does not evade anything.
+  function defenseAdvisory(facts) {
+    if (!facts.has('defense.control')) return '';
+    var v = {}; try { v = (facts.values('defense.control') || [])[0] || {}; } catch (e) {}
+    var bits = [];
+    if (v.clm) bits.push('Constrained Language Mode');
+    if (v.applocker) bits.push('AppLocker enforced');
+    if (v.defender) bits.push('Defender real-time on');
+    if (v.exclusion_count) bits.push(v.exclusion_count + ' Defender exclusion' + (v.exclusion_count === 1 ? '' : 's'));
+    var what = bits.length ? bits.join(' · ') : 'endpoint controls active';
+    return '<div class="coach-defense"><span class="coach-defense-ico">' + OBOL.ic('shield') + '</span>'
+      + '<span>Endpoint defenses detected, <strong>' + esc(what) + '</strong>. Prefer remote-first moves; on-host tooling may be seen.</span></div>';
   }
 
   // Tokens that come from proven facts, the engagement params, or the workspace — the operator fills
   // these on the sidebar or by pasting evidence, so they stay a "needs:" hint, not a text box.
   var DERIVED_TOKENS = {
-    target: 1, domain: 1, basedn: 1, dc: 1, user: 1, password: 1, nthash: 1, lhost: 1,
+    target: 1, domain: 1, basedn: 1, dc: 1, user: 1, password: 1, nthash: 1, lhost: 1, lport: 1,
     userlist: 1, hashfile: 1, wordlist: 1, dc_netbios: 1, dc_account: 1, domain_sid: 1,
     target_sam: 1, group: 1, ca_name: 1, template: 1, pfx: 1, nmap_ports: 1, krbtgt_hash: 1,
   };
   // Ad-hoc, operator-supplied free-text tokens get an inline fill box right on the card (the coach
   // stays a builder-free surface — this only completes a placeholder, no toggles). Nice labels/hints:
-  var FILL_LABEL = { command: 'run on host', cmd: 'command', lport: 'listener port', rport: 'remote port', payload: 'payload', outfile: 'output file', url: 'URL', share: 'share', file: 'file', listener: 'listener' };
-  var FILL_PH = { command: 'e.g. whoami /all', cmd: 'e.g. id', lport: '4444', payload: 'windows/x64/…', outfile: 'out.txt', url: 'http://…', share: 'C$', file: 'C:\\path\\file' };
-
-  function commandsBlock(action, filled) {
-    // Coach awareness: mark each variant obol has already seen you run (from the activity ledger) and, for
-    // a non-sequenced move, float the un-run variants up so "preferred" is the next thing left to do — a
-    // command you already ran (or one whose effect is already proven) stops being re-suggested at the top.
-    var eng = OBOL.store.active() || {};
-    var acts = eng.activities || [], params = eng.params || {};
-    // Match on the TEMPLATE (v.run), not the filled command: a filled command carries the real domain /
-    // user / password / target (pulled from facts and the active credential, which params may not hold), and
-    // those lab-specific values would never appear in the recovered dispatch of an attached dump. The
-    // template keeps them as {{tokens}} — stripped from the signature — so only the true action verbs remain.
-    var items = filled.map(function (v, i) { return { v: v, i: i, ran: OBOL.command.commandWasRun(v.run || v.filled, acts, params) }; });
-    if (!action.sequence) items = items.filter(function (x) { return !x.ran; }).concat(items.filter(function (x) { return x.ran; }));
-    var firstUnrun = -1;
-    for (var fu = 0; fu < items.length; fu++) { if (!items[fu].ran) { firstUnrun = fu; break; } }
-    return items.map(function (x, pos) {
-      var v = x.v, i = x.i;
-      var unfilled = OBOL.command.unfilledTokens(v.filled);
-      var derived = unfilled.filter(function (t) { return DERIVED_TOKENS[t]; });
-      var fillable = unfilled.filter(function (t) { return !DERIVED_TOKENS[t]; });
-      var warn = derived.length
-        ? '<div class="cmd-needs">needs: ' + derived.map(function (t) { return '<code>' + esc(t) + '</code>'; }).join(', ') + '</div>'
-        : '';
-      // an inline input per ad-hoc token; typing substitutes live into the command + copy button.
-      var fillRow = fillable.length
-        ? '<div class="cmd-fill-row">' + fillable.map(function (t) {
-            return '<label class="cmd-fill-lbl"><span>' + esc(FILL_LABEL[t] || t) + '</span>'
-              + '<input class="cmd-fill" data-tok="' + esc(t) + '" placeholder="' + esc(FILL_PH[t] || ('value for ' + t)) + '" autocomplete="off" spellcheck="false"></label>';
-          }).join('') + '</div>'
-        : '';
-      var note = v.note ? '<div class="cmd-note">' + esc(v.note) + '</div>' : '';
-      // hands-on guidance for obol web: big output → tee to a file and attach it in Evidence.
-      var webNote = v.webNote ? '<div class="cmd-webnote">✋ ' + esc(v.webNote) + '</div>' : '';
-      var label = action.sequence ? ('step ' + (i + 1))
-        : (x.ran ? 'already run' : (pos === firstUnrun ? 'preferred' : 'alt ' + pos));
-      var ranTag = (x.ran && !action.sequence)
-        ? '<span class="cmd-ran" title="obol saw this command in your run ledger — run the next one instead">✓ ran</span>' : '';
-      return '<div class="cmd' + (x.ran ? ' cmd-ran-done' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
-        + (fillable.length ? ' data-tmpl="' + U.attr(v.filled) + '"' : '') + '>'
-        + '<div class="cmd-head"><span class="cmd-tag">' + esc(v.tool || action.tool || 'cmd') + '</span>'
-        + '<span class="cmd-variant">' + label + '</span>' + ranTag
-        + (v.win && !x.ran ? '<span class="cmd-win">☠ Pwn This Target</span>' : '')
-        + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '" title="Copy command">copy</button></div>'
-        + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
-        + fillRow + note + webNote + warn + '</div>';
-    }).join('');
-  }
+  var FILL_LABEL = { command: 'run on host', cmd: 'command', lport: 'listener port', rport: 'remote port', payload: 'payload', outfile: 'output file', url: 'URL', share: 'share', file: 'file', listener: 'listener',
+    // privesc / cloud module tokens (values you discover from the previous step)
+    suid_bin: 'SUID binary path', hijack_name: 'hijacked name', dll_name: 'DLL name', dll_path: 'writable DLL dir', task_target: 'task target path', task_name: 'task name', service: 'service name',
+    sid: 'Oracle SID', sudo_command: 'allowed sudo command', kernel: 'kernel version', access_key: 'AWS access key', secret_key: 'AWS secret key', token: 'AWS session token', instance: 'EC2 instance id',
+    // phase-B module tokens (values you discover from the previous step)
+    clsid: 'hijackable CLSID', writable_dir: 'writable directory', unit: 'systemd unit', unit_path: 'unit file path', resource_group: 'Azure resource group', vm_name: 'Azure VM name', bearer: 'bearer token', dc_fqdn: 'DC FQDN', ca_name: 'CA name', nthash: 'NT hash',
+    // discover-from-previous-step values swept out of <angle-bracket> dead text
+    gmsa_account: 'gMSA account', forest_root_sid: 'forest root SID', database: 'database name', index: 'index name', internal_cidr: 'internal CIDR', internal_host: 'internal host', export: 'NFS export path', module: 'rsync module', masterkey_file: 'masterkey file', user_sid: 'user SID', credential_blob: 'credential blob', masterkey_hex: 'unwrapped masterkey (hex)', blob: 'credential blob file',
+    // phase-E module tokens
+    spoofed_name: 'spoofed DNS name', victim_fqdn: 'victim FQDN', wordlist: 'wordlist path', rid: 'computer RID', iface: 'your interface', project: 'GCP project id', secret: 'secret name',
+    // phase-F module tokens
+    endpoint: 'API endpoint path', cookie: 'session cookie',
+    // phase-G module tokens
+    exploit_src: 'exploit source file', script_path: 'root script path', script_dir: 'script directory' };
+  var FILL_PH = { command: 'e.g. whoami /all', cmd: 'e.g. id', lport: '4444', payload: 'windows/x64/…', outfile: 'out.txt', url: 'http://…', share: 'C$', file: 'C:\\path\\file',
+    suid_bin: '/usr/local/bin/backup', hijack_name: 'backup', dll_name: 'config', dll_path: 'C:\\Program Files\\App', task_target: 'C:\\Scripts\\backup.bat', task_name: '\\VulnBackup', service: 'VulnAppSvc',
+    sid: 'ORCL', sudo_command: '/usr/sbin/apache2ctl', kernel: '5.8.0', access_key: 'ASIA…', secret_key: 'wJalr…', token: 'IQoJb…', instance: 'i-0abc123',
+    clsid: '{0ABCD...}', writable_dir: '/opt/backups', unit: 'backup.service', unit_path: '/etc/systemd/system/backup.service', resource_group: 'rg-prod', vm_name: 'web-vm', bearer: 'eyJ0eXA…', dc_fqdn: 'dc01.acme.internal', ca_name: 'acme-DC01-CA', nthash: 'aad3b…' };
 
   // "Set up the file this move reads" — obol proved the user list / hashes, so it hands back a
   // copy-paste heredoc that writes the exact file {{userlist}}/{{hashfile}} now points at. This is
   // the browser stand-in for obol-local materializing loot/users.txt on disk: obol can't write the
   // operator's box, so it gives them the one command that does, with the names it already parsed.
-  function prepStep(tag, variant, cmd, note) {
+  // A stable short id for a prep step, keyed by WHAT it writes AND the exact bytes it writes, so a dismissed
+  // step stays gone while its content is unchanged but RE-APPEARS the moment the content changes (you proved
+  // more users, so the file obol would write is different and worth re-running). djb2 over the command text.
+  function prepHash(s) { var h = 5381; s = String(s || ''); for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+  function prepDoneMap() { var e = OBOL.store.active(); return (e && e.ui && e.ui.prepDone) || {}; }
+
+  // One "Set Up First" step. obol can't see the operator's disk, so a prep step can't auto-detect "done";
+  // instead it carries a "Got It" control that collapses it to a single line (persisted per engagement), and
+  // a "Show" to bring it back. This keeps the big heredoc from eating the card once the file has been written.
+  function prepStep(tag, variant, cmd, note, key, done) {
+    if (done) {
+      return '<div class="cmd cmd-prep is-prep-done">'
+        + '<div class="cmd-head"><span class="cmd-tag">Done</span>'
+        + '<span class="cmd-variant">' + esc(String(variant).replace(/^creates /, '')) + ' written</span>'
+        + '<button class="btn-ghost prep-undo" data-prep="' + esc(key) + '" title="Show this step again">Show</button></div></div>';
+    }
     return '<div class="cmd cmd-prep">'
       + '<div class="cmd-head"><span class="cmd-tag">' + esc(tag) + '</span>'
       + '<span class="cmd-variant">' + esc(variant) + '</span>'
-      + '<button class="btn-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">copy</button></div>'
+      + '<button class="btn-copy" data-copy="' + U.attr(cmd) + '" title="Copy command">Copy</button>'
+      + '<button class="btn-ghost prep-done" data-prep="' + esc(key) + '" title="Hide this once you have run it">Got It</button></div>'
       + '<pre class="cmd-run"><code>' + esc(cmd) + '</code></pre>'
       + (note ? '<div class="cmd-note">' + esc(note) + '</div>' : '') + '</div>';
   }
 
   function prepBlock(action, facts, dirs) {
     if (!OBOL.loot) return '';
-    var steps = '';
+    var steps = '', doneMap = prepDoneMap();
     // {{userlist}} — the move reads it and obol has proven users to write into it.
     if (OBOL.loot.actionUsesToken(action, 'userlist')) {
       var users = OBOL.loot.usernames(facts);
       var ulCmd = OBOL.loot.userlistCommand(facts, dirs);
       if (users.length && ulCmd) {
-        steps += prepStep('write', 'creates ' + OBOL.loot.userlistPath(dirs),
-          ulCmd, 'Run once — the ' + users.length + ' users obol proved, written where every command below reads them.');
+        var ulKey = 'ul:' + prepHash(ulCmd);
+        steps += prepStep('Write', 'creates ' + OBOL.loot.userlistPath(dirs),
+          ulCmd, 'Run once, the ' + users.length + ' users obol proved, written where every command below reads them.', ulKey, !!doneMap[ulKey]);
       }
     }
     // {{hashfile}} as an INPUT (a crack move) — obol holds the roasted hashes as facts but no file
@@ -115,62 +162,490 @@
     if (cracksHashes && OBOL.loot.actionUsesToken(action, 'hashfile')) {
       var hfCmd = OBOL.loot.hashfileCommand(facts, action, dirs);
       if (hfCmd) {
-        steps += prepStep('write', 'creates ' + OBOL.loot.hashfilePath(dirs, action),
-          hfCmd, 'Lay the roasted hashes obol captured into the file the crack reads.');
+        var hfKey = 'hf:' + prepHash(hfCmd);
+        steps += prepStep('Write', 'creates ' + OBOL.loot.hashfilePath(dirs, action),
+          hfCmd, 'Lay the roasted hashes obol captured into the file the crack reads.', hfKey, !!doneMap[hfKey]);
       }
     }
     return steps ? '<div class="move-prep"><span class="mini-label">Set Up First</span>' + steps + '</div>' : '';
   }
 
-  function moveCard(action, facts, params, opts) {
-    opts = opts || {};
-    var why = U.firstSentence(action.hypothesis || action.proves || action.title);
-    var dnp = action.does_not_prove
-      ? '<div class="move-dnp"><span class="mini-label">Does Not Prove</span>' + esc(action.does_not_prove) + '</div>'
-      : '';
-    var toolLink = (action.tool || (action.tools && action.tools[0]))
-      ? '<a class="btn-ghost" href="#/tools/' + esc(action.tool || action.tools[0]) + '">Build in Tools ↗</a>'
-      : '';
-    var dirs = OBOL.workspace.tokens(OBOL.store.active());
-    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: dirs });
-    var prefCmd = (filled[0] && filled[0].filled) || action.command || '';
-    // Inline ingestion: paste this move's output right here — the coach mints facts and advances,
-    // so a first-timer never has to guess where the output goes. Big dumps still go to Evidence.
-    var ingestBox = '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr(prefCmd) + '" hidden>'
-      + '<textarea class="mi-text" placeholder="Paste this command\'s full output here — prompt, command and all. The coach reads it, mints only what it proves, and advances." spellcheck="false"></textarea>'
-      + '<div class="mi-row"><button class="btn-primary mi-go" data-action="' + esc(action.id) + '">Ingest → Facts</button>'
-      + '<a class="mi-evlink" href="#/evidence/' + esc(action.id) + '">Big output or a screenshot? Full Evidence ↗</a>'
-      + '<span class="mi-result" role="status"></span></div></div>';
-    return '<article class="move' + (opts.primary ? ' move-primary' : '') + '" data-action="' + esc(action.id) + '">'
-      + '<header class="move-head">' + phaseChip(OBOL.phases.phaseOfAction(action))
-      + '<h3 class="move-title">' + esc(action.title) + '</h3></header>'
-      + '<p class="move-why">' + esc(why) + '</p>'
-      + prepBlock(action, facts, dirs)
-      + commandsBlock(action, filled)
-      + producesChips(action) + dnp
-      + '<footer class="move-actions">'
-      + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output ↴</button>'
-      + toolLink
-      + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
-      + (action.refs && action.refs.length ? '<span class="move-refs">' + action.refs.length + ' ref' + (action.refs.length > 1 ? 's' : '') + '</span>' : '')
-      + '</footer>'
-      + ingestBox + '</article>';
+  // ---- pivot staging guide: multi-stage moves (tunnels and pivots) only make sense as a sequence
+  //      across TWO machines, and single commands out of context mislead. For these, show an authored
+  //      field-notes guide: ordered, machine-labelled, copy-ready, and tickable so you track where you
+  //      are in the setup. Authored here (presentation) rather than in the packs, like the Learn field
+  //      notes. Gated by move id so it never guesses a machine label it is not sure of. ----
+  // The tunnel-setup field notes come from the shared catalog (data/tunnels.js), keyed by move id,
+  // so the coach guide and the connectivity-panel chooser never drift.
+  function tunnelFor(moveId) { var ts = OBOL.TUNNELS || []; for (var i = 0; i < ts.length; i++) if (ts[i].moveId === moveId) return ts[i]; return null; }
+  // The step list itself is rendered by the shared OBOL.renderTunnelSteps (data/tunnels.js), so the
+  // coach's Setup guide and the hub's tunnel chooser can never drift. Here we only wrap it in the
+  // collapsible <details> and add the when / before-you-start intro.
+  function stagingGuide(action, params) {
+    var s = tunnelFor(action.id); if (!s || !OBOL.renderTunnelSteps) return '';
+    var intro = (s.when || s.summary ? '<p class="stage-intro">' + esc(s.when || s.summary) + '</p>' : '')
+      + (s.prereq ? '<p class="stage-prereq"><span class="stage-prereq-l">Before You Start:</span> ' + esc(s.prereq) + '</p>' : '');
+    return '<details class="move-staging"><summary><span class="stage-sum-l">Setup Guide</span>'
+      + '<span class="stage-sum-d">Step by step, on your box and the host</span></summary>'
+      + intro + OBOL.renderTunnelSteps(s, params) + '</details>';
   }
 
-  // A cluster of blocked moves that share one unlocking prerequisite: "prove X → these open".
-  function blockedGroup(g) {
-    var cap = 12;
-    var reason = String(g.reason || '').replace(/^blocked until\s*/i, '');
-    var items = g.actions.slice(0, cap).map(function (a) {
-      return '<li class="blocked-item">' + phaseChip(OBOL.phases.phaseOfAction(a))
-        + '<span class="blocked-title">' + esc(a.title) + '</span></li>';
+  // ===================================================================================================
+  // Next Steps redesign — a ranked card grid (left) + a field-notes canvas (right). Cards are compact and
+  // scannable; selecting one morphs it wider, reveals its commands with a Remote/On-Host toggle, and loads
+  // the field notes for the selected command into the canvas. Glow follows selection; #1 keeps a persistent
+  // "Suggested Start" tag. See docs/mockups/next-steps-redesign.html for the agreed design.
+  // ===================================================================================================
+
+  // Which card is open, which command inside it, which locus tab. Module-level so it survives the route's
+  // full re-renders (a fact change re-renders the whole coach); validated against the live set each render.
+  var nsSel = { id: null, idx: 0, locus: null };
+  var NS_INFRA = { 'target.configured': 1, 'host.up': 1, 'ports.open': 1, 'scan.nmap.quick': 1 };
+
+  // Inline formatting for an authored note line: a `backtick` span renders as a monospace, click-to-copy
+  // <code> chip, so an error string reads as code and a fix command lifts in one click. Everything outside
+  // the backticks is escaped as plain text; the chip carries the RAW text in data-copy for an exact copy.
+  function fmtNote(s) {
+    s = String(s == null ? '' : s);
+    var out = '', re = /`([^`]+)`/g, last = 0, m;
+    while ((m = re.exec(s)) !== null) {
+      out += esc(s.slice(last, m.index));
+      out += '<code class="ns-ic" data-copy="' + U.attr(m[1]) + '" title="Click to copy">' + esc(m[1]) + '</code>';
+      last = m.index + m[0].length;
+    }
+    return out + esc(s.slice(last));
+  }
+
+  // Tokens that come from an EARNED fact (you discover them on the box): the domain, the base DN, a
+  // credential, a captured hash, the scanned ports. These GATE a command, because until the fact is proven
+  // the command cannot run. Operator config (target, lhost, lport, wordlist) is deliberately NOT here: the
+  // user sets those, so a command that only needs config still shows with its fill box.
+  var GATE_TOKENS = { domain: 1, basedn: 1, dc: 1, dc_netbios: 1, dc_account: 1, user: 1, password: 1,
+    nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, ca_name: 1, template: 1,
+    pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1, flag_path_local: 1 };
+  // Human phrasing for the "unlocks once you have ..." affordance (deduped). user/password both read as
+  // "a credential" so a command needing both reads once.
+  var GATE_LABEL = { domain: 'the domain', basedn: 'the base DN', dc: 'the DC', dc_netbios: 'the DC name',
+    dc_account: 'the DC account', user: 'a credential', password: 'a credential', nthash: 'an NT hash',
+    userlist: 'a user list', hashfile: 'a captured hash', domain_sid: 'the domain SID', group: 'a group',
+    ca_name: 'the CA name', template: 'a cert template', pfx: 'a certificate', nmap_ports: 'a port scan',
+    krbtgt_hash: 'the krbtgt hash', target_sam: 'the SAM', flag_path_local: 'the located user flag' };
+  // A command is GATED when, after filling from the engagement's facts/params, it still carries an unfilled
+  // EARNED token: a value meant to come from a proven fact the operator has not earned yet. Its time has not
+  // come, so the coach hides it rather than showing a dead "Needs: basedn" line, and it reappears, filled,
+  // the moment the fact that feeds it is proven.
+  function cmdUnmetGates(v) {
+    return OBOL.command.unfilledTokens((v && v.filled) || '').filter(function (t) { return GATE_TOKENS[t]; });
+  }
+  function cmdGated(v) { return cmdUnmetGates(v).length > 0; }
+
+  // The default command for a move at a locus: the house-toolkit (nxc) pick, a switchless probe first, never
+  // a command already settled by a held fact, and never one still gated on an unearned fact. Fills the
+  // move's commands so the gate check sees what actually resolved, then delegates the toolkit/probe/settle
+  // ranking to the engine so the coach and any test share one rule.
+  function firstCmdIndexForLocus(move, locus, facts) {
+    if (!move) return 0;
+    var eng = OBOL.store.active() || {};
+    var filled = OBOL.command.fillAll(move, facts, { params: eng.params || {}, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
+    return OBOL.pack.preferredCommandIndex(move, locus, facts || null, function (cmd, i) { return cmdGated(filled[i]); });
+  }
+  // "Because <held gate> → expect <first payoff>" — the attack-graph cause/effect in one plain line.
+  function nsNarrative(a, facts) {
+    var because = '', gates = (a.requires_all || []).concat(a.requires_any || []);
+    for (var i = 0; i < gates.length; i++) {
+      var g = gates[i];
+      if (facts.has(g) && !NS_INFRA[g] && g.indexOf('port:') !== 0) { because = OBOL.pack.chipLabel(g); break; }
+    }
+    var expect = (a.produces && a.produces.length) ? OBOL.pack.chipLabel(a.produces[0]) : '';
+    var out = '';
+    if (because) out += 'Because <span class="ns-k">' + esc(because) + '</span>';
+    if (expect) out += (out ? ' <span class="ns-arrow">→</span> ' : '') + 'expect <span class="ns-k">' + esc(expect) + '</span>';
+    return out || esc(U.firstSentence(a.hypothesis || ''));
+  }
+
+  // The command rows inside an expanded card: flush-left commands (no tool badge), each selectable and
+  // tagged with its own locus + original index so the canvas and the toggle can address it. Reuses the
+  // token-fill / "Needs:" / missing-tool logic from commandsBlock.
+  function nsCommandRows(action, filled, selLocus, selIdx, spansBoth, facts) {
+    var eng = OBOL.store.active() || {}, acts = eng.activities || [], params = eng.params || {};
+    var gatedNeeds = {};   // earned-token -> 1, union across all hidden (gated) commands, for the affordance
+    var rows = (action.commands || []).map(function (cmdObj, i) {
+      // A command that has done its job drops out: a run-once probe (the switchless null-session check)
+      // disappears once the fact it was there to prove is held, so you never re-run a question you answered.
+      if (OBOL.pack.commandSettled(cmdObj, facts)) return '';
+      var v = filled[i] || {};
+      // A command whose time has not come drops out too: it still needs an EARNED fact (base DN, domain, a
+      // credential) the operator has not proven yet. Collect what it waits on, then hide it; it returns,
+      // filled, once that fact is minted. (Config tokens like lhost are not gates, see GATE_TOKENS.)
+      var gates = cmdUnmetGates(v);
+      if (gates.length) { gates.forEach(function (t) { gatedNeeds[GATE_LABEL[t] || t] = 1; }); return ''; }
+      var locus = OBOL.pack.commandLocus(cmdObj);
+      var hidden = spansBoth && locus !== selLocus;
+      var ran = OBOL.command.commandWasRun(v.run || v.filled, acts, params);
+      var unfilled = OBOL.command.unfilledTokens(v.filled || '');
+      var fillable = unfilled.filter(function (t) { return !DERIVED_TOKENS[t]; });
+      var fillRow = fillable.length
+        ? '<div class="cmd-fill-row">' + fillable.map(function (t) {
+            return '<label class="cmd-fill-lbl"><span>' + esc(FILL_LABEL[t] || t) + '</span>'
+              + '<input class="cmd-fill" data-tok="' + esc(t) + '" placeholder="' + esc(FILL_PH[t] || ('value for ' + t)) + '" autocomplete="off" spellcheck="false"></label>';
+          }).join('') + '</div>' : '';
+      var step = action.sequence ? ('<span class="ns-cmd-step">' + (i + 1) + '</span>') : '';
+      var ranTag = ran ? '<span class="ns-cmd-ran" title="obol saw this in your run ledger">Ran</span>' : '';
+      return '<div class="ns-cmd' + (i === selIdx ? ' active' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
+        + ' tabindex="0" role="group" aria-label="' + U.attr('Command ' + (i + 1) + ', ' + locus) + '"'
+        + ' data-cmd-index="' + i + '" data-locus="' + locus + '"' + (hidden ? ' hidden' : '')
+        + (fillable.length ? ' data-tmpl="' + U.attr(v.filled || '') + '"' : '') + '>'
+        + '<div class="ns-cmd-line">' + step
+        + '<code class="cmd-run-code">' + esc(v.filled || '') + '</code>' + ranTag
+        + '<button class="btn-copy ns-cmd-copy" data-copy="' + U.attr(v.filled || '') + '" title="Copy command" aria-label="Copy command">' + OBOL.ic('clip') + '</button></div>'
+        + fillRow + missingToolHint(action, v) + '</div>';
     }).join('');
-    var more = g.actions.length > cap ? '<li class="blocked-more">…and ' + (g.actions.length - cap) + ' more</li>' : '';
-    return '<section class="blocked-group">'
-      + '<div class="blocked-group-head"><span class="blocked-unlock">unlock →</span>'
-      + '<span class="blocked-reason">' + esc(reason) + '</span>'
-      + '<span class="blocked-count">' + g.actions.length + '</span></div>'
-      + '<ul class="blocked-items">' + items + more + '</ul></section>';
+    // Progressive disclosure: one quiet line for the commands still waiting on a fact, so the user knows
+    // more unlocks here without seeing commands they cannot run yet.
+    var needs = Object.keys(gatedNeeds);
+    if (needs.length) {
+      rows += '<div class="ns-cmd-locked" role="note">' + OBOL.ic('lock')
+        + '<span>More unlocks once you have ' + esc(humanList(needs)) + '.</span></div>';
+    }
+    return rows;
+  }
+  // "a, b and c" from a short list, for the unlocks affordance.
+  function humanList(a) {
+    if (a.length <= 1) return a[0] || '';
+    if (a.length === 2) return a[0] + ' and ' + a[1];
+    return a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+  }
+
+  // One ranked card. opts: { rank, selected, suggested }. The expanded body is always in the DOM (shown via
+  // CSS when .selected) so the delegated fill / paste-back / copy listeners work without a re-render.
+  function nsCard(action, facts, params, opts) {
+    opts = opts || {};
+    var famClass = ' ns-ph-' + OBOL.phases.phaseOfAction(action);
+    var dirs = OBOL.workspace.tokens(OBOL.store.active());
+    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: dirs });
+    var loci = OBOL.pack.moveCommandLoci(action);
+    var selLocus = opts.selected ? (nsSel.locus || OBOL.pack.defaultCommandLocus(action)) : OBOL.pack.defaultCommandLocus(action);
+    var selIdx = opts.selected ? nsSel.idx : firstCmdIndexForLocus(action, selLocus, facts);
+    var nCmd = (action.commands || []).length;
+    var toggle = loci.both
+      ? '<div class="ns-toggle" role="group" aria-label="Where to run this">'
+        + '<button type="button" data-locus="remote" class="' + (selLocus === 'remote' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'remote') + '">Remote</button>'
+        + '<button type="button" data-locus="onhost" class="' + (selLocus === 'onhost' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'onhost') + '">On-Host</button>'
+        + '</div>' : '';
+    var body = '<div class="ns-body">'
+      + toggle
+      + prepBlock(action, facts, dirs)
+      + '<div class="ns-cmds">' + nsCommandRows(action, filled, selLocus, selIdx, loci.both, facts) + '</div>'
+      + '<div class="ns-card-actions">'
+      + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output</button>'
+      + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
+      + ((action.tool || (action.tools && action.tools[0])) ? '<a class="btn-ghost" href="#/tools/' + esc(action.tool || action.tools[0]) + '">Build In Tools</a>' : '')
+      + '</div>'
+      + '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr((filled[0] && filled[0].filled) || '') + '" hidden>'
+      + '<textarea class="mi-text" placeholder="Paste this command\'s full output here, prompt and all. The coach reads it, mints only what it proves, and advances." spellcheck="false"></textarea>'
+      + '<div class="mi-row"><button class="btn-primary mi-go" data-action="' + esc(action.id) + '">Ingest to Facts</button>'
+      + '<a class="mi-evlink" href="#/evidence/' + esc(action.id) + '">Big output or a screenshot? Full Evidence</a>'
+      + '<span class="mi-result" role="status"></span></div></div>'
+      + '</div>';
+    // Not role="button" — the expanded body holds real buttons/inputs, which must not nest inside a
+    // button for screen readers. It is a focusable region with an aria-label and Enter/Space handling.
+    return '<article class="ns-card' + famClass + (opts.selected ? ' selected is-glow' : '') + '" tabindex="0"'
+      + ' aria-expanded="' + (opts.selected ? 'true' : 'false') + '"'
+      + ' aria-label="' + U.attr(action.title + ' — press Enter to open its commands and field notes') + '" data-action="' + esc(action.id) + '">'
+      + (opts.rank ? '<span class="ns-rank">#' + opts.rank + '</span>' : '')
+      + '<div class="ns-card-head">'
+      + (opts.suggested ? '<span class="ns-suggested">Suggested Start</span>' : '')
+      + '<span class="ns-chip ns-phase ph-' + esc(OBOL.phases.phaseOfAction(action)) + '">' + esc(U.titleCase(OBOL.phases.phaseOfAction(action))) + '</span>'
+      + '</div>'
+      + '<h3 class="ns-title">' + esc(action.title) + '</h3>'
+      + '<p class="ns-narr">' + nsNarrative(action, facts) + '</p>'
+      + body
+      + '<div class="ns-foot">' + nCmd + ' Command' + (nCmd === 1 ? '' : 's') + '</div>'
+      + '</article>';
+  }
+
+  // The field-notes canvas for a (move, command): reactive doctors on top (if a pasted error minted a
+  // blocker), then the command echo, How To Land It, You'll Know It Worked, Common Mistakes, an authored
+  // per-command doctor, and the pivot setup guide for tunnel moves.
+  function nsLiveDoctors(facts) {
+    var docs = OBOL.FIELD_DOCTORS || {}, out = [];
+    Object.keys(docs).forEach(function (k) { if (facts.has(k)) out.push(docs[k]); });
+    return out;
+  }
+  // Fill a companion-command template through the real pipeline (tokens + Loadout arsenal rewrite), so a
+  // field-note setup command carries the operator's actual IP / wordlist paths / tool invocations.
+  function nsFill(tmpl, facts, params) {
+    try {
+      return OBOL.command.fillCommand({ commands: [{ run: String(tmpl && tmpl.cmd || tmpl) }] }, facts,
+        { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) }, 0).filled;
+    } catch (e) { return String(tmpl && tmpl.cmd || tmpl); }
+  }
+  // One "Set Up First" row: a labelled, copy-ready command. srcTag marks a command surfaced from another
+  // move (so the learner knows it is reused from a canonical place, not re-stated here).
+  function nsSetupStep(label, cmd, srcTag) {
+    return '<div class="ns-setup-step">'
+      + (label ? '<div class="ns-setup-l">' + esc(label) + (srcTag ? ' <span class="ns-setup-src">' + esc(srcTag) + '</span>' : '') + '</div>' : '')
+      + '<div class="ns-setup-cmd"><code>' + esc(cmd) + '</code>'
+      + '<button class="btn-copy ns-setup-copy" data-copy="' + U.attr(cmd) + '" title="Copy" aria-label="Copy command">' + OBOL.ic('clip') + '</button></div></div>';
+  }
+  // Surface another move's command(s) as prerequisite steps, pulled live from the loaded packs and filled
+  // through the real pipeline. This is how a field note reuses the Shells lane's catcher / reverse-shell /
+  // transfer one-liners instead of re-authoring them, so there is one source of truth.
+  function nsReuseSteps(refId, facts, params) {
+    var pack; try { pack = OBOL.packs.actions(); } catch (e) { return ''; }
+    var m = null; for (var i = 0; i < pack.length; i++) { if (pack[i].id === refId) { m = pack[i]; break; } }
+    if (!m) return '';
+    var filled;
+    try { filled = OBOL.command.fillAll(m, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) }); }
+    catch (e) { filled = (m.commands || []).map(function (c) { return { filled: c.run }; }); }
+    var cmd = (filled[0] && filled[0].filled) || ((m.commands || [])[0] || {}).run || '';
+    return cmd ? nsSetupStep(m.title, cmd, 'reused') : '';
+  }
+  // The automatic post-success block. Two distinct cases, because the right orientation differs:
+  //   - a NEW shell (foothold / access.shell): get your bearings and fix the half-broken shell; or
+  //   - an ELEVATION to root / SYSTEM (access.admin/root/system, no new shell): confirm the new identity and
+  //     grab the proof flag in the same window.
+  // Derived from the move's produces, so it covers every lane with no per-move authoring, and a privesc move
+  // never wrongly tells a root user to fix their PTY.
+  var NEW_SHELL_RE = /^foothold\.|^access\.shell$/;
+  var ELEVATED_RE = /^access\.(admin|system|root)$/;
+  function nsOnceYouAreIn(move, facts, params) {
+    if (!move) return '';
+    var p = move.produces || [];
+    var newShell = p.some(function (k) { return NEW_SHELL_RE.test(k); });
+    var elevated = !newShell && p.some(function (k) { return ELEVATED_RE.test(k); });
+    if (!newShell && !elevated) return '';
+    var O = OBOL.ORIENT || {};
+
+    if (newShell) {
+      var isWin = p.indexOf('foothold.windows') >= 0;
+      var isLin = p.indexOf('foothold.linux') >= 0 || p.indexOf('access.shell') >= 0;
+      if (!isWin && !isLin) isLin = true;
+      var orient = '';
+      if (isLin && O.linux) orient += nsSetupStep(O.linux.label, O.linux.cmd);
+      if (isWin && O.windows) orient += nsSetupStep(O.windows.label, O.windows.cmd);
+      var html = '<p class="ns-cn-h">Once You Are In</p>'
+        + '<p class="ns-oyi-lead">You have a shell. Get your bearings first, then the coach ranks your next moves. Do not forget to grab the flag.</p>';
+      if (orient) html += '<div class="ns-setup">' + orient + '</div>';
+      // The PTY stabilization is a real multi-step, two-machine sequence, so it is NOT crammed into one copy
+      // box: it renders as ordered, machine-labelled steps (Linux shells only; Windows needs no PTY fix).
+      if (isLin && OBOL.renderPtySteps) html += OBOL.renderPtySteps();
+      return html;
+    }
+    // Elevation: you already have a working shell and just became root/SYSTEM. No PTY to fix. Reuse the
+    // proof-flag move, whose command confirms the new identity and reads the flag in one frame.
+    var win = p.indexOf('access.system') >= 0;
+    var flagMove = win ? 'flag-hunt-root-windows' : 'flag-hunt-root-linux';
+    return '<p class="ns-cn-h">You Have ' + (win ? 'SYSTEM' : 'Root') + ' Now</p>'
+      + '<p class="ns-oyi-lead">Capture the proof flag with your new identity in the same window. One screenshot proves all of it, and that is what the exam grades.</p>'
+      + '<div class="ns-setup">' + nsReuseSteps(flagMove, facts, params) + '</div>';
+  }
+  // "Learn More": the canonical, comprehensive source for the whole technique family, so a learner is never
+  // left with just the one example command. Reuses the pack's own `refs` (the same links the Learn tab uses,
+  // one source of truth) plus a curated best-pick per move (OBOL.FIELD_MOVE[id].refs), including the
+  // interactive "back ends" that beat any static command (revshells.com, CrackStation, GTFOBins).
+  var REF_HOSTS = {
+    'gtfobins.github.io': 'GTFOBins', 'book.hacktricks.wiki': 'HackTricks', 'hacktricks.wiki': 'HackTricks',
+    'portswigger.net': 'PortSwigger Academy', 'swisskyrepo.github.io': 'PayloadsAllTheThings',
+    'github.com': 'GitHub', 'thehacker.recipes': 'The Hacker Recipes', 'netexec.wiki': 'NetExec Wiki',
+    'hashcat.net': 'hashcat', 'crackstation.net': 'CrackStation', 'revshells.com': 'revshells.com',
+    'owasp.org': 'OWASP', 'ired.team': 'ired.team', '0xdf.gitlab.io': '0xdf', 'ippsec.rocks': 'IppSec',
+    'exploit-db.com': 'Exploit-DB', 'attack.mitre.org': 'MITRE ATT&CK',
+  };
+  function refLabel(url) {
+    try { var h = new URL(url).hostname.replace(/^www\./, ''); return REF_HOSTS[h] || h; } catch (e) { return 'reference'; }
+  }
+  // GTFOBins resolver block: for the sudo / SUID moves, surface the EXACT escape for each binary the parser
+  // already identified from pasted output, pre-filled and copy-ready, with the deep link to the exact page.
+  // Also a live lookup box so a learner can type any binary and get the escape, even before a fact exists.
+  function nsGtfoRow(it) {
+    var head = '<div class="ns-gtfo-bin">' + esc(it.bin)
+      + '<a class="ns-gtfo-link" href="' + U.attr(it.url) + '" target="_blank" rel="noopener noreferrer">GTFOBins <span aria-hidden="true">↗</span></a></div>';
+    var body = it.command
+      ? '<div class="ns-setup-cmd"><code>' + esc(it.command) + '</code>'
+        + '<button class="btn-copy ns-setup-copy" data-copy="' + U.attr(it.command) + '" title="Copy" aria-label="Copy command">' + OBOL.ic('clip') + '</button></div>'
+      : '<div class="ns-gtfo-none">GTFOBins lists an escape for this one. Open the page for the exact command (it wraps another tool, so it is best read there).</div>';
+    return '<div class="ns-gtfo-row">' + head + body + '</div>';
+  }
+  function nsGtfobins(move, facts) {
+    if (!move || !OBOL.resolve || !OBOL.resolve.gtfobinsForMove) return '';
+    var r = OBOL.resolve.gtfobinsForMove(move.id, facts);
+    if (!r) return '';
+    var ctxLabel = r.context === 'suid' ? 'SUID' : 'Sudo';
+    var rows = r.items.map(nsGtfoRow).join('');
+    var intro = r.items.length
+      ? '<p class="ns-oyi-lead">obol found ' + r.items.length + ' that GTFOBins can turn into a root shell. Here ' + (r.items.length === 1 ? 'is' : 'are') + ' the exact escape' + (r.items.length === 1 ? '' : 's') + ':</p>'
+      : '<p class="ns-oyi-lead">Paste your ' + (r.context === 'suid' ? 'SUID list' : '<code>sudo -l</code>') + ' output on Evidence and obol fills the exact escape here. Or look one up now:</p>';
+    var lookup = '<div class="ns-gtfo-lookup"><label class="cmd-fill-lbl"><span>Look Up A Binary</span>'
+      + '<input class="ns-gtfo-input" data-ctx="' + r.context + '" placeholder="e.g. find, awk, vim, less" autocomplete="off" spellcheck="false"></label>'
+      + '<div class="ns-gtfo-result" aria-live="polite"></div></div>';
+    return '<p class="ns-cn-h">GTFOBins: Exact ' + ctxLabel + ' Escape</p>' + intro
+      + (rows ? '<div class="ns-setup">' + rows + '</div>' : '') + lookup;
+  }
+  // "Build In Workbench": deep links from a move to the Workbench tool that helps with it. Presentation
+  // only, it never changes which command the coach ranks. Classify by what the move PRODUCES and the tools
+  // it uses (both authored in the pack), so it stays correct as the pack evolves.
+  var WB_DIR_TOOLS = { gobuster: 1, ffuf: 1, feroxbuster: 1, dirb: 1, dirbuster: 1, wfuzz: 1 };
+  function nsWorkbenchTargets(move) {
+    if (!move) return [];
+    var tools = {}; if (move.tool) tools[String(move.tool).toLowerCase()] = 1;
+    (move.tools || []).forEach(function (t) { if (t) tools[String(t).toLowerCase()] = 1; });
+    var produces = (move.produces || []).join(' ');
+    var idt = (move.id || '') + ' ' + (move.title || '');
+    var out = [], seen = {};
+    function add(tab, label) { if (!seen[tab]) { seen[tab] = 1; out.push({ tab: tab, label: label }); } }
+
+    // a hash to crack or identify
+    if (/\bhash\./.test(produces) || tools.hashcat || tools.john || /roast|ntds|secretsdump|lsass|\bsam\b|dcsync|hashdump/i.test(idt)) {
+      add('hashid', 'Identify / Crack In Workbench');
+    }
+    // a sudo / SUID escape
+    if (move.id === 'sudo-abuse' || move.id === 'suid-gtfobins' || /gtfobins/i.test(idt)) {
+      add('gtfobins', 'Open GTFOBins Browser');
+    }
+    // WEB content discovery / vhosts only. Gate on the actual tools (gobuster/ffuf/feroxbuster/dirb/
+    // wfuzz), or a title that is unambiguously about web fuzzing. NOT a bare "discovery" (that matched
+    // "Nmap Fast TCP Open-Port Discovery" and wrongly offered a wordlist on the first scan).
+    var usesDirTool = Object.keys(tools).some(function (k) { return WB_DIR_TOOLS[k]; });
+    if (usesDirTool || /content discovery|directory brute|directory fuzz|web.?fuzz|virtual host|vhost|subdomain enum/i.test(idt)) {
+      var wlTask = /vhost|virtual host|subdomain/i.test(idt) ? 'subdomains' : 'dirs';
+      add('wordlists/' + wlTask, 'Pick A Wordlist');
+    }
+    // a reverse shell / listener
+    if (/foothold\.|access\.shell/.test(produces) || tools.nc || tools.ncat || tools.socat || tools.msfvenom || /reverse shell|listener|\brevshell\b/i.test(idt)) {
+      add('revshell', 'Build A Reverse Shell');
+    }
+    // JWT
+    if (/\bjwt\b|json web token/i.test(idt)) add('jwt', 'Decode The JWT');
+    // manual SQL injection: the Workbench builds the payloads step by step
+    if (/sql injection|sqli|sql-inj/i.test(idt)) add('sqli', 'Build The SQLi');
+    // payloads that often need encoding or evasion (LFI/traversal, command injection, XSS)
+    if (/command inj|cmdi|local file inclusion|\blfi\b|traversal|\bxss\b|cross-site script/i.test(idt)) add('encoder', 'Encode A Payload');
+    return out.slice(0, 2);
+  }
+  function nsWorkbench(move) {
+    var targets = nsWorkbenchTargets(move);
+    if (!targets.length) return '';
+    return '<div class="ns-wb"><span class="ns-wb-l">Build In Workbench</span>'
+      + targets.map(function (t) {
+          return '<a class="ns-wb-link" href="#/workbench/' + esc(t.tab) + '">' + esc(t.label)
+            + '<span class="ns-wb-arrow" aria-hidden="true">→</span></a>';
+        }).join('') + '</div>';
+  }
+
+  function nsLearnMore(move) {
+    if (!move) return '';
+    var out = [], seen = {};
+    var curated = ((OBOL.FIELD_MOVE || {})[move.id] || {}).refs || [];
+    curated.forEach(function (r) { var u = r.url || r; var l = r.label || refLabel(u); if (u && !seen[u]) { seen[u] = 1; out.push({ url: u, label: l }); } });
+    (move.refs || []).forEach(function (u) { if (u && !seen[u]) { seen[u] = 1; out.push({ url: u, label: refLabel(u) }); } });
+    if (!out.length) return '';
+    out = out.slice(0, 5);
+    return '<p class="ns-cn-h">Learn More</p><div class="ns-learn">'
+      + out.map(function (r) {
+          return '<a class="ns-learn-link" href="' + U.attr(r.url) + '" target="_blank" rel="noopener noreferrer">'
+            + esc(r.label) + '<span class="ns-learn-ext" aria-hidden="true">↗</span></a>';
+        }).join('')
+      + '</div>';
+  }
+  function nsDoctorBlock(d) {
+    return '<div class="ns-doctor"><div class="ns-doctor-h">' + OBOL.ic('shield') + ' ' + esc(d.title) + '</div>'
+      + '<p>' + esc(d.body) + '</p>' + (d.code ? '<pre class="ns-doctor-code"><code>' + esc(d.code) + '</code></pre>'
+        + '<div class="ns-doctor-actions"><button class="btn-copy" data-copy="' + U.attr(d.code) + '">Copy Fix</button></div>' : '') + '</div>';
+  }
+  function nsCanvasHtml(move, idx, facts, params) {
+    if (!move) return '<div class="ns-canvas-head"><span class="ns-canvas-kick">Field Notes</span></div>'
+      + '<div class="ns-canvas-empty">Pick a move on the left to see how to land it, step by step.</div>';
+    var filled = OBOL.command.fillAll(move, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+    var cmdText = (filled[idx] && filled[idx].filled) || '';
+    var note = OBOL.fieldNote ? OBOL.fieldNote(move, idx) : null;
+    var live = nsLiveDoctors(facts);
+    var html = '<div class="ns-canvas-head"><span class="ns-canvas-kick">Field Notes</span>'
+      + '<span class="ns-canvas-move" title="' + U.attr(move.title) + '">' + esc(move.title) + '</span></div>'
+      + '<div class="ns-canvas-body">';
+    live.forEach(function (d) { html += nsDoctorBlock(d); });
+    if (cmdText) html += '<div class="ns-canvas-cmd">' + esc(cmdText) + '</div>';
+    // "When" — one line of situational context: where in a box this move sits (an opener, post-foothold,
+    // only after creds, needs a pivot...). Sets the frame before the how-to, the way the tunnel wizard's
+    // "when" line does on the hub.
+    if (note && note.when) html += '<div class="ns-cn-when"><span class="ns-cn-when-l">When</span><span>' + esc(note.when) + '</span></div>';
+    // "What" — the goal of this move in plain language, and how it gets you closer to the flag. Comes
+    // after When and before the how-to, so a learner who does not already know the service or technique
+    // gets the point of the move before any setup or command detail.
+    if (note && note.what) html += '<div class="ns-cn-when ns-cn-what"><span class="ns-cn-when-l">What</span><span>' + esc(note.what) + '</span></div>';
+    // The exact, pre-filled GTFOBins escape for the binary the parser identified (sudo / SUID moves only).
+    html += nsGtfobins(move, facts);
+    // If this command runs a tool that must first be staged onto the host (PowerView, winPEAS, mimikatz...),
+    // show the serve -> fetch -> load recipe. This fills the "how do I get it there?" gap no command answers.
+    var selCmd = (move.commands || [])[idx] || {};
+    var stage = (OBOL.stagingFor && OBOL.pack.commandIsOnHost(selCmd)) ? OBOL.stagingFor(selCmd.tool) : null;
+    if (stage && OBOL.renderToolStaging) html += OBOL.renderToolStaging(stage, params);
+    if (note) {
+      // "Set Up First": companion commands to run before this one. Two sources, one block:
+      //   (a) authored `setup` strings, filled through the real token/arsenal pipeline; and
+      //   (b) `use` references to OTHER moves (e.g. the Shells lane's shell-listener), whose commands are
+      //       pulled live from the packs so the catcher / reverse-shell / transfer one-liners stay in one
+      //       place and never drift. Both render as the same copy-ready step.
+      var setupSteps = '', setupCmds = [];
+      (note.setup || []).forEach(function (s) {
+        var cmd = nsFill(s.cmd || s, facts, params);
+        if (cmd) setupCmds.push(cmd);
+        setupSteps += nsSetupStep(s.label || '', cmd);
+      });
+      (note.use || []).forEach(function (refId) {
+        setupSteps += nsReuseSteps(refId, facts, params);
+      });
+      if (setupSteps) {
+        // When there are two or more authored setup one-liners, offer a single "Copy All" that bundles
+        // them (newline-joined) so the student can paste the whole prep at once. Presentation only.
+        var allBtn = setupCmds.length >= 2
+          ? '<button class="btn-copy ns-setup-all" data-copy="' + U.attr(setupCmds.join('\n')) + '" title="Copy all setup commands as one block">Copy All ' + setupCmds.length + ' Steps</button>'
+          : '';
+        html += '<p class="ns-cn-h">Set Up First' + allBtn + '</p><div class="ns-setup">' + setupSteps + '</div>';
+      }
+      if (note.land && note.land.length) html += '<p class="ns-cn-h">How To Land It</p><ul class="ns-cn-list">'
+        + note.land.map(function (l) { return '<li>' + fmtNote(l) + '</li>'; }).join('') + '</ul>';
+      // "What To Look For" — the signals worth scanning the output for. This is the heart of an
+      // enumeration note, where restating the command adds nothing but reading the result is everything.
+      if (note.look && note.look.length) html += '<p class="ns-cn-h">What To Look For</p><ul class="ns-cn-list look">'
+        + note.look.map(function (l) { return '<li>' + fmtNote(l) + '</li>'; }).join('') + '</ul>';
+      if (note.win) html += '<div class="ns-cn-win"><span class="ns-tick" aria-hidden="true">✓</span><span>' + fmtNote(note.win) + '</span></div>';
+      if (note.mistakes && note.mistakes.length) html += '<p class="ns-cn-h">Common Mistakes</p><ul class="ns-cn-list warn">'
+        + note.mistakes.map(function (l) { return '<li>' + fmtNote(l) + '</li>'; }).join('') + '</ul>';
+      if (note.doctor) html += nsDoctorBlock(note.doctor);
+    }
+    // Automatic (derived from the move's produces, not authored per move): the first-breath orientation
+    // once a shell lands, reusing the Shells lane's PTY upgrade.
+    html += nsOnceYouAreIn(move, facts, params);
+    html += stagingGuide(move, params);
+    html += nsWorkbench(move);
+    html += nsLearnMore(move);
+    html += '</div>';
+    return html;
+  }
+
+  // The aspirational "Opens Up Next" strip: capability-unlocks only, nearest first, each with its fact
+  // chips. Capped to a peek with a "+N more" expander so it invites rather than overwhelms.
+  function nsOpensStrip(opens) {
+    if (!opens.length) return '';
+    var CAP = 8;
+    function card(o) {
+      var famClass = ' ns-ph-' + OBOL.phases.phaseOfAction(o.action);
+      var chips = o.needs.slice(0, 3).map(function (k) { var lbl = OBOL.pack.chipLabel(k); return '<span class="ns-factchip" title="' + U.attr(lbl) + '">' + esc(lbl) + '</span>'; }).join('');
+      return '<div class="ns-ocard' + famClass + '">' + OBOL.ic('lock')
+        + '<div class="ns-ocard-t">' + esc(o.action.title) + '</div>'
+        + '<div class="ns-needs"><span class="ns-needs-l">Needs</span>' + chips + '</div>'
+        + '<div class="ns-ocard-near">' + o.steps + ' Step' + (o.steps === 1 ? '' : 's') + ' Away</div></div>';
+    }
+    var peek = opens.slice(0, CAP), more = opens.slice(CAP);
+    return '<section class="ns-opens"><div class="ns-opens-head">'
+      + '<span class="ns-opens-kick">Opens Up Next</span>'
+      + '<span class="ns-opens-sub">What a little more progress unlocks, closest first.</span>'
+      + '<span class="ns-opens-n">' + opens.length + '</span></div>'
+      + '<div class="ns-opens-peek">' + peek.map(card).join('') + '</div>'
+      + (more.length ? '<details class="ns-opens-more"><summary>' + more.length + ' more, further out</summary>'
+          + '<div class="ns-opens-peek">' + more.map(card).join('') + '</div></details>' : '')
+      + '</section>';
   }
 
   // The live context rail (wide screens): access level, next move, flags, creds, recent evidence.
@@ -200,23 +675,23 @@
     var acts = (eng && eng.activities || []).slice(0, 4);
     return '<aside class="context-rail" aria-label="Live context">'
       + railCard('Access', '<div class="rail-access ra-' + access[1] + '">' + esc(access[0]) + '</div>')
-      + railCard('Next move', topMove ? ('<div class="rail-move">' + esc(topMove.title) + '</div>') : '<div class="rail-empty">Log evidence to unlock moves.</div>')
+      + railCard('Next Move', topMove ? ('<div class="rail-move">' + esc(topMove.title) + '</div>') : '<div class="rail-empty">Log evidence to unlock moves.</div>')
       + railCard('Flags (' + flags.length + ')', (flags.length || located.length)
         ? '<ul class="rail-list rail-flags">' + flags.map(function (f) {
-            var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
-            var label = SL[v.slot] || (f.kind.split('.').pop().replace('_', ' '));
+            var v = f.value || {}; var SL = { root: 'Root Flag', local: 'Local Flag', user: 'Local Flag' };
+            var label = SL[v.slot] || U.titleCase(f.kind.split('.').pop().replace('_', ' '));
             var val = v.flag || '';
             // Show the WHOLE flag (wrapped, selectable, click-to-copy) — a captured flag is the deliverable.
-            return '<li class="rail-flag"><div class="rail-flag-h"><span>🚩 ' + esc(label) + '</span>'
+            return '<li class="rail-flag"><div class="rail-flag-h"><span>' + OBOL.ic('flag') + ' ' + esc(label) + '</span>'
               + (v.name ? '<span class="rail-flag-file" title="' + U.attr(v.path || v.name) + '">' + esc(v.name) + '</span>' : '') + '</div>'
               + (val ? '<code class="rail-flag-val" data-copy="' + U.attr(val) + '" title="Click to copy">' + esc(val) + '</code>' : '') + '</li>';
           }).join('')
           + located.map(function (f) {
-            var v = f.value || {}; var SL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
+            var v = f.value || {}; var SL = { root: 'Root Flag', local: 'Local Flag', user: 'Local Flag' };
             var label = SL[v.slot] || 'Flag';
-            return '<li class="rail-located" title="' + U.attr('located remotely at ' + (v.path || v.name || '') + ' — read it from an on-host shell for the report') + '"><span>📍 ' + esc(label) + ' <em>located</em></span><span class="rail-produced">capture on-host</span></li>';
+            return '<li class="rail-located" title="' + U.attr('located remotely at ' + (v.path || v.name || '') + ', read it from an on-host shell for the report') + '"><span>' + OBOL.ic('pin') + ' ' + esc(label) + ' <em>Located</em></span><span class="rail-produced">Capture On-Host</span></li>';
           }).join('')
-          + '</ul>' + (located.length ? '<div class="rail-note">📍 located remotely — read on the host (interactive shell) so it counts for the report.</div>' : '')
+          + '</ul>' + (located.length ? '<div class="rail-note">' + OBOL.ic('pin') + ' located remotely, read on the host (interactive shell) so it counts for the report.</div>' : '')
         : '<div class="rail-empty">None captured yet.</div>')
       + railCard('Credentials (' + creds.length + ')', creds.length
         ? '<ul class="rail-list">' + creds.slice(0, 6).map(function (c) {
@@ -227,28 +702,35 @@
               + (shown ? '<span class="rail-secret"' + (redact ? '' : ' title="' + U.attr(secret) + '"') + '>' + esc(shown) + '</span>' : '') + '</li>';
           }).join('') + '</ul>'
         : '<div class="rail-empty">None validated yet.</div>')
-      + railCard('Recent evidence', (acts.length
+      + railCard('Recent Evidence', (acts.length
         ? '<ul class="rail-list rail-acts">' + acts.map(function (a) { var c = a.command || (a.file ? a.file : 'pasted output'); return '<li title="' + U.attr(c) + '"><code>' + esc(c.length > 30 ? c.slice(0, 30) + '…' : c) + '</code><span class="rail-produced">' + ((a.produced || []).length) + '</span></li>'; }).join('') + '</ul>'
         : '<div class="rail-empty">Paste tool output on Evidence.</div>')
-        + '<a class="rail-link" href="#/history">View full Run Log →</a>')
+        + '<a class="rail-link" href="#/history">View Full Run Log →</a>')
       + '</aside>';
   }
   OBOL.rail = { html: buildRail };
 
-  function render(ctx) {
+  // Shared coach computation — the SINGLE source of truth for "what's next". Used by this coach AND by
+  // the engagement Hub's "Your Next Move" anchor, the Hub's per-target cards, and the Evidence summary,
+  // so every screen shows the same move instead of disagreeing (the Hub used to call the old v1 ranker
+  // while the coach called v2). Report-only writeup checks (OBOL.pack.isReportOnly) are pulled out of the
+  // live ready/coming-up lists into their own group, so an info-severity finding (SPF/DMARC, headers, …)
+  // can never headline a box you're actively working.
+  function computeCoach() { return rankFor(OBOL.store.factSet()); }
+  // rankFor(facts) is computeCoach generalized to ANY factset — the engagement-wide one for this coach and
+  // the Hub anchor, or a single host's (factSetForTarget) for the per-target "Next Steps for this box"
+  // panel — so every surface ranks moves the same way and shows the same prep steps. Report-only writeup
+  // checks are split out; the frontier/phase are computed from the passed facts (correct per scope).
+  function rankFor(facts) {
     var eng = OBOL.store.active();
-    var facts = OBOL.store.factSet();
     var params = (eng && eng.params) || {};
     var pack = OBOL.packs.actions();
     var doneIds = {};
     // 'done' = the operator ticked it; 'empty' = its tool ran and proved nothing (a useless path RIGHT NOW,
     // e.g. no SCCM in this environment). Both retire the move from the ready list. The un-retire test is per
-    // MOVE, not per fact-KIND: a move stays retired only while NONE of its OWN runs ever produced a fact,
-    // and comes back the moment a run attributed to it produces one (new evidence revealing it is no longer
-    // a dead end). Checking the fact kind globally was wrong — sccm-enum "produces" credential.candidate,
-    // which you already hold from an unrelated AS-REP crack, so it never retired.
+    // MOVE, not per fact-KIND: a move stays retired only while NONE of its OWN runs ever produced a fact.
     function moveEverProduced(actionId) {
-      return (eng.activities || []).some(function (a) { return a && a.action_id === actionId && (a.produced || []).length > 0; });
+      return (eng && eng.activities || []).some(function (a) { return a && a.action_id === actionId && (a.produced || []).length > 0; });
     }
     Object.keys((eng && eng.checklist) || {}).forEach(function (k) {
       var st = eng.checklist[k];
@@ -256,32 +738,222 @@
       if (st === 'empty' && !moveEverProduced(k)) doneIds[k] = true; // never paid off → stay retired
     });
 
-    var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
-    var ranked = OBOL.pack.nextActions(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
+    var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
+    var ranked = (OBOL.pack.rankActions || OBOL.pack.nextActions)(facts, pack, { doneIds: doneIds, focusPrefixes: focus });
     var frontier = OBOL.phases.frontierIndex(facts);
-    var onFlow = [], comingUp = [];
+    var onFlow = [], comingUp = [], reportChecks = [];
+    function reportOnly(a) { return !!(OBOL.pack.isReportOnly && OBOL.pack.isReportOnly(a, pack)); }
+    // Trap-doctor moves (gated on a pasted-error blocker.* fact, or producing only advice.*) are NOT cards
+    // in the rail — their fix surfaces reactively in the field-notes canvas the moment the blocker mints.
+    // Keeping them out of the grid is the de-clutter the redesign calls for; real exploit moves that happen
+    // to key on a vuln.* fingerprint stay, because running them IS the next attack step.
+    function isCanvasDoctor(a) {
+      var gates = (a.requires_all || []).concat(a.requires_any || []);
+      if (gates.some(function (k) { return /^blocker\./.test(k); })) return true;
+      var prod = a.produces || [];
+      return prod.length > 0 && prod.every(function (k) { return /^advice\./.test(k); });
+    }
+    // A move is actionable NOW only if it has a command you can actually run now: one that is neither
+    // settled (already done) nor gated on a fact you have not earned. A move whose every command still
+    // waits on an unearned fact (e.g. a zone transfer that needs the domain) is eligible but not ready, so
+    // it drops to Coming Up until one of its commands unlocks, rather than taking a Ready Now slot with
+    // nothing you can do. A move with no commands at all is left where it is.
+    function hasRunnableCommand(a) {
+      var cmds = a.commands || []; if (!cmds.length) return true;
+      var eng = OBOL.store.active() || {};
+      var filled = OBOL.command.fillAll(a, facts, { params: eng.params || {}, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
+      for (var i = 0; i < cmds.length; i++) {
+        if (OBOL.pack.commandSettled(cmds[i], facts)) continue;
+        if (cmdGated(filled[i])) continue;
+        return true;
+      }
+      return false;
+    }
     ranked.forEach(function (a) {
-      if (OBOL.phases.prematurity(a, facts) === 0) onFlow.push(a); else comingUp.push(a);
+      if (isCanvasDoctor(a)) return;                                       // doctor → canvas only, never a card
+      if (reportOnly(a)) { reportChecks.push(a); return; }                 // writeup check → own group, never headlines
+      if (OBOL.phases.prematurity(a, facts) === 0 && hasRunnableCommand(a)) onFlow.push(a); else comingUp.push(a);
     });
     var locked = OBOL.pack.lockedActions(facts, pack);
 
+    // Scope lens: filter the visible moves to the chosen syllabus level. Count what the lens hides so the
+    // operator always knows there's more one click away (never a silent disappearance).
+    var lens = lensGet();
+    function inLens(a) { return scopeAllowed(a.scope, lens); }
+    var hiddenBy = 0;
+    function applyLens(arr) { var kept = arr.filter(inLens); hiddenBy += arr.length - kept.length; return kept; }
+    onFlow = applyLens(onFlow);
+    comingUp = applyLens(comingUp);
+    reportChecks = applyLens(reportChecks);
+    locked = locked.filter(function (p) { if (inLens(p.action)) return true; hiddenBy++; return false; });
+
     var factCount = Object.keys(facts.kinds()).length;
     var phaseName = OBOL.phases.PHASES[frontier] || 'recon';
+    return { eng: eng, facts: facts, params: params, pack: pack, frontier: frontier,
+      onFlow: onFlow, comingUp: comingUp, reportChecks: reportChecks, locked: locked,
+      lens: lens, hiddenBy: hiddenBy, factCount: factCount, phaseName: phaseName };
+  }
+  // The authoritative ranking every screen shares, plus the renderers (prep step + full move card) so the
+  // per-target panel can show the exact same "Set Up First" steps and cards the coach does.
+  OBOL.coach = {
+    compute: computeCoach,
+    rankFor: rankFor,
+    topMove: function () { return computeCoach().onFlow[0] || null; },
+    topMoveFor: function (facts) { return rankFor(facts).onFlow[0] || null; },
+    prepBlock: prepBlock,
+    pasteSummary: pasteSummary,
+  };
 
-    var html = '<div class="withrail"><section class="coach">';
+  // ── Positive feedback on paste ───────────────────────────────────────────────────────────────
+  // After a paste mints facts, the old feedback was a 2-second toast ("Minted 9 facts, recomputing")
+  // and a silent re-render, so for this audience it read as "nothing happened" even when the engine
+  // learned plenty. pasteSummary turns the recognized facts into a plain-language, value-aware line of
+  // what obol LEARNED (the flag captured, the credential validated, the writable groups found) plus the
+  // next move it unlocked, so the tool visibly says what it did. Presentation only, no new facts.
+  // _pasteFlash carries that summary across the ingest-triggered re-render (the toast element is wiped);
+  // render() emits it once at the top of the coach, then clears it.
+  var _pasteFlash = null;
+  // Rank a fact kind by how much the operator cares to hear it announced (0 = loudest).
+  function flashRank(k) {
+    if (/^objective\.(root_flag|local_flag|flag)$/.test(k)) return 0;
+    if (k === 'objective.flag_located') return 1;
+    if (/^access\.(admin|system|root)$/.test(k)) return 2;
+    if (k === 'loot.ntds' || /^hash\.(krbtgt|ntlm|asrep|tgs)$/.test(k)) return 3;
+    if (/^credential\.(validated|available)$/.test(k)) return 4;
+    if (/^(ad\.acl_lead|ad\.control_paths|ad\.attack_paths|ad\.group_joined|loot\.)/.test(k)) return 5;
+    if (/^foothold\.|^access\.shell$/.test(k)) return 6;
+    if (/^(ad\.user_list|ad\.domain_known|ad\.dc_candidate|ad\.anonymous_bind|smb\.null_session|smb\.guest_session)/.test(k)) return 7;
+    if (/^(host\.|ad\.base_dn)/.test(k)) return 8;
+    if (/^(service\.|port:|ports\.)/.test(k)) return 10;
+    return 9;
+  }
+  // A short, value-aware phrase for one newly learned fact. Reads the fact's own value, never invents.
+  function flashPhrase(f) {
+    var k = String(f.kind || ''), v = f.value || {};
+    var who = v.user || v.username || v.account || '';
+    if (k === 'objective.root_flag') return 'Captured the root flag';
+    if (k === 'objective.local_flag') return 'Captured the user flag';
+    if (k === 'objective.flag') return 'Captured a flag';
+    if (k === 'objective.flag_located') return 'Located the ' + (v.slot === 'root' ? 'root' : (v.slot === 'local' ? 'user' : '')) + ' flag' + (v.path ? (' at ' + v.path) : '');
+    if (k === 'access.admin' || k === 'access.system' || k === 'access.root') return 'Gained administrative access';
+    if (k === 'loot.ntds') return 'Dumped the NTDS (every domain hash)';
+    if (k === 'hash.krbtgt') return 'Recovered the krbtgt hash (golden-ticket key)';
+    if (k === 'hash.ntlm') return 'Recovered an NTLM hash' + (who ? (' for ' + who) : '');
+    if (k === 'hash.asrep') return 'Captured an AS-REP roastable hash' + (who ? (' for ' + who) : '');
+    if (k === 'hash.tgs') return 'Captured a Kerberoast hash' + (who ? (' for ' + who) : '');
+    if (k === 'credential.validated') return 'Validated the credential' + (who ? (' for ' + who) : '') + ' (it works here)';
+    if (k === 'credential.available') return 'A working credential' + (who ? (' for ' + who) : '');
+    if (k === 'ad.acl_lead') {
+      var tg = (v.targets || []).slice(0, 3);
+      return 'Found writable objects' + (tg.length ? (': ' + tg.join(', ') + ((v.targets || []).length > tg.length ? (', +' + ((v.targets || []).length - tg.length) + ' more') : '')) : '');
+    }
+    if (k === 'ad.control_paths') return 'Gained a control path' + ((v.rights || []).length ? (' (' + (v.rights || []).join(', ') + ')') : '');
+    if (k === 'ad.attack_paths') return 'Mapped an attack path to Domain Admin';
+    if (k === 'ad.group_joined') return 'Joined the group ' + (v.group || '(a group)');
+    if (k === 'ad.user_list') return 'Enumerated the domain user list' + (v.count ? (' (' + v.count + ' users)') : '');
+    if (k === 'ad.domain_known') return 'Confirmed the domain ' + (v.name || v.domain || '');
+    if (k === 'ad.dc_candidate') return 'Identified the domain controller';
+    if (k === 'ad.anonymous_bind') return 'Confirmed an anonymous LDAP bind';
+    if (k === 'ad.base_dn') return 'Derived the LDAP base DN';
+    if (k === 'smb.null_session') return 'Confirmed an anonymous (null) SMB session';
+    if (k === 'smb.guest_session') return 'Confirmed guest SMB access';
+    if (/^foothold\.|^access\.shell$/.test(k)) return 'Landed a foothold on the target';
+    if (k === 'blocker.acl_reauth') return 'Hit an access-denied wall on the ACL write (the fix is below: re-authenticate)';
+    if (/^blocker\./.test(k)) { try { return 'Hit a known wall: ' + (OBOL.pack.friendly(k) || 'see the fix below'); } catch (e) { return 'Hit a known wall (see the fix below)'; } }
+    if (k === 'host.hostname') return 'Learned the hostname ' + (v.name || v.hostname || '');
+    // generic fallback: the friendly noun phrase for the kind, Title Cased
+    try { if (OBOL.pack && OBOL.pack.friendly) return U.titleCase(OBOL.pack.friendly(k) || k.replace(/[._]/g, ' ')); } catch (e) {}
+    return k.replace(/[._]/g, ' ');
+  }
+  // Build the summary object from the recognized facts of a paste. Dedup by kind (one line per kind,
+  // keeping the richest value), rank, take the top few. Returns null when there is nothing worth saying.
+  function pasteSummary(facts) {
+    if (!facts || !facts.length) return null;
+    var byKind = {};
+    facts.forEach(function (f) {
+      var k = f.kind; if (!k) return;
+      // keep the value with the most targets/richest, else the first
+      if (!byKind[k]) byKind[k] = f;
+      else {
+        var a = (byKind[k].value && (byKind[k].value.targets || []).length) || 0;
+        var b = (f.value && (f.value.targets || []).length) || 0;
+        if (b > a) byKind[k] = f;
+      }
+    });
+    var uniq = Object.keys(byKind).map(function (k) { return byKind[k]; });
+    uniq.sort(function (a, b) { return flashRank(a.kind) - flashRank(b.kind); });
+    var top = uniq.slice(0, 4).map(flashPhrase).filter(Boolean);
+    if (!top.length) return null;
+    var extra = uniq.length - top.length;
+    var next = '';
+    try { var m = computeCoach().onFlow[0]; next = m ? m.title : ''; } catch (e) {}
+    return { phrases: top, extra: extra > 0 ? extra : 0, total: facts.length, next: next };
+  }
+
+  function render(ctx) {
+    var c = computeCoach();
+    var eng = c.eng, facts = c.facts, params = c.params, pack = c.pack;
+    var onFlow = c.onFlow, comingUp = c.comingUp, reportChecks = c.reportChecks, locked = c.locked;
+    var frontier = c.frontier, lens = c.lens, hiddenBy = c.hiddenBy, factCount = c.factCount, phaseName = c.phaseName;
+
+    var opensCount = OBOL.pack.opensUpNext ? OBOL.pack.opensUpNext(facts, pack).length : locked.length;
+    var html = '<section class="coach ns-coach-wrap">';
+    // Positive feedback: a plain-language banner of what the last paste LEARNED + the move it unlocked,
+    // so a paste that minted facts never reads as "nothing happened". Shown once, then cleared.
+    if (_pasteFlash) {
+      var fl = _pasteFlash; _pasteFlash = null;
+      html += '<div class="coach-flash" role="status">'
+        + '<div class="coach-flash-h">' + OBOL.ic('flag') + '<span>Parsed ' + fl.total + ' fact' + (fl.total === 1 ? '' : 's') + '. Here is what obol learned:</span>'
+        + '<button class="coach-flash-x" aria-label="Dismiss">×</button></div>'
+        + '<ul class="coach-flash-list">' + fl.phrases.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('')
+        + (fl.extra ? ('<li class="coach-flash-more">and ' + fl.extra + ' more detail' + (fl.extra === 1 ? '' : 's') + '</li>') : '') + '</ul>'
+        + (fl.next ? ('<div class="coach-flash-next">Next move: <strong>' + esc(fl.next) + '</strong></div>') : '') + '</div>';
+    }
     // hero
     html += '<div class="coach-hero">'
       + '<div class="coach-hero-main">'
-      + '<div class="coach-kicker">Next move · frontier: <strong>' + esc(phaseName) + '</strong></div>'
+      + '<div class="coach-kicker">Next Move · Frontier: <strong>' + esc(U.titleCase(phaseName)) + '</strong></div>'
       + '<h1 class="coach-h1">' + (onFlow.length ? esc(onFlow[0].title) : 'Log evidence to unlock moves') + '</h1>'
       + '<p class="coach-sub">' + (onFlow.length ? esc(U.firstSentence(onFlow[0].hypothesis || '')) : 'Paste tool output on the Evidence route (or add a fact) and the coach ranks your next commands.') + '</p>'
       + '</div>'
       + '<div class="coach-metrics">'
       + '<div class="metric"><span class="metric-n">' + onFlow.length + '</span><span class="metric-l">Ready</span></div>'
       + '<div class="metric"><span class="metric-n">' + comingUp.length + '</span><span class="metric-l">Coming Up</span></div>'
-      + '<div class="metric"><span class="metric-n">' + locked.length + '</span><span class="metric-l">Blocked</span></div>'
+      + '<div class="metric"><span class="metric-n">' + opensCount + '</span><span class="metric-l">Opens Up Next</span></div>'
       + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">Facts</span></div>'
       + '</div></div>';
+
+    html += arsenalStrip();
+    html += defenseAdvisory(facts);
+
+    // Scope lens control: a newcomer-safe syllabus filter. OSCP (core only) · OSCP+ (adds modern AD) ·
+    // All (the full arsenal, edge CVEs included). The hidden-count hint keeps it honest.
+    html += '<div class="coach-lens" role="group" aria-label="Syllabus scope filter">'
+      + '<span class="coach-lens-label">Scope</span>'
+      + ['oscp', 'oscp+', 'all'].map(function (v) {
+          var txt = v === 'oscp' ? 'OSCP' : (v === 'oscp+' ? 'OSCP+' : 'All');
+          return '<button type="button" class="lens-opt' + (lens === v ? ' on' : '') + '" data-lens="' + v + '"'
+            + ' aria-pressed="' + (lens === v ? 'true' : 'false') + '">' + txt + '</button>';
+        }).join('')
+      + (hiddenBy ? '<span class="coach-lens-hint">' + hiddenBy + ' move' + (hiddenBy === 1 ? '' : 's') + ' above this level, tap <strong>All</strong> to show</span>' : '')
+      + '</div>';
+
+    // Planned route to the objective: the planner's lowest-cost dependable path from what's proven to
+    // the goal. Re-planned on every render as evidence accrues. A plausible route, not a promise — the
+    // box decides which steps actually land; this sharpens as you capture more.
+    var route = OBOL.pack.planPath ? OBOL.pack.planPath(facts, pack, {}) : null;
+    if (route && route.reachable && route.path && route.path.length > 1 && factCount > 1) {
+      html += '<details class="coach-route"><summary class="coach-sec-h">Planned Route To The Objective'
+        + ' <span class="coach-route-n">' + route.path.length + ' steps</span></summary>'
+        + '<ol class="coach-route-list">'
+        + route.path.map(function (id, i) {
+          var a = pack.filter(function (x) { return x.id === id; })[0];
+          return '<li class="coach-route-step' + (i === 0 ? ' next' : '') + '">' + esc(a ? a.title : id) + '</li>';
+        }).join('')
+        + '</ol>'
+        + '<div class="coach-route-note">The shortest dependable path from what you’ve proven to the goal, it re-plans as you capture evidence. A plausible route, not a guarantee.</div>'
+        + '</details>';
+    }
 
     // one-time workspace scaffold: create the output tree once, then every command below writes
     // into it and tells you which file to attach. Dismissible; auto-hides once you're rolling.
@@ -290,13 +962,13 @@
       var scandir = OBOL.workspace.tokens(eng).scandir;
       var stamp = OBOL.workspace.promptStamp ? OBOL.workspace.promptStamp((params || {}).lhost_iface || '') : (OBOL.workspace.PROMPT_STAMP_ZSH || '');
       html += '<div class="ws-banner">'
-        + '<div class="ws-banner-h">📁 Set up your working directory — run this once on your Kali box:</div>'
+        + '<div class="ws-banner-h">' + OBOL.ic('folder') + ' Set up your working directory, run this once on your Kali box:</div>'
         + '<pre class="cmd-run"><code>' + esc(scaffold) + '</code></pre>'
         + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(scaffold) + '">copy</button>'
         + '<button class="btn-ghost ws-done">Got It</button></div>'
-        + '<div class="ws-banner-note">Commands below write into <code>' + esc(scandir) + '</code> — run one, then attach its output file in Evidence.</div>'
+        + '<div class="ws-banner-note">Commands below write into <code>' + esc(scandir) + '</code>, run one, then attach its output file in Evidence.</div>'
         + (stamp
-          ? ('<details class="ws-stamp"><summary>Optional: stamp your prompt with the time + VPN IP <span class="ev-import-tag">recommended</span></summary>'
+          ? ('<details class="ws-stamp"><summary>Optional: stamp your prompt with the time + VPN IP <span class="ev-import-tag">Recommended</span></summary>'
             + '<div class="ws-banner-note">Paste this into <code>~/.zshrc</code> once. It prints a dim <code>[UTC time] [tun0:IP]</code> line before each prompt (your prompt is untouched), so later you can paste your <strong>whole session</strong> into Evidence and obol orders it correctly and auto-fills your <code>{{lhost}}</code>.</div>'
             + '<pre class="cmd-run"><code>' + esc(stamp) + '</code></pre>'
             + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(stamp) + '">copy</button></div>'
@@ -305,47 +977,85 @@
         + '</div>';
     }
 
-    // ready (on-flow) moves — cap the visible list to the top few so a late-game frontier (where the whole
-    // pack is technically "ready") doesn't bury the actual next move under an encyclopedia. The rest fold
-    // into a collapsed "More ready moves" so nothing is lost, just quieted.
-    var READY_CAP = 6;
+    // ---- the two-column coach: ranked card grid (left) + field-notes canvas (right) ----
+    // Resolve the open card from the persisted selection, validating it against the live set; default to
+    // the #1 ready move so the canvas is never empty and the recommended path is zero-click.
+    var selectable = onFlow.concat(comingUp).concat(reportChecks);
+    var selMove = nsSel.id ? selectable.filter(function (a) { return a.id === nsSel.id; })[0] : null;
+    if (!selMove) {
+      selMove = onFlow[0] || selectable[0] || null;
+      nsSel.id = selMove ? selMove.id : null;
+      nsSel.locus = selMove ? OBOL.pack.defaultCommandLocus(selMove) : null;
+      nsSel.idx = selMove ? firstCmdIndexForLocus(selMove, nsSel.locus, facts) : 0;
+    } else {
+      if (!nsSel.locus) nsSel.locus = OBOL.pack.defaultCommandLocus(selMove);
+      // Re-point a stale selection: out of range, OR a command that has since settled (a run-once probe now
+      // hidden), OR one still gated on an unearned fact (now hidden), OR one that no longer matches the
+      // active locus. Without this the canvas would keep showing a command the card no longer offers, and
+      // the selected card would show no active row.
+      var selCmds = selMove.commands || [], selCur = selCmds[nsSel.idx];
+      var selFilled = OBOL.command.fillAll(selMove, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+      if (nsSel.idx >= selCmds.length || OBOL.pack.commandSettled(selCur, facts) || cmdGated(selFilled[nsSel.idx]) || OBOL.pack.commandLocus(selCur) !== nsSel.locus) {
+        nsSel.idx = firstCmdIndexForLocus(selMove, nsSel.locus, facts);
+      }
+    }
+    function cardOpts(a, i, section) {
+      return { rank: section === 'ready' ? (i + 1) : 0, selected: a.id === nsSel.id, suggested: section === 'ready' && i === 0 };
+    }
+
+    // Narrow screens are best-effort: the two-column coach + canvas really wants width. Say so plainly
+    // (shown only under the single-column breakpoint) and tell a phone user where the field notes land.
+    html += '<p class="ns-mobile-note">The coach is designed for a larger screen. On a phone it still works: tap a move to expand its commands, and its full field notes appear lower down.</p>';
+
+    html += '<div class="ns-coach"><div class="ns-main">';
+
+    // If a pasted error minted a wall, say so at the top of the column (visible on every screen size,
+    // including mobile where the canvas sits below) and point to the fix in Field Notes.
+    var liveDocs = nsLiveDoctors(facts);
+    if (liveDocs.length) {
+      html += '<div class="ns-wall" role="alert">' + OBOL.ic('shield')
+        + '<span>A wall was detected: <strong>' + esc(liveDocs.map(function (d) { return d.title; }).join(', '))
+        + '</strong>. The fix is in <a href="#ns-canvas">Field Notes</a>.</span></div>';
+    }
+
+    var READY_CAP = 8;
     if (onFlow.length) {
       var top = onFlow.slice(0, READY_CAP), rest = onFlow.slice(READY_CAP);
-      html += '<div class="coach-section"><h2 class="coach-sec-h">Ready now</h2>';
-      top.forEach(function (a, i) { html += moveCard(a, facts, params, { primary: i === 0 }); });
+      html += '<div class="ns-railhead"><h2>Ready Now</h2><span class="ns-count">' + onFlow.length + ' move' + (onFlow.length === 1 ? '' : 's') + '</span></div>';
+      html += '<div class="ns-grid">';
+      top.forEach(function (a, i) { html += nsCard(a, facts, params, cardOpts(a, i, 'ready')); });
       html += '</div>';
       if (rest.length) {
-        html += '<details class="coach-section coach-more"><summary class="coach-sec-h">More ready moves — lower priority right now (' + rest.length + ')</summary>';
-        rest.forEach(function (a) { html += moveCard(a, facts, params, {}); });
-        html += '</details>';
+        html += '<details class="ns-more"' + (rest.some(function (a) { return a.id === nsSel.id; }) ? ' open' : '') + '><summary>' + rest.length + ' more ready, lower priority right now</summary><div class="ns-grid">';
+        rest.forEach(function (a, i) { html += nsCard(a, facts, params, cardOpts(a, i + READY_CAP, 'ready-rest')); });
+        html += '</div></details>';
       }
     } else {
-      html += '<div class="coach-empty">No on-flow moves yet. Start with a scan on the Evidence route, or add a target fact.</div>';
+      html += '<div class="ns-empty">No ready moves yet. Paste a scan on the Evidence route, or add a target fact, and the coach will rank your next commands here.</div>';
     }
 
-    // coming up (premature but eligible)
     if (comingUp.length) {
-      html += '<details class="coach-section coach-comingup"><summary class="coach-sec-h">Coming up — eligible but ahead of your frontier (' + comingUp.length + ')</summary>';
-      comingUp.forEach(function (a) { html += moveCard(a, facts, params, {}); });
-      html += '</details>';
-    }
-
-    // blocked with reasons
-    if (locked.length) {
-      // Group by the prerequisite that unlocks them, most-unlocking first: one "prove X" can
-      // open many moves, so the operator sees what to hunt for instead of a flat 60-row wall.
-      var groups = {};
-      locked.forEach(function (p) { (groups[p.reason] = groups[p.reason] || []).push(p.action); });
-      var groupList = Object.keys(groups).map(function (r) { return { reason: r, actions: groups[r] }; })
-        .sort(function (a, b) { return b.actions.length - a.actions.length; });
-      html += '<details class="coach-section coach-blocked"><summary class="coach-sec-h">Blocked — grouped by what unlocks them ('
-        + locked.length + ' moves · ' + groupList.length + ' prerequisite' + (groupList.length === 1 ? '' : 's') + ')</summary>'
-        + '<div class="blocked-groups">';
-      groupList.forEach(function (g) { html += blockedGroup(g); });
+      html += '<details class="ns-section ns-comingup"' + (comingUp.some(function (a) { return a.id === nsSel.id; }) ? ' open' : '') + '><summary>Coming Up, eligible but ahead of your frontier (' + comingUp.length + ')</summary><div class="ns-grid">';
+      comingUp.forEach(function (a, i) { html += nsCard(a, facts, params, cardOpts(a, i, 'coming')); });
       html += '</div></details>';
     }
 
-    html += '</section>' + buildRail(eng, facts, onFlow[0]) + '</div>';
+    if (reportChecks.length) {
+      html += '<details class="ns-section ns-reportchecks"' + (reportChecks.some(function (a) { return a.id === nsSel.id; }) ? ' open' : '') + '><summary>Report Checks, for the writeup (' + reportChecks.length + ')</summary>'
+        + '<p class="ns-section-note">Info-only checks that do not move the box forward (SPF/DMARC, security headers, TLS, CORS). Run them when you are tidying up the report.</p><div class="ns-grid">';
+      reportChecks.forEach(function (a, i) { html += nsCard(a, facts, params, cardOpts(a, i, 'report')); });
+      html += '</div></details>';
+    }
+
+    // the aspirational roadmap of capability-unlocks (contingency doctors/vulns excluded by the engine)
+    html += nsOpensStrip(OBOL.pack.opensUpNext(facts, pack));
+
+    html += '</div>'; // .ns-main
+    html += '<aside class="ns-canvas" id="ns-canvas" aria-label="Field notes for the selected move" aria-live="polite">'
+      + nsCanvasHtml(selMove, nsSel.idx, facts, params) + '</aside>';
+    html += '</div>'; // .ns-coach
+
+    html += '</section>';
     return html;
   }
 
@@ -354,7 +1064,92 @@
     // listeners bound on it would stack on every re-render — the Paste-Output toggle would then fire
     // an even number of times (open→closed = no-op) and ingests would duplicate. Bind on the coach's
     // own container instead: it's recreated on each render, so its listeners die with the old DOM.
-    var mount = ctx.mount.querySelector('.withrail') || ctx.mount;
+    var mount = ctx.mount.querySelector('.coach') || ctx.mount;
+
+    // ---- Next Steps card grid: select a card (glow follows), toggle Remote/On-Host, pick a command.
+    // These update the DOM and the canvas IN PLACE (no full re-render) so scroll and focus are preserved.
+    function freshCtx() {
+      return { facts: OBOL.store.factSet(), pack: OBOL.packs.actions(), params: (OBOL.store.active() || {}).params || {} };
+    }
+    function moveById(pack, id) { return pack.filter(function (a) { return a.id === id; })[0]; }
+    function repaintCanvas() {
+      var el = mount.querySelector('#ns-canvas'); if (!el) return;
+      var fx = freshCtx(); var m = moveById(fx.pack, nsSel.id);
+      el.innerHTML = nsCanvasHtml(m, nsSel.idx, fx.facts, fx.params);
+    }
+    function selectCard(card) {
+      var id = card.getAttribute('data-action'); if (!id) return;
+      var fx = freshCtx(); var m = moveById(fx.pack, id); if (!m) return;
+      nsSel.id = id;
+      nsSel.locus = OBOL.pack.defaultCommandLocus(m);
+      nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus, fx.facts);
+      // glow + expand follow the selection
+      Array.prototype.forEach.call(mount.querySelectorAll('.ns-card.selected'), function (o) {
+        o.classList.remove('selected', 'is-glow', 'ns-bloom'); o.setAttribute('aria-expanded', 'false');
+      });
+      card.classList.add('selected', 'is-glow'); card.setAttribute('aria-expanded', 'true');
+      // one-shot bloom shimmer ONLY on an explicit open — never on toggle/command clicks or re-render
+      card.classList.remove('ns-bloom'); void card.offsetWidth; card.classList.add('ns-bloom');
+      setTimeout(function () { card.classList.remove('ns-bloom'); }, 3600);
+      // apply the move's default locus to its command rows + mark the first active
+      syncCardLocus(card, nsSel.locus);
+      repaintCanvas();
+    }
+    function syncCardLocus(card, locus) {
+      var tgl = card.querySelector('.ns-toggle');
+      if (tgl) Array.prototype.forEach.call(tgl.querySelectorAll('button'), function (b) {
+        var on = b.getAttribute('data-locus') === locus;
+        b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      var spans = !!tgl, first = -1;
+      Array.prototype.forEach.call(card.querySelectorAll('.ns-cmd'), function (row) {
+        var rl = row.getAttribute('data-locus');
+        var show = !spans || rl === locus;
+        if (show) { row.removeAttribute('hidden'); if (first < 0) first = parseInt(row.getAttribute('data-cmd-index'), 10); }
+        else row.setAttribute('hidden', '');
+        row.classList.remove('active');
+      });
+      if (first >= 0) {
+        nsSel.idx = first;
+        var active = card.querySelector('.ns-cmd[data-cmd-index="' + first + '"]');
+        if (active) active.classList.add('active');
+      }
+    }
+    // dismiss the "what obol learned" flash banner
+    U.on(mount, 'click', '.coach-flash-x', function (e, t) {
+      var fl = t.closest('.coach-flash'); if (fl) fl.remove();
+    });
+    // click a card (but not an interactive control inside it) to open it
+    U.on(mount, 'click', '.ns-card', function (e, t) {
+      if (e.target.closest('.ns-cmd') || e.target.closest('.ns-toggle') || e.target.closest('button') || e.target.closest('a') || e.target.closest('input') || e.target.closest('textarea')) return;
+      if (!t.classList.contains('selected')) selectCard(t);
+    });
+    U.on(mount, 'keydown', '.ns-card', function (e, t) {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button, a, input, textarea')) { e.preventDefault(); if (!t.classList.contains('selected')) selectCard(t); }
+    });
+    // Remote / On-Host toggle inside the open card
+    U.on(mount, 'click', '.ns-toggle button', function (e, t) {
+      var card = t.closest('.ns-card'); if (!card) return;
+      nsSel.locus = t.getAttribute('data-locus');
+      syncCardLocus(card, nsSel.locus);
+      repaintCanvas();
+    });
+    // pick a command row → it drives the canvas field notes (mouse or keyboard)
+    function pickCmd(t) {
+      var card = t.closest('.ns-card'); if (!card) return;
+      Array.prototype.forEach.call(card.querySelectorAll('.ns-cmd'), function (x) { x.classList.remove('active'); });
+      t.classList.add('active');
+      nsSel.idx = parseInt(t.getAttribute('data-cmd-index'), 10) || 0;
+      repaintCanvas();
+    }
+    U.on(mount, 'click', '.ns-cmd', function (e, t) {
+      if (e.target.closest('.btn-copy') || e.target.closest('.cmd-fill')) return;
+      pickCmd(t);
+    });
+    U.on(mount, 'keydown', '.ns-cmd', function (e, t) {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button, input')) { e.preventDefault(); pickCmd(t); }
+    });
+
     // copy buttons
     U.on(mount, 'click', '.rail-flag-val', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Flag copied' : 'Copy failed', ok ? '' : 'err'); });
@@ -362,22 +1157,53 @@
     U.on(mount, 'click', '.btn-copy', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
+    // pivot staging guide: tick a step done (in place, so the open guide and scroll are preserved)
+    U.on(mount, 'click', '[data-stage]', function (e, t) {
+      var id = t.getAttribute('data-stage'), i = t.getAttribute('data-stage-i'), key = 'obol.stage:' + id + ':' + i;
+      var was; try { was = localStorage.getItem(key) === '1'; localStorage.setItem(key, was ? '0' : '1'); } catch (x) { was = false; }
+      var on = !was;
+      t.setAttribute('aria-checked', on ? 'true' : 'false');
+      t.innerHTML = on ? '✓' : '';
+      var li = t.closest('.stage-step'); if (li) li.classList.toggle('done', on);
+    });
+    U.on(mount, 'click', '.cmd-miss-cmd', function (e, t) {
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Install command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    // inline code chips inside a field note (fmtNote `backtick` spans): click to copy the exact text.
+    U.on(mount, 'click', '.ns-ic', function (e, t) {
+      U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
     // inline free-text token fill ({{command}} etc.): substitute live into the command + copy button.
     U.on(mount, 'input', '.cmd-fill', function (e, t) {
-      var cmd = t.closest('.cmd'); if (!cmd) return;
+      var cmd = t.closest('.ns-cmd') || t.closest('.cmd'); if (!cmd) return;
       var out = cmd.getAttribute('data-tmpl') || '';
       Array.prototype.forEach.call(cmd.querySelectorAll('.cmd-fill'), function (inp) {
         var val = (inp.value || '').trim();
         if (val) out = out.split('{{' + inp.getAttribute('data-tok') + '}}').join(val);
       });
-      var code = cmd.querySelector('.cmd-run code'); if (code) code.textContent = out;
+      var code = cmd.querySelector('.cmd-run-code') || cmd.querySelector('.cmd-run code'); if (code) code.textContent = out;
       var copy = cmd.querySelector('.btn-copy'); if (copy) copy.setAttribute('data-copy', out);
+    });
+    // GTFOBins live lookup: type a binary, get its exact escape for this move's context (sudo / SUID).
+    U.on(mount, 'input', '.ns-gtfo-input', function (e, t) {
+      var box = t.closest('.ns-gtfo-lookup'); box = box && box.querySelector('.ns-gtfo-result'); if (!box) return;
+      var val = (t.value || '').trim(), ctx = t.getAttribute('data-ctx') || 'sudo';
+      if (!val) { box.innerHTML = ''; return; }
+      var r = OBOL.resolve && OBOL.resolve.gtfoLookup ? OBOL.resolve.gtfoLookup(val, ctx) : null;
+      box.innerHTML = (r && r.known) ? nsGtfoRow(r)
+        : '<div class="ns-gtfo-none">GTFOBins has no entry for <code>' + esc(val) + '</code>. Check the spelling, or this one may escalate a different way.</div>';
+    });
+    // scope lens: persist the choice and re-render the coach at the new syllabus level
+    U.on(mount, 'click', '.lens-opt', function (e, t) {
+      var v = t.getAttribute('data-lens'); if (!v) return;
+      lensSet(v);
+      OBOL.router.render();
     });
     // mark done
     U.on(mount, 'click', '.btn-done', function (e, t) {
       var id = t.getAttribute('data-action');
       OBOL.store.update(function (eng) { eng.checklist = eng.checklist || {}; eng.checklist[id] = 'done'; }, 'done');
-      U.toast('Marked done — recomputing');
+      U.toast('Marked done, recomputing');
       OBOL.router.render();
     });
     // dismiss the workspace scaffold banner
@@ -385,9 +1211,22 @@
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.wsScaffoldDone = true; }, 'ui');
       OBOL.router.render();
     });
+    // "Got It" on a Set Up First prep step: collapse it to one line (obol can't see your disk, so you tell
+    // it the file is written). Keyed by content, so it re-appears if the file obol would write changes.
+    U.on(mount, 'click', '.prep-done', function (e, t) {
+      var key = t.getAttribute('data-prep'); if (!key) return;
+      OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.prepDone = eng.ui.prepDone || {}; eng.ui.prepDone[key] = true; }, 'ui');
+      OBOL.router.render();
+    });
+    // "Show" on a collapsed prep step: bring the full command back.
+    U.on(mount, 'click', '.prep-undo', function (e, t) {
+      var key = t.getAttribute('data-prep'); if (!key) return;
+      OBOL.store.update(function (eng) { if (eng.ui && eng.ui.prepDone) delete eng.ui.prepDone[key]; }, 'ui');
+      OBOL.router.render();
+    });
     // paste-back: toggle this move's inline ingestion box (no route jump — ingest right here)
     U.on(mount, 'click', '.btn-pasteback', function (e, t) {
-      var art = t.closest('.move'); if (!art) return;
+      var art = t.closest('.ns-card') || t.closest('.move'); if (!art) return;
       var box = art.querySelector('.move-ingest'); if (!box) return;
       var open = box.hasAttribute('hidden');
       if (open) { box.removeAttribute('hidden'); } else { box.setAttribute('hidden', ''); }
@@ -403,12 +1242,16 @@
       if (out) out.textContent = 'Reading…';
       t.disabled = true;
       OBOL.ingest.ensureParsers().then(function (okp) {
-        if (!okp) { if (out) out.textContent = 'Parsers still loading — try again.'; t.disabled = false; return; }
+        if (!okp) { if (out) out.textContent = 'Parsers still loading, try again.'; t.disabled = false; return; }
         var r = OBOL.ingest.run({ text: text, command: box.getAttribute('data-cmd') || '',
           actionId: box.getAttribute('data-action') || '', source: 'paste' });
-        if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading — try again.' : 'Nothing to parse.'; t.disabled = false; return; }
+        if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
         if (r.added) {
-          U.toast('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + ' — recomputing');
+          // Positive, value-aware feedback: say what obol learned + the next move, so the paste never
+          // reads as silent. The flash survives the re-render below (the toast element gets wiped).
+          _pasteFlash = pasteSummary(r.facts);
+          var lead = _pasteFlash && _pasteFlash.phrases[0] ? _pasteFlash.phrases[0] : ('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's'));
+          U.toast(lead + ' · coach updated');
           OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
         } else {
           var aid = box.getAttribute('data-action') || '';
@@ -424,7 +1267,7 @@
           var moveEverPaid = (eng2.activities || []).some(function (a) { return a && a.action_id === aid && (a.produced || []).length > 0; });
           if (aid && !moveEverPaid && !r.parseError && r.recognizedTool && !r.looksError && bodyLines >= 2) {
             OBOL.store.update(function (engg) { engg.checklist = engg.checklist || {}; engg.checklist[aid] = 'empty'; }, 'done');
-            U.toast(toolNm + ' ran — nothing found here. Retired from the coach.');
+            U.toast(toolNm + ' ran, nothing found here. Retired from the coach.');
             OBOL.router.render();
             return;
           }
@@ -432,7 +1275,7 @@
           if (out) {
             // The output is always saved as evidence; only fact extraction may come up empty.
             out.innerHTML = r.parseError
-              ? ('Output saved — the parser skipped part of it, no new facts. <a href="#/evidence/' + esc(aid) + '">Open in Evidence ↗</a>')
+              ? ('Output saved, the parser skipped part of it, no new facts. <a href="#/evidence/' + esc(aid) + '">Open in Evidence ↗</a>')
               : r.facts.length
                 ? ('Recognized ' + r.facts.length + ', nothing new (already known).')
                 : 'No facts recognized (output saved). <a href="#/evidence/' + esc(aid) + '">Set the command in Evidence ↗</a>';

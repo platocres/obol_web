@@ -35,10 +35,13 @@ console.log('  top 6:', ids.slice(0, 6).join(', '));
 
 // The flag hunt must LEAD after import — it is the objective, and it surfaces at the very top of Ready now,
 // not buried under recon or side-quests. (This is the "make the flag commands surface at the top" contract.)
-ok(rank('flag-hunt-windows') === 0, 'the Windows flag hunt is the #1 Ready-now move after a domain-compromise import (id[0]=' + ids[0] + ')');
-ok(rank('flag-hunt-windows') < rank('sccm-enum'), 'flag hunt outranks SCCM enumeration after loot.ntds');
-ok(rank('flag-hunt-windows') < rank('windows-enum'), 'flag hunt outranks the local privesc sweep once admin');
-ok(rank('flag-hunt-windows') < rank('seimpersonate'), 'flag hunt outranks SeImpersonate once admin');
+// You already hold admin here, so the ROOT/proof flag leads and the still-open user flag follows right
+// behind it — both flag moves sit above every side-quest.
+ok(rank('flag-hunt-root-windows') === 0, 'the Windows ROOT/proof flag hunt is the #1 Ready-now move after a domain-compromise import (id[0]=' + ids[0] + ')');
+ok(rank('flag-hunt-windows') <= 1, 'the Windows user flag hunt follows right behind the root flag (still open, still near the top)');
+ok(rank('flag-hunt-root-windows') < rank('sccm-enum') && rank('flag-hunt-windows') < rank('sccm-enum'), 'both flag hunts outrank SCCM enumeration after loot.ntds');
+ok(rank('flag-hunt-root-windows') < rank('windows-enum') && rank('flag-hunt-windows') < rank('windows-enum'), 'both flag hunts outrank the local privesc sweep once admin');
+ok(rank('flag-hunt-root-windows') < rank('seimpersonate') && rank('flag-hunt-windows') < rank('seimpersonate'), 'both flag hunts outrank SeImpersonate once admin');
 
 // SCCM and local privesc stay AVAILABLE (cross-box loot / larger labs) — just not the next move.
 ok(rank('sccm-enum') < Infinity, 'SCCM stays available (not retired) for cross-box loot in larger labs');

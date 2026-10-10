@@ -1,0 +1,31 @@
+{
+  "name": "MSSQL standalone — nxc mssql login → xp_cmdshell foothold (gate ordering)",
+  "target": "10.10.10.125",
+  "steps": [
+    {
+      "after": "nmap -sV: 1433/tcp MSSQL confirmed (service scan done)",
+      "add": ["target.configured", "host.up", "ports.open", "scan.nmap.quick", "scan.nmap.version", "port:1433", "service.ms-sql-s"],
+      "top": "mssql-login",
+      "present": ["mssql-login"],
+      "absentTop": ["mssql-xp-cmdshell"]
+    },
+    {
+      "after": "reused sa:Password1 as a candidate credential (not yet validated)",
+      "add": ["credential.candidate"],
+      "present": ["mssql-login"],
+      "absentTop": ["mssql-xp-cmdshell"]
+    },
+    {
+      "after": "nxc mssql validated the login (Pwn3d!) → db.session",
+      "add": ["db.session"],
+      "top": "mssql-xp-cmdshell",
+      "present": ["mssql-xp-cmdshell"],
+      "absentTop": ["mssql-login"]
+    },
+    {
+      "after": "nxc mssql -x whoami → Windows foothold as the SQL service account",
+      "add": ["foothold.windows"],
+      "absentTop": ["mssql-xp-cmdshell", "mssql-login"]
+    }
+  ]
+}

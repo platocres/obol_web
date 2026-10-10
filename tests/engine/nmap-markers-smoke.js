@@ -64,5 +64,49 @@ ok(gk.indexOf('scan.nmap.quick') >= 0 && gk.indexOf('scan.nmap.version') >= 0,
 var empty = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -Pn -p 9999 10.129.95.210', stdout: 'Nmap scan report for 10.129.95.210\nHost is up.\nAll 1 scanned ports are closed\nNmap done', source: 'nmap', scope: 'host:10.129.95.210', domain: '' });
 ok(kindsOf(empty).indexOf('scan.nmap.quick') === -1, 'a scan with no open ports does NOT claim port discovery');
 
+// smb-os-discovery supplies the hostname + domain. In -oX XML (what the browser's DOMParser decodes from
+// the <script output="…"> attribute) these lines have NO leading "| " pipe, just indentation, so the
+// hostname/domain/FQDN regexes must match the un-piped form too. Regression for a Forest scan where the
+// host and domain read "not captured yet" because only the piped text form matched.
+var smbOsNoPipe = [
+  'Nmap scan report for 10.129.102.107', 'Host is up.',
+  'PORT    STATE SERVICE', '445/tcp open  microsoft-ds',
+  'Host script results:',
+  '  OS: Windows Server 2016 Standard 14393',
+  '  Computer name: FOREST',
+  '  Domain name: htb.local',
+  '  FQDN: FOREST.htb.local',
+  'Nmap done',
+].join('\n');
+var smbRes = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -sC -sV 10.129.102.107', stdout: smbOsNoPipe, source: 'nmap', scope: 'host:10.129.102.107', domain: '' });
+var smbFacts = smbRes.facts || [];
+function fv(kind) { var f = smbFacts.filter(function (x) { return x.kind === kind; })[0]; return f ? f.value : null; }
+ok(fv('host.hostname') && fv('host.hostname').name === 'FOREST', 'un-piped "Computer name: FOREST" mints host.hostname (XML smb-os-discovery)');
+ok(fv('host.domain') && fv('host.domain').domain === 'htb.local', 'un-piped "Domain name: htb.local" mints host.domain');
+ok(fv('ad.domain_known') && fv('ad.domain_known').name === 'htb.local', 'the domain also mints ad.domain_known (base DN derivable)');
+// the smb-os-discovery "OS:" line carries the SPECIFIC product, not just the family — surfaced on the hub
+ok(fv('host.os_hint') && fv('host.os_hint').family === 'windows', 'smb-os-discovery mints the Windows os family');
+ok(fv('host.os_hint') && fv('host.os_hint').os === 'Windows Server 2016 Standard 14393', 'the specific OS version is carved from the "OS:" line (value.os)');
+// a noisy service banner with no labelled OS line stays family-only (no garbage version)
+var bannerOnly = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -sV 10.10.10.11',
+  stdout: ['Nmap scan report for 10.10.10.11', '445/tcp open microsoft-ds Windows Server 2016 Standard 14393 microsoft-ds', 'Nmap done'].join('\n'),
+  source: 'nmap', scope: 'host:10.10.10.11', domain: '' });
+var bo = (bannerOnly.facts || []).filter(function (x) { return x.kind === 'host.os_hint'; })[0];
+ok(bo && bo.value.family === 'windows', 'a bare -sV service banner still mints the Windows family');
+
+// "Microsoft-HTTPAPI/2.0" on 5985/47001 is WinRM/WSMan, not a browsable web app, so it must NOT mint
+// web.server (which would unlock the whole web-exploit lane and bury the AD next move). A real web server
+// header still must. Regression for a Forest vuln scan that ranked exposed-files/CMS/Log4Shell above LDAP.
+var httpapi = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -sV --script vuln 10.129.102.107',
+  stdout: ['Nmap scan report for 10.129.102.107', '445/tcp open microsoft-ds', '5985/tcp open http Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)', '|_http-server-header: Microsoft-HTTPAPI/2.0', 'Nmap done'].join('\n'),
+  source: 'nmap', scope: 'host:10.129.102.107', domain: '' });
+var hk = kindsOf(httpapi);
+ok(hk.indexOf('web.server') === -1, 'Microsoft-HTTPAPI (WinRM) does NOT mint web.server (no web-exploit cascade on an AD box)');
+ok(hk.indexOf('winrm.reachable') >= 0, 'the same 5985 line still mints winrm.reachable');
+var apache = OBOL.parsers.parseActionOutput({ actionId: '', command: 'nmap -sV 10.10.10.10',
+  stdout: ['Nmap scan report for 10.10.10.10', '80/tcp open http Apache httpd 2.4.41', '|_http-server-header: Apache/2.4.41 (Ubuntu)', 'Nmap done'].join('\n'),
+  source: 'nmap', scope: 'host:10.10.10.10', domain: '' });
+ok(kindsOf(apache).indexOf('web.server') >= 0, 'a real Apache server header still mints web.server');
+
 console.log(fail ? ('\nNMAP MARKERS: ' + fail + ' FAILURES') : '\nNMAP MARKERS: all passed');
 process.exit(fail ? 1 : 0);

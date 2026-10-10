@@ -1,5 +1,5 @@
 {
- "_comment": "Snapshot of the CISA Known Exploited Vulnerabilities catalog. A COMMITTED SNAPSHOT, never a runtime fetch \u2014 obol's targets are offline. Regenerate with scripts/update_findings.py. findings.py/vulnmatch flag any candidate whose CVE is here.",
+ "_comment": "Snapshot of the CISA Known Exploited Vulnerabilities catalog. A COMMITTED SNAPSHOT, never a runtime fetch, obol's targets are offline. Regenerate with scripts/update_findings.py. findings.py/vulnmatch flag any candidate whose CVE is here.",
  "source": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
  "snapshot_date": "2026-09-16",
  "catalog_version": "2026.09.16",

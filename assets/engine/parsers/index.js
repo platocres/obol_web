@@ -69,9 +69,13 @@
       if (has('_parse_nmap')) C._parse_nmap(text, ws, source, facts, actionId);
     }
 
-    var isNxc = lc.indexOf('nxc ') >= 0 || lc.indexOf('nxc ') === 0;
+    var isNxc = lc.indexOf('nxc ') >= 0 || lc.indexOf('nxc ') === 0 || lc.indexOf('netexec ') >= 0;
     if (isNxc) {
       C._parse_nxc_common(text, ws, source, facts);
+      // Data-driven capability catalog (nxc-catalog.js): fills the switches the hand-written parsers below
+      // don't cover (--users on smb, --lsa cleartext, -M gpp_password/lsassy/…). Facts dedupe, so running it
+      // alongside the existing parsers is safe. See docs + tests/engine/nxc-switch-parsers.js.
+      if (has('_parse_nxc_capability')) C._parse_nxc_capability(text, command, ws, source, facts);
       if (C._is_ldap_command(command) && (actionId === 'ad-anon-ldap-enum' || lc.indexOf('--users') >= 0)) {
         C._parse_user_list(text, ws, source, facts, { prove_anonymous_ldap: C._looks_anonymous_ldap_command(command, actObj), domain_hint: domainHint });
         if (lc.indexOf('--users') >= 0 && has('_parse_ldap_descriptions')) C._parse_ldap_descriptions(text, ws, source, facts, { domain_hint: domainHint });
@@ -108,7 +112,7 @@
     if ((actionId === 'trust-enum' || lc.indexOf('domain_trusts') >= 0 || lc.indexOf('domaintrust') >= 0 || lc.indexOf('lookupsid') >= 0) && has('_parse_domain_trusts')) C._parse_domain_trusts(text, ws, source, facts);
     if ((actionId === 'zerologon-check' || lc.indexOf('zerologon') >= 0) && has('_parse_zerologon_scan')) C._parse_zerologon_scan(text, ws, source, facts);
 
-    if ((actionId === 'powerview-enum' || lc.indexOf('get-netuser') >= 0 || lc.indexOf('get-domainuser') >= 0) && has('_parse_powerview')) C._parse_powerview(text, ws, command, source, facts, { domain_hint: domainHint });
+    if ((actionId === 'powerview-enum' || lc.indexOf('get-netuser') >= 0 || lc.indexOf('get-domainuser') >= 0 || lc.indexOf('get-aduser') >= 0) && has('_parse_powerview')) C._parse_powerview(text, ws, command, source, facts, { domain_hint: domainHint });
     if (['get-netgroup', 'get-domaingroup', 'get-netcomputer', 'get-domaincomputer', 'objectacl', 'get-acl'].some(function (k) { return lc.indexOf(k) >= 0; }) && has('_parse_powerview_objects')) C._parse_powerview_objects(text, ws, command, source, facts, { domain_hint: domainHint });
 
     if (lc.indexOf('kerbrute') >= 0) C._parse_kerbrute(text, ws, source, facts, { domain_hint: domainHint });
@@ -120,6 +124,15 @@
       C._parse_ntlm_dump(text, ws, command, source, facts);
     }
 
+    // mimikatz / pypykatz credential dumps: sekurlsa::logonpasswords → hash.ntlm (+ credential.plaintext
+    // when a cleartext is present), lsadump::sam/lsa → hash.ntlm (+ loot.ntds for a full dump). Routed on
+    // the command OR a content signature so an attached dump file with no command line still mints.
+    if ((lc.indexOf('mimikatz') >= 0 || lc.indexOf('sekurlsa') >= 0 || lc.indexOf('lsadump') >= 0 || lc.indexOf('pypykatz') >= 0 || (has('_looks_like_mimikatz') && C._looks_like_mimikatz(text))) && has('_parse_mimikatz')) C._parse_mimikatz(text, ws, command, source, facts);
+
+    // MSCache2/DCC2 cached domain hashes ($DCC2$…) from secretsdump cached output or lsadump::cache.
+    // Routed on the content token so a pasted cache dump mints even without a recognizable command line.
+    if (has('_looks_like_mscache') && C._looks_like_mscache(text)) C._parse_mscache(text, ws, command, source, facts);
+
     if (lc.indexOf('bloodhound-python') >= 0 || lc.indexOf('sharphound') >= 0) C._parse_bloodhound_collection(text, ws, source, facts);
     if (lc.indexOf('bloodhound') >= 0) C._parse_bloodhound_analysis(text, ws, source, facts);
 
@@ -127,6 +140,21 @@
 
     var isSsh = C._is_ssh_command(command);
     if (isSsh) C._parse_ssh_exec(text, ws, command, source, facts);
+    // An SSH key login that FAILED (any client, any cause) → mint ssh.key_rejected so the troubleshooter
+    // surfaces the fix. Keyed on the output, so it also catches a bare pasted error with no command.
+    if ((isSsh || /\bssh\b/.test(lc) || /Permission denied \(publickey|UNPROTECTED PRIVATE KEY|no mutual signature/i.test(text)) && C._parse_ssh_key_diagnostics)
+      C._parse_ssh_key_diagnostics(text, ws, source, facts);
+    // Auth blockers (a valid credential refused for a fixable reason) can come from any auth tool —
+    // nxc, impacket, smbclient, ssh — so recognize them content-first, not tool-gated.
+    if (C._parse_auth_blockers && /STATUS_PASSWORD_(?:MUST_CHANGE|EXPIRED)|must change .*password|password has expired|KRB_AP_ERR_SKEW|clock skew too great|time difference too large|STATUS_NOT_SUPPORTED|STATUS_ACCOUNT_(?:LOCKED_OUT|DISABLED|RESTRICTION|EXPIRED)|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_INVALID_LOGON_HOURS|locked out|insufficientAccessRights|insufficient access rights/i.test(text))
+      C._parse_auth_blockers(text, ws, source, facts);
+    // Operational blockers (recon/exec/privesc/web traps) — all content-first, any tool.
+    if (C._parse_op_blockers) C._parse_op_blockers(text, ws, command, source, facts);
+    // Service login / DB-RCE that lands a *nix shell (telnet, rlogin/rsh, psql/odat/sqlplus COPY..PROGRAM
+    // and friends): the proof is the same Linux id output, so reuse the ssh-exec reader to mint the
+    // foothold from a pasted uid=... line.
+    if (!isSsh && /\b(telnet|rlogin|rsh|rexec|psql|sqlplus|odat)\b/.test(lc)) C._parse_ssh_exec(text, ws, command, source, facts);
+    if (!isSsh && C._LINUX_SHELL_ACTION_IDS && C._LINUX_SHELL_ACTION_IDS.has(actionId)) C._parse_ssh_exec(text, ws, command, source, facts);
 
     if (isNxc && (' ' + lc + ' ').indexOf(' rdp ') >= 0) C._parse_nxc_rdp(text, ws, command, source, facts);
 
@@ -137,6 +165,33 @@
     if (lc.indexOf('penelope') >= 0) C._parse_penelope(text, ws, source, facts);
 
     if (C._PRIVESC_ACTION_IDS && C._PRIVESC_ACTION_IDS.has(actionId)) C._parse_privesc_output(actionId, text, ws, command, source, facts);
+    // A bare `whoami /priv` / `whoami /all` or `sudo -l` / `sudo --list` paste carries no privesc
+    // action-id, so the gate above skips it. Route on the command OR a conservative content signature
+    // (a dangerous Enabled Se*Privilege line; a sudo rights listing) so an attached paste with no
+    // command line still mints its lead, while unrelated output (an ls, a config dump) never does.
+    if ((lc.indexOf('whoami /priv') >= 0 || lc.indexOf('whoami /all') >= 0 || (has('_looks_like_whoami_priv') && C._looks_like_whoami_priv(text))) && has('_parse_whoami_priv')) C._parse_whoami_priv(text, ws, command, source, facts);
+    if ((lc.indexOf('sudo -l') >= 0 || lc.indexOf('sudo --list') >= 0 || (has('_looks_like_sudo_l') && C._looks_like_sudo_l(text))) && has('_parse_sudo_l')) C._parse_sudo_l(text, ws, command, source, facts);
+    // net user / net localgroup / net group account enumeration, and winPEAS/PrivescCheck privesc dumps —
+    // both arrive as operator-ingest with no action-id, so route on the command OR a conservative content
+    // signature. The parsers are content-gated (a domain-group membership → ad.user_list, a local-admin
+    // members list → config.review; a dangerous Enabled privilege → privesc.windows_privilege), so an
+    // unrelated paste mints nothing.
+    if ((lc.indexOf('net user') >= 0 || lc.indexOf('net localgroup') >= 0 || lc.indexOf('net group') >= 0 || (has('_looks_like_net_output') && C._looks_like_net_output(text))) && has('_parse_net_accounts')) C._parse_net_accounts(text, ws, command, source, facts);
+    if ((lc.indexOf('winpeas') >= 0 || lc.indexOf('privesccheck') >= 0 || (has('_looks_like_winpeas') && C._looks_like_winpeas(text))) && has('_parse_winpeas')) C._parse_winpeas(text, ws, command, source, facts);
+    // schtasks /query /v → scheduled-task privesc lead (SYSTEM/admin run-as pointing at a path);
+    // reg query → Winlogon autologon + stored creds (VNC/PuTTY/SNMP); icacls/accesschk → a writable
+    // service/path ACE for a low-priv principal. All arrive as operator-ingest with no action-id, so
+    // route on the command OR a conservative content signature; each parser is content-gated (only a
+    // privileged task with a path, a credential-ish reg value, or a writable program-path ACE mints),
+    // so an unrelated paste — an ls, a harmless reg dump, a read-only ACE — mints nothing.
+    if ((lc.indexOf('schtasks') >= 0 || (has('_looks_like_schtasks') && C._looks_like_schtasks(text))) && has('_parse_schtasks')) C._parse_schtasks(text, ws, command, source, facts);
+    if ((lc.indexOf('reg query') >= 0 || (has('_looks_like_reg_query') && C._looks_like_reg_query(text))) && has('_parse_reg_query')) C._parse_reg_query(text, ws, command, source, facts);
+    if ((lc.indexOf('klist') >= 0 || (has('_looks_like_klist') && C._looks_like_klist(text))) && has('_parse_klist')) C._parse_klist(text, ws, command, source, facts);
+    if ((lc.indexOf('icacls') >= 0 || lc.indexOf('accesschk') >= 0 || (has('_looks_like_icacls_accesschk') && C._looks_like_icacls_accesschk(text))) && has('_parse_icacls_accesschk')) C._parse_icacls_accesschk(text, ws, command, source, facts);
+
+    // endpoint defensive posture (read-only): languagemode / Get-MpComputerStatus / Get-MpPreference /
+    // Get-AppLockerPolicy → defense.control, so the coach can prefer remote-first and warn before on-host runs.
+    if ((lc.indexOf('get-mpcomputerstatus') >= 0 || lc.indexOf('get-applockerpolicy') >= 0 || lc.indexOf('languagemode') >= 0 || lc.indexOf('get-mppreference') >= 0 || (has('_looks_like_defense_enum') && C._looks_like_defense_enum(text))) && has('_parse_defense_enum')) C._parse_defense_enum(text, ws, command, source, facts);
     if (has('_parse_script_sinks')) C._parse_script_sinks(text, command, ws, source, facts);
     if (has('_parse_shadow_file')) C._parse_shadow_file(text, command, ws, source, facts);
 
@@ -165,7 +220,7 @@
     if (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0) C._parse_http_metadata(text, ws, source, facts);
     if (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'katana', 'hakrawler'].some(function (w) { return lc.indexOf(w) >= 0; })) C._parse_web_surface(text, ws, command, source, facts);
     if (['snmpwalk', 'snmp-check', 'onesixtyone'].some(function (t) { return lc.indexOf(t) >= 0; })) C._parse_snmp_output(text, ws, command, source, facts);
-    if (['mysql', 'mssqlclient', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli'].some(function (t) { return lc.indexOf(t) >= 0; })) C._parse_database_output(text, ws, command, source, facts);
+    if (['mysql', 'mssqlclient', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli', 'sqlplus', 'odat'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\bnxc\s+mssql\b|\bnetexec\s+mssql\b|\bcrackmapexec\s+mssql\b/.test(lc)) C._parse_database_output(text, ws, command, source, facts);
     if (lc.indexOf('sqlite3') >= 0 && has('_parse_sqlite_dump')) C._parse_sqlite_dump(text, ws, source, facts);
     if (has('_has_notable_programs') && C._has_notable_programs(text)) C._parse_notable_programs(text, ws, source, facts);
     if ((' ' + lc + ' ').indexOf('ftp ') >= 0 || lc.indexOf('lftp') >= 0) C._parse_ftp_output(text, ws, command, source, facts);
@@ -193,8 +248,55 @@
     if (has('_has_product_signature') && C._has_product_signature(text)) C._parse_product_signature(text, ws, command, source, facts);
     if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) C._parse_sqli_oracle(text, ws, command, source, facts);
 
+    // findings-lens checks (the "checks" lane + a couple of recon observations): route on the move's
+    // action-id, each parser is content-gated so an unrelated paste mints nothing.
+    if (actionId === 'check-web-headers' && has('_parse_http_headers')) C._parse_http_headers(text, ws, source, facts);
+    if ((actionId === 'check-http-methods' || /^\s*(allow|public):/im.test(text)) && has('_parse_http_methods')) C._parse_http_methods(text, ws, source, facts);
+    if ((actionId === 'check-cors' || /access-control-allow-origin:/i.test(text)) && has('_parse_http_cors')) C._parse_http_cors(text, ws, source, facts);
+    if (actionId === 'check-web-body' && has('_parse_http_body')) C._parse_http_body(text, ws, source, facts);
+    if ((actionId === 'check-tls-config' || lc.indexOf('sslscan') >= 0 || lc.indexOf('testssl') >= 0 || lc.indexOf('ssl-enum-ciphers') >= 0) && has('_parse_tls_info')) C._parse_tls_info(text, ws, source, facts);
+    if (actionId === 'check-exposed-files' && has('_parse_http_exposed')) C._parse_http_exposed(text, ws, source, facts);
+    if ((actionId === 'recon-dns' || lc.indexOf('axfr') >= 0) && has('_parse_dns_zone')) C._parse_dns_zone(text, ws, source, facts);
+    if (actionId === 'check-dns-email' && has('_parse_dns_email')) C._parse_dns_email(text, ws, source, facts);
+    if (actionId === 'check-subdomain-takeover' && has('_parse_dns_takeover')) C._parse_dns_takeover(text, ws, source, facts);
+    if ((actionId === 'vhost-discovery' || (lc.indexOf('-h ') >= 0 && lc.indexOf('host:') >= 0 && lc.indexOf('fuzz') >= 0)) && has('_parse_vhost')) C._parse_vhost(text, ws, source, facts);
+    // late-game AD recording facts (the access is already landed; these record the specific primitive)
+    if ((actionId === 'ticket-reuse' || actionId === 'lateral-exec') && has('_parse_lateral_movement')) C._parse_lateral_movement(text, ws, source, facts);
+    if (actionId === 'coerce-auth' && has('_parse_coerced_auth')) C._parse_coerced_auth(text, ws, source, facts);
+    if (actionId === 'gpo-abuse' && has('_parse_gpo_control')) C._parse_gpo_control(text, ws, source, facts);
+    if (actionId === 'sid-history-abuse' && has('_parse_sid_history')) C._parse_sid_history(text, ws, source, facts);
+
+    // Known-exploit fingerprint recognizer: when pasted service/version output names a product+version
+    // (or a CVE / nmap vuln verdict) that a promoted known-exploit module targets, mint a vuln.<name>
+    // lead so the coach lights that exact module. Anchored and additive; unrelated output mints nothing.
+    if (has('_parse_vulnmatch')) C._parse_vulnmatch(text, ws, source, facts);
+
+    // Connectivity: a foothold's own interface/route dump → the subnets it reaches (and multihomed);
+    // a pivot tool's setup output → the live tunnel. Powers the hub connectivity view.
+    if (has('_parse_local_net') && (/\bip\s+(?:-\d+\s+)?a(?:ddr)?\b|\bifconfig\b|\bip\s+route\b|\bipconfig\b|\broute\s+print\b|\bnetstat\s+-r/.test(lc) || /\binet\s+\d|IPv4 Address|Network Destination|\bGenmask\b/i.test(text)))
+      C._parse_local_net(text, ws, source, facts);
+    if (has('_parse_tunnel') && (/\bchisel\b|\bligolo\b|\bsshuttle\b|\bdnscat|ssh\s+[^\n]*-[a-z]*d\b/.test(lc) || /\bchisel\b|ligolo|sshuttle|dnscat|Agent joined/i.test(text)))
+      C._parse_tunnel(text, ws, source, facts, command);
+    // Adjacent hosts (ARP/neighbour cache), listening services, and internal resolvers from the foothold
+    // — the leads that tell the operator what to aim the pivot at. Command-keyed, with a shape fallback.
+    if (has('_parse_local_neighbors') && (/\bip\s+neigh|\barp\s+-a\b/.test(lc) || /\blladdr\b|\bdynamic\b/i.test(text)))
+      C._parse_local_neighbors(text, ws, source, facts);
+    if (has('_parse_local_listeners') && (/\bnetstat\s+-[a-z]*[alno]|\bss\s+-[a-z]*l/.test(lc) || /\bLISTEN(?:ING)?\b/.test(text)))
+      C._parse_local_listeners(text, ws, source, facts);
+    if (has('_parse_local_dns') && (/\bresolv\.conf\b|\bresolvectl\b|ipconfig\s+\/all/.test(lc) || /^\s*nameserver\s+\d|DNS Servers[^\n:]*:/im.test(text)))
+      C._parse_local_dns(text, ws, source, facts);
+    // Internal-resolver interrogation: a dig/nslookup/host query or an AXFR zone transfer against the
+    // foothold's resolver → the domain and its DCs (unlocking the AD lane), plus a zone receipt.
+    if (has('_parse_dns') && (/\b(?:dig|nslookup|host|dnsrecon|dnsenum)\b/.test(lc) || /\bIN\s+(?:SOA|SRV|NS)\b|_ldap\._tcp|service\s*=\s*\d+\s+\d+\s+\d+|has address/i.test(text)))
+      C._parse_dns(text, ws, source, facts);
+
+    // Output-shape fallback (runs last): recognize common output by its shape when the command-keyed
+    // dispatch above did not key on it. Strictly additive and guarded, so it only fills gaps (a bare
+    // port table, a raw HTTP response, a pasted AS-REP/TGS hash) and never alters a parsed result.
+    if (has('_parse_shape')) C._parse_shape(text, ws, source, facts);
+
     } catch (e) {
-      try { if (typeof console !== 'undefined' && console.warn) console.warn('obol parser: a sub-parser failed — keeping the ' + facts.length + ' fact(s) already recognized. Command: ' + command + ' — ' + (e && e.message)); } catch (_e) {}
+      try { if (typeof console !== 'undefined' && console.warn) console.warn('obol parser: a sub-parser failed, keeping the ' + facts.length + ' fact(s) already recognized. Command: ' + command + ' | ' + (e && e.message)); } catch (_e) {}
       return { facts: facts, unmatched: facts.length === 0, error: (e && e.message) || String(e) };
     }
 
