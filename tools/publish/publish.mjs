@@ -30,6 +30,17 @@ const PUBLISH_TO = (() => { const i = process.argv.indexOf('--publish'); return 
 // ── files never published (private context + the robot itself) ──────────────
 const DENY = ['CLAUDE.md', 'AGENTS.md', 'CHANGELOG.md', 'docs/', '.github/', 'tools/publish/'];
 
+// ── lean build: dirs removed from the staged tree AFTER the in-staging build/stamp (they are needed
+//    during staging so build-packs can read the pack sources, but the browser never loads them, so the
+//    published repo ships only the runnable app + generated bundles) ──────────
+const PRUNE_AFTER_BUILD = ['tests', 'tools', 'data/packs'];
+
+// ── curated replacements: if tools/publish/overrides/<rel> exists, that clean copy is staged in place of
+//    the source (then scrubbed as a backstop). Used for ARCHITECTURE.md, which needs real editorial
+//    cleanup the regex rules cannot do. The overrides dir lives under tools/publish/ (DENY), so it never
+//    ships itself. ──────────────────────────────────────────────────────────
+const OVERRIDES = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'overrides');
+
 // ── which files are text (get scrubbed + gate-scanned); everything else copies verbatim ──
 const TEXT_EXT = new Set(['.js', '.mjs', '.cjs', '.json', '.css', '.html', '.md', '.txt', '.svg', '.yml', '.yaml', '.map']);
 
@@ -73,6 +84,16 @@ const RULES = [
   [/\s*\((?:ROADMAP|SOURCES)[^)]*\)/gi, ''],
   [/\s*ROADMAP\s*§\s*\d+/gi, ''],
   [/\bAGENTS\.md\b/gi, ''],
+  // 6b) CLAUDE.md references + python-origin script/test paths (reveal a separate toolchain)
+  [/\[`?CLAUDE\.md`?\]\([^)]*\)/gi, ''],
+  [/\s*\(CLAUDE\.md\)/gi, ''],
+  [/\bCLAUDE\.md\b/gi, ''],
+  [/,?[ \t]*(?:Refresh|Regenerate|Update)[ \t]+via[ \t]+scripts\/[A-Za-z0-9_.-]+\.py\.?/gi, ''],
+  [/\btests\/test_[A-Za-z0-9_]+\.py\b/gi, 'the test suite'],
+  [/\bscripts\/[A-Za-z0-9_]+\.py\b/gi, 'the build scripts'],
+  // 6c) product-name variants the obol_web rule misses (space / hyphen). Case-preserving.
+  [/\bObol[- ]web\b/g, 'Obol'],
+  [/\bobol[- ]web\b/g, 'obol'],
   // 7) drop the README "Under the hood (for developers)" section — it maps the port lineage
   [/\n## Under the hood \(for developers\)[\s\S]*?(?=\n## )/g, '\n'],
   // 8) rename the product everywhere (comments, headers, the live-site URL)
@@ -91,11 +112,15 @@ const FORBIDDEN = [
   ['donor', /\bdonor\b/i],
   ['AGENTS.md ref', /AGENTS\.md/i],
   ['CLAUDE.md ref', /CLAUDE\.md/i],
-  // other AI assistants that helped build obol_web — never credit them in the public repo either
+  ['obol-web', /obol-web/i],
+  ['obol web', /\bobol web\b/i],
+  ['roadmap ref', /ROADMAP\s*§/i],
+  // other AI assistants that helped build obol_web — never credit them in the public repo either.
+  // NOTE: kept to unambiguous names. Bare `codex`/`gpt` are NOT gated: this is a pentest tool that
+  // catalogs real local binaries (GTFOBins lists a binary literally named `codex`) and disk/partition
+  // strings (`gpt`), so those words appear as legitimate security data, not as an AI credit.
   ['openai', /openai/i],
   ['chatgpt', /chatgpt/i],
-  ['codex', /\bcodex\b/i],
-  ['gpt', /\bgpt\b/i],
   ['copilot', /copilot/i],
 ];
 
@@ -116,12 +141,15 @@ const tracked = execFileSync('git', ['-C', REPO, 'ls-files'], { encoding: 'utf8'
 
 // 2) stage
 rmrf(STAGE); ensureDir(STAGE);
-let copied = 0, scrubbed = 0, denied = 0;
+let copied = 0, scrubbed = 0, denied = 0, overrode = 0;
 for (const rel of tracked) {
   if (isDenied(rel)) { denied++; continue; }
-  const src = path.join(REPO, rel), dst = path.join(STAGE, rel);
+  const ovr = path.join(OVERRIDES, rel);
+  const useOverride = fs.existsSync(ovr);
+  const src = useOverride ? ovr : path.join(REPO, rel), dst = path.join(STAGE, rel);
+  if (useOverride) overrode++;
   ensureDir(path.dirname(dst));
-  if (isText(rel)) {
+  if (isText(rel) || useOverride) {
     const out = scrub(fs.readFileSync(src, 'utf8'));
     fs.writeFileSync(dst, out); scrubbed++;
   } else {
@@ -135,6 +163,11 @@ for (const rel of tracked) {
 function run(cmd, args) { execFileSync(cmd, args, { cwd: STAGE, stdio: 'pipe' }); }
 try { run('node', ['tools/build-packs.js']); } catch (e) { console.error('build-packs failed in staging:', e.message); }
 try { run('node', ['tools/stamp-assets.js']); } catch (e) { console.error('stamp-assets failed in staging:', e.message); }
+
+// 4b) lean the published tree: drop the build/test inputs now that the bundles are generated. The
+// browser never loads these; the app is index.html + assets + data/*.js bundles + screenshots.
+let pruned = 0;
+for (const d of PRUNE_AFTER_BUILD) { const p = path.join(STAGE, d); if (fs.existsSync(p)) { rmrf(p); pruned++; } }
 
 // 5) gate — scan the finished tree
 const hits = [];
@@ -156,7 +189,9 @@ const hits = [];
 console.log('\n=== PUBLISH PRACTICE RUN ===');
 console.log(`staged to : ${STAGE}`);
 console.log(`files     : ${scrubbed} scrubbed (text) + ${copied} copied (binary) = ${scrubbed + copied}`);
+console.log(`overrides : ${overrode} curated file(s) swapped in (tools/publish/overrides/)`);
 console.log(`dropped   : ${denied} private/provenance files (${DENY.join(', ')})`);
+console.log(`pruned    : ${pruned} build-only dir(s) after build (${PRUNE_AFTER_BUILD.join(', ')})`);
 console.log(`gate      : ${hits.length ? hits.length + ' FORBIDDEN TOKEN(S) STILL PRESENT' : 'CLEAN — no forbidden tokens'}`);
 if (hits.length) {
   console.log('\n--- remaining hits (must be fixed before publishing) ---');
