@@ -465,7 +465,7 @@
     'ad.dc_candidate': 'a domain-controller candidate', 'ad.domain_known': 'the domain',
     'ad.base_dn': 'the LDAP base DN', 'ad.user_list': 'a domain user list',
     'ad.protected_user': 'a Protected Users member (Kerberos-only auth)',
-    'ad.anonymous_bind': 'anonymous LDAP bind', 'ad.anon_search_denied': 'anonymous LDAP search denied (credential needed)', 'ad.graph.collected': 'the AD graph',
+    'ad.anonymous_bind': 'anonymous LDAP bind', 'blocker.smb_null_denied': 'null SMB session rejected (credential needed)', 'ad.graph.collected': 'the AD graph',
     'ad.attack_paths': 'attack paths', 'ad.control_paths': 'object-control paths',
     'ad.trusts': 'domain trusts', 'ad.computer_added': 'an added computer account',
     'ad.acl_lead': 'an abusable ACL (control lead)',

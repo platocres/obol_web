@@ -291,7 +291,7 @@
         "ad.anonymous_bind"
       ],
       "obsoleted_by": [
-        "ad.anon_search_denied"
+        "blocker.ldap_anonymous_disabled"
       ],
       "priority": 94,
       "proves": "confirms the LDAP base DN, a list of domain users, and that anonymous LDAP binding is allowed",
@@ -923,6 +923,10 @@
       ],
       "produces": [
         "credential.available"
+      ],
+      "deprioritize_when": [
+        "blocker.lockout",
+        "blocker.account_restricted"
       ],
       "priority": 72,
       "proves": "confirms a usable credential",

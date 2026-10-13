@@ -63,12 +63,12 @@
     'smb-shares': {
       looksFor: 'smbclient / smbmap / nxc share listings and the null-/guest-session banner that lets you read them.',
       regex: 'Disk  READ/WRITE, [+] Guest / null session',
-      emits: ['smb.shares', 'smb.null_session', 'smb.guest_session', 'smb.reachable', 'smb.content_accessible', 'smb.readable_share', 'smb.writable_share', 'access.admin_share', 'share.users_readable'],
+      emits: ['smb.shares', 'smb.null_session', 'smb.guest_session', 'blocker.smb_null_denied', 'smb.reachable', 'smb.content_accessible', 'smb.readable_share', 'smb.writable_share', 'access.admin_share', 'share.users_readable'],
     },
     'ad-ldap': {
       looksFor: 'ldapsearch / nxc --users / rid-brute output — the user and computer accounts, the named domain, and whether the bind was anonymous.',
       regex: 'sAMAccountName: …, DC=corp,DC=local',
-      emits: ['ad.user_list', 'ad.domain_known', 'ad.base_dn', 'ad.anonymous_bind', 'ad.anon_search_denied', 'ad.computer_list', 'ad.group_list'],
+      emits: ['ad.user_list', 'ad.domain_known', 'ad.base_dn', 'ad.anonymous_bind', 'ad.computer_list', 'ad.group_list'],
     },
     'kerberos-roast': {
       looksFor: 'GetNPUsers / GetUserSPNs output — the $krb5asrep$ and $krb5tgs$ hashes (also recognized by shape when pasted alone).',

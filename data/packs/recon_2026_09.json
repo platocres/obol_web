@@ -29,6 +29,9 @@
         "smb.shares",
         "ad.user_list"
       ],
+      "obsoleted_by": [
+        "blocker.smb_null_denied"
+      ],
       "priority": 74,
       "phase": "enum",
       "proves": "the anonymous SMB surface, shares reachable without auth and/or a RID-cycled user list",

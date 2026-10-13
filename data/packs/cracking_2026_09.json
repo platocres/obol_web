@@ -311,6 +311,10 @@
         "credential.available",
         "credential.validated"
       ],
+      "deprioritize_when": [
+        "blocker.lockout",
+        "blocker.account_restricted"
+      ],
       "priority": 30,
       "autonomy": "approve",
       "proves": "a working SSH login (hydra's success line parses to a validated credential)",
@@ -341,6 +345,10 @@
         "credential.available",
         "credential.validated"
       ],
+      "deprioritize_when": [
+        "blocker.lockout",
+        "blocker.account_restricted"
+      ],
       "priority": 10,
       "autonomy": "approve",
       "proves": "a working SSH login if hydra returns a hit against a common account",
@@ -369,6 +377,10 @@
       "produces": [
         "credential.available",
         "credential.validated"
+      ],
+      "deprioritize_when": [
+        "blocker.lockout",
+        "blocker.account_restricted"
       ],
       "priority": 30,
       "autonomy": "approve",
@@ -400,6 +412,10 @@
       "produces": [
         "credential.available",
         "credential.validated"
+      ],
+      "deprioritize_when": [
+        "blocker.lockout",
+        "blocker.account_restricted"
       ],
       "priority": 28,
       "autonomy": "approve",

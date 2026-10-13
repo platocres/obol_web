@@ -1285,6 +1285,10 @@
       "produces": [
         "credential.available"
       ],
+      "deprioritize_when": [
+        "blocker.lockout",
+        "blocker.account_restricted"
+      ],
       "priority": 50,
       "autonomy": "approve",
       "proves": "a working application credential for one of the enumerated users",

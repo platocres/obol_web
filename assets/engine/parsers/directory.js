@@ -53,14 +53,12 @@
     // with no username before it), e.g. `[+] htb.local\:`. But on a hardened DC the anonymous BIND is
     // accepted while anonymous SEARCH is denied: nxc then also prints
     // `Error in searchRequest -> operationsError ... a successful bind must be completed`. The bind
-    // "works" yet you cannot enumerate, so recording ad.anonymous_bind here would wrongly advance the
-    // card to a `--users` dump that fails. When that error is present, mint ad.anon_search_denied (a
-    // proven-negative the anonymous-enum move retires on) and do NOT mint ad.anonymous_bind.
+    // "works" yet you cannot enumerate, so recording ad.anonymous_bind here would wrongly advance the card
+    // to a `--users` dump that fails. Guard against it: when that error is present, do NOT mint
+    // ad.anonymous_bind. blockers.js mints blocker.ldap_anonymous_disabled on the same signature, which
+    // obsoletes the anonymous-enum move (its dead commands disappear) and surfaces the fix-card doctor.
     var anonSearchDenied = /(?:searchRequest\s*->\s*operationsError|a successful bind must be completed)/i.test(text) && /^LDAP\s+/im.test(text);
-    if (anonSearchDenied) {
-      var errLine = (text.match(/^.*operationsError.*$/im) || [''])[0].trim();
-      _add(facts, mkFact('ad.anon_search_denied', C._scope_for_domain(ws, domain), { tool: 'nxc', evidence: errLine ? [errLine] : [] }, S, source));
-    } else if (/^LDAP\s+.*\[\+\].*(?:\\:|anonymous|'')/im.test(text)) {
+    if (!anonSearchDenied && /^LDAP\s+.*\[\+\].*(?:\\:|anonymous|'')/im.test(text)) {
       _add(facts, mkFact('ad.anonymous_bind', C._scope_for_domain(ws, domain), { tool: 'nxc' }, S, source));
     }
   }
@@ -70,14 +68,22 @@
     var h = 'host:' + ws.target;
     var anonymousCommand = command.indexOf("-u ''") >= 0 || command.indexOf('-u ""') >= 0;
     var guestCommand = /\s-u\s+guest\b/i.test(command);
-    if (/\(Null Auth:True\)/i.test(text)) _add(facts, mkFact('smb.null_session', h, { tool: 'nxc', null_auth: true }, S, source));
+    var gotSession = false;
+    if (/\(Null Auth:True\)/i.test(text)) { _add(facts, mkFact('smb.null_session', h, { tool: 'nxc', null_auth: true }, S, source)); gotSession = true; }
     text.split(/\r?\n/).forEach(function (line) {
       if (!/^\s*SMB\s+/i.test(line) || line.indexOf('[+]') < 0) return;
       var auth = line.split('[+]')[1].trim();
       var authL = auth.toLowerCase();
-      if (guestCommand || authL.indexOf('guest') >= 0) _add(facts, mkFact('smb.guest_session', h, { tool: 'nxc' }, S, source));
-      if (anonymousCommand || /(?:^|\\):(?:\s|$)/.test(auth) || auth === ':' || auth === '\\:' || auth === '') _add(facts, mkFact('smb.null_session', h, { tool: 'nxc' }, S, source));
+      if (guestCommand || authL.indexOf('guest') >= 0) { _add(facts, mkFact('smb.guest_session', h, { tool: 'nxc' }, S, source)); gotSession = true; }
+      if (anonymousCommand || /(?:^|\\):(?:\s|$)/.test(auth) || auth === ':' || auth === '\\:' || auth === '') { _add(facts, mkFact('smb.null_session', h, { tool: 'nxc' }, S, source)); gotSession = true; }
     });
+    // Null/anonymous session REJECTED: the anon command got no session and the SMB line shows a denial
+    // (`[-] domain\: STATUS_ACCESS_DENIED` / STATUS_LOGON_FAILURE). This is a box policy, not a transient
+    // error, so recon-smb-anon is obsoleted on it (its dead anonymous commands disappear) and the fix-card
+    // doctor surfaces. Command-aware so it only fires for a genuine anonymous attempt.
+    if (anonymousCommand && !gotSession && /^\s*SMB\s+.*\[-\].*(?:STATUS_ACCESS_DENIED|STATUS_LOGON_FAILURE)/im.test(text)) {
+      _add(facts, mkFact('blocker.smb_null_denied', h, { tool: 'nxc' }, S, source));
+    }
   }
   C._parse_nxc_smb_session = _parse_nxc_smb_session;
 
