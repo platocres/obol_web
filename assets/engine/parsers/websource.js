@@ -1,7 +1,7 @@
 /*!
  * obol engine — parsers/websource.js
  * Port of the fixture-reachable §33 web source/disclosure parsers from
- * obol-local/obol/parsers/websource.py: product-signature fingerprint and the SQLi oracle
+ *  product-signature fingerprint and the SQLi oracle
  * (differential boolean + reflected UNION column). The remaining OSWE content-gated parsers
  * (verbose_error, source_secret, pem_key, js_framework, graphql, phpinfo, dependency_manifest,
  * git_exposed, xmlrpc, cracked_hash, weak_hashing) are intentionally NOT ported — see index.js.

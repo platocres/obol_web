@@ -1,6 +1,6 @@
 /*!
  * obol engine — cruise.js — Cruise control for the browser, the exam-legal, no-execution port of
- * obol-local/obol/cruise.py. obol-local runs ONE safe move per loop (execution is free there). Here
+ *  obol runs ONE safe move per loop (execution is free there). Here
  * the human is the execution channel and the expensive step is the PASTE round-trip, so Cruise hands
  * out a phase-scoped BATCH of the moves that are independent of each other's output, then checkpoints
  * where output genuinely changes what comes next. The batch is a FRONTIER CUT over the move graph

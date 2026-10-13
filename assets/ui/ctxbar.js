@@ -92,6 +92,7 @@
     syncFocusButton();
     // The engagement / credential / target context lives in the left parameter bar on every surface that
     // shows it. Learn is the one full-bleed route with no sidebar, so the context pills exist ONLY there.
+    // The Next Steps route gets a dedicated Target selector to swap focus cleanly per-target or engagement-wide.
     // The engagement sub-nav shows on engagement routes. Every other global route (Workbench, Stuck,
     // Cruise, ...) needs neither, so the whole bar hides and its grid row collapses.
     var html = '';

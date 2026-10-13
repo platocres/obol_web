@@ -7,7 +7,7 @@
  * reach, foreign principals, ESC1-shape templates), the derived owned→Domain-Admins
  * attack path(s), a PlumHound-style query board, and a self-contained printable report.
  *
- * Faithful JS port of obol-local/obol/bloodhound.py. Deliberately tolerant: BloodHound's
+ * Faithful JS port of  Deliberately tolerant: BloodHound's
  * JSON schema drifts across versions (legacy SharpHound PascalCase vs BH-CE lower/camel),
  * so every property read is case-insensitive and nesting-tolerant.
  *
@@ -59,7 +59,8 @@
   var ABUSABLE_ACE = {
     GenericAll: 1, GenericWrite: 1, WriteDacl: 1, WriteOwner: 1, Owns: 1, AddMember: 1, AddSelf: 1,
     ForceChangePassword: 1, AllExtendedRights: 1, AddKeyCredentialLink: 1, WriteSPN: 1,
-    AddAllowedToAct: 1, SyncLAPSPassword: 1, WriteAccountRestrictions: 1, DCSync: 1, GetChangesAll: 1,
+    AddAllowedToAct: 1, AllowedToAct: 1, CanPSRemote: 1, SyncLAPSPassword: 1, ReadLAPSPassword: 1, ReadGMSAPassword: 1,
+    WriteAccountRestrictions: 1, DCSync: 1, GetChangesAll: 1, GetChanges: 1,
   };
   var MEMBER_ACE = { AddMember: 1, AddSelf: 1 };
 
@@ -288,6 +289,10 @@
         if (tn && supplies === true && ekuOk && tenabled !== false) {
           summary.esc_templates.push(tn + ' (ESC1: enrollee supplies subject + client auth)');
         }
+        var noSecExt = props.nosecurityextension === true || (typeof props.enrollmentflag === 'number' && (props.enrollmentflag & 0x80000));
+        if (tn && noSecExt && ekuOk && tenabled !== false) {
+          summary.esc_templates.push(tn + ' (ESC9: no security extension / weak mapping)');
+        }
       }
     }
   }
@@ -370,7 +375,9 @@
     for (var i = 0; i < chain.length; i++) {
       var h = chain[i];
       if (ABUSABLE_ACE[h.edge]) {
-        return { edge: h.edge, target: String(h.to).split('@')[0].trim(),
+        var toShort = String(h.to).split('@')[0].trim();
+        var fromShort = String(h.from).split('@')[0].trim();
+        return { edge: h.edge, target: toShort, from: fromShort, to: toShort,
                  kind: MEMBER_ACE[h.edge] ? 'group' : 'object' };
       }
     }
@@ -1024,6 +1031,10 @@
       if (items.length) mk(pair[0], { principals: items.slice(), count: items.length });
     });
 
+    if (summary.esc_templates && summary.esc_templates.length) {
+      mk('adcs.vulnerable', { tool: 'bloodhound', templates: summary.esc_templates.slice() });
+    }
+
     // attack paths (the LEAD) — shape matches bloodhound.py:902-908
     var chains = paths || [];
     var first = null;
@@ -1031,12 +1042,32 @@
     if (chains && chains.length) {
       var shortest = chains[0];
       if (!first) first = firstAbusable(shortest);
+      var goal = (shortest && shortest.length && shortest[shortest.length - 1]) ? shortest[shortest.length - 1].to : '';
       var value = {
         tool: 'bloodhound', evidence: 'reachability',
-        path: shortest, paths: chains, goal: shortest[shortest.length - 1].to,
+        path: shortest, paths: chains, goal: goal,
       };
       if (first) value.first_action = first;
       mk('ad.attack_paths', value);
+      mk('ad.control_paths', value);
+      var tgt = first ? (first.target || first.to) : (shortest[0] ? (shortest[0].to || '') : '');
+      mk('ad.acl_lead', { tool: 'bloodhound', target: tgt, edge: first ? first.edge : '', first_action: first });
+      var shortestHops = Array.isArray(shortest) ? shortest : [];
+      if ((first && first.edge === 'ReadGMSAPassword') || shortestHops.some(function (h) { return h.edge === 'ReadGMSAPassword'; })) {
+        mk('ad.gmsa', { tool: 'bloodhound', edge: 'ReadGMSAPassword', target: tgt });
+      }
+      if ((first && (first.edge === 'ReadLAPSPassword' || first.edge === 'SyncLAPSPassword')) || shortestHops.some(function (h) { return h.edge === 'ReadLAPSPassword' || h.edge === 'SyncLAPSPassword'; })) {
+        mk('ad.laps', { tool: 'bloodhound', edge: first ? first.edge : 'ReadLAPSPassword', target: tgt });
+      }
+      if ((first && (first.edge === 'AllowedToAct' || first.edge === 'AddAllowedToAct')) || shortestHops.some(function (h) { return h.edge === 'AllowedToAct' || h.edge === 'AddAllowedToAct'; })) {
+        mk('ad.rbcd', { tool: 'bloodhound', edge: first ? first.edge : 'AllowedToAct', target: tgt });
+        mk('ad.delegation', { tool: 'bloodhound', edge: first ? first.edge : 'AllowedToAct', target: tgt });
+      }
+      if ((first && first.edge === 'WriteSPN') || shortestHops.some(function (h) { return h.edge === 'WriteSPN'; })) {
+        mk('ad.targeted_kerberoast', { tool: 'bloodhound', edge: 'WriteSPN', target: tgt });
+      }
+    } else if (summary.dcsync_principals && summary.dcsync_principals.length) {
+      mk('ad.control_paths', { tool: 'bloodhound', principals: summary.dcsync_principals.slice(), type: 'dcsync' });
     }
     return out;
   }

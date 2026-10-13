@@ -1,5 +1,5 @@
 /*!
- * obol ui — routes/target.js — the per-target page, emulating obol-local's target Overview:
+ * obol ui — routes/target.js — the per-target page:
  * the attack-chain bar (where this box is on the kill chain), the ATTACK PATH (proven facts +
  * done/next moves as a phase-column graph), a coarse access level, ranked next moves scoped to
  * this target, captured flags, and the proven-fact storyline. Reached at #/target/<ip>.
@@ -155,15 +155,16 @@
 
     // Attack Path bar: the ordered, causal path actually walked (what led to what → the flags),
     // reconstructed from the run ledger + prereq graph, rendered as a dense horizontal block ribbon.
-    // Each block synthesizes obol-local's two surfaces: the milestone + concrete subject (attack_path)
+    // Each block synthesizes obol's two surfaces: the milestone + concrete subject (attack_path)
     // AND the command that produced it + real causal link (storyline). Off-path parents get "← from".
     var steps = OBOL.chain.build({ facts: facts, activities: eng.activities || [], actions: pack, host: ip });
     var story = OBOL.chainview.ribbon(steps);
 
     // top scoped moves (compact, copy-ready)
-    var params = eng.params || {};
+    var params = Object.assign({}, eng.params || {}, { target: ip });
     var moveHtml = moves.slice(0, 6).map(function (a) {
-      var v = OBOL.command.fillCommand(a, facts, { params: params, profile: eng.profile, workspace: dirs }, 0);
+      var aIdx = (OBOL.command && OBOL.command.bestCommandIndex) ? OBOL.command.bestCommandIndex(a, facts, { params: params, target: ip, profile: eng.profile, workspace: dirs }) : 0;
+      var v = OBOL.command.fillCommand(a, facts, { params: params, target: ip, profile: eng.profile, workspace: dirs }, aIdx);
       // The "Set Up First" prep step (e.g. write loot/users.txt from the users obol proved) — the SAME step
       // the coach renders, so a move whose command reads a file you must create first never ships here
       // without the command that creates it.
@@ -196,6 +197,7 @@
       + '<div class="ident-row"><dt>IP</dt><dd class="ident-ip"><h1 class="route-h1 inline">' + esc(idn.ip) + '</h1></dd></div>'
       + identRow('Hostname', idn.hostname, 'ident-host', idn.hostname && idn.fqdn !== idn.hostname ? idn.fqdn : '')
       + identRow('Domain', idn.domain, 'ident-dom', '')
+      + identRow('OS', idn.os, 'ident-os', '')
       + '</dl></div>'
       + '<div class="home-spine target-chain">' + chain + '</div>'
 
@@ -295,6 +297,9 @@
       var id = b.getAttribute('data-rm');
       OBOL.store.update(function (eng) { eng.screenshots = (eng.screenshots || []).filter(function (s) { return s.id !== id; }); }, 'screenshots');
       OBOL.router.render();
+    });
+    U.on(mount, 'click', '.tw-fullcoach', function (e, b) {
+      if (OBOL.store.setActiveTarget) OBOL.store.setActiveTarget(tgtIp);
     });
   }
 

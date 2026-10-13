@@ -1,6 +1,6 @@
 /*!
  * obol engine — parsers/nmap.js
- * Faithful JS port of obol-local/obol/parsers/nmap.py.
+ * Faithful JS port of 
  * Structured-first: nmap -oX XML when a DOMParser is available (with XXE/size guards);
  * otherwise the text-regex path. A port maps to reachability, never a vuln or access.
  */

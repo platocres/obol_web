@@ -968,7 +968,7 @@
       return { proves: d ? ('The domain is ' + d + '.') : 'The domain name was confirmed.',
         caveat: d ? ('Your base DN is ' + baseDn(d) + '. Knowing the domain is not access to it: you still need a credential or a roastable account.') : 'Knowing the domain is not access to it.' };
     }
-    if (k === 'ad.base_dn') return { proves: 'The LDAP base DN is ' + (v.base_dn || v.basedn || '(derived from the domain)') + '.', caveat: 'Use it to scope ldapsearch and nxc LDAP queries.' };
+    if (k === 'ad.base_dn') return { proves: 'The LDAP base DN is ' + (v.base_dn || v.basedn || '') + '.', caveat: 'Use it to scope ldapsearch and nxc LDAP queries.' };
     if (k.indexOf('port:') === 0) {
       var port = k.split(':')[1], svc = v.service || '';
       return { proves: 'Port ' + port + ' is open' + (svc ? (' (' + svc + ')') : '') + '.', caveat: 'Open is not vulnerable. Fingerprint the version, then decide if it is the way in.' };

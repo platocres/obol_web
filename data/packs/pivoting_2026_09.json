@@ -1,7 +1,7 @@
 {
   "name": "Network pivoting & tunnelling (§3)",
   "description": "Turn a proven foothold into reach onto an internal segment: a chisel or ligolo-ng SOCKS/TUN tunnel, sshuttle, an SSH dynamic forward, then enumerate the far side through the proxy. Every tunnel puts traffic on the wire, so each pauses for approval; a confirmed pivot widens scope to the subnet it exposes, scope grows, it is never skipped.",
-  "source": "OSCP methodology (project-authored, obol-local)",
+  "source": "OSCP methodology",
   "actions": [
     {
       "id": "pivot-chisel-socks",

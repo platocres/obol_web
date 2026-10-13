@@ -1,10 +1,11 @@
 {
-  "name": "Offline password cracking (\u00a73)",
+  "name": "Offline password cracking (§3)",
   "description": "Feed recovered hash material (kerberoast and AS-REP tickets, NTLM/NTDS dumps, captured NetNTLMv2, /etc/shadow entries) to hashcat or john and recover the plaintext. It all runs offline on your own box and touches no target, so these steps auto-advance; a cracked hash stays a candidate secret until a real login proves it.",
-  "source": "OSCP methodology (project-authored, obol-local)",
+  "source": "OSCP methodology",
   "actions": [
     {
       "id": "crack-identify",
+      "transition": "crack",
       "title": "Identify an Unknown Hash",
       "hypothesis": "Pinning down the hash format before cracking keeps you from burning hours on the wrong hashcat mode.",
       "tool": "name-that-hash",
@@ -17,7 +18,9 @@
         "credential.candidate",
         "db.tables"
       ],
-      "produces": [],
+      "produces": [
+        "hash.type"
+      ],
       "priority": 40,
       "autonomy": "auto",
       "proves": "the likely hash type and cracker mode to use (hashcat --identify records hash.type{mode})",
@@ -31,11 +34,13 @@
           "tool": "hashid",
           "run": "hashid -m hashes.txt"
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "crack-hash-troubleshoot",
-      "title": "Hashcat/John Won't Load the Hash \u2014 Fix It",
+      "transition": "crack",
+      "title": "Hashcat/John Won't Load the Hash — Fix It",
       "tool": "hashcat",
       "tools": [
         "hashcat",
@@ -49,7 +54,7 @@
       "priority": 62,
       "hypothesis": "'No hashes loaded' or 'Token length exception' is not a tough hash - the file or mode is wrong. The usual culprits: a username: prefix left on the line (or missing when the mode wants it), the wrong -m mode for the hash type, CRLF line endings from a Windows copy, or stray whitespace. Fix the file and it cracks.",
       "proves": "nothing attack-wise; it gets the cracker to actually load and run on your hash",
-      "does_not_prove": "that the password is in your wordlist \u2014 that is a separate question",
+      "does_not_prove": "that the password is in your wordlist — that is a separate question",
       "report": {
         "finding": "Hash format/mode mismatch resolved",
         "severity": "info"
@@ -66,7 +71,7 @@
         {
           "tool": "hashcat",
           "run": "hashcat -m {{mode}} hash.txt {{wordlist}}   # strip/keep the user: prefix to match the mode",
-          "note": "NetNTLMv2/Kerberos modes WANT user$realm in the line; raw-MD5/NTLM modes do NOT \u2014 'No hashes loaded' is usually a prefix mismatch. Also run `dos2unix hash.txt` and remove trailing spaces."
+          "note": "NetNTLMv2/Kerberos modes WANT user$realm in the line; raw-MD5/NTLM modes do NOT — 'No hashes loaded' is usually a prefix mismatch. Also run `dos2unix hash.txt` and remove trailing spaces."
         },
         {
           "tool": "john",
@@ -86,6 +91,7 @@
     },
     {
       "id": "crack-kerberoast",
+      "transition": "crack",
       "title": "Crack a Kerberoast (TGS) Hash",
       "hypothesis": "Service accounts frequently use weak, human-chosen passwords, so a cracked $krb5tgs$ ticket hands you the service account's plaintext.",
       "tool": "hashcat",
@@ -115,10 +121,12 @@
           "tool": "john",
           "run": "john --format=krb5tgs --wordlist=/usr/share/wordlists/rockyou.txt tgs.hash"
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "crack-asrep-offline",
+      "transition": "crack",
       "title": "Crack an AS-REP Roast Hash",
       "hypothesis": "An account without Kerberos pre-auth is AS-REP-roastable: the $krb5asrep$ hash it yields cracks to that user's plaintext.",
       "tool": "hashcat",
@@ -145,10 +153,12 @@
           "tool": "john",
           "run": "john --format=krb5asrep --wordlist=/usr/share/wordlists/rockyou.txt asrep.hash"
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "crack-ntlm",
+      "transition": "crack",
       "title": "Crack a Dumped NTLM Hash",
       "hypothesis": "An NTLM hash pulled from SAM or NTDS may crack to a plaintext that logs in here or is reused elsewhere.",
       "tool": "hashcat",
@@ -172,10 +182,12 @@
           "tool": "hashcat",
           "run": "hashcat -m 1000 ntlm.hash /usr/share/wordlists/rockyou.txt"
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "crack-netntlmv2",
+      "transition": "crack",
       "title": "Crack a Captured NetNTLMv2 Hash",
       "hypothesis": "A NetNTLMv2 hash captured by Responder or a relay cracks to the account's plaintext; unlike an NT hash it cannot be passed, so cracking is the only route.",
       "tool": "hashcat",
@@ -200,10 +212,12 @@
           "tool": "hashcat",
           "run": "hashcat -m 5600 netntlmv2.hash /usr/share/wordlists/rockyou.txt"
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "crack-shadow",
+      "transition": "crack",
       "title": "Crack a Linux /etc/shadow Hash",
       "hypothesis": "A shadow entry you can read (via a SUID binary, a backup, or a misconfig) cracks to a local password that is often reused for sudo.",
       "tool": "hashcat",
@@ -231,10 +245,12 @@
           "tool": "john",
           "run": "unshadow /etc/passwd /etc/shadow > unshadowed && john --wordlist=/usr/share/wordlists/rockyou.txt unshadowed"
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "crack-archive",
+      "transition": "crack",
       "title": "Crack a Password-Protected Archive (zip/rar/7z)",
       "hypothesis": "A password-protected backup/export archive found in loot usually hides config files or credentials. Extract its hash with the matching *2john and crack it offline; then unpack it on your box and paste anything credential-like from inside back on Evidence.",
       "tool": "john",
@@ -276,7 +292,8 @@
           "run": "john --wordlist=/usr/share/wordlists/rockyou.txt archive.hash",
           "note": "john auto-detects the *2john format; unzip with the cracked password, then paste any creds/config from inside on Evidence."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "online-brute-ssh",
@@ -290,7 +307,10 @@
         "ad.user_list",
         "web.users"
       ],
-      "produces": [],
+      "produces": [
+        "credential.available",
+        "credential.validated"
+      ],
       "priority": 30,
       "autonomy": "approve",
       "proves": "a working SSH login (hydra's success line parses to a validated credential)",
@@ -317,7 +337,10 @@
       "requires_any": [
         "ssh.reachable"
       ],
-      "produces": [],
+      "produces": [
+        "credential.available",
+        "credential.validated"
+      ],
       "priority": 10,
       "autonomy": "approve",
       "proves": "a working SSH login if hydra returns a hit against a common account",
@@ -328,7 +351,8 @@
           "run": "hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/wordlists/rockyou.txt -f -t 4 ssh://{{target}}",
           "note": "Short COMMON-users list, not an enumerated one. If a login lands, stop and pivot. Do not grind rockyou blindly or you will lock accounts; this is the move of last resort."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "online-brute-ftp",
@@ -342,7 +366,10 @@
         "ad.user_list",
         "web.users"
       ],
-      "produces": [],
+      "produces": [
+        "credential.available",
+        "credential.validated"
+      ],
       "priority": 30,
       "autonomy": "approve",
       "proves": "a working FTP login (parses to a validated credential)",
@@ -370,7 +397,10 @@
         "ad.user_list",
         "web.users"
       ],
-      "produces": [],
+      "produces": [
+        "credential.available",
+        "credential.validated"
+      ],
       "priority": 28,
       "autonomy": "approve",
       "proves": "a working RDP login (parses to a validated credential)",
@@ -388,6 +418,7 @@
     },
     {
       "id": "crack-mscache2",
+      "transition": "crack",
       "title": "Crack an MS Cache v2 (DCC2) Hash",
       "hypothesis": "Domain Cached Credentials v2 ($DCC2$) are stored on a workstation so a domain user can log in offline. They are deliberately slow to crack, but a weak password still falls, and the plaintext is a real domain credential to reuse. Pulled from a local secretsdump (the cachedump).",
       "tool": "hashcat",
@@ -420,7 +451,157 @@
           "run": "hashcat -m 2100 dcc2.hash /usr/share/wordlists/rockyou.txt",
           "note": "Mode 2100 = DCC2 / MS-Cache v2."
         }
+      ],
+      "requires_any": []
+    },
+    {
+      "id": "vnc-decrypt",
+      "title": "VNC Stored Password Decryption",
+      "phase": "creds",
+      "hypothesis": "VNC implementations (TightVNC, UltraVNC, RealVNC) store passwords encrypted with a standardized DES key fixed in the RFB specification. Extracted password registry values or .ini file hex strings can be instantly decrypted offline to plaintext without dictionary cracking.",
+      "tool": "vncpwd",
+      "tools": [
+        "vncpwd",
+        "vncpasswd"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "config.review",
+        "loot.files",
+        "credential.candidate"
+      ],
+      "produces": [
+        "credential.available"
+      ],
+      "priority": 78,
+      "proves": "decrypts cleartext VNC administrative passwords from stored registry keys or configuration files",
+      "does_not_prove": "access until validated against open VNC (port 5900) or reused against SSH/WinRM/SMB",
+      "report": {
+        "finding": "Insecure VNC Password Storage (Reversible RFB Encryption)",
+        "severity": "high"
+      },
+      "refs": [
+        "https://github.com/frizb/PasswordDecrypt/blob/master/vncpasswd.py"
+      ],
+      "commands": [
+        {
+          "tool": "vncpwd",
+          "run": "vncpwd {{vnc_hex_or_file}}",
+          "note": "PREFERRED: Built-in Kali/Linux tool to decrypt VNC hex strings or TightVNC .reg exports into plaintext."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 vncpasswd.py -d {{vnc_hex}}",
+          "note": "Python standalone RFB DES decryptor for raw hex strings found in configs or memory dumps."
+        }
       ]
+    },
+    {
+      "id": "keepass-dump-recover",
+      "title": "KeePass Memory Dump Recovery (CVE-2023-32784) & Hash Cracking",
+      "hypothesis": "KeePass 2.x versions prior to 2.54 leave cleartext password characters in process memory during entry editing (CVE-2023-32784). If a process memory dump (.dmp or crash dump) is discovered, specialized parsers can reconstruct the KeePass master password. If an encrypted database (.kdbx) is obtained, keepass2john extracts the crackable hash for offline password recovery.",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "john",
+        "hashcat"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "loot.keepass_dump",
+        "loot.files"
+      ],
+      "produces": [
+        "credential.candidate",
+        "credential.available"
+      ],
+      "priority": 82,
+      "phase": "creds",
+      "proves": "recovers candidate master passwords from KeePass process dumps or extracts crackable master password hashes from KDBX databases",
+      "does_not_prove": "does not prove database unlock until the candidate master password successfully decrypts the KDBX file",
+      "report": {
+        "finding": "KeePass Master Password Recoverable from Memory Dump (CVE-2023-32784)",
+        "severity": "high"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2023-32784",
+        "https://github.com/vdohney/keepass-password-dumper"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "python3 keepass_dump_masterkey.py -d {{dump_file|keepass.dmp}}",
+          "note": "PREFERRED (Memory Dump Master Key Recovery): Reconstructs master password character candidates from KeePass process dump memory (CVE-2023-32784)."
+        },
+        {
+          "tool": "john",
+          "run": "keepass2john {{kdbx_file}} > {{kdbx_file}}.hash && john --wordlist={{wordlist}} {{kdbx_file}}.hash",
+          "note": "OFFLINE KDBX HASH CRACKING: Extracts the master key hash from an encrypted KeePass database file and cracks with John the Ripper."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 -c \"import pykeepass; kp = pykeepass.PyKeePass('{{kdbx_file}}', password='{{password}}'); [print(e.title, e.username, e.password) for e in kp.entries]\"",
+          "note": "DECRYPT KDBX ENTRIES: With the recovered master password, unlock the KDBX database and print all stored usernames, passwords, and URLs."
+        }
+      ]
+    },
+    {
+      "id": "cisco-decrypt",
+      "title": "Cisco Password Decryption and Hash Cracking",
+      "hypothesis": "Cisco configuration files frequently contain obfuscated Type 7 passwords or salted Type 5/8/9 hashes. Type 7 uses a reversible Vigenère cipher instantly decrypted with cisco-decrypt. Type 5 (md5crypt) and Type 8/9 (PBKDF2/scrypt) are cracked offline with Hashcat (-m 500 / -m 9200 / -m 9300) or John the Ripper.",
+      "tool": "cisco-decrypt",
+      "tools": [
+        "cisco-decrypt",
+        "hashcat",
+        "john"
+      ],
+      "os": [],
+      "phase": "access",
+      "requires_any": [
+        "credential.candidate",
+        "loot.credentials"
+      ],
+      "produces": [
+        "credential.available"
+      ],
+      "priority": 75,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "decrypted cleartext or cracked Cisco administrative passwords",
+      "does_not_prove": "network device or host access until authenticated against a live service",
+      "report": {
+        "finding": "Cisco Obfuscated or Weak Password Recovered",
+        "severity": "high"
+      },
+      "refs": [
+        "https://hashcat.net/wiki/doku.php?id=example_hashes"
+      ],
+      "commands": [
+        {
+          "tool": "cisco-decrypt",
+          "run": "cisco-decrypt {{ciphertext}}",
+          "note": "Reversibly decrypts Cisco Type 7 passwords (e.g. password 7 0822455B10D00F1654)."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 500 {{hashes_file}} /usr/share/wordlists/rockyou.txt",
+          "note": "Cracks Cisco Type 5 MD5-crypt hashes (enable secret 5 $1$...) using wordlists."
+        },
+        {
+          "tool": "john",
+          "run": "john --format=md5crypt-long {{hashes_file}} --wordlist=/usr/share/wordlists/rockyou.txt",
+          "note": "John the Ripper alternative for Cisco Type 5 secret cracking."
+        }
+      ],
+      "requires_all": []
     }
   ]
 }

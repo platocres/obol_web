@@ -405,7 +405,7 @@
       // Route to Domain Admin: the derived owned->DA path as numbered steps with the command per hop.
       html += routeStepsHtml(view, owned, summary, cmdCtx(owned, true));
 
-      // Interactive attack-path graph (parity with obol-local's draggable domain graph).
+      // Interactive attack-path graph.
       html += '<h2 class="coach-sec-h">Attack-path graph</h2>'
         + '<div id="bh-graph" class="bh-graph-host">'
         + (owned.length ? '' : '<div class="coach-empty">Own an account (a credential, or tick "I Own This" on an inspected account) to derive and graph owned→Domain-Admin paths.</div>')
@@ -507,7 +507,7 @@
       }
       var facts = OBOL.bloodhound.toFacts(summary, paths, 'domain:' + (summary.domain || 'domain'));
       // Keep the transient _graph on the persisted summary so the interactive graph + census can
-      // be re-derived (and owned-principal recompute works) after reload — obol-local drops it only
+      // be re-derived (and owned-principal recompute works) after reload — obol drops it only
       // because its server keeps a lean SQLite store; the browser's IndexedDB can hold it.
       OBOL.store.update(function (eng) { eng.bloodhound = summary; }, 'bloodhound');
       OBOL.store.addFacts(facts, 'bloodhound');

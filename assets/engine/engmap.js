@@ -5,7 +5,7 @@
  * to a self-contained inline SVG (tier rows top→down, bezier edges, node classes by
  * type/access so the active skin themes it).
  *
- * Faithful JS port of obol-local/obol/graph.py build_engagement_graph (+ target_access_level).
+ * 
  * Conservative: NEVER invents a host-to-host edge from a shared subnet — a target hangs from a
  * scope range only where CIDR/IP membership proves it, from a domain only where an identity/DC
  * fact ties it, and a credential links to a host only where a host-scoped fact ties them.
@@ -25,7 +25,7 @@
   function nid(s) { return String(s).replace(/[^a-zA-Z0-9_]/g, '_'); }
   function slug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 
-  // ── port / service labelling (mirrors graph.py's tables) ─────────────────────────────────
+  // ── port / service labelling ─────────────────────────────────
   var PORT_LABELS = {
     21: 'FTP', 22: 'SSH', 25: 'SMTP', 53: 'DNS', 80: 'HTTP',
     88: 'Kerberos', 135: 'RPC', 139: 'NetBIOS', 389: 'LDAP',

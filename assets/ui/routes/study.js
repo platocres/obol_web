@@ -6,7 +6,7 @@
  * sample output with the signal highlighted → proves/opens → common mistake) or YOUR TURN
  * (retrieval practice: a situation, multiple choice, a verdict on every answer, the cell as reward).
  *
- * All content comes from OBOL.study (derived from the packs) + OBOL.STUDY_FIXTURES. No hand-authored
+ * All content comes from OBOL.study + OBOL.STUDY_FIXTURES. No hand-authored
  * lessons live here — this file is rendering + interaction only.
  */
 (function (root) {
@@ -268,7 +268,7 @@
     if (authored) {
       return '<div class="study-why"><div class="study-why-h">Why this, why now</div><p>' + codeify(authored) + '</p></div>';
     }
-    // Fallback (derived) until a move has an authored note: name the prereq → outcome link plainly.
+    // Fallback until a move has an authored note: name the prereq → outcome link plainly.
     var proves = (cell.proves || [])[0];
     var needs = cell.prereqFacts.length
       ? 'you are holding ' + cell.prereqFacts.map(function (f) { return '<b>' + esc(human(f)) + '</b>'; }).join(', ')

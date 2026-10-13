@@ -1,6 +1,6 @@
 /*!
  * obol engine — report.js
- * The report pipeline, ported from obol-local/obol/report.py + report_profiles/*.
+ * The report pipeline, 
  *
  * A report is a READ-ONLY PROJECTION of the same state the board is narrated from:
  * facts (OBOL.facts), targets, activities (the run ledger), credentials, and operator
@@ -22,7 +22,7 @@
   var SUPPORTED = (FACTS.ProofState && FACTS.ProofState.SUPPORTED) || 'supported';
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 0. constants (ported from report.py)
+  // 0. constants
   // ─────────────────────────────────────────────────────────────────────────
   var FLAG_FACT_KINDS = ['objective.local_flag', 'objective.root_flag', 'objective.flag'];
   var PROOF_FACT = 'proof.captured';
@@ -52,7 +52,7 @@
     objective: 8, loot: 9, config: 10, web: 11, wireless: 12, other: 99,
   };
 
-  // ── redaction regexes (ported, JS-native) ────────────────────────────────
+  // ── redaction regexes ────────────────────────────────
   // flags whose value is ALWAYS a secret, for any tool
   var SECRET_FLAG_RE = /((?:^|\s)(?:--password|--pass|--?nthash|--?aes-?key|-computer-pass))([=\s]+)('[^']*'|"[^"]*"|\S+)/gi;
   // hash flags, redact only a hash-shaped value (curl -H headers survive)
@@ -71,7 +71,7 @@
   var USERPCT_RE = /((?:^|\s)(?:-U|--user)[=\s]+['"]?[^\s'"%]+%)([^\s'"]+)/gi;
   var URLCRED_RE = /(:\/\/[^\s:/@'"]+:)([^\s@/'"]+)(@)/g;
 
-  // ── proof interactivity classification (ported from proof.py) ─────────────
+  // ── proof interactivity classification ─────────────
   var NONINTERACTIVE_TOOLS = ['nxc', 'netexec', 'crackmapexec', 'wmiexec', 'smbexec', 'atexec',
     'dcomexec', 'psexec', 'impacket-wmiexec', 'impacket-smbexec', 'impacket-psexec', 'impacket-atexec'];
   var INTERACTIVE_TOOLS = ['evil-winrm', 'ssh', 'sshpass', 'rdp', 'xfreerdp', 'reverse-shell'];
@@ -146,7 +146,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 2. redaction (two-layer, default ON) — ported from report.py
+  // 2. redaction (two-layer, default ON) — py
   // ─────────────────────────────────────────────────────────────────────────
   function redactValue(value, includeSecrets) {
     if (includeSecrets) return value;
@@ -287,7 +287,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 4. block model (ported from report_profiles/_doc.py) + serializers
+  // 4. block model + serializers
   // ─────────────────────────────────────────────────────────────────────────
   function H(text, level, anchor) { return { t: 'heading', text: text, level: level || 2, anchor: anchor || '' }; }
   function P(text) { return { t: 'para', text: text || '' }; }
@@ -560,7 +560,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 5. context builder (ported from report.py build_report_context)
+  // 5. context builder
   // ─────────────────────────────────────────────────────────────────────────
   function dedupPorts(facts) {
     function svcRank(svc) {
@@ -1041,7 +1041,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 6. section builders (ported from report_profiles/_sections.py)
+  // 6. section builders
   // ─────────────────────────────────────────────────────────────────────────
   var SEV_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
   var FULL_PRIV_LEVELS = ['Administrator / SYSTEM', 'root'];
@@ -1789,7 +1789,7 @@
           var via = s.command ? '  ·  `' + s.command + '`' : '';
           return lead + det + tech + from + via;
         }), true));
-        // everything else the operator ran on this host was enumeration/noise (obol-local parity)
+        // everything else the operator ran on this host was enumeration/noise
         var split = essentialRows(ctx, t.host);
         if (split.scoped && split.noise.length) {
           blocks.push(P('_+ ' + split.noise.length + ' other move' + (split.noise.length === 1 ? '' : 's')
@@ -1966,7 +1966,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 7. profiles + dispatch (ported from report_profiles/__init__.py)
+  // 7. profiles + dispatch
   // ─────────────────────────────────────────────────────────────────────────
   var PROFILES = {
     oscp: {
@@ -2070,7 +2070,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 8. validate — OSCP readiness (ported from report_profiles.validate)
+  // 8. validate — OSCP readiness
   // ─────────────────────────────────────────────────────────────────────────
   function validate(profileName, ctx) {
     var profile = resolve(profileName, ctx);

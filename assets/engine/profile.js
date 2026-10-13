@@ -3,7 +3,7 @@
  * Engagement profile: platform/exam awareness (HTB, OffSec/OSCP, PWK, THM, HTB-CPTS, CTF,
  * OSWP, custom) + machine types. Decides which flag names/formats the hunt looks for, the
  * submittable-proof requirement, the exam-floor posture, and the ranking focus nudge.
- * Faithful JS port of obol-local/obol/profile.py (browser subset — no shell command building
+ * Faithful JS port of  (browser subset — no shell command building
  * beyond the flag-hunt token helpers). Configuration, never a proof.
  */
 (function (root) {

@@ -29,7 +29,7 @@
       + (info.host ? '<span class="hb-tip">' + esc(info.ip) + '</span>' : '')
       + '<span class="hb-acc ' + b.cls + '">' + b.label + '</span></div>'
       + '<div class="tgt-meta">'
-      + '<div class="tgt-row"><span class="tgt-k">OS</span><span class="tgt-v' + (info.os ? '' : ' tgt-empty') + '">' + (info.os ? esc(U.titleCase(info.os)) : 'Not Yet Fingerprinted') + '</span></div>'
+      + '<div class="tgt-row"><span class="tgt-k">OS</span><span class="tgt-v' + (info.os ? '' : ' tgt-empty') + '">' + (info.os ? esc(info.os) : 'Not Yet Fingerprinted') + '</span></div>'
       + '<div class="tgt-row"><span class="tgt-k">Domain</span><span class="tgt-v' + (info.domain ? '' : ' tgt-empty') + '">' + (info.domain ? esc(info.domain) : 'None Known Yet') + '</span></div>'
       + '</div>'
       + '<div class="tgt-ports"><span class="tgt-k">Ports</span><div class="hb-ports">' + (ports || '<span class="hb-port-none">No Ports Yet</span>') + '</div></div>'

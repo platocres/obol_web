@@ -100,8 +100,10 @@
     if (/\bssh\b[^\n]*\s-[a-z]*d(?:\s+\S+)?\b/i.test(cmd) || /(^|\s)-D\s*\d+/.test(cmd))
       _add(facts, mkFact('tunnel.socks', h, { via: 'ssh-dynamic' }, S, source));
     // ligolo-ng routed tunnel: the command, or an "Agent joined" / tunnel-up banner.
-    if (/\bligolo\b/.test(lc) || (/ligolo/i.test(t) && /(agent joined|tunnel started|route added|listening on|ligolo-ng|session)/i.test(t)) || /\bAgent joined\b/.test(t))
+    if (/\bligolo\b/.test(lc) || /\bagent(?:\.exe)?\s+-connect\b/i.test(lc) || (/ligolo/i.test(t) && /(agent joined|tunnel started|route added|listening on|ligolo-ng|session|interface ligolo is up)/i.test(t)) || /\bAgent joined\b/i.test(t) || /\[Tunnel\] Interface ligolo is UP/i.test(t)) {
       _add(facts, mkFact('tunnel.route', h, { via: 'ligolo' }, S, source));
+      _add(facts, mkFact('pivot.active', h, { via: 'ligolo' }, S, source));
+    }
     // sshuttle transparent route: the command, or its "Connected to server." line.
     if (/\bsshuttle\b/.test(lc) || (/sshuttle/i.test(t) && /connected to server/i.test(t)) || (/client:\s*Connected to server/i.test(t)))
       _add(facts, mkFact('tunnel.route', h, { via: 'sshuttle' }, S, source));

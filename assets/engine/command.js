@@ -2,7 +2,7 @@
  * obol engine — command.js
  * Command templating: build the {{token}} context from proven facts + engagement params,
  * fill a command template, and render an action's command variants. Faithful JS port of the
- * relevant parts of obol-local/obol/board.py (command_context / fill_template / fill_command).
+ * relevant parts of  (command_context / fill_template / fill_command).
  *
  * Browser adaptation: there is no Workspace. Callers pass a FactSet (OBOL.facts.FactSet) and
  * an engagement `params` object (target/domain/username/password/lhost/…). Facts-derived
@@ -25,18 +25,32 @@
   }
 
   function firstVal(facts, kind) {
-    var v = facts.values(kind);
-    return v.length ? v[0] : null;
+    if (!facts) return null;
+    if (typeof facts.values === 'function') {
+      var v = facts.values(kind);
+      return v && v.length ? v[0] : null;
+    }
+    var list = facts.facts || (Array.isArray(facts) ? facts : []);
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && (list[i].kind === kind || list[i].k === kind)) {
+        return (list[i].value !== undefined) ? list[i].value : list[i].v;
+      }
+    }
+    return null;
   }
 
   // Open ports as sorted numbers, from port:NNN facts (recon output).
   function openPorts(facts) {
     var ports = [];
-    for (var i = 0; i < facts.facts.length; i++) {
-      var f = facts.facts[i];
-      if (f.state !== OBOL.facts.ProofState.SUPPORTED) continue;
-      if (f.kind.indexOf('port:') === 0) {
-        var n = parseInt(f.kind.split(':')[1], 10);
+    if (!facts) return ports;
+    var list = (facts && facts.facts) || (Array.isArray(facts) ? facts : []);
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i];
+      if (!f) continue;
+      if (f.state && OBOL.facts && f.state !== OBOL.facts.ProofState.SUPPORTED) continue;
+      var k = f.kind || f.k || '';
+      if (k.indexOf('port:') === 0) {
+        var n = parseInt(k.split(':')[1], 10);
         if (!isNaN(n)) ports.push(n);
       }
     }
@@ -50,7 +64,7 @@
     return ports;
   }
 
-  // Map obol_web engagement params to the base token context (ws.inputs analog).
+  // Map obol engagement params to the base token context (ws.inputs analog).
   function paramsToInputs(params) {
     params = params || {};
     var ctx = {};
@@ -59,7 +73,7 @@
       if (v === null || v === undefined || v === '') return;
       ctx[k] = v;
     });
-    // common aliases obol_web uses
+    // common aliases obol uses
     if (params.username && !ctx.user) ctx.user = params.username;
     if (params.target && !ctx.target) ctx.target = params.target;
     if (params.rhost && !ctx.target) ctx.target = params.rhost;
@@ -69,6 +83,11 @@
   // Build the {{token}} context from facts + params (+ extra which wins).
   function buildContext(facts, opts) {
     opts = opts || {};
+    if (Array.isArray(facts) && OBOL.facts && OBOL.facts.FactSet) {
+      facts = new OBOL.facts.FactSet(facts.map(function (x) {
+        return (OBOL.facts && OBOL.facts.factFromJson) ? OBOL.facts.factFromJson(x) : x;
+      }));
+    }
     var params = opts.params || {};
     var extra = opts.extra || {};
     var tgt = opts.target || params.target || params.rhost || '';
@@ -157,6 +176,17 @@
           ctx.dauser = v.user || 'Administrator';
           if (!ctx.domain && v.domain) ctx.domain = v.domain;
           break;
+        }
+      }
+      if (!ctx.dahash) {
+        for (var ai2 = 0; ai2 < avs.length; ai2++) {
+          var v2 = avs[ai2];
+          if (v2 && (v2.nthash || v2.hash) && String(v2.user || '').toLowerCase() === 'administrator') {
+            ctx.dahash = v2.nthash || v2.hash;
+            ctx.dauser = v2.user || 'Administrator';
+            if (!ctx.domain && v2.domain) ctx.domain = v2.domain;
+            break;
+          }
         }
       }
     }
@@ -254,7 +284,20 @@
         var kinds = ['objective.flag_located', slot === 'root' ? 'objective.root_flag' : 'objective.local_flag'];
         for (var k = 0; k < kinds.length; k++) {
           var vs = (facts && facts.values) ? (facts.values(kinds[k]) || []) : [];
-          for (var i = 0; i < vs.length; i++) if (vs[i] && vs[i].path && vs[i].slot === slot) return vs[i].path;
+          var candidates = [];
+          for (var i = 0; i < vs.length; i++) {
+            if (vs[i] && vs[i].path && vs[i].slot === slot) {
+              var p = String(vs[i].path);
+              if (/\.lnk$/i.test(p) || /[\\/](?:Recent|AppData|Temp)[\\/]/i.test(p)) continue;
+              candidates.push(p);
+            }
+          }
+          if (candidates.length) {
+            for (var c = 0; c < candidates.length; c++) {
+              if (/[\\/]Desktop[\\/]/i.test(candidates[c])) return candidates[c];
+            }
+            return candidates[0];
+          }
         }
         return '';
       };
@@ -270,17 +313,71 @@
       if (ctx.flag_path_local === undefined) {
         var _locL = _locatedPath('local');
         if (_locL) ctx.flag_path_local = _locL;
-        else if (ctx.user && !_priv) ctx.flag_path_local = _isLinux
-          ? ('/home/' + ctx.user + '/' + _flagName('local'))
-          : ('C:\\Users\\' + ctx.user + '\\Desktop\\' + _flagName('local'));
         // else: leave {{flag_path_local}} unfilled → the capture gates until you LOCATE the user flag.
       }
-      // The ROOT/proof flag is reliably on Administrator's (or /root) Desktop once you hold admin, so a
-      // located path wins but the default guess is safe to offer immediately.
+      // The ROOT/proof flag path for capture. Prefer a path obol actually LOCATED (a nxc/smb spider,
+      // a recursive dir /s /b, or prior read) so capture fills with the real proven file instead of a
+      // guessed placeholder. When unlocated, it remains unfilled so read commands stay gated behind
+      // locating the flag first (both flag_path_local and flag_path_root are earned gate tokens).
       if (ctx.flag_path_root === undefined) {
-        ctx.flag_path_root = _locatedPath('root') || (_isLinux
-          ? ('/root/' + _flagName('root'))
-          : ('C:\\Users\\Administrator\\Desktop\\' + _flagName('root')));
+        var _locR = _locatedPath('root');
+        if (_locR) ctx.flag_path_root = _locR;
+      }
+    }
+
+    // SMB share tokens: resolve the top-ranked readable share from discovered shares (smb.shares / smb.readable_share)
+    // Priority order:
+    //   1. Custom non-default shares (e.g. Replication, Backups, Shared, Public, Data)
+    //   2. Domain policy shares (SYSVOL, NETLOGON)
+    //   3. Administrative shares (C$)
+    // Exclude transport noise: IPC$, PRINT$
+    if (!ctx.share) {
+      var allShares = [];
+      facts.values('smb.shares').forEach(function (v) {
+        (v.shares || []).forEach(function (s) { if (s && s.name) allShares.push(s); });
+      });
+      facts.values('smb.readable_share').forEach(function (s) {
+        if (s && s.name && !allShares.some(function (x) { return x.name.toUpperCase() === s.name.toUpperCase(); })) {
+          allShares.push(Object.assign({ readable: true }, s));
+        }
+      });
+      var BOILERPLATE = { 'IPC$': 1, 'PRINT$': 1 };
+      var readableList = allShares.filter(function (s) {
+        var n = (s.name || '').toUpperCase();
+        return (s.readable === true || !s.permission || (s.permission && s.permission.indexOf('READ') >= 0)) && !BOILERPLATE[n];
+      });
+      var customList = readableList.filter(function (s) {
+        var n = (s.name || '').toUpperCase();
+        return ['SYSVOL', 'NETLOGON', 'ADMIN$', 'C$'].indexOf(n) < 0;
+      });
+      var policyList = readableList.filter(function (s) {
+        var n = (s.name || '').toUpperCase();
+        return n === 'SYSVOL' || n === 'NETLOGON';
+      });
+      var adminList = readableList.filter(function (s) {
+        var n = (s.name || '').toUpperCase();
+        return n === 'C$';
+      });
+
+      var chosen = (customList[0] || policyList[0] || adminList[0] || readableList[0] || {});
+      if (chosen.name) ctx.share = chosen.name;
+      else if (params && params.share) ctx.share = params.share;
+
+      var candidateNames = customList.concat(policyList).map(function (s) { return s.name; });
+      if (candidateNames.length) {
+        ctx.shares_readable_quoted = candidateNames.map(function (n) { return '"' + n + '"'; }).join(' ');
+      }
+    }
+
+    // cpassword from GPP hunting facts (credential.candidate with kind: 'gpp_cpassword')
+    if (!ctx.cpassword) {
+      var gppCandidates = facts.values('credential.candidate');
+      for (var gc = 0; gc < gppCandidates.length; gc++) {
+        var gVal = gppCandidates[gc] || {};
+        if (gVal.kind === 'gpp_cpassword' && gVal.values && gVal.values.length) {
+          ctx.cpassword = gVal.values[0];
+          break;
+        }
       }
     }
 
@@ -367,11 +464,11 @@
   }
 
   // Fill a command variant of an action (0-based). Returns {tool, run, note, filled, webNote}.
-  // obol web is the hands-on edition: where an action carries a web-suited command (`web` on a
+  // obol is the hands-on edition: where an action carries a web-suited command (`web` on a
   // variant, or `web_command` on the action) — one tuned for a human who must copy/paste or attach
   // the output by hand, not a terminal reading it off disk — that form is preferred here. A
   // `web_note` carries the matching hands-on guidance (e.g. "large output → tee to a file and
-  // attach it in Evidence"). Neither field exists in obol-local's mined data; both are additive.
+  // attach it in Evidence"). Neither field exists in obol's mined data; both are additive.
   function fillCommand(action, facts, opts, index) {
     opts = opts || {};
     index = index || 0;
@@ -483,6 +580,166 @@
     return out;
   }
 
+  var EARNED_TOKENS = {
+    domain: 1, basedn: 1, dc: 1, dc_netbios: 1, dc_account: 1, user: 1, password: 1,
+    nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, ca_name: 1, template: 1,
+    pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1, flag_path_local: 1, flag_path_root: 1, share: 1, cpassword: 1
+  };
+
+  function bestCommandIndex(action, facts, opts) {
+    if (!action) return 0;
+    var commands = action.commands || [];
+    if (!commands.length) return 0;
+    opts = opts || {};
+    var locus = opts.locus || (action.locus === 'F' || action.locus === 'I' ? 'onhost' : 'remote');
+    var filled = fillAll(action, facts, opts);
+    function isGated(cmd, i) {
+      if (!filled[i]) return false;
+      var un = unfilledTokens(filled[i].filled || '');
+      return un.some(function (t) { return EARNED_TOKENS[t]; });
+    }
+    if (root.OBOL && root.OBOL.pack && root.OBOL.pack.preferredCommandIndex) {
+      return root.OBOL.pack.preferredCommandIndex(action, locus, facts || null, isGated);
+    }
+    for (var i = 0; i < commands.length; i++) {
+      var cmd = commands[i];
+      if (root.OBOL && root.OBOL.pack && root.OBOL.pack.commandSettled) {
+        if (root.OBOL.pack.commandSettled(cmd, facts)) continue;
+      } else if (cmd && (cmd.settled_by || cmd.settledBy) && facts) {
+        var sb = cmd.settled_by || cmd.settledBy;
+        var settled = false;
+        for (var s = 0; s < sb.length; s++) { if (facts.has(sb[s])) { settled = true; break; } }
+        if (settled) continue;
+      }
+      if (!isGated(cmd, i)) return i;
+    }
+    return 0;
+  }
+
+  // Check if a command's transport port is confirmed open when port evidence exists
+  var CMD_PORT_MAP = {
+    'evil-winrm': [5985, 5986],
+    'winrs': [5985, 5986],
+    'ssh': [22], 'sshpass': [22],
+    'smbclient': [445, 139], 'smbmap': [445, 139],
+    'impacket-psexec': [445], 'impacket-wmiexec': [445, 135], 'impacket-smbexec': [445],
+    'psexec': [445], 'wmiexec': [445, 135], 'smbexec': [445],
+    'xfreerdp': [3389], 'rdesktop': [3389],
+    'mysql': [3306], 'mssqlclient': [1433],
+    'ldapsearch': [389, 636], 'windapsearch': [389, 636],
+    'ftp': [21], 'snmpwalk': [161]
+  };
+
+  function commandPortFeasible(cmd, facts) {
+    if (!cmd || !facts) return { feasible: true };
+    var tool = String(cmd.tool || '').toLowerCase();
+    var portsNeeded = CMD_PORT_MAP[tool];
+    if (!portsNeeded || !portsNeeded.length) return { feasible: true };
+
+    var portsKnown = openPorts(facts);
+    if (!portsKnown || !portsKnown.length) return { feasible: true }; // No scan data yet, don't rule out
+
+    for (var i = 0; i < portsNeeded.length; i++) {
+      if (portsKnown.indexOf(portsNeeded[i]) >= 0 || facts.has('port:' + portsNeeded[i])) {
+        return { feasible: true, port: portsNeeded[i] };
+      }
+    }
+    return { feasible: false, required: portsNeeded };
+  }
+
+  // Deconstruct common CLI flags into structured, plain-language explanations for student learning
+  var FLAG_EXPLANATIONS = {
+    '-m': 'Hash type mode (e.g. 18200 = Kerberos AS-REP, 13100 = Kerberos TGS, 1000 = NTLM, 0 = MD5)',
+    '-u': 'Target username, username list, or URL',
+    '-p': 'Password, hash, or password list',
+    '-d': 'Target Active Directory domain name',
+    '-H': 'NTLM hash for Pass-the-Hash authentication (no plaintext needed)',
+    '-k': 'Use Kerberos ticket authentication (requires existing ccache / TGT)',
+    '-dc-ip': 'IP address of Domain Controller for Kerberos/LDAP queries',
+    '-request': 'Request Kerberos TGS service tickets for Kerberoasting',
+    '-no-pass': 'Authenticate without a password (for AS-REP roasting or anonymous bind)',
+    '-O': 'Optimized OpenCL hashcat kernel (faster speed; limits password length to 32)',
+    '-Pn': 'Skip ICMP ping discovery (treat host as online, bypassing firewall blocks)',
+    '-sC': 'Run default Nmap script set against discovered ports',
+    '-sV': 'Probe open ports to fingerprint service and software version',
+    '-oN': 'Save output in human-readable normal format to file',
+    '-oX': 'Save output in structured XML format for parsers',
+    '--min-rate': 'Send packets at minimum rate (packets/sec) for faster scanning',
+    '--shares': 'List accessible SMB shares and current access rights',
+    '--users': 'Query and enumerate domain user accounts',
+    '--rid-brute': 'Enumerate domain users via anonymous/guest RPC RID cycling',
+    '--asreproast': 'Extract AS-REP hashes for accounts with DONT_REQ_PREAUTH',
+    '--kerberoasting': 'Request and extract TGS hashes for service accounts (SPNs)',
+    '--bloodhound': 'Collect full Active Directory domain graph data for BloodHound',
+    '-M': 'Execute a NetExec enumeration or post-exploitation module',
+    '-x': 'Execute a remote shell command',
+    '-X': 'Execute a remote PowerShell command',
+    '--local-auth': 'Authenticate against local target SAM database instead of domain',
+    '-r': 'Recursively list directories or shares',
+    '-R': 'Recursively list directories or shares (smbmap)',
+    '-w': 'Wordlist path for dictionary attack or directory fuzzing',
+    '-t': 'Number of concurrent execution threads',
+    '-N': 'No password / anonymous bind (suppress password prompt)',
+    '-c': 'Execute a single command string and exit',
+    '-L': 'List available SMB shares on the target',
+    '-U': 'Username or credentials (format: DOMAIN\\USER%PASSWORD)',
+    '--download': 'Download specified remote file from SMB share'
+  };
+
+  function explainFlags(cmdStr) {
+    if (!cmdStr) return [];
+    var toks = String(cmdStr).trim().split(/\s+/);
+    var results = [];
+    var seen = {};
+
+    for (var i = 0; i < toks.length; i++) {
+      var tok = toks[i];
+      if (tok.charAt(0) !== '-') continue;
+      var flagName = tok;
+      var val = '';
+      if (i + 1 < toks.length && toks[i + 1].charAt(0) !== '-') {
+        val = toks[i + 1].replace(/^["']|["']$/g, '');
+      }
+
+      var exp = FLAG_EXPLANATIONS[flagName];
+      if (!exp && flagName.indexOf('=') > 0) {
+        var base = flagName.split('=')[0];
+        exp = FLAG_EXPLANATIONS[base];
+        val = flagName.slice(base.length + 1);
+        flagName = base;
+      }
+
+      // Context-aware flag definitions
+      if (flagName === '-p') {
+        var firstTool = toks[0].toLowerCase();
+        if (firstTool.indexOf('nmap') >= 0 || firstTool.indexOf('rustscan') >= 0 || /^[\d,-]+$/.test(val)) {
+          exp = 'Target port(s) to probe (e.g. -p 80,445 or -p-)';
+        }
+      }
+
+      var displayVal = val;
+      if (val && val.length > 20) {
+        if (val.indexOf(',') >= 0) {
+          var pList = val.split(',');
+          displayVal = pList.slice(0, 3).join(',') + '… (' + pList.length + ' ports)';
+        } else {
+          displayVal = val.slice(0, 18) + '…';
+        }
+      }
+
+      if (exp && !seen[flagName]) {
+        seen[flagName] = 1;
+        results.push({
+          flag: flagName,
+          value: displayVal,
+          fullValue: val,
+          meaning: exp
+        });
+      }
+    }
+    return results;
+  }
+
   OBOL.command = {
     shellQuote: shellQuote,
     openPorts: openPorts,
@@ -493,5 +750,10 @@
     applyArsenal: applyArsenal,
     commandWasRun: commandWasRun,
     unfilledTokens: unfilledTokens,
+    commandPortFeasible: commandPortFeasible,
+    explainFlags: explainFlags,
+    bestCommandIndex: bestCommandIndex,
+    EARNED_TOKENS: EARNED_TOKENS,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
+

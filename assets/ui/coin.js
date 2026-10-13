@@ -1,5 +1,5 @@
 /*!
- * obol ui — coin.js — the coin-burst effect (ported from obol-local's webapp/static/js/coin.js).
+ * obol ui — coin.js — the coin-burst effect.
  * An *obol* is the coin paid to Charon — obol's namesake — so when you beat the box (a foothold,
  * privilege escalation, a captured flag) gold coins burst across the screen. Self-contained,
  * presentation-only: it shares no app state, draws on its own fixed pointer-events:none <canvas>
@@ -21,7 +21,7 @@
   function motionLevel() { var v = lsGet(LS_MOTION); return (v === "reduced" || v === "off") ? v : "full"; }
   function fullMotion() { return motionLevel() === "full" && !reduceMotion(); }
 
-  // ── the honest milestone table (every key is a proof fact obol_web can mint) ──
+  // ── the honest milestone table (every key is a proof fact obol can mint) ──
   var MILESTONES = {
     "foothold.windows": { tier: "foothold", label: "foothold", coins: 6 },
     "foothold.linux": { tier: "foothold", label: "foothold", coins: 6 },

@@ -162,7 +162,7 @@
       + '<button type="button" class="stuck-port-add" data-portadd>Add</button></div></div>';
   }
 
-  // ── Build In Workbench deep links (mirrors the Next Steps classifier) ───────────────────────────
+  // ── Build In Workbench deep links ───────────────────────────
   var WB_DIR_TOOLS = { gobuster: 1, ffuf: 1, feroxbuster: 1, dirb: 1, dirbuster: 1, wfuzz: 1 };
   function wbTargets(move) {
     if (!move) return [];

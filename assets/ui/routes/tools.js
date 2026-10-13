@@ -1,6 +1,6 @@
 /*!
  * obol ui — routes/tools.js — THE TOOLS SURFACE.
- * Robust command BUILDERS for exactly the tools obol-local is prepared to equip. Every builder
+ * Robust command BUILDERS for exactly the tools obol is prepared to equip. Every builder
  * in OBOL.TOOLSET whose equips[] intersects OBOL.packs.equippedTools() is shown, grouped by
  * category, as an expandable card. Expanding mounts a grouped form (presets, snippets, credential
  * modes) with a live command preview compiled by OBOL.toolbuilder.compile — autofilled from the
@@ -203,7 +203,7 @@
 
     var html = '<section class="tools-route">';
     html += '<h1 class="route-h1">Tools</h1>';
-    html += '<p class="route-sub">Command builders for the ' + builders.length + ' equipped tools obol-local carries. Pick a tool, tune the controls, and copy the generated command, it is never executed here. Fields autofill from your engagement params and proven facts.</p>';
+    html += '<p class="route-sub">Command builders for the ' + builders.length + ' equipped tools obol carries. Pick a tool, tune the controls, and copy the generated command, it is never executed here. Fields autofill from your engagement params and proven facts.</p>';
 
     // category jump nav
     var present = CATS.filter(function (c) { return byCat[c.id] && byCat[c.id].length; });

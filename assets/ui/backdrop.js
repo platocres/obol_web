@@ -1,5 +1,5 @@
 /*!
- * obol ui — backdrop.js — the motion background (ported from obol-local's webapp/static/js/theme.js).
+ * obol ui — backdrop.js — the motion background.
  * A single fixed, behind-everything <canvas> painted at ~30fps, chosen per skin:
  *   obol → particles · ghostwire → matrix · amber → crt · neon → synthwave · daylight → none.
  * Self-contained + presentation-only. Frame-capped, DPR-capped, and idle-paused: after 12s of no
@@ -15,7 +15,7 @@
   var LS_MOTION = "obol.motion";
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 
-  // obol_web skin (data-skin) → animation name. Unlisted / daylight → none (static base).
+  // obol skin (data-skin) → animation name. Unlisted / daylight → none (static base).
   var SKIN_ANIM = { obol: "particles", htb: "particles", indigo: "particles", ghostwire: "matrix", amber: "crt", neon: "synthwave", daylight: null };
   function currentSkin() { try { return document.documentElement.getAttribute("data-skin") || "obol"; } catch (e) { return "obol"; } }
   function wantedAnim() { var a = SKIN_ANIM[currentSkin()]; return a === undefined ? "particles" : a; }

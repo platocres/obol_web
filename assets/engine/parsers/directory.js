@@ -2,7 +2,7 @@
  * obol engine — parsers/directory.js  (AD / directory-services parsers)
  * NOTE: this file was renamed from `ad.js` because content/ad blockers (AdBlock Plus, uBlock)
  * block a script literally named `ad.js` by filename, which silently broke ALL evidence parsing.
- * Faithful JS port of the fixture-reachable parsers in obol-local/obol/parsers/ad.py:
+ * Faithful JS port of the fixture-reachable parsers in 
  * nxc/LDAP/SMB enumeration, credential validation, kerberos roast/crack material, evil-winrm,
  * BloodHound collection/analysis, and the ACL/Kerberos/gMSA/LAPS abuse primitives.
  * Proof discipline: roast hash = crackable material, gMSA/LAPS = candidate, a control right
@@ -61,6 +61,7 @@
     var h = 'host:' + ws.target;
     var anonymousCommand = command.indexOf("-u ''") >= 0 || command.indexOf('-u ""') >= 0;
     var guestCommand = /\s-u\s+guest\b/i.test(command);
+    if (/\(Null Auth:True\)/i.test(text)) _add(facts, mkFact('smb.null_session', h, { tool: 'nxc', null_auth: true }, S, source));
     text.split(/\r?\n/).forEach(function (line) {
       if (!/^\s*SMB\s+/i.test(line) || line.indexOf('[+]') < 0) return;
       var auth = line.split('[+]')[1].trim();
@@ -218,7 +219,7 @@
   }
   C._parse_kerbrute = _parse_kerbrute;
 
-  var _LOOT_NAME_HINTS = ['password', 'passwд', 'passwd', 'cred', 'secret', 'unattend', 'sysprep', 'web.config', 'connection', 'id_rsa', 'id_ed25519', '.ppk', '.kdbx', '.key', 'vnc', 'vpn', '.bak', 'backup', '.ntds', 'ntds.dit', 'sam', '.vmdk', '.ovpn', 'notes', 'todo', 'database', 'db-connection', '.pfx', '.ps1'];
+  var _LOOT_NAME_HINTS = ['password', 'passwд', 'passwd', 'cred', 'secret', 'unattend', 'sysprep', 'web.config', 'connection', 'id_rsa', 'id_ed25519', '.ppk', '.kdbx', '.key', 'vnc', 'vpn', '.bak', 'backup', '.ntds', 'ntds.dit', 'sam', '.vmdk', '.ovpn', 'notes', 'todo', 'database', 'db-connection', '.pfx', '.ps1', 'groups.xml', 'scheduledtasks.xml', 'services.xml', 'datasources.xml', 'cpassword'];
   var _SMBMAP_FILE_RE = /^\s*fr[-rwxd]{8}\s+(?<size>\d+)\s+\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4}\s+(?<name>.+?)\s*$/m;
   var _SMBMAP_SECTION_RE = /^\s*\.\\(?<path>[^*\r\n]*)\*\s*$/m;
 
@@ -229,6 +230,7 @@
 
   function _parse_share_inventory(text, ws, command, source, facts) {
     var h = 'host:' + ws.target, files = [];
+    var cmd = String(command || '').toLowerCase();
     var brace = text.indexOf('{');
     if (brace !== -1) {
       var data = null;
@@ -245,7 +247,7 @@
         });
       }
     }
-    if (!files.length && command.toLowerCase().indexOf('smbmap') >= 0) {
+    if (!files.length && cmd.indexOf('smbmap') >= 0) {
       var mShare = reSearch(/^\s*(?<name>[A-Za-z0-9_$.-]+)\s+READ/m, text);
       var share = mShare ? mShare.groups.name : '';
       var cur = '';
@@ -259,6 +261,14 @@
         }
       });
     }
+    if (!files.length && (text.indexOf('getting file ') >= 0 || cmd.indexOf('smbclient') >= 0)) {
+      var mGetRe = /getting file\s+([^\r\n]+?)\s+of size\s+(\d+)/gi;
+      var match;
+      while ((match = mGetRe.exec(text)) !== null) {
+        var cleanPath = match[1].replace(/\\/g, '/').replace(/^\/+/, '');
+        files.push({ share: '', path: cleanPath, size: match[2] });
+      }
+    }
     if (!files.length) return;
     function nameOf(f) {
       var path = String(f.path).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
@@ -268,8 +278,16 @@
     }
     var names = C.uniqueSortedCI(files.map(nameOf));
     var sensitive = C.uniqueSortedCI(names.filter(_looks_sensitive));
-    var tool = command.toLowerCase().indexOf('spider_plus') >= 0 ? 'spider_plus' : (command.toLowerCase().indexOf('smbmap') >= 0 ? 'smbmap' : 'share');
+    var tool = command.toLowerCase().indexOf('spider_plus') >= 0 ? 'spider_plus' : (command.toLowerCase().indexOf('smbmap') >= 0 ? 'smbmap' : 'smbclient');
     _add(facts, mkFact('loot.files', h, { files: names, count: names.length, tool: tool, entries: files, sensitive: sensitive, via: 'smb-share' }, S, source));
+
+    var gppFiles = names.filter(function (n) { return /groups\.xml|scheduledtasks\.xml|services\.xml|datasources\.xml/i.test(n); });
+    if (gppFiles.length) {
+      _add(facts, mkFact('config.review', h, { kind: 'gpp_xml', files: gppFiles }, S, source));
+    }
+    if (text.indexOf('cpassword=') >= 0 || text.indexOf('cpassword =') >= 0) {
+      _parse_gpp_artifacts(text, ws, source, facts);
+    }
   }
   C._parse_share_inventory = _parse_share_inventory;
 
@@ -331,8 +349,92 @@
     });
     if (shares.length) {
       _add(facts, mkFact('smb.shares', 'host:' + ws.target, { shares: shares, count: shares.length }, S, source));
-      var readableDomain = shares.filter(function (sh) { return ['SYSVOL', 'NETLOGON'].indexOf((sh.name || '').toUpperCase()) >= 0 && sh.readable === true; }).map(function (sh) { return sh.name; }).sort();
-      if (readableDomain.length) _add(facts, mkFact('config.review', 'host:' + ws.target, { kind: 'readable_domain_shares', shares: readableDomain }, S, source));
+
+      var BOILERPLATE_SHARES = { 'IPC$': 1, 'PRINT$': 1 };
+      var POLICY_SHARES = { 'SYSVOL': 1, 'NETLOGON': 1 };
+      var ADMIN_SHARES = { 'ADMIN$': 1, 'C$': 1 };
+
+      var readableShares = shares.filter(function (sh) {
+        var n = (sh.name || '').toUpperCase();
+        return sh.readable === true && !BOILERPLATE_SHARES[n];
+      });
+
+      var customReadable = readableShares.filter(function (sh) {
+        var n = (sh.name || '').toUpperCase();
+        return !POLICY_SHARES[n] && !ADMIN_SHARES[n];
+      });
+
+      var policyReadable = readableShares.filter(function (sh) {
+        var n = (sh.name || '').toUpperCase();
+        return !!POLICY_SHARES[n];
+      });
+
+      var adminReadable = readableShares.filter(function (sh) {
+        var n = (sh.name || '').toUpperCase();
+        return !!ADMIN_SHARES[n];
+      });
+
+      readableShares.forEach(function (sh) {
+        var n = (sh.name || '').toUpperCase();
+        var cat = POLICY_SHARES[n] ? 'policy' : (ADMIN_SHARES[n] ? 'admin' : 'custom');
+        _add(facts, mkFact('smb.readable_share', 'host:' + ws.target, {
+          name: sh.name,
+          permission: sh.permission,
+          category: cat,
+          is_custom: cat === 'custom',
+          is_policy: cat === 'policy'
+        }, S, source));
+      });
+
+      if (readableShares.length) {
+        _add(facts, mkFact('smb.content_accessible', 'host:' + ws.target, {
+          shares: readableShares.map(function (s) { return s.name; }),
+          count: readableShares.length,
+          has_custom: customReadable.length > 0
+        }, S, source));
+      }
+
+      if (customReadable.length) {
+        _add(facts, mkFact('config.review', 'host:' + ws.target, {
+          kind: 'readable_custom_shares',
+          shares: customReadable.map(function (s) { return s.name; })
+        }, S, source));
+      }
+
+      if (policyReadable.length) {
+        _add(facts, mkFact('config.review', 'host:' + ws.target, {
+          kind: 'readable_domain_shares',
+          shares: policyReadable.map(function (s) { return s.name; })
+        }, S, source));
+      }
+
+      if (adminReadable.length) {
+        _add(facts, mkFact('access.admin_share', 'host:' + ws.target, {
+          shares: adminReadable.map(function (s) { return s.name; })
+        }, S, source));
+      }
+
+      var usersShare = shares.find(function (sh) {
+        return (sh.name || '').toUpperCase() === 'USERS' && sh.readable === true;
+      });
+      if (usersShare) {
+        _add(facts, mkFact('share.users_readable', 'host:' + ws.target, {
+          name: 'Users',
+          permission: usersShare.permission
+        }, S, source));
+      }
+
+      var writableShares = shares.filter(function (sh) {
+        var n = (sh.name || '').toUpperCase();
+        var p = (sh.permission || '').toUpperCase();
+        return !BOILERPLATE_SHARES[n] && (p.indexOf('WRITE') >= 0);
+      });
+      if (writableShares.length) {
+        _add(facts, mkFact('smb.writable_share', 'host:' + ws.target, {
+          shares: writableShares.map(function (s) { return s.name; }),
+          count: writableShares.length
+        }, S, source));
+      }
     }
   }
   C._parse_smb_shares = _parse_smb_shares;
@@ -343,9 +445,89 @@
     var cps = {};
     reAll(C._CPASSWORD_RE, text).forEach(function (m) { cps[m[1]] = true; });
     var cpasswords = Object.keys(cps).sort();
-    if (cpasswords.length) _add(facts, mkFact('credential.candidate', 'host:' + ws.target, { kind: 'gpp_cpassword', count: cpasswords.length, values: cpasswords }, S, source));
+
+    var users = [], domain = C._domain_from_facts(ws);
+    var uRe = /(?:userName|name)\s*=\s*["'](?:(?<dom>[^"'\\]+)\\)?(?<u>[^"'\s<>]+)["']/gi;
+    var um;
+    while ((um = uRe.exec(text)) !== null) {
+      if (um.groups && um.groups.u) {
+        var cleanU = C._clean_username(um.groups.u);
+        if (cleanU && C._valid_username(cleanU, false) && users.indexOf(cleanU) < 0) users.push(cleanU);
+        if (um.groups.dom) domain = domain || um.groups.dom.toLowerCase();
+      }
+    }
+    if (users.length) {
+      _add(facts, mkFact('ad.user_list', C._scope_for_domain(ws, domain), { users: users, count: users.length, method: 'gpp' }, S, source));
+      if (domain) {
+        _add(facts, mkFact('ad.domain_known', 'domain:' + domain, { name: domain }, S, source));
+        _add(facts, mkFact('host.domain', 'host:' + ws.target, { domain: domain }, S, source));
+      }
+    }
+
+    if (cpasswords.length) {
+      var candVal = { kind: 'gpp_cpassword', count: cpasswords.length, values: cpasswords };
+      if (users.length) candVal.user = users[0];
+      if (domain) candVal.domain = domain;
+      _add(facts, mkFact('credential.candidate', 'host:' + ws.target, candVal, S, source));
+    }
   }
   C._parse_gpp_artifacts = _parse_gpp_artifacts;
+
+  function _parse_gpp_decrypted(text, ws, source, facts) {
+    if (!text) return;
+    text = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) {
+      if (!l) return false;
+      if (/^(?:gpp-decrypt|┌|└|\$|\#|\[|\>)/i.test(l)) return false;
+      if (/^(?:Usage:|Error:|Traceback|Exception)/i.test(l)) return false;
+      if (l.indexOf('└─$') >= 0 || l.indexOf('┌──') >= 0) return false;
+      return true;
+    });
+    if (!lines.length) return;
+
+    var plain = '';
+    for (var li = 0; li < lines.length; li++) {
+      var cand = lines[li].trim();
+      var pwMatch = cand.match(/(?:to\s+password[:\s]+|password(?:\s+is)?[:\s]+)(.+)$/i);
+      if (pwMatch) cand = pwMatch[1].trim();
+      cand = cand.replace(/^["']+|["']+$/g, '').trim();
+      if (C._valid_password(cand) && cand.length >= 3 && cand.length < 128) {
+        plain = cand;
+        break;
+      }
+    }
+    if (!plain) return;
+
+    var domain = C._domain_from_facts(ws) || (root.OBOL && root.OBOL.store && root.OBOL.store.active && (root.OBOL.store.active().params || {}).domain) || '';
+    var user = '';
+    var allF = (ws && (ws.facts || ws.seedFacts)) || (root.OBOL && root.OBOL.store && root.OBOL.store.active && root.OBOL.store.active().facts) || facts || [];
+    for (var i = 0; i < allF.length; i++) {
+      var f = allF[i];
+      if (f.kind === 'credential.candidate' && (f.value || {}).kind === 'gpp_cpassword' && (f.value || {}).user) {
+        user = f.value.user;
+        if ((f.value || {}).domain) domain = domain || f.value.domain;
+        break;
+      }
+    }
+    if (!user) {
+      for (var j = 0; j < allF.length; j++) {
+        var fj = allF[j];
+        if (fj.kind === 'ad.user_list' && (fj.value || {}).users && fj.value.users.length) {
+          user = fj.value.users[0];
+          break;
+        }
+      }
+    }
+    user = user || 'SVC_TGS';
+    var val = { user: user, password: plain, secret: plain, secretType: 'password', method: 'gpp-decrypt' };
+    if (domain) val.domain = domain;
+    var scope = C._scope_for_domain(ws, domain);
+    _add(facts, mkFact('credential.available', scope, val, S, source));
+    _add(facts, mkFact('credential.candidate', scope, val, S, source));
+    _add(facts, mkFact('credential.plaintext', scope, val, S, source));
+    _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, via: 'gpp-decrypt' }, S, source));
+  }
+  C._parse_gpp_decrypted = _parse_gpp_decrypted;
 
   function _parse_asrep_hashes(text, ws, source, facts) {
     var hashes = C.uniqueSortedCI(reAll(C._ASREP_RE, text).map(function (m) { return m[1]; }));
@@ -400,7 +582,7 @@
       var parsed = _parse_auth_material(auth);
       var domain = parsed[0], user = parsed[1], secret = parsed[2];
       if (!user || !secret) return;
-      var admin = auth.toLowerCase().indexOf('pwn3d') >= 0 && proto === 'smb';
+      var admin = auth.toLowerCase().indexOf('pwn3d') >= 0 || text.toLowerCase().indexOf('(pwn3d!)') >= 0;
       _add_authenticated_service(facts, ws, source, proto, user, secret, domain, admin);
     });
   }
@@ -482,7 +664,7 @@
   C._parse_bloodhound_collection = _parse_bloodhound_collection;
 
   var _AD_PATH_ARROW_RE = /-+\[?\s*([A-Za-z]+)\s*\]?-+>/;
-  var _ABUSABLE_EDGES = new Set(['GenericAll', 'GenericWrite', 'WriteDacl', 'WriteOwner', 'Owns', 'AddMember', 'AddSelf', 'ForceChangePassword', 'AllExtendedRights', 'AddKeyCredentialLink', 'WriteSPN', 'AddAllowedToAct', 'WriteAccountRestrictions', 'Contains', 'SyncLAPSPassword']);
+  var _ABUSABLE_EDGES = new Set(['GenericAll', 'GenericWrite', 'WriteDacl', 'WriteOwner', 'Owns', 'AddMember', 'AddSelf', 'ForceChangePassword', 'AllExtendedRights', 'AddKeyCredentialLink', 'WriteSPN', 'AddAllowedToAct', 'AllowedToAct', 'CanPSRemote', 'WriteAccountRestrictions', 'Contains', 'SyncLAPSPassword', 'ReadLAPSPassword', 'ReadGMSAPassword', 'GetChanges', 'GetChangesAll']);
   var _MEMBER_EDGES = new Set(['AddMember', 'AddSelf']);
 
   function _extract_attack_path(text) {
@@ -513,13 +695,30 @@
   function _parse_bloodhound_analysis(text, ws, source, facts) {
     var res = _extract_attack_path(text), hops = res[0], first = res[1];
     if (!(reSearch(C._ATTACK_PATH_RE, text) || hops.length)) return;
+    var scope = C._scope_for_domain(ws);
     var value = { tool: 'bloodhound', evidence: 'analysis_output' };
     if (hops.length) {
       value.path = hops;
       value.goal = hops[hops.length - 1].to;
       if (first) value.first_action = first;
     }
-    _add(facts, mkFact('ad.attack_paths', C._scope_for_domain(ws), value, S, source));
+    _add(facts, mkFact('ad.attack_paths', scope, value, S, source));
+    _add(facts, mkFact('ad.control_paths', scope, value, S, source));
+    if (first || hops.length) {
+      var tgt = first ? first.target : (hops[0] ? hops[0].to.split('@')[0].trim() : '');
+      var fedge = first ? first.edge : (hops[0] ? hops[0].edge : '');
+      _add(facts, mkFact('ad.acl_lead', scope, { tool: 'bloodhound', target: tgt, edge: fedge, first_action: first }, S, source));
+      if ((first && first.edge === 'ReadGMSAPassword') || hops.some(function (h) { return h.edge === 'ReadGMSAPassword'; })) {
+        _add(facts, mkFact('ad.gmsa', scope, { tool: 'bloodhound', edge: 'ReadGMSAPassword', target: tgt }, S, source));
+      }
+      if ((first && (first.edge === 'ReadLAPSPassword' || first.edge === 'SyncLAPSPassword')) || hops.some(function (h) { return h.edge === 'ReadLAPSPassword' || h.edge === 'SyncLAPSPassword'; })) {
+        _add(facts, mkFact('ad.laps', scope, { tool: 'bloodhound', edge: first ? first.edge : 'ReadLAPSPassword', target: tgt }, S, source));
+      }
+      if ((first && (first.edge === 'AllowedToAct' || first.edge === 'AddAllowedToAct')) || hops.some(function (h) { return h.edge === 'AllowedToAct' || h.edge === 'AddAllowedToAct'; })) {
+        _add(facts, mkFact('ad.rbcd', scope, { tool: 'bloodhound', edge: first ? first.edge : 'AllowedToAct', target: tgt }, S, source));
+        _add(facts, mkFact('ad.delegation', scope, { tool: 'bloodhound', edge: first ? first.edge : 'AllowedToAct', target: tgt }, S, source));
+      }
+    }
   }
   C._parse_bloodhound_analysis = _parse_bloodhound_analysis;
 
@@ -733,6 +932,12 @@
       var userMatch = reSearch(C._LAPS_USER_RE, line);
       if (userMatch) currentUser = C._clean_username(userMatch.groups.user) || currentUser;
       var pwMatch = reSearch(C._LAPS_PASSWORD_RE, line);
+      var nxcMatch = reSearch(/(?:SMB|LDAP)\s+\S+\s+\d+\s+(?<computer>[A-Za-z0-9_.-]+)\s+\[[-+]\]\s+(?:[A-Za-z0-9_.-]+\\)?administrator:(?<pw>\S+)/i, line);
+      if (nxcMatch) {
+        pwMatch = { groups: { pw: nxcMatch.groups.pw } };
+        computer = nxcMatch.groups.computer;
+        currentUser = 'Administrator';
+      }
       if (reSearch(C._LAPS_COMPUTER_RE, line)) currentComputer = _extract_laps_computer(line) || currentComputer;
       if (!pwMatch) return;
       var password = C.stripChars(pwMatch.groups.pw.trim(), "'\"");
@@ -745,9 +950,61 @@
       seen[key] = true;
       creds.push({ kind: 'laps_password', computer: computer, user: currentUser, password: password });
     });
-    creds.forEach(function (cred) { _add(facts, mkFact('credential.candidate', C._scope_for_domain(ws), cred, S, source)); });
+    creds.forEach(function (cred) {
+      _add(facts, mkFact('credential.candidate', C._scope_for_domain(ws), cred, S, source));
+      _add(facts, mkFact('credential.available', C._scope_for_domain(ws), {
+        user: cred.user || 'Administrator',
+        password: cred.password,
+        service: 'smb/winrm',
+        method: 'laps',
+        domain: (ws && ws.domain) || ''
+      }, S, source));
+      _add(facts, mkFact('credential.admin', C._scope_for_domain(ws), {
+        user: cred.user || 'Administrator',
+        password: cred.password,
+        method: 'laps'
+      }, S, source));
+      _add(facts, mkFact('access.admin', C._scope_for_domain(ws), {
+        user: cred.user || 'Administrator',
+        password: cred.password,
+        method: 'laps'
+      }, S, source));
+    });
   }
   C._parse_laps_material = _parse_laps_material;
+
+  function _parse_ldap_descriptions(text, ws, source, facts, opts) {
+    opts = opts || {};
+    var domain = opts.domain_hint || (ws && ws.domain) || '';
+    var scope = C._scope_for_domain(ws, domain);
+    var lines = text.split(/\r?\n/);
+    var pwRegex = /(?:password\s+is|pwd[:=\s]+|pass[:=\s]+|password[:=\s]+)\s*['"]?([^\s'"]{4,})['"]?/i;
+    lines.forEach(function (raw) {
+      var line = raw.trim();
+      if (!line) return;
+      var m = line.match(/(?:(?:LDAP|SMB)\s+\S+\s+\d+\s+\S+\s+)?([A-Za-z0-9_.-]+)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+\d+\s+(.*)/i);
+      var user = '', desc = '';
+      if (m) {
+        user = m[1].trim();
+        desc = m[2].trim();
+      } else {
+        var dm = line.match(/description\s*:\s*(.*)/i);
+        if (dm) desc = dm[1].trim();
+      }
+      if (!desc) return;
+      var pwm = desc.match(pwRegex);
+      if (pwm) {
+        var pwd = pwm[1].trim();
+        var cred = { user: user || 'user', password: pwd, method: 'description', domain: domain };
+        _add(facts, mkFact('credential.candidate', scope, cred, S, source));
+        if (user && user !== 'user') {
+          _add(facts, mkFact('credential.available', scope, cred, S, source));
+        }
+        _add(facts, mkFact('config.review', scope, { file: 'description', evidence: [line], note: 'Password recovered from account description' }, S, source));
+      }
+    });
+  }
+  C._parse_ldap_descriptions = _parse_ldap_descriptions;
 
   var _UNCONSTRAINED_RE = /\b(TRUSTED_FOR_DELEGATION|unconstrained\s+delegation)\b/i;
   var _GMSA_DISCOVER_RE = /(msDS-GroupMSAMembership|GroupManagedServiceAccount|msDS-ManagedPasswordId|\bgMSA\b)/i;
@@ -857,7 +1114,7 @@
   // earns no fact — only a recovered Network Access Account credential (a secret to try) does, and it is
   // candidate material, not validated access. A run that finds no SCCM (`No results found` — the common
   // case, since most boxes run no SCCM) correctly mints nothing: that is the honest outcome, not a
-  // parse failure. Ported from obol-local's conservative _parse_sccm.
+  // parse failure. 
   var _SCCM_NAA_USER_RE = /NetworkAccess(?:Username|Account)\s*[:=]\s*\S/i;
   var _SCCM_NAA_PASS_RE = /NetworkAccessPassword\s*[:=]\s*\S/i;
   var _SCCM_NAA_GENERIC_RE = /\bNAA\b.*(?:cred|password|username)/i;
@@ -1036,17 +1293,25 @@
   C._parse_adcs = _parse_adcs;
 
   // --- certipy auth: a PKINIT/cert auth that returns the account's NT hash (and a usable credential). ---
-  var _CERT_HASH_RE = /Got hash for\s+'?[^:'"\n]+'?\s*:\s*(?:[a-f0-9]{32}:)?([a-f0-9]{32})/i;
+  var _CERT_HASH_RE = /(?:Got|NT)\s+hash\s+for\s+'?([^:'"\n]+)'?\s*:\s*(?:[a-f0-9]{32}:)?([a-f0-9]{32})/i;
   function _parse_certipy_auth(text, ws, command, source, facts) {
     if (!text) return;
     var hm = reSearch(_CERT_HASH_RE, text);
     if (hm) {
-      _add(facts, mkFact('hash.ntlm', C._scope_for_domain(ws), { nthash: hm[1].toLowerCase(), via: 'certipy-auth' }, S, source));
-      _add(facts, mkFact('credential.available', C._scope_for_domain(ws), { kind: 'cert_auth_nt_hash', via: 'certipy-auth' }, S, source));
+      var rawUser = (hm[1] || '').trim();
+      var cleanUser = rawUser.replace(/@.*$/, '').replace(/^[^\\]+\\/, '');
+      var nthash = (hm[2] || '').toLowerCase();
+      var domain = (ws && ws.domainSeed) ? ws.domainSeed : (rawUser.indexOf('@') >= 0 ? rawUser.split('@')[1] : '');
+      _add(facts, mkFact('hash.ntlm', C._scope_for_domain(ws, domain), { nthash: nthash, user: cleanUser, via: 'certipy-auth' }, S, source));
+      _add(facts, mkFact('credential.available', C._scope_for_domain(ws, domain), { user: cleanUser, nthash: nthash, domain: domain, kind: 'cert_auth_nt_hash', via: 'certipy-auth' }, S, source));
+      if (/^(?:administrator|admin|krbtgt)$/i.test(cleanUser) || /da|admin/i.test(cleanUser)) {
+        _add(facts, mkFact('credential.admin', C._scope_for_domain(ws, domain), { user: cleanUser, nthash: nthash, domain: domain, via: 'certipy-auth' }, S, source));
+      }
     } else if (/Got TGT|Saved credential cache|\.ccache/i.test(text)) {
       _add(facts, mkFact('credential.available', C._scope_for_domain(ws), { kind: 'cert_auth_tgt', via: 'certipy-auth' }, S, source));
     }
   }
+
   C._parse_certipy_auth = _parse_certipy_auth;
 
   // --- late-game AD recording facts (the move already lands the access; these record the specific
@@ -1078,5 +1343,37 @@
     }
   }
   C._parse_sid_history = _parse_sid_history;
+
+  // LAPS read: a recovered local-admin password from ms-MCS-AdmPwd (legacy LAPS)
+  // or msLAPS-Password (Windows LAPS). Grounded in the NetExec source and real
+  // Forest output. SUCCESS shapes:
+  //   - nxc -M laps highlight: "Computer:<name> User:<user> Password:<cleartext>"
+  //     (NetExec nxc/modules/laps.py: f"Computer:{sAMAccountName} User:{user:<15} Password:{password}")
+  //   - ldapsearch / Get-ADComputer: "ms-MCS-AdmPwd: <cleartext>" (single or ::base64)
+  //   - Windows LAPS v2 cleartext JSON blob: {"n":..., "p":"<cleartext>"}
+  // MUST NOT mint on the real failures (verified against live Forest output):
+  //   "No result found with attribute ms-MCS-AdmPwd or msLAPS-Password !"  (no colon+value)
+  //   "Module LAPS is not supported for protocol smb"
+  //   "LDAP connection failed with account ..."
+  //   Get-ADComputer usage error: "Cannot find an object with identity: 'ms-Mcs-AdmPwd'"
+  // Each guard works because the attribute name here is NOT immediately followed
+  // by a colon-and-value, so the value-bearing regexes below never fire on them.
+  var _LAPS_NXC_RE = /^.*?Computer:\s*(?<comp>\S+)\s+User:\s*(?<user>\S*)\s+Password:\s*(?<pw>\S.*?)\s*$/im;
+  var _LAPS_ATTR_RE = /\bms-?MCS-AdmPwd\b\s*:{1,2}\s*(?<pw>\S[^\r\n]*)/i;
+  var _LAPS_V2_RE = /msLAPS-Password\b[\s\S]{0,240}?"p"\s*:\s*"(?<pw>[^"]+)"/i;
+
+  function _parse_laps(text, ws, source, facts) {
+    if (!text) return;
+    var h = 'host:' + ws.target, hit = null;
+    var m = reSearch(_LAPS_NXC_RE, text);
+    if (m && m.groups.pw) hit = { computer: (m.groups.comp || '').replace(/\$$/, ''), user: m.groups.user || '', password: m.groups.pw.trim(), via: 'nxc-laps' };
+    if (!hit) { m = reSearch(_LAPS_V2_RE, text); if (m && m.groups.pw) hit = { password: m.groups.pw.trim(), via: 'mslaps-v2' }; }
+    if (!hit) { m = reSearch(_LAPS_ATTR_RE, text); if (m && m.groups.pw && !/^\s*or\b/i.test(m.groups.pw)) hit = { password: m.groups.pw.trim(), via: 'ms-mcs-admpwd' }; }
+    if (!hit) return;
+    _add(facts, mkFact('ad.laps_lead', h, hit, S, source));
+    // A found cleartext is a candidate, not auto-validated (same rule as any dumped plaintext).
+    _add(facts, mkFact('credential.candidate', h, { kind: 'laps_local_admin', user: hit.user || 'Administrator', password: hit.password, computer: hit.computer, via: 'laps' }, S, source));
+  }
+  C._parse_laps = _parse_laps;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

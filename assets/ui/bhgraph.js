@@ -1,5 +1,5 @@
 /*!
- * obol ui — bhgraph.js — the interactive BloodHound attack-path graph (parity with obol-local's
+ * obol ui — bhgraph.js — the interactive BloodHound attack-path graph (
  * domainGraphSVG): typed nodes laid out by depth, drag-to-move nodes, wheel-zoom, background-pan,
  * MemberOf (traversal, muted) vs control (abusable, highlighted) edges with labels, the domain
  * goal + owned source highlighted, and per-path highlight chips. Pure DOM (no library).

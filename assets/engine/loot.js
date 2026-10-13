@@ -1,6 +1,6 @@
 /*!
  * obol engine — loot.js
- * Fact → file glue for command tokens (the AD-chain seam; port of obol-local/obol/loot.py).
+ * Fact → file glue for command tokens (the AD-chain seam; port of ).
  *
  * Some pack commands need a *file*, not just a value: AS-REP / Kerberoast roasting reads a
  * {{userlist}} and writes a {{hashfile}}; cracking reads that same hashfile against a {{wordlist}}.
@@ -8,7 +8,7 @@
  * `hash.asrep`/`hash.tgs`, but nothing turned those facts into the file the command consumes — so a
  * roast command could be offered yet render with a bare, unfilled `{{userlist}}` placeholder.
  *
- * Browser adaptation: obol web never touches the filesystem, so it cannot *write* loot/users.txt.
+ * Browser adaptation: obol never touches the filesystem, so it cannot *write* loot/users.txt.
  * Instead it does two things this module supplies:
  *   1. resolve {{userlist}}/{{hashfile}}/{{wordlist}} to stable paths under the workspace loot/ dir,
  *      so the roast that WRITES {{hashfile}} and the crack that READS it agree on one path; and
@@ -73,7 +73,7 @@
   }
 
   // asrep / tgs / hashes — the basename a roast writes and its crack reads, so both resolve to the
-  // SAME file. Derived from the action id + produces/requires tags (mirrors loot.py._hash_name).
+  // SAME file. Derived from the action id + produces/requires tags.
   function hashName(action) {
     action = action || {};
     var tags = String(action.id || '').toLowerCase() + ' '
@@ -117,7 +117,7 @@
     return out;
   }
 
-  // A copy-paste command that WRITES a file on the operator's box (obol web can't touch disk).
+  // A copy-paste command that WRITES a file on the operator's box (obol can't touch disk).
   // A single-quoted heredoc keeps every line literal — no shell expansion of $names or backticks.
   function writeFileCommand(path, lines) {
     if (!path || !lines || !lines.length) return '';

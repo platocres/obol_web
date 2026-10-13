@@ -1,5 +1,5 @@
 {
-  "_comment": "Findings-check actions (ROADMAP §21b). Disciplined active checks, gated on a discovered service, each ONE scope-gated command whose parser records a plain observation fact (http.headers/tls.info/http.methods/http.cors/dns.email). findings.py then matches the catalog against those facts. These are report-recon, not exploitation, proof-bound, never a scanner blast.",
+  "_comment": "Findings-check actions. Disciplined active checks, gated on a discovered service, each ONE scope-gated command whose parser records a plain observation fact (http.headers/tls.info/http.methods/http.cors/dns.email). findings.py then matches the catalog against those facts. These are report-recon, not exploitation, proof-bound, never a scanner blast.",
   "actions": [
     {
       "id": "check-web-headers",
@@ -7,40 +7,93 @@
       "title": "Security Header Review",
       "hypothesis": "A quick header review surfaces the report's easy wins, missing HSTS/CSP/X-Frame-Options, a leaked server/tech version. One HEAD request, no exploitation.",
       "tool": "curl",
-      "tools": ["curl"],
+      "tools": [
+        "curl"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["port:80", "port:443", "port:8080", "port:8443", "web.server", "web.tech", "http.reachable"],
-      "produces": ["http.headers"],
+      "requires_any": [
+        "port:80",
+        "port:443",
+        "port:8080",
+        "port:8443",
+        "web.server",
+        "web.tech",
+        "http.reachable"
+      ],
+      "produces": [
+        "http.headers"
+      ],
       "priority": 40,
       "proves": "records which HTTP response headers are present (a report observation, not a vulnerability)",
       "does_not_prove": "exploitation, a missing header is a hardening finding, not access",
-      "report": {"finding": "Security header review", "severity": "info"},
-      "refs": ["https://owasp.org/www-project-secure-headers/"],
+      "report": {
+        "finding": "Security header review",
+        "severity": "info"
+      },
+      "refs": [
+        "https://owasp.org/www-project-secure-headers/"
+      ],
       "commands": [
-        {"tool": "curl", "run": "curl -sSIkL http://{{target}}/", "note": "HEAD the site; findings.py flags missing/weak headers and any leaked Server/X-Powered-By version."},
-        {"tool": "curl", "run": "curl -sSIkL https://{{target}}/", "note": "HTTPS variant when 443 is open."}
+        {
+          "tool": "curl",
+          "run": "curl -sSIkL http://{{target}}/",
+          "note": "HEAD the site; findings.py flags missing/weak headers and any leaked Server/X-Powered-By version."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sSIkL https://{{target}}/",
+          "note": "HTTPS variant when 443 is open."
+        }
       ]
     },
     {
+      "diagnostic": true,
+      "eliminates": [
+        "web-stack"
+      ],
       "id": "check-web-components",
       "phase": "enum",
       "title": "Web Component Fingerprint",
       "hypothesis": "GET the page and read its script sources, generator meta, Server/X-Powered-By headers and framework cookies to fingerprint the web components + versions it runs, the input the CVE catalog matches on (§21 detection-coverage). One GET, no exploitation.",
       "tool": "curl",
-      "tools": ["curl"],
+      "tools": [
+        "curl"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["port:80", "port:443", "port:8080", "port:8443", "web.server", "web.tech", "http.reachable"],
-      "produces": ["web.tech"],
+      "requires_any": [
+        "port:80",
+        "port:443",
+        "port:8080",
+        "port:8443",
+        "web.server",
+        "http.reachable"
+      ],
+      "produces": [
+        "web.tech"
+      ],
       "priority": 42,
       "proves": "records which web components (and versions, when exposed) the site runs, the input for candidate component-CVE findings",
       "does_not_prove": "the vulnerability itself, a matched version is a candidate finding, never confirmed exploitation",
-      "report": {"finding": "Web component inventory", "severity": "info"},
-      "refs": ["https://github.com/RetireJS/retire.js"],
+      "report": {
+        "finding": "Web component inventory",
+        "severity": "info"
+      },
+      "refs": [
+        "https://github.com/RetireJS/retire.js"
+      ],
       "commands": [
-        {"tool": "curl", "run": "curl -sSikL http://{{target}}/", "note": "GET the site with headers; the parser fingerprints components + versions from the body, headers and cookies (packs/web_fingerprints_*.json)."},
-        {"tool": "curl", "run": "curl -sSikL https://{{target}}/", "note": "HTTPS variant when 443 is open."}
+        {
+          "tool": "curl",
+          "run": "curl -sSikL http://{{target}}/",
+          "note": "GET the site with headers; the parser fingerprints components + versions from the body, headers and cookies (packs/web_fingerprints_*.json)."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sSikL https://{{target}}/",
+          "note": "HTTPS variant when 443 is open."
+        }
       ]
     },
     {
@@ -49,19 +102,39 @@
       "title": "CMS / Framework Version Probe",
       "hypothesis": "Once a CMS or framework is fingerprinted, pin its exact version from the files that publish it (CHANGELOG, Joomla manifest, WordPress readme, composer.lock), the input that lets its version-gated CVEs fire. Read-only GETs of standard paths, no exploitation.",
       "tool": "curl",
-      "tools": ["curl"],
+      "tools": [
+        "curl"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["web.tech", "web.server"],
-      "produces": ["web.tech"],
+      "requires_any": [
+        "web.tech",
+        "web.server"
+      ],
+      "produces": [
+        "vuln.candidates"
+      ],
       "priority": 30,
       "proves": "records the exact CMS/framework version from its published version files, upgrades a name-only fingerprint so that component's version-gated CVEs can fire (candidate)",
       "does_not_prove": "the vulnerability itself, a version match is a candidate finding, never confirmed exploitation",
-      "report": {"finding": "CMS/framework version", "severity": "info"},
-      "refs": ["https://owasp.org/www-project-web-security-testing-guide/"],
+      "report": {
+        "finding": "CMS/framework version",
+        "severity": "info"
+      },
+      "refs": [
+        "https://owasp.org/www-project-web-security-testing-guide/"
+      ],
       "commands": [
-        {"tool": "curl", "run": "curl -sSkL http://{{target}}/CHANGELOG.txt http://{{target}}/core/CHANGELOG.txt http://{{target}}/administrator/manifests/files/joomla.xml http://{{target}}/readme.html http://{{target}}/composer.lock", "note": "GET the common version files; the parser reads the version from whichever exists (packs/web_fingerprints_*.json)."},
-        {"tool": "curl", "run": "curl -sSkL https://{{target}}/CHANGELOG.txt https://{{target}}/core/CHANGELOG.txt https://{{target}}/administrator/manifests/files/joomla.xml https://{{target}}/readme.html https://{{target}}/composer.lock", "note": "HTTPS variant."}
+        {
+          "tool": "curl",
+          "run": "curl -sSkL http://{{target}}/CHANGELOG.txt http://{{target}}/core/CHANGELOG.txt http://{{target}}/administrator/manifests/files/joomla.xml http://{{target}}/readme.html http://{{target}}/composer.lock",
+          "note": "GET the common version files; the parser reads the version from whichever exists (packs/web_fingerprints_*.json)."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sSkL https://{{target}}/CHANGELOG.txt https://{{target}}/core/CHANGELOG.txt https://{{target}}/administrator/manifests/files/joomla.xml https://{{target}}/readme.html https://{{target}}/composer.lock",
+          "note": "HTTPS variant."
+        }
       ]
     },
     {
@@ -70,18 +143,36 @@
       "title": "TLS Configuration Review",
       "hypothesis": "The certificate and protocol set are a report staple: expired/self-signed certs and SSLv3/TLS1.0 are common, low-effort findings. nmap's ssl scripts read it without touching the app.",
       "tool": "nmap",
-      "tools": ["nmap"],
+      "tools": [
+        "nmap"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["port:443", "port:8443", "port:993", "port:995"],
-      "produces": ["tls.info"],
+      "requires_any": [
+        "port:443",
+        "port:8443",
+        "port:993",
+        "port:995"
+      ],
+      "produces": [
+        "tls.info"
+      ],
       "priority": 39,
       "proves": "records the TLS certificate/protocol posture (a report observation)",
       "does_not_prove": "exploitation or access",
-      "report": {"finding": "TLS configuration review", "severity": "info"},
-      "refs": ["https://datatracker.ietf.org/doc/html/rfc8996"],
+      "report": {
+        "finding": "TLS configuration review",
+        "severity": "info"
+      },
+      "refs": [
+        "https://datatracker.ietf.org/doc/html/rfc8996"
+      ],
       "commands": [
-        {"tool": "nmap", "run": "nmap --script ssl-cert,ssl-enum-ciphers -p 443 {{target}}", "note": "Reads the cert (expiry/self-signed) and the enabled protocols/ciphers."}
+        {
+          "tool": "nmap",
+          "run": "nmap --script ssl-cert,ssl-enum-ciphers -p 443 {{target}}",
+          "note": "Reads the cert (expiry/self-signed) and the enabled protocols/ciphers."
+        }
       ]
     },
     {
@@ -90,18 +181,37 @@
       "title": "HTTP Methods Review",
       "hypothesis": "An OPTIONS request reveals whether risky verbs (PUT/DELETE/TRACE/CONNECT) are enabled, a quick, reportable misconfiguration.",
       "tool": "curl",
-      "tools": ["curl"],
+      "tools": [
+        "curl"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["port:80", "port:443", "port:8080", "web.server", "http.reachable"],
-      "produces": ["http.methods"],
+      "requires_any": [
+        "port:80",
+        "port:443",
+        "port:8080",
+        "web.server",
+        "http.reachable"
+      ],
+      "produces": [
+        "http.methods"
+      ],
       "priority": 34,
       "proves": "records the HTTP methods the server advertises",
       "does_not_prove": "exploitation, an enabled method is a lead, not proven abuse",
-      "report": {"finding": "HTTP methods review", "severity": "info"},
-      "refs": ["https://owasp.org/www-community/vulnerabilities/Improper_Data_Validation"],
+      "report": {
+        "finding": "HTTP methods review",
+        "severity": "info"
+      },
+      "refs": [
+        "https://owasp.org/www-community/vulnerabilities/Improper_Data_Validation"
+      ],
       "commands": [
-        {"tool": "curl", "run": "curl -sSIkLX OPTIONS http://{{target}}/", "note": "Reads the Allow header; findings.py flags risky verbs."}
+        {
+          "tool": "curl",
+          "run": "curl -sSIkLX OPTIONS http://{{target}}/",
+          "note": "Reads the Allow header; findings.py flags risky verbs."
+        }
       ]
     },
     {
@@ -110,18 +220,37 @@
       "title": "CORS Policy Review",
       "hypothesis": "Reflecting an arbitrary Origin (or allowing null) is a high-value web finding. A single request with a spoofed Origin shows it.",
       "tool": "curl",
-      "tools": ["curl"],
+      "tools": [
+        "curl"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["port:80", "port:443", "port:8080", "web.server", "http.reachable"],
-      "produces": ["http.cors"],
+      "requires_any": [
+        "port:80",
+        "port:443",
+        "port:8080",
+        "web.server",
+        "http.reachable"
+      ],
+      "produces": [
+        "http.cors"
+      ],
       "priority": 33,
       "proves": "records how the server answers a cross-origin request",
       "does_not_prove": "exploitation, a reflected origin is a finding, not stolen data",
-      "report": {"finding": "CORS policy review", "severity": "info"},
-      "refs": ["https://portswigger.net/web-security/cors"],
+      "report": {
+        "finding": "CORS policy review",
+        "severity": "info"
+      },
+      "refs": [
+        "https://portswigger.net/web-security/cors"
+      ],
       "commands": [
-        {"tool": "curl", "run": "curl -sSIkL -H \"Origin: https://evil.example\" http://{{target}}/", "note": "If Access-Control-Allow-Origin reflects the spoofed Origin (or is *), findings.py flags it."}
+        {
+          "tool": "curl",
+          "run": "curl -sSIkL -H \"Origin: https://evil.example\" http://{{target}}/",
+          "note": "If Access-Control-Allow-Origin reflects the spoofed Origin (or is *), findings.py flags it."
+        }
       ]
     },
     {
@@ -130,19 +259,44 @@
       "title": "Web Body Review (mixed content / forms)",
       "hypothesis": "A read of the page body surfaces body-level report findings the header checks miss, insecure http:// resource references, a login form that permits autocomplete, and a POST form with no anti-CSRF token. One GET, no exploitation.",
       "tool": "curl",
-      "tools": ["curl"],
+      "tools": [
+        "curl"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["port:80", "port:443", "port:8080", "port:8443", "web.server", "web.tech", "http.reachable"],
-      "produces": ["http.body"],
+      "requires_any": [
+        "port:80",
+        "port:443",
+        "port:8080",
+        "port:8443",
+        "web.server",
+        "web.tech",
+        "http.reachable"
+      ],
+      "produces": [
+        "http.body"
+      ],
       "priority": 32,
       "proves": "records body-level hygiene observations (mixed content, form autocomplete, missing CSRF token)",
       "does_not_prove": "exploitation, these are hardening findings, heuristic and candidate, not proven abuse",
-      "report": {"finding": "Web body review", "severity": "info"},
-      "refs": ["https://owasp.org/www-project-web-security-testing-guide/"],
+      "report": {
+        "finding": "Web body review",
+        "severity": "info"
+      },
+      "refs": [
+        "https://owasp.org/www-project-web-security-testing-guide/"
+      ],
       "commands": [
-        {"tool": "curl", "run": "curl -sSkL http://{{target}}/", "note": "GET the page body; findings.py flags mixed content, autocomplete-on login forms, and POST forms with no CSRF token."},
-        {"tool": "curl", "run": "curl -sSkL https://{{target}}/", "note": "HTTPS variant when 443 is open."}
+        {
+          "tool": "curl",
+          "run": "curl -sSkL http://{{target}}/",
+          "note": "GET the page body; findings.py flags mixed content, autocomplete-on login forms, and POST forms with no CSRF token."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sSkL https://{{target}}/",
+          "note": "HTTPS variant when 443 is open."
+        }
       ]
     },
     {
@@ -151,19 +305,49 @@
       "title": "Exposed Sensitive Files",
       "hypothesis": "A quick GET of the usual leaked paths (a .git tree, a .env, a server-status page, an editor backup) turns up source and secrets that shouldn't be web-served. Read-only requests of well-known paths, no exploitation.",
       "tool": "curl",
-      "tools": ["curl"],
+      "tools": [
+        "curl"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["port:80", "port:443", "port:8080", "port:8443", "web.server", "web.tech", "http.reachable"],
-      "produces": ["http.exposed"],
+      "requires_any": [
+        "port:80",
+        "port:443",
+        "port:8080",
+        "port:8443",
+        "web.server",
+        "web.tech",
+        "http.reachable"
+      ],
+      "produces": [
+        "http.exposed"
+      ],
       "priority": 31,
       "proves": "records which sensitive paths are served (a source-disclosure observation)",
       "does_not_prove": "exploitation, exposed source/config is a finding and candidate material, not access",
-      "report": {"finding": "Exposed sensitive file", "severity": "medium"},
-      "refs": ["https://owasp.org/www-project-web-security-testing-guide/"],
+      "report": {
+        "finding": "Exposed sensitive file",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://owasp.org/www-project-web-security-testing-guide/"
+      ],
       "commands": [
-        {"tool": "curl", "run": "curl -sSkL http://{{target}}/.git/HEAD http://{{target}}/.git/config http://{{target}}/.env http://{{target}}/server-status http://{{target}}/.svn/entries", "note": "GET the common leaked paths; findings.py flags a served VCS tree / env file / status page."},
-        {"tool": "curl", "run": "curl -sSkL https://{{target}}/.git/HEAD https://{{target}}/.git/config https://{{target}}/.env https://{{target}}/server-status", "note": "HTTPS variant."}
+        {
+          "tool": "curl",
+          "run": "curl -sSkL http://{{target}}/.git/HEAD http://{{target}}/.git/config http://{{target}}/.env http://{{target}}/server-status http://{{target}}/.svn/entries",
+          "note": "GET the common leaked paths; findings.py flags a served VCS tree / env file / status page."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sSkL https://{{target}}/.git/HEAD https://{{target}}/.git/config https://{{target}}/.env https://{{target}}/server-status",
+          "note": "HTTPS variant."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sSkL http://{{target}}/actuator/heapdump -o heapdump && strings heapdump | grep -iE 'token|password|session|authorization' | head -30",
+          "note": "Spring Boot Actuator /heapdump secret extraction: Downloads the JVM memory snapshot and extracts session cookies, tokens, and database passwords from memory."
+        }
       ]
     },
     {
@@ -172,18 +356,36 @@
       "title": "Cleartext HTTP (no HTTPS redirect)",
       "hypothesis": "A HEAD of plain http:// (without following redirects) shows whether the site serves content in the clear instead of redirecting to https. One request, no exploitation.",
       "tool": "curl",
-      "tools": ["curl"],
+      "tools": [
+        "curl"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["port:80", "port:8080", "web.server", "http.reachable"],
-      "produces": ["http.redirect"],
+      "requires_any": [
+        "port:80",
+        "port:8080",
+        "web.server",
+        "http.reachable"
+      ],
+      "produces": [
+        "http.redirect"
+      ],
       "priority": 30,
       "proves": "records whether plain http serves content or redirects to https",
       "does_not_prove": "exploitation, cleartext http is a hardening finding",
-      "report": {"finding": "Cleartext HTTP", "severity": "low"},
-      "refs": ["https://datatracker.ietf.org/doc/html/rfc8996"],
+      "report": {
+        "finding": "Cleartext HTTP",
+        "severity": "low"
+      },
+      "refs": [
+        "https://datatracker.ietf.org/doc/html/rfc8996"
+      ],
       "commands": [
-        {"tool": "curl", "run": "curl -sSIk http://{{target}}/", "note": "HEAD plain http WITHOUT -L; a 2xx (content in the clear) or a redirect not to https is flagged."}
+        {
+          "tool": "curl",
+          "run": "curl -sSIk http://{{target}}/",
+          "note": "HEAD plain http WITHOUT -L; a 2xx (content in the clear) or a redirect not to https is flagged."
+        }
       ]
     },
     {
@@ -192,18 +394,35 @@
       "title": "Subdomain Takeover (dangling CNAME)",
       "hypothesis": "When a host's CNAME points at a third-party service (S3 / GitHub Pages / Heroku / …) that is no longer claimed, an attacker can register it and take over the name. One DNS lookup surfaces the dangling CNAME; the operator confirms the target is unclaimed.",
       "tool": "dig",
-      "tools": ["dig"],
+      "tools": [
+        "dig"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["host.fqdn", "host.domain", "host.hostname"],
-      "produces": ["dns.takeover"],
+      "requires_any": [
+        "host.fqdn",
+        "host.domain",
+        "host.hostname"
+      ],
+      "produces": [
+        "dns.takeover"
+      ],
       "priority": 29,
       "proves": "records a CNAME pointing at a known takeover-able third-party host (a candidate)",
       "does_not_prove": "the takeover, it lands only if that third-party resource is actually unclaimed",
-      "report": {"finding": "Subdomain takeover", "severity": "high"},
-      "refs": ["https://owasp.org/www-community/attacks/Subdomain_Takeover"],
+      "report": {
+        "finding": "Subdomain takeover",
+        "severity": "high"
+      },
+      "refs": [
+        "https://owasp.org/www-community/attacks/Subdomain_Takeover"
+      ],
       "commands": [
-        {"tool": "dig", "run": "dig +noall +answer CNAME {{target}}", "note": "Resolve the CNAME chain; findings.py flags a pointer to a known takeover-able service (candidate, verify it's unclaimed)."}
+        {
+          "tool": "dig",
+          "run": "dig +noall +answer CNAME {{target}}",
+          "note": "Resolve the CNAME chain; findings.py flags a pointer to a known takeover-able service (candidate, verify it's unclaimed)."
+        }
       ]
     },
     {
@@ -212,18 +431,181 @@
       "title": "Email DNS Review (SPF/DMARC)",
       "hypothesis": "Missing or permissive SPF/DMARC is a routine report finding when the engagement has a domain. Two TXT lookups, no scanning.",
       "tool": "dig",
-      "tools": ["dig"],
+      "tools": [
+        "dig"
+      ],
       "os": [],
       "requires_all": [],
-      "requires_any": ["ad.domain_known", "host.domain"],
-      "produces": ["dns.email"],
+      "requires_any": [
+        "ad.domain_known",
+        "host.domain"
+      ],
+      "produces": [
+        "dns.email"
+      ],
       "priority": 30,
       "proves": "records the domain's SPF/DMARC TXT records",
       "does_not_prove": "exploitation",
-      "report": {"finding": "Email DNS (SPF/DMARC) review", "severity": "info"},
-      "refs": ["https://datatracker.ietf.org/doc/html/rfc7208"],
+      "report": {
+        "finding": "Email DNS (SPF/DMARC) review",
+        "severity": "info"
+      },
+      "refs": [
+        "https://datatracker.ietf.org/doc/html/rfc7208"
+      ],
       "commands": [
-        {"tool": "dig", "run": "dig +short TXT {{domain}} _dmarc.{{domain}}", "note": "SPF (on the domain) and DMARC (on _dmarc) in one query; findings.py flags missing/permissive policy."}
+        {
+          "tool": "dig",
+          "run": "dig +short TXT {{domain}} _dmarc.{{domain}}",
+          "note": "SPF (on the domain) and DMARC (on _dmarc) in one query; findings.py flags missing/permissive policy."
+        }
+      ]
+    },
+    {
+      "id": "access-db-export",
+      "title": "Microsoft Access Database (.mdb / .accdb) Analysis",
+      "hypothesis": "Extracted Microsoft Access databases (.mdb, .accdb) stored on open shares, backups, or web directories hold application credentials, connection strings, or user tables. mdbtools inspects tables and dumps contents to CSV or SQL without needing Microsoft Access.",
+      "tool": "mdb-tables",
+      "tools": [
+        "mdb-tables",
+        "mdb-export",
+        "mdb-sql"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "loot.files",
+        "smb.readable_share"
+      ],
+      "produces": [
+        "credential.available",
+        "loot.credentials"
+      ],
+      "priority": 72,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "extracted table schemas and cleartext credentials from Access databases",
+      "does_not_prove": "validity against remote services until credentials are authenticated",
+      "report": {
+        "finding": "Microsoft Access Database Sensitive Data Exposure",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://github.com/mdbtools/mdbtools"
+      ],
+      "commands": [
+        {
+          "tool": "mdb-tables",
+          "run": "mdb-tables -1 {{path}}",
+          "note": "Lists all tables in the Microsoft Access database file."
+        },
+        {
+          "tool": "mdb-export",
+          "run": "mdb-export {{path}} {{table}} > scans/{{table}}.csv",
+          "note": "Dumps the contents of the target table to CSV for credential extraction."
+        },
+        {
+          "tool": "mdb-sql",
+          "run": "mdb-sql -i {{script}} {{path}}",
+          "note": "Executes SQL query scripts against the database file."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "ole-macro-analysis",
+      "title": "Office Document VBA Macro Analysis and Credential Extraction",
+      "hypothesis": "Microsoft Office documents (.doc, .xls, .xlsm) discovered on SMB shares or backups often contain VBA macros with hardcoded credentials, database connection strings, or administrative scripts. olevba and oledump.py inspect macro streams and extract cleartext credentials.",
+      "tool": "olevba",
+      "tools": [
+        "olevba",
+        "oledump"
+      ],
+      "os": [],
+      "phase": "access",
+      "requires_any": [
+        "loot.files",
+        "smb.readable_share"
+      ],
+      "produces": [
+        "credential.available",
+        "loot.credentials"
+      ],
+      "priority": 73,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "extracted VBA macro code and embedded credentials from Office document streams",
+      "does_not_prove": "valid remote service authentication until credentials are confirmed",
+      "report": {
+        "finding": "VBA Macro Embedded Credentials Exposure",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://github.com/decalage2/oletools"
+      ],
+      "commands": [
+        {
+          "tool": "olevba",
+          "run": "olevba {{file_path}}",
+          "note": "Extracts and analyzes VBA macro code from Office documents, highlighting suspicious strings."
+        },
+        {
+          "tool": "oledump",
+          "run": "oledump.py {{file_path}}",
+          "note": "Lists OLE streams in document; uppercase 'M' indicators indicate streams containing macros."
+        },
+        {
+          "tool": "oledump",
+          "run": "oledump.py -s {{stream_id}} -v {{file_path}}",
+          "note": "Decompresses and prints VBA code from the selected OLE stream."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "gpg-private-key-decrypt",
+      "title": "GPG Private Key Cracking and Artifact Decryption",
+      "hypothesis": "Target user directory contains GPG private keys or encrypted files. Extracting the passphrase hash with gpg2john and cracking with John the Ripper allows decrypting protected credentials and files.",
+      "tool": "john",
+      "tools": [
+        "john",
+        "gpg"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.linux"
+      ],
+      "produces": [
+        "credential.plain",
+        "loot.files"
+      ],
+      "priority": 85,
+      "phase": "findings",
+      "proves": "cracks GPG passphrase and decrypts protected private archives/credentials",
+      "does_not_prove": "administrative privileges across all target host components",
+      "report": {
+        "finding": "Encrypted User Credentials Recoverable via Weak GPG Key Passphrase",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.openwall.com/john/"
+      ],
+      "commands": [
+        {
+          "tool": "john",
+          "run": "gpg2john {{key_file}} > gpg.hash && john --wordlist=/usr/share/wordlists/rockyou.txt gpg.hash",
+          "note": "Extract hash from encrypted GPG private key or file and crack passphrase using John the Ripper."
+        },
+        {
+          "tool": "gpg",
+          "run": "gpg --import {{key_file}} && gpg --batch --yes --passphrase {{passphrase}} --decrypt {{encrypted_file}}",
+          "note": "Import cracked GPG private key and decrypt target file or archive to recover cleartext credentials."
+        }
       ]
     }
   ]

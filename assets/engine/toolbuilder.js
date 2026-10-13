@@ -1,6 +1,6 @@
 /*!
  * obol engine — toolbuilder.js
- * The Tool Builder command COMPILER, ported and cleaned from the donor
+ * The Tool Builder command COMPILER
  * data/tool-builder-current.js + data/tool-builder-schema.js. Pure and runtime-independent:
  * it validates a builder definition, resolves field values (defaults + dotted-key autofill),
  * and compiles the {executable, tokens[]} model into a single shell-safe command string.

