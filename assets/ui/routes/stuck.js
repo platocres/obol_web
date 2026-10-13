@@ -351,23 +351,31 @@
     ensureFs();
     afterRender();
 
-    U.on(_mount, 'click', '.btn-copy', function (e, t) { U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); }); });
+    // Bind every delegated handler to this route's OWN container (.stuck), not the shared #view.
+    // #view is a singleton that outlives the route, so binding there would (a) stack a fresh handler
+    // set on every visit (making a toggle fire an even number of times and net to a no-op) and
+    // (b) leak generic selectors like .btn-copy onto other routes. The .stuck element is recreated on
+    // each full render and preserved across in-place rebuild()/refresh*(), so handlers bound to it live
+    // exactly as long as the view they serve. A stray re-mount just binds to the current .stuck.
+    var root = _mount.querySelector('.stuck') || _mount;
+
+    U.on(root, 'click', '.btn-copy', function (e, t) { U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); }); });
 
     // interview answers. The seed button is also a .stuck-ans (so it matches visually), but its action
     // lives in the [data-seed] handler below; skip it here, or this handler's rebuild() would detach the
     // node before the seed handler runs and container.contains() would drop it (a no-op click).
-    U.on(_mount, 'click', '.stuck-ans', function (e, t) {
+    U.on(root, 'click', '.stuck-ans', function (e, t) {
       if (t.hasAttribute('data-seed')) return;
       applyAnswer(t.getAttribute('data-assert'), t.getAttribute('data-goto'), t.getAttribute('data-skip'));
     });
-    U.on(_mount, 'click', '[data-seed]', function () { seedFromEngagement(); rebuild(); });
-    U.on(_mount, 'click', '.stuck-skiplink, [data-skip][data-goto="board"]', function () { _stage = 'board'; rebuild(); });
-    U.on(_mount, 'click', '[data-restart]', function () { _stage = 'interview'; _step = 'intro'; rebuild(); });
-    U.on(_mount, 'click', '[data-startover]', function () { reset(); rebuild(); });
-    U.on(_mount, 'click', '[data-save]', function () { saveToEngagement(); });
+    U.on(root, 'click', '[data-seed]', function () { seedFromEngagement(); rebuild(); });
+    U.on(root, 'click', '.stuck-skiplink, [data-skip][data-goto="board"]', function () { _stage = 'board'; rebuild(); });
+    U.on(root, 'click', '[data-restart]', function () { _stage = 'interview'; _step = 'intro'; rebuild(); });
+    U.on(root, 'click', '[data-startover]', function () { reset(); rebuild(); });
+    U.on(root, 'click', '[data-save]', function () { saveToEngagement(); });
 
     // port palette (shared: interview + board)
-    U.on(_mount, 'click', '.stuck-port', function (e, t) {
+    U.on(root, 'click', '.stuck-port', function (e, t) {
       var port = parseInt(t.getAttribute('data-port'), 10); ensureFs();
       S().togglePort(_fs, port, scope());
       if (_stage === 'board') { refreshDoors(); refreshFindings(); refreshMoves(); }
@@ -375,18 +383,18 @@
         var on = S().portOn(_fs, port); t.classList.toggle('on', on); t.setAttribute('aria-pressed', on ? 'true' : 'false');
       }
     });
-    U.on(_mount, 'click', '[data-portadd]', function () {
+    U.on(root, 'click', '[data-portadd]', function () {
       var inp = _mount.querySelector('#stuck-port-free'); if (!inp) return; ensureFs();
       if (S().addPortNumber(_fs, inp.value, scope())) { inp.value = ''; if (_stage === 'board') { refreshDoors(); refreshFindings(); refreshMoves(); } else rebuild(); }
       else U.toast('Enter a port number 1 to 65535', 'err');
     });
 
     // move tiles: select to expand (ignore clicks inside the expanded body, which has its own controls)
-    U.on(_mount, 'click', '.stuck-move', function (e, t) {
+    U.on(root, 'click', '.stuck-move', function (e, t) {
       if (e.target && e.target.closest && e.target.closest('.ns-body')) return;
       var id = t.getAttribute('data-move'); _sel = (_sel === id) ? '' : id; refreshMoves();
     });
-    U.on(_mount, 'keydown', '.stuck-move', function (e, t) {
+    U.on(root, 'keydown', '.stuck-move', function (e, t) {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
         if (e.target && e.target.closest && e.target.closest('.ns-body')) return;
         e.preventDefault(); var id = t.getAttribute('data-move'); _sel = (_sel === id) ? '' : id; refreshMoves();
@@ -394,15 +402,15 @@
     });
 
     // tried / clear
-    U.on(_mount, 'click', '.stuck-tried', function (e, t) { var id = t.getAttribute('data-tried'); if (id) { _tried[id] = true; if (_sel === id) _sel = ''; refreshMoves(); } });
-    U.on(_mount, 'click', '[data-cleartried]', function () { _tried = {}; refreshMoves(); });
+    U.on(root, 'click', '.stuck-tried', function (e, t) { var id = t.getAttribute('data-tried'); if (id) { _tried[id] = true; if (_sel === id) _sel = ''; refreshMoves(); } });
+    U.on(root, 'click', '[data-cleartried]', function () { _tried = {}; refreshMoves(); });
 
     // findings add / remove
-    U.on(_mount, 'click', '.stuck-fact', function (e, t) { var k = t.getAttribute('data-add'); if (k) { ensureFs(); S().assert(_fs, k, { scope: scope() }); refreshFindings(); refreshMoves(); } });
-    U.on(_mount, 'click', '.stuck-chip', function (e, t) { var k = t.getAttribute('data-drop'); if (k) { S().retract(_fs, k); refreshFindings(); refreshMoves(); } });
+    U.on(root, 'click', '.stuck-fact', function (e, t) { var k = t.getAttribute('data-add'); if (k) { ensureFs(); S().assert(_fs, k, { scope: scope() }); refreshFindings(); refreshMoves(); } });
+    U.on(root, 'click', '.stuck-chip', function (e, t) { var k = t.getAttribute('data-drop'); if (k) { S().retract(_fs, k); refreshFindings(); refreshMoves(); } });
 
     // optional params fill
-    ['target', 'lhost', 'lport'].forEach(function (k) { U.on(_mount, 'input', '#stuck-p-' + k, function (e, t) { _params[k] = t.value; refreshMoves(); }); });
+    ['target', 'lhost', 'lport'].forEach(function (k) { U.on(root, 'input', '#stuck-p-' + k, function (e, t) { _params[k] = t.value; refreshMoves(); }); });
   }
 
   OBOL.routes = OBOL.routes || {};

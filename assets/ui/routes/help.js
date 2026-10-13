@@ -117,6 +117,10 @@
     // Go There (any element carrying data-goto, including the triage cards): optionally set UI state
     // (e.g. a Findings sub-view), then navigate.
     U.on(mount, 'click', '[data-goto]', function (e, b) {
+      // Scope to Help: this handler is delegated on the shared #view, which outlives the route, so it
+      // must ignore [data-goto] clicks owned by another route (e.g. Stuck?'s interview buttons carry
+      // data-goto as a step name, not a Help route hash).
+      if (OBOL.router.current().name !== 'help') return;
       var set = b.getAttribute('data-set');
       if (set) { try { var o = JSON.parse(set); OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; Object.keys(o).forEach(function (k) { eng.ui[k] = o[k]; }); }, 'ui'); } catch (x) {} }
       var go = b.getAttribute('data-goto'); if (go) location.hash = go;

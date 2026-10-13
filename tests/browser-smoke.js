@@ -1048,6 +1048,42 @@ function serve() {
   ok(Math.abs(afterTop - beforeTop) <= 24, 'clicking a step keeps the rail scroll (was ' + beforeTop + ', now ' + afterTop + ')');
   ok((await page.locator('.study-graph .study-gnode.active').count()) === 1, 'the clicked step is highlighted as active');
 
+  // ---- Stuck? interview + ports are live (regression for the delegated-handler leak) ----------------
+  // These run LAST, after many other routes have mounted, so #view carries their delegated handlers
+  // too, exactly the condition that let a leaked [data-goto] handler (Learn / Help) hijack Stuck?'s
+  // interview buttons and let re-mounts stack a port toggle into a no-op. The route now binds to its own
+  // .stuck container and Learn/Help scope their [data-goto] to their own route, so this must stay green.
+  async function stuckToPorts() {
+    await page.evaluate(() => { location.hash = '#/path'; }); await page.waitForTimeout(80);
+    await page.evaluate(() => { location.hash = '#/stuck'; });
+    await page.waitForSelector('.stuck', { timeout: 4000 }); await page.waitForTimeout(150);
+    if (await page.locator('[data-startover]').count()) { await page.locator('[data-startover]').first().click(); await page.waitForTimeout(100); }
+    if (await page.locator('.stuck-intro').count()) {
+      await page.locator('.stuck-ans[data-goto="host"]').first().click(); await page.waitForTimeout(100);
+    }
+    if (await page.locator('.stuck-ans[data-goto="ports"]').count()) {
+      await page.locator('.stuck-ans[data-goto="ports"]').first().click(); await page.waitForTimeout(100);
+    }
+  }
+  await page.evaluate(() => { location.hash = '#/stuck'; });
+  await page.waitForSelector('.stuck', { timeout: 4000 }); await page.waitForTimeout(150);
+  if (await page.locator('[data-startover]').count()) { await page.locator('[data-startover]').first().click(); await page.waitForTimeout(100); }
+  ok(await page.locator('.stuck-intro').count() > 0, 'Stuck?: lands on the Ferryman intro');
+  await page.locator('.stuck-ans[data-goto="host"]').first().click(); await page.waitForTimeout(120);
+  const stuckAdvanced = (await page.$$eval('.stuck-ans', els => els.map(e => e.getAttribute('data-goto')))).indexOf('ports') >= 0;
+  ok(stuckAdvanced, 'Stuck?: "Carry Me Across" advances the interview (not hijacked by a leaked [data-goto])');
+  await page.locator('.stuck-ans[data-goto="ports"]').first().click(); await page.waitForTimeout(120);
+  ok(await page.locator('.stuck-port').count() > 0, 'Stuck?: reached the Ports step');
+  const fp = page.locator('.stuck-port').first();
+  await fp.click(); await page.waitForTimeout(60); const on1 = await fp.getAttribute('aria-pressed');
+  await fp.click(); await page.waitForTimeout(60); const on2 = await fp.getAttribute('aria-pressed');
+  ok(on1 === 'true' && on2 === 'false', 'Stuck?: one click = one port toggle (no double-bound no-op; got ' + on1 + ',' + on2 + ')');
+  await stuckToPorts();   // revisit (away and back twice would surface a stacking regression)
+  await stuckToPorts();
+  const fp2 = page.locator('.stuck-port').first();
+  await fp2.click(); await page.waitForTimeout(60);
+  ok(await fp2.getAttribute('aria-pressed') === 'true', 'Stuck?: after revisits a single port click still toggles (no handler stacking)');
+
   await browser.close();
   server.close();
   console.log(fail ? ('\nBROWSER SMOKE: ' + fail + ' FAILURES') : '\nBROWSER SMOKE: all passed');

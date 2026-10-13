@@ -28,8 +28,8 @@
     tools: ['assets/engine/toolbuilder.js?v=f8af90d9', 'data/toolset.js?v=11de7936', 'assets/ui/routes/tools.js?v=24241304'],
     loadout: ['assets/engine/arsenal.js?v=bf5ae024', 'assets/ui/routes/loadout.js?v=fd258957'],
     workbench: ['assets/engine/workbench.js?v=1acf899d', 'assets/ui/routes/workbench.js?v=42462153'],
-    stuck: ['data/stuck-catalog.js?v=1ef29430', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=ef858247'],
-    study: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b', 'assets/ui/routes/study.js?v=891156ad'],
+    stuck: ['data/stuck-catalog.js?v=e0c715e9', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=c2ee9e88'],
+    study: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b', 'assets/ui/routes/study.js?v=277d4c77'],
     decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=768768b4', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=2317deac', 'assets/engine/decisionmap.js?v=72d3dcb7', 'assets/ui/decisiontree.js?v=910ea8b0'],
     checklist: ['data/oscp-scope.js?v=ebf0ff68', 'assets/ui/routes/checklist.js?v=ff1f5ef9'],
     target: ['assets/engine/graph.js?v=96741069', 'assets/ui/routes/target.js?v=3e9e5e4a'],
@@ -40,7 +40,7 @@
     map: ['assets/engine/engmap.js?v=49eca2a8', 'assets/ui/routes/map.js?v=3a19112a'],
     findings: ['data/attack-catalog.js?v=1fca5f0a', 'data/attack-move-map.js?v=0dd50cc7', 'data/d3fend-map.js?v=24188198', 'data/frameworks-tables.js?v=5f75b2bc', 'data/kev-catalog.js?v=45ae87a9', 'assets/engine/frameworks.js?v=c304a986', 'assets/ui/routes/findings.js?v=55f3e567'],
     history: ['assets/ui/routes/history.js?v=5fb9bd10'],
-    help: ['data/help-content.js?v=c67f0a4a', 'assets/ui/routes/help.js?v=d4b0a9d3'],
+    help: ['data/help-content.js?v=c67f0a4a', 'assets/ui/routes/help.js?v=d864ef28'],
   };
 
   var _loaded = {};   // group -> Promise

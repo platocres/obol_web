@@ -167,6 +167,9 @@
         "host.up"
       ],
       "requires_any": [],
+      "obsoleted_by": [
+        "scan.nmap.udp"
+      ],
       "deprioritize_when": [
         "loot.ntds"
       ],
@@ -174,6 +177,7 @@
         "scan.nmap.udp"
       ],
       "priority": 35,
+      "phase": "recon",
       "proves": "produces evidence from a narrowly scoped UDP scan",
       "does_not_prove": "UDP exposure by itself, not that the service is exploitable, and no access, credential, or privilege",
       "report": {

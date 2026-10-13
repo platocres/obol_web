@@ -29,7 +29,11 @@
     'ports.open': { group: 'Recon', label: 'I Have Open Ports', help: 'A port sweep came back with at least one open port.' },
     'scan.nmap.quick': { group: 'Recon', label: 'I Did A Quick Port Sweep', help: 'You ran a fast all-ports scan to find what is listening.' },
     'scan.nmap.version': { group: 'Recon', label: 'I Did A Service Version Scan', help: 'You ran the thorough scan (nmap -sC -sV) and know the service versions.' },
-    'scan.nmap.udp': { group: 'Recon', label: 'I Scanned UDP Ports', help: 'You checked UDP too, not just TCP (SNMP, DNS, TFTP live there).' },
+    // Note: 'scan.nmap.udp' is intentionally NOT catalogued. It is an activity marker ("I ran a UDP
+    // scan"), not a target attribute, and offering it as an assertable fact let a user unlock SNMP
+    // Enumeration without SNMP actually being open (recon-snmp gates on it in requires_any). In Stuck?
+    // you indicate SNMP by lighting the 161 port in the palette; the UDP services a scan reveals are
+    // themselves the findings. The move graph keeps the scan.nmap.udp -> recon-snmp reachability edge.
     'scan.nmap.vuln': { group: 'Recon', label: 'I Ran The Vuln Scripts', help: 'You ran nmap with the vuln scripts against the open services.' },
 
     // Service presence. A stuck student usually knows which ports answered, even without the versions.
