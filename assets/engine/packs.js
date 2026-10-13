@@ -21,7 +21,7 @@
 
   function dataPack(name) { return packData()[name] || null; }
 
-  // The tool universe obol-local is prepared to equip: union of every action's tool + tools[].
+  // The tool universe obol is prepared to equip: union of every action's tool + tools[].
   function equippedTools() {
     var set = {};
     actions().forEach(function (a) {

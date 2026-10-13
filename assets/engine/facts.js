@@ -6,7 +6,7 @@
  * narrated from them. Nothing becomes "true" unless a Fact records it, scoped to
  * exactly what the evidence supports.
  *
- * Faithful JS port of obol-local/obol/facts.py. Environment-agnostic: attaches to
+ * Faithful JS port of  Environment-agnostic: attaches to
  * `self` so it works in both the window and inside a Web Worker (importScripts).
  */
 (function (root) {

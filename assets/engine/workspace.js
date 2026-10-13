@@ -2,10 +2,10 @@
  * obol engine — workspace.js
  * Models the on-disk working directory the operator runs commands from (their Kali box), so obol
  * web can fill concrete output paths into suggested commands and tell the user exactly where a
- * file landed and how to attach it. obol web never touches the filesystem — this only *generates*
+ * file landed and how to attach it. obol never touches the filesystem — this only *generates*
  * paths and a one-time scaffold command; the operator runs it and attaches the results.
  *
- * The attacker box is Kali/Linux, so paths are POSIX. The layout mirrors obol-local's `scans/`
+ * The attacker box is Kali/Linux, so paths are POSIX. The layout
  * convention (tool output → scans/). Default root is box-centric on labs, engagement-centric on
  * exams. Pure + self-contained (window / worker / node).
  */

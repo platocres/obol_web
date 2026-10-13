@@ -1,5 +1,5 @@
 /*!
- * obol ui — routes/findings.js — cross-host findings roll-up (parity with obol-local `obol findings`).
+ * obol ui — routes/findings.js — cross-host findings roll-up.
  * Gathers finding.<category> facts across every host in the engagement, grouped by severity then
  * category, each with its host (scope), evidence, and remediation (enriched from reportmeta when
  * that bundle is loaded). Read-only projection over the fact ledger — nothing is invented.

@@ -2,8 +2,8 @@
  * obol data — tools-install.js — OBOL.ARSENAL
  * The install/stage registry for the Loadout tab and the generated download-arsenal.sh.
  *
- * This is a faithful port of obol-local's provisioner slate (obol/provision.py): the same
- * curated upstream sources, versions, licenses, and detection binaries. obol-local only
+ * This is a faithful port of obol's provisioner slate (the tool cache): the same
+ * curated upstream sources, versions, licenses, and detection binaries. obol only
  * *fetches* the tools Kali does NOT ship (the compiled binaries / scripts below); it assumes
  * the apt tooling is already present. We mirror that split exactly:
  *   - `kali`   — ships with a standard Kali install; nothing to fetch (just a ✓ badge).
@@ -171,7 +171,7 @@
   });
   INSTALL.forEach(function (e) { e.on_kali = false; A[e.key] = e; });
 
-  // ── 3. Staged materials / compiled binaries — ported from obol-local's provision.py REGISTRY.
+  // ── 3. Staged materials / compiled binaries — py REGISTRY.
   //    upstream `latest` unless a version is pinned; the .sh records sha256 (trust-on-first-use).
   var PEASS = 'https://github.com/peass-ng/PEASS-ng/releases/latest/download';
   var AV = 'offensive binary, expect Microsoft Defender to flag/quarantine it; obfuscate or load reflectively.';

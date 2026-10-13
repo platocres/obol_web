@@ -5,7 +5,7 @@
  * fact-gating, command variants and attribution. This module only lets the operator read a
  * runbook and resolve its steps back to the real Actions; the *ordering* is the composition.
  *
- * Faithful JS port of obol-local/obol/playbook.py (list/get/resolve_steps/applicable). Pure and
+ * Pure and
  * Node-safe: reads playbooks from the generated OBOL.playbookData global and resolves against
  * OBOL.packs.actions() (or a caller-supplied pack).
  */
@@ -27,7 +27,7 @@
     return null;
   }
 
-  // All shipped playbooks, in OBOL.PLAYBOOK_NAMES order (obol-local sorts by name).
+  // All shipped playbooks, in OBOL.PLAYBOOK_NAMES order.
   function list() {
     var d = playbookData();
     return names().map(function (n) { return d[n]; }).filter(Boolean);

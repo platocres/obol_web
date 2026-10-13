@@ -3,7 +3,7 @@
  * Replaces the old dashboard: create an engagement with a platform profile (HTB, OffSec/OSCP,
  * PWK, TryHackMe, HTB CPTS, CTF, OSWP, custom) + machine-type + scope/targets, then launch a
  * run (seeds facts -> lands on the coach). Also the engagement library + active-engagement
- * status. Emulates obol-local's `engagement new` + profile + scope flow.
+ * status..
  */
 (function (root) {
   'use strict';
@@ -23,7 +23,7 @@
   function troubleOn() { try { return localStorage.getItem(troubleKey()) === '1'; } catch (e) { return false; } }
   function setTrouble(on) { try { if (on) localStorage.setItem(troubleKey(), '1'); else localStorage.removeItem(troubleKey()); } catch (e) {} }
 
-  // Extract IPs and CIDRs from arbitrary pasted text (obol-local `scope paste` filter).
+  // Extract IPs and CIDRs from arbitrary pasted text.
   var IP_RE = /\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b/g;
   function extractScope(text) {
     var out = [], m, seen = {};
@@ -431,15 +431,36 @@
   // Readable OS, domain, and reachable-service facts for a target's dossier (shared by the hub board
   // and the Targets screen). All read-only projections of proven facts — nothing is invented.
   function fval(f, k) { try { return (f.values(k) || [])[0] || null; } catch (e) { return null; } }
+  function cleanOsDisplay(str) {
+    if (!str) return '';
+    str = String(str).trim();
+    var cpeM = str.match(/cpe:\/o:([a-z0-9_-]+):([a-z0-9_.:-]+)/i);
+    if (cpeM) {
+      var prodParts = cpeM[2].split(':');
+      var decoded = prodParts.join(' ')
+        .replace(/_/g, ' ')
+        .replace(/\bwindows\b/gi, 'Windows')
+        .replace(/\bserver\b/gi, 'Server')
+        .replace(/\br2\b/gi, 'R2')
+        .replace(/\bsp(\d+)\b/gi, 'SP$1')
+        .replace(/\bsp\b/gi, 'SP')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      if (/windows/i.test(decoded)) return decoded.indexOf('Windows') === 0 ? decoded : ('Windows ' + decoded);
+      if (/ubuntu/i.test(decoded)) return decoded.indexOf('Ubuntu') === 0 ? decoded : ('Ubuntu ' + decoded);
+      if (/debian/i.test(decoded)) return decoded.indexOf('Debian') === 0 ? decoded : ('Debian ' + decoded);
+    }
+    return str.replace(/;\s*CPE:.*$/i, '').trim();
+  }
   function hostOs(f, t) {
-    if (t && t.os) return t.os;
+    if (t && t.os) return cleanOsDisplay(t.os);
     // Prefer a SPECIFIC product string ("Windows Server 2016 Standard 14393") that a parser carved
     // from an authoritative labelled line; fall back to the bare family, capitalized.
     var specific = '', fam = '';
     ['host.os_hint', 'host.os', 'host.os_family'].forEach(function (k) {
       (f.values(k) || []).forEach(function (v) {
         v = v || {};
-        var os = (v.os || '').trim();
+        var os = cleanOsDisplay(v.os || '').trim();
         if (!specific && os && /[\s\d]/.test(os)) specific = os;
         if (!fam) fam = (v.family || v.name || (/^(windows|linux)$/i.test(os) ? os : '')).trim();
       });
@@ -491,6 +512,8 @@
   // next move) the hub board shows, from one projection — the two never drift.
   OBOL.targets = OBOL.targets || {};
   OBOL.targets.all = function (eng) { return targetInfos(eng || OBOL.store.active() || { targets: [] }); };
+  OBOL.targets.hostOs = hostOs;
+  OBOL.targets.cleanOs = cleanOsDisplay;
   OBOL.targets.ACC_BADGE = ACC_BADGE;
 
   function surfaceCard(href, ic, name, count, desc) {
@@ -676,7 +699,8 @@
       : OBOL.pack.rankActions(OBOL.store.factSet(), pack, { focusPrefixes: focus })[0];
     var nmHtml;
     if (nm) {
-      var v = OBOL.command.fillCommand(nm, OBOL.store.factSet(), { params: eng.params || {}, profile: eng.profile }, 0);
+      var nmIdx = (OBOL.command && OBOL.command.bestCommandIndex) ? OBOL.command.bestCommandIndex(nm, OBOL.store.factSet(), { params: eng.params || {}, profile: eng.profile }) : 0;
+      var v = OBOL.command.fillCommand(nm, OBOL.store.factSet(), { params: eng.params || {}, profile: eng.profile }, nmIdx);
       nmHtml = '<div class="hb-anchor"><div class="hb-anchor-l">Your Next Move</div>'
         + '<div class="hb-anchor-body"><span class="hb-anchor-t">' + esc(nm.title) + '</span>'
         + '<code class="hb-anchor-cmd">' + esc(v.filled) + '</code>'
@@ -946,6 +970,8 @@
           var lines = String(f.output).replace(/\s+$/, '').split(/\n/);
           var shown = lines.slice(0, 16).join('\n') + (lines.length > 16 ? '\n… ' + (lines.length - 16) + ' more line' + (lines.length - 16 === 1 ? '' : 's') : '');
           body = '<pre class="ws-pv-term">' + esc(shown) + '</pre>';
+        } else if (f.status === 'captured') {
+          body = '<div class="ws-pv-note">Captured evidence file' + (f.size ? ' (' + esc(fsize(f.size)) + ')' : '') + (f.tool ? ' via ' + esc(f.tool) : '') + '. Saved to your Kali working directory.</div>';
         } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the coach, run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
         else if (f.unknown) body = '<div class="ws-pv-note">Found on your disk by a sync. obol knows it exists but not what\'s inside.</div>' + cta;
         else if (f.manual) body = '<div class="ws-pv-note">Added by hand. Syncing only confirms it exists, to mint facts, paste what\'s inside.</div>' + cta;

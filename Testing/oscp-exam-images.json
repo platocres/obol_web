@@ -1,0 +1,366 @@
+{
+  "oscp_a": [
+    {
+      "index": 1,
+      "filename": "oscp-a-01-initial-entry.png",
+      "path": "Testing/assets/oscp-a/oscp-a-01-initial-entry.png",
+      "bytes": 82845
+    },
+    {
+      "index": 2,
+      "filename": "oscp-a-02-enumeration.png",
+      "path": "Testing/assets/oscp-a/oscp-a-02-enumeration.png",
+      "bytes": 67739
+    },
+    {
+      "index": 3,
+      "filename": "oscp-a-03.png",
+      "path": "Testing/assets/oscp-a/oscp-a-03.png",
+      "bytes": 83769
+    },
+    {
+      "index": 4,
+      "filename": "oscp-a-04-privilege-escalation.png",
+      "path": "Testing/assets/oscp-a/oscp-a-04-privilege-escalation.png",
+      "bytes": 212736
+    },
+    {
+      "index": 5,
+      "filename": "oscp-a-05-further-exploitation.png",
+      "path": "Testing/assets/oscp-a/oscp-a-05-further-exploitation.png",
+      "bytes": 72355
+    },
+    {
+      "index": 6,
+      "filename": "oscp-a-06.png",
+      "path": "Testing/assets/oscp-a/oscp-a-06.png",
+      "bytes": 97400
+    },
+    {
+      "index": 7,
+      "filename": "oscp-a-07.png",
+      "path": "Testing/assets/oscp-a/oscp-a-07.png",
+      "bytes": 105346
+    },
+    {
+      "index": 8,
+      "filename": "oscp-a-08.png",
+      "path": "Testing/assets/oscp-a/oscp-a-08.png",
+      "bytes": 43289
+    },
+    {
+      "index": 9,
+      "filename": "oscp-a-09-bloodhound.png",
+      "path": "Testing/assets/oscp-a/oscp-a-09-bloodhound.png",
+      "bytes": 128923
+    },
+    {
+      "index": 10,
+      "filename": "oscp-a-10.png",
+      "path": "Testing/assets/oscp-a/oscp-a-10.png",
+      "bytes": 32971
+    },
+    {
+      "index": 11,
+      "filename": "oscp-a-11.png",
+      "path": "Testing/assets/oscp-a/oscp-a-11.png",
+      "bytes": 198093
+    },
+    {
+      "index": 12,
+      "filename": "oscp-a-12-enumeration.png",
+      "path": "Testing/assets/oscp-a/oscp-a-12-enumeration.png",
+      "bytes": 19241
+    },
+    {
+      "index": 13,
+      "filename": "oscp-a-13-cracking.png",
+      "path": "Testing/assets/oscp-a/oscp-a-13-cracking.png",
+      "bytes": 132635
+    },
+    {
+      "index": 14,
+      "filename": "oscp-a-14-flag.png",
+      "path": "Testing/assets/oscp-a/oscp-a-14-flag.png",
+      "bytes": 70607
+    },
+    {
+      "index": 15,
+      "filename": "oscp-a-15-http.png",
+      "path": "Testing/assets/oscp-a/oscp-a-15-http.png",
+      "bytes": 162664
+    },
+    {
+      "index": 16,
+      "filename": "oscp-a-16-pico-cms.png",
+      "path": "Testing/assets/oscp-a/oscp-a-16-pico-cms.png",
+      "bytes": 38324
+    },
+    {
+      "index": 17,
+      "filename": "oscp-a-17-exploiting-aerospike.png",
+      "path": "Testing/assets/oscp-a/oscp-a-17-exploiting-aerospike.png",
+      "bytes": 31904
+    },
+    {
+      "index": 18,
+      "filename": "oscp-a-18-local-txt.png",
+      "path": "Testing/assets/oscp-a/oscp-a-18-local-txt.png",
+      "bytes": 56973
+    },
+    {
+      "index": 19,
+      "filename": "oscp-a-19-flag.png",
+      "path": "Testing/assets/oscp-a/oscp-a-19-flag.png",
+      "bytes": 54995
+    },
+    {
+      "index": 20,
+      "filename": "oscp-a-20.png",
+      "path": "Testing/assets/oscp-a/oscp-a-20.png",
+      "bytes": 233339
+    },
+    {
+      "index": 21,
+      "filename": "oscp-a-21-initial-access-amp-local-flag.png",
+      "path": "Testing/assets/oscp-a/oscp-a-21-initial-access-amp-local-flag.png",
+      "bytes": 120762
+    },
+    {
+      "index": 22,
+      "filename": "oscp-a-22-enumeration.png",
+      "path": "Testing/assets/oscp-a/oscp-a-22-enumeration.png",
+      "bytes": 67814
+    },
+    {
+      "index": 23,
+      "filename": "oscp-a-23.png",
+      "path": "Testing/assets/oscp-a/oscp-a-23.png",
+      "bytes": 16452
+    },
+    {
+      "index": 24,
+      "filename": "oscp-a-24.png",
+      "path": "Testing/assets/oscp-a/oscp-a-24.png",
+      "bytes": 162652
+    },
+    {
+      "index": 25,
+      "filename": "oscp-a-25.png",
+      "path": "Testing/assets/oscp-a/oscp-a-25.png",
+      "bytes": 11641
+    },
+    {
+      "index": 26,
+      "filename": "oscp-a-26.png",
+      "path": "Testing/assets/oscp-a/oscp-a-26.png",
+      "bytes": 31216
+    },
+    {
+      "index": 27,
+      "filename": "oscp-a-27.png",
+      "path": "Testing/assets/oscp-a/oscp-a-27.png",
+      "bytes": 47750
+    },
+    {
+      "index": 28,
+      "filename": "oscp-a-28-privilege-escalation-amp-proof.png",
+      "path": "Testing/assets/oscp-a/oscp-a-28-privilege-escalation-amp-proof.png",
+      "bytes": 87077
+    },
+    {
+      "index": 29,
+      "filename": "oscp-a-29-initial-access-amp-local-flag.png",
+      "path": "Testing/assets/oscp-a/oscp-a-29-initial-access-amp-local-flag.png",
+      "bytes": 55681
+    },
+    {
+      "index": 30,
+      "filename": "oscp-a-30-enumeration.png",
+      "path": "Testing/assets/oscp-a/oscp-a-30-enumeration.png",
+      "bytes": 26740
+    },
+    {
+      "index": 31,
+      "filename": "oscp-a-31-privilege-escalation-amp-proof.png",
+      "path": "Testing/assets/oscp-a/oscp-a-31-privilege-escalation-amp-proof.png",
+      "bytes": 74594
+    }
+  ],
+  "oscp_b": [
+    {
+      "index": 1,
+      "filename": "oscp-b-01-enumeration.png",
+      "path": "Testing/assets/oscp-b/oscp-b-01-enumeration.png",
+      "bytes": 70245
+    },
+    {
+      "index": 2,
+      "filename": "oscp-b-02.png",
+      "path": "Testing/assets/oscp-b/oscp-b-02.png",
+      "bytes": 141298
+    },
+    {
+      "index": 3,
+      "filename": "oscp-b-03.png",
+      "path": "Testing/assets/oscp-b/oscp-b-03.png",
+      "bytes": 28294
+    },
+    {
+      "index": 4,
+      "filename": "oscp-b-04.png",
+      "path": "Testing/assets/oscp-b/oscp-b-04.png",
+      "bytes": 103655
+    },
+    {
+      "index": 5,
+      "filename": "oscp-b-05.png",
+      "path": "Testing/assets/oscp-b/oscp-b-05.png",
+      "bytes": 13204
+    },
+    {
+      "index": 6,
+      "filename": "oscp-b-06.png",
+      "path": "Testing/assets/oscp-b/oscp-b-06.png",
+      "bytes": 16930
+    },
+    {
+      "index": 7,
+      "filename": "oscp-b-07.png",
+      "path": "Testing/assets/oscp-b/oscp-b-07.png",
+      "bytes": 100339
+    },
+    {
+      "index": 8,
+      "filename": "oscp-b-08-kerberoasting.png",
+      "path": "Testing/assets/oscp-b/oscp-b-08-kerberoasting.png",
+      "bytes": 88577
+    },
+    {
+      "index": 9,
+      "filename": "oscp-b-09.png",
+      "path": "Testing/assets/oscp-b/oscp-b-09.png",
+      "bytes": 140895
+    },
+    {
+      "index": 10,
+      "filename": "oscp-b-10.png",
+      "path": "Testing/assets/oscp-b/oscp-b-10.png",
+      "bytes": 45474
+    },
+    {
+      "index": 11,
+      "filename": "oscp-b-11-initial-enumeration.png",
+      "path": "Testing/assets/oscp-b/oscp-b-11-initial-enumeration.png",
+      "bytes": 88553
+    },
+    {
+      "index": 12,
+      "filename": "oscp-b-12-privilege-escalation.png",
+      "path": "Testing/assets/oscp-b/oscp-b-12-privilege-escalation.png",
+      "bytes": 64594
+    },
+    {
+      "index": 13,
+      "filename": "oscp-b-13-further-enumeration.png",
+      "path": "Testing/assets/oscp-b/oscp-b-13-further-enumeration.png",
+      "bytes": 61304
+    },
+    {
+      "index": 14,
+      "filename": "oscp-b-14.png",
+      "path": "Testing/assets/oscp-b/oscp-b-14.png",
+      "bytes": 47638
+    },
+    {
+      "index": 15,
+      "filename": "oscp-b-15-cracking-sam-hashes.png",
+      "path": "Testing/assets/oscp-b/oscp-b-15-cracking-sam-hashes.png",
+      "bytes": 130098
+    },
+    {
+      "index": 16,
+      "filename": "oscp-b-16-initial-entry-amp-flag.png",
+      "path": "Testing/assets/oscp-b/oscp-b-16-initial-entry-amp-flag.png",
+      "bytes": 72994
+    },
+    {
+      "index": 17,
+      "filename": "oscp-b-17.png",
+      "path": "Testing/assets/oscp-b/oscp-b-17.png",
+      "bytes": 72867
+    },
+    {
+      "index": 18,
+      "filename": "oscp-b-18-initial-access.png",
+      "path": "Testing/assets/oscp-b/oscp-b-18-initial-access.png",
+      "bytes": 54343
+    },
+    {
+      "index": 19,
+      "filename": "oscp-b-19.png",
+      "path": "Testing/assets/oscp-b/oscp-b-19.png",
+      "bytes": 82140
+    },
+    {
+      "index": 20,
+      "filename": "oscp-b-20-local-flag.png",
+      "path": "Testing/assets/oscp-b/oscp-b-20-local-flag.png",
+      "bytes": 80972
+    },
+    {
+      "index": 21,
+      "filename": "oscp-b-21-further-enumeration.png",
+      "path": "Testing/assets/oscp-b/oscp-b-21-further-enumeration.png",
+      "bytes": 46719
+    },
+    {
+      "index": 22,
+      "filename": "oscp-b-22-privilege-escalation-flag.png",
+      "path": "Testing/assets/oscp-b/oscp-b-22-privilege-escalation-flag.png",
+      "bytes": 54946
+    },
+    {
+      "index": 23,
+      "filename": "oscp-b-23-initial-access-local-flag.png",
+      "path": "Testing/assets/oscp-b/oscp-b-23-initial-access-local-flag.png",
+      "bytes": 140895
+    },
+    {
+      "index": 24,
+      "filename": "oscp-b-24-privilege-escalation-flag.png",
+      "path": "Testing/assets/oscp-b/oscp-b-24-privilege-escalation-flag.png",
+      "bytes": 58196
+    },
+    {
+      "index": 25,
+      "filename": "oscp-b-25-initial-entry-local-flag.png",
+      "path": "Testing/assets/oscp-b/oscp-b-25-initial-entry-local-flag.png",
+      "bytes": 34624
+    },
+    {
+      "index": 26,
+      "filename": "oscp-b-26-privilege-escalation-proof-fla.png",
+      "path": "Testing/assets/oscp-b/oscp-b-26-privilege-escalation-proof-fla.png",
+      "bytes": 55706
+    },
+    {
+      "index": 27,
+      "filename": "oscp-b-27.png",
+      "path": "Testing/assets/oscp-b/oscp-b-27.png",
+      "bytes": 22328
+    },
+    {
+      "index": 28,
+      "filename": "oscp-b-28.png",
+      "path": "Testing/assets/oscp-b/oscp-b-28.png",
+      "bytes": 22012
+    },
+    {
+      "index": 29,
+      "filename": "oscp-b-29.png",
+      "path": "Testing/assets/oscp-b/oscp-b-29.png",
+      "bytes": 89901
+    }
+  ]
+}

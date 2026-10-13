@@ -1,7 +1,7 @@
 {
   "name": "Reverse shells & handlers (§3)",
   "description": "Once a foothold or command-execution path exists, catch and stabilise an interactive shell: stand up a listener, craft a reverse-shell payload for the target OS, then upgrade to a full PTY. Payloads are only crafted and handed to the operator, never auto-fired, an OSCP requirement; the listener runs locally.",
-  "source": "OSCP methodology (project-authored, obol-local)",
+  "source": "OSCP methodology",
   "actions": [
     {
       "id": "shell-listener",

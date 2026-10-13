@@ -51,15 +51,47 @@
     { kind: 'blocker.responder_quiet', re: /(?:SMB|HTTP) server\s*\[OFF\]|Responder[^\n]*\[OFF\]|\[OFF\][^\n]*(?:SMB|HTTP)/i },
     // gobuster/ffuf hitting a wildcard/catch-all response and refusing to run until you filter it.
     { kind: 'blocker.web_wildcard', re: /the server returns a status code that matches the provided options for non existing urls|To continue please exclude the status code|use the "--wildcard" switch|WildcardResponse/i },
+    // access denied / permission barriers (service refused authenticated access or local account confusion).
+    { kind: 'blocker.access_denied', re: /STATUS_ACCESS_DENIED|Access is denied|0xc0000022/i },
+    // authentication rejected (bad password or wrong account scope).
+    { kind: 'blocker.logon_failure', re: /STATUS_LOGON_FAILURE|0xc000006d|Authentication failure|Failed to authenticate|Login failed for user/i },
+    // Kerberos clock skew: DC rejected ticket because time drift > 5 mins.
+    { kind: 'blocker.clock_skew', re: /KRB_AP_ERR_SKEW|clock skew too great|time difference too large/i },
     // hashcat/john cannot use the GPU/OpenCL (common in a VM) — fall back to CPU / --force.
     { kind: 'blocker.hashcat_env', re: /No devices found\/left|clGetPlatformIDs|No OpenCL compatible|ADL_Main_Control_Create|increase.*--force|You can use --force to override/i },
+    // anonymous LDAP bind rejected by DC policy (DSID-0C09075A).
+    { kind: 'blocker.ldap_anonymous_disabled', re: /000004DC:\s*LdapErr:\s*DSID-0C09075A|operationsError.*successful bind must be completed|In order to perform this operation a successful bind must be completed/i },
+    // NetExec --get-file quietly defaulting to administrative C$ share instead of the target share.
+    { kind: 'blocker.nxc_c_share_denied', re: /from share ["']C\$["']|Error writing file .* from share ["']C\$["']|(?:share\s+["']?C\$["']?|enumerating\s+C\$).*(?:0xc0000022|STATUS_ACCESS_DENIED)/i },
+    // account in Protected Users group: KDC refuses RC4/DES Kerberos tickets and NTLM authentication.
+    { kind: 'blocker.protected_users', re: /KDC_ERR_ETYPE_NOSUPP|KDC has no support for encryption type|Protected Users/i },
+    // delegation target account has AccountNotDelegated = True (Marked Sensitive).
+    { kind: 'blocker.account_not_delegated', re: /AccountNotDelegated\s*:\s*True|KDC_ERR_BADOPTION|account is marked as sensitive and cannot be delegated/i },
+    // WinRM port 5985 closed / connection refused (evil-winrm failing on non-WinRM targets).
+    { kind: 'blocker.winrm_closed', re: /ECONNREFUSED.*(?:5985|evil-winrm)|Connection refused.*(?:port 5985|5985)|Cannot establish connection to remote endpoint.*5985/i },
+    // NetExec --spider usage banner from missing positional share/pattern arguments.
+    { kind: 'blocker.nxc_spider_usage', re: /usage:\s*nxc\s+smb.*--spider|--spider:\s*(?:expected|error)|nxc smb: error:.*--spider|--spider requires|arguments are required:\s*share/i },
   ];
 
   function _parse_op_blockers(text, ws, command, source, facts) {
     var t = String(text || ''); if (!t) return;
     var h = 'host:' + ws.target;
+    var isNmap = (command && /^\s*nmap\b/i.test(command)) || /Starting Nmap|Nmap scan report for/i.test(t);
+    var isRoastOrEnum = command && /--asreproast|--kerberoast|--users|GetNPUsers|GetUserSPNs/i.test(command);
+    // Strip nmap script probe lines so unauthenticated NSE probe outputs (like ms10-061: NT_STATUS_ACCESS_DENIED)
+    // never masquerade as operational authentication/execution blockers for the operator.
+    var tWithoutNse = t.replace(/^\|\s*[-_a-zA-Z0-9]+:\s*NT_STATUS_ACCESS_DENIED.*$/gim, '')
+                       .replace(/^\|_[-_a-zA-Z0-9]+:\s*NT_STATUS_ACCESS_DENIED.*$/gim, '');
     for (var i = 0; i < WALLS.length; i++) {
-      if (WALLS[i].re.test(t)) _add(facts, mkFact(WALLS[i].kind, h, { tool: C._exec_tool ? C._exec_tool(command || '') : '', via: 'blocker-detect' }, S, source));
+      var w = WALLS[i];
+      if (w.kind === 'blocker.access_denied') {
+        if (isNmap || isRoastOrEnum) continue;
+        if (w.re.test(tWithoutNse)) {
+          _add(facts, mkFact(w.kind, h, { tool: C._exec_tool ? C._exec_tool(command || '') : '', via: 'blocker-detect' }, S, source));
+        }
+        continue;
+      }
+      if (w.re.test(t)) _add(facts, mkFact(w.kind, h, { tool: C._exec_tool ? C._exec_tool(command || '') : '', via: 'blocker-detect' }, S, source));
     }
   }
   C._parse_op_blockers = _parse_op_blockers;

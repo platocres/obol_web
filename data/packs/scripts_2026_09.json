@@ -1,5 +1,5 @@
 {
-  "_note": "Copy/paste manual-exploitation snippet library (ROADMAP §11). Project-authored obol-local data. Fact kinds are normalized to obol-local's namespace (AGENTS.md); {{tokens}} are filled from facts by obol/scripts.py (basedn/target/user/password/domain from command_context, lhost/lport from staging/listeners). examSafe = OSCP-rule-safe (manual, no automated exploitation). Nothing here is auto-executed, every snippet is human-run.",
+  "_note": "Copy/paste manual-exploitation snippet library. Project-authored obol data. Fact kinds are normalized to obol's namespace; {{tokens}} are filled from facts by the engine (basedn/target/user/password/domain from command_context, lhost/lport from staging/listeners). examSafe = OSCP-rule-safe (manual, no automated exploitation). Nothing here is auto-executed, every snippet is human-run.",
   "scripts": [
     {
       "id": "ldapsearch",

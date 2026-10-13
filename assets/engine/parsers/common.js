@@ -1,7 +1,7 @@
 /*!
  * obol engine — parsers/common.js  (was _common.js — renamed; GitHub Pages/Jekyll drops underscore-prefixed files)
  * Shared compiled regexes, scoping/validation helpers, and the `_add` dedup primitive.
- * Faithful JS port of obol-local/obol/parsers/_common.py.
+ * Faithful JS port of 
  *
  * The "workspace" (ws) in the browser is a plain context object:
  *   { target: "10.10.10.10", domainSeed: "corp.local", seedFacts: [Fact...] }
@@ -42,7 +42,7 @@
   C.reAll = reAll;
   C.reSearch = reSearch;
 
-  // ---- regexes (ported from _common.py) ----------------------------------------- //
+  // ---- regexes ----------------------------------------- //
   C._DOMAIN_RE = /\(domain:([^)]+)\)/i;
   C._NAME_RE = /\(name:([^)]+)\)/i;
   C._NXC_PROTO_REACHABLE_RE = /^(?<proto>LDAP|SMB|WINRM|RDP|SSH|FTP)\s+\S+\s+\d+\s+\S+/im;
@@ -331,19 +331,52 @@
   }
   C._line_for_match = _line_for_match;
 
+  function _clean_os_string(str) {
+    if (!str) return '';
+    str = String(str).trim();
+    var cpeM = str.match(/cpe:\/o:([a-z0-9_-]+):([a-z0-9_.:-]+)/i);
+    if (cpeM) {
+      var vendor = cpeM[1].toLowerCase();
+      var prodParts = cpeM[2].split(':');
+      var decoded = prodParts.join(' ')
+        .replace(/_/g, ' ')
+        .replace(/\bwindows\b/gi, 'Windows')
+        .replace(/\bserver\b/gi, 'Server')
+        .replace(/\br2\b/gi, 'R2')
+        .replace(/\bsp(\d+)\b/gi, 'SP$1')
+        .replace(/\bsp\b/gi, 'SP')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      if (/windows/i.test(decoded)) return decoded.indexOf('Windows') === 0 ? decoded : ('Windows ' + decoded);
+      if (/ubuntu/i.test(decoded)) return decoded.indexOf('Ubuntu') === 0 ? decoded : ('Ubuntu ' + decoded);
+      if (/debian/i.test(decoded)) return decoded.indexOf('Debian') === 0 ? decoded : ('Debian ' + decoded);
+    }
+    return str.replace(/;\s*CPE:.*$/i, '').trim();
+  }
+  C._clean_os_string = _clean_os_string;
+
   // Pull a SPECIFIC OS product ("Windows Server 2016 Standard 14393", "Ubuntu 20.04") out of an
-  // authoritative LABELLED line only: smb-os-discovery / nmap OS detection / systeminfo (OS: / OS
-  // details: / Running:). Service banners are too noisy to carve a version from, so an unlabelled
-  // match stays family-only and nothing wrong is ever shown.
+  // authoritative LABELLED line: smb-os-discovery / nmap OS detection / systeminfo (OS: / OS
+  // details: / Running:), or NetExec SMB banner ([*] Windows 7 / Server 2008 R2...).
   function _os_product_from_label(text, family) {
+    // 1) NetExec banner: [*] Windows 7 / Server 2008 R2 Build 7601 x64 (name:DC)...
+    var nxcRe = /\[\*\]\s+((?:Windows|Linux|Unix)[^\(\r\n]+?)(?:\s*\((?:name|domain|signing|SMBv1|Null Auth)|$)/im;
+    var nm = nxcRe.exec(text || '');
+    if (nm && nm[1]) {
+      var np = nm[1].trim();
+      if (np && np.toLowerCase().indexOf(family) >= 0) return _clean_os_string(np).slice(0, 80);
+    }
+
+    // 2) OS: / OS details: / Running:
     var re = /\b(?:OS(?:\s*details)?|Running)\s*:\s*([^\n|]+)/gi;
     var m;
     while ((m = re.exec(text || ''))) {
-      var p = m[1].trim()
+      var raw = m[1].trim()
         .replace(/\s+(microsoft-ds|netbios-ssn|msrpc|microsoft-rpc|workgroup)\b.*$/i, '')
         .replace(/[.,;]+\s*$/, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
+      var p = _clean_os_string(raw);
       if (p && p.toLowerCase().indexOf(family) >= 0) return p.slice(0, 80);
     }
     return '';

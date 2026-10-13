@@ -1,6 +1,6 @@
 /*!
  * obol engine — parsers/database.js
- * Faithful JS port of obol-local/obol/parsers/database.py.
+ * Faithful JS port of 
  */
 (function (root) {
   'use strict';
@@ -15,7 +15,7 @@
 
   function _db_tool(low) {
     if (/\bnxc\b|netexec|crackmapexec/.test(low)) return 'nxc';
-    var tools = ['mssqlclient', 'mysql', 'psql', 'pymongo', 'mongosh', 'mongo', 'redis-cli'];
+    var tools = ['mssqlclient', 'mysql', 'psql', 'pymongo', 'mongosh', 'mongo', 'redis-cli', 'sqlite3', 'sqlite'];
     for (var i = 0; i < tools.length; i++) if (low.indexOf(tools[i]) >= 0) return tools[i];
     return 'database';
   }
@@ -40,7 +40,7 @@
     }
 
     var hashes = [], seen = {};
-    if (['password', 'hash', 'users'].some(function (k) { return text.toLowerCase().indexOf(k) >= 0; })) {
+    if (['password', 'hash', 'users', 'user', 'partners', 'accounts', 'credential', 'sqlite'].some(function (k) { return text.toLowerCase().indexOf(k) >= 0; })) {
       reAll(_DB_HASH_ROW_RE, text).forEach(function (m) {
         var hsh = m.groups.hash;
         if (seen[hsh.toLowerCase()] || hsh.toLowerCase() === 'password' || hsh.toLowerCase() === 'email') return;
@@ -71,6 +71,7 @@
       else if (nxcMssql && (/MSSQL\b[^\n]*\[\+\]/i.test(text) || /\(Pwn3d!\)/i.test(text))) svc = 'mssql';
       else if (low.indexOf('psql') >= 0 && (/list of databases/i.test(text) || /^\s*\w+=[#>]/m.test(text) || tlow.indexOf('template0') >= 0)) svc = 'postgresql';
       else if ((low.indexOf('sqlplus') >= 0 || low.indexOf('odat') >= 0) && (/connected to:/i.test(text) || /^\s*SQL>/m.test(text))) svc = 'oracle';
+      else if ((low.indexOf('sqlite') >= 0 || /SQLite format 3|CREATE TABLE/i.test(text)) && (/\bsqlite\s*>/i.test(text) || /CREATE TABLE/i.test(text) || low.indexOf('.schema') >= 0 || low.indexOf('.tables') >= 0 || low.indexOf('select') >= 0)) svc = 'sqlite';
       if (svc) _add(facts, mkFact('db.session', h, { service: svc, tool: _db_tool(low), detail: 'authenticated database session established' }, S, source));
     }
   }

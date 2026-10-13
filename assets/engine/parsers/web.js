@@ -1,6 +1,6 @@
 /*!
  * obol engine — parsers/web.js
- * Faithful JS port of the fixture-reachable parsers in obol-local/obol/parsers/web.py:
+ * Faithful JS port of the fixture-reachable parsers in 
  * wpscan, content discovery, git source, sqlmap, and the manual web-exploitation success
  * signals (LFI/XXE, cmdi/SSTI/deser/jenkins, SQLi, SSRF/IMDS, NoSQLi, JWT, IDOR, XSS).
  * None of the exploit signals promote to a foothold, shell, or validated credential.
@@ -459,5 +459,34 @@
     if (C._WEB_IDOR_ACTION_IDS.has(actionId)) _parse_web_idor(text, ws, source, facts);
   }
   C._parse_web_exploit_output = _parse_web_exploit_output;
+
+  // Product fingerprints that gate a specific exploit move. Shape-based and
+  // conservative: each mints only on a signature that genuinely identifies the
+  // product (a dedicated response header, or the product name in a title/body),
+  // so an unrelated web paste mints nothing. These are the precise triggers the
+  // matching moves want instead of a bare "port 80/8080 is open" gate.
+  //
+  // Jenkins: the X-Jenkins / X-Hudson response headers are definitive (Hudson
+  // was Jenkins' former name and the header persists); the CLI port header and
+  // the "Welcome to Jenkins!" / "Dashboard [Jenkins]" chrome are strong backups.
+  var _FP_JENKINS_RE = /^\s*X-(?:Jenkins|Hudson)(?:-(?:Session|CLI2?-Port))?\s*:/im;
+  var _FP_JENKINS_BODY_RE = /Welcome to Jenkins!|Dashboard \[Jenkins\]|<[^>]*id=["']?jenkins|Manage Jenkins/i;
+  // NVMS-1000 (TVT) network video management, CVE-2019-20085 directory traversal.
+  // The product names itself in the login page title and asset paths.
+  var _FP_NVMS_RE = /NVMS[\s-]?1000|\/vh_www\/|TVT[\s_-]?NVMS/i;
+
+  function _parse_web_fingerprint(text, ws, source, facts) {
+    if (!text || !text.trim()) return;
+    var h = 'host:' + ws.target;
+    if (reSearch(_FP_JENKINS_RE, text)) {
+      _add(facts, mkFact('web.fingerprint.jenkins', h, { via: 'response-header', evidence: C._line_for_match(text, reSearch(_FP_JENKINS_RE, text)) }, S, source));
+    } else if (reSearch(_FP_JENKINS_BODY_RE, text)) {
+      _add(facts, mkFact('web.fingerprint.jenkins', h, { via: 'page-chrome' }, S, source));
+    }
+    if (reSearch(_FP_NVMS_RE, text)) {
+      _add(facts, mkFact('web.fingerprint.nvms', h, { via: 'product-name', product: 'NVMS-1000' }, S, source));
+    }
+  }
+  C._parse_web_fingerprint = _parse_web_fingerprint;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

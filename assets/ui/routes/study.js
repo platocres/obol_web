@@ -6,7 +6,7 @@
  * sample output with the signal highlighted → proves/opens → common mistake) or YOUR TURN
  * (retrieval practice: a situation, multiple choice, a verdict on every answer, the cell as reward).
  *
- * All content comes from OBOL.study (derived from the packs) + OBOL.STUDY_FIXTURES. No hand-authored
+ * All content comes from OBOL.study + OBOL.STUDY_FIXTURES. No hand-authored
  * lessons live here — this file is rendering + interaction only.
  */
 (function (root) {
@@ -268,7 +268,7 @@
     if (authored) {
       return '<div class="study-why"><div class="study-why-h">Why this, why now</div><p>' + codeify(authored) + '</p></div>';
     }
-    // Fallback (derived) until a move has an authored note: name the prereq → outcome link plainly.
+    // Fallback until a move has an authored note: name the prereq → outcome link plainly.
     var proves = (cell.proves || [])[0];
     var needs = cell.prereqFacts.length
       ? 'you are holding ' + cell.prereqFacts.map(function (f) { return '<b>' + esc(human(f)) + '</b>'; }).join(', ')
@@ -1384,7 +1384,10 @@
     });
     // node select + "opens →" jumps + goto chips → re-render
     U.on(mount, 'click', '[data-node]', function (e, t) { var g = mount.querySelector('.study-graph'); _railScroll = g ? g.scrollTop : null; _sel = t.getAttribute('data-node'); OBOL.router.render(); });
-    U.on(mount, 'click', '[data-goto]', function (e, t) { if (_view === 'sim') _from = 'map'; _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
+    // Scope to Learn: this handler is delegated on the shared #view, which outlives the route, so it
+    // must ignore [data-goto] clicks that belong to another route (e.g. Stuck?'s interview buttons,
+    // which carry data-goto as a step name, not a Learn node id).
+    U.on(mount, 'click', '[data-goto]', function (e, t) { if (OBOL.router.current().name !== 'study') return; if (_view === 'sim') _from = 'map'; _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
     // gear toggle → re-render
     U.on(mount, 'click', '[data-gear]', function (e, t) { _gear = t.getAttribute('data-gear'); OBOL.router.render(); });
     // "Run it from" toggle: remote (your box) vs on the target — local DOM swap, no re-render

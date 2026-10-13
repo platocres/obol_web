@@ -76,6 +76,25 @@
     //     type and structured value); the guard keeps it from double-running when the command already did.
     if (/\$krb5asrep\$/i.test(text) && !hasKind(facts, 'hash.asrep') && C._parse_asrep_hashes) C._parse_asrep_hashes(text, ws, source, facts);
     if (/\$krb5tgs\$/i.test(text) && !hasKind(facts, 'hash.tgs') && C._parse_tgs_hashes) C._parse_tgs_hashes(text, ws, source, facts);
+
+    // (4) Share download output or GPP cpassword XML/grep without command
+    if (text.indexOf('getting file ') >= 0 && !hasKind(facts, 'loot.files') && C._parse_share_inventory) {
+      C._parse_share_inventory(text, ws, 'smbclient', source, facts);
+    }
+    if ((text.indexOf('cpassword=') >= 0 || text.indexOf('cpassword =') >= 0) && !hasKind(facts, 'credential.candidate') && C._parse_gpp_artifacts) {
+      C._parse_gpp_artifacts(text, ws, source, facts);
+    }
+
+    // (5) Ligolo-ng tunnel establishment or session shape pasted without command
+    if ((/(\[Tunnel\] Interface ligolo is UP|session connected|Agent joined:)/i.test(text) || /ligolo-proxy.*listening/i.test(text)) && !hasKind(facts, 'tunnel.route')) {
+      _add(facts, mkFact('tunnel.route', h, { via: 'ligolo', shape: true }, S, source));
+      _add(facts, mkFact('pivot.active', h, { via: 'ligolo', shape: true }, S, source));
+    }
+
+    // (6) Raw SQLite database dump or table schema shape pasted without command
+    if (/(SQLite format 3|CREATE TABLE\s+(?:partners|users|accounts|credentials)|^\s*\d+\|[a-zA-Z0-9_.-]+\|\$2[aby]\$)/im.test(text) && !hasKind(facts, 'loot.material')) {
+      _add(facts, mkFact('loot.material', h, { kind: 'sqlite_db', via: 'shape' }, S, source));
+    }
   }
 
   C._parse_shape = _parse_shape;
@@ -99,6 +118,7 @@
     { fact: 'vuln.phpmyadmin_lfi', re: /phpMyAdmin\s*4\.8(\.[01])?\b|CVE-2018-12613/i, cve: 'CVE-2018-12613' },
     { fact: 'vuln.webmin', re: /MiniServ\s*1\.9|Webmin\s*1\.9|CVE-2019-15107/i, cve: 'CVE-2019-15107' },
     { fact: 'vuln.usermin', re: /\bUsermin\b/i, cve: '' },
+    { fact: 'vuln.usermin_rce', re: /Usermin\s*(?:v?1\.[89]|1\.820)|EDB-50234/i, cve: 'EDB-50234' },
     { fact: 'vuln.ofbiz', re: /\bOFBiz\b|CVE-2020-9496/i, cve: 'CVE-2020-9496' },
     { fact: 'vuln.cacti', re: /\bCacti\b|CVE-2022-46169/i, cve: 'CVE-2022-46169' },
     { fact: 'vuln.zabbix', re: /\bZabbix\b|CVE-2022-23131/i, cve: 'CVE-2022-23131' },
@@ -107,7 +127,26 @@
     { fact: 'vuln.freeswitch', re: /FreeSWITCH|mod_event_socket/i, cve: '' },
     { fact: 'vuln.jdwp', re: /JDWP-?Handshake|Java Debug Wire/i, cve: '' },
     { fact: 'vuln.aerospike', re: /\bAerospike\b|CVE-2020-13151/i, cve: 'CVE-2020-13151' },
+    { fact: 'vuln.aerospike_udf', re: /Aerospike.*5\.[01]|cve-2020-13151/i, cve: 'CVE-2020-13151' },
+    { fact: 'vuln.pico_cms', re: /Pico CMS|Pico v[0-9.]+/i, cve: '' },
+    { fact: 'vuln.screen_suid', re: /screen-4\.5\.0|GNU Screen 4\.5\.0/i, cve: 'CVE-2017-5618' },
     { fact: 'vuln.wifi_mouse', re: /WiFi\s*Mouse|Mobile\s*Mouse|Mouse\s*Server/i, cve: '' },
+    { fact: 'vuln.solr', re: /Apache Solr|Solr.*(?:8\.[0-3]|7\.|6\.|5\.)|CVE-2019-17558/i, cve: 'CVE-2019-17558' },
+    { fact: 'vuln.achat', re: /A(?:Chat|chat)\s*(?:v?0\.150|beta7)|CVE-2015-8278/i, cve: 'CVE-2015-8278' },
+    { fact: 'vuln.nibbleblog', re: /Nibbleblog|CVE-2015-6967/i, cve: 'CVE-2015-6967' },
+    { fact: 'vuln.iis6_webdav', re: /Microsoft[- ]IIS(?: httpd|\/)?\s*6\.0.*WebDAV|CVE-2017-7269|ScStoragePathFromUrl|ExplodingCan/i, cve: 'CVE-2017-7269' },
+    { fact: 'vuln.prtg', re: /PRTG Network Monitor|Paessler PRTG/i, cve: '' },
+    { fact: 'vuln.gitlab', re: /GitLab Community Edition|GitLab Enterprise Edition/i, cve: '' },
+    { fact: 'vuln.october_cms', re: /October\s*(?:CMS)?\s*(?:v?1\.[0-9.]+|Build\s*\d+)?/i, cve: '' },
+    { fact: 'vuln.rejetto_hfs', re: /HttpFileServer\s*2\.[0-3]|HFS\s*2\.[0-3]|rejetto/i, cve: 'CVE-2014-6287' },
+    { fact: 'vuln.coldfusion', re: /ColdFusion(?:\s*(?:8|9|10))?|CFIDE/i, cve: 'CVE-2010-2861' },
+    { fact: 'vuln.oracle_tns', re: /Oracle TNS Listener|TNSLSNR|1521\/tcp.*oracle/i, cve: '' },
+    { fact: 'vuln.h2_console', re: /H2 Database|h2-console|8082\/tcp.*h2/i, cve: '' },
+    { fact: 'vuln.chkrootkit', re: /chkrootkit(?:\s*(?:0\.[0-4][0-9]?))?/i, cve: 'CVE-2014-0476' },
+    { fact: 'vuln.zabbix_agent', re: /Zabbix Agent|10050\/tcp.*zabbix/i, cve: '' },
+    { fact: 'vuln.myfaces_jsf', re: /javax\.faces\.ViewState|Apache MyFaces|MyFaces/i, cve: '' },
+    { fact: 'vuln.node_serialize', re: /node-serialize|_\$\$ND_FUNC\$\$_/i, cve: 'CVE-2017-5941' },
+    { fact: 'vuln.gitea', re: /\bGitea\b|Git with a cup of tea/i, cve: '' },
   ];
   function _parse_vulnmatch(text, ws, source, facts) {
     text = String(text || ''); if (!text.trim()) return;

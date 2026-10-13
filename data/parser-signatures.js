@@ -39,9 +39,9 @@
         'web.tech', 'http.redirect', 'ad.domain_known', 'ad.base_dn'],
     },
     'http-metadata': {
-      looksFor: 'an HTTP response or a whatweb/curl banner — the status line, the Server header, and the tech it reveals.',
-      regex: 'HTTP/1.1 200, Server: …',
-      emits: ['http.reachable', 'http.response', 'web.server', 'web.tech', 'web.title', 'http.redirect'],
+      looksFor: 'an HTTP response or a whatweb/curl banner — the status line, the Server header, the tech it reveals, and a product fingerprint (a Jenkins X-Jenkins header or chrome, an NVMS-1000 login page) that gates a specific exploit move.',
+      regex: 'HTTP/1.1 200, Server: …, X-Jenkins: …, NVMS-1000',
+      emits: ['http.reachable', 'http.response', 'web.server', 'web.tech', 'web.title', 'http.redirect', 'web.fingerprint.'],
     },
     'web-content': {
       looksFor: "a content-discovery tool's status/path lines (feroxbuster/gobuster/ffuf) — the 200s and 301s, and whether a page carries a form, a parameter, or an exposed file.",
@@ -63,7 +63,7 @@
     'smb-shares': {
       looksFor: 'smbclient / smbmap / nxc share listings and the null-/guest-session banner that lets you read them.',
       regex: 'Disk  READ/WRITE, [+] Guest / null session',
-      emits: ['smb.shares', 'smb.null_session', 'smb.guest_session', 'smb.reachable'],
+      emits: ['smb.shares', 'smb.null_session', 'smb.guest_session', 'blocker.smb_null_denied', 'smb.reachable', 'smb.content_accessible', 'smb.readable_share', 'smb.writable_share', 'access.admin_share', 'share.users_readable'],
     },
     'ad-ldap': {
       looksFor: 'ldapsearch / nxc --users / rid-brute output — the user and computer accounts, the named domain, and whether the bind was anonymous.',
@@ -73,12 +73,12 @@
     'kerberos-roast': {
       looksFor: 'GetNPUsers / GetUserSPNs output — the $krb5asrep$ and $krb5tgs$ hashes (also recognized by shape when pasted alone).',
       regex: '$krb5asrep$ / $krb5tgs$',
-      emits: ['hash.asrep', 'hash.tgs'],
+      emits: ['hash.asrep', 'hash.tgs', 'hash.sntp'],
     },
     'secretsdump': {
       looksFor: 'secretsdump / mimikatz / pypykatz dumps — NTLM hashes, the full NTDS, the krbtgt key, cached (DCC2) hashes, Linux /etc/shadow, and any cleartext.',
       regex: 'user:rid:lm:nt:::, $DCC2$, krbtgt:502',
-      emits: ['hash.ntlm', 'loot.ntds', 'hash.krbtgt', 'hash.mscache', 'credential.plaintext', 'loot.shadow'],
+      emits: ['hash.ntlm', 'loot.ntds', 'hash.krbtgt', 'hash.mscache', 'credential.plaintext', 'loot.shadow', 'credential.admin', 'loot.sam'],
     },
     'cracked': {
       looksFor: "john/hashcat cracked lines — a recovered 'hash:password' pair.",
@@ -97,11 +97,11 @@
       emits: ['credential.netntlm', 'hash.ntlm'],
     },
     'ad-abuse': {
-      looksFor: 'BloodHound / bloodyAD / PowerView output — collected graph, attack and control paths, ACL edges (GenericAll/WriteDacl), delegation, GPO and gMSA control, and the objects you can now add or own.',
-      regex: 'GenericAll, Unconstrained, has control over',
+      looksFor: 'BloodHound / bloodyAD / PowerView output — collected graph, attack and control paths, ACL edges (GenericAll/WriteDacl), delegation, GPO and gMSA control, the objects you can now add or own, and a recovered LAPS local-admin password (ms-MCS-AdmPwd / msLAPS-Password, via nxc -M laps or ldapsearch).',
+      regex: 'GenericAll, Unconstrained, has control over, Computer:X Password:Y',
       emits: ['ad.graph.collected', 'ad.attack_paths', 'ad.control_paths', 'ad.acl_lead', 'ad.domain_control',
         'ad.gmsa', 'ad.gpo_writable', 'ad.unconstrained', 'ad.group_joined', 'ad.computer_added',
-        'lateral.movement', 'ad.coerced_auth', 'ad.gpo_control', 'ad.sid_history'],
+        'lateral.movement', 'ad.coerced_auth', 'ad.gpo_control', 'ad.sid_history', 'ad.laps_lead', 'credential.candidate', 'ad.delegation', 'ad.laps', 'ad.rbcd'],
     },
     'adcs': {
       looksFor: 'certipy / pywhisker output — a `find -vulnerable` run naming ESC1-16 templates (adcs.vulnerable), a saved .pfx certificate from `req` or a shadow-credentials add (credential.certificate), and a `certipy auth` that exchanges a cert for the account’s NT hash (hash.ntlm → a usable credential).',
@@ -140,9 +140,9 @@
     },
     'host-privesc': {
       looksFor: "a privilege-escalation sweep on the host — winPEAS/linPEAS leads, sudo -l rights, SUID binaries, capabilities, writable cron/paths, docker/lxd groups, unquoted service paths, dangerous tokens, missing patches, stored app credentials (PuTTY/WinSCP/VNC), AV/AppLocker posture, notable programs, and a reachable desktop.",
-      regex: 'NOPASSWD, SeImpersonatePrivilege, -rwsr-xr-x',
+      regex: 'NOPASSWD, SeImpersonatePrivilege, -rwsr-xr-x, nsclient.ini password=',
       emits: ['privesc.', 'config.review', 'defense.control', 'host.notable_program', 'host.arch', 'access.desktop',
-        'host.os_family', 'credential.candidate'],
+        'host.os_family', 'credential.candidate', 'file.nsclient_ini'],
     },
     'flags': {
       looksFor: 'an on-host flag read — a clean flag token on its own line from a `type`/`cat …proof.txt`, or a ===FLAG marker, tied to its slot.',
@@ -160,9 +160,9 @@
       emits: ['snmp.info', 'snmp.community', 'snmp.reachable', 'ad.user_list', 'credential.candidate', 'host.hostname'],
     },
     'banners': {
-      looksFor: 'a bare service banner — an SSH version string or an FTP 220/230 line — pasted without the scan around it.',
-      regex: 'SSH-2.0-…, 220 (vsFTPd …)',
-      emits: ['ssh.banner', 'ssh.reachable', 'ftp.banner', 'ftp.reachable', 'ftp.anonymous_login'],
+      looksFor: 'a bare service banner — an SSH version string or an FTP 220/230 line — pasted without the scan around it, or a confirmed FTP upload (STOR / put reaching "226 Transfer complete") that proves the FTP root is writable.',
+      regex: 'SSH-2.0-…, 220 (vsFTPd …), STOR … 226 Transfer complete',
+      emits: ['ssh.banner', 'ssh.reachable', 'ftp.banner', 'ftp.reachable', 'ftp.anonymous_login', 'ftp.anon_write'],
     },
     'websource': {
       looksFor: 'secrets inside a response or source — a config/.env value, a PEM private key, a JWT secret, a VCS token or connection URI, an exposed artifact.',
@@ -172,12 +172,12 @@
     'shell-exec': {
       looksFor: "a caught shell or a command's result — an `id`/`whoami`/`uname` that proves you are executing on the box, as a user or as root/SYSTEM.",
       regex: 'uid=0(root), nt authority\\system',
-      emits: ['access.shell', 'foothold.linux', 'foothold.windows', 'access.system', 'host.os_family', 'host.kernel'],
+      emits: ['access.shell', 'foothold.linux', 'foothold.windows', 'access.system', 'host.os_family', 'host.kernel', 'pivot.active'],
     },
     'auth-blocker': {
       looksFor: "a credential that is valid but refused for a fixable reason — a forced password change (STATUS_PASSWORD_MUST_CHANGE / expired), Kerberos clock skew (KRB_AP_ERR_SKEW), NTLM disabled (STATUS_NOT_SUPPORTED → use -k), account lockout (STATUS_ACCOUNT_LOCKED_OUT) or a disabled/restricted account.",
       regex: 'STATUS_PASSWORD_MUST_CHANGE | password has expired | KRB_AP_ERR_SKEW | clock skew too great | STATUS_NOT_SUPPORTED | STATUS_ACCOUNT_LOCKED_OUT | STATUS_ACCOUNT_DISABLED | STATUS_LOGON_TYPE_NOT_GRANTED | insufficientAccessRights',
-      emits: ['blocker.password_change', 'blocker.clock_skew', 'blocker.ntlm_disabled', 'blocker.lockout', 'blocker.account_restricted', 'blocker.acl_reauth'],
+      emits: ['blocker.password_change', 'blocker.clock_skew', 'blocker.ntlm_disabled', 'blocker.lockout', 'blocker.account_restricted', 'blocker.acl_reauth', 'blocker.access_denied', 'blocker.account_not_delegated', 'blocker.ldap_anonymous_disabled', 'blocker.logon_failure', 'blocker.nxc_c_share_denied', 'blocker.nxc_spider_usage', 'blocker.protected_users', 'blocker.winrm_closed'],
     },
     'op-blocker': {
       looksFor: "a classic operational wall from a pasted error — nmap 'host seems down' (needs -Pn), 'could not resolve host' (needs /etc/hosts), a CRLF 'bad interpreter', 'sudo: no tty present', Defender/AMSI blocking a payload, a SeImpersonate potato that failed, HTTP fuzzing rate-limited (429), or an http/https scheme mismatch (WRONG_VERSION_NUMBER).",
@@ -190,9 +190,9 @@
       emits: ['ssh.key_rejected'],
     },
     'files': {
-      looksFor: 'a file or directory listing — an FTP/rsync/SMB-spider listing or a loot hunt, naming files worth taking (configs, backups, keys).',
-      regex: '-rw-r--r-- … file, drwxr-xr-x … dir',
-      emits: ['loot.files', 'loot.material'],
+      looksFor: 'a file or directory listing — an FTP/rsync/SMB-spider listing or a loot hunt, naming files worth taking (configs, backups, keys), including a KeePass database or dump (.kdbx / $keepass$ hash).',
+      regex: '-rw-r--r-- … file, drwxr-xr-x … dir, *.kdbx, $keepass$*',
+      emits: ['loot.files', 'loot.material', 'loot.keepass_dump'],
     },
     'klist': {
       looksFor: 'klist ticket-cache output — the Kerberos tickets currently held, for pass-the-ticket / reuse.',

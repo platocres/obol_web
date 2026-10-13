@@ -23,7 +23,7 @@
   function phaseOf(kind) { try { return OBOL.phases.phaseOfKind(kind); } catch (e) { return 'recon'; } }
   function phaseIdx(kind) { try { return OBOL.phases.phaseIndex(phaseOf(kind)); } catch (e) { return 0; } }
 
-  // ── concrete "so what" per milestone (ported from obol-local storyline._milestone_detail) ──
+  // ── concrete "so what" per milestone ──
   // Turns a generic kind ("A Usable Credential") into its real subject ("svc@corp.local"), so a
   // block says WHAT specifically, not just its category. Never returns a bare secret value unless
   // no subject exists (callers redact that fallback when secrets are hidden).
@@ -56,7 +56,7 @@
     return !principal(v || {}) && !!detail; // the [:24] hash fallback fired
   }
 
-  // ── light technique framing (ported from storyline._technique; substring over produced kinds) ──
+  // ── light technique framing ──
   var TECH_RULES = [
     [['objective.root_flag'], 'Root Flag Captured'],
     [['objective.local_flag', 'objective.flag'], 'Local Flag Captured'],

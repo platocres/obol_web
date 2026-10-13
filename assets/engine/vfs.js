@@ -228,6 +228,82 @@
       file(p, { status: 'captured', at: s.at || 0, image: s.data_uri, tool: 'screenshot', name: nm, folder: 'proof', origin: 'ran' });
     });
 
+    // 2a) loot and spidered/downloaded files proven by facts (loot.files / smbclient / smbmap / spider_plus).
+    var lootdir = dirs.lootdir || dirs.loot || 'loot';
+    (factIdx['loot.files'] || []).forEach(function (lf) {
+      var lv = lf.value || {};
+      var entries = lv.entries || (lv.files || []).map(function (p) { return { path: p }; });
+      var tool = lv.tool || 'smbclient';
+      var at = lf.at || 0;
+      var sensitiveList = lv.sensitive || [];
+      entries.forEach(function (e) {
+        if (!e) return;
+        var rawPath = typeof e === 'string' ? e : (e.path || '');
+        if (!rawPath) return;
+        var cleanRel = rawPath.replace(/\\/g, '/').replace(/^\/+/, '');
+        var fullPath = cleanRel.indexOf(lootdir + '/') === 0 ? cleanRel : (OBOL.workspace ? OBOL.workspace.join(lootdir, cleanRel) : (lootdir + '/' + cleanRel));
+        var sz = parseInt(e.size, 10) || 0;
+        var isSensitive = sensitiveList.indexOf(rawPath) >= 0 || sensitiveList.indexOf(cleanRel) >= 0 || /groups\.xml|cpassword|id_rsa|\.kdbx|\.pfx/i.test(cleanRel);
+        var f = file(fullPath, {
+          folder: 'loot',
+          status: 'captured',
+          origin: 'ran',
+          confirmed: true,
+          tool: tool,
+          size: sz,
+          at: at,
+          sensitive: isSensitive
+        });
+        if (f.facts.indexOf('loot.files') === -1) f.facts.push('loot.files');
+        if (!f.output) {
+          var base = baseName(cleanRel);
+          (eng.activities || []).forEach(function (act) {
+            if (f.output) return;
+            var outText = (typeof act.stdout === 'string') ? act.stdout : '';
+            if (outText && (outText.indexOf(base) >= 0 || outText.indexOf(cleanRel) >= 0)) {
+              var lines = outText.split(/\r?\n/).filter(function (l) {
+                return l.indexOf(base) >= 0 || l.indexOf(cleanRel) >= 0 || /cpassword/i.test(l);
+              });
+              if (lines.length) f.output = lines.slice(0, 10).join('\n');
+            }
+          });
+        }
+      });
+    });
+
+    (factIdx['config.review'] || []).forEach(function (cr) {
+      var cv = cr.value || {};
+      if (cv.kind === 'gpp_xml' && Array.isArray(cv.files)) {
+        cv.files.forEach(function (fn) {
+          var cleanRel = fn.replace(/\\/g, '/').replace(/^\/+/, '');
+          var fullPath = cleanRel.indexOf(lootdir + '/') === 0 ? cleanRel : (OBOL.workspace ? OBOL.workspace.join(lootdir, cleanRel) : (lootdir + '/' + cleanRel));
+          var f = file(fullPath, {
+            folder: 'loot',
+            status: 'captured',
+            origin: 'ran',
+            confirmed: true,
+            tool: 'gpp',
+            at: cr.at || 0,
+            sensitive: true
+          });
+          if (f.facts.indexOf('config.review') === -1) f.facts.push('config.review');
+          if (!f.output) {
+            var base = baseName(cleanRel);
+            (eng.activities || []).forEach(function (act) {
+              if (f.output) return;
+              var outText = (typeof act.stdout === 'string') ? act.stdout : '';
+              if (outText && (outText.indexOf(base) >= 0 || /cpassword/i.test(outText))) {
+                var lines = outText.split(/\r?\n/).filter(function (l) {
+                  return l.indexOf(base) >= 0 || /cpassword/i.test(l);
+                });
+                if (lines.length) f.output = lines.slice(0, 10).join('\n');
+              }
+            });
+          }
+        });
+      }
+    });
+
     // 2b) files the operator added by hand OR that a disk-sync turned up, to keep the picture in step
     // with their real disk. They are asserted-present (obol has no body), so they read as on-disk until a
     // paste captures one. A synced file obol has no move for is flagged 'unknown'obol stays on the same

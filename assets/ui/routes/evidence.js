@@ -1,6 +1,6 @@
 /*!
  * obol ui — routes/evidence.js — paste tool output, mint facts, recompute the coach.
- * Uses OBOL.parsers (ported obol-local parsers) when available; the paste is analyzed and
+ * Uses OBOL.parsers when available; the paste is analyzed and
  * facts are added conservatively (parsers never invent facts). A manual fact composer is the
  * always-available fallback. When arrived via a coach "Paste result" jump, the pinned action
  * is shown as context and its command primes the parser dispatcher.
@@ -12,6 +12,7 @@
   function esc(s) { return U.esc(s); }
 
   function pinnedAction(ctx) {
+    ctx = ctx || {};
     var id = (ctx.args && ctx.args[0]) || null;
     if (!id) { try { id = sessionStorage.getItem('obol-pasteback-action'); } catch (e) {} }
     if (!id) return null;
@@ -27,6 +28,51 @@
       }
     } catch (e) {}
     return ' (redirect it there with <code>… | tee out.txt</code>)';
+  }
+
+  // Diagnostic Fix Cards for blocker.* facts recognized from tool error output
+  function renderFixCards(facts) {
+    if (!facts || !OBOL.FIELD_DOCTORS) return '';
+    var docs = OBOL.FIELD_DOCTORS;
+    var cards = [];
+    var act = OBOL.store ? OBOL.store.active() : null;
+    var f = facts || (act && act.facts) || [];
+    var ctx = (OBOL.command && OBOL.command.buildContext) ? OBOL.command.buildContext(f, { params: (act && act.params), profile: (act && act.profile), workspace: (OBOL.workspace && act) ? OBOL.workspace.tokens(act) : {} }) : {};
+
+    Object.keys(docs).forEach(function (k) {
+      if (facts.has && facts.has(k)) {
+        var d = docs[k];
+        var code = d.code || '';
+        if (code && ctx) {
+          if (ctx.target) code = code.replace(/<target(?:-ip)?>/g, ctx.target);
+          if (ctx.domain) code = code.replace(/<domain>/g, ctx.domain);
+          if (ctx.share) code = code.replace(/<share>/g, ctx.share);
+          if (ctx.user) code = code.replace(/<user(?:name)?>/g, ctx.user);
+        }
+        cards.push(
+          '<div class="fix-card" data-blocker="' + esc(k) + '">'
+          + '<div class="fix-card-header">'
+          + '<div class="fix-card-title-group">'
+          + '<span class="fix-card-badge">DIAGNOSTIC DETECTED</span>'
+          + '<h3 class="fix-card-title">' + esc(d.title || k) + '</h3>'
+          + '</div>'
+          + '<button type="button" class="fix-card-dismiss" data-dismiss-blocker="' + esc(k) + '" title="Dismiss this diagnostic">✓ Resolved</button>'
+          + '</div>'
+          + '<div class="fix-card-body">'
+          + (d.why ? ('<div class="fix-card-why"><strong>Root Cause:</strong> ' + esc(d.why) + '</div>') : '')
+          + (d.body ? ('<p class="fix-card-desc">' + esc(d.body) + '</p>') : '')
+          + (code ? ('<div class="fix-card-cmd-wrap">'
+              + '<pre class="fix-card-code"><code>' + esc(code) + '</code></pre>'
+              + '<button type="button" class="btn-copy fix-card-copy" data-copy="' + U.attr(code) + '" title="Copy fix command">Copy Fix</button>'
+              + '</div>') : '')
+          + (d.gotcha ? ('<div class="fix-card-gotcha"><strong>Gotcha / Trap:</strong> ' + esc(d.gotcha) + '</div>') : '')
+          + '</div>'
+          + '</div>'
+        );
+      }
+    });
+    if (!cards.length) return '';
+    return '<div class="fix-cards-container">' + cards.join('') + '</div>';
   }
 
   // Whole-session import — the "catch me up on the entire box" panel. Paste a full terminal capture (or
@@ -95,17 +141,21 @@
     var pin = pinnedAction(ctx);
     var parsersReady = !!(OBOL.parsers && OBOL.parsers.parseActionOutput);
     var pinBlock = '';
+    var facts = OBOL.store.factSet();
     if (pin) {
-      var facts = OBOL.store.factSet();
-      var v = OBOL.command.fillCommand(pin, facts, { params: (OBOL.store.active().params || {}), workspace: OBOL.workspace.tokens(OBOL.store.active()) }, 0);
+      var pinOpts = { params: (OBOL.store.active().params || {}), workspace: OBOL.workspace.tokens(OBOL.store.active()) };
+      var pinIdx = (OBOL.command && OBOL.command.bestCommandIndex) ? OBOL.command.bestCommandIndex(pin, facts, pinOpts) : 0;
+      var v = OBOL.command.fillCommand(pin, facts, pinOpts, pinIdx);
       pinBlock = '<div class="ev-pin"><div class="ev-pin-h">Paste Result For</div>'
         + '<div class="ev-pin-title">' + esc(pin.title) + '</div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
         + '<div class="ev-pin-dnp">' + (pin.does_not_prove ? ('Remember: does not prove ' + esc(pin.does_not_prove)) : '') + '</div></div>';
     }
+    var fixCards = renderFixCards(facts);
     return '<section class="evidence">'
       + '<h1 class="route-h1">Evidence</h1>'
       + '<p class="route-sub">Paste your <strong>whole terminal</strong>, the command you ran <em>and</em> its full output. Conservative parsers mint only proven facts (nothing is inferred that the output doesn\'t show), the coach recomputes, and the raw command+output is kept as verbatim evidence for your report.</p>'
+      + fixCards
       + pinBlock
       + '<div class="ev-paste">'
       + '<textarea id="ev-text" class="ev-textarea" placeholder="Select your whole terminal and paste it here, prompt, command, and all output. e.g.&#10;&#10;$ nmap -sC -sV -oN nmap/full 10.10.10.10&#10;Starting Nmap 7.94 ...&#10;PORT     STATE SERVICE&#10;53/tcp   open  domain&#10;88/tcp   open  kerberos-sec&#10;389/tcp  open  ldap&#10;..." spellcheck="false"></textarea>'
@@ -143,9 +193,10 @@
     }
     var origin = r.fileName ? (esc(r.fileName) + ' · ' + r.lines.toLocaleString() + ' lines') : null;
     var resEl = document.getElementById('ev-result');
+    var fixHtml = renderFixCards(OBOL.store.factSet());
     if (resEl) {
       if (!r.facts.length) {
-        resEl.innerHTML = '<div class="ev-none">' + (origin ? ('Read ' + origin + ', no ') : 'No ')
+        resEl.innerHTML = fixHtml + '<div class="ev-none">' + (origin ? ('Read ' + origin + ', no ') : 'No ')
           + 'facts recognized (output saved; nothing invented). '
           + (r.parseError ? 'The parser skipped part of this output (see the browser console). ' : '')
           + 'Set the command above if the output is on its own, or add a fact manually.</div>';
@@ -156,7 +207,7 @@
         var plain = sum ? ('<ul class="ev-learned">' + sum.phrases.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('')
           + (sum.extra ? ('<li class="ev-learned-more">and ' + sum.extra + ' more</li>') : '') + '</ul>'
           + (sum.next ? ('<div class="ev-imp-next">Next move: <strong>' + esc(sum.next) + '</strong></div>') : '')) : '';
-        resEl.innerHTML = '<div class="ev-added">Minted ' + r.added + ' new fact' + (r.added === 1 ? '' : 's') + ' (' + r.facts.length + ' recognized)'
+        resEl.innerHTML = fixHtml + '<div class="ev-added">Minted ' + r.added + ' new fact' + (r.added === 1 ? '' : 's') + ' (' + r.facts.length + ' recognized)'
           + (origin ? (' from ' + origin) : '') + ':</div>'
           + plain
           + '<details class="ev-factraw"' + (sum ? '' : ' open') + '><summary>Fact details</summary>'
@@ -286,6 +337,18 @@
       var el = document.getElementById(t.getAttribute('data-copy'));
       if (!el) return;
       U.copy(el.textContent).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    U.on(mount, 'click', '.btn-copy', function (e, t) {
+      var val = t.getAttribute('data-copy');
+      if (val) U.copy(val).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+    U.on(mount, 'click', '[data-dismiss-blocker]', function (e, t) {
+      var k = t.getAttribute('data-dismiss-blocker');
+      if (k && OBOL.store && OBOL.store.retractFactKind) {
+        OBOL.store.retractFactKind(k);
+        U.toast('Diagnostic resolved');
+        OBOL.router.render();
+      }
     });
 
     // screenshots: attach (readAsDataURL, stored inline for report embedding) + remove

@@ -34,7 +34,7 @@
   // that leads with a tool obol parses) plus content signatures for output that names its own tool. What
   // is recovered is only ADDED to the dispatch label — never to lineage — and every parser stays
   // content/proof-bound, so a recovered token can ENABLE the right parser but can never manufacture a
-  // fact the output doesn't support. Ported from obol-local's _sniff_command / _content_signatures.
+  // fact the output doesn't support. 
   var TOOL_HINTS = {};
   ('nmap rustscan masscan nxc netexec crackmapexec cme ldapsearch smbclient smbmap rpcclient '
     + 'enum4linux enum4linux-ng gpp-decrypt wpscan kerbrute getnpusers getnpusers.py getuserspns '

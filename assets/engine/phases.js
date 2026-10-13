@@ -6,7 +6,7 @@
  * from "is it time for it yet" (phase distance), so recon/low-risk enum sort ahead of a
  * premature high-value branch without a low-priority recon step leapfrogging the real move.
  *
- * Faithful JS port of obol-local/obol/phases.py.
+ * Faithful JS port of 
  */
 (function (root) {
   'use strict';
@@ -115,6 +115,67 @@
     return Math.max(0, phaseIndex(phaseOfAction(action)) - frontierIndex(factset));
   }
 
+  // Evaluate concrete state vector of an engagement for DAG-based state-transition guidance
+  function evaluateEngagementState(factset) {
+    if (!factset) return { accessLevel: 'none', credTier: 'none', adPosture: 'unmapped', os: 'unknown' };
+    var has = function (k) { return factset.has ? factset.has(k) : false; };
+
+    // 1. Access Level
+    var accessLevel = 'none';
+    if (has('access.system') || has('access.root') || has('loot.ntds') || has('objective.root_flag')) {
+      accessLevel = 'system';
+    } else if (has('access.admin') || has('credential.admin') || has('privesc.sudo_rights')) {
+      accessLevel = 'admin';
+    } else if (has('foothold.windows') || has('foothold.linux') || has('foothold.webshell') || has('access.shell') || has('access.command_exec')) {
+      accessLevel = 'foothold';
+    }
+
+    // 2. Credential Tier
+    var credTier = 'none';
+    if (has('loot.ntds') || has('hash.krbtgt') || has('credential.admin')) {
+      credTier = 'admin_cred';
+    } else if (has('credential.available') || has('credential.validated') || has('credential.plaintext') || has('credential.ntlm_hash')) {
+      credTier = 'domain_user';
+    } else if (has('hash.tgs') || has('hash.asrep') || has('hash.ntlm') || has('loot.shadow')) {
+      credTier = 'crackable_hash';
+    } else if (has('smb.null_session') || has('smb.guest_session') || has('ad.anonymous_bind') || has('ftp.anonymous_login')) {
+      credTier = 'anonymous';
+    }
+
+    // 3. AD Posture
+    var adPosture = 'unmapped';
+    if (has('loot.ntds') || has('ad.domain_control') || has('ad.control_paths')) {
+      adPosture = 'dcsync_ready';
+    } else if (has('ad.attack_paths') || has('ad.graph.collected') || has('ad.acl_lead')) {
+      adPosture = 'paths_mapped';
+    } else if (has('ad.user_list')) {
+      adPosture = 'users_known';
+    } else if (has('ad.dc_candidate') || has('ad.domain_known')) {
+      adPosture = 'dc_identified';
+    }
+
+    // 4. Target OS
+    var os = 'unknown';
+    if (has('foothold.windows') || has('ad.dc_candidate') || has('winrm.authenticated') || has('winrm.reachable')) {
+      os = 'windows';
+    } else if (has('foothold.linux') || has('privesc.sudo_rights') || has('access.root')) {
+      os = 'linux';
+    } else {
+      var osFam = (factset.values && factset.values('host.os_family')) || [];
+      if (osFam.length && osFam[0].family) os = String(osFam[0].family).toLowerCase();
+    }
+
+    return {
+      accessLevel: accessLevel,
+      credTier: credTier,
+      adPosture: adPosture,
+      os: os,
+      hasDC: has('ad.dc_candidate') || has('ad.domain_known'),
+      hasWeb: has('http.reachable') || has('port:80') || has('port:443') || has('port:8080'),
+      hasSMB: has('smb.reachable') || has('port:445') || has('port:139')
+    };
+  }
+
   OBOL.phases = {
     PHASES: PHASES,
     PHASE_INDEX: PHASE_INDEX,
@@ -125,5 +186,7 @@
     targetPhase: targetPhase,
     frontierIndex: frontierIndex,
     prematurity: prematurity,
+    evaluateEngagementState: evaluateEngagementState,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
+

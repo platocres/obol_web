@@ -1,6 +1,6 @@
 /*!
  * obol engine — parsers/services.js
- * Faithful JS port of obol-local/obol/parsers/services.py.
+ * Faithful JS port of 
  * Generic service metadata: HTTP, SSH, FTP, SNMP — reachability/fingerprints only.
  */
 (function (root) {
@@ -68,6 +68,15 @@
   }
   C._parse_ssh_banner = _parse_ssh_banner;
 
+  // A CONFIRMED FTP upload: an upload-specific initiation token AND a success
+  // marker. Discriminators matter so a download never trips it: "Ok to send
+  // data" (vsftpd) and "bytes sent in" (ftp client) are store-only, the inverse
+  // of a RETR's "Opening ... for" / "bytes received in". This proves the FTP
+  // root is writable (webroot-upload-to-webshell), the precise signal that move
+  // wants instead of a bare "port 21 is open" gate.
+  var _FTP_UPLOAD_INIT_RE = /(?:^|\s)STOR\b|\bftp>\s*(?:m?put)\b|^\s*(?:m?put)\s+\S|150\s+Ok to send data/im;
+  var _FTP_UPLOAD_OK_RE = /226[\s-](?:Transfer complete|Transfer okay)|\bbytes sent in\b|\bUpload(?:ed|\s+complete)\b/i;
+
   function _parse_ftp_output(text, ws, command, source, facts) {
     var banners = [], loginSuccess = false;
     reAll(C._FTP_BANNER_RE, text).forEach(function (m) {
@@ -75,11 +84,14 @@
       if (banner) banners.push(banner);
       if (m.groups.login) loginSuccess = true;
     });
-    if (!banners.length && !loginSuccess) return;
+    var writeOk = reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text);
+    if (!banners.length && !loginSuccess && !writeOk) return;
     var h = 'host:' + ws.target;
     _add(facts, mkFact('ftp.reachable', h, { tool: 'ftp-client' }, S, source));
     if (banners.length) _add(facts, mkFact('ftp.banner', h, { banners: C.uniqueSortedCI(banners).slice(0, 10) }, S, source));
+    var isAnon = /\banonymous\b/i.test(command) || /\banonymous\b/i.test(text) || loginSuccess;
     if (loginSuccess && /\banonymous\b/i.test(command)) _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'ftp-client' }, S, source));
+    if (writeOk) _add(facts, mkFact('ftp.anon_write', h, { tool: 'ftp-client', anonymous: isAnon }, S, source));
   }
   C._parse_ftp_output = _parse_ftp_output;
 

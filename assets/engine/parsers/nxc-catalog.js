@@ -160,6 +160,12 @@
         return /enable|success|\[\+\]/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'wdigest_uselogoncredential', detail: 'WDigest cleartext-credential caching toggled (re-dump LSASS after a logon)', tool: 'nxc' } }] : [];
       } },
 
+    { id: 'smb-enum-trusts', proto: 'smb', module: 'enum_trusts', produces: ['ad.trusts'], existing: true,
+      gate: ['smb.reachable', 'credential.available'] },
+    { id: 'smb-laps', proto: 'smb', flag: '--laps', produces: ['ad.laps_lead', 'credential.candidate'], existing: true,
+      gate: ['smb.reachable', 'credential.available'] },
+    { id: 'smb-timeroast', proto: 'smb', module: 'timeroast', produces: ['hash.sntp'], existing: true,
+      gate: ['smb.reachable'] },
     { id: 'smb-spider', proto: 'smb', flag: '--spider', produces: ['loot.files', 'credential.candidate'],
       gate: ['smb.reachable', 'credential.available'],
       extract: function (text, ws) { return CAT_BY_ID['smb-spider-plus'].extract(text, ws); } },
@@ -314,7 +320,7 @@
     { id: 'ldap-find-delegation', proto: 'ldap', flag: '--find-delegation', produces: ['ad.unconstrained', 'ad.attack_paths'],
       gate: ['credential.available', 'ldap.reachable'],
       extract: function (text, ws) { return CAT_BY_ID['ldap-trusted-for-delegation'].extract(text, ws); } },
-    { id: 'ldap-gmsa', proto: 'ldap', flag: '--gmsa', produces: ['ad.gmsa', 'credential.candidate'],
+    { id: 'ldap-gmsa', proto: 'ldap', flag: '--gmsa', produces: ['ad.gmsa', 'credential.candidate', 'credential.available', 'hash.ntlm'],
       gate: ['credential.available', 'ldap.reachable'],
       extract: function (text, ws) {
         var out = [], lines = payloadLines(text);
@@ -322,7 +328,12 @@
           out.push({ kind: 'ad.gmsa', scope: dom(ws), value: { detail: 'gMSA accounts present', tool: 'nxc' } });
           lines.forEach(function (l) {
             var m = l.match(/Account:\s*(\S+)\s+NTLM:\s*([a-f0-9]{32})/i);
-            if (m) out.push({ kind: 'credential.candidate', scope: dom(ws), value: { kind: 'gmsa', user: m[1], nthash: m[2].toLowerCase(), tool: 'nxc' } });
+            if (m) {
+              var nthash = m[2].toLowerCase();
+              out.push({ kind: 'credential.candidate', scope: dom(ws), value: { kind: 'gmsa', user: m[1], nthash: nthash, tool: 'nxc' } });
+              out.push({ kind: 'credential.available', scope: dom(ws), value: { user: m[1], nthash: nthash, method: 'gmsa', service: 'ldap' } });
+              out.push({ kind: 'hash.ntlm', scope: dom(ws), value: { count: 1, user: m[1], nthash: nthash } });
+            }
           });
         }
         return out;

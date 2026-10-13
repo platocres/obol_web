@@ -29,7 +29,11 @@
     'ports.open': { group: 'Recon', label: 'I Have Open Ports', help: 'A port sweep came back with at least one open port.' },
     'scan.nmap.quick': { group: 'Recon', label: 'I Did A Quick Port Sweep', help: 'You ran a fast all-ports scan to find what is listening.' },
     'scan.nmap.version': { group: 'Recon', label: 'I Did A Service Version Scan', help: 'You ran the thorough scan (nmap -sC -sV) and know the service versions.' },
-    'scan.nmap.udp': { group: 'Recon', label: 'I Scanned UDP Ports', help: 'You checked UDP too, not just TCP (SNMP, DNS, TFTP live there).' },
+    // Note: 'scan.nmap.udp' is intentionally NOT catalogued. It is an activity marker ("I ran a UDP
+    // scan"), not a target attribute, and offering it as an assertable fact let a user unlock SNMP
+    // Enumeration without SNMP actually being open (recon-snmp gates on it in requires_any). In Stuck?
+    // you indicate SNMP by lighting the 161 port in the palette; the UDP services a scan reveals are
+    // themselves the findings. The move graph keeps the scan.nmap.udp -> recon-snmp reachability edge.
     'scan.nmap.vuln': { group: 'Recon', label: 'I Ran The Vuln Scripts', help: 'You ran nmap with the vuln scripts against the open services.' },
 
     // Service presence. A stuck student usually knows which ports answered, even without the versions.
@@ -199,5 +203,36 @@
     { port: 8443, label: 'HTTPS (alt)', lane: 'Web', facts: ['http.reachable', 'port:8443'] },
     { port: 9200, label: 'Elasticsearch', lane: 'Database', facts: ['service.elasticsearch', 'port:9200'] },
     { port: 27017, label: 'MongoDB', lane: 'Database', facts: ['service.mongodb', 'port:27017'] },
+    // Ports carried by the newer move lanes. Each asserts exactly the service/reachable fact its move
+    // gates on (so lighting the port makes that move eligible), plus the bare port:N. Where a move keys
+    // on port:N alone, only port:N is asserted (no speculative service fact).
+    { port: 69, label: 'TFTP', lane: 'Common', facts: ['tftp.reachable', 'port:69'] },
+    { port: 79, label: 'Finger', lane: 'Common', facts: ['port:79'] },
+    { port: 512, label: 'rexec', lane: 'Common', facts: ['rservices.reachable', 'port:512'] },
+    { port: 513, label: 'rlogin', lane: 'Common', facts: ['rservices.reachable', 'port:513'] },
+    { port: 514, label: 'rsh', lane: 'Common', facts: ['rservices.reachable', 'port:514'] },
+    { port: 623, label: 'IPMI', lane: 'Common', facts: ['port:623'] },
+    { port: 6000, label: 'X11', lane: 'Common', facts: ['x11.reachable', 'port:6000'] },
+    { port: 6667, label: 'IRC', lane: 'Common', facts: ['service.irc', 'port:6667'] },
+    { port: 6697, label: 'IRC (TLS)', lane: 'Common', facts: ['service.irc', 'port:6697'] },
+    { port: 465, label: 'SMTPS', lane: 'Mail', facts: ['port:465'] },
+    { port: 1521, label: 'Oracle TNS', lane: 'Database', facts: ['service.oracle-tns', 'port:1521'] },
+    { port: 11211, label: 'Memcached', lane: 'Database', facts: ['service.memcached', 'port:11211'] },
+    { port: 8082, label: 'H2 Console', lane: 'Database', facts: ['port:8082'] },
+    { port: 5900, label: 'VNC', lane: 'Windows', facts: ['port:5900'] },
+    { port: 5901, label: 'VNC :1', lane: 'Windows', facts: ['port:5901'] },
+    { port: 5800, label: 'VNC (Web)', lane: 'Windows', facts: ['port:5800'] },
+    { port: 29819, label: 'Sirep (IoT)', lane: 'Windows', facts: ['port:29819'] },
+    { port: 29820, label: 'Sirep (IoT)', lane: 'Windows', facts: ['port:29820'] },
+    { port: 3000, label: 'HTTP (3000)', lane: 'Web', facts: ['http.reachable', 'port:3000'] },
+    { port: 8000, label: 'HTTP (8000)', lane: 'Web', facts: ['http.reachable', 'port:8000'] },
+    { port: 8089, label: 'Splunkd', lane: 'Web', facts: ['http.reachable', 'port:8089'] },
+    { port: 10000, label: 'Webmin', lane: 'Web', facts: ['http.reachable', 'port:10000'] },
+    { port: 20000, label: 'Usermin', lane: 'Web', facts: ['port:20000'] },
+    { port: 5005, label: 'JDWP', lane: 'Common', facts: ['port:5005'] },
+    { port: 8787, label: 'JDWP (8787)', lane: 'Common', facts: ['port:8787'] },
+    { port: 8021, label: 'FreeSWITCH', lane: 'Common', facts: ['port:8021'] },
+    { port: 10050, label: 'Zabbix Agent', lane: 'Common', facts: ['port:10050'] },
+    { port: 1978, label: 'WiFi Mouse', lane: 'Common', facts: ['port:1978'] },
   ];
 })(typeof globalThis !== 'undefined' ? globalThis : this);

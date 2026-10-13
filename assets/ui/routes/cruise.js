@@ -1,6 +1,6 @@
 /*!
  * obol ui — routes/cruise.js — CRUISE (experimental), the exam-legal, no-execution port of
- * obol-local's cruise control. The loop with the human as the execution channel: obol hands you a
+ * obol's cruise control. The loop with the human as the execution channel: obol hands you a
  * phase-scoped BATCH of safe moves, you run the script on your own box, you paste the output back,
  * facts update, and the next batch generates, round after round, until flags.
  *

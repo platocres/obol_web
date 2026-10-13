@@ -1,6 +1,6 @@
 /*!
  * obol engine — findings.js
- * Findings catalog match engine. A faithful JS port of obol-local/obol/findings.py:
+ * Findings catalog match engine. A faithful JS port of 
  * a fact-driven projection that matches the shipped findings catalog
  * (data/findings-catalog.js → OBOL.findingsCatalog) against a target's proven facts.
  *
