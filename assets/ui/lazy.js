@@ -12,7 +12,7 @@
   var GROUPS = {
     parsers: [
       'assets/engine/parsers/common.js?v=d779003b',
-      'assets/engine/parsers/nmap.js?v=2b47ff03', 'assets/engine/parsers/directory.js?v=9be25dbc',
+      'assets/engine/parsers/nmap.js?v=2b47ff03', 'assets/engine/parsers/directory.js?v=c292bc2c',
       'assets/engine/parsers/creds.js?v=b8cda7b4', 'assets/engine/parsers/host.js?v=a3d5205d',
       'assets/engine/parsers/services.js?v=d86e3aea', 'assets/engine/parsers/database.js?v=0e407c6a',
       'assets/engine/parsers/web.js?v=dff6fe62', 'assets/engine/parsers/websource.js?v=65a6766e',
@@ -28,9 +28,9 @@
     tools: ['assets/engine/toolbuilder.js?v=f8af90d9', 'data/toolset.js?v=11de7936', 'assets/ui/routes/tools.js?v=24241304'],
     loadout: ['assets/engine/arsenal.js?v=bf5ae024', 'assets/ui/routes/loadout.js?v=fd258957'],
     workbench: ['assets/engine/workbench.js?v=1acf899d', 'assets/ui/routes/workbench.js?v=42462153'],
-    stuck: ['data/stuck-catalog.js?v=e0c715e9', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=c2ee9e88'],
+    stuck: ['data/stuck-catalog.js?v=e76b3e66', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=c2ee9e88'],
     study: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b', 'assets/ui/routes/study.js?v=277d4c77'],
-    decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=768768b4', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=2317deac', 'assets/engine/decisionmap.js?v=72d3dcb7', 'assets/ui/decisiontree.js?v=910ea8b0'],
+    decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=0690d046', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=2317deac', 'assets/engine/decisionmap.js?v=72d3dcb7', 'assets/ui/decisiontree.js?v=910ea8b0'],
     checklist: ['data/oscp-scope.js?v=ebf0ff68', 'assets/ui/routes/checklist.js?v=ff1f5ef9'],
     target: ['assets/engine/graph.js?v=96741069', 'assets/ui/routes/target.js?v=3e9e5e4a'],
     creds: ['assets/ui/routes/creds.js?v=867f1379'],

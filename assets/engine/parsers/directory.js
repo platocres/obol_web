@@ -49,11 +49,20 @@
       if (['ldap', 'smb', 'winrm', 'rdp', 'ssh', 'ftp'].indexOf(proto) >= 0) _add(facts, mkFact(proto + '.reachable', h, { tool: 'nxc' }, S, source));
       if (proto === 'winrm' || proto === 'rdp') C._add_os_observation(facts, ws, source, 'windows', m[0].trim(), proto === 'winrm' ? 'high' : 'medium', 'nxc', proto === 'winrm');
     });
-    // A successful anonymous LDAP bind prints the empty-user signature `DOMAIN\:` (one backslash, then a
-    // colon with no username before it), e.g. nxc's `[+] htb.local\:`. Match a SINGLE backslash before the
-    // colon; an authenticated bind is `DOMAIN\user:pass`, which has no backslash-then-colon, so it is not
-    // mistaken for anonymous.
-    if (/^LDAP\s+.*\[\+\].*(?:\\:|anonymous|'')/im.test(text)) _add(facts, mkFact('ad.anonymous_bind', C._scope_for_domain(ws, domain), { tool: 'nxc' }, S, source));
+    // Anonymous LDAP: nxc prints the empty-user bind signature `DOMAIN\:` (one backslash, then a colon
+    // with no username before it), e.g. `[+] htb.local\:`. But on a hardened DC the anonymous BIND is
+    // accepted while anonymous SEARCH is denied: nxc then also prints
+    // `Error in searchRequest -> operationsError ... a successful bind must be completed`. The bind
+    // "works" yet you cannot enumerate, so recording ad.anonymous_bind here would wrongly advance the
+    // card to a `--users` dump that fails. When that error is present, mint ad.anon_search_denied (a
+    // proven-negative the anonymous-enum move retires on) and do NOT mint ad.anonymous_bind.
+    var anonSearchDenied = /(?:searchRequest\s*->\s*operationsError|a successful bind must be completed)/i.test(text) && /^LDAP\s+/im.test(text);
+    if (anonSearchDenied) {
+      var errLine = (text.match(/^.*operationsError.*$/im) || [''])[0].trim();
+      _add(facts, mkFact('ad.anon_search_denied', C._scope_for_domain(ws, domain), { tool: 'nxc', evidence: errLine ? [errLine] : [] }, S, source));
+    } else if (/^LDAP\s+.*\[\+\].*(?:\\:|anonymous|'')/im.test(text)) {
+      _add(facts, mkFact('ad.anonymous_bind', C._scope_for_domain(ws, domain), { tool: 'nxc' }, S, source));
+    }
   }
   C._parse_nxc_common = _parse_nxc_common;
 

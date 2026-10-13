@@ -171,12 +171,16 @@
         "scan.nmap.udp"
       ],
       "deprioritize_when": [
-        "loot.ntds"
+        "loot.ntds",
+        "scan.nmap.version",
+        "foothold.linux",
+        "foothold.windows",
+        "access.shell"
       ],
       "produces": [
         "scan.nmap.udp"
       ],
-      "priority": 35,
+      "priority": 10,
       "phase": "recon",
       "proves": "produces evidence from a narrowly scoped UDP scan",
       "does_not_prove": "UDP exposure by itself, not that the service is exploitable, and no access, credential, or privilege",
@@ -285,6 +289,9 @@
         "ad.base_dn",
         "ad.user_list",
         "ad.anonymous_bind"
+      ],
+      "obsoleted_by": [
+        "ad.anon_search_denied"
       ],
       "priority": 94,
       "proves": "confirms the LDAP base DN, a list of domain users, and that anonymous LDAP binding is allowed",

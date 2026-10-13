@@ -61,5 +61,20 @@ ok(run('certipy req -ca ACME-CA -template UserAuth', "Saved certificate and priv
 ok([].concat(by['zerologon-exploit'].requires_all || [], by['zerologon-exploit'].requires_any || []).indexOf('ad.zerologon') >= 0, 'zerologon-exploit requires ad.zerologon (now reachable)');
 ok([].concat(by['cert-authenticate'].requires_all || [], by['cert-authenticate'].requires_any || []).indexOf('credential.certificate') >= 0, 'cert-authenticate requires credential.certificate (now reachable)');
 
+// --- Auth/access failure awareness: anonymous LDAP bind accepted but search denied ---
+// A hardened DC accepts the anonymous bind (prints `[+] domain\:`) yet denies the anonymous SEARCH
+// (`searchRequest -> operationsError ... a successful bind must be completed`). This must NOT mint
+// ad.anonymous_bind (that would advance the card to a --users dump that fails); it mints the proven-
+// negative ad.anon_search_denied, which retires the anonymous-enum move so its dead commands disappear.
+var ldapDenied = run("nxc ldap 10.10.10.10 -u '' -p ''",
+  'LDAP        10.10.10.10   389    DC   [*] Windows Server 2008 R2 (name:DC) (domain:acme.local) (signing:None)\n' +
+  'LDAP        10.10.10.10   389    DC   [-] Error in searchRequest -> operationsError: 000004DC: LdapErr: DSID-0C09075A, comment: In order to perform this operation a successful bind must be completed on the connection., data 0, v1db1\n' +
+  'LDAP        10.10.10.10   389    DC   [+] acme.local\\: ');
+ok(ldapDenied.indexOf('ad.anon_search_denied') >= 0, 'anon LDAP search-denied mints ad.anon_search_denied');
+ok(ldapDenied.indexOf('ad.anonymous_bind') < 0, 'anon LDAP search-denied does NOT mint ad.anonymous_bind (no dead --users dump)');
+var ldapOk = run("nxc ldap 10.10.10.10 -u '' -p ''", 'LDAP        10.10.10.10   389    DC   [+] acme.local\\: ');
+ok(ldapOk.indexOf('ad.anonymous_bind') >= 0 && ldapOk.indexOf('ad.anon_search_denied') < 0, 'a genuinely open anonymous bind still mints ad.anonymous_bind (not the denied fact)');
+ok((by['ad-anon-ldap-enum'].obsoleted_by || []).indexOf('ad.anon_search_denied') >= 0, 'ad-anon-ldap-enum is obsoleted_by ad.anon_search_denied (the anonymous commands disappear)');
+
 console.log('\nOUTCOME PARSERS SMOKE: ' + (fail ? fail + ' FAILURE(S)' : 'all passed'));
 process.exit(fail ? 1 : 0);

@@ -68,7 +68,7 @@
     'ad-ldap': {
       looksFor: 'ldapsearch / nxc --users / rid-brute output — the user and computer accounts, the named domain, and whether the bind was anonymous.',
       regex: 'sAMAccountName: …, DC=corp,DC=local',
-      emits: ['ad.user_list', 'ad.domain_known', 'ad.base_dn', 'ad.anonymous_bind', 'ad.computer_list', 'ad.group_list'],
+      emits: ['ad.user_list', 'ad.domain_known', 'ad.base_dn', 'ad.anonymous_bind', 'ad.anon_search_denied', 'ad.computer_list', 'ad.group_list'],
     },
     'kerberos-roast': {
       looksFor: 'GetNPUsers / GetUserSPNs output — the $krb5asrep$ and $krb5tgs$ hashes (also recognized by shape when pasted alone).',
