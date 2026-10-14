@@ -5143,7 +5143,7 @@ main#view:has(.stuck) { max-width: 2600px; }
    ATT&CK, with Stuck? folded in. Neon-glass chrome; the colour axis follows the active lens
    (Moves = lane hue, Commands = phase tint, ATT&CK = tactic). Calm, predictable structure.
    ============================================================================================ */
-main#view:has(.library) { max-width: 2400px; }
+main#view:has(.library) { max-width: 2600px; }
 .library { display: block; }
 .lib-head { margin: 0 0 12px; }
 .lib-intro { color: var(--text-2); margin: 2px 0 0; max-width: 86ch; font-size: 13px; line-height: 1.5; }

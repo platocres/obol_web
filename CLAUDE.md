@@ -1472,7 +1472,7 @@ fillCommand); `techniqueLibrary(pack)` (byMove -> {id,name,tactics,moves,url}); 
   and example commands behind it.
 - [x] **L4.** Fold Stuck? in as a sub-tab (delegates to OBOL.routes.stuck; exposed `seed` so a move's
   "Seed Into Stuck?" lands you on the Ferryman board with that move already a lead).
-- [ ] **L5.** Aesthetic / responsive / a11y pass (4K/1080p/tablet/mobile) + full guardrails + stamp +
+- [x] **L5.** Aesthetic / responsive / a11y pass (4K/1080p/tablet/mobile) + full guardrails + stamp +
   screenshots. Help entry (Stuck? -> Library + lens subs) and help-coverage updated.
 
 ### Verify each phase (same as the project)
@@ -1503,3 +1503,22 @@ tests/browser-smoke.js` Â· `node tools/stamp-assets.js` (after any asset edit) Â
   block (neon-glass sub-tabs, facet sidebar, lane-hued move tiles, phase-tinted command cards, tactic
   matrix), main#view:has(.library) widened to 2400px, responsive stacks under 960/560px. L5 (full
   guardrail sweep + screenshots) next.
+- 2026-10-14: L5 COMPLETE, and with it the Library build. Aesthetic/responsive/a11y pass: widened
+  main#view:has(.library) to 2600px (matches the Stuck? precedent so 4K is not guttered), verified the
+  colour-follows-axis design (Moves lane-hued tiles, Commands phase-tinted cards, ATT&CK tactic-coloured
+  columns), shimmer gated by prefers-reduced-motion (ns-bloom skipped when reduced), colour never the
+  sole signal (every chip and cell carries a text label). Drove all four lenses headless at 4K, 1080p,
+  tablet, and mobile with 0 console errors, and verified every interaction: facet toggle narrows (345 ->
+  73 on AD), tile expand shows commands + notes + Seed Into Stuck?, search narrows, Clear restores;
+  Commands Flatten + search + back-link jump into Moves; ATT&CK cell select shows moves + example
+  commands + jump; Seed Into Stuck? seeds the sandbox and lands on the Ferryman board. All guardrails
+  green (field-notes-coverage, lint-study, gap-report, attack-coverage integrity clean, help-coverage,
+  full 50-file engine suite incl. the new library-smoke, browser-smoke); assets stamped; house style held
+  (no em/en dashes in authored content; the em dashes visible in some MOVE TITLES are pre-existing pack
+  data, shown identically in Next Steps/Stuck?, not introduced here). Build summary (PR #306): L1 engine
+  + Moves lens + nav rename + scaffold, L2 the Commands hero lens, L3 the library-scoped ATT&CK matrix,
+  L4 Stuck? folded in as a sub-tab (with the new seed entry), L5 the aesthetic/responsive/a11y pass.
+  Presentation only throughout: no ranker fork, one store, pack commands the source of truth. NEXT (not
+  part of this build, separately sequenced): the Next Steps "Focus mode" trim (default-on, collapses
+  non-lead commands behind "N more ways -> Library"), toggle-gated and reversible. Public republish of
+  #306 stays held until explicitly requested.
