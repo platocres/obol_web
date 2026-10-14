@@ -51,7 +51,8 @@
   var _cQ = '';
   var _cGroup = 'tool';    // 'tool' | 'phase' | 'lane' | 'flat'
   var _cExp = {};          // { templateKey: true } open cards
-  var _cGrpClosed = {};    // { groupKey: true } collapsed groups
+  var _cGrpClosed = {};    // { groupKey: true } collapsed top-level groups
+  var _cSubOpen = {};      // { "group::sub": bool } per-sub-group open state (overrides the per-view default)
   // ATT&CK lens
   var _aSel = '';          // selected technique code
 
@@ -233,11 +234,14 @@
       }).join('') + '</div>';
     }
     var ph = entry.phase || 'enum';
-    return '<article class="lib-ccard ' + phaseTintClass(ph) + (selected ? ' selected' : '') + '" data-tpl="' + attr(key) + '">'
+    // Each command card carries its LANE hue (like a Moves tile): a tool spans many lanes, so this gives
+    // real colour variety down a list. The labelled phase chip keeps the phase readable too.
+    var fam = L().laneHexOf(entry.lane) || '';
+    return '<article class="lib-ccard lane-tinted' + (selected ? ' selected' : '') + '" data-tpl="' + attr(key) + '"' + (fam ? ' style="--fam:' + fam + '"' : '') + '>'
       + '<div class="lib-ccard-top">'
       + '<code class="lib-ccard-run">' + esc(shown) + '</code>'
       + '<button type="button" class="btn-copy lib-copy" data-copy="' + attr(shown) + '" aria-label="Copy command">Copy</button></div>'
-      + '<div class="lib-ccard-moves"><span class="ns-chip ns-phase ph-' + esc(ph) + ' lib-ccard-ph">' + esc(U.titleCase(ph)) + '</span>'
+      + '<div class="lib-ccard-moves"><span class="lib-ph-chip ph-' + esc(ph) + '">' + esc(U.titleCase(ph)) + '</span>'
       + '<span class="lib-ccard-used">Used by</span>' + moveChips + more + '</div>'
       + note + '</article>';
   }
@@ -254,10 +258,17 @@
     }
     var groups = L().commandsGrouped(pack(), _cQ, _cGroup);
     if (!groups.length) return '<p class="lib-empty">No commands match that search.</p>';
+    // In Tool view the sub-groups are capabilities (nxc smb / nxc ldap): leave them open so the hero reads
+    // as before. In Outcome / Phase / Lane views the sub-groups are TOOLS: collapse them so each tool is a
+    // tidy "nmap (20)" row inside the band, which you expand on demand (owner request).
+    var subDefaultOpen = (_cGroup === 'tool');
     return groups.map(function (g) {
       var subs = g.subs.map(function (c) {
-        return '<div class="lib-cap"><h4 class="lib-cap-h">' + esc(c.label) + ' <span class="lib-cap-n">' + c.cmds.length + '</span></h4>'
-          + '<div class="lib-cmd-list">' + c.cmds.map(cmdCard).join('') + '</div></div>';
+        var shue = L().hashHue(c.label);
+        var sopen = _cSubOpen[g.key + '::' + c.key] != null ? _cSubOpen[g.key + '::' + c.key] : subDefaultOpen;
+        return '<details class="lib-cap-grp"' + (sopen ? ' open' : '') + ' data-sub="' + attr(g.key + '::' + c.key) + '" style="--shue:' + shue + '">'
+          + '<summary><span class="lib-cap-h">' + esc(c.label) + '</span><span class="lib-cap-n">' + c.cmds.length + '</span></summary>'
+          + '<div class="lib-cmd-list">' + c.cmds.map(cmdCard).join('') + '</div></details>';
       }).join('');
       var open = !_cGrpClosed[g.key];
       var hue = g.hue ? ' style="--ghue:' + g.hue + '"' : '';
@@ -456,11 +467,23 @@
     } else if (_lens === 'commands') {
       U.on(rootEl, 'input', '#lib-cmd-q', function (e, t) { _cQ = t.value; refreshCommands(); });
       // Group By axis: re-render the whole lens (the control, the Expand/Collapse row, and the body).
-      U.on(rootEl, 'click', '[data-cgroup]', function (e, t) { var g = t.getAttribute('data-cgroup'); if (g && g !== _cGroup) { _cGroup = g; _cGrpClosed = {}; refreshCommandsArea(); } });
-      // Expand/Collapse All drive the top-level <details> directly (no re-render), and remember the
-      // collapsed set so a later search re-render keeps the choice.
-      U.on(rootEl, 'click', '[data-cexpand]', function () { _cGrpClosed = {}; var ds = _mount.querySelectorAll('.lib-tool-grp'); for (var i = 0; i < ds.length; i++) ds[i].open = true; });
+      U.on(rootEl, 'click', '[data-cgroup]', function (e, t) { var g = t.getAttribute('data-cgroup'); if (g && g !== _cGroup) { _cGroup = g; _cGrpClosed = {}; _cSubOpen = {}; refreshCommandsArea(); } });
+      // Expand/Collapse All drive BOTH levels directly (no re-render) and remember the choice so a later
+      // search re-render keeps it. Expand All opens every group and tool row; Collapse All closes the
+      // top-level groups (which hides the tool rows with them).
+      U.on(rootEl, 'click', '[data-cexpand]', function () {
+        _cGrpClosed = {};
+        var ds = _mount.querySelectorAll('.lib-tool-grp'); for (var i = 0; i < ds.length; i++) ds[i].open = true;
+        var ss = _mount.querySelectorAll('.lib-cap-grp'); for (var j = 0; j < ss.length; j++) { ss[j].open = true; var sk = ss[j].getAttribute('data-sub'); if (sk) _cSubOpen[sk] = true; }
+      });
       U.on(rootEl, 'click', '[data-ccollapse]', function () { _cGrpClosed = {}; var ds = _mount.querySelectorAll('.lib-tool-grp'); for (var i = 0; i < ds.length; i++) { ds[i].open = false; var k = ds[i].getAttribute('data-grp'); if (k) _cGrpClosed[k] = true; } });
+      // remember a manual group / tool-row open-close so a later search re-render keeps it (the toggle
+      // event does not bubble, so listen in the capture phase on the container).
+      rootEl.addEventListener('toggle', function (e) {
+        var d = e.target; if (!d || !d.classList) return;
+        if (d.classList.contains('lib-cap-grp')) { var sk = d.getAttribute('data-sub'); if (sk) _cSubOpen[sk] = d.open; }
+        else if (d.classList.contains('lib-tool-grp')) { var gk = d.getAttribute('data-grp'); if (gk) { if (d.open) delete _cGrpClosed[gk]; else _cGrpClosed[gk] = true; } }
+      }, true);
       // multi-open command cards (same model as the Moves tiles)
       U.on(rootEl, 'click', '.lib-ccard', function (e, t) {
         if (e.target && (e.target.closest('.lib-copy') || e.target.closest('a'))) return;

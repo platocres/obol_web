@@ -5239,14 +5239,25 @@ main#view:has(.library) { max-width: 2600px; }
 .lib-tool-grp > summary:hover { background: color-mix(in srgb, var(--accent) 11%, var(--surf1)); }
 .lib-tool-n { font: 800 11px var(--mono); color: var(--accent-ink, #04110c); background: var(--accent); border-radius: 999px; padding: 1px 9px; }
 .lib-caps { padding: 6px 14px 14px; }
-.lib-cap { margin: 12px 0 0; }
-.lib-cap-h { font: 800 12.5px var(--sans); color: var(--text-2); margin: 0 0 7px; display: flex; align-items: center; gap: 8px; letter-spacing: .02em; }
-.lib-cap-n { font: 700 10px var(--mono); color: var(--muted); }
+/* tool / capability sub-group: a collapsible, boldly colour-coded row (owner request). Each sub-group
+   gets its own hue via --shue (a stable hash of its label), so "nmap", "nxc ldap", "impacket" each read
+   as their own colour and collapse into a tidy row. */
+.lib-cap-grp { margin: 9px 0 0; border-left: 2px solid color-mix(in srgb, var(--shue, var(--accent)) 50%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--shue, var(--accent)) 5%, transparent); }
+.lib-cap-grp > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 9px; padding: 7px 11px; }
+.lib-cap-grp > summary::-webkit-details-marker { display: none; }
+.lib-cap-grp > summary::before { content: "\25B8"; color: var(--shue, var(--accent)); font-size: 11px; transition: transform .12s; }
+.lib-cap-grp[open] > summary::before { transform: rotate(90deg); }
+.lib-cap-grp > summary:hover { background: color-mix(in srgb, var(--shue, var(--accent)) 10%, transparent); border-radius: 7px; }
+.lib-cap-h { font: 800 14px var(--mono); color: var(--shue, var(--accent)); letter-spacing: .01em; text-shadow: 0 0 10px color-mix(in srgb, var(--shue, var(--accent)) 35%, transparent); }
+.lib-cap-n { font: 800 10px var(--mono); color: var(--shue, var(--accent)); background: color-mix(in srgb, var(--shue, var(--accent)) 14%, transparent); border: 1px solid color-mix(in srgb, var(--shue, var(--accent)) 42%, var(--line)); border-radius: 999px; padding: 1px 8px; }
+.lib-cap-grp > .lib-cmd-list { padding: 2px 11px 11px 16px; }
 .lib-cmd-list { display: flex; flex-direction: column; gap: 9px; }
+/* a vivid, solid phase chip on each command card, independent of the card's lane hue */
+.lib-ph-chip { flex: none; font: 800 9.5px var(--mono); text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 5px; color: #06130d; }
 .lib-cmd-flat { margin-top: 2px; }
-.lib-ccard { --fam: var(--accent); border: 1px solid color-mix(in srgb, var(--fam) 24%, var(--line)); border-left: 3px solid var(--fam);
-  border-radius: 10px; padding: 11px 13px; background: linear-gradient(180deg, color-mix(in srgb, var(--fam) 8%, var(--surf1)), var(--surf1)); cursor: pointer; }
-.lib-ccard:hover { border-color: color-mix(in srgb, var(--fam) 50%, var(--line)); }
+.lib-ccard { --fam: var(--accent); border: 1px solid color-mix(in srgb, var(--fam) 32%, var(--line)); border-left: 4px solid var(--fam);
+  border-radius: 10px; padding: 11px 13px; background: linear-gradient(110deg, color-mix(in srgb, var(--fam) 13%, var(--surf1)), var(--surf1) 62%); cursor: pointer; }
+.lib-ccard:hover { border-color: color-mix(in srgb, var(--fam) 60%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--fam) 25%, transparent); }
 .lib-ccard.selected { box-shadow: 0 0 0 1px var(--fam), 0 0 22px -8px color-mix(in srgb, var(--fam) 70%, transparent); }
 .lib-ccard-top { display: flex; align-items: flex-start; gap: 8px; }
 .lib-ccard-run { flex: 1; min-width: 0; font: 12.5px var(--mono); color: var(--text); white-space: pre-wrap; word-break: break-word; }

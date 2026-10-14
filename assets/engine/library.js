@@ -214,6 +214,11 @@
   // colour by its organizing axis (phase or lane) without reaching into the DOM.
   var PHASE_HEX = { recon: '#38BDF8', enum: '#818CF8', creds: '#F59E0B', access: '#34D399', escalate: '#F472B6', loot: '#A855F7' };
   var LANE_HEX = { recon: '#14B8A6', web: '#A855F7', checks: '#22D3EE', ad: '#22C55E', creds: '#EAB308', linux: '#F97316', windows: '#3E7BC4', database: '#EC4899', shells: '#84CC16', pivot: '#8B5CF6', proof: '#F43F5E' };
+  L.laneHexOf = function (pk) { return LANE_HEX[L.laneHue(pk)] || ''; };
+  L.phaseHex = function (ph) { return PHASE_HEX[ph] || ''; };
+  // a stable, vivid hue for an arbitrary label (tool / capability sub-group headers), so each reads as its
+  // own colour. Deterministic (same label -> same hue), spread around the wheel, kept bright and legible.
+  L.hashHue = function (s) { var h = 0, str = String(s || ''); for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return 'hsl(' + (h % 360) + ', 70%, 62%)'; };
 
   // Group the command catalogue by an axis for browsing. by = 'tool' | 'phase' | 'lane'. The shape is
   // uniform so the UI renders any axis the same way:
