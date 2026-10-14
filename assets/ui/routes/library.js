@@ -292,7 +292,9 @@
       + '<span class="lib-groupby-l">Group By</span>'
       + CGROUPS.map(function (g) { return '<button type="button" class="lib-seg' + (_cGroup === g[0] ? ' on' : '') + '" data-cgroup="' + g[0] + '" aria-pressed="' + (_cGroup === g[0] ? 'true' : 'false') + '">' + esc(g[1]) + '</button>'; }).join('')
       + '</div>';
+    var bindBar = (OBOL.bind && OBOL.bind.render) ? '<div id="bind-bar" class="lib-bind"></div>' : '';
     return '<div class="lib-lens lib-lens-commands">'
+      + bindBar
       + '<div class="lib-lens-bar">'
       + '<div class="lib-search"><input type="search" id="lib-cmd-q" value="' + attr(_cQ) + '" placeholder="Search commands, tools, moves" autocomplete="off" spellcheck="false" aria-label="Search commands"></div>'
       + groupBy + '<span class="lib-count">' + cat.length + ' distinct commands</span>' + fillNote + '</div>'
@@ -465,6 +467,10 @@
         }
       });
     } else if (_lens === 'commands') {
+      // shared engagement-binding bar (same component as the Tools tab): its target / wordlist / Make
+      // Active writes params, so the command previews here re-fill on change.
+      var bindEl = _mount.querySelector('#bind-bar');
+      if (bindEl && OBOL.bind) { bindEl.innerHTML = OBOL.bind.render({ compact: true }); OBOL.bind.mount(bindEl, { compact: true, onChange: function () { refreshCommands(); } }); }
       U.on(rootEl, 'input', '#lib-cmd-q', function (e, t) { _cQ = t.value; refreshCommands(); });
       // Group By axis: re-render the whole lens (the control, the Expand/Collapse row, and the body).
       U.on(rootEl, 'click', '[data-cgroup]', function (e, t) { var g = t.getAttribute('data-cgroup'); if (g && g !== _cGroup) { _cGroup = g; _cGrpClosed = {}; _cSubOpen = {}; refreshCommandsArea(); } });

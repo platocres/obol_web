@@ -1782,3 +1782,12 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   mobile stacks cleanly. Full engine suite + post-parse-audit + gap + lint + attack-coverage +
   help-coverage + browser-smoke green; assets stamped. The left-rail Focus layout and the Library-lens
   reuse of the binding are TB3b/TB4.
+- 2026-10-14: TB phase 4, the binding bar is now reused in the Library Commands lens (the "one shared
+  component across both surfaces" the owner asked for). It renders compact above the search/group-by
+  bar; its target, wordlist, and Make Active write engagement params, so the Library command previews
+  (OBOL.library.fill reads params) re-fill on change via refreshCommands. Driven headless: the bar
+  renders with the seeded identity + ports + wordlists, the curl/nxc previews fill from the engagement,
+  drive-library.js still passes 0 console errors, library-smoke green; assets stamped. TB (the Tools UX
+  revamp) is now functionally complete: binding bar, stations, recipes, flag gloss, editable preview,
+  dual layout lens, and the shared component across Tools + Library. The richer left-rail Focus variant
+  is a later polish; TC (new daily-driver tools + authored paths) is next.

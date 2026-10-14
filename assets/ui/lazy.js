@@ -37,7 +37,7 @@
       'data/attack-catalog.js?v=1fca5f0a', 'data/attack-move-map.js?v=69b57161',
       'data/tool-glossary.js?v=69c2abbf', 'data/tool-recipes.js?v=8ccd5b3e', 'data/tool-stations.js?v=9c4b2099',
       'assets/engine/toolbuilder.js?v=f8af90d9', 'data/toolset.js?v=d05e4da4', 'assets/engine/toolkit.js?v=bbc74ec3', 'assets/ui/bind.js?v=11486ff3',
-      'assets/engine/library.js?v=cc552212', 'assets/ui/routes/library.js?v=96bce51e'],
+      'assets/engine/library.js?v=cc552212', 'assets/ui/routes/library.js?v=4f8e4bd2'],
     study: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b', 'assets/ui/routes/study.js?v=277d4c77'],
     decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=24469b5c', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=2317deac', 'assets/engine/decisionmap.js?v=72d3dcb7', 'assets/ui/decisiontree.js?v=910ea8b0'],
     checklist: ['data/oscp-scope.js?v=ebf0ff68', 'assets/ui/routes/checklist.js?v=ff1f5ef9'],
