@@ -127,9 +127,12 @@
     var loc = locusLabel(move.locus);
     var laneLabel = L().laneLabel(L().laneOf(move.id));
     var cls = 'ns-card lib-move ' + laneClassForMove(move) + ' ns-ph-' + ph + (selected ? ' selected is-glow' + (reducedMotion() ? '' : ' ns-bloom') : '');
+    // Show the phase chip unless it would just echo the lane name (the Recon lane at the recon phase
+    // would otherwise read "Recon Recon").
+    var phChip = (String(laneLabel).toLowerCase() === String(ph).toLowerCase())
+      ? '' : '<span class="ns-chip ns-phase ph-' + esc(ph) + '">' + esc(U.titleCase(ph)) + '</span>';
     var head = '<div class="ns-card-head">'
-      + '<span class="ns-chip lib-lane-chip">' + esc(laneLabel) + '</span>'
-      + '<span class="ns-chip ns-phase ph-' + esc(ph) + '">' + esc(U.titleCase(ph)) + '</span>'
+      + '<span class="ns-chip lib-lane-chip">' + esc(laneLabel) + '</span>' + phChip
       + (loc ? '<span class="ns-chip">' + esc(loc) + '</span>' : '') + '</div>';
     var foot = '<div class="ns-foot">' + esc(moveWhy(move)) + '</div>';
     var body = selected
@@ -170,13 +173,15 @@
     if (!list.length) {
       return head + '<p class="lib-empty">No moves match those filters. Clear a facet or widen your search.</p>';
     }
-    // keep a stable, readable order: lane load order, then phase, then title.
+    // Order phase-first (recon -> loot), then lane, then title. Phase-first is the natural methodology
+    // reading order AND it interleaves the lanes, so the opening screen shows the full lane-hue spectrum
+    // (recon from AD, Web, Recon, DB side by side) instead of one lane's colour clumped at the top.
     var PH = { recon: 0, enum: 1, creds: 2, access: 3, escalate: 4, loot: 5 };
     list.sort(function (a, b) {
-      var la = (OBOL.ACTION_PACKS || []).indexOf(L().laneOf(a.id)), lb = (OBOL.ACTION_PACKS || []).indexOf(L().laneOf(b.id));
-      if (la !== lb) return la - lb;
       var pa = PH[L().phaseOf(a)] || 0, pb = PH[L().phaseOf(b)] || 0;
       if (pa !== pb) return pa - pb;
+      var la = (OBOL.ACTION_PACKS || []).indexOf(L().laneOf(a.id)), lb = (OBOL.ACTION_PACKS || []).indexOf(L().laneOf(b.id));
+      if (la !== lb) return la - lb;
       return (a.title || a.id).localeCompare(b.title || b.id);
     });
     return head + '<div class="ns-grid lib-moves-grid">' + list.map(moveTile).join('') + '</div>';
@@ -223,11 +228,13 @@
         return '<p class="lib-cmd-ctx"><span class="lib-cmd-ctx-m">' + esc(m.title) + '</span> ' + esc(m.note) + '</p>';
       }).join('') + '</div>';
     }
-    return '<article class="lib-ccard ' + phaseTintClass(entry.phase) + (selected ? ' selected' : '') + '" data-tpl="' + attr(key) + '">'
+    var ph = entry.phase || 'enum';
+    return '<article class="lib-ccard ' + phaseTintClass(ph) + (selected ? ' selected' : '') + '" data-tpl="' + attr(key) + '">'
       + '<div class="lib-ccard-top">'
       + '<code class="lib-ccard-run">' + esc(shown) + '</code>'
       + '<button type="button" class="btn-copy lib-copy" data-copy="' + attr(shown) + '" aria-label="Copy command">Copy</button></div>'
-      + '<div class="lib-ccard-moves"><span class="lib-ccard-used">Used by</span>' + moveChips + more + '</div>'
+      + '<div class="lib-ccard-moves"><span class="ns-chip ns-phase ph-' + esc(ph) + ' lib-ccard-ph">' + esc(U.titleCase(ph)) + '</span>'
+      + '<span class="lib-ccard-used">Used by</span>' + moveChips + more + '</div>'
       + note + '</article>';
   }
   function commandsGroupedHtml() {
@@ -348,6 +355,20 @@
   // in-place refreshers (avoid a full hash navigation on every facet/search change)
   function refreshMoves() { var el = _mount && _mount.querySelector('#lib-moves-results'); if (el) el.innerHTML = movesResultsHtml(); }
   function refreshFacets() { var el = _mount && _mount.querySelector('.lib-facets'); if (el) el.outerHTML = facetSidebarHtml(); }
+  // Keep each facet group's "N selected" badge in sync WITHOUT rebuilding the sidebar (which would
+  // collapse the open <details> and lose scroll). A toggle updates only the badges, so a count never
+  // goes stale, which is what left "Lane 2" showing after both lanes were deselected.
+  function updateFacetBadges() {
+    if (!_mount) return;
+    var grps = _mount.querySelectorAll('.lib-facet-grp');
+    for (var i = 0; i < grps.length; i++) {
+      var d = grps[i], g = d.getAttribute('data-grp'), n = (_mSel[g] || []).length;
+      var sum = d.querySelector('summary'); if (!sum) continue;
+      var badge = sum.querySelector('.lib-facet-active');
+      if (n) { if (!badge) { badge = document.createElement('span'); badge.className = 'lib-facet-active'; sum.appendChild(badge); } badge.textContent = n; }
+      else if (badge) { badge.parentNode.removeChild(badge); }
+    }
+  }
   function refreshCommands() { var el = _mount && _mount.querySelector('#lib-cmd-results'); if (el) el.innerHTML = (_cFlat ? commandsFlatHtml() : commandsGroupedHtml()); }
   function refreshAttack() { var el = _mount && _mount.querySelector('#lib-body'); if (el) el.innerHTML = attackLensHtml(); }
 
@@ -368,7 +389,7 @@
         var i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v);
         if (!arr.length) delete _mSel[g];
         t.classList.toggle('on'); t.setAttribute('aria-pressed', t.classList.contains('on') ? 'true' : 'false');
-        refreshMoves();
+        updateFacetBadges(); refreshMoves();
       });
       U.on(rootEl, 'click', '[data-clear-moves]', function () { _mSel = {}; _mQ = ''; _mRelevant = false; var q = _mount.querySelector('#lib-moves-q'); if (q) q.value = ''; var r = _mount.querySelector('#lib-relevant'); if (r) r.checked = false; refreshFacets(); refreshMoves(); });
       // remember which facet groups are open
