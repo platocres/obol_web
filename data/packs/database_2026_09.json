@@ -839,7 +839,7 @@
         "port:8082"
       ],
       "produces": [
-        "foothold.shell"
+        "foothold.linux"
       ],
       "priority": 82,
       "phase": "access",
@@ -976,7 +976,7 @@
         "loot.material"
       ],
       "produces": [
-        "credential.plain",
+        "credential.plaintext",
         "credential.candidate",
         "hash.candidate"
       ],

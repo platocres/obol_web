@@ -2087,7 +2087,7 @@
         "service.activemq"
       ],
       "produces": [
-        "foothold.shell",
+        "foothold.linux",
         "access.shell"
       ],
       "priority": 88,
@@ -2420,7 +2420,7 @@
       ],
       "produces": [
         "foothold.linux",
-        "access.root"
+        "access.admin"
       ],
       "priority": 77,
       "autonomy": "approve",
@@ -2548,7 +2548,7 @@
         "http.reachable"
       ],
       "produces": [
-        "foothold.shell"
+        "foothold.linux"
       ],
       "priority": 79,
       "phase": "access",

@@ -1576,3 +1576,149 @@ tests/browser-smoke.js` · `node tools/stamp-assets.js` (after any asset edit) �
   is a tidy "nmap (20)" row you expand on demand (Tool view keeps capability rows open). Expand/Collapse
   All drive both levels; manual group/row open-close is remembered across a search re-render. Engine
   helpers laneHexOf/phaseHex/hashHue. library-smoke + headless drive + browser-smoke + lint green; stamped.
+
+---
+
+## Active build: Tools tab revamp + methodology audit (in progress, new PR on branch claude/lucid-mayer-ebsiwv)
+
+**Plan of record. If this chat is lost, resume here. Branch `claude/lucid-mayer-ebsiwv` (fresh from main
+after #306 merged). One PR, built in internal phases, each green on the full guardrail gauntlet before
+the next. Commit frequently; fold status-log updates into the code commit.**
+
+### Intention
+
+The Tools tab was one of the first surfaces, built before the mission was clear. It is 36 dumb forms:
+open a card, face a wall of fields (certipy has 75), type target/user/domain/wordlist that obol already
+holds. Revamp it into a **fact-aware tactical launchpad** that matches the rest of obol (neon glass,
+lane/phase hues, fact-fill), AND use the revamp as the trigger for a **retroactive methodology audit**
+so the whole move/command/parser graph meets a single correctness standard. Owner wants it ambitious:
+"do more than people think a static site is capable of."
+
+### The five-obligation mandate (the correctness contract, applies to EXISTING surface too)
+
+Every tool/command/move/path, old and new, must satisfy all five, held by the named guardrails:
+
+1. **No dead facts** — a minted fact is consumed by a downstream move and advances the engagement
+   (`gap-report` dead-end lens).
+2. **No missed facts** — if real output contains something meaningful, a parser mints it; a false
+   negative is a bug (`gap-report` parse-gap lens + the new auditor + golden replays).
+3. **Failure awareness** — obol recognizes what a FAILED command looks like (denied, locked out, empty,
+   bind-restricted, wrong creds, hung) for existing AND new commands, and either doctors it
+   (`blocker.*` fact -> FIELD_DOCTORS reactive card) or uses the failure to re-rank a better next move.
+   Every new command ships a success signature AND a failure signature.
+4. **No ranking regression and no under-serving** — order never degrades (`ranker-sim` 0/25,
+   `ranker-sweep` 0.0%); and a command a user is entitled to, once prereqs are met, actually appears
+   (gating correctness).
+5. **Create the path, do not relegate.** obol is a universal lab solver: if a genuinely useful tool does
+   not pay off down an existing path, AUTHOR the path where it does (move + produces + downstream
+   consumers + parser + failure signature + a golden replay), to a flag. Boundary: "useful on a
+   realistic box", proven by a golden stateful replay. Only things that are genuinely not moves (a
+   listener/payload pairing, a shell-upgrade sequence) stay Tools-only presentation strings.
+
+Proof of no-regression = the golden, stateful replays (`forest-e2e-replay` + the run->paste->expect
+card-delta fixtures). Extend the corpus per new path; re-run the whole corpus every phase.
+
+### The auditor (task #30, the backbone) — tools/post-parse-audit.js
+
+Read-only. Reuses `OBOL.decisionMap.gapReport()` for the move-level lenses (parse-gap, dead-end,
+unreachable, orphan facts, signature drift) and ADDS the command-level and failure-level checks it
+lacks: (1) a confirm/probe command (switchless, auth-only, a count) with no `settled_by` for the fact
+its success mints (can never retire); (2) a move whose proven end-state has no
+`obsoleted_by`/`deprioritize_when` (re-offers after done); (3) a command that authenticates/sprays/probes
+anonymous access but has no failure signature (`blocker.*` + a FIELD_DOCTOR) for its likely failure;
+(4) lead-command order (the operator's real next command buried). Clustered output (ranker-sweep shape),
+human-triaged. Added to the verify list. Baseline at start: 8 parse gaps, 13 partials, 44 dead-ends.
+
+### Tools UX revamp (the launchpad)
+
+- **Recipes = named field-PRESETS, not strings** (Option B, bidirectional). A recipe sets toolbuilder
+  field values; the compiler derives the command; you tweak and it recompiles. A **recipe<->pack
+  equivalence test** asserts `compile(defaults+recipe.fields+boundIdentity)` equals the corresponding
+  pack command, so recipes and the pack never drift (recipes derive from the pack, mechanically). Grow
+  the `toolbuilder` field model wherever a hero recipe is not yet expressible.
+- **Shared engagement-binding component** (target + Identity Picker + port chips + wordlist chips +
+  manual-fill toggle), reused by BOTH Tools and the Library Commands lens. The Identity Picker
+  enumerates every credential in the fact ledger (null / guest / each validated cred / each hash);
+  selecting one sets auth mode + `-u/-p/-H` + domain prefix as FIELD values. Local by default, with an
+  explicit "make active". Secrets masked with hover-to-reveal.
+- **Four-tier funnel** (big tools never a wall): mode tabs (nxc: SMB/LDAP/WINRM/...) -> hero recipe
+  tiles (4-8 common, fact-filled) -> a COMPLETE searchable flag/module palette (every documented switch
+  and module, grouped Auth/Enum/Exec/Output/Evasion; a per-tool coverage check PROVES nothing common is
+  omitted) -> the command preview is directly EDITABLE text (no scary blank box; editing is the natural
+  override). Power path (palette + editable + full form) is a strict superset of today's forms (test:
+  every current field stays reachable).
+- **Dual layout lens** (persisted per engagement): Grid (scan many tools) | Focus (coach-style list +
+  right-hand live-command + teaching canvas). Default Focus.
+- **Teaching, day-one must**: a flag-by-flag gloss per generated command (a per-tool flag dictionary),
+  plus the field-note canvas (When / How To Land It / What To Look For / Mistakes) reused for recipes.
+- **Stations (combine substitutes, by JOB not by move)**: a station = {job title, shared parameter
+  model, visible engine selector with one-line teaching per engine, per-engine compiler + palette,
+  fact-aware default engine}. Switching engines persists and re-expresses shared params. Families:
+  **Web Content Discovery** (ffuf/gobuster/feroxbuster/dirsearch/wfuzz), **Port Scan**
+  (nmap/rustscan/masscan), **Crack Hashes** (hashcat/john), **Database Shell**
+  (mssqlclient/mysql/psql/redis/mongo), plus the two access stations below. Keep COMPLEMENTS separate
+  (SMB enum: smbclient/smbmap/enum4linux/nxc-smb stay distinct cards). Search/alias so the tool name
+  still finds the station. Accessibility: one job per card, calm default, shape+label not colour-only.
+- Tools works STANDALONE with no engagement (all-manual, like Workbench/Library).
+
+### Shell + Pivot stations (downloadable, fact-filled bundles, no execution, exam-legal)
+
+- **Shell Station** ("Get a Shell"): a one-download listener kit `.sh` (picks/validates port, starts the
+  chosen catcher backgrounded + logged, prints every payload variant filled with lhost/lport, includes
+  the TTY-upgrade sequence). Payload text reuses the Workbench reverse-shell engine (one engine).
+- **Pivot Station** ("Pivot & Tunnel"), surfaced in Tools AND Cruise: a downloadable local-half `.sh`
+  (server/proxy + tun + route to the internal subnet) + on-host copy-chips (stage agent + connect-back),
+  a liveness check + fallback egress ports. obol PICKS the transport from facts and says why (SSH creds
+  -> sshuttle/ssh-forward; stageable checksummed agent (arsenal.js) + writable foothold -> ligolo/chisel),
+  user-overridable. A **locate-first subnet flow** (like the flag hunt): foothold -> paste host
+  `ip route`/`ifconfig`/`ipconfig` -> parse `scan.local.routes/interfaces/neighbors` -> the bundle
+  regenerates with the discovered subnet filled. Install preamble (apt/go install the missing transport,
+  gated behind a visible prompt) using the machine profile. Realizes the deferred Cruise CR3. Honesty
+  line: obol writes both halves, you run the local `.sh` and the on-host one-liner; obol never touches
+  the target.
+
+### Internal phasing (one PR; each phase green before the next)
+
+- **TA.** Auditor + clear the existing punch-list (parse gaps -> parsers/fact-naming; dead-ends ->
+  consumers or accept; failure signatures). Zero new tools = low ranking risk. Extend golden replays.
+- **TB.** Tools UX revamp on EXISTING tools (binding component, recipes-as-presets + equivalence test,
+  funnel, dual layout, teaching, re-skin, the four substitute stations). Zero new pack commands = zero
+  ranking risk.
+- **TC.** New daily-driver tools WITH authored flag-paths + success/failure signatures + golden replays
+  (bloodyAD, ntlmrelayx, wpscan, searchsploit, db shells, eyewitness, dnsenum/dig, cewl, rustscan,
+  Coercer). The ranking-sensitive phase, heavily guarded.
+- **TD.** Shell + Pivot stations + the bundle engine + Cruise pivot integration.
+
+### Verify each phase (the gauntlet)
+
+`node tools/post-parse-audit.js` · `node tools/gap-report.js --check` · `node tools/field-notes-coverage.js` ·
+`node tools/lint-study.js --check` · `node tools/attack-coverage.js` · `node tools/ranker-sim.js` (0/25) ·
+`node tools/ranker-sweep.js` (0.0%) · `node tests/engine/help-coverage.js` ·
+`for t in tests/engine/*.js; do node "$t"; done` (incl. forest-e2e-replay + new golden replays) ·
+`NODE_PATH=/opt/node-tools/node_modules node tests/browser-smoke.js` · `node tools/stamp-assets.js` ·
+drive headless (0 console errors) · screenshot every changed surface. House style: no em/en dashes.
+
+### Status log (update per commit)
+
+- 2026-10-14: Plan documented. Baseline audit via gap-report: 8 parse gaps (incl. foothold.shell /
+  access.root unreadable on several RCE/privesc moves), 13 partials, 44 dead-ends.
+- 2026-10-14: TA phase 1. Built the post-parse-advance auditor tools/post-parse-audit.js (the "command
+  -> real output -> fact -> advance/retire" round-trip, task #30), read-only like gap-report/ranker-sim.
+  It adds the COMMAND and FAILURE levels gap-report cannot see: MISSED GAIN (a move produces a progress
+  fact, a foothold/access/credential/loot/objective, that no parser reads, so you gain and obol cannot
+  tell, the worst class), PROBE RETIRE (a switchless confirm/probe command with no settled_by, so it
+  cannot retire after you prove it), RE-OFFER (a terminal-fact move with no obsoleted_by/deprioritize_when,
+  advisory) and FAILURE GAP (an authenticating/spraying move with no reachable blocker.* doctor, advisory).
+  The parser capability set is derived from OBOL.PARSER_SIGNATURES emits with prefix-wildcard support, so
+  it mirrors exactly what the live parsers can mint. --check hard-fails only on NEW MISSED GAIN / PROBE
+  RETIRE (a 6-entry allowlist tolerates the known captured-hash routing cases, closed in TC, plus two
+  borderline probes). Root cause of the baseline gaps was non-canonical fact names: the auditor confirmed
+  foothold.shell / access.root / credential.plain were consumed by NOTHING, so normalizing them to the
+  canonical foothold.linux / access.admin / credential.plaintext (13 moves across ad, database,
+  findings_checks, linux_privesc, recon, web) wires them into the real graph rather than orphaning them.
+  Added settled_by to four switchless probes (ad-dc-identify[0] -> ad.anonymous_bind/ldap.authenticated,
+  recon-ftp[0,1] -> ftp.anonymous_login, recon-smb-anon[2] -> smb.shares/smb.null_session/
+  blocker.smb_null_denied) so they retire once proven. Result: parse gaps 8 -> 0, dead-ends 44 -> 30,
+  missed-gain 18 -> 4 (the 4 allowlisted captured-hash cases), probe-retire 10 -> 2. Full gauntlet green:
+  ranker-sim 0/25, ranker-sweep 0.0%, gap --check OK, field-notes OK, lint OK, attack-coverage OK, full
+  engine suite PASS; bundle rebuilt, assets stamped. Zero new tools, zero ranking risk, per the TA plan.

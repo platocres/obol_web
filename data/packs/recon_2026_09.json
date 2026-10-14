@@ -61,7 +61,12 @@
         {
           "tool": "smbmap",
           "run": "smbmap -H {{target}} -u '' -p ''",
-          "note": "Same idea with read/write flags shown, so a writable share stands out immediately."
+          "note": "Same idea with read/write flags shown, so a writable share stands out immediately.",
+          "settled_by": [
+            "smb.shares",
+            "smb.null_session",
+            "blocker.smb_null_denied"
+          ]
         },
         {
           "tool": "nxc",
@@ -488,12 +493,18 @@
         {
           "tool": "nxc",
           "run": "nxc ftp {{target}} -u anonymous -p ''",
-          "note": "Check anonymous login across the host."
+          "note": "Check anonymous login across the host.",
+          "settled_by": [
+            "ftp.anonymous_login"
+          ]
         },
         {
           "tool": "curl",
           "run": "curl ftp://{{target}}/ --user anonymous:anonymous",
-          "note": "List the root directory over anonymous FTP."
+          "note": "List the root directory over anonymous FTP.",
+          "settled_by": [
+            "ftp.anonymous_login"
+          ]
         },
         {
           "tool": "ftp",
@@ -2112,8 +2123,8 @@
         "port:445"
       ],
       "produces": [
-        "foothold.shell",
-        "access.root"
+        "foothold.linux",
+        "access.admin"
       ],
       "priority": 95,
       "phase": "access",
@@ -2159,7 +2170,7 @@
         "snmp.community"
       ],
       "produces": [
-        "credential.plain",
+        "credential.plaintext",
         "credential.candidate"
       ],
       "priority": 84,

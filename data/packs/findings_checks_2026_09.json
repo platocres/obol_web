@@ -581,7 +581,7 @@
         "foothold.linux"
       ],
       "produces": [
-        "credential.plain",
+        "credential.plaintext",
         "loot.files"
       ],
       "priority": 85,

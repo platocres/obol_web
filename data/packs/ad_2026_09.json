@@ -243,7 +243,11 @@
         {
           "tool": "nxc",
           "run": "nxc ldap {{target}} -u '' -p ''",
-          "note": "PREFERRED: a NetExec LDAP smoke test. It verifies LDAP is reachable and generally reveals hostname and domain context without yet diving into deeper enumeration."
+          "note": "PREFERRED: a NetExec LDAP smoke test. It verifies LDAP is reachable and generally reveals hostname and domain context without yet diving into deeper enumeration.",
+          "settled_by": [
+            "ad.anonymous_bind",
+            "ldap.authenticated"
+          ]
         },
         {
           "tool": "nxc",

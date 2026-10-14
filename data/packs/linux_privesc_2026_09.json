@@ -1334,7 +1334,7 @@
         "privesc.lxd_group"
       ],
       "produces": [
-        "access.root"
+        "access.admin"
       ],
       "priority": 85,
       "autonomy": "approve",
@@ -1388,7 +1388,7 @@
         "port:1337"
       ],
       "produces": [
-        "foothold.shell"
+        "foothold.linux"
       ],
       "priority": 76,
       "phase": "access",
@@ -1473,7 +1473,7 @@
         "vuln.chkrootkit"
       ],
       "produces": [
-        "access.root"
+        "access.admin"
       ],
       "priority": 90,
       "phase": "escalate",
@@ -1517,7 +1517,7 @@
         "foothold.linux"
       ],
       "produces": [
-        "access.root"
+        "access.admin"
       ],
       "priority": 90,
       "phase": "escalate",
@@ -1564,7 +1564,7 @@
         "foothold.linux"
       ],
       "produces": [
-        "access.root"
+        "access.admin"
       ],
       "priority": 92,
       "phase": "escalate",
