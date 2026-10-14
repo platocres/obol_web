@@ -9,6 +9,12 @@ any other coding agent. There are no separate, model-specific build instructions
 **House style:** no em dashes or en dashes anywhere (use commas, colons, or periods). Use proper
 capitalization, and Title Case for UI labels, tabs, and section headings.
 
+**Commit hygiene:** fold the CLAUDE.md status-log update into the same commit as the code change it
+describes, never a trailing docs-only commit. GitHub Pages deploys one commit at a time, so two pushes
+within the same deploy window cancel the earlier deployment (it shows as a red "Error" on that commit).
+One commit per change keeps the Pages timeline clean. A docs-only commit is fine only when there is no
+code change to fold it into.
+
 ---
 
 ## Active build: Workbench and fact-driven utilities (in progress, PR #302)
