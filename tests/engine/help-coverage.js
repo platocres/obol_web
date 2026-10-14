@@ -26,7 +26,7 @@ var ids = {};
 
 // the real nav surfaces that MUST have an entry (global nav + ctxbar SUBNAV + header actions)
 var REQUIRED = [
-  'study', 'loadout', 'engagements', 'tools', 'workbench', 'stuck', 'cruise',  // global nav
+  'study', 'loadout', 'engagements', 'tools', 'workbench', 'library', 'cruise',  // global nav
   'home', 'targets', 'path', 'evidence',                                           // Work the Box
   'map', 'domain', 'creds',                                                         // Analyze
   'checklist', 'findings', 'history', 'scoreboard', 'report',                       // Track & Report

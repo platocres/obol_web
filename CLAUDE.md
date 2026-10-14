@@ -1400,3 +1400,106 @@ em/en dashes.
   owner's credentialed Forest state: batch is all enumeration with zero needs rows, golden-ticket/dcsync
   gone, checkpoint is Authenticated Remote Execution, 0 console errors. Full engine suite + browser-smoke +
   lint + gap green; assets stamped.
+
+---
+
+## Active build: the Library tab (in progress, PR #306 branch)
+
+**Plan of record. If this chat is lost, resume here. Branch `claude/lucid-mayer-ebsiwv` (= open PR
+#306). Commit frequently. One PR; public republish of #306 is held until the whole Library ships.**
+
+### Intention
+
+The Stuck? tab becomes **Library**: a read-only, deterministic catalogue of everything obol knows,
+explorable on the user's own terms (not the coach, never ranked). Four lenses as sub-tabs, opening on
+**Moves**: **Moves · Commands · ATT&CK · Stuck?**. obol has 35+ surfaces and ~345 moves / ~1033 distinct
+command templates; users currently have no way to just *see* what is available. The Library fills that
+gap. The audience is neurodivergent and disabled learners: calm, predictable, low-cognitive-load
+structure is an acceptance criterion, with the neon-glass aesthetic in the chrome, not the layout.
+
+### Decisions locked (owner-approved, over a multi-turn design discussion)
+
+- **Commands lens = the hero.** Flatten all commands, dedupe to the distinct template with back-link
+  chips to every move that uses it (Option B), grouped **Tool -> Capability** (nxc sub-grouped by
+  protocol) with a **Flatten** toggle + persistent search, **phase-tinted**, auto-filled from the active
+  engagement when present, one-tap copy. (The owner finds the move packs "a necessary evil"; the command
+  browser is the thing they actually wanted.)
+- **Moves lens.** Faceted card browser (facets lane / phase / port / service / tool / OS / kind + search),
+  **lane-hued**, reusing the `ns-card` tile. Each move expands to its commands (filled), field notes, and
+  offers Build In Workbench + Seed Into Stuck?. A v1 **"Only What Is Relevant To My Box"** toggle
+  (engagement only) narrows to moves whose own `.eligible(facts)` passes (NOT a ranker fork).
+- **ATT&CK lens.** A **library-scoped** matrix (what obol CAN do): every technique obol performs ->
+  the moves AND commands behind it, tactic-coloured. Distinct from the Findings tab's engagement-scoped
+  matrix (what you HAVE done).
+- **Stuck? lens.** The existing Ferryman, folded in unchanged (the Library route delegates to
+  `OBOL.routes.stuck`); `#/stuck` stays a working alias.
+- **Colour follows the active lens's organizing axis:** Moves = lane hue, Commands = phase tint,
+  ATT&CK = tactic.
+- **v1 scope line:** moves + commands + ATT&CK only (no GTFOBins / wordlists / CVE / D3FEND lenses).
+- **Separately sequenced, NOT part of this build:** a "Focus mode" for Next Steps (a default-on toggle
+  that collapses non-lead commands behind "N more ways -> Library"). Do it AFTER the Library ships;
+  toggle-gated and reversible. The owner is skeptical of rankings and protective of ranking progress;
+  the Library is ranking-independent by construction, which is the point.
+
+### Boundaries (unchanged, non-negotiable)
+
+Static, browser-local, no backend, no execution, no telemetry. Presentation only: the Library reads
+`OBOL.library` (a pure engine over the pack), the one filler (`OBOL.command`), and the active
+engagement's facts for fill/relevance. It writes nothing to `OBOL.store`, never forks the ranker,
+never changes the move graph. Pack commands are the source of truth. Accessibility is acceptance
+(neon glass, colour never the sole signal, 11px floor, prefers-reduced-motion honoured, 4K to ~320px).
+House style: no em or en dashes; Title Case.
+
+### Engine (assets/engine/library.js, pure, Node-safe, tested)
+
+`OBOL.library`: `lanes()`/`laneOf(id)`/`laneLabel(pk)`/`laneHue(pk)` (lane = the ACTION_PACK a move
+came from, derived at load from OBOL.packData in OBOL.ACTION_PACKS order, no build step); `phaseOf(a)`;
+`facets(pack)` -> grouped facet values (lane/phase/service/port/tool/os/tag) with counts; `filter(pack,
+sel, q)` (OR within a group, AND across groups, + free-text over id/title/hypothesis/tools/commands);
+`commandCatalog(pack)` (dedupe to the distinct template, back-link `moves[]` with per-move note);
+`commandsGrouped(pack, q)` (tool -> capability -> commands; `toolOf`/`capabilityOf` normalise
+netexec/nxc and impacket-* and split nxc by protocol); `fill(template, facts, params)` (via
+fillCommand); `techniqueLibrary(pack)` (byMove -> {id,name,tactics,moves,url}); `tactics()`.
+
+### Phases (check off as completed)
+
+- [x] **L1.** Engine + Moves lens + nav rename (Stuck? -> Library, #/library, #/stuck alias) + lazy
+  group + route scaffold (sub-tabs, Stuck? delegating). Smoke test tests/engine/library-smoke.js.
+  CLAUDE.md plan.
+- [x] **L2.** Commands lens (the hero): dedupe-to-template, back-link move chips, Tool -> Capability
+  grouping (nxc by protocol), Flatten toggle, search, phase tint, engagement auto-fill, one-tap copy.
+- [x] **L3.** ATT&CK lens: library-scoped tactic-coloured matrix, each technique opening to the moves
+  and example commands behind it.
+- [x] **L4.** Fold Stuck? in as a sub-tab (delegates to OBOL.routes.stuck; exposed `seed` so a move's
+  "Seed Into Stuck?" lands you on the Ferryman board with that move already a lead).
+- [ ] **L5.** Aesthetic / responsive / a11y pass (4K/1080p/tablet/mobile) + full guardrails + stamp +
+  screenshots. Help entry (Stuck? -> Library + lens subs) and help-coverage updated.
+
+### Verify each phase (same as the project)
+
+`node tools/field-notes-coverage.js` · `node tools/lint-study.js --check` · `node tools/gap-report.js
+--check` · `node tools/attack-coverage.js` · `node tests/engine/help-coverage.js` ·
+`for t in tests/engine/*.js; do node "$t"; done` · `NODE_PATH=/opt/node-tools/node_modules node
+tests/browser-smoke.js` · `node tools/stamp-assets.js` (after any asset edit) · drive the app headless
+(0 console errors) · screenshot each lens at 4K/1080p/tablet/mobile. House style: no em/en dashes.
+
+### Status log (update per commit)
+
+- 2026-10-14: L1-L4 built. Engine assets/engine/library.js (facets/filter/commandCatalog/
+  commandsGrouped/techniqueLibrary/tactics/fill, pure over the pack, lane derived from load order),
+  tested in tests/engine/library-smoke.js (345 moves, 1033 distinct command templates, 44 ATT&CK
+  techniques, nxc split by protocol, OR-within/AND-across filtering). Route assets/ui/routes/library.js:
+  sub-tab shell opening on Moves, deep-linkable (#/library/<lens>), with all four lenses live:
+  Moves (faceted ns-card browser, lane-hued, Relevant-To-My-Box toggle, Build In Workbench + Seed Into
+  Stuck?), Commands (the hero: deduped templates grouped tool -> capability, Flatten toggle, search,
+  phase tint, engagement auto-fill, copy, back-link move chips that jump into the Moves lens), ATT&CK
+  (tactic-coloured library-scoped matrix, each cell opening to the moves + example commands behind it),
+  Stuck? (delegates to OBOL.routes.stuck, with a new exposed `seed(kinds, params)` entry so Seed Into
+  Stuck? lands on the Ferryman board with the move already a lead, and `_wbTargets` reused for the
+  Workbench classifier). Nav renamed Stuck? -> Library (desktop + mobile More sheet), data-nav-match
+  keeps #/stuck highlighting Library; `library` lazy group (carries Stuck?'s data+engine+route plus the
+  ATT&CK catalog/map + the library engine/route); #/stuck kept registered as the alias. Help section
+  Stuck? -> Library with the four lens subs; help-coverage required id stuck -> library. CSS .lib-*
+  block (neon-glass sub-tabs, facet sidebar, lane-hued move tiles, phase-tinted command cards, tactic
+  matrix), main#view:has(.library) widened to 2400px, responsive stacks under 960/560px. L5 (full
+  guardrail sweep + screenshots) next.
