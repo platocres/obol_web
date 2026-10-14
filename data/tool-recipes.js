@@ -49,8 +49,6 @@
         values: { engine: 'feroxbuster', wordlist: WC + 'raft-medium-directories.txt', extensions: 'php,txt,html', recursion: true, depth: '2' } },
       { id: 'gobuster-vhost', label: 'Gobuster VHosts', phase: 'enum', hint: 'Virtual-host discovery: same IP, different Host header.',
         values: { engine: 'gobuster', gobusterMode: 'vhost', wordlist: DNS } },
-      { id: 'gobuster-dns', label: 'Gobuster Subdomains', phase: 'recon', hint: 'DNS subdomain discovery. No web server needed, just a domain.',
-        values: { engine: 'gobuster', gobusterMode: 'dns', wordlist: DNS } },
     ],
     'tb-wfuzz': [
       { id: 'path', label: 'Path Discovery', phase: 'enum', hint: 'Fuzz the URL path, hide the 404 background.',

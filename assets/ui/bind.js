@@ -58,8 +58,14 @@
     var p = params(), id = selectedIdentity();
     var tgt = p.target || p.rhost || '';
     var ti = {}; try { ti = OBOL.store.targetIdentity && OBOL.store.targetIdentity(tgt) || {}; } catch (e) {}
+    // a URL-shaped target for the web tools: scheme + host (hostname preferred so vhosts resolve), with
+    // a FUZZ variant for ffuf/wfuzz. https only when 443/8443 is open and plain http is not.
+    var host = p.hostname || ti.hostname || ti.fqdn || tgt;
+    var open = {}; try { (OBOL.command.openPorts(facts()) || []).forEach(function (n) { open[n] = 1; }); } catch (e) {}
+    var scheme = ((open[443] || open[8443]) && !open[80] && !open[8080]) ? 'https://' : 'http://';
+    var url = host ? (scheme + host) : '';
     return {
-      target: { value: tgt, ip: p.rhost || p.ip || tgt, hostname: p.hostname || ti.hostname || ti.fqdn || '' },
+      target: { value: tgt, ip: p.rhost || p.ip || tgt, hostname: p.hostname || ti.hostname || ti.fqdn || '', url: url, fuzzurl: url ? (url + '/FUZZ') : '' },
       context: {
         domain: (id && id.domain) || p.domain || ti.domain || '',
         username: (id && id.user) || p.username || '',

@@ -1762,3 +1762,23 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   port/wordlist land in the right slots, and manual mode yields an empty context. CSS appended; both
   bind.js and the TB1 engine/data registered in the lazy `tools` AND `library` groups (loadScript
   dedupes by src). Route wiring lands in TB3. Full engine suite green; assets stamped.
+- 2026-10-14: TB phase 3a, the Tools route rebuilt as a fact-aware funnel (assets/ui/routes/tools.js).
+  The binding bar sits on top and autofills every tool; STATIONS (Web Content Discovery, Crack Hashes,
+  Port Scan) lead as hero cards with a visible engine selector (fact-aware default, one-line teach per
+  engine, shared params carried across a swap); every tool opens to a funnel panel: RECIPE tiles
+  (ns-card hero presets, one tap to a filled command, phase-hued), an always-editable command preview
+  (highlighted by default, an edit toggle reveals a textarea, reset restores, copy lifts the edited or
+  generated text), a flag-by-flag TEACHING gloss (OBOL.toolkit.glossCommand, re-computed live as the
+  command changes), a collapsible complete form (All Options, every documented switch), and the
+  Evidence boundary. A Grid | Focus layout lens persists per engagement (default Focus). Station
+  engines are not also shown as standalone category cards. Fixed a real fill gap the headless run
+  surfaced: the web tools autofilled the bare IP, so ffuf came out `-u 10.10.10.161` (no scheme, no
+  FUZZ); added target.url (scheme + host, https only when 443 is open and 80 is not) and target.fuzzurl
+  (+ /FUZZ) to the binding and the fallback context, pointed ffuf.url at target.fuzzurl and
+  gobuster.target at target.url, and dropped the gobuster-dns recipe (its `dns -d` mode wants a domain,
+  not a URL). Driven headless (drive-tools.js) at 4K/1080p/tablet/mobile: binding bar with seeded
+  identities + ports + wordlists, three stations, recipe-to-command fill (ffuf -u http://host/FUZZ, a
+  clean gobuster on engine swap), live gloss, edit toggle, layout lens, all with 0 console errors;
+  mobile stacks cleanly. Full engine suite + post-parse-audit + gap + lint + attack-coverage +
+  help-coverage + browser-smoke green; assets stamped. The left-rail Focus layout and the Library-lens
+  reuse of the binding are TB3b/TB4.

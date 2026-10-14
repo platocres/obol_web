@@ -12,7 +12,7 @@ OBOL.store = {
   active: function () { return ENG; },
   factSet: function () { return { facts: [] }; },
   update: function (fn) { fn(ENG); },
-  targetIdentity: function () { return { hostname: 'FOREST', domain: 'htb.local' }; },
+  targetIdentity: function () { return {}; },
 };
 var CREDS = [
   { user: 'svc-alfresco', domain: 'htb.local', secret: 's3rvice', nthash: '', type: 'PW' },
@@ -38,6 +38,8 @@ var c1 = B.context();
 ok(c1.target.value === '10.10.10.10', 'target.value from params');
 ok(c1.context.username === 'bob', 'username from params');
 ok(c1.workspace.wordlist === B.DEFAULT_WORDLIST, 'wordlist defaults when unset');
+ok(c1.target.url === 'http://10.10.10.10', 'target.url is scheme + host (' + c1.target.url + ')');
+ok(c1.target.fuzzurl === 'http://10.10.10.10/FUZZ', 'target.fuzzurl appends /FUZZ (' + c1.target.fuzzurl + ')');
 
 // 2) a locally-selected identity overrides username/domain (not the active params)
 ENG.ui = { bind: { identityKey: OBOL.creds.keyOf(CREDS[0]) } };

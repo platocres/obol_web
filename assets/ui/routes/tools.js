@@ -1,137 +1,118 @@
 /*!
- * obol ui — routes/tools.js — THE TOOLS SURFACE.
- * Robust command BUILDERS for exactly the tools obol is prepared to equip. Every builder
- * in OBOL.TOOLSET whose equips[] intersects OBOL.packs.equippedTools() is shown, grouped by
- * category, as an expandable card. Expanding mounts a grouped form (presets, snippets, credential
- * modes) with a live command preview compiled by OBOL.toolbuilder.compile — autofilled from the
- * engagement params + proven facts (via OBOL.command.buildContext). Field values persist under
- * engagement.ui.tools[toolId]. Nothing executes: the surface only generates copy-ready text.
+ * obol ui — routes/tools.js — THE TOOLS SURFACE (fact-aware tactical launchpad).
+ *
+ * A funnel, not a wall of flags: the shared Engagement Binding bar (OBOL.bind) autofills the target,
+ * identity, ports, and wordlist; STATIONS group substitute tools by the job they do (Web Content
+ * Discovery, Crack Hashes, Port Scan) with a visible engine selector; each tool opens to RECIPE tiles
+ * (named presets, one tap to a filled command), an always-editable command preview, a flag-by-flag
+ * teaching gloss, and a collapsible complete form (every documented switch). Compiled by
+ * OBOL.toolbuilder.compile; nothing executes. Field values persist under engagement.ui.tools[toolId].
+ * Presentation only: pack commands stay the source of truth. House style: no em or en dashes.
  */
 (function (root) {
   'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
   var U = OBOL.util;
   var TB = OBOL.toolbuilder;
+  var TK = OBOL.toolkit;
   function esc(s) { return U.esc(s); }
+  function attr(s) { return U.attr ? U.attr(s) : esc(s); }
   function truthy(v) { return TB.truthy(v); }
 
   var CATS = [
     { id: 'web', label: 'Web', hint: 'Content discovery, fingerprinting, request testing.' },
     { id: 'credentials', label: 'Credentials', hint: 'Validation, spraying, roasting, cracking, capture.' },
     { id: 'ad', label: 'Active Directory', hint: 'LDAP, Kerberos, AD CS, graph collection.' },
-    { id: 'remote-exec', label: 'Remote exec', hint: 'Authenticated shells and command execution.' },
+    { id: 'remote-exec', label: 'Remote Exec', hint: 'Authenticated shells and command execution.' },
     { id: 'pivot', label: 'Pivot', hint: 'Tunnels, SOCKS, port forwarding.' },
     { id: 'enum', label: 'Enumeration', hint: 'Scanning, SMB/RPC/SNMP surface mapping.' },
-    { id: 'privesc', label: 'Privilege escalation', hint: 'Local enumeration helpers.' },
-    { id: 'shells', label: 'Shells & transfer', hint: 'Payloads, listeners, file transfer.' },
+    { id: 'privesc', label: 'Privilege Escalation', hint: 'Local enumeration helpers.' },
+    { id: 'shells', label: 'Shells & Transfer', hint: 'Payloads, listeners, file transfer.' },
   ];
+  // Phase hue per recipe tag (reuses the --ph-* tokens).
+  var PHASE_HUE = { recon: 'recon', enum: 'enum', cracking: 'creds', creds: 'creds', access: 'access', escalate: 'escalate', loot: 'loot' };
 
   // ---- equipped scoping ----
-  function equippedSet() {
-    var set = {};
-    try { OBOL.packs.equippedTools().forEach(function (t) { set[t] = true; }); } catch (e) {}
-    return set;
-  }
+  function equippedSet() { var set = {}; try { OBOL.packs.equippedTools().forEach(function (t) { set[t] = true; }); } catch (e) {} return set; }
   function toolset() { return (OBOL.TOOLSET || []).slice(); }
-  function isEquipped(builder, equipped) {
-    return (builder.equips || []).some(function (t) { return equipped[t]; });
-  }
-  function equippedBuilders() {
-    var equipped = equippedSet();
-    return toolset().filter(function (b) { return isEquipped(b, equipped); });
+  function isEquipped(b, eq) { return (b.equips || []).some(function (t) { return eq[t]; }); }
+  function equippedBuilders() { var eq = equippedSet(); return toolset().filter(function (b) { return isEquipped(b, eq); }); }
+  function builderById(id) { return toolset().filter(function (b) { return b.id === id; })[0] || null; }
+
+  // Builders that live inside a station are not also shown as standalone category cards.
+  function stationBuilderIds() {
+    var ids = {};
+    (TK && TK.stations ? TK.stations() : []).forEach(function (s) { (s.engines || []).forEach(function (e) { ids[e.builderId] = true; }); });
+    return ids;
   }
 
-  // ---- autofill context (nested keys the builders' `autofill` reads) ----
+  // ---- autofill context (from the binding bar, with a safe fallback) ----
   function toolContext() {
-    var eng = OBOL.store.active();
-    var params = (eng && eng.params) || {};
-    var facts;
+    if (OBOL.bind && OBOL.bind.context) { try { return OBOL.bind.context(); } catch (e) {} }
+    var eng = OBOL.store.active(), params = (eng && eng.params) || {}, facts;
     try { facts = OBOL.store.factSet(); } catch (e) { facts = new OBOL.facts.FactSet([]); }
-    var ctx = {};
-    try { ctx = OBOL.command.buildContext(facts, { params: params }); } catch (e) { ctx = {}; }
-    var target = (ctx.target && ctx.target !== '<target>') ? ctx.target : (params.target || params.rhost || '');
+    var c = {}; try { c = OBOL.command.buildContext(facts, { params: params }); } catch (e) { c = {}; }
+    var target = (c.target && c.target !== '<target>') ? c.target : (params.target || params.rhost || '');
+    var host = params.hostname || c.dc || target;
+    var scheme = 'http://';
+    var url = host ? (scheme + host) : '';
     return {
-      target: { value: target, ip: params.rhost || params.ip || target, hostname: params.hostname || ctx.dc || '' },
-      context: { domain: ctx.domain || params.domain || '', username: ctx.user || params.username || '', port: params.port || '' },
-      workspace: {
-        wordlist: params.wordlist || '/usr/share/seclists/Discovery/Web-Content/raft-small-words.txt',
-        outputDir: params.outputDir || 'loot',
-        hashfile: params.hashfile || 'hashes.txt',
-      },
+      target: { value: target, ip: params.rhost || params.ip || target, hostname: params.hostname || c.dc || '', url: url, fuzzurl: url ? (url + '/FUZZ') : '' },
+      context: { domain: c.domain || params.domain || '', username: c.user || params.username || '', port: params.port || '' },
+      workspace: { wordlist: params.wordlist || '/usr/share/seclists/Discovery/Web-Content/raft-small-words.txt', outputDir: params.outputDir || 'loot', hashfile: params.hashfile || 'hashes.txt' },
     };
   }
 
-  // ---- per-tool value persistence ----
-  function savedValues(toolId) {
-    var eng = OBOL.store.active();
-    var tools = (eng && eng.ui && eng.ui.tools) || {};
-    return Object.assign({}, tools[toolId] || {});
-  }
-  function persistValues(toolId, values) {
-    OBOL.store.update(function (eng) {
-      eng.ui = eng.ui || {};
-      eng.ui.tools = eng.ui.tools || {};
-      eng.ui.tools[toolId] = values;
-    }, 'tool-values');
-  }
+  // ---- layout lens (Grid | Focus), persisted per engagement; default Focus ----
+  function layout() { try { return (OBOL.store.active().ui || {}).toolsLayout || 'focus'; } catch (e) { return 'focus'; } }
+  function setLayout(v) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.toolsLayout = v; }, 'tools-layout'); }
+  // focus selection (station or tool id)
+  function focusSel() { try { return (OBOL.store.active().ui || {}).toolsFocus || ''; } catch (e) { return ''; } }
+  function setFocusSel(id) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.toolsFocus = id; }, 'tools-focus'); }
 
-  // ================================ form rendering ================================
+  // ---- per-tool value persistence ----
+  function savedValues(toolId) { var eng = OBOL.store.active(); var tools = (eng && eng.ui && eng.ui.tools) || {}; return Object.assign({}, tools[toolId] || {}); }
+  function persistValues(toolId, values) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.tools = eng.ui.tools || {}; eng.ui.tools[toolId] = values; }, 'tool-values'); }
+  // station engine choice
+  function stationEngine(stationId, def) { try { var s = (OBOL.store.active().ui || {}).toolsStation || {}; return s[stationId] || def; } catch (e) { return def; } }
+  function setStationEngine(stationId, builderId) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.toolsStation = eng.ui.toolsStation || {}; eng.ui.toolsStation[stationId] = builderId; }, 'tool-station'); }
+
+  // ================================ form rendering (shared) ================================
   function fieldControl(builder, field, value) {
     var id = 'tb-' + builder.id + '-' + field.id;
     var common = ' id="' + esc(id) + '" name="' + esc(field.id) + '" data-tb-field="' + esc(field.id) + '"' + (field.required ? ' required' : '');
     var help = field.help ? '<small class="tb-hint">' + esc(field.help) + '</small>' : '';
-    if (field.type === 'checkbox') {
-      return '<label class="tb-check"><input type="checkbox"' + common + (truthy(value) ? ' checked' : '') + '> <span>' + esc(field.label) + '</span></label>' + help;
-    }
+    if (field.type === 'checkbox') return '<label class="tb-check"><input type="checkbox"' + common + (truthy(value) ? ' checked' : '') + '> <span>' + esc(field.label) + '</span></label>' + help;
     if (field.type === 'select') {
       var anyDesc = false;
-      var opts = (field.options || []).map(function (o) {
-        if (o.description) anyDesc = true;
-        return '<option value="' + esc(o.value) + '"' + (String(o.value) === String(value) ? ' selected' : '')
-          + (o.description ? ' data-desc="' + esc(o.description) + '" title="' + esc(o.description) + '"' : '') + '>' + esc(o.label) + '</option>';
-      }).join('');
-      // A live description line under the select mirrors the hovered/selected option's `description`
-      // (native <option> tooltips are unreliable) — updated in refresh().
+      var opts = (field.options || []).map(function (o) { if (o.description) anyDesc = true; return '<option value="' + esc(o.value) + '"' + (String(o.value) === String(value) ? ' selected' : '') + (o.description ? ' data-desc="' + esc(o.description) + '" title="' + esc(o.description) + '"' : '') + '>' + esc(o.label) + '</option>'; }).join('');
       var optDesc = anyDesc ? '<small class="tb-hint tb-optdesc" data-optdesc-for="' + esc(field.id) + '"></small>' : '';
       return '<label for="' + esc(id) + '">' + esc(field.label) + '</label><select' + common + '>' + opts + '</select>' + optDesc + help;
     }
-    if (field.type === 'textarea') {
-      return '<label for="' + esc(id) + '">' + esc(field.label) + '</label><textarea' + common + (field.placeholder ? ' placeholder="' + esc(field.placeholder) + '"' : '') + ' rows="3">' + esc(value == null ? '' : value) + '</textarea>' + help;
-    }
+    if (field.type === 'textarea') return '<label for="' + esc(id) + '">' + esc(field.label) + '</label><textarea' + common + (field.placeholder ? ' placeholder="' + esc(field.placeholder) + '"' : '') + ' rows="3">' + esc(value == null ? '' : value) + '</textarea>' + help;
     var inputType = field.type === 'secret' ? 'password' : (field.type === 'number' ? 'number' : 'text');
     return '<label for="' + esc(id) + '">' + esc(field.label) + '</label><input type="' + inputType + '"' + common + ' value="' + esc(value == null ? '' : value) + '"' + (field.placeholder ? ' placeholder="' + esc(field.placeholder) + '"' : '') + ' autocomplete="' + (field.type === 'secret' ? 'off' : 'on') + '">' + help;
   }
   function presetsHtml(field) {
-    var presets = Array.isArray(field.presets) ? field.presets : [];
-    if (!presets.length) return '';
-    return '<div class="tb-chips">' + presets.map(function (p) {
-      var spd = p.speed ? '<span class="tb-spd ' + esc(p.speed) + '">' + esc(p.speed) + '</span>' : '';
-      return '<button type="button" class="tb-chip" data-preset-field="' + esc(field.id) + '" data-preset-value="' + esc(p.value) + '">' + spd + esc(p.label) + '</button>';
-    }).join('') + '</div>';
+    var presets = Array.isArray(field.presets) ? field.presets : []; if (!presets.length) return '';
+    return '<div class="tb-chips">' + presets.map(function (p) { var spd = p.speed ? '<span class="tb-spd ' + esc(p.speed) + '">' + esc(p.speed) + '</span>' : ''; return '<button type="button" class="tb-chip" data-preset-field="' + esc(field.id) + '" data-preset-value="' + esc(p.value) + '">' + spd + esc(p.label) + '</button>'; }).join('') + '</div>';
   }
   function snippetsHtml(field) {
-    var snippets = Array.isArray(field.snippets) ? field.snippets : [];
-    if (!snippets.length) return '';
-    return '<div class="tb-chips">' + snippets.map(function (s) {
-      return '<button type="button" class="tb-chip" data-snippet-field="' + esc(field.id) + '" data-snippet-value="' + esc(s.value) + '">' + esc(s.label) + '</button>';
-    }).join('') + '</div>';
+    var snippets = Array.isArray(field.snippets) ? field.snippets : []; if (!snippets.length) return '';
+    return '<div class="tb-chips">' + snippets.map(function (s) { return '<button type="button" class="tb-chip" data-snippet-field="' + esc(field.id) + '" data-snippet-value="' + esc(s.value) + '">' + esc(s.label) + '</button>'; }).join('') + '</div>';
   }
   function fieldRow(builder, field, values) {
     var hidden = field.visibleWhen && !TB.conditionMatches(field.visibleWhen, values);
     var wide = field.type === 'textarea' ? ' tb-wide' : '';
-    return '<div class="tb-field' + wide + '" data-field-id="' + esc(field.id) + '"' + (hidden ? ' hidden' : '') + '>'
-      + fieldControl(builder, field, values[field.id]) + snippetsHtml(field) + presetsHtml(field) + '</div>';
+    return '<div class="tb-field' + wide + '" data-field-id="' + esc(field.id) + '"' + (hidden ? ' hidden' : '') + '>' + fieldControl(builder, field, values[field.id]) + snippetsHtml(field) + presetsHtml(field) + '</div>';
   }
   function groupsFor(builder) {
-    var fields = (builder.fields || []);
-    var byId = {}; fields.forEach(function (f) { byId[f.id] = f; });
+    var fields = (builder.fields || []); var byId = {}; fields.forEach(function (f) { byId[f.id] = f; });
     if (Array.isArray(builder.fieldGroups) && builder.fieldGroups.length) {
       var claimed = {};
-      var groups = builder.fieldGroups.map(function (g) {
-        return { title: g.title, description: g.description, fields: (g.fields || []).map(function (id) { claimed[id] = true; return byId[id]; }).filter(Boolean) };
-      }).filter(function (g) { return g.fields.length; });
+      var groups = builder.fieldGroups.map(function (g) { return { title: g.title, description: g.description, fields: (g.fields || []).map(function (id) { claimed[id] = true; return byId[id]; }).filter(Boolean) }; }).filter(function (g) { return g.fields.length; });
       var leftovers = fields.filter(function (f) { return !claimed[f.id]; });
-      if (leftovers.length) groups.push({ title: 'More options', description: 'Additional flags and output controls.', fields: leftovers });
+      if (leftovers.length) groups.push({ title: 'More Options', description: 'Additional flags and output controls.', fields: leftovers });
       return groups;
     }
     return [{ title: '', description: '', fields: fields }];
@@ -152,199 +133,287 @@
       return '<span class="' + cls + '">' + esc(tok) + '</span>';
     }).join(' ');
   }
+
+  // ================================ funnel panel ================================
+  function recipeTiles(builder, activeId) {
+    var recipes = TK ? TK.recipesFor(builder.id) : [];
+    if (!recipes.length) return '';
+    var tiles = recipes.map(function (r) {
+      var hue = PHASE_HUE[r.phase] || 'enum';
+      return '<button type="button" class="tb-recipe ns-card ns-ph-' + hue + (r.id === activeId ? ' selected is-glow' : '') + '" data-recipe="' + esc(r.id) + '" aria-pressed="' + (r.id === activeId ? 'true' : 'false') + '">'
+        + '<span class="tb-recipe-name">' + esc(r.label) + '</span>'
+        + '<span class="tb-recipe-hint">' + esc(r.hint) + '</span>'
+        + '<span class="ph-chip ph-' + hue + '">' + esc(r.phase) + '</span></button>';
+    }).join('');
+    return '<div class="tb-recipes"><div class="tb-recipes-lab">Recipes <span class="tb-recipes-sub">one tap to a filled command, then tune it</span></div>'
+      + '<div class="ns-grid tb-recipe-grid">' + tiles + '</div></div>';
+  }
+  function glossHtml(cmd, builder) {
+    var rows = TK ? TK.glossCommand(cmd, builder) : [];
+    if (!rows.length) return '<div class="tb-gloss"><div class="tb-gloss-lab">What Each Part Does</div><p class="tb-hint">Flag notes appear here once the command has recognized switches.</p></div>';
+    return '<div class="tb-gloss"><div class="tb-gloss-lab">What Each Part Does</div><dl class="tb-gloss-list">'
+      + rows.map(function (g) { return '<div class="tb-gloss-row"><dt><code>' + esc(g.flag) + '</code></dt><dd>' + esc(g.gloss) + '</dd></div>'; }).join('')
+      + '</dl></div>';
+  }
   function proofHtml(builder) {
     var e = builder.evidence || {}, m = builder.manualOutcome || {};
-    return '<details class="tb-proof"><summary>Evidence &amp; report boundary</summary>'
+    return '<details class="tb-proof"><summary>Evidence &amp; Report Boundary</summary>'
       + '<p class="tb-hint"><b>Expected Evidence:</b> ' + esc(e.expectation) + '</p>'
-      + '<p class="tb-hint"><b>Proof boundary:</b> ' + esc(e.proofBoundary) + '</p>'
-      + '<p class="tb-hint"><b>Manual outcome:</b> ' + esc(m.boundary) + '</p></details>';
+      + '<p class="tb-hint"><b>Proof Boundary:</b> ' + esc(e.proofBoundary) + '</p>'
+      + '<p class="tb-hint"><b>Manual Outcome:</b> ' + esc(m.boundary) + '</p></details>';
   }
-
-  // full builder body (mounted lazily on first expand)
-  function bodyHtml(builder, values) {
-    return '<div class="tb-preview cmd"><div class="cmd-head"><span class="cmd-tag">' + esc((builder.equips && builder.equips[0]) || builder.tool) + '</span>'
-      + '<span class="cmd-variant">generated command</span>'
-      + '<button type="button" class="btn-copy tb-copy" title="Copy command">copy</button></div>'
-      + '<pre class="cmd-run"><code class="tb-code"></code></pre></div>'
-      + formHtml(builder, values)
+  // the panel body: recipe tiles, editable preview + copy/reset, flag gloss, collapsible full form, evidence.
+  function panelBody(builder, values, activeRecipe) {
+    return '<div class="tb-panel">'
+      + recipeTiles(builder, activeRecipe)
+      + '<div class="tb-preview cmd"><div class="cmd-head"><span class="cmd-tag">' + esc((builder.equips && builder.equips[0]) || builder.tool) + '</span>'
+        + '<span class="cmd-variant tb-recipe-name-live"></span>'
+        + '<span class="cmd-spacer"></span>'
+        + '<button type="button" class="btn-copy tb-editbtn" title="Edit the command by hand">edit</button>'
+        + '<button type="button" class="btn-copy tb-reset" title="Restore the generated command">reset</button>'
+        + '<button type="button" class="btn-copy tb-copy" title="Copy command">copy</button></div>'
+        + '<pre class="cmd-run tb-render" title="Click to edit"><code class="tb-code"></code></pre>'
+        + '<textarea class="tb-edit" spellcheck="false" aria-label="Editable command" rows="2"></textarea></div>'
+      + glossHtml('', builder)
+      + '<details class="tb-allopts"><summary>All Options <span class="tb-hint">every documented switch, grouped</span></summary>' + formHtml(builder, values) + '</details>'
       + proofHtml(builder)
-      + '<p class="tb-foot">Obol builds the minimal valid command from the controls you set and never executes it. Review and run it yourself in an authorized environment, then paste the output into Evidence.</p>';
+      + '<p class="tb-foot">Obol builds the command from the controls you set and never runs it. The box above is editable: tune it, copy it, and run it yourself in an authorized lab, then paste the output into Evidence.</p>'
+      + '</div>';
   }
 
-  // ================================ render ================================
+  // ================================ cards ================================
+  function toolCardHead(builder) {
+    return '<div class="tool-card-head" role="button" tabindex="0" aria-expanded="false">'
+      + '<div class="tool-card-title"><span class="tool-card-name">' + esc(builder.title) + '</span>'
+      + '<span class="tool-card-exec">' + esc(builder.executionContext || 'any') + '</span>'
+      + '<span class="tool-card-chev" aria-hidden="true">▾</span></div>'
+      + '<p class="tool-card-sum">' + esc(builder.summary) + '</p></div>';
+  }
   function toolCard(builder, openId) {
     var open = builder.id === openId || builder.tool === openId || (builder.equips || []).indexOf(openId) !== -1;
     var equipsChips = (builder.equips || []).slice(0, 4).map(function (t) { return '<span class="pill">' + esc(t) + '</span>'; }).join('');
     var cred = (builder.credentialModes && builder.credentialModes.length) ? '<span class="pill tb-cred">' + esc(builder.credentialModes.join(' / ')) + '</span>' : '';
-    // The head is a role=button div (not a real <button>) so it can validly contain the
-    // title/summary blocks; the tag pills live OUTSIDE it, so clicking a tag never toggles the card.
     return '<article class="tool-card' + (open ? ' open' : '') + '" data-tool-id="' + esc(builder.id) + '">'
-      + '<div class="tool-card-head" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '">'
-      + '<div class="tool-card-title"><span class="tool-card-name">' + esc(builder.title) + '</span>'
-      + '<span class="tool-card-exec">' + esc(builder.executionContext || 'any') + '</span>'
-      + '<span class="tool-card-chev" aria-hidden="true">▾</span></div>'
-      + '<p class="tool-card-sum">' + esc(builder.summary) + '</p></div>'
+      + toolCardHead(builder)
       + '<div class="tool-card-tags">' + equipsChips + cred + '</div>'
       + '<div class="tool-body"></div></article>';
   }
+  function stationCard(station, openStationId, factKinds) {
+    var built = TK.stationBuilders(station);
+    if (!built.length) return '';
+    var active = stationEngine(station.id, TK.defaultEngine(station, factKinds));
+    if (!built.some(function (b) { return b.builder.id === active; })) active = built[0].builder.id;
+    var open = station.id === openStationId;
+    var engineChips = built.map(function (b) {
+      return '<button type="button" class="tb-engine' + (b.builder.id === active ? ' on' : '') + '" data-engine="' + esc(b.builder.id) + '" title="' + attr(b.engine.teach) + '">' + esc(b.engine.label) + '</button>';
+    }).join('');
+    var teach = (built.filter(function (b) { return b.builder.id === active; })[0] || built[0]).engine.teach;
+    return '<article class="tool-card station-card lane-' + esc(station.hue) + (open ? ' open' : '') + '" data-station-id="' + esc(station.id) + '" data-active-engine="' + esc(active) + '">'
+      + '<div class="tool-card-head" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '">'
+      + '<div class="tool-card-title"><span class="station-badge">Station</span><span class="tool-card-name">' + esc(station.title) + '</span><span class="tool-card-chev" aria-hidden="true">▾</span></div>'
+      + '<p class="tool-card-sum">' + esc(station.job) + '</p></div>'
+      + '<div class="station-engines"><span class="tb-engines-lab">Engine</span>' + engineChips + '<span class="tb-engine-teach">' + esc(teach) + '</span></div>'
+      + '<div class="tool-body"></div></article>';
+  }
 
+  // ================================ render ================================
   function render(ctx) {
     var builders = equippedBuilders();
     var openId = (ctx.args && ctx.args[0]) ? decodeURIComponent(ctx.args[0]).toLowerCase() : '';
-
     if (!builders.length) {
-      return '<section class="tools-route"><h1 class="route-h1">Tools</h1>'
-        + '<p class="route-sub">No equipped tools resolved yet. Load a methodology pack (the equipped-tool set is the union of every pack action\'s tools) and the matching builders appear here.</p></section>';
+      return '<section class="tools-route"><h1 class="route-h1">Tools</h1><p class="route-sub">No equipped tools resolved yet. Load a methodology pack and the matching builders appear here.</p></section>';
+    }
+    var lay = layout();
+    var factKinds = []; try { factKinds = OBOL.store.factSet().kinds(); } catch (e) {}
+
+    var html = '<section class="tools-route" data-layout="' + esc(lay) + '">';
+    html += '<div class="tools-top"><h1 class="route-h1">Tools</h1>'
+      + '<div class="tools-lens" role="group" aria-label="Layout"><button type="button" class="tools-lens-btn' + (lay === 'focus' ? ' on' : '') + '" data-lay="focus">Focus</button>'
+      + '<button type="button" class="tools-lens-btn' + (lay === 'grid' ? ' on' : '') + '" data-lay="grid">Grid</button></div></div>';
+    html += '<p class="route-sub">Point and click: the binding bar fills the target, identity, ports, and wordlist; pick a recipe for a ready command, tune it, copy it. Nothing runs here.</p>';
+    html += '<div id="bind-bar"></div>';
+
+    // stations (hero)
+    var stations = (TK && TK.stations ? TK.stations() : []).filter(function (s) { return TK.stationBuilders(s).length; });
+    if (stations.length) {
+      html += '<section class="tools-stations"><div class="tools-cat-head"><h2 class="tools-cat-h">Stations</h2><span class="tools-cat-hint">One job, your choice of engine.</span></div>'
+        + '<div class="tools-grid">' + stations.map(function (s) { return stationCard(s, openId, factKinds); }).join('') + '</div></section>';
     }
 
+    // categories (standalone tools not covered by a station)
+    var inStation = stationBuilderIds();
     var byCat = {};
-    builders.forEach(function (b) { (byCat[b.category] = byCat[b.category] || []).push(b); });
+    builders.forEach(function (b) { if (inStation[b.id]) return; (byCat[b.category] = byCat[b.category] || []).push(b); });
     Object.keys(byCat).forEach(function (c) { byCat[c].sort(function (a, b) { return a.title.localeCompare(b.title); }); });
-
-    var html = '<section class="tools-route">';
-    html += '<h1 class="route-h1">Tools</h1>';
-    html += '<p class="route-sub">Command builders for the ' + builders.length + ' equipped tools obol carries. Pick a tool, tune the controls, and copy the generated command, it is never executed here. Fields autofill from your engagement params and proven facts.</p>';
-
-    // category jump nav
     var present = CATS.filter(function (c) { return byCat[c.id] && byCat[c.id].length; });
-    // Buttons, not <a href="#…"> — a bare hash is misread by the hash router as a route and
-    // bounces the user to the default screen. These scroll to the category in mounted().
-    html += '<nav class="tools-nav">' + present.map(function (c) {
-      return '<button type="button" class="pill tools-jump" data-cat="tb-cat-' + esc(c.id) + '">' + esc(c.label) + ' <b>' + byCat[c.id].length + '</b></button>';
-    }).join('') + '</nav>';
 
+    html += '<nav class="tools-nav">' + present.map(function (c) { return '<button type="button" class="pill tools-jump" data-cat="tb-cat-' + esc(c.id) + '">' + esc(c.label) + ' <b>' + byCat[c.id].length + '</b></button>'; }).join('') + '</nav>';
     present.forEach(function (c) {
-      html += '<section class="tools-cat" id="tb-cat-' + esc(c.id) + '">'
-        + '<div class="tools-cat-head"><h2 class="tools-cat-h">' + esc(c.label) + '</h2><span class="tools-cat-hint">' + esc(c.hint) + '</span></div>'
+      html += '<section class="tools-cat" id="tb-cat-' + esc(c.id) + '"><div class="tools-cat-head"><h2 class="tools-cat-h">' + esc(c.label) + '</h2><span class="tools-cat-hint">' + esc(c.hint) + '</span></div>'
         + '<div class="tools-grid">' + byCat[c.id].map(function (b) { return toolCard(b, openId); }).join('') + '</div></section>';
     });
-
     html += '</section>';
     return html;
   }
 
-  // ================================ mounted / interactivity ================================
-  function builderById(id) { return equippedBuilders().filter(function (b) { return b.id === id; })[0] || null; }
-
+  // ================================ panel mounting ================================
   function collect(form, builder) {
     var out = {};
-    (builder.fields || []).forEach(function (f) {
-      var el = form.elements ? form.elements.namedItem(f.id) : null;
-      if (!el) return;
-      out[f.id] = f.type === 'checkbox' ? !!el.checked : el.value;
-    });
+    (builder.fields || []).forEach(function (f) { var el = form.elements ? form.elements.namedItem(f.id) : null; if (!el) return; out[f.id] = f.type === 'checkbox' ? !!el.checked : el.value; });
     return out;
   }
   function applyVisibility(form, builder, values) {
-    (builder.fields || []).forEach(function (f) {
-      var row = form.querySelector('[data-field-id="' + f.id + '"]');
-      if (!row) return;
-      row.hidden = !!(f.visibleWhen && !TB.conditionMatches(f.visibleWhen, values));
-    });
+    (builder.fields || []).forEach(function (f) { var row = form.querySelector('[data-field-id="' + f.id + '"]'); if (!row) return; row.hidden = !!(f.visibleWhen && !TB.conditionMatches(f.visibleWhen, values)); });
+  }
+  function setFormValue(form, builder, fid, val) {
+    var f = (builder.fields || []).filter(function (x) { return x.id === fid; })[0]; if (!f) return;
+    var el = form.elements && form.elements.namedItem(fid); if (!el) return;
+    if (f.type === 'checkbox') el.checked = truthy(val); else el.value = (val == null ? '' : val);
   }
 
-  function mountBuilder(card, builder, context) {
-    var bodyEl = card.querySelector('.tool-body');
-    if (!bodyEl || bodyEl.getAttribute('data-mounted') === '1') return;
-    var start = Object.assign(TB.defaultsFor(builder, context), savedValues(builder.id));
-    bodyEl.innerHTML = bodyHtml(builder, start);
-    bodyEl.setAttribute('data-mounted', '1');
+  // Mount the funnel panel for one builder into panelEl (its .tool-body). persistId keys saved values.
+  function mountPanel(panelEl, builder, context, persistId, startValues) {
+    var start = startValues || Object.assign(TB.defaultsFor(builder, context), savedValues(persistId));
+    var activeRecipe = TK ? TK.matchingRecipe(builder, start) : null;
+    panelEl.innerHTML = panelBody(builder, start, activeRecipe);
 
-    var form = bodyEl.querySelector('.tb-form');
-    var code = bodyEl.querySelector('.tb-code');
-    var copyBtn = bodyEl.querySelector('.tb-copy');
+    var form = panelEl.querySelector('.tb-form');
+    var code = panelEl.querySelector('.tb-code');
+    var edit = panelEl.querySelector('.tb-edit');
+    var render = panelEl.querySelector('.tb-render');
+    var copyBtn = panelEl.querySelector('.tb-copy');
+    var resetBtn = panelEl.querySelector('.tb-reset');
+    var editBtn = panelEl.querySelector('.tb-editbtn');
+    var preview = panelEl.querySelector('.tb-preview');
+    var glossEl = panelEl.querySelector('.tb-gloss');
+    var liveName = panelEl.querySelector('.tb-recipe-name-live');
+    var edited = false; // operator hand-edited the command box
+    function setEditing(on) { if (!preview) return; preview.classList.toggle('editing', on); if (editBtn) editBtn.textContent = on ? 'done' : 'edit'; if (on && edit) { edit.focus(); } }
 
-    function refresh(save) {
+    function paintGloss(cmd) { if (glossEl) glossEl.outerHTML = glossHtml(cmd, builder); glossEl = panelEl.querySelector('.tb-gloss'); }
+    function showCmd(cmd, valid) {
+      code.innerHTML = valid ? highlight(cmd) : esc(cmd);
+      code.setAttribute('data-valid', valid ? 'true' : 'false');
+      if (valid) code.setAttribute('data-cmd', cmd); else code.removeAttribute('data-cmd');
+      if (edit && document.activeElement !== edit) edit.value = cmd;
+      paintGloss(valid ? cmd : '');
+    }
+    function recompile(save) {
       var current = collect(form, builder);
       applyVisibility(form, builder, TB.normalizeValues(builder, current, context));
-      try {
-        var cmd = TB.compile(builder, current, context);
-        code.setAttribute('data-valid', 'true');
-        code.innerHTML = highlight(cmd);
-        code.setAttribute('data-cmd', cmd);
-      } catch (err) {
-        code.setAttribute('data-valid', 'false');
-        var missing = TB.validateRequired(builder, TB.normalizeValues(builder, current, context));
-        code.textContent = missing.length ? ('Set required: ' + missing.join(', ')) : 'Complete the required fields to generate a command.';
-        code.removeAttribute('data-cmd');
-      }
-      // Mirror each select's chosen option description into its live description line.
+      var activeId = TK ? TK.matchingRecipe(builder, TB.normalizeValues(builder, current, context)) : null;
+      // reflect active recipe tile
+      var tiles = panelEl.querySelectorAll('.tb-recipe');
+      for (var ti = 0; ti < tiles.length; ti++) { var on = tiles[ti].getAttribute('data-recipe') === activeId; tiles[ti].classList.toggle('selected', on); tiles[ti].classList.toggle('is-glow', on); tiles[ti].setAttribute('aria-pressed', on ? 'true' : 'false'); }
+      if (liveName) liveName.textContent = activeId ? (TK.recipeById(builder.id, activeId) || {}).label || '' : 'custom';
+      edited = false;
+      try { showCmd(TB.compile(builder, current, context), true); }
+      catch (err) { var missing = TB.validateRequired(builder, TB.normalizeValues(builder, current, context)); showCmd(missing.length ? ('Set required: ' + missing.join(', ')) : 'Complete the required fields to generate a command.', false); }
+      // select option descriptions
       var sels = form.querySelectorAll('select');
-      for (var si = 0; si < sels.length; si++) {
-        var sel = sels[si];
-        var note = sel.parentNode && sel.parentNode.querySelector('.tb-optdesc');
-        if (!note) continue;
-        var opt = sel.options[sel.selectedIndex];
-        note.textContent = (opt && opt.getAttribute('data-desc')) || '';
-      }
-      if (save) persistValues(builder.id, current);
+      for (var si = 0; si < sels.length; si++) { var sel = sels[si], note = sel.parentNode && sel.parentNode.querySelector('.tb-optdesc'); if (!note) continue; var opt = sel.options[sel.selectedIndex]; note.textContent = (opt && opt.getAttribute('data-desc')) || ''; }
+      if (save) persistValues(persistId, current);
     }
 
-    form.addEventListener('input', function () { refresh(true); });
-    form.addEventListener('change', function () { refresh(true); });
+    form.addEventListener('input', function () { recompile(true); });
+    form.addEventListener('change', function () { recompile(true); });
 
-    // presets: set a field value
-    U.on(bodyEl, 'click', '[data-preset-field]', function (e, t) {
-      var el = form.elements && form.elements.namedItem(t.getAttribute('data-preset-field'));
-      if (!el) return;
-      el.value = t.getAttribute('data-preset-value');
-      try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (_e) {}
-      refresh(true);
+    // recipe tile: apply the preset to the form, then recompile
+    U.on(panelEl, 'click', '.tb-recipe', function (e, t) {
+      var rid = t.getAttribute('data-recipe');
+      var recipe = TK.recipeById(builder.id, rid); if (!recipe) return;
+      var vals = TK.applyRecipe(builder, recipe, context);
+      Object.keys(recipe.values || {}).forEach(function (k) { setFormValue(form, builder, k, vals[k]); });
+      recompile(true);
     });
-    // snippets: append a line to a textarea
-    U.on(bodyEl, 'click', '[data-snippet-field]', function (e, t) {
-      var el = form.elements && form.elements.namedItem(t.getAttribute('data-snippet-field'));
-      if (!el) return;
-      var val = t.getAttribute('data-snippet-value');
-      el.value = (String(el.value).trim() ? String(el.value).replace(/\s+$/, '') + '\n' : '') + val;
-      try { el.focus(); } catch (_e) {}
-      refresh(true);
-    });
+    // presets / snippets inside the full form
+    U.on(panelEl, 'click', '[data-preset-field]', function (e, t) { var el = form.elements && form.elements.namedItem(t.getAttribute('data-preset-field')); if (!el) return; el.value = t.getAttribute('data-preset-value'); try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (_e) {} recompile(true); });
+    U.on(panelEl, 'click', '[data-snippet-field]', function (e, t) { var el = form.elements && form.elements.namedItem(t.getAttribute('data-snippet-field')); if (!el) return; var v = t.getAttribute('data-snippet-value'); el.value = (String(el.value).trim() ? String(el.value).replace(/\s+$/, '') + '\n' : '') + v; try { el.focus(); } catch (_e) {} recompile(true); });
+
+    // editable command box: typing re-glosses live; it becomes the copy source
+    if (edit) edit.addEventListener('input', function () { edited = true; code.setAttribute('data-cmd', edit.value); code.setAttribute('data-valid', 'true'); code.innerHTML = highlight(edit.value); paintGloss(edit.value); if (liveName) liveName.textContent = 'edited'; });
+    if (editBtn) editBtn.addEventListener('click', function () { setEditing(!(preview && preview.classList.contains('editing'))); });
+    // clicking the rendered command also opens the editor
+    if (render) render.addEventListener('click', function () { setEditing(true); });
+    if (resetBtn) resetBtn.addEventListener('click', function () { setEditing(false); recompile(false); });
     if (copyBtn) copyBtn.addEventListener('click', function () {
-      if (code.getAttribute('data-valid') !== 'true') { U.toast('Command not ready', 'err'); return; }
-      U.copy(code.getAttribute('data-cmd') || code.textContent).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+      var cmd = (edit && edited) ? edit.value : (code.getAttribute('data-cmd') || '');
+      if (!cmd || code.getAttribute('data-valid') !== 'true') { U.toast('Command not ready', 'err'); return; }
+      U.copy(cmd).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
 
-    refresh(false);
+    recompile(false);
   }
 
+  // ================================ mounted ================================
   function mounted(ctx) {
     var mount = ctx.mount;
     var context = toolContext();
+
+    // binding bar: on change, recompute context and re-mount every open panel so previews re-fill.
+    var bindEl = mount.querySelector('#bind-bar');
+    if (bindEl && OBOL.bind) {
+      bindEl.innerHTML = OBOL.bind.render({});
+      OBOL.bind.mount(bindEl, { onChange: function () { context = toolContext(); remountOpen(); } });
+    }
+
+    function remountOpen() {
+      var open = mount.querySelectorAll('.tool-card.open');
+      for (var i = 0; i < open.length; i++) mountCardBody(open[i]);
+    }
+    function mountCardBody(card) {
+      var body = card.querySelector('.tool-body'); if (!body) return;
+      if (card.classList.contains('station-card')) {
+        var st = TK.stationById(card.getAttribute('data-station-id')); if (!st) return;
+        var active = card.getAttribute('data-active-engine');
+        var b = builderById(active); if (!b) return;
+        mountPanel(body, b, context, 'station:' + st.id + ':' + b.id);
+      } else {
+        var builder = builderById(card.getAttribute('data-tool-id')); if (!builder) return;
+        mountPanel(body, builder, context, builder.id);
+      }
+    }
 
     function toggle(card) {
       var head = card.querySelector('.tool-card-head');
       var open = card.classList.toggle('open');
       if (head) head.setAttribute('aria-expanded', open ? 'true' : 'false');
-      if (open) {
-        var builder = builderById(card.getAttribute('data-tool-id'));
-        if (builder) mountBuilder(card, builder, context);
-      }
+      if (open) mountCardBody(card);
     }
 
-    U.on(mount, 'click', '.tool-card-head', function (e, t) {
-      toggle(t.closest('.tool-card'));
-    });
-    // keyboard access for the role=button head
-    U.on(mount, 'keydown', '.tool-card-head', function (e, t) {
-      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); toggle(t.closest('.tool-card')); }
-    });
-    // category jump chips: scroll to the section (no hash navigation → no router hijack)
-    U.on(mount, 'click', '.tools-jump', function (e, t) {
-      var el = document.getElementById(t.getAttribute('data-cat'));
-      if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_e) { el.scrollIntoView(); } }
+    U.on(mount, 'click', '.tool-card-head', function (e, t) { toggle(t.closest('.tool-card')); });
+    U.on(mount, 'keydown', '.tool-card-head', function (e, t) { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); toggle(t.closest('.tool-card')); } });
+
+    // station engine switch: carry shared params across, persist the choice, re-mount the panel
+    U.on(mount, 'click', '.tb-engine', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      var card = t.closest('.station-card'); if (!card) return;
+      var st = TK.stationById(card.getAttribute('data-station-id')); if (!st) return;
+      var fromId = card.getAttribute('data-active-engine'), toId = t.getAttribute('data-engine');
+      if (fromId === toId) return;
+      var fromEng = (st.engines || []).filter(function (en) { return en.builderId === fromId; })[0];
+      var toEng = (st.engines || []).filter(function (en) { return en.builderId === toId; })[0];
+      var fromVals = savedValues('station:' + st.id + ':' + fromId);
+      var carried = TK.carryShared(st, fromEng, toEng, fromVals);
+      setStationEngine(st.id, toId);
+      card.setAttribute('data-active-engine', toId);
+      // update engine chip states + teach line
+      var chips = card.querySelectorAll('.tb-engine');
+      for (var i = 0; i < chips.length; i++) chips[i].classList.toggle('on', chips[i].getAttribute('data-engine') === toId);
+      var teachEl = card.querySelector('.tb-engine-teach'); if (teachEl && toEng) teachEl.textContent = toEng.teach;
+      var toBuilder = builderById(toId); if (!toBuilder) return;
+      var start = Object.assign(TB.defaultsFor(toBuilder, context), savedValues('station:' + st.id + ':' + toId), carried);
+      mountPanel(card.querySelector('.tool-body'), toBuilder, context, 'station:' + st.id + ':' + toId, start);
     });
 
-    // any card pre-marked open (deep link #/tools/<tool>) mounts now and scrolls into view
+    // layout lens
+    U.on(mount, 'click', '.tools-lens-btn', function (e, t) { setLayout(t.getAttribute('data-lay')); OBOL.router.render(); });
+    // category jump
+    U.on(mount, 'click', '.tools-jump', function (e, t) { var el = document.getElementById(t.getAttribute('data-cat')); if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_e) { el.scrollIntoView(); } } });
+
+    // any card pre-opened (deep link) mounts now
     var opened = mount.querySelectorAll('.tool-card.open');
-    for (var i = 0; i < opened.length; i++) {
-      var card = opened[i];
-      var head = card.querySelector('.tool-card-head');
-      if (head) head.setAttribute('aria-expanded', 'true');
-      var b = builderById(card.getAttribute('data-tool-id'));
-      if (b) mountBuilder(card, b, context);
-      if (i === 0) { try { card.scrollIntoView({ block: 'start' }); } catch (e) {} }
-    }
+    for (var k = 0; k < opened.length; k++) { var c = opened[k]; var h = c.querySelector('.tool-card-head'); if (h) h.setAttribute('aria-expanded', 'true'); mountCardBody(c); if (k === 0) { try { c.scrollIntoView({ block: 'start' }); } catch (e) {} } }
   }
 
   OBOL.routes = OBOL.routes || {};

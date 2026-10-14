@@ -23,7 +23,7 @@ function ok(cond, msg) { if (!cond) { console.error('  FAIL:', msg); fail++; } e
 
 var byId = {}; OBOL.TOOLSET.forEach(function (b) { byId[b.id] = b; });
 // a context that supplies the engagement-bound inputs the binding component would fill.
-var CTX = { target: { value: '10.10.10.10', ip: '10.10.10.10' }, context: { domain: 'corp.local' }, workspace: { outputDir: 'loot', wordlist: '/usr/share/wordlists/rockyou.txt', hashfile: 'hashes.txt' } };
+var CTX = { target: { value: '10.10.10.10', ip: '10.10.10.10', url: 'http://10.10.10.10', fuzzurl: 'http://10.10.10.10/FUZZ' }, context: { domain: 'corp.local' }, workspace: { outputDir: 'loot', wordlist: '/usr/share/wordlists/rockyou.txt', hashfile: 'hashes.txt' } };
 // placeholders for required inputs a recipe never sets (the operator / binding supplies them).
 var FILL = { url: 'http://10.10.10.10', target: '10.10.10.10', hashOrFile: 'hashes.txt', hashFile: 'hashes.txt', mask: '?a?a?a' };
 
