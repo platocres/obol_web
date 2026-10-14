@@ -72,16 +72,22 @@ ok(new Set(dupTemplates).size === dupTemplates.length, 'templates are deduped (o
 const reused = cat.filter((e) => e.moves.length > 1);
 ok(reused.length > 0, 'a command shared by multiple moves back-links to all of them (' + reused.length + ' shared)');
 
-// ── grouped tool -> capability, nxc split by protocol ────────────────────────────────────────────
-const grouped = L.commandsGrouped(PACK, '');
-ok(grouped.length > 0 && grouped[0].count >= grouped[grouped.length - 1].count, 'tool groups sorted by command count desc');
-const nxc = grouped.find((g) => g.tool === 'nxc');
-ok(nxc && nxc.caps.some((c) => c.capability === 'nxc smb') && nxc.caps.some((c) => c.capability === 'nxc ldap'), 'nxc is sub-grouped by protocol (smb, ldap, ...)');
-const impacket = grouped.find((g) => g.tool === 'impacket');
-ok(impacket && impacket.caps.some((c) => /secretsdump|getnpusers|getuserspns/.test(c.capability)), 'impacket capability is the script name');
-// search narrows the grouped view
-const g2 = L.commandsGrouped(PACK, 'evil-winrm');
-ok(g2.length && g2.every((t) => t.caps.every((c) => c.cmds.every((e) => /evil-winrm/i.test(e.template + ' ' + e.moves.map((m) => m.title).join(' '))))), 'command search filters the grouped view');
+// ── grouped by tool -> capability (nxc split by protocol), and by phase / lane ───────────────────
+const grouped = L.commandsGrouped(PACK, '', 'tool');
+ok(grouped.length > 0 && grouped[0].count >= grouped[grouped.length - 1].count, 'by tool: groups sorted by command count desc');
+ok(grouped.every((g) => g.key && g.label && Array.isArray(g.subs)), 'grouped shape is uniform {key,label,count,subs}');
+const nxc = grouped.find((g) => g.key === 'nxc');
+ok(nxc && nxc.subs.some((c) => c.label === 'nxc smb') && nxc.subs.some((c) => c.label === 'nxc ldap'), 'nxc is sub-grouped by protocol (smb, ldap, ...)');
+const impacket = grouped.find((g) => g.key === 'impacket');
+ok(impacket && impacket.subs.some((c) => /secretsdump|getnpusers|getuserspns/.test(c.label)), 'impacket capability is the script name');
+// group by phase (recon -> loot order, hue carried) and by lane (load order)
+const byPhase = L.commandsGrouped(PACK, '', 'phase');
+ok(byPhase[0].key === 'recon' && byPhase.every((g) => g.hue), 'by phase: recon leads and every group carries a hue');
+const byLane = L.commandsGrouped(PACK, '', 'lane');
+ok(byLane[0].key === 'ad_2026_09' && byLane.every((g) => g.hue && g.label), 'by lane: AD leads (load order), labelled, hued');
+// search narrows every axis
+const g2 = L.commandsGrouped(PACK, 'evil-winrm', 'tool');
+ok(g2.length && g2.every((t) => t.subs.every((c) => c.cmds.every((e) => /evil-winrm/i.test(e.template + ' ' + e.moves.map((m) => m.title).join(' '))))), 'command search filters the grouped view');
 
 // ── ATT&CK technique library ─────────────────────────────────────────────────────────────────────
 const techs = L.techniqueLibrary(PACK);

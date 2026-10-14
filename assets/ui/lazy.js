@@ -33,7 +33,7 @@
     // catalog/map (for the ATT&CK lens) and the library engine itself.
     library: ['data/stuck-catalog.js?v=e76b3e66', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=bf310a35',
       'data/attack-catalog.js?v=1fca5f0a', 'data/attack-move-map.js?v=69b57161',
-      'assets/engine/library.js?v=7fa54dc3', 'assets/ui/routes/library.js?v=2f781c7c'],
+      'assets/engine/library.js?v=585b8390', 'assets/ui/routes/library.js?v=8d39e178'],
     study: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b', 'assets/ui/routes/study.js?v=277d4c77'],
     decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=24469b5c', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=2317deac', 'assets/engine/decisionmap.js?v=72d3dcb7', 'assets/ui/decisiontree.js?v=910ea8b0'],
     checklist: ['data/oscp-scope.js?v=ebf0ff68', 'assets/ui/routes/checklist.js?v=ff1f5ef9'],

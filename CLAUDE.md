@@ -1538,3 +1538,16 @@ tests/browser-smoke.js` Â· `node tools/stamp-assets.js` (after any asset edit) Â
   objectives. library-smoke extended (union reaches a byKind-only move: trust-enum -> T1482; cmdCount
   present); attack-coverage integrity clean (79 referenced techniques); full engine suite + gap + lint
   + browser-smoke green; assets stamped; headless-verified (0 console errors).
+- 2026-10-14: Library browse ergonomics (owner feedback). (1) Commands lens gains a Group By axis
+  (Tool . Phase . Lane . Flat): the engine's commandsGrouped(pack, q, by) now returns a uniform
+  {key,label,hue,count,subs} shape for any axis (tool->capability, phase->tool, lane->tool), hued by the
+  organizing axis; Flat is the old flatten. Group By Lane + Collapse All is a colourful one-band-per-lane
+  index. (2) Expand All / Collapse All on both the Commands groups and the Moves tiles (no more
+  collapsing one at a time). (3) Both lenses are now MULTI-OPEN: a click toggles a card and it stays open
+  until clicked again, any number open at once (replaces the single-open model). A delegation gotcha
+  found and fixed en route: refreshing a lens via el.outerHTML detached the delegated handlers, so the
+  Group By control and results now live in separate containers (the control stays put, only #lib-cmd-area
+  refreshes), mirroring the Moves facet/results split. library-smoke covers all three axes + the uniform
+  shape; drive-library covers multi-open, Expand/Collapse All, and every Group By axis (0 console errors);
+  full suite + browser-smoke + coverage green; stamped. OPEN with owner: whether to bring the same
+  click-to-stay-open multi-open model to Next Steps (deferred, it is the coach's focused view).

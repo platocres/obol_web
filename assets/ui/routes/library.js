@@ -39,16 +39,19 @@
   // ── module state (per lens; all throwaway, none touches OBOL.store) ──────────────────────────────
   var _mount = null;
   var _lens = 'moves';
-  // Moves lens
+  // Moves lens. _mExp is a SET of open move ids: click toggles one, it stays open until clicked again,
+  // and any number can be open at once (Expand All / Collapse All drive the whole set).
   var _mSel = {};          // { group: [keys] }
   var _mQ = '';            // search
-  var _mExp = '';          // expanded move id
+  var _mExp = {};          // { moveId: true } open cards
   var _mRelevant = false;  // "relevant to my box" toggle
   var _facetOpen = { lane: true, phase: true, service: false, port: false, tool: false, os: false, tag: false };
-  // Commands lens
+  // Commands lens. _cGroup is the organizing axis; _cExp is the SET of open command cards; _cGrpClosed
+  // tracks which top-level groups the user collapsed (default open).
   var _cQ = '';
-  var _cFlat = false;      // flatten (one flat list instead of grouped)
-  var _cExp = '';          // expanded template key
+  var _cGroup = 'tool';    // 'tool' | 'phase' | 'lane' | 'flat'
+  var _cExp = {};          // { templateKey: true } open cards
+  var _cGrpClosed = {};    // { groupKey: true } collapsed groups
   // ATT&CK lens
   var _aSel = '';          // selected technique code
 
@@ -123,7 +126,7 @@
   }
   function moveTile(move) {
     var ph = L().phaseOf ? L().phaseOf(move) : (move.phase || 'enum');
-    var selected = move.id === _mExp;
+    var selected = !!_mExp[move.id];
     var loc = locusLabel(move.locus);
     var laneLabel = L().laneLabel(L().laneOf(move.id));
     var cls = 'ns-card lib-move ' + laneClassForMove(move) + ' ns-ph-' + ph + (selected ? ' selected is-glow' + (reducedMotion() ? '' : ' ns-bloom') : '');
@@ -168,8 +171,9 @@
       list = list.filter(function (a) { try { return a.eligible && a.eligible(facts); } catch (e) { return false; } });
     }
     var total = pack().length;
+    var xpand = list.length ? '<div class="lib-xpand"><button type="button" class="lib-clear" data-mexpand>Expand All</button><button type="button" class="lib-clear" data-mcollapse>Collapse All</button></div>' : '';
     var head = '<div class="lib-results-head"><span class="lib-count">' + list.length + ' of ' + total + ' moves</span>'
-      + anyActiveFilterHtml() + '</div>';
+      + xpand + anyActiveFilterHtml() + '</div>';
     if (!list.length) {
       return head + '<p class="lib-empty">No moves match those filters. Clear a facet or widen your search.</p>';
     }
@@ -214,7 +218,7 @@
   }
   function cmdCard(entry) {
     var key = entry.template;
-    var selected = key === _cExp;
+    var selected = !!_cExp[key];
     var shown = fillTemplate(entry.template);
     var moves = entry.moves || [];
     var moveChips = moves.slice(0, selected ? moves.length : 3).map(function (m) {
@@ -237,37 +241,51 @@
       + '<span class="lib-ccard-used">Used by</span>' + moveChips + more + '</div>'
       + note + '</article>';
   }
-  function commandsGroupedHtml() {
-    var groups = L().commandsGrouped(pack(), _cQ);
+  var CGROUPS = [['tool', 'Tool'], ['phase', 'Phase'], ['lane', 'Lane'], ['flat', 'Flat']];
+  function commandsBodyHtml() {
+    if (_cGroup === 'flat') {
+      var list = L().commandCatalog(pack()), needle = (_cQ || '').trim().toLowerCase();
+      if (needle) list = list.filter(function (e) {
+        return (e.template + ' ' + e.tool + ' ' + e.capability + ' ' + e.phase + ' ' + L().laneLabel(e.lane) + ' ' + (e.moves || []).map(function (m) { return m.title; }).join(' ')).toLowerCase().indexOf(needle) >= 0;
+      });
+      list.sort(function (a, b) { return (b.moves.length - a.moves.length) || a.template.localeCompare(b.template); });
+      if (!list.length) return '<p class="lib-empty">No commands match that search.</p>';
+      return '<div class="lib-cmd-list lib-cmd-flat">' + list.map(cmdCard).join('') + '</div>';
+    }
+    var groups = L().commandsGrouped(pack(), _cQ, _cGroup);
     if (!groups.length) return '<p class="lib-empty">No commands match that search.</p>';
     return groups.map(function (g) {
-      var caps = g.caps.map(function (c) {
-        return '<div class="lib-cap"><h4 class="lib-cap-h">' + esc(c.capability) + ' <span class="lib-cap-n">' + c.cmds.length + '</span></h4>'
+      var subs = g.subs.map(function (c) {
+        return '<div class="lib-cap"><h4 class="lib-cap-h">' + esc(c.label) + ' <span class="lib-cap-n">' + c.cmds.length + '</span></h4>'
           + '<div class="lib-cmd-list">' + c.cmds.map(cmdCard).join('') + '</div></div>';
       }).join('');
-      return '<details class="lib-tool-grp" open><summary><span class="lib-tool-h">' + esc(g.tool) + '</span>'
-        + '<span class="lib-tool-n">' + g.count + '</span></summary><div class="lib-caps">' + caps + '</div></details>';
+      var open = !_cGrpClosed[g.key];
+      var hue = g.hue ? ' style="--ghue:' + g.hue + '"' : '';
+      return '<details class="lib-tool-grp"' + (open ? ' open' : '') + ' data-grp="' + attr(g.key) + '"' + hue + '>'
+        + '<summary><span class="lib-tool-h">' + esc(g.label) + '</span>'
+        + '<span class="lib-tool-n">' + g.count + '</span></summary><div class="lib-caps">' + subs + '</div></details>';
     }).join('');
   }
-  function commandsFlatHtml() {
-    var list = L().commandCatalog(pack()), needle = (_cQ || '').trim().toLowerCase();
-    if (needle) list = list.filter(function (e) {
-      return (e.template + ' ' + e.tool + ' ' + e.capability + ' ' + (e.moves || []).map(function (m) { return m.title; }).join(' ')).toLowerCase().indexOf(needle) >= 0;
-    });
-    list.sort(function (a, b) { return (b.moves.length - a.moves.length) || a.template.localeCompare(b.template); });
-    if (!list.length) return '<p class="lib-empty">No commands match that search.</p>';
-    return '<div class="lib-cmd-list lib-cmd-flat">' + list.map(cmdCard).join('') + '</div>';
+  // the Expand/Collapse row + the results, refreshed together on a group-by or search change. Kept in
+  // its own container (id=lib-cmd-area) so the Group By control and search stay put, exactly as the Moves
+  // facet sidebar stays put while only #lib-moves-results refreshes (delegated handlers never detach).
+  function commandsAreaHtml() {
+    var expandAll = (_cGroup === 'flat') ? ''
+      : '<div class="lib-results-head lib-cmd-head"><div class="lib-xpand"><button type="button" class="lib-clear" data-cexpand>Expand All</button><button type="button" class="lib-clear" data-ccollapse>Collapse All</button></div></div>';
+    return expandAll + '<section class="lib-results" id="lib-cmd-results" aria-live="polite">' + commandsBodyHtml() + '</section>';
   }
   function commandsLensHtml() {
     var cat = L().commandCatalog(pack());
     var fillNote = hasEng() ? '<span class="lib-fillnote">Filled from your active engagement.</span>' : '<span class="lib-fillnote">Tokens like {{target}} fill once you open an engagement.</span>';
+    var groupBy = '<div class="lib-groupby" role="group" aria-label="Group commands by">'
+      + '<span class="lib-groupby-l">Group By</span>'
+      + CGROUPS.map(function (g) { return '<button type="button" class="lib-seg' + (_cGroup === g[0] ? ' on' : '') + '" data-cgroup="' + g[0] + '" aria-pressed="' + (_cGroup === g[0] ? 'true' : 'false') + '">' + esc(g[1]) + '</button>'; }).join('')
+      + '</div>';
     return '<div class="lib-lens lib-lens-commands">'
       + '<div class="lib-lens-bar">'
       + '<div class="lib-search"><input type="search" id="lib-cmd-q" value="' + attr(_cQ) + '" placeholder="Search commands, tools, moves" autocomplete="off" spellcheck="false" aria-label="Search commands"></div>'
-      + '<label class="lib-toggle"><input type="checkbox" id="lib-cmd-flat"' + (_cFlat ? ' checked' : '') + '><span>Flatten (One List)</span></label>'
-      + '<span class="lib-count">' + cat.length + ' distinct commands</span>' + fillNote + '</div>'
-      + '<section class="lib-results" id="lib-cmd-results" aria-live="polite">'
-      + (_cFlat ? commandsFlatHtml() : commandsGroupedHtml()) + '</section></div>';
+      + groupBy + '<span class="lib-count">' + cat.length + ' distinct commands</span>' + fillNote + '</div>'
+      + '<div id="lib-cmd-area">' + commandsAreaHtml() + '</div></div>';
   }
 
   // ════════════════════════════════════════════════════════════════════════════════════════════════
@@ -371,8 +389,21 @@
       else if (badge) { badge.parentNode.removeChild(badge); }
     }
   }
-  function refreshCommands() { var el = _mount && _mount.querySelector('#lib-cmd-results'); if (el) el.innerHTML = (_cFlat ? commandsFlatHtml() : commandsGroupedHtml()); }
+  function refreshCommands() { var el = _mount && _mount.querySelector('#lib-cmd-results'); if (el) el.innerHTML = commandsBodyHtml(); }
+  // group-by change: update the segmented control in place and refresh only the area below it (the
+  // controls and search stay in the DOM, so no delegated handler detaches).
+  function refreshCommandsArea() {
+    var segs = _mount.querySelectorAll('.lib-seg');
+    for (var i = 0; i < segs.length; i++) { var on = segs[i].getAttribute('data-cgroup') === _cGroup; segs[i].classList.toggle('on', on); segs[i].setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    var area = _mount.querySelector('#lib-cmd-area'); if (area) area.innerHTML = commandsAreaHtml();
+  }
   function refreshAttack() { var el = _mount && _mount.querySelector('#lib-body'); if (el) el.innerHTML = attackLensHtml(); }
+  // the moves matching the current facets/search/relevance (same selection movesResultsHtml renders).
+  function currentMoves() {
+    var list = L().filter(pack(), _mSel, _mQ);
+    if (_mRelevant && hasEng()) { var f = engFacts(); list = list.filter(function (a) { try { return a.eligible && a.eligible(f); } catch (e) { return false; } }); }
+    return list;
+  }
 
   // ── mount ──────────────────────────────────────────────────────────────────────────────────────
   function mounted(ctx) {
@@ -396,17 +427,21 @@
       U.on(rootEl, 'click', '[data-clear-moves]', function () { _mSel = {}; _mQ = ''; _mRelevant = false; var q = _mount.querySelector('#lib-moves-q'); if (q) q.value = ''; var r = _mount.querySelector('#lib-relevant'); if (r) r.checked = false; refreshFacets(); refreshMoves(); });
       // remember which facet groups are open
       U.on(rootEl, 'toggle', '.lib-facet-grp', function (e, t) { var g = t.getAttribute('data-grp'); if (g) _facetOpen[g] = t.open; });
-      // expand a move tile (ignore clicks inside the expanded body)
+      // expand/collapse a move tile. Multi-open: a click toggles THIS card and leaves every other open
+      // card open, so you can read several side by side; click again to close one.
+      function toggleMove(id) { if (!id) return; if (_mExp[id]) delete _mExp[id]; else _mExp[id] = true; refreshMoves(); }
       U.on(rootEl, 'click', '.lib-move', function (e, t) {
         if (e.target && e.target.closest && e.target.closest('.ns-body')) return;
-        var id = t.getAttribute('data-move'); _mExp = (_mExp === id) ? '' : id; refreshMoves();
+        toggleMove(t.getAttribute('data-move'));
       });
       U.on(rootEl, 'keydown', '.lib-move', function (e, t) {
         if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
           if (e.target && e.target.closest && e.target.closest('.ns-body')) return;
-          e.preventDefault(); var id = t.getAttribute('data-move'); _mExp = (_mExp === id) ? '' : id; refreshMoves();
+          e.preventDefault(); toggleMove(t.getAttribute('data-move'));
         }
       });
+      U.on(rootEl, 'click', '[data-mexpand]', function () { currentMoves().forEach(function (a) { _mExp[a.id] = true; }); refreshMoves(); });
+      U.on(rootEl, 'click', '[data-mcollapse]', function () { _mExp = {}; refreshMoves(); });
       // Seed Into Stuck?: seed the move's gating facts into the Stuck? sandbox, then switch to that lens.
       U.on(rootEl, 'click', '.lib-seed', function (e, t) {
         e.stopPropagation();
@@ -420,10 +455,16 @@
       });
     } else if (_lens === 'commands') {
       U.on(rootEl, 'input', '#lib-cmd-q', function (e, t) { _cQ = t.value; refreshCommands(); });
-      U.on(rootEl, 'change', '#lib-cmd-flat', function (e, t) { _cFlat = !!t.checked; refreshCommands(); });
+      // Group By axis: re-render the whole lens (the control, the Expand/Collapse row, and the body).
+      U.on(rootEl, 'click', '[data-cgroup]', function (e, t) { var g = t.getAttribute('data-cgroup'); if (g && g !== _cGroup) { _cGroup = g; _cGrpClosed = {}; refreshCommandsArea(); } });
+      // Expand/Collapse All drive the top-level <details> directly (no re-render), and remember the
+      // collapsed set so a later search re-render keeps the choice.
+      U.on(rootEl, 'click', '[data-cexpand]', function () { _cGrpClosed = {}; var ds = _mount.querySelectorAll('.lib-tool-grp'); for (var i = 0; i < ds.length; i++) ds[i].open = true; });
+      U.on(rootEl, 'click', '[data-ccollapse]', function () { _cGrpClosed = {}; var ds = _mount.querySelectorAll('.lib-tool-grp'); for (var i = 0; i < ds.length; i++) { ds[i].open = false; var k = ds[i].getAttribute('data-grp'); if (k) _cGrpClosed[k] = true; } });
+      // multi-open command cards (same model as the Moves tiles)
       U.on(rootEl, 'click', '.lib-ccard', function (e, t) {
         if (e.target && (e.target.closest('.lib-copy') || e.target.closest('a'))) return;
-        var k = t.getAttribute('data-tpl'); _cExp = (_cExp === k) ? '' : k; refreshCommands();
+        var k = t.getAttribute('data-tpl'); if (_cExp[k]) delete _cExp[k]; else _cExp[k] = true; refreshCommands();
       });
       // jump to a move from a command's back-link: switch to Moves lens, search it in.
       U.on(rootEl, 'click', '[data-jump-move]', function (e, t) { e.preventDefault(); jumpToMove(t.getAttribute('data-jump-move')); });
@@ -439,7 +480,7 @@
   function jumpToMove(id) {
     if (!id) return;
     var pk = pack(), mv = null; for (var i = 0; i < pk.length; i++) { if (pk[i].id === id) { mv = pk[i]; break; } }
-    _mSel = {}; _mQ = mv ? (mv.title || id) : id; _mExp = id; _mRelevant = false;
+    _mSel = {}; _mQ = mv ? (mv.title || id) : id; _mExp = {}; _mExp[id] = true; _mRelevant = false;
     OBOL.router.go('library/moves');
   }
 

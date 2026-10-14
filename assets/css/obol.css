@@ -5217,7 +5217,15 @@ main#view:has(.library) { max-width: 2600px; }
 .lib-act:hover { border-color: var(--accent); }
 
 /* ---- Commands lens (hero) ---- */
-.lib-tool-grp { border: 1px solid var(--line); border-radius: 13px; background: var(--surf1); margin: 0 0 14px; overflow: hidden; }
+/* Group By segmented control + Expand/Collapse All */
+.lib-groupby { display: inline-flex; align-items: center; gap: 6px; }
+.lib-groupby-l { font: 800 10px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-right: 2px; }
+.lib-seg { font: 700 12px var(--sans); color: var(--text-2); background: var(--surf2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 13px; cursor: pointer; transition: color .1s, border-color .1s, background .1s; }
+.lib-seg:hover { color: var(--text); border-color: var(--line-hot); }
+.lib-seg.on { color: var(--accent-2); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.lib-cmd-head { margin: 0 0 12px; }
+.lib-xpand { display: inline-flex; gap: 8px; }
+.lib-tool-grp { border: 1px solid var(--line); border-left: 3px solid var(--ghue, var(--line)); border-radius: 13px; background: var(--surf1); margin: 0 0 14px; overflow: hidden; }
 .lib-tool-grp > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
   padding: 12px 16px; font: 800 15px var(--mono); color: var(--text); background: color-mix(in srgb, var(--accent) 6%, var(--surf1)); }
 .lib-tool-grp > summary::-webkit-details-marker { display: none; }

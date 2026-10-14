@@ -182,23 +182,44 @@
     return Object.keys(byTemplate).map(function (k) { return byTemplate[k]; });
   };
 
-  // grouped tool -> capability -> [commands], for the default browse view.
-  L.commandsGrouped = function (pack, q) {
+  // hues for the group-by axes, mirroring the CSS phase/lane palettes, so a grouped command view can
+  // colour by its organizing axis (phase or lane) without reaching into the DOM.
+  var PHASE_HEX = { recon: '#38BDF8', enum: '#818CF8', creds: '#F59E0B', access: '#34D399', escalate: '#F472B6', loot: '#A855F7' };
+  var LANE_HEX = { recon: '#14B8A6', web: '#A855F7', checks: '#22D3EE', ad: '#22C55E', creds: '#EAB308', linux: '#F97316', windows: '#3E7BC4', database: '#EC4899', shells: '#84CC16', pivot: '#8B5CF6', proof: '#F43F5E' };
+
+  // Group the command catalogue by an axis for browsing. by = 'tool' | 'phase' | 'lane'. The shape is
+  // uniform so the UI renders any axis the same way:
+  //   [{ key, label, hue, count, subs: [{ key, label, cmds:[entry] }] }]
+  // tool  -> group by tool, sub-group by capability (nxc by protocol)  [the hero default]
+  // phase -> group by phase (recon..loot),            sub-group by tool
+  // lane  -> group by methodology lane,               sub-group by tool
+  L.commandsGrouped = function (pack, q, by) {
+    by = by || 'tool';
     var list = L.commandCatalog(pack), needle = (q || '').trim().toLowerCase();
     if (needle) list = list.filter(function (e) {
-      return (e.template + ' ' + e.tool + ' ' + e.capability + ' ' + e.moves.map(function (m) { return m.title; }).join(' ')).toLowerCase().indexOf(needle) >= 0;
+      return (e.template + ' ' + e.tool + ' ' + e.capability + ' ' + e.phase + ' ' + L.laneLabel(e.lane) + ' ' + e.moves.map(function (m) { return m.title; }).join(' ')).toLowerCase().indexOf(needle) >= 0;
     });
-    var tools = {};
+    var PH = { recon: 0, enum: 1, creds: 2, access: 3, escalate: 4, loot: 5 };
+    function topKey(e) { return by === 'phase' ? (e.phase || 'enum') : (by === 'lane' ? (e.lane || '') : e.tool); }
+    function topLabel(e) { return by === 'phase' ? ((e.phase || 'enum').charAt(0).toUpperCase() + (e.phase || 'enum').slice(1)) : (by === 'lane' ? L.laneLabel(e.lane) : e.tool); }
+    function topHue(e) { return by === 'phase' ? (PHASE_HEX[e.phase] || '') : (by === 'lane' ? (LANE_HEX[L.laneHue(e.lane)] || '') : ''); }
+    function subKey(e) { return by === 'tool' ? e.capability : e.tool; }
+    var groups = {};
     list.forEach(function (e) {
-      var t = tools[e.tool] = tools[e.tool] || { tool: e.tool, count: 0, caps: {} };
-      (t.caps[e.capability] = t.caps[e.capability] || { capability: e.capability, cmds: [] }).cmds.push(e);
-      t.count++;
+      var gk = topKey(e), g = groups[gk] = groups[gk] || { key: gk, label: topLabel(e), hue: topHue(e), count: 0, subs: {} };
+      var sk = subKey(e); (g.subs[sk] = g.subs[sk] || { key: sk, label: sk, cmds: [] }).cmds.push(e);
+      g.count++;
     });
-    return Object.keys(tools).map(function (tk) {
-      var t = tools[tk];
-      t.caps = Object.keys(t.caps).sort().map(function (ck) { var c = t.caps[ck]; c.cmds.sort(function (a, b) { return a.template.localeCompare(b.template); }); return c; });
-      return t;
-    }).sort(function (a, b) { return b.count - a.count || a.tool.localeCompare(b.tool); });
+    var arr = Object.keys(groups).map(function (gk) {
+      var g = groups[gk];
+      g.subs = Object.keys(g.subs).sort(function (a, b) { return by === 'tool' ? a.localeCompare(b) : (g.subs[b].cmds.length - g.subs[a].cmds.length || a.localeCompare(b)); })
+        .map(function (sk) { var s = g.subs[sk]; s.cmds.sort(function (a, b) { return a.template.localeCompare(b.template); }); return s; });
+      return g;
+    });
+    if (by === 'phase') arr.sort(function (a, b) { return (PH[a.key] || 0) - (PH[b.key] || 0); });
+    else if (by === 'lane') arr.sort(function (a, b) { return (OBOL.ACTION_PACKS || []).indexOf(a.key) - (OBOL.ACTION_PACKS || []).indexOf(b.key); });
+    else arr.sort(function (a, b) { return b.count - a.count || a.key.localeCompare(b.key); });
+    return arr;
   };
 
   // fill a template from the active engagement's facts/params (the "relevant to my box" affordance),
