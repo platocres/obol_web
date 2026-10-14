@@ -233,6 +233,10 @@ aside#sidebar { grid-area: side; position: relative; border-right: 1px solid var
 /* bottom padding clears the fixed settings gear so it never covers content (e.g. the last
    engagement row's delete ×) in the bottom-right corner. */
 main#view { grid-area: main; padding: 22px 30px 84px; overflow-y: auto; max-width: 1720px; }
+/* The router wraps each route's markup in a fresh per-render host so delegated handlers scope to the
+   route and never stack on #view. display:contents makes the host add no box, so the route's section
+   lays out exactly as if it were a direct child of #view (this is why #view:has(...) rules still match). */
+.route-host { display: contents; }
 
 /* ---- the global engagement context strip (ctxbar.js) ---- */
 .ctxbar { grid-area: ctx; display: flex; flex-direction: column; gap: 0; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg1) 55%, transparent); min-width: 0; }
