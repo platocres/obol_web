@@ -9,6 +9,12 @@ any other coding agent. There are no separate, model-specific build instructions
 **House style:** no em dashes or en dashes anywhere (use commas, colons, or periods). Use proper
 capitalization, and Title Case for UI labels, tabs, and section headings.
 
+**Commit hygiene:** fold the CLAUDE.md status-log update into the same commit as the code change it
+describes, never a trailing docs-only commit. GitHub Pages deploys one commit at a time, so two pushes
+within the same deploy window cancel the earlier deployment (it shows as a red "Error" on that commit).
+One commit per change keeps the Pages timeline clean. A docs-only commit is fine only when there is no
+code change to fold it into.
+
 ---
 
 ## Active build: Workbench and fact-driven utilities (in progress, PR #302)
@@ -1400,3 +1406,173 @@ em/en dashes.
   owner's credentialed Forest state: batch is all enumeration with zero needs rows, golden-ticket/dcsync
   gone, checkpoint is Authenticated Remote Execution, 0 console errors. Full engine suite + browser-smoke +
   lint + gap green; assets stamped.
+
+---
+
+## Active build: the Library tab (in progress, PR #306 branch)
+
+**Plan of record. If this chat is lost, resume here. Branch `claude/lucid-mayer-ebsiwv` (= open PR
+#306). Commit frequently. One PR; public republish of #306 is held until the whole Library ships.**
+
+### Intention
+
+The Stuck? tab becomes **Library**: a read-only, deterministic catalogue of everything obol knows,
+explorable on the user's own terms (not the coach, never ranked). Four lenses as sub-tabs, opening on
+**Moves**: **Moves · Commands · ATT&CK · Stuck?**. obol has 35+ surfaces and ~345 moves / ~1033 distinct
+command templates; users currently have no way to just *see* what is available. The Library fills that
+gap. The audience is neurodivergent and disabled learners: calm, predictable, low-cognitive-load
+structure is an acceptance criterion, with the neon-glass aesthetic in the chrome, not the layout.
+
+### Decisions locked (owner-approved, over a multi-turn design discussion)
+
+- **Commands lens = the hero.** Flatten all commands, dedupe to the distinct template with back-link
+  chips to every move that uses it (Option B), grouped **Tool -> Capability** (nxc sub-grouped by
+  protocol) with a **Flatten** toggle + persistent search, **phase-tinted**, auto-filled from the active
+  engagement when present, one-tap copy. (The owner finds the move packs "a necessary evil"; the command
+  browser is the thing they actually wanted.)
+- **Moves lens.** Faceted card browser (facets lane / phase / port / service / tool / OS / kind + search),
+  **lane-hued**, reusing the `ns-card` tile. Each move expands to its commands (filled), field notes, and
+  offers Build In Workbench + Seed Into Stuck?. A v1 **"Only What Is Relevant To My Box"** toggle
+  (engagement only) narrows to moves whose own `.eligible(facts)` passes (NOT a ranker fork).
+- **ATT&CK lens.** A **library-scoped** matrix (what obol CAN do): every technique obol performs ->
+  the moves AND commands behind it, tactic-coloured. Distinct from the Findings tab's engagement-scoped
+  matrix (what you HAVE done).
+- **Stuck? lens.** The existing Ferryman, folded in unchanged (the Library route delegates to
+  `OBOL.routes.stuck`); `#/stuck` stays a working alias.
+- **Colour follows the active lens's organizing axis:** Moves = lane hue, Commands = phase tint,
+  ATT&CK = tactic.
+- **v1 scope line:** moves + commands + ATT&CK only (no GTFOBins / wordlists / CVE / D3FEND lenses).
+- **Separately sequenced, NOT part of this build:** a "Focus mode" for Next Steps (a default-on toggle
+  that collapses non-lead commands behind "N more ways -> Library"). Do it AFTER the Library ships;
+  toggle-gated and reversible. The owner is skeptical of rankings and protective of ranking progress;
+  the Library is ranking-independent by construction, which is the point.
+
+### Boundaries (unchanged, non-negotiable)
+
+Static, browser-local, no backend, no execution, no telemetry. Presentation only: the Library reads
+`OBOL.library` (a pure engine over the pack), the one filler (`OBOL.command`), and the active
+engagement's facts for fill/relevance. It writes nothing to `OBOL.store`, never forks the ranker,
+never changes the move graph. Pack commands are the source of truth. Accessibility is acceptance
+(neon glass, colour never the sole signal, 11px floor, prefers-reduced-motion honoured, 4K to ~320px).
+House style: no em or en dashes; Title Case.
+
+### Engine (assets/engine/library.js, pure, Node-safe, tested)
+
+`OBOL.library`: `lanes()`/`laneOf(id)`/`laneLabel(pk)`/`laneHue(pk)` (lane = the ACTION_PACK a move
+came from, derived at load from OBOL.packData in OBOL.ACTION_PACKS order, no build step); `phaseOf(a)`;
+`facets(pack)` -> grouped facet values (lane/phase/service/port/tool/os/tag) with counts; `filter(pack,
+sel, q)` (OR within a group, AND across groups, + free-text over id/title/hypothesis/tools/commands);
+`commandCatalog(pack)` (dedupe to the distinct template, back-link `moves[]` with per-move note);
+`commandsGrouped(pack, q)` (tool -> capability -> commands; `toolOf`/`capabilityOf` normalise
+netexec/nxc and impacket-* and split nxc by protocol); `fill(template, facts, params)` (via
+fillCommand); `techniqueLibrary(pack)` (byMove -> {id,name,tactics,moves,url}); `tactics()`.
+
+### Phases (check off as completed)
+
+- [x] **L1.** Engine + Moves lens + nav rename (Stuck? -> Library, #/library, #/stuck alias) + lazy
+  group + route scaffold (sub-tabs, Stuck? delegating). Smoke test tests/engine/library-smoke.js.
+  CLAUDE.md plan.
+- [x] **L2.** Commands lens (the hero): dedupe-to-template, back-link move chips, Tool -> Capability
+  grouping (nxc by protocol), Flatten toggle, search, phase tint, engagement auto-fill, one-tap copy.
+- [x] **L3.** ATT&CK lens: library-scoped tactic-coloured matrix, each technique opening to the moves
+  and example commands behind it.
+- [x] **L4.** Fold Stuck? in as a sub-tab (delegates to OBOL.routes.stuck; exposed `seed` so a move's
+  "Seed Into Stuck?" lands you on the Ferryman board with that move already a lead).
+- [x] **L5.** Aesthetic / responsive / a11y pass (4K/1080p/tablet/mobile) + full guardrails + stamp +
+  screenshots. Help entry (Stuck? -> Library + lens subs) and help-coverage updated.
+
+### Verify each phase (same as the project)
+
+`node tools/field-notes-coverage.js` · `node tools/lint-study.js --check` · `node tools/gap-report.js
+--check` · `node tools/attack-coverage.js` · `node tests/engine/help-coverage.js` ·
+`for t in tests/engine/*.js; do node "$t"; done` · `NODE_PATH=/opt/node-tools/node_modules node
+tests/browser-smoke.js` · `node tools/stamp-assets.js` (after any asset edit) · drive the app headless
+(0 console errors) · screenshot each lens at 4K/1080p/tablet/mobile. House style: no em/en dashes.
+
+### Status log (update per commit)
+
+- 2026-10-14: L1-L4 built. Engine assets/engine/library.js (facets/filter/commandCatalog/
+  commandsGrouped/techniqueLibrary/tactics/fill, pure over the pack, lane derived from load order),
+  tested in tests/engine/library-smoke.js (345 moves, 1033 distinct command templates, 44 ATT&CK
+  techniques, nxc split by protocol, OR-within/AND-across filtering). Route assets/ui/routes/library.js:
+  sub-tab shell opening on Moves, deep-linkable (#/library/<lens>), with all four lenses live:
+  Moves (faceted ns-card browser, lane-hued, Relevant-To-My-Box toggle, Build In Workbench + Seed Into
+  Stuck?), Commands (the hero: deduped templates grouped tool -> capability, Flatten toggle, search,
+  phase tint, engagement auto-fill, copy, back-link move chips that jump into the Moves lens), ATT&CK
+  (tactic-coloured library-scoped matrix, each cell opening to the moves + example commands behind it),
+  Stuck? (delegates to OBOL.routes.stuck, with a new exposed `seed(kinds, params)` entry so Seed Into
+  Stuck? lands on the Ferryman board with the move already a lead, and `_wbTargets` reused for the
+  Workbench classifier). Nav renamed Stuck? -> Library (desktop + mobile More sheet), data-nav-match
+  keeps #/stuck highlighting Library; `library` lazy group (carries Stuck?'s data+engine+route plus the
+  ATT&CK catalog/map + the library engine/route); #/stuck kept registered as the alias. Help section
+  Stuck? -> Library with the four lens subs; help-coverage required id stuck -> library. CSS .lib-*
+  block (neon-glass sub-tabs, facet sidebar, lane-hued move tiles, phase-tinted command cards, tactic
+  matrix), main#view:has(.library) widened to 2400px, responsive stacks under 960/560px. L5 (full
+  guardrail sweep + screenshots) next.
+- 2026-10-14: L5 COMPLETE, and with it the Library build. Aesthetic/responsive/a11y pass: widened
+  main#view:has(.library) to 2600px (matches the Stuck? precedent so 4K is not guttered), verified the
+  colour-follows-axis design (Moves lane-hued tiles, Commands phase-tinted cards, ATT&CK tactic-coloured
+  columns), shimmer gated by prefers-reduced-motion (ns-bloom skipped when reduced), colour never the
+  sole signal (every chip and cell carries a text label). Drove all four lenses headless at 4K, 1080p,
+  tablet, and mobile with 0 console errors, and verified every interaction: facet toggle narrows (345 ->
+  73 on AD), tile expand shows commands + notes + Seed Into Stuck?, search narrows, Clear restores;
+  Commands Flatten + search + back-link jump into Moves; ATT&CK cell select shows moves + example
+  commands + jump; Seed Into Stuck? seeds the sandbox and lands on the Ferryman board. All guardrails
+  green (field-notes-coverage, lint-study, gap-report, attack-coverage integrity clean, help-coverage,
+  full 50-file engine suite incl. the new library-smoke, browser-smoke); assets stamped; house style held
+  (no em/en dashes in authored content; the em dashes visible in some MOVE TITLES are pre-existing pack
+  data, shown identically in Next Steps/Stuck?, not introduced here). Build summary (PR #306): L1 engine
+  + Moves lens + nav rename + scaffold, L2 the Commands hero lens, L3 the library-scoped ATT&CK matrix,
+  L4 Stuck? folded in as a sub-tab (with the new seed entry), L5 the aesthetic/responsive/a11y pass.
+  Presentation only throughout: no ranker fork, one store, pack commands the source of truth. NEXT (not
+  part of this build, separately sequenced): the Next Steps "Focus mode" trim (default-on, collapses
+  non-lead commands behind "N more ways -> Library"), toggle-gated and reversible. Public republish of
+  #306 stays held until explicitly requested.
+- 2026-10-14: Library ATT&CK lens coverage (owner: "I'd have thought ATT&CK would have more mapped").
+  The lens mapped techniques via the explicit per-move table ONLY (byMove: 109 moves, 44 techniques),
+  while the Findings matrix maps via byMove AND each move's produced fact-kinds (byKind). Fixed
+  techniqueLibrary to use the same union (byMove wins, then byKind over produces): 263 moves and 65
+  techniques now, and it carries a command count per technique (cells show "N moves . M cmds", the
+  spec's "moves and commands"). Also closed the biggest honest byKind gaps in attack-move-map.js
+  (verified each code exists in the catalog and is defensible): scan.nmap.vuln/udp -> T1046,
+  scan.local.* -> T1016, host.kernel/arch -> T1082, ad.dc_candidate -> T1018, ad.trusts -> T1482,
+  ad.deleted_objects -> T1087.002, loot.files -> T1083, foothold.webshell -> T1505.003,
+  credential.candidate -> T1552, kerberos.tickets -> T1558, tunnel.socks -> T1090.001/tunnel.route ->
+  T1090. New tactics now populate (Discovery, Command and Control). These byKind entries also enrich
+  the Findings engagement matrix and the recorded-moves trail (same map), all accurate. Remaining ~82
+  unmapped moves are advice/troubleshooters (produce advice.*, correctly no technique) and flag
+  objectives. library-smoke extended (union reaches a byKind-only move: trust-enum -> T1482; cmdCount
+  present); attack-coverage integrity clean (79 referenced techniques); full engine suite + gap + lint
+  + browser-smoke green; assets stamped; headless-verified (0 console errors).
+- 2026-10-14: Library browse ergonomics (owner feedback). (1) Commands lens gains a Group By axis
+  (Tool . Phase . Lane . Flat): the engine's commandsGrouped(pack, q, by) now returns a uniform
+  {key,label,hue,count,subs} shape for any axis (tool->capability, phase->tool, lane->tool), hued by the
+  organizing axis; Flat is the old flatten. Group By Lane + Collapse All is a colourful one-band-per-lane
+  index. (2) Expand All / Collapse All on both the Commands groups and the Moves tiles (no more
+  collapsing one at a time). (3) Both lenses are now MULTI-OPEN: a click toggles a card and it stays open
+  until clicked again, any number open at once (replaces the single-open model). A delegation gotcha
+  found and fixed en route: refreshing a lens via el.outerHTML detached the delegated handlers, so the
+  Group By control and results now live in separate containers (the control stays put, only #lib-cmd-area
+  refreshes), mirroring the Moves facet/results split. library-smoke covers all three axes + the uniform
+  shape; drive-library covers multi-open, Expand/Collapse All, and every Group By axis (0 console errors);
+  full suite + browser-smoke + coverage green; stamped. OPEN with owner: whether to bring the same
+  click-to-stay-open multi-open model to Next Steps (deferred, it is the coach's focused view).
+- 2026-10-14: Next Steps multi-open (owner-approved: behind a toggle, default OFF). The coach gains a
+  "Keep Cards Open" toggle (shown only with >1 ready move), persisted per engagement in
+  eng.ui.nsMultiOpen. Default is unchanged single-focus (open one card at a time; nsSel drives the field
+  notes canvas). When on, clicking a card opens it and leaves the others open (click again to collapse
+  it); the clicked card becomes the focused one that drives the canvas, and a "Collapse To One" button
+  returns to a single card. Module-level nsOpen is the set of expanded ids (always contains nsSel.id);
+  cardOpts marks a card selected when open. Presentation only: no ranking change (ranker-sim 0/25).
+  Verified headless end to end (default single-focus preserved; multi-open opens/collapses correctly;
+  persist + Collapse To One + toggle-off all work; 0 console errors); full engine suite + browser-smoke
+  + lint + gap green; assets stamped. The Library (PR #306) and this Next Steps follow-up are both on the
+  branch; public republish still held.
+- 2026-10-14: Commands lens visual + collapse pass (owner feedback). (1) Tool/capability sub-group
+  headers are bold, monospace, colour-coded (a stable hash hue per label) with a caret and a matching
+  count pill. (2) Command cards carry their lane hue (border + accent, the Moves-tile treatment) for real
+  colour variety, the phase chip became a vivid solid pill, move back-links keep their lane colour.
+  (3) In Outcome/Phase/Lane views the tool sub-groups are collapsible and default-collapsed, so each tool
+  is a tidy "nmap (20)" row you expand on demand (Tool view keeps capability rows open). Expand/Collapse
+  All drive both levels; manual group/row open-close is remembered across a search re-render. Engine
+  helpers laneHexOf/phaseHex/hashHue. library-smoke + headless drive + browser-smoke + lint green; stamped.

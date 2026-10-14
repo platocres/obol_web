@@ -39,12 +39,23 @@
         try { await def.ensure(); def._ensured = true; }
         catch (e) { /* surfaced by the route's own render */ }
       }
-      // Single write into #view.
+      // Single write into #view. The route's markup goes inside a FRESH per-render host (a
+      // display:contents <div>, so it adds no box and the layout is exactly as if the route's section
+      // were a direct child of #view). mounted() binds its delegated click/keydown handlers to THIS host,
+      // not to the shared, persistent #view. Because a new host is created on every render, a route's
+      // handlers can never stack across revisits (the previous host and its listeners are discarded with
+      // it) and can never fire for a different route (that route's host no longer exists). This is the
+      // systemic cure for the "buttons stop responding until a full reload" class: a delegated handler
+      // left on #view used to accumulate every visit, so a toggle fired an even number of times and
+      // netted to a no-op, and a broad selector from one route could hijack another's elements. The host
+      // is an ANCESTOR of the route's content, so mounted()'s own `mount.querySelector('.<root>')` calls
+      // (several routes look up their own root that way) keep resolving.
       if (_mount && def.render) {
         var out = def.render({ name: route.name, args: route.args, mount: _mount });
-        // render() may return an HTML string (we set it) or manage the DOM itself (returns undefined).
-        if (typeof out === 'string') _mount.innerHTML = out;
-        if (def.mounted) { try { def.mounted({ name: route.name, args: route.args, mount: _mount }); } catch (e) {} }
+        // render() may return an HTML string (we wrap + set it) or manage the DOM itself (returns undefined).
+        var host = _mount;
+        if (typeof out === 'string') { _mount.innerHTML = '<div class="route-host">' + out + '</div>'; host = _mount.firstElementChild || _mount; }
+        if (def.mounted) { try { def.mounted({ name: route.name, args: route.args, mount: host }); } catch (e) {} }
       }
       // reflect active nav + expose the route name for layout (e.g. the full-bleed Learn front door)
       reflectNav(route.name);

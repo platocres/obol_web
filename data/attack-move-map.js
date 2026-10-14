@@ -58,6 +58,18 @@
     'privesc.windows_privilege': 'T1134.001',
     // lateral / relay
     'smb.signing_disabled': 'T1557.001', 'relay.target': 'T1557.001',
+    // more discovery (the facts a scan/enumeration proves)
+    'scan.nmap.vuln': 'T1046', 'scan.nmap.udp': 'T1046',
+    'scan.local.interfaces': 'T1016', 'scan.local.routes': 'T1016', 'scan.local.neighbors': 'T1016',
+    'host.kernel': 'T1082', 'host.arch': 'T1082',
+    'ad.dc_candidate': 'T1018', 'ad.trusts': 'T1482', 'ad.deleted_objects': 'T1087.002',
+    'loot.files': 'T1083',
+    // more collection / credential access / execution
+    'foothold.webshell': 'T1505.003',
+    'credential.candidate': 'T1552',
+    'kerberos.tickets': 'T1558',
+    // command and control (pivoting)
+    'tunnel.socks': 'T1090.001', 'tunnel.route': 'T1090',
   };
 
   // move id -> the ATT&CK technique that move's action embodies (wins over BY_KIND for named moves).

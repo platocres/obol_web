@@ -234,6 +234,12 @@
   // Which card is open, which command inside it, which locus tab. Module-level so it survives the route's
   // full re-renders (a fact change re-renders the whole coach); validated against the live set each render.
   var nsSel = { id: null, idx: 0, locus: null };
+  // Multi-open (owner-requested, default OFF): when on, clicking a card toggles it and leaves the others
+  // open, so you can read several side by side; nsSel stays the FOCUSED card that drives the field-notes
+  // canvas. nsOpen is the set of expanded card ids (it always contains nsSel.id). The default single-focus
+  // behaviour is unchanged. The preference persists per engagement in eng.ui.nsMultiOpen.
+  var nsOpen = {};
+  function nsMultiOpen() { try { return !!(((OBOL.store.active() || {}).ui || {}).nsMultiOpen); } catch (e) { return false; } }
   var NS_INFRA = { 'target.configured': 1, 'host.up': 1, 'ports.open': 1, 'scan.nmap.quick': 1 };
 
   // Inline formatting for an authored note line: a `backtick` span renders as a monospace, click-to-copy
@@ -1436,9 +1442,12 @@
         nsSel.idx = firstCmdIndexForLocus(selMove, nsSel.locus, facts);
       }
     }
+    var mOpen = nsMultiOpen();
+    if (mOpen && nsSel.id) nsOpen[nsSel.id] = true;   // the focused card is always one of the open set
     function cardOpts(a, i, section) {
       var badge = actionTargetLabel(a, facts, eng, c.target);
-      return { rank: section === 'ready' ? (i + 1) : 0, selected: a.id === nsSel.id, suggested: section === 'ready' && i === 0, targetBadge: badge };
+      var open = mOpen ? (!!nsOpen[a.id] || a.id === nsSel.id) : (a.id === nsSel.id);
+      return { rank: section === 'ready' ? (i + 1) : 0, selected: open, suggested: section === 'ready' && i === 0, targetBadge: badge };
     }
 
     // Narrow screens are best-effort: the two-column coach + canvas really wants width. Say so plainly
@@ -1451,6 +1460,14 @@
     var coachFixCards = renderCoachFixCards(facts);
     if (coachFixCards) {
       html += coachFixCards;
+    }
+
+    // Multi-open toggle: default OFF keeps the single-focus coach (open one card at a time); ON lets you
+    // keep several cards open to compare. Only shown when there is more than one card to compare.
+    if (onFlow.length > 1) {
+      html += '<div class="ns-controls"><label class="ns-multi-toggle"><input type="checkbox" id="ns-multiopen"' + (mOpen ? ' checked' : '') + '>'
+        + '<span>Keep Cards Open</span></label>'
+        + (mOpen ? '<button type="button" class="ns-collapse-others" data-ns-collapse>Collapse To One</button>' : '') + '</div>';
     }
 
     var READY_CAP = 8;
@@ -1553,13 +1570,52 @@
     U.on(mount, 'click', '.coach-flash-x', function (e, t) {
       var fl = t.closest('.coach-flash'); if (fl) fl.remove();
     });
+    // Open the clicked card and make it the focus, WITHOUT closing the other open cards (multi-open mode).
+    function openCardKeepOthers(card) {
+      var id = card.getAttribute('data-action'); if (!id) return;
+      var fx = freshCtx(); var m = moveById(fx.pack, id); if (!m) return;
+      nsOpen[id] = true; nsSel.id = id; nsSel.locus = OBOL.pack.defaultCommandLocus(m);
+      nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus, fx.facts);
+      Array.prototype.forEach.call(mount.querySelectorAll('.ns-card.selected'), function (o) { o.classList.remove('is-glow'); });
+      card.classList.add('selected', 'is-glow'); card.setAttribute('aria-expanded', 'true');
+      card.classList.remove('ns-bloom'); void card.offsetWidth; card.classList.add('ns-bloom');
+      setTimeout(function () { card.classList.remove('ns-bloom'); }, 3600);
+      syncCardLocus(card, nsSel.locus); repaintCanvas();
+    }
+    // Collapse one open card (multi-open mode). If it was the focused card, move focus to another open one.
+    function collapseCard(card) {
+      var id = card.getAttribute('data-action');
+      card.classList.remove('selected', 'is-glow', 'ns-bloom'); card.setAttribute('aria-expanded', 'false');
+      if (id) delete nsOpen[id];
+      if (id === nsSel.id) {
+        var nextId = Object.keys(nsOpen)[0];
+        var nextCard = nextId ? mount.querySelector('.ns-card[data-action="' + nextId + '"]') : null;
+        if (nextCard) openCardKeepOthers(nextCard);
+      }
+    }
     // click a card (but not an interactive control inside it) to open it
     U.on(mount, 'click', '.ns-card', function (e, t) {
       if (e.target.closest('.ns-cmd') || e.target.closest('.ns-toggle') || e.target.closest('button') || e.target.closest('a') || e.target.closest('input') || e.target.closest('textarea')) return;
-      if (!t.classList.contains('selected')) selectCard(t);
+      if (nsMultiOpen()) { if (t.classList.contains('selected')) collapseCard(t); else openCardKeepOthers(t); }
+      else if (!t.classList.contains('selected')) selectCard(t);
     });
     U.on(mount, 'keydown', '.ns-card', function (e, t) {
-      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button, a, input, textarea')) { e.preventDefault(); if (!t.classList.contains('selected')) selectCard(t); }
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button, a, input, textarea')) {
+        e.preventDefault();
+        if (nsMultiOpen()) { if (t.classList.contains('selected')) collapseCard(t); else openCardKeepOthers(t); }
+        else if (!t.classList.contains('selected')) selectCard(t);
+      }
+    });
+    // multi-open toggle + "collapse to one"
+    U.on(mount, 'click', '#ns-multiopen', function (e, t) {
+      var on = !!t.checked;
+      if (!on) nsOpen = nsSel.id ? (function () { var o = {}; o[nsSel.id] = true; return o; })() : {};
+      OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.nsMultiOpen = on; }, 'ui');
+      OBOL.router.render();
+    });
+    U.on(mount, 'click', '[data-ns-collapse]', function () {
+      nsOpen = nsSel.id ? (function () { var o = {}; o[nsSel.id] = true; return o; })() : {};
+      OBOL.router.render();
     });
     // Remote / On-Host toggle inside the open card
     U.on(mount, 'click', '.ns-toggle button', function (e, t) {

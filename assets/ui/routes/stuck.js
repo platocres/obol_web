@@ -413,6 +413,19 @@
     ['target', 'lhost', 'lport'].forEach(function (k) { U.on(root, 'input', '#stuck-p-' + k, function (e, t) { _params[k] = t.value; refreshMoves(); }); });
   }
 
+  // Seed the sandbox from a move's own gating facts, then drop the user on the board with that move
+  // already ranked as a lead. The Library's "Seed Into Stuck?" affordance calls this before navigating
+  // to the Stuck? lens. It is a fresh throwaway sandbox (never the active engagement), so clobbering any
+  // prior Stuck? session is the intended "start this exploration" semantics.
+  function seed(kinds, params) {
+    ensureFs(); _fs = S().sandbox(); _tried = {}; _sel = ''; _refineOpen = false;
+    if (params) { ['target', 'lhost', 'lport'].forEach(function (p) { if (params[p]) _params[p] = params[p]; }); }
+    (kinds || []).forEach(function (k) { k = String(k || '').trim(); if (k) S().assert(_fs, k, { scope: scope() }); });
+    _stage = 'board'; _step = 'intro';
+  }
+
   OBOL.routes = OBOL.routes || {};
-  OBOL.routes.stuck = { render: render, mounted: mounted };
+  // _wbTargets is exposed so the Library's Moves lens can reuse the exact same Build In Workbench
+  // classifier (a move -> which Workbench tools help with it) without duplicating the mapping.
+  OBOL.routes.stuck = { render: render, mounted: mounted, seed: seed, _wbTargets: wbTargets };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

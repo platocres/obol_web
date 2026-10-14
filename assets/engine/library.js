@@ -1,0 +1,312 @@
+/*!
+ * obol engine, library.js, the pure logic behind the Library tab.
+ *
+ * The Library is a READ-ONLY, deterministic catalogue of everything obol knows: every move, every
+ * command, mapped onto MITRE ATT&CK. It is not the coach and it is not ranked: it is a reference you
+ * explore by facet (lane, phase, port, service, tool) or by command (the hero lens) or by technique.
+ *
+ * Boundaries (identical to Stuck?): a function of the pack you hand it, writes nothing to OBOL.store,
+ * never forks the ranker, never changes the move graph. The pack is the source of truth; this module
+ * only projects it for browsing. Node-safe (no DOM), so the smoke test drives it headless.
+ */
+(function (root) {
+  'use strict';
+  var OBOL = root.OBOL = root.OBOL || {};
+  var L = OBOL.library = OBOL.library || {};
+
+  // ── lanes (methodology packs) ───────────────────────────────────────────────────────────────────
+  // A move's lane is the ACTION_PACK it came from. packData keeps that grouping, so we derive it at
+  // load (no build step, no per-action field) and label it for humans. Order is the pack load order.
+  var LANE_LABEL = {
+    recon_2026_09: 'Recon', ad_2026_09: 'Active Directory', web_2026_09: 'Web',
+    web_exploit_checks_2026_09: 'Web Exploit Checks', database_2026_09: 'Database',
+    linux_privesc_2026_09: 'Linux Privesc', windows_privesc_2026_09: 'Windows Privesc',
+    credential_access_2026_09: 'Credential Access', cracking_2026_09: 'Cracking',
+    shells_2026_09: 'Shells', pivoting_2026_09: 'Pivoting', obol_local_pivot_2026_09: 'Pivoting (On-Box)',
+    findings_checks_2026_09: 'Findings Checks', obol_flag_hunt_2026_09: 'Flag Hunt',
+  };
+  // short hue key reused by the Learn/coach lane palette (lane-ad, lane-web, …); falls back to a neutral.
+  var LANE_HUE = {
+    recon_2026_09: 'recon', ad_2026_09: 'ad', web_2026_09: 'web', web_exploit_checks_2026_09: 'web',
+    database_2026_09: 'database', linux_privesc_2026_09: 'linux', windows_privesc_2026_09: 'windows',
+    credential_access_2026_09: 'creds', cracking_2026_09: 'creds', shells_2026_09: 'shells',
+    pivoting_2026_09: 'pivot', obol_local_pivot_2026_09: 'pivot', findings_checks_2026_09: 'checks',
+    obol_flag_hunt_2026_09: 'checks',
+  };
+
+  var _laneById = null;
+  function laneMap() {
+    if (_laneById) return _laneById;
+    _laneById = {};
+    var pd = OBOL.packData || {}, order = OBOL.ACTION_PACKS || [];
+    order.forEach(function (pk) {
+      var acts = (pd[pk] && pd[pk].actions) || [];
+      acts.forEach(function (a) { if (a && a.id && !_laneById[a.id]) _laneById[a.id] = pk; });
+    });
+    return _laneById;
+  }
+  L.laneOf = function (id) { return laneMap()[id] || ''; };
+  L.laneLabel = function (pk) { return LANE_LABEL[pk] || String(pk || '').replace(/_\d+.*$/, '').replace(/_/g, ' '); };
+  L.laneHue = function (pk) { return LANE_HUE[pk] || 'checks'; };
+  // Lanes in load order, only those that actually carry moves.
+  L.lanes = function () {
+    var pd = OBOL.packData || {}, order = OBOL.ACTION_PACKS || [];
+    return order.filter(function (pk) { return pd[pk] && (pd[pk].actions || []).length; })
+      .map(function (pk) { return { key: pk, label: L.laneLabel(pk), hue: L.laneHue(pk) }; });
+  };
+
+  function phaseOf(a) { return (OBOL.phases && OBOL.phases.phaseOfAction) ? OBOL.phases.phaseOfAction(a) : (a.phase || 'enum'); }
+  L.phaseOf = phaseOf;
+
+  // ── tokens a move keys on (its ports / services) ────────────────────────────────────────────────
+  function gatesOf(a) { return (a.requires_all || []).concat(a.requires_any || []); }
+  function portsOf(a) {
+    var out = {}; gatesOf(a).forEach(function (k) { var m = /^port:(\d+)$/.exec(k); if (m) out[m[1]] = true; }); return Object.keys(out);
+  }
+  function servicesOf(a) {
+    var out = {};
+    gatesOf(a).forEach(function (k) {
+      var m = /^service\.([a-z0-9-]+)$/.exec(k) || /^([a-z0-9]+)\.reachable$/.exec(k);
+      if (m) out[m[1]] = true;
+    });
+    return Object.keys(out);
+  }
+  function toolsOf(a) {
+    var out = {}; if (a.tool) out[String(a.tool).toLowerCase()] = true;
+    (a.tools || []).forEach(function (t) { if (t) out[String(t).toLowerCase()] = true; });
+    return Object.keys(out);
+  }
+  function needsCred(a) { return gatesOf(a).some(function (k) { return /^credential\./.test(k); }); }
+  function isExploit(a) {
+    var p = (a.produces || []).join(' ');
+    return /foothold\.|access\.(shell|admin|system|root)|rce|exploit/i.test((a.id || '') + ' ' + p) || /exploit|cve-/i.test(a.id || '');
+  }
+
+  // ── facet index (every facet value -> its move ids, with counts) ────────────────────────────────
+  var _index = null;
+  function buildIndex(pack) {
+    if (_index) return _index;
+    var ix = { lane: {}, phase: {}, port: {}, service: {}, tool: {}, os: {}, locus: {}, tag: {} };
+    function add(group, key, id) { if (!key && key !== 0) return; (ix[group][key] = ix[group][key] || {})[id] = true; }
+    (pack || []).forEach(function (a) {
+      add('lane', L.laneOf(a.id), a.id);
+      add('phase', phaseOf(a), a.id);
+      portsOf(a).forEach(function (p) { add('port', p, a.id); });
+      servicesOf(a).forEach(function (s) { add('service', s, a.id); });
+      toolsOf(a).forEach(function (t) { add('tool', t, a.id); });
+      (a.os || []).forEach(function (o) { add('os', o, a.id); });
+      if (a.locus) add('locus', a.locus, a.id);
+      if (needsCred(a)) add('tag', 'needs-credential', a.id);
+      add('tag', isExploit(a) ? 'exploit' : 'enumeration', a.id);
+    });
+    _index = ix;
+    return ix;
+  }
+  // facet listing for the UI: [{group, values:[{key,label,count}]}], sorted sensibly.
+  L.facets = function (pack) {
+    var ix = buildIndex(pack);
+    function vals(group, labeler, sorter) {
+      var out = Object.keys(ix[group]).map(function (k) { return { key: k, label: labeler ? labeler(k) : k, count: Object.keys(ix[group][k]).length }; });
+      out.sort(sorter || function (a, b) { return b.count - a.count || String(a.label).localeCompare(String(b.label)); });
+      return out;
+    }
+    var PH = ['recon', 'enum', 'creds', 'access', 'escalate', 'loot'];
+    return [
+      { group: 'lane', label: 'Lane', values: L.lanes().map(function (ln) { return { key: ln.key, label: ln.label, count: Object.keys(ix.lane[ln.key] || {}).length, hue: ln.hue }; }).filter(function (v) { return v.count; }) },
+      { group: 'phase', label: 'Phase', values: PH.filter(function (p) { return ix.phase[p]; }).map(function (p) { return { key: p, label: p.charAt(0).toUpperCase() + p.slice(1), count: Object.keys(ix.phase[p]).length }; }) },
+      { group: 'service', label: 'Service', values: vals('service', function (s) { return s.toUpperCase(); }) },
+      { group: 'port', label: 'Port', values: vals('port', function (p) { return p; }, function (a, b) { return (+a.key) - (+b.key); }) },
+      { group: 'tool', label: 'Tool', values: vals('tool') },
+      { group: 'os', label: 'OS', values: vals('os', function (o) { return o.charAt(0).toUpperCase() + o.slice(1); }) },
+      { group: 'tag', label: 'Kind', values: vals('tag', function (t) { return t.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }); }) },
+    ].filter(function (f) { return f.values.length; });
+  };
+
+  // filter moves: OR within a facet group, AND across groups. sel = { lane:[..], phase:[..], ... }.
+  L.filter = function (pack, sel, q) {
+    sel = sel || {};
+    var ix = buildIndex(pack);
+    var groups = Object.keys(sel).filter(function (g) { return (sel[g] || []).length && ix[g]; });
+    var needle = (q || '').trim().toLowerCase();
+    return (pack || []).filter(function (a) {
+      for (var i = 0; i < groups.length; i++) {
+        var g = groups[i], want = sel[g], ok = false;
+        for (var j = 0; j < want.length; j++) { if (ix[g][want[j]] && ix[g][want[j]][a.id]) { ok = true; break; } }
+        if (!ok) return false;
+      }
+      if (needle) {
+        var hay = (a.id + ' ' + (a.title || '') + ' ' + (a.hypothesis || '') + ' ' + toolsOf(a).join(' ')
+          + ' ' + (a.commands || []).map(function (c) { return c.run || ''; }).join(' ')).toLowerCase();
+        if (hay.indexOf(needle) < 0) return false;
+      }
+      return true;
+    });
+  };
+
+  // ── command catalogue (the hero lens): flatten, dedupe to template, group tool -> capability ────
+  function stripCmd(run) {
+    return String(run || '').replace(/^#.*$/m, '').replace(/^\s*(?:sudo\s+|proxychains4?\s+|[A-Z_][A-Z0-9_]*=\S+\s+)+/, '').trim();
+  }
+  // the tool a command invokes (normalised family) + a capability sub-label.
+  L.toolOf = function (run) {
+    var s = stripCmd(run); var first = (s.split(/\s+/)[0] || '').toLowerCase();
+    if (first === 'netexec' || first === 'nxc') return 'nxc';
+    if (/^impacket-/.test(first) || /^(secretsdump|getnpusers|getuserspns|gettgt|getst|psexec|wmiexec|smbexec|dcomexec|ntlmrelayx|getadusers|lookupsid|rbcd|dacledit|ticketer|raiseChild|goldenPac|mssqlclient|rpcdump|samrdump)\.py$/i.test(first)) return 'impacket';
+    if (/\.py$/.test(first)) return first.replace(/\.py$/, '');
+    return first || '(shell)';
+  };
+  L.capabilityOf = function (run, move) {
+    var s = stripCmd(run), toks = s.split(/\s+/), tool = L.toolOf(run);
+    if (tool === 'nxc') { var proto = (toks[1] || '').toLowerCase(); if (/^(smb|ldap|winrm|mssql|rdp|ssh|ftp|wmi|vnc|nfs)$/.test(proto)) return 'nxc ' + proto; return 'nxc'; }
+    if (tool === 'impacket') { var b = (toks[0] || '').toLowerCase().replace(/^impacket-/, '').replace(/\.py$/, ''); return b || 'impacket'; }
+    // everything else: group by the move's phase so nothing is uncategorised
+    return move ? phaseOf(move) : 'other';
+  };
+
+  // ── outcome taxonomy: what a command ACHIEVES, derived from the produced facts of the moves that use
+  // it. Ordered by advancement; a command that proves several picks the most advanced (highest rank), so
+  // an exploit that lands a shell reads "Get A Foothold", not "Discover". Operator-intuitive grouping:
+  // "show me every way to harvest credentials". ──
+  var OUTCOMES = [
+    { key: 'discover', label: 'Discover And Enumerate', rank: 1, hue: '#38BDF8', test: function (k) { return /^(scan\.|ports\.open|snmp\.|host\.(up|processes|kernel|arch)|web\.(source|dirs|vhosts|server|tech|param_candidate|idor_candidate)|smb\.(null_session|guest_session|shares)|.*\.reachable|enum\.deep|config\.review|privesc\.(leads|process_lead))/.test(k); } },
+    { key: 'map_ad', label: 'Map Active Directory', rank: 2, hue: '#22C55E', test: function (k) { return /^(ad\.(user_list|users|dc_candidate|domain_known|base_dn|anonymous_bind|trusts|acl_lead|control_paths|attack_paths|gpo_control|deleted_objects|graph)|rid\.users)/.test(k); } },
+    { key: 'confirm_vuln', label: 'Confirm A Vulnerability', rank: 3, hue: '#F472B6', test: function (k) { return /^(web\.(sqli|cmdi|ssti|xxe|nosqli|deserial|lfi|authz_bypass|ssrf_confirmed|rce)|exploit\.candidate|adcs\.vulnerable|ad\.zerologon)/.test(k); } },
+    { key: 'foothold', label: 'Get A Foothold', rank: 4, hue: '#34D399', test: function (k) { return /^(foothold\.|access\.shell)/.test(k); } },
+    { key: 'creds', label: 'Harvest Credentials', rank: 5, hue: '#F59E0B', test: function (k) { return /^(hash\.|credential\.|loot\.(sam|ntds|gpp|ssh_key|creds)|gpp\.cpassword|kerberos\.tickets)/.test(k); } },
+    { key: 'pivot', label: 'Pivot And Tunnel', rank: 6, hue: '#8B5CF6', test: function (k) { return /^(tunnel\.|scan\.local\.)/.test(k); } },
+    { key: 'escalate', label: 'Escalate Privilege', rank: 7, hue: '#F97316', test: function (k) { return /^(access\.(admin|root|system)|privesc\.|ad\.(coerced_auth|computer_added))/.test(k); } },
+    { key: 'loot', label: 'Loot And Collect', rank: 8, hue: '#A855F7', test: function (k) { return /^(loot\.|objective\.(?!.*flag))/.test(k); } },
+    { key: 'flag', label: 'Capture The Flag', rank: 9, hue: '#F43F5E', test: function (k) { return /^objective\..*flag/.test(k); } },
+  ];
+  function outcomeOf(kinds) {
+    var best = null;
+    (kinds || []).forEach(function (k) {
+      for (var i = 0; i < OUTCOMES.length; i++) { if (OUTCOMES[i].test(k)) { if (!best || OUTCOMES[i].rank > best.rank) best = OUTCOMES[i]; break; } }
+    });
+    return best || { key: 'other', label: 'Other', rank: 0, hue: '' };
+  }
+  L.OUTCOMES = OUTCOMES;
+
+  // One entry per DISTINCT command template, with back-links to every move that uses it. moves[] keeps
+  // the per-move note so the UI can show context on click. Source of truth: the move's own commands.
+  L.commandCatalog = function (pack) {
+    var byTemplate = {};
+    (pack || []).forEach(function (a) {
+      var cmds = (a.commands && a.commands.length) ? a.commands : (a.command ? [{ run: a.command }] : []);
+      cmds.forEach(function (c) {
+        var run = String(c.run || '').trim(); if (!run || /^#/.test(run)) return;
+        var key = run;
+        var e = byTemplate[key];
+        if (!e) {
+          e = byTemplate[key] = { template: run, tool: L.toolOf(run), capability: L.capabilityOf(run, a), phase: phaseOf(a), lane: L.laneOf(a.id), moves: [], _produces: {} };
+        }
+        (a.produces || []).forEach(function (k) { e._produces[k] = true; });
+        if (!e.moves.some(function (m) { return m.id === a.id; })) e.moves.push({ id: a.id, title: a.title || a.id, note: c.note || '' });
+      });
+    });
+    return Object.keys(byTemplate).map(function (k) {
+      var e = byTemplate[k]; var o = outcomeOf(Object.keys(e._produces)); e.outcome = o.key; e.outcomeLabel = o.label; e.outcomeHue = o.hue; e.outcomeRank = o.rank;
+      return e;
+    });
+  };
+
+  // hues for the group-by axes, mirroring the CSS phase/lane palettes, so a grouped command view can
+  // colour by its organizing axis (phase or lane) without reaching into the DOM.
+  var PHASE_HEX = { recon: '#38BDF8', enum: '#818CF8', creds: '#F59E0B', access: '#34D399', escalate: '#F472B6', loot: '#A855F7' };
+  var LANE_HEX = { recon: '#14B8A6', web: '#A855F7', checks: '#22D3EE', ad: '#22C55E', creds: '#EAB308', linux: '#F97316', windows: '#3E7BC4', database: '#EC4899', shells: '#84CC16', pivot: '#8B5CF6', proof: '#F43F5E' };
+  L.laneHexOf = function (pk) { return LANE_HEX[L.laneHue(pk)] || ''; };
+  L.phaseHex = function (ph) { return PHASE_HEX[ph] || ''; };
+  // a stable, vivid hue for an arbitrary label (tool / capability sub-group headers), so each reads as its
+  // own colour. Deterministic (same label -> same hue), spread around the wheel, kept bright and legible.
+  L.hashHue = function (s) { var h = 0, str = String(s || ''); for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return 'hsl(' + (h % 360) + ', 70%, 62%)'; };
+
+  // Group the command catalogue by an axis for browsing. by = 'tool' | 'phase' | 'lane'. The shape is
+  // uniform so the UI renders any axis the same way:
+  //   [{ key, label, hue, count, subs: [{ key, label, cmds:[entry] }] }]
+  // tool  -> group by tool, sub-group by capability (nxc by protocol)  [the hero default]
+  // phase -> group by phase (recon..loot),            sub-group by tool
+  // lane  -> group by methodology lane,               sub-group by tool
+  L.commandsGrouped = function (pack, q, by) {
+    by = by || 'tool';
+    var list = L.commandCatalog(pack), needle = (q || '').trim().toLowerCase();
+    if (needle) list = list.filter(function (e) {
+      return (e.template + ' ' + e.tool + ' ' + e.capability + ' ' + e.phase + ' ' + L.laneLabel(e.lane) + ' ' + (e.outcomeLabel || '') + ' ' + e.moves.map(function (m) { return m.title; }).join(' ')).toLowerCase().indexOf(needle) >= 0;
+    });
+    var PH = { recon: 0, enum: 1, creds: 2, access: 3, escalate: 4, loot: 5 };
+    function topKey(e) { return by === 'phase' ? (e.phase || 'enum') : (by === 'lane' ? (e.lane || '') : (by === 'outcome' ? e.outcome : e.tool)); }
+    function topLabel(e) { return by === 'phase' ? ((e.phase || 'enum').charAt(0).toUpperCase() + (e.phase || 'enum').slice(1)) : (by === 'lane' ? L.laneLabel(e.lane) : (by === 'outcome' ? e.outcomeLabel : e.tool)); }
+    function topHue(e) { return by === 'phase' ? (PHASE_HEX[e.phase] || '') : (by === 'lane' ? (LANE_HEX[L.laneHue(e.lane)] || '') : (by === 'outcome' ? (e.outcomeHue || '') : '')); }
+    function subKey(e) { return by === 'tool' ? e.capability : e.tool; }
+    var groups = {};
+    list.forEach(function (e) {
+      var gk = topKey(e), g = groups[gk] = groups[gk] || { key: gk, label: topLabel(e), hue: topHue(e), count: 0, subs: {} };
+      var sk = subKey(e); (g.subs[sk] = g.subs[sk] || { key: sk, label: sk, cmds: [] }).cmds.push(e);
+      g.count++;
+    });
+    var arr = Object.keys(groups).map(function (gk) {
+      var g = groups[gk];
+      g.subs = Object.keys(g.subs).sort(function (a, b) { return by === 'tool' ? a.localeCompare(b) : (g.subs[b].cmds.length - g.subs[a].cmds.length || a.localeCompare(b)); })
+        .map(function (sk) { var s = g.subs[sk]; s.cmds.sort(function (a, b) { return a.template.localeCompare(b.template); }); return s; });
+      return g;
+    });
+    if (by === 'phase') arr.sort(function (a, b) { return (PH[a.key] || 0) - (PH[b.key] || 0); });
+    else if (by === 'lane') arr.sort(function (a, b) { return (OBOL.ACTION_PACKS || []).indexOf(a.key) - (OBOL.ACTION_PACKS || []).indexOf(b.key); });
+    else if (by === 'outcome') { var RANK = {}; OUTCOMES.forEach(function (o) { RANK[o.key] = o.rank; }); arr.sort(function (a, b) { return (RANK[a.key] || 99) - (RANK[b.key] || 99); }); }  // 'other' sinks to the bottom
+    else arr.sort(function (a, b) { return b.count - a.count || a.key.localeCompare(b.key); });
+    return arr;
+  };
+
+  // fill a template from the active engagement's facts/params (the "relevant to my box" affordance),
+  // or return it tokenised. Reuses the one filler, so a Library command matches what the coach would run.
+  L.fill = function (template, facts, params) {
+    try { return OBOL.command.fillCommand({ commands: [{ run: template }] }, facts, { params: params || {} }, 0).filled; }
+    catch (e) { return template; }
+  };
+
+  // ── ATT&CK library view: every technique obol performs -> the moves + commands behind it ─────────
+  // A move's techniques are the SAME set the Findings matrix lights: the explicit per-move act (byMove,
+  // which wins) UNION the techniques its produced fact-kinds map to (byKind). Keying on produces, not
+  // just the authored byMove list, is why this covers far more than the ~109 explicitly-tagged moves:
+  // a move with no byMove entry still maps through the facts it proves (a share inventory -> T1083, a
+  // trust enum -> T1482, a found credential -> T1552). Advice/troubleshooter moves produce only advice.*
+  // (which maps to nothing), so they correctly stay off the matrix.
+  L.techniqueLibrary = function (pack) {
+    var AM = OBOL.ATTACK_MOVE, CAT = OBOL.ATTACK;
+    if (!AM || !CAT) return [];
+    var byMove = AM.byMove || {}, byKind = AM.byKind || {}, techs = {};
+    (pack || []).forEach(function (a) {
+      var codes = {};
+      var bm = byMove[a.id]; if (bm) (Array.isArray(bm) ? bm : [bm]).forEach(function (c) { codes[c] = true; });
+      (a.produces || []).forEach(function (k) { if (byKind[k]) codes[byKind[k]] = true; });
+      var keys = Object.keys(codes); if (!keys.length) return;
+      var cmdN = (a.commands && a.commands.length) ? a.commands.length : (a.command ? 1 : 0);
+      keys.forEach(function (code) {
+        var t = techs[code] = techs[code] || { id: code, moves: [], cmdCount: 0 };
+        t.moves.push({ id: a.id, title: a.title || a.id, lane: L.laneOf(a.id), phase: phaseOf(a) });
+        t.cmdCount += cmdN;
+      });
+    });
+    // catalog technique entries are compact: .n = name, .ta = tactic ids, .p = parent, .url. A code obol
+    // maps to may be a sub-technique whose name lives under its parent, so fall back to the parent entry.
+    var meta = (CAT && CAT.techniques) || {};
+    function parentOf(c) { var m = /^(T\d+)\.\d+$/.exec(c); return m ? m[1] : c; }
+    return Object.keys(techs).map(function (code) {
+      var t = techs[code], m = meta[code] || meta[parentOf(code)] || {};
+      t.name = m.n || code; t.tactics = m.ta || []; t.url = m.url || '';
+      return t;
+    }).sort(function (a, b) {
+      var ta = (a.tactics[0] || 'zzz'), tb = (b.tactics[0] || 'zzz');
+      return ta.localeCompare(tb) || a.id.localeCompare(b.id);
+    });
+  };
+
+  // tactic id -> label, in ATT&CK matrix order, for the library-scoped matrix colouring.
+  L.tactics = function () {
+    var CAT = OBOL.ATTACK; return ((CAT && CAT.tactics) || []).map(function (ta) { return { id: ta.id, name: ta.name }; });
+  };
+
+  // reset caches (the engagement changing does not change the catalogue, but tests may reload packs).
+  L.reset = function () { _laneById = null; _index = null; };
+
+  OBOL.library = L;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
