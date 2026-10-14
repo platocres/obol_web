@@ -1729,3 +1729,23 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   admin-producing Linux privesc moves are eligible before admin and ALL retire once access.admin is
   held (global phase logic, so no per-move obsoleted_by is needed, which also clears the auditor's
   RE-OFFER advisory on those moves). 15/15 assertions green; full gauntlet still green.
+- 2026-10-14: TB phase 1, engine + data foundations (no UI yet, zero pack commands, zero ranking risk).
+  Three new data files and one engine module back the whole Tools revamp:
+  - data/tool-glossary.js (OBOL.TOOL_GLOSSARY): a flag-by-flag teaching dictionary for ~16 high-traffic
+    tools (ffuf, gobuster, feroxbuster, wfuzz, nmap, rustscan, masscan, hashcat, john, nxc/netexec,
+    hydra, kerbrute, smbclient, smbmap, evil-winrm, curl, sqlmap). One calm sentence per switch.
+  - data/tool-recipes.js (OBOL.TOOL_RECIPES): named field PRESETS (the funnel's hero tiles) for nmap,
+    ffuf, gobuster-ferox, wfuzz, hashcat, john, mirroring the canonical pack commands, phase-tagged,
+    setting METHOD knobs only (wordlist/mode/codes) so the binding component still supplies the target.
+  - data/tool-stations.js (OBOL.STATIONS): substitute tools grouped by job, Web Content Discovery
+    (ffuf / gobuster-ferox / wfuzz), Crack Hashes (hashcat / john), Port Scan (nmap now; rustscan and
+    masscan listed and auto-skipped until TC builds them). sharedParams + per-engine sharedMap carry the
+    wordlist/ports across an engine swap; fact-aware default via whenFact.
+  - assets/engine/toolkit.js (OBOL.toolkit, pure/Node-safe): recipesFor/applyRecipe/matchingRecipe
+    (most-specific match wins so a subset recipe never shadows the exact one), glossCommand (quote-aware
+    tokenizer, handles -mc, --format=x, and subcommand words), and station helpers (stationBuilders,
+    carryShared, fact-aware defaultEngine).
+  tests/engine/toolkit-smoke.js: every recipe targets real field ids and compiles clean (no token leak,
+  no undefined) and round-trips to matchingRecipe; the glossary resolves each command's flags; stations
+  resolve to built engines and carry shared params. Registered in the lazy `tools` group (data+engine
+  before the route). Full engine suite + auditor + lint green; assets stamped.
