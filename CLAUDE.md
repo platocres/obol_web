@@ -1562,3 +1562,11 @@ tests/browser-smoke.js` Â· `node tools/stamp-assets.js` (after any asset edit) Â
   persist + Collapse To One + toggle-off all work; 0 console errors); full engine suite + browser-smoke
   + lint + gap green; assets stamped. The Library (PR #306) and this Next Steps follow-up are both on the
   branch; public republish still held.
+- 2026-10-14: Commands lens visual + collapse pass (owner feedback). (1) Tool/capability sub-group
+  headers are bold, monospace, colour-coded (a stable hash hue per label) with a caret and a matching
+  count pill. (2) Command cards carry their lane hue (border + accent, the Moves-tile treatment) for real
+  colour variety, the phase chip became a vivid solid pill, move back-links keep their lane colour.
+  (3) In Outcome/Phase/Lane views the tool sub-groups are collapsible and default-collapsed, so each tool
+  is a tidy "nmap (20)" row you expand on demand (Tool view keeps capability rows open). Expand/Collapse
+  All drive both levels; manual group/row open-close is remembered across a search re-render. Engine
+  helpers laneHexOf/phaseHex/hashHue. library-smoke + headless drive + browser-smoke + lint green; stamped.
