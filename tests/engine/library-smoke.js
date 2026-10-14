@@ -85,6 +85,11 @@ const byPhase = L.commandsGrouped(PACK, '', 'phase');
 ok(byPhase[0].key === 'recon' && byPhase.every((g) => g.hue), 'by phase: recon leads and every group carries a hue');
 const byLane = L.commandsGrouped(PACK, '', 'lane');
 ok(byLane[0].key === 'ad_2026_09' && byLane.every((g) => g.hue && g.label), 'by lane: AD leads (load order), labelled, hued');
+const byOutcome = L.commandsGrouped(PACK, '', 'outcome');
+ok(byOutcome.length >= 4 && byOutcome.every((g) => g.label && g.hue !== undefined), 'by outcome: groups present and labelled (' + byOutcome.map((g) => g.key).join(', ') + ')');
+ok(byOutcome[0].key === 'discover', 'by outcome: Discover leads (lowest rank first)');
+const creds = byOutcome.find((g) => g.key === 'creds');
+ok(creds && creds.subs.some((s) => /hashcat|john|secretsdump|nxc/.test(s.label)), 'by outcome: Harvest Credentials holds the cracking/dumping tools');
 // search narrows every axis
 const g2 = L.commandsGrouped(PACK, 'evil-winrm', 'tool');
 ok(g2.length && g2.every((t) => t.subs.every((c) => c.cmds.every((e) => /evil-winrm/i.test(e.template + ' ' + e.moves.map((m) => m.title).join(' '))))), 'command search filters the grouped view');

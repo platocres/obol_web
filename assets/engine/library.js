@@ -163,6 +163,30 @@
     return move ? phaseOf(move) : 'other';
   };
 
+  // ── outcome taxonomy: what a command ACHIEVES, derived from the produced facts of the moves that use
+  // it. Ordered by advancement; a command that proves several picks the most advanced (highest rank), so
+  // an exploit that lands a shell reads "Get A Foothold", not "Discover". Operator-intuitive grouping:
+  // "show me every way to harvest credentials". ──
+  var OUTCOMES = [
+    { key: 'discover', label: 'Discover And Enumerate', rank: 1, hue: '#38BDF8', test: function (k) { return /^(scan\.|ports\.open|snmp\.|host\.(up|processes|kernel|arch)|web\.(source|dirs|vhosts|server|tech|param_candidate|idor_candidate)|smb\.(null_session|guest_session|shares)|.*\.reachable|enum\.deep|config\.review|privesc\.(leads|process_lead))/.test(k); } },
+    { key: 'map_ad', label: 'Map Active Directory', rank: 2, hue: '#22C55E', test: function (k) { return /^(ad\.(user_list|users|dc_candidate|domain_known|base_dn|anonymous_bind|trusts|acl_lead|control_paths|attack_paths|gpo_control|deleted_objects|graph)|rid\.users)/.test(k); } },
+    { key: 'confirm_vuln', label: 'Confirm A Vulnerability', rank: 3, hue: '#F472B6', test: function (k) { return /^(web\.(sqli|cmdi|ssti|xxe|nosqli|deserial|lfi|authz_bypass|ssrf_confirmed|rce)|exploit\.candidate|adcs\.vulnerable|ad\.zerologon)/.test(k); } },
+    { key: 'foothold', label: 'Get A Foothold', rank: 4, hue: '#34D399', test: function (k) { return /^(foothold\.|access\.shell)/.test(k); } },
+    { key: 'creds', label: 'Harvest Credentials', rank: 5, hue: '#F59E0B', test: function (k) { return /^(hash\.|credential\.|loot\.(sam|ntds|gpp|ssh_key|creds)|gpp\.cpassword|kerberos\.tickets)/.test(k); } },
+    { key: 'pivot', label: 'Pivot And Tunnel', rank: 6, hue: '#8B5CF6', test: function (k) { return /^(tunnel\.|scan\.local\.)/.test(k); } },
+    { key: 'escalate', label: 'Escalate Privilege', rank: 7, hue: '#F97316', test: function (k) { return /^(access\.(admin|root|system)|privesc\.|ad\.(coerced_auth|computer_added))/.test(k); } },
+    { key: 'loot', label: 'Loot And Collect', rank: 8, hue: '#A855F7', test: function (k) { return /^(loot\.|objective\.(?!.*flag))/.test(k); } },
+    { key: 'flag', label: 'Capture The Flag', rank: 9, hue: '#F43F5E', test: function (k) { return /^objective\..*flag/.test(k); } },
+  ];
+  function outcomeOf(kinds) {
+    var best = null;
+    (kinds || []).forEach(function (k) {
+      for (var i = 0; i < OUTCOMES.length; i++) { if (OUTCOMES[i].test(k)) { if (!best || OUTCOMES[i].rank > best.rank) best = OUTCOMES[i]; break; } }
+    });
+    return best || { key: 'other', label: 'Other', rank: 0, hue: '' };
+  }
+  L.OUTCOMES = OUTCOMES;
+
   // One entry per DISTINCT command template, with back-links to every move that uses it. moves[] keeps
   // the per-move note so the UI can show context on click. Source of truth: the move's own commands.
   L.commandCatalog = function (pack) {
@@ -174,12 +198,16 @@
         var key = run;
         var e = byTemplate[key];
         if (!e) {
-          e = byTemplate[key] = { template: run, tool: L.toolOf(run), capability: L.capabilityOf(run, a), phase: phaseOf(a), lane: L.laneOf(a.id), moves: [] };
+          e = byTemplate[key] = { template: run, tool: L.toolOf(run), capability: L.capabilityOf(run, a), phase: phaseOf(a), lane: L.laneOf(a.id), moves: [], _produces: {} };
         }
+        (a.produces || []).forEach(function (k) { e._produces[k] = true; });
         if (!e.moves.some(function (m) { return m.id === a.id; })) e.moves.push({ id: a.id, title: a.title || a.id, note: c.note || '' });
       });
     });
-    return Object.keys(byTemplate).map(function (k) { return byTemplate[k]; });
+    return Object.keys(byTemplate).map(function (k) {
+      var e = byTemplate[k]; var o = outcomeOf(Object.keys(e._produces)); e.outcome = o.key; e.outcomeLabel = o.label; e.outcomeHue = o.hue; e.outcomeRank = o.rank;
+      return e;
+    });
   };
 
   // hues for the group-by axes, mirroring the CSS phase/lane palettes, so a grouped command view can
@@ -197,12 +225,12 @@
     by = by || 'tool';
     var list = L.commandCatalog(pack), needle = (q || '').trim().toLowerCase();
     if (needle) list = list.filter(function (e) {
-      return (e.template + ' ' + e.tool + ' ' + e.capability + ' ' + e.phase + ' ' + L.laneLabel(e.lane) + ' ' + e.moves.map(function (m) { return m.title; }).join(' ')).toLowerCase().indexOf(needle) >= 0;
+      return (e.template + ' ' + e.tool + ' ' + e.capability + ' ' + e.phase + ' ' + L.laneLabel(e.lane) + ' ' + (e.outcomeLabel || '') + ' ' + e.moves.map(function (m) { return m.title; }).join(' ')).toLowerCase().indexOf(needle) >= 0;
     });
     var PH = { recon: 0, enum: 1, creds: 2, access: 3, escalate: 4, loot: 5 };
-    function topKey(e) { return by === 'phase' ? (e.phase || 'enum') : (by === 'lane' ? (e.lane || '') : e.tool); }
-    function topLabel(e) { return by === 'phase' ? ((e.phase || 'enum').charAt(0).toUpperCase() + (e.phase || 'enum').slice(1)) : (by === 'lane' ? L.laneLabel(e.lane) : e.tool); }
-    function topHue(e) { return by === 'phase' ? (PHASE_HEX[e.phase] || '') : (by === 'lane' ? (LANE_HEX[L.laneHue(e.lane)] || '') : ''); }
+    function topKey(e) { return by === 'phase' ? (e.phase || 'enum') : (by === 'lane' ? (e.lane || '') : (by === 'outcome' ? e.outcome : e.tool)); }
+    function topLabel(e) { return by === 'phase' ? ((e.phase || 'enum').charAt(0).toUpperCase() + (e.phase || 'enum').slice(1)) : (by === 'lane' ? L.laneLabel(e.lane) : (by === 'outcome' ? e.outcomeLabel : e.tool)); }
+    function topHue(e) { return by === 'phase' ? (PHASE_HEX[e.phase] || '') : (by === 'lane' ? (LANE_HEX[L.laneHue(e.lane)] || '') : (by === 'outcome' ? (e.outcomeHue || '') : '')); }
     function subKey(e) { return by === 'tool' ? e.capability : e.tool; }
     var groups = {};
     list.forEach(function (e) {
@@ -218,6 +246,7 @@
     });
     if (by === 'phase') arr.sort(function (a, b) { return (PH[a.key] || 0) - (PH[b.key] || 0); });
     else if (by === 'lane') arr.sort(function (a, b) { return (OBOL.ACTION_PACKS || []).indexOf(a.key) - (OBOL.ACTION_PACKS || []).indexOf(b.key); });
+    else if (by === 'outcome') { var RANK = {}; OUTCOMES.forEach(function (o) { RANK[o.key] = o.rank; }); arr.sort(function (a, b) { return (RANK[a.key] || 99) - (RANK[b.key] || 99); }); }  // 'other' sinks to the bottom
     else arr.sort(function (a, b) { return b.count - a.count || a.key.localeCompare(b.key); });
     return arr;
   };

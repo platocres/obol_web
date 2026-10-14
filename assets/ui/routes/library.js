@@ -241,7 +241,7 @@
       + '<span class="lib-ccard-used">Used by</span>' + moveChips + more + '</div>'
       + note + '</article>';
   }
-  var CGROUPS = [['tool', 'Tool'], ['phase', 'Phase'], ['lane', 'Lane'], ['flat', 'Flat']];
+  var CGROUPS = [['tool', 'Tool'], ['outcome', 'Outcome'], ['phase', 'Phase'], ['lane', 'Lane'], ['flat', 'Flat']];
   function commandsBodyHtml() {
     if (_cGroup === 'flat') {
       var list = L().commandCatalog(pack()), needle = (_cQ || '').trim().toLowerCase();
