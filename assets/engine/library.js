@@ -209,15 +209,26 @@
   };
 
   // ── ATT&CK library view: every technique obol performs -> the moves + commands behind it ─────────
+  // A move's techniques are the SAME set the Findings matrix lights: the explicit per-move act (byMove,
+  // which wins) UNION the techniques its produced fact-kinds map to (byKind). Keying on produces, not
+  // just the authored byMove list, is why this covers far more than the ~109 explicitly-tagged moves:
+  // a move with no byMove entry still maps through the facts it proves (a share inventory -> T1083, a
+  // trust enum -> T1482, a found credential -> T1552). Advice/troubleshooter moves produce only advice.*
+  // (which maps to nothing), so they correctly stay off the matrix.
   L.techniqueLibrary = function (pack) {
     var AM = OBOL.ATTACK_MOVE, CAT = OBOL.ATTACK;
     if (!AM || !CAT) return [];
-    var byMove = AM.byMove || {}, techs = {};
+    var byMove = AM.byMove || {}, byKind = AM.byKind || {}, techs = {};
     (pack || []).forEach(function (a) {
-      var codes = byMove[a.id]; if (!codes) return;
-      (Array.isArray(codes) ? codes : [codes]).forEach(function (code) {
-        var t = techs[code] = techs[code] || { id: code, moves: [] };
+      var codes = {};
+      var bm = byMove[a.id]; if (bm) (Array.isArray(bm) ? bm : [bm]).forEach(function (c) { codes[c] = true; });
+      (a.produces || []).forEach(function (k) { if (byKind[k]) codes[byKind[k]] = true; });
+      var keys = Object.keys(codes); if (!keys.length) return;
+      var cmdN = (a.commands && a.commands.length) ? a.commands.length : (a.command ? 1 : 0);
+      keys.forEach(function (code) {
+        var t = techs[code] = techs[code] || { id: code, moves: [], cmdCount: 0 };
         t.moves.push({ id: a.id, title: a.title || a.id, lane: L.laneOf(a.id), phase: phaseOf(a) });
+        t.cmdCount += cmdN;
       });
     });
     // catalog technique entries are compact: .n = name, .ta = tactic ids, .p = parent, .url. A code obol

@@ -296,9 +296,11 @@
       var hue = tacticHue(tid);
       var cells = byTac[tid].map(function (t) {
         var on = t.id === _aSel;
+        var cN = t.cmdCount || 0;
         return '<button type="button" class="lib-tcell' + (on ? ' on' : '') + '" data-tech="' + esc(t.id) + '" style="--tac:' + hue + '" aria-pressed="' + (on ? 'true' : 'false') + '">'
           + '<span class="lib-tcell-n">' + esc(t.name) + '</span>'
-          + '<span class="lib-tcell-meta">' + esc(t.id) + ' &middot; ' + t.moves.length + ' move' + (t.moves.length === 1 ? '' : 's') + '</span></button>';
+          + '<span class="lib-tcell-meta">' + esc(t.id) + ' &middot; ' + t.moves.length + ' move' + (t.moves.length === 1 ? '' : 's')
+          + (cN ? ' &middot; ' + cN + ' cmd' + (cN === 1 ? '' : 's') : '') + '</span></button>';
       }).join('');
       return '<div class="lib-tcol" style="--tac:' + hue + '"><h3 class="lib-tcol-h">' + esc(tacticName(tid)) + '</h3><div class="lib-tcol-cells">' + cells + '</div></div>';
     }).join('');

@@ -1522,3 +1522,19 @@ tests/browser-smoke.js` Â· `node tools/stamp-assets.js` (after any asset edit) Â
   part of this build, separately sequenced): the Next Steps "Focus mode" trim (default-on, collapses
   non-lead commands behind "N more ways -> Library"), toggle-gated and reversible. Public republish of
   #306 stays held until explicitly requested.
+- 2026-10-14: Library ATT&CK lens coverage (owner: "I'd have thought ATT&CK would have more mapped").
+  The lens mapped techniques via the explicit per-move table ONLY (byMove: 109 moves, 44 techniques),
+  while the Findings matrix maps via byMove AND each move's produced fact-kinds (byKind). Fixed
+  techniqueLibrary to use the same union (byMove wins, then byKind over produces): 263 moves and 65
+  techniques now, and it carries a command count per technique (cells show "N moves . M cmds", the
+  spec's "moves and commands"). Also closed the biggest honest byKind gaps in attack-move-map.js
+  (verified each code exists in the catalog and is defensible): scan.nmap.vuln/udp -> T1046,
+  scan.local.* -> T1016, host.kernel/arch -> T1082, ad.dc_candidate -> T1018, ad.trusts -> T1482,
+  ad.deleted_objects -> T1087.002, loot.files -> T1083, foothold.webshell -> T1505.003,
+  credential.candidate -> T1552, kerberos.tickets -> T1558, tunnel.socks -> T1090.001/tunnel.route ->
+  T1090. New tactics now populate (Discovery, Command and Control). These byKind entries also enrich
+  the Findings engagement matrix and the recorded-moves trail (same map), all accurate. Remaining ~82
+  unmapped moves are advice/troubleshooters (produce advice.*, correctly no technique) and flag
+  objectives. library-smoke extended (union reaches a byKind-only move: trust-enum -> T1482; cmdCount
+  present); attack-coverage integrity clean (79 referenced techniques); full engine suite + gap + lint
+  + browser-smoke green; assets stamped; headless-verified (0 console errors).

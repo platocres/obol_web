@@ -85,11 +85,17 @@ ok(g2.length && g2.every((t) => t.caps.every((c) => c.cmds.every((e) => /evil-wi
 
 // ── ATT&CK technique library ─────────────────────────────────────────────────────────────────────
 const techs = L.techniqueLibrary(PACK);
-ok(techs.length > 20, 'technique library maps obol moves to ATT&CK (' + techs.length + ' techniques)');
+ok(techs.length >= 55, 'technique library maps obol moves to ATT&CK (' + techs.length + ' techniques)');
 ok(techs.every((t) => /^T\d{4}/.test(t.id) && t.name && t.name !== t.id), 'every technique has a real ATT&CK id and a resolved name');
 ok(techs.every((t) => Array.isArray(t.moves) && t.moves.length && t.moves.every((m) => m.id && m.title && m.lane)), 'every technique back-links to moves with lane + title');
 ok(techs.some((t) => (t.tactics || []).length), 'techniques carry their tactic ids for colouring');
+ok(techs.every((t) => typeof t.cmdCount === 'number'), 'every technique carries a command count');
 ok(L.tactics().length >= 14, 'tactic list available for the matrix (' + L.tactics().length + ')');
+// the union with byKind(produces) must reach moves that carry NO explicit byMove tag
+const movesMapped = techs.reduce((s, t) => s + t.moves.length, 0);
+ok(movesMapped > 200, 'byKind-over-produces lights far more than the ~109 byMove-tagged moves (' + movesMapped + ' move links)');
+const t1482 = techs.find((t) => t.id === 'T1482');  // Domain Trust Discovery, reached only via ad.trusts
+ok(t1482 && t1482.moves.some((m) => m.id === 'trust-enum'), 'a move tagged only through its produced fact (trust-enum -> T1482) is mapped');
 
 // ── fill reuses the one filler ───────────────────────────────────────────────────────────────────
 const fs2 = new OBOL.facts.FactSet([]);
