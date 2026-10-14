@@ -27,7 +27,7 @@
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=ef155083', 'assets/engine/report.js?v=0a3837f6', 'assets/ui/routes/report.js?v=a4e9c6ee'],
     tools: ['assets/engine/toolbuilder.js?v=f8af90d9', 'data/toolset.js?v=11de7936',
       'data/tool-glossary.js?v=69c2abbf', 'data/tool-recipes.js?v=64d3156f', 'data/tool-stations.js?v=9c4b2099',
-      'assets/engine/toolkit.js?v=bbc74ec3', 'assets/ui/routes/tools.js?v=24241304'],
+      'assets/engine/toolkit.js?v=bbc74ec3', 'assets/ui/bind.js?v=24460623', 'assets/ui/routes/tools.js?v=24241304'],
     loadout: ['assets/engine/arsenal.js?v=bf5ae024', 'assets/ui/routes/loadout.js?v=fd258957'],
     workbench: ['assets/engine/workbench.js?v=1acf899d', 'assets/ui/routes/workbench.js?v=42462153'],
     stuck: ['data/stuck-catalog.js?v=e76b3e66', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=bf310a35'],
@@ -35,6 +35,8 @@
     // catalog/map (for the ATT&CK lens) and the library engine itself.
     library: ['data/stuck-catalog.js?v=e76b3e66', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=bf310a35',
       'data/attack-catalog.js?v=1fca5f0a', 'data/attack-move-map.js?v=69b57161',
+      'data/tool-glossary.js?v=69c2abbf', 'data/tool-recipes.js?v=64d3156f', 'data/tool-stations.js?v=9c4b2099',
+      'assets/engine/toolbuilder.js?v=f8af90d9', 'data/toolset.js?v=11de7936', 'assets/engine/toolkit.js?v=bbc74ec3', 'assets/ui/bind.js?v=24460623',
       'assets/engine/library.js?v=cc552212', 'assets/ui/routes/library.js?v=96bce51e'],
     study: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b', 'assets/ui/routes/study.js?v=277d4c77'],
     decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=24469b5c', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=2317deac', 'assets/engine/decisionmap.js?v=72d3dcb7', 'assets/ui/decisiontree.js?v=910ea8b0'],

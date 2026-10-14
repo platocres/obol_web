@@ -5320,3 +5320,35 @@ main#view:has(.library) { max-width: 2600px; }
   .lib-matrix { grid-template-columns: 1fr; }
   .lib-lens-bar { gap: 10px; }
 }
+
+/* ============================ Engagement Binding bar (assets/ui/bind.js) ============================
+   Shared by the Tools tab and the Library Commands lens. Reuses the .cv-shead glass chrome but stacks
+   vertically. Colour is never the only signal: identity type carries a text badge, selection a ring. */
+.bind.cv-shead { display: block; margin: 0 0 16px; padding: 12px 15px; }
+.bind-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+.bind-title { font: 800 11.5px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: color-mix(in srgb, var(--sh) 70%, var(--text)); }
+.bind-manual { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); cursor: pointer; }
+.bind-manual input { accent-color: var(--sh); }
+.bind-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; padding: 5px 0; }
+.bind-lab { flex: 0 0 72px; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.bind-note { font-size: 11.5px; color: var(--muted); font-style: italic; }
+.bind-target { flex: 1 1 220px; min-width: 160px; background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; color: var(--text); padding: 6px 10px; font-family: var(--mono); font-size: 12.5px; }
+.bind-target:focus { outline: none; border-color: var(--sh); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sh) 25%, transparent); }
+.bind-ids, .bind-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; }
+.bind-id { display: inline-flex; align-items: center; gap: 6px; background: var(--surf2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 9px; cursor: pointer; color: var(--text-2); font-size: 12px; }
+.bind-id:hover { border-color: var(--sh); color: var(--text); }
+.bind-id.on { border-color: var(--sh); color: var(--text); background: color-mix(in srgb, var(--sh) 14%, var(--surf2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sh) 45%, transparent); }
+.bind-id-who { font-family: var(--mono); }
+.bind-id-type { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 4px; padding: 0 5px; }
+.bind-id-type.bt-nt { background: color-mix(in srgb, var(--purple) 22%, transparent); color: color-mix(in srgb, var(--purple) 80%, var(--text)); }
+.bind-id-type.bt-pw { background: color-mix(in srgb, var(--teal) 22%, transparent); color: color-mix(in srgb, var(--teal) 80%, var(--text)); }
+.bind-id-type.bt-ot { background: color-mix(in srgb, var(--accent) 22%, transparent); color: color-mix(in srgb, var(--accent) 80%, var(--text)); }
+.bind-id-act { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--g-next); }
+.bind-secret { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0 4px 72px; }
+.bind-mask { font-family: var(--mono); font-size: 12px; color: var(--text-2); background: var(--bg2); border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; letter-spacing: .1em; }
+.bind-chip { background: var(--surf3); color: var(--text-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; font-size: 11.5px; cursor: pointer; font-family: var(--mono); }
+.bind-chip:hover { border-color: var(--sh); color: var(--text); }
+.bind-chip.on { border-color: var(--sh); color: var(--text); background: color-mix(in srgb, var(--sh) 16%, var(--surf3)); }
+.bind-compact.cv-shead { margin-bottom: 10px; padding: 9px 12px; }
+.bind-compact .bind-lab { flex-basis: 60px; }
+@media (max-width: 560px) { .bind-lab { flex-basis: 100%; } .bind-secret { padding-left: 0; } }

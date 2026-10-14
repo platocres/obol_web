@@ -1749,3 +1749,16 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   no undefined) and round-trips to matchingRecipe; the glossary resolves each command's flags; stations
   resolve to built engines and carry shared params. Registered in the lazy `tools` group (data+engine
   before the route). Full engine suite + auditor + lint green; assets stamped.
+- 2026-10-14: TB phase 2, the shared engagement-binding bar (assets/ui/bind.js, OBOL.bind), reused by
+  Tools and the Library Commands lens. One neon-glass band (reusing .cv-shead chrome) that shows the
+  target, the active IDENTITY (every ledger + proven credential via OBOL.creds.gather, type-badged,
+  secret masked with hover-reveal + copy), the engagement's OPEN PORTS (OBOL.command.openPorts), and a
+  WORDLIST palette, plus a Manual Fill toggle that pauses autofill for a standalone user. It writes the
+  same engagement params the rest of obol reads; identity selection is LOCAL by default (steers only
+  the previews) with an explicit "Make Active" that pins it engagement-wide via OBOL.creds.activate.
+  OBOL.bind.context() returns the nested target.* / context.* / workspace.* shape the Tool Builder
+  autofill consumes, so the binding feeds every tool. tests/engine/bind-context-smoke.js (stubs the
+  store/creds/command) proves params flow through, a local identity overrides username/domain, a picked
+  port/wordlist land in the right slots, and manual mode yields an empty context. CSS appended; both
+  bind.js and the TB1 engine/data registered in the lazy `tools` AND `library` groups (loadScript
+  dedupes by src). Route wiring lands in TB3. Full engine suite green; assets stamped.
