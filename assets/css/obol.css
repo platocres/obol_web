@@ -3778,6 +3778,13 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .ns-ph-access { --fam: var(--ph-access); } .ns-ph-escalate { --fam: var(--ph-escalate); } .ns-ph-loot { --fam: var(--ph-loot); }
 
 /* flex-start so a sibling of the expanded card keeps its natural height instead of ballooning to match */
+/* Next Steps multi-open toggle (default off; shown only with >1 ready move) */
+.ns-controls { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; flex-wrap: wrap; }
+.ns-multi-toggle { display: inline-flex; align-items: center; gap: 8px; font: 700 12px var(--sans); color: var(--text-2); cursor: pointer; user-select: none; }
+.ns-multi-toggle input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+.ns-multi-toggle:hover { color: var(--text); }
+.ns-collapse-others { font: 700 11px var(--sans); color: var(--text-2); background: var(--surf2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; cursor: pointer; }
+.ns-collapse-others:hover { color: var(--text); border-color: var(--accent); }
 .ns-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
 .ns-card { position: relative; flex: 1 1 210px; min-width: 200px; max-width: 288px; display: flex; flex-direction: column; gap: 9px;
   text-align: left; cursor: pointer; font-family: var(--sans); border: 1px solid color-mix(in srgb, var(--fam, var(--accent)) 24%, var(--line));

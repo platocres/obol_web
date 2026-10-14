@@ -1551,3 +1551,14 @@ tests/browser-smoke.js` Â· `node tools/stamp-assets.js` (after any asset edit) Â
   shape; drive-library covers multi-open, Expand/Collapse All, and every Group By axis (0 console errors);
   full suite + browser-smoke + coverage green; stamped. OPEN with owner: whether to bring the same
   click-to-stay-open multi-open model to Next Steps (deferred, it is the coach's focused view).
+- 2026-10-14: Next Steps multi-open (owner-approved: behind a toggle, default OFF). The coach gains a
+  "Keep Cards Open" toggle (shown only with >1 ready move), persisted per engagement in
+  eng.ui.nsMultiOpen. Default is unchanged single-focus (open one card at a time; nsSel drives the field
+  notes canvas). When on, clicking a card opens it and leaves the others open (click again to collapse
+  it); the clicked card becomes the focused one that drives the canvas, and a "Collapse To One" button
+  returns to a single card. Module-level nsOpen is the set of expanded ids (always contains nsSel.id);
+  cardOpts marks a card selected when open. Presentation only: no ranking change (ranker-sim 0/25).
+  Verified headless end to end (default single-focus preserved; multi-open opens/collapses correctly;
+  persist + Collapse To One + toggle-off all work; 0 console errors); full engine suite + browser-smoke
+  + lint + gap green; assets stamped. The Library (PR #306) and this Next Steps follow-up are both on the
+  branch; public republish still held.
