@@ -1722,3 +1722,10 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   missed-gain 18 -> 4 (the 4 allowlisted captured-hash cases), probe-retire 10 -> 2. Full gauntlet green:
   ranker-sim 0/25, ranker-sweep 0.0%, gap --check OK, field-notes OK, lint OK, attack-coverage OK, full
   engine suite PASS; bundle rebuilt, assets stamped. Zero new tools, zero ranking risk, per the TA plan.
+- 2026-10-14: TA phase 1, golden guard. Added tests/engine/fact-canon-smoke.js to lock the migration
+  in as a regression guard (the mandate's "proven by a stateful round-trip"): it asserts the three
+  non-canonical names can never return on any move edge, the canonical progress facts stay
+  parser-readable, the four switchless probes keep their settled_by, and, as the round-trip, that
+  admin-producing Linux privesc moves are eligible before admin and ALL retire once access.admin is
+  held (global phase logic, so no per-move obsoleted_by is needed, which also clears the auditor's
+  RE-OFFER advisory on those moves). 15/15 assertions green; full gauntlet still green.
