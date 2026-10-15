@@ -939,10 +939,17 @@
         var nz = W.normalizeHash(v);
         var banner = '';
         if (nz.changed && nz.cleaned && nz.cleaned !== v.trim()) {
+          // hashcat takes a literal hash on the command line, so "use as hash" fills the hash field. john
+          // reads hashes from a FILE only (a literal positional arg is treated as a path and fails), so for
+          // john offer "copy" and a note to save it to a file rather than filling a path field with a literal.
+          var cleanBtn = isHc
+            ? '<button type="button" class="btn-copy tb-hashid-fill" data-clean="' + attr(nz.cleaned) + '">use as hash</button>'
+            : '<button type="button" class="btn-copy tb-hashid-copy" data-clean="' + attr(nz.cleaned) + '">copy</button>';
           banner = '<div class="wb-clean"><div class="wb-clean-h">Cleaned For Cracking</div><ul class="wb-clean-list">'
             + nz.changes.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>'
-            + '<div class="wb-cmd"><code>' + esc(nz.cleaned) + '</code>'
-            + '<button type="button" class="btn-copy tb-hashid-fill" data-clean="' + attr(nz.cleaned) + '">use as hash</button></div></div>';
+            + '<div class="wb-cmd"><code>' + esc(nz.cleaned) + '</code>' + cleanBtn + '</div>'
+            + (isJn ? '<p class="tb-hint">john reads hashes from a file: save this into your hashes file, then point john at it.</p>' : '')
+            + '</div>';
         }
         var r = W.identifyHash(nz.cleaned);
         if (!r.candidates.length) { outEl.innerHTML = banner + '<p class="tb-hint">' + esc(r.note || 'No confident match.') + '</p>'; return; }
@@ -965,6 +972,9 @@
       });
       U.on(panel, 'click', '.tb-hashid-fill', function (e, t) {
         if (fileEl) { fileEl.value = t.getAttribute('data-clean') || ''; recompile(true); if (U.toast) U.toast('Cleaned hash set', ''); }
+      });
+      U.on(panel, 'click', '.tb-hashid-copy', function (e, t) {
+        U.copy(t.getAttribute('data-clean') || '').then(function (ok) { if (U.toast) U.toast(ok ? 'Cleaned hash copied' : 'Copy failed', ok ? '' : 'err'); });
       });
     })();
 
