@@ -25,7 +25,7 @@ var byId = {}; OBOL.TOOLSET.forEach(function (b) { byId[b.id] = b; });
 // a context that supplies the engagement-bound inputs the binding component would fill.
 var CTX = { target: { value: '10.10.10.10', ip: '10.10.10.10', url: 'http://10.10.10.10', fuzzurl: 'http://10.10.10.10/FUZZ' }, context: { domain: 'corp.local' }, workspace: { outputDir: 'loot', wordlist: '/usr/share/wordlists/rockyou.txt', hashfile: 'hashes.txt' } };
 // placeholders for required inputs a recipe never sets (the operator / binding supplies them).
-var FILL = { url: 'http://10.10.10.10', target: '10.10.10.10', hashOrFile: 'hashes.txt', hashFile: 'hashes.txt', mask: '?a?a?a' };
+var FILL = { url: 'http://10.10.10.10', target: '10.10.10.10', hashOrFile: 'hashes.txt', hashFile: 'hashes.txt', mask: '?a?a?a', password: 'P@ssw0rd', hash: 'aad3b435b51404eeaad3b435b51404ee', username: 'sa', ports: '1-65535' };
 
 // ---- recipes ----
 Object.keys(OBOL.TOOL_RECIPES).forEach(function (bid) {
@@ -76,7 +76,9 @@ Object.keys(OBOL.TOOL_RECIPES).forEach(function (bid) {
   var web = TK.stationById('web-content');
   ok(web && TK.stationBuilders(web).length === 3, 'web-content resolves 3 built engines');
   var ps = TK.stationById('port-scan');
-  ok(ps && TK.stationBuilders(ps).length === 1, 'port-scan resolves only nmap now (rustscan/masscan skipped until TC)');
+  ok(ps && TK.stationBuilders(ps).length === 3, 'port-scan resolves nmap + rustscan + masscan (' + TK.stationBuilders(ps).length + ')');
+  var db = TK.stationById('db-shell');
+  ok(db && TK.stationBuilders(db).length === 3, 'db-shell resolves mssqlclient + mysql + psql (' + (db ? TK.stationBuilders(db).length : 0) + ')');
   var carried = TK.carryShared(web, web.engines[0], web.engines[1], { wordlist: 'x.txt', extensions: 'php', url: 'http://x' });
   ok(carried.wordlist === 'x.txt' && carried.extensions === 'php', 'carryShared moves wordlist+extensions across an engine swap');
   ok(TK.defaultEngine(web, []) === 'tb-ffuf', 'web-content default engine is ffuf');

@@ -86,7 +86,7 @@ ok(C.fillCommand(resp, new OBOL.facts.FactSet([]), { params: {} }, 0).filled ===
 const PACKS_DIR = require('path').join(__dirname, '..', '..', 'data', 'packs');
 const ad = JSON.parse(require('fs').readFileSync(require('path').join(PACKS_DIR, 'ad_2026_09.json'), 'utf8'));
 const nmapAct = ad.actions.find((a) => a.id === 'nmap-fast-open-ports');
-ok(nmapAct && (nmapAct.commands || []).every((c) => /-oN \{\{scandir\}\}\//.test(c.run)), 'nmap discovery commands write -oN into {{scandir}}');
+ok(nmapAct && (nmapAct.commands || []).every((c) => /-o[NGXL] \{\{scandir\}\}\//.test(c.run)), 'discovery commands write native output into {{scandir}} (nmap -oN, masscan -oG)');
 
 console.log(fail ? ('\nWORKSPACE SMOKE: ' + fail + ' FAILURES') : '\nWORKSPACE SMOKE: all passed');
 process.exit(fail ? 1 : 0);

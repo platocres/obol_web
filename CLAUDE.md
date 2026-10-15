@@ -1791,3 +1791,22 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   revamp) is now functionally complete: binding bar, stations, recipes, flag gloss, editable preview,
   dual layout lens, and the shared component across Tools + Library. The richer left-rail Focus variant
   is a later polish; TC (new daily-driver tools + authored paths) is next.
+- 2026-10-15: TC phase 1a, station-completing tools. Five new validated Tool Builders (authored via a
+  generator run through OBOL.toolbuilder.validate): tb-rustscan and tb-masscan complete the Port Scan
+  station (now nmap / rustscan / masscan), and tb-mssqlclient / tb-mysql / tb-psql form a new Database
+  Shell station (fact-aware default from service.mssql/mysql/postgresql). masscan was in no pack, so it
+  would not have been "equipped": added it as a methodologically-correct fast-scan alternative command
+  on the existing nmap-fast-open-ports move (writes -oG into {{scandir}}), which keeps it equipped
+  without changing move eligibility or produces. Glossary entries for the new tools; recipes per tool
+  (rustscan fast-service, masscan all-tcp, MSSQL Windows/SQL/PtH login, MySQL/psql list-databases); a
+  `database` category. Fixed rustscan's nmap passthrough (the token `when:{truthy:true}` only matches
+  checkbox values, not a non-empty string, so `-- -sV -sC` was dropped: made it unconditional). New
+  this phase: SECRET AUTOFILL, the db/authenticated tools now fill the password/hash field (masked)
+  from the engagement's effective identity (OBOL.bind.effectiveIdentity), so a one-tap MSSQL login
+  comes out complete (impacket-mssqlclient htb.local/sa:P@ssw0rd@host -windows-auth); autofilled
+  secrets are not persisted into eng.ui.tools (they re-fill from the ledger). Pack touched, so the
+  scoreboard was re-run: ranker-sim 0/25, ranker-sweep 0.00%; full engine suite (incl. updated
+  toolbuilder/toolkit/workspace smokes) + gap + auditor + lint + attack-coverage + help-coverage +
+  browser-smoke all green; bundle rebuilt, assets stamped. Driven headless: 4 stations, Port Scan with
+  3 engines, Database Shell with 3 engines and the MSSQL secret-autofilled command, engine swap to
+  MySQL, 0 console errors.

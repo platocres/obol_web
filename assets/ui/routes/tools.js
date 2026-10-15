@@ -24,6 +24,7 @@
     { id: 'credentials', label: 'Credentials', hint: 'Validation, spraying, roasting, cracking, capture.' },
     { id: 'ad', label: 'Active Directory', hint: 'LDAP, Kerberos, AD CS, graph collection.' },
     { id: 'remote-exec', label: 'Remote Exec', hint: 'Authenticated shells and command execution.' },
+    { id: 'database', label: 'Database', hint: 'SQL shells: read data, pivot to code execution.' },
     { id: 'pivot', label: 'Pivot', hint: 'Tunnels, SOCKS, port forwarding.' },
     { id: 'enum', label: 'Enumeration', hint: 'Scanning, SMB/RPC/SNMP surface mapping.' },
     { id: 'privesc', label: 'Privilege Escalation', hint: 'Local enumeration helpers.' },
@@ -271,9 +272,25 @@
     if (f.type === 'checkbox') el.checked = truthy(val); else el.value = (val == null ? '' : val);
   }
 
+  // Fill a builder's empty secret fields from the engagement's effective identity (the one the binding
+  // bar points at). The secret is already stored in the credential ledger and shown masked in the bar,
+  // so this places the same value into the tool's password/hash field (masked) rather than exposing
+  // anything new. It never overwrites a value the operator typed.
+  function fillSecrets(builder, values) {
+    var id = (OBOL.bind && OBOL.bind.effectiveIdentity) ? OBOL.bind.effectiveIdentity() : null;
+    if (!id) return;
+    (builder.fields || []).forEach(function (f) {
+      if (f.type !== 'secret' || (values[f.id] !== undefined && values[f.id] !== '')) return;
+      if (f.credentialKind === 'password' && id.secret) values[f.id] = id.secret;
+      else if ((f.credentialKind === 'ntlm' || f.credentialKind === 'netntlm') && id.nthash) values[f.id] = id.nthash;
+    });
+  }
+
   // Mount the funnel panel for one builder into panelEl (its .tool-body). persistId keys saved values.
   function mountPanel(panelEl, builder, context, persistId, startValues) {
     var start = startValues || Object.assign(TB.defaultsFor(builder, context), savedValues(persistId));
+    fillSecrets(builder, start);
+    var secretSet = {}; (builder.fields || []).forEach(function (f) { if (f.type === 'secret') secretSet[f.id] = 1; });
     var activeRecipe = TK ? TK.matchingRecipe(builder, start) : null;
     panelEl.innerHTML = panelBody(builder, start, activeRecipe);
 
@@ -312,7 +329,7 @@
       // select option descriptions
       var sels = form.querySelectorAll('select');
       for (var si = 0; si < sels.length; si++) { var sel = sels[si], note = sel.parentNode && sel.parentNode.querySelector('.tb-optdesc'); if (!note) continue; var opt = sel.options[sel.selectedIndex]; note.textContent = (opt && opt.getAttribute('data-desc')) || ''; }
-      if (save) persistValues(persistId, current);
+      if (save) { var pv = {}; Object.keys(current).forEach(function (k) { if (!secretSet[k]) pv[k] = current[k]; }); persistValues(persistId, pv); }
     }
 
     form.addEventListener('input', function () { recompile(true); });

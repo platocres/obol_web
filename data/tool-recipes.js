@@ -68,6 +68,38 @@
       { id: 'netntlmv2', label: 'NetNTLMv2', phase: 'cracking', hint: 'Captured responder / relay hashes (mode 5600).',
         values: { mode: '5600', attack: 'straight', wordlist: '/usr/share/wordlists/rockyou.txt' } },
     ],
+    'tb-rustscan': [
+      { id: 'fast-service', label: 'Fast Scan + Service', phase: 'recon', hint: 'Every port in seconds, then nmap -sV -sC on whatever is open.',
+        values: { ulimit: '5000', nmapArgs: '-sV -sC -oN scans/rustscan.txt' } },
+      { id: 'gentle', label: 'Gentle (small batch)', phase: 'recon', hint: 'A smaller batch for a fragile or rate-limited target.',
+        values: { ulimit: '2000', batch: '1500', nmapArgs: '-sV' } },
+    ],
+    'tb-masscan': [
+      { id: 'all-tcp', label: 'All TCP (fast)', phase: 'recon', hint: 'Sweep every TCP port at a modest rate, then follow up with nmap -sV.',
+        values: { ports: '1-65535', rate: '1000' } },
+      { id: 'web', label: 'Web Ports', phase: 'recon', hint: 'Just the common web ports across a range.',
+        values: { ports: '80,443,8080,8443', rate: '500' } },
+    ],
+    'tb-mssqlclient': [
+      { id: 'win-auth', label: 'Windows Login', phase: 'access', hint: 'Domain or Windows account (pairs with your bound identity).',
+        values: { authMode: 'password', windowsAuth: true } },
+      { id: 'sql-auth', label: 'SQL Login (sa)', phase: 'access', hint: 'Local SQL account such as sa, no domain.',
+        values: { authMode: 'password', windowsAuth: false } },
+      { id: 'pth', label: 'Pass-the-Hash', phase: 'access', hint: 'Authenticate with the NT hash instead of a password.',
+        values: { authMode: 'ntlm', windowsAuth: true } },
+    ],
+    'tb-mysql': [
+      { id: 'show-dbs', label: 'List Databases', phase: 'loot', hint: 'One query: show every database the account can see.',
+        values: { execute: 'show databases;' } },
+      { id: 'version', label: 'Version + User', phase: 'loot', hint: 'Confirm the connection and see who you are.',
+        values: { execute: 'select version(), current_user();' } },
+    ],
+    'tb-psql': [
+      { id: 'list-dbs', label: 'List Databases', phase: 'loot', hint: 'One query: list every database.',
+        values: { execute: 'SELECT datname FROM pg_database;' } },
+      { id: 'version', label: 'Version + User', phase: 'loot', hint: 'Confirm the connection and the current role.',
+        values: { execute: 'SELECT version(), current_user;' } },
+    ],
     'tb-john': [
       { id: 'asrep', label: 'AS-REP Roast', phase: 'cracking', hint: 'Crack AS-REP hashes with john when you have no GPU.',
         values: { format: 'krb5asrep', mode: 'wordlist', wordlist: '/usr/share/wordlists/rockyou.txt' } },

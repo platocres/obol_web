@@ -29,7 +29,7 @@ let fail = 0;
 function ok(cond, msg) { if (!cond) { console.error('  FAIL:', msg); fail++; } else { console.log('  ok  :', msg); } }
 
 const FORBIDDEN = ['execute', 'exec', 'spawn', 'runCommand', 'autoRun'];
-const CATS = ['web', 'credentials', 'ad', 'remote-exec', 'pivot', 'enum', 'privesc', 'shells'];
+const CATS = ['web', 'credentials', 'ad', 'remote-exec', 'database', 'pivot', 'enum', 'privesc', 'shells'];
 
 const equipped = new Set(OBOL.packs.equippedTools());
 console.log('Equipped-tool universe: ' + equipped.size + ' tools.');

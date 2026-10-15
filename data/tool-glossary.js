@@ -242,6 +242,29 @@
       '--os-shell': 'Try to drop to an OS shell (lab only; banned on the OSCP exam).',
       '--cookie': 'Session cookie to stay authenticated.',
     },
+    'impacket-mssqlclient': {
+      '-windows-auth': 'Authenticate as a Windows/domain account instead of a SQL (sa) login.',
+      '-no-pass': 'Do not send a password: pairs with a hash (-hashes) or a Kerberos ticket.',
+      '-hashes': 'Pass-the-hash: authenticate with the NT hash instead of a password.',
+      '-port': 'MSSQL port (default 1433).',
+      '-k': 'Use a Kerberos ticket from the cache.',
+    },
+    mysql: {
+      '-h': 'Database host.',
+      '-P': 'Port (default 3306).',
+      '-u': 'Username.',
+      '--password': 'Password (joined with = so it is one argument, never a separate word MySQL would read as a database).',
+      '-D': 'Default database to use.',
+      '-e': 'Run this one query and exit (non-interactive).',
+      '--skip-ssl': 'Do not negotiate TLS (older servers that reject it).',
+    },
+    psql: {
+      '-c': 'Run this one SQL command and exit.',
+      '-h': 'Database host (when not using a connection URI).',
+      '-U': 'Username (when not using a connection URI).',
+      '-p': 'Port (default 5432).',
+      '-d': 'Database name.',
+    },
   };
 
   // netexec is the same binary family as nxc: share the glossary.

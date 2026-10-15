@@ -48,6 +48,18 @@
     for (var i = 0; i < list.length; i++) { if (OBOL.creds.keyOf(list[i]) === key) return list[i]; }
     return null;
   }
+  // The identity actually driving the previews: the local selection if any, else the engagement's
+  // active credential (the one in params). Used to autofill a tool's username AND its secret field.
+  function effectiveIdentity() {
+    if (state().manual) return null;
+    var sel = selectedIdentity();
+    if (sel) return sel;
+    var active = ''; try { active = OBOL.creds.activeKey(); } catch (e) {}
+    if (!active) return null;
+    var list = identities();
+    for (var i = 0; i < list.length; i++) { if (OBOL.creds.keyOf(list[i]) === active) return list[i]; }
+    return null;
+  }
 
   // ---- the context the Tool Builder autofill reads ----
   // Manual mode returns an empty context (nothing autofills, the operator types every field). Otherwise
@@ -191,5 +203,5 @@
     });
   }
 
-  OBOL.bind = { render: render, mount: mount, context: context, selectedIdentity: selectedIdentity, DEFAULT_WORDLIST: DEFAULT_WORDLIST };
+  OBOL.bind = { render: render, mount: mount, context: context, selectedIdentity: selectedIdentity, effectiveIdentity: effectiveIdentity, DEFAULT_WORDLIST: DEFAULT_WORDLIST };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

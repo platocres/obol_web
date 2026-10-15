@@ -52,9 +52,21 @@
       defaultEngine: 'tb-nmap',
       engines: [
         { builderId: 'tb-nmap', tool: 'nmap', label: 'nmap', teach: 'The reference scanner: discovery, versions, and NSE scripts all in one.' },
-        // TC appends rustscan and masscan here once their builders land; they are skipped until then.
         { builderId: 'tb-rustscan', tool: 'rustscan', label: 'rustscan', teach: 'Finds open ports in seconds, then hands them straight to nmap for the service scan.' },
         { builderId: 'tb-masscan', tool: 'masscan', label: 'masscan', teach: 'Internet-scale speed for a wide sweep. Keep the rate sane on shared labs.' },
+      ],
+    },
+    {
+      id: 'db-shell',
+      title: 'Database Shell',
+      job: 'Log in to a database you found and read it, or pivot to code execution.',
+      hue: 'database',
+      sharedParams: [],
+      defaultEngine: 'tb-mssqlclient',
+      engines: [
+        { builderId: 'tb-mssqlclient', tool: 'impacket-mssqlclient', label: 'MSSQL', teach: 'Microsoft SQL Server: Windows auth, pass-the-hash, and the xp_cmdshell path to code execution.', whenFact: 'service.mssql' },
+        { builderId: 'tb-mysql', tool: 'mysql', label: 'MySQL / MariaDB', teach: 'Read databases and tables; watch for file-read and UDF paths.', whenFact: 'service.mysql' },
+        { builderId: 'tb-psql', tool: 'psql', label: 'PostgreSQL', teach: 'Connect by URI; test the COPY-to-program code-execution path.', whenFact: 'service.postgresql' },
       ],
     },
   ];
