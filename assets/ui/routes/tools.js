@@ -295,9 +295,26 @@
         + (compact ? '' : '<span class="tb-recipe-hint">' + esc(r.hint) + '</span>')
         + '<span class="ph-chip ph-' + hue + '">' + esc(r.phase) + '</span></button>';
     }).join('');
-    return '<div class="tb-recipes' + (compact ? ' compact' : '') + '"><div class="tb-recipes-lab">Recipes <span class="tb-recipes-sub">one tap to a filled command, then tune it</span></div>'
+    return '<div class="tb-recipes' + (compact ? ' compact' : '') + '"><div class="tb-recipes-lab">Options <span class="tb-recipes-sub">one tap to a filled command, then tune it</span></div>'
       + '<div class="ns-grid tb-recipe-grid">' + tiles + '</div>'
-      + '<p class="tb-recipes-empty tb-hint" hidden>No preset for this selection yet. Open All Options below, or pick another above.</p></div>';
+      + '<p class="tb-recipes-empty tb-hint" hidden>No preset for this selection yet. Open All Switches below, or pick another above.</p></div>';
+  }
+  // Stackable Option toggles: a builder's headlineToggles (independent checkbox switches) surfaced as
+  // multi-select chips so the operator composes several in one command (nxc --users --groups --asreproast).
+  // Only the toggles whose visibleWhen matches the current state show (so SMB-only modules hide under LDAP);
+  // any shown subset is a valid stack by construction. Distinct from the single-select mode chips above.
+  function toggleChipsHtml(builder, values) {
+    var ids = builder.headlineToggles || []; if (!ids.length) return '';
+    var byId = {}; (builder.fields || []).forEach(function (f) { byId[f.id] = f; });
+    var chips = ids.map(function (fid) {
+      var f = byId[fid]; if (!f) return '';
+      var vis = !(f.visibleWhen && !TB.conditionMatches(f.visibleWhen, values));
+      var on = truthy(values[fid]);
+      return '<button type="button" class="tb-tog-chip' + (on ? ' on' : '') + '" data-toggle-field="' + esc(fid) + '"' + (vis ? '' : ' hidden')
+        + ' aria-pressed="' + (on ? 'true' : 'false') + '"' + (f.help ? ' title="' + attr(f.help) + '"' : '') + '>' + esc(f.label) + '</button>';
+    }).join('');
+    var lab = builder.switchesLabel || 'Switches';
+    return '<div class="tb-toggles"><span class="tb-modes-lab">' + esc(lab) + ' <span class="tb-recipes-sub">stack any that apply</span></span><div class="tb-toggles-row">' + chips + '</div></div>';
   }
   function glossHtml(cmd, builder) {
     var rows = TK ? TK.glossCommand(cmd, builder) : [];
@@ -370,6 +387,7 @@
     // Options: pick the protocol first and only its recipes and fields follow (the funnel the owner wants).
     return '<div class="tb-panel">'
       + modeChipsHtml(builder, values)
+      + toggleChipsHtml(builder, values)
       + recipeTiles(builder, activeRecipe)
       + '<div class="tb-preview cmd"><div class="cmd-head"><span class="cmd-tag">' + esc((builder.equips && builder.equips[0]) || builder.tool) + '</span>'
         + '<span class="cmd-variant tb-recipe-name-live"></span>'
@@ -381,7 +399,7 @@
         + '<textarea class="tb-edit" spellcheck="false" aria-label="Editable command" rows="2"></textarea></div>'
       + '<div class="tb-needs" hidden></div>'
       + glossHtml('', builder)
-      + '<details class="tb-allopts"><summary>All Options <span class="tb-hint">every documented switch, grouped</span></summary>'
+      + '<details class="tb-allopts"><summary>All Switches <span class="tb-hint">every documented switch, grouped</span></summary>'
         + '<div class="tb-optfind"><input type="search" class="tb-optfilter" placeholder="Find A Switch (mask, rule, username, proxy, ...)" aria-label="Find a switch" autocomplete="off" spellcheck="false"><span class="tb-optfind-none tb-hint" hidden>No option matches that.</span></div>'
         + formHtml(builder, values) + '</details>'
       + '<p class="tb-foot">Obol builds the command from the controls you set and never runs it. The box above is editable: tune it, copy it, and run it yourself in an authorized lab, then paste the output into Evidence.</p>'
@@ -748,6 +766,20 @@
         chips[i].classList.toggle('on', on); chips[i].setAttribute('aria-pressed', on ? 'true' : 'false');
       }
     }
+    // Reflect the stackable Option toggles: each chip's on/off from its checkbox value, and its visibility
+    // from visibleWhen against the current state (so the SMB modules hide the moment the operator picks LDAP).
+    var fieldsById = {}; (builder.fields || []).forEach(function (f) { fieldsById[f.id] = f; });
+    function syncToggleChips(current) {
+      var chips = panelEl.querySelectorAll('.tb-tog-chip'); if (!chips.length) return;
+      var norm = TB.normalizeValues(builder, current, context);
+      for (var i = 0; i < chips.length; i++) {
+        var fid = chips[i].getAttribute('data-toggle-field'), f = fieldsById[fid];
+        var vis = !(f && f.visibleWhen && !TB.conditionMatches(f.visibleWhen, norm));
+        chips[i].hidden = !vis;
+        var on = truthy(current[fid]);
+        chips[i].classList.toggle('on', on); chips[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+    }
     // Show only the recipes relevant to the chosen primary value (protocol / method / ...). A recipe that
     // pins no primary value (data-rmode="") is mode-agnostic and always shows. This is the "Protocol ->
     // relevant Recipes" funnel: picking a mode chip reveals that mode's presets and hides the rest, so the
@@ -795,6 +827,7 @@
       if (liveName) liveName.textContent = activeId ? (TK.recipeById(builder.id, activeId) || {}).label || '' : 'custom';
       edited = false;
       syncModeChips(current);
+      syncToggleChips(current);
       syncRecipeFilter(current);
       renderNeeds(current);
       try { showCmd(TB.compile(builder, current, context), true); }
@@ -829,9 +862,16 @@
       });
     }
 
-    // Prominent mode chips at the top: set the primary field and rebuild (also mirrors into All Options).
+    // Prominent mode chips at the top: set the primary field and rebuild (also mirrors into All Switches).
     U.on(panelEl, 'click', '.tb-mode-chip', function (e, t) {
       setFormValue(form, builder, t.getAttribute('data-mode-field'), t.getAttribute('data-mode-value'));
+      recompile(true);
+    });
+    // Stackable Option toggles: flip the underlying checkbox on/off and rebuild. Independent of every other
+    // toggle, so the operator composes as many as apply (the command stays valid by construction).
+    U.on(panelEl, 'click', '.tb-tog-chip', function (e, t) {
+      var fid = t.getAttribute('data-toggle-field');
+      setFormValue(form, builder, fid, !truthy(collect(form, builder)[fid]));
       recompile(true);
     });
     // Inline "fill these" inputs proxy straight into the real form field, so required fields are fillable
@@ -931,6 +971,15 @@
     // own handlers, so the command rebuilds exactly as if the operator chose it.
     function applyToolSelector(card, sel) {
       if (!card || !sel) return;
+      // Composition tools (nxc) map the old recipe-id selectors to a protocol + the module toggle(s) to turn
+      // on, so "Build In Tools" lands on exactly that switch, now stackable with others.
+      var b = builderById(card.getAttribute('data-tool-id')) || builderById(card.getAttribute('data-active-engine'));
+      var alias = b && b.selectorAliases && b.selectorAliases[sel];
+      if (alias) {
+        if (alias.protocol) { var mc = card.querySelector('.tb-mode-chip[data-mode-value="' + alias.protocol + '"]'); if (mc) mc.click(); }
+        (alias.on || []).forEach(function (fid) { var tc = card.querySelector('.tb-tog-chip[data-toggle-field="' + fid + '"]'); if (tc && tc.getAttribute('aria-pressed') !== 'true') tc.click(); });
+        return;
+      }
       var tiles = card.querySelectorAll('.tb-recipe');
       for (var i = 0; i < tiles.length; i++) { if (tiles[i].getAttribute('data-recipe') === sel) { tiles[i].click(); return; } }
       var chips = card.querySelectorAll('.tb-mode-chip');

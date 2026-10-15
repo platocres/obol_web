@@ -5578,6 +5578,22 @@ main#view:has(.library) { max-width: 2600px; }
 .tb-mode-chip.on { background: color-mix(in srgb, var(--lane, var(--accent)) 24%, var(--surf2)); border-color: var(--lane, var(--accent)); color: var(--text); font-weight: 700;
   box-shadow: 0 0 13px color-mix(in srgb, var(--lane, var(--accent)) 40%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--lane, var(--accent)) 42%, transparent); }
 
+/* Option toggles: MULTI-select switch chips you stack (users + groups + roast). Distinguished from the
+   single-select mode chips above by a leading glyph (+ when off, check when on) and the accent-2 hue, so
+   the "these combine" nature is clear beyond colour alone, which the audience needs. */
+.tb-toggles { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.tb-toggles-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.tb-tog-chip { font: 600 12.5px var(--sans); padding: 5px 12px 5px 10px; border-radius: 9px; cursor: pointer; color: var(--text-2);
+  display: inline-flex; align-items: center; gap: 6px;
+  background: color-mix(in srgb, var(--lane, var(--accent-2)) 7%, var(--surf2)); border: 1px solid color-mix(in srgb, var(--lane, var(--accent-2)) 24%, var(--line));
+  transition: background .14s ease, border-color .14s ease, box-shadow .14s ease, color .14s ease; }
+.tb-tog-chip[hidden] { display: none; }
+.tb-tog-chip::before { content: "+"; font-weight: 800; font-size: 13px; line-height: 1; color: color-mix(in srgb, var(--lane, var(--accent-2)) 70%, var(--text-2)); }
+.tb-tog-chip:hover { border-color: var(--lane, var(--accent-2)); color: var(--text); }
+.tb-tog-chip.on { background: color-mix(in srgb, var(--lane, var(--accent-2)) 26%, var(--surf2)); border-color: var(--lane, var(--accent-2)); color: var(--text); font-weight: 700;
+  box-shadow: 0 0 13px color-mix(in srgb, var(--lane, var(--accent-2)) 38%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--lane, var(--accent-2)) 40%, transparent); }
+.tb-tog-chip.on::before { content: "\2713"; color: var(--lane, var(--accent-2)); }
+
 /* Inline "Fill These To Build The Command": the missing required fields, always visible, amber-flagged. */
 .tb-needs { margin: 10px 0 14px; padding: 12px 14px; border-radius: var(--radius);
   background: color-mix(in srgb, var(--yellow) 9%, var(--surf1)); border: 1px solid color-mix(in srgb, var(--yellow) 38%, var(--line)); }
