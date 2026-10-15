@@ -1455,6 +1455,9 @@ ol.bh-steps li { margin-bottom: 9px; }
 .tb-flag { color: var(--yellow); }
 .tb-arg { color: var(--text); }
 .tb-fuzz { color: var(--red); font-weight: 700; }
+.tb-str { color: var(--teal); }
+.tb-ip { color: var(--green); }
+.tb-num { color: #22D3EE; }
 
 .tb-form { display: flex; flex-direction: column; gap: 14px; }
 .tb-group { border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; background: var(--bg1); }

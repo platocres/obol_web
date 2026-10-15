@@ -36,11 +36,11 @@
       title: 'Crack Hashes',
       job: 'Recover plaintext passwords from captured hashes offline.',
       hue: 'creds',
-      sharedParams: ['wordlist'],
+      sharedParams: ['wordlist', 'hashfile'],
       defaultEngine: 'tb-hashcat',
       engines: [
-        { builderId: 'tb-hashcat', tool: 'hashcat', label: 'hashcat', teach: 'GPU-fast. You give it the -m mode number for the exact hash type.' },
-        { builderId: 'tb-john', tool: 'john', label: 'john', teach: 'No GPU needed, names formats in words (krb5asrep). The CPU fallback.' },
+        { builderId: 'tb-hashcat', tool: 'hashcat', label: 'hashcat', teach: 'GPU-fast. You give it the -m mode number for the exact hash type.', sharedMap: { hashfile: 'hashOrFile' } },
+        { builderId: 'tb-john', tool: 'john', label: 'john', teach: 'No GPU needed, names formats in words (krb5asrep). The CPU fallback.', sharedMap: { hashfile: 'hashFile' } },
       ],
     },
     {

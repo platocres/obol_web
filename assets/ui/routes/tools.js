@@ -131,10 +131,20 @@
     return '<form class="tb-form" novalidate>' + groups + '</form>';
   }
   function highlight(cmd) {
-    return String(cmd).split(' ').map(function (tok, i) {
+    // Tokenize honoring quotes (TK.tokenize) so a quoted argument like "whoami /all" stays ONE token and
+    // its inner space is not mistaken for a flag boundary. Colour executables, flags, IPs, numbers, and
+    // quoted strings distinctly so the command reads semantically, not as a grey slab.
+    var toks = (TK && TK.tokenize) ? TK.tokenize(cmd) : String(cmd).split(' ');
+    return toks.map(function (tok, i) {
       if (tok === '') return '';
-      var cls = i === 0 ? 'tb-exe' : (/^-/.test(tok) ? 'tb-flag' : 'tb-arg');
-      if (/FUZZ/.test(tok)) return tok.split(/(FUZZ)/).map(function (part) { return part === 'FUZZ' ? '<span class="tb-fuzz">FUZZ</span>' : (part ? '<span class="' + cls + '">' + esc(part) + '</span>' : ''); }).join('');
+      if (/FUZZ/.test(tok)) return tok.split(/(FUZZ)/).map(function (part) { return part === 'FUZZ' ? '<span class="tb-fuzz">FUZZ</span>' : (part ? '<span class="tb-arg">' + esc(part) + '</span>' : ''); }).join('');
+      var cls;
+      if (i === 0) cls = 'tb-exe';
+      else if (/^-/.test(tok)) cls = 'tb-flag';
+      else if (/^["']/.test(tok)) cls = 'tb-str';                          // a quoted argument, kept whole
+      else if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(tok)) cls = 'tb-ip';   // an IPv4 (optional :port)
+      else if (/^\d+$/.test(tok)) cls = 'tb-num';                          // a bare number (port, hashcat mode)
+      else cls = 'tb-arg';
       return '<span class="' + cls + '">' + esc(tok) + '</span>';
     }).join(' ');
   }
