@@ -190,6 +190,7 @@
     if (!eng || !hasPlan) {
       html += emptyState();
       html += recipesSection(facts, opts);
+      html += pivotSection();
       return html + '</section>';
     }
 
@@ -206,7 +207,16 @@
     html += '</div>';
 
     html += recipesSection(facts, opts);
+    html += pivotSection();
     return html + '</section>';
+  }
+
+  // The Pivot Station (shared with the Tools tab): the downloadable local-half tunnel + on-host chips.
+  function pivotSection() {
+    if (!OBOL.pivotStationUI) return '';
+    return '<section class="cr-pivot"><div class="tools-cat-head"><h2 class="tools-cat-h">Pivot &amp; Tunnel</h2>'
+      + '<span class="tools-cat-hint">When a batch stops at a foothold, tunnel into the internal subnet from here.</span></div>'
+      + '<div class="tools-grid">' + OBOL.pivotStationUI.card(false) + '</div></section>';
   }
 
   function download(name, text) {
@@ -232,6 +242,14 @@
 
   function mounted(ctx) {
     var mount = ctx.mount;
+
+    // Pivot Station (shared with Tools): expand-on-click, then mount the shared UI into its body.
+    U.on(mount, 'click', '.cr-pivot .tool-card-head', function (e, t) {
+      var card = t.closest('.pivot-station'); if (!card) return;
+      var open = card.classList.toggle('open');
+      var head = card.querySelector('.tool-card-head'); if (head) head.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open && OBOL.pivotStationUI) OBOL.pivotStationUI.mount(card.querySelector('.tool-body'));
+    });
 
     U.on(mount, 'click', '.btn-copy', function (e, t) {
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });

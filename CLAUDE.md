@@ -1876,3 +1876,16 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   subnets, ligolo on-host lines, the REAL downloaded local-half carries the subnet and passes bash -n,
   0 console errors. Full engine suite + browser-smoke + lint green; assets stamped. CR3 (the Cruise
   pivot integration) is TD2b.
+
+- 2026-10-15: TD phase 2b, CR3 done. Extracted the Pivot Station UI into a shared module
+  assets/ui/pivotstation.js (OBOL.pivotStationUI = {card, mount}) so ONE component serves both the
+  Tools tab and the Cruise tab (the plan's "lives under Tools and Cruise"). The Tools route now
+  delegates to it (its inline pivot copy removed), and the Cruise route adds a Pivot & Tunnel section
+  that renders the same card and mounts it on click, so when a Cruise batch stops at a foothold you
+  tunnel into the subnet without leaving Cruise. Registered in the lazy tools AND cruise groups. Driven
+  headless: the Tools pivot still works via the shared module (2 subnets, bash -n clean) and the Cruise
+  embed opens with transport chips, subnet chips, and on-host lines, both with 0 console errors. Full
+  engine suite + browser-smoke + help-coverage + lint green; assets stamped. TD is complete: the Shell
+  Station and the Pivot Station both ship as downloadable, fact-filled, bash-valid bundles, and the
+  Pivot Station is surfaced in Tools and Cruise. With it the whole Tools-tab revamp PR (TA audit, TB UX
+  revamp, TC new tools, TD access kits) is feature-complete.
