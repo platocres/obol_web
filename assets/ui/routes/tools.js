@@ -92,7 +92,7 @@
   }
 
   // ---- layout lens (Grid | Focus), persisted per engagement; default Focus ----
-  function layout() { try { return (OBOL.store.active().ui || {}).toolsLayout || 'focus'; } catch (e) { return 'focus'; } }
+  function layout() { try { return (OBOL.store.active().ui || {}).toolsLayout || 'grid'; } catch (e) { return 'grid'; } }
   function setLayout(v) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.toolsLayout = v; }, 'tools-layout'); }
   // focus selection (a focus-item key: "station:<id>" | "kit:shell" | "kit:pivot" | "tool:<id>")
   function focusSel() { try { return (OBOL.store.active().ui || {}).toolsFocus || ''; } catch (e) { return ''; } }
@@ -585,8 +585,8 @@
 
     var html = '<section class="tools-route" data-layout="' + esc(lay) + '">';
     html += '<div class="tools-top"><h1 class="route-h1">Tools</h1>'
-      + '<div class="tools-lens" role="group" aria-label="Layout"><button type="button" class="tools-lens-btn' + (lay === 'focus' ? ' on' : '') + '" data-lay="focus" aria-pressed="' + (lay === 'focus' ? 'true' : 'false') + '">Focus</button>'
-      + '<button type="button" class="tools-lens-btn' + (lay === 'grid' ? ' on' : '') + '" data-lay="grid" aria-pressed="' + (lay === 'grid' ? 'true' : 'false') + '">Grid</button></div></div>';
+      + '<div class="tools-lens" role="group" aria-label="Layout"><button type="button" class="tools-lens-btn' + (lay === 'grid' ? ' on' : '') + '" data-lay="grid" aria-pressed="' + (lay === 'grid' ? 'true' : 'false') + '">Grid</button>'
+      + '<button type="button" class="tools-lens-btn' + (lay === 'focus' ? ' on' : '') + '" data-lay="focus" aria-pressed="' + (lay === 'focus' ? 'true' : 'false') + '">Focus</button></div></div>';
     html += '<p class="route-sub">Point and click: the binding bar fills the target, identity, ports, and wordlist; pick a recipe for a ready command, tune it, copy it. Nothing runs here.</p>';
     html += '<div id="bind-bar"></div>';
     html += (lay === 'focus') ? renderFocus(openId, factKinds) : renderGrid(openId, factKinds);
