@@ -39,6 +39,9 @@ Object.keys(OBOL.TOOL_RECIPES).forEach(function (bid) {
     // every value key is a real field id
     var bad = Object.keys(r.values || {}).filter(function (k) { return !fieldIds[k]; });
     ok(bad.length === 0, bid + '/' + r.id + ' targets only real fields' + (bad.length ? ' (BAD: ' + bad.join(',') + ')' : ''));
+    // a value for a SELECT field must be one of its options (else the recipe compiles but is silently wrong)
+    var badOpt = Object.keys(r.values || {}).filter(function (k) { var f = fieldIds[k]; return f && f.type === 'select' && !(f.options || []).some(function (o) { return String(o.value) === String(r.values[k]); }); });
+    ok(badOpt.length === 0, bid + '/' + r.id + ' select values are real options' + (badOpt.length ? ' (BAD: ' + badOpt.join(',') + ')' : ''));
     // phase + hint present (funnel needs them)
     ok(r.label && r.hint && r.phase, bid + '/' + r.id + ' has label+hint+phase');
     // applyRecipe -> compiles cleanly once required inputs are present
