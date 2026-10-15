@@ -654,22 +654,36 @@
   }
 
   // compilePreview(builder, values, context) -> a command string with <fieldid> placeholders standing in for
-  // every VISIBLE required field the operator has not filled yet, so the command's SHAPE is always on screen
-  // (not a dead "fill these" line) before any typing. Returns null only when the builder cannot compile even
-  // with placeholders (e.g. an unselected executable selector), in which case the caller shows a message.
-  // The placeholders are shell-unsafe (they carry <>), so compile() quotes them; we strip that one layer of
+  // every VISIBLE required field the operator has not filled yet, so the command's SHAPE is ALWAYS on screen
+  // (never a dead "fill these" line), whatever option they toggle. Thorough by construction: it fills every
+  // blank that could block compilation, by kind, so a required credential (<password>), an unset executable
+  // selector, or a must-check box can never swallow the preview. Returns null only if even a fully-placeholdered
+  // command will not compile (not expected for a valid builder), in which case the caller shows a message.
+  // The placeholders carry <>, which is shell-unsafe, so compile() quotes them; we strip that one layer of
   // quoting back off so they read as <user>, not '<user>'. Placeholder-free tokens keep their real quoting.
   function compilePreview(builder, values, context) {
     if (!TB) return null;
     var norm = TB.normalizeValues(builder, values || {}, context);
     var filled = {}; Object.keys(norm).forEach(function (k) { filled[k] = norm[k]; });
+    // The executable itself must resolve to a real binary. If it is a selector whose field is blank (or holds a
+    // value that is not one of its choices), adopt the first choice, so the shape leads with a real command name,
+    // never a <placeholder> in the executable slot.
+    var exSel = builder.command && builder.command.executable;
+    if (exSel && typeof exSel === 'object' && exSel.field) {
+      var ev = filled[exSel.field];
+      var known = (exSel.choices || []).some(function (c) { return String(c.value) === String(ev); });
+      if (!known && (exSel.choices || []).length) filled[exSel.field] = exSel.choices[0].value;
+    }
     (builder.fields || []).forEach(function (f) {
-      if (f.type === 'checkbox' || f.type === 'secret') return; // a checkbox has no placeholder; a secret stays blank
       if (f.visibleWhen && !TB.conditionMatches(f.visibleWhen, norm)) return; // only fields actually on screen
       var required = f.required === true || (f.requiredWhen ? TB.conditionMatches(f.requiredWhen, norm) : false);
       if (!required) return;
       var v = filled[f.id];
-      if (v === undefined || v === null || v === '') filled[f.id] = '<' + f.id + '>';
+      var present = !(v === undefined || v === null || v === '');
+      if (f.type === 'checkbox') { if (!present && f.mustBeChecked) filled[f.id] = true; return; } // show the flag
+      // every other kind (text, number, path, textarea, select, and a SECRET like a password or hash) gets a
+      // readable <placeholder>; a secret placeholdered this way shows the operator a credential is needed.
+      if (!present) filled[f.id] = '<' + f.id + '>';
     });
     var cmd;
     try { cmd = TB.compile(builder, filled, context); } catch (e) { return null; }
