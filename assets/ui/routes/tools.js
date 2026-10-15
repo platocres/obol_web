@@ -270,7 +270,6 @@
       + '<div class="tb-needs" hidden></div>'
       + glossHtml('', builder)
       + '<details class="tb-allopts"><summary>All Options <span class="tb-hint">every documented switch, grouped</span></summary>' + formHtml(builder, values) + '</details>'
-      + proofHtml(builder)
       + '<p class="tb-foot">Obol builds the command from the controls you set and never runs it. The box above is editable: tune it, copy it, and run it yourself in an authorized lab, then paste the output into Evidence.</p>'
       + '</div>';
   }
