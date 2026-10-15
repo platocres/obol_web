@@ -1458,7 +1458,8 @@ ol.bh-steps li { margin-bottom: 9px; }
 .tb-preview { margin: 4px 0 14px; }
 .tb-code { font-size: 12.5px; color: var(--text); white-space: pre-wrap; word-break: break-all; }
 .tb-code[data-valid="false"] { color: var(--muted); font-style: italic; }
-.tb-exe { color: var(--accent-2); font-weight: 600; }
+.tb-exe { color: #FBBF24; font-weight: 700; }
+.tb-sub { color: var(--purple); font-weight: 600; }
 .tb-flag { color: var(--yellow); }
 .tb-arg { color: var(--text); }
 .tb-fuzz { color: var(--red); font-weight: 700; }
@@ -5459,6 +5460,12 @@ main#view:has(.library) { max-width: 2600px; }
 .tb-allopts > summary .tb-hint { font-weight: 400; margin-left: 8px; }
 .tb-allopts[open] { padding-bottom: 12px; }
 .tb-allopts .tb-form { margin-top: 12px; }
+/* "Find A Switch" palette inside All Options */
+.tb-optfind { margin: 10px 0 2px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tb-optfilter { flex: 1 1 220px; max-width: 420px; background: var(--bg2); border: 1px solid color-mix(in srgb, var(--lane, var(--accent)) 30%, var(--line)); border-radius: 8px; color: var(--text); padding: 6px 10px; font: 12px var(--mono); }
+.tb-optfilter:focus { outline: none; border-color: var(--lane, var(--accent)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--lane, var(--accent)) 30%, transparent); }
+.tb-optfind-none { color: var(--muted); }
+.tb-field.tb-filter-hide, .tb-group.tb-filter-hide { display: none !important; }
 .tb-foot { font-size: 11px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
 
 /* ============================ Shell Station (Access Kits) ============================ */
@@ -5479,9 +5486,15 @@ main#view:has(.library) { max-width: 2600px; }
 .shk-pay-os { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; border-radius: 4px; padding: 0 5px; }
 .shk-pay-os.linux { background: color-mix(in srgb, var(--teal) 22%, transparent); color: color-mix(in srgb, var(--teal) 85%, var(--text)); }
 .shk-pay-os.windows { background: color-mix(in srgb, var(--ph-recon) 22%, transparent); color: color-mix(in srgb, var(--ph-recon) 85%, var(--text)); }
+.shk-pay-os.web { background: color-mix(in srgb, var(--purple) 22%, transparent); color: color-mix(in srgb, var(--purple) 85%, var(--text)); }
 .shk-pay-h .shk-copy { margin-left: auto; }
 .shk-pay-cmd { display: block; font: 11.5px var(--mono); color: var(--text-2); white-space: pre-wrap; word-break: break-all; }
+.shk-pay-note { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); line-height: 1.4; }
 .shk-tty { margin: 0; font: 11.5px var(--mono); color: var(--text-2); white-space: pre-wrap; }
+/* encode toggle + section labels (webshells / msfvenom additions) */
+.shk-enc { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 2px 0 12px; }
+.shk-enc-badge { font: 800 9px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: color-mix(in srgb, var(--lane, var(--accent-2)) 85%, var(--text)); border: 1px solid color-mix(in srgb, var(--lane, var(--accent)) 45%, var(--line)); border-radius: 4px; padding: 0 5px; }
+.shk-sec-lab { font: 800 11px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: color-mix(in srgb, var(--lane, var(--ph-access)) 80%, var(--text)); margin: 14px 0 8px; }
 
 /* ============================ Tools colour pass (lane-coded zones + discoverability) ============================ */
 /* Category zones: each tool category carries its lane hue (class emitted by tools.js). */
@@ -5603,6 +5616,12 @@ main#view:has(.library) { max-width: 2600px; }
   box-shadow: 0 0 0 1px var(--lane, var(--accent)), 0 0 16px color-mix(in srgb, var(--lane, var(--accent)) 38%, transparent); }
 /* neon checkboxes */
 .tb-field input[type="checkbox"] { width: auto; accent-color: var(--lane, var(--accent)); box-shadow: 0 0 7px color-mix(in srgb, var(--lane, var(--accent)) 45%, transparent); }
+/* combobox (datalist) inputs: a persistent chevron so a "pick or type" field reads as a dropdown, not a
+   plain text box. Colour is never the sole signal: the chevron glyph is the affordance. */
+input[data-combobox] { background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) 51%, calc(100% - 10px) 51%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 26px !important; }
+.tb-field input[data-combobox] { color: var(--text); }
+.tb-need input[data-combobox] { color: var(--text); }
 
 @media (prefers-reduced-motion: reduce) {
   .tb-mode-chip, .tb-allopts > summary, .tb-field input, .tb-field select, .tb-field textarea, .tb-need input, .tb-need select, .tb-need textarea { transition: none; }

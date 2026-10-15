@@ -48,5 +48,30 @@ ok(SK.catcherById('pwncat').label === 'pwncat-cs', 'catcherById resolves');
   try { fs.unlinkSync(tmp); } catch (e) {}
 });
 
+// 6) web shells (drop-and-browse files).
+var ws = SK.webshells();
+ok(ws.length >= 4, 'web shell catalogue is populated (' + ws.length + ')');
+ok(ws.some(function (w) { return w.ext === 'php' && w.code.indexOf('_GET') >= 0; }), 'a PHP cmd web shell is present');
+ok(ws.some(function (w) { return w.ext === 'jsp'; }) && ws.some(function (w) { return w.ext === 'aspx'; }), 'JSP and ASPX web shells are present');
+
+// 7) msfvenom one-liners fill LHOST/LPORT and name a format + output.
+var mv = SK.msfvenom('10.10.14.5', '443');
+ok(mv.length >= 5, 'msfvenom catalogue is populated (' + mv.length + ')');
+ok(mv.every(function (m) { return m.cmd.indexOf('msfvenom -p ') === 0 && m.cmd.indexOf('LHOST=10.10.14.5') > 0 && m.cmd.indexOf('LPORT=443') > 0 && /-f \S+ -o \S+$/.test(m.cmd); }), 'every msfvenom row is filled and well-formed');
+
+// 8) payload encoders round-trip (base64 runner + url-encode), raw passes through.
+var one = SK.payloads('10.10.14.5', '4444').filter(function (p) { return p.os === 'linux'; })[0].cmd;
+var b64 = SK.encodePayload(one, 'b64');
+var m = b64.match(/^echo (\S+) \| base64 -d \| bash$/);
+ok(!!m, 'b64 encode has the echo B64 | base64 -d | bash shape');
+ok(m && Buffer.from(m[1], 'base64').toString('utf8') === one, 'b64 runner decodes back to the original payload');
+ok(decodeURIComponent(SK.encodePayload(one, 'url')) === one, 'url encode round-trips');
+ok(SK.encodePayload(one, 'raw') === one, 'raw encode passes the payload through unchanged');
+
+// 9) the generated kit now carries the msfvenom + web-shell sections.
+var fullKit = SK.listenerKit({ lhost: '10.10.14.5', lport: '4444', catcher: 'nc' });
+ok(/msfvenom -p /.test(fullKit), 'kit includes an msfvenom section');
+ok(/_GET/.test(fullKit), 'kit includes a web shell');
+
 if (fail) { console.error('shellkit-smoke: ' + fail + ' FAIL'); process.exit(1); }
 console.log('shellkit-smoke: OK');

