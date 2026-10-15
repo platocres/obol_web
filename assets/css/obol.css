@@ -4096,6 +4096,14 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-hash-note { margin: 2px 0 9px; font-size: 12px; color: var(--text-2); line-height: 1.5; max-width: 74ch; }
 .wb-hash-card .wb-cmd { margin-top: 7px; }
 
+/* Cleaned-for-cracking banner: what obol fixed about the pasted hash, then the ready value with "use this". */
+.wb-clean { margin: 10px 0 4px; padding: 11px 13px; border-radius: 9px;
+  background: color-mix(in srgb, var(--teal) 9%, var(--surf1)); border: 1px solid color-mix(in srgb, var(--teal) 38%, var(--line)); }
+.wb-clean-h { font: 800 11.5px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, var(--teal) 70%, var(--text)); margin-bottom: 7px; }
+.wb-clean-list { margin: 0 0 9px; padding-left: 18px; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+.wb-clean-list li { margin: 1px 0; }
+.wb-clean .wb-cmd { margin: 0; }
+
 /* Workbench Encoder (mini CyberChef) + JWT output rows */
 .wb-enc-out, .wb-jwt-out { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
 .wb-xform { display: flex; flex-direction: column; gap: 5px; }
@@ -5593,6 +5601,25 @@ main#view:has(.library) { max-width: 2600px; }
 .tb-tog-chip.on { background: color-mix(in srgb, var(--lane, var(--accent-2)) 26%, var(--surf2)); border-color: var(--lane, var(--accent-2)); color: var(--text); font-weight: 700;
   box-shadow: 0 0 13px color-mix(in srgb, var(--lane, var(--accent-2)) 38%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--lane, var(--accent-2)) 40%, transparent); }
 .tb-tog-chip.on::before { content: "\2713"; color: var(--lane, var(--accent-2)); }
+
+/* Identify A Hash panel (Crack Hashes): paste a sample, obol names + cleans it and sets the mode in one tap. */
+.tb-hashid { margin: 2px 0 14px; padding: 12px 13px; border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-2) 6%, var(--surf1)); border: 1px solid color-mix(in srgb, var(--accent-2) 30%, var(--line)); }
+.tb-hashid-h { font: 800 11.5px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, var(--accent-2) 72%, var(--text)); margin-bottom: 8px; }
+.tb-hashid-in { width: 100%; box-sizing: border-box; background: var(--bg2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 9px; font: 12px var(--mono); resize: vertical; min-height: 40px; }
+.tb-hashid-in:focus { outline: none; border-color: var(--accent-2); }
+.tb-hashid-out:not(:empty) { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.tb-hashid-cand { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+.tb-hashid-cand.top { border-color: color-mix(in srgb, var(--accent-2) 45%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 12%, transparent); }
+.tb-hashid-cn { display: flex; align-items: center; gap: 8px; }
+.tb-hashid-name { font-size: 13px; font-weight: 650; color: var(--text); }
+.tb-hashid-top { font: 700 10px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--accent-2);
+  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, var(--line)); border-radius: 5px; padding: 1px 6px; }
+.tb-hashid-act { margin-top: 8px; }
+.tb-hashid-use { font: 600 12px var(--sans); cursor: pointer; color: var(--text); padding: 5px 12px; border-radius: 7px;
+  background: color-mix(in srgb, var(--accent-2) 20%, var(--surf2)); border: 1px solid color-mix(in srgb, var(--accent-2) 45%, var(--line)); }
+.tb-hashid-use:hover { background: color-mix(in srgb, var(--accent-2) 32%, var(--surf2)); border-color: var(--accent-2); }
 
 /* Inline "Fill These To Build The Command": the missing required fields, always visible, amber-flagged. */
 .tb-needs { margin: 10px 0 14px; padding: 12px 14px; border-radius: var(--radius);

@@ -913,6 +913,61 @@
       hashEl.addEventListener('input', function () { if (String(hashEl.value).trim().length >= 16) detect(); });
     })();
 
+    // Identify A Hash (Crack Hashes hero): paste ONE sample hash, obol cleans up the common lab formatting
+    // pitfalls (wrapped Rubeus ticket, secretsdump line, quotes, log prefix), names it, and lets you set the
+    // -m mode (john format) with one tap. Reuses the Workbench engine (identifyHash + normalizeHash), so the
+    // two surfaces stay identical. The cleaned value can also be dropped straight into the hashes field.
+    (function () {
+      if (!OBOL.workbench || !OBOL.workbench.identifyHash || !OBOL.workbench.normalizeHash) return;
+      var isHc = builder.id === 'tb-hashcat', isJn = builder.id === 'tb-john';
+      if (!isHc && !isJn) return;
+      var modeEl = form.elements && form.elements.namedItem(isHc ? 'mode' : 'format');
+      var fileEl = form.elements && form.elements.namedItem(isHc ? 'hashOrFile' : 'hashFile');
+      if (!modeEl || modeEl.tagName !== 'SELECT') return;
+      function modeHasOpt(v) { for (var i = 0; i < modeEl.options.length; i++) if (modeEl.options[i].value === String(v)) return true; return false; }
+      var panel = document.createElement('div');
+      panel.className = 'tb-hashid';
+      panel.innerHTML = '<div class="tb-hashid-h">Identify A Hash <span class="tb-recipes-sub">paste one sample; obol names it, cleans it, sets the mode</span></div>'
+        + '<textarea class="tb-hashid-in" rows="2" placeholder="Paste one hash (a wrapped Rubeus ticket or a full secretsdump line is fine)" autocomplete="off" spellcheck="false"></textarea>'
+        + '<div class="tb-hashid-out" aria-live="polite"></div>';
+      var pv = panelEl.querySelector('.tb-preview');
+      if (pv && pv.parentNode) pv.parentNode.insertBefore(panel, pv); else panelEl.querySelector('.tb-panel').appendChild(panel);
+      var inEl = panel.querySelector('.tb-hashid-in'), outEl = panel.querySelector('.tb-hashid-out');
+      function render() {
+        var W = OBOL.workbench, v = String(inEl.value || '');
+        if (!v.trim()) { outEl.innerHTML = ''; return; }
+        var nz = W.normalizeHash(v);
+        var banner = '';
+        if (nz.changed && nz.cleaned && nz.cleaned !== v.trim()) {
+          banner = '<div class="wb-clean"><div class="wb-clean-h">Cleaned For Cracking</div><ul class="wb-clean-list">'
+            + nz.changes.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>'
+            + '<div class="wb-cmd"><code>' + esc(nz.cleaned) + '</code>'
+            + '<button type="button" class="btn-copy tb-hashid-fill" data-clean="' + attr(nz.cleaned) + '">use as hash</button></div></div>';
+        }
+        var r = W.identifyHash(nz.cleaned);
+        if (!r.candidates.length) { outEl.innerHTML = banner + '<p class="tb-hint">' + esc(r.note || 'No confident match.') + '</p>'; return; }
+        var cards = r.candidates.map(function (c, i) {
+          var act;
+          if (isHc) act = (c.mode != null && modeHasOpt(c.mode)) ? '<button type="button" class="tb-hashid-use" data-mode="' + esc(c.mode) + '">Use -m ' + esc(c.mode) + '</button>'
+            : (c.mode != null ? '<span class="tb-hint">hashcat -m ' + esc(c.mode) + ' (not in this tool)</span>' : '<span class="tb-hint">no hashcat mode, use john</span>');
+          else { var jf = normJohn(c.john); act = (jf && modeHasOpt(jf)) ? '<button type="button" class="tb-hashid-use" data-mode="' + esc(jf) + '">Use ' + esc(jf) + '</button>' : (c.john ? '<span class="tb-hint">john: ' + esc(c.john) + '</span>' : ''); }
+          return '<div class="tb-hashid-cand' + (i === 0 ? ' top' : '') + '"><div class="tb-hashid-cn">'
+            + (i === 0 ? '<span class="tb-hashid-top">Most Likely</span>' : '') + '<span class="tb-hashid-name">' + esc(c.name) + '</span></div>'
+            + (c.note ? '<p class="tb-hint">' + esc(c.note) + '</p>' : '') + '<div class="tb-hashid-act">' + act + '</div></div>';
+        }).join('');
+        outEl.innerHTML = banner + cards;
+      }
+      inEl.addEventListener('input', render);
+      U.on(panel, 'click', '.tb-hashid-use', function (e, t) {
+        modeEl.value = t.getAttribute('data-mode'); recompile(true);
+        if (liveName) liveName.textContent = 'identified';
+        if (U.toast) U.toast('Mode set to ' + t.getAttribute('data-mode'), '');
+      });
+      U.on(panel, 'click', '.tb-hashid-fill', function (e, t) {
+        if (fileEl) { fileEl.value = t.getAttribute('data-clean') || ''; recompile(true); if (U.toast) U.toast('Cleaned hash set', ''); }
+      });
+    })();
+
     // recipe tile: apply the preset to the form, then recompile
     U.on(panelEl, 'click', '.tb-recipe', function (e, t) {
       var rid = t.getAttribute('data-recipe');
