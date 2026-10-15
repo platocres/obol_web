@@ -19,6 +19,22 @@
   function attr(s) { return U.attr ? U.attr(s) : esc(s); }
   function truthy(v) { return TB.truthy(v); }
 
+  // hashcat -m <-> john --format for the common OSCP hash types, so swapping the Crack Hashes engine
+  // keeps the hash type you already picked. Values match the two builders' own option lists exactly.
+  var HASH_XWALK = [
+    ['1000', 'NT'], ['3000', 'lm'], ['5500', 'netntlm'], ['5600', 'netntlmv2'],
+    ['1100', 'mscash'], ['2100', 'mscash2'], ['13100', 'krb5tgs'], ['18200', 'krb5asrep'],
+    ['19600', 'krb5tgs'], ['19700', 'krb5tgs'], ['19800', 'krb5asrep'], ['19900', 'krb5asrep'],
+    ['1800', 'sha512crypt'], ['7400', 'sha256crypt'], ['500', 'md5crypt'], ['3200', 'bcrypt'], ['1500', 'descrypt'],
+    ['0', 'raw-md5'], ['900', 'raw-md4'], ['100', 'raw-sha1'], ['1400', 'raw-sha256'], ['1700', 'raw-sha512'],
+    ['400', 'phpass'], ['300', 'mysql-sha1'], ['200', 'mysql'], ['131', 'mssql'], ['132', 'mssql05'], ['1731', 'mssql12'],
+    ['13400', 'keepass'], ['11600', '7z'], ['13000', 'rar5'], ['12500', 'rar'],
+  ];
+  function hcModeToJohn(mode) { for (var i = 0; i < HASH_XWALK.length; i++) if (HASH_XWALK[i][0] === String(mode)) return HASH_XWALK[i][1]; return null; }
+  function johnFormatToHc(fmt) { for (var i = 0; i < HASH_XWALK.length; i++) if (HASH_XWALK[i][1] === String(fmt)) return HASH_XWALK[i][0]; return null; }
+  // identifyHash returns lowercase john hints ('nt'); the john builder's NT option value is uppercase.
+  function normJohn(j) { return j === 'nt' ? 'NT' : j; }
+
   var CATS = [
     { id: 'web', label: 'Web', hint: 'Content discovery, fingerprinting, request testing.' },
     { id: 'credentials', label: 'Credentials', hint: 'Validation, spraying, roasting, cracking, capture.' },
@@ -153,14 +169,17 @@
   function recipeTiles(builder, activeId) {
     var recipes = TK ? TK.recipesFor(builder.id) : [];
     if (!recipes.length) return '';
+    // With many presets (the hash modes), switch to compact chips: name + phase only, the hint on hover,
+    // so more fit on screen at once ("smaller neon chunks").
+    var compact = recipes.length > 6;
     var tiles = recipes.map(function (r) {
       var hue = PHASE_HUE[r.phase] || 'enum';
-      return '<button type="button" class="tb-recipe ns-card ns-ph-' + hue + (r.id === activeId ? ' selected is-glow' : '') + '" data-recipe="' + esc(r.id) + '" aria-pressed="' + (r.id === activeId ? 'true' : 'false') + '">'
+      return '<button type="button" class="tb-recipe ns-card ns-ph-' + hue + (r.id === activeId ? ' selected is-glow' : '') + '" data-recipe="' + esc(r.id) + '" title="' + attr(r.hint) + '" aria-pressed="' + (r.id === activeId ? 'true' : 'false') + '">'
         + '<span class="tb-recipe-name">' + esc(r.label) + '</span>'
-        + '<span class="tb-recipe-hint">' + esc(r.hint) + '</span>'
+        + (compact ? '' : '<span class="tb-recipe-hint">' + esc(r.hint) + '</span>')
         + '<span class="ph-chip ph-' + hue + '">' + esc(r.phase) + '</span></button>';
     }).join('');
-    return '<div class="tb-recipes"><div class="tb-recipes-lab">Recipes <span class="tb-recipes-sub">one tap to a filled command, then tune it</span></div>'
+    return '<div class="tb-recipes' + (compact ? ' compact' : '') + '"><div class="tb-recipes-lab">Recipes <span class="tb-recipes-sub">one tap to a filled command, then tune it</span></div>'
       + '<div class="ns-grid tb-recipe-grid">' + tiles + '</div></div>';
   }
   function glossHtml(cmd, builder) {
@@ -333,7 +352,9 @@
     Object.keys(byCat).forEach(function (c) { byCat[c].sort(function (a, b) { return a.title.localeCompare(b.title); }); });
     var present = CATS.filter(function (c) { return byCat[c.id] && byCat[c.id].length; });
 
-    html += '<nav class="tools-nav">' + present.map(function (c) { return '<button type="button" class="pill tools-jump ' + esc(catLane(c.id)) + '" data-cat="tb-cat-' + esc(c.id) + '">' + esc(c.label) + ' <b>' + byCat[c.id].length + '</b></button>'; }).join('') + '</nav>';
+    html += '<nav class="tools-nav" aria-label="Jump to a tool category">'
+      + '<button type="button" class="pill tools-jump tools-jump-top" data-cat="__top__" title="Back to Stations">↑ Top</button>'
+      + present.map(function (c) { return '<button type="button" class="pill tools-jump ' + esc(catLane(c.id)) + '" data-cat="tb-cat-' + esc(c.id) + '">' + esc(c.label) + ' <b>' + byCat[c.id].length + '</b></button>'; }).join('') + '</nav>';
     present.forEach(function (c) {
       var lc = catLane(c.id);
       html += '<section class="tools-cat ' + esc(lc) + '" id="tb-cat-' + esc(c.id) + '"><div class="tools-cat-head"><h2 class="tools-cat-h">' + esc(c.label) + '</h2><span class="tools-cat-hint">' + esc(c.hint) + '</span></div>'
@@ -421,12 +442,45 @@
     form.addEventListener('input', function () { recompile(true); });
     form.addEventListener('change', function () { recompile(true); });
 
+    // Hash auto-detect (Crack Hashes): paste a hash into the hash field and obol picks the matching -m
+    // mode (hashcat) or --format (john) via OBOL.workbench.identifyHash, so you never hand-set the number.
+    (function () {
+      if (!OBOL.workbench || !OBOL.workbench.identifyHash) return;
+      var isHc = builder.id === 'tb-hashcat', isJn = builder.id === 'tb-john';
+      if (!isHc && !isJn) return;
+      var hashEl = form.elements && form.elements.namedItem(isHc ? 'hashOrFile' : 'hashFile');
+      var modeEl = form.elements && form.elements.namedItem(isHc ? 'mode' : 'format');
+      if (!hashEl || !modeEl || modeEl.tagName !== 'SELECT') return;
+      function hasOpt(v) { for (var i = 0; i < modeEl.options.length; i++) if (modeEl.options[i].value === String(v)) return true; return false; }
+      function detect() {
+        var v = String(hashEl.value || '').trim();
+        if (!v || v.length < 8 || /[\s]/.test(v) || v.indexOf('/') >= 0 || v.indexOf('\\') >= 0) return; // a path or blank, not a hash
+        var r = OBOL.workbench.identifyHash(v), cand = r && r.candidates && r.candidates[0];
+        if (!cand) return;
+        var want = isHc ? String(cand.mode) : normJohn(cand.john);
+        if (want && hasOpt(want) && modeEl.value !== want) {
+          modeEl.value = want;
+          recompile(true);
+          if (liveName) liveName.textContent = 'auto: ' + cand.name;
+          if (U.toast) U.toast('Detected ' + cand.name, '');
+        }
+      }
+      hashEl.addEventListener('change', detect);
+      hashEl.addEventListener('input', function () { if (String(hashEl.value).trim().length >= 16) detect(); });
+    })();
+
     // recipe tile: apply the preset to the form, then recompile
     U.on(panelEl, 'click', '.tb-recipe', function (e, t) {
       var rid = t.getAttribute('data-recipe');
       var recipe = TK.recipeById(builder.id, rid); if (!recipe) return;
-      var vals = TK.applyRecipe(builder, recipe, context);
-      Object.keys(recipe.values || {}).forEach(function (k) { setFormValue(form, builder, k, vals[k]); });
+      var vals = TK.applyRecipe(builder, recipe, context); // defaults + binding autofill + recipe values
+      // Adopt the recipe WHOLESALE: set every non-secret field, clearing any a previous recipe pinned
+      // (e.g. the rule file from "NTLM + Rules") that this recipe does not set. Without this, a stale
+      // field keeps matchingRecipe locked on the broader recipe and the exact tile looks unselectable.
+      (builder.fields || []).forEach(function (f) {
+        if (f.type === 'secret') return; // never clobber a typed credential
+        setFormValue(form, builder, f.id, Object.prototype.hasOwnProperty.call(vals, f.id) ? vals[f.id] : '');
+      });
       recompile(true);
     });
     // presets / snippets inside the full form
@@ -500,6 +554,10 @@
       var toEng = (st.engines || []).filter(function (en) { return en.builderId === toId; })[0];
       var fromVals = savedValues('station:' + st.id + ':' + fromId);
       var carried = TK.carryShared(st, fromEng, toEng, fromVals);
+      // Carry the hash TYPE across the engine swap too (hashcat -m <-> john --format), so switching
+      // engines on a kerberoast hash does not silently reset to NTLM.
+      if (fromId === 'tb-hashcat' && toId === 'tb-john') { var jf = hcModeToJohn(fromVals.mode); if (jf) carried.format = jf; }
+      else if (fromId === 'tb-john' && toId === 'tb-hashcat') { var hm = johnFormatToHc(fromVals.format); if (hm) carried.mode = hm; }
       setStationEngine(st.id, toId);
       card.setAttribute('data-active-engine', toId);
       // update engine chip states + teach line
@@ -514,7 +572,11 @@
     // layout lens
     U.on(mount, 'click', '.tools-lens-btn', function (e, t) { setLayout(t.getAttribute('data-lay')); OBOL.router.render(); });
     // category jump
-    U.on(mount, 'click', '.tools-jump', function (e, t) { var el = document.getElementById(t.getAttribute('data-cat')); if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_e) { el.scrollIntoView(); } } });
+    U.on(mount, 'click', '.tools-jump', function (e, t) {
+      var cat = t.getAttribute('data-cat');
+      if (cat === '__top__') { var v = document.getElementById('view') || mount; try { v.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_e) { v.scrollTop = 0; } return; }
+      var el = document.getElementById(cat); if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_e) { el.scrollIntoView(); } }
+    });
 
     // any card pre-opened (deep link) mounts now
     var opened = mount.querySelectorAll('.tool-card.open');

@@ -1422,8 +1422,11 @@ ol.bh-steps li { margin-bottom: 9px; }
 .rep-gaps ul { margin: 6px 0; }
 
 /* ---- tools route (command builders) ---- */
-.tools-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; }
+.tools-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--bg1) 90%, transparent); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); padding: 9px 0; }
 .tools-nav .pill { cursor: pointer; }
+.tools-jump-top { background: var(--surf2); border-color: var(--line); color: var(--text-2); font-weight: 700; }
+.tools-jump-top:hover { border-color: var(--accent); color: var(--text); }
 .tools-nav .pill b { color: var(--accent-2); font-weight: 700; }
 .tools-cat { margin-bottom: 28px; scroll-margin-top: 70px; }
 .tools-cat-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
@@ -5368,8 +5371,14 @@ main#view:has(.library) { max-width: 2600px; }
 .tools-route[data-layout="grid"] .tools-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
 
 /* stations */
-.station-card { --lane: var(--accent); border-left: 3px solid var(--lane); }
+/* Do NOT hardcode --lane here: the per-station lane-<hue> class supplies it (web=violet, creds=gold,
+   recon=teal, database=cyan, shells, pivot), so each station reads its own colour instead of all-green. */
+.station-card { border-left: 3px solid var(--lane, var(--accent)); }
 .station-card .tool-card-head { padding-bottom: 6px; }
+/* Hover tints the WHOLE card (head + engine row), not just the title block, so the highlight fills. */
+.station-card .tool-card-head:hover { background: transparent; }
+.station-card:hover { background: color-mix(in srgb, var(--lane) 13%, var(--surf1)); border-color: color-mix(in srgb, var(--lane) 38%, var(--line)); }
+.station-card.open:hover { border-color: color-mix(in srgb, var(--lane) 55%, var(--line)); }
 .station-badge { font: 800 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: #0a0e18; background: var(--lane); border-radius: 4px; padding: 1px 6px; }
 .station-engines { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 0 15px 12px; }
 .tb-engines-lab { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
@@ -5387,6 +5396,10 @@ main#view:has(.library) { max-width: 2600px; }
 .tb-recipe .tb-recipe-name { font-weight: 700; font-size: 13px; color: var(--text); }
 .tb-recipe .tb-recipe-hint { font-size: 11.5px; color: var(--text-2); line-height: 1.4; }
 .tb-recipe .ph-chip { align-self: flex-start; margin-top: 2px; }
+/* compact recipe chips (many hash modes): smaller, name + phase only, so more fit per row */
+.tb-recipes.compact .tb-recipe { min-width: 110px; flex: 0 1 140px; max-width: 180px; padding: 8px 11px; gap: 3px; align-items: flex-start; }
+.tb-recipes.compact .tb-recipe-name { font-size: 12px; }
+.tb-recipes.compact .tb-recipe .ph-chip { display: none; } /* phase is identical across hash modes, so the chip is noise here */
 
 /* editable preview */
 .tb-preview .cmd-head { display: flex; align-items: center; gap: 8px; }
