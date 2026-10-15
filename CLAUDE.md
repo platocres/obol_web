@@ -1858,3 +1858,21 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   shellkit.js registered in the lazy tools group. Full engine suite + browser-smoke + lint green; assets
   stamped. TD2 (the Pivot Station, downloadable local-half tunnel + on-host chips, in Tools and Cruise)
   is next.
+
+- 2026-10-15: TD phase 2, the Pivot Station (Access Kits), porting obol-local's TRANSPORT_HALVES.
+  New engine assets/engine/pivotkit.js (OBOL.pivotkit, pure/Node-safe): per transport (sshuttle,
+  SSH dynamic SOCKS, ligolo, chisel) which half runs LOCALLY vs ON THE TARGET, selectTransport (an SSH
+  credential -> sshuttle, else a foothold -> ligolo), localKit() (the downloadable local-half .sh with
+  a gated install preamble, the tun/route/proxy setup, and a liveness hint) and onHostLines() (the
+  stage-agent + connect-back one-liners, Linux and Windows). Locate-first: the internal subnet comes
+  from scan.local.routes/interfaces (paste `ip route` from the foothold into Evidence and it fills).
+  tests/engine/pivotkit-smoke.js proves transport auto-selection, that every local kit fills the
+  context and passes `bash -n`, and the on-host lines connect back to LHOST:PORT. UI: a "Pivot & Tunnel"
+  kit card beside Get A Shell, transport selector (fact-aware default), discovered-subnet chips,
+  Download Local Half (.sh), and the on-host copy-chips. Honesty line: obol writes both halves, you run
+  both, nothing executes here. Fixed a latent bug this surfaced: FactSet.kinds() returns an object-set,
+  not an array, so toolkit.defaultEngine and pivotkit.selectTransport now accept either form (the
+  command stations' fact-aware default had been silently no-oping). Driven headless: 2 discovered
+  subnets, ligolo on-host lines, the REAL downloaded local-half carries the subnet and passes bash -n,
+  0 console errors. Full engine suite + browser-smoke + lint green; assets stamped. CR3 (the Cruise
+  pivot integration) is TD2b.

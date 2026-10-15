@@ -118,7 +118,10 @@
   // The engine a station should default to for the current facts: an engine whose `whenFact` kind is
   // present wins (stack-aware default), else the station's declared default, else the first engine.
   function defaultEngine(station, factKinds) {
-    var kinds = {}; arr(factKinds).forEach(function (k) { kinds[k] = 1; });
+    var kinds = {};
+    if (Array.isArray(factKinds)) factKinds.forEach(function (k) { kinds[k] = 1; });
+    else if (factKinds && typeof factKinds === 'object') kinds = factKinds; // FactSet.kinds() object-set
+
     var engines = arr(station && station.engines);
     for (var i = 0; i < engines.length; i++) { if (engines[i].whenFact && kinds[engines[i].whenFact]) return engines[i].builderId; }
     return (station && station.defaultEngine) || (engines[0] && engines[0].builderId) || null;
