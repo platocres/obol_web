@@ -39,6 +39,10 @@
       'assets/engine/toolbuilder.js?v=e3ee7f1f', 'data/toolset.js?v=73192b48', 'assets/engine/toolkit.js?v=77414ef4', 'assets/ui/bind.js?v=4319ea2f',
       'assets/engine/library.js?v=cc552212', 'assets/ui/routes/library.js?v=4f8e4bd2'],
     study: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b', 'assets/ui/routes/study.js?v=277d4c77'],
+    // data-only slice of the study group (the ~1MB sample-output fixtures + the replay engine, no Learn
+    // route UI). The coach background-loads this after mount so "See It Run" can show real example output
+    // in Next Steps without putting the fixtures on the critical boot path.
+    studydata: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b'],
     decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=24469b5c', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=2317deac', 'assets/engine/decisionmap.js?v=72d3dcb7', 'assets/ui/decisiontree.js?v=910ea8b0'],
     checklist: ['data/oscp-scope.js?v=ebf0ff68', 'assets/ui/routes/checklist.js?v=ff1f5ef9'],
     target: ['assets/engine/graph.js?v=96741069', 'assets/ui/routes/target.js?v=3e9e5e4a'],

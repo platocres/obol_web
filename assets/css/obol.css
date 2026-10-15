@@ -5474,3 +5474,22 @@ main#view:has(.library) { max-width: 2600px; }
 .tb-preview .tb-editbtn { border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line)); color: color-mix(in srgb, var(--accent) 82%, var(--text)); }
 .tb-preview .tb-render:hover { outline: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--line)); outline-offset: 2px; }
 .shk-pay-os { font-size: 11px; }
+
+/* "See It Run": inline, toggleable example run + expected output on a field-note card.
+   Reuses the Learn replay terminal (.rp-* lines) so a learner sees the command run and the output
+   to expect without leaving Next Steps. The caret rotates open; the choice persists per browser. */
+.ns-ex { margin: 8px 0 4px; }
+.ns-ex-toggle { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surf1)); border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: var(--radius); padding: 8px 12px; color: var(--text); font: 600 13px var(--sans);
+  transition: background .15s ease, border-color .15s ease; }
+.ns-ex-toggle:hover { background: color-mix(in srgb, var(--accent) 14%, var(--surf1)); border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); }
+.ns-ex-caret { color: var(--accent); transition: transform .15s ease; display: inline-block; }
+.ns-ex.open .ns-ex-caret { transform: rotate(90deg); }
+.ns-ex-sub { color: var(--muted); font-weight: 400; font-size: 11.5px; margin-left: auto; }
+.ns-ex-term { margin-top: 8px; background: #060b18; border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: 8px; padding: 10px 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.55; color: #8498b4; overflow-x: auto; }
+.ns-ex-term[hidden] { display: none; }
+.ns-ex-step { color: var(--accent-2); font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .04em; margin: 9px 0 4px; }
+.ns-ex-step:first-child { margin-top: 0; }
+@media (max-width: 520px) { .ns-ex-sub { display: none; } }

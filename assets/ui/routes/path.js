@@ -714,6 +714,35 @@
       + '</div>';
   }
 
+  // "See It Run": the Learn-style command + sample output, inline on the field-note card and toggleable.
+  // Reuses OBOL.study.replayFor (the exact invocation + captured output the Learn Watch pane shows), so a
+  // learner sees what the command looks like run and the output to expect, without leaving Next Steps. The
+  // on/off choice persists (localStorage), so once you turn it on it stays on across every move.
+  function exampleOn() { try { var v = localStorage.getItem('obol.show-example'); return v === null ? true : v === '1'; } catch (e) { return true; } }
+  function nsExampleBlock(move) {
+    if (!move || !OBOL.study || !OBOL.study.replayFor) return '';
+    var rp = null; try { rp = OBOL.study.replayFor(move.id); } catch (e) { rp = null; }
+    if (!rp || !rp.hasOutput || !rp.steps || !rp.steps.length) return ''; // only promise it where real output exists
+    var open = exampleOn();
+    var promptFor = function (where) { return where === 'host' ? 'C:\\>' : 'kali$'; };
+    var body = rp.steps.map(function (s) {
+      var head = rp.multi ? ('<div class="ns-ex-step">' + (s.where === 'host' ? 'On the target' : 'On your box') + '</div>') : '';
+      var cmdLine = '<div class="rp-line rp-cmd"><span class="rp-prompt' + (s.where === 'host' ? ' host' : '') + '">' + promptFor(s.where) + '</span> ' + esc(s.command) + '</div>';
+      var outs = (s.outputLines || []).map(function (ln) {
+        var hot = rp.signal && String(ln).indexOf(rp.signal) >= 0;
+        return '<div class="rp-line rp-out' + (hot ? ' hot' : '') + '">' + esc(ln || ' ') + '</div>'
+          + (hot && rp.teach ? '<div class="rp-cap">\u2190 ' + esc(rp.teach) + '</div>' : '');
+      }).join('');
+      return head + cmdLine + outs;
+    }).join('');
+    return '<div class="ns-ex' + (open ? ' open' : '') + '">'
+      + '<button type="button" class="ns-ex-toggle" data-ex-toggle aria-expanded="' + (open ? 'true' : 'false') + '">'
+      + '<span class="ns-ex-caret" aria-hidden="true">\u25B8</span> See It Run'
+      + '<span class="ns-ex-sub">a real run of this command and the output you would see</span></button>'
+      + '<div class="ns-ex-term rp-term"' + (open ? '' : ' hidden') + '>' + body + '</div>'
+      + '</div>';
+  }
+
   function nsCanvasHtml(move, idx, facts, params) {
     if (!move) return '<div class="ns-canvas-head"><span class="ns-canvas-kick">Field Notes</span></div>'
       + '<div class="ns-canvas-empty">Pick a move on the left to see how to land it, step by step.</div>';
@@ -730,6 +759,9 @@
 
     // Staged command display
     if (cmdText) html += '<div class="ns-canvas-cmd"><code>' + esc(cmdText) + '</code></div>';
+
+    // "See It Run": toggleable Learn-style example run + expected output for this move.
+    html += nsExampleBlock(move);
 
     var flagsExpl = (OBOL.command && OBOL.command.explainFlags) ? OBOL.command.explainFlags(cmdText) : [];
     var mistakes = (note && note.mistakes) || [];
@@ -1517,6 +1549,14 @@
     // own container instead: it's recreated on each render, so its listeners die with the old DOM.
     var mount = ctx.mount.querySelector('.coach') || ctx.mount;
 
+    // Background-load the ~1MB sample-output fixtures (off the critical boot path) so "See It Run" can
+    // show a real example run and its output in the field notes. When they land, repaint the open card.
+    if (!(OBOL.study && OBOL.study.replayFor) && OBOL.lazy && OBOL.lazy.loadGroup) {
+      OBOL.lazy.loadGroup('studydata').then(function () {
+        try { if (OBOL.study && OBOL.study.replayFor && nsSel && nsSel.id) repaintCanvas(); } catch (e) {}
+      });
+    }
+
     // ---- Next Steps card grid: select a card (glow follows), toggle Remote/On-Host, pick a command.
     // These update the DOM and the canvas IN PLACE (no full re-render) so scroll and focus are preserved.
     function freshCtx() {
@@ -1712,6 +1752,25 @@
       });
     }
     // Anatomy pillar tab switcher (zero-scroll neurodivergent navigation)
+    // "See It Run" toggle: flip this card's example terminal and remember the choice for every card.
+    U.on(mount, 'click', '[data-ex-toggle]', function (e, t) {
+      var wrap = t.closest('.ns-ex'); if (!wrap) return;
+      var term = wrap.querySelector('.ns-ex-term');
+      var open = !wrap.classList.contains('open');
+      wrap.classList.toggle('open', open);
+      if (term) { if (open) term.removeAttribute('hidden'); else term.setAttribute('hidden', ''); }
+      t.setAttribute('aria-expanded', open ? 'true' : 'false');
+      try { localStorage.setItem('obol.show-example', open ? '1' : '0'); } catch (x) {}
+      // apply the new preference to any other example blocks on screen without a full re-render
+      Array.prototype.forEach.call(mount.querySelectorAll('.ns-ex'), function (w) {
+        if (w === wrap) return;
+        var tm = w.querySelector('.ns-ex-term'), bt = w.querySelector('.ns-ex-toggle');
+        w.classList.toggle('open', open);
+        if (tm) { if (open) tm.removeAttribute('hidden'); else tm.setAttribute('hidden', ''); }
+        if (bt) bt.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    });
+
     U.on(mount, 'click', '[data-pillar-tab]', function (e, t) {
       var tabKey = t.getAttribute('data-pillar-tab');
       if (!tabKey) return;
