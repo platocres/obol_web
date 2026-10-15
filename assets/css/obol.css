@@ -5427,6 +5427,9 @@ main#view:has(.library) { max-width: 2600px; }
 .tb-recipe-grid { gap: 10px; }
 /* recipe tiles are presets, not Next Steps cards: size to content, don't inherit the 150px card height */
 .tb-recipe { text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 190px; flex: 1 1 210px; max-width: 320px; padding: 10px 12px; min-height: 0; }
+/* the [hidden] attribute must win over the flex display above, or a protocol-filtered recipe (and a
+   search-filtered tool row) would stay visible. */
+.tb-recipe[hidden], .tfl-item[hidden], .tfl-group[hidden], .tb-recipe-grid[hidden] { display: none !important; }
 .tb-recipe-grid { align-items: stretch; }
 .tb-recipe .tb-recipe-name { font-weight: 700; font-size: 13px; color: var(--text); }
 .tb-recipe .tb-recipe-hint { font-size: 11.5px; color: var(--text-2); line-height: 1.4; }

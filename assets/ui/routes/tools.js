@@ -128,7 +128,14 @@
     if (item.kind === 'station') { var s = TK.stationById(item.id); return s ? stationCard(s, item.id, factKinds) : ''; }
     var b = builderById(item.id); return b ? toolCard(b, item.id, item.hue) : '';
   }
-  // Resolve a deep-link arg (a tool/station id) OR a saved key to a present focus item's key.
+  // The station whose engine list includes this builder id (so a deep link to a station-only tool like
+  // hashcat/ffuf resolves to its station), or null.
+  function stationOf(builderId) {
+    var sts = (TK && TK.stations) ? TK.stations() : [];
+    for (var i = 0; i < sts.length; i++) { if ((sts[i].engines || []).some(function (e) { return e.builderId === builderId; })) return sts[i]; }
+    return null;
+  }
+  // Resolve a deep-link arg (a builder id, a tool NAME, or a station id) OR a saved key to a focus item.
   function resolveFocusKey(items, openId, saved) {
     function present(k) { return items.some(function (it) { return it.key === k; }); }
     if (openId) {
@@ -136,6 +143,16 @@
         return it.id === openId || it.key === 'tool:' + openId || it.key === 'station:' + openId
           || (openId === 'shell' && it.kind === 'shell') || (openId === 'pivot' && it.kind === 'pivot');
       })[0];
+      // also resolve a tool NAME (e.g. "nxc") to the builder whose tool/equips match it
+      if (!hit) {
+        hit = items.filter(function (it) {
+          if (it.kind !== 'tool') return false;
+          var b = builderById(it.id); if (!b) return false;
+          return String(b.tool || '').toLowerCase() === openId || (b.equips || []).some(function (t) { return String(t).toLowerCase() === openId; });
+        })[0];
+      }
+      // a builder that only exists inside a station (hashcat, ffuf, ...) -> that station's item
+      if (!hit) { var st = stationOf(openId); if (st) hit = items.filter(function (it) { return it.key === 'station:' + st.id; })[0]; }
       if (hit) return hit.key;
     }
     if (saved && present(saved)) return saved;
@@ -345,9 +362,11 @@
   }
 
   function panelBody(builder, values, activeRecipe) {
+    // Protocol / mode chips LEAD, then the recipes relevant to that choice, then Fill These, then All
+    // Options: pick the protocol first and only its recipes and fields follow (the funnel the owner wants).
     return '<div class="tb-panel">'
-      + recipeTiles(builder, activeRecipe)
       + modeChipsHtml(builder, values)
+      + recipeTiles(builder, activeRecipe)
       + '<div class="tb-preview cmd"><div class="cmd-head"><span class="cmd-tag">' + esc((builder.equips && builder.equips[0]) || builder.tool) + '</span>'
         + '<span class="cmd-variant tb-recipe-name-live"></span>'
         + '<span class="cmd-spacer"></span>'
@@ -388,9 +407,12 @@
   function stationCard(station, openStationId, factKinds) {
     var built = TK.stationBuilders(station);
     if (!built.length) return '';
-    var active = stationEngine(station.id, TK.defaultEngine(station, factKinds));
+    // A deep link may name a station engine builder (e.g. tb-hashcat) rather than the station id, so open
+    // the station and pre-activate that engine.
+    var engineMatch = (station.engines || []).some(function (e) { return e.builderId === openStationId; });
+    var active = engineMatch ? openStationId : stationEngine(station.id, TK.defaultEngine(station, factKinds));
     if (!built.some(function (b) { return b.builder.id === active; })) active = built[0].builder.id;
-    var open = station.id === openStationId;
+    var open = station.id === openStationId || engineMatch;
     var engineChips = built.map(function (b) {
       return '<button type="button" class="tb-engine' + (b.builder.id === active ? ' on' : '') + '" data-engine="' + esc(b.builder.id) + '" title="' + attr(b.engine.teach) + '">' + esc(b.engine.label) + '</button>';
     }).join('');
@@ -816,6 +838,30 @@
   function mounted(ctx) {
     var mount = ctx.mount;
     var context = toolContext();
+    var openId = (ctx.args && ctx.args[0]) ? decodeURIComponent(ctx.args[0]).toLowerCase() : '';
+    // Deep-link selector (#/tools/<tool>/<sel>): a recipe id, a protocol/mode value, or a hashcat/john mode.
+    var selArg = (ctx.args && ctx.args[1]) ? decodeURIComponent(ctx.args[1]) : '';
+    // If the deep link named a station engine builder (hashcat/ffuf/...), switch the station to it before
+    // the selector lands. Clicking the engine chip reuses the panel's own swap (which re-mounts the body).
+    function applyStationEngine(card) {
+      if (!card || !openId || !card.classList.contains('station-card')) return;
+      if (card.getAttribute('data-active-engine') === openId) return;
+      var chips = card.querySelectorAll('.tb-engine');
+      for (var i = 0; i < chips.length; i++) { if (chips[i].getAttribute('data-engine') === openId) { chips[i].click(); return; } }
+    }
+
+    // Apply the deep-link selector to a freshly mounted tool card: pick the recipe tile (which also sets
+    // its protocol), else the protocol/mode chip, else the mode/format select. Clicking reuses the panel's
+    // own handlers, so the command rebuilds exactly as if the operator chose it.
+    function applyToolSelector(card, sel) {
+      if (!card || !sel) return;
+      var tiles = card.querySelectorAll('.tb-recipe');
+      for (var i = 0; i < tiles.length; i++) { if (tiles[i].getAttribute('data-recipe') === sel) { tiles[i].click(); return; } }
+      var chips = card.querySelectorAll('.tb-mode-chip');
+      for (var j = 0; j < chips.length; j++) { if (chips[j].getAttribute('data-mode-value') === sel) { chips[j].click(); return; } }
+      var selects = card.querySelectorAll('select[name="mode"], select[name="format"]');
+      for (var k = 0; k < selects.length; k++) { var s = selects[k]; for (var o = 0; o < s.options.length; o++) { if (s.options[o].value === sel) { s.value = sel; try { s.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {} return; } } }
+    }
 
     // binding bar: on change, recompute context and re-mount every open panel so previews re-fill.
     var bindEl = mount.querySelector('#bind-bar');
@@ -917,9 +963,9 @@
       var el = document.getElementById(cat); if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_e) { el.scrollIntoView(); } }
     });
 
-    // any card pre-opened (deep link) mounts now
+    // any card pre-opened (deep link) mounts now, then the deep-link selector is applied to the first one
     var opened = mount.querySelectorAll('.tool-card.open');
-    for (var k = 0; k < opened.length; k++) { var c = opened[k]; var h = c.querySelector('.tool-card-head'); if (h) h.setAttribute('aria-expanded', 'true'); mountCardBody(c); if (k === 0) { try { c.scrollIntoView({ block: 'start' }); } catch (e) {} } }
+    for (var k = 0; k < opened.length; k++) { var c = opened[k]; var h = c.querySelector('.tool-card-head'); if (h) h.setAttribute('aria-expanded', 'true'); mountCardBody(c); if (k === 0) { try { c.scrollIntoView({ block: 'start' }); } catch (e) {} applyStationEngine(c); applyToolSelector(c, selArg); } }
   }
 
   OBOL.routes = OBOL.routes || {};
