@@ -87,9 +87,53 @@
   // ---- layout lens (Grid | Focus), persisted per engagement; default Focus ----
   function layout() { try { return (OBOL.store.active().ui || {}).toolsLayout || 'focus'; } catch (e) { return 'focus'; } }
   function setLayout(v) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.toolsLayout = v; }, 'tools-layout'); }
-  // focus selection (station or tool id)
+  // focus selection (a focus-item key: "station:<id>" | "kit:shell" | "kit:pivot" | "tool:<id>")
   function focusSel() { try { return (OBOL.store.active().ui || {}).toolsFocus || ''; } catch (e) { return ''; } }
   function setFocusSel(id) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.toolsFocus = id; }, 'tools-focus'); }
+
+  // ---- Focus Lens: one flat, grouped index of every selectable surface (stations, access kits, and
+  // standalone tools), so the master-detail layout has a single source for the left list and the
+  // detail dispatch. Each item carries a stable key, its display group, label, summary, and the kind
+  // the detail pane mounts. Order: Stations, Access Kits, then the category order in CATS.
+  function focusItems() {
+    var items = [];
+    var inStation = stationBuilderIds();
+    (TK && TK.stations ? TK.stations() : []).forEach(function (s) {
+      if (!TK.stationBuilders(s).length) return;
+      items.push({ key: 'station:' + s.id, group: 'Stations', label: s.title, sum: s.job, kind: 'station', id: s.id, hue: 'lane-' + s.hue });
+    });
+    items.push({ key: 'kit:shell', group: 'Access Kits', label: 'Get A Shell', sum: 'Download a listener kit filled with your LHOST and LPORT.', kind: 'shell', hue: 'lane-shells' });
+    if (OBOL.pivotStationUI) items.push({ key: 'kit:pivot', group: 'Access Kits', label: 'Pivot And Tunnel', sum: 'Download both halves of a tunnel, filled from your engagement.', kind: 'pivot', hue: 'lane-pivot' });
+    var byCat = {};
+    equippedBuilders().forEach(function (b) { if (inStation[b.id]) return; (byCat[b.category] = byCat[b.category] || []).push(b); });
+    Object.keys(byCat).forEach(function (c) { byCat[c].sort(function (a, b) { return a.title.localeCompare(b.title); }); });
+    CATS.forEach(function (c) {
+      if (!byCat[c.id] || !byCat[c.id].length) return;
+      byCat[c.id].forEach(function (b) { items.push({ key: 'tool:' + b.id, group: c.label, label: b.title, sum: b.summary, kind: 'tool', id: b.id, hue: catLane(c.id), exec: b.executionContext || 'any', uses: (b.equips || []).join(' ') }); });
+    });
+    return items;
+  }
+  // The card markup for a focus item, rendered open, so the existing mountCardBody dispatch can mount it.
+  function focusCardHtml(item, factKinds) {
+    if (!item) return '';
+    if (item.kind === 'shell') return shellStationCard(true);
+    if (item.kind === 'pivot') return OBOL.pivotStationUI ? OBOL.pivotStationUI.card(true) : '';
+    if (item.kind === 'station') { var s = TK.stationById(item.id); return s ? stationCard(s, item.id, factKinds) : ''; }
+    var b = builderById(item.id); return b ? toolCard(b, item.id, item.hue) : '';
+  }
+  // Resolve a deep-link arg (a tool/station id) OR a saved key to a present focus item's key.
+  function resolveFocusKey(items, openId, saved) {
+    function present(k) { return items.some(function (it) { return it.key === k; }); }
+    if (openId) {
+      var hit = items.filter(function (it) {
+        return it.id === openId || it.key === 'tool:' + openId || it.key === 'station:' + openId
+          || (openId === 'shell' && it.kind === 'shell') || (openId === 'pivot' && it.kind === 'pivot');
+      })[0];
+      if (hit) return hit.key;
+    }
+    if (saved && present(saved)) return saved;
+    return items.length ? items[0].key : '';
+  }
 
   // ---- per-tool value persistence ----
   function savedValues(toolId) { var eng = OBOL.store.active(); var tools = (eng && eng.ui && eng.ui.tools) || {}; return Object.assign({}, tools[toolId] || {}); }
@@ -183,15 +227,22 @@
     // With many presets (the hash modes), switch to compact chips: name + phase only, the hint on hover,
     // so more fit on screen at once ("smaller neon chunks").
     var compact = recipes.length > 6;
+    // The primary field (protocol / method / ...) the tool switches on. A recipe that pins a value for
+    // it is tagged with data-rmode, so the panel can show only the recipes relevant to the chosen mode
+    // (Protocol -> relevant Recipes -> Fill These -> All Options). Recipes that set no primary value are
+    // mode-agnostic and always show.
+    var pf = primaryField(builder), pfid = pf ? pf.id : null;
     var tiles = recipes.map(function (r) {
       var hue = PHASE_HUE[r.phase] || 'enum';
-      return '<button type="button" class="tb-recipe ns-card ns-ph-' + hue + (r.id === activeId ? ' selected is-glow' : '') + '" data-recipe="' + esc(r.id) + '" title="' + attr(r.hint) + '" aria-pressed="' + (r.id === activeId ? 'true' : 'false') + '">'
+      var rmode = (pfid && r.values && Object.prototype.hasOwnProperty.call(r.values, pfid)) ? String(r.values[pfid]) : '';
+      return '<button type="button" class="tb-recipe ns-card ns-ph-' + hue + (r.id === activeId ? ' selected is-glow' : '') + '" data-recipe="' + esc(r.id) + '" data-rmode="' + esc(rmode) + '" title="' + attr(r.hint) + '" aria-pressed="' + (r.id === activeId ? 'true' : 'false') + '">'
         + '<span class="tb-recipe-name">' + esc(r.label) + '</span>'
         + (compact ? '' : '<span class="tb-recipe-hint">' + esc(r.hint) + '</span>')
         + '<span class="ph-chip ph-' + hue + '">' + esc(r.phase) + '</span></button>';
     }).join('');
     return '<div class="tb-recipes' + (compact ? ' compact' : '') + '"><div class="tb-recipes-lab">Recipes <span class="tb-recipes-sub">one tap to a filled command, then tune it</span></div>'
-      + '<div class="ns-grid tb-recipe-grid">' + tiles + '</div></div>';
+      + '<div class="ns-grid tb-recipe-grid">' + tiles + '</div>'
+      + '<p class="tb-recipes-empty tb-hint" hidden>No preset for this selection yet. Open All Options below, or pick another above.</p></div>';
   }
   function glossHtml(cmd, builder) {
     var rows = TK ? TK.glossCommand(cmd, builder) : [];
@@ -380,6 +431,62 @@
   }
 
   // ================================ render ================================
+  // The Grid layout: every surface laid out as expandable cards (stations hero, access kits, then
+  // category sections with a sticky jump nav). The scannable, see-everything view.
+  function renderGrid(openId, factKinds) {
+    var builders = equippedBuilders();
+    var html = '';
+    var stations = (TK && TK.stations ? TK.stations() : []).filter(function (s) { return TK.stationBuilders(s).length; });
+    if (stations.length) {
+      html += '<section class="tools-stations"><div class="tools-cat-head"><h2 class="tools-cat-h">Stations</h2><span class="tools-cat-hint">One job, your choice of engine.</span></div>'
+        + '<div class="tools-grid">' + stations.map(function (s) { return stationCard(s, openId, factKinds); }).join('') + '</div></section>';
+    }
+    html += '<section class="tools-stations"><div class="tools-cat-head"><h2 class="tools-cat-h">Access Kits</h2><span class="tools-cat-hint">Downloadable, filled from your engagement. obol writes them; you run them.</span></div>'
+      + '<div class="tools-grid">' + shellStationCard(openId === 'shell') + (OBOL.pivotStationUI ? OBOL.pivotStationUI.card(openId === 'pivot') : '') + '</div></section>';
+    var inStation = stationBuilderIds();
+    var byCat = {};
+    builders.forEach(function (b) { if (inStation[b.id]) return; (byCat[b.category] = byCat[b.category] || []).push(b); });
+    Object.keys(byCat).forEach(function (c) { byCat[c].sort(function (a, b) { return a.title.localeCompare(b.title); }); });
+    var present = CATS.filter(function (c) { return byCat[c.id] && byCat[c.id].length; });
+    html += '<nav class="tools-nav" aria-label="Jump to a tool category">'
+      + '<button type="button" class="pill tools-jump tools-jump-top" data-cat="__top__" title="Back to Stations">↑ Top</button>'
+      + present.map(function (c) { return '<button type="button" class="pill tools-jump ' + esc(catLane(c.id)) + '" data-cat="tb-cat-' + esc(c.id) + '">' + esc(c.label) + ' <b>' + byCat[c.id].length + '</b></button>'; }).join('') + '</nav>';
+    present.forEach(function (c) {
+      var lc = catLane(c.id);
+      html += '<section class="tools-cat ' + esc(lc) + '" id="tb-cat-' + esc(c.id) + '"><div class="tools-cat-head"><h2 class="tools-cat-h">' + esc(c.label) + '</h2><span class="tools-cat-hint">' + esc(c.hint) + '</span></div>'
+        + '<div class="tools-grid">' + byCat[c.id].map(function (b) { return toolCard(b, openId, lc); }).join('') + '</div></section>';
+    });
+    return html;
+  }
+  // The Focus layout: a master-detail workbench. A searchable, grouped tool list on the left; the
+  // selected tool's full funnel panel on the right. One tool at a time, no scrolling past the rest.
+  function renderFocus(openId, factKinds) {
+    var items = focusItems();
+    var sel = resolveFocusKey(items, openId, focusSel());
+    var selItem = items.filter(function (it) { return it.key === sel; })[0] || items[0];
+    // left list, grouped in item order
+    var listHtml = '', lastGroup = '';
+    items.forEach(function (it) {
+      if (it.group !== lastGroup) {
+        if (lastGroup) listHtml += '</div>';
+        listHtml += '<div class="tfl-group" data-group="' + attr(it.group) + '"><div class="tfl-group-head">' + esc(it.group) + '</div>';
+        lastGroup = it.group;
+      }
+      var on = it.key === sel;
+      listHtml += '<button type="button" class="tfl-item ' + esc(it.hue || '') + (on ? ' on' : '') + '" data-focus="' + attr(it.key) + '"'
+        + ' data-search="' + attr((it.label + ' ' + (it.sum || '') + ' ' + (it.uses || '')).toLowerCase()) + '" aria-pressed="' + (on ? 'true' : 'false') + '">'
+        + '<span class="tfl-item-name">' + esc(it.label) + '</span>'
+        + '<span class="tfl-item-sum">' + esc(it.sum || '') + '</span></button>';
+    });
+    if (lastGroup) listHtml += '</div>';
+    var detailHtml = '<div class="tools-focus-detail" data-sel="' + attr(sel) + '">' + focusCardHtml(selItem, factKinds) + '</div>';
+    return '<div class="tools-focus-wrap">'
+      + '<aside class="tools-focus-list" aria-label="Tool list">'
+      + '<div class="tfl-search-wrap"><input type="search" class="tfl-search" placeholder="Search Tools" aria-label="Search tools" spellcheck="false" autocomplete="off">'
+      + '<span class="tfl-search-none" hidden>No tool matches.</span></div>'
+      + '<div class="tfl-groups">' + listHtml + '</div></aside>'
+      + detailHtml + '</div>';
+  }
   function render(ctx) {
     var builders = equippedBuilders();
     var openId = (ctx.args && ctx.args[0]) ? decodeURIComponent(ctx.args[0]).toLowerCase() : '';
@@ -391,37 +498,11 @@
 
     var html = '<section class="tools-route" data-layout="' + esc(lay) + '">';
     html += '<div class="tools-top"><h1 class="route-h1">Tools</h1>'
-      + '<div class="tools-lens" role="group" aria-label="Layout"><button type="button" class="tools-lens-btn' + (lay === 'focus' ? ' on' : '') + '" data-lay="focus">Focus</button>'
-      + '<button type="button" class="tools-lens-btn' + (lay === 'grid' ? ' on' : '') + '" data-lay="grid">Grid</button></div></div>';
+      + '<div class="tools-lens" role="group" aria-label="Layout"><button type="button" class="tools-lens-btn' + (lay === 'focus' ? ' on' : '') + '" data-lay="focus" aria-pressed="' + (lay === 'focus' ? 'true' : 'false') + '">Focus</button>'
+      + '<button type="button" class="tools-lens-btn' + (lay === 'grid' ? ' on' : '') + '" data-lay="grid" aria-pressed="' + (lay === 'grid' ? 'true' : 'false') + '">Grid</button></div></div>';
     html += '<p class="route-sub">Point and click: the binding bar fills the target, identity, ports, and wordlist; pick a recipe for a ready command, tune it, copy it. Nothing runs here.</p>';
     html += '<div id="bind-bar"></div>';
-
-    // stations (hero)
-    var stations = (TK && TK.stations ? TK.stations() : []).filter(function (s) { return TK.stationBuilders(s).length; });
-    if (stations.length) {
-      html += '<section class="tools-stations"><div class="tools-cat-head"><h2 class="tools-cat-h">Stations</h2><span class="tools-cat-hint">One job, your choice of engine.</span></div>'
-        + '<div class="tools-grid">' + stations.map(function (s) { return stationCard(s, openId, factKinds); }).join('') + '</div></section>';
-    }
-
-    // access kits (downloadable, fact-filled bundles)
-    html += '<section class="tools-stations"><div class="tools-cat-head"><h2 class="tools-cat-h">Access Kits</h2><span class="tools-cat-hint">Downloadable, filled from your engagement. obol writes them; you run them.</span></div>'
-      + '<div class="tools-grid">' + shellStationCard(openId === 'shell') + (OBOL.pivotStationUI ? OBOL.pivotStationUI.card(openId === 'pivot') : '') + '</div></section>';
-
-    // categories (standalone tools not covered by a station)
-    var inStation = stationBuilderIds();
-    var byCat = {};
-    builders.forEach(function (b) { if (inStation[b.id]) return; (byCat[b.category] = byCat[b.category] || []).push(b); });
-    Object.keys(byCat).forEach(function (c) { byCat[c].sort(function (a, b) { return a.title.localeCompare(b.title); }); });
-    var present = CATS.filter(function (c) { return byCat[c.id] && byCat[c.id].length; });
-
-    html += '<nav class="tools-nav" aria-label="Jump to a tool category">'
-      + '<button type="button" class="pill tools-jump tools-jump-top" data-cat="__top__" title="Back to Stations">↑ Top</button>'
-      + present.map(function (c) { return '<button type="button" class="pill tools-jump ' + esc(catLane(c.id)) + '" data-cat="tb-cat-' + esc(c.id) + '">' + esc(c.label) + ' <b>' + byCat[c.id].length + '</b></button>'; }).join('') + '</nav>';
-    present.forEach(function (c) {
-      var lc = catLane(c.id);
-      html += '<section class="tools-cat ' + esc(lc) + '" id="tb-cat-' + esc(c.id) + '"><div class="tools-cat-head"><h2 class="tools-cat-h">' + esc(c.label) + '</h2><span class="tools-cat-hint">' + esc(c.hint) + '</span></div>'
-        + '<div class="tools-grid">' + byCat[c.id].map(function (b) { return toolCard(b, openId, lc); }).join('') + '</div></section>';
-    });
+    html += (lay === 'focus') ? renderFocus(openId, factKinds) : renderGrid(openId, factKinds);
     html += '</section>';
     return html;
   }
@@ -504,6 +585,27 @@
         chips[i].classList.toggle('on', on); chips[i].setAttribute('aria-pressed', on ? 'true' : 'false');
       }
     }
+    // Show only the recipes relevant to the chosen primary value (protocol / method / ...). A recipe that
+    // pins no primary value (data-rmode="") is mode-agnostic and always shows. This is the "Protocol ->
+    // relevant Recipes" funnel: picking a mode chip reveals that mode's presets and hides the rest, so the
+    // student is never shown a lit recipe that does not apply to what they selected.
+    var pfField = primaryField(builder), pfId = pfField ? pfField.id : null;
+    function syncRecipeFilter(current) {
+      if (!pfId) return;
+      var wrap = panelEl.querySelector('.tb-recipes');
+      var tiles = panelEl.querySelectorAll('.tb-recipe');
+      if (!wrap || !tiles.length) return;
+      var cur = String(current[pfId] == null ? '' : current[pfId]);
+      var anyVisible = false;
+      for (var i = 0; i < tiles.length; i++) {
+        var rm = tiles[i].getAttribute('data-rmode') || '';
+        var show = !rm || rm === cur;
+        tiles[i].hidden = !show;
+        if (show) anyVisible = true;
+      }
+      var grid = wrap.querySelector('.tb-recipe-grid'); if (grid) grid.hidden = !anyVisible;
+      var empty = wrap.querySelector('.tb-recipes-empty'); if (empty) empty.hidden = anyVisible;
+    }
     function setEditing(on) { if (!preview) return; preview.classList.toggle('editing', on); if (editBtn) editBtn.textContent = on ? 'done' : 'edit'; if (on && edit) { edit.focus(); } }
 
     function paintGloss(cmd) { if (glossEl) glossEl.outerHTML = glossHtml(cmd, builder); glossEl = panelEl.querySelector('.tb-gloss'); }
@@ -525,6 +627,7 @@
       if (liveName) liveName.textContent = activeId ? (TK.recipeById(builder.id, activeId) || {}).label || '' : 'custom';
       edited = false;
       syncModeChips(current);
+      syncRecipeFilter(current);
       renderNeeds(current);
       try { showCmd(TB.compile(builder, current, context), true); }
       catch (err) { var missing = TB.validateRequired(builder, TB.normalizeValues(builder, current, context)); showCmd(missing.length ? ('Fill the ' + missing.length + ' required field' + (missing.length > 1 ? 's' : '') + ' below to build this command.') : 'Complete the required fields to generate a command.', false); }
@@ -643,10 +746,35 @@
     }
 
     function toggle(card) {
+      if (!card) return;
+      // In the Focus detail pane the selected tool is always expanded (the left list is the selector),
+      // so a head click there is a no-op rather than a collapse.
+      if (card.closest('.tools-focus-detail')) return;
       var head = card.querySelector('.tool-card-head');
       var open = card.classList.toggle('open');
       if (head) head.setAttribute('aria-expanded', open ? 'true' : 'false');
       if (open) mountCardBody(card);
+    }
+
+    // Focus Lens: swap the detail pane to the picked tool, mount it, mark the list row active.
+    function selectFocus(key) {
+      var detail = mount.querySelector('.tools-focus-detail'); if (!detail) return;
+      setFocusSel(key);
+      var rows = mount.querySelectorAll('.tfl-item');
+      for (var i = 0; i < rows.length; i++) { var on = rows[i].getAttribute('data-focus') === key; rows[i].classList.toggle('on', on); rows[i].setAttribute('aria-pressed', on ? 'true' : 'false'); }
+      var item = focusItems().filter(function (it) { return it.key === key; })[0]; if (!item) return;
+      var fk = []; try { fk = OBOL.store.factSet().kinds(); } catch (e) {}
+      detail.setAttribute('data-sel', key);
+      detail.innerHTML = focusCardHtml(item, fk);
+      var card = detail.querySelector('.tool-card'); if (card) { card.classList.add('open'); mountCardBody(card); }
+    }
+    function filterFocusList(q) {
+      q = String(q || '').trim().toLowerCase();
+      var rows = mount.querySelectorAll('.tfl-item'), anyAll = false;
+      for (var i = 0; i < rows.length; i++) { var hit = !q || (rows[i].getAttribute('data-search') || '').indexOf(q) >= 0; rows[i].hidden = !hit; if (hit) anyAll = true; }
+      var groups = mount.querySelectorAll('.tfl-group');
+      for (var g = 0; g < groups.length; g++) { groups[g].hidden = !groups[g].querySelector('.tfl-item:not([hidden])'); }
+      var none = mount.querySelector('.tfl-search-none'); if (none) none.hidden = anyAll;
     }
 
     U.on(mount, 'click', '.tool-card-head', function (e, t) { toggle(t.closest('.tool-card')); });
@@ -677,6 +805,10 @@
       var start = Object.assign(TB.defaultsFor(toBuilder, context), savedValues('station:' + st.id + ':' + toId), carried);
       mountPanel(card.querySelector('.tool-body'), toBuilder, context, 'station:' + st.id + ':' + toId, start);
     });
+
+    // Focus Lens: list selection + search
+    U.on(mount, 'click', '.tfl-item', function (e, t) { selectFocus(t.getAttribute('data-focus')); });
+    U.on(mount, 'input', '.tfl-search', function (e, t) { filterFocusList(t.value); });
 
     // layout lens
     U.on(mount, 'click', '.tools-lens-btn', function (e, t) { setLayout(t.getAttribute('data-lay')); OBOL.router.render(); });

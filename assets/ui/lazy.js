@@ -27,7 +27,7 @@
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=ef155083', 'assets/engine/report.js?v=0a3837f6', 'assets/ui/routes/report.js?v=a4e9c6ee'],
     tools: ['assets/engine/toolbuilder.js?v=e3ee7f1f', 'data/toolset.js?v=bda2377f',
       'data/tool-glossary.js?v=a7190533', 'data/tool-recipes.js?v=f5cf7453', 'data/tool-stations.js?v=18fb8834',
-      'assets/engine/toolkit.js?v=77414ef4', 'assets/engine/shellkit.js?v=aa4a8af5', 'assets/engine/pivotkit.js?v=4fec7f45', 'assets/ui/pivotstation.js?v=0173cdd2', 'assets/engine/workbench.js?v=1acf899d', 'assets/ui/bind.js?v=4319ea2f', 'assets/ui/routes/tools.js?v=f903925a'],
+      'assets/engine/toolkit.js?v=77414ef4', 'assets/engine/shellkit.js?v=aa4a8af5', 'assets/engine/pivotkit.js?v=4fec7f45', 'assets/ui/pivotstation.js?v=0173cdd2', 'assets/engine/workbench.js?v=1acf899d', 'assets/ui/bind.js?v=4319ea2f', 'assets/ui/routes/tools.js?v=82e1e2e6'],
     loadout: ['assets/engine/arsenal.js?v=bf5ae024', 'assets/ui/routes/loadout.js?v=fd258957'],
     workbench: ['assets/engine/workbench.js?v=1acf899d', 'assets/ui/routes/workbench.js?v=42462153'],
     stuck: ['data/stuck-catalog.js?v=e76b3e66', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=bf310a35'],

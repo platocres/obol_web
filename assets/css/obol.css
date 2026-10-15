@@ -5370,9 +5370,37 @@ main#view:has(.library) { max-width: 2600px; }
 .tools-lens-btn:last-child { border-right: 0; }
 .tools-lens-btn.on { background: var(--accent-soft); color: var(--accent-2); font-weight: 700; }
 .tools-stations { margin: 4px 0 26px; }
-/* Focus layout: single, roomy column. Grid layout: the multi-column pack. */
-.tools-route[data-layout="focus"] .tools-grid { grid-template-columns: 1fr; }
 .tools-route[data-layout="grid"] .tools-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+
+/* ---- Focus Lens: a master-detail workbench. Left: a searchable, grouped tool list. Right: the
+   selected tool's full funnel panel, always expanded. One tool at a time, no scrolling past the rest. */
+.tools-focus-wrap { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.tools-focus-list { position: sticky; top: 8px; align-self: start; max-height: calc(100vh - 92px); overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surf1); padding: 10px; }
+.tfl-search-wrap { position: sticky; top: 0; background: var(--surf1); padding-bottom: 8px; margin: -2px 0 4px; z-index: 2; }
+.tfl-search { width: 100%; box-sizing: border-box; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; color: var(--text); padding: 7px 10px; font-size: 12.5px; }
+.tfl-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tfl-search-none { display: block; font-size: 11.5px; color: var(--muted); padding: 6px 2px 0; }
+.tfl-group { margin-bottom: 10px; }
+.tfl-group-head { font: 800 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 4px 4px 6px; }
+.tfl-item { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; cursor: pointer; background: var(--surf2); border: 1px solid var(--line); border-left: 3px solid var(--lane, var(--line)); border-radius: 8px; padding: 7px 10px; margin-bottom: 5px; color: var(--text-2); }
+.tfl-item:hover { background: color-mix(in srgb, var(--lane, var(--accent)) 12%, var(--surf2)); border-color: color-mix(in srgb, var(--lane, var(--accent)) 40%, var(--line)); }
+.tfl-item.on { background: color-mix(in srgb, var(--lane, var(--accent)) 18%, var(--surf2)); border-color: var(--lane, var(--accent)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lane, var(--accent)) 45%, transparent); }
+.tfl-item-name { font-weight: 700; font-size: 13px; color: color-mix(in srgb, var(--lane, var(--text)) 58%, var(--text)); }
+.tfl-item.on .tfl-item-name { color: color-mix(in srgb, var(--lane, var(--text)) 82%, var(--text)); }
+.tfl-item-sum { font-size: 11px; color: var(--muted); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tools-focus-detail { min-width: 0; }
+/* The detail card is always expanded here: no collapse chevron, head is not a toggle, body shows. */
+.tools-focus-detail .tool-card { background: linear-gradient(180deg, color-mix(in srgb, var(--lane) 10%, var(--surf1)), var(--surf1)); border-color: color-mix(in srgb, var(--lane, var(--line)) 40%, var(--line)); border-left: 3px solid var(--lane, var(--line)); }
+.tools-focus-detail .tool-card-head { cursor: default; }
+.tools-focus-detail .tool-card-chev { display: none; }
+.tools-focus-detail .tool-card .tool-body { display: block; }
+.tools-focus-detail .tool-card-name { color: color-mix(in srgb, var(--lane, var(--text)) 80%, var(--text)); }
+.tools-focus-detail .tb-gloss-lab { color: color-mix(in srgb, var(--lane, var(--teal)) 74%, var(--text)); }
+.tools-focus-detail .tb-recipes-lab { color: color-mix(in srgb, var(--lane, var(--accent-2)) 80%, var(--text)); }
+@media (max-width: 720px) {
+  .tools-focus-wrap { grid-template-columns: 1fr; }
+  .tools-focus-list { position: static; max-height: 320px; }
+}
 
 /* stations */
 /* Do NOT hardcode --lane here: the per-station lane-<hue> class supplies it (web=violet, creds=gold,
