@@ -81,7 +81,8 @@
     L.push('LHOST="' + lhost + '"');
     L.push('LPORT="' + lport + '"');
     L.push('');
-    L.push('if ! [[ "$LPORT" =~ ^[0-9]+$ ]] || [ "$LPORT" -lt 1 ] || [ "$LPORT" -gt 65535 ]; then echo "Bad LPORT: $LPORT"; exit 1; fi');
+    L.push('if ! [[ "$LPORT" =~ ^[0-9]+$ ]] || [ "$LPORT" -lt 1 ] || [ "$LPORT" -gt 65535 ]; then echo "[!] Bad LPORT: $LPORT"; exit 1; fi');
+    L.push('if [ -z "$LHOST" ] || [ "$LHOST" = "LHOST" ]; then echo "[!] LHOST is not set. Set it in the Shell Station (your tun0 IP) and re-download."; exit 1; fi');
     L.push('echo "==================== obol Shell Station ===================="');
     L.push('echo "LHOST=$LHOST  LPORT=$LPORT   catcher: ' + cat.label + '"');
     L.push('echo');

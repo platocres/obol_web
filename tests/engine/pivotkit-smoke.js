@@ -27,7 +27,17 @@ PK.transports().forEach(function (t) {
   var r = cp.spawnSync('bash', ['-n', tmp], { encoding: 'utf8' });
   ok(r.status === 0, t.id + ': local kit passes bash -n' + (r.status === 0 ? '' : ' (' + (r.stderr || '').trim() + ')'));
   try { fs.unlinkSync(tmp); } catch (e) {}
+  // the server MUST run in the foreground (exec, not backgrounded) or the tunnel dies when the script exits.
+  var lines = kit.trim().split('\n');
+  ok(/^exec /.test(lines[lines.length - 1]), t.id + ': server runs in the foreground (last line is exec)');
+  ok(!/ &\s*$/m.test(kit) && kit.indexOf('-proxy -selfcert -laddr 0.0.0.0:' + CTX.port + ' &') < 0, t.id + ': no backgrounded server (& then exit) kills the tunnel');
+  // the install check names the real BINARY, not the transport id.
+  ok(kit.indexOf('command -v ' + (t.bin || t.id)) >= 0, t.id + ': install check probes the binary ' + (t.bin || t.id));
+  // unfilled-placeholder guard present.
+  ok(kit.indexOf('is not set, fill it') >= 0, t.id + ': guards against unfilled LHOST/PIVOT/SUBNET');
 });
+// a kit built with no context must refuse to run broken (placeholder guard), not emit LHOST="LHOST" bare.
+ok(/case .*LHOST\|PIVOT\|SUBNET\|FOOTHOLD/.test(PK.localKit('ligolo', {})), 'empty-context kit still carries the placeholder guard');
 
 // 3) on-host lines fill (agent transports) and are empty (ssh transports)
 var lig = PK.onHostLines('ligolo', CTX, 'linux');
