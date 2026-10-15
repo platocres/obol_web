@@ -190,12 +190,8 @@
       { id: 'users', label: 'User Objects', phase: 'enum', hint: 'Just the user accounts and their sAMAccountName.',
         values: { authMode: 'anonymous', filter: '(objectClass=user)', attributes: 'sAMAccountName' } },
     ],
-    'tb-enum4linux-ng': [
-      { id: 'all', label: 'Everything', phase: 'enum', hint: 'The full sweep: users, groups, shares, policy, OS, over a null session.',
-        values: { all: true } },
-      { id: 'users', label: 'Users Only', phase: 'enum', hint: 'Just enumerate the domain/local users.',
-        values: { users: true } },
-    ],
+    // tb-enum4linux-ng has no recipes: its enumeration categories (-A/-U/-G/-S/-P/-R) are now stackable
+    // Option toggles (headlineToggles), so the old "Everything"/"Users Only" presets are just toggle picks.
     'tb-rpcclient': [
       { id: 'enumusers', label: 'Enumerate Users', phase: 'enum', hint: 'The classic null-session user dump (enumdomusers).',
         values: { command: 'enumdomusers' } },
