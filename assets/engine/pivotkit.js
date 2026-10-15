@@ -16,7 +16,7 @@
   // Each transport: where each half runs, how to build them, what it needs, and the install hint.
   var TRANSPORTS = [
     {
-      id: 'sshuttle', label: 'sshuttle', needs: 'ssh', bin: 'sshuttle',
+      id: 'sshuttle', label: 'sshuttle', needs: 'ssh', bin: 'sshuttle', requires: ['PIVOT', 'SUBNET'],
       teach: 'A VPN-like tunnel over plain SSH. All local, nothing to stage on the target. The simplest pivot when you have SSH creds.',
       install: 'sudo apt install -y sshuttle',
       setup: function () { return []; },
@@ -26,7 +26,7 @@
       onhost: function () { return []; },
     },
     {
-      id: 'ssh-dynamic', label: 'SSH dynamic (SOCKS)', needs: 'ssh', bin: 'ssh',
+      id: 'ssh-dynamic', label: 'SSH dynamic (SOCKS)', needs: 'ssh', bin: 'ssh', requires: ['PIVOT'],
       teach: 'An SSH dynamic port-forward (a SOCKS proxy). All local; point proxychains at 127.0.0.1:1080.',
       install: 'ssh is already on Kali; set a "socks5 127.0.0.1 1080" line in /etc/proxychains4.conf',
       setup: function () { return []; },
@@ -36,7 +36,7 @@
       onhost: function () { return []; },
     },
     {
-      id: 'ligolo', label: 'Ligolo-ng', needs: 'agent', bin: 'ligolo-proxy',
+      id: 'ligolo', label: 'Ligolo-ng', needs: 'agent', bin: 'ligolo-proxy', requires: ['LHOST', 'SUBNET'],
       teach: 'A fast userland tunnel with a real tun interface, so your tools reach the subnet with no proxychains. Stage the agent on the target.',
       install: 'Download ligolo-proxy and the agent from the ligolo-ng releases (or the Loadout stages them).',
       // tun + route are set up first; the proxy then runs in the FOREGROUND as its interactive console.
@@ -52,7 +52,7 @@
       onhostWin: function (c) { return [agentStage(c, 'windows'), '.\\agent.exe -connect ' + c.lhost + ':' + c.port + ' -ignore-cert']; },
     },
     {
-      id: 'chisel', label: 'Chisel', needs: 'agent', bin: 'chisel',
+      id: 'chisel', label: 'Chisel', needs: 'agent', bin: 'chisel', requires: ['LHOST'],
       teach: 'A reliable reverse SOCKS tunnel over HTTP. Server local (foreground), client on the target; use proxychains to reach the subnet.',
       install: 'sudo apt install -y chisel  # or download the matching client for the target OS',
       setup: function () { return []; },
@@ -120,8 +120,10 @@
     L.push('set -u');
     L.push('LHOST="' + c.lhost + '"; PIVOT="' + c.pivotHost + '"; SUBNET="' + c.subnet + '"; PORT="' + c.port + '"');
     L.push('');
-    // guard against unfilled placeholders so the script fails loudly instead of running a broken command.
-    L.push('for v in LHOST PIVOT SUBNET; do');
+    // guard ONLY the vars this transport actually uses, so an SSH SOCKS tunnel (needs just the foothold)
+    // does not abort on an unset LHOST or SUBNET it never references.
+    var reqVars = (t.requires && t.requires.length) ? t.requires : ['LHOST', 'PIVOT', 'SUBNET'];
+    L.push('for v in ' + reqVars.join(' ') + '; do');
     L.push('  case "${!v}" in LHOST|PIVOT|SUBNET|FOOTHOLD|"") echo "[!] $v is not set, fill it in the Pivot Station and re-download."; exit 1;; esac');
     L.push('done');
     L.push('');

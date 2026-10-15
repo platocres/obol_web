@@ -46,5 +46,13 @@ ok(PK.onHostLines('ligolo', CTX, 'windows').join(' ').indexOf('agent.exe') >= 0,
 ok(PK.onHostLines('chisel', CTX, 'linux').join(' ').indexOf('R:1080:socks') >= 0, 'chisel on-host sets up the reverse SOCKS');
 ok(PK.onHostLines('sshuttle', CTX, 'linux').length === 0, 'sshuttle has no on-host half (all local)');
 
+// 4) the placeholder guard only checks the vars THIS transport uses, so an SSH SOCKS tunnel (needs just the
+// foothold) does not abort on an unset LHOST or SUBNET it never references.
+function guardLine(id) { return (PK.localKit(id, {}).split('\n').filter(function (l) { return l.indexOf('for v in') >= 0; })[0] || ''); }
+ok(/for v in PIVOT; do/.test(guardLine('ssh-dynamic')), 'ssh-dynamic guards only PIVOT (not LHOST/SUBNET)');
+ok(/for v in PIVOT SUBNET; do/.test(guardLine('sshuttle')), 'sshuttle guards PIVOT + SUBNET');
+ok(/for v in LHOST SUBNET; do/.test(guardLine('ligolo')), 'ligolo guards LHOST + SUBNET');
+ok(/for v in LHOST; do/.test(guardLine('chisel')), 'chisel guards only LHOST');
+
 if (fail) { console.error('pivotkit-smoke: ' + fail + ' FAIL'); process.exit(1); }
 console.log('pivotkit-smoke: OK');

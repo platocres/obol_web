@@ -315,7 +315,10 @@
   // the panel body: recipe tiles, editable preview + copy/reset, flag gloss, collapsible full form, evidence.
   // The primary "mode" field a tool switches on (protocol / method / role / ...). Surfaced as prominent
   // clickable chips at the top of the panel so the main choice is never buried in All Options.
-  var PRIMARY_IDS = ['mode', 'method', 'protocol', 'role', 'source', 'inputMode'];
+  // protocol wins over authMode (so nxc leads with its protocol), but authMode is the primary branch for the
+  // credentialed tools that have no protocol/mode (Evil-WinRM, secretsdump, bloodhound-python): password vs
+  // Pass-The-Hash vs Kerberos is their main choice, so it gets the lead chips.
+  var PRIMARY_IDS = ['mode', 'method', 'protocol', 'authMode', 'role', 'source', 'inputMode'];
   function primaryField(builder) {
     var fields = builder.fields || [];
     for (var i = 0; i < PRIMARY_IDS.length; i++) {
@@ -481,7 +484,10 @@
           + '<code class="shk-pay-cmd">' + esc(m.cmd) + '</code><span class="shk-pay-note">' + esc(m.note) + '</span></div>';
       }).join('');
       var wsRows = (SK.webshells ? SK.webshells() : []).map(function (w) {
+        var cradle = SK.webshellCradle ? SK.webshellCradle(w.code, w.ext) : '';
         return '<div class="shk-pay"><div class="shk-pay-h"><span class="shk-pay-name">' + esc(w.name) + '</span><span class="shk-pay-os web">shell.' + esc(w.ext) + '</span>'
+          + '<button type="button" class="bind-chip shk-ws-dl" data-fn="shell.' + attr(w.ext) + '" data-code="' + attr(w.code) + '">download</button>'
+          + (cradle ? '<button type="button" class="bind-chip shk-copy" data-copy="' + attr(cradle) + '" title="One-line base64 delivery: decode straight to a file on the target, no pasting raw source">cradle</button>' : '')
           + '<button type="button" class="bind-chip shk-copy" data-copy="' + attr(w.code) + '">copy</button></div>'
           + '<code class="shk-pay-cmd">' + esc(w.code) + '</code><span class="shk-pay-note">' + esc(w.note) + '</span></div>';
       }).join('');
@@ -508,6 +514,10 @@
     U.on(body, 'click', '.shk-encbtn', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.shellEnc = t.getAttribute('data-enc'); }, 'shell-enc'); draw(); });
     U.on(body, 'click', '.tb-engine:not(.shk-encbtn)', function (e, t) { if (!t.getAttribute('data-catcher')) return; OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.shellCatcher = t.getAttribute('data-catcher'); }, 'shell-catcher'); draw(); });
     U.on(body, 'click', '.shk-copy, .shk-copyenc', function (e, t) { U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); }); });
+    U.on(body, 'click', '.shk-ws-dl', function (e, t) {
+      var okd = downloadText(t.getAttribute('data-fn') || 'shell.txt', t.getAttribute('data-code') || '');
+      U.toast(okd ? 'Web shell downloaded' : 'Download blocked by the browser', okd ? '' : 'err');
+    });
     U.on(body, 'click', '.shk-dl', function () {
       var sp = shellParams();
       var cur = ((OBOL.store.active() || {}).ui || {}).shellCatcher || 'nc';
@@ -786,7 +796,10 @@
       function hasOpt(v) { for (var i = 0; i < modeEl.options.length; i++) if (modeEl.options[i].value === String(v)) return true; return false; }
       function detect() {
         var v = String(hashEl.value || '').trim();
-        if (!v || v.length < 8 || /[\s]/.test(v) || v.indexOf('/') >= 0 || v.indexOf('\\') >= 0) return; // a path or blank, not a hash
+        if (!v || v.length < 8 || /\s/.test(v)) return; // blank, too short, or whitespace: not a single hash
+        // A slash/backslash usually means a filesystem path, NOT a hash, EXCEPT a structured hash that starts
+        // with '$' (a Kerberoast $krb5tgs$ carries the SPN, e.g. MSSQLSvc/dc01:1433, with slashes).
+        if (v.charAt(0) !== '$' && (v.indexOf('/') >= 0 || v.indexOf('\\') >= 0)) return;
         var r = OBOL.workbench.identifyHash(v), cand = r && r.candidates && r.candidates[0];
         if (!cand) return;
         var want = isHc ? String(cand.mode) : normJohn(cand.john);
