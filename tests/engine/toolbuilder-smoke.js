@@ -168,5 +168,18 @@ var sdPrompt = compileOf('tb-secretsdump', { authMode: 'password-prompt', domain
 ok(sdPrompt.indexOf(':') === -1 || sdPrompt.indexOf('alice@10.0.0.10') !== -1, 'secretsdump password-prompt inlines no password in the target');
 ok(sdPrompt.indexOf('alice@10.0.0.10') !== -1, 'secretsdump password-prompt keeps user@host so impacket prompts for the password');
 
+// I3 Windows quoting: a 'windows' executionContext builder must NOT wrap target paths in POSIX
+// single quotes (literal on cmd.exe/PowerShell). winpeas is the one windows-context builder.
+ok(typeof TB.winQuote === 'function', 'a Windows quoter is exported');
+ok(TB.winQuote('C:\\Windows\\Temp\\x.exe') === 'C:\\Windows\\Temp\\x.exe', 'winQuote leaves a backslash path bare');
+ok(TB.winQuote('a b') === '"a b"', 'winQuote double-quotes a value with a space');
+var wpRL = compileOf('tb-winpeas', { mode: 'run-local', quiet: 'quiet', outputFile: 'C:\\Temp\\o.txt' });
+ok(wpRL.indexOf("'") === -1, 'winpeas does not POSIX single-quote (would break on the Windows target)');
+ok(wpRL.indexOf('cmd /c "C:\\Windows\\Temp\\winPEASx64.exe quiet > C:\\Temp\\o.txt"') !== -1, 'winpeas run-local is cmd-quoted and runs');
+var wpPS = compileOf('tb-winpeas', { mode: 'ps-download', url: 'http://10.0.0.1/w.exe', targetPath: 'C:\\T\\w.exe' });
+ok(wpPS.indexOf("-Command \"Invoke-WebRequest") !== -1, 'winpeas ps-download double-quotes the -Command script');
+// a kali-context builder still uses POSIX single-quoting for spacey/hostile values.
+ok(TB.shellQuote('a b') === "'a b'", 'shellQuote (kali/default) still POSIX single-quotes');
+
 if (fail) { console.error('\n' + fail + ' assertion(s) FAILED.'); process.exit(1); }
 console.log('\nAll toolbuilder smoke assertions passed (' + TS.length + ' builders).');

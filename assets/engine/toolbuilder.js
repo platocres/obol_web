@@ -35,6 +35,18 @@
     if (/^[A-Za-z0-9_@%+=:,.\/-]+$/.test(s)) return s;
     return "'" + s.replace(/'/g, "'\\''") + "'";
   }
+  // Windows (cmd.exe / PowerShell) quoting for executionContext 'windows'. POSIX single quotes are
+  // literal on a Windows shell, so a path like C:\Windows\Temp\x.exe wrapped in '...' breaks when the
+  // operator pastes it on the target. Backslash paths are cmd-safe and pass through; anything with a
+  // space or a cmd metacharacter is wrapped in double quotes (which cmd /c and powershell -Command
+  // both honour) with embedded double quotes escaped.
+  function winQuote(s) {
+    s = String(s == null ? '' : s);
+    if (s === '') return '""';
+    if (/^[A-Za-z0-9_@%+=:,.\/\\-]+$/.test(s)) return s;
+    return '"' + s.replace(/"/g, '\\"') + '"';
+  }
+  function quoterFor(ctx) { return ctx === 'windows' ? winQuote : shellQuote; }
 
   function truthy(v) { return v === true || v === 1 || v === '1' || v === 'true' || v === 'on' || v === 'yes'; }
   function same(a, b) { return String(a) === String(b); }
@@ -296,19 +308,20 @@
     var resolved = normalizeValues(builder, values, context);
     var missing = validateRequired(builder, resolved);
     if (missing.length) throw new Error('Missing required fields: ' + missing.join(', '));
-    var parts = [shellQuote(commandExecutable(builder, resolved))];
+    var q = quoterFor(builder.executionContext);
+    var parts = [q(commandExecutable(builder, resolved))];
     arr(builder.command.tokens).forEach(function (token) {
       if (!conditionMatches(token.when, resolved)) return;
       if (token.kind === 'literal') { parts.push(String(token.value)); return; }
       var value = resolved[token.field];
       if (token.kind === 'toggle') { if (truthy(value)) parts.push(String(token.flag)); return; }
       if (token.kind === 'choice') { var a = choiceArg(token, value); if (a) parts.push(String(a)); return; }
-      if (token.kind === 'concat') { var combined = concatValue(token, resolved); if (combined) parts.push(token.raw === true ? combined : shellQuote(combined)); return; }
+      if (token.kind === 'concat') { var combined = concatValue(token, resolved); if (combined) parts.push(token.raw === true ? combined : q(combined)); return; }
       if (token.kind === 'repeat') {
         if (value === undefined || value === null || value === '') return;
         splitRepeat(value, token.split || 'lines').forEach(function (item) {
           if (token.flag) parts.push(String(token.flag));
-          parts.push(token.raw === true ? item : shellQuote(valueWithAffixes(token, item)));
+          parts.push(token.raw === true ? item : q(valueWithAffixes(token, item)));
         });
         return;
       }
@@ -316,7 +329,7 @@
         if (value === undefined || value === null || value === '') return;
         if (token.flag) parts.push(String(token.flag));
         var rendered = valueWithAffixes(token, value);
-        parts.push(token.raw === true ? rendered : shellQuote(rendered));
+        parts.push(token.raw === true ? rendered : q(rendered));
       }
     });
     return parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
@@ -327,6 +340,7 @@
     CREDENTIAL_KINDS: CREDENTIAL_KINDS,
     EXECUTION_CONTEXTS: EXECUTION_CONTEXTS,
     shellQuote: shellQuote,
+    winQuote: winQuote,
     truthy: truthy,
     conditionMatches: conditionMatches,
     validate: validate,
