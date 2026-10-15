@@ -158,5 +158,15 @@ var digNo = compileOf('tb-dig', { name: 'corp.local', type: 'axfr' });
 ok(digNo.indexOf('@') === -1 && /dig axfr corp\.local$/.test(digNo), 'dig omits @server when none is given');
 ok(compileOf('tb-dig', { name: 'corp.local', type: 'axfr', server: '10.0.0.1' }).indexOf('@10.0.0.1') !== -1, 'dig keeps @server when one is given');
 
+// C7 impacket: a password with @ breaks impacket's own target parser; the password-prompt mode
+// omits the password from the target so impacket prompts (correct for any special-char password).
+['tb-secretsdump', 'tb-getuserspns', 'tb-mssqlclient', 'tb-impacket-exec'].forEach(function (id) {
+  var am = byId[id].fields.find(function (f) { return f.id === 'authMode'; });
+  ok(am.options.some(function (o) { return o.value === 'password-prompt'; }), id + ': offers a password-prompt auth mode');
+});
+var sdPrompt = compileOf('tb-secretsdump', { authMode: 'password-prompt', domain: 'corp.local', username: 'alice', target: '10.0.0.10' });
+ok(sdPrompt.indexOf(':') === -1 || sdPrompt.indexOf('alice@10.0.0.10') !== -1, 'secretsdump password-prompt inlines no password in the target');
+ok(sdPrompt.indexOf('alice@10.0.0.10') !== -1, 'secretsdump password-prompt keeps user@host so impacket prompts for the password');
+
 if (fail) { console.error('\n' + fail + ' assertion(s) FAILED.'); process.exit(1); }
 console.log('\nAll toolbuilder smoke assertions passed (' + TS.length + ' builders).');
