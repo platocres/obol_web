@@ -26,7 +26,7 @@
     domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=b9cd70b7', 'assets/ui/bhgraph.js?v=18204e6c', 'assets/ui/routes/domain.js?v=dcac952d'],
     report: ['assets/jszip.min.js?v=c96375d5', 'data/reportmeta.js?v=ef155083', 'assets/engine/report.js?v=0a3837f6', 'assets/ui/routes/report.js?v=a4e9c6ee'],
     tools: ['assets/engine/toolbuilder.js?v=e3ee7f1f', 'data/toolset.js?v=73192b48',
-      'data/tool-glossary.js?v=a99f9314', 'data/tool-recipes.js?v=70f72590', 'data/tool-stations.js?v=fb120866',
+      'data/tool-glossary.js?v=a99f9314', 'data/tool-recipes.js?v=4b5b815c', 'data/tool-stations.js?v=fb120866',
       'assets/engine/toolkit.js?v=77414ef4', 'assets/engine/shellkit.js?v=aa4a8af5', 'assets/engine/pivotkit.js?v=94634d8e', 'assets/ui/pivotstation.js?v=0173cdd2', 'assets/ui/bind.js?v=4319ea2f', 'assets/ui/routes/tools.js?v=e44991e0'],
     loadout: ['assets/engine/arsenal.js?v=bf5ae024', 'assets/ui/routes/loadout.js?v=fd258957'],
     workbench: ['assets/engine/workbench.js?v=1acf899d', 'assets/ui/routes/workbench.js?v=42462153'],
@@ -35,7 +35,7 @@
     // catalog/map (for the ATT&CK lens) and the library engine itself.
     library: ['data/stuck-catalog.js?v=e76b3e66', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=bf310a35',
       'data/attack-catalog.js?v=1fca5f0a', 'data/attack-move-map.js?v=69b57161',
-      'data/tool-glossary.js?v=a99f9314', 'data/tool-recipes.js?v=70f72590', 'data/tool-stations.js?v=fb120866',
+      'data/tool-glossary.js?v=a99f9314', 'data/tool-recipes.js?v=4b5b815c', 'data/tool-stations.js?v=fb120866',
       'assets/engine/toolbuilder.js?v=e3ee7f1f', 'data/toolset.js?v=73192b48', 'assets/engine/toolkit.js?v=77414ef4', 'assets/ui/bind.js?v=4319ea2f',
       'assets/engine/library.js?v=cc552212', 'assets/ui/routes/library.js?v=4f8e4bd2'],
     study: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b', 'assets/ui/routes/study.js?v=277d4c77'],
