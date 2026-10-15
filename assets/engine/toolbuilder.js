@@ -49,6 +49,11 @@
     if (Object.prototype.hasOwnProperty.call(condition, 'in')) return (condition.in || []).some(function (e) { return same(value, e); });
     if (Object.prototype.hasOwnProperty.call(condition, 'notIn')) return !(condition.notIn || []).some(function (e) { return same(value, e); });
     if (Object.prototype.hasOwnProperty.call(condition, 'truthy')) return truthy(value) === condition.truthy;
+    // notEmpty: true matches a present, non-blank value (free text, unlike truthy which is boolean-only).
+    if (Object.prototype.hasOwnProperty.call(condition, 'notEmpty')) {
+      var present = value != null && String(value) !== '';
+      return condition.notEmpty ? present : !present;
+    }
     return false;
   }
 
@@ -100,11 +105,12 @@
     }
     if (typeof condition !== 'object') return [label + ' must be an object or array'];
     if (!fieldIds[condition.field]) fail(errors, label + ' references unknown field ' + text(condition.field));
-    var ops = ['equals', 'notEquals', 'in', 'notIn', 'truthy'].filter(function (k) { return Object.prototype.hasOwnProperty.call(condition, k); });
+    var ops = ['equals', 'notEquals', 'in', 'notIn', 'truthy', 'notEmpty'].filter(function (k) { return Object.prototype.hasOwnProperty.call(condition, k); });
     if (ops.length !== 1) fail(errors, label + ' must declare exactly one condition operator');
     if (Object.prototype.hasOwnProperty.call(condition, 'in') && !isArr(condition.in)) fail(errors, label + ' in operator requires an array');
     if (Object.prototype.hasOwnProperty.call(condition, 'notIn') && !isArr(condition.notIn)) fail(errors, label + ' notIn operator requires an array');
     if (Object.prototype.hasOwnProperty.call(condition, 'truthy') && typeof condition.truthy !== 'boolean') fail(errors, label + ' truthy operator requires a boolean');
+    if (Object.prototype.hasOwnProperty.call(condition, 'notEmpty') && typeof condition.notEmpty !== 'boolean') fail(errors, label + ' notEmpty operator requires a boolean');
     return errors;
   }
 
