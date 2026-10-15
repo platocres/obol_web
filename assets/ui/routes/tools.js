@@ -217,6 +217,73 @@
       + '<div class="tool-body"></div></article>';
   }
 
+  // ================================ Shell Station ================================
+  function downloadText(filename, text) {
+    try {
+      var blob = new Blob([text], { type: 'text/x-shellscript' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a'); a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      return true;
+    } catch (e) { return false; }
+  }
+  function shellParams() {
+    var p = (OBOL.store.active() || {}).params || {};
+    return { lhost: p.lhost || '', lport: p.lport || '4444' };
+  }
+  function shellStationCard(open) {
+    return '<article class="tool-card station-card shell-station lane-shells' + (open ? ' open' : '') + '" data-station-id="shell">'
+      + '<div class="tool-card-head" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '">'
+      + '<div class="tool-card-title"><span class="station-badge">Kit</span><span class="tool-card-name">Get A Shell</span><span class="tool-card-chev" aria-hidden="true">▾</span></div>'
+      + '<p class="tool-card-sum">Download a listener kit: one .sh that prints every payload filled with your LHOST and LPORT, the PowerShell -EncodedCommand, and the TTY upgrade, then listens.</p></div>'
+      + '<div class="tool-body"></div></article>';
+  }
+  function mountShellStation(body) {
+    if (!OBOL.shellkit) { body.innerHTML = '<p class="tb-hint">Shell kit engine still loading, try again in a moment.</p>'; return; }
+    var SK = OBOL.shellkit;
+    function draw() {
+      var sp = shellParams();
+      var catchers = SK.catchers();
+      var cur = ((OBOL.store.active() || {}).ui || {}).shellCatcher || 'nc';
+      if (!catchers.some(function (c) { return c.id === cur; })) cur = 'nc';
+      var catEl = catchers.map(function (c) { return '<button type="button" class="tb-engine' + (c.id === cur ? ' on' : '') + '" data-catcher="' + esc(c.id) + '" title="' + attr(c.teach) + '">' + esc(c.label) + '</button>'; }).join('');
+      var teach = (catchers.filter(function (c) { return c.id === cur; })[0] || catchers[0]).teach;
+      var pays = SK.payloads(sp.lhost || 'LHOST', sp.lport || '4444');
+      var payRows = pays.map(function (p) {
+        return '<div class="shk-pay"><div class="shk-pay-h"><span class="shk-pay-name">' + esc(p.name) + '</span><span class="shk-pay-os ' + esc(p.os) + '">' + esc(p.os) + '</span>'
+          + '<button type="button" class="bind-chip shk-copy" data-copy="' + attr(p.cmd) + '">copy</button></div>'
+          + '<code class="shk-pay-cmd">' + esc(p.cmd) + '</code></div>';
+      }).join('');
+      var enc = SK.psEncodedCommand(sp.lhost || 'LHOST', sp.lport || '4444');
+      var tty = SK.ttyUpgrade().map(function (l) { return esc(l); }).join('\n');
+      body.innerHTML = '<div class="shk">'
+        + '<div class="shk-lh"><label>LHOST <input class="shk-lhost" value="' + attr(sp.lhost) + '" placeholder="10.10.14.5" spellcheck="false"></label>'
+        + '<label>LPORT <input class="shk-lport" value="' + attr(sp.lport) + '" placeholder="4444" spellcheck="false"></label></div>'
+        + '<div class="station-engines"><span class="tb-engines-lab">Catcher</span>' + catEl + '<span class="tb-engine-teach">' + esc(teach) + '</span></div>'
+        + '<div class="shk-actions"><button type="button" class="shk-dl">Download Kit (.sh)</button>'
+        + '<button type="button" class="bind-chip shk-copyenc" data-copy="' + attr(enc) + '">Copy PowerShell -EncodedCommand</button>'
+        + '<span class="tb-hint">obol writes it; you run it on your own box. Nothing executes here.</span></div>'
+        + '<div class="shk-pays">' + payRows + '</div>'
+        + '<div class="tb-gloss"><div class="tb-gloss-lab">After You Catch It: Upgrade The TTY</div><pre class="shk-tty">' + tty + '</pre></div>'
+        + '</div>';
+    }
+    draw();
+    U.on(body, 'input', '.shk-lhost', function (e, t) { OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.lhost = t.value.trim(); }, 'params'); });
+    U.on(body, 'input', '.shk-lport', function (e, t) { OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.lport = t.value.trim(); }, 'params'); });
+    U.on(body, 'change', '.shk-lhost', function () { draw(); });
+    U.on(body, 'change', '.shk-lport', function () { draw(); });
+    U.on(body, 'click', '.tb-engine', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.shellCatcher = t.getAttribute('data-catcher'); }, 'shell-catcher'); draw(); });
+    U.on(body, 'click', '.shk-copy, .shk-copyenc', function (e, t) { U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); }); });
+    U.on(body, 'click', '.shk-dl', function () {
+      var sp = shellParams();
+      var cur = ((OBOL.store.active() || {}).ui || {}).shellCatcher || 'nc';
+      var kit = SK.listenerKit({ lhost: sp.lhost || 'LHOST', lport: sp.lport || '4444', catcher: cur });
+      var okd = downloadText('obol-listener-' + (sp.lport || '4444') + '.sh', kit);
+      U.toast(okd ? 'Listener kit downloaded' : 'Download blocked by the browser', okd ? '' : 'err');
+    });
+  }
+
   // ================================ render ================================
   function render(ctx) {
     var builders = equippedBuilders();
@@ -240,6 +307,10 @@
       html += '<section class="tools-stations"><div class="tools-cat-head"><h2 class="tools-cat-h">Stations</h2><span class="tools-cat-hint">One job, your choice of engine.</span></div>'
         + '<div class="tools-grid">' + stations.map(function (s) { return stationCard(s, openId, factKinds); }).join('') + '</div></section>';
     }
+
+    // access kits (downloadable, fact-filled bundles)
+    html += '<section class="tools-stations"><div class="tools-cat-head"><h2 class="tools-cat-h">Access Kits</h2><span class="tools-cat-hint">Downloadable, filled from your engagement. obol writes them; you run them.</span></div>'
+      + '<div class="tools-grid">' + shellStationCard(openId === 'shell') + '</div></section>';
 
     // categories (standalone tools not covered by a station)
     var inStation = stationBuilderIds();
@@ -380,6 +451,7 @@
     }
     function mountCardBody(card) {
       var body = card.querySelector('.tool-body'); if (!body) return;
+      if (card.classList.contains('shell-station')) { mountShellStation(body); return; }
       if (card.classList.contains('station-card')) {
         var st = TK.stationById(card.getAttribute('data-station-id')); if (!st) return;
         var active = card.getAttribute('data-active-engine');

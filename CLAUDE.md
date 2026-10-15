@@ -1839,3 +1839,22 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   rebuilt, assets stamped. toolbuilder-smoke now 50 builders. TC is complete: every daily-driver tool
   the owner listed has a builder, and the four stations (Port Scan, Web Content Discovery, Crack
   Hashes, Database Shell) are populated.
+### TD status log
+
+- 2026-10-15: TD phase 1, the Shell Station (Access Kits), the owner's "one-download listener kit"
+  idea. New engine assets/engine/shellkit.js (OBOL.shellkit, pure/Node-safe): a curated OSCP payload
+  catalogue (mirroring the Workbench reverse-shell set), catchers (nc, rlwrap+nc, ncat TLS, pwncat-cs,
+  socat, metasploit multi/handler), the TTY-upgrade sequence, and listenerKit() which emits a complete
+  .sh that prints every payload filled with LHOST/LPORT, the PowerShell -EncodedCommand (UTF-16LE then
+  base64, the owner's must-have for the OSCP), and the upgrade, then execs the chosen catcher in the
+  foreground so it is listening the moment you run it. tests/engine/shellkit-smoke.js proves psEncode is
+  byte-exact (whoami -> dwBoAG8AYQBtAGkA, and the browser no-Buffer path agrees), payloads fill with no
+  token leak, and every generated kit passes `bash -n`. UI: a "Get A Shell" kit card in a new Access
+  Kits section of the Tools tab, LHOST/LPORT bound to params, a catcher selector, Download Kit (.sh), a
+  one-click Copy PowerShell -EncodedCommand, the filled payload grid with per-payload copy, and the TTY
+  upgrade. Honesty line on the card: obol writes it, you run it on your own box, nothing executes here.
+  Driven headless: deep link opens it, 9 payloads filled from the engagement, the REAL downloaded .sh
+  has the shebang, filled LHOST/LPORT, the -EncodedCommand, and passes bash -n, 0 console errors.
+  shellkit.js registered in the lazy tools group. Full engine suite + browser-smoke + lint green; assets
+  stamped. TD2 (the Pivot Station, downloadable local-half tunnel + on-host chips, in Tools and Cruise)
+  is next.

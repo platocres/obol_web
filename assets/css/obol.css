@@ -5410,3 +5410,25 @@ main#view:has(.library) { max-width: 2600px; }
 .tb-allopts[open] { padding-bottom: 12px; }
 .tb-allopts .tb-form { margin-top: 12px; }
 .tb-foot { font-size: 11px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
+
+/* ============================ Shell Station (Access Kits) ============================ */
+.shell-station { --lane: var(--ph-access); }
+.shk { padding: 2px 0 4px; }
+.shk-lh { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.shk-lh label { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.shk-lh input { background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; color: var(--text); padding: 5px 9px; font: 12.5px var(--mono); width: 150px; }
+.shk-lh input:focus { outline: none; border-color: var(--lane); }
+.shk-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 10px 0 14px; }
+.shk-dl { background: color-mix(in srgb, var(--lane) 20%, var(--surf2)); border: 1px solid var(--lane); color: var(--text); border-radius: 8px; padding: 7px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.shk-dl:hover { background: color-mix(in srgb, var(--lane) 32%, var(--surf2)); }
+.shk-pays { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 12px; }
+@media (min-width: 1000px) { .shk-pays { grid-template-columns: 1fr 1fr; } }
+.shk-pay { border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); padding: 8px 10px; min-width: 0; }
+.shk-pay-h { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.shk-pay-name { font-weight: 700; font-size: 12px; color: var(--text); }
+.shk-pay-os { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; border-radius: 4px; padding: 0 5px; }
+.shk-pay-os.linux { background: color-mix(in srgb, var(--teal) 22%, transparent); color: color-mix(in srgb, var(--teal) 85%, var(--text)); }
+.shk-pay-os.windows { background: color-mix(in srgb, var(--ph-recon) 22%, transparent); color: color-mix(in srgb, var(--ph-recon) 85%, var(--text)); }
+.shk-pay-h .shk-copy { margin-left: auto; }
+.shk-pay-cmd { display: block; font: 11.5px var(--mono); color: var(--text-2); white-space: pre-wrap; word-break: break-all; }
+.shk-tty { margin: 0; font: 11.5px var(--mono); color: var(--text-2); white-space: pre-wrap; }
