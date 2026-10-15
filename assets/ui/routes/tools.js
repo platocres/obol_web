@@ -146,6 +146,17 @@
     }).join('');
     return '<form class="tb-form" novalidate>' + groups + '</form>';
   }
+  // The real executable of a compiled command, for the live cmd-tag label (skip env/sudo wrappers and
+  // VAR=value prefixes so a field-choice tool like file-transfer-helper shows impacket-smbserver, not wget).
+  function execOf(cmd) {
+    var toks = (TK && TK.tokenize) ? TK.tokenize(cmd) : String(cmd).split(' ');
+    for (var i = 0; i < toks.length; i++) {
+      var t = toks[i];
+      if (t === 'env' || t === 'sudo' || t === 'nohup' || t === 'exec' || /^[A-Z_][A-Z0-9_]*=/.test(t)) continue;
+      return t.split('/').pop();
+    }
+    return toks[0] || '';
+  }
   function highlight(cmd) {
     // Tokenize honoring quotes (TK.tokenize) so a quoted argument like "whoami /all" stays ONE token and
     // its inner space is not mistaken for a flag boundary. Colour executables, flags, IPs, numbers, and
@@ -462,6 +473,7 @@
     var editBtn = panelEl.querySelector('.tb-editbtn');
     var preview = panelEl.querySelector('.tb-preview');
     var glossEl = panelEl.querySelector('.tb-gloss');
+    var cmdTag = panelEl.querySelector('.cmd-tag');
     var liveName = panelEl.querySelector('.tb-recipe-name-live');
     var needsEl = panelEl.querySelector('.tb-needs');
     var needsLastKey = '__init__';
@@ -497,6 +509,7 @@
 
     function paintGloss(cmd) { if (glossEl) glossEl.outerHTML = glossHtml(cmd, builder); glossEl = panelEl.querySelector('.tb-gloss'); }
     function showCmd(cmd, valid) {
+      if (cmdTag && valid) { var ex = execOf(cmd); if (ex) cmdTag.textContent = ex; } // reflect the ACTIVE executable
       code.innerHTML = valid ? highlight(cmd) : esc(cmd);
       code.setAttribute('data-valid', valid ? 'true' : 'false');
       if (valid) code.setAttribute('data-cmd', cmd); else code.removeAttribute('data-cmd');
