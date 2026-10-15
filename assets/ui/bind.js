@@ -17,17 +17,11 @@
   function esc(s) { return U.esc(s); }
   function attr(s) { return U.attr ? U.attr(s) : esc(s); }
 
+  // Kept as the engagement's content-discovery default (feeds the Tools workspace context), but no longer
+  // a binding-bar row: {{wordlist}} serves both content discovery and password work, so one global slot was
+  // ambiguous. The per-tool dropdowns own the per-tool choice now, and the coach picks a context-appropriate
+  // default per move (OBOL.loot), so there is nothing left for a single engagement wordlist to set.
   var DEFAULT_WORDLIST = '/usr/share/seclists/Discovery/Web-Content/raft-small-words.txt';
-  // A compact, self-contained palette of the wordlists a student reaches for most. Grouped so the chips
-  // read as "directories / files / subdomains / passwords" without needing the Workbench engine loaded.
-  var WORDLISTS = [
-    { label: 'raft small', path: '/usr/share/seclists/Discovery/Web-Content/raft-small-words.txt', kind: 'web' },
-    { label: 'raft medium dirs', path: '/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt', kind: 'web' },
-    { label: 'common.txt', path: '/usr/share/seclists/Discovery/Web-Content/common.txt', kind: 'web' },
-    { label: 'dirb common', path: '/usr/share/wordlists/dirb/common.txt', kind: 'web' },
-    { label: 'subdomains 5k', path: '/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt', kind: 'dns' },
-    { label: 'rockyou', path: '/usr/share/wordlists/rockyou.txt', kind: 'pw' },
-  ];
 
   // ---- state (per engagement, under eng.ui.bind) ----
   function eng() { try { return OBOL.store.active(); } catch (e) { return null; } }
@@ -145,14 +139,6 @@
       + (cur ? '<button type="button" class="bind-chip bind-port-clear">clear</button>' : '') + '</div></div>';
   }
 
-  function wordlistRow() {
-    var cur = state().wordlist || params().wordlist || '';
-    var chips = WORDLISTS.map(function (w) {
-      return '<button type="button" class="bind-chip bind-wl' + (w.path === cur ? ' on' : '') + '" data-wl="' + attr(w.path) + '" title="' + attr(w.path) + '">' + esc(w.label) + '</button>';
-    }).join('');
-    return '<div class="bind-row br-wl"><span class="bind-lab">Wordlist</span><div class="bind-chips">' + chips + '</div></div>';
-  }
-
   // render(opts) -> the band HTML. opts.compact shrinks it for the Library lens bar.
   function render(opts) {
     opts = opts || {};
@@ -169,7 +155,7 @@
       + '<p class="bind-modehint">' + (manual ? 'Manual: autofill is paused, you type every parameter.' : 'Autofill: commands fill from this engagement. Switch to Manual to type everything yourself.') + '</p>';
     var targetRow = '<div class="bind-row br-target"><span class="bind-lab">Target</span>'
       + '<input type="text" class="bind-target" value="' + attr(tgt) + '" placeholder="10.10.10.10 or host.domain" autocomplete="off" spellcheck="false"' + (manual ? ' disabled' : '') + '></div>';
-    var body = manual ? '' : (targetRow + identityRow() + portsRow() + wordlistRow());
+    var body = manual ? '' : (targetRow + identityRow() + portsRow());
     return '<section class="bind' + (opts.compact ? ' bind-compact' : '') + ' cv-shead cv-sh-teal">' + head + body + '</section>';
   }
 
@@ -199,13 +185,6 @@
     U.on(el, 'click', '.bind-copy-secret', function (e, t) { U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Secret copied' : 'Copy failed', ok ? '' : 'err'); }); });
     U.on(el, 'click', '.bind-port', function (e, t) { setState({ port: t.getAttribute('data-port') }, 'bind-port'); changed(); });
     U.on(el, 'click', '.bind-port-clear', function () { setState({ port: '' }, 'bind-port'); changed(); });
-    U.on(el, 'click', '.bind-wl', function (e, t) {
-      var path = t.getAttribute('data-wl');
-      var next = state().wordlist === path ? '' : path;
-      setState({ wordlist: next }, 'bind-wl');
-      setParam('wordlist', next);
-      changed();
-    });
   }
 
   OBOL.bind = { render: render, mount: mount, context: context, selectedIdentity: selectedIdentity, effectiveIdentity: effectiveIdentity, DEFAULT_WORDLIST: DEFAULT_WORDLIST };

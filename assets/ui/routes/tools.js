@@ -587,7 +587,7 @@
     html += '<div class="tools-top"><h1 class="route-h1">Tools</h1>'
       + '<div class="tools-lens" role="group" aria-label="Layout"><button type="button" class="tools-lens-btn' + (lay === 'grid' ? ' on' : '') + '" data-lay="grid" aria-pressed="' + (lay === 'grid' ? 'true' : 'false') + '">Grid</button>'
       + '<button type="button" class="tools-lens-btn' + (lay === 'focus' ? ' on' : '') + '" data-lay="focus" aria-pressed="' + (lay === 'focus' ? 'true' : 'false') + '">Focus</button></div></div>';
-    html += '<p class="route-sub">Point and click: the binding bar fills the target, identity, ports, and wordlist; pick a recipe for a ready command, tune it, copy it. Nothing runs here.</p>';
+    html += '<p class="route-sub">Point and click: the binding bar fills the target, identity, and ports; pick a recipe for a ready command, tune it, copy it. Nothing runs here.</p>';
     html += '<div id="bind-bar"></div>';
     html += (lay === 'focus') ? renderFocus(openId, factKinds) : renderGrid(openId, factKinds);
     html += '</section>';
