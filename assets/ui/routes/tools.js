@@ -225,8 +225,11 @@
   }
   function toolCard(builder, openId, laneCls) {
     var open = builder.id === openId || builder.tool === openId || (builder.equips || []).indexOf(openId) !== -1;
-    var equipsChips = (builder.equips || []).slice(0, 4).map(function (t) { return '<span class="pill">' + esc(t) + '</span>'; }).join('');
-    var cred = (builder.credentialModes && builder.credentialModes.length) ? '<span class="pill tb-cred">' + esc(builder.credentialModes.join(' / ')) + '</span>' : '';
+    // These are DESCRIPTIVE metadata (what binaries the tool uses, which auth it takes), not selectors.
+    // Label them "uses" / "auth" and style them flat so they do not read as clickable mode toggles.
+    var equips = (builder.equips || []).slice(0, 4);
+    var equipsChips = equips.length ? '<span class="tags-lab">uses</span>' + equips.map(function (t) { return '<span class="pill tag-static">' + esc(t) + '</span>'; }).join('') : '';
+    var cred = (builder.credentialModes && builder.credentialModes.length) ? '<span class="tags-lab">auth</span><span class="pill tb-cred tag-static">' + esc(builder.credentialModes.join(' / ')) + '</span>' : '';
     return '<article class="tool-card' + (laneCls ? ' ' + laneCls : '') + (open ? ' open' : '') + '" data-tool-id="' + esc(builder.id) + '">'
       + toolCardHead(builder)
       + '<div class="tool-card-tags">' + equipsChips + cred + '</div>'

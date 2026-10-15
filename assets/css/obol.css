@@ -1444,8 +1444,12 @@ ol.bh-steps li { margin-bottom: 9px; }
 .tool-card-exec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
 .tool-card-sum { color: var(--text-2); font-size: 12.5px; margin: 7px 0 0; padding-right: 22px; line-height: 1.45; }
 .tool-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 15px 13px; }
-.tool-card-tags .pill { font-family: var(--mono); font-size: 11px; padding: 2px 8px; background: var(--bg2); color: var(--text-2); }
-.pill.tb-cred { background: var(--accent-soft); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+/* descriptive tags, not selectors: a mini label plus flat (non-pill, non-interactive) chips */
+.tool-card-tags .tags-lab { font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-right: 1px; }
+.tool-card-tags .tags-lab:not(:first-child) { margin-left: 6px; }
+.tool-card-tags .pill.tag-static { font-family: var(--mono); font-size: 11px; padding: 2px 8px; background: var(--bg2); color: var(--text-2); border-radius: 5px; cursor: default; }
+/* the auth tag: a quiet outline, not a solid green "active" chip that looks selected */
+.pill.tb-cred.tag-static { background: transparent; color: var(--text-2); border-color: var(--line); }
 .tool-card-chev { position: absolute; top: 15px; right: 14px; color: var(--muted); transition: transform .15s; }
 .tool-card.open .tool-card-chev { transform: rotate(180deg); }
 .tool-body { display: none; padding: 0 15px 15px; }
