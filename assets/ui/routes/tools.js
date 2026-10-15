@@ -32,6 +32,10 @@
   ];
   // Phase hue per recipe tag (reuses the --ph-* tokens).
   var PHASE_HUE = { recon: 'recon', enum: 'enum', cracking: 'creds', creds: 'creds', access: 'access', escalate: 'escalate', loot: 'loot' };
+  // Each tool category gets a distinct LANE hue, so the page reads as colour-coded zones (the hue
+  // encodes the category). Maps to the established .lane-* classes (which set --lane).
+  var CATHUE = { web: 'lane-web', credentials: 'lane-creds', ad: 'lane-ad', 'remote-exec': 'lane-windows', database: 'lane-database', pivot: 'lane-pivot', enum: 'lane-recon', privesc: 'lane-linux', shells: 'lane-shells' };
+  function catLane(id) { return CATHUE[id] || ''; }
 
   // ---- equipped scoping ----
   function equippedSet() { var set = {}; try { OBOL.packs.equippedTools().forEach(function (t) { set[t] = true; }); } catch (e) {} return set; }
@@ -190,11 +194,11 @@
       + '<span class="tool-card-chev" aria-hidden="true">▾</span></div>'
       + '<p class="tool-card-sum">' + esc(builder.summary) + '</p></div>';
   }
-  function toolCard(builder, openId) {
+  function toolCard(builder, openId, laneCls) {
     var open = builder.id === openId || builder.tool === openId || (builder.equips || []).indexOf(openId) !== -1;
     var equipsChips = (builder.equips || []).slice(0, 4).map(function (t) { return '<span class="pill">' + esc(t) + '</span>'; }).join('');
     var cred = (builder.credentialModes && builder.credentialModes.length) ? '<span class="pill tb-cred">' + esc(builder.credentialModes.join(' / ')) + '</span>' : '';
-    return '<article class="tool-card' + (open ? ' open' : '') + '" data-tool-id="' + esc(builder.id) + '">'
+    return '<article class="tool-card' + (laneCls ? ' ' + laneCls : '') + (open ? ' open' : '') + '" data-tool-id="' + esc(builder.id) + '">'
       + toolCardHead(builder)
       + '<div class="tool-card-tags">' + equipsChips + cred + '</div>'
       + '<div class="tool-body"></div></article>';
@@ -319,10 +323,11 @@
     Object.keys(byCat).forEach(function (c) { byCat[c].sort(function (a, b) { return a.title.localeCompare(b.title); }); });
     var present = CATS.filter(function (c) { return byCat[c.id] && byCat[c.id].length; });
 
-    html += '<nav class="tools-nav">' + present.map(function (c) { return '<button type="button" class="pill tools-jump" data-cat="tb-cat-' + esc(c.id) + '">' + esc(c.label) + ' <b>' + byCat[c.id].length + '</b></button>'; }).join('') + '</nav>';
+    html += '<nav class="tools-nav">' + present.map(function (c) { return '<button type="button" class="pill tools-jump ' + esc(catLane(c.id)) + '" data-cat="tb-cat-' + esc(c.id) + '">' + esc(c.label) + ' <b>' + byCat[c.id].length + '</b></button>'; }).join('') + '</nav>';
     present.forEach(function (c) {
-      html += '<section class="tools-cat" id="tb-cat-' + esc(c.id) + '"><div class="tools-cat-head"><h2 class="tools-cat-h">' + esc(c.label) + '</h2><span class="tools-cat-hint">' + esc(c.hint) + '</span></div>'
-        + '<div class="tools-grid">' + byCat[c.id].map(function (b) { return toolCard(b, openId); }).join('') + '</div></section>';
+      var lc = catLane(c.id);
+      html += '<section class="tools-cat ' + esc(lc) + '" id="tb-cat-' + esc(c.id) + '"><div class="tools-cat-head"><h2 class="tools-cat-h">' + esc(c.label) + '</h2><span class="tools-cat-hint">' + esc(c.hint) + '</span></div>'
+        + '<div class="tools-grid">' + byCat[c.id].map(function (b) { return toolCard(b, openId, lc); }).join('') + '</div></section>';
     });
     html += '</section>';
     return html;

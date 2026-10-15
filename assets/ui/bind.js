@@ -120,7 +120,7 @@
     var secretBox = '';
     if (sel) {
       var secret = sel.secret || sel.nthash || '';
-      secretBox = '<div class="bind-secret">'
+      secretBox = '<div class="bind-secret br-id">'
         + '<span class="bind-lab">Secret</span>'
         + (secret
           ? '<code class="bind-mask" data-secret="' + attr(secret) + '" title="Hover to reveal">' + esc('*'.repeat(Math.min(12, secret.length))) + '</code>'
@@ -130,7 +130,7 @@
         + (OBOL.creds.keyOf(sel) !== activeKey ? '<button type="button" class="bind-chip bind-makeactive">Make Active</button>' : '<span class="bind-note">This identity is active engagement-wide.</span>')
         + '</div>';
     }
-    return '<div class="bind-row"><span class="bind-lab">Identity</span><div class="bind-ids">' + chips + '</div></div>' + secretBox;
+    return '<div class="bind-row br-id"><span class="bind-lab">Identity</span><div class="bind-ids">' + chips + '</div></div>' + secretBox;
   }
 
   function portsRow() {
@@ -141,7 +141,7 @@
     var chips = open.map(function (p) {
       return '<button type="button" class="bind-chip bind-port' + (String(p) === cur ? ' on' : '') + '" data-port="' + attr(p) + '">' + esc(p) + '</button>';
     }).join('');
-    return '<div class="bind-row"><span class="bind-lab">Open Ports</span><div class="bind-chips">' + chips
+    return '<div class="bind-row br-ports"><span class="bind-lab">Open Ports</span><div class="bind-chips">' + chips
       + (cur ? '<button type="button" class="bind-chip bind-port-clear">clear</button>' : '') + '</div></div>';
   }
 
@@ -150,7 +150,7 @@
     var chips = WORDLISTS.map(function (w) {
       return '<button type="button" class="bind-chip bind-wl' + (w.path === cur ? ' on' : '') + '" data-wl="' + attr(w.path) + '" title="' + attr(w.path) + '">' + esc(w.label) + '</button>';
     }).join('');
-    return '<div class="bind-row"><span class="bind-lab">Wordlist</span><div class="bind-chips">' + chips + '</div></div>';
+    return '<div class="bind-row br-wl"><span class="bind-lab">Wordlist</span><div class="bind-chips">' + chips + '</div></div>';
   }
 
   // render(opts) -> the band HTML. opts.compact shrinks it for the Library lens bar.
@@ -159,14 +159,17 @@
     var p = params(), st = state();
     var tgt = p.target || p.rhost || '';
     var manual = !!st.manual;
+    // A prominent segmented Autofill | Manual Fill toggle on its own line (the old tiny checkbox was
+    // easy to miss), with a one-line explanation of what each mode does.
     var head = '<div class="bind-head"><span class="bind-title">Engagement Binding</span>'
-      + '<label class="bind-manual" title="Turn off autofill and type every parameter yourself">'
-      + '<input type="checkbox" class="bind-manual-cb"' + (manual ? ' checked' : '') + '> <span>Manual Fill</span></label></div>';
-    var targetRow = '<div class="bind-row"><span class="bind-lab">Target</span>'
+      + '<div class="bind-mode" role="group" aria-label="Fill mode">'
+      + '<button type="button" class="bind-modebtn' + (manual ? '' : ' on') + '" data-manual="0" aria-pressed="' + (manual ? 'false' : 'true') + '">Autofill</button>'
+      + '<button type="button" class="bind-modebtn' + (manual ? ' on' : '') + '" data-manual="1" aria-pressed="' + (manual ? 'true' : 'false') + '">Manual Fill</button>'
+      + '</div></div>'
+      + '<p class="bind-modehint">' + (manual ? 'Manual: autofill is paused, you type every parameter.' : 'Autofill: commands fill from this engagement. Switch to Manual to type everything yourself.') + '</p>';
+    var targetRow = '<div class="bind-row br-target"><span class="bind-lab">Target</span>'
       + '<input type="text" class="bind-target" value="' + attr(tgt) + '" placeholder="10.10.10.10 or host.domain" autocomplete="off" spellcheck="false"' + (manual ? ' disabled' : '') + '></div>';
-    var body = manual
-      ? '<div class="bind-row"><span class="bind-note">Manual fill is on. Autofill is paused, every command starts blank for you to complete.</span></div>'
-      : (targetRow + identityRow() + portsRow() + wordlistRow());
+    var body = manual ? '' : (targetRow + identityRow() + portsRow() + wordlistRow());
     return '<section class="bind' + (opts.compact ? ' bind-compact' : '') + ' cv-shead cv-sh-teal">' + head + body + '</section>';
   }
 
@@ -178,7 +181,7 @@
     if (!el) return;
     function changed() { try { el.innerHTML = render(opts); } catch (e) {} if (opts.onChange) try { opts.onChange(); } catch (e) {} }
 
-    U.on(el, 'change', '.bind-manual-cb', function (e, t) { setState({ manual: !!t.checked }, 'bind-manual'); changed(); });
+    U.on(el, 'click', '.bind-modebtn', function (e, t) { setState({ manual: t.getAttribute('data-manual') === '1' }, 'bind-manual'); changed(); });
     U.on(el, 'input', '.bind-target', function (e, t) { setParam('target', t.value.trim()); if (opts.onChange) opts.onChange(); });
     U.on(el, 'change', '.bind-target', function (e, t) { setParam('target', t.value.trim()); changed(); });
     U.on(el, 'click', '.bind-id', function (e, t) {

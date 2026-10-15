@@ -5432,3 +5432,45 @@ main#view:has(.library) { max-width: 2600px; }
 .shk-pay-h .shk-copy { margin-left: auto; }
 .shk-pay-cmd { display: block; font: 11.5px var(--mono); color: var(--text-2); white-space: pre-wrap; word-break: break-all; }
 .shk-tty { margin: 0; font: 11.5px var(--mono); color: var(--text-2); white-space: pre-wrap; }
+
+/* ============================ Tools colour pass (lane-coded zones + discoverability) ============================ */
+/* Category zones: each tool category carries its lane hue (class emitted by tools.js). */
+.tools-cat .tools-cat-h { color: color-mix(in srgb, var(--lane, var(--accent-2)) 80%, var(--text)); }
+.tools-cat .tools-cat-head { border-bottom-color: color-mix(in srgb, var(--lane, var(--accent)) 42%, var(--line)); }
+.tools-cat .tool-card { border-left: 3px solid var(--lane, var(--line)); background: linear-gradient(180deg, color-mix(in srgb, var(--lane) 8%, var(--surf1)), var(--surf1)); }
+.tools-cat .tool-card:hover .tool-card-head { background: color-mix(in srgb, var(--lane) 9%, var(--surf2)); }
+.tools-cat .tool-card.open { border-color: var(--lane); }
+.tools-cat .tool-card-name { color: color-mix(in srgb, var(--lane) 66%, var(--text)); }
+.tools-cat .tool-card.open .tool-card-name { color: color-mix(in srgb, var(--lane) 80%, var(--text)); }
+/* jump nav doubles as a lane legend */
+.tools-nav .tools-jump[class*="lane-"] { border-color: color-mix(in srgb, var(--lane) 45%, var(--line)); color: color-mix(in srgb, var(--lane) 78%, var(--text)); }
+.tools-nav .tools-jump[class*="lane-"]:hover { background: color-mix(in srgb, var(--lane) 14%, var(--surf2)); }
+.tools-nav .tools-jump[class*="lane-"] b { color: var(--lane); }
+/* follow-the-lane labels inside hued cards */
+.tools-cat .tb-gloss-lab, .station-card .tb-gloss-lab { color: color-mix(in srgb, var(--lane, var(--teal)) 74%, var(--text)); }
+.tools-cat .tb-recipes-lab, .station-card .tb-recipes-lab { color: color-mix(in srgb, var(--lane, var(--accent-2)) 80%, var(--text)); }
+.tools-cat .tb-gloss, .station-card .tb-gloss { border-color: color-mix(in srgb, var(--lane, var(--accent)) 24%, var(--line)); }
+
+/* Stations: glass gradient body + hued name (previously a gray card with a thin bar). */
+.station-card { background: linear-gradient(180deg, color-mix(in srgb, var(--lane) 13%, var(--surf1)), var(--surf1)); }
+.station-card .tool-card-head:hover { background: color-mix(in srgb, var(--lane) 11%, var(--surf2)); }
+.station-card .tool-card-name { color: color-mix(in srgb, var(--lane) 74%, var(--text)); }
+.station-badge { background: color-mix(in srgb, var(--lane) 24%, transparent); color: color-mix(in srgb, var(--lane) 82%, var(--text)); font-size: 11px; }
+
+/* Binding bar: hue each row by what it represents (chips/inputs already read --sh). */
+.bind .br-target { --sh: var(--ph-recon); }
+.bind .br-id, .bind .bind-secret.br-id { --sh: var(--ph-creds); }
+.bind .br-ports { --sh: var(--teal); }
+.bind .br-wl { --sh: var(--purple); }
+.bind-id-type, .bind-id-act { font-size: 11px; }
+/* prominent Autofill | Manual Fill segmented toggle (replaces the tiny checkbox) */
+.bind-mode { display: inline-flex; border: 1px solid color-mix(in srgb, var(--sh) 40%, var(--line)); border-radius: 8px; overflow: hidden; }
+.bind-mode button { background: var(--surf1); color: var(--text-2); border: 0; border-right: 1px solid var(--line); padding: 5px 15px; font: 700 12px var(--sans, inherit); cursor: pointer; }
+.bind-mode button:last-child { border-right: 0; }
+.bind-mode button.on { background: color-mix(in srgb, var(--sh) 24%, var(--surf2)); color: color-mix(in srgb, var(--sh) 86%, var(--text)); }
+.bind-modehint { font-size: 11.5px; color: var(--muted); margin: 2px 0 10px; }
+
+/* make the editable-command affordance obvious */
+.tb-preview .tb-editbtn { border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line)); color: color-mix(in srgb, var(--accent) 82%, var(--text)); }
+.tb-preview .tb-render:hover { outline: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--line)); outline-offset: 2px; }
+.shk-pay-os { font-size: 11px; }
