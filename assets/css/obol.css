@@ -5396,7 +5396,9 @@ main#view:has(.library) { max-width: 2600px; }
 .tb-recipes-lab { font: 800 11px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: var(--accent-2); margin-bottom: 8px; }
 .tb-recipes-sub { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 8px; font-family: inherit; }
 .tb-recipe-grid { gap: 10px; }
-.tb-recipe { text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 190px; flex: 1 1 210px; max-width: 320px; padding: 10px 12px; }
+/* recipe tiles are presets, not Next Steps cards: size to content, don't inherit the 150px card height */
+.tb-recipe { text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 190px; flex: 1 1 210px; max-width: 320px; padding: 10px 12px; min-height: 0; }
+.tb-recipe-grid { align-items: stretch; }
 .tb-recipe .tb-recipe-name { font-weight: 700; font-size: 13px; color: var(--text); }
 .tb-recipe .tb-recipe-hint { font-size: 11.5px; color: var(--text-2); line-height: 1.4; }
 .tb-recipe .ph-chip { align-self: flex-start; margin-top: 2px; }
@@ -5513,3 +5515,47 @@ main#view:has(.library) { max-width: 2600px; }
 .ns-ex-step { color: var(--accent-2); font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .04em; margin: 9px 0 4px; }
 .ns-ex-step:first-child { margin-top: 0; }
 @media (max-width: 520px) { .ns-ex-sub { display: none; } }
+
+/* ===== Tool panel: prominent mode chips, inline required-fields block, colourful All Options ===== */
+/* Primary "mode" field surfaced as clickable chips at the top (protocol / method / role / ...). */
+.tb-modes { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
+.tb-modes-lab { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: color-mix(in srgb, var(--lane, var(--accent-2)) 78%, var(--text)); }
+.tb-modes-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.tb-mode-chip { font: 600 12.5px var(--sans); padding: 5px 13px; border-radius: 9px; cursor: pointer; color: var(--text-2);
+  background: color-mix(in srgb, var(--lane, var(--accent)) 8%, var(--surf2)); border: 1px solid color-mix(in srgb, var(--lane, var(--accent)) 26%, var(--line));
+  transition: background .14s ease, border-color .14s ease, box-shadow .14s ease, color .14s ease; }
+.tb-mode-chip:hover { border-color: var(--lane, var(--accent)); color: var(--text); }
+.tb-mode-chip.on { background: color-mix(in srgb, var(--lane, var(--accent)) 24%, var(--surf2)); border-color: var(--lane, var(--accent)); color: var(--text); font-weight: 700;
+  box-shadow: 0 0 13px color-mix(in srgb, var(--lane, var(--accent)) 40%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--lane, var(--accent)) 42%, transparent); }
+
+/* Inline "Fill These To Build The Command": the missing required fields, always visible, amber-flagged. */
+.tb-needs { margin: 10px 0 14px; padding: 12px 14px; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--yellow) 9%, var(--surf1)); border: 1px solid color-mix(in srgb, var(--yellow) 38%, var(--line)); }
+.tb-needs[hidden] { display: none; }
+.tb-needs-lab { display: flex; align-items: center; gap: 9px; font: 800 12px var(--sans); text-transform: uppercase; letter-spacing: .04em;
+  color: color-mix(in srgb, var(--yellow) 68%, var(--text)); margin-bottom: 11px; }
+.tb-needs-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 9px var(--yellow); animation: tbNeedsPulse 1.6s ease-in-out infinite; }
+@keyframes tbNeedsPulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+.tb-needs-sub { margin-left: auto; font-weight: 600; font-size: 11px; color: var(--muted); letter-spacing: .02em; }
+.tb-needs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 11px 14px; }
+.tb-need { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tb-need label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, var(--yellow) 45%, var(--text-2)); }
+.tb-need input, .tb-need select, .tb-need textarea { width: 100%; box-sizing: border-box; background: var(--bg1); color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--yellow) 32%, var(--line)); border-radius: 7px; padding: 7px 10px; font: 13px var(--mono); }
+.tb-need input:focus, .tb-need select:focus, .tb-need textarea:focus { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 2px color-mix(in srgb, var(--yellow) 22%, transparent); }
+
+/* Colourful, glowy All Options: a lane-tinted summary and lane-tinted field labels + focus glow. */
+.tb-allopts { border-color: color-mix(in srgb, var(--lane, var(--line)) 22%, var(--line)); background: color-mix(in srgb, var(--lane, var(--accent)) 4%, var(--surf1)); }
+.tb-allopts > summary { color: color-mix(in srgb, var(--lane, var(--accent-2)) 70%, var(--text)); border-radius: 7px; padding: 4px 6px; transition: background .14s ease; }
+.tb-allopts > summary:hover { background: color-mix(in srgb, var(--lane, var(--accent)) 10%, transparent); }
+.tb-allopts[open] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lane, var(--accent)) 14%, transparent); }
+.tb-group-head h4 { color: color-mix(in srgb, var(--lane, var(--accent-2)) 66%, var(--text)); }
+.tb-field label { color: color-mix(in srgb, var(--lane, var(--accent-2)) 52%, var(--text-2)); }
+.tb-field input, .tb-field select, .tb-field textarea { background: var(--bg1); border-color: color-mix(in srgb, var(--lane, var(--line)) 20%, var(--line));
+  transition: border-color .14s ease, box-shadow .14s ease; }
+.tb-field input:focus, .tb-field select:focus, .tb-field textarea:focus { border-color: var(--lane, var(--accent)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--lane, var(--accent)) 20%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-mode-chip, .tb-allopts > summary, .tb-field input, .tb-field select, .tb-field textarea, .tb-need input, .tb-need select, .tb-need textarea { transition: none; }
+  .tb-needs-dot { animation: none; }
+}

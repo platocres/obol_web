@@ -197,9 +197,57 @@
       + '<p class="tb-hint"><b>Manual Outcome:</b> ' + esc(m.boundary) + '</p></details>';
   }
   // the panel body: recipe tiles, editable preview + copy/reset, flag gloss, collapsible full form, evidence.
+  // The primary "mode" field a tool switches on (protocol / method / role / ...). Surfaced as prominent
+  // clickable chips at the top of the panel so the main choice is never buried in All Options.
+  var PRIMARY_IDS = ['mode', 'method', 'protocol', 'role', 'source', 'inputMode'];
+  function primaryField(builder) {
+    var fields = builder.fields || [];
+    for (var i = 0; i < PRIMARY_IDS.length; i++) {
+      // 2 to 8 options: enough to be a real switch, few enough to chip. A big list (hashcat's 55 modes)
+      // stays a select in All Options and is driven by recipes / auto-detect instead.
+      var f = fields.filter(function (x) { var n = (x.options || []).length; return x.id === PRIMARY_IDS[i] && x.type === 'select' && n >= 2 && n <= 8; })[0];
+      if (f) return f;
+    }
+    return null;
+  }
+  function modeChipsHtml(builder, values) {
+    var f = primaryField(builder); if (!f) return '';
+    var cur = values[f.id];
+    var chips = (f.options || []).map(function (o) {
+      var on = String(o.value) === String(cur);
+      return '<button type="button" class="tb-mode-chip' + (on ? ' on' : '') + '" data-mode-field="' + esc(f.id) + '" data-mode-value="' + esc(o.value) + '" aria-pressed="' + (on ? 'true' : 'false') + '"'
+        + (o.description ? ' title="' + esc(o.description) + '"' : '') + '>' + esc(o.label) + '</button>';
+    }).join('');
+    return '<div class="tb-modes"><span class="tb-modes-lab">' + esc(f.label) + '</span><div class="tb-modes-row">' + chips + '</div></div>';
+  }
+
+  // The required fields that are not yet filled (respecting requiredWhen + visibility), as field objects.
+  function missingRequiredFields(builder, values) {
+    return (builder.fields || []).filter(function (f) {
+      var required = f.required === true || (f.requiredWhen ? TB.conditionMatches(f.requiredWhen, values) : false);
+      if (!required) return false;
+      if (f.visibleWhen && !TB.conditionMatches(f.visibleWhen, values)) return false;
+      var v = values[f.id];
+      return v === undefined || v === null || v === '' || (f.type === 'checkbox' && f.mustBeChecked === true && !truthy(v));
+    });
+  }
+  // A labelled input for one missing field, proxied to the real form field (distinct id to avoid clashes).
+  function needsInputHtml(field, value) {
+    var fid = 'need-' + field.id, lab = '<label for="' + esc(fid) + '">' + esc(field.label) + '</label>';
+    var ph = field.placeholder ? ' placeholder="' + esc(field.placeholder) + '"' : '';
+    if (field.type === 'select') {
+      var opts = (field.options || []).map(function (o) { return '<option value="' + esc(o.value) + '"' + (String(o.value) === String(value) ? ' selected' : '') + '>' + esc(o.label) + '</option>'; }).join('');
+      return lab + '<select id="' + esc(fid) + '" data-needs-field="' + esc(field.id) + '">' + opts + '</select>';
+    }
+    if (field.type === 'textarea') return lab + '<textarea id="' + esc(fid) + '" data-needs-field="' + esc(field.id) + '" rows="2"' + ph + '>' + esc(value == null ? '' : value) + '</textarea>';
+    var t = field.type === 'secret' ? 'password' : (field.type === 'number' ? 'number' : 'text');
+    return lab + '<input type="' + t + '" id="' + esc(fid) + '" data-needs-field="' + esc(field.id) + '" value="' + esc(value == null ? '' : value) + '"' + ph + ' autocomplete="off" spellcheck="false">';
+  }
+
   function panelBody(builder, values, activeRecipe) {
     return '<div class="tb-panel">'
       + recipeTiles(builder, activeRecipe)
+      + modeChipsHtml(builder, values)
       + '<div class="tb-preview cmd"><div class="cmd-head"><span class="cmd-tag">' + esc((builder.equips && builder.equips[0]) || builder.tool) + '</span>'
         + '<span class="cmd-variant tb-recipe-name-live"></span>'
         + '<span class="cmd-spacer"></span>'
@@ -208,6 +256,7 @@
         + '<button type="button" class="btn-copy tb-copy" title="Copy command">copy</button></div>'
         + '<pre class="cmd-run tb-render" title="Click to edit"><code class="tb-code"></code></pre>'
         + '<textarea class="tb-edit" spellcheck="false" aria-label="Editable command" rows="2"></textarea></div>'
+      + '<div class="tb-needs" hidden></div>'
       + glossHtml('', builder)
       + '<details class="tb-allopts"><summary>All Options <span class="tb-hint">every documented switch, grouped</span></summary>' + formHtml(builder, values) + '</details>'
       + proofHtml(builder)
@@ -414,7 +463,36 @@
     var preview = panelEl.querySelector('.tb-preview');
     var glossEl = panelEl.querySelector('.tb-gloss');
     var liveName = panelEl.querySelector('.tb-recipe-name-live');
+    var needsEl = panelEl.querySelector('.tb-needs');
+    var needsLastKey = '__init__';
     var edited = false; // operator hand-edited the command box
+
+    // Surface the still-unfilled required fields as inline, labelled inputs right under the command, so
+    // they are never a dead "Set required: ..." line and never hidden behind All Options. Re-render only
+    // when the SET of missing fields changes, and never while the operator is typing inside the block.
+    function renderNeeds(current) {
+      if (!needsEl) return;
+      var resolved = TB.normalizeValues(builder, current, context);
+      var missing = missingRequiredFields(builder, resolved);
+      var key = missing.map(function (f) { return f.id; }).join(',');
+      // never yank the field being typed in; leave needsLastKey stale so it re-renders once focus leaves.
+      if (needsEl.contains(document.activeElement)) return;
+      if (key === needsLastKey) return;
+      needsLastKey = key;
+      if (!missing.length) { needsEl.innerHTML = ''; needsEl.setAttribute('hidden', ''); return; }
+      needsEl.removeAttribute('hidden');
+      needsEl.innerHTML = '<div class="tb-needs-lab"><span class="tb-needs-dot" aria-hidden="true"></span>Fill These To Build The Command'
+        + '<span class="tb-needs-sub">' + missing.length + ' required</span></div>'
+        + '<div class="tb-needs-grid">' + missing.map(function (f) { return '<div class="tb-need">' + needsInputHtml(f, current[f.id]) + '</div>'; }).join('') + '</div>';
+    }
+    function syncModeChips(current) {
+      var chips = panelEl.querySelectorAll('.tb-mode-chip');
+      for (var i = 0; i < chips.length; i++) {
+        var fid = chips[i].getAttribute('data-mode-field');
+        var on = String(current[fid]) === String(chips[i].getAttribute('data-mode-value'));
+        chips[i].classList.toggle('on', on); chips[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+    }
     function setEditing(on) { if (!preview) return; preview.classList.toggle('editing', on); if (editBtn) editBtn.textContent = on ? 'done' : 'edit'; if (on && edit) { edit.focus(); } }
 
     function paintGloss(cmd) { if (glossEl) glossEl.outerHTML = glossHtml(cmd, builder); glossEl = panelEl.querySelector('.tb-gloss'); }
@@ -434,8 +512,10 @@
       for (var ti = 0; ti < tiles.length; ti++) { var on = tiles[ti].getAttribute('data-recipe') === activeId; tiles[ti].classList.toggle('selected', on); tiles[ti].classList.toggle('is-glow', on); tiles[ti].setAttribute('aria-pressed', on ? 'true' : 'false'); }
       if (liveName) liveName.textContent = activeId ? (TK.recipeById(builder.id, activeId) || {}).label || '' : 'custom';
       edited = false;
+      syncModeChips(current);
+      renderNeeds(current);
       try { showCmd(TB.compile(builder, current, context), true); }
-      catch (err) { var missing = TB.validateRequired(builder, TB.normalizeValues(builder, current, context)); showCmd(missing.length ? ('Set required: ' + missing.join(', ')) : 'Complete the required fields to generate a command.', false); }
+      catch (err) { var missing = TB.validateRequired(builder, TB.normalizeValues(builder, current, context)); showCmd(missing.length ? ('Fill the ' + missing.length + ' required field' + (missing.length > 1 ? 's' : '') + ' below to build this command.') : 'Complete the required fields to generate a command.', false); }
       // select option descriptions
       var sels = form.querySelectorAll('select');
       for (var si = 0; si < sels.length; si++) { var sel = sels[si], note = sel.parentNode && sel.parentNode.querySelector('.tb-optdesc'); if (!note) continue; var opt = sel.options[sel.selectedIndex]; note.textContent = (opt && opt.getAttribute('data-desc')) || ''; }
@@ -444,6 +524,20 @@
 
     form.addEventListener('input', function () { recompile(true); });
     form.addEventListener('change', function () { recompile(true); });
+
+    // Prominent mode chips at the top: set the primary field and rebuild (also mirrors into All Options).
+    U.on(panelEl, 'click', '.tb-mode-chip', function (e, t) {
+      setFormValue(form, builder, t.getAttribute('data-mode-field'), t.getAttribute('data-mode-value'));
+      recompile(true);
+    });
+    // Inline "fill these" inputs proxy straight into the real form field, so required fields are fillable
+    // without opening All Options. A select fires change; text fires input (and keeps focus, see renderNeeds).
+    if (needsEl) {
+      U.on(needsEl, 'input', '[data-needs-field]', function (e, t) { setFormValue(form, builder, t.getAttribute('data-needs-field'), t.value); recompile(true); });
+      U.on(needsEl, 'change', '[data-needs-field]', function (e, t) { setFormValue(form, builder, t.getAttribute('data-needs-field'), t.value); recompile(true); });
+      // when focus truly leaves the block, re-render so any now-filled fields drop out
+      needsEl.addEventListener('focusout', function () { setTimeout(function () { if (!needsEl.contains(document.activeElement)) renderNeeds(collect(form, builder)); }, 0); });
+    }
 
     // Hash auto-detect (Crack Hashes): paste a hash into the hash field and obol picks the matching -m
     // mode (hashcat) or --format (john) via OBOL.workbench.identifyHash, so you never hand-set the number.
