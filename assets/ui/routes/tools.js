@@ -968,7 +968,13 @@
     U.on(mount, 'input', '.tfl-search', function (e, t) { filterFocusList(t.value); });
 
     // layout lens
-    U.on(mount, 'click', '.tools-lens-btn', function (e, t) { setLayout(t.getAttribute('data-lay')); OBOL.router.render(); });
+    U.on(mount, 'click', '.tools-lens-btn', function (e, t) {
+      setLayout(t.getAttribute('data-lay')); OBOL.router.render();
+      // start the switched layout at the top, not wherever the previous layout was scrolled (the scroller is
+      // #view on desktop, the window on mobile, so reset both).
+      var v = document.getElementById('view'); if (v) { try { v.scrollTo({ top: 0 }); } catch (_e) { v.scrollTop = 0; } }
+      try { window.scrollTo(0, 0); } catch (_e2) {}
+    });
     // category jump
     U.on(mount, 'click', '.tools-jump', function (e, t) {
       var cat = t.getAttribute('data-cat');
@@ -976,9 +982,17 @@
       var el = document.getElementById(cat); if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_e) { el.scrollIntoView(); } }
     });
 
-    // any card pre-opened (deep link) mounts now, then the deep-link selector is applied to the first one
+    // any card pre-opened (deep link) mounts now, then the deep-link selector is applied to the first one.
+    // Only scroll to it for a GRID deep link (openId): in Focus the detail pane is already at the top, and
+    // scrolling a short detail card into view would jump the page down (the whole header sits above it).
     var opened = mount.querySelectorAll('.tool-card.open');
-    for (var k = 0; k < opened.length; k++) { var c = opened[k]; var h = c.querySelector('.tool-card-head'); if (h) h.setAttribute('aria-expanded', 'true'); mountCardBody(c); if (k === 0) { try { c.scrollIntoView({ block: 'start' }); } catch (e) {} applyStationEngine(c); applyToolSelector(c, selArg); } }
+    for (var k = 0; k < opened.length; k++) {
+      var c = opened[k]; var h = c.querySelector('.tool-card-head'); if (h) h.setAttribute('aria-expanded', 'true'); mountCardBody(c);
+      if (k === 0) {
+        if (openId && !c.closest('.tools-focus-detail')) { try { c.scrollIntoView({ block: 'start' }); } catch (e) {} }
+        applyStationEngine(c); applyToolSelector(c, selArg);
+      }
+    }
   }
 
   OBOL.routes = OBOL.routes || {};
