@@ -181,6 +181,9 @@
       '-c': 'BloodHound collection method (All, DCOnly, ...).',
       '--dns-server': 'DNS server to resolve the domain through, usually the domain controller.',
       '-M': 'Load an nxc module (spider_plus to walk shares, laps to read LAPS, gpp_password, ...).',
+      'laps': 'nxc module: read the LAPS local-administrator passwords this identity is allowed to see.',
+      'spider_plus': 'nxc module: walk every readable share and index files (configs, scripts, creds).',
+      'gpp_password': 'nxc module: recover passwords from Group Policy Preferences (cpassword) in SYSVOL.',
     },
     netexec: { /* alias of nxc; filled from nxc at load */ },
     hydra: {

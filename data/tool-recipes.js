@@ -34,13 +34,13 @@
     ],
     'tb-ffuf': [
       { id: 'dir-common', label: 'Directory Brute', phase: 'enum', hint: 'The default first sweep: common web paths, keep the interesting status codes, auto-calibrated.',
-        values: { action: 'content', wordlist: WC + 'common.txt', matchCodes: '200,204,301,302,307,401,403', autoCalibration: true } },
+        values: { wordlist: WC + 'common.txt', matchCodes: '200,204,301,302,307,401,403', autoCalibration: true } },
       { id: 'dir-ext', label: 'Files + Extensions', phase: 'enum', hint: 'A deeper directory list that also tries php, txt, html, and bak on every word.',
-        values: { action: 'content', wordlist: WC + 'raft-medium-directories.txt', extensions: '.php,.txt,.html,.bak', autoCalibration: true } },
+        values: { wordlist: WC + 'raft-medium-directories.txt', extensions: '.php,.txt,.html,.bak', autoCalibration: true } },
       { id: 'vhost', label: 'Virtual Host Sweep', phase: 'enum', hint: 'Same IP, different site: fuzz the Host header to find hidden vhosts. Set the domain first.',
-        values: { action: 'vhost', wordlist: DNS, filterSize: '0' } },
+        values: { wordlist: DNS, filterSize: '0' } },
       { id: 'api', label: 'API Endpoints', phase: 'enum', hint: 'Hunt REST and API routes specifically.',
-        values: { action: 'content', wordlist: WC + 'api/api-endpoints.txt', matchCodes: '200,201,401,403,405', autoCalibration: true } },
+        values: { wordlist: WC + 'api/api-endpoints.txt', matchCodes: '200,201,401,403,405', autoCalibration: true } },
     ],
     'tb-gobuster-ferox': [
       { id: 'gobuster-dir', label: 'Gobuster Directories', phase: 'enum', hint: 'Classic directory and file discovery with common extensions.',
@@ -52,9 +52,9 @@
     ],
     'tb-wfuzz': [
       { id: 'path', label: 'Path Discovery', phase: 'enum', hint: 'Fuzz the URL path, hide the 404 background.',
-        values: { action: 'path', mode: 'path', wordlist: '/usr/share/wordlists/dirb/common.txt', hideCodes: '404' } },
+        values: { mode: 'path', wordlist: '/usr/share/wordlists/dirb/common.txt', hideCodes: '404' } },
       { id: 'vhost', label: 'Virtual Host Sweep', phase: 'enum', hint: 'Fuzz the Host header; hide the baseline response size so only real vhosts show.',
-        values: { action: 'custom', mode: 'custom', header: 'Host: FUZZ.target.local', hideChars: '0' } },
+        values: { mode: 'custom', header: 'Host: FUZZ.target.local', hideChars: '0' } },
     ],
     'tb-hashcat': [
       { id: 'ntlm', label: 'NTLM', phase: 'cracking', hint: 'Plain Windows NT hashes (mode 1000) against rockyou.',

@@ -54,7 +54,9 @@
   // ------------------------------------------------------------- conditions (when) --
   function conditionMatches(condition, values) {
     if (condition == null) return true;
-    if (isArr(condition)) return condition.every(function (c) { return conditionMatches(c, values); });
+    if (isArr(condition)) return condition.every(function (c) { return conditionMatches(c, values); }); // array = AND
+    // { any: [cond, cond, ...] } = OR: true if ANY sub-condition matches (each sub may itself be an array = AND).
+    if (Object.prototype.hasOwnProperty.call(condition, 'any')) return (condition.any || []).some(function (c) { return conditionMatches(c, values); });
     var value = (values || {})[condition.field];
     if (Object.prototype.hasOwnProperty.call(condition, 'equals')) return same(value, condition.equals);
     if (Object.prototype.hasOwnProperty.call(condition, 'notEquals')) return !same(value, condition.notEquals);
@@ -116,6 +118,11 @@
       return errors;
     }
     if (typeof condition !== 'object') return [label + ' must be an object or array'];
+    if (Object.prototype.hasOwnProperty.call(condition, 'any')) {
+      if (!isArr(condition.any) || !condition.any.length) fail(errors, label + ' any requires a non-empty array');
+      else condition.any.forEach(function (entry, i) { validateCondition(entry, label + '.any[' + i + ']', fieldIds).forEach(function (e) { fail(errors, e); }); });
+      return errors;
+    }
     if (!fieldIds[condition.field]) fail(errors, label + ' references unknown field ' + text(condition.field));
     var ops = ['equals', 'notEquals', 'in', 'notIn', 'truthy', 'notEmpty'].filter(function (k) { return Object.prototype.hasOwnProperty.call(condition, k); });
     if (ops.length !== 1) fail(errors, label + ' must declare exactly one condition operator');
