@@ -74,7 +74,11 @@
     var toks = tokenize(cmd);
     if (!toks.length) return [];
     var G = OBOL.TOOL_GLOSSARY || {};
-    var dict = G[glossToolName(toks[0], builder)] || {};
+    var toolName = glossToolName(toks[0], builder);
+    var dict = G[toolName] || {};
+    // rustscan runs nmap for the service phase after `--` (e.g. rustscan -a IP -- -sV -sC -oN out), so
+    // flags not in rustscan's own dict are nmap's: fall back to the nmap dict rather than leaving them bare.
+    var fallback = (toolName === 'rustscan') ? (G.nmap || null) : null;
     var out = [], seen = {};
     toks.forEach(function (tok, i) {
       if (i === 0) return; // the executable itself
@@ -82,6 +86,7 @@
       if (tok.indexOf('=') > 0 && /^--?/.test(tok)) key = tok.slice(0, tok.indexOf('=')); // --format=x
       var gloss = dict[key];
       if (gloss === undefined && !/^-/.test(tok)) gloss = dict[tok.toLowerCase()]; // bare subcommand
+      if (gloss === undefined && fallback) { gloss = fallback[key]; if (gloss === undefined && !/^-/.test(tok)) gloss = fallback[tok.toLowerCase()]; }
       if (gloss === undefined) return;
       if (seen[key]) return;
       seen[key] = 1;

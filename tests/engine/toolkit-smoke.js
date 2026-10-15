@@ -89,5 +89,28 @@ Object.keys(OBOL.TOOL_RECIPES).forEach(function (bid) {
   });
 })();
 
+// ---- every recipe must compile from a realistic BOUND context alone ----
+// A recipe is "one tap to a filled command". With the engagement bound (target + domain + an identity),
+// applying a recipe must leave no NON-SECRET required field empty: such a field could only be typed by
+// hand, which breaks that promise (this is the class that hid wfuzz/vhost and ldapsearch's Base DN, which
+// the old mock FILL masked by pre-supplying url + baseDn). Secrets (password/hash) are operator-supplied.
+(function () {
+  var bound = {
+    target: { value: '10.10.10.10', ip: '10.10.10.10', hostname: 'dc01.corp.local', url: 'http://10.10.10.10', fuzzurl: 'http://10.10.10.10/FUZZ' },
+    context: { domain: 'corp.local', baseDn: 'DC=corp,DC=local', username: 'svc', port: '445', lhost: '10.10.14.5', lport: '4444' },
+    workspace: { wordlist: 'rockyou.txt', outputDir: 'loot', hashfile: 'hashes.txt' },
+  };
+  var offenders = [];
+  (OBOL.TOOLSET || []).forEach(function (b) {
+    var secretLabels = {}; (b.fields || []).forEach(function (f) { if (f.type === 'secret') secretLabels[f.label || f.id] = 1; });
+    (TK.recipesFor(b.id) || []).forEach(function (r) {
+      var norm = TB.normalizeValues(b, TK.applyRecipe(b, r, bound), bound);
+      var miss = TB.validateRequired(b, norm).filter(function (lab) { return !secretLabels[lab]; });
+      if (miss.length) offenders.push(b.id + '/' + r.id + ' needs ' + miss.join(', '));
+    });
+  });
+  ok(offenders.length === 0, 'every recipe compiles from a bound context (no non-secret required field unfilled)' + (offenders.length ? ': ' + offenders.join(' | ') : ''));
+})();
+
 if (fail) { console.error('toolkit-smoke: ' + fail + ' FAIL'); process.exit(1); }
 console.log('toolkit-smoke: OK');

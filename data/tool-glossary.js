@@ -134,6 +134,7 @@
       '-w': 'Workload profile (1 low to 4 nightmare).',
       '--username': 'The hash file has a username column before each hash.',
       '-O': 'Optimized kernels: faster, but caps the password length.',
+      '--increment': 'Walk increasing mask lengths (shorter candidates first).',
     },
     john: {
       '--wordlist': 'Dictionary file to try.',
@@ -144,6 +145,17 @@
       '--show': 'Print cracked passwords from the pot file.',
       '--incremental': 'Pure brute force by character classes when a wordlist fails.',
       '--list': 'List something john knows (formats, rules, ...).',
+      '--pot': 'Use this pot file for cracked results (so a re-run shows them with --show).',
+    },
+    msfvenom: {
+      '-p': 'Payload to generate (e.g. windows/x64/meterpreter/reverse_tcp, linux/x64/shell_reverse_tcp).',
+      '-f': 'Output format (exe, elf, raw, aspx, war, dll, ...).',
+      '-o': 'Write the generated payload to this file.',
+      '-a': 'Target architecture (x86, x64).',
+      '--platform': 'Target platform (windows, linux, ...).',
+      '-e': 'Encoder to dodge simple signatures (e.g. x86/shikata_ga_nai).',
+      '-b': 'Bad characters to keep out of the payload (e.g. \\x00\\x0a\\x0d).',
+      '-i': 'How many times to run the encoder.',
     },
     nxc: {
       '-u': 'Username, or a userlist file.',
@@ -163,6 +175,12 @@
       '-X': 'Run this command through PowerShell.',
       '--local-auth': 'Authenticate against the box\'s local accounts, not the domain.',
       '--continue-on-success': 'Keep going after the first valid login (spraying).',
+      '--asreproast': 'Request AS-REP hashes for accounts with pre-auth disabled, to crack offline.',
+      '--kerberoasting': 'Request TGS tickets for every SPN account and dump the crackable hashes.',
+      '--bloodhound': 'Collect the AD graph over LDAP (pair with -c for the collection method).',
+      '-c': 'BloodHound collection method (All, DCOnly, ...).',
+      '--dns-server': 'DNS server to resolve the domain through, usually the domain controller.',
+      '-M': 'Load an nxc module (spider_plus to walk shares, laps to read LAPS, gpp_password, ...).',
     },
     netexec: { /* alias of nxc; filled from nxc at load */ },
     hydra: {
@@ -176,6 +194,7 @@
       '-V': 'Show every attempt (verbose).',
       '-e': 'Also try empty, same-as-login, or reversed passwords (nsr).',
       '-M': 'Target list file.',
+      '-o': 'Write found credentials to this file.',
     },
     kerbrute: {
       'userenum': 'Validate which usernames exist in the domain (no lockout risk).',
@@ -184,6 +203,7 @@
       '-d': 'Target domain.',
       '--dc': 'Domain controller to talk to.',
       '-o': 'Write output to this file.',
+      '--safe': 'Abort the moment any account reads as locked out, so a spray never locks the domain.',
     },
     smbclient: {
       '-L': 'List the shares on the target.',
@@ -191,6 +211,10 @@
       '-N': 'No password prompt (anonymous or null session).',
       '-c': 'Run these smbclient commands non-interactively.',
       '--pw-nt-hash': 'Treat the supplied password as an NTLM hash.',
+      '-k': 'Use Kerberos authentication (needs a ticket in KRB5CCNAME).',
+      '-no-pass': 'Send no password, authenticate with the Kerberos ticket.',
+      '-W': 'Workgroup / domain for the login.',
+      '-p': 'Target port (445 default, 139 for the legacy SMB service).',
     },
     smbmap: {
       '-H': 'Target host.',
@@ -411,6 +435,7 @@
       '-u': 'Username (leave blank for a null/anonymous session).',
       '-p': 'Password for the user.',
       '-oJ': 'Write JSON output to this file.',
+      '-oA': 'Write output in all formats (JSON + YAML) to this basename.',
     },
     ldapsearch: {
       '-x': 'Simple authentication (a bind DN and password, not SASL).',

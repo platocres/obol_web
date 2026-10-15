@@ -70,10 +70,14 @@
     var open = {}; try { (OBOL.command.openPorts(facts()) || []).forEach(function (n) { open[n] = 1; }); } catch (e) {}
     var scheme = ((open[443] || open[8443]) && !open[80] && !open[8080]) ? 'https://' : 'http://';
     var url = host ? (scheme + host) : '';
+    var dom = (id && id.domain) || p.domain || ti.domain || '';
     return {
       target: { value: tgt, ip: p.rhost || p.ip || tgt, hostname: p.hostname || ti.hostname || ti.fqdn || '', url: url, fuzzurl: url ? (url + '/FUZZ') : '' },
       context: {
-        domain: (id && id.domain) || p.domain || ti.domain || '',
+        domain: dom,
+        // the LDAP naming context derived from the domain (corp.local -> DC=corp,DC=local), so ldapsearch
+        // and friends fill their Base DN with no typing. Empty when no domain is known (still a real prereq).
+        baseDn: dom ? ('DC=' + dom.split('.').join(',DC=')) : '',
         username: (id && id.user) || p.username || '',
         port: state().port || '',
         lhost: p.lhost || '',
