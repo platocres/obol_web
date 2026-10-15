@@ -24,7 +24,7 @@
   var HASH_XWALK = [
     ['1000', 'NT'], ['3000', 'lm'], ['5500', 'netntlm'], ['5600', 'netntlmv2'],
     ['1100', 'mscash'], ['2100', 'mscash2'], ['13100', 'krb5tgs'], ['18200', 'krb5asrep'],
-    ['19600', 'krb5tgs'], ['19700', 'krb5tgs'], ['19800', 'krb5asrep'], ['19900', 'krb5asrep'],
+    ['19600', 'krb5tgs'], ['19700', 'krb5tgs'], ['19800', 'krb5pa-sha1'], ['19900', 'krb5pa-sha1'],
     ['1800', 'sha512crypt'], ['7400', 'sha256crypt'], ['500', 'md5crypt'], ['3200', 'bcrypt'], ['1500', 'descrypt'],
     ['0', 'raw-md5'], ['900', 'raw-md4'], ['100', 'raw-sha1'], ['1400', 'raw-sha256'], ['1700', 'raw-sha512'],
     ['400', 'phpass'], ['300', 'mysql-sha1'], ['200', 'mysql'], ['131', 'mssql'], ['132', 'mssql05'], ['1731', 'mssql12'],

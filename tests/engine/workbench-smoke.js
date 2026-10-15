@@ -68,6 +68,12 @@ ok(/phpass/i.test(topName('$P$Babcdefghijklmnop')), 'phpass ($P$) recognised');
 ok(topMode('$krb5tgs$23$*svc*' ) === 13100, 'Kerberoast RC4 is mode 13100');
 ok(topMode('$krb5asrep$23$user@DOM') === 18200, 'AS-REP RC4 is mode 18200');
 ok(topMode('$krb5tgs$18$*svc*') === 19700, 'Kerberoast AES256 is mode 19700');
+// Kerberos pre-auth is etype-aware: RC4=7500, AES128=19800, AES256=19900 (19800/19900 are pre-auth, NOT AS-REP)
+ok(topMode('$krb5pa$23$user$REALM$abc') === 7500, 'Kerberos pre-auth RC4 is mode 7500');
+ok(topMode('$krb5pa$17$user$REALM$abc') === 19800, 'Kerberos pre-auth AES128 is mode 19800');
+ok(topMode('$krb5pa$18$user$REALM$abc') === 19900, 'Kerberos pre-auth AES256 is mode 19900');
+// an AES AS-REP has no hashcat mode (AS-REP roasting is RC4/18200 only)
+ok(W.identifyHash('$krb5asrep$18$user@DOM').candidates[0].mode === null, 'AES AS-REP has no hashcat mode (use john)');
 
 // bare hex: NTLM/MD5 ambiguity for 32 hex, NTLM ranked first with MD5 offered
 const h32 = W.identifyHash('b4b9b02e6f09a9bd760f388b67351e2b');
