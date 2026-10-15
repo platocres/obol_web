@@ -169,6 +169,11 @@
           "tool": "dnsrecon",
           "run": "dnsrecon -d {{domain}} -n {{target}} -a",
           "note": "Standard record enumeration plus the AXFR attempt in a single run."
+        },
+        {
+          "tool": "dnsenum",
+          "run": "dnsenum --dnsserver {{target}} {{domain}}",
+          "note": "An all-in-one alternative: record enumeration, the AXFR attempt, and a subdomain brute in one pass. Point --dnsserver at the box so it queries the target's nameserver, not yours."
         }
       ],
       "requires_all": []

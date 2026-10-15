@@ -59,7 +59,9 @@
       "tools": [
         "feroxbuster",
         "ffuf",
-        "gobuster"
+        "gobuster",
+        "cewl",
+        "eyewitness"
       ],
       "os": [],
       "requires_all": [],
@@ -98,6 +100,16 @@
           "tool": "gobuster",
           "run": "gobuster dir -u http://{{target}} -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,txt,html,bak -o scans/gobuster.txt",
           "note": "The long-standing alternative (0xdf leaned on it for years before feroxbuster). -x tacks on extension fuzzing; use -k for invalid TLS certificates."
+        },
+        {
+          "tool": "cewl",
+          "run": "cewl -d 2 -m 5 -w cewl.txt http://{{target}}",
+          "note": "OPTIONAL: crawl the site and build a wordlist from its own words. A target-specific list often cracks a password that rockyou never will; feed cewl.txt to the Crack Hashes station or a login brute."
+        },
+        {
+          "tool": "eyewitness",
+          "run": "eyewitness --web --single http://{{target}} -d eyewitness_report",
+          "note": "OPTIONAL: screenshot the web service so you can eyeball the stack and the login pages at a glance instead of curling each path. Most useful once content discovery has surfaced several endpoints or vhosts."
         }
       ]
     },

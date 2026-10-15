@@ -1824,3 +1824,18 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   suite + toolkit-smoke + browser-smoke green; driven headless, 4 stations, 0 console errors; assets
   stamped. Remaining TC tools with no pack home (eyewitness, gowitness, dnsenum, cewl, PetitPotam-only)
   are deferred to TC1c, where a tool only ships with an authored path (the "create the path" mandate).
+- 2026-10-15: TC phase 1c, the last of the owner's new-tool list, each given a real pack home rather
+  than relegated. tb-dnsenum was already equipped (recon-dns lists it in tools); added a runnable
+  dnsenum command to that move and its builder. cewl and eyewitness had no home, so they are added as
+  commands on the existing content-discovery web move (and its tools list): cewl generates a
+  target-specific wordlist that feeds the Crack Hashes station (a list that cracks what rockyou cannot,
+  the genuine pay-off), and eyewitness screenshots the discovered web services for triage. Three new
+  validated builders (tb-dnsenum, tb-cewl, tb-eyewitness) with flag glossaries. PetitPotam was NOT
+  added: Coercer already performs the PetitPotam method (among PrinterBug/DFSCoerce), so a standalone
+  builder would be a duplicate path, not new solving capability, which is the mandate's boundary
+  ("useful on a realistic box"), not box-ticking. These are command additions to existing moves (no new
+  moves, so no eligibility/ranking change); scoreboard re-run anyway: ranker-sim 0/25, ranker-sweep
+  0.00%; full engine suite + gap + auditor + lint + attack-coverage + browser-smoke green; bundle
+  rebuilt, assets stamped. toolbuilder-smoke now 50 builders. TC is complete: every daily-driver tool
+  the owner listed has a builder, and the four stations (Port Scan, Web Content Discovery, Crack
+  Hashes, Database Shell) are populated.

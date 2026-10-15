@@ -318,6 +318,29 @@
       '+short': 'Print just the answer, no headers.',
       '-x': 'Reverse lookup (PTR) for an IP.',
     },
+    dnsenum: {
+      '--dnsserver': 'Query this nameserver (point it at the target, not yours).',
+      '-f': 'Subdomain wordlist for the brute pass.',
+      '--threads': 'Parallel lookups.',
+      '--noreverse': 'Skip the reverse-lookup stage (faster).',
+      '--enum': 'Shortcut for a thorough default enumeration.',
+    },
+    cewl: {
+      '-d': 'Crawl depth: how far to follow links.',
+      '-m': 'Minimum word length to keep.',
+      '-w': 'Write the wordlist to this file.',
+      '--with-numbers': 'Also keep words that contain numbers.',
+      '-e': 'Also harvest email addresses.',
+      '--lowercase': 'Lowercase every word.',
+    },
+    eyewitness: {
+      '--web': 'Screenshot web services (HTTP/HTTPS).',
+      '--single': 'Screenshot one URL.',
+      '-f': 'Read many targets from a file (a URL list or an nmap XML).',
+      '-d': 'Write the report into this directory.',
+      '--timeout': 'Seconds to wait per site.',
+      '--prepend-https': 'Also try the HTTPS version of each host.',
+    },
   };
 
   // netexec is the same binary family as nxc: share the glossary.
