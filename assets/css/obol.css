@@ -1458,6 +1458,9 @@ ol.bh-steps li { margin-bottom: 9px; }
 .tb-preview { margin: 4px 0 14px; }
 .tb-code { font-size: 12.5px; color: var(--text); white-space: pre-wrap; word-break: break-all; }
 .tb-code[data-valid="false"] { color: var(--muted); font-style: italic; }
+/* a preview (the command shape with <placeholder> tokens for fields you have not filled yet) reads as a
+   real command, not a dim "fill these" message: full colour, upright, so the shape is legible at a glance. */
+.tb-code[data-preview="true"] { color: var(--text); font-style: normal; }
 .tb-exe { color: #FBBF24; font-weight: 700; }
 .tb-sub { color: var(--purple); font-weight: 600; }
 .tb-flag { color: var(--yellow); }
@@ -1466,6 +1469,9 @@ ol.bh-steps li { margin-bottom: 9px; }
 .tb-str { color: var(--teal); }
 .tb-ip { color: var(--green); }
 .tb-num { color: #22D3EE; }
+/* a <placeholder> for a field you have not filled yet: pink, italic and bracketed, so it reads as "fill me",
+   never as a real argument (colour is not the sole signal: the angle brackets and the slant carry it too). */
+.tb-ph { color: #F472B6; font-weight: 600; font-style: italic; }
 
 .tb-form { display: flex; flex-direction: column; gap: 14px; }
 .tb-group { border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; background: var(--bg1); }

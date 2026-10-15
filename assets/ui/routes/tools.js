@@ -263,7 +263,8 @@
       if (tok === '') return '';
       if (/FUZZ/.test(tok)) return tok.split(/(FUZZ)/).map(function (part) { return part === 'FUZZ' ? '<span class="tb-fuzz">FUZZ</span>' : (part ? '<span class="tb-arg">' + esc(part) + '</span>' : ''); }).join('');
       var cls;
-      if (i === execIdx) cls = 'tb-exe';                                   // the executable, gold
+      if (/^<[a-z0-9_-]+>$/i.test(tok)) cls = 'tb-ph';                     // a <placeholder> for an unfilled field
+      else if (i === execIdx) cls = 'tb-exe';                              // the executable, gold
       else if (i === subIdx) cls = 'tb-sub';                               // the subcommand / protocol, violet
       else if (/^-/.test(tok)) cls = 'tb-flag';
       else if (/^["']/.test(tok)) cls = 'tb-str';                          // a quoted argument, kept whole
@@ -652,11 +653,43 @@
     }
   }
 
+  // compilePreview(builder, values, context) -> a command string with <fieldid> placeholders standing in for
+  // every VISIBLE required field the operator has not filled yet, so the command's SHAPE is always on screen
+  // (not a dead "fill these" line) before any typing. Returns null only when the builder cannot compile even
+  // with placeholders (e.g. an unselected executable selector), in which case the caller shows a message.
+  // The placeholders are shell-unsafe (they carry <>), so compile() quotes them; we strip that one layer of
+  // quoting back off so they read as <user>, not '<user>'. Placeholder-free tokens keep their real quoting.
+  function compilePreview(builder, values, context) {
+    if (!TB) return null;
+    var norm = TB.normalizeValues(builder, values || {}, context);
+    var filled = {}; Object.keys(norm).forEach(function (k) { filled[k] = norm[k]; });
+    (builder.fields || []).forEach(function (f) {
+      if (f.type === 'checkbox' || f.type === 'secret') return; // a checkbox has no placeholder; a secret stays blank
+      if (f.visibleWhen && !TB.conditionMatches(f.visibleWhen, norm)) return; // only fields actually on screen
+      var required = f.required === true || (f.requiredWhen ? TB.conditionMatches(f.requiredWhen, norm) : false);
+      if (!required) return;
+      var v = filled[f.id];
+      if (v === undefined || v === null || v === '') filled[f.id] = '<' + f.id + '>';
+    });
+    var cmd;
+    try { cmd = TB.compile(builder, filled, context); } catch (e) { return null; }
+    // unwrap the one layer of shell/Windows quoting the compiler put around any token holding a placeholder:
+    // '<user>' -> <user>, "--user=<user>" -> --user=<user>. Only placeholder-bearing tokens are touched.
+    return cmd.replace(/(['"])([^'"]*<[a-z0-9_-]+>[^'"]*)\1/gi, '$2');
+  }
+
   function mountPanel(panelEl, builder, context, persistId, startValues) {
     var start = startValues || Object.assign(TB.defaultsFor(builder, context), savedValues(persistId));
     if (!startValues) crackPrepick(builder, persistId, start);
     fillSecrets(builder, start);
     var secretSet = {}; (builder.fields || []).forEach(function (f) { if (f.type === 'secret') secretSet[f.id] = 1; });
+    // Fields that SOME recipe pins (the union of every recipe's value keys). These are "recipe-owned": swapping
+    // recipes may legitimately clear one a previous recipe set (e.g. a rule file) so a stale value does not keep
+    // matchingRecipe locked on the broader recipe. Every OTHER field (target, username, domain, ports: the
+    // engagement identity no recipe touches) is the operator's, and is carried ACROSS a recipe swap untouched,
+    // so they never re-type the same thing when hopping protocols and recipes.
+    var recipeOwnedFields = {};
+    (TK ? TK.recipesFor(builder.id) : []).forEach(function (r) { Object.keys(r.values || {}).forEach(function (k) { recipeOwnedFields[k] = 1; }); });
     var activeRecipe = TK ? TK.matchingRecipe(builder, start) : null;
     panelEl.innerHTML = panelBody(builder, start, activeRecipe);
 
@@ -725,13 +758,18 @@
     function setEditing(on) { if (!preview) return; preview.classList.toggle('editing', on); if (editBtn) editBtn.textContent = on ? 'done' : 'edit'; if (on && edit) { edit.focus(); } }
 
     function paintGloss(cmd) { if (glossEl) glossEl.outerHTML = glossHtml(cmd, builder); glossEl = panelEl.querySelector('.tb-gloss'); }
-    function showCmd(cmd, valid) {
-      if (cmdTag && valid) { var ex = execOf(cmd); if (ex) cmdTag.textContent = ex; } // reflect the ACTIVE executable
-      code.innerHTML = valid ? highlight(cmd) : esc(cmd);
+    // state: true = a real, copyable command; 'preview' = the command SHAPE with <placeholder> tokens (shown,
+    // glossed, but not copyable); false = a plain message (cmd is the message text). A preview highlights and
+    // glosses like a real command so the student sees the whole thing before filling a single field.
+    function showCmd(cmd, state) {
+      var valid = state === true, preview = state === 'preview', render = valid || preview;
+      if (cmdTag && render) { var ex = execOf(cmd); if (ex) cmdTag.textContent = ex; } // reflect the ACTIVE executable
+      code.innerHTML = render ? highlight(cmd) : esc(cmd);
       code.setAttribute('data-valid', valid ? 'true' : 'false');
+      code.setAttribute('data-preview', preview ? 'true' : 'false');
       if (valid) code.setAttribute('data-cmd', cmd); else code.removeAttribute('data-cmd');
-      if (edit && document.activeElement !== edit) edit.value = cmd;
-      paintGloss(valid ? cmd : '');
+      if (edit && document.activeElement !== edit) edit.value = render ? cmd : '';
+      paintGloss(render ? cmd : '');
     }
     function recompile(save) {
       var current = collect(form, builder);
@@ -746,7 +784,14 @@
       syncRecipeFilter(current);
       renderNeeds(current);
       try { showCmd(TB.compile(builder, current, context), true); }
-      catch (err) { var missing = TB.validateRequired(builder, TB.normalizeValues(builder, current, context)); showCmd(missing.length ? ('Fill the ' + missing.length + ' required field' + (missing.length > 1 ? 's' : '') + ' below to build this command.') : 'Complete the required fields to generate a command.', false); }
+      catch (err) {
+        // Not yet runnable (a required field is blank). Show the command SHAPE with <placeholder> tokens so the
+        // student sees what they are building before they fill anything; fall back to a message only if even the
+        // placeholdered command cannot compile (e.g. no executable selected).
+        var pv = compilePreview(builder, current, context);
+        if (pv) showCmd(pv, 'preview');
+        else { var missing = TB.validateRequired(builder, TB.normalizeValues(builder, current, context)); showCmd(missing.length ? ('Fill the ' + missing.length + ' required field' + (missing.length > 1 ? 's' : '') + ' below to build this command.') : 'Complete the required fields to generate a command.', false); }
+      }
       // select option descriptions
       var sels = form.querySelectorAll('select');
       for (var si = 0; si < sels.length; si++) { var sel = sels[si], note = sel.parentNode && sel.parentNode.querySelector('.tb-optdesc'); if (!note) continue; var opt = sel.options[sel.selectedIndex]; note.textContent = (opt && opt.getAttribute('data-desc')) || ''; }
@@ -818,13 +863,17 @@
     U.on(panelEl, 'click', '.tb-recipe', function (e, t) {
       var rid = t.getAttribute('data-recipe');
       var recipe = TK.recipeById(builder.id, rid); if (!recipe) return;
-      var vals = TK.applyRecipe(builder, recipe, context); // defaults + binding autofill + recipe values
-      // Adopt the recipe WHOLESALE: set every non-secret field, clearing any a previous recipe pinned
-      // (e.g. the rule file from "NTLM + Rules") that this recipe does not set. Without this, a stale
-      // field keeps matchingRecipe locked on the broader recipe and the exact tile looks unselectable.
+      var rvals = (recipe.values) || {};
+      // Apply the recipe WITHOUT wiping what the operator already typed. For each non-secret field:
+      //   - the recipe pins it            -> set it to the recipe value;
+      //   - a DIFFERENT recipe owns it     -> clear it, so a stale pin (e.g. a rule file from "NTLM + Rules")
+      //                                       does not keep matchingRecipe locked on the broader recipe;
+      //   - no recipe owns it (identity)   -> LEAVE IT, so target / username / domain / ports carry across
+      //                                       the swap and are never re-typed.
       (builder.fields || []).forEach(function (f) {
         if (f.type === 'secret') return; // never clobber a typed credential
-        setFormValue(form, builder, f.id, Object.prototype.hasOwnProperty.call(vals, f.id) ? vals[f.id] : '');
+        if (Object.prototype.hasOwnProperty.call(rvals, f.id)) setFormValue(form, builder, f.id, rvals[f.id]);
+        else if (recipeOwnedFields[f.id]) setFormValue(form, builder, f.id, '');
       });
       recompile(true);
     });
