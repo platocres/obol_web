@@ -82,6 +82,8 @@
         domain: (id && id.domain) || p.domain || ti.domain || '',
         username: (id && id.user) || p.username || '',
         port: state().port || '',
+        lhost: p.lhost || '',
+        lport: p.lport || '',
       },
       workspace: {
         wordlist: state().wordlist || p.wordlist || DEFAULT_WORDLIST,

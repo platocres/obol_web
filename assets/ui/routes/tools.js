@@ -59,7 +59,7 @@
     var url = host ? (scheme + host) : '';
     return {
       target: { value: target, ip: params.rhost || params.ip || target, hostname: params.hostname || c.dc || '', url: url, fuzzurl: url ? (url + '/FUZZ') : '' },
-      context: { domain: c.domain || params.domain || '', username: c.user || params.username || '', port: params.port || '' },
+      context: { domain: c.domain || params.domain || '', username: c.user || params.username || '', port: params.port || '', lhost: params.lhost || '', lport: params.lport || '' },
       workspace: { wordlist: params.wordlist || '/usr/share/seclists/Discovery/Web-Content/raft-small-words.txt', outputDir: params.outputDir || 'loot', hashfile: params.hashfile || 'hashes.txt' },
     };
   }

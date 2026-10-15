@@ -1810,3 +1810,17 @@ drive headless (0 console errors) · screenshot every changed surface. House sty
   browser-smoke all green; bundle rebuilt, assets stamped. Driven headless: 4 stations, Port Scan with
   3 engines, Database Shell with 3 engines and the MSSQL secret-autofilled command, engine swap to
   MySQL, 0 console errors.
+- 2026-10-15: TC phase 1b, six more daily-driver Tool Builders, all for tools that ALREADY have a pack
+  home, so this is pure presentation (zero pack edits, zero ranking risk): tb-bloodyad (AD read/write:
+  get writable, grant DCSync, reset password, add group member, RBCD, the write side of a BloodHound
+  path), tb-ntlmrelayx (relay to LDAPS/SMB/AD CS, with ESC8 and RBCD options), tb-wpscan (WordPress
+  enum + login brute), tb-searchsploit (offline Exploit-DB lookup, exam-legal reference), tb-coercer
+  (PetitPotam/PrinterBug/DFSCoerce coercion into a listener) and tb-dig (DNS + AXFR zone transfer).
+  Each validated through OBOL.toolbuilder.validate, compiled clean, and carries a flag glossary and
+  (bloodyAD/ntlmrelayx) command presets. Added context.lhost / context.lport to the binding + fallback
+  context so coercion/relay tools autofill the listener. Fixed one real fill bug: wpscan's -P appeared
+  with no username because `notEquals:''` is true for an undefined field; gave username a default of ''
+  so the brute flags only show once a username is set. toolbuilder-smoke now 47 builders; full engine
+  suite + toolkit-smoke + browser-smoke green; driven headless, 4 stations, 0 console errors; assets
+  stamped. Remaining TC tools with no pack home (eyewitness, gowitness, dnsenum, cewl, PetitPotam-only)
+  are deferred to TC1c, where a tool only ships with an authored path (the "create the path" mandate).
