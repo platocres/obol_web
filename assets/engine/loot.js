@@ -22,7 +22,20 @@
   'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
 
-  var DEFAULT_WORDLIST = '/usr/share/wordlists/rockyou.txt';
+  var DEFAULT_WORDLIST = '/usr/share/wordlists/rockyou.txt';          // password cracking / spraying
+  var DEFAULT_WORDLIST_WEB = '/usr/share/seclists/Discovery/Web-Content/raft-small-words.txt'; // content discovery
+  // {{wordlist}} serves two incompatible contexts: content discovery (ffuf/gobuster want a directory or
+  // name list) and password work (hashcat/hydra want rockyou). With no operator-pinned wordlist, pick the
+  // default by what the move is: a web content/vhost/subdomain discovery move gets the web list, everything
+  // else (cracking, spraying) gets rockyou. This is why the engagement no longer carries one global
+  // wordlist, the per-tool dropdowns and these context defaults cover it.
+  function isContentDiscoveryMove(action) {
+    if (!action) return false;
+    var tools = [].concat(action.tool || [], action.tools || []).join(' ').toLowerCase();
+    if (/\b(gobuster|ffuf|feroxbuster|dirb|dirbuster|wfuzz)\b/.test(tools)) return true;
+    var hay = ((action.id || '') + ' ' + (action.title || '') + ' ' + (action.produces || []).join(' ')).toLowerCase();
+    return /content discov|directory (brute|fuzz|discov)|\bvhost\b|virtual host|subdomain|web\.paths|web\.vhost|web\.content/.test(hay);
+  }
   // A user DISCOVERY command (SMTP VRFY enum, an RID/finger sweep) uses {{userlist}} to FIND users, not
   // to spray a list you already hold, so it must be runnable before any user is proven. It seeds a short
   // common-names list (the same shortlist the blind brute uses), which the operator can widen. A SPRAY
@@ -86,7 +99,11 @@
   function lootDir(dirs) { return (dirs && dirs.lootdir) || 'loot'; }
   function userlistPath(dirs) { return join(lootDir(dirs), 'users.txt'); }
   function hashfilePath(dirs, action) { return join(lootDir(dirs), hashName(action) + '.hashes'); }
-  function wordlistPath(inputs) { return (String((inputs && inputs.wordlist) || '').trim()) || DEFAULT_WORDLIST; }
+  function wordlistPath(inputs, action) {
+    var pinned = String((inputs && inputs.wordlist) || '').trim();
+    if (pinned) return pinned;
+    return isContentDiscoveryMove(action) ? DEFAULT_WORDLIST_WEB : DEFAULT_WORDLIST;
+  }
 
   // The roast fact kind that backs a hashfile basename (so a crack can be materialized straight
   // from proven facts even when the roast printed the hash to stdout instead of a file).
@@ -113,7 +130,7 @@
       else if (!spraysUserList(action)) out.userlist = DEFAULT_NAMES;
     }
     if (!inputs.hashfile) out.hashfile = hashfilePath(dirs, action);
-    if (!inputs.wordlist) out.wordlist = wordlistPath(inputs);
+    if (!inputs.wordlist) out.wordlist = wordlistPath(inputs, action);
     return out;
   }
 

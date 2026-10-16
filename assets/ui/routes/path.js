@@ -416,7 +416,7 @@
       + '<div class="ns-card-actions">'
       + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output</button>'
       + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
-      + ((action.tool || (action.tools && action.tools[0])) ? '<a class="btn-ghost" href="#/tools/' + esc(action.tool || action.tools[0]) + '">Build In Tools</a>' : '')
+      + nsBuildInTools(action)
       + '</div>'
       + '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr((filled[0] && filled[0].filled) || '') + '" hidden>'
       + '<textarea class="mi-text" placeholder="Paste this command\'s full output here, prompt and all. The coach reads it, mints only what it proves, and advances." spellcheck="false"></textarea>'
@@ -601,6 +601,81 @@
     return '<p class="ns-cn-h">GTFOBins: Exact ' + ctxLabel + ' Escape</p>' + intro
       + (rows ? '<div class="ns-setup">' + rows + '</div>' : '') + lookup;
   }
+  // "Build In Tools": deep link a move to the exact Tool Builder, pre-selecting the protocol / recipe /
+  // mode most relevant to the move, so the card lands ready to tune instead of on a blank tool. The link
+  // is #/tools/<builderId>/<selector>; the Tools route applies the selector (a recipe id, a protocol
+  // value, or a hashcat/john mode). Classify by the move's tool + id/title + produces, all authored data.
+  var TOOL_TO_BUILDER = {
+    nxc: 'tb-nxc', netexec: 'tb-nxc', crackmapexec: 'tb-nxc', cme: 'tb-nxc',
+    hashcat: 'tb-hashcat', john: 'tb-john',
+    'evil-winrm': 'tb-evilwinrm', evilwinrm: 'tb-evilwinrm',
+    hydra: 'tb-hydra', kerbrute: 'tb-kerbrute',
+    ffuf: 'tb-ffuf', gobuster: 'tb-gobuster-ferox', feroxbuster: 'tb-gobuster-ferox',
+    sqlmap: 'tb-sqlmap', curl: 'tb-curl', nmap: 'tb-nmap', rustscan: 'tb-rustscan',
+    secretsdump: 'tb-secretsdump', 'impacket-secretsdump': 'tb-secretsdump',
+    getuserspns: 'tb-getuserspns', 'impacket-getuserspns': 'tb-getuserspns',
+    getnpusers: 'tb-getnpusers', 'impacket-getnpusers': 'tb-getnpusers',
+    certipy: 'tb-certipy', 'certipy-ad': 'tb-certipy',
+    mssqlclient: 'tb-mssqlclient', 'impacket-mssqlclient': 'tb-mssqlclient',
+    bloodyad: 'tb-bloodyad', coercer: 'tb-coercer', ntlmrelayx: 'tb-ntlmrelayx',
+    responder: 'tb-responder', wpscan: 'tb-wpscan', smbmap: 'tb-smbmap', smbclient: 'tb-smbclient',
+    wmiexec: 'tb-impacket-exec', 'impacket-wmiexec': 'tb-impacket-exec', psexec: 'tb-impacket-exec',
+    'impacket-psexec': 'tb-impacket-exec', atexec: 'tb-impacket-exec', smbexec: 'tb-impacket-exec',
+    ldapsearch: 'tb-ldapsearch', psql: 'tb-psql', mysql: 'tb-mysql',
+    'bloodhound-python': 'tb-bloodhound-python', bloodhound: 'tb-bloodhound-python', masscan: 'tb-masscan',
+  };
+  // True if the Tools surface actually has a builder for this id/name (so we do not deep-link a move to a
+  // tool that has no builder, which would land on the wrong tool). Needs OBOL.TOOLSET, loaded once the
+  // Tools tab has been opened; a mapped TOOL_TO_BUILDER id is always a real builder, so it never needs this.
+  function builderExists(name) {
+    try { return (OBOL.TOOLSET || []).some(function (b) { return b.id === name || String(b.tool || '').toLowerCase() === name || (b.equips || []).some(function (t) { return String(t).toLowerCase() === name; }); }); }
+    catch (e) { return false; }
+  }
+  function nsToolTarget(move) {
+    if (!move) return null;
+    var tool = String(move.tool || (move.tools && move.tools[0]) || '').toLowerCase();
+    if (!tool) return null;
+    var builder = TOOL_TO_BUILDER[tool];
+    if (!builder) { if (!builderExists(tool)) return null; builder = tool; } // suppress the link for a tool obol has no builder for
+    var idt = ((move.id || '') + ' ' + (move.title || '')).toLowerCase();
+    var pt = (move.produces || []).join(' ').toLowerCase() + ' ' + idt;
+    var sel = '';
+    if (builder === 'tb-nxc') {
+      if (/kerberoast/.test(idt)) sel = 'kerberoast';
+      else if (/as.?rep/.test(idt)) sel = 'asrep';
+      else if (/bloodhound/.test(idt)) sel = 'bloodhound';
+      else if (/ntds|dcsync/.test(idt)) sel = 'ntds';
+      else if (/\bspider\b/.test(idt)) sel = 'spider';
+      else if (/\blaps\b/.test(idt)) sel = 'laps-smb';
+      else if (/\bsam\b/.test(idt)) sel = 'sam';
+      else if (/\blsa\b/.test(idt)) sel = 'lsa';
+      else if (/share/.test(idt)) sel = 'shares';
+      else if (/password policy|pass.?pol/.test(idt)) sel = 'pass-pol';
+      else if (/rid.?(brute|cycl)/.test(idt)) sel = 'rid-brute';
+      else if (/winrm|remote (exec|command|shell)/.test(idt)) sel = 'winrm-check';
+      else if (/mssql|sql server/.test(idt)) sel = 'mssql-check';
+      else if (/\bftp\b/.test(idt)) sel = 'ftp-check';
+      else if (/user list|\busers?\b|enumerate user|userlist/.test(idt)) sel = 'users';
+      else if (/validate|confirm (a )?cred|check cred/.test(idt)) sel = 'validate';
+    } else if (builder === 'tb-hashcat') {
+      if (/kerberoast|krb5tgs|\btgs\b/.test(pt)) sel = '13100';
+      else if (/as.?rep|krb5asrep/.test(pt)) sel = '18200';
+      else if (/netntlmv2/.test(pt)) sel = '5600';
+      else if (/\bntlm\b|ntds|nt hash|dcc|mscache|secretsdump/.test(pt)) sel = '1000';
+    } else if (builder === 'tb-john') {
+      if (/kerberoast|krb5tgs|\btgs\b/.test(pt)) sel = 'krb5tgs';
+      else if (/as.?rep|krb5asrep/.test(pt)) sel = 'krb5asrep';
+      else if (/netntlmv2/.test(pt)) sel = 'netntlmv2';
+      else if (/\bntlm\b|ntds|nt hash/.test(pt)) sel = 'NT';
+    }
+    return { builder: builder, sel: sel };
+  }
+  function nsBuildInTools(move) {
+    var tt = nsToolTarget(move);
+    if (!tt) return '';
+    return '<a class="btn-ghost" href="#/tools/' + esc(tt.builder) + (tt.sel ? '/' + esc(tt.sel) : '') + '">Build In Tools</a>';
+  }
+
   // "Build In Workbench": deep links from a move to the Workbench tool that helps with it. Presentation
   // only, it never changes which command the coach ranks. Classify by what the move PRODUCES and the tools
   // it uses (both authored in the pack), so it stays correct as the pack evolves.
@@ -714,6 +789,35 @@
       + '</div>';
   }
 
+  // "See It Run": the Learn-style command + sample output, inline on the field-note card and toggleable.
+  // Reuses OBOL.study.replayFor (the exact invocation + captured output the Learn Watch pane shows), so a
+  // learner sees what the command looks like run and the output to expect, without leaving Next Steps. The
+  // on/off choice persists (localStorage), so once you turn it on it stays on across every move.
+  function exampleOn() { try { var v = localStorage.getItem('obol.show-example'); return v === null ? true : v === '1'; } catch (e) { return true; } }
+  function nsExampleBlock(move) {
+    if (!move || !OBOL.study || !OBOL.study.replayFor) return '';
+    var rp = null; try { rp = OBOL.study.replayFor(move.id); } catch (e) { rp = null; }
+    if (!rp || !rp.hasOutput || !rp.steps || !rp.steps.length) return ''; // only promise it where real output exists
+    var open = exampleOn();
+    var promptFor = function (where) { return where === 'host' ? 'C:\\>' : 'kali$'; };
+    var body = rp.steps.map(function (s) {
+      var head = rp.multi ? ('<div class="ns-ex-step">' + (s.where === 'host' ? 'On the target' : 'On your box') + '</div>') : '';
+      var cmdLine = '<div class="rp-line rp-cmd"><span class="rp-prompt' + (s.where === 'host' ? ' host' : '') + '">' + promptFor(s.where) + '</span> ' + esc(s.command) + '</div>';
+      var outs = (s.outputLines || []).map(function (ln) {
+        var hot = rp.signal && String(ln).indexOf(rp.signal) >= 0;
+        return '<div class="rp-line rp-out' + (hot ? ' hot' : '') + '">' + esc(ln || ' ') + '</div>'
+          + (hot && rp.teach ? '<div class="rp-cap">\u2190 ' + esc(rp.teach) + '</div>' : '');
+      }).join('');
+      return head + cmdLine + outs;
+    }).join('');
+    return '<div class="ns-ex' + (open ? ' open' : '') + '">'
+      + '<button type="button" class="ns-ex-toggle" data-ex-toggle aria-expanded="' + (open ? 'true' : 'false') + '">'
+      + '<span class="ns-ex-caret" aria-hidden="true">\u25B8</span> See It Run'
+      + '<span class="ns-ex-sub">a real run of this command and the output you would see</span></button>'
+      + '<div class="ns-ex-term rp-term"' + (open ? '' : ' hidden') + '>' + body + '</div>'
+      + '</div>';
+  }
+
   function nsCanvasHtml(move, idx, facts, params) {
     if (!move) return '<div class="ns-canvas-head"><span class="ns-canvas-kick">Field Notes</span></div>'
       + '<div class="ns-canvas-empty">Pick a move on the left to see how to land it, step by step.</div>';
@@ -730,6 +834,9 @@
 
     // Staged command display
     if (cmdText) html += '<div class="ns-canvas-cmd"><code>' + esc(cmdText) + '</code></div>';
+
+    // "See It Run": toggleable Learn-style example run + expected output for this move.
+    html += nsExampleBlock(move);
 
     var flagsExpl = (OBOL.command && OBOL.command.explainFlags) ? OBOL.command.explainFlags(cmdText) : [];
     var mistakes = (note && note.mistakes) || [];
@@ -1517,6 +1624,14 @@
     // own container instead: it's recreated on each render, so its listeners die with the old DOM.
     var mount = ctx.mount.querySelector('.coach') || ctx.mount;
 
+    // Background-load the ~1MB sample-output fixtures (off the critical boot path) so "See It Run" can
+    // show a real example run and its output in the field notes. When they land, repaint the open card.
+    if (!(OBOL.study && OBOL.study.replayFor) && OBOL.lazy && OBOL.lazy.loadGroup) {
+      OBOL.lazy.loadGroup('studydata').then(function () {
+        try { if (OBOL.study && OBOL.study.replayFor && nsSel && nsSel.id) repaintCanvas(); } catch (e) {}
+      });
+    }
+
     // ---- Next Steps card grid: select a card (glow follows), toggle Remote/On-Host, pick a command.
     // These update the DOM and the canvas IN PLACE (no full re-render) so scroll and focus are preserved.
     function freshCtx() {
@@ -1712,6 +1827,25 @@
       });
     }
     // Anatomy pillar tab switcher (zero-scroll neurodivergent navigation)
+    // "See It Run" toggle: flip this card's example terminal and remember the choice for every card.
+    U.on(mount, 'click', '[data-ex-toggle]', function (e, t) {
+      var wrap = t.closest('.ns-ex'); if (!wrap) return;
+      var term = wrap.querySelector('.ns-ex-term');
+      var open = !wrap.classList.contains('open');
+      wrap.classList.toggle('open', open);
+      if (term) { if (open) term.removeAttribute('hidden'); else term.setAttribute('hidden', ''); }
+      t.setAttribute('aria-expanded', open ? 'true' : 'false');
+      try { localStorage.setItem('obol.show-example', open ? '1' : '0'); } catch (x) {}
+      // apply the new preference to any other example blocks on screen without a full re-render
+      Array.prototype.forEach.call(mount.querySelectorAll('.ns-ex'), function (w) {
+        if (w === wrap) return;
+        var tm = w.querySelector('.ns-ex-term'), bt = w.querySelector('.ns-ex-toggle');
+        w.classList.toggle('open', open);
+        if (tm) { if (open) tm.removeAttribute('hidden'); else tm.setAttribute('hidden', ''); }
+        if (bt) bt.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    });
+
     U.on(mount, 'click', '[data-pillar-tab]', function (e, t) {
       var tabKey = t.getAttribute('data-pillar-tab');
       if (!tabKey) return;

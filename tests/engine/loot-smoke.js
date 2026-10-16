@@ -40,6 +40,11 @@ ok(L.hashName({ id: 'dump-secrets' }) === 'hashes', 'hashName falls back to gene
 ok(L.hashfilePath(dirs, { id: 'asrep-roast', produces: ['hash.asrep'] }) === '~/e/forest/loot/asrep.hashes', 'hashfilePath → loot/asrep.hashes');
 ok(L.wordlistPath({}) === '/usr/share/wordlists/rockyou.txt', 'wordlist defaults to rockyou');
 ok(L.wordlistPath({ wordlist: '/tmp/w.txt' }) === '/tmp/w.txt', 'operator wordlist wins');
+// context-aware default: a content-discovery move gets a web list, cracking/spraying gets rockyou
+ok(L.wordlistPath({}, { tool: 'ffuf', produces: ['web.paths'] }).indexOf('raft-small') >= 0, 'content move defaults to a web wordlist');
+ok(L.wordlistPath({}, { tool: 'gobuster', id: 'vhost-fuzz' }).indexOf('Web-Content') >= 0, 'vhost move defaults to a web wordlist');
+ok(L.wordlistPath({}, { tool: 'hashcat', id: 'crack-asrep' }) === '/usr/share/wordlists/rockyou.txt', 'cracking move defaults to rockyou');
+ok(L.wordlistPath({ wordlist: '/tmp/w.txt' }, { tool: 'ffuf' }) === '/tmp/w.txt', 'operator wordlist still wins for a content move');
 
 // --- tokensFor: userlist only when proven; hashfile/wordlist always; operator inputs win ---
 var roast = { id: 'asrep-roast', produces: ['hash.asrep', 'credential.candidate'], requires_all: ['ad.user_list'] };

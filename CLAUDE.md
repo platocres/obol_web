@@ -1576,3 +1576,316 @@ tests/browser-smoke.js` · `node tools/stamp-assets.js` (after any asset edit) �
   is a tidy "nmap (20)" row you expand on demand (Tool view keeps capability rows open). Expand/Collapse
   All drive both levels; manual group/row open-close is remembered across a search re-render. Engine
   helpers laneHexOf/phaseHex/hashHue. library-smoke + headless drive + browser-smoke + lint green; stamped.
+
+---
+
+## Active build: Tools tab revamp + methodology audit (in progress, new PR on branch claude/lucid-mayer-ebsiwv)
+
+**Plan of record. If this chat is lost, resume here. Branch `claude/lucid-mayer-ebsiwv` (fresh from main
+after #306 merged). One PR, built in internal phases, each green on the full guardrail gauntlet before
+the next. Commit frequently; fold status-log updates into the code commit.**
+
+### Intention
+
+The Tools tab was one of the first surfaces, built before the mission was clear. It is 36 dumb forms:
+open a card, face a wall of fields (certipy has 75), type target/user/domain/wordlist that obol already
+holds. Revamp it into a **fact-aware tactical launchpad** that matches the rest of obol (neon glass,
+lane/phase hues, fact-fill), AND use the revamp as the trigger for a **retroactive methodology audit**
+so the whole move/command/parser graph meets a single correctness standard. Owner wants it ambitious:
+"do more than people think a static site is capable of."
+
+### The five-obligation mandate (the correctness contract, applies to EXISTING surface too)
+
+Every tool/command/move/path, old and new, must satisfy all five, held by the named guardrails:
+
+1. **No dead facts** — a minted fact is consumed by a downstream move and advances the engagement
+   (`gap-report` dead-end lens).
+2. **No missed facts** — if real output contains something meaningful, a parser mints it; a false
+   negative is a bug (`gap-report` parse-gap lens + the new auditor + golden replays).
+3. **Failure awareness** — obol recognizes what a FAILED command looks like (denied, locked out, empty,
+   bind-restricted, wrong creds, hung) for existing AND new commands, and either doctors it
+   (`blocker.*` fact -> FIELD_DOCTORS reactive card) or uses the failure to re-rank a better next move.
+   Every new command ships a success signature AND a failure signature.
+4. **No ranking regression and no under-serving** — order never degrades (`ranker-sim` 0/25,
+   `ranker-sweep` 0.0%); and a command a user is entitled to, once prereqs are met, actually appears
+   (gating correctness).
+5. **Create the path, do not relegate.** obol is a universal lab solver: if a genuinely useful tool does
+   not pay off down an existing path, AUTHOR the path where it does (move + produces + downstream
+   consumers + parser + failure signature + a golden replay), to a flag. Boundary: "useful on a
+   realistic box", proven by a golden stateful replay. Only things that are genuinely not moves (a
+   listener/payload pairing, a shell-upgrade sequence) stay Tools-only presentation strings.
+
+Proof of no-regression = the golden, stateful replays (`forest-e2e-replay` + the run->paste->expect
+card-delta fixtures). Extend the corpus per new path; re-run the whole corpus every phase.
+
+### The auditor (task #30, the backbone) — tools/post-parse-audit.js
+
+Read-only. Reuses `OBOL.decisionMap.gapReport()` for the move-level lenses (parse-gap, dead-end,
+unreachable, orphan facts, signature drift) and ADDS the command-level and failure-level checks it
+lacks: (1) a confirm/probe command (switchless, auth-only, a count) with no `settled_by` for the fact
+its success mints (can never retire); (2) a move whose proven end-state has no
+`obsoleted_by`/`deprioritize_when` (re-offers after done); (3) a command that authenticates/sprays/probes
+anonymous access but has no failure signature (`blocker.*` + a FIELD_DOCTOR) for its likely failure;
+(4) lead-command order (the operator's real next command buried). Clustered output (ranker-sweep shape),
+human-triaged. Added to the verify list. Baseline at start: 8 parse gaps, 13 partials, 44 dead-ends.
+
+### Tools UX revamp (the launchpad)
+
+- **Recipes = named field-PRESETS, not strings** (Option B, bidirectional). A recipe sets toolbuilder
+  field values; the compiler derives the command; you tweak and it recompiles. A **recipe<->pack
+  equivalence test** asserts `compile(defaults+recipe.fields+boundIdentity)` equals the corresponding
+  pack command, so recipes and the pack never drift (recipes derive from the pack, mechanically). Grow
+  the `toolbuilder` field model wherever a hero recipe is not yet expressible.
+- **Shared engagement-binding component** (target + Identity Picker + port chips + wordlist chips +
+  manual-fill toggle), reused by BOTH Tools and the Library Commands lens. The Identity Picker
+  enumerates every credential in the fact ledger (null / guest / each validated cred / each hash);
+  selecting one sets auth mode + `-u/-p/-H` + domain prefix as FIELD values. Local by default, with an
+  explicit "make active". Secrets masked with hover-to-reveal.
+- **Four-tier funnel** (big tools never a wall): mode tabs (nxc: SMB/LDAP/WINRM/...) -> hero recipe
+  tiles (4-8 common, fact-filled) -> a COMPLETE searchable flag/module palette (every documented switch
+  and module, grouped Auth/Enum/Exec/Output/Evasion; a per-tool coverage check PROVES nothing common is
+  omitted) -> the command preview is directly EDITABLE text (no scary blank box; editing is the natural
+  override). Power path (palette + editable + full form) is a strict superset of today's forms (test:
+  every current field stays reachable).
+- **Dual layout lens** (persisted per engagement): Grid (scan many tools) | Focus (coach-style list +
+  right-hand live-command + teaching canvas). Default Focus.
+- **Teaching, day-one must**: a flag-by-flag gloss per generated command (a per-tool flag dictionary),
+  plus the field-note canvas (When / How To Land It / What To Look For / Mistakes) reused for recipes.
+- **Stations (combine substitutes, by JOB not by move)**: a station = {job title, shared parameter
+  model, visible engine selector with one-line teaching per engine, per-engine compiler + palette,
+  fact-aware default engine}. Switching engines persists and re-expresses shared params. Families:
+  **Web Content Discovery** (ffuf/gobuster/feroxbuster/dirsearch/wfuzz), **Port Scan**
+  (nmap/rustscan/masscan), **Crack Hashes** (hashcat/john), **Database Shell**
+  (mssqlclient/mysql/psql/redis/mongo), plus the two access stations below. Keep COMPLEMENTS separate
+  (SMB enum: smbclient/smbmap/enum4linux/nxc-smb stay distinct cards). Search/alias so the tool name
+  still finds the station. Accessibility: one job per card, calm default, shape+label not colour-only.
+- Tools works STANDALONE with no engagement (all-manual, like Workbench/Library).
+
+### Shell + Pivot stations (downloadable, fact-filled bundles, no execution, exam-legal)
+
+- **Shell Station** ("Get a Shell"): a one-download listener kit `.sh` (picks/validates port, starts the
+  chosen catcher backgrounded + logged, prints every payload variant filled with lhost/lport, includes
+  the TTY-upgrade sequence). Payload text reuses the Workbench reverse-shell engine (one engine).
+- **Pivot Station** ("Pivot & Tunnel"), surfaced in Tools AND Cruise: a downloadable local-half `.sh`
+  (server/proxy + tun + route to the internal subnet) + on-host copy-chips (stage agent + connect-back),
+  a liveness check + fallback egress ports. obol PICKS the transport from facts and says why (SSH creds
+  -> sshuttle/ssh-forward; stageable checksummed agent (arsenal.js) + writable foothold -> ligolo/chisel),
+  user-overridable. A **locate-first subnet flow** (like the flag hunt): foothold -> paste host
+  `ip route`/`ifconfig`/`ipconfig` -> parse `scan.local.routes/interfaces/neighbors` -> the bundle
+  regenerates with the discovered subnet filled. Install preamble (apt/go install the missing transport,
+  gated behind a visible prompt) using the machine profile. Realizes the deferred Cruise CR3. Honesty
+  line: obol writes both halves, you run the local `.sh` and the on-host one-liner; obol never touches
+  the target.
+
+### Internal phasing (one PR; each phase green before the next)
+
+- **TA.** Auditor + clear the existing punch-list (parse gaps -> parsers/fact-naming; dead-ends ->
+  consumers or accept; failure signatures). Zero new tools = low ranking risk. Extend golden replays.
+- **TB.** Tools UX revamp on EXISTING tools (binding component, recipes-as-presets + equivalence test,
+  funnel, dual layout, teaching, re-skin, the four substitute stations). Zero new pack commands = zero
+  ranking risk.
+- **TC.** New daily-driver tools WITH authored flag-paths + success/failure signatures + golden replays
+  (bloodyAD, ntlmrelayx, wpscan, searchsploit, db shells, eyewitness, dnsenum/dig, cewl, rustscan,
+  Coercer). The ranking-sensitive phase, heavily guarded.
+- **TD.** Shell + Pivot stations + the bundle engine + Cruise pivot integration.
+
+### Verify each phase (the gauntlet)
+
+`node tools/post-parse-audit.js` · `node tools/gap-report.js --check` · `node tools/field-notes-coverage.js` ·
+`node tools/lint-study.js --check` · `node tools/attack-coverage.js` · `node tools/ranker-sim.js` (0/25) ·
+`node tools/ranker-sweep.js` (0.0%) · `node tests/engine/help-coverage.js` ·
+`for t in tests/engine/*.js; do node "$t"; done` (incl. forest-e2e-replay + new golden replays) ·
+`NODE_PATH=/opt/node-tools/node_modules node tests/browser-smoke.js` · `node tools/stamp-assets.js` ·
+drive headless (0 console errors) · screenshot every changed surface. House style: no em/en dashes.
+
+### Status log (update per commit)
+
+- 2026-10-14: Plan documented. Baseline audit via gap-report: 8 parse gaps (incl. foothold.shell /
+  access.root unreadable on several RCE/privesc moves), 13 partials, 44 dead-ends.
+- 2026-10-14: TA phase 1. Built the post-parse-advance auditor tools/post-parse-audit.js (the "command
+  -> real output -> fact -> advance/retire" round-trip, task #30), read-only like gap-report/ranker-sim.
+  It adds the COMMAND and FAILURE levels gap-report cannot see: MISSED GAIN (a move produces a progress
+  fact, a foothold/access/credential/loot/objective, that no parser reads, so you gain and obol cannot
+  tell, the worst class), PROBE RETIRE (a switchless confirm/probe command with no settled_by, so it
+  cannot retire after you prove it), RE-OFFER (a terminal-fact move with no obsoleted_by/deprioritize_when,
+  advisory) and FAILURE GAP (an authenticating/spraying move with no reachable blocker.* doctor, advisory).
+  The parser capability set is derived from OBOL.PARSER_SIGNATURES emits with prefix-wildcard support, so
+  it mirrors exactly what the live parsers can mint. --check hard-fails only on NEW MISSED GAIN / PROBE
+  RETIRE (a 6-entry allowlist tolerates the known captured-hash routing cases, closed in TC, plus two
+  borderline probes). Root cause of the baseline gaps was non-canonical fact names: the auditor confirmed
+  foothold.shell / access.root / credential.plain were consumed by NOTHING, so normalizing them to the
+  canonical foothold.linux / access.admin / credential.plaintext (13 moves across ad, database,
+  findings_checks, linux_privesc, recon, web) wires them into the real graph rather than orphaning them.
+  Added settled_by to four switchless probes (ad-dc-identify[0] -> ad.anonymous_bind/ldap.authenticated,
+  recon-ftp[0,1] -> ftp.anonymous_login, recon-smb-anon[2] -> smb.shares/smb.null_session/
+  blocker.smb_null_denied) so they retire once proven. Result: parse gaps 8 -> 0, dead-ends 44 -> 30,
+  missed-gain 18 -> 4 (the 4 allowlisted captured-hash cases), probe-retire 10 -> 2. Full gauntlet green:
+  ranker-sim 0/25, ranker-sweep 0.0%, gap --check OK, field-notes OK, lint OK, attack-coverage OK, full
+  engine suite PASS; bundle rebuilt, assets stamped. Zero new tools, zero ranking risk, per the TA plan.
+- 2026-10-14: TA phase 1, golden guard. Added tests/engine/fact-canon-smoke.js to lock the migration
+  in as a regression guard (the mandate's "proven by a stateful round-trip"): it asserts the three
+  non-canonical names can never return on any move edge, the canonical progress facts stay
+  parser-readable, the four switchless probes keep their settled_by, and, as the round-trip, that
+  admin-producing Linux privesc moves are eligible before admin and ALL retire once access.admin is
+  held (global phase logic, so no per-move obsoleted_by is needed, which also clears the auditor's
+  RE-OFFER advisory on those moves). 15/15 assertions green; full gauntlet still green.
+- 2026-10-14: TB phase 1, engine + data foundations (no UI yet, zero pack commands, zero ranking risk).
+  Three new data files and one engine module back the whole Tools revamp:
+  - data/tool-glossary.js (OBOL.TOOL_GLOSSARY): a flag-by-flag teaching dictionary for ~16 high-traffic
+    tools (ffuf, gobuster, feroxbuster, wfuzz, nmap, rustscan, masscan, hashcat, john, nxc/netexec,
+    hydra, kerbrute, smbclient, smbmap, evil-winrm, curl, sqlmap). One calm sentence per switch.
+  - data/tool-recipes.js (OBOL.TOOL_RECIPES): named field PRESETS (the funnel's hero tiles) for nmap,
+    ffuf, gobuster-ferox, wfuzz, hashcat, john, mirroring the canonical pack commands, phase-tagged,
+    setting METHOD knobs only (wordlist/mode/codes) so the binding component still supplies the target.
+  - data/tool-stations.js (OBOL.STATIONS): substitute tools grouped by job, Web Content Discovery
+    (ffuf / gobuster-ferox / wfuzz), Crack Hashes (hashcat / john), Port Scan (nmap now; rustscan and
+    masscan listed and auto-skipped until TC builds them). sharedParams + per-engine sharedMap carry the
+    wordlist/ports across an engine swap; fact-aware default via whenFact.
+  - assets/engine/toolkit.js (OBOL.toolkit, pure/Node-safe): recipesFor/applyRecipe/matchingRecipe
+    (most-specific match wins so a subset recipe never shadows the exact one), glossCommand (quote-aware
+    tokenizer, handles -mc, --format=x, and subcommand words), and station helpers (stationBuilders,
+    carryShared, fact-aware defaultEngine).
+  tests/engine/toolkit-smoke.js: every recipe targets real field ids and compiles clean (no token leak,
+  no undefined) and round-trips to matchingRecipe; the glossary resolves each command's flags; stations
+  resolve to built engines and carry shared params. Registered in the lazy `tools` group (data+engine
+  before the route). Full engine suite + auditor + lint green; assets stamped.
+- 2026-10-14: TB phase 2, the shared engagement-binding bar (assets/ui/bind.js, OBOL.bind), reused by
+  Tools and the Library Commands lens. One neon-glass band (reusing .cv-shead chrome) that shows the
+  target, the active IDENTITY (every ledger + proven credential via OBOL.creds.gather, type-badged,
+  secret masked with hover-reveal + copy), the engagement's OPEN PORTS (OBOL.command.openPorts), and a
+  WORDLIST palette, plus a Manual Fill toggle that pauses autofill for a standalone user. It writes the
+  same engagement params the rest of obol reads; identity selection is LOCAL by default (steers only
+  the previews) with an explicit "Make Active" that pins it engagement-wide via OBOL.creds.activate.
+  OBOL.bind.context() returns the nested target.* / context.* / workspace.* shape the Tool Builder
+  autofill consumes, so the binding feeds every tool. tests/engine/bind-context-smoke.js (stubs the
+  store/creds/command) proves params flow through, a local identity overrides username/domain, a picked
+  port/wordlist land in the right slots, and manual mode yields an empty context. CSS appended; both
+  bind.js and the TB1 engine/data registered in the lazy `tools` AND `library` groups (loadScript
+  dedupes by src). Route wiring lands in TB3. Full engine suite green; assets stamped.
+- 2026-10-14: TB phase 3a, the Tools route rebuilt as a fact-aware funnel (assets/ui/routes/tools.js).
+  The binding bar sits on top and autofills every tool; STATIONS (Web Content Discovery, Crack Hashes,
+  Port Scan) lead as hero cards with a visible engine selector (fact-aware default, one-line teach per
+  engine, shared params carried across a swap); every tool opens to a funnel panel: RECIPE tiles
+  (ns-card hero presets, one tap to a filled command, phase-hued), an always-editable command preview
+  (highlighted by default, an edit toggle reveals a textarea, reset restores, copy lifts the edited or
+  generated text), a flag-by-flag TEACHING gloss (OBOL.toolkit.glossCommand, re-computed live as the
+  command changes), a collapsible complete form (All Options, every documented switch), and the
+  Evidence boundary. A Grid | Focus layout lens persists per engagement (default Focus). Station
+  engines are not also shown as standalone category cards. Fixed a real fill gap the headless run
+  surfaced: the web tools autofilled the bare IP, so ffuf came out `-u 10.10.10.161` (no scheme, no
+  FUZZ); added target.url (scheme + host, https only when 443 is open and 80 is not) and target.fuzzurl
+  (+ /FUZZ) to the binding and the fallback context, pointed ffuf.url at target.fuzzurl and
+  gobuster.target at target.url, and dropped the gobuster-dns recipe (its `dns -d` mode wants a domain,
+  not a URL). Driven headless (drive-tools.js) at 4K/1080p/tablet/mobile: binding bar with seeded
+  identities + ports + wordlists, three stations, recipe-to-command fill (ffuf -u http://host/FUZZ, a
+  clean gobuster on engine swap), live gloss, edit toggle, layout lens, all with 0 console errors;
+  mobile stacks cleanly. Full engine suite + post-parse-audit + gap + lint + attack-coverage +
+  help-coverage + browser-smoke green; assets stamped. The left-rail Focus layout and the Library-lens
+  reuse of the binding are TB3b/TB4.
+- 2026-10-14: TB phase 4, the binding bar is now reused in the Library Commands lens (the "one shared
+  component across both surfaces" the owner asked for). It renders compact above the search/group-by
+  bar; its target, wordlist, and Make Active write engagement params, so the Library command previews
+  (OBOL.library.fill reads params) re-fill on change via refreshCommands. Driven headless: the bar
+  renders with the seeded identity + ports + wordlists, the curl/nxc previews fill from the engagement,
+  drive-library.js still passes 0 console errors, library-smoke green; assets stamped. TB (the Tools UX
+  revamp) is now functionally complete: binding bar, stations, recipes, flag gloss, editable preview,
+  dual layout lens, and the shared component across Tools + Library. The richer left-rail Focus variant
+  is a later polish; TC (new daily-driver tools + authored paths) is next.
+- 2026-10-15: TC phase 1a, station-completing tools. Five new validated Tool Builders (authored via a
+  generator run through OBOL.toolbuilder.validate): tb-rustscan and tb-masscan complete the Port Scan
+  station (now nmap / rustscan / masscan), and tb-mssqlclient / tb-mysql / tb-psql form a new Database
+  Shell station (fact-aware default from service.mssql/mysql/postgresql). masscan was in no pack, so it
+  would not have been "equipped": added it as a methodologically-correct fast-scan alternative command
+  on the existing nmap-fast-open-ports move (writes -oG into {{scandir}}), which keeps it equipped
+  without changing move eligibility or produces. Glossary entries for the new tools; recipes per tool
+  (rustscan fast-service, masscan all-tcp, MSSQL Windows/SQL/PtH login, MySQL/psql list-databases); a
+  `database` category. Fixed rustscan's nmap passthrough (the token `when:{truthy:true}` only matches
+  checkbox values, not a non-empty string, so `-- -sV -sC` was dropped: made it unconditional). New
+  this phase: SECRET AUTOFILL, the db/authenticated tools now fill the password/hash field (masked)
+  from the engagement's effective identity (OBOL.bind.effectiveIdentity), so a one-tap MSSQL login
+  comes out complete (impacket-mssqlclient htb.local/sa:P@ssw0rd@host -windows-auth); autofilled
+  secrets are not persisted into eng.ui.tools (they re-fill from the ledger). Pack touched, so the
+  scoreboard was re-run: ranker-sim 0/25, ranker-sweep 0.00%; full engine suite (incl. updated
+  toolbuilder/toolkit/workspace smokes) + gap + auditor + lint + attack-coverage + help-coverage +
+  browser-smoke all green; bundle rebuilt, assets stamped. Driven headless: 4 stations, Port Scan with
+  3 engines, Database Shell with 3 engines and the MSSQL secret-autofilled command, engine swap to
+  MySQL, 0 console errors.
+- 2026-10-15: TC phase 1b, six more daily-driver Tool Builders, all for tools that ALREADY have a pack
+  home, so this is pure presentation (zero pack edits, zero ranking risk): tb-bloodyad (AD read/write:
+  get writable, grant DCSync, reset password, add group member, RBCD, the write side of a BloodHound
+  path), tb-ntlmrelayx (relay to LDAPS/SMB/AD CS, with ESC8 and RBCD options), tb-wpscan (WordPress
+  enum + login brute), tb-searchsploit (offline Exploit-DB lookup, exam-legal reference), tb-coercer
+  (PetitPotam/PrinterBug/DFSCoerce coercion into a listener) and tb-dig (DNS + AXFR zone transfer).
+  Each validated through OBOL.toolbuilder.validate, compiled clean, and carries a flag glossary and
+  (bloodyAD/ntlmrelayx) command presets. Added context.lhost / context.lport to the binding + fallback
+  context so coercion/relay tools autofill the listener. Fixed one real fill bug: wpscan's -P appeared
+  with no username because `notEquals:''` is true for an undefined field; gave username a default of ''
+  so the brute flags only show once a username is set. toolbuilder-smoke now 47 builders; full engine
+  suite + toolkit-smoke + browser-smoke green; driven headless, 4 stations, 0 console errors; assets
+  stamped. Remaining TC tools with no pack home (eyewitness, gowitness, dnsenum, cewl, PetitPotam-only)
+  are deferred to TC1c, where a tool only ships with an authored path (the "create the path" mandate).
+- 2026-10-15: TC phase 1c, the last of the owner's new-tool list, each given a real pack home rather
+  than relegated. tb-dnsenum was already equipped (recon-dns lists it in tools); added a runnable
+  dnsenum command to that move and its builder. cewl and eyewitness had no home, so they are added as
+  commands on the existing content-discovery web move (and its tools list): cewl generates a
+  target-specific wordlist that feeds the Crack Hashes station (a list that cracks what rockyou cannot,
+  the genuine pay-off), and eyewitness screenshots the discovered web services for triage. Three new
+  validated builders (tb-dnsenum, tb-cewl, tb-eyewitness) with flag glossaries. PetitPotam was NOT
+  added: Coercer already performs the PetitPotam method (among PrinterBug/DFSCoerce), so a standalone
+  builder would be a duplicate path, not new solving capability, which is the mandate's boundary
+  ("useful on a realistic box"), not box-ticking. These are command additions to existing moves (no new
+  moves, so no eligibility/ranking change); scoreboard re-run anyway: ranker-sim 0/25, ranker-sweep
+  0.00%; full engine suite + gap + auditor + lint + attack-coverage + browser-smoke green; bundle
+  rebuilt, assets stamped. toolbuilder-smoke now 50 builders. TC is complete: every daily-driver tool
+  the owner listed has a builder, and the four stations (Port Scan, Web Content Discovery, Crack
+  Hashes, Database Shell) are populated.
+### TD status log
+
+- 2026-10-15: TD phase 1, the Shell Station (Access Kits), the owner's "one-download listener kit"
+  idea. New engine assets/engine/shellkit.js (OBOL.shellkit, pure/Node-safe): a curated OSCP payload
+  catalogue (mirroring the Workbench reverse-shell set), catchers (nc, rlwrap+nc, ncat TLS, pwncat-cs,
+  socat, metasploit multi/handler), the TTY-upgrade sequence, and listenerKit() which emits a complete
+  .sh that prints every payload filled with LHOST/LPORT, the PowerShell -EncodedCommand (UTF-16LE then
+  base64, the owner's must-have for the OSCP), and the upgrade, then execs the chosen catcher in the
+  foreground so it is listening the moment you run it. tests/engine/shellkit-smoke.js proves psEncode is
+  byte-exact (whoami -> dwBoAG8AYQBtAGkA, and the browser no-Buffer path agrees), payloads fill with no
+  token leak, and every generated kit passes `bash -n`. UI: a "Get A Shell" kit card in a new Access
+  Kits section of the Tools tab, LHOST/LPORT bound to params, a catcher selector, Download Kit (.sh), a
+  one-click Copy PowerShell -EncodedCommand, the filled payload grid with per-payload copy, and the TTY
+  upgrade. Honesty line on the card: obol writes it, you run it on your own box, nothing executes here.
+  Driven headless: deep link opens it, 9 payloads filled from the engagement, the REAL downloaded .sh
+  has the shebang, filled LHOST/LPORT, the -EncodedCommand, and passes bash -n, 0 console errors.
+  shellkit.js registered in the lazy tools group. Full engine suite + browser-smoke + lint green; assets
+  stamped. TD2 (the Pivot Station, downloadable local-half tunnel + on-host chips, in Tools and Cruise)
+  is next.
+
+- 2026-10-15: TD phase 2, the Pivot Station (Access Kits), porting obol-local's TRANSPORT_HALVES.
+  New engine assets/engine/pivotkit.js (OBOL.pivotkit, pure/Node-safe): per transport (sshuttle,
+  SSH dynamic SOCKS, ligolo, chisel) which half runs LOCALLY vs ON THE TARGET, selectTransport (an SSH
+  credential -> sshuttle, else a foothold -> ligolo), localKit() (the downloadable local-half .sh with
+  a gated install preamble, the tun/route/proxy setup, and a liveness hint) and onHostLines() (the
+  stage-agent + connect-back one-liners, Linux and Windows). Locate-first: the internal subnet comes
+  from scan.local.routes/interfaces (paste `ip route` from the foothold into Evidence and it fills).
+  tests/engine/pivotkit-smoke.js proves transport auto-selection, that every local kit fills the
+  context and passes `bash -n`, and the on-host lines connect back to LHOST:PORT. UI: a "Pivot & Tunnel"
+  kit card beside Get A Shell, transport selector (fact-aware default), discovered-subnet chips,
+  Download Local Half (.sh), and the on-host copy-chips. Honesty line: obol writes both halves, you run
+  both, nothing executes here. Fixed a latent bug this surfaced: FactSet.kinds() returns an object-set,
+  not an array, so toolkit.defaultEngine and pivotkit.selectTransport now accept either form (the
+  command stations' fact-aware default had been silently no-oping). Driven headless: 2 discovered
+  subnets, ligolo on-host lines, the REAL downloaded local-half carries the subnet and passes bash -n,
+  0 console errors. Full engine suite + browser-smoke + lint green; assets stamped. CR3 (the Cruise
+  pivot integration) is TD2b.
+
+- 2026-10-15: TD phase 2b, CR3 done. Extracted the Pivot Station UI into a shared module
+  assets/ui/pivotstation.js (OBOL.pivotStationUI = {card, mount}) so ONE component serves both the
+  Tools tab and the Cruise tab (the plan's "lives under Tools and Cruise"). The Tools route now
+  delegates to it (its inline pivot copy removed), and the Cruise route adds a Pivot & Tunnel section
+  that renders the same card and mounts it on click, so when a Cruise batch stops at a foothold you
+  tunnel into the subnet without leaving Cruise. Registered in the lazy tools AND cruise groups. Driven
+  headless: the Tools pivot still works via the shared module (2 subnets, bash -n clean) and the Cruise
+  embed opens with transport chips, subnet chips, and on-host lines, both with 0 console errors. Full
+  engine suite + browser-smoke + help-coverage + lint green; assets stamped. TD is complete: the Shell
+  Station and the Pivot Station both ship as downloadable, fact-filled, bash-valid bundles, and the
+  Pivot Station is surfaced in Tools and Cruise. With it the whole Tools-tab revamp PR (TA audit, TB UX
+  revamp, TC new tools, TD access kits) is feature-complete.

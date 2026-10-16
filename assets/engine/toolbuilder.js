@@ -35,6 +35,18 @@
     if (/^[A-Za-z0-9_@%+=:,.\/-]+$/.test(s)) return s;
     return "'" + s.replace(/'/g, "'\\''") + "'";
   }
+  // Windows (cmd.exe / PowerShell) quoting for executionContext 'windows'. POSIX single quotes are
+  // literal on a Windows shell, so a path like C:\Windows\Temp\x.exe wrapped in '...' breaks when the
+  // operator pastes it on the target. Backslash paths are cmd-safe and pass through; anything with a
+  // space or a cmd metacharacter is wrapped in double quotes (which cmd /c and powershell -Command
+  // both honour) with embedded double quotes escaped.
+  function winQuote(s) {
+    s = String(s == null ? '' : s);
+    if (s === '') return '""';
+    if (/^[A-Za-z0-9_@%+=:,.\/\\-]+$/.test(s)) return s;
+    return '"' + s.replace(/"/g, '\\"') + '"';
+  }
+  function quoterFor(ctx) { return ctx === 'windows' ? winQuote : shellQuote; }
 
   function truthy(v) { return v === true || v === 1 || v === '1' || v === 'true' || v === 'on' || v === 'yes'; }
   function same(a, b) { return String(a) === String(b); }
@@ -42,13 +54,20 @@
   // ------------------------------------------------------------- conditions (when) --
   function conditionMatches(condition, values) {
     if (condition == null) return true;
-    if (isArr(condition)) return condition.every(function (c) { return conditionMatches(c, values); });
+    if (isArr(condition)) return condition.every(function (c) { return conditionMatches(c, values); }); // array = AND
+    // { any: [cond, cond, ...] } = OR: true if ANY sub-condition matches (each sub may itself be an array = AND).
+    if (Object.prototype.hasOwnProperty.call(condition, 'any')) return (condition.any || []).some(function (c) { return conditionMatches(c, values); });
     var value = (values || {})[condition.field];
     if (Object.prototype.hasOwnProperty.call(condition, 'equals')) return same(value, condition.equals);
     if (Object.prototype.hasOwnProperty.call(condition, 'notEquals')) return !same(value, condition.notEquals);
     if (Object.prototype.hasOwnProperty.call(condition, 'in')) return (condition.in || []).some(function (e) { return same(value, e); });
     if (Object.prototype.hasOwnProperty.call(condition, 'notIn')) return !(condition.notIn || []).some(function (e) { return same(value, e); });
     if (Object.prototype.hasOwnProperty.call(condition, 'truthy')) return truthy(value) === condition.truthy;
+    // notEmpty: true matches a present, non-blank value (free text, unlike truthy which is boolean-only).
+    if (Object.prototype.hasOwnProperty.call(condition, 'notEmpty')) {
+      var present = value != null && String(value) !== '';
+      return condition.notEmpty ? present : !present;
+    }
     return false;
   }
 
@@ -99,12 +118,18 @@
       return errors;
     }
     if (typeof condition !== 'object') return [label + ' must be an object or array'];
+    if (Object.prototype.hasOwnProperty.call(condition, 'any')) {
+      if (!isArr(condition.any) || !condition.any.length) fail(errors, label + ' any requires a non-empty array');
+      else condition.any.forEach(function (entry, i) { validateCondition(entry, label + '.any[' + i + ']', fieldIds).forEach(function (e) { fail(errors, e); }); });
+      return errors;
+    }
     if (!fieldIds[condition.field]) fail(errors, label + ' references unknown field ' + text(condition.field));
-    var ops = ['equals', 'notEquals', 'in', 'notIn', 'truthy'].filter(function (k) { return Object.prototype.hasOwnProperty.call(condition, k); });
+    var ops = ['equals', 'notEquals', 'in', 'notIn', 'truthy', 'notEmpty'].filter(function (k) { return Object.prototype.hasOwnProperty.call(condition, k); });
     if (ops.length !== 1) fail(errors, label + ' must declare exactly one condition operator');
     if (Object.prototype.hasOwnProperty.call(condition, 'in') && !isArr(condition.in)) fail(errors, label + ' in operator requires an array');
     if (Object.prototype.hasOwnProperty.call(condition, 'notIn') && !isArr(condition.notIn)) fail(errors, label + ' notIn operator requires an array');
     if (Object.prototype.hasOwnProperty.call(condition, 'truthy') && typeof condition.truthy !== 'boolean') fail(errors, label + ' truthy operator requires a boolean');
+    if (Object.prototype.hasOwnProperty.call(condition, 'notEmpty') && typeof condition.notEmpty !== 'boolean') fail(errors, label + ' notEmpty operator requires a boolean');
     return errors;
   }
 
@@ -290,19 +315,20 @@
     var resolved = normalizeValues(builder, values, context);
     var missing = validateRequired(builder, resolved);
     if (missing.length) throw new Error('Missing required fields: ' + missing.join(', '));
-    var parts = [shellQuote(commandExecutable(builder, resolved))];
+    var q = quoterFor(builder.executionContext);
+    var parts = [q(commandExecutable(builder, resolved))];
     arr(builder.command.tokens).forEach(function (token) {
       if (!conditionMatches(token.when, resolved)) return;
       if (token.kind === 'literal') { parts.push(String(token.value)); return; }
       var value = resolved[token.field];
       if (token.kind === 'toggle') { if (truthy(value)) parts.push(String(token.flag)); return; }
       if (token.kind === 'choice') { var a = choiceArg(token, value); if (a) parts.push(String(a)); return; }
-      if (token.kind === 'concat') { var combined = concatValue(token, resolved); if (combined) parts.push(token.raw === true ? combined : shellQuote(combined)); return; }
+      if (token.kind === 'concat') { var combined = concatValue(token, resolved); if (combined) parts.push(token.raw === true ? combined : q(combined)); return; }
       if (token.kind === 'repeat') {
         if (value === undefined || value === null || value === '') return;
         splitRepeat(value, token.split || 'lines').forEach(function (item) {
           if (token.flag) parts.push(String(token.flag));
-          parts.push(token.raw === true ? item : shellQuote(valueWithAffixes(token, item)));
+          parts.push(token.raw === true ? item : q(valueWithAffixes(token, item)));
         });
         return;
       }
@@ -310,7 +336,7 @@
         if (value === undefined || value === null || value === '') return;
         if (token.flag) parts.push(String(token.flag));
         var rendered = valueWithAffixes(token, value);
-        parts.push(token.raw === true ? rendered : shellQuote(rendered));
+        parts.push(token.raw === true ? rendered : q(rendered));
       }
     });
     return parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
@@ -321,6 +347,7 @@
     CREDENTIAL_KINDS: CREDENTIAL_KINDS,
     EXECUTION_CONTEXTS: EXECUTION_CONTEXTS,
     shellQuote: shellQuote,
+    winQuote: winQuote,
     truthy: truthy,
     conditionMatches: conditionMatches,
     validate: validate,

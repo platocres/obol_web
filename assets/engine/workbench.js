@@ -522,12 +522,15 @@
     { re: /^\{SSHA\}/, c: [hc('LDAP {SSHA} (salted SHA-1)', 111, 'ssha', 'Common in LDAP directories. Salted.')] },
     { re: /^\{SHA\}/, c: [hc('LDAP {SHA} (base64 SHA-1)', 101, 'nsldap', 'Unsalted base64 SHA-1. CrackStation may know it.')] },
     { re: /^\$krb5asrep\$(23)\$/i, c: [hc('Kerberos AS-REP (RC4)', 18200, 'krb5asrep', 'From AS-REP roasting (a user with "do not require preauth"). RC4, fast to crack. Try a wordlist first.')] },
-    { re: /^\$krb5asrep\$(17|18)\$/i, c: [hc('Kerberos AS-REP (AES)', 18200, 'krb5asrep', 'AES variant of AS-REP roast. Slower than RC4. Offline wordlist crack.')] },
+    { re: /^\$krb5asrep\$(17|18)\$/i, c: [hc('Kerberos AS-REP (AES)', null, 'krb5asrep', 'An AES AS-REP (etype 17/18). AS-REP roasting is almost always RC4 (mode 18200); hashcat has no AES AS-REP mode, so crack this with john --format=krb5asrep. Rare in practice.')] },
     { re: /^\$krb5tgs\$23\$/i, c: [hc('Kerberoast TGS-REP (RC4)', 13100, 'krb5tgs', 'From Kerberoasting a service account. RC4, fast. Service accounts often have weak passwords, so this is high value.')] },
     { re: /^\$krb5tgs\$17\$/i, c: [hc('Kerberoast TGS-REP (AES128)', 19600, 'krb5tgs', 'AES128 Kerberoast. Slower than RC4. Offline wordlist crack.')] },
     { re: /^\$krb5tgs\$18\$/i, c: [hc('Kerberoast TGS-REP (AES256)', 19700, 'krb5tgs', 'AES256 Kerberoast. Slower than RC4. Offline wordlist crack.')] },
     { re: /^\$DCC2\$/i, c: [hc('Domain Cached Credentials 2 (mscash2)', 2100, 'mscash2', 'Cached domain logon from a workstation. Very slow. Low iteration wordlist only.')] },
-    { re: /^\$krb5pa\$/i, c: [hc('Kerberos pre-auth (PA-ENC-TIMESTAMP)', 7500, 'krb5pa-md5', 'From sniffed pre-auth. RC4, fast.')] },
+    { re: /^\$krb5pa\$23\$/i, c: [hc('Kerberos pre-auth (RC4, PA-ENC-TIMESTAMP)', 7500, 'krb5pa-md5', 'From sniffed AS-REQ pre-auth. RC4, fast to crack.')] },
+    { re: /^\$krb5pa\$17\$/i, c: [hc('Kerberos pre-auth (AES128, PA-ENC-TIMESTAMP)', 19800, 'krb5pa-sha1', 'AES128 pre-auth (etype 17). Offline wordlist crack.')] },
+    { re: /^\$krb5pa\$18\$/i, c: [hc('Kerberos pre-auth (AES256, PA-ENC-TIMESTAMP)', 19900, 'krb5pa-sha1', 'AES256 pre-auth (etype 18). Offline wordlist crack.')] },
+    { re: /^\$krb5pa\$/i, c: [hc('Kerberos pre-auth (PA-ENC-TIMESTAMP)', 7500, 'krb5pa-md5', 'From sniffed pre-auth. The etype (second field) sets the mode: 23 RC4 is 7500, 17/18 AES are 19800/19900.')] },
     { re: /^0x0100[0-9a-f]+$/i, c: [hc('MSSQL 2000', 131, 'mssql', 'Legacy SQL Server hash.')] },
     { re: /^0x0200[0-9a-f]+$/i, c: [hc('MSSQL 2012 / 2014+', 1731, 'mssql12', 'Modern SQL Server hash (SHA-512 based).')] },
     { re: /^\*[A-F0-9]{40}$/i, c: [hc('MySQL 4.1+ (SHA1(SHA1(pw)))', 300, 'mysql-sha1', 'The leading * marks it. Unsalted, fast.')] },
@@ -535,6 +538,25 @@
     { re: /^[^:\s]+::[^:]*:[0-9a-f]{48}:[0-9a-f]{48}:[0-9a-f]{16}$/i, c: [hc('NetNTLMv1 (Responder capture)', 5500, 'netntlm', 'The v1 capture. Can sometimes be cracked to NTLM via rainbow tables (crack.sh).')] },
     { re: /^\$argon2[id]{1,2}\$/i, c: [hc('Argon2', null, 'argon2', 'Modern, memory-hard. hashcat has no stable mode; use john --format=argon2. Expect it to be slow.')] },
     { re: /^\$y\$/, c: [hc('yescrypt (modern Linux /etc/shadow)', null, 'crypt', 'Default on recent Debian/Ubuntu. hashcat has no mode yet; use john. Very slow.')] },
+    // ── structured application / file / network formats: unambiguous prefixes, so they identify exactly ──
+    { re: /^\$keepass\$/i, c: [hc('KeePass (1.x / 2.x database)', 13400, 'keepass', 'A KeePass master key. Slow by design. Offline wordlist crack only.')] },
+    { re: /^\$7z\$/i, c: [hc('7-Zip archive', 11600, '7z', 'The archive password. Slow, memory-hard. Offline crack.')] },
+    { re: /^\$RAR3\$/i, c: [hc('RAR3 archive', 12500, 'rar3', 'WinRAR 3.x password. Slow. Offline crack.')] },
+    { re: /^\$rar5\$/i, c: [hc('RAR5 archive', 13000, 'rar5', 'WinRAR 5.x password. Slow. Offline crack.')] },
+    { re: /^\$office\$\*?2007/i, c: [hc('MS Office 2007 document', 9400, 'office2007', 'Office 2007 encryption. Offline wordlist crack.')] },
+    { re: /^\$office\$\*?2010/i, c: [hc('MS Office 2010 document', 9500, 'office2010', 'Office 2010 encryption. Slower than 2007.')] },
+    { re: /^\$office\$\*?2013/i, c: [hc('MS Office 2013+ document', 9600, 'office2013', 'Office 2013+ encryption. 100k iterations, slow.')] },
+    { re: /^\$pdf\$/i, c: [hc('PDF document', 10500, 'pdf', 'Encrypted PDF. For Acrobat 1.7 (revision 6) the mode is 10700 instead; the $pdf$V*R* fields tell you (R=6 is 1.7).')] },
+    { re: /^\$zip2\$/i, c: [hc('WinZip (AES) archive', 13600, 'zip2', 'WinZip AES. Offline crack.')] },
+    { re: /^\$pkzip2?\$/i, c: [hc('PKZIP / legacy ZIP archive', 17200, 'pkzip', 'Legacy ZIP. The exact mode varies by layout (17210 uncompressed, 17225 mixed); 17200 is the common compressed case.')] },
+    { re: /^\$sshng\$/i, c: [hc('SSH private key (encrypted)', 22911, 'sshng', 'A passphrase-protected id_rsa / id_ed25519. The subtype sets the exact mode (22911 RSA/DSA up to 22951); start here.')] },
+    { re: /^pbkdf2_sha256\$/i, c: [hc('Django (PBKDF2-SHA256)', 10000, 'django', 'Django web framework password. Stretched, slow.')] },
+    { re: /^\$S\$[./0-9A-Za-z]{52}$/, c: [hc('Drupal 7 (SHA-512, stretched)', 7900, 'drupal7', 'Drupal 7 CMS password. Salted and stretched. Offline crack.')] },
+    { re: /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/, c: [hc('JWT (JSON Web Token, HMAC-signed)', 16500, 'jwt', 'A signed token. Crack the HMAC secret to forge your own; a weak secret falls fast. States only the secret, not a password.')] },
+    { re: /^WPA\*0[12]\*/i, c: [hc('WPA / WPA2 (PMKID or EAPOL)', 22000, 'wpa-pbkdf2-pmkid+eapol', 'Captured Wi-Fi handshake or PMKID. Offline wordlist crack.')] },
+    { re: /^S:[0-9A-Fa-f]{60}$/, c: [hc('Oracle 11g (SHA-1, salted)', 112, 'oracle11g', 'From DBA_USERS.SPARE4. Salted SHA-1. Offline crack.')] },
+    { re: /^md5[0-9a-f]{32}$/, c: [hc('PostgreSQL (md5 of password + username)', 12, 'postgres', 'The pg_shadow md5 form. The salt is the username; supply it as hash:username.')] },
+    { re: /^[./0-9A-Za-z]{13}$/, c: [hc('descrypt (traditional Unix DES crypt)', 1500, 'descrypt', 'A 13-character classic Unix crypt hash. Old and rare now, but still seen on legacy boxes. Only the first 8 password characters matter.')] },
   ];
 
   // pwdump / secretsdump line: user:rid:LM:NT:::  → identify the NT (and flag the LM if not blank).
@@ -576,6 +598,44 @@
       return { input: s, candidates: [], note: 'A ' + s.length + '-character hex string that does not match a common length. Paste it into the hashcat example-hashes wiki to compare.' };
     }
     return { input: s, candidates: [], note: 'No confident match. Compare it against the hashcat example-hashes wiki, or try name-that-hash locally.' };
+  };
+
+  // normalizeHash(raw) -> { input, cleaned, changed, changes[] }. DETERMINISTIC, transparent cleanup of the
+  // formatting pitfalls that make a perfectly good hash fail to crack in a lab: stray whitespace and CRLF,
+  // surrounding quotes, a capture-log prefix, a $NT$ prefix, a full secretsdump line (keep the NT hash), and
+  // a Kerberos ticket that wrapped across lines (Rubeus loves to do this). It NEVER reorders fields, changes
+  // an etype, or drops a ticket's SPN section: those could corrupt a valid hash, so they are left alone. Every
+  // change is recorded in `changes` so the UI can show exactly what it did (honest by construction, like the
+  // parser's Explain Output). A hash that is already clean comes back changed:false with cleaned === input.
+  W.normalizeHash = function (raw) {
+    var original = String(raw == null ? '' : raw);
+    var s = original;
+    var changes = [];
+
+    var trimmed = s.replace(/\r/g, '').replace(/^\s+|\s+$/g, '');
+    if (trimmed !== original) changes.push('Trimmed surrounding whitespace.');
+    s = trimmed;
+
+    var q = s.match(/^(["'])([\s\S]*)\1$/);
+    if (q) { s = q[2]; changes.push('Removed the surrounding quotes.'); }
+
+    // a Responder / capture log line: "[SMB] NTLMv2-SSP Hash : user::DOMAIN:..." -> keep the hash
+    var rp = s.match(/^\[[^\]]*\][^:]*?Hash\s*:\s*([\s\S]+)$/i);
+    if (rp) { s = rp[1].trim(); changes.push('Removed the capture-log prefix, kept the hash.'); }
+
+    // a full secretsdump / pwdump line -> the NT hash (4th field), which is what -m 1000 wants
+    var pd = s.match(PWDUMP_RE);
+    if (pd) { s = pd[2]; changes.push('Took the NT hash (4th field) from the secretsdump line.'); }
+
+    if (/^\$NT\$/i.test(s)) { s = s.replace(/^\$NT\$/i, ''); changes.push('Removed the $NT$ prefix.'); }
+
+    // a Kerberos ticket wrapped across lines (or with internal whitespace) -> one line; hashcat needs it joined
+    if (/^\$krb5(tgs|asrep|pa)\$/i.test(s) && /\s/.test(s)) {
+      s = s.replace(/\s+/g, '');
+      changes.push('Joined the Kerberos ticket into one line (removed the line wraps).');
+    }
+
+    return { input: original, cleaned: s, changed: changes.length > 0, changes: changes };
   };
 
   // The hashcat crack command for a candidate (canonical rockyou path; the Loadout rewrite can retarget it).

@@ -151,8 +151,18 @@
   function hashOutHtml(value) {
     var wb = W();
     if (!value || !value.trim()) return '<p class="wb-note">Paste a hash above and obol will name it, give you the hashcat mode and a ready crack command.</p>';
-    var r = wb.identifyHash(value);
-    if (!r.candidates.length) return '<p class="wb-note">' + esc(r.note || 'No confident match.') + '</p>' + HASH_REFS;
+    // Clean up the common lab formatting pitfalls FIRST (wrapped tickets, secretsdump lines, quotes, log
+    // prefixes), then identify the cleaned hash. Every change is shown so you see exactly what obol did.
+    var nz = wb.normalizeHash(value);
+    var cleanBanner = '';
+    if (nz.changed && nz.cleaned && nz.cleaned !== String(value).trim()) {
+      cleanBanner = '<div class="wb-clean"><div class="wb-clean-h">Cleaned For Cracking</div>'
+        + '<ul class="wb-clean-list">' + nz.changes.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>'
+        + '<div class="wb-cmd"><code>' + esc(nz.cleaned) + '</code>'
+        + '<button type="button" class="btn-copy wb-use-clean" data-clean="' + U.attr(nz.cleaned) + '">use this</button></div></div>';
+    }
+    var r = wb.identifyHash(nz.cleaned);
+    if (!r.candidates.length) return cleanBanner + '<p class="wb-note">' + esc(r.note || 'No confident match.') + '</p>' + HASH_REFS;
 
     var cards = r.candidates.map(function (c, i) {
       var modeBadge = (c.mode != null)
@@ -171,7 +181,7 @@
         + cmds + '</div>';
     }).join('');
     var multi = r.candidates.length > 1 ? '<p class="wb-note">More than one hash has this shape. The most likely is first; the context (where you found it) decides.</p>' : '';
-    return multi + cards + HASH_REFS;
+    return cleanBanner + multi + cards + HASH_REFS;
   }
 
   function hashidPanel() {
@@ -722,6 +732,15 @@
     U.on(mount, 'input', '#wb-hash-in', function (e, t) {
       var out = document.getElementById('wb-hash-out');
       if (out) out.innerHTML = hashOutHtml(t.value);
+    });
+    // "use this": replace the pasted mess with the cleaned hash, so it is ready to copy into a cracker
+    U.on(mount, 'click', '.wb-use-clean', function (e, t) {
+      var box = document.getElementById('wb-hash-in');
+      if (!box) return;
+      box.value = t.getAttribute('data-clean') || '';
+      var out = document.getElementById('wb-hash-out');
+      if (out) out.innerHTML = hashOutHtml(box.value);
+      if (U.toast) U.toast('Cleaned hash applied', '');
     });
     U.on(mount, 'click', '.wb-fill-chip', function (e, t) {
       var box = document.getElementById('wb-hash-in');

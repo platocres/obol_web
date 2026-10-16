@@ -1422,8 +1422,11 @@ ol.bh-steps li { margin-bottom: 9px; }
 .rep-gaps ul { margin: 6px 0; }
 
 /* ---- tools route (command builders) ---- */
-.tools-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; }
+.tools-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--bg1) 90%, transparent); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); padding: 9px 0; }
 .tools-nav .pill { cursor: pointer; }
+.tools-jump-top { background: var(--surf2); border-color: var(--line); color: var(--text-2); font-weight: 700; }
+.tools-jump-top:hover { border-color: var(--accent); color: var(--text); }
 .tools-nav .pill b { color: var(--accent-2); font-weight: 700; }
 .tools-cat { margin-bottom: 28px; scroll-margin-top: 70px; }
 .tools-cat-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
@@ -1441,8 +1444,12 @@ ol.bh-steps li { margin-bottom: 9px; }
 .tool-card-exec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
 .tool-card-sum { color: var(--text-2); font-size: 12.5px; margin: 7px 0 0; padding-right: 22px; line-height: 1.45; }
 .tool-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 15px 13px; }
-.tool-card-tags .pill { font-family: var(--mono); font-size: 11px; padding: 2px 8px; background: var(--bg2); color: var(--text-2); }
-.pill.tb-cred { background: var(--accent-soft); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+/* descriptive tags, not selectors: a mini label plus flat (non-pill, non-interactive) chips */
+.tool-card-tags .tags-lab { font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-right: 1px; }
+.tool-card-tags .tags-lab:not(:first-child) { margin-left: 6px; }
+.tool-card-tags .pill.tag-static { font-family: var(--mono); font-size: 11px; padding: 2px 8px; background: var(--bg2); color: var(--text-2); border-radius: 5px; cursor: default; }
+/* the auth tag: a quiet outline, not a solid green "active" chip that looks selected */
+.pill.tb-cred.tag-static { background: transparent; color: var(--text-2); border-color: var(--line); }
 .tool-card-chev { position: absolute; top: 15px; right: 14px; color: var(--muted); transition: transform .15s; }
 .tool-card.open .tool-card-chev { transform: rotate(180deg); }
 .tool-body { display: none; padding: 0 15px 15px; }
@@ -1451,10 +1458,20 @@ ol.bh-steps li { margin-bottom: 9px; }
 .tb-preview { margin: 4px 0 14px; }
 .tb-code { font-size: 12.5px; color: var(--text); white-space: pre-wrap; word-break: break-all; }
 .tb-code[data-valid="false"] { color: var(--muted); font-style: italic; }
-.tb-exe { color: var(--accent-2); font-weight: 600; }
+/* a preview (the command shape with <placeholder> tokens for fields you have not filled yet) reads as a
+   real command, not a dim "fill these" message: full colour, upright, so the shape is legible at a glance. */
+.tb-code[data-preview="true"] { color: var(--text); font-style: normal; }
+.tb-exe { color: #FBBF24; font-weight: 700; }
+.tb-sub { color: var(--purple); font-weight: 600; }
 .tb-flag { color: var(--yellow); }
 .tb-arg { color: var(--text); }
 .tb-fuzz { color: var(--red); font-weight: 700; }
+.tb-str { color: var(--teal); }
+.tb-ip { color: var(--green); }
+.tb-num { color: #22D3EE; }
+/* a <placeholder> for a field you have not filled yet: pink, italic and bracketed, so it reads as "fill me",
+   never as a real argument (colour is not the sole signal: the angle brackets and the slant carry it too). */
+.tb-ph { color: #F472B6; font-weight: 600; font-style: italic; }
 
 .tb-form { display: flex; flex-direction: column; gap: 14px; }
 .tb-group { border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; background: var(--bg1); }
@@ -4079,6 +4096,14 @@ nav.mainnav a.active { background: color-mix(in srgb, var(--accent) 18%, var(--s
 .wb-hash-note { margin: 2px 0 9px; font-size: 12px; color: var(--text-2); line-height: 1.5; max-width: 74ch; }
 .wb-hash-card .wb-cmd { margin-top: 7px; }
 
+/* Cleaned-for-cracking banner: what obol fixed about the pasted hash, then the ready value with "use this". */
+.wb-clean { margin: 10px 0 4px; padding: 11px 13px; border-radius: 9px;
+  background: color-mix(in srgb, var(--teal) 9%, var(--surf1)); border: 1px solid color-mix(in srgb, var(--teal) 38%, var(--line)); }
+.wb-clean-h { font: 800 11.5px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, var(--teal) 70%, var(--text)); margin-bottom: 7px; }
+.wb-clean-list { margin: 0 0 9px; padding-left: 18px; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+.wb-clean-list li { margin: 1px 0; }
+.wb-clean .wb-cmd { margin: 0; }
+
 /* Workbench Encoder (mini CyberChef) + JWT output rows */
 .wb-enc-out, .wb-jwt-out { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
 .wb-xform { display: flex; flex-direction: column; gap: 5px; }
@@ -5319,4 +5344,338 @@ main#view:has(.library) { max-width: 2600px; }
 @media (max-width: 560px) {
   .lib-matrix { grid-template-columns: 1fr; }
   .lib-lens-bar { gap: 10px; }
+}
+
+/* ============================ Engagement Binding bar (assets/ui/bind.js) ============================
+   Shared by the Tools tab and the Library Commands lens. Reuses the .cv-shead glass chrome but stacks
+   vertically. Colour is never the only signal: identity type carries a text badge, selection a ring. */
+.bind.cv-shead { display: block; margin: 0 0 16px; padding: 12px 15px; }
+.bind-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+.bind-title { font: 800 11.5px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: color-mix(in srgb, var(--sh) 70%, var(--text)); }
+.bind-manual { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); cursor: pointer; }
+.bind-manual input { accent-color: var(--sh); }
+.bind-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; padding: 5px 0; }
+.bind-lab { flex: 0 0 72px; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.bind-note { font-size: 11.5px; color: var(--muted); font-style: italic; }
+.bind-target { flex: 1 1 220px; min-width: 160px; background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; color: var(--text); padding: 6px 10px; font-family: var(--mono); font-size: 12.5px; }
+.bind-target:focus { outline: none; border-color: var(--sh); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sh) 25%, transparent); }
+.bind-ids, .bind-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; }
+.bind-id { display: inline-flex; align-items: center; gap: 6px; background: var(--surf2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 9px; cursor: pointer; color: var(--text-2); font-size: 12px; }
+.bind-id:hover { border-color: var(--sh); color: var(--text); }
+.bind-id.on { border-color: var(--sh); color: var(--text); background: color-mix(in srgb, var(--sh) 14%, var(--surf2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sh) 45%, transparent); }
+.bind-id-who { font-family: var(--mono); }
+.bind-id-type { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 4px; padding: 0 5px; }
+.bind-id-type.bt-nt { background: color-mix(in srgb, var(--purple) 22%, transparent); color: color-mix(in srgb, var(--purple) 80%, var(--text)); }
+.bind-id-type.bt-pw { background: color-mix(in srgb, var(--teal) 22%, transparent); color: color-mix(in srgb, var(--teal) 80%, var(--text)); }
+.bind-id-type.bt-ot { background: color-mix(in srgb, var(--accent) 22%, transparent); color: color-mix(in srgb, var(--accent) 80%, var(--text)); }
+.bind-id-act { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--g-next); }
+.bind-secret { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0 4px 72px; }
+.bind-mask { font-family: var(--mono); font-size: 12px; color: var(--text-2); background: var(--bg2); border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; letter-spacing: .1em; }
+.bind-chip { background: var(--surf3); color: var(--text-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; font-size: 11.5px; cursor: pointer; font-family: var(--mono); }
+.bind-chip:hover { border-color: var(--sh); color: var(--text); }
+.bind-chip.on { border-color: var(--sh); color: var(--text); background: color-mix(in srgb, var(--sh) 16%, var(--surf3)); }
+.bind-compact.cv-shead { margin-bottom: 10px; padding: 9px 12px; }
+.bind-compact .bind-lab { flex-basis: 60px; }
+@media (max-width: 560px) { .bind-lab { flex-basis: 100%; } .bind-secret { padding-left: 0; } }
+
+/* ============================ Tools revamp (routes/tools.js) ============================ */
+.tools-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.tools-lens { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.tools-lens-btn { background: var(--surf1); color: var(--text-2); border: 0; border-right: 1px solid var(--line); padding: 5px 14px; font-size: 12px; cursor: pointer; }
+.tools-lens-btn:last-child { border-right: 0; }
+.tools-lens-btn.on { background: var(--accent-soft); color: var(--accent-2); font-weight: 700; }
+.tools-stations { margin: 4px 0 26px; }
+.tools-route[data-layout="grid"] .tools-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+
+/* ---- Focus Lens: a master-detail workbench. Left: a searchable, grouped tool list. Right: the
+   selected tool's full funnel panel, always expanded. One tool at a time, no scrolling past the rest. */
+.tools-focus-wrap { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.tools-focus-list { position: sticky; top: 8px; align-self: start; max-height: calc(100vh - 92px); overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surf1); padding: 10px; }
+.tfl-search-wrap { position: sticky; top: 0; background: var(--surf1); padding-bottom: 8px; margin: -2px 0 4px; z-index: 2; }
+.tfl-search { width: 100%; box-sizing: border-box; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; color: var(--text); padding: 7px 10px; font-size: 12.5px; }
+.tfl-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tfl-search-none { display: block; font-size: 11.5px; color: var(--muted); padding: 6px 2px 0; }
+.tfl-group { margin-bottom: 10px; }
+.tfl-group-head { font: 800 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 4px 4px 6px; }
+.tfl-item { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; cursor: pointer; background: var(--surf2); border: 1px solid var(--line); border-left: 3px solid var(--lane, var(--line)); border-radius: 8px; padding: 7px 10px; margin-bottom: 5px; color: var(--text-2); }
+.tfl-item:hover { background: color-mix(in srgb, var(--lane, var(--accent)) 12%, var(--surf2)); border-color: color-mix(in srgb, var(--lane, var(--accent)) 40%, var(--line)); }
+.tfl-item.on { background: color-mix(in srgb, var(--lane, var(--accent)) 18%, var(--surf2)); border-color: var(--lane, var(--accent)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lane, var(--accent)) 45%, transparent); }
+.tfl-item-name { font-weight: 700; font-size: 13px; color: color-mix(in srgb, var(--lane, var(--text)) 58%, var(--text)); }
+.tfl-item.on .tfl-item-name { color: color-mix(in srgb, var(--lane, var(--text)) 82%, var(--text)); }
+.tfl-item-sum { font-size: 11px; color: var(--muted); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tools-focus-detail { min-width: 0; }
+/* The detail card is always expanded here: no collapse chevron, head is not a toggle, body shows. */
+.tools-focus-detail .tool-card { background: linear-gradient(180deg, color-mix(in srgb, var(--lane) 10%, var(--surf1)), var(--surf1)); border-color: color-mix(in srgb, var(--lane, var(--line)) 40%, var(--line)); border-left: 3px solid var(--lane, var(--line)); }
+.tools-focus-detail .tool-card-head { cursor: default; }
+.tools-focus-detail .tool-card-chev { display: none; }
+.tools-focus-detail .tool-card .tool-body { display: block; }
+.tools-focus-detail .tool-card-name { color: color-mix(in srgb, var(--lane, var(--text)) 80%, var(--text)); }
+.tools-focus-detail .tb-gloss-lab { color: color-mix(in srgb, var(--lane, var(--teal)) 74%, var(--text)); }
+.tools-focus-detail .tb-recipes-lab { color: color-mix(in srgb, var(--lane, var(--accent-2)) 80%, var(--text)); }
+@media (max-width: 720px) {
+  .tools-focus-wrap { grid-template-columns: 1fr; }
+  .tools-focus-list { position: static; max-height: 320px; }
+}
+
+/* stations */
+/* Do NOT hardcode --lane here: the per-station lane-<hue> class supplies it (web=violet, creds=gold,
+   recon=teal, database=cyan, shells, pivot), so each station reads its own colour instead of all-green. */
+.station-card { border-left: 3px solid var(--lane, var(--accent)); }
+.station-card .tool-card-head { padding-bottom: 6px; }
+/* Hover tints the WHOLE card (head + engine row), not just the title block, so the highlight fills. */
+.station-card .tool-card-head:hover { background: transparent; }
+.station-card:hover { background: color-mix(in srgb, var(--lane) 13%, var(--surf1)); border-color: color-mix(in srgb, var(--lane) 38%, var(--line)); }
+.station-card.open:hover { border-color: color-mix(in srgb, var(--lane) 55%, var(--line)); }
+.station-badge { font: 800 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: #0a0e18; background: var(--lane); border-radius: 4px; padding: 1px 6px; }
+.station-engines { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 0 15px 12px; }
+.tb-engines-lab { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.tb-engine { background: var(--surf2); border: 1px solid var(--line); border-radius: 7px; color: var(--text-2); padding: 4px 11px; font-size: 12.5px; cursor: pointer; }
+.tb-engine:hover { border-color: var(--lane); color: var(--text); }
+.tb-engine.on { background: color-mix(in srgb, var(--lane) 16%, var(--surf2)); border-color: var(--lane); color: var(--text); font-weight: 700; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lane) 45%, transparent); }
+.tb-engine-teach { flex: 1 1 100%; font-size: 11.5px; color: var(--text-2); font-style: italic; }
+
+/* recipe tiles */
+.tb-recipes { margin: 2px 0 14px; }
+.tb-recipes-lab { font: 800 11px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: var(--accent-2); margin-bottom: 8px; }
+.tb-recipes-sub { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 8px; font-family: inherit; }
+.tb-recipe-grid { gap: 10px; }
+/* recipe tiles are presets, not Next Steps cards: size to content, don't inherit the 150px card height */
+.tb-recipe { text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 190px; flex: 1 1 210px; max-width: 320px; padding: 10px 12px; min-height: 0; }
+/* the [hidden] attribute must win over the flex display above, or a protocol-filtered recipe (and a
+   search-filtered tool row) would stay visible. */
+.tb-recipe[hidden], .tfl-item[hidden], .tfl-group[hidden], .tb-recipe-grid[hidden] { display: none !important; }
+.tb-recipe-grid { align-items: stretch; }
+.tb-recipe .tb-recipe-name { font-weight: 700; font-size: 13px; color: var(--text); }
+.tb-recipe .tb-recipe-hint { font-size: 11.5px; color: var(--text-2); line-height: 1.4; }
+.tb-recipe .ph-chip { align-self: flex-start; margin-top: 2px; }
+/* compact recipe chips (many hash modes): smaller, name + phase only, so more fit per row */
+.tb-recipes.compact .tb-recipe { min-width: 110px; flex: 0 1 140px; max-width: 180px; padding: 8px 11px; gap: 3px; align-items: flex-start; }
+.tb-recipes.compact .tb-recipe-name { font-size: 12px; }
+.tb-recipes.compact .tb-recipe .ph-chip { display: none; } /* phase is identical across hash modes, so the chip is noise here */
+
+/* editable preview */
+.tb-preview .cmd-head { display: flex; align-items: center; gap: 8px; }
+.cmd-spacer { flex: 1 1 auto; }
+.tb-preview .tb-editbtn, .tb-preview .tb-reset { margin-left: 0; }
+.tb-preview .tb-render { cursor: text; }
+.tb-preview .tb-edit { display: none; width: 100%; background: var(--bg2); color: var(--text); border: 1px solid var(--accent); border-radius: 0 0 8px 8px; padding: 10px 12px; font: 12.5px var(--mono); resize: vertical; min-height: 46px; }
+.tb-preview.editing .tb-render { display: none; }
+.tb-preview.editing .tb-edit { display: block; }
+
+/* flag gloss */
+.tb-gloss { margin: 0 0 14px; border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: var(--bg1); }
+.tb-gloss-lab { font: 800 11px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: var(--teal); margin-bottom: 7px; }
+.tb-gloss-list { margin: 0; display: grid; grid-template-columns: 1fr; gap: 5px; }
+.tb-gloss-row { display: grid; grid-template-columns: minmax(70px, auto) 1fr; gap: 10px; align-items: baseline; }
+.tb-gloss-row dt { margin: 0; }
+.tb-gloss-row dt code { font: 700 12px var(--mono); color: var(--yellow); background: var(--bg2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+.tb-gloss-row dd { margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.45; }
+@media (min-width: 900px) { .tb-gloss-list { grid-template-columns: 1fr 1fr; gap: 5px 22px; } }
+
+.tb-allopts { margin: 0 0 12px; border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; background: var(--surf1); }
+.tb-allopts > summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--text); }
+.tb-allopts > summary .tb-hint { font-weight: 400; margin-left: 8px; }
+.tb-allopts[open] { padding-bottom: 12px; }
+.tb-allopts .tb-form { margin-top: 12px; }
+/* "Find A Switch" palette inside All Options */
+.tb-optfind { margin: 10px 0 2px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tb-optfilter { flex: 1 1 220px; max-width: 420px; background: var(--bg2); border: 1px solid color-mix(in srgb, var(--lane, var(--accent)) 30%, var(--line)); border-radius: 8px; color: var(--text); padding: 6px 10px; font: 12px var(--mono); }
+.tb-optfilter:focus { outline: none; border-color: var(--lane, var(--accent)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--lane, var(--accent)) 30%, transparent); }
+.tb-optfind-none { color: var(--muted); }
+.tb-field.tb-filter-hide, .tb-group.tb-filter-hide { display: none !important; }
+.tb-foot { font-size: 11px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
+
+/* ============================ Shell Station (Access Kits) ============================ */
+.shell-station { --lane: var(--ph-access); }
+.shk { padding: 2px 0 4px; }
+.shk-lh { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.shk-lh label { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.shk-lh input { background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; color: var(--text); padding: 5px 9px; font: 12.5px var(--mono); width: 150px; }
+.shk-lh input:focus { outline: none; border-color: var(--lane); }
+.shk-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 10px 0 14px; }
+.shk-dl { background: color-mix(in srgb, var(--lane) 20%, var(--surf2)); border: 1px solid var(--lane); color: var(--text); border-radius: 8px; padding: 7px 15px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.shk-dl:hover { background: color-mix(in srgb, var(--lane) 32%, var(--surf2)); }
+.shk-pays { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 12px; }
+@media (min-width: 1000px) { .shk-pays { grid-template-columns: 1fr 1fr; } }
+.shk-pay { border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); padding: 8px 10px; min-width: 0; }
+.shk-pay-h { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.shk-pay-name { font-weight: 700; font-size: 12px; color: var(--text); }
+.shk-pay-os { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; border-radius: 4px; padding: 0 5px; }
+.shk-pay-os.linux { background: color-mix(in srgb, var(--teal) 22%, transparent); color: color-mix(in srgb, var(--teal) 85%, var(--text)); }
+.shk-pay-os.windows { background: color-mix(in srgb, var(--ph-recon) 22%, transparent); color: color-mix(in srgb, var(--ph-recon) 85%, var(--text)); }
+.shk-pay-os.web { background: color-mix(in srgb, var(--purple) 22%, transparent); color: color-mix(in srgb, var(--purple) 85%, var(--text)); }
+.shk-pay-h .shk-copy { margin-left: auto; }
+.shk-pay-cmd { display: block; font: 11.5px var(--mono); color: var(--text-2); white-space: pre-wrap; word-break: break-all; }
+.shk-pay-note { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); line-height: 1.4; }
+.shk-tty { margin: 0; font: 11.5px var(--mono); color: var(--text-2); white-space: pre-wrap; }
+/* encode toggle + section labels (webshells / msfvenom additions) */
+.shk-enc { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 2px 0 12px; }
+.shk-enc-badge { font: 800 9px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: color-mix(in srgb, var(--lane, var(--accent-2)) 85%, var(--text)); border: 1px solid color-mix(in srgb, var(--lane, var(--accent)) 45%, var(--line)); border-radius: 4px; padding: 0 5px; }
+.shk-sec-lab { font: 800 11px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: color-mix(in srgb, var(--lane, var(--ph-access)) 80%, var(--text)); margin: 14px 0 8px; }
+
+/* ============================ Tools colour pass (lane-coded zones + discoverability) ============================ */
+/* Category zones: each tool category carries its lane hue (class emitted by tools.js). */
+.tools-cat .tools-cat-h { color: color-mix(in srgb, var(--lane, var(--accent-2)) 80%, var(--text)); }
+.tools-cat .tools-cat-head { border-bottom-color: color-mix(in srgb, var(--lane, var(--accent)) 42%, var(--line)); }
+.tools-cat .tool-card { border-left: 3px solid var(--lane, var(--line)); background: linear-gradient(180deg, color-mix(in srgb, var(--lane) 8%, var(--surf1)), var(--surf1)); }
+.tools-cat .tool-card:hover .tool-card-head { background: color-mix(in srgb, var(--lane) 9%, var(--surf2)); }
+.tools-cat .tool-card.open { border-color: var(--lane); }
+.tools-cat .tool-card-name { color: color-mix(in srgb, var(--lane) 66%, var(--text)); }
+.tools-cat .tool-card.open .tool-card-name { color: color-mix(in srgb, var(--lane) 80%, var(--text)); }
+/* jump nav doubles as a lane legend */
+.tools-nav .tools-jump[class*="lane-"] { border-color: color-mix(in srgb, var(--lane) 45%, var(--line)); color: color-mix(in srgb, var(--lane) 78%, var(--text)); }
+.tools-nav .tools-jump[class*="lane-"]:hover { background: color-mix(in srgb, var(--lane) 14%, var(--surf2)); }
+.tools-nav .tools-jump[class*="lane-"] b { color: var(--lane); }
+/* follow-the-lane labels inside hued cards */
+.tools-cat .tb-gloss-lab, .station-card .tb-gloss-lab { color: color-mix(in srgb, var(--lane, var(--teal)) 74%, var(--text)); }
+.tools-cat .tb-recipes-lab, .station-card .tb-recipes-lab { color: color-mix(in srgb, var(--lane, var(--accent-2)) 80%, var(--text)); }
+.tools-cat .tb-gloss, .station-card .tb-gloss { border-color: color-mix(in srgb, var(--lane, var(--accent)) 24%, var(--line)); }
+
+/* Stations: glass gradient body + hued name (previously a gray card with a thin bar). */
+.station-card { background: linear-gradient(180deg, color-mix(in srgb, var(--lane) 13%, var(--surf1)), var(--surf1)); }
+.station-card .tool-card-head:hover { background: color-mix(in srgb, var(--lane) 11%, var(--surf2)); }
+.station-card .tool-card-name { color: color-mix(in srgb, var(--lane) 74%, var(--text)); }
+.station-badge { background: color-mix(in srgb, var(--lane) 24%, transparent); color: color-mix(in srgb, var(--lane) 82%, var(--text)); font-size: 11px; }
+
+/* Binding bar: hue each row by what it represents (chips/inputs already read --sh). */
+.bind .br-target { --sh: var(--ph-recon); }
+.bind .br-id, .bind .bind-secret.br-id { --sh: var(--ph-creds); }
+.bind .br-ports { --sh: var(--teal); }
+.bind .br-wl { --sh: var(--purple); }
+.bind-id-type, .bind-id-act { font-size: 11px; }
+/* prominent Autofill | Manual Fill segmented toggle (replaces the tiny checkbox) */
+.bind-mode { display: inline-flex; border: 1px solid color-mix(in srgb, var(--sh) 40%, var(--line)); border-radius: 8px; overflow: hidden; }
+.bind-mode button { background: var(--surf1); color: var(--text-2); border: 0; border-right: 1px solid var(--line); padding: 5px 15px; font: 700 12px var(--sans, inherit); cursor: pointer; }
+.bind-mode button:last-child { border-right: 0; }
+.bind-mode button.on { background: color-mix(in srgb, var(--sh) 24%, var(--surf2)); color: color-mix(in srgb, var(--sh) 86%, var(--text)); }
+.bind-modehint { font-size: 11.5px; color: var(--muted); margin: 2px 0 10px; }
+
+/* make the editable-command affordance obvious */
+.tb-preview .tb-editbtn { border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line)); color: color-mix(in srgb, var(--accent) 82%, var(--text)); }
+.tb-preview .tb-render:hover { outline: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--line)); outline-offset: 2px; }
+.shk-pay-os { font-size: 11px; }
+
+/* "See It Run": inline, toggleable example run + expected output on a field-note card.
+   Reuses the Learn replay terminal (.rp-* lines) so a learner sees the command run and the output
+   to expect without leaving Next Steps. The caret rotates open; the choice persists per browser. */
+.ns-ex { margin: 8px 0 4px; }
+.ns-ex-toggle { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surf1)); border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: var(--radius); padding: 8px 12px; color: var(--text); font: 600 13px var(--sans);
+  transition: background .15s ease, border-color .15s ease; }
+.ns-ex-toggle:hover { background: color-mix(in srgb, var(--accent) 14%, var(--surf1)); border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); }
+.ns-ex-caret { color: var(--accent); transition: transform .15s ease; display: inline-block; }
+.ns-ex.open .ns-ex-caret { transform: rotate(90deg); }
+.ns-ex-sub { color: var(--muted); font-weight: 400; font-size: 11.5px; margin-left: auto; }
+.ns-ex-term { margin-top: 8px; background: #060b18; border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: 8px; padding: 10px 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.55; color: #8498b4; overflow-x: auto; }
+.ns-ex-term[hidden] { display: none; }
+.ns-ex-step { color: var(--accent-2); font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .04em; margin: 9px 0 4px; }
+.ns-ex-step:first-child { margin-top: 0; }
+@media (max-width: 520px) { .ns-ex-sub { display: none; } }
+
+/* ===== Tool panel: prominent mode chips, inline required-fields block, colourful All Options ===== */
+/* Primary "mode" field surfaced as clickable chips at the top (protocol / method / role / ...). */
+.tb-modes { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
+.tb-modes-lab { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: color-mix(in srgb, var(--lane, var(--accent-2)) 78%, var(--text)); }
+.tb-modes-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.tb-mode-chip { font: 600 12.5px var(--sans); padding: 5px 13px; border-radius: 9px; cursor: pointer; color: var(--text-2);
+  background: color-mix(in srgb, var(--lane, var(--accent)) 8%, var(--surf2)); border: 1px solid color-mix(in srgb, var(--lane, var(--accent)) 26%, var(--line));
+  transition: background .14s ease, border-color .14s ease, box-shadow .14s ease, color .14s ease; }
+.tb-mode-chip:hover { border-color: var(--lane, var(--accent)); color: var(--text); }
+.tb-mode-chip.on { background: color-mix(in srgb, var(--lane, var(--accent)) 24%, var(--surf2)); border-color: var(--lane, var(--accent)); color: var(--text); font-weight: 700;
+  box-shadow: 0 0 13px color-mix(in srgb, var(--lane, var(--accent)) 40%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--lane, var(--accent)) 42%, transparent); }
+
+/* Option toggles: MULTI-select switch chips you stack (users + groups + roast). Distinguished from the
+   single-select mode chips above by a leading glyph (+ when off, check when on) and the accent-2 hue, so
+   the "these combine" nature is clear beyond colour alone, which the audience needs. */
+.tb-toggles { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.tb-toggles-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.tb-tog-chip { font: 600 12.5px var(--sans); padding: 5px 12px 5px 10px; border-radius: 9px; cursor: pointer; color: var(--text-2);
+  display: inline-flex; align-items: center; gap: 6px;
+  background: color-mix(in srgb, var(--lane, var(--accent-2)) 7%, var(--surf2)); border: 1px solid color-mix(in srgb, var(--lane, var(--accent-2)) 24%, var(--line));
+  transition: background .14s ease, border-color .14s ease, box-shadow .14s ease, color .14s ease; }
+.tb-tog-chip[hidden] { display: none; }
+.tb-tog-chip::before { content: "+"; font-weight: 800; font-size: 13px; line-height: 1; color: color-mix(in srgb, var(--lane, var(--accent-2)) 70%, var(--text-2)); }
+.tb-tog-chip:hover { border-color: var(--lane, var(--accent-2)); color: var(--text); }
+.tb-tog-chip.on { background: color-mix(in srgb, var(--lane, var(--accent-2)) 26%, var(--surf2)); border-color: var(--lane, var(--accent-2)); color: var(--text); font-weight: 700;
+  box-shadow: 0 0 13px color-mix(in srgb, var(--lane, var(--accent-2)) 38%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--lane, var(--accent-2)) 40%, transparent); }
+.tb-tog-chip.on::before { content: "\2713"; color: var(--lane, var(--accent-2)); }
+
+/* Identify A Hash panel (Crack Hashes): paste a sample, obol names + cleans it and sets the mode in one tap. */
+.tb-hashid { margin: 2px 0 14px; padding: 12px 13px; border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-2) 6%, var(--surf1)); border: 1px solid color-mix(in srgb, var(--accent-2) 30%, var(--line)); }
+.tb-hashid-h { font: 800 11.5px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: color-mix(in srgb, var(--accent-2) 72%, var(--text)); margin-bottom: 8px; }
+.tb-hashid-in { width: 100%; box-sizing: border-box; background: var(--bg2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 9px; font: 12px var(--mono); resize: vertical; min-height: 40px; }
+.tb-hashid-in:focus { outline: none; border-color: var(--accent-2); }
+.tb-hashid-out:not(:empty) { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.tb-hashid-cand { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+.tb-hashid-cand.top { border-color: color-mix(in srgb, var(--accent-2) 45%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 12%, transparent); }
+.tb-hashid-cn { display: flex; align-items: center; gap: 8px; }
+.tb-hashid-name { font-size: 13px; font-weight: 650; color: var(--text); }
+.tb-hashid-top { font: 700 10px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--accent-2);
+  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, var(--line)); border-radius: 5px; padding: 1px 6px; }
+.tb-hashid-act { margin-top: 8px; }
+.tb-hashid-use { font: 600 12px var(--sans); cursor: pointer; color: var(--text); padding: 5px 12px; border-radius: 7px;
+  background: color-mix(in srgb, var(--accent-2) 20%, var(--surf2)); border: 1px solid color-mix(in srgb, var(--accent-2) 45%, var(--line)); }
+.tb-hashid-use:hover { background: color-mix(in srgb, var(--accent-2) 32%, var(--surf2)); border-color: var(--accent-2); }
+
+/* Inline "Fill These To Build The Command": the missing required fields, always visible, amber-flagged. */
+.tb-needs { margin: 10px 0 14px; padding: 12px 14px; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--yellow) 9%, var(--surf1)); border: 1px solid color-mix(in srgb, var(--yellow) 38%, var(--line)); }
+.tb-needs[hidden] { display: none; }
+.tb-needs-lab { display: flex; align-items: center; gap: 9px; font: 800 12px var(--sans); text-transform: uppercase; letter-spacing: .04em;
+  color: color-mix(in srgb, var(--yellow) 68%, var(--text)); margin-bottom: 11px; }
+.tb-needs-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 9px var(--yellow); animation: tbNeedsPulse 1.6s ease-in-out infinite; }
+@keyframes tbNeedsPulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+.tb-needs-sub { margin-left: auto; font-weight: 600; font-size: 11px; color: var(--muted); letter-spacing: .02em; }
+.tb-needs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 11px 14px; }
+.tb-need { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tb-need label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: color-mix(in srgb, var(--yellow) 45%, var(--text-2)); }
+.tb-need input, .tb-need select, .tb-need textarea { width: 100%; box-sizing: border-box; background: var(--bg1); color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--yellow) 32%, var(--line)); border-radius: 7px; padding: 7px 10px; font: 13px var(--mono); }
+.tb-need input:focus, .tb-need select:focus, .tb-need textarea:focus { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 2px color-mix(in srgb, var(--yellow) 22%, transparent); }
+
+/* ===== All Options: cyberpunk neon panels, where organization and aesthetic are one ===== */
+.tb-allopts { border: 1px solid color-mix(in srgb, var(--lane, var(--accent)) 32%, var(--line)); border-radius: 11px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--lane, var(--accent)) 8%, var(--surf1)), var(--surf1) 150px); }
+.tb-allopts[open] { box-shadow: 0 0 24px color-mix(in srgb, var(--lane, var(--accent)) 16%, transparent), inset 0 1px 0 color-mix(in srgb, var(--lane, var(--accent)) 22%, transparent); }
+/* the toggle: a glowing neon bar with a pulsing lane dot */
+.tb-allopts > summary { color: color-mix(in srgb, var(--lane, var(--accent-2)) 82%, var(--text)); font: 800 12.5px var(--sans); text-transform: uppercase; letter-spacing: .06em;
+  padding: 8px 11px; border-radius: 8px; border: 1px solid transparent; transition: background .14s ease, border-color .14s ease; }
+.tb-allopts > summary::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--lane, var(--accent));
+  box-shadow: 0 0 9px var(--lane, var(--accent)); margin-right: 9px; vertical-align: middle; }
+.tb-allopts > summary:hover { background: color-mix(in srgb, var(--lane, var(--accent)) 13%, transparent); border-color: color-mix(in srgb, var(--lane, var(--accent)) 32%, transparent); }
+.tb-allopts > summary .tb-hint { color: var(--muted); }
+
+/* every group (and the ungrouped field grid) becomes a neon panel with a glowing left rail */
+.tb-allopts .tb-group, .tb-allopts .tb-form > .tb-group-body { position: relative; margin-top: 14px; padding: 15px 15px 7px 17px; border-radius: 10px;
+  background: color-mix(in srgb, var(--lane, var(--accent)) 6%, var(--surf2)); border: 1px solid color-mix(in srgb, var(--lane, var(--accent)) 24%, var(--line));
+  box-shadow: inset 0 0 20px color-mix(in srgb, var(--lane, var(--accent)) 8%, transparent); }
+.tb-allopts .tb-group::before, .tb-allopts .tb-form > .tb-group-body::before { content: ''; position: absolute; left: 0; top: 13px; bottom: 13px; width: 3px; border-radius: 3px;
+  background: var(--lane, var(--accent)); box-shadow: 0 0 11px color-mix(in srgb, var(--lane, var(--accent)) 65%, transparent); }
+.tb-group-head h4 { color: color-mix(in srgb, var(--lane, var(--accent-2)) 80%, var(--text)); text-transform: uppercase; letter-spacing: .05em; font-weight: 800; }
+.tb-group-head p { color: var(--text-2); }
+
+/* neon inputs: dark glass that lights up on focus with a lane halo */
+.tb-field label { color: color-mix(in srgb, var(--lane, var(--accent-2)) 62%, var(--text)); font-weight: 700; }
+.tb-field input, .tb-field select, .tb-field textarea { background: color-mix(in srgb, var(--lane, var(--accent)) 4%, var(--bg)); color: var(--text); border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--lane, var(--accent)) 26%, var(--line)); transition: border-color .14s ease, box-shadow .14s ease, background .14s ease; }
+.tb-field input::placeholder, .tb-field textarea::placeholder { color: color-mix(in srgb, var(--lane, var(--muted)) 20%, var(--muted)); }
+.tb-field input:hover, .tb-field select:hover, .tb-field textarea:hover { border-color: color-mix(in srgb, var(--lane, var(--accent)) 46%, var(--line)); }
+.tb-field input:focus, .tb-field select:focus, .tb-field textarea:focus { border-color: var(--lane, var(--accent)); background: color-mix(in srgb, var(--lane, var(--accent)) 8%, var(--bg));
+  box-shadow: 0 0 0 1px var(--lane, var(--accent)), 0 0 16px color-mix(in srgb, var(--lane, var(--accent)) 38%, transparent); }
+/* neon checkboxes */
+.tb-field input[type="checkbox"] { width: auto; accent-color: var(--lane, var(--accent)); box-shadow: 0 0 7px color-mix(in srgb, var(--lane, var(--accent)) 45%, transparent); }
+/* combobox (datalist) inputs: a persistent chevron so a "pick or type" field reads as a dropdown, not a
+   plain text box. Colour is never the sole signal: the chevron glyph is the affordance. */
+input[data-combobox] { background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) 51%, calc(100% - 10px) 51%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 26px !important; }
+.tb-field input[data-combobox] { color: var(--text); }
+.tb-need input[data-combobox] { color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-mode-chip, .tb-allopts > summary, .tb-field input, .tb-field select, .tb-field textarea, .tb-need input, .tb-need select, .tb-need textarea { transition: none; }
+  .tb-needs-dot { animation: none; }
 }

@@ -68,6 +68,12 @@ ok(/phpass/i.test(topName('$P$Babcdefghijklmnop')), 'phpass ($P$) recognised');
 ok(topMode('$krb5tgs$23$*svc*' ) === 13100, 'Kerberoast RC4 is mode 13100');
 ok(topMode('$krb5asrep$23$user@DOM') === 18200, 'AS-REP RC4 is mode 18200');
 ok(topMode('$krb5tgs$18$*svc*') === 19700, 'Kerberoast AES256 is mode 19700');
+// Kerberos pre-auth is etype-aware: RC4=7500, AES128=19800, AES256=19900 (19800/19900 are pre-auth, NOT AS-REP)
+ok(topMode('$krb5pa$23$user$REALM$abc') === 7500, 'Kerberos pre-auth RC4 is mode 7500');
+ok(topMode('$krb5pa$17$user$REALM$abc') === 19800, 'Kerberos pre-auth AES128 is mode 19800');
+ok(topMode('$krb5pa$18$user$REALM$abc') === 19900, 'Kerberos pre-auth AES256 is mode 19900');
+// an AES AS-REP has no hashcat mode (AS-REP roasting is RC4/18200 only)
+ok(W.identifyHash('$krb5asrep$18$user@DOM').candidates[0].mode === null, 'AES AS-REP has no hashcat mode (use john)');
 
 // bare hex: NTLM/MD5 ambiguity for 32 hex, NTLM ranked first with MD5 offered
 const h32 = W.identifyHash('b4b9b02e6f09a9bd760f388b67351e2b');
@@ -85,6 +91,33 @@ const pw = W.identifyHash('Administrator:500:aad3b435b51404eeaad3b435b51404ee:31
 ok(/NTLM/.test(pw.candidates[0].name) && pw.candidates.length === 1, 'pwdump with empty LM yields NT only');
 const pw2 = W.identifyHash('bob:1001:' + 'a'.repeat(32) + ':' + 'b'.repeat(32) + ':::');
 ok(pw2.candidates.some(function (c) { return /^LM/.test(c.name); }), 'pwdump with a set LM flags the LM too');
+
+// structured application / file / network formats identify exactly by prefix
+ok(topMode('$keepass$*1*600000*0*abc') === 13400, 'KeePass is mode 13400');
+ok(topMode('$7z$0$14$0$abc') === 11600, '7-Zip is mode 11600');
+ok(topMode('$office$*2013*100000*256*16*abc') === 9600, 'Office 2013 is mode 9600');
+ok(topMode('$rar5$16$abc') === 13000, 'RAR5 is mode 13000');
+ok(topMode('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.abcDEF_-123') === 16500, 'JWT is mode 16500');
+ok(topMode('pbkdf2_sha256$260000$abc$def') === 10000, 'Django PBKDF2 is mode 10000');
+ok(topMode('S:' + 'A'.repeat(60)) === 112, 'Oracle 11g is mode 112');
+ok(topMode('md5' + 'a'.repeat(32)) === 12, 'PostgreSQL md5 form is mode 12');
+ok(topMode('WPA*01*abc*def') === 22000, 'WPA is mode 22000');
+ok(topMode('abCD12./xy9Zq') === 1500, 'descrypt (13-char) is mode 1500');
+
+// normalizeHash: deterministic, transparent cleanup of lab formatting pitfalls
+var nzClean = W.normalizeHash('31d6cfe0d16ae931b73c59d7e0c089c0');
+ok(nzClean.changed === false && nzClean.cleaned === '31d6cfe0d16ae931b73c59d7e0c089c0', 'an already-clean hash is left untouched');
+var nzWrap = W.normalizeHash('$krb5tgs$23$*svc$CORP$spn*$\n  aabbccdd\n  eeff0011  ');
+ok(nzWrap.cleaned === '$krb5tgs$23$*svc$CORP$spn*$aabbccddeeff0011' && nzWrap.changed, 'a wrapped Kerberos ticket joins to one line');
+ok(nzWrap.changes.some(function (c) { return /one line/.test(c); }), 'the ticket-join change is reported');
+var nzPw = W.normalizeHash('CORP\\Administrator:500:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::');
+ok(nzPw.cleaned === '31d6cfe0d16ae931b73c59d7e0c089c0' && /NT hash/.test(nzPw.changes.join(' ')), 'a secretsdump line reduces to the NT hash');
+var nzResp = W.normalizeHash('[SMB] NTLMv2-SSP Hash     : bob::CORP:1122334455667788:aabb:ccdd');
+ok(nzResp.cleaned === 'bob::CORP:1122334455667788:aabb:ccdd', 'a Responder capture line keeps just the hash');
+var nzQuote = W.normalizeHash('"$NT$31d6cfe0d16ae931b73c59d7e0c089c0"');
+ok(nzQuote.cleaned === '31d6cfe0d16ae931b73c59d7e0c089c0', 'surrounding quotes and a $NT$ prefix are stripped');
+// cleanup then identify: the cleaned secretsdump NT hash identifies as NTLM
+ok(topMode(W.normalizeHash('u:500:' + 'a'.repeat(32) + ':' + 'b'.repeat(32) + ':::').cleaned) === 1000, 'cleanup output identifies (NT hash -> NTLM 1000)');
 
 // crack command builders
 ok(W.hashcatCmd(1000) === 'hashcat -m 1000 hash.txt /usr/share/wordlists/rockyou.txt', 'hashcat command forms');

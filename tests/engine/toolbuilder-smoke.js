@@ -29,7 +29,7 @@ let fail = 0;
 function ok(cond, msg) { if (!cond) { console.error('  FAIL:', msg); fail++; } else { console.log('  ok  :', msg); } }
 
 const FORBIDDEN = ['execute', 'exec', 'spawn', 'runCommand', 'autoRun'];
-const CATS = ['web', 'credentials', 'ad', 'remote-exec', 'pivot', 'enum', 'privesc', 'shells'];
+const CATS = ['web', 'credentials', 'ad', 'remote-exec', 'database', 'pivot', 'enum', 'privesc', 'shells'];
 
 const equipped = new Set(OBOL.packs.equippedTools());
 console.log('Equipped-tool universe: ' + equipped.size + ' tools.');
@@ -125,6 +125,61 @@ ok(covered.size >= 40, 'TOOLSET covers a healthy subset of the equipped set (>=4
 // the golden reference must be present and equipped
 ok(TS.some(function (b) { return b.id === 'tb-ffuf'; }), 'golden reference tb-ffuf is present');
 ok(equipped.has('ffuf'), 'ffuf is in the equipped set');
+
+// ── command-shape regressions (the adversarial per-tool fixes) ──────────────────────────────
+// These lock in that specific compiled commands actually run, not just that they validate.
+var byId = {}; TS.forEach(function (b) { byId[b.id] = b; });
+function compileOf(id, vals) { try { return TB.compile(byId[id], vals, {}); } catch (e) { return 'ERR: ' + e.message; } }
+
+// notEmpty condition operator exists and discriminates free text from blank.
+ok(TB.conditionMatches({ field: 'x', notEmpty: true }, { x: 'abc' }) === true, 'notEmpty:true matches a non-blank value');
+ok(TB.conditionMatches({ field: 'x', notEmpty: true }, {}) === false, 'notEmpty:true rejects an unset value');
+ok(TB.conditionMatches({ field: 'x', notEmpty: true }, { x: '' }) === false, 'notEmpty:true rejects an empty string');
+
+// C5 sqlmap: the MSSQL dbms choice must not word-split (no literal "Microsoft SQL Server" on the line).
+var sqlm = compileOf('tb-sqlmap', { url: 'http://t/x?id=1', dbms: 'Microsoft SQL Server', action: 'dump', database: 'master' });
+ok(sqlm.indexOf('--dbms MSSQL') !== -1 && sqlm.indexOf('Microsoft SQL Server') === -1, 'sqlmap MSSQL dbms uses the single-token short form');
+
+// C6 psql: libpq URI parsing is bypassed; a special-char password rides PGPASSWORD, never the URI.
+var psqlPw = compileOf('tb-psql', { target: '10.0.0.1', username: 'postgres', password: 'P@ss/w0rd#1', port: '5432', database: 'postgres' });
+ok(psqlPw.indexOf('postgresql://') === -1, 'psql does not build a libpq URI');
+ok(/env '?PGPASSWORD=P@ss\/w0rd#1'? psql/.test(psqlPw) && psqlPw.indexOf('-h 10.0.0.1') !== -1, 'psql passes a special-char password via PGPASSWORD + keyword form');
+var psqlNo = compileOf('tb-psql', { target: '10.0.0.1', username: 'postgres', port: '5432', database: 'postgres' });
+ok(psqlNo.indexOf('PGPASSWORD') === -1 && psqlNo.indexOf('env psql') === 0, 'psql with no password omits PGPASSWORD so psql prompts');
+
+// C8 + I2 winpeas: no dangling " > " when no output file, and the bare word quiet (not quiet=true).
+var wpDef = compileOf('tb-winpeas', { mode: 'run-local' });
+ok(wpDef.indexOf(' > ') === -1 && /winPEASx64\.exe'?$/.test(wpDef), 'winpeas run-local has no dangling redirect by default');
+var wpQ = compileOf('tb-winpeas', { mode: 'run-local', quiet: 'quiet', outputFile: 'C:\\Temp\\o.txt' });
+ok(wpQ.indexOf('quiet=true') === -1 && /winPEASx64\.exe quiet > C:\\Temp\\o\.txt/.test(wpQ), 'winpeas emits bare quiet and a real redirect when asked');
+
+// I1 dig: no dangling "@" when the server is blank.
+var digNo = compileOf('tb-dig', { name: 'corp.local', type: 'axfr' });
+ok(digNo.indexOf('@') === -1 && /dig axfr corp\.local$/.test(digNo), 'dig omits @server when none is given');
+ok(compileOf('tb-dig', { name: 'corp.local', type: 'axfr', server: '10.0.0.1' }).indexOf('@10.0.0.1') !== -1, 'dig keeps @server when one is given');
+
+// C7 impacket: a password with @ breaks impacket's own target parser; the password-prompt mode
+// omits the password from the target so impacket prompts (correct for any special-char password).
+['tb-secretsdump', 'tb-getuserspns', 'tb-mssqlclient', 'tb-impacket-exec'].forEach(function (id) {
+  var am = byId[id].fields.find(function (f) { return f.id === 'authMode'; });
+  ok(am.options.some(function (o) { return o.value === 'password-prompt'; }), id + ': offers a password-prompt auth mode');
+});
+var sdPrompt = compileOf('tb-secretsdump', { authMode: 'password-prompt', domain: 'corp.local', username: 'alice', target: '10.0.0.10' });
+ok(sdPrompt.indexOf(':') === -1 || sdPrompt.indexOf('alice@10.0.0.10') !== -1, 'secretsdump password-prompt inlines no password in the target');
+ok(sdPrompt.indexOf('alice@10.0.0.10') !== -1, 'secretsdump password-prompt keeps user@host so impacket prompts for the password');
+
+// I3 Windows quoting: a 'windows' executionContext builder must NOT wrap target paths in POSIX
+// single quotes (literal on cmd.exe/PowerShell). winpeas is the one windows-context builder.
+ok(typeof TB.winQuote === 'function', 'a Windows quoter is exported');
+ok(TB.winQuote('C:\\Windows\\Temp\\x.exe') === 'C:\\Windows\\Temp\\x.exe', 'winQuote leaves a backslash path bare');
+ok(TB.winQuote('a b') === '"a b"', 'winQuote double-quotes a value with a space');
+var wpRL = compileOf('tb-winpeas', { mode: 'run-local', quiet: 'quiet', outputFile: 'C:\\Temp\\o.txt' });
+ok(wpRL.indexOf("'") === -1, 'winpeas does not POSIX single-quote (would break on the Windows target)');
+ok(wpRL.indexOf('cmd /c "C:\\Windows\\Temp\\winPEASx64.exe quiet > C:\\Temp\\o.txt"') !== -1, 'winpeas run-local is cmd-quoted and runs');
+var wpPS = compileOf('tb-winpeas', { mode: 'ps-download', url: 'http://10.0.0.1/w.exe', targetPath: 'C:\\T\\w.exe' });
+ok(wpPS.indexOf("-Command \"Invoke-WebRequest") !== -1, 'winpeas ps-download double-quotes the -Command script');
+// a kali-context builder still uses POSIX single-quoting for spacey/hostile values.
+ok(TB.shellQuote('a b') === "'a b'", 'shellQuote (kali/default) still POSIX single-quotes');
 
 if (fail) { console.error('\n' + fail + ' assertion(s) FAILED.'); process.exit(1); }
 console.log('\nAll toolbuilder smoke assertions passed (' + TS.length + ' builders).');

