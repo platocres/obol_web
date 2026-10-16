@@ -15,14 +15,19 @@
 
   function _user_for_nthash(ws, nthash) {
     nthash = (nthash || '').toLowerCase();
-    var facts = (ws && ws.seedFacts) || [];
+    var facts = (ws && (ws.seedFacts || ws.facts || ws.existing_facts)) || [];
     for (var i = 0; i < facts.length; i++) {
-      var val = facts[i].value || {};
+      var f = facts[i];
+      var val = f.value || {};
       var entries = val.entries || [];
       for (var j = 0; j < entries.length; j++) {
-        if (entries[j] && String(entries[j].nthash || '').toLowerCase() === nthash) return String(entries[j].user || '');
+        var e = entries[j];
+        if (e && String(e.nthash || e.hash || '').toLowerCase() === nthash) return String(e.user || '');
       }
-      if (String(val.nthash || '').toLowerCase() === nthash && val.user) return String(val.user);
+      if ((String(val.nthash || '').toLowerCase() === nthash || String(val.hash || '').toLowerCase() === nthash) && val.user) return String(val.user);
+      if ((f.kind === 'hash.ntlm' || f.kind === 'credential.hash') && val.user) {
+        if (String(val.hash || val.ntlm || val.nthash || '').toLowerCase() === nthash) return String(val.user);
+      }
     }
     return '';
   }
@@ -59,11 +64,13 @@
     // A credential you CRACKED from a hash (john/hashcat) is validated by construction: the crack proved
     // the plaintext produces that account's own hash, so it needs no "does it work?" probe. Mark it so the
     // Validate step settles for it. A dumped/found plaintext (mimikatz) is NOT auto-validated.
-    if (method === 'john' || method === 'hashcat') _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, via: method }, S, source));
+    if (method === 'john' || method === 'hashcat' || method === 'hashcat_ntlm') _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, via: method }, S, source));
     var uLow = (user || '').toLowerCase();
     if (uLow === 'administrator' || uLow === 'root') {
       _add(facts, mkFact('credential.admin', scope, value, S, source));
-      _add(facts, mkFact('access.admin', scope, value, S, source));
+      if (method !== 'db_csv_dump' && method !== 'db-dump') {
+        _add(facts, mkFact('access.admin', scope, value, S, source));
+      }
     }
   }
   C._add_plaintext_credential = _add_plaintext_credential;
@@ -119,6 +126,7 @@
           var u = _user_for_nthash(ws, nthash);
           if (u) cred.user = u;
           _add(facts, mkFact('credential.candidate', 'host:' + ws.target, cred, S, source));
+          _add_plaintext_credential(facts, ws, source, u || 'cracked', m.groups.pw, C._domain_from_facts(ws), 'hashcat_ntlm', 'ntlm');
           return;
         }
         var mIpmi = _HASHCAT_IPMI_RE.exec(line);
@@ -139,6 +147,7 @@
           var ur = _user_for_roast(ws, htype);
           if (ur) cr.user = ur;
           _add(facts, mkFact('credential.candidate', 'host:' + ws.target, cr, S, source));
+          _add_plaintext_credential(facts, ws, source, ur || 'cracked', jm.groups.pw, C._domain_from_facts(ws), 'john', htype);
           return;
         }
       }
@@ -458,7 +467,7 @@
       var u = C._clean_username(row[userIdx]);
       var p = (row[passIdx] || '').trim();
       if (C._valid_username(u, false) && C._valid_password(p)) {
-        _add_plaintext_credential(facts, ws, source, u, p, C._domain_from_facts(ws), 'db-dump', '');
+        _add_plaintext_credential(facts, ws, source, u, p, C._domain_from_facts(ws), 'db_csv_dump', '');
       }
     }
   }

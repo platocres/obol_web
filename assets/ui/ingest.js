@@ -266,6 +266,15 @@
     } catch (e) { res = { facts: [] }; parseError = (e && e.message) || 'parse failed'; }
     if (res && res.error) parseError = res.error; // a sub-parser threw but earlier facts survived
     var facts = (res && res.facts) || [];
+    var existingFs = (OBOL.store && OBOL.store.factSet) ? OBOL.store.factSet() : null;
+    var BANNER_ECHO_RE = /^(smb\.reachable|http\.reachable|ldap\.reachable|kerberos\.reachable|winrm\.reachable|ssh\.reachable|host\.|os\.|ad\.domain_known|ad\.base_dn|ad\.dc_candidate)$/;
+    var genuineNewFacts = facts.filter(function (f) {
+      if (!existingFs) return true;
+      if (BANNER_ECHO_RE.test(f.kind)) return false;
+      return !existingFs.has(f.kind);
+    });
+    var epoch = (OBOL.pack && OBOL.pack.accessEpoch) ? OBOL.pack.accessEpoch(existingFs || (OBOL.store && OBOL.store.factSet && OBOL.store.factSet())) : 'anon';
+    var blockers = facts.filter(function (f) { return /^blocker\./.test(f.kind); }).map(function (f) { return f.kind; });
     var added = OBOL.store.addFacts(facts, 'evidence');
     var CAP = 24000;
     var lines = text.split(/\r?\n/).length;
@@ -280,14 +289,16 @@
       e.activities.unshift({ at: opts.at || Date.now(), command: cmd, dispatch: (dispatchCmd !== cmd ? dispatchCmd : ''),
         source: opts.source || 'paste', tool: (extractTool(cmd) || 'paste'),
         target: scopeIp || params.target || '', scope: scope, file: opts.fileName || '', action_id: opts.actionId || '',
-        produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
+        produced: facts.map(function (f) { return f.kind; }), addedCount: added, epoch: epoch, blockers: blockers,
+        stdout: stored, sample: text.slice(0, 400) });
     }, 'activity');
     // `quiet` — a batch session import re-renders ONCE at the end instead of per command.
     if (!opts.quiet && OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
     // Signals for the caller's "this move ran but proved nothing" decision: did a tool obol knows about
     // actually run (recognized), and did it fail rather than simply come up empty (looksError)?
     return { ok: true, added: added, facts: facts, cmd: cmd, lines: lines, fileName: opts.fileName || '',
-      parseError: parseError, recognizedTool: recognizesTool(cmd, text), looksError: looksLikeError(text) };
+      parseError: parseError, recognizedTool: recognizesTool(cmd, text), looksError: looksLikeError(text),
+      epoch: epoch, blockers: blockers };
   }
 
   // ── Whole-session import ────────────────────────────────────────────────────────────────────────

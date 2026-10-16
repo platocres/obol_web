@@ -12,15 +12,15 @@
   var GROUPS = {
     parsers: [
       'assets/engine/parsers/common.js?v=d779003b',
-      'assets/engine/parsers/nmap.js?v=2b47ff03', 'assets/engine/parsers/directory.js?v=8504254b',
-      'assets/engine/parsers/creds.js?v=b8cda7b4', 'assets/engine/parsers/host.js?v=a3d5205d',
+      'assets/engine/parsers/nmap.js?v=2b47ff03', 'assets/engine/parsers/directory.js?v=4a37e150',
+      'assets/engine/parsers/creds.js?v=e47843c7', 'assets/engine/parsers/host.js?v=a3d5205d',
       'assets/engine/parsers/services.js?v=d86e3aea', 'assets/engine/parsers/database.js?v=0e407c6a',
       'assets/engine/parsers/web.js?v=dff6fe62', 'assets/engine/parsers/websource.js?v=65a6766e',
-      'assets/engine/parsers/findings.js?v=555ba048', 'assets/engine/parsers/shape.js?v=857b2f23',
+      'assets/engine/parsers/findings.js?v=135930d4', 'assets/engine/parsers/shape.js?v=7cc5a61b',
       'assets/engine/parsers/pivot.js?v=f9381c5e', 'assets/engine/parsers/dns.js?v=7faf7efe',
-      'assets/engine/parsers/blockers.js?v=ffe08979',
-      'assets/engine/parsers/nxc-catalog.js?v=8060d8b1',
-      'assets/engine/parsers/index.js?v=42093cb0',
+      'assets/engine/parsers/blockers.js?v=daf7ff29',
+      'assets/engine/parsers/nxc-catalog.js?v=1f7ec540',
+      'assets/engine/parsers/index.js?v=4958d998',
     ],
     graph: ['assets/engine/graph.js?v=96741069', 'assets/ui/routes/graph.js?v=e45ae25b'],
     domain: ['assets/jszip.min.js?v=42bf78a9', 'assets/engine/bloodhound.js?v=196e49d0', 'assets/ui/bhgraph.js?v=18204e6c', 'assets/ui/routes/domain.js?v=4d95a7b4'],
@@ -43,7 +43,7 @@
     // route UI). The coach background-loads this after mount so "See It Run" can show real example output
     // in Next Steps without putting the fixtures on the critical boot path.
     studydata: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b'],
-    decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=24469b5c', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=2317deac', 'assets/engine/decisionmap.js?v=72d3dcb7', 'assets/ui/decisiontree.js?v=910ea8b0'],
+    decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=69efd90c', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=2317deac', 'assets/engine/decisionmap.js?v=72d3dcb7', 'assets/ui/decisiontree.js?v=910ea8b0'],
     checklist: ['data/oscp-scope.js?v=ebf0ff68', 'assets/ui/routes/checklist.js?v=ff1f5ef9'],
     target: ['assets/engine/graph.js?v=96741069', 'assets/ui/routes/target.js?v=3e9e5e4a'],
     creds: ['assets/ui/routes/creds.js?v=7a3c7d37'],

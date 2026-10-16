@@ -328,6 +328,16 @@
     // port table, a raw HTTP response, a pasted AS-REP/TGS hash) and never alters a parsed result.
     if (has('_parse_shape')) C._parse_shape(text, ws, source, facts);
 
+    // Ensure twin facts required by packs are always co-minted
+    if (C._add && C.mkFact) {
+      for (var fi = 0; fi < facts.length; fi++) {
+        var fk = facts[fi].kind;
+        if (fk === 'vuln.sqli_confirmed') {
+          C._add(facts, C.mkFact('web.sqli_confirmed', facts[fi].scope, facts[fi].value, facts[fi].state, facts[fi].source));
+        }
+      }
+    }
+
     } catch (e) {
       try { if (typeof console !== 'undefined' && console.warn) console.warn('obol parser: a sub-parser failed, keeping the ' + facts.length + ' fact(s) already recognized. Command: ' + command + ' | ' + (e && e.message)); } catch (_e) {}
       return { facts: facts, unmatched: facts.length === 0, error: (e && e.message) || String(e) };
