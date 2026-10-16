@@ -44,6 +44,9 @@ var lig = PK.onHostLines('ligolo', CTX, 'linux');
 ok(lig.length && lig.join(' ').indexOf('10.10.14.5:11601') >= 0, 'ligolo on-host line connects back to LHOST:PORT');
 ok(PK.onHostLines('ligolo', CTX, 'windows').join(' ').indexOf('agent.exe') >= 0, 'ligolo windows on-host uses agent.exe');
 ok(PK.onHostLines('chisel', CTX, 'linux').join(' ').indexOf('R:1080:socks') >= 0, 'chisel on-host sets up the reverse SOCKS');
+var chisWin = PK.onHostLines('chisel', CTX, 'windows').join(' ');
+ok(chisWin.indexOf('chisel.exe') >= 0 && chisWin.indexOf('chisel.exe.exe') < 0, 'chisel windows on-host uses chisel.exe (no .exe.exe)');
+ok(PK.localKit('ligolo', Object.assign({}, CTX, { os: 'windows' })).indexOf('agent.exe') >= 0, 'localKit reflects Windows on-host lines when ctx.os is windows');
 ok(PK.onHostLines('sshuttle', CTX, 'linux').length === 0, 'sshuttle has no on-host half (all local)');
 
 // 4) the placeholder guard only checks the vars THIS transport uses, so an SSH SOCKS tunnel (needs just the

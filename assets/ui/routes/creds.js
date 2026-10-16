@@ -202,7 +202,7 @@
   // mirror the copyable lists plus the full ledger, so you can keep records off-app for any one kind. ----
   var EXPORT_MENU = [
     ['all', 'All Credentials', 'The full ledger: every row with its status, source, and what it unlocked.'],
-    ['usernames', 'Usernames', 'Every account name seen, one per row.'],
+    ['users', 'Usernames', 'Every account name seen, one per row.'],
     ['passwords', 'Passwords', 'Every plaintext password.'],
     ['ntlm', 'NT Hashes', 'username and NT hash.'],
     ['combos', 'Combos', 'username and password.'],
@@ -228,13 +228,13 @@
       });
       return csvRows([head].concat(body));
     }
-    var items = (lists[kind] || []);
+    var items = (kind === 'users' || kind === 'usernames') ? (lists.users || lists.usernames || []) : (lists[kind] || []);
     if (kind === 'ntlm' || kind === 'combos') {
       var h2 = kind === 'ntlm' ? ['Username', 'NT Hash'] : ['Username', 'Password'];
       var b2 = items.map(function (s) { var i = String(s).indexOf(':'); return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)]; });
       return csvRows([h2].concat(b2));
     }
-    var h1 = kind === 'usernames' ? 'Username' : kind === 'passwords' ? 'Password' : 'Hash';
+    var h1 = (kind === 'users' || kind === 'usernames') ? 'Username' : kind === 'passwords' ? 'Password' : 'Hash';
     return csvRows([[h1]].concat(items.map(function (s) { return [s]; })));
   }
   function downloadCsv(name, text) {

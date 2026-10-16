@@ -29,6 +29,8 @@
     ['0', 'raw-md5'], ['900', 'raw-md4'], ['100', 'raw-sha1'], ['1400', 'raw-sha256'], ['1700', 'raw-sha512'],
     ['400', 'phpass'], ['300', 'mysql-sha1'], ['200', 'mysql'], ['131', 'mssql'], ['132', 'mssql05'], ['1731', 'mssql12'],
     ['13400', 'keepass'], ['11600', '7z'], ['13000', 'rar5'], ['12500', 'rar'],
+    ['5400', 'ike'], ['101', 'nsldap'], ['111', 'ssha'], ['112', 'oracle11'],
+    ['10500', 'pdf'], ['13600', 'zip'], ['17200', 'pkzip'], ['22911', 'ssh'],
   ];
   // Captured hash facts -> the hashcat -m mode to pre-pick, so the Crack Hashes tool opens already set to
   // the hash you actually hold (an AS-REP roast, a Kerberoast ticket, a dumped NT hash). Roast hashes that
@@ -40,7 +42,10 @@
   function hcModeToJohn(mode) { for (var i = 0; i < HASH_XWALK.length; i++) if (HASH_XWALK[i][0] === String(mode)) return HASH_XWALK[i][1]; return null; }
   function johnFormatToHc(fmt) { for (var i = 0; i < HASH_XWALK.length; i++) if (HASH_XWALK[i][1] === String(fmt)) return HASH_XWALK[i][0]; return null; }
   // identifyHash returns lowercase john hints ('nt'); the john builder's NT option value is uppercase.
-  function normJohn(j) { return j === 'nt' ? 'NT' : j; }
+  function normJohn(j) {
+    var map = { nt: 'NT', rar3: 'rar', zip2: 'zip', sshng: 'ssh', oracle11g: 'oracle11', 'krb5pa-md5': 'krb5pa-sha1' };
+    return map[j] || j;
+  }
 
   var CATS = [
     { id: 'web', label: 'Web', hint: 'Content discovery, fingerprinting, request testing.' },
@@ -121,18 +126,24 @@
     return items;
   }
   // The card markup for a focus item, rendered open, so the existing mountCardBody dispatch can mount it.
-  function focusCardHtml(item, factKinds) {
+  function focusCardHtml(item, factKinds, openId) {
     if (!item) return '';
     if (item.kind === 'shell') return shellStationCard(true);
     if (item.kind === 'pivot') return OBOL.pivotStationUI ? OBOL.pivotStationUI.card(true) : '';
-    if (item.kind === 'station') { var s = TK.stationById(item.id); return s ? stationCard(s, item.id, factKinds) : ''; }
+    if (item.kind === 'station') { var s = TK.stationById(item.id); return s ? stationCard(s, openId || item.id, factKinds) : ''; }
     var b = builderById(item.id); return b ? toolCard(b, item.id, item.hue) : '';
   }
   // The station whose engine list includes this builder id (so a deep link to a station-only tool like
   // hashcat/ffuf resolves to its station), or null.
   function stationOf(builderId) {
     var sts = (TK && TK.stations) ? TK.stations() : [];
-    for (var i = 0; i < sts.length; i++) { if ((sts[i].engines || []).some(function (e) { return e.builderId === builderId; })) return sts[i]; }
+    for (var i = 0; i < sts.length; i++) {
+      if ((sts[i].engines || []).some(function (e) {
+        if (e.builderId === builderId) return true;
+        var b = builderById(e.builderId);
+        return b && (b.tool === builderId || (b.equips || []).indexOf(builderId) !== -1);
+      })) return sts[i];
+    }
     return null;
   }
   // Resolve a deep-link arg (a builder id, a tool NAME, or a station id) OR a saved key to a focus item.
@@ -219,10 +230,23 @@
     return '<div class="tb-field' + wide + '" data-field-id="' + esc(field.id) + '" data-filter="' + attr(hay) + '"' + (hidden ? ' hidden' : '') + '>' + fieldControl(builder, field, values[field.id]) + snippetsHtml(field) + presetsHtml(field) + '</div>';
   }
   function groupsFor(builder) {
-    var fields = (builder.fields || []); var byId = {}; fields.forEach(function (f) { byId[f.id] = f; });
+    var pf = primaryField(builder);
+    var pfid = pf ? pf.id : null;
+    var fields = (builder.fields || []).filter(function (f) { return !pfid || f.id !== pfid; });
+    var byId = {}; fields.forEach(function (f) { byId[f.id] = f; });
     if (Array.isArray(builder.fieldGroups) && builder.fieldGroups.length) {
       var claimed = {};
-      var groups = builder.fieldGroups.map(function (g) { return { title: g.title, description: g.description, fields: (g.fields || []).map(function (id) { claimed[id] = true; return byId[id]; }).filter(Boolean) }; }).filter(function (g) { return g.fields.length; });
+      var groups = builder.fieldGroups.map(function (g) {
+        return {
+          title: g.title,
+          description: g.description,
+          fields: (g.fields || []).map(function (id) {
+            if (id === pfid) return null;
+            claimed[id] = true;
+            return byId[id];
+          }).filter(Boolean)
+        };
+      }).filter(function (g) { return g.fields.length; });
       var leftovers = fields.filter(function (f) { return !claimed[f.id]; });
       if (leftovers.length) groups.push({ title: 'More Options', description: 'Additional flags and output controls.', fields: leftovers });
       return groups;
@@ -243,8 +267,9 @@
     var toks = (TK && TK.tokenize) ? TK.tokenize(cmd) : String(cmd).split(' ');
     for (var i = 0; i < toks.length; i++) {
       var t = toks[i];
-      if (t === 'env' || t === 'sudo' || t === 'nohup' || t === 'exec' || /^[A-Z_][A-Z0-9_]*=/.test(t)) continue;
-      return t.split('/').pop();
+      var unq = t.replace(/^['"]|['"]$/g, '');
+      if (t === 'env' || t === 'sudo' || t === 'nohup' || t === 'exec' || /^[A-Z_][A-Z0-9_]*=/.test(unq)) continue;
+      return unq.split('/').pop();
     }
     return toks[0] || '';
   }
@@ -256,7 +281,14 @@
     // Find the real executable (gold), skipping env/sudo/nohup/exec wrappers and VAR= prefixes, and the
     // one subcommand/protocol word right after it (violet): nxc SMB, gobuster DIR, certipy FIND, git CLONE.
     var execIdx = -1;
-    for (var k = 0; k < toks.length; k++) { var t0 = toks[k]; if (t0 === '') continue; if (t0 === 'env' || t0 === 'sudo' || t0 === 'nohup' || t0 === 'exec' || /^[A-Z_][A-Z0-9_]*=/.test(t0)) continue; execIdx = k; break; }
+    for (var k = 0; k < toks.length; k++) {
+      var t0 = toks[k];
+      if (t0 === '') continue;
+      var unq0 = t0.replace(/^['"]|['"]$/g, '');
+      if (t0 === 'env' || t0 === 'sudo' || t0 === 'nohup' || t0 === 'exec' || /^[A-Z_][A-Z0-9_]*=/.test(unq0)) continue;
+      execIdx = k;
+      break;
+    }
     var subIdx = -1;
     if (execIdx >= 0) { for (var j = execIdx + 1; j < toks.length; j++) { if (toks[j] === '') continue; if (/^[a-z][a-z0-9_-]*$/.test(toks[j])) subIdx = j; break; } }
     return toks.map(function (tok, i) {
@@ -336,13 +368,17 @@
   // protocol wins over authMode (so nxc leads with its protocol), but authMode is the primary branch for the
   // credentialed tools that have no protocol/mode (Evil-WinRM, secretsdump, bloodhound-python): password vs
   // Pass-The-Hash vs Kerberos is their main choice, so it gets the lead chips.
-  var PRIMARY_IDS = ['mode', 'method', 'protocol', 'authMode', 'role', 'source', 'inputMode'];
+  var PRIMARY_IDS = ['mode', 'action', 'gobusterMode', 'source', 'protocol', 'method', 'authMode', 'role', 'inputMode'];
   function primaryField(builder) {
     var fields = builder.fields || [];
     for (var i = 0; i < PRIMARY_IDS.length; i++) {
       // 2 to 8 options: enough to be a real switch, few enough to chip. A big list (hashcat's 55 modes)
       // stays a select in All Options and is driven by recipes / auto-detect instead.
-      var f = fields.filter(function (x) { var n = (x.options || []).length; return x.id === PRIMARY_IDS[i] && x.type === 'select' && n >= 2 && n <= 8; })[0];
+      var f = fields.filter(function (x) {
+        if (x.visibleWhen) return false;
+        var n = (x.options || []).length;
+        return x.id === PRIMARY_IDS[i] && x.type === 'select' && n >= 2 && n <= 8;
+      })[0];
       if (f) return f;
     }
     return null;
@@ -429,12 +465,18 @@
   function stationCard(station, openStationId, factKinds) {
     var built = TK.stationBuilders(station);
     if (!built.length) return '';
-    // A deep link may name a station engine builder (e.g. tb-hashcat) rather than the station id, so open
-    // the station and pre-activate that engine.
-    var engineMatch = (station.engines || []).some(function (e) { return e.builderId === openStationId; });
-    var active = engineMatch ? openStationId : stationEngine(station.id, TK.defaultEngine(station, factKinds));
+    var engineMatch = null;
+    (station.engines || []).forEach(function (e) {
+      if (engineMatch) return;
+      if (e.builderId === openStationId) { engineMatch = e.builderId; return; }
+      var b = builderById(e.builderId);
+      if (b && (b.tool === openStationId || (b.equips || []).indexOf(openStationId) !== -1)) {
+        engineMatch = e.builderId;
+      }
+    });
+    var active = engineMatch ? engineMatch : stationEngine(station.id, TK.defaultEngine(station, factKinds));
     if (!built.some(function (b) { return b.builder.id === active; })) active = built[0].builder.id;
-    var open = station.id === openStationId || engineMatch;
+    var open = station.id === openStationId || !!engineMatch;
     var engineChips = built.map(function (b) {
       return '<button type="button" class="tb-engine' + (b.builder.id === active ? ' on' : '') + '" data-engine="' + esc(b.builder.id) + '" title="' + attr(b.engine.teach) + '">' + esc(b.engine.label) + '</button>';
     }).join('');
@@ -459,7 +501,8 @@
     } catch (e) { return false; }
   }
   function shellParams() {
-    var p = (OBOL.store.active() || {}).params || {};
+    var manual = OBOL.bind && OBOL.bind.isManual && OBOL.bind.isManual();
+    var p = manual ? {} : ((OBOL.store.active() || {}).params || {});
     return { lhost: p.lhost || '', lport: p.lport || '4444' };
   }
   function shellStationCard(open) {
@@ -471,6 +514,12 @@
   }
   function mountShellStation(body) {
     if (!OBOL.shellkit) { body.innerHTML = '<p class="tb-hint">Shell kit engine still loading, try again in a moment.</p>'; return; }
+    if (body.parentNode && body._obolMounted) {
+      var fresh = body.cloneNode(false);
+      body.parentNode.replaceChild(fresh, body);
+      body = fresh;
+    }
+    body._obolMounted = true;
     var SK = OBOL.shellkit;
     // Encoding for the Linux one-liners: Raw, Base64 runner (quoting-proof delivery), or URL-encoded
     // (to inject through a parameter). Windows payloads keep the dedicated -EncodedCommand button.
@@ -525,11 +574,50 @@
         + '<div class="tb-gloss"><div class="tb-gloss-lab">After You Catch It: Upgrade The TTY</div><pre class="shk-tty">' + tty + '</pre></div>'
         + '</div>';
     }
+    function updateCommands() {
+      var sp = shellParams();
+      var em = encMode();
+      var pays = SK.payloads(sp.lhost || 'LHOST', sp.lport || '4444');
+      var allPaySecs = body.querySelectorAll('.shk-pays');
+      if (allPaySecs.length) {
+        var pRows = allPaySecs[0].querySelectorAll('.shk-pay');
+        pays.forEach(function (p, idx) {
+          if (pRows[idx]) {
+            var shown = (p.os === 'linux' && em !== 'raw' && SK.encodePayload) ? SK.encodePayload(p.cmd, em) : p.cmd;
+            var cEl = pRows[idx].querySelector('.shk-pay-cmd');
+            var bEl = pRows[idx].querySelector('.shk-copy');
+            if (cEl) cEl.textContent = shown;
+            if (bEl) bEl.setAttribute('data-copy', shown);
+          }
+        });
+      }
+      var encBtn = body.querySelector('.shk-copyenc');
+      if (encBtn) {
+        var enc = SK.psEncodedCommand(sp.lhost || 'LHOST', sp.lport || '4444');
+        encBtn.setAttribute('data-copy', enc);
+      }
+      if (allPaySecs.length > 1 && SK.msfvenom) {
+        var mvRows = allPaySecs[1].querySelectorAll('.shk-pay');
+        var mvs = SK.msfvenom(sp.lhost || 'LHOST', sp.lport || '4444');
+        mvs.forEach(function (m, idx) {
+          if (mvRows[idx]) {
+            var cEl = mvRows[idx].querySelector('.shk-pay-cmd');
+            var bEl = mvRows[idx].querySelector('.shk-copy');
+            if (cEl) cEl.textContent = m.cmd;
+            if (bEl) bEl.setAttribute('data-copy', m.cmd);
+          }
+        });
+      }
+    }
     draw();
-    U.on(body, 'input', '.shk-lhost', function (e, t) { OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.lhost = t.value.trim(); }, 'params'); });
-    U.on(body, 'input', '.shk-lport', function (e, t) { OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.lport = t.value.trim(); }, 'params'); });
-    U.on(body, 'change', '.shk-lhost', function () { draw(); });
-    U.on(body, 'change', '.shk-lport', function () { draw(); });
+    U.on(body, 'input', '.shk-lhost', function (e, t) {
+      OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.lhost = t.value.trim(); }, 'params');
+      updateCommands();
+    });
+    U.on(body, 'input', '.shk-lport', function (e, t) {
+      OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.lport = t.value.trim(); }, 'params');
+      updateCommands();
+    });
     U.on(body, 'click', '.shk-encbtn', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.shellEnc = t.getAttribute('data-enc'); }, 'shell-enc'); draw(); });
     U.on(body, 'click', '.tb-engine:not(.shk-encbtn)', function (e, t) { if (!t.getAttribute('data-catcher')) return; OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.shellCatcher = t.getAttribute('data-catcher'); }, 'shell-catcher'); draw(); });
     U.on(body, 'click', '.shk-copy, .shk-copyenc', function (e, t) { U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); }); });
@@ -595,7 +683,7 @@
         + '<span class="tfl-item-sum">' + esc(it.sum || '') + '</span></button>';
     });
     if (lastGroup) listHtml += '</div>';
-    var detailHtml = '<div class="tools-focus-detail" data-sel="' + attr(sel) + '">' + focusCardHtml(selItem, factKinds) + '</div>';
+    var detailHtml = '<div class="tools-focus-detail" data-sel="' + attr(sel) + '">' + focusCardHtml(selItem, factKinds, openId) + '</div>';
     return '<div class="tools-focus-wrap">'
       + '<aside class="tools-focus-list" aria-label="Tool list">'
       + '<div class="tfl-search-wrap"><input type="search" class="tfl-search" placeholder="Search Tools" aria-label="Search tools" spellcheck="false" autocomplete="off">'
@@ -645,6 +733,14 @@
   function fillSecrets(builder, values) {
     var id = (OBOL.bind && OBOL.bind.effectiveIdentity) ? OBOL.bind.effectiveIdentity() : null;
     if (!id) return;
+    if (!id.secret && id.nthash) {
+      var authField = (builder.fields || []).filter(function (f) { return f.id === 'authMode' && f.type === 'select'; })[0];
+      if (authField && (authField.options || []).some(function (o) { return o.value === 'ntlm'; })) {
+        if (!values.authMode || values.authMode === 'password') {
+          values.authMode = 'ntlm';
+        }
+      }
+    }
     (builder.fields || []).forEach(function (f) {
       if (f.type !== 'secret' || (values[f.id] !== undefined && values[f.id] !== '')) return;
       if (f.credentialKind === 'password' && id.secret) values[f.id] = id.secret;
@@ -710,8 +806,28 @@
     return cmd.replace(/(['"])([^'"]*<[a-z0-9_-]+>[^'"]*)\1/gi, '$2');
   }
 
+  function cleanSaved(builder, saved) {
+    if (!saved || !builder) return saved || {};
+    var out = Object.assign({}, saved);
+    (builder.fields || []).forEach(function (f) {
+      if (!f || !f.autofill) return;
+      var isCtx = false;
+      if (typeof f.autofill === 'string') isCtx = /^(target|context)\./.test(f.autofill);
+      else if (typeof f.autofill === 'object' && f.autofill) isCtx = f.autofill.from === 'target' || f.autofill.from === 'context';
+      if (isCtx) delete out[f.id];
+    });
+    return out;
+  }
+
   function mountPanel(panelEl, builder, context, persistId, startValues) {
-    var start = startValues || Object.assign(TB.defaultsFor(builder, context), savedValues(persistId));
+    if (panelEl.parentNode && panelEl._obolMounted) {
+      var fresh = panelEl.cloneNode(false);
+      panelEl.parentNode.replaceChild(fresh, panelEl);
+      panelEl = fresh;
+    }
+    panelEl._obolMounted = true;
+    var saved = cleanSaved(builder, savedValues(persistId), context);
+    var start = startValues || Object.assign(TB.defaultsFor(builder, context), saved);
     if (!startValues) crackPrepick(builder, persistId, start);
     fillSecrets(builder, start);
     var secretSet = {}; (builder.fields || []).forEach(function (f) { if (f.type === 'secret') secretSet[f.id] = 1; });
@@ -780,21 +896,19 @@
         chips[i].classList.toggle('on', on); chips[i].setAttribute('aria-pressed', on ? 'true' : 'false');
       }
     }
-    // Show only the recipes relevant to the chosen primary value (protocol / method / ...). A recipe that
-    // pins no primary value (data-rmode="") is mode-agnostic and always shows. This is the "Protocol ->
-    // relevant Recipes" funnel: picking a mode chip reveals that mode's presets and hides the rest, so the
-    // student is never shown a lit recipe that does not apply to what they selected.
-    var pfField = primaryField(builder), pfId = pfField ? pfField.id : null;
     function syncRecipeFilter(current) {
-      if (!pfId) return;
       var wrap = panelEl.querySelector('.tb-recipes');
       var tiles = panelEl.querySelectorAll('.tb-recipe');
       if (!wrap || !tiles.length) return;
-      var cur = String(current[pfId] == null ? '' : current[pfId]);
       var anyVisible = false;
       for (var i = 0; i < tiles.length; i++) {
-        var rm = tiles[i].getAttribute('data-rmode') || '';
-        var show = !rm || rm === cur;
+        var rid = tiles[i].getAttribute('data-recipe');
+        var r = TK ? TK.recipeById(builder.id, rid) : null;
+        var rvals = (r && r.values) || {};
+        var show = true;
+        if (rvals.engine && current.engine && rvals.engine !== current.engine) {
+          show = false;
+        }
         tiles[i].hidden = !show;
         if (show) anyVisible = true;
       }
@@ -842,7 +956,22 @@
       // select option descriptions
       var sels = form.querySelectorAll('select');
       for (var si = 0; si < sels.length; si++) { var sel = sels[si], note = sel.parentNode && sel.parentNode.querySelector('.tb-optdesc'); if (!note) continue; var opt = sel.options[sel.selectedIndex]; note.textContent = (opt && opt.getAttribute('data-desc')) || ''; }
-      if (save) { var pv = {}; Object.keys(current).forEach(function (k) { if (!secretSet[k]) pv[k] = current[k]; }); persistValues(persistId, pv); }
+      if (save) {
+        var pv = {};
+        (builder.fields || []).forEach(function (f) {
+          if (secretSet[f.id]) return;
+          var v = current[f.id];
+          if (v === undefined) return;
+          if (f.autofill) {
+            var isCtx = false;
+            if (typeof f.autofill === 'string') isCtx = /^(target|context)\./.test(f.autofill);
+            else if (typeof f.autofill === 'object' && f.autofill) isCtx = f.autofill.from === 'target' || f.autofill.from === 'context';
+            if (isCtx) return;
+          }
+          pv[f.id] = v;
+        });
+        persistValues(persistId, pv);
+      }
     }
 
     form.addEventListener('input', function () { recompile(true); });
@@ -992,7 +1121,10 @@
       (builder.fields || []).forEach(function (f) {
         if (f.type === 'secret') return; // never clobber a typed credential
         if (Object.prototype.hasOwnProperty.call(rvals, f.id)) setFormValue(form, builder, f.id, rvals[f.id]);
-        else if (recipeOwnedFields[f.id]) setFormValue(form, builder, f.id, '');
+        else if (recipeOwnedFields[f.id]) {
+          var def = (builder.defaults && builder.defaults[f.id] !== undefined) ? builder.defaults[f.id] : (f.default !== undefined ? f.default : (f.type === 'checkbox' ? false : ''));
+          setFormValue(form, builder, f.id, def);
+        }
       });
       recompile(true);
     });
@@ -1026,9 +1158,17 @@
     // the selector lands. Clicking the engine chip reuses the panel's own swap (which re-mounts the body).
     function applyStationEngine(card) {
       if (!card || !openId || !card.classList.contains('station-card')) return;
-      if (card.getAttribute('data-active-engine') === openId) return;
+      var active = card.getAttribute('data-active-engine');
       var chips = card.querySelectorAll('.tb-engine');
-      for (var i = 0; i < chips.length; i++) { if (chips[i].getAttribute('data-engine') === openId) { chips[i].click(); return; } }
+      for (var i = 0; i < chips.length; i++) {
+        var engId = chips[i].getAttribute('data-engine');
+        var b = builderById(engId);
+        var match = engId === openId || (b && (b.tool === openId || (b.equips || []).indexOf(openId) !== -1));
+        if (match) {
+          if (active !== engId) chips[i].click();
+          return;
+        }
+      }
     }
 
     // Apply the deep-link selector to a freshly mounted tool card: pick the recipe tile (which also sets
@@ -1123,11 +1263,12 @@
       if (fromId === toId) return;
       var fromEng = (st.engines || []).filter(function (en) { return en.builderId === fromId; })[0];
       var toEng = (st.engines || []).filter(function (en) { return en.builderId === toId; })[0];
-      var fromVals = savedValues('station:' + st.id + ':' + fromId);
+      var fromBuilder = builderById(fromId), liveForm = card.querySelector('.tb-form');
+      var fromVals = (liveForm && fromBuilder) ? collect(liveForm, fromBuilder) : savedValues('station:' + st.id + ':' + fromId);
       var carried = TK.carryShared(st, fromEng, toEng, fromVals);
       // Carry the hash TYPE across the engine swap too (hashcat -m <-> john --format), so switching
       // engines on a kerberoast hash does not silently reset to NTLM.
-      if (fromId === 'tb-hashcat' && toId === 'tb-john') { var jf = hcModeToJohn(fromVals.mode); if (jf) carried.format = jf; }
+      if (fromId === 'tb-hashcat' && toId === 'tb-john') { var jf = hcModeToJohn(fromVals.mode); if (jf) carried.format = normJohn(jf); }
       else if (fromId === 'tb-john' && toId === 'tb-hashcat') { var hm = johnFormatToHc(fromVals.format); if (hm) carried.mode = hm; }
       setStationEngine(st.id, toId);
       card.setAttribute('data-active-engine', toId);
@@ -1136,8 +1277,11 @@
       for (var i = 0; i < chips.length; i++) chips[i].classList.toggle('on', chips[i].getAttribute('data-engine') === toId);
       var teachEl = card.querySelector('.tb-engine-teach'); if (teachEl && toEng) teachEl.textContent = toEng.teach;
       var toBuilder = builderById(toId); if (!toBuilder) return;
-      var start = Object.assign(TB.defaultsFor(toBuilder, context), savedValues('station:' + st.id + ':' + toId), carried);
-      mountPanel(card.querySelector('.tool-body'), toBuilder, context, 'station:' + st.id + ':' + toId, start);
+      var toPersist = 'station:' + st.id + ':' + toId;
+      var saved = cleanSaved(toBuilder, savedValues(toPersist), context);
+      var start = Object.assign(TB.defaultsFor(toBuilder, context), saved, carried);
+      if (carried.mode === undefined && carried.format === undefined) crackPrepick(toBuilder, toPersist, start);
+      mountPanel(card.querySelector('.tool-body'), toBuilder, context, toPersist, start);
     });
 
     // Focus Lens: list selection + search

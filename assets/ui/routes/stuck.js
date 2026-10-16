@@ -60,6 +60,11 @@
     if (reducedMotion()) { el.textContent = text; return; }
     el.textContent = ''; var i = 0;
     _typeTimer = setInterval(function () {
+      if (!el.isConnected || (OBOL.router && OBOL.router.current && OBOL.router.current().name !== 'stuck' && OBOL.router.current().name !== 'library')) {
+        clearInterval(_typeTimer);
+        _typeTimer = null;
+        return;
+      }
       i += 2; el.textContent = text.slice(0, i);
       if (i >= text.length) { el.textContent = text; clearInterval(_typeTimer); _typeTimer = null; }
     }, 16);

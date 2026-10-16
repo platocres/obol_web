@@ -336,6 +336,7 @@
       return '<div class="ns-cmd' + (i === selIdx ? ' active' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
         + ' tabindex="0" role="group" aria-label="' + U.attr('Command ' + (i + 1) + ', ' + locus) + '"'
         + ' data-cmd-index="' + i + '" data-locus="' + locus + '"' + (hidden ? ' hidden' : '')
+        + ' data-cmd="' + U.attr(v.filled || '') + '"'
         + (fillable.length ? ' data-tmpl="' + U.attr(v.filled || '') + '"' : '') + '>'
         + '<div class="ns-cmd-line">' + step
         + '<code class="cmd-run-code">' + esc(v.filled || '') + '</code>' + ranTag
@@ -418,7 +419,7 @@
       + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
       + nsBuildInTools(action)
       + '</div>'
-      + '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr((filled[0] && filled[0].filled) || '') + '" hidden>'
+      + '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr((filled[selIdx] && filled[selIdx].filled) || (filled[0] && filled[0].filled) || '') + '" hidden>'
       + '<textarea class="mi-text" placeholder="Paste this command\'s full output here, prompt and all. The coach reads it, mints only what it proves, and advances." spellcheck="false"></textarea>'
       + '<div class="mi-row"><button class="btn-primary mi-go" data-action="' + esc(action.id) + '">Ingest to Facts</button>'
       + '<a class="mi-evlink" href="#/evidence/' + esc(action.id) + '">Big output or a screenshot? Full Evidence</a>'
@@ -1158,6 +1159,7 @@
       var eng = OBOL.store.active() || {};
       var filled = OBOL.command.fillAll(a, facts, { params: eng.params || {}, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
       for (var i = 0; i < cmds.length; i++) {
+        if (!OBOL.pack.commandIsEligible(cmds[i], facts)) continue;
         if (OBOL.pack.commandSettled(cmds[i], facts)) continue;
         if (cmdGated(filled[i])) continue;
         return true;
@@ -1635,7 +1637,11 @@
     // ---- Next Steps card grid: select a card (glow follows), toggle Remote/On-Host, pick a command.
     // These update the DOM and the canvas IN PLACE (no full re-render) so scroll and focus are preserved.
     function freshCtx() {
-      return { facts: OBOL.store.factSet(), pack: OBOL.packs.actions(), params: (OBOL.store.active() || {}).params || {} };
+      var targetIp = OBOL.store.activeTarget && OBOL.store.activeTarget();
+      var facts = (targetIp && OBOL.store.factSetForTarget) ? OBOL.store.factSetForTarget(targetIp) : OBOL.store.factSet();
+      var params = Object.assign({}, (OBOL.store.active() || {}).params || {});
+      if (targetIp) params.target = targetIp;
+      return { facts: facts, pack: OBOL.packs.actions(), params: params };
     }
     function moveById(pack, id) { return pack.filter(function (a) { return a.id === id; })[0]; }
     function repaintCanvas() {
@@ -1679,6 +1685,9 @@
         nsSel.idx = first;
         var active = card.querySelector('.ns-cmd[data-cmd-index="' + first + '"]');
         if (active) active.classList.add('active');
+        var lead = active;
+        var mi = card.querySelector('.move-ingest');
+        if (mi && lead) mi.setAttribute('data-cmd', lead.getAttribute('data-cmd') || (lead.querySelector('[data-copy]') && lead.querySelector('[data-copy]').getAttribute('data-copy')) || '');
       }
     }
     // dismiss the "what obol learned" flash banner
@@ -1745,6 +1754,9 @@
       Array.prototype.forEach.call(card.querySelectorAll('.ns-cmd'), function (x) { x.classList.remove('active'); });
       t.classList.add('active');
       nsSel.idx = parseInt(t.getAttribute('data-cmd-index'), 10) || 0;
+      var lead = t;
+      var mi = card.querySelector('.move-ingest');
+      if (mi && lead) mi.setAttribute('data-cmd', lead.getAttribute('data-cmd') || (lead.querySelector('[data-copy]') && lead.querySelector('[data-copy]').getAttribute('data-copy')) || '');
       repaintCanvas();
     }
     U.on(mount, 'click', '.ns-cmd', function (e, t) {
@@ -1923,29 +1935,53 @@
       t.setAttribute('aria-expanded', open ? 'true' : 'false');
       if (open) { var ta = box.querySelector('.mi-text'); if (ta) ta.focus(); }
     });
-    // inline ingest: parse this move's output, mint facts, advance the coach
-    U.on(mount, 'click', '.mi-go', function (e, t) {
-      var box = t.closest('.move-ingest'); if (!box) return;
-      var ta = box.querySelector('.mi-text'), out = box.querySelector('.mi-result');
-      var text = (ta && ta.value) || '';
-      if (!text.trim()) { if (out) out.textContent = 'Paste the output first.'; return; }
-      if (out) out.textContent = 'Reading…';
-      t.disabled = true;
-      OBOL.ingest.ensureParsers().then(function (okp) {
-        if (!okp) { if (out) out.textContent = 'Parsers still loading, try again.'; t.disabled = false; return; }
-        var r = OBOL.ingest.run({ text: text, command: box.getAttribute('data-cmd') || '',
-          actionId: box.getAttribute('data-action') || '', source: 'paste' });
-        if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
-        if (r.added) {
-          // Positive, value-aware feedback: say what obol learned + the next move, so the paste never
-          // reads as silent. The flash survives the re-render below (the toast element gets wiped).
-          _pasteFlash = pasteSummary(r.facts);
-          var lead = _pasteFlash && _pasteFlash.phrases[0] ? _pasteFlash.phrases[0] : ('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's'));
-          U.toast(lead + ' · coach updated');
-          OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
-        } else {
-          var aid = box.getAttribute('data-action') || '';
-          var toolNm = ((box.getAttribute('data-cmd') || '').trim().split(/\s+/)[0] || '').split('/').pop().replace(/\.(py|exe)$/, '') || 'the tool';
+  function extractToolName(cmd) {
+    if (OBOL.ingest && (OBOL.ingest.extractTool || OBOL.ingest.extractToolName)) {
+      return (OBOL.ingest.extractTool || OBOL.ingest.extractToolName)(cmd);
+    }
+    if (!cmd) return '';
+    var toks = String(cmd).trim().split(/\s+/);
+    var i = 0;
+    while (i < toks.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) i++;
+    if (i >= toks.length) return '';
+    var first = toks[i].split('/').pop().toLowerCase().replace(/\.(py|exe)$/, '');
+    if (first === 'sudo') {
+      i++;
+      while (i < toks.length) {
+        var t = toks[i];
+        if (t === '-l' || t === '--list') return 'sudo';
+        if (t === '-u' || t === '-g' || t === '-U' || t === '-h') { i += 2; continue; }
+        if (/^-[a-zA-Z]/.test(t)) { i++; continue; }
+        return t.split('/').pop().toLowerCase().replace(/\.(py|exe)$/, '');
+      }
+      return 'sudo';
+    }
+    return first;
+  }
+
+  // inline ingest: parse this move's output, mint facts, advance the coach
+  U.on(mount, 'click', '.mi-go', function (e, t) {
+    var box = t.closest('.move-ingest'); if (!box) return;
+    var ta = box.querySelector('.mi-text'), out = box.querySelector('.mi-result');
+    var text = (ta && ta.value) || '';
+    if (!text.trim()) { if (out) out.textContent = 'Paste the output first.'; return; }
+    if (out) out.textContent = 'Reading…';
+    t.disabled = true;
+    OBOL.ingest.ensureParsers().then(function (okp) {
+      if (!okp) { if (out) out.textContent = 'Parsers still loading, try again.'; t.disabled = false; return; }
+      var r = OBOL.ingest.run({ text: text, command: box.getAttribute('data-cmd') || '',
+        actionId: box.getAttribute('data-action') || '', source: 'paste' });
+      if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
+      if (r.added) {
+        // Positive, value-aware feedback: say what obol learned + the next move, so the paste never
+        // reads as silent. The flash survives the re-render below (the toast element gets wiped).
+        _pasteFlash = pasteSummary(r.facts);
+        var lead = _pasteFlash && _pasteFlash.phrases[0] ? _pasteFlash.phrases[0] : ('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's'));
+        U.toast(lead + ' · coach updated');
+        OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
+      } else {
+        var aid = box.getAttribute('data-action') || '';
+        var toolNm = extractToolName(box.getAttribute('data-cmd') || '') || 'the tool';
           var bodyLines = text.trim().split(/\r?\n/).filter(function (l) { return l.trim(); }).length;
           // The move's tool ran to completion and proved nothing HERE (a useless path right now — e.g. no
           // SCCM in the environment): acknowledge it and retire the move from the coach instead of

@@ -168,13 +168,25 @@
       + '<a href="#/evidence">Evidence</a> (or the header Paste), and your first batch appears here.</p></div>';
   }
 
+  function checklistDoneIds(eng) {
+    var cl = OBOL.store.loadChecklist ? OBOL.store.loadChecklist() : ((eng && eng.checklist) || {});
+    var doneIds = {};
+    Object.keys(cl || {}).forEach(function (k) {
+      if (cl[k] === 'done' || cl[k] === 'empty' || cl[k] === true) doneIds[k] = true;
+    });
+    return doneIds;
+  }
+
   function render(ctx) {
     var eng = OBOL.store.active();
-    var facts = OBOL.store.factSet();
+    var targetIp = OBOL.store.activeTarget ? OBOL.store.activeTarget() : null;
+    var facts = (targetIp && OBOL.store.factSetForTarget) ? OBOL.store.factSetForTarget(targetIp) : OBOL.store.factSet();
     var opts = optsFor(eng);
+    if (targetIp && opts && opts.params) opts.params.target = targetIp;
     var mode = modeOf(eng);
     var pack = OBOL.packs.actions();
-    var plan = OBOL.cruise.plan(facts, pack, { mode: mode, fill: opts });
+    var doneIds = checklistDoneIds(eng);
+    var plan = OBOL.cruise.plan(facts, pack, { mode: mode, fill: opts, doneIds: doneIds });
 
     var html = '<section class="cruise">';
     html += '<div class="cr-top"><h1 class="route-h1">Cruise <span class="cr-exp">Experimental</span></h1></div>';
@@ -229,7 +241,12 @@
 
   function currentCtx() {
     var eng = OBOL.store.active();
-    return { eng: eng, facts: OBOL.store.factSet(), opts: optsFor(eng), mode: modeOf(eng), pack: OBOL.packs.actions() };
+    var targetIp = OBOL.store.activeTarget ? OBOL.store.activeTarget() : null;
+    var facts = (targetIp && OBOL.store.factSetForTarget) ? OBOL.store.factSetForTarget(targetIp) : OBOL.store.factSet();
+    var opts = optsFor(eng);
+    if (targetIp && opts && opts.params) opts.params.target = targetIp;
+    var doneIds = checklistDoneIds(eng);
+    return { eng: eng, facts: facts, opts: opts, mode: modeOf(eng), pack: OBOL.packs.actions(), doneIds: doneIds };
   }
 
   function setMode(m) {
@@ -261,7 +278,7 @@
     U.on(mount, 'click', '.cr-dl', function (e) {
       e.preventDefault();
       var c = currentCtx();
-      var plan = OBOL.cruise.plan(c.facts, c.pack, { mode: c.mode, fill: c.opts });
+      var plan = OBOL.cruise.plan(c.facts, c.pack, { mode: c.mode, fill: c.opts, doneIds: c.doneIds });
       if (!plan.batch.length) { U.toast('No batch to export', 'err'); return; }
       var script = OBOL.cruise.buildScript(plan.batch, { pack: c.pack, facts: c.facts, params: c.opts.params, profile: c.opts.profile, workspace: c.opts.workspace, mode: c.mode, phase: plan.phase });
       download('cruise-' + (plan.phase || 'batch') + '-' + c.mode + '.sh', script);
@@ -271,7 +288,7 @@
     U.on(mount, 'click', '.cr-copyall', function (e) {
       e.preventDefault();
       var c = currentCtx();
-      var plan = OBOL.cruise.plan(c.facts, c.pack, { mode: c.mode, fill: c.opts });
+      var plan = OBOL.cruise.plan(c.facts, c.pack, { mode: c.mode, fill: c.opts, doneIds: c.doneIds });
       var lines = plan.batch.map(function (it) { return fill(it.action, c.facts, c.opts, it.cmdIndex).filled; }).filter(Boolean);
       U.copy(lines.join('\n')).then(function (ok) { U.toast(ok ? (lines.length + ' commands copied') : 'Copy failed', ok ? '' : 'err'); });
     });

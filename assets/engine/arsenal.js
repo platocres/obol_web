@@ -137,7 +137,8 @@
     if (win.length) {
       out.push('echo "[windows] binaries staged to $CACHE/win (copy to your www/ to serve), Defender will flag these"');
       out.push.apply(out, win);
-      out.push('cp -f "$CACHE"/*.exe "$CACHE"/*.bat "$CACHE"/*.ps1 "$WWW"/ 2>/dev/null || true');
+      out.push('cp -f "$CACHE"/*.exe "$CACHE"/*.bat "$CACHE"/*.ps1 "$CACHE"/*.zip "$CACHE"/*.msi "$CACHE/win"/ 2>/dev/null || true');
+      out.push('cp -f "$CACHE"/*.exe "$CACHE"/*.bat "$CACHE"/*.ps1 "$CACHE"/*.zip "$CACHE"/*.msi "$WWW"/ 2>/dev/null || true');
       out.push('');
     }
     // shell setup: the obol prompt stamp (UTC time + VPN IP before each prompt). OPT-IN — only when the

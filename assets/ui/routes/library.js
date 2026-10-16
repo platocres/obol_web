@@ -215,7 +215,49 @@
   function phaseTintClass(ph) { return 'ns-ph-' + (ph || 'enum'); }
   function fillTemplate(tpl) {
     if (!hasEng()) return tpl;
-    try { return L().fill(tpl, engFacts(), engParams()) || tpl; } catch (e) { return tpl; }
+    var facts = engFacts();
+    var params = Object.assign({}, engParams());
+    var act = (OBOL.store && OBOL.store.active) ? OBOL.store.active() : null;
+    if (OBOL.bind) {
+      var isMan = (typeof OBOL.bind.isManual === 'function') ? OBOL.bind.isManual() : !!(act && act.ui && act.ui.bind && act.ui.bind.manual);
+      if (isMan) {
+        var emptyFacts = (OBOL.facts && OBOL.facts.FactSet) ? new OBOL.facts.FactSet([]) : [];
+        try { return L().fill(tpl, emptyFacts, {}) || tpl; } catch (e) { return tpl; }
+      }
+      var effTarget = (typeof OBOL.bind.effectiveTarget === 'function') ? OBOL.bind.effectiveTarget() : ((act && act.params && (act.params.target || act.params.rhost)) || (OBOL.store && OBOL.store.activeTarget && OBOL.store.activeTarget()) || '');
+      if (effTarget) {
+        params.target = effTarget;
+        params.rhost = effTarget;
+      }
+      var effId = (typeof OBOL.bind.effectiveIdentity === 'function') ? OBOL.bind.effectiveIdentity() : null;
+      if (effId) {
+        if (effId.user) { params.user = effId.user; params.username = effId.user; }
+        var sec = effId.secret || effId.password || '';
+        if (sec) { params.secret = sec; params.password = sec; }
+        var nh = effId.nthash || effId.hash || '';
+        if (nh) { params.nthash = nh; params.hash = nh; }
+        if (effId.domain) { params.domain = effId.domain; }
+
+        if (OBOL.facts && OBOL.facts.FactSet) {
+          var synFact = {
+            kind: 'credential.available',
+            state: 'supported',
+            value: {
+              user: effId.user || '',
+              password: sec,
+              nthash: nh,
+              domain: effId.domain || ''
+            }
+          };
+          facts = new OBOL.facts.FactSet([synFact].concat((facts && facts.facts) || []));
+        }
+      }
+      var bPort = (act && act.ui && act.ui.bind && act.ui.bind.port);
+      if (bPort) {
+        params.port = bPort;
+      }
+    }
+    try { return L().fill(tpl, facts, params) || tpl; } catch (e) { return tpl; }
   }
   function cmdCard(entry) {
     var key = entry.template;

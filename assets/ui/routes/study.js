@@ -1036,6 +1036,13 @@
   // learner always sees WHERE each command runs and in what order. The prompt itself (kali$ / target$)
   // also reflects the locus.
   function cancelReplay() { if (_rpToken) { _rpToken.cancelled = true; _rpToken = null; } }
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('hashchange', function () {
+      if (OBOL.router && OBOL.router.current && OBOL.router.current().name !== 'study') {
+        cancelReplay();
+      }
+    });
+  }
   // Honour reduced motion for UNINITIATED replay (scroll-in / chaining): OS setting or the
   // motion pref set to reduced/off. An explicit Play/Replay click always animates, since
   // the person asked for it. Under reduced motion auto-play still shows the full result, just
@@ -1068,11 +1075,25 @@
     var multi = steps.length > 1;
     function popFacts(delay) {
       study().markStudied(rp.id, 'studied');   // watching a move through counts as having studied it
-      if (facts && (rp.proves || []).length) setTimeout(function () { if (token.cancelled || !facts) return; var lab = document.createElement('span'); lab.className = 'rp-facts-l'; lab.textContent = 'New facts in hand'; facts.appendChild(lab); }, delay);
-      (rp.proves || []).forEach(function (f, k) { setTimeout(function () { if (token.cancelled || !facts) return; var c = document.createElement('span'); c.className = 'study-chip proof rp-pop'; c.textContent = '+ ' + titleCase(human(f)); facts.appendChild(c); }, delay + 120 + k * 260); });
+      if (facts && (rp.proves || []).length) setTimeout(function () {
+        if (token.cancelled || !facts) return;
+        if (OBOL.router && OBOL.router.current && OBOL.router.current().name !== 'study') { cancelReplay(); return; }
+        var lab = document.createElement('span'); lab.className = 'rp-facts-l'; lab.textContent = 'New facts in hand'; facts.appendChild(lab);
+      }, delay);
+      (rp.proves || []).forEach(function (f, k) {
+        setTimeout(function () {
+          if (token.cancelled || !facts) return;
+          if (OBOL.router && OBOL.router.current && OBOL.router.current().name !== 'study') { cancelReplay(); return; }
+          var c = document.createElement('span'); c.className = 'study-chip proof rp-pop'; c.textContent = '+ ' + titleCase(human(f)); facts.appendChild(c);
+        }, delay + 120 + k * 260);
+      });
       var nextId = rp.next;
       if (_pathMode && _path.length) { var pi = _path.indexOf(rp.id); nextId = (pi >= 0 && pi < _path.length - 1) ? _path[pi + 1] : null; }
-      if (_autolane && nextId) setTimeout(function () { if (token.cancelled) return; _sel = nextId; _autoplay = true; OBOL.router.render(); }, delay + (rp.proves.length * 260) + 1400);
+      if (_autolane && nextId) setTimeout(function () {
+        if (token.cancelled) return;
+        if (OBOL.router && OBOL.router.current && OBOL.router.current().name !== 'study') { cancelReplay(); return; }
+        _sel = nextId; _autoplay = true; OBOL.router.render();
+      }, delay + (rp.proves.length * 260) + 1400);
     }
     function lineHtml(ln) {
       var hot = rp.signal && ln.indexOf(rp.signal) >= 0;
@@ -1328,94 +1349,104 @@
   // All delegated click handlers for the study route. Bound once (see mounted); they read current
   // state from module vars and query the current DOM through the stable mount element.
   function wireStudyClicks(mount) {
+    if (!mount || mount._studyWired || mount.__studyWired) return;
+    mount._studyWired = true;
+    mount.__studyWired = true;
+    function onStudy(sel, fn) {
+      U.on(mount, 'click', sel, function (e, t) {
+        if (OBOL.router && OBOL.router.current && OBOL.router.current().name !== 'study') return;
+        return fn.call(this, e, t);
+      });
+    }
+
     // "How you got here": collapsible context, collapsed by default
     // welcome two-doors: remember the choice, then stay on Learn or start an engagement
-    U.on(mount, 'click', '[data-welcome-dismiss]', function () { try { localStorage.setItem('obol.welcomed', '1'); } catch (e) {} OBOL.router.render(); });
-    U.on(mount, 'click', '[data-welcome-go]', function () { try { localStorage.setItem('obol.welcomed', '1'); } catch (e) {} OBOL.router.go('home'); });
-    U.on(mount, 'click', '[data-recap-toggle]', function () { setRecapOpen(!recapOpen()); OBOL.router.render(); });
+    onStudy('[data-welcome-dismiss]', function () { try { localStorage.setItem('obol.welcomed', '1'); } catch (e) {} OBOL.router.render(); });
+    onStudy('[data-welcome-go]', function () { try { localStorage.setItem('obol.welcomed', '1'); } catch (e) {} OBOL.router.go('home'); });
+    onStudy('[data-recap-toggle]', function () { setRecapOpen(!recapOpen()); OBOL.router.render(); });
     // switch which plausible lead-up route is shown
-    U.on(mount, 'click', '[data-recap-path]', function (e, t) { _recapPath[_sel] = t.getAttribute('data-recap-path'); OBOL.router.render(); });
+    onStudy('[data-recap-path]', function (e, t) { _recapPath[_sel] = t.getAttribute('data-recap-path'); OBOL.router.render(); });
     // field-notes bench: pick a technique (plays its demo), or replay the current one
-    U.on(mount, 'click', '[data-bench]', function (e, t) {
+    onStudy('[data-bench]', function (e, t) {
       var i = +t.getAttribute('data-bench'), h = study().howTo(_sel); if (!h) return;
       _benchSel[_sel] = i;
       Array.prototype.forEach.call(mount.querySelectorAll('.bench-item'), function (b) { b.classList.toggle('on', +b.getAttribute('data-bench') === i); });
       var main = mount.querySelector('#bench-main'); if (main) { main.innerHTML = benchMain(h.items, i); playBenchTerm(mount, h.items[i].demo); }
     });
-    U.on(mount, 'click', '[data-bench-play], [data-bench-replay]', function () {
+    onStudy('[data-bench-play], [data-bench-replay]', function () {
       var h = study().howTo(_sel); if (!h) return; var i = _benchSel[_sel] || 0;
       playBenchTerm(mount, (h.items[i] || {}).demo);
     });
     // map/graph: open a lane/step → node view (remember where we came from)
-    U.on(mount, 'click', '[data-open]', function (e, t) { _from = (_view === 'atlas' ? 'atlas' : (_view === 'ports' ? 'ports' : 'map')); _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-back]', function () { _view = _from; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-back-map]', function () { _view = 'map'; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-graph]', function () { _view = 'atlas'; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-ports]', function () { _view = 'ports'; OBOL.router.render(); });
+    onStudy('[data-open]', function (e, t) { _from = (_view === 'atlas' ? 'atlas' : (_view === 'ports' ? 'ports' : 'map')); _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
+    onStudy('[data-back]', function () { _view = _from; OBOL.router.render(); });
+    onStudy('[data-back-map]', function () { _view = 'map'; OBOL.router.render(); });
+    onStudy('[data-graph]', function () { _view = 'atlas'; OBOL.router.render(); });
+    onStudy('[data-ports]', function () { _view = 'ports'; OBOL.router.render(); });
     // Walk The Decision Graph: open the by-port view straight into its Decision-map mode (the forest).
-    U.on(mount, 'click', '[data-decision]', function () { _view = 'ports'; _evMode = 'map'; try { localStorage.setItem('obol.evMode', 'map'); } catch (e) {} OBOL.router.render(); });
-    // landing "more" links — distinct from the single data-graph/data-ports triggers above so a
+    onStudy('[data-decision]', function () { _view = 'ports'; _evMode = 'map'; try { localStorage.setItem('obol.evMode', 'map'); } catch (e) {} OBOL.router.render(); });
+    // landing "more" links - distinct from the single data-graph/data-ports triggers above so a
     // click selector stays unambiguous (the smoke test clicks [data-graph]/[data-ports] directly).
-    U.on(mount, 'click', '[data-go-atlas]', function () { _view = 'atlas'; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-go-ports]', function () { _view = 'ports'; OBOL.router.render(); });
+    onStudy('[data-go-atlas]', function () { _view = 'atlas'; OBOL.router.render(); });
+    onStudy('[data-go-ports]', function () { _view = 'ports'; OBOL.router.render(); });
     // a landing by-port/access card: open the full by-port view (cards mode) with that card expanded.
-    U.on(mount, 'click', '[data-port-open]', function (e, t) {
+    onStudy('[data-port-open]', function (e, t) {
       var k = t.getAttribute('data-port-open');
       _view = 'ports'; _evMode = 'cards';
       try { localStorage.setItem('obol.evMode', 'cards'); } catch (x) {}
       var o = evOpen(); o[k] = true; evSave();
       OBOL.router.render();
     });
-    U.on(mount, 'click', '[data-ev-toggle]', function (e, t) { var k = t.getAttribute('data-ev-toggle'); var o = evOpen(); o[k] = !o[k]; evSave(); OBOL.router.render(); });
-    U.on(mount, 'click', '[data-ev-all]', function (e, t) { var open = t.getAttribute('data-ev-all') === 'open'; var o = evOpen(); study().evidence().forEach(function (x) { o[x.key] = open; }); evSave(); OBOL.router.render(); });
+    onStudy('[data-ev-toggle]', function (e, t) { var k = t.getAttribute('data-ev-toggle'); var o = evOpen(); o[k] = !o[k]; evSave(); OBOL.router.render(); });
+    onStudy('[data-ev-all]', function (e, t) { var open = t.getAttribute('data-ev-all') === 'open'; var o = evOpen(); study().evidence().forEach(function (x) { o[x.key] = open; }); evSave(); OBOL.router.render(); });
     // by-port: flip between the ordered-move cards and the derived LTR decision forest
-    U.on(mount, 'click', '[data-ev-mode]', function (e, t) { _evMode = t.getAttribute('data-ev-mode') === 'map' ? 'map' : 'cards'; try { localStorage.setItem('obol.evMode', _evMode); } catch (x) {} OBOL.router.render(); });
-    U.on(mount, 'click', '[data-sim]', function () { _view = 'sim'; _simKey = null; _simStep = 0; _simState = {}; OBOL.router.render(); });
+    onStudy('[data-ev-mode]', function (e, t) { _evMode = t.getAttribute('data-ev-mode') === 'map' ? 'map' : 'cards'; try { localStorage.setItem('obol.evMode', _evMode); } catch (x) {} OBOL.router.render(); });
+    onStudy('[data-sim]', function () { _view = 'sim'; _simKey = null; _simStep = 0; _simState = {}; OBOL.router.render(); });
     // cold-box simulation: pick a scenario, answer each "what next", advance
-    U.on(mount, 'click', '[data-sim-start]', function (e, t) { _simKey = t.getAttribute('data-sim-start'); _simStep = 0; _simState = {}; _view = 'sim'; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-sim-exit]', function () { _simKey = null; _simStep = 0; _simState = {}; _view = 'sim'; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-sim-restart]', function () { _simStep = 0; _simState = {}; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-sim-next]', function () { _simStep += 1; OBOL.router.render(); });
-    U.on(mount, 'click', '[data-sim-pick]', function (e, t) {
+    onStudy('[data-sim-start]', function (e, t) { _simKey = t.getAttribute('data-sim-start'); _simStep = 0; _simState = {}; _view = 'sim'; OBOL.router.render(); });
+    onStudy('[data-sim-exit]', function () { _simKey = null; _simStep = 0; _simState = {}; _view = 'sim'; OBOL.router.render(); });
+    onStudy('[data-sim-restart]', function () { _simStep = 0; _simState = {}; OBOL.router.render(); });
+    onStudy('[data-sim-next]', function () { _simStep += 1; OBOL.router.render(); });
+    onStudy('[data-sim-pick]', function (e, t) {
       var id = t.getAttribute('data-sim-pick'), correct = t.getAttribute('data-correct') === '1';
       _simState[_simStep] = { pickedId: id, correct: correct };
       if (correct) { var sim = study().simFor(_simKey); if (sim && sim.steps[_simStep]) study().markStudied(sim.steps[_simStep].id, 'correct'); }
       OBOL.router.render();
     });
     // node select + "opens →" jumps + goto chips → re-render
-    U.on(mount, 'click', '[data-node]', function (e, t) { var g = mount.querySelector('.study-graph'); _railScroll = g ? g.scrollTop : null; _sel = t.getAttribute('data-node'); OBOL.router.render(); });
+    onStudy('[data-node]', function (e, t) { var g = mount.querySelector('.study-graph'); _railScroll = g ? g.scrollTop : null; _sel = t.getAttribute('data-node'); OBOL.router.render(); });
     // Scope to Learn: this handler is delegated on the shared #view, which outlives the route, so it
     // must ignore [data-goto] clicks that belong to another route (e.g. Stuck?'s interview buttons,
     // which carry data-goto as a step name, not a Learn node id).
-    U.on(mount, 'click', '[data-goto]', function (e, t) { if (OBOL.router.current().name !== 'study') return; if (_view === 'sim') _from = 'map'; _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
+    onStudy('[data-goto]', function (e, t) { if (_view === 'sim') _from = 'map'; _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
     // gear toggle → re-render
-    U.on(mount, 'click', '[data-gear]', function (e, t) { _gear = t.getAttribute('data-gear'); OBOL.router.render(); });
+    onStudy('[data-gear]', function (e, t) { _gear = t.getAttribute('data-gear'); OBOL.router.render(); });
     // "Run it from" toggle: remote (your box) vs on the target — local DOM swap, no re-render
-    U.on(mount, 'click', '[data-runway]', function (e, t) {
+    onStudy('[data-runway]', function (e, t) {
       var way = t.getAttribute('data-runway');
       Array.prototype.forEach.call(mount.querySelectorAll('.rw-tab'), function (b) { b.classList.toggle('on', b.getAttribute('data-runway') === way); });
       Array.prototype.forEach.call(mount.querySelectorAll('.rw-pane'), function (p) { p.hidden = p.getAttribute('data-pane') !== way; });
     });
     // reveal the reasoning for this move (overrides the faded-once-mastered default)
-    U.on(mount, 'click', '[data-why-show]', function () { _whyOverride[_sel] = true; OBOL.router.render(); });
+    onStudy('[data-why-show]', function () { _whyOverride[_sel] = true; OBOL.router.render(); });
     // cycle how much reasoning to show: auto -> always -> off
-    U.on(mount, 'click', '[data-coach-cycle]', function () { var p = study().coachPref(); study().setCoachPref(p === 'auto' ? 'always' : (p === 'always' ? 'off' : 'auto')); OBOL.router.render(); });
+    onStudy('[data-coach-cycle]', function () { var p = study().coachPref(); study().setCoachPref(p === 'auto' ? 'always' : (p === 'always' ? 'off' : 'auto')); OBOL.router.render(); });
     // a fact chip is first-class: tap it to see what produces it and what it unlocks
-    U.on(mount, 'click', '[data-fact]', function (e, t) { showFactPop(mount, t.getAttribute('data-fact')); });
-    U.on(mount, 'click', '[data-factpop-close]', function () { var p = mount.querySelector('#study-factpop'); if (p) p.hidden = true; });
+    onStudy('[data-fact]', function (e, t) { showFactPop(mount, t.getAttribute('data-fact')); });
+    onStudy('[data-factpop-close]', function () { var p = mount.querySelector('#study-factpop'); if (p) p.hidden = true; });
     // replay controls
-    U.on(mount, 'click', '[data-rp="play"]', function () { runReplay(mount, false); });
-    U.on(mount, 'click', '[data-rp="restart"]', function () { runReplay(mount, false); });
-    U.on(mount, 'click', '[data-rp="skip"]', function () { runReplay(mount, true); });
-    U.on(mount, 'click', '[data-rp="autolane"]', function () {
+    onStudy('[data-rp="play"]', function () { runReplay(mount, false); });
+    onStudy('[data-rp="restart"]', function () { runReplay(mount, false); });
+    onStudy('[data-rp="skip"]', function () { runReplay(mount, true); });
+    onStudy('[data-rp="autolane"]', function () {
       _autolane = !_autolane;
       if (_autolane) { _autoplay = true; OBOL.router.render(); }   // start chaining from here
       else { cancelReplay(); OBOL.router.render(); }                // stop instantly, one click
     });
     // practice: switch between "what to do next" and "reading the output"
-    U.on(mount, 'click', '[data-pmode]', function (e, t) { _practiceMode = t.getAttribute('data-pmode'); OBOL.router.render(); });
+    onStudy('[data-pmode]', function (e, t) { _practiceMode = t.getAttribute('data-pmode'); OBOL.router.render(); });
     // diagnosis: read the output, name what it proves
-    U.on(mount, 'click', '.study-dx-choice', function (e, t) {
+    onStudy('.study-dx-choice', function (e, t) {
       var correct = t.getAttribute('data-correct') === '1';
       Array.prototype.forEach.call(mount.querySelectorAll('.study-dx-choice'), function (c) { c.classList.remove('ok', 'bad', 'dimmed'); if (c !== t) c.classList.add('dimmed'); });
       t.classList.add(correct ? 'ok' : 'bad');
@@ -1428,7 +1459,7 @@
       }
     });
     // practice: answer a choice (local DOM update, keeps the answered state)
-    U.on(mount, 'click', '.study-choice', function (e, t) {
+    onStudy('.study-choice', function (e, t) {
       if (t.classList.contains('study-dx-choice')) return; // handled above
       var verdict = t.getAttribute('data-verdict'), coach = t.getAttribute('data-coach') || '', missing = t.getAttribute('data-missing') || '';
       Array.prototype.forEach.call(mount.querySelectorAll('.study-choice'), function (c) { c.classList.remove('ok', 'alt', 'bad', 'dimmed'); if (c !== t) c.classList.add('dimmed'); });
@@ -1446,7 +1477,7 @@
       }
     });
     // reveal the worked cell on a correct answer
-    U.on(mount, 'click', '.study-reveal-btn', function (e, t) {
+    onStudy('.study-reveal-btn', function (e, t) {
       var slot = mount.querySelector('#study-reveal-slot'); if (!slot) return;
       var save = _gear; _gear = 'watch'; var cellHtml = cellPanel(); _gear = save;
       // strip the outer panel wrapper so it nests cleanly

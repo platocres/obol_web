@@ -409,7 +409,7 @@
   }
 
   function renderCves(m) {
-    if (!m.cves.length) return '<p class="route-sub">No CVEs detected in your findings yet.</p>';
+    if (!m || !m.cves || !m.cves.length) return '<p class="route-sub">No CVEs detected in your findings yet.</p>';
     var kevN = m.cves.filter(function (c) { return c.kev; }).length;
     return '<p class="route-sub"><b>' + m.cves.length + '</b> CVE' + (m.cves.length === 1 ? '' : 's') + ' detected'
       + (kevN ? ', <b>' + kevN + '</b> actively exploited (CISA KEV)' : '') + '. Actively-exploited first.</p>'
@@ -447,7 +447,6 @@
   function render() {
     var findings = gather();
     var active = ((OBOL.store.active() || {}).ui || {}).findingsView || 'findings';
-    if (active !== 'findings' && !findings.length) active = 'findings';
     var head = '<section class="findings-route"><div class="findings-head"><h1 class="route-h1">Findings</h1></div>' + fwTabBar(active);
 
     if (active === 'findings') {
@@ -515,7 +514,16 @@
       if (!wrap) return;
       document.querySelectorAll('.fw-hovercard-float').forEach(function (n) { n.remove(); });
       var card = null, curKey = null, model = null;
-      function ensure() { if (!card) { card = document.createElement('div'); card.className = 'fw-hovercard-float'; card.setAttribute('aria-hidden', 'true'); document.body.appendChild(card); } return card; }
+      function ensure() {
+        if (!card) {
+          card = document.createElement('div');
+          card.className = 'fw-hovercard-float';
+          card.setAttribute('aria-hidden', 'true');
+          document.body.appendChild(card);
+          window.addEventListener('hashchange', hide);
+        }
+        return card;
+      }
       function place(x, y) {
         var c = card; if (!c) return;
         var w = c.offsetWidth || 300, h = c.offsetHeight || 150, vw = window.innerWidth, vh = window.innerHeight;

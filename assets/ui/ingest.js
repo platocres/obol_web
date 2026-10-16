@@ -100,8 +100,28 @@
   // Did this paste come from a tool obol recognizes actually RUNNING (vs. junk or an unrelated blob)?
   // The move's own command names the tool; failing that, the paste's own signatures do. Used to tell a
   // "the tool ran and simply found nothing" result apart from "you pasted something unparseable".
+  function extractTool(cmd) {
+    if (!cmd) return '';
+    var toks = String(cmd).trim().split(/\s+/);
+    var i = 0;
+    while (i < toks.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) i++;
+    if (i >= toks.length) return '';
+    var first = toks[i].split('/').pop().toLowerCase().replace(/\.(py|exe)$/, '');
+    if (first === 'sudo') {
+      i++;
+      while (i < toks.length) {
+        var t = toks[i];
+        if (t === '-l' || t === '--list') return 'sudo';
+        if (t === '-u' || t === '-g' || t === '-U' || t === '-h') { i += 2; continue; }
+        if (/^-[a-zA-Z]/.test(t)) { i++; continue; }
+        return t.split('/').pop().toLowerCase().replace(/\.(py|exe)$/, '');
+      }
+      return 'sudo';
+    }
+    return first;
+  }
   function firstToolToken(cmd) {
-    return (String(cmd || '').trim().split(/\s+/)[0] || '').split('/').pop().toLowerCase().replace(/\.(py|exe)$/, '');
+    return extractTool(cmd);
   }
   function recognizesTool(cmd, text) {
     var f = firstToolToken(cmd);
@@ -258,7 +278,7 @@
       // routing label obol recovered from the content — the coach's "already run" check reads it so an
       // ATTACHED dump (no typed command) still marks the command that produced it ✓ ran.
       e.activities.unshift({ at: opts.at || Date.now(), command: cmd, dispatch: (dispatchCmd !== cmd ? dispatchCmd : ''),
-        source: opts.source || 'paste', tool: (cmd.split(/\s+/)[0] || 'paste'),
+        source: opts.source || 'paste', tool: (extractTool(cmd) || 'paste'),
         target: scopeIp || params.target || '', scope: scope, file: opts.fileName || '', action_id: opts.actionId || '',
         produced: facts.map(function (f) { return f.kind; }), stdout: stored, sample: text.slice(0, 400) });
     }, 'activity');
@@ -466,7 +486,8 @@
       var scope = tip ? ('host:' + tip) : undefined;
       var r = run({ text: s.stdout, command: s.command, source: 'session', at: s.ts || undefined, quiet: true, fileName: opts.fileName || '', scope: scope });
       if (r && r.ok) {
-        imported++; added += (r.added || 0); ranTools[(s.command.split(/\s+/)[0] || '').toLowerCase()] = 1;
+        imported++; added += (r.added || 0);
+        var tname = extractTool(s.command); if (tname) ranTools[tname] = 1;
         if (!first) first = s.command;
         // register a host only once we attributed proven facts to it in auto mode — and never the Kali box
         if (tip && r.facts && r.facts.length && !selfSet[tip]) { hosts[tip] = 1; if (!fixed && known.indexOf(tip) < 0) { _ensureTarget(tip); known.push(tip); } }
@@ -497,5 +518,6 @@
     looksLikeError: looksLikeError, detectLhost: detectLhost, detectTarget: detectTarget,
     remapIps: remapIps, splitSession: splitSession, importSession: importSession,
     credFromCommand: credFromCommand, escalationCred: escalationCred,
+    extractTool: extractTool, extractToolName: extractTool,
     ensureParsers: ensureParsers, ready: ready };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
