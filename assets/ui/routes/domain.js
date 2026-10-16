@@ -39,6 +39,11 @@
     var owned = [];
     (eng.credentials || []).forEach(function (c) { if (c.user) owned.push(String(c.user).toUpperCase()); });
     if (eng.params && eng.params.username) owned.push(String(eng.params.username).toUpperCase());
+    var gathered = (OBOL.creds && OBOL.creds.gather) ? OBOL.creds.gather(eng) : [];
+    gathered.forEach(function (c) {
+      var u = c.user || c.username;
+      if (u) owned.push(String(u).toUpperCase());
+    });
     var extra = (eng.bloodhound && eng.bloodhound.ownedExtra) || [];
     extra.forEach(function (x) { if (x) owned.push(String(x).split('@')[0].toUpperCase()); });
     return owned.filter(function (v, i, a) { return v && a.indexOf(v) === i; });
@@ -76,7 +81,7 @@
           // carry the RAW secret parts too, so per-tool auth syntax (evil-winrm -H, xfreerdp /pth,
           // impacket -hashes) is built correctly for a hash-only identity — not a blank -p ''.
           if (h && /^[a-fA-F0-9]{32}$/.test(String(h))) { ctxOut.secret = '-H ' + h; ctxOut.nt = h; }
-          else if (pw) { ctxOut.secret = "-p '" + pw + "'"; ctxOut.pw = pw; }
+          else if (pw) { ctxOut.secret = "-p '" + String(pw).replace(/'/g, "'\\''") + "'"; ctxOut.pw = pw; }
         }
       }
       return ctxOut;
@@ -98,7 +103,7 @@
   // control of the DOMAIN -> grant yourself DCSync; a group -> add yourself as a member; a user ->
   // reset or shadow it. bloodyAD is obol's house ACL-abuse tool, so the whole chain reads consistently.
   function bdPrefix(ctx, domain, you) {
-    var auth = ctx.pw ? ("-p '" + ctx.pw + "'") : (ctx.nt ? ("-p ':" + ctx.nt + "'") : "-p '<password>'");
+    var auth = ctx.pw ? ("-p '" + String(ctx.pw).replace(/'/g, "'\\''") + "'") : (ctx.nt ? ("-p ':" + ctx.nt + "'") : "-p '<password>'");
     return "bloodyAD -u '" + (you || '<you>') + "' " + auth + " -d " + (domain || '<domain>') + " --host " + (ctx.dc || '<dc-ip>');
   }
   function hopCommand(hop, ctx, domain, you) {

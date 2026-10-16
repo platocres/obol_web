@@ -30,11 +30,14 @@
     } catch (e) { return []; }
   }
   function pivotCtx() {
+    var manual = OBOL.bind && OBOL.bind.isManual && OBOL.bind.isManual();
     var p = (OBOL.store.active() || {}).params || {};
     var id = (OBOL.bind && OBOL.bind.effectiveIdentity) ? OBOL.bind.effectiveIdentity() : null;
     var subs = pivotSubnets();
     var chosen = ((OBOL.store.active() || {}).ui || {}).pivotSubnet;
-    return { lhost: p.lhost || '', pivotHost: p.target || p.rhost || '', sshUser: (id && id.user) || p.username || 'user', subnet: chosen || subs[0] || '', port: '11601', os: 'linux' };
+    var pivotHost = manual ? '' : (p.target || p.rhost || '');
+    var sshUser = (id && id.user) || (manual ? '' : p.username) || (manual ? '' : 'user');
+    return { lhost: p.lhost || '', pivotHost: pivotHost, sshUser: sshUser || (manual ? '' : 'user'), subnet: chosen || subs[0] || '', port: '11601', os: 'linux' };
   }
 
   // card(open) -> the pivot station card HTML (same markup the Tools tab uses).
@@ -49,6 +52,12 @@
   // mount(body) -> render and wire the pivot station into a .tool-body element.
   function mount(body) {
     if (!OBOL.pivotkit) { body.innerHTML = '<p class="tb-hint">Pivot kit engine still loading, try again in a moment.</p>'; return; }
+    if (body.parentNode && body._obolMounted) {
+      var fresh = body.cloneNode(false);
+      body.parentNode.replaceChild(fresh, body);
+      body = fresh;
+    }
+    body._obolMounted = true;
     var PK = OBOL.pivotkit;
     function draw() {
       var c = pivotCtx();
@@ -76,12 +85,27 @@
         + '<span class="tb-hint">LHOST ' + esc(c.lhost || 'set it in the sidebar') + ' &middot; via ' + esc(c.pivotHost || 'foothold') + '. obol writes it; you run it on your own box.</span></div>'
         + ohRows + '</div>';
     }
+    function updateCommands() {
+      var c = pivotCtx();
+      var cur = ((OBOL.store.active() || {}).ui || {}).pivotTransport || PK.selectTransport(factKinds());
+      if (!PK.transportById(cur)) cur = 'ligolo';
+      var onhost = PK.onHostLines(cur, c, 'linux'), onhostWin = PK.onHostLines(cur, c, 'windows');
+      var all = onhost.concat(onhostWin);
+      var rows = body.querySelectorAll('.shk-pay');
+      for (var i = 0; i < rows.length && i < all.length; i++) {
+        var cmdEl = rows[i].querySelector('.shk-pay-cmd');
+        var btnEl = rows[i].querySelector('.pv-copy');
+        if (cmdEl) cmdEl.textContent = all[i];
+        if (btnEl) btnEl.setAttribute('data-copy', all[i]);
+      }
+    }
     draw();
     U.on(body, 'click', '.tb-engine', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.pivotTransport = t.getAttribute('data-transport'); }, 'pivot-transport'); draw(); });
     U.on(body, 'click', '.pv-sub', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.pivotSubnet = t.getAttribute('data-sub'); }, 'pivot-subnet'); draw(); });
-    // manual CIDR: store on every keystroke (no redraw, keeps focus), re-render on blur so the on-host lines update
-    U.on(body, 'input', '.pv-subnet-input', function (e, t) { OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.pivotSubnet = t.value.trim(); }, 'pivot-subnet'); });
-    U.on(body, 'change', '.pv-subnet-input', function () { draw(); });
+    U.on(body, 'input', '.pv-subnet-input', function (e, t) {
+      OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.pivotSubnet = t.value.trim(); }, 'pivot-subnet');
+      updateCommands();
+    });
     U.on(body, 'click', '.pv-copy', function (e, t) { U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); }); });
     U.on(body, 'click', '.pv-dl', function () {
       var c = pivotCtx();

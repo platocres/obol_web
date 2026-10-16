@@ -316,6 +316,7 @@
     },
     {
       "id": "suid-gtfobins",
+      "transition": "privesc_act",
       "title": "SUID Binary Abuse",
       "hypothesis": "SUID binaries execute with their owner's identity (typically root). The stock ones (su, sudo, mount) are expected, what you want is the OUTLIER: a custom or out-of-place binary carrying the SUID bit. Check anything unusual against GTFOBins; there are plenty of boxes where find / -perm -4000 alone is the whole path to root.",
       "tool": "sh",
@@ -1225,10 +1226,13 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
-      "requires_any": [
-        "access.shell",
+      "requires_all": [
         "foothold.linux"
+      ],
+      "requires_any": [
+        "privesc.cron",
+        "privesc.cron_wildcard",
+        "privesc.cron_writable"
       ],
       "produces": [
         "objective.root_flag",
@@ -1329,9 +1333,13 @@
         "linux"
       ],
       "phase": "elevate",
+      "requires_all": [
+        "foothold.linux"
+      ],
       "requires_any": [
-        "foothold.linux",
-        "privesc.lxd_group"
+        "privesc.group_lxd",
+        "privesc.lxd_group",
+        "privesc.container_group"
       ],
       "produces": [
         "access.admin"
@@ -1369,8 +1377,7 @@
           "run": "lxc start privbox && lxc exec privbox /bin/sh",
           "note": "Starts container and enters interactive root shell with full write access to host /mnt/root."
         }
-      ],
-      "requires_all": []
+      ]
     },
     {
       "id": "gdbserver-remote-execution",
@@ -1426,6 +1433,7 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "foothold.linux"
@@ -1467,15 +1475,18 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.linux"
+      ],
       "requires_any": [
-        "foothold.linux",
+        "privesc.cron",
+        "privesc.cron_writable",
         "vuln.chkrootkit"
       ],
       "produces": [
         "access.admin"
       ],
-      "priority": 90,
+      "priority": 74,
       "phase": "escalate",
       "proves": "exploits insecure /tmp/update execution in chkrootkit cron job to gain root privileges",
       "does_not_prove": "system compromise without a scheduled cron invocation",
@@ -1512,14 +1523,17 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
-      "requires_any": [
+      "requires_all": [
         "foothold.linux"
+      ],
+      "requires_any": [
+        "privesc.sudo_nopasswd",
+        "vuln.npm_privesc"
       ],
       "produces": [
         "access.admin"
       ],
-      "priority": 90,
+      "priority": 72,
       "phase": "escalate",
       "proves": "exploits sudo npm install permissions to execute commands as root via package preinstall lifecycle hook",
       "does_not_prove": "privilege escalation without sudo npm privileges",
@@ -1557,16 +1571,18 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
-      "requires_any": [
-        "vuln.screen_suid",
-        "privesc.suid_candidate",
+      "requires_all": [
         "foothold.linux"
+      ],
+      "requires_any": [
+        "privesc.suid_candidate",
+        "privesc.suid_binary",
+        "vuln.screen_suid"
       ],
       "produces": [
         "access.admin"
       ],
-      "priority": 92,
+      "priority": 74,
       "phase": "escalate",
       "proves": "root shell access via GNU Screen 4.5.0 SUID ld.so.preload privilege escalation",
       "does_not_prove": "kernel-level root exploitation on patched screen versions",

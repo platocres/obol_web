@@ -445,10 +445,11 @@
         return !BOILERPLATE_SHARES[n] && (p.indexOf('WRITE') >= 0);
       });
       if (writableShares.length) {
-        _add(facts, mkFact('smb.writable_share', 'host:' + ws.target, {
+        var wVal = {
           shares: writableShares.map(function (s) { return s.name; }),
           count: writableShares.length
-        }, S, source));
+        };
+        _add(facts, mkFact('smb.writable_share', 'host:' + ws.target, wVal, S, source));
       }
     }
   }
@@ -525,11 +526,18 @@
       }
     }
     if (!user) {
+      var genericAccts = { guest: true, krbtgt: true, defaultaccount: true };
       for (var j = 0; j < allF.length; j++) {
         var fj = allF[j];
         if (fj.kind === 'ad.user_list' && (fj.value || {}).users && fj.value.users.length) {
-          user = fj.value.users[0];
-          break;
+          for (var ui = 0; ui < fj.value.users.length; ui++) {
+            var candU = fj.value.users[ui];
+            if (candU && !genericAccts[candU.toLowerCase()]) {
+              user = candU;
+              break;
+            }
+          }
+          if (user) break;
         }
       }
     }

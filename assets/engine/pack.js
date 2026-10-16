@@ -372,8 +372,9 @@
             var meth = (c.method || '').toLowerCase();
             var isCrack = meth.indexOf('crack') >= 0 || meth.indexOf('hashcat') >= 0 || meth.indexOf('john') >= 0;
             if (!isCrack) return false;
-            if (hasTgs && c.hash_type && c.hash_type !== 'tgs') return false;
-            if (hasAsrep && c.hash_type && c.hash_type !== 'asrep') return false;
+            var ht = String(c.hash_type || '').toLowerCase();
+            if (hasTgs && ht && ht !== 'tgs' && ht !== 'krb5tgs') return false;
+            if (hasAsrep && ht && ht !== 'asrep' && ht !== 'krb5asrep') return false;
             return true;
           });
           if (!cracked) return false;
@@ -946,6 +947,76 @@
     return { recent: recent, before: before };
   }
 
+  function accessEpoch(facts) {
+    if (!facts) return 'anon';
+    var hasFact = function (k) {
+      if (typeof facts.has === 'function') return facts.has(k);
+      if (facts.facts && Array.isArray(facts.facts)) {
+        return facts.facts.some(function (f) { return f.kind === k && f.state !== 'refuted' && f.state !== 'inconclusive'; });
+      }
+      if (Array.isArray(facts)) {
+        return facts.some(function (f) { return (f.kind || f) === k; });
+      }
+      return !!facts[k];
+    };
+    var getValues = function (k) {
+      if (typeof facts.values === 'function') return facts.values(k) || [];
+      if (facts.facts && Array.isArray(facts.facts)) {
+        var out = [];
+        facts.facts.forEach(function (f) {
+          if (f.kind === k && f.state !== 'refuted' && f.state !== 'inconclusive' && f.value) out.push(f.value);
+        });
+        return out;
+      }
+      return [];
+    };
+
+    var adminVal = hasFact('access.root') ? 'root'
+      : (hasFact('access.system') ? 'system'
+      : (hasFact('access.admin') ? 'admin'
+      : (hasFact('credential.admin') ? 'cred' : '')));
+
+    var fhVal = hasFact('foothold.windows') ? 'win'
+      : (hasFact('foothold.linux') ? 'lin'
+      : (hasFact('access.shell') ? 'shell' : ''));
+
+    var credMap = {};
+    ['credential.available', 'credential.validated', 'credential.plaintext'].forEach(function (k) {
+      var vals = getValues(k);
+      vals.forEach(function (v) {
+        if (!v) return;
+        var u = String(v.user || v.username || '').toLowerCase().trim();
+        if (!u) return;
+        var hasPw = !!(v.password || v.secret);
+        var hasHash = !!(v.nthash || v.hash || v.ntlm);
+        var secType = (hasPw && hasHash) ? 'both' : (hasPw ? 'pw' : (hasHash ? 'hash' : 'id'));
+        if (!credMap[u] || credMap[u] === 'id') credMap[u] = secType;
+        else if (secType === 'both') credMap[u] = 'both';
+      });
+    });
+
+    var credUsers = Object.keys(credMap).sort().map(function (u) {
+      return u + ':' + credMap[u];
+    });
+
+    var openHashes = [];
+    if (hasFact('hash.asrep')) openHashes.push('asrep');
+    if (hasFact('hash.tgs')) openHashes.push('tgs');
+    if (hasFact('hash.ntlm')) openHashes.push('ntlm');
+
+    if (!adminVal && !fhVal && credUsers.length === 0 && openHashes.length === 0) {
+      return 'anon';
+    }
+
+    var parts = [];
+    if (adminVal) parts.push('adm:' + adminVal);
+    if (fhVal) parts.push('fh:' + fhVal);
+    if (credUsers.length > 0) parts.push('cred:' + credUsers.join(','));
+    if (openHashes.length > 0) parts.push('h:' + openHashes.join(','));
+
+    return parts.join('|') || 'anon';
+  }
+
   function nextActionsV2(facts, pack, opts) {
     opts = opts || {};
     var doneIds = opts.doneIds || {}, focus = opts.focusPrefixes || [];
@@ -994,6 +1065,10 @@
       }
     }
 
+    var hasWinShellSurface = !!(haveObj['foothold.windows'] || haveObj['access.shell'] || haveObj['access.admin'] || haveObj['access.system']
+      || haveObj['smb.reachable'] || haveObj['winrm.reachable'] || haveObj['winrm.authenticated'] || haveObj['rdp.reachable']
+      || haveObj['port:445'] || haveObj['port:139'] || haveObj['port:5985'] || haveObj['port:5986'] || haveObj['port:3389'] || haveObj['port:22']);
+
     var scored = live.map(function (a) {
       var gates = a.requires_all.concat(a.requires_any), indicated = false, i;
       for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) { indicated = true; break; }
@@ -1006,7 +1081,7 @@
         fresh = false;
       }
       var isDcBox = haveObj['ad.dc_candidate'] || haveObj['ad.domain_controller'];
-      var isAdTarget = haveObj['ad.domain_known'] || isDcBox || haveObj['service.ldap'] || haveObj['port:389'];
+      var isAdTarget = haveObj['ad.domain_known'] || isDcBox || haveObj['service.ldap'] || haveObj['port:389'] || haveObj['port:88'] || haveObj['kerberos.reachable'] || haveObj['ldap.reachable'];
       var adMapped = haveObj['ad.graph.collected'] || haveObj['ad.control_paths'] || haveObj['ad.acl_lead'] || haveObj['ad.attack_paths'];
       // Anti-thrash on Domain Controller: generic host LPE / tunnel fallbacks must not leapfrog the AD attack chain
       if (fresh && isDcBox && !adMapped) {
@@ -1078,39 +1153,63 @@
         if (tier < 2) tier = 2;
       }
       // (c) Foothold established -> Privesc enumeration is the immediate next phase
-      if (st.accessLevel === 'foothold' && a.transition === 'privesc_act') {
+      var privescIndicated = a.requires_all.concat(a.requires_any).some(function (k) {
+        return haveObj[k] && (/^privesc\./.test(k) || k === 'privesc.sudo_rights' || k === 'privesc.suid_candidate' || k === 'privesc.cron' || k === 'privesc.capabilities' || k === 'privesc.windows_privilege' || k === 'privesc.weak_service_permission' || k === 'privesc.scheduled_task');
+      });
+      if (st.accessLevel === 'foothold' && a.transition === 'privesc_act' && privescIndicated) {
         score += 2.5;
       }
+      if (haveObj['foothold.linux'] && !haveObj['access.root'] && !haveObj['access.admin']) {
+        var hasLinuxPrivescIndicator = !!(haveObj['privesc.sudo_rights'] || haveObj['privesc.suid_candidate'] || haveObj['privesc.cron'] || haveObj['privesc.capabilities']);
+        if (!hasLinuxPrivescIndicator) {
+          var isLinuxOrient = (
+            a.transition === 'privesc_orient' ||
+            a.id === 'linux-enum' ||
+            ((a.produces.indexOf('privesc.sudo_rights') >= 0 || a.produces.indexOf('privesc.suid_candidate') >= 0) && !haveObj['privesc.sudo_rights'] && !haveObj['privesc.suid_candidate'])
+          );
+          if (isLinuxOrient) {
+            score += 5.0;
+            if (tier < 2) tier = 2;
+          }
+        }
+      }
+      if (haveObj['foothold.windows'] && !haveObj['access.admin'] && !haveObj['access.system']) {
+        var hasWinPrivescIndicator = !!(haveObj['privesc.windows_privilege'] || haveObj['privesc.weak_service_permission'] || haveObj['privesc.scheduled_task'] || haveObj['privesc.unquoted_service_path'] || haveObj['privesc.always_install_elevated'] || haveObj['privesc.autorun']);
+        if (!hasWinPrivescIndicator && (a.transition === 'privesc_orient' || a.id === 'windows-enum')) {
+          score += 5.0;
+          if (tier < 2) tier = 2;
+        }
+      }
       // (d) Admin credential or admin access in hand -> Capture root flag leads everything!
-      if ((st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred' || haveObj['access.admin'] || haveObj['access.system'] || haveObj['credential.admin']) && a.transition === 'root_flag_win' && !haveObj['objective.root_flag']) {
+      if (hasWinShellSurface && (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred' || haveObj['access.admin'] || haveObj['access.system'] || haveObj['credential.admin']) && a.transition === 'root_flag_win' && !haveObj['objective.root_flag']) {
         score += 8.0;
         if (tier < 2) tier = 2;
-      } else if ((st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred') && a.transition === 'foothold_win') {
+      } else if (hasWinShellSurface && (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred') && a.transition === 'foothold_win') {
         score += 3.5;
         if (tier < 2) tier = 2;
       }
       // (d2) Credential in hand without active shell/foothold -> Interactive shell leads to establish foothold
-      if ((st.credTier === 'domain_user' || haveObj['credential.available']) && !haveObj['access.shell'] && !haveObj['foothold.windows'] && a.transition === 'foothold_win') {
+      if (hasWinShellSurface && (st.credTier === 'domain_user' || haveObj['credential.available']) && !haveObj['access.shell'] && !haveObj['foothold.windows'] && a.transition === 'foothold_win') {
         score += 4.5;
         if (tier < 2) tier = 2;
       }
       // (e) SMB shares discovered or readable -> Browse & download leads
-      if ((haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares'] || haveObj['smb.null_session'] || haveObj['smb.guest_session']) && (a.transition === 'loot_browse' || a.transition === 'gpp')) {
+      if ((haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares'] || haveObj['smb.null_session'] || haveObj['smb.guest_session']) && (a.transition === 'loot_browse' || (isAdTarget && a.transition === 'gpp'))) {
         score += 4.5;
         if (tier < 2) tier = 2;
       }
       // (e2) Downloaded loot contains XML / GPP policy artifacts -> GPP passwords leads
-      if ((haveObj['loot.files'] || haveObj['config.review']) && a.transition === 'gpp') {
+      if (isAdTarget && (haveObj['loot.files'] || haveObj['config.review']) && a.transition === 'gpp') {
         score += 5.5;
         if (tier < 2) tier = 2;
       }
       // (e3) GPP candidate in hand without available secret -> Decrypt leads
-      if (haveObj['credential.candidate'] && !haveObj['credential.available'] && a.transition === 'gpp') {
+      if (isAdTarget && haveObj['credential.candidate'] && !haveObj['credential.available'] && a.transition === 'gpp') {
         score += 6.5;
         if (tier < 2) tier = 2;
       }
       // (f) Cred in hand on Windows box -> User flag pull leads if not yet captured
-      if ((st.credTier === 'domain_user' || haveObj['credential.available']) && a.transition === 'user_flag_win' && !haveObj['objective.local_flag']) {
+      if (hasWinShellSurface && (st.credTier === 'domain_user' || haveObj['credential.available']) && a.transition === 'user_flag_win' && !haveObj['objective.local_flag']) {
         if (haveObj['access.shell'] || haveObj['foothold.windows'] || haveObj['smb.content_accessible'] || haveObj['smb.readable_share']) {
           score += 4.5;
         } else {
@@ -1119,7 +1218,7 @@
         if (tier < 2) tier = 2;
       }
       // (g) Cred in hand on Windows box -> Kerberoasting leads (suppressed if DCSync cash-in is already available)
-      if (haveObj['credential.available'] && a.transition === 'kerberoast' && !haveObj['hash.tgs'] && st.adPosture !== 'dcsync_ready' && !haveObj['loot.ntds']) {
+      if (isAdTarget && haveObj['credential.available'] && a.transition === 'kerberoast' && !haveObj['hash.tgs'] && st.adPosture !== 'dcsync_ready' && !haveObj['loot.ntds']) {
         score += 4.0;
         if (tier < 2) tier = 2;
       }
@@ -1142,6 +1241,41 @@
           score += 4.5;
           if (tier < 2) tier = 2;
         }
+      }
+
+      // Stage 3 Web Surface Discovery leads ahead of speculative probes on non-AD web targets
+      if (!isAdTarget && haveObj['http.reachable'] && haveObj['scan.nmap.version'] && !haveObj['foothold.linux'] && !haveObj['foothold.windows']) {
+        var isPrimaryWebDiscovery = (
+          a.id === 'content-discovery' || a.id === 'web-content-discovery' || a.id === 'gobuster-dir' ||
+          a.id === 'ffuf-dir' || a.id === 'feroxbuster-dir' || a.id === 'check-web-components' ||
+          a.id === 'recon-web-triage' || a.id === 'whatweb-fingerprint'
+        );
+        if (isPrimaryWebDiscovery) {
+          score += 3.0;
+          if (tier < 2) tier = 2;
+        }
+      }
+
+      // Demote AD-specific transitions on non-AD targets
+      var isAdSpecific = (
+        a.transition === 'gpp' || a.transition === 'kerberoast' || a.transition === 'asrep_roast' ||
+        a.transition === 'dcsync' || a.transition === 'map_acl' || a.transition === 'map_graph' ||
+        a.transition === 'map_manual' ||
+        a.id === 'gpp-passwords' || a.id === 'ad-path-manual' || a.id === 'bloodhound-collect' ||
+        a.id === 'ad-recycle-bin-enum' || a.id === 'kerberoast' || a.id === 'asrep-roast' ||
+        a.id === 'dcsync' || a.id === 'powerview-enum' || a.id === 'adcs-esc' ||
+        a.id === 'sccm-enum' || a.id === 'ad-legacy-enum' || a.id === 'ad-psdotnet-enum' ||
+        a.id === 'adidns-abuse' || a.id === 'azuread-connect-dump'
+      );
+      if (!isAdTarget && isAdSpecific) {
+        tier = -1;
+        score -= 10;
+      }
+
+      // Demote Windows shell moves when no Windows shell surface exists
+      if (!hasWinShellSurface && (a.id === 'flag-hunt-windows' || a.id === 'win-interactive-shell')) {
+        tier = -1;
+        score -= 10;
       }
 
       // Endgame objective pull: a reachable, still-uncaptured flag is the box's actual objective — surface it
@@ -1400,5 +1534,6 @@
     ranker: 'v2',
     lockedActions: lockedActions,
     blockedActions: blockedActions,
+    accessEpoch: accessEpoch,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

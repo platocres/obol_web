@@ -495,7 +495,7 @@
       if (!text.trim()) { if (msg) msg.textContent = 'Paste the script output first.'; return; }
       var r = OBOL.arsenal.ingestInventory(text);
       if (!r.ok) { if (msg) { msg.textContent = r.reason; msg.className = 'lo-paste-msg err'; } return; }
-      U.toast('Loadout stocked' + r.present + ' tools, ' + r.staged + ' staged');
+      U.toast('Loadout stocked ' + r.present + ' tools, ' + r.staged + ' staged');
       OBOL.router.render();
     });
   }

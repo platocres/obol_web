@@ -60,13 +60,13 @@
     var L = [];
     L.push('#!/usr/bin/env bash');
     L.push('#');
-    L.push('# OBOL playbook' + pb.title + ' (' + pb.name + ')');
+    L.push('# OBOL playbook: ' + pb.title + ' (' + pb.name + ')');
     if (pb.description) L.push('# ' + pb.description);
     L.push('#');
     L.push('# CAVEAT: obol generates command text only, it NEVER runs anything. Review every');
     L.push('# command, confirm the target is in scope, and run each step yourself. A run is not');
     L.push('# a win: prove the result. Steps marked [REQUIRES APPROVAL] are noisy/risky.');
-    L.push('# Generated ' + new Date().toISOString().slice(0, 10) + 'browser-local, no backend.');
+    L.push('# Generated ' + new Date().toISOString().slice(0, 10) + ' - browser-local, no backend.');
     L.push('set -o pipefail');
     L.push('');
 
@@ -93,7 +93,7 @@
       head += ' ---';
       L.push(head);
       if (step.note) L.push('# ' + step.note);
-      if (!step.action) { L.push('# (unresolved action: ' + step.action_id + 'not in current packs)'); L.push(''); return; }
+      if (!step.action) { L.push('# (unresolved action: ' + step.action_id + ' not in current packs)'); L.push(''); return; }
       var f = fillStep(step, facts, opts);
       var unfilled = OBOL.command.unfilledTokens(f.run);
       if (unfilled.length) L.push('# needs: ' + unfilled.join(', '));

@@ -156,18 +156,36 @@
 
   // ---- persistence of the active engagement (debounced) ----
   var _saveTimer = null;
-  function scheduleSave() {
-    if (_saveTimer) return;
-    _saveTimer = setTimeout(function () {
+  var _dirtyIds = {};
+
+  function flushSave() {
+    if (_saveTimer) {
+      clearTimeout(_saveTimer);
       _saveTimer = null;
-      var eng = _mem.engagements[_activeId];
+    }
+    var ids = Object.keys(_dirtyIds);
+    _dirtyIds = {};
+    if (!ids.length) return Promise.resolve();
+    var promises = [];
+    ids.forEach(function (id) {
+      var eng = _mem.engagements[id];
       if (!eng) return;
       eng.updatedAt = Date.now();
       if (_useIDB && _db) {
-        idbPut('engagements', eng).catch(function () { snapshotFallback(); });
+        promises.push(idbPut('engagements', eng).catch(function () { snapshotFallback(); }));
       } else {
         snapshotFallback();
       }
+    });
+    return Promise.all(promises);
+  }
+
+  function scheduleSave(id) {
+    var targetId = id || _activeId;
+    if (targetId) _dirtyIds[targetId] = true;
+    if (_saveTimer) return;
+    _saveTimer = setTimeout(function () {
+      flushSave();
     }, 250);
   }
   function snapshotFallback() {
@@ -236,7 +254,12 @@
       return (!n || /^(untitled run|new engagement)$/i.test(n)) ? 'No Run Yet' : n;
     },
     async setActive(id) {
-      if (_mem.engagements[id]) { _activeId = id; await this.setSetting('activeEngagement', id); emit('active'); }
+      if (_mem.engagements[id]) {
+        await flushSave();
+        _activeId = id;
+        await this.setSetting('activeEngagement', id);
+        emit('active');
+      }
     },
     async createEngagement(name, profile) {
       var eng = newEngagement(name);
@@ -312,11 +335,12 @@
       if (!data || typeof data !== 'object') return 0;
       if (Array.isArray(data.engagements)) list = data.engagements;
       else if (data.engagement && typeof data.engagement === 'object') list = [data.engagement];
-      else if (data.id && data.name) list = [data];   // a bare engagement object
+      else if (data.id || Array.isArray(data.facts) || typeof data.name === 'string') list = [data];   // a bare engagement object
       var added = 0;
       for (var i = 0; i < list.length; i++) {
         var e = list[i];
-        if (!e || typeof e !== 'object' || !e.name) continue;
+        if (!e || typeof e !== 'object' || (typeof e.name !== 'string' && !e.id && !Array.isArray(e.facts))) continue;
+        e.name = e.name || '';
         e.id = uid('eng');
         e.importedAt = Date.now();
         e.updatedAt = Date.now();
@@ -428,23 +452,30 @@
               (eng.targets || []).forEach(function (tg) { if (tg.ip === ipOs && !tg.os) tg.os = clean.charAt(0).toUpperCase() + clean.slice(1); });
             }
           }
-          if (f.kind === 'credential.available' && f.state === SUP) {
+          var isCredFact = (f.kind === 'credential.available' || f.kind === 'credential.plaintext' || f.kind === 'credential.admin'
+            || f.type === 'credential.available' || f.type === 'credential.plaintext' || f.type === 'credential.admin');
+          if (isCredFact && f.state === SUP) {
             var cv = f.value || {};
             var u = String(cv.user || cv.username || '').trim();
-            var p = String(cv.secret || cv.password || '').trim();
+            var isNT = (cv.secret_type === 'NT' || cv.secretType === 'NT');
+            var h = String(cv.nthash || cv.hash || (isNT ? (cv.secret || cv.password || '') : '') || '').trim();
+            var p = isNT ? '' : String(cv.secret || cv.password || '').trim();
             var d = String(cv.domain || '').trim();
-            var st = cv.secretType || cv.secret_type || 'password';
-            if (u && p) {
+            var st = isNT ? 'NT' : (cv.secretType || cv.secret_type || 'password');
+            if (u && (p || h)) {
               eng.credentials = eng.credentials || [];
               var exists = eng.credentials.some(function (c) {
-                return (c.user || '').toLowerCase() === u.toLowerCase() && (c.secret || c.password || '') === p;
+                return (c.user || '').toLowerCase() === u.toLowerCase()
+                  && (c.secret || c.password || '') === (p || '')
+                  && (c.nthash || '') === (h || '');
               });
               if (!exists) {
                 eng.credentials.push({
                   id: uid('cred'),
                   user: u,
                   domain: d,
-                  secret: p,
+                  secret: p || '',
+                  nthash: h || '',
                   secretType: st,
                   notes: 'Discovered via ' + (cv.method || f.source || 'evidence')
                 });

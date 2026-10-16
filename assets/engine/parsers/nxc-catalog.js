@@ -56,7 +56,7 @@
     // ========================= SMB =========================
     { id: 'smb-auth', proto: 'smb', validate: true, produces: ['credential.available'], existing: true,
       gate: ['smb.reachable', 'port:445', 'credential.candidate', 'credential.available'] },
-    { id: 'smb-shares', proto: 'smb', flag: '--shares', produces: ['smb.shares'], existing: true,
+    { id: 'smb-shares', proto: 'smb', flag: '--shares', produces: ['smb.shares', 'smb.writable_share'], existing: true,
       gate: ['smb.reachable', 'port:445'] },
     { id: 'smb-rid-brute', proto: 'smb', flag: '--rid-brute', produces: ['ad.user_list'], existing: true,
       gate: ['smb.reachable', 'port:445'] },

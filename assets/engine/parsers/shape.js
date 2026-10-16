@@ -95,7 +95,91 @@
     if (/(SQLite format 3|CREATE TABLE\s+(?:partners|users|accounts|credentials)|^\s*\d+\|[a-zA-Z0-9_.-]+\|\$2[aby]\$)/im.test(text) && !hasKind(facts, 'loot.material')) {
       _add(facts, mkFact('loot.material', h, { kind: 'sqlite_db', via: 'shape' }, S, source));
     }
+
+    _parse_family_resemblance(text, ws, source, facts);
   }
+
+  function _parse_family_resemblance(text, ws, source, facts) {
+    text = String(text || '');
+    if (!text.trim()) return;
+    var h = 'host:' + ws.target;
+    var domScope = C._scope_for_domain ? C._scope_for_domain(ws) : h;
+    var lines = text.split(/\r?\n/);
+
+    // 1. AD ACL / Object Control Family
+    // Lines containing both an ACL right token and a target/principal identifier
+    if (!hasKind(facts, 'ad.acl_lead') && !hasKind(facts, 'ad.control_paths')) {
+      var aclRightRe = /\b(GenericAll|GenericWrite|WriteDacl|WriteOwner|ForceChangePassword|AddMember|AddSelf|AllExtendedRights|AddKeyCredentialLink)\b/i;
+      var aclPrincipalRe = /(?:CN=|DC=|@|[a-zA-Z0-9._-]+\\[a-zA-Z0-9._-]+|\bDomain Admins\b|\bBackup Operators\b|\bDnsAdmins\b|\bUsers\b|\bComputers\b)/i;
+      var matchedAclRight = '', matchedPrincipal = '';
+      for (var i = 0; i < lines.length; i++) {
+        var l = lines[i];
+        var mr = aclRightRe.exec(l);
+        var mp = aclPrincipalRe.exec(l);
+        if (mr && mp) {
+          matchedAclRight = mr[1];
+          matchedPrincipal = mp[0];
+          break;
+        }
+      }
+      if (matchedAclRight) {
+        _add(facts, mkFact('ad.acl_lead', domScope, { right: matchedAclRight, principal: matchedPrincipal, via: 'shape' }, S, source));
+        _add(facts, mkFact('ad.control_paths', domScope, { right: matchedAclRight, via: 'shape' }, S, source));
+      }
+    }
+
+    // 2. ADCS / Certificate Template Family
+    // Output containing both a CA/template header and a vulnerability/EKU signal
+    if (!hasKind(facts, 'adcs.vulnerable')) {
+      var adcsHeaderRe = /(?:CA Name|Template Name|pKIEnrollmentService|Certipy|Certificate Authorities)/i;
+      var adcsVulnRe = /(?:EnrolleeSuppliesSubject|ENROLLEE_SUPPLIES_SUBJECT|\bESC1\b|\bESC4\b|\bESC8\b|Client Authentication)/i;
+      if (adcsHeaderRe.test(text) && adcsVulnRe.test(text)) {
+        var esc = [];
+        if (/ESC1|EnrolleeSuppliesSubject|ENROLLEE_SUPPLIES_SUBJECT/i.test(text)) esc.push('ESC1');
+        if (/\bESC4\b/i.test(text)) esc.push('ESC4');
+        if (/\bESC8\b/i.test(text)) esc.push('ESC8');
+        _add(facts, mkFact('adcs.vulnerable', domScope, { esc: esc, via: 'shape' }, S, source));
+      }
+    }
+
+    // 3. Kerberos SPN & AS-REP Directory Entry Family
+    // Output containing both an identity field and either a <service>/<host> SPN pattern or DONT_REQ_PREAUTH
+    if (!hasKind(facts, 'ad.user_list')) {
+      var idFieldRe = /(?:sAMAccountName|ServicePrincipalName|\bcn:|\bUser:)\s*[:=]\s*([A-Za-z0-9._-]+)/gi;
+      var spnRe = /\b(MSSQLSvc|HTTP|cifs|ldap|host|wsman|krbtgt|exchangeMDB)\/[A-Za-z0-9._-]+/i;
+      var asrepRe = /(?:DONT_REQ_PREAUTH|UF_DONT_REQUIRE_PREAUTH|DoesNotRequirePreAuth\s*:\s*True)/i;
+      if (spnRe.test(text) || asrepRe.test(text)) {
+        var foundUsers = [], mId;
+        while ((mId = idFieldRe.exec(text)) !== null) {
+          var uName = mId[1];
+          if (uName && foundUsers.indexOf(uName) < 0 && !/\//.test(uName)) foundUsers.push(uName);
+        }
+        if (foundUsers.length) {
+          _add(facts, mkFact('ad.user_list', domScope, { users: foundUsers, count: foundUsers.length, via: 'shape' }, S, source));
+        }
+      }
+    }
+
+    // 4. Share Table Family
+    // Multi-line table containing at least one standard share alongside permission tokens (READ, WRITE, Disk)
+    if (!hasKind(facts, 'smb.shares')) {
+      var stdShareRe = /\b(IPC\$|ADMIN\$|C\$|SYSVOL|NETLOGON)\b/i;
+      var permRe = /\b(READ|WRITE|Disk)\b/i;
+      if (stdShareRe.test(text) && permRe.test(text)) {
+        _add(facts, mkFact('smb.shares', h, { via: 'shape' }, S, source));
+        var hasRead = false, hasWrite = false;
+        for (var j = 0; j < lines.length; j++) {
+          var row = lines[j];
+          if (/\bIPC\$\b/i.test(row)) continue;
+          if (/\bREAD\b/i.test(row)) hasRead = true;
+          if (/\bWRITE\b/i.test(row)) hasWrite = true;
+        }
+        if (hasRead && !hasKind(facts, 'smb.readable_share')) _add(facts, mkFact('smb.readable_share', h, { via: 'shape' }, S, source));
+        if (hasWrite && !hasKind(facts, 'smb.writable_share')) _add(facts, mkFact('smb.writable_share', h, { via: 'shape' }, S, source));
+      }
+    }
+  }
+  C._parse_family_resemblance = _parse_family_resemblance;
 
   C._parse_shape = _parse_shape;
 
@@ -159,4 +243,22 @@
     }
   }
   C._parse_vulnmatch = _parse_vulnmatch;
+  function parse(text, scope, cmd, existingFacts) {
+    var textStr = String(text || '');
+    if (!textStr.trim()) return [];
+    var target = scope || '';
+    if (target.indexOf('host:') === 0) target = target.slice(5);
+    if (target.indexOf('domain:') === 0) target = '';
+    if (!target) target = '10.10.10.10';
+    var seed = Array.isArray(existingFacts) ? existingFacts.slice() : [];
+    var ws = { target: target, domainSeed: '', seedFacts: seed, facts: seed };
+    var source = cmd || 'shape';
+    var baseFacts = seed.slice();
+    var initialLen = baseFacts.length;
+    _parse_shape(textStr, ws, source, baseFacts);
+    _parse_vulnmatch(textStr, ws, source, baseFacts);
+    return baseFacts.slice(initialLen);
+  }
+  OBOL.parsers = OBOL.parsers || {};
+  OBOL.parsers.shape = { parse: parse };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

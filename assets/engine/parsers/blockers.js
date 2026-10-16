@@ -71,6 +71,10 @@
     { kind: 'blocker.winrm_closed', re: /ECONNREFUSED.*(?:5985|evil-winrm)|Connection refused.*(?:port 5985|5985)|Cannot establish connection to remote endpoint.*5985/i },
     // NetExec --spider usage banner from missing positional share/pattern arguments.
     { kind: 'blocker.nxc_spider_usage', re: /usage:\s*nxc\s+smb.*--spider|--spider:\s*(?:expected|error)|nxc smb: error:.*--spider|--spider requires|arguments are required:\s*share/i },
+    // xp_cmdshell disabled on MSSQL server.
+    { kind: 'blocker.xp_cmdshell_disabled', re: /SQL Server blocked access to procedure 'sys\.xp_cmdshell'|EXECUTE permission was denied on the object 'xp_cmdshell'/i },
+    // cracking exhausted: wordlist or hash exhaustion.
+    { kind: 'blocker.cracking_exhausted', re: /Status\.+:\s*Exhausted|\b0\s+password\s+hashes\s+cracked\b/i },
   ];
 
   function _parse_op_blockers(text, ws, command, source, facts) {

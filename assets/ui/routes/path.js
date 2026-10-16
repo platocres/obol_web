@@ -336,6 +336,7 @@
       return '<div class="ns-cmd' + (i === selIdx ? ' active' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
         + ' tabindex="0" role="group" aria-label="' + U.attr('Command ' + (i + 1) + ', ' + locus) + '"'
         + ' data-cmd-index="' + i + '" data-locus="' + locus + '"' + (hidden ? ' hidden' : '')
+        + ' data-cmd="' + U.attr(v.filled || '') + '"'
         + (fillable.length ? ' data-tmpl="' + U.attr(v.filled || '') + '"' : '') + '>'
         + '<div class="ns-cmd-line">' + step
         + '<code class="cmd-run-code">' + esc(v.filled || '') + '</code>' + ranTag
@@ -418,7 +419,7 @@
       + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
       + nsBuildInTools(action)
       + '</div>'
-      + '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr((filled[0] && filled[0].filled) || '') + '" hidden>'
+      + '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr((filled[selIdx] && filled[selIdx].filled) || (filled[0] && filled[0].filled) || '') + '" hidden>'
       + '<textarea class="mi-text" placeholder="Paste this command\'s full output here, prompt and all. The coach reads it, mints only what it proves, and advances." spellcheck="false"></textarea>'
       + '<div class="mi-row"><button class="btn-primary mi-go" data-action="' + esc(action.id) + '">Ingest to Facts</button>'
       + '<a class="mi-evlink" href="#/evidence/' + esc(action.id) + '">Big output or a screenshot? Full Evidence</a>'
@@ -1123,14 +1124,21 @@
     var doneIds = {};
     // 'done' = the operator ticked it; 'empty' = its tool ran and proved nothing (a useless path RIGHT NOW,
     // e.g. no SCCM in this environment). Both retire the move from the ready list. The un-retire test is per
-    // MOVE, not per fact-KIND: a move stays retired only while NONE of its OWN runs ever produced a fact.
-    function moveEverProduced(actionId) {
-      return (eng && eng.activities || []).some(function (a) { return a && a.action_id === actionId && (a.produced || []).length > 0; });
+    var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch) ? OBOL.pack.accessEpoch(facts) : 'anon';
+    function moveEverProduced(actionId, epoch) {
+      return (eng && eng.activities || []).some(function (a) {
+        if (!a || a.action_id !== actionId) return false;
+        if (epoch && a.epoch && a.epoch !== epoch) return false;
+        if (typeof a.addedCount === 'number') return a.addedCount > 0;
+        return (a.produced || []).some(function (k) {
+          return !/^(smb\.reachable|http\.reachable|ldap\.reachable|kerberos\.reachable|winrm\.reachable|ssh\.reachable|host\.|os\.|ad\.domain_known|ad\.base_dn|ad\.dc_candidate)$/.test(k);
+        });
+      });
     }
     Object.keys((eng && eng.checklist) || {}).forEach(function (k) {
       var st = eng.checklist[k];
       if (st === 'done') { doneIds[k] = true; return; }
-      if (st === 'empty' && !moveEverProduced(k)) doneIds[k] = true; // never paid off → stay retired
+      if ((st === 'empty' || st === 'empty:' + curEpoch) && !moveEverProduced(k, curEpoch)) doneIds[k] = true;
     });
 
     var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
@@ -1158,6 +1166,7 @@
       var eng = OBOL.store.active() || {};
       var filled = OBOL.command.fillAll(a, facts, { params: eng.params || {}, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
       for (var i = 0; i < cmds.length; i++) {
+        if (!OBOL.pack.commandIsEligible(cmds[i], facts)) continue;
         if (OBOL.pack.commandSettled(cmds[i], facts)) continue;
         if (cmdGated(filled[i])) continue;
         return true;
@@ -1635,7 +1644,11 @@
     // ---- Next Steps card grid: select a card (glow follows), toggle Remote/On-Host, pick a command.
     // These update the DOM and the canvas IN PLACE (no full re-render) so scroll and focus are preserved.
     function freshCtx() {
-      return { facts: OBOL.store.factSet(), pack: OBOL.packs.actions(), params: (OBOL.store.active() || {}).params || {} };
+      var targetIp = OBOL.store.activeTarget && OBOL.store.activeTarget();
+      var facts = (targetIp && OBOL.store.factSetForTarget) ? OBOL.store.factSetForTarget(targetIp) : OBOL.store.factSet();
+      var params = Object.assign({}, (OBOL.store.active() || {}).params || {});
+      if (targetIp) params.target = targetIp;
+      return { facts: facts, pack: OBOL.packs.actions(), params: params };
     }
     function moveById(pack, id) { return pack.filter(function (a) { return a.id === id; })[0]; }
     function repaintCanvas() {
@@ -1679,6 +1692,9 @@
         nsSel.idx = first;
         var active = card.querySelector('.ns-cmd[data-cmd-index="' + first + '"]');
         if (active) active.classList.add('active');
+        var lead = active;
+        var mi = card.querySelector('.move-ingest');
+        if (mi && lead) mi.setAttribute('data-cmd', lead.getAttribute('data-cmd') || (lead.querySelector('[data-copy]') && lead.querySelector('[data-copy]').getAttribute('data-copy')) || '');
       }
     }
     // dismiss the "what obol learned" flash banner
@@ -1745,6 +1761,9 @@
       Array.prototype.forEach.call(card.querySelectorAll('.ns-cmd'), function (x) { x.classList.remove('active'); });
       t.classList.add('active');
       nsSel.idx = parseInt(t.getAttribute('data-cmd-index'), 10) || 0;
+      var lead = t;
+      var mi = card.querySelector('.move-ingest');
+      if (mi && lead) mi.setAttribute('data-cmd', lead.getAttribute('data-cmd') || (lead.querySelector('[data-copy]') && lead.querySelector('[data-copy]').getAttribute('data-copy')) || '');
       repaintCanvas();
     }
     U.on(mount, 'click', '.ns-cmd', function (e, t) {
@@ -1923,54 +1942,145 @@
       t.setAttribute('aria-expanded', open ? 'true' : 'false');
       if (open) { var ta = box.querySelector('.mi-text'); if (ta) ta.focus(); }
     });
-    // inline ingest: parse this move's output, mint facts, advance the coach
-    U.on(mount, 'click', '.mi-go', function (e, t) {
-      var box = t.closest('.move-ingest'); if (!box) return;
-      var ta = box.querySelector('.mi-text'), out = box.querySelector('.mi-result');
-      var text = (ta && ta.value) || '';
-      if (!text.trim()) { if (out) out.textContent = 'Paste the output first.'; return; }
-      if (out) out.textContent = 'Reading…';
-      t.disabled = true;
-      OBOL.ingest.ensureParsers().then(function (okp) {
-        if (!okp) { if (out) out.textContent = 'Parsers still loading, try again.'; t.disabled = false; return; }
-        var r = OBOL.ingest.run({ text: text, command: box.getAttribute('data-cmd') || '',
-          actionId: box.getAttribute('data-action') || '', source: 'paste' });
-        if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
-        if (r.added) {
-          // Positive, value-aware feedback: say what obol learned + the next move, so the paste never
-          // reads as silent. The flash survives the re-render below (the toast element gets wiped).
-          _pasteFlash = pasteSummary(r.facts);
-          var lead = _pasteFlash && _pasteFlash.phrases[0] ? _pasteFlash.phrases[0] : ('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's'));
-          U.toast(lead + ' · coach updated');
-          OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
-        } else {
-          var aid = box.getAttribute('data-action') || '';
-          var toolNm = ((box.getAttribute('data-cmd') || '').trim().split(/\s+/)[0] || '').split('/').pop().replace(/\.(py|exe)$/, '') || 'the tool';
-          var bodyLines = text.trim().split(/\r?\n/).filter(function (l) { return l.trim(); }).length;
-          // The move's tool ran to completion and proved nothing HERE (a useless path right now — e.g. no
-          // SCCM in the environment): acknowledge it and retire the move from the coach instead of
-          // re-suggesting a command already run. Guarded so a junk paste or a broken/denied run does NOT
-          // retire — and so RE-PASTING evidence that already paid off (this MOVE produced facts on an
-          // earlier run) never buries a move you still need. Judged per move (its own activities), not by a
-          // fact-kind that some unrelated move may have produced.
-          var eng2 = OBOL.store.active() || {};
-          var moveEverPaid = (eng2.activities || []).some(function (a) { return a && a.action_id === aid && (a.produced || []).length > 0; });
-          if (aid && !moveEverPaid && !r.parseError && r.recognizedTool && !r.looksError && bodyLines >= 2) {
-            OBOL.store.update(function (engg) { engg.checklist = engg.checklist || {}; engg.checklist[aid] = 'empty'; }, 'done');
-            U.toast(toolNm + ' ran, nothing found here. Retired from the coach.');
+  function extractToolName(cmd) {
+    if (OBOL.ingest && (OBOL.ingest.extractTool || OBOL.ingest.extractToolName)) {
+      return (OBOL.ingest.extractTool || OBOL.ingest.extractToolName)(cmd);
+    }
+    if (!cmd) return '';
+    var toks = String(cmd).trim().split(/\s+/);
+    var i = 0;
+    while (i < toks.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) i++;
+    if (i >= toks.length) return '';
+    var first = toks[i].split('/').pop().toLowerCase().replace(/\.(py|exe)$/, '');
+    if (first === 'sudo') {
+      i++;
+      while (i < toks.length) {
+        var t = toks[i];
+        if (t === '-l' || t === '--list') return 'sudo';
+        if (t === '-u' || t === '-g' || t === '-U' || t === '-h') { i += 2; continue; }
+        if (/^-[a-zA-Z]/.test(t)) { i++; continue; }
+        return t.split('/').pop().toLowerCase().replace(/\.(py|exe)$/, '');
+      }
+      return 'sudo';
+    }
+    return first;
+  }
+
+  // inline ingest: parse this move's output, mint facts, advance the coach
+  U.on(mount, 'click', '.mi-go', function (e, t) {
+    var box = t.closest('.move-ingest'); if (!box) return;
+    var ta = box.querySelector('.mi-text'), out = box.querySelector('.mi-result');
+    var text = (ta && ta.value) || '';
+    if (!text.trim()) { if (out) out.textContent = 'Paste the output first.'; return; }
+    if (out) out.textContent = 'Reading…';
+    t.disabled = true;
+    OBOL.ingest.ensureParsers().then(function (okp) {
+      if (!okp) { if (out) out.textContent = 'Parsers still loading, try again.'; t.disabled = false; return; }
+      var r = OBOL.ingest.run({ text: text, command: box.getAttribute('data-cmd') || '',
+        actionId: box.getAttribute('data-action') || '', source: 'paste' });
+      if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
+      var factsOnlyBlockers = r.facts && r.facts.length > 0 && r.facts.every(function (f) { return /^blocker\./.test(f.kind); });
+      if (r.added && !factsOnlyBlockers) {
+        // Positive, value-aware feedback: say what obol learned + the next move, so the paste never
+        // reads as silent. The flash survives the re-render below (the toast element gets wiped).
+        _pasteFlash = pasteSummary(r.facts);
+        var lead = _pasteFlash && _pasteFlash.phrases[0] ? _pasteFlash.phrases[0] : ('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's'));
+        U.toast(lead + ' · coach updated');
+        OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
+      } else {
+        var aid = box.getAttribute('data-action') || '';
+        var toolNm = extractToolName(box.getAttribute('data-cmd') || '') || 'the tool';
+        var bodyLines = text.trim().split(/\r?\n/).filter(function (l) { return l.trim(); }).length;
+        var eng2 = OBOL.store.active() || {};
+        var facts2 = (OBOL.store && OBOL.store.factSet && OBOL.store.factSet()) || null;
+        var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch) ? OBOL.pack.accessEpoch(facts2) : (r.epoch || 'anon');
+        var moveEverPaid = (eng2.activities || []).some(function (a) {
+          if (!a || a.action_id !== aid) return false;
+          if (typeof a.addedCount === 'number') return a.addedCount > 0;
+          return (a.produced || []).some(function (k) {
+            return !/^(smb\.reachable|http\.reachable|ldap\.reachable|kerberos\.reachable|winrm\.reachable|ssh\.reachable|host\.|os\.|ad\.domain_known|ad\.base_dn|ad\.dc_candidate)$/.test(k);
+          });
+        });
+        var blockers = r.blockers || (r.facts && r.facts.filter(function (f) { return /^blocker\./.test(f.kind); }).map(function (f) { return f.kind; })) || [];
+
+        // Case 1: Blocker / Field Doctor (DOCTOR_IN_PLACE or DEFER_FOR_PRECONDITION)
+        if ((blockers.length > 0 || r.looksError) && aid && !moveEverPaid) {
+          var isEnvBlocker = blockers.some(function (b) {
+            return /^(blocker\.clock_skew|blocker\.name_resolution|blocker\.no_tty|blocker\.crlf|blocker\.hash_format|blocker\.hashcat_env|blocker\.web_wildcard|blocker\.tls_scheme|blocker\.kerberos_spn|blocker\.xp_cmdshell_disabled|blocker\.password_change|blocker\.ntlm_disabled|blocker\.nxc_c_share_denied|blocker\.nxc_spider_usage|ssh\.key_rejected)$/.test(b);
+          });
+          if (isEnvBlocker) {
+            // Keep in place so the reactive Field Doctor banner in the canvas shows the fix
+            t.disabled = false;
             OBOL.router.render();
             return;
           }
-          t.disabled = false;
-          if (out) {
-            // The output is always saved as evidence; only fact extraction may come up empty.
-            out.innerHTML = r.parseError
-              ? ('Output saved, the parser skipped part of it, no new facts. <a href="#/evidence/' + esc(aid) + '">Open in Evidence ↗</a>')
-              : r.facts.length
-                ? ('Recognized ' + r.facts.length + ', nothing new (already known).')
-                : 'No facts recognized (output saved). <a href="#/evidence/' + esc(aid) + '">Set the command in Evidence ↗</a>';
+          var isRefusal = blockers.some(function (b) {
+            return /^(blocker\.access_denied|blocker\.smb_null_denied|blocker\.ldap_anonymous_disabled|blocker\.logon_failure|blocker\.winrm_closed|blocker\.account_restricted|blocker\.account_not_delegated|blocker\.protected_users|blocker\.cracking_exhausted)$/.test(b);
+          }) || r.looksError;
+
+          if (isRefusal) {
+            // Check if the move has another eligible command using a different tool/mechanism that has not been tried yet
+            var pack = OBOL.packs.actions();
+            var move = moveById(pack, aid);
+            var nextCmdIdx = -1;
+            if (move && move.commands && move.commands.length > 1) {
+              var curCmdStr = box.getAttribute('data-cmd') || '';
+              var curTool = (extractToolName(curCmdStr) || '').toLowerCase();
+              var filledAll = OBOL.command.fillAll(move, facts2, { params: eng2.params || {}, profile: eng2.profile, workspace: OBOL.workspace.tokens(eng2) });
+              for (var ci = 0; ci < move.commands.length; ci++) {
+                var cObj = move.commands[ci];
+                if (OBOL.pack.commandSettled(cObj, facts2)) continue;
+                if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cObj, facts2)) continue;
+                if (cmdGated(filledAll[ci])) continue;
+                var cTool = (cObj.tool || extractToolName(cObj.run) || '').toLowerCase();
+                if (cTool === curTool) continue;
+                var tried = (eng2.activities || []).some(function (act) {
+                  return act.action_id === aid && (act.tool === cTool || act.command === (filledAll[ci] && filledAll[ci].filled));
+                });
+                if (!tried) { nextCmdIdx = ci; break; }
+              }
+            }
+            if (nextCmdIdx >= 0) {
+              nsSel.idx = nextCmdIdx;
+              var card = box.closest('.ns-card');
+              if (card) {
+                var nextRow = card.querySelector('.ns-cmd[data-cmd-index="' + nextCmdIdx + '"]');
+                if (nextRow) pickCmd(nextRow);
+              }
+              U.toast((toolNm || 'Command') + ' was refused. Stepping to alternate command.');
+              t.disabled = false;
+              OBOL.router.render();
+              return;
+            } else {
+              OBOL.store.update(function (engg) {
+                engg.checklist = engg.checklist || {};
+                engg.checklist[aid] = 'empty:' + curEpoch;
+              }, 'done');
+              U.toast((toolNm || 'Command') + ' was refused. Retired for this access epoch.');
+              OBOL.router.render();
+              return;
+            }
           }
         }
+
+        // Case 2: Clean Empty Run (STEP_COMMAND vs RETIRE_FOR_EPOCH)
+        if (aid && !moveEverPaid && !r.parseError && r.recognizedTool && !r.looksError && bodyLines >= 2) {
+          OBOL.store.update(function (engg) { engg.checklist = engg.checklist || {}; engg.checklist[aid] = 'empty:' + curEpoch; }, 'done');
+          U.toast(toolNm + ' ran, nothing found here. Retired from the coach.');
+          OBOL.router.render();
+          return;
+        }
+
+        t.disabled = false;
+        if (out) {
+          // The output is always saved as evidence; only fact extraction may come up empty.
+          out.innerHTML = r.parseError
+            ? ('Output saved, the parser skipped part of it, no new facts. <a href="#/evidence/' + esc(aid) + '">Open in Evidence ↗</a>')
+            : r.facts.length
+              ? ('Recognized ' + r.facts.length + ', nothing new (already known).')
+              : 'No facts recognized (output saved). <a href="#/evidence/' + esc(aid) + '">Set the command in Evidence ↗</a>';
+        }
+      }
       });
     });
   }

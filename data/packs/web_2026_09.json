@@ -462,6 +462,7 @@
         "git-dumper"
       ],
       "os": [],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "http.reachable",
@@ -510,6 +511,7 @@
         "svn"
       ],
       "os": [],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "http.reachable",
@@ -2133,10 +2135,12 @@
       "os": [
         "windows"
       ],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "service.nvms1000",
-        "port:80",
+        "port:1000",
+        "vuln.nvms1000",
         "web.fingerprint.nvms"
       ],
       "produces": [

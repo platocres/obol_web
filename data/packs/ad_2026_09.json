@@ -680,12 +680,18 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "ad.domain_known"
+      ],
       "requires_any": [
-        "credential.available",
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
         "smb.null_session",
         "smb.guest_session",
-        "smb.shares"
+        "loot.files",
+        "credential.candidate",
+        "credential.available"
       ],
       "produces": [
         "credential.candidate",
@@ -988,7 +994,8 @@
         "windows"
       ],
       "requires_all": [
-        "credential.available"
+        "credential.available",
+        "ad.domain_known"
       ],
       "requires_any": [],
       "deprioritize_when": [
@@ -1086,9 +1093,12 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "ad.domain_known"
+      ],
       "requires_any": [
         "credential.available",
+        "credential.validated",
         "foothold.windows",
         "ad.acl_lead"
       ],

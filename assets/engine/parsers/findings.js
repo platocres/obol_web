@@ -87,6 +87,18 @@
   }
   C._parse_dns_email = _parse_dns_email;
 
+  // check-sqli: error-based or confirmed SQL injection signatures.
+  // When minting vuln.sqli_confirmed, ALSO mint web.sqli_confirmed (which web_2026_09.json moves require).
+  var _SQLI_CONFIRMED_RE = /(?:sql\s*syntax.*MySQL|unclosed quotation mark after the character string|Microsoft OLE DB Provider for SQL Server|pg_query\(\)|SQLSTATE\[\w+\]|SQLite3?::(?:query|exec)|near ".+?": syntax error|syntax error at or near|ORA-\d{5})/i;
+  function _parse_sqli_finding(text, ws, source, facts) {
+    var m = reSearch(_SQLI_CONFIRMED_RE, text);
+    if (!m) return;
+    var val = { evidence: m[0], via: 'findings' };
+    _add(facts, mkFact('vuln.sqli_confirmed', h(ws), val, S, source));
+    _add(facts, mkFact('web.sqli_confirmed', h(ws), val, S, source));
+  }
+  C._parse_sqli_finding = _parse_sqli_finding;
+
   // check-subdomain-takeover: a dangling CNAME plus a takeover fingerprint from the target service.
   var _TAKEOVER = /NoSuchBucket|There isn't a GitHub Pages site here|No such app|herokucdn\.com\/error|Fastly error: unknown domain|The specified bucket does not exist|Domain uses DO name servers with no records|Repository not found|NXDOMAIN/i;
   function _parse_dns_takeover(text, ws, source, facts) {
