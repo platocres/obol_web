@@ -31,7 +31,7 @@ const STAGE = process.env.OBOL_STAGE || path.join(process.env.TEMP || '/tmp', 'o
 const PUBLISH_TO = (() => { const i = process.argv.indexOf('--publish'); return i >= 0 ? process.argv[i + 1] : null; })();
 
 // ── files never published (private context + the robot itself) ──────────────
-const DENY = ['CLAUDE.md', 'AGENTS.md', 'CHANGELOG.md', 'docs/', '.github/', 'tools/publish/'];
+const DENY = ['CLAUDE.md', 'CLAUDE_HANDOFF.md', 'AGENTS.md', 'OPEN_ITEMS.md', 'CHANGELOG.md', 'docs/', '.github/', 'tools/publish/'];
 
 // ── lean build: dirs removed from the staged tree AFTER the in-staging build/stamp (they are needed
 //    during staging so build-packs can read the pack sources, but the browser never loads them, so the
@@ -119,6 +119,8 @@ const FORBIDDEN = [
   ['donor', /\bdonor\b/i],
   ['AGENTS.md ref', /AGENTS\.md/i],
   ['CLAUDE.md ref', /CLAUDE\.md/i],
+  ['CLAUDE_HANDOFF.md ref', /CLAUDE_HANDOFF\.md/i],
+  ['OPEN_ITEMS.md ref', /OPEN_ITEMS\.md/i],
   ['obol-web', /obol-web/i],
   ['obol web', /\bobol web\b/i],
   ['roadmap ref', /ROADMAP\s*§/i],
