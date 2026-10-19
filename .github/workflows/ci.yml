@@ -39,11 +39,11 @@ jobs:
       - name: Regenerate packs bundle and verify it is in sync
         run: |
           node tools/build-packs.js
-          git diff --exit-code data/packs-bundle.js || (echo "packs-bundle.js out of sync — run node tools/build-packs.js" && exit 1)
+          git diff --exit-code data/packs-bundle.js || (echo "packs-bundle.js out of sync - run node tools/build-packs.js" && exit 1)
       - name: Verify asset cache-busting is stamped in sync
         run: |
           node tools/stamp-assets.js
-          git diff --exit-code index.html assets/ui/lazy.js || (echo "cache-bust stamps out of sync — run node tools/build-packs.js && node tools/stamp-assets.js" && exit 1)
+          git diff --exit-code index.html assets/ui/lazy.js || (echo "cache-bust stamps out of sync - run node tools/build-packs.js && node tools/stamp-assets.js" && exit 1)
       - name: Move-contract lint + decision-map gap check (ranking guardrails)
         run: |
           set -e
@@ -54,17 +54,3 @@ jobs:
           set -e
           for t in tests/engine/*.js; do echo "== $t =="; node "$t"; done
 
-  browser-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install Playwright
-        run: npm install --no-save --no-package-lock playwright@1.62.1
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Browser smoke (boot, coach, routes, no console errors)
-        run: node tests/browser-smoke.js

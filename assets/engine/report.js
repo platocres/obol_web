@@ -2106,7 +2106,14 @@
     var active = [], passive = [], privescActive = [], seen = {};
     ((ctx.findings || {}).targets || []).forEach(function (t) {
       if (!ownedHosts[t.host]) return;
-      (t.findings || []).forEach(function (f) {
+      var sortedFs = (t.findings || []).slice().sort(function (a, b) {
+        var ta = a.first_at || 0, tb = b.first_at || 0;
+        if (ta && tb && ta !== tb) return ta - tb;
+        if (ta && !tb) return -1;
+        if (!ta && tb) return 1;
+        return 0;
+      });
+      sortedFs.forEach(function (f) {
         var title = (f.title || '').trim();
         if (!title || seen[title.toLowerCase()]) return;
         seen[title.toLowerCase()] = 1;

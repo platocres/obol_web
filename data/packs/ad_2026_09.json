@@ -1053,6 +1053,7 @@
         "ad.attack_paths",
         "ad.control_paths"
       ],
+      "sequence": true,
       "priority": 84,
       "proves": "produces the AD graph and its attack paths",
       "does_not_prove": "context and enumeration only, no access, credential, or privilege",

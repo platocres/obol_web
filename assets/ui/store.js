@@ -480,9 +480,10 @@
       var eng = this.active();
       var arr = ((eng && eng.facts) || []).filter(function (f) { return f && typeof f === 'object' && f.kind; });
       var hostScope = 'host:' + ip;
-      var multiTarget = ((eng && eng.targets) || []).length > 1 || arr.some(function (f) {
+      var targetList = (eng && eng.targets) || [];
+      var multiTarget = targetList.length > 1 || (targetList.length === 0 && arr.some(function (f) {
         return f && f.scope && f.scope.indexOf('host:') === 0 && f.scope !== hostScope && f.scope !== 'host:target';
-      });
+      }));
       var hostFacts = arr.filter(function (f) { return f && (f.scope === hostScope || (!multiTarget && f.scope === 'host:target')); });
       var hasHostActivity = hostFacts.some(function (f) {
         return f.state === 'supported' && f.kind.indexOf('target.') !== 0

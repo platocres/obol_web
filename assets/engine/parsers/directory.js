@@ -719,8 +719,8 @@
     text = _unwrap_rubeus_roast(text);
     var rawMatches = reAll(C._ASREP_RE, text).map(function (m) { return m[1]; });
     var hashes = C.uniqueSortedCI(rawMatches.filter(function (h) {
-      if (!/[0-9a-fA-F]{64}/.test(h)) return false;
-      if (/\$[0-9a-fA-F]{64,}:[^\s:]+$/.test(h)) return false;
+      if (!/[:$][0-9a-fA-F]{6,}(?:\$[0-9a-fA-F]{6,})?$/.test(h)) return false;
+      if (/\$[0-9a-fA-F]{16,}:[^\s:$]+$/.test(h)) return false;
       return true;
     }));
     if (!hashes.length) {
@@ -750,8 +750,8 @@
     text = _unwrap_rubeus_roast(text);
     var rawMatches = reAll(C._TGS_RE, text).map(function (m) { return m[1]; });
     var hashes = C.uniqueSortedCI(rawMatches.filter(function (h) {
-      if (!/[0-9a-fA-F]{64}/.test(h)) return false;
-      if (/\$[0-9a-fA-F]{64,}:[^\s:]+$/.test(h)) return false;
+      if (!/[:$][0-9a-fA-F]{6,}(?:\$[0-9a-fA-F]{6,})?$/.test(h)) return false;
+      if (/\$[0-9a-fA-F]{16,}:[^\s:$]+$/.test(h)) return false;
       return true;
     }));
     if (!hashes.length) {

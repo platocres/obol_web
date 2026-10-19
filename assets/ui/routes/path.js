@@ -1309,7 +1309,10 @@
   function computeCoach(overrideTarget) {
     var eng = OBOL.store.active();
     var targetIp = (overrideTarget !== undefined) ? overrideTarget : (OBOL.store.activeTarget ? OBOL.store.activeTarget() : null);
-    var facts = (targetIp && OBOL.store.factSetForTarget) ? OBOL.store.factSetForTarget(targetIp) : OBOL.store.factSet();
+    var multiTgt = ((eng && eng.targets) || []).length > 1;
+    var facts = (targetIp && (overrideTarget !== undefined || multiTgt) && OBOL.store.factSetForTarget)
+      ? OBOL.store.factSetForTarget(targetIp)
+      : OBOL.store.factSet();
     return rankFor(facts, { target: targetIp });
   }
   // rankFor(facts, opts) is computeCoach generalized to ANY factset - the engagement-wide one for this coach and

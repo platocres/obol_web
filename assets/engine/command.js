@@ -507,14 +507,21 @@
       };
       var _isLinux = facts && facts.has && (facts.has('foothold.linux') || facts.has('access.shell') || facts.has('os.linux'))
         && !facts.has('foothold.windows') && !facts.has('os.windows');
-      // Both the USER/local flag path and ROOT/proof flag path for capture are earned gate tokens.
-      // Only fill them once a path was actually LOCATED (via Get-ChildItem, dir /s /b, find, or an SMB
-      // spider) so the read command stays gated behind the locate step instead of guessing a path before
-      // the operator has enumerated the host.
+      var _priv = function (u) {
+        var s = String(u || '').toLowerCase();
+        return !s || /^(?:administrator|admin|root|system|nt authority\\system|guest|defaultaccount|krbtgt|www-data|apache|nginx|nobody|daemon|http|postgres|mysql|redis|tomcat|iis apppool|network service|local service)$/.test(s) || /\$$/.test(s);
+      };
+      // The ROOT/proof flag path is an earned gate token (only filled once located).
+      // The USER/local flag path prefers a located path; otherwise, when the active user is an unprivileged
+      // user (not admin/root/SYSTEM), it defaults to that user's own Desktop/home directory.
       if (ctx.flag_path_local === undefined) {
         var _locL = _locatedPath('local');
         if (_locL) {
           ctx.flag_path_local = _locL;
+        } else if (ctx.user && !_priv(ctx.user) && !(facts && facts.has && (facts.has('access.admin') || facts.has('access.system') || facts.has('access.root')))) {
+          ctx.flag_path_local = _isLinux
+            ? ('/home/' + ctx.user + '/' + _flagName('local'))
+            : ('C:\\Users\\' + ctx.user + '\\Desktop\\' + _flagName('local'));
         }
       }
       if (ctx.flag_path_root === undefined) {

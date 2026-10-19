@@ -68,8 +68,7 @@
       "priority": 98,
       "requires_all": [],
       "requires_any": [
-        "access.admin",
-        "access.root"
+        "access.admin"
       ],
       "os": [
         "linux"
