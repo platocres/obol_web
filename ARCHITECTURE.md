@@ -331,7 +331,7 @@ All "what's my next move?" surfaces rank through the one shared `OBOL.coach.rank
 
 ---
 
-## 7. The Evidence Loop (how a paste becomes guidance)
+## 7. How Obol Parses Inputs (Pastes) And Mints Facts
 
 ```
  operator pastes tool output
@@ -353,17 +353,84 @@ All "what's my next move?" surfaces rank through the one shared `OBOL.coach.rank
 Each paste advances the whole app through one pure recomputation. Nothing is remembered that the
 output did not prove.
 
+When an operator pastes terminal output (via QuickPaste `Ctrl+V`, a move card, Cruise, or Evidence), it flows through a **4-stage ingestion pipeline**:
+
+```
+Raw Terminal Paste
+   │
+   ▼
+1. Session Splitter & Scrollback Trimmer (assets/ui/ingest.js)
+   │  Splits multi-command scrollback or Cruise markers (===== OBOL STEP ... =====)
+   │  Extracts typed command, strips ANSI escape codes & spinner CR overwrites
+   ▼
+2. Scope & Context Router (assets/ui/ingest.js: detectTarget / detectLhost)
+   │  Auto-learns {{lhost}} from prompt stamps; routes output to host:<ip> or domain:<name>
+   ▼
+3. Multi-Strategy Fan-Out Dispatcher (assets/engine/parsers/index.js: parseActionOutput)
+   │  ├── Command-Gated Dispatch (nmap, nxc, ldapsearch, impacket, certipy, hashcat...)
+   │  ├── Content-Sniffed Dispatch (recognizes linpeas, winpeas, bloodhound, mimikatz, flags even without a command line)
+   │  ├── Blocker & Auth Failure Dispatch (blockers.js: clock skew, lockout, access denied...)
+   │  └── Output-Shape Fallback (shape.js: bare port tables, HTTP responses, CVE/version banners)
+   ▼
+4. FactSet Deduplication & Proof-State Ledger (assets/engine/facts.js: FactSet.add)
+```
+
+### Key Parsing Design Principles
+
+1. **Dual Routing (Command + Content Signatures)**:
+   - In `assets/ui/ingest.js` (`run`), Obol inspects what the paste *actually shows* (`deriveCommand` + `dispatchLabel`) rather than blindly trusting which card the user pasted into. If you paste `ldapsearch` output into an Nmap card, or paste a raw file attachment with no prompt at all, `assets/engine/parsers/index.js` routes on both the command string and conservative content regexes (and falls back to `assets/engine/parsers/shape.js` for bare outputs).
+2. **Conservative Proof Gating ("Running a command != It worked")**:
+   - Parsers never mint a fact merely because a command ran. For example, running `nxc smb 10.10.10.5 -u '' -p '' --shares` only mints `smb.null_session` if `[+]` session establishment is present, and only mints `smb.readable_share` if a non-`IPC$` share has `READ` permissions.
+3. **Three Proof States (`ProofState` in `assets/engine/facts.js`)**:
+   - `SUPPORTED`: Evidence affirmatively established the claim (gates `FactSet.has(kind)`).
+   - `REFUTED`: Evidence proved the claim is *false* (for example, `credential.validation` with `works: false`, or an anonymous bind explicitly rejected).
+   - `INCONCLUSIVE`: Attempted, but output was ambiguous.
+   - If a fact's proof state changes on a later paste (for example, an earlier assumption is refuted or superseded), `FactSet.prototype.add` updates the state in-place on `(kind, scope, value)` so stale claims immediately stop gating the planner.
+
 ---
 
-## 8. The Coach Ranker, Concretely
+## 8. How Obol Hypothesizes Deterministically And Settles Moves
 
-The live ranker (`nextActionsV2`) sorts eligible, non-settled, non-obsolete moves by:
+Every move in Obol is an explicit **testable hypothesis** about the target. In `assets/ui/routes/path.js` (`nsNarrative`), Obol renders this cause-and-effect relationship directly on every move card:
 
-1. **tier**, recency (just-unlocked leads), with speculative payoffs capped.
-2. **recon-first** (opening only) and **validate-first** (unvalidated credential held), bounded
-   "prep before use" tie-breaks inside the fresh tier.
-3. **score**, `reliability * (goalProgress + 0.6*enable + keystoneW*keystone)` + objective pull.
-4. **priority** (hand-tuned) → **house toolkit** (prefer nxc) → **locus** (remote-first) → **id**.
+> **"Because `<held prerequisite fact>` -> expect `<produced payoff fact>`"**
+> *(for example, "Because **Domain User List** -> expect **AS-REP Hash**")*
+
+To decide which hypothesis to test next, `nextActionsV2` in `assets/engine/pack.js` runs a **4-part deterministic ranking algorithm**:
+
+### 8.1 Eligibility Filtering (`Action.prototype.eligible`)
+
+A move enters the candidate pool only if:
+1. Its OS constraint matches `hostOsFamily(facts)` (inferred from Nmap banners, SMB/AD signals, or footholds).
+2. Every fact in `requires_all` is `SUPPORTED` in the target's `FactSet`.
+3. At least one fact in `requires_any` is `SUPPORTED`.
+4. The move is neither `settled(facts)` nor `obsolete(facts)`.
+
+### 8.2 Recency & Evidence Tiering (`tier` in `assets/engine/pack.js`)
+
+Every eligible move is placed into a strict priority tier based on **what your latest paste just proved**:
+- **Tier 2 (`fresh`)**: Moves that were *locked* before your most recent paste and *just unlocked* because of a fact minted in the latest ingest batch (`v2Recency`). This captures operator momentum: *"I just got an AS-REP hash, so cracking it is my immediate next step."*
+- **Tier 1 (`indicated` / `v2Earned`)**: Moves gated on a specific, high-signal earned primitive (`V2_SPECIFIC`, such as `privesc.sudo_rights`, `ad.control_paths`, `vuln.dirtypipe`, `smb.ms17_010`).
+- **Tier 0 (Standard Enumeration)**: Routine eligible moves that advance discovery.
+- **Tier -1 (`speculative` / unindicated gambles)**: Moves marked `speculative` or moves that claim a high payoff (a foothold or credential) from a bare open port *without* any supporting vulnerability fingerprint, hash, or credential (`v2Speculative`). These are capped at Tier -1 so blind gambles (like blind password spraying or unindicated CVE checks) never bury deterministic enumeration.
+
+### 8.3 Backward-Chained Goal Distance + 1-Step Forward Lookahead
+
+Within each tier, Obol scores every move over the hypergraph:
+
+```
+score(a) = Reliability(a) * ( prog(a) + 0.6 * enable(a) + 0.15 * keystone(a) ) + TransitionBonuses(a)
+```
+
+- **`prog(a)` (Goal Progress via Backward Chaining)**: `v2GoalDistance` computes the minimum number of steps from the current facts to any Goal (`AND` over `requires_all`, `OR` over `requires_any`). `prog(a) = d0 - d(H U produces(a))` measures how many steps closer to root, Domain Admin, or flags this move takes you.
+- **`enable(a)` (Best Door Opened)**: 1-step forward lookahead over all currently locked moves `b` that become eligible if `a` succeeds, rewarding the single deepest unlock.
+- **`keystone(a)` (Breadth of Doors Opened)**: How many currently blocked moves `a`'s produced facts unblock (capped at `V2_KEYSTONE_CAP = 4`), so pivotal facts like `credential.available` or `ad.user_list` naturally bubble up.
+- **`Reliability(a)`**: `1.0` for earned cash-ins (`v2Earned`), `0.8` for standard enumeration, `0.3` for generic privilege jumps, and `0.25` for speculative gambles.
+- **Explore-vs-Exploit Opening Discipline**:
+  - *Orient before exploit*: After a quick port scan, the thorough version scan (`scan.nmap.version`) and `diagnostic: true` moves with the highest `eliminates` breadth lead before deeper exploitation.
+  - *Validate before use*: When a found credential is not yet validated, the cheap validation probe leads before moves that spend the credential.
+  - **priority** (hand-tuned) -> **house toolkit** (prefer NetExec) -> **locus** (remote-first) -> **id**.
+- **A* Full-Route Planner (`planPath` in `assets/engine/pack.js`)**: Runs A* search over the action graph using `v2ActionCost` (earned = `1.0`, enum = `1.5`, speculative = `12.0`, plus a small `+0.3` locus surcharge for on-host commands) to display the complete multi-step **"Planned Route To The Objective"**.
 
 `path.js` then buckets the ranked list into Ready Now, Coming Up (eligible but ahead of the
 frontier, or no runnable command yet), and Report Checks (info-only writeup checks), and applies the
@@ -374,6 +441,67 @@ The operator preferences baked in: **remote-first always**, and **prefer NetExec
 (one remote tool spanning SMB/LDAP/WinRM/MSSQL/RDP/WMI/SSH for cred validation, enumeration,
 pass-the-hash exec, and secret dumping). See `docs/MOVE-ENGINE.md` for the full rationale and the
 lints that enforce it.
+
+### 8.4 Confirming Vs. Falsifying A Theory: Settling Moves & Commands
+
+A deterministic coach must know both **when a theory succeeded** (so it advances the attack chain and stops nagging you to repeat what worked) and **when a theory failed** (so it retires dead ends, diagnoses fixable errors, and pivots to the next viable hypothesis).
+
+#### Case A: Confirming A Theory (Positive Proof)
+
+When a paste mints the facts a command or move was designed to prove:
+1. **Command-Level Settlement (`commandSettled` in `assets/engine/pack.js`)**:
+   - Individual commands inside a move can declare `settled_by: ["smb.null_session"]` (or `ad.group_joined`, `objective.flag_located`).
+   - Once that specific sub-question is answered, **that individual command disappears from the card**, while follow-up commands in the same move remain active.
+   - Simultaneously, previously hidden commands that were waiting on an **Earned Token** (`{{domain}}`, `{{basedn}}`, `{{userlist}}`, `{{hashfile}}`, `{{user}}`, `{{password}}` in `assets/engine/command.js`) automatically un-gate and pre-fill with the newly parsed values.
+2. **Move-Level Settlement (`Action.prototype.settled` in `assets/engine/pack.js`)**:
+   - Once **every** fact in `action.produces` is held in `FactSet` (or, for multi-OS foothold moves, once the host's OS foothold/admin equivalent is held), `action.settled(facts)` returns `true`. The move retires from the active Coach queue because re-running it yields zero new graph progress.
+3. **Obsolescence & Goal Cash-In (`Action.prototype.obsolete` in `assets/engine/pack.js`)**:
+   - If a later achievement makes an entire branch moot (for example, achieving `foothold.linux`, `access.root`, or `loot.ntds` is listed in an earlier move's `obsoleted_by`), `action.obsolete(facts)` retires the entire branch, both ready and locked moves alike, so the coach never steers you toward a means to an end you already hold.
+
+#### Case B: Proving A Theory False (Falsification & Dead-End Retirement)
+
+When an operator runs a command and the theory fails, Obol distinguishes **three different kinds of failure** so it never confuses a typo or clock-skew with a dead attack path:
+
+```
+Operator Pastes Unsuccessful / Empty Output
+   │
+   ├──► 1. Fixable Environmental / Syntax Trap (isEnvBlocker in ingest.js)
+   │       Examples: KRB_AP_ERR_SKEW (clock skew), Name resolution failure, chmod 600 SSH key
+   │       Result: Does NOT retire the move! Mints blocker.* and surfaces a reactive
+   │               "DIAGNOSTIC DETECTED" Fix Card (path.js) with the exact fix command.
+   │               Auto-retracts the blocker as soon as the fix or next command succeeds.
+   │
+   ├──► 2. Explicit Target Refusal (isRefusalBlocker / REFUTED in blockers.js & creds.js)
+   │       Examples: STATUS_ACCESS_DENIED on null SMB, Anonymous LDAP bind disabled,
+   │                 STATUS_LOGON_FAILURE (credential.validation works:false)
+   │       Result: Mints refusal blocker + marks command/move tried in current Access Epoch.
+   │               If other commands/tools exist on the card, advances to the next untried one;
+   │               once all eligible commands are tried, retires the move (empty:<epoch>).
+   │
+   └──► 3. Clean Empty / Negative Result (Tool ran cleanly, >= 2 lines, 0 facts minted)
+           Examples: GetNPUsers.py finds no AS-REP roastable users; find finds no SUIDs
+           Result: Marks that command as "Already tried" (commandTriedInEpoch) and promotes
+                   the next untried command on the card. When no untried commands remain on the
+                   card for the current Access Epoch, marks checklist[moveId] = "empty:<epoch>"
+                   (ingest.js) and retires the move from Ready Now!
+```
+
+#### Access-Epoch Attempt Memory (`accessEpoch` in `assets/engine/pack.js`)
+
+Why does Obol retire a falsified move with `empty:<epoch>` instead of permanently deleting it?
+- In penetration testing, **"SMB share enumeration proved nothing"** is only true *relative to your current privilege and credential state* (your **Access Epoch**, computed by `accessEpoch(facts)`: for example, `anon` -> `cred:svc-alfresco:pw` -> `fh:win|cred:svc-alfresco:pw` -> `adm:system`).
+- If you run SMB share enumeration or BloodHound collection anonymously (`epoch = "anon"`) and it fails or comes back empty, `assets/ui/ingest.js` records `checklist[moveId] = "empty:anon"`, and `commandTriedInEpoch` retires those commands during the `anon` epoch.
+- The moment you crack a password or land a foothold, `accessEpoch(facts)` transitions to a new epoch string (for example, `cred:bob:pw`). Every move that was marked `empty:anon` **automatically wakes back up** with its commands re-filled with `bob`'s credentials, ready to test the hypothesis under the new privilege state.
+
+#### Summary Table
+
+| Stage | Component | What It Does |
+| :--- | :--- | :--- |
+| **1. Ingest & Split** | `assets/ui/ingest.js` | Splits terminal scrollback and Cruise batches, detects target IP and `{{lhost}}`, strips ANSI and spinners. |
+| **2. Parse & Mint** | `assets/engine/parsers/index.js` | Dual command + content-signature fan-out; mints scoped `Fact` objects (`SUPPORTED`, `REFUTED`, `blocker.*`). |
+| **3. Hypothesize** | `assets/engine/pack.js` (`nextActionsV2`) | Ranks eligible moves by Recency Tier -> Reliability * (Backward Goal Progress + Forward Enablement + Keystone Breadth). |
+| **4. Confirm & Settle** | `commandSettled` / `Action.settled` / `Action.obsolete` | Retires individual commands once `settled_by` is proven; retires moves once `produces` or `obsoleted_by` is held; unlocks earned `{{tokens}}`. |
+| **5. Falsify & Pivot** | `blockers.js` + `accessEpoch` + `empty:<epoch>` | Separates fixable env traps (shows reactive Fix Card) from negative results (retires command/move for the current `accessEpoch`, waking it up if new creds/access are earned later). |
 
 ---
 
