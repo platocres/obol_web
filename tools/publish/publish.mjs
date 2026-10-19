@@ -21,10 +21,13 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
-const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
-const STAGE = process.env.OBOL_STAGE || '/tmp/claude-0/obol-staging';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const REPO = path.resolve(__dirname, '..', '..');
+const STAGE = process.env.OBOL_STAGE || path.join(process.env.TEMP || '/tmp', 'obol-staging');
 const PUBLISH_TO = (() => { const i = process.argv.indexOf('--publish'); return i >= 0 ? process.argv[i + 1] : null; })();
 
 // ── files never published (private context + the robot itself) ──────────────
@@ -39,7 +42,7 @@ const PRUNE_AFTER_BUILD = ['tests', 'tools', 'data/packs', 'Testing'];
 //    the source (then scrubbed as a backstop). Used for ARCHITECTURE.md, which needs real editorial
 //    cleanup the regex rules cannot do. The overrides dir lives under tools/publish/ (DENY), so it never
 //    ships itself. ──────────────────────────────────────────────────────────
-const OVERRIDES = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'overrides');
+const OVERRIDES = path.resolve(__dirname, 'overrides');
 
 // ── which files are text (get scrubbed + gate-scanned); everything else copies verbatim ──
 const TEXT_EXT = new Set(['.js', '.mjs', '.cjs', '.json', '.css', '.html', '.md', '.txt', '.svg', '.yml', '.yaml', '.map']);
@@ -126,6 +129,8 @@ const FORBIDDEN = [
   ['openai', /openai/i],
   ['chatgpt', /chatgpt/i],
   ['copilot', /copilot/i],
+  ['antigravity', /antigravity/i],
+  ['gemini', /\bgemini\b/i],
 ];
 
 function isDenied(rel) { return DENY.some((d) => (d.endsWith('/') ? rel.startsWith(d) : rel === d)); }

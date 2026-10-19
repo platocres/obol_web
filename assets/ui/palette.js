@@ -15,7 +15,7 @@
   function esc(s) { return U.esc(s); }
 
   function buildIndex() {
-    if (cmdIndex) return cmdIndex;
+    if (cmdIndex && cmdIndex.length > 20) return cmdIndex;
     var out = [];
     // nav routes
     document.querySelectorAll('header nav a[href^="#/"]').forEach(function (a) {
@@ -29,7 +29,7 @@
         out.push({ kind: 'cmd', label: act.title, hint: (c.tool || act.tool || 'cmd'), run: c.run, lane: OBOL.phases.phaseOfAction(act) });
       });
     });
-    // arsenal tools that need setup (not Kali-default) — ⌘K to find a tool + copy its install one-liner
+    // arsenal tools that need setup (not Kali-default) - Ctrl+K to find a tool + copy its install one-liner
     var A = OBOL.ARSENAL || {}, seenTool = {};
     Object.keys(A).forEach(function (k) {
       var e = A[k]; if (!e || seenTool[e.key] || e.class === 'kali' || e.class === 'builtin') return;
@@ -68,8 +68,16 @@
   }
 
   function fill(run) {
-    try { return OBOL.command.fillTemplate(run, OBOL.store.factSet(), { params: (OBOL.store.active() || {}).params, profile: (OBOL.store.active() || {}).profile }); }
-    catch (e) { return run; }
+    try {
+      var eng = OBOL.store.active() || {};
+      var ws = (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(eng) : null;
+      return OBOL.command.fillTemplate(run, OBOL.store.factSet(), {
+        params: eng.params,
+        profile: eng.profile,
+        target: (eng.params || {}).target,
+        workspace: ws,
+      });
+    } catch (e) { return run; }
   }
 
   function renderList() {

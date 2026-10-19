@@ -1,13 +1,13 @@
 /*!
- * obol ui — routes/study.js — Study mode (milestone 1: the AD vertical slice).
+ * obol ui - routes/study.js - Study mode (milestone 1: the AD vertical slice).
  *
  * Left: the AD lane as a clickable, phase-grouped graph. Right: the selected node, in one of two
- * gears — WATCH (the derived conditional cell: what it is → prereqs → remote-first commands → real
+ * gears - WATCH (the derived conditional cell: what it is → prereqs → remote-first commands → real
  * sample output with the signal highlighted → proves/opens → common mistake) or YOUR TURN
  * (retrieval practice: a situation, multiple choice, a verdict on every answer, the cell as reward).
  *
  * All content comes from OBOL.study + OBOL.STUDY_FIXTURES. No hand-authored
- * lessons live here — this file is rendering + interaction only.
+ * lessons live here - this file is rendering + interaction only.
  */
 (function (root) {
   'use strict';
@@ -162,7 +162,7 @@
       + (output.teach ? '<div class="study-annot"><span class="study-ar">↳</span><div>' + esc(output.teach) + '</div></div>' : '');
   }
   // ---- the replay player (the star of Watch): one remote-first command runs, output streams, the
-  // signal lights up, the facts it mints pop. Markup only — the controller lives in mounted(). ----
+  // signal lights up, the facts it mints pop. Markup only - the controller lives in mounted(). ----
   function replayPlayer(rp) {
     if (!rp) return '';
     var idle = rp.hasOutput
@@ -243,7 +243,7 @@
       + '</div>';
   }
 
-  // the scope-safety badge (header) + callout (body) — teach when NOT to fire a move
+  // the scope-safety badge (header) + callout (body) - teach when NOT to fire a move
   function scopeBadge(id) {
     var s = study().scopeSafety(id);
     if (s.level === 'destructive') return '<span class="study-badge b-danger">can break things</span>';
@@ -462,7 +462,7 @@
     return '<div class="study-tell"><div class="study-tell-h">Reading the result</div>'
       + '<p>' + codeify(body) + '</p></div>';
   }
-  // "Why this, not that?" — the tool-selection decisions attached to this move
+  // "Why this, not that?" - the tool-selection decisions attached to this move
   function decisionPanel(cell) {
     var ds = study().decisionFor(cell.id); if (!ds.length) return '';
     return ds.map(function (d) {
@@ -613,7 +613,7 @@
   // style (coloured accent, icon tile, kicker, title, description, CTA). o.trig gives a button its
   // single canonical trigger attribute (data-sim / data-graph / data-decision / data-ports live
   // here and nowhere else, so the click selectors stay unambiguous); o.href makes it a link instead.
-  // o.icon is ready HTML — a geometric glyph or an OBOL.ic() SVG (both render at the tile font size).
+  // o.icon is ready HTML - a geometric glyph or an OBOL.ic() SVG (both render at the tile font size).
   function barCard(o) {
     var isLink = !!o.href;
     var open = isLink ? '<a class="sl-way ' + o.mod + '" href="' + o.href + '">'
@@ -655,9 +655,9 @@
   function welcomed() { try { return !!localStorage.getItem('obol.welcomed'); } catch (e) { return false; } }
   function welcomeBanner() {
     if (welcomed()) return '';
-    return '<div class="study-welcome" role="region" aria-label="Welcome to Obol">'
+    return '<div class="study-welcome" role="region" aria-label="Welcome to OBOL">'
       + '<button type="button" class="study-welcome-x" data-welcome-dismiss aria-label="Dismiss welcome">×</button>'
-      + '<div class="study-welcome-h">Welcome to Obol</div>'
+      + '<div class="study-welcome-h">Welcome to OBOL</div>'
       + '<p class="study-welcome-p">A calm companion for learning offensive security, at your own pace, your own way. Where would you like to start?</p>'
       + '<div class="study-welcome-doors">'
       + '<button type="button" class="study-welcome-door sw-learn" data-welcome-dismiss>'
@@ -688,19 +688,19 @@
     h += '<div class="study-hero sl-hero">'
       + '<div class="sl-hero-main"><span class="sl-tag">Learn at your own pace, your own way</span>'
       + '<h1 class="study-hero-h">Learn the methodology</h1>'
-      + '<p class="study-hero-p">Obol teaches offensive security as a decision graph: <b>know what to do, and why, from what you\'ve found.</b> '
+      + '<p class="study-hero-p">OBOL teaches offensive security as a decision graph: <b>know what to do, and why, from what you\'ve found.</b> '
       + 'Start from a structured path, from a port you just scanned, or drop into a live box, whatever fits how you learn.</p></div>'
       + heroProg(contId, studiedTotal, totalSteps)
       + '</div>';
     // one unified action bar: six matching cards (three ways to start, the decision graph, and the
     // set-up / engagement entries). Each has a colour, an icon, a kicker, and a CTA.
     h += '<div class="sl-bar">'
-      + barCard({ trig: 'data-sim', mod: 'sl-way-cold', icon: OBOL.ic('play'), kick: 'Guided Simulation', title: 'Run A Cold Box', desc: 'Start from an IP and nothing else. Read each result, choose the next move, and watch the box fall one step at a time.', go: 'Start A Run' })
-      + barCard({ trig: 'data-graph', mod: 'sl-way-atlas', icon: OBOL.ic('graph'), kick: 'The Whole Map', title: 'Walk The Attack Graph', desc: 'Every move in one graph, wired by what unlocks what. Pan, zoom, and trace end-to-end paths, or light up a ready-made scenario.', go: 'Open The Atlas' })
-      + barCard({ trig: 'data-decision', mod: 'sl-way-decision', icon: OBOL.ic('branch'), kick: 'Why Each Move', title: 'Walk The Decision Tree', desc: 'Every move as a decision: what unlocks it, what it proves, what it rules out. Follow the branches from an open port to the whole path.', go: 'Open The Map' })
-      + barCard({ trig: 'data-ports', mod: 'sl-way-port', icon: OBOL.ic('ports'), kick: 'Start From A Scan', title: 'Browse By Open Port', desc: 'You scanned; these ports are open. Pick the one in front of you and get the exact, ordered moves it unlocks.', go: 'Full By-Port View' })
-      + barCard({ href: '#/loadout', mod: 'sl-way-setup', icon: OBOL.ic('gear'), kick: 'Your Machine', title: 'Setup Your Box', desc: 'Install the toolset so the commands you learn match your own machine.', go: 'Install Tools' })
-      + barCard({ href: '#/home', mod: 'sl-way-engage', icon: OBOL.ic('crosshair'), kick: 'Track A Box', title: 'Start An Engagement', desc: 'Working a real box? Track it: paste output, get your next move.', go: 'Start Tracking' })
+      + barCard({ trig: 'data-sim', mod: 'sl-way-cold', icon: OBOL.ic('play'), kick: 'Guided Simulation', title: 'Run a Cold Box', desc: 'Start from an IP and nothing else. Read each result, choose the next move, and watch the box fall one step at a time.', go: 'Start a Run' })
+      + barCard({ trig: 'data-graph', mod: 'sl-way-atlas', icon: OBOL.ic('graph'), kick: 'The Whole Map', title: 'Walk the Attack Graph', desc: 'Every move in one graph, wired by what unlocks what. Pan, zoom, and trace end-to-end paths, or light up a ready-made scenario.', go: 'Open the Atlas' })
+      + barCard({ trig: 'data-decision', mod: 'sl-way-decision', icon: OBOL.ic('branch'), kick: 'Why Each Move', title: 'Walk the Decision Tree', desc: 'Every move as a decision: what unlocks it, what it proves, what it rules out. Follow the branches from an open port to the whole path.', go: 'Open the Map' })
+      + barCard({ trig: 'data-ports', mod: 'sl-way-port', icon: OBOL.ic('ports'), kick: 'Start from a Scan', title: 'Browse by Open Port', desc: 'You scanned; these ports are open. Pick the one in front of you and get the exact, ordered moves it unlocks.', go: 'Full By-Port View' })
+      + barCard({ href: '#/loadout', mod: 'sl-way-setup', icon: OBOL.ic('gear'), kick: 'Your Machine', title: 'Set Up Your Box', desc: 'Install the toolset so the commands you learn match your own machine.', go: 'Install Tools' })
+      + barCard({ href: '#/home', mod: 'sl-way-engage', icon: OBOL.ic('crosshair'), kick: 'Track a Box', title: 'Start an Engagement', desc: 'Working a real box? Track it: paste output, get your next move.', go: 'Start Tracking' })
       + '</div>';
     // the two-column dashboard
     h += '<div class="sl-dash">';
@@ -795,7 +795,7 @@
     if (isMap) {
       h += '<p class="ev-map-lede">The whole forest, derived from the same move graph and ranker that drive Next Steps, so it can never contradict the coach. '
         + 'It opens zoomed out on the full mass; scroll or use the controls to zoom, drag to pan, click a port to fold its branches, and click a move to open it. '
-        + 'The lit path is the coach’s ranked spine. Flip the lens to <i>Parser cover</i> to see, in plain language, what obol reads at each step, and where it reads nothing.</p>';
+        + 'The lit path is the coach’s ranked spine. Flip the lens to <i>Parser cover</i> to see, in plain language, what OBOL reads at each step, and where it reads nothing.</p>';
       h += '<div id="port-decision-map" class="dt-mount" role="region" aria-label="By-port decision map"></div>';
       return h + '</section>';
     }
@@ -1025,8 +1025,11 @@
     return h;
   }
 
+  var _lastAppliedArg = '';
   function render(ctx) {
-    if (ctx && ctx.args && ctx.args[0] && study().cellFor(ctx.args[0])) { _sel = ctx.args[0]; _view = 'node'; _pathMode = false; _path = []; }
+    var arg = (ctx && ctx.args && ctx.args[0]) || '';
+    if (arg && arg !== _lastAppliedArg && study().cellFor(arg)) { _lastAppliedArg = arg; _sel = arg; _view = 'node'; _pathMode = false; _path = []; }
+    else if (!arg) { _lastAppliedArg = ''; }
     return _view === 'map' ? mapView() : (_view === 'atlas' ? atlasView() : (_view === 'ports' ? portsView() : (_view === 'sim' ? simView() : nodeView())));
   }
 
@@ -1258,7 +1261,7 @@
     U.on(mount, 'click', '[data-az]', function (e, t) { var a = t.getAttribute('data-az'); if (a === 'in' || a === 'out') { var r = stage.getBoundingClientRect(); zoomAround(r.width / 2, r.height / 2, a === 'in' ? 1.2 : 0.83); } else fit(); });
     U.on(mount, 'click', '[data-atlas="clear"]', function () { _atlasPath = []; _scenario = null; atlasSelection(mount); });
     U.on(mount, 'click', '[data-atlas="study"]', function () { if (!_atlasPath.length) return; _path = _atlasPath.slice(); _pathName = _scenario ? scenName(_scenario) : 'Your custom path'; _pathMode = true; _from = 'atlas'; _sel = _path[0]; _view = 'node'; OBOL.router.render(); });
-    // fold / unfold a lane band (full re-render — the whole layout reflows around it; the pan/zoom persists)
+    // fold / unfold a lane band (full re-render - the whole layout reflows around it; the pan/zoom persists)
     U.on(mount, 'click', '[data-band]', function (e, t) { var k = t.getAttribute('data-band'); _collapsed[k] = !_collapsed[k]; OBOL.router.render(); });
     // search: dim non-matches, centre the first hit
     U.on(mount, 'input', '#atlas-search', function (e, t) { _atlasQuery = t.value || ''; var first = applyQuery(mount); if (first) centerOn(first); });
@@ -1274,14 +1277,8 @@
   function mounted(ctx) {
     var mount = ctx.mount;
     cancelReplay(); cancelBench();
-    // Delegated click handlers are registered ONCE per mount element. The route re-renders in place
-    // (it replaces #view's innerHTML, the element itself is stable), so re-binding every render would
-    // stack duplicate listeners — one click would then fire N handlers and re-render N times, and a
-    // handler that reads live DOM (the rail scroll) would see the already-rebuilt view. Bind once.
-    if (!mount.__studyWired) {
-      mount.__studyWired = true;
-      wireStudyClicks(mount);
-    }
+    // Delegated click handlers are registered ONCE per mount element.
+    wireStudyClicks(mount);
     // ---- per-render setup (runs every render) ----
     // keep your place in the step rail across a re-render: restore the scroll you clicked from, or,
     // when arriving on a different step (a jump from the map/atlas), bring the active step into view.
@@ -1325,7 +1322,7 @@
     }
     // the Atlas: pan / zoom / semantic LOD / draw a custom path
     if (_view === 'atlas') setTimeout(function () { wireAtlas(mount); }, 30);
-    // the by-port decision map: the derived LTR forest (lazy — the engine + renderer load on demand)
+    // the by-port decision map: the derived LTR forest (lazy - the engine + renderer load on demand)
     if (_view === 'ports' && _evMode === 'map') setTimeout(function () { wirePortMap(mount); }, 30);
   }
 
@@ -1421,7 +1418,7 @@
     onStudy('[data-goto]', function (e, t) { if (_view === 'sim') _from = 'map'; _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
     // gear toggle → re-render
     onStudy('[data-gear]', function (e, t) { _gear = t.getAttribute('data-gear'); OBOL.router.render(); });
-    // "Run it from" toggle: remote (your box) vs on the target — local DOM swap, no re-render
+    // "Run it from" toggle: remote (your box) vs on the target - local DOM swap, no re-render
     onStudy('[data-runway]', function (e, t) {
       var way = t.getAttribute('data-runway');
       Array.prototype.forEach.call(mount.querySelectorAll('.rw-tab'), function (b) { b.classList.toggle('on', b.getAttribute('data-runway') === way); });

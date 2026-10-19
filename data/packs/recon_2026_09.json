@@ -56,7 +56,10 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u '' -p '' --shares",
-          "note": "List shares over a null session; if the empty user is rejected, retry as guest with an empty password."
+          "note": "List shares over a null session; if the empty user is rejected, retry as guest with an empty password.",
+          "settled_by": [
+            "smb.shares"
+          ]
         },
         {
           "tool": "smbmap",
@@ -70,13 +73,19 @@
         },
         {
           "tool": "nxc",
-          "run": "nxc smb {{target}} -u guest -p '' --rid-brute",
-          "note": "Cycle RIDs through the guest session to recover the full account list with no Kerberos traffic."
+          "run": "nxc smb {{target}} -u '' -p '' --rid-brute",
+          "note": "Cycle RIDs through the null session to recover the full account list with no Kerberos traffic (if the empty user is rejected, retry with -u guest -p '').",
+          "settled_by": [
+            "ad.user_list"
+          ]
         },
         {
           "tool": "enum4linux-ng",
           "run": "enum4linux-ng -A {{target}}",
-          "note": "One-shot sweep of shares, users, groups, and password policy over RPC."
+          "note": "One-shot sweep of shares, users, groups, and password policy over RPC.",
+          "settled_by": [
+            "ad.user_list"
+          ]
         }
       ],
       "requires_all": []
@@ -392,7 +401,7 @@
         "foothold.linux"
       ],
       "priority": 52,
-      "proves": "command execution from the VNC desktop session — a foothold",
+      "proves": "command execution from the VNC desktop session - a foothold",
       "does_not_prove": "privilege beyond the desktop user; escalate from the shell",
       "report": {
         "finding": "Interactive VNC Desktop Access",
@@ -410,7 +419,7 @@
         {
           "tool": "xdotool",
           "run": "id; hostname; ip -4 addr | grep inet",
-          "note": "In the desktop's terminal, run this and screenshot the frame — that captures the foothold with host identity. From here enumerate for root exactly like any shell."
+          "note": "In the desktop's terminal, run this and screenshot the frame - that captures the foothold with host identity. From here enumerate for root exactly like any shell."
         },
         {
           "tool": "vncpwd",
@@ -418,7 +427,10 @@
           "note": "TightVNC / UltraVNC password decryption: Decrypts DES-obfuscated VNC passwords recovered from registry or vncpwd configuration files."
         }
       ],
-      "requires_any": []
+      "requires_any": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "diagnostic": true,
@@ -605,7 +617,12 @@
         {
           "tool": "nxc",
           "run": "nxc rdp {{target}} -u '' -p ''",
-          "note": "Unauthenticated: netexec prints the host name, domain, OS build and NLA state, context with zero credentials and no lockout risk."
+          "note": "Unauthenticated: netexec prints the host name, domain, OS build and NLA state, context with zero credentials and no lockout risk.",
+          "settled_by": [
+            "host.hostname",
+            "ad.domain_known",
+            "rdp.authenticated"
+          ]
         },
         {
           "tool": "nxc",
@@ -698,7 +715,7 @@
         "foothold.linux"
       ],
       "priority": 58,
-      "proves": "a shell from a reachable NFS export — a looted or planted SSH key, or a webshell on a writable share",
+      "proves": "a shell from a reachable NFS export - a looted or planted SSH key, or a webshell on a writable share",
       "does_not_prove": "a shell when exports are squashed and hold nothing sensitive; no_root_squash is the stronger, separate privesc",
       "report": {
         "finding": "Sensitive/Writable NFS Export",
@@ -719,7 +736,10 @@
           "note": "Mount it. Read a home for an id_rsa to SSH in with, or (matching the owner's UID locally) write ~/.ssh/authorized_keys and then SSH: ssh -i key <user>@{{target}}; `id` confirms the foothold."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "recon-telnet",
@@ -788,7 +808,7 @@
         "foothold.linux"
       ],
       "priority": 60,
-      "proves": "an interactive login shell on the target over telnet — a foothold",
+      "proves": "an interactive login shell on the target over telnet - a foothold",
       "does_not_prove": "privilege beyond that account; escalate from the shell for the root flag",
       "report": {
         "finding": "Cleartext Telnet Login",
@@ -803,10 +823,13 @@
         {
           "tool": "hydra",
           "run": "hydra -L {{userlist}} -P {{wordlist}} telnet://{{target}}",
-          "note": "No credential yet? Brute it — telnet boxes lean on weak/default logins. A [23][telnet] host: ... login: ... password: ... line is your way in; then use the first command."
+          "note": "No credential yet? Brute it - telnet boxes lean on weak/default logins. A [23][telnet] host: ... login: ... password: ... line is your way in; then use the first command."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "recon-rservices",
@@ -881,7 +904,7 @@
         "access.admin"
       ],
       "priority": 60,
-      "proves": "a trusted-login shell over rlogin/rsh — a foothold, and root directly when the trust names root",
+      "proves": "a trusted-login shell over rlogin/rsh - a foothold, and root directly when the trust names root",
       "does_not_prove": "a shell when no .rhosts trust exists for your source; then fall back to a credential login",
       "report": {
         "finding": "Passwordless r-services Trust Login",
@@ -899,7 +922,11 @@
           "note": "The rsh form runs a single command across the trust; `uid=0(root)` confirms a passwordless root foothold."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux",
+        "access.admin"
+      ]
     },
     {
       "id": "recon-rsync",
@@ -969,7 +996,7 @@
         "foothold.linux"
       ],
       "priority": 58,
-      "proves": "code execution from a writable rsync module — a foothold via a planted key or webshell",
+      "proves": "code execution from a writable rsync module - a foothold via a planted key or webshell",
       "does_not_prove": "a shell when every module is read-only or sandboxed away from a useful path",
       "report": {
         "finding": "Writable rsync Module",
@@ -995,7 +1022,10 @@
           "note": "Confirm the planted-key login lands a shell; `uid=...` is your foothold."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "recon-tftp",
@@ -1081,7 +1111,10 @@
           "note": "If the TFTP root was the web root, your file is now served: run a command. `uid=...` is the foothold; swap in a reverse shell and catch it with the listener card."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "recon-x11",
@@ -1151,7 +1184,7 @@
         "credential.candidate"
       ],
       "priority": 50,
-      "proves": "secrets visible on the victim's desktop and keystrokes it typed — candidate credentials",
+      "proves": "secrets visible on the victim's desktop and keystrokes it typed - candidate credentials",
       "does_not_prove": "a shell by itself; the captured password still has to be used on SSH/su/sudo",
       "report": {
         "finding": "Unauthenticated X11 Session Access",
@@ -1164,7 +1197,7 @@
         {
           "tool": "xwd",
           "run": "xwd -root -display {{target}}:0 -out screen.xwd && convert screen.xwd screen.png",
-          "note": "Grab the current screen — terminals, password managers and chat windows routinely show secrets. Eyeball screen.png."
+          "note": "Grab the current screen - terminals, password managers and chat windows routinely show secrets. Eyeball screen.png."
         },
         {
           "tool": "xdotool",
@@ -1218,7 +1251,12 @@
           "note": "Request the uploaded script to execute it; a returned uid is your proof of RCE."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "ssh-user-enum",
@@ -1365,7 +1403,11 @@
         {
           "tool": "nmap",
           "run": "nmap -b anonymous:anonymous@{{target}} -p 1-1000 172.16.5.10",
-          "note": "Let nmap run the whole bounce scan: -b is the FTP relay, the trailing host is the internal target."
+          "note": "Let nmap run the whole bounce scan: -b is the FTP relay, the trailing host is the internal target.",
+          "settled_by": [
+            "ports.open",
+            "config.review"
+          ]
         }
       ],
       "requires_all": []
@@ -1420,7 +1462,10 @@
           "note": "The Metasploit module automates the trigger and the 6200 connect."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "proftpd-modcopy",
@@ -1471,7 +1516,12 @@
           "note": "After copying a PHP payload into the web root, call it. Swap id for a reverse-shell one-liner once it responds. Start nc -lvnp 4444 first."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "samba-usermap",
@@ -1523,7 +1573,10 @@
           "note": "The Metasploit module is the reliable alternative if the manual injection is awkward."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "smbghost",
@@ -1574,7 +1627,12 @@
           "note": "chompie1337's RCE proof of concept; edit the embedded shellcode to call back to {{lhost}}. It can BSOD the host, so snapshot first."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.windows",
+        "access.system",
+        "access.admin"
+      ]
     },
     {
       "id": "bluekeep",
@@ -1620,7 +1678,12 @@
           "note": "Set the correct target arch and VM profile; the wrong one BSODs the host instead of landing a shell."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.windows",
+        "access.system",
+        "access.admin"
+      ]
     },
     {
       "id": "freeswitch-esl",
@@ -1670,7 +1733,11 @@
           "note": "The PoC wraps auth and a reverse shell; start nc -lvnp 4444 first."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "jdwp-debug",
@@ -1682,7 +1749,9 @@
         "python",
         "git"
       ],
-      "os": [],
+      "os": [
+        "linux"
+      ],
       "phase": "access",
       "requires_any": [
         "port:8000",
@@ -1722,7 +1791,10 @@
           "note": "Runs as the JVM user; if JDWP is bound to localhost, reach it through a chisel or ligolo pivot. Start nc -lvnp 4444 first."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "aerospike-udf",
@@ -1775,7 +1847,10 @@
           "note": "Start nc -lvnp 4444 first; the UDF runs as the aerospike user."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "wifi-mouse-rce",
@@ -1821,11 +1896,14 @@
           "note": "The PoC sends unauthenticated file-exec events to run a reverse shell; start nc -lvnp 4444 first."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.windows"
+      ]
     },
     {
       "id": "nmap-host-unresponsive",
-      "title": "Nmap Says Host Is Down — Make It Answer",
+      "title": "Nmap Says Host Is Down - Make It Answer",
       "tool": "nmap",
       "tools": [
         "nmap"
@@ -1869,7 +1947,7 @@
     },
     {
       "id": "fix-name-resolution",
-      "title": "Could Not Resolve Host — Add It to /etc/hosts",
+      "title": "Could Not Resolve Host - Add It to /etc/hosts",
       "tool": "sh",
       "tools": [
         "sh"
@@ -1901,7 +1979,7 @@
         {
           "tool": "sh",
           "run": "curl -s -H 'Host: {{hostname}}' http://{{target}}/",
-          "note": "If a name resolves but the site shows a default page, it is virtual-host routed: the real site only answers to the right Host header — feed that name to vhost/content discovery."
+          "note": "If a name resolves but the site shows a default page, it is virtual-host routed: the real site only answers to the right Host header - feed that name to vhost/content discovery."
         }
       ],
       "requires_any": []
@@ -1975,7 +2053,8 @@
       ],
       "produces": [
         "credential.available",
-        "credential.hash"
+        "hash.candidate",
+        "credential.candidate"
       ],
       "priority": 68,
       "autonomy": "safe",
@@ -2058,7 +2137,10 @@
           "note": "Triggers reverse shell through the UnrealIRCd backdoor command pipeline."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "heartbleed-memory-leak",
@@ -2072,11 +2154,13 @@
       "os": [],
       "phase": "recon",
       "requires_any": [
-        "port:443"
+        "port:443",
+        "vuln.heartbleed"
       ],
       "produces": [
         "credential.available",
-        "loot.credentials"
+        "credential.candidate",
+        "loot.material"
       ],
       "priority": 79,
       "autonomy": "safe",
@@ -2153,6 +2237,10 @@
           "run": "nmap -p 139,445 --script smb-vuln-cve2007-2447 {{target}}",
           "note": "Scan target SMB daemon to confirm presence of vulnerable Samba 3.0.20 release."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux",
+        "access.admin"
       ]
     },
     {

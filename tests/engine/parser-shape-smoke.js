@@ -61,5 +61,21 @@ var p80 = nm.facts.filter(function (f) { return f.kind === 'port:80'; });
 ok(p80.length === 1, 'an nmap paste mints each port exactly once (shape does not duplicate the command parser)');
 ok(nm.facts.filter(function (f) { return f.kind === 'port:22'; }).length === 1 && p80.length === 1, 'consecutive simple port rows both parse (newline-safe nmap row regex)');
 
+// (6) service version upper-bound guards (TASK-03)
+var vsftpdVuln = kinds('21/tcp open ftp vsftpd 2.3.4', { scope: 'host:10.10.10.10' });
+var vsftpdPatched = kinds('21/tcp open ftp vsftpd 3.0.3', { scope: 'host:10.10.10.10' });
+ok(vsftpdVuln.set.indexOf('vuln.vsftpd_234') >= 0, 'vsftpd 2.3.4 mints vuln.vsftpd_234');
+ok(vsftpdPatched.set.indexOf('vuln.vsftpd_234') < 0, 'vsftpd 3.0.3 does NOT mint vuln.vsftpd_234');
+
+var sambaVuln = kinds('445/tcp open netbios-ssn Samba smbd 3.0.20-Debian', { scope: 'host:10.10.10.10' });
+var sambaPatched = kinds('445/tcp open microsoft-ds Samba smbd 4.9.5-Debian', { scope: 'host:10.10.10.10' });
+ok(sambaVuln.set.indexOf('vuln.samba_usermap') >= 0, 'Samba smbd 3.0.20-Debian mints vuln.samba_usermap');
+ok(sambaPatched.set.indexOf('vuln.samba_usermap') < 0, 'Samba smbd 4.9.5-Debian does NOT mint vuln.samba_usermap');
+
+var proftpdVuln = kinds('21/tcp open ftp ProFTPD 1.3.5 Server', { scope: 'host:10.10.10.10' });
+var proftpdPatched = kinds('21/tcp open ftp ProFTPD 1.3.8 Server', { scope: 'host:10.10.10.10' });
+ok(proftpdVuln.set.indexOf('vuln.proftpd_modcopy') >= 0, 'ProFTPD 1.3.5 Server mints vuln.proftpd_modcopy');
+ok(proftpdPatched.set.indexOf('vuln.proftpd_modcopy') < 0, 'ProFTPD 1.3.8 Server does NOT mint vuln.proftpd_modcopy');
+
 console.log('\nPARSER SHAPE SMOKE: ' + (fail ? fail + ' FAILURE(S)' : 'all passed'));
 process.exit(fail ? 1 : 0);

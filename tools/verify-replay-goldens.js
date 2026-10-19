@@ -73,6 +73,12 @@ load('assets/engine/parsers/blockers.js');
 load('assets/engine/parsers/creds.js');
 load('assets/engine/parsers/directory.js');
 load('assets/engine/parsers/index.js');
+load('assets/ui/ingest.js');
+load('assets/engine/chain.js');
+load('data/findings-catalog.js');
+load('assets/engine/findings.js');
+load('data/narratives.js');
+load('assets/engine/report.js');
 load('assets/ui/ctxbar.js');
 load('assets/ui/routes/path.js');
 
@@ -380,6 +386,54 @@ console.log('  Active Stage 6 Un-gated Read:', filledActiveRoot6[prefActiveRoot6
 assert(filledActiveRoot6[prefActiveRoot6].filled.includes('type C:\\Users\\Administrator\\Desktop\\root.txt'), 'Active Stage 6: Root read command un-gated');
 
 console.log('PASS: HTB Active 6-Stage Golden Replay 100% SUCCESSFUL!\n');
+
+// =========================================================================
+// TEST SUITE 3: ALL-SCOPE LENS, FLAG GATING, PROMPT EXTRACTION & REPORT AUDIT
+// =========================================================================
+console.log('--- TEST 3: ALL-SCOPE LENS, GATING & REPORT INVARIANTS ---');
+
+// 3a) Under 'all' ('beyond') scope lens at Forest Stage 6 (DCSync rights granted),
+// speculative moves (silver-ticket, printnightmare) must NOT outrank dcsync:
+sandbox.localStorage.getItem = (k) => (k === 'obol.scope.lens.v1' ? 'all' : null);
+createMockEng(Object.assign({}, forestParams, {
+  username: 'svc-alfresco',
+  password: 's3rvice'
+}), stage6Facts);
+const coach6All = OBOL.coach.compute();
+assert(coach6All.onFlow[0].id === 'dcsync', 'Stage 6 (All Lens): dcsync is #1 even under All scope lens');
+const top3Stage6All = coach6All.onFlow.slice(0, 3).map(m => m.id);
+assert(!top3Stage6All.includes('silver-ticket') && !top3Stage6All.includes('printnightmare'), 'Stage 6 (All Lens): speculative moves do not invade top 3');
+sandbox.localStorage.getItem = () => null;
+
+// 3b) Before objective.flag_located is minted, flag_path_local MUST be empty (gated)
+// even when username ('svc-alfresco') and foothold.windows are present:
+const preLocateFacts = stage4Facts.filter(f => !String(f.kind || '').startsWith('objective.flag_located') && !String(f.kind || '').startsWith('objective.local_flag'));
+createMockEng(Object.assign({}, forestParams, {
+  username: 'svc-alfresco',
+  password: 's3rvice'
+}), preLocateFacts);
+const ctxPreLocate = OBOL.command.buildContext(OBOL.store.factSet(), { params: OBOL.store.active().params });
+assert(!ctxPreLocate.flag_path_local, 'Pre-Locate Gate: ctx.flag_path_local is unset/gated until objective.flag_located is proven');
+
+// 3c) Prompt extraction on shell loops (for g in ...; do bloodyAD ...) and PowerShell Get-ChildItem:
+const splitLoop = OBOL.ingest.splitSession(
+  '┌──(kali㉿kali)-[~/obol/htb-forest]\n└─$ for g in \'Exchange Windows Permissions\'; do bloodyAD -d htb.local --host 10.129.110.123 -u svc-alfresco -p \'s3rvice\' add groupMember "$g" svc-alfresco; done\n[+] svc-alfresco added to Exchange Windows Permissions\n'
+);
+assert(splitLoop.length === 1 && splitLoop[0].command.startsWith('for g in'), 'Prompt Splitter: shell loop prompt is recognized and not dropped');
+assert(OBOL.ingest.extractTool(splitLoop[0].command) === 'bloodyad', 'Tool Extractor: shell loop unwraps inner bloodyad tool');
+
+const splitPs = OBOL.ingest.splitSession(
+  '*Evil-WinRM* PS C:\\Users\\svc-alfresco\\Documents> Get-ChildItem \'C:\\Users\\*\\Desktop\' -Recurse -Force -Include user.txt\nC:\\Users\\svc-alfresco\\Desktop\\user.txt\n'
+);
+assert(splitPs.length === 1 && splitPs[0].command.startsWith('Get-ChildItem'), 'Prompt Splitter: Evil-WinRM Get-ChildItem prompt is recognized');
+
+const splitSemi = OBOL.ingest.splitSession(
+  '*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> whoami; hostname; ipconfig; type C:\\Users\\Administrator\\Desktop\\root.txt\nhtb\\administrator\nFOREST\n'
+);
+assert(splitSemi.length === 1 && OBOL.ingest.extractTool(splitSemi[0].command) === 'whoami', 'Tool Extractor: trailing semicolon stripped from whoami;');
+
+console.log('PASS: All-Scope Lens, Flag Gating & Prompt Extraction Invariants 100% SUCCESSFUL!\n');
 console.log('===========================================================');
 console.log('ALL GOLDEN REPLAY ASSERTIONS PASSED WITH 100% SUCCESS!');
 console.log('===========================================================');
+

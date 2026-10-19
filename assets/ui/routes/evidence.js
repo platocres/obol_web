@@ -1,5 +1,5 @@
 /*!
- * obol ui — routes/evidence.js — paste tool output, mint facts, recompute the coach.
+ * obol ui - routes/evidence.js - paste tool output, mint facts, recompute the coach.
  * Uses OBOL.parsers when available; the paste is analyzed and
  * facts are added conservatively (parsers never invent facts). A manual fact composer is the
  * always-available fallback. When arrived via a coach "Paste result" jump, the pinned action
@@ -75,7 +75,7 @@
     return '<div class="fix-cards-container">' + cards.join('') + '</div>';
   }
 
-  // Whole-session import — the "catch me up on the entire box" panel. Paste a full terminal capture (or
+  // Whole-session import - the "catch me up on the entire box" panel. Paste a full terminal capture (or
   // attach several), obol splits it into per-command segments, stitches them chronologically, and runs
   // each through the same parsers. Collapsed by default so the single-command flow above stays primary.
   function importSection() {
@@ -91,15 +91,15 @@
         return '<option value="' + U.attr(ip) + '">' + esc(ip) + (t.hostname && t.ip ? (' · ' + t.hostname) : '') + '</option>';
       }).join('');
     return '<details class="ev-import"><summary>Import A Full Session <span class="ev-import-tag">Catch Up On The Whole Box</span></summary>'
-      + '<p class="ev-hint">Already deep into a box? Paste (or attach) your <strong>entire terminal</strong> from this run, every command and its output. obol splits it into per-command segments, orders them by time, skips duplicates, and mints facts from all of them at once, so the coach jumps straight to your real frontier.</p>'
-      + '<textarea id="ev-imp-text" class="ev-textarea" placeholder="Paste your whole session, many commands and all their output. obol finds each command by its prompt line." spellcheck="false"></textarea>'
+      + '<p class="ev-hint">Already deep into a box? Paste (or attach) your <strong>entire terminal</strong> from this run, every command and its output. OBOL splits it into per-command segments, orders them by time, skips duplicates, and mints facts from all of them at once, so the coach jumps straight to your real frontier.</p>'
+      + '<textarea id="ev-imp-text" class="ev-textarea" placeholder="Paste your whole session, many commands and all their output. OBOL finds each command by its prompt line." spellcheck="false"></textarea>'
       + '<label class="ev-imp-route"><span>Route Facts To</span><select id="ev-imp-target" class="ev-cmd">' + tOpts + '</select></label>'
       + '<div class="ev-hint ev-imp-route-hint">Auto-route reads the target IP from each command (<code>nxc smb 10.0.0.5</code>, <code>--host 10.0.0.5</code>…) and files its facts under that host, your VPN/<code>tun0</code> address is never treated as a target. New hosts you touch are added automatically. Pick a specific target to force everything onto one host.</div>'
       + '<details class="ev-imp-remap"><summary>Box got reverted? Remap an old IP</summary>'
       + '<div class="ev-imp-remap-row"><input id="ev-imp-oldip" class="ev-cmd" placeholder="old IP in your capture (e.g. 10.129.95.9)" autocomplete="off" spellcheck="false" inputmode="decimal">'
       + '<span class="ev-imp-arrow">→</span>'
       + '<input id="ev-imp-newip" class="ev-cmd" placeholder="' + esc((eng && eng.params && eng.params.target) || 'current target IP') + '" value="' + U.attr((eng && eng.params && eng.params.target) || '') + '" autocomplete="off" spellcheck="false" inputmode="decimal"></div>'
-      + '<div class="ev-hint">If the lab reset and the target IP changed, obol rewrites the old IP to the new one across the whole capture before parsing, so you don\'t have to hand-edit your log. New IP defaults to your current target.</div>'
+      + '<div class="ev-hint">If the lab reset and the target IP changed, OBOL rewrites the old IP to the new one across the whole capture before parsing, so you don\'t have to hand-edit your log. New IP defaults to your current target.</div>'
       + '</details>'
       + '<div class="ev-row">'
       + '<label class="ev-filebtn" for="ev-imp-file">⭱ Attach Session File(s)…</label>'
@@ -108,7 +108,7 @@
       + '</div>'
       + '<div id="ev-imp-result" class="ev-result"></div>'
       + '<details class="ev-import-setup"><summary>Set your terminal up like this (recommended, one-time)</summary>'
-      + '<p class="ev-hint">These are optional, but they make imports far more accurate, obol reads a UTC timestamp to stitch tabs in order, and your VPN IP to auto-fill <code>{{lhost}}</code> for coercion/relay/reverse-shell commands.</p>'
+      + '<p class="ev-hint">These are optional, but they make imports far more accurate, OBOL reads a UTC timestamp to stitch tabs in order, and your VPN IP to auto-fill <code>{{lhost}}</code> for coercion/relay/reverse-shell commands.</p>'
       + '<div class="ev-setup-step"><div class="ev-setup-lbl">1 · Stamp every prompt with the time + VPN IP <span class="ev-import-tag">Non-Destructive, Keeps Your Prompt</span></div>'
       + '<pre class="cmd-run"><code id="ev-stamp-code">' + esc(stamp) + '</code></pre>'
       + '<button class="ev-copy" data-copy="ev-stamp-code">Copy zsh Snippet</button>'
@@ -141,12 +141,15 @@
     var pin = pinnedAction(ctx);
     var parsersReady = !!(OBOL.parsers && OBOL.parsers.parseActionOutput);
     var pinBlock = '';
+    var pinCmd = '';
     var facts = OBOL.store.factSet();
     if (pin) {
-      var pinOpts = { params: (OBOL.store.active().params || {}), workspace: OBOL.workspace.tokens(OBOL.store.active()) };
+      var eng0 = OBOL.store.active() || {};
+      var pinOpts = { params: (eng0.params || {}), profile: eng0.profile, workspace: OBOL.workspace.tokens(eng0), activities: eng0.activities || [] };
       var pinIdx = (OBOL.command && OBOL.command.bestCommandIndex) ? OBOL.command.bestCommandIndex(pin, facts, pinOpts) : 0;
       var v = OBOL.command.fillCommand(pin, facts, pinOpts, pinIdx);
-      pinBlock = '<div class="ev-pin"><div class="ev-pin-h">Paste Result For</div>'
+      pinCmd = v.filled || '';
+      pinBlock = '<div class="ev-pin" data-pin-action="' + U.attr(pin.id) + '"><div class="ev-pin-h">Paste Result For</div>'
         + '<div class="ev-pin-title">' + esc(pin.title) + '</div>'
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre>'
         + '<div class="ev-pin-dnp">' + (pin.does_not_prove ? ('Remember: does not prove ' + esc(pin.does_not_prove)) : '') + '</div></div>';
@@ -160,7 +163,7 @@
       + '<div class="ev-paste">'
       + '<textarea id="ev-text" class="ev-textarea" placeholder="Select your whole terminal and paste it here, prompt, command, and all output. e.g.&#10;&#10;$ nmap -sC -sV -oN nmap/full 10.10.10.10&#10;Starting Nmap 7.94 ...&#10;PORT     STATE SERVICE&#10;53/tcp   open  domain&#10;88/tcp   open  kerberos-sec&#10;389/tcp  open  ldap&#10;..." spellcheck="false"></textarea>'
       + '<div class="ev-row">'
-      + '<input id="ev-cmd" class="ev-cmd" placeholder="command (auto-detected from your paste, only set this if the paste is output-only)" value="' + (pin ? U.attr(pin.command) : '') + '">'
+      + '<input id="ev-cmd" class="ev-cmd" placeholder="command (auto-detected from your paste, only set this if the paste is output-only)" value="' + (pin ? U.attr(pinCmd || pin.command || '') : '') + '">'
       + '<button id="ev-parse" class="btn-primary"' + (parsersReady ? '' : ' disabled') + '>' + (parsersReady ? 'Parse → Facts' : 'Loading parsers…') + '</button>'
       + '</div>'
       // Attach an output file for firehose tools too big to paste (bloodyAD, full ldapsearch,
@@ -176,7 +179,7 @@
       + importSection()
       + shotsSection()
       + '<details class="ev-manual"><summary>Add A Fact Manually</summary>'
-      + '<p class="ev-hint">Pick what you\'ve confirmed and the coach advances, use this when you did something obol\'s parsers can\'t read (a manual exploit, an unsupported tool).</p>'
+      + '<p class="ev-hint">Pick what you\'ve confirmed and the coach advances, use this when you did something OBOL\'s parsers can\'t read (a manual exploit, an unsupported tool).</p>'
       + '<div id="ev-factpick" class="fact-pick"></div>'
       + '</details>'
       + '</section>';
@@ -185,14 +188,24 @@
   // Ingest via the shared core (OBOL.ingest), then render the Evidence route's result panel.
   function ingest(text, cmd, meta) {
     meta = meta || {};
-    var r = OBOL.ingest.run({ text: text, command: cmd, source: meta.source, fileName: meta.fileName });
+    var pinEl = document.querySelector('.ev-pin[data-pin-action]');
+    var actionId = meta.actionId || (pinEl && pinEl.getAttribute('data-pin-action')) || '';
+    var r = OBOL.ingest.run({ text: text, command: cmd, source: meta.source, fileName: meta.fileName, actionId: actionId });
     if (!r.ok) {
       if (r.reason === 'empty') U.toast('Nothing to parse, the ' + (meta.fileName ? 'file' : 'paste') + ' is empty');
       else U.toast('Parsers not loaded yet');
       return;
     }
-    var origin = r.fileName ? (esc(r.fileName) + ' · ' + r.lines.toLocaleString() + ' lines') : null;
     var resEl = document.getElementById('ev-result');
+    if (r.arsenal && r.arsenal.ok) {
+      if (resEl) {
+        resEl.innerHTML = '<div class="ev-added">Loadout synced: ' + r.arsenal.present + ' tools ready, ' + r.arsenal.staged + ' staged, ' + (r.arsenal.wordlists || 0) + ' wordlists mapped.</div>'
+          + '<a class="btn-primary" href="#/loadout">Open Loadout -></a>';
+      }
+      U.toast('Loadout stocked ' + r.arsenal.present + ' tools, ' + r.arsenal.staged + ' staged');
+      return;
+    }
+    var origin = r.fileName ? (esc(r.fileName) + ' · ' + r.lines.toLocaleString() + ' lines') : null;
     var fixHtml = renderFixCards(OBOL.store.factSet());
     if (resEl) {
       if (!r.facts.length) {
@@ -223,7 +236,7 @@
     ingest((document.getElementById('ev-text') || {}).value || '',
       (document.getElementById('ev-cmd') || {}).value || '', { source: 'paste' });
   }
-  // Read an attached output file as text and ingest it (no upload — FileReader is local).
+  // Read an attached output file as text and ingest it (no upload - FileReader is local).
   var FILE_MAX = 25 * 1024 * 1024; // 25 MB guard: even huge AD dumps are well under this
   function ingestFile(file) {
     if (!file) return;
@@ -239,7 +252,7 @@
 
   // The coach's current top move, named for the post-import summary. Mirrors path.js's frontier
   // computation (retired 'done'/'empty' moves excluded, machine focus applied) so the summary points at
-  // the same move the coach will show. Best-effort — returns '' if anything is unavailable.
+  // the same move the coach will show. Best-effort - returns '' if anything is unavailable.
   function topNextMove() {
     try {
       // Prefer the shared coach computation so the post-import "Next move" matches the coach and hub

@@ -1,10 +1,10 @@
 /*!
- * obol ui — routes/playbooks.js — PLAYBOOKS (ordered runbooks).
- * A playbook is a named, ordered batch of pack actions — not a second engine. This surface
+ * obol ui - routes/playbooks.js - PLAYBOOKS (ordered runbooks).
+ * A playbook is a named, ordered batch of pack actions - not a second engine. This surface
  * lists the shipped runbooks (applicable ones, whose first step is offered on the current
  * facts, highlighted), and expanding one shows the step plan with each command FILLED from the
  * active engagement's facts + params (honoring per-step cmd variant + args_extra), per-step
- * require_approval marked, copy-per-step, and an "Export .sh" download. obol never runs a step —
+ * require_approval marked, copy-per-step, and an "Export .sh" download. obol never runs a step -
  * it generates the command text for a human to review and run externally.
  */
 (function (root) {
@@ -31,7 +31,7 @@
     };
   }
 
-  // The raw (unfilled) template for a step's variant — used to collect referenced {{tokens}}.
+  // The raw (unfilled) template for a step's variant - used to collect referenced {{tokens}}.
   function rawRun(step) {
     var a = step.action; if (!a) return '';
     var cmds = (a.commands && a.commands.length) ? a.commands : [{ run: a.command }];
@@ -63,14 +63,14 @@
     L.push('# OBOL playbook: ' + pb.title + ' (' + pb.name + ')');
     if (pb.description) L.push('# ' + pb.description);
     L.push('#');
-    L.push('# CAVEAT: obol generates command text only, it NEVER runs anything. Review every');
+    L.push('# CAVEAT: OBOL generates command text only, it NEVER runs anything. Review every');
     L.push('# command, confirm the target is in scope, and run each step yourself. A run is not');
     L.push('# a win: prove the result. Steps marked [REQUIRES APPROVAL] are noisy/risky.');
     L.push('# Generated ' + new Date().toISOString().slice(0, 10) + ' - browser-local, no backend.');
     L.push('set -o pipefail');
     L.push('');
 
-    // variables preamble — referenced tokens that the engagement can currently fill.
+    // variables preamble - referenced tokens that the engagement can currently fill.
     var refs = referencedTokens(resolved);
     var pre = [];
     refs.forEach(function (k) {
@@ -114,7 +114,7 @@
 
   function stepRow(step, i, facts, opts) {
     var approval = step.require_approval
-      ? '<span class="pill pill-warn" title="Noisy/risky, obol crafts on approval, never silently">requires approval</span>'
+      ? '<span class="pill pill-warn" title="Noisy/risky, OBOL crafts on approval, never silently">requires approval</span>'
       : '';
     if (!step.action) {
       return '<li class="pb-step pb-step-missing">'
@@ -172,7 +172,7 @@
     var html = '<section class="playbooks">';
     html += '<h1 class="route-h1">Playbooks</h1>';
     html += '<p class="route-sub">Ordered runbooks, a named batch of pack actions run as one deliberate move. '
-      + 'Each step is an existing pack action; obol only generates the command text, gated per step. '
+      + 'Each step is an existing pack action; OBOL only generates the command text, gated per step. '
       + 'Applicable runbooks (first step offered on your current facts) are highlighted.</p>';
 
     if (!all.length) {

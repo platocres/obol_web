@@ -1,5 +1,5 @@
 /*!
- * obol ui — routes/graph.js — the path graph surface (inline SVG from OBOL.graph).
+ * obol ui - routes/graph.js - the path graph surface (inline SVG from OBOL.graph).
  * Toggle between the live path (done + next) and the whole methodology DAG.
  */
 (function (root) {
@@ -15,7 +15,7 @@
     return '<section class="graph-route">'
       + '<div class="graph-head"><h1 class="route-h1">Path graph</h1>'
       + '<label class="graph-toggle"><input type="checkbox" id="g-all"' + (showAll ? ' checked' : '') + '> show whole methodology</label></div>'
-      + '<p class="route-sub">Proven facts and done/next moves on your current path, laid out by phase. Toggle to see every methodology branch obol can drive. Drag to pan, scroll to zoom.</p>'
+      + '<p class="route-sub">Proven facts and done/next moves on your current path, laid out by phase. Toggle to see every methodology branch OBOL can drive. Drag to pan, scroll to zoom.</p>'
       + (OBOL.graphview ? OBOL.graphview.html(svg) : '<div class="graph-scroll" id="g-scroll">' + svg + '</div>')
       + '</section>';
   }

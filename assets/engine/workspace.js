@@ -1,8 +1,8 @@
 /*!
- * obol engine — workspace.js
+ * obol engine - workspace.js
  * Models the on-disk working directory the operator runs commands from (their Kali box), so obol
  * web can fill concrete output paths into suggested commands and tell the user exactly where a
- * file landed and how to attach it. obol never touches the filesystem — this only *generates*
+ * file landed and how to attach it. obol never touches the filesystem - this only *generates*
  * paths and a one-time scaffold command; the operator runs it and attaches the results.
  *
  * The attacker box is Kali/Linux, so paths are POSIX. The layout
@@ -20,11 +20,15 @@
     return String(s || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'run';
   }
   // Sanitize a working-directory path the operator typed/pasted. obol drops the path into generated
-  // commands UNQUOTED (e.g. `-oN <root>/scans/…`), so a stray shell metacharacter — a `]`, or worse a
-  // `;`/backtick/`$(…)` — would leak into a command they paste into their own terminal. Strip shell-
+  // commands UNQUOTED (e.g. `-oN <root>/scans/…`), so a stray shell metacharacter - a `]`, or worse a
+  // `;`/backtick/`$(…)` - would leak into a command they paste into their own terminal. Strip shell-
   // special characters and whitespace; keep ordinary POSIX path characters (~ / . _ - and word chars).
   function sanitizeRoot(s) {
-    return String(s == null ? '' : s).trim()
+    var raw = String(s == null ? '' : s).trim();
+    var mPrompt = /\[([~\/][^\[\]\r\n]+)\]/.exec(raw);
+    if (mPrompt) raw = mPrompt[1].trim();
+    raw = raw.replace(/^cd\s+/i, '').replace(/^[^\/~]+(?=~\/)/, '');
+    return raw
       .replace(/[;&|`$(){}\[\]<>*?!'"\\\s]+/g, '')
       .replace(/\/{2,}/g, '/').replace(/\/+$/, '');
   }
@@ -105,7 +109,7 @@
   }
   // A one-shot snapshot of the working directory: list every file (path + size + mtime), wrapped in
   // markers so obol can find the block in a larger paste. The operator runs it and pastes the output
-  // back to fully synchronize the virtual workspace — obol confirms the files it predicted and adopts
+  // back to fully synchronize the virtual workspace - obol confirms the files it predicted and adopts
   // any it didn't know about. GNU find (Kali); hidden files skipped so ~/.zshrc etc. stay out.
   function snapshotCmd(eng) {
     var r = rootFor(eng) || '.';

@@ -1,5 +1,5 @@
 /*!
- * obol ui — lazy.js — route-lazy bundle loader. Injects <script> tags on demand (works over
+ * obol ui - lazy.js - route-lazy bundle loader. Injects <script> tags on demand (works over
  * file:// and http, unlike fetch). Keeps the critical boot path tiny: only the engine core +
  * coach/evidence/home/targets load up front; tools/domain/report/graph/checklist load on first
  * navigation. Missing files degrade gracefully (the route shows a "coming online" placeholder).
@@ -11,49 +11,49 @@
   // Files per group, in load order. Populated as bundles are built; tolerant of absent files.
   var GROUPS = {
     parsers: [
-      'assets/engine/parsers/common.js?v=d779003b',
-      'assets/engine/parsers/nmap.js?v=2b47ff03', 'assets/engine/parsers/directory.js?v=4a37e150',
-      'assets/engine/parsers/creds.js?v=e47843c7', 'assets/engine/parsers/host.js?v=a3d5205d',
-      'assets/engine/parsers/services.js?v=d86e3aea', 'assets/engine/parsers/database.js?v=0e407c6a',
-      'assets/engine/parsers/web.js?v=dff6fe62', 'assets/engine/parsers/websource.js?v=65a6766e',
-      'assets/engine/parsers/findings.js?v=135930d4', 'assets/engine/parsers/shape.js?v=7cc5a61b',
-      'assets/engine/parsers/pivot.js?v=f9381c5e', 'assets/engine/parsers/dns.js?v=7faf7efe',
-      'assets/engine/parsers/blockers.js?v=daf7ff29',
-      'assets/engine/parsers/nxc-catalog.js?v=1f7ec540',
-      'assets/engine/parsers/index.js?v=4958d998',
+      'assets/engine/parsers/common.js?v=de99f48c',
+      'assets/engine/parsers/nmap.js?v=666c66da', 'assets/engine/parsers/directory.js?v=b7c4100f',
+      'assets/engine/parsers/creds.js?v=bb91cbb9', 'assets/engine/parsers/host.js?v=1f9af98c',
+      'assets/engine/parsers/services.js?v=8886be39', 'assets/engine/parsers/database.js?v=46626db2',
+      'assets/engine/parsers/web.js?v=130dc93d', 'assets/engine/parsers/websource.js?v=ebd07eff',
+      'assets/engine/parsers/findings.js?v=a4a6a465', 'assets/engine/parsers/shape.js?v=98cd12a1',
+      'assets/engine/parsers/pivot.js?v=2b6ce000', 'assets/engine/parsers/dns.js?v=61c20f89',
+      'assets/engine/parsers/blockers.js?v=735aa9db',
+      'assets/engine/parsers/nxc-catalog.js?v=39713d06',
+      'assets/engine/parsers/index.js?v=fc760f4c',
     ],
-    graph: ['assets/engine/graph.js?v=96741069', 'assets/ui/routes/graph.js?v=e45ae25b'],
-    domain: ['assets/jszip.min.js?v=42bf78a9', 'assets/engine/bloodhound.js?v=196e49d0', 'assets/ui/bhgraph.js?v=18204e6c', 'assets/ui/routes/domain.js?v=4d95a7b4'],
-    report: ['assets/jszip.min.js?v=42bf78a9', 'data/reportmeta.js?v=ef155083', 'assets/engine/report.js?v=0a3837f6', 'assets/ui/routes/report.js?v=a4e9c6ee'],
+    graph: ['assets/engine/graph.js?v=96741069', 'assets/ui/routes/graph.js?v=860cfd69'],
+    domain: ['assets/jszip.min.js?v=42bf78a9', 'assets/engine/bloodhound.js?v=f47620d8', 'assets/ui/bhgraph.js?v=3c07276b', 'assets/ui/routes/domain.js?v=1df7dda3'],
+    report: ['assets/jszip.min.js?v=42bf78a9', 'data/reportmeta.js?v=ef155083', 'assets/engine/report.js?v=05981acf', 'assets/ui/routes/report.js?v=0e56772b'],
     tools: ['assets/engine/toolbuilder.js?v=2b09578c', 'data/toolset.js?v=14dcf727',
-      'data/tool-glossary.js?v=7d94ddfa', 'data/tool-recipes.js?v=19ed08c7', 'data/tool-stations.js?v=5a853a22',
-      'assets/engine/toolkit.js?v=c296c726', 'assets/engine/shellkit.js?v=9c85f7b9', 'assets/engine/pivotkit.js?v=a2abcbb3', 'assets/ui/pivotstation.js?v=89e32594', 'assets/engine/workbench.js?v=199b7b3f', 'assets/ui/bind.js?v=80976b39', 'assets/ui/routes/tools.js?v=6f3bdad3'],
-    loadout: ['assets/engine/arsenal.js?v=efd129ec', 'assets/ui/routes/loadout.js?v=50be148c'],
-    workbench: ['assets/engine/workbench.js?v=199b7b3f', 'assets/ui/routes/workbench.js?v=55f5a3ec'],
-    stuck: ['data/stuck-catalog.js?v=e76b3e66', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=fd21eba1'],
+      'data/tool-glossary.js?v=ecc13486', 'data/tool-recipes.js?v=19ed08c7', 'data/tool-stations.js?v=5a853a22',
+      'assets/engine/toolkit.js?v=c296c726', 'assets/engine/shellkit.js?v=9c85f7b9', 'assets/engine/pivotkit.js?v=8f13edb9', 'assets/ui/pivotstation.js?v=db8de9e9', 'assets/engine/workbench.js?v=d7f910b9', 'assets/ui/bind.js?v=f7ce1151', 'assets/ui/routes/tools.js?v=b1e72bcc'],
+    loadout: ['assets/engine/arsenal.js?v=c20665e7', 'assets/ui/routes/loadout.js?v=2b84d3a5'],
+    workbench: ['assets/engine/workbench.js?v=d7f910b9', 'assets/ui/routes/workbench.js?v=3119bf5b'],
+    stuck: ['data/stuck-catalog.js?v=e76b3e66', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=26416b60'],
     // Library folds Stuck? in as a sub-lens, so it carries Stuck?'s data+engine+route plus the ATT&CK
     // catalog/map (for the ATT&CK lens) and the library engine itself.
-    library: ['data/stuck-catalog.js?v=e76b3e66', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=fd21eba1',
+    library: ['data/stuck-catalog.js?v=e76b3e66', 'assets/engine/stuck.js?v=7bb9ce32', 'assets/ui/routes/stuck.js?v=26416b60',
       'data/attack-catalog.js?v=1fca5f0a', 'data/attack-move-map.js?v=69b57161',
-      'data/tool-glossary.js?v=7d94ddfa', 'data/tool-recipes.js?v=19ed08c7', 'data/tool-stations.js?v=5a853a22',
-      'assets/engine/toolbuilder.js?v=2b09578c', 'data/toolset.js?v=14dcf727', 'assets/engine/toolkit.js?v=c296c726', 'assets/ui/bind.js?v=80976b39',
-      'assets/engine/library.js?v=45dc2b64', 'assets/ui/routes/library.js?v=f79d9557'],
-    study: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b', 'assets/ui/routes/study.js?v=e13b77a8'],
+      'data/tool-glossary.js?v=ecc13486', 'data/tool-recipes.js?v=19ed08c7', 'data/tool-stations.js?v=5a853a22',
+      'assets/engine/toolbuilder.js?v=2b09578c', 'data/toolset.js?v=14dcf727', 'assets/engine/toolkit.js?v=c296c726', 'assets/ui/bind.js?v=f7ce1151',
+      'assets/engine/library.js?v=45dc2b64', 'assets/ui/routes/library.js?v=b765f5bb'],
+    study: ['data/study-fixtures.js?v=67738f4a', 'assets/engine/study.js?v=b4f6b12b', 'assets/ui/routes/study.js?v=febc1728'],
     // data-only slice of the study group (the ~1MB sample-output fixtures + the replay engine, no Learn
     // route UI). The coach background-loads this after mount so "See It Run" can show real example output
     // in Next Steps without putting the fixtures on the critical boot path.
-    studydata: ['data/study-fixtures.js?v=74aaac1e', 'assets/engine/study.js?v=b4f6b12b'],
-    decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=69efd90c', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=2317deac', 'assets/engine/decisionmap.js?v=72d3dcb7', 'assets/ui/decisiontree.js?v=910ea8b0'],
-    checklist: ['data/oscp-scope.js?v=ebf0ff68', 'assets/ui/routes/checklist.js?v=ff1f5ef9'],
-    target: ['assets/engine/graph.js?v=96741069', 'assets/ui/routes/target.js?v=3e9e5e4a'],
-    creds: ['assets/ui/routes/creds.js?v=7a3c7d37'],
-    scoreboard: ['assets/ui/routes/scoreboard.js?v=2dfeb512'],
-    playbooks: ['data/playbooks-bundle.js?v=d8be47ce', 'assets/engine/playbooks.js?v=e8879ec8', 'assets/ui/routes/playbooks.js?v=bc699900'],
-    cruise: ['data/playbooks-bundle.js?v=d8be47ce', 'assets/engine/playbooks.js?v=e8879ec8', 'assets/engine/cruise.js?v=d32b13c9', 'assets/engine/pivotkit.js?v=a2abcbb3', 'assets/ui/pivotstation.js?v=89e32594', 'assets/ui/routes/cruise.js?v=41d4644a'],
-    map: ['assets/engine/engmap.js?v=49eca2a8', 'assets/ui/routes/map.js?v=3a19112a'],
-    findings: ['data/attack-catalog.js?v=1fca5f0a', 'data/attack-move-map.js?v=69b57161', 'data/d3fend-map.js?v=24188198', 'data/frameworks-tables.js?v=5f75b2bc', 'data/kev-catalog.js?v=45ae87a9', 'assets/engine/frameworks.js?v=c304a986', 'assets/ui/routes/findings.js?v=3caadf2f'],
-    history: ['assets/ui/routes/history.js?v=5fb9bd10'],
-    help: ['data/help-content.js?v=9cceaccc', 'assets/ui/routes/help.js?v=d864ef28'],
+    studydata: ['data/study-fixtures.js?v=67738f4a', 'assets/engine/study.js?v=b4f6b12b'],
+    decisionmap: ['data/decision-forks.js?v=c0723934', 'data/parser-signatures.js?v=3f503c12', 'data/coverage-expected.js?v=9a4bb92f', 'data/flag-reach.js?v=e8d6c84a', 'assets/engine/decisionmap.js?v=23cfa96f', 'assets/ui/decisiontree.js?v=b2010390'],
+    checklist: ['data/oscp-scope.js?v=ebf0ff68', 'assets/ui/routes/checklist.js?v=2ceebfe3'],
+    target: ['assets/engine/graph.js?v=96741069', 'assets/ui/routes/target.js?v=5bf5b977'],
+    creds: ['assets/ui/routes/creds.js?v=f69235fa'],
+    scoreboard: ['assets/ui/routes/scoreboard.js?v=5dff636a'],
+    playbooks: ['data/playbooks-bundle.js?v=d8be47ce', 'assets/engine/playbooks.js?v=e8879ec8', 'assets/ui/routes/playbooks.js?v=47989518'],
+    cruise: ['assets/engine/arsenal.js?v=c20665e7', 'data/playbooks-bundle.js?v=d8be47ce', 'assets/engine/playbooks.js?v=e8879ec8', 'assets/engine/cruise.js?v=f5dd14cf', 'assets/engine/pivotkit.js?v=8f13edb9', 'assets/ui/pivotstation.js?v=db8de9e9', 'assets/ui/routes/cruise.js?v=bfdf99e1'],
+    map: ['assets/engine/engmap.js?v=39184f97', 'assets/ui/routes/map.js?v=8d44aa6c'],
+    findings: ['data/attack-catalog.js?v=1fca5f0a', 'data/attack-move-map.js?v=69b57161', 'data/d3fend-map.js?v=24188198', 'data/frameworks-tables.js?v=5f75b2bc', 'data/kev-catalog.js?v=45ae87a9', 'assets/engine/frameworks.js?v=c304a986', 'assets/ui/routes/findings.js?v=ae41ead2'],
+    history: ['assets/ui/routes/history.js?v=4b600b99'],
+    help: ['data/help-content.js?v=58ca514f', 'assets/ui/routes/help.js?v=8dfce8ba'],
   };
 
   var _loaded = {};   // group -> Promise
@@ -79,7 +79,7 @@
     var p = files.reduce(function (acc, src) {
       return acc.then(function (allOk) { return loadScript(src).then(function (ok) { return allOk && ok; }); });
     }, Promise.resolve(true));
-    // Don't cache a group that didn't fully load — a retry (e.g. the next paste) re-attempts the
+    // Don't cache a group that didn't fully load - a retry (e.g. the next paste) re-attempts the
     // missing file instead of running the engine with a helper permanently undefined.
     p.then(function (allOk) { if (!allOk) delete _loaded[name]; });
     _loaded[name] = p;

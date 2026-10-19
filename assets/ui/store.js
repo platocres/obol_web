@@ -146,8 +146,63 @@
       checklist: {},       // {actionId: true}
       bloodhound: null,    // domain analysis summary
       facts: [],           // serialized OBOL.facts
-      ui: {},              // per-engagement UI state (active target, path zoom/pan, …)
+      ui: {},              // per-engagement UI state (active target, path zoom/pan, ...)
+      _rev: 1,
     };
+  }
+
+  function normalizeEngagement(raw) {
+    var base = newEngagement(raw && raw.name != null ? String(raw.name) : '');
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
+    var e = Object.assign(base, raw);
+    e.name = e.name == null ? '' : String(e.name);
+    e.profile = (e.profile && typeof e.profile === 'object' && !Array.isArray(e.profile))
+      ? Object.assign({ platform: 'custom', machine_type: '', candidate: '', osid: '', scope: [] }, e.profile)
+      : { platform: 'custom', machine_type: '', candidate: '', osid: '', scope: [] };
+    if (!Array.isArray(e.profile.scope)) e.profile.scope = [];
+    e.params = (e.params && typeof e.params === 'object' && !Array.isArray(e.params)) ? e.params : {};
+    e.targets = Array.isArray(e.targets) ? e.targets.filter(function (t) { return t && typeof t === 'object'; }) : [];
+    e.credentials = Array.isArray(e.credentials) ? e.credentials.filter(function (c) { return c && typeof c === 'object'; }) : [];
+    e.activities = Array.isArray(e.activities) ? e.activities.filter(function (a) { return a && typeof a === 'object'; }) : [];
+    e.checklist = (e.checklist && typeof e.checklist === 'object' && !Array.isArray(e.checklist)) ? e.checklist : {};
+    e.facts = Array.isArray(e.facts) ? e.facts.filter(function (f) { return f && typeof f === 'object' && f.kind; }) : [];
+    var localFlagMap = {};
+    e.facts.forEach(function (f) {
+      if (f.kind === 'proof.captured' && f.value && f.value.flag && f.value.block) {
+        var fl = String(f.value.flag).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var reLocal = new RegExp('===FLAG:[^\\r\\n]*(?:user|local)\\.txt::[\\s\\S]{0,160}?' + fl, 'i');
+        if (reLocal.test(f.value.block)) {
+          localFlagMap[f.value.flag] = 1;
+          f.value.kind = 'objective.local_flag';
+          f.value.slot = 'local';
+          if (f.value.name === 'proof.txt') f.value.name = 'user.txt';
+          if (f.value.path === 'proof.txt') f.value.path = 'user.txt';
+        }
+      }
+    });
+    e.facts = e.facts.filter(function (f) {
+      if (f.kind === 'objective.root_flag' && f.value && f.value.flag && localFlagMap[f.value.flag]) {
+        f.kind = 'objective.local_flag';
+        f.value.slot = 'local';
+        if (f.value.name === 'proof.txt') f.value.name = 'user.txt';
+        if (f.value.path === 'proof.txt') f.value.path = 'user.txt';
+      }
+      if ((f.kind === 'pivot.candidate' || f.kind === 'scan.local.routes' || f.kind === 'scan.local.interfaces') && f.value && Array.isArray(f.value.subnets)) {
+        if (f.value.subnets.indexOf('0.0.0.0/3') >= 0) {
+          f.value.subnets = f.value.subnets.filter(function (s) { return s !== '0.0.0.0/3' && s !== '10.0.0.0/8'; });
+          if (f.kind === 'pivot.candidate' && (!Array.isArray(f.value.interfaces) || f.value.interfaces.length < 2) && f.value.subnets.length <= 1) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
+    e.ui = (e.ui && typeof e.ui === 'object' && !Array.isArray(e.ui)) ? e.ui : {};
+    e._rev = (e._rev || 0) + 1;
+    if (!e.params.target && e.targets.length && (e.targets[0].ip || e.targets[0].id)) {
+      e.params.target = e.targets[0].ip || e.targets[0].id;
+    }
+    return e;
   }
 
   // ---- change notification ----
@@ -182,7 +237,14 @@
 
   function scheduleSave(id) {
     var targetId = id || _activeId;
-    if (targetId) _dirtyIds[targetId] = true;
+    if (targetId) {
+      _dirtyIds[targetId] = true;
+      var eng = _mem.engagements[targetId];
+      if (eng) {
+        eng.updatedAt = Date.now();
+        eng._rev = (eng._rev || 0) + 1;
+      }
+    }
     if (_saveTimer) return;
     _saveTimer = setTimeout(function () {
       flushSave();
@@ -201,14 +263,25 @@
         _db = await openDB();
         _useIDB = true;
         var list = await idbGetAll('engagements');
-        list.forEach(function (e) { _mem.engagements[e.id] = e; });
+        list.forEach(function (e) { if (e && e.id) _mem.engagements[e.id] = normalizeEngagement(e); });
         var act = await idbGet('settings', 'activeEngagement');
         _activeId = (act && act.value) || null;
       } catch (e) {
         _useIDB = false;
         try {
           var snap = JSON.parse(localStorage.getItem(LS_SNAPSHOT) || 'null');
-          if (snap) { _mem.engagements = snap.engagements || {}; _activeId = snap.activeId || null; }
+          if (snap) {
+            var rawMap = snap.engagements || {};
+            _mem.engagements = {};
+            Object.keys(rawMap).forEach(function (k) {
+              if (rawMap[k] && typeof rawMap[k] === 'object') {
+                var ne = normalizeEngagement(rawMap[k]);
+                ne.id = rawMap[k].id || k;
+                _mem.engagements[ne.id] = ne;
+              }
+            });
+            _activeId = snap.activeId || null;
+          }
         } catch (e2) {}
       }
       // One-time cleanup: the removed legacy auto-migration left auto-imported engagements in
@@ -277,7 +350,17 @@
     async deleteEngagement(id) {
       delete _mem.engagements[id];
       if (_useIDB && _db) await idbDelete('engagements', id).catch(function () {});
-      if (_activeId === id) _activeId = Object.keys(_mem.engagements)[0] || null;
+      var remaining = Object.keys(_mem.engagements);
+      if (!remaining.length) {
+        var fresh = newEngagement('');
+        _mem.engagements[fresh.id] = fresh;
+        _activeId = fresh.id;
+        await this._persistEngagement(fresh);
+      } else if (_activeId === id || !_mem.engagements[_activeId]) {
+        _activeId = remaining[0];
+      }
+      await this.setSetting('activeEngagement', _activeId).catch(function () {});
+      if (!_useIDB || !_db) snapshotFallback();
       emit('active');
     },
     // Delete every engagement (keeps appearance prefs). The caller reloads; init() then seeds a
@@ -333,14 +416,18 @@
     async importData(data) {
       var list = [];
       if (!data || typeof data !== 'object') return 0;
-      if (Array.isArray(data.engagements)) list = data.engagements;
-      else if (data.engagement && typeof data.engagement === 'object') list = [data.engagement];
-      else if (data.id || Array.isArray(data.facts) || typeof data.name === 'string') list = [data];   // a bare engagement object
+      if (Array.isArray(data)) list = data;
+      else if (Array.isArray(data.engagements)) list = data.engagements;
+      else if (data.engagement && typeof data.engagement === 'object' && !Array.isArray(data.engagement)) list = [data.engagement];
+      else if (data.id || Array.isArray(data.facts) || Array.isArray(data.targets) || typeof data.name === 'string') list = [data];   // a bare engagement object
       var added = 0;
       for (var i = 0; i < list.length; i++) {
-        var e = list[i];
-        if (!e || typeof e !== 'object' || (typeof e.name !== 'string' && !e.id && !Array.isArray(e.facts))) continue;
-        e.name = e.name || '';
+        var raw = list[i];
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)
+          || (typeof raw.name !== 'string' && !raw.id && !Array.isArray(raw.facts) && !Array.isArray(raw.targets))) continue;
+        var cloned;
+        try { cloned = JSON.parse(JSON.stringify(raw)); } catch (err) { continue; }
+        var e = normalizeEngagement(cloned);
         e.id = uid('eng');
         e.importedAt = Date.now();
         e.updatedAt = Date.now();
@@ -366,7 +453,7 @@
     // ---- facts (as OBOL.facts, stored serialized on the engagement) ----
     factSet() {
       var eng = this.active();
-      var arr = (eng && eng.facts) || [];
+      var arr = ((eng && eng.facts) || []).filter(function (f) { return f && typeof f === 'object' && f.kind; });
       var fs = new OBOL.facts.FactSet(arr.map(OBOL.facts.factFromJson));
       return fs;
     },
@@ -386,22 +473,62 @@
         }
       }, 'active-target');
     },
-    // A per-target FactSet: this host's facts + domain-/engagement-scoped facts (mirrors
-    // obol ws.facts_for_target so a target ranks by its own progress).
+    // A per-target FactSet: this host's facts + applicable domain-/engagement-scoped facts.
+    // Unscanned targets in multi-target engagements do not inherit other hosts' domain credentials/loot
+    // until they have been scanned, and non-AD Linux hosts do not inherit Windows AD/DC compromise facts.
     factSetForTarget(ip) {
       var eng = this.active();
-      var arr = (eng && eng.facts) || [];
+      var arr = ((eng && eng.facts) || []).filter(function (f) { return f && typeof f === 'object' && f.kind; });
       var hostScope = 'host:' + ip;
+      var multiTarget = ((eng && eng.targets) || []).length > 1 || arr.some(function (f) {
+        return f && f.scope && f.scope.indexOf('host:') === 0 && f.scope !== hostScope && f.scope !== 'host:target';
+      });
+      var hostFacts = arr.filter(function (f) { return f && (f.scope === hostScope || (!multiTarget && f.scope === 'host:target')); });
+      var hasHostActivity = hostFacts.some(function (f) {
+        return f.state === 'supported' && f.kind.indexOf('target.') !== 0
+          && f.kind !== 'host.hostname' && f.kind !== 'host.domain' && f.kind !== 'host.fqdn';
+      });
+      if (multiTarget && !hasHostActivity) {
+        return new OBOL.facts.FactSet(hostFacts.map(OBOL.facts.factFromJson));
+      }
+      var isLinux = hostFacts.some(function (f) {
+        if (f.state !== 'supported') return false;
+        if (f.kind === 'foothold.linux' || f.kind === 'os.linux') return true;
+        if (f.kind === 'host.os_family' || f.kind === 'host.os_hint') {
+          var fam = String((f.value && f.value.family) || '').toLowerCase();
+          return fam === 'linux' || fam === 'unix';
+        }
+        return false;
+      }) && !hostFacts.some(function (f) {
+        return f.state === 'supported' && (f.kind === 'foothold.windows' || f.kind === 'os.windows'
+          || ((f.kind === 'host.os_family' || f.kind === 'host.os_hint') && String((f.value && f.value.family) || '').toLowerCase() === 'windows'));
+      });
+      var hasAdOrSmb = hostFacts.some(function (f) {
+        return f.state === 'supported' && /^(smb|ldap|kerberos|winrm)\.reachable$|^ad\.dc_candidate$|^port:(445|389|636|88|5985|5986)$/.test(f.kind);
+      });
+      var isDc = !multiTarget || hostFacts.some(function (f) {
+        return f.state === 'supported' && /^(kerberos\.reachable|ad\.dc_candidate|port:(88|3268|3269))$/.test(f.kind);
+      });
+      var DC_ONLY_DOMAIN_RE = /^(access\.admin|loot\.ntds|hash\.krbtgt|persistence\.domain|ad\.(acl_lead|control_paths|attack_paths|group_joined|domain_control)|adcs\.vulnerable)$/;
       var sel = arr.filter(function (f) {
         var s = f.scope || '';
-        return s === hostScope || s.indexOf('domain:') === 0 || s === '' || s.indexOf('scope:') === 0;
+        if (s === hostScope || (!multiTarget && s === 'host:target')) return true;
+        if (s === '' || s.indexOf('scope:') === 0) return !multiTarget || hasHostActivity;
+        if (s.indexOf('domain:') === 0) {
+          if (isLinux && !hasAdOrSmb) {
+            return s === 'domain:domain' && (f.kind.indexOf('credential.') === 0 || f.kind.indexOf('dns.') === 0);
+          }
+          if (!isDc && DC_ONLY_DOMAIN_RE.test(f.kind)) return false;
+          return true;
+        }
+        return false;
       });
       return new OBOL.facts.FactSet(sel.map(OBOL.facts.factFromJson));
     },
     // The identity of a target at a glance: IP + the hostname and AD domain obol has proven for it (or
     // the domain the operator scoped). Both the target page and the engagement Attack Path render this,
     // so "Hostname: FOREST / Domain: corp.local" fills in the moment the fact is captured. Empty strings
-    // for anything not yet known — the caller decides whether to show the slot or hide it.
+    // for anything not yet known - the caller decides whether to show the slot or hide it.
     targetIdentity(ip) {
       var eng = this.active() || {};
       var params = eng.params || {};
@@ -416,8 +543,8 @@
         return '';
       }
       var fqdn = first('host.fqdn', ['fqdn', 'name']);
-      var hostname = (tgt.hostname || first('host.hostname', ['name']) || (fqdn ? fqdn.split('.')[0] : '')).trim();
-      var domain = (first('host.domain', ['domain']) || first('ad.domain_known', ['name']) || (params.domain || '')).trim();
+      var hostname = (tgt.hostname || first('host.hostname', ['name', 'hostname']) || (fqdn ? fqdn.split('.')[0] : '')).trim();
+      var domain = (first('host.domain', ['domain', 'name']) || first('ad.domain_known', ['name', 'domain']) || (params.domain || '')).trim();
       var os = (tgt.os || (OBOL.targets && OBOL.targets.hostOs ? OBOL.targets.hostOs(fs, tgt) : '') || '').trim();
       return { ip: realIp, hostname: hostname, domain: domain, fqdn: fqdn, os: os };
     },
@@ -425,9 +552,10 @@
       // facts: array of OBOL.facts (or serialized). Returns count actually added (deduped).
       var eng = this.active();
       if (!eng) return 0;
-      var fs = new OBOL.facts.FactSet((eng.facts || []).map(OBOL.facts.factFromJson));
+      var fs = new OBOL.facts.FactSet((eng.facts || []).filter(Boolean).map(OBOL.facts.factFromJson).filter(Boolean));
       var added = 0, addedKinds = [];
       (facts || []).forEach(function (f) {
+        if (!f) return;
         var fact = f.kind ? (f.state ? f : OBOL.facts.factFromJson(f)) : null;
         if (fact && fs.add(fact)) { added++; addedKinds.push(fact.kind); }
       });
@@ -441,6 +569,14 @@
             var name = String(v.name || v.hostname || v.fqdn || '').split('.')[0];
             if (!name) return;
             (eng.targets || []).forEach(function (tg) { if (tg.ip === ip && !tg.hostname) tg.hostname = name; });
+          }
+          if ((f.kind === 'ad.domain_known' || f.kind === 'ad.domain' || f.kind === 'host.domain') && f.state === SUP) {
+            var dv = f.value || {};
+            var dName = String(dv.domain || dv.name || '').trim().replace(/0\.$/, '').replace(/\.$/, '');
+            if (dName && dName.toLowerCase() !== 'domain' && dName.toLowerCase() !== 'workgroup' && dName.indexOf('.') > 0) {
+              eng.params = eng.params || {};
+              if (!eng.params.domain) eng.params.domain = dName;
+            }
           }
           if ((f.kind === 'host.os_hint' || f.kind === 'host.os' || f.kind === 'host.os_family') && f.state === SUP && String(f.scope).indexOf('host:') === 0) {
             var ipOs = f.scope.slice(5), ov = f.value || {};
@@ -457,10 +593,12 @@
           if (isCredFact && f.state === SUP) {
             var cv = f.value || {};
             var u = String(cv.user || cv.username || '').trim();
-            var isNT = (cv.secret_type === 'NT' || cv.secretType === 'NT');
-            var h = String(cv.nthash || cv.hash || (isNT ? (cv.secret || cv.password || '') : '') || '').trim();
-            var p = isNT ? '' : String(cv.secret || cv.password || '').trim();
-            var d = String(cv.domain || '').trim();
+            var rawH = String(cv.nthash || cv.hash || '').trim();
+            var rawP = String(cv.secret || cv.password || '').trim();
+            var isNT = (cv.secret_type === 'NT' || cv.secretType === 'NT' || cv.hash_type === 'ntlm' || (!!rawH && !rawP));
+            var h = String(rawH || (isNT ? rawP : '') || '').trim();
+            var p = isNT ? '' : rawP;
+            var d = String(cv.domain || '').trim() || ((f.scope && f.scope.indexOf('domain:') === 0 && f.scope !== 'domain:domain') ? f.scope.slice(7) : '');
             var st = isNT ? 'NT' : (cv.secretType || cv.secret_type || 'password');
             if (u && (p || h)) {
               eng.credentials = eng.credentials || [];
@@ -477,8 +615,18 @@
                   secret: p || '',
                   nthash: h || '',
                   secretType: st,
+                  source: 'proven',
+                  scope: f.scope || '',
                   notes: 'Discovered via ' + (cv.method || f.source || 'evidence')
                 });
+              }
+              eng.params = eng.params || {};
+              var isAdmFact = (f.kind === 'credential.admin' || f.type === 'credential.admin');
+              if (!eng.params.username || (isAdmFact && !/^(?:administrator|root)$/i.test(eng.params.username))) {
+                eng.params.username = u;
+                if (h && !p) { eng.params.nthash = h; eng.params.password = ''; }
+                else if (p) { eng.params.password = p; eng.params.nthash = ''; }
+                if (d && !eng.params.domain) eng.params.domain = d;
               }
             }
           }

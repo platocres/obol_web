@@ -377,9 +377,9 @@
       }).join('');
       return '<div class="lib-tcol" style="--tac:' + hue + '"><h3 class="lib-tcol-h">' + esc(tacticName(tid)) + '</h3><div class="lib-tcol-cells">' + cells + '</div></div>';
     }).join('');
-    var detail = _aSel ? attackDetailHtml(_aSel, techs) : '<div class="lib-tdetail lib-tdetail-empty"><p>Select a technique to see the obol moves and commands behind it.</p></div>';
+    var detail = _aSel ? attackDetailHtml(_aSel, techs) : '<div class="lib-tdetail lib-tdetail-empty"><p>Select a technique to see the OBOL moves and commands behind it.</p></div>';
     return '<div class="lib-lens lib-lens-attack">'
-      + '<p class="lib-attack-intro">Every ATT&CK technique obol can perform, with the moves and commands behind each. This is what obol <em>can</em> do, the whole lineup. For what you have actually done on a box, see the Findings tab\'s matrix.</p>'
+      + '<p class="lib-attack-intro">Every ATT&CK technique OBOL can perform, with the moves and commands behind each. This is what OBOL <em>can</em> do, the whole lineup. For what you have actually done on a box, see the Findings tab\'s matrix.</p>'
       + '<div class="lib-attack-split"><div class="lib-matrix">' + cols + '</div>' + detail + '</div></div>';
   }
   function attackDetailHtml(code, techs) {
@@ -400,14 +400,14 @@
     return '<div class="lib-tdetail" style="--tac:' + hue + '">'
       + '<div class="lib-tdetail-head"><span class="lib-tdetail-id">' + esc(t.id) + '</span><h3 class="lib-tdetail-n">' + esc(t.name) + '</h3></div>'
       + '<div class="lib-ttags">' + tactics + '</div>'
-      + '<h4 class="lib-tdetail-sub">obol Moves (' + t.moves.length + ')</h4><ul class="lib-tmoves">' + moveList + '</ul>'
+      + '<h4 class="lib-tdetail-sub">OBOL Moves (' + t.moves.length + ')</h4><ul class="lib-tmoves">' + moveList + '</ul>'
       + link + '</div>';
   }
 
   // ════════════════════════════════════════════════════════════════════════════════════════════════
   // SHELL + RENDER
   // ════════════════════════════════════════════════════════════════════════════════════════════════
-  var INTRO = '<p class="lib-intro">Browse everything obol knows. No ranking, no engagement needed: the full lineup of moves and commands, mapped onto ATT&CK, yours to explore.</p>';
+  var INTRO = '<p class="lib-intro">Browse everything OBOL knows. No ranking, no engagement needed: the full lineup of moves and commands, mapped onto ATT&CK, yours to explore.</p>';
 
   function lensBody() {
     if (_lens === 'moves') return movesLensHtml();
@@ -421,6 +421,12 @@
     var lens = (ctx.args && ctx.args[0]) || 'moves';
     if (!LENSES.some(function (t) { return t.id === lens; })) lens = 'moves';
     _lens = lens;
+    if (ctx && ctx.query) {
+      var qm = /(?:^|&)q=([^&]*)/.exec(ctx.query);
+      if (qm && qm[1]) {
+        try { _mQ = decodeURIComponent(qm[1]); } catch (e) { _mQ = qm[1]; }
+      }
+    }
     return '<section class="library lib-lens-' + _lens + '">'
       + '<div class="lib-head"><h1 class="route-h1">Library</h1>' + INTRO + '</div>'
       + tabsHtml()

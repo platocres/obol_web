@@ -1,5 +1,5 @@
 /*!
- * obol ui — routes/checklist.js — the attack-chain checklist: the FULL pack catalogue of EVERY command
+ * obol ui - routes/checklist.js - the attack-chain checklist: the FULL pack catalogue of EVERY command
  * obol has inventoried, grouped by phase (collapsible) then by the move the commands share (collapsible
  * sub-group), each command its own tickable row. Three signals per command: a manual tick (persisted),
  * a "ran" marker that grays a command obol detects in this engagement's Run Log, and a "needs: ..." hint
@@ -95,7 +95,7 @@
       : '';
     var html = '<section class="checklist">'
       + '<div class="chk-top"><h1 class="route-h1">Checklist</h1>' + toggle + '</div>'
-      + '<p class="route-sub">Every command obol has inventoried, grouped by attack-chain phase then by move. Tick a command when you run it; a command obol already saw in your Run Log is <span class="chk-ran-k">grayed</span>. Add any command to the <strong>Playbook</strong> (lower right) to build a runnable script. ' + totalCmds + ' commands across ' + pack.length + ' moves, ' + doneCmds + ' ticked.' + scopeNote + '</p>';
+      + '<p class="route-sub">Every command OBOL has inventoried, grouped by attack-chain phase then by move. Tick a command when you run it; a command OBOL already saw in your Run Log is <span class="chk-ran-k">grayed</span>. Add any command to the <strong>Playbook</strong> (lower right) to build a runnable script. ' + totalCmds + ' commands across ' + pack.length + ' moves, ' + doneCmds + ' ticked.' + scopeNote + '</p>';
 
     var railItems = [];
     OBOL.phases.PHASES.forEach(function (p) {
@@ -127,7 +127,7 @@
           return '<div class="chk-row' + (on ? ' done' : '') + (ran ? ' ran' : '') + '">'
             + '<label class="chk-tick"><input type="checkbox" data-chk="' + attr(key) + '"' + (on ? ' checked' : '') + ' aria-label="Mark run"></label>'
             + cmd
-            + '<div class="chk-row-r">' + (ran ? '<span class="chk-ran" title="obol detected this command in your Run Log">ran</span>' : '') + note
+            + '<div class="chk-row-r">' + (ran ? '<span class="chk-ran" title="OBOL detected this command in your Run Log">ran</span>' : '') + note
             + '<button type="button" class="chk-add' + (inPb ? ' on' : '') + '" data-pb-add="' + attr(key) + '" title="' + (inPb ? 'In the playbook' : 'Add to playbook') + '" aria-label="Add to playbook">' + ic('chain') + (inPb ? '<span class="chk-add-k">In</span>' : '') + '</button></div>'
             + '</div>';
         }).join('');
@@ -268,10 +268,11 @@
     }
     // anchor the slide-out panel to the top of the content area (below the app header + context bar) so
     // those stay usable while the playbook is open; on narrow screens it falls back to a full-height drawer.
+    var viewEl = document.getElementById('view') || mount.firstElementChild || mount;
     var pn = mount.querySelector('#pb-panel');
     if (pn) {
       if (window.innerWidth > 860) {
-        var top = Math.max(0, Math.round(mount.getBoundingClientRect().top));
+        var top = Math.max(0, Math.round(viewEl.getBoundingClientRect().top));
         pn.style.top = top + 'px'; pn.style.height = (window.innerHeight - top) + 'px';
       } else { pn.style.top = ''; pn.style.height = ''; }
     }
@@ -279,7 +280,7 @@
     // checklist border rather than floating over the app's left sidebar. Mobile keeps the CSS fallback.
     var rail = mount.querySelector('#chk-rail');
     if (rail) {
-      if (window.innerWidth > 860) { rail.style.left = Math.max(0, Math.round(mount.getBoundingClientRect().left)) + 'px'; }
+      if (window.innerWidth > 860) { rail.style.left = Math.max(0, Math.round(viewEl.getBoundingClientRect().left)) + 'px'; }
       else { rail.style.left = ''; }
     }
     // persist each collapsible's open state (toggle does not bubble); bind once per node.

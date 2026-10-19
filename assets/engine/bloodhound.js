@@ -1,6 +1,6 @@
 /*!
- * obol engine — bloodhound.js
- * BloodHound / SharpHound ingestion — turn a SharpHound/BloodHound-CE export into an
+ * obol engine  -  bloodhound.js
+ * BloodHound / SharpHound ingestion  -  turn a SharpHound/BloodHound-CE export into an
  * engagement-wide domain overlay, entirely client-side. Upload a collection zip (or the
  * loose JSON files), get a census (Domain/Enterprise Admins, Kerberoastable, AS-REP,
  * unconstrained delegation, DCSync principals, broad local-admin, DA sessions, execution
@@ -12,7 +12,7 @@
  * so every property read is case-insensitive and nesting-tolerant.
  *
  * CONSERVATIVE POSTURE (carried over from the Python): collection is NOT access. Recording
- * `ad.graph.collected` proves the graph was collected and names the domain — it never proves
+ * `ad.graph.collected` proves the graph was collected and names the domain  -  it never proves
  * a usable control path. An `ad.attack_paths` fact is a LEAD (the edges exist in the collected
  * data), never a claim the path was walked. A DA/EA census is recon context, not a win.
  *
@@ -25,13 +25,13 @@
  * The heavy work (parse + census + path derivation) is pure and can run either on the main
  * thread (call OBOL.bloodhound.* directly) or off it via workers/bloodhound-worker.js. When
  * workers are unavailable (e.g. file://), the caller simply runs OBOL.bloodhound on the main
- * thread — same functions, same results.
+ * thread  -  same functions, same results.
  */
 (function (root) {
   'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
 
-  // ── Universal Windows well-known RIDs / SIDs — Microsoft constants, identical in EVERY
+  // ── Universal Windows well-known RIDs / SIDs  -  Microsoft constants, identical in EVERY
   // Active Directory (not a lab fact). Used only to give a bare SID a readable label; the
   // collection's own name map always wins. ────────────────────────────────────────────────
   var WELL_KNOWN_RID = {
@@ -64,7 +64,7 @@
   };
   var MEMBER_ACE = { AddMember: 1, AddSelf: 1 };
 
-  // ACE right-names that ARE (or grant) domain replication — on the domain object = DCSync.
+  // ACE right-names that ARE (or grant) domain replication  -  on the domain object = DCSync.
   var DCSYNC_RIGHTS = { GetChangesAll: 1, DCSync: 1 };
   var DCSYNC_OWNING = { GenericAll: 1, WriteDacl: 1, Owns: 1, AllExtendedRights: 1 }; // let you GRANT DCSync
 
@@ -103,7 +103,7 @@
   }
 
   // A readable label for a SID: the collection's own name first, then a universal well-known
-  // RID/SID, else the raw SID (honest — never a guess).
+  // RID/SID, else the raw SID (honest  -  never a guess).
   function resolveSid(sid, names) {
     var s = String(sid == null ? '' : sid).trim();
     if (!s) return '';
@@ -122,7 +122,7 @@
     return s.indexOf('S-1-5-21-') === 0 && !!BROAD_PRINCIPAL_RID[s.substring(s.lastIndexOf('-') + 1)];
   }
 
-  // The domain portion of a machine SID — S-1-5-21-a-b-c for S-1-5-21-a-b-c-<rid>. Empty for a
+  // The domain portion of a machine SID  -  S-1-5-21-a-b-c for S-1-5-21-a-b-c-<rid>. Empty for a
   // well-known/built-in SID. Used to tell a foreign-domain principal (across a trust) from a local one.
   function domainOfSid(sid) {
     var s = String(sid == null ? '' : sid).trim();
@@ -141,7 +141,7 @@
   }
 
   // Fold one BloodHound object into the reachability graph: its identity, the ACEs OTHER
-  // principals hold over it (control edges), and — for a group — its members (MemberOf edges).
+  // principals hold over it (control edges), and  -  for a group  -  its members (MemberOf edges).
   function indexObject(graph, kind, o) {
     var sid = sidOf(o);
     if (!sid) return;
@@ -171,6 +171,9 @@
       else if (base === 'ENTERPRISE ADMINS') graph.ea_sid = sid;
     } else if (kind === 'domains') {
       graph.domain_sid = sid;
+    } else if (kind === 'users' || kind === 'computers') {
+      var pgSid = prop(o, 'primarygroupsid');
+      if (pgSid) graph.members.push([sid, String(pgSid)]);
     }
   }
 
@@ -342,7 +345,7 @@
     });
     summary.da_sessions = sessions;
 
-    // execution reach: a broad, low-privilege population that can RDP/PSRemote/DCOM to a host —
+    // execution reach: a broad, low-privilege population that can RDP/PSRemote/DCOM to a host  - 
     // instant lateral movement with any domain credential. Broad-only (a single user's right is routine).
     [['rdp', 'rdp_reach'], ['psremote', 'psremote_reach'], ['dcom', 'dcom_reach']].forEach(function (pair) {
       var reach = [];
@@ -353,7 +356,7 @@
     });
 
     // foreign principals: a group member whose SID belongs to a DIFFERENT domain than this
-    // collection's — a foreign security principal reached over a trust.
+    // collection's  -  a foreign security principal reached over a trust.
     var ourDom = domainOfSid(dom) || domainOfSid(daSid) || domainOfSid(g.ea_sid || '');
     var privGroups = {};
     if (daSid) privGroups[daSid] = 1;
@@ -384,13 +387,91 @@
     return null;
   }
 
+  var EDGE_RANK = {
+    MemberOf: 0, GenericAll: 1, WriteDacl: 2, AddSelf: 3, AddMember: 4,
+    GenericWrite: 5, WriteOwner: 6, Owns: 7, AllExtendedRights: 8,
+    ForceChangePassword: 9, AddKeyCredentialLink: 10, GetChangesAll: 11,
+    DCSync: 11, GetChanges: 12, WriteSPN: 13, AddAllowedToAct: 14,
+    AllowedToAct: 15, ReadGMSAPassword: 16, ReadLAPSPassword: 17, SyncLAPSPassword: 18
+  };
+  function edgeRank(e) { return EDGE_RANK[e] !== undefined ? EDGE_RANK[e] : 50; }
+
+  // Build deduplicated adjacency from graph.members and graph.control:
+  // - Collapses parallel edges between the same (src, dst) pair to the highest-priority edge
+  //   (recording additional control edges in `alts`) so paths never repeat the exact same node
+  //   sequence multiple times just because a principal holds several ACEs on the same target.
+  // - Filters out non-abusable ACEs and read-only GetChanges edges on the domain object that
+  //   lack GetChangesAll/DCSync/GetChangesInFilteredSet (e.g. Enterprise Read-Only DCs).
+  function buildDeduplicatedGraph(graph) {
+    var domSid = graph.domain_sid || '';
+    var domRightsBySrc = {};
+    (graph.control || []).forEach(function (e) {
+      if (e[2] === domSid) (domRightsBySrc[e[0]] = domRightsBySrc[e[0]] || {})[e[1]] = 1;
+    });
+    function validControl(src, right, dst) {
+      if (!ABUSABLE_ACE[right]) return false;
+      if (dst === domSid) {
+        if (DCSYNC_OWNING[right] || right === 'WriteOwner' || DCSYNC_RIGHTS[right]) return true;
+        if (right === 'GetChanges') {
+          var r = domRightsBySrc[src] || {};
+          return !!(r.GetChangesAll || r.DCSync || r.GetChangesInFilteredSet);
+        }
+        return false;
+      }
+      return true;
+    }
+    var adjMap = {}, hasEdge = {}, radj = {};
+    (graph.members || []).forEach(function (e) {
+      var k = e[0] + '\u0000' + e[1];
+      if (!hasEdge[k]) {
+        hasEdge[k] = 1;
+        adjMap[k] = { src: e[0], dst: e[1], edge: 'MemberOf', alts: [] };
+        (radj[e[1]] = radj[e[1]] || []).push(e[0]);
+      }
+    });
+    (graph.control || []).forEach(function (e) {
+      var src = e[0], right = e[1], dst = e[2];
+      if (!validControl(src, right, dst)) return;
+      var k = src + '\u0000' + dst;
+      if (!hasEdge[k]) {
+        hasEdge[k] = 1;
+        (radj[dst] = radj[dst] || []).push(src);
+      }
+      if (!adjMap[k]) {
+        adjMap[k] = { src: src, dst: dst, edge: right, alts: [right] };
+      } else {
+        if (adjMap[k].alts.indexOf(right) < 0) adjMap[k].alts.push(right);
+        if (adjMap[k].edge !== 'MemberOf' && edgeRank(right) < edgeRank(adjMap[k].edge)) {
+          adjMap[k].edge = right;
+        }
+      }
+    });
+    var adj = {};
+    Object.keys(adjMap).forEach(function (k) {
+      var item = adjMap[k];
+      (adj[item.src] = adj[item.src] || []).push(item);
+    });
+    var goals = {};
+    if (graph.da_sid) goals[graph.da_sid] = 1;
+    if (graph.domain_sid) goals[graph.domain_sid] = 1;
+    var dist = {}, rq = [];
+    Object.keys(goals).forEach(function (g) { dist[g] = 0; rq.push(g); });
+    for (var qi = 0; qi < rq.length; qi++) {
+      var node = rq[qi], d = dist[node];
+      (radj[node] || []).forEach(function (src) {
+        if (dist[src] === undefined) { dist[src] = d + 1; rq.push(src); }
+      });
+    }
+    return { adj: adj, radj: radj, hasEdge: hasEdge, goals: goals, dist: dist };
+  }
+
   // Enumerate the paths from a principal we OWN to Domain Admins or the domain object, over
   // BloodHound's own collected edges (group memberships + control ACEs). A bounded query on the
   // data BloodHound gathered. Returns {paths, first}: `paths` is a length-sorted list of hop-chains
   // (each hop {from, edge, to, to_kind}); `first` is the first abusable edge on the SHORTEST path.
   // Because a browser tool has no engagement credential store, the owned principals are passed in
-  // explicitly (the user picks/enters them). With none given, returns {paths:[], first:null} —
-  // census-only, no path derivation — gracefully.
+  // explicitly (the user picks/enters them). With none given, returns {paths:[], first:null} -
+  // census-only, no path derivation - gracefully.
   function ownedPaths(summary, ownedPrincipals, opts) {
     opts = opts || {};
     var maxPaths = opts.maxPaths || 16;
@@ -405,48 +486,67 @@
     var owned = [];
     (ownedPrincipals || []).forEach(function (u) {
       var key = String(u == null ? '' : u).split('@')[0].toLowerCase();
-      if (key in nameToSid) owned.push(nameToSid[key]);
+      if (key in nameToSid && owned.indexOf(nameToSid[key]) < 0) owned.push(nameToSid[key]);
     });
-    var goals = {};
-    if (graph.da_sid) goals[graph.da_sid] = 1;
-    if (graph.domain_sid) goals[graph.domain_sid] = 1;
+    var dg = buildDeduplicatedGraph(graph);
+    var goals = dg.goals, adj = dg.adj, hasEdge = dg.hasEdge, distToGoal = dg.dist;
     if (!owned.length || !Object.keys(goals).length) return { paths: [], first: null };
-
-    var adj = {};
-    (graph.members || []).forEach(function (e) { (adj[e[0]] = adj[e[0]] || []).push(['MemberOf', e[1]]); });
-    (graph.control || []).forEach(function (e) { (adj[e[0]] = adj[e[0]] || []).push([e[1], e[2]]); });
 
     var found = [];
     var types = graph.types || {};
-
-    // BREADTH-first over simple paths (FIFO), so goal-reaching paths come out shortest-first: a path
-    // is only ever extended by one hop, and a parent is dequeued before its children, so the first goal
-    // hit is a globally shortest route (its hop count matches nearestToGoal's). A plain DFS could fill
-    // maxPaths with long routes before reaching the short one and report a too-long "shortest". A node-
-    // expansion budget guards a dense graph. Every owned principal seeds the frontier.
     var budget = opts.budget || 50000;
-    var q = [], spent = 0;
-    owned.forEach(function (sid) { var v = {}; v[sid] = 1; q.push({ node: sid, hops: [], visited: v }); });
-    for (var qi = 0; qi < q.length && found.length < maxPaths && spent < budget; qi++) {
-      var cur = q[qi]; spent++;
-      if (cur.hops.length >= maxDepth) continue;
-      var out = adj[cur.node] || [];
-      for (var i = 0; i < out.length; i++) {
-        var edge = out[i][0], dst = out[i][1];
-        if (cur.visited[dst]) continue; // simple paths only (no cycles)
-        var hop = { from: names[cur.node] || cur.node, edge: edge, to: names[dst] || dst, to_kind: types[dst] || '' };
-        if (goals[dst]) {
-          found.push(cur.hops.concat([hop]));
-          if (found.length >= maxPaths) break;
-          continue; // a goal ends the path; don't extend past it
+    var spent = 0;
+
+    // Run chordless shortest-first BFS per owned principal so every owned account is represented
+    // and clique detours (A -> B -> C when A -> C already exists) are pruned cleanly.
+    owned.forEach(function (sid) {
+      var startDist = distToGoal[sid];
+      var v0 = {}; v0[sid] = 1;
+      var q = [{ node: sid, nodes: [sid], hops: [], visited: v0 }];
+      var pFound = [];
+      for (var qi = 0; qi < q.length && pFound.length < maxPaths && spent < budget; qi++) {
+        var cur = q[qi]; spent++;
+        if (cur.hops.length >= maxDepth) continue;
+        var out = adj[cur.node] || [];
+        var curDist = distToGoal[cur.node];
+        for (var i = 0; i < out.length; i++) {
+          var item = out[i], edge = item.edge, dst = item.dst;
+          if (cur.visited[dst]) continue;
+          if (distToGoal[dst] === undefined) continue;
+          if (!goals[dst]) {
+            if (cur.hops.length > 0 && curDist === 1) continue; // cur.node already directly reaches a goal
+            if (startDist === 1 && cur.hops.length > 0 && distToGoal[dst] >= curDist) continue;
+          }
+          // Chordless path check: skip if an ancestor on this path already had a direct edge to dst.
+          var chord = false;
+          for (var ai = 0; ai < cur.nodes.length - 1; ai++) {
+            if (hasEdge[cur.nodes[ai] + '\u0000' + dst]) { chord = true; break; }
+          }
+          if (chord) continue;
+          var hop = { from: names[cur.node] || cur.node, edge: edge, to: names[dst] || dst, to_kind: types[dst] || '' };
+          if (item.alts && item.alts.length > 1) hop.alt_edges = item.alts.slice();
+          var nextHops = cur.hops.concat([hop]);
+          if (goals[dst]) {
+            pFound.push(nextHops);
+            if (pFound.length >= maxPaths) break;
+            continue;
+          }
+          var nv = Object.assign({}, cur.visited); nv[dst] = 1;
+          q.push({ node: dst, nodes: cur.nodes.concat([dst]), hops: nextHops, visited: nv });
         }
-        var nv = Object.assign({}, cur.visited); nv[dst] = 1;
-        q.push({ node: dst, hops: cur.hops.concat([hop]), visited: nv });
       }
-    }
+      pFound.forEach(function (p) { found.push(p); });
+    });
+
     if (!found.length) return { paths: [], first: null };
-    found.sort(function (a, b) { return a.length - b.length; }); // stable; BFS order is already shortest-first
-    return { paths: found, first: firstAbusable(found[0]) };
+    found.sort(function (a, b) { return a.length - b.length; });
+    if (found.length > maxPaths) found = found.slice(0, maxPaths);
+    var firstAbuse = null;
+    for (var fi = 0; fi < found.length; fi++) {
+      firstAbuse = firstAbusable(found[fi]);
+      if (firstAbuse) break;
+    }
+    return { paths: found, first: firstAbuse };
   }
 
   // Shortest hop-count from every node to a Domain-Admin goal, via ONE reverse BFS over the same
@@ -457,18 +557,8 @@
     opts = opts || {};
     var graph = (summary && summary._graph) || {};
     var names = graph.names || {}, types = graph.types || {};
-    var goals = {};
-    if (graph.da_sid) goals[graph.da_sid] = 1;
-    if (graph.domain_sid) goals[graph.domain_sid] = 1;
-    var radj = {};
-    (graph.members || []).forEach(function (e) { (radj[e[1]] = radj[e[1]] || []).push(e[0]); });
-    (graph.control || []).forEach(function (e) { (radj[e[2]] = radj[e[2]] || []).push(e[0]); });
-    var dist = {}, q = [];
-    Object.keys(goals).forEach(function (g) { dist[g] = 0; q.push(g); });
-    for (var qi = 0; qi < q.length; qi++) {
-      var node = q[qi], d = dist[node];
-      (radj[node] || []).forEach(function (src) { if (dist[src] === undefined) { dist[src] = d + 1; q.push(src); } });
-    }
+    var dg = buildDeduplicatedGraph(graph);
+    var goals = dg.goals, dist = dg.dist;
     var out = [];
     Object.keys(dist).forEach(function (sid) {
       if (goals[sid] || dist[sid] === 0) return;
@@ -493,16 +583,15 @@
     var nameToSid = {};
     Object.keys(names).forEach(function (sid) { var k = String(names[sid]).split('@')[0].toLowerCase(); if (!(k in nameToSid)) nameToSid[k] = sid; });
     var start = nameToSid[String(principal == null ? '' : principal).split('@')[0].toLowerCase()];
-    if (!start) return { principal: principal, controls: [], groups: [], count: 0 };
-    var adj = {};
-    (graph.members || []).forEach(function (e) { (adj[e[0]] = adj[e[0]] || []).push(['MemberOf', e[1]]); });
-    (graph.control || []).forEach(function (e) { (adj[e[0]] = adj[e[0]] || []).push([e[1], e[2]]); });
+    if (!start) return { principal: principal, controls: [], groups: [], count: 0, inbound: [] };
+    var dg = buildDeduplicatedGraph(graph);
+    var adj = dg.adj;
     var seen = {}; seen[start] = 1;
     var q = [{ sid: start, hops: 0 }], ctrl = {}, groups = {};
     for (var qi = 0; qi < q.length; qi++) {
       var cur = q[qi]; if (cur.hops >= maxDepth) continue;
-      (adj[cur.sid] || []).forEach(function (pair) {
-        var edge = pair[0], dst = pair[1];
+      (adj[cur.sid] || []).forEach(function (item) {
+        var edge = item.edge, dst = item.dst;
         if (edge === 'MemberOf') { if (/group/.test(String(types[dst] || ''))) groups[names[dst] || dst] = 1; }
         else if (!ctrl[dst] || ctrl[dst].hops > cur.hops + 1) ctrl[dst] = { name: names[dst] || dst, type: types[dst] || '', edge: edge, hops: cur.hops + 1 };
         if (!seen[dst]) { seen[dst] = 1; q.push({ sid: dst, hops: cur.hops + 1 }); }
@@ -510,7 +599,20 @@
     }
     var list = Object.keys(ctrl).map(function (k) { return ctrl[k]; });
     list.sort(function (a, b) { return a.hops - b.hops || (a.name < b.name ? -1 : 1); });
-    return { principal: principal, controls: list, groups: Object.keys(groups).sort(), count: list.length };
+    var inMap = {};
+    (graph.control || []).forEach(function (e) {
+      if (e[2] !== start || e[0] === start) return;
+      var srcName = names[e[0]] || '';
+      if (!srcName || isBroadPrincipal(e[0]) || /^S-1-\d+-\d+$/.test(srcName)) return;
+      var right = e[1];
+      if (!ABUSABLE_ACE[right]) return;
+      if (!inMap[srcName] || edgeRank(right) < edgeRank(inMap[srcName].edge)) {
+        inMap[srcName] = { name: srcName, type: types[e[0]] || '', edge: right };
+      }
+    });
+    var inbound = Object.keys(inMap).map(function (k) { return inMap[k]; });
+    inbound.sort(function (a, b) { return edgeRank(a.edge) - edgeRank(b.edge) || (a.name < b.name ? -1 : 1); });
+    return { principal: principal, controls: list, groups: Object.keys(groups).sort(), count: list.length, inbound: inbound };
   }
 
   // The per-principal weaknesses the collection ITSELF indicates for one account: the flags
@@ -718,29 +820,42 @@
     gpos: 'gpo', ous: 'ou', containers: 'container',
   };
 
-  // Merge the owned→DA path chains (each {hops:[…]}) into a node/edge graph the tab renders
+  // Merge the owned->DA path chains (each {hops:[...]}) into a node/edge graph the tab renders
   // BloodHound-style: nodes typed and placed by depth, deduplicated control edges between them.
-  function pathsToGraph(paths) {
+  function pathsToGraph(paths, ownedPrincipals, summary) {
     var nodes = {};
     var edges = [];
     var seen = {};
+    var rawGraph = (summary && summary._graph) || {};
+    var rawNames = rawGraph.names || {}, rawTypes = rawGraph.types || {};
+    var sidByShort = {}, typeByShort = {};
+    Object.keys(rawNames).forEach(function (sid) {
+      var sh = label(rawNames[sid]).toUpperCase();
+      if (!sidByShort[sh]) {
+        sidByShort[sh] = sid;
+        typeByShort[sh] = NODE_TYPE[String(rawTypes[sid] || 'user').toLowerCase()] || 'user';
+      }
+    });
     (paths || []).forEach(function (p, pi) {
-      var hops = p.hops || [];
+      var hops = p.hops || (Array.isArray(p) ? p : []);
       if (hops.length) {
         var srcName = hops[0].from;
-        if (!nodes[srcName]) nodes[srcName] = { id: srcName, label: srcName, type: 'user', depth: 0, paths: [] };
+        var srcType = typeByShort[String(srcName).toUpperCase()] || 'user';
+        if (!nodes[srcName]) nodes[srcName] = { id: srcName, label: srcName, type: srcType, depth: 0, paths: [] };
         nodes[srcName].paths.push(pi);
       }
       hops.forEach(function (h, i) {
         var to = h.to;
-        var kind = NODE_TYPE[String(h.to_kind || '').toLowerCase()] || (i === hops.length - 1 ? 'domain' : 'group');
+        var kind = NODE_TYPE[String(h.to_kind || '').toLowerCase()] || typeByShort[String(to).toUpperCase()] || (i === hops.length - 1 ? 'domain' : 'group');
         var n = nodes[to] || (nodes[to] = { id: to, label: to, type: kind, depth: i + 1, paths: [] });
         n.depth = Math.max(n.depth, i + 1);
         if (kind !== 'group' || n.type === 'group') n.type = kind;
+        if (i === hops.length - 1) n.goal = true;
         n.paths.push(pi);
         var key = h.from + '\u0000' + to + '\u0000' + h.edge;
         if (!seen[key]) {
           var ed = { from: h.from, to: to, edge: h.edge, path: pi, paths: [pi] };
+          if (h.alt_edges && h.alt_edges.length > 1) ed.alt_edges = h.alt_edges.slice();
           seen[key] = ed;
           edges.push(ed);
         } else if (seen[key].paths.indexOf(pi) < 0) {
@@ -748,13 +863,28 @@
         }
       });
     });
+    var deadEnds = [];
+    (ownedPrincipals || []).forEach(function (u) {
+      var sh = label(u).toUpperCase();
+      if (!sh || !sidByShort[sh] || nodes[sh]) return;
+      var sid = sidByShort[sh];
+      if (sid === rawGraph.da_sid || sid === rawGraph.domain_sid) return;
+      nodes[sh] = { id: sh, label: sh, type: typeByShort[sh] || 'user', depth: 0, paths: [], deadEnd: true };
+      if (deadEnds.indexOf(sh) < 0) deadEnds.push(sh);
+    });
     var uniqSort = function (arr) { return Object.keys(arr.reduce(function (a, x) { a[x] = 1; return a; }, {})).map(Number).sort(function (a, b) { return a - b; }); };
     Object.keys(nodes).forEach(function (k) { nodes[k].paths = uniqSort(nodes[k].paths); });
     edges.forEach(function (ed) { ed.paths = uniqSort(ed.paths); });
-    return { nodes: Object.keys(nodes).map(function (k) { return nodes[k]; }), edges: edges, count: (paths || []).length };
+    return {
+      nodes: Object.keys(nodes).map(function (k) { return nodes[k]; }),
+      edges: edges,
+      count: (paths || []).length,
+      paths: (paths || []).map(function (p) { return p.hops || (Array.isArray(p) ? p : []); }),
+      deadEnds: deadEnds
+    };
   }
 
-  // ── PlumHound-style domain view (the Domain tab model) ────────────────────────────────────
+  // -- PlumHound-style domain view (the Domain tab model) ------------------------------------
   function label(x) {
     var s = String(x == null ? '' : x).trim();
     return s.indexOf('@') >= 0 ? s.split('@')[0] : s;
@@ -767,7 +897,7 @@
     ctx = ctx || {};
     var u = (ownedPrincipals && ownedPrincipals.length) ? label(ownedPrincipals[0]) : 'USER';
     // Fill from the engagement where we know it: the DC/target host, and the owned account's secret
-    // (an NT hash as -H, or a password as -p '…'). Unknown values keep their operator placeholders.
+    // (an NT hash as -H, or a password as -p '...'). Unknown values keep their operator placeholders.
     var dc = ctx.dc || 'DC';
     var domain = summary.domain || 'DOMAIN';
     var sec = ctx.secret || "-p ''";
@@ -821,7 +951,7 @@
   }
 
   // The Domain tab's model: a PlumHound-style board of canned high-value queries answered from the
-  // summary, plus the derived owned→Domain-Admins path(s). Pure — no network, no writes.
+  // summary, plus the derived owned->Domain-Admins path(s). Pure - no network, no writes.
   function domainView(summary, ownedPrincipals, ctx) {
     summary = summary || {};
     var sections = [];
@@ -834,19 +964,19 @@
 
     sec('asrep', 'AS-REP Roastable Users',
         'DONT_REQ_PREAUTH accounts, request the AS-REP and crack it offline, no credential needed.',
-        summary.asrep_roastable, 'obol AS-REP roasts + cracks these automatically');
+        summary.asrep_roastable, 'OBOL AS-REP roasts + cracks these automatically');
     sec('kerberoast', 'Kerberoastable Users',
         'Accounts with an SPN, request a TGS ticket and crack it offline.',
-        summary.kerberoastable, 'obol Kerberoasts these');
+        summary.kerberoastable, 'OBOL Kerberoasts these');
     sec('da', 'Domain Admins', 'Full control of the domain, the usual objective.', summary.domain_admins);
     sec('ea', 'Enterprise Admins', 'Forest-wide control (all domains).', summary.enterprise_admins);
     sec('dcsync', 'Can DCSync the Domain', 'Principals holding replication rights (or the ACL to grant '
         + 'them) on the domain object, they can already pull every hash. Where you land, this is the win.',
-        summary.dcsync_principals, 'obol secretsdumps once you become one of these');
-    sec('unconstrained', 'Unconstrained Delegation', 'Computers that cache any authenticating user’s TGT '
+        summary.dcsync_principals, 'OBOL secretsdumps once you become one of these');
+    sec('unconstrained', 'Unconstrained Delegation', 'Computers that cache any authenticating user\'s TGT '
         + 'coerce a DC to authenticate, capture its TGT, and you own the domain.',
-        summary.unconstrained_delegation, 'obol coerces + captures the TGT');
-    sec('adminto', 'Domain Users → Local Admin', 'Hosts where a broad, low-privilege group is a local '
+        summary.unconstrained_delegation, 'OBOL coerces + captures the TGT');
+    sec('adminto', 'Domain Users -> Local Admin', 'Hosts where a broad, low-privilege group is a local '
         + 'administrator, instant lateral movement with any domain account.',
         summary.admin_to, 'log in and dump credentials');
     sec('sessions', 'Where a Domain Admin Is Logged In', 'Live DA sessions, land on this host and steal '
@@ -855,11 +985,11 @@
         + 'a host with a credential you hold.', summary.can_rdp, 'xfreerdp / nxc rdp');
     sec('winrm', 'Can WinRM', 'Principals who can open a WinRM / evil-winrm shell (Remote Management Users).',
         summary.can_winrm, 'evil-winrm / nxc winrm');
-    sec('rdp_reach', 'Broad RDP Reach → Host', 'Hosts where a broad, low-privilege group can RDP in, instant lateral movement with any domain credential.', summary.rdp_reach, 'xfreerdp / nxc rdp to that host');
-    sec('psremote_reach', 'Broad PSRemote Reach → Host', 'Hosts where a broad group can open a WinRM / '
+    sec('rdp_reach', 'Broad RDP Reach -> Host', 'Hosts where a broad, low-privilege group can RDP in, instant lateral movement with any domain credential.', summary.rdp_reach, 'xfreerdp / nxc rdp to that host');
+    sec('psremote_reach', 'Broad PSRemote Reach -> Host', 'Hosts where a broad group can open a WinRM / '
         + 'PSRemote shell, a shell on that host with any domain credential.', summary.psremote_reach,
         'evil-winrm / nxc winrm to that host');
-    sec('dcom_reach', 'Broad DCOM Reach → Host', 'Hosts where a broad group is in Distributed COM Users '
+    sec('dcom_reach', 'Broad DCOM Reach -> Host', 'Hosts where a broad group is in Distributed COM Users '
         + 'MMC20/ShellWindows DCOM code execution with any domain credential.', summary.dcom_reach,
         'impacket-dcomexec to that host');
     sec('foreign', 'Foreign Principals (cross-trust)', 'Group members whose SID belongs to another domain '
@@ -867,22 +997,27 @@
         + 'cross-domain route to control.', summary.foreign_principals);
     sec('esc', 'Vulnerable Cert Templates (AD CS)', 'ESC1-shape templates: client-auth certificates whose '
         + 'enrollee supplies the subject, request one AS a Domain Admin and authenticate as them.',
-        summary.esc_templates, 'certipy req → PKINIT / UnPAC-the-hash');
+        summary.esc_templates, 'certipy req -> PKINIT / UnPAC-the-hash');
     sec('passwordnotreqd', 'Password Not Required', 'Accounts flagged PASSWD_NOTREQD, may authenticate '
         + 'with a BLANK password. Try it first, it costs nothing.', summary.password_not_required, "nxc with -p ''");
     sec('pwdneverexpires', 'Password Never Expires', 'Accounts whose password never expires, stale high-value crack/spray targets.', summary.pwd_never_expires);
     sec('highvalue', 'High-Value Targets', 'Objects BloodHound marks high-value.', summary.high_value);
     sec('computers', 'Computers', 'Domain-joined hosts in the collection.', summary.computers);
 
-    // the headline ANALYSIS — the derived owned→Domain-Admins path(s), as structured hops
+    // the headline ANALYSIS - the derived owned->Domain-Admins path(s), as structured hops
     var paths = [];
     var owned = ownedPaths(summary, ownedPrincipals || []);
     (owned.paths || []).forEach(function (chain) {
       var hops = (chain || []).filter(function (h) { return h.from || h.to; }).map(function (h) {
-        return { from: label(h.from || ''), edge: String(h.edge || ''), to: label(h.to || ''), to_kind: String(h.to_kind || '') };
+        var hopObj = { from: label(h.from || ''), edge: String(h.edge || ''), to: label(h.to || ''), to_kind: String(h.to_kind || '') };
+        if (h.alt_edges && h.alt_edges.length > 1) hopObj.alt_edges = h.alt_edges.slice();
+        return hopObj;
       });
       if (hops.length) {
-        var dup = paths.some(function (q) { return JSON.stringify(q.hops) === JSON.stringify(hops); });
+        var keyStr = hops.map(function (h) { return h.from + '>' + h.edge + '>' + h.to; }).join('|');
+        var dup = paths.some(function (q) {
+          return q.hops.map(function (h) { return h.from + '>' + h.edge + '>' + h.to; }).join('|') === keyStr;
+        });
         if (!dup) paths.push({ hops: hops, length: hops.length });
       }
     });
@@ -890,17 +1025,23 @@
 
     var headline;
     if (paths.length) {
-      var goal = paths[0].hops[paths[0].hops.length - 1].to;
+      var daSet = {};
+      (summary.domain_admins || []).forEach(function (d) { daSet[label(d).toUpperCase()] = 1; });
+      var primary = paths.filter(function (p) {
+        var s = p.hops[0] ? p.hops[0].from.toUpperCase() : '';
+        return !daSet[s] && p.hops.some(function (h) { return !/^memberof$/i.test(h.edge); });
+      })[0] || paths[0];
+      var goal = primary.hops[primary.hops.length - 1].to;
       headline = paths.length + ' path(s) from a principal you own to ' + goal + '. The shortest is '
-        + paths[0].length + ' hop(s). obol’s ACL-abuse move walks it automatically.';
+        + primary.length + ' hop(s) from ' + primary.hops[0].from + '. OBOL\'s ACL-abuse move walks it automatically.';
     } else if (summary.domain || (summary.files && summary.files.length) || summary.users) {
-      headline = 'No owned→Domain-Admins path derived from this collection, start from the high-value '
+      headline = 'No owned->Domain-Admins path derived from this collection, start from the high-value '
         + 'queries below (a DCSync principal, an unconstrained-delegation host, or a broad local-admin edge is '
         + 'usually the way in). Enter a principal you own to derive the route.';
     } else {
       headline = '';
     }
-    var analysis = { headline: headline, paths: paths, graph: pathsToGraph(paths) };
+    var analysis = { headline: headline, paths: paths, graph: pathsToGraph(paths, ownedPrincipals, summary) };
 
     var collected = !!(summary.domain || summary.users || (summary.files && summary.files.length)
       || (summary.computers && summary.computers.length));
@@ -948,7 +1089,7 @@
       + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ' UTC';
   }
 
-  // A self-contained, printable PlumHound-style HTML report, the attack path(s) obol surmised
+  // A self-contained, printable PlumHound-style HTML report, the attack path(s) OBOL surmised
   // plus every high-value canned query. No external assets, no neo4j; opens in a browser or
   // downloads as one file. `view` is optional; when omitted it is computed from the summary.
   function domainReportHtml(summary, view) {
@@ -994,17 +1135,17 @@
     return '<!doctype html><html><head><meta charset="utf-8">'
       + '<title>Domain analysis: ' + dom + '</title><style>' + REPORT_CSS + '</style></head><body><div class="wrap">'
       + '<header><h1>Domain analysis · ' + dom + '</h1>'
-      + '<div class="sub">obol, BloodHound analysis &amp; escalation report · ingested ' + when + '</div>'
+      + '<div class="sub">OBOL, BloodHound analysis &amp; escalation report · ingested ' + when + '</div>'
       + '<div class="kpis">' + kpis + '</div></header>'
       + parts.join('')
-      + '<footer>Generated by obol from a BloodHound collection · every path is a lead over collected edges, '
+      + '<footer>Generated by OBOL from a BloodHound collection · every path is a lead over collected edges, '
       + 'not a claim it was walked.</footer></div></body></html>';
   }
 
   // ── fact minting (so the coach/graph can consume the ingest) ─────────────────────────────
-  // Conservative: collecting the graph proves the graph was collected and names the domain — it
+  // Conservative: collecting the graph proves the graph was collected and names the domain  -  it
   // does NOT prove a usable control path. An ad.attack_paths fact is a LEAD (the edges exist),
-  // never a claim it was walked. `paths` is the ownedPaths result — either the {paths, first}
+  // never a claim it was walked. `paths` is the ownedPaths result  -  either the {paths, first}
   // object or the bare list of hop-chains.
   function toFacts(summary, paths, scope) {
     var F = OBOL.facts;
@@ -1023,7 +1164,7 @@
     });
     if (summary.domain) mk('ad.domain_known', { name: summary.domain });
 
-    // high-value census facts — one compact fact per high-signal category that matched.
+    // high-value census facts  -  one compact fact per high-signal category that matched.
     [['ad.kerberoastable', 'kerberoastable'], ['ad.asrep_roastable', 'asrep_roastable'],
      ['ad.dcsync_principals', 'dcsync_principals'], ['ad.unconstrained_delegation', 'unconstrained_delegation'],
      ['ad.high_value', 'high_value'], ['ad.esc_templates', 'esc_templates']].forEach(function (pair) {
@@ -1035,13 +1176,18 @@
       mk('adcs.vulnerable', { tool: 'bloodhound', templates: summary.esc_templates.slice() });
     }
 
-    // attack paths (the LEAD) — shape matches bloodhound.py:902-908
+    // attack paths (the LEAD) - shape matches bloodhound.py:902-908
     var chains = paths || [];
     var first = null;
     if (chains && !Array.isArray(chains)) { first = chains.first || null; chains = chains.paths || []; }
     if (chains && chains.length) {
-      var shortest = chains[0];
-      if (!first) first = firstAbusable(shortest);
+      var daMap = {};
+      (summary.domain_admins || []).forEach(function (d) { daMap[label(d).toUpperCase()] = 1; });
+      var shortest = chains.filter(function (c) {
+        var s = (c && c[0] && c[0].from) ? label(c[0].from).toUpperCase() : '';
+        return !daMap[s] && !!firstAbusable(c);
+      })[0] || chains.filter(function (c) { return !!firstAbusable(c); })[0] || chains[0];
+      first = firstAbusable(shortest) || first;
       var goal = (shortest && shortest.length && shortest[shortest.length - 1]) ? shortest[shortest.length - 1].to : '';
       var value = {
         tool: 'bloodhound', evidence: 'reachability',
@@ -1049,10 +1195,15 @@
       };
       if (first) value.first_action = first;
       mk('ad.attack_paths', value);
-      mk('ad.control_paths', value);
-      var tgt = first ? (first.target || first.to) : (shortest[0] ? (shortest[0].to || '') : '');
-      mk('ad.acl_lead', { tool: 'bloodhound', target: tgt, edge: first ? first.edge : '', first_action: first });
       var shortestHops = Array.isArray(shortest) ? shortest : [];
+      var nonMemberHops = shortestHops.filter(function (h) { return h && !/^memberof$/i.test(String(h.edge || '')); });
+      if (first && (first.edge === 'GetChanges' || first.edge === 'GetChangesAll') && nonMemberHops.length <= 1) {
+        mk('ad.control_paths', value);
+        mk('ad.domain_control', { tool: 'bloodhound', right: 'DCSync', principal: first.from || '' });
+      }
+      var tgt = first ? (first.target || first.to) : (shortest[0] ? (shortest[0].to || '') : '');
+      var tgtShort = String(tgt || '').split('@')[0].trim();
+      mk('ad.acl_lead', { tool: 'bloodhound', target: tgtShort || tgt, targets: tgtShort ? [tgtShort] : [], edge: first ? first.edge : '', first_action: first });
       if ((first && first.edge === 'ReadGMSAPassword') || shortestHops.some(function (h) { return h.edge === 'ReadGMSAPassword'; })) {
         mk('ad.gmsa', { tool: 'bloodhound', edge: 'ReadGMSAPassword', target: tgt });
       }
@@ -1066,13 +1217,11 @@
       if ((first && first.edge === 'WriteSPN') || shortestHops.some(function (h) { return h.edge === 'WriteSPN'; })) {
         mk('ad.targeted_kerberoast', { tool: 'bloodhound', edge: 'WriteSPN', target: tgt });
       }
-    } else if (summary.dcsync_principals && summary.dcsync_principals.length) {
-      mk('ad.control_paths', { tool: 'bloodhound', principals: summary.dcsync_principals.slice(), type: 'dcsync' });
     }
     return out;
   }
 
-  // ── parse: unzip (browser/worker) or accept pre-extracted JSON, into a domain summary ──────
+  // -- parse: unzip (browser/worker) or accept pre-extracted JSON, into a domain summary ------
   function newSummary() {
     return {
       domain: '', users: 0, computers: [], domain_admins: [],
@@ -1083,7 +1232,7 @@
       rdp_reach: [], psremote_reach: [], dcom_reach: [],
       foreign_principals: [], esc_templates: [],
       ingested_at: Date.now() / 1000, files: [],
-      // transient reachability graph — used to derive census + owned→DA path, then dropped by
+      // transient reachability graph  -  used to derive census + owned→DA path, then dropped by
       // the caller before persisting (call dropGraph(summary)).
       _graph: newGraph(),
     };
@@ -1152,7 +1301,7 @@
   // Parse one or more uploaded files (a .zip export, or individual .json files) into a domain
   // summary matching bloodhound.py:741-758. `files` is an array of {name, arrayBuffer|text}.
   // Async because unzipping is async; the JSON-only path never touches JSZip. The returned
-  // summary retains its transient `_graph` so ownedPaths/deriveCensus can read it — call
+  // summary retains its transient `_graph` so ownedPaths/deriveCensus can read it  -  call
   // OBOL.bloodhound.dropGraph(summary) before persisting.
   function parse(files) {
     var summary = newSummary();

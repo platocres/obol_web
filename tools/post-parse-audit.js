@@ -1,26 +1,28 @@
 #!/usr/bin/env node
 /*!
- * tools/post-parse-audit.js — the post-parse-advance auditor (the "command -> real output -> fact ->
+ * tools/post-parse-audit.js - the post-parse-advance auditor (the "command -> real output -> fact ->
  * advance/retire" round-trip, task #30).
  *
  * gap-report.js audits the MOVE level (a move whose produced fact no parser reads; a move that produces
  * a fact nothing uses; an unreachable move). This auditor adds the COMMAND level and the FAILURE level,
  * the things that make a run feel broken even when the move graph is fine:
  *
- *   MISSED GAIN  — a move produces a PROGRESS fact (a foothold, access, credential, loot.ntds, or
+ *   MISSED GAIN  - a move produces a PROGRESS fact (a foothold, access, credential, loot.ntds, or
  *                  objective) that NO parser can read. You get a shell / a cred / root, paste it, and
  *                  obol cannot tell. This is the worst class and the only one --check hard-fails on by
  *                  default (plus the probe-retire class below).
- *   PROBE RETIRE — a switchless confirm/probe command (an anonymous/auth check, a count) with no
+ *   PROBE RETIRE - a switchless confirm/probe command (an anonymous/auth check, a count) with no
  *                  `settled_by`, so after you run it and paste the proof the command just sits there
  *                  asking to be re-run (the recurring one-off bug the owner asked us to stop fixing
  *                  individually).
- *   RE-OFFER     — a move whose proven terminal state (access.admin/root/system, loot.ntds, a flag) has
+ *   RE-OFFER     - a move whose proven terminal state (access.admin/root/system, loot.ntds, a flag) has
  *                  neither `obsoleted_by` nor `deprioritize_when`, so it can re-offer after it is done.
- *   FAILURE GAP  — a move whose command authenticates / sprays / probes anonymous access but whose
+ *   FAILURE GAP  - a move whose command authenticates / sprays / probes anonymous access but whose
  *                  likely failure (denied, locked out, wrong creds, bind-restricted) maps to no
  *                  `blocker.*` fact that a FIELD_DOCTOR handles. obol cannot doctor or redirect on
  *                  failure. Advisory (heuristic), not a hard gate.
+ *   LEAD ORDER   - a move whose commands[0] requires an unearned high-gate token when a later command
+ *                  with the same locus is immediately runnable. Advisory, not a hard gate.
  *
  * Read-only: never touches the pack or the ranker. Clustered output; human-triaged like ranker-sweep.
  *
@@ -51,10 +53,10 @@ var CHECK = process.argv.indexOf('--check') >= 0;
 // Known-deferred hard findings that --check tolerates (so it catches NEW regressions, not these). Each
 // is a captured-hash routing case closed by the "generic captured hash -> cracking path" work (TC), or a
 // genuinely borderline probe. Remove an entry when its real fix lands.
-var ALLOW_MISSED = { 'crack-identify|hash.type': 1, 'sqlite-table-extract|hash.candidate': 1, 'recon-ike-vpn|hash.ike_psk': 1, 'ipmi-bmc-cipher0|credential.hash': 1 };
-var ALLOW_PROBE = { 'rdp-enum|0': 1, 'ftp-bounce|2': 1 };
+var ALLOW_MISSED = {};
+var ALLOW_PROBE = {};
 
-// ── the parser capability set: every fact any parser can mint (prefix "." = wildcard family) ───────
+// -- the parser capability set: every fact any parser can mint (prefix "." = wildcard family) -------
 var SIG = OBOL.PARSER_SIGNATURES || {};
 var EMITS = {};
 Object.keys(SIG).forEach(function (k) { (SIG[k].emits || []).forEach(function (e) { EMITS[e] = true; }); });
@@ -79,64 +81,131 @@ function isProbe(run) { run = String(run || ''); return PROBE_RE.test(run) && !P
 // a command that authenticates or sprays (its failure is a login/lockout the operator should be doctored on)
 function isAuthish(run) { run = String(run || ''); return /-u\s+\S|-p\s+\S|-H\s+\S|--password|--hashes|hydra|kerbrute|--spray/i.test(run) || isProbe(run); }
 
-var DOCTORS = OBOL.FIELD_DOCTORS || {};
+var HIGH_GATE_TOKENS = new Set(['domain', 'basedn', 'user', 'password', 'nthash', 'dahash', 'krbtgt_hash', 'ca_name', 'cert_template', 'spn_host']);
 
-var missedGain = [], probeRetire = [], reOffer = [], failureGap = [];
+function extractTokens(run) {
+  var s = String(run || ''), m, re = /\{\{([a-zA-Z0-9_]+)\}\}/g, res = new Set();
+  while ((m = re.exec(s)) !== null) res.add(m[1]);
+  return res;
+}
+
+function tokenGuaranteed(m, token) {
+  var allReqs = (m.requires_all || []).concat(m.requires_any || []);
+  if (token === 'domain') return allReqs.some(function (r) { return r.indexOf('domain') >= 0; });
+  if (token === 'basedn') return allReqs.some(function (r) { return r.indexOf('base_dn') >= 0; });
+  if (token === 'user' || token === 'password') return allReqs.some(function (r) { return r.indexOf('credential.') >= 0 || r.indexOf('user_list') >= 0; });
+  if (token === 'nthash' || token === 'dahash' || token === 'krbtgt_hash') return allReqs.some(function (r) { return r.indexOf('hash.') >= 0 || r.indexOf('credential.hash') >= 0; });
+  if (token === 'ca_name' || token === 'cert_template') return allReqs.some(function (r) { return r.indexOf('adcs.') >= 0; });
+  if (token === 'spn_host') return allReqs.some(function (r) { return r.indexOf('spn') >= 0 || r.indexOf('kerberos') >= 0; });
+  return false;
+}
+
+function unearnedTokens(m, run) {
+  var toks = extractTokens(run), unearned = [];
+  toks.forEach(function (t) {
+    if (HIGH_GATE_TOKENS.has(t) && !tokenGuaranteed(m, t)) unearned.push(t);
+  });
+  return unearned;
+}
+
+var DOCTORS = OBOL.FIELD_DOCTORS || {};
+var GLOBAL_AUTH_DOCTOR_KEYS = [
+  'blocker.logon_failure', 'blocker.lockout', 'blocker.clock_skew',
+  'blocker.ntlm_disabled', 'blocker.password_change', 'blocker.account_restricted',
+  'blocker.smb_null_denied', 'blocker.ldap_anonymous_disabled', 'ssh.key_rejected'
+];
+var hasGlobalAuthDoctors = GLOBAL_AUTH_DOCTOR_KEYS.every(function (k) { return !!DOCTORS[k]; });
+
+var missedGain = [], probeRetire = [], reOffer = [], failureGap = [], leadOrder = [];
 
 A.forEach(function (m) {
   var produces = m.produces || [], cmds = (m.commands && m.commands.length) ? m.commands : (m.command ? [{ run: m.command }] : []);
 
-  // MISSED GAIN — a produced progress fact no parser reads
+  // MISSED GAIN - a produced progress fact no parser reads
   produces.forEach(function (f) {
     if (isProgressFact(f) && !parserReads(f)) missedGain.push({ id: m.id, fact: f });
   });
 
-  // RE-OFFER — mints a terminal fact but has no retire edge
+  // RE-OFFER - mints a terminal fact but has no retire edge
   var terminal = produces.filter(isTerminalFact);
   if (terminal.length && !(m.obsoleted_by && m.obsoleted_by.length) && !(m.deprioritize_when && m.deprioritize_when.length)) {
     reOffer.push({ id: m.id, facts: terminal });
   }
 
-  // PROBE RETIRE — a probe command with no settled_by
+  // PROBE RETIRE - a probe command with no settled_by
   cmds.forEach(function (c, i) {
     if (isProbe(c.run) && !(c.settled_by && c.settled_by.length)) probeRetire.push({ id: m.id, idx: i, run: String(c.run || '').slice(0, 72) });
   });
 
-  // FAILURE GAP — authenticating/spraying move with no reachable blocker doctor. Heuristic: the move
-  // neither obsoletes on a blocker.* nor deprioritizes on one, and none of its commands settle on one.
+  // FAILURE GAP - authenticating/spraying move with no reachable blocker doctor.
   var authish = cmds.some(function (c) { return isAuthish(c.run); });
   if (authish) {
-    var touchesBlocker = (m.obsoleted_by || []).concat(m.deprioritize_when || []).some(function (x) { return /^blocker\./.test(x) && DOCTORS[x]; })
+    var touchesBlocker = hasGlobalAuthDoctors
+      || (m.obsoleted_by || []).concat(m.deprioritize_when || []).some(function (x) { return /^blocker\./.test(x) && DOCTORS[x]; })
       || cmds.some(function (c) { return (c.settled_by || []).some(function (x) { return /^blocker\./.test(x); }); });
     if (!touchesBlocker) failureGap.push({ id: m.id });
   }
+
+  // LEAD ORDER - bare-recon move whose commands[0] requires an unearned high-gate token while a later command is runnable
+  if (m.sequence !== true && cmds.length > 1) {
+    var allReqs = (m.requires_all || []).concat(m.requires_any || []);
+    var isPostRecon = allReqs.some(function (r) {
+      return /^(credential\.|access\.|foothold\.|privesc\.|ad\.|adcs\.|hash\.|db\.|scan\.local\.|blocker\.)/.test(r);
+    });
+    var isIntentionalAuthFirst = (m.id === 'mssql-login' || m.id === 'recon-vnc');
+    if (!isPostRecon && !isIntentionalAuthFirst) {
+      var cmd0 = (cmds[0] && cmds[0].run) || '';
+      var unearned0 = unearnedTokens(m, cmd0);
+      if (unearned0.length) {
+        var locus0 = cmds[0].locus || 'target';
+        for (var j = 1; j < cmds.length; j++) {
+          var cj = cmds[j];
+          var locusJ = cj.locus || 'target';
+          if (locusJ !== locus0) continue;
+          var unearnedJ = unearnedTokens(m, cj.run || '');
+          if (unearnedJ.length === 0) {
+            leadOrder.push({
+              id: m.id,
+              tokens: unearned0,
+              altIdx: j,
+              altRun: String(cj.run || '').slice(0, 60)
+            });
+            break;
+          }
+        }
+      }
+    }
+  }
 });
 
-// ── report ─────────────────────────────────────────────────────────────────────────────────────
+// -- report -------------------------------------------------------------------------------------
 function hd(s, n) { console.log('\n== ' + s + ' (' + n + ') =='); }
 function list(arr, fmt, cap) { if (!arr.length) { console.log('  (none)'); return; } arr.slice(0, cap || 60).forEach(function (x) { console.log('  ' + fmt(x)); }); if (arr.length > (cap || 60)) console.log('  ... and ' + (arr.length - (cap || 60)) + ' more'); }
 
-console.log('OBOL post-parse-advance audit — ' + A.length + ' moves');
-console.log(JSON.stringify({ missedGain: missedGain.length, probeRetire: probeRetire.length, reOffer: reOffer.length, failureGap: failureGap.length }));
+console.log('OBOL post-parse-advance audit - ' + A.length + ' moves');
+console.log(JSON.stringify({ missedGain: missedGain.length, probeRetire: probeRetire.length, reOffer: reOffer.length, failureGap: failureGap.length, leadOrder: leadOrder.length }));
 
-hd('MISSED GAIN — a progress fact no parser can read (you gain, obol cannot tell)', missedGain.length);
+hd('MISSED GAIN - a progress fact no parser can read (you gain, obol cannot tell)', missedGain.length);
 list(missedGain, function (x) { return x.id + '  -> ' + x.fact; });
 
-hd('PROBE RETIRE — a confirm/probe command with no settled_by (cannot retire after it is proven)', probeRetire.length);
+hd('PROBE RETIRE - a confirm/probe command with no settled_by (cannot retire after it is proven)', probeRetire.length);
 list(probeRetire, function (x) { return x.id + ' [cmd ' + x.idx + ']  ' + x.run; });
 
-hd('RE-OFFER — mints a terminal fact but has no obsoleted_by/deprioritize_when', reOffer.length);
+hd('RE-OFFER - mints a terminal fact but has no obsoleted_by/deprioritize_when', reOffer.length);
 list(reOffer, function (x) { return x.id + '  -> ' + x.facts.join(', '); });
 
-hd('FAILURE GAP (advisory) — authenticates/sprays but no blocker doctor reachable on failure', failureGap.length);
+hd('FAILURE GAP (advisory) - authenticates/sprays but no blocker doctor reachable on failure', failureGap.length);
 list(failureGap, function (x) { return x.id; }, 40);
+
+hd('WARN · LEAD ORDER - commands[0] requires an unearned token while a later command is immediately runnable', leadOrder.length);
+list(leadOrder, function (x) { return x.id + ' [cmd 0 requires ' + x.tokens.join(', ') + '; cmd ' + x.altIdx + ' runnable]'; }, 40);
 
 var newMissed = missedGain.filter(function (x) { return !ALLOW_MISSED[x.id + '|' + x.fact]; });
 var newProbe = probeRetire.filter(function (x) { return !ALLOW_PROBE[x.id + '|' + x.idx]; });
 var hard = newMissed.length + newProbe.length;
 console.log('\n' + (hard ? ('AUDIT: ' + hard + ' NEW hard finding(s) (MISSED GAIN + PROBE RETIRE)') : 'AUDIT: no new hard findings') +
   '  [' + (missedGain.length - newMissed.length + (probeRetire.length - newProbe.length)) + ' allowlisted, ' +
-  reOffer.length + ' re-offer, ' + failureGap.length + ' failure-gap advisory]');
+  reOffer.length + ' re-offer, ' + failureGap.length + ' failure-gap advisory, ' + leadOrder.length + ' lead-order advisory]');
 if (hard) { console.log('  NEW:'); newMissed.forEach(function (x) { console.log('   MISSED ' + x.id + ' -> ' + x.fact); }); newProbe.forEach(function (x) { console.log('   PROBE ' + x.id + ' [' + x.idx + ']'); }); }
 if (CHECK && hard) process.exit(1);
 process.exit(0);

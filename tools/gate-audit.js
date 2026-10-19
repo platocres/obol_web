@@ -76,7 +76,7 @@ raw.forEach(function (a) {
   }
   all.concat(any).forEach(function (k) { if (gateSource(k) === 'NONE') deadGate.push(a.id + '  dead gate: ' + k + (any.indexOf(k) >= 0 && any.length > 1 ? ' (one of ' + any.length + ' OR-options)' : ' (sole/required)')); });
   if (!all.length && !any.length) noGate.push(a.id + ' [' + packOf[a.id] + ']');
-  if ((phase === 'recon' || phase === 'enum') && prod.some(function (k) { return /^(foothold\.|access\.|loot\.ntds)/.test(k); })) phaseEffect.push(a.id + ' phase=' + phase + ' produces ' + prod.join(','));
+  if ((phase === 'recon' || phase === 'enum') && prod.some(function (k) { return /^(foothold\.|access\.(?!desktop$)|loot\.ntds)/.test(k); })) phaseEffect.push(a.id + ' phase=' + phase + ' produces ' + prod.join(','));
   if (firesFromBareRecon(a) && prod.some(function (k) { return PAYOFF.test(k); })) {
     var lead = any.some(function (k) { return /^(vuln\.|service\.)/.test(k); });
     var line = a.id + ' [' + packOf[a.id] + '] any=[' + any.join(',') + ']';

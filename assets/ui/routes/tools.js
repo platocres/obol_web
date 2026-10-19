@@ -1,5 +1,5 @@
 /*!
- * obol ui — routes/tools.js — THE TOOLS SURFACE (fact-aware tactical launchpad).
+ * obol ui - routes/tools.js - THE TOOLS SURFACE (fact-aware tactical launchpad).
  *
  * A funnel, not a wall of flags: the shared Engagement Binding bar (OBOL.bind) autofills the target,
  * identity, ports, and wordlist; STATIONS group substitute tools by the job they do (Web Content
@@ -566,7 +566,7 @@
         + '<div class="station-engines"><span class="tb-engines-lab">Catcher</span>' + catEl + '<span class="tb-engine-teach">' + esc(teach) + '</span></div>'
         + '<div class="shk-actions"><button type="button" class="shk-dl">Download Kit (.sh)</button>'
         + '<button type="button" class="bind-chip shk-copyenc" data-copy="' + attr(enc) + '">Copy PowerShell -EncodedCommand</button>'
-        + '<span class="tb-hint">obol writes it; you run it on your own box. Nothing executes here.</span></div>'
+        + '<span class="tb-hint">OBOL writes it; you run it on your own box. Nothing executes here.</span></div>'
         + encToggle
         + '<div class="shk-sec-lab">Reverse Shells</div><div class="shk-pays">' + payRows + '</div>'
         + '<div class="shk-sec-lab">MSFVenom Payload Files</div><div class="shk-pays">' + mvRows + '</div>'
@@ -645,7 +645,7 @@
       html += '<section class="tools-stations"><div class="tools-cat-head"><h2 class="tools-cat-h">Stations</h2><span class="tools-cat-hint">One job, your choice of engine.</span></div>'
         + '<div class="tools-grid">' + stations.map(function (s) { return stationCard(s, openId, factKinds); }).join('') + '</div></section>';
     }
-    html += '<section class="tools-stations"><div class="tools-cat-head"><h2 class="tools-cat-h">Access Kits</h2><span class="tools-cat-hint">Downloadable, filled from your engagement. obol writes them; you run them.</span></div>'
+    html += '<section class="tools-stations"><div class="tools-cat-head"><h2 class="tools-cat-h">Access Kits</h2><span class="tools-cat-hint">Downloadable, filled from your engagement. OBOL writes them; you run them.</span></div>'
       + '<div class="tools-grid">' + shellStationCard(openId === 'shell') + (OBOL.pivotStationUI ? OBOL.pivotStationUI.card(openId === 'pivot') : '') + '</div></section>';
     var inStation = stationBuilderIds();
     var byCat = {};
@@ -1056,7 +1056,7 @@
       function modeHasOpt(v) { for (var i = 0; i < modeEl.options.length; i++) if (modeEl.options[i].value === String(v)) return true; return false; }
       var panel = document.createElement('div');
       panel.className = 'tb-hashid';
-      panel.innerHTML = '<div class="tb-hashid-h">Identify A Hash <span class="tb-recipes-sub">paste one sample; obol names it, cleans it, sets the mode</span></div>'
+      panel.innerHTML = '<div class="tb-hashid-h">Identify A Hash <span class="tb-recipes-sub">paste one sample; OBOL names it, cleans it, sets the mode</span></div>'
         + '<textarea class="tb-hashid-in" rows="2" placeholder="Paste one hash (a wrapped Rubeus ticket or a full secretsdump line is fine)" autocomplete="off" spellcheck="false"></textarea>'
         + '<div class="tb-hashid-out" aria-live="polite"></div>';
       var pv = panelEl.querySelector('.tb-preview');

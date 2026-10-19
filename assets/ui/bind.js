@@ -30,7 +30,14 @@
   function setState(patch, reason) {
     OBOL.store.update(function (e) { e.ui = e.ui || {}; e.ui.bind = Object.assign({}, e.ui.bind || {}, patch); }, reason || 'bind');
   }
-  function setParam(key, val) { OBOL.store.update(function (e) { e.params = e.params || {}; e.params[key] = val; }, 'params'); }
+  function setParam(key, val) {
+    OBOL.store.update(function (e) {
+      e.params = e.params || {};
+      e.params[key] = val;
+      if (key === 'target') e.activeTarget = val ? String(val).trim() : null;
+    }, 'params');
+  }
+  function isManual() { return !!state().manual; }
   function facts() { try { return OBOL.store.factSet(); } catch (e) { return new OBOL.facts.FactSet([]); } }
 
   // The selected (local) identity, resolved from the stored key against the live credential set.
@@ -191,5 +198,5 @@
     U.on(el, 'click', '.bind-port-clear', function () { setState({ port: '' }, 'bind-port'); changed(); });
   }
 
-  OBOL.bind = { render: render, mount: mount, context: context, selectedIdentity: selectedIdentity, effectiveIdentity: effectiveIdentity, DEFAULT_WORDLIST: DEFAULT_WORDLIST };
+  OBOL.bind = { render: render, mount: mount, context: context, isManual: isManual, selectedIdentity: selectedIdentity, effectiveIdentity: effectiveIdentity, DEFAULT_WORDLIST: DEFAULT_WORDLIST };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

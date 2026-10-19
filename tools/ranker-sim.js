@@ -220,6 +220,57 @@ const RUBRIC = [
       return (isScan || isOrient) ? null : `opening lead '${lead.id}' is neither the service scan nor an AD orient`;
     },
   },
+  {
+    name: 'no_cross_os_in_top8',
+    test: (ctx) => {
+      const top8 = ctx.top8 || ctx.top.slice(0, 8);
+      const isLin = hasAny(ctx.facts, ['foothold.linux', 'os.linux']) && !hasAny(ctx.facts, ['foothold.windows', 'os.windows', 'ad.dc_candidate', 'ad.domain_known', 'kerberos.reachable']);
+      const isWin = hasAny(ctx.facts, ['foothold.windows', 'os.windows', 'ad.dc_candidate']) && !hasAny(ctx.facts, ['foothold.linux', 'os.linux']);
+      if (isLin) {
+        const bad = top8.find(a => Array.isArray(a.os) && a.os.length === 1 && a.os[0] === 'windows');
+        if (bad) return `Windows-only move '${bad.id}' in top-8 on confirmed Linux target`;
+      }
+      if (isWin) {
+        const bad = top8.find(a => Array.isArray(a.os) && a.os.length === 1 && a.os[0] === 'linux');
+        if (bad) return `Linux-only move '${bad.id}' in top-8 on confirmed Windows target`;
+      }
+      return null;
+    },
+  },
+  {
+    name: 'no_ad_moves_on_non_ad',
+    test: (ctx) => {
+      if (ctx.meta.isAD !== false) return null;
+      if (hasAny(ctx.facts, ['ad.dc_candidate', 'ad.domain_known', 'ad.base_dn', 'kerberos.reachable', 'ldap.reachable', 'port:88', 'port:389', 'port:636', 'port:3268'])) return null;
+      const top8 = ctx.top8 || ctx.top.slice(0, 8);
+      const isAdOnly = (a) => a && a.pack_id === 'ad_2026_09' && (/^(ad-|kerberoast|asrep-roast|bloodhound-|bloodyad-|dcsync|golden-ticket|silver-ticket|trust-enum|sccm-|wsus-abuse|certifried|adcs-|shadow-credentials|delegation-abuse|gmsa-read|laps-read|adidns-abuse|timeroasting|zerologon-|nopac|ms14-068|kerberos-|azuread-)/.test(a.id)
+        || ((a.produces || []).length > 0 && (a.produces || []).every(k => /^(ad\.|kerberos\.|hash\.asrep|hash\.tgs|hash\.krbtgt|loot\.ntds|persistence\.domain|sccm\.)/.test(k))));
+      const bad = top8.find(isAdOnly);
+      return bad ? `AD move '${bad.id}' in top-8 on non-AD target` : null;
+    },
+  },
+  {
+    name: 'no_http_moves_without_http',
+    test: (ctx) => {
+      if (hasAny(ctx.facts, ['http.reachable', 'web.server', 'port:80', 'port:443', 'port:8080', 'port:8443', 'port:8000'])) return null;
+      const top8 = ctx.top8 || ctx.top.slice(0, 8);
+      const bad = top8.find(a => a && (a.pack_id === 'web_2026_09' || a.pack_id === 'web_exploit_checks_2026_09'));
+      return bad ? `Web/HTTP move '${bad.id}' in top-8 without HTTP open` : null;
+    },
+  },
+  {
+    name: 'indicated_privesc_in_top3',
+    test: (ctx) => {
+      if (!hasAny(ctx.facts, ['foothold.linux', 'foothold.windows'])) return null;
+      if (hasAny(ctx.facts, ['access.admin', 'access.system'])) return null;
+      const indKinds = ['privesc.suid_candidate', 'privesc.sudo_rights', 'privesc.windows_privilege'];
+      const heldInd = indKinds.filter(k => has(ctx.facts, k));
+      if (!heldInd.length) return null;
+      const usesInd = (a) => a && [].concat(a.requires_all || [], a.requires_any || []).some(k => heldInd.indexOf(k) >= 0);
+      if (!ctx.all.some(usesInd)) return null;
+      return ctx.top3.some(usesInd) ? null : `indicated privesc move not in top-3 despite ${heldInd.join(', ')}`;
+    },
+  },
 ];
 
 // ---- Teeth-check: prove every rule CAN fire (node tools/ranker-sim.js --selftest)
@@ -228,18 +279,25 @@ const RUBRIC = [
 if (process.argv.indexOf('--selftest') >= 0) {
   const pack = OBOL.packs.actions();
   const esc = pack.find(a => P.phaseOfAction(a) === 'escalate');
+  const winEsc = pack.find(a => Array.isArray(a.os) && a.os.length === 1 && a.os[0] === 'windows');
+  const adMove = pack.find(a => a.id === 'kerberoast' || a.id === 'ad-dc-identify');
+  const webMove = pack.find(a => a.pack_id === 'web_2026_09' || a.id === 'recon-web-triage');
+  const suidMove = pack.find(a => (a.requires_all || []).indexOf('privesc.suid_candidate') >= 0 || (a.requires_any || []).indexOf('privesc.suid_candidate') >= 0);
   const loot = pack.find(a => P.phaseOfAction(a) === 'loot');
   const spray = pack.find(a => /spray/i.test(a.id) && !/blind/i.test(a.id));
   const orient = pack.find(a => (a.produces || []).some(k => AD_ORIENT_KINDS.indexOf(k) >= 0));
-  const nmapScan = pack.find(a => (a.produces || []).indexOf('scan.nmap.version') >= 0);
   const openFact = [F('scan.nmap.quick')];
   const cases = {
-    leads_somewhere: { facts: [], meta: {}, top: [], top3: [], all: [] },
-    no_privesc_before_access: { facts: [], meta: {}, top: [esc], top3: [esc], all: [esc] },
-    no_loot_before_access: { facts: [], meta: {}, top: [loot], top3: [loot], all: [loot] },
-    ad_orient_in_top3: { facts: openFact, meta: { isAD: true }, top: [esc], top3: [esc], all: [esc, orient] },
-    no_blind_spray_lead: { facts: [], meta: {}, top: [spray], top3: [spray], all: [spray] },
-    recon_scan_leads_opening: { facts: openFact, meta: { isAD: false }, top: [esc], top3: [esc], all: [esc] },
+    leads_somewhere: { facts: [], meta: {}, top: [], top3: [], top8: [], all: [] },
+    no_privesc_before_access: { facts: [], meta: {}, top: [esc], top3: [esc], top8: [esc], all: [esc] },
+    no_loot_before_access: { facts: [], meta: {}, top: [loot], top3: [loot], top8: [loot], all: [loot] },
+    ad_orient_in_top3: { facts: openFact, meta: { isAD: true }, top: [esc], top3: [esc], top8: [esc], all: [esc, orient] },
+    no_blind_spray_lead: { facts: [], meta: {}, top: [spray], top3: [spray], top8: [spray], all: [spray] },
+    recon_scan_leads_opening: { facts: openFact, meta: { isAD: false }, top: [esc], top3: [esc], top8: [esc], all: [esc] },
+    no_cross_os_in_top8: { facts: [F('foothold.linux')], meta: { isAD: false }, top: [winEsc], top3: [winEsc], top8: [winEsc], all: [winEsc] },
+    no_ad_moves_on_non_ad: { facts: openFact, meta: { isAD: false }, top: [adMove], top3: [adMove], top8: [adMove], all: [adMove] },
+    no_http_moves_without_http: { facts: openFact, meta: { isAD: false }, top: [webMove], top3: [webMove], top8: [webMove], all: [webMove] },
+    indicated_privesc_in_top3: { facts: [F('foothold.linux'), F('privesc.suid_candidate')], meta: { isAD: false }, top: [webMove], top3: [webMove], top8: [webMove, suidMove], all: [webMove, suidMove] },
   };
   let ok = 0, bad = 0;
   RUBRIC.forEach(rule => {
@@ -260,13 +318,13 @@ function judge(facts, meta) {
   const c = OBOL.coach.compute();
   const top = c.onFlow || [];
   const all = top.concat(c.comingUp || []);
-  const ctx = { facts, meta: meta || {}, top, top3: top.slice(0, 3), all };
+  const ctx = { facts, meta: meta || {}, top, top3: top.slice(0, 3), top8: top.slice(0, 8), all };
   const out = [];
   for (const rule of RUBRIC) {
     const v = rule.test(ctx);
     if (v) out.push({ principle: rule.name, detail: v, lead: top[0] && top[0].id });
   }
-  return { violations: out, top3: top.slice(0, 3).map(a => a.id) };
+  return { violations: out, top3: top.slice(0, 3).map(a => a.id), top8: top.slice(0, 8).map(a => a.id) };
 }
 
 module.exports = { RUBRIC, ARCHETYPES, stateFor, judge, F, seed, AD_ORIENT_KINDS };

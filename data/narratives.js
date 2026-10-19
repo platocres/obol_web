@@ -206,6 +206,101 @@
       explanation: 'The application on {{target}} accepted an uploaded file without validating its extension or content and stored it within the web root where scripts execute. A server-side script (web shell) was uploaded and then requested to obtain command execution.',
       impact: 'Remote code execution on the host through an uploaded web shell.'
     },
+    'insecure-direct-object-reference': {
+      phase_label: 'Initial Access, Insecure Direct Object Reference (IDOR)',
+      explanation: 'An endpoint on {{target}} referenced internal objects by user-supplied identifiers without verifying that the requesting session was authorized to access the target record. Modifying the identifier in the request exposed data belonging to other users.',
+      impact: 'Unauthorized disclosure or modification of records across user accounts.'
+    },
+    'smb-null-session': {
+      phase_label: 'Initial Access, SMB Null Session / Anonymous Share Access',
+      explanation: 'The SMB service on {{target}} accepted unauthenticated (null or guest) sessions and permitted listing or reading shared directories and RPC endpoints without credentials.',
+      impact: 'Unauthenticated disclosure of shared files, configuration data, and domain account listings.'
+    },
+    'unauthenticated-datastore': {
+      phase_label: 'Initial Access, Unauthenticated Datastore Access',
+      explanation: 'A database or caching service on {{target}} accepted network connections without authentication, exposing stored collections, keys, or tables directly to remote clients.',
+      impact: 'Full read and write access to the datastore and potential remote code execution via service features.'
+    },
+    'gpp-cpassword': {
+      phase_label: 'Credential Access, Group Policy Preferences (GPP) cpassword',
+      explanation: 'A Group Policy Preferences XML file readable from SYSVOL on {{target}} contained a `cpassword` attribute encrypted with the publicly documented AES key (MS14-025). Decrypting the value yielded a plaintext password.',
+      impact: 'Recovery of plaintext credentials stored in Group Policy Preferences.'
+    },
+    'llmnr-nbtns-poisoning': {
+      phase_label: 'Credential Access, LLMNR / NBT-NS Name Resolution Poisoning',
+      explanation: 'Hosts on the segment containing {{target}} fell back to link-local multicast or NetBIOS name resolution and authenticated to an attacker-controlled responder, exposing NetNTLMv1/v2 challenge-response hashes for {{subject}}.',
+      impact: 'Capture of NetNTLM authentication hashes suitable for offline cracking or NTLM relay.'
+    },
+    'ntlm-relay': {
+      phase_label: 'Privilege Escalation, NTLM Relay',
+      explanation: 'Incoming NTLM authentication was relayed to {{target}} because the target service did not enforce SMB signing, LDAP signing, or EPA channel binding. The relayed session executed actions with the privileges of {{subject}}.',
+      impact: 'Authenticated command execution, directory modification, or certificate enrollment as the relayed principal.'
+    },
+    'exposed-vcs-metadata': {
+      phase_label: 'Initial Access, Exposed Version Control Metadata (.git / .svn)',
+      explanation: 'The web server on {{target}} served a version control metadata directory (such as `/.git/`) over HTTP, allowing the repository object database and commit history to be reconstructed.',
+      impact: 'Disclosure of application source code, historical commits, and embedded credentials.'
+    },
+    'jwt-signature-bypass': {
+      phase_label: 'Initial Access, JWT Validation Bypass',
+      explanation: 'The application on {{target}} accepted JSON Web Tokens with a modified or unverified signature (such as `alg: none`, a weak HMAC secret, or algorithm confusion), allowing arbitrary identity claims to be forged.',
+      impact: 'Authentication bypass and impersonation of privileged application users.'
+    },
+    'anonymous-ldap-bind': {
+      phase_label: 'Initial Access, Anonymous LDAP Bind',
+      explanation: 'The LDAP directory service on {{target}} permitted unauthenticated bind requests and returned directory objects, exposing domain naming contexts, user accounts, and service attributes without credentials.',
+      impact: 'Unauthenticated enumeration of Active Directory users, groups, computers, and account metadata.'
+    },
+    'lfi-to-rce': {
+      phase_label: 'Initial Access, Local File Inclusion to Remote Code Execution',
+      explanation: 'A local file inclusion vulnerability on {{target}} was chained with an attacker-controlled input sink (such as poisoned log files, session files, or PHP stream filters) to execute arbitrary server-side code.',
+      impact: 'Remote code execution on {{target}} in the context of the web server account.'
+    },
+    'smbv1-enabled': {
+      phase_label: 'Initial Access, Legacy SMBv1 Protocol Enabled',
+      explanation: 'The SMB server on {{target}} negotiated the deprecated SMBv1 dialect (NT LM 0.12), which lacks modern integrity protections and is associated with critical remote code execution vulnerabilities such as MS17-010.',
+      impact: 'Exposure to legacy SMB protocol attacks and potential unauthenticated remote code execution.'
+    },
+    'default-snmp-community': {
+      phase_label: 'Initial Access, Default or Predictable SNMP Community String',
+      explanation: 'The SNMP agent on {{target}} responded to queries using a default community string (`public` or `private`), exposing the system MIB tree including running processes, network interfaces, and software parameters.',
+      impact: 'Unauthenticated disclosure of host configuration, running command lines, and network state.'
+    },
+    'linux-kernel-privilege-escalation': {
+      phase_label: 'Privilege Escalation, Linux Kernel / Subsystem Exploitation',
+      explanation: 'The Linux kernel or a privileged core subsystem (such as Polkit/pkexec or DirtyPipe) on {{target}} matched a version vulnerable to local privilege escalation. Executing the corresponding local exploit elevated the session from an unprivileged user to `root`.',
+      impact: 'Full root compromise of {{target}}.'
+    },
+    'windows-scheduled-task-abuse': {
+      phase_label: 'Privilege Escalation, Windows Scheduled Task / Startup Binary Abuse',
+      explanation: 'A scheduled task or startup entry on {{target}} executed under a privileged account while referencing a script, binary, or parent directory writable by the current user. Replacing the executable payload caused the task scheduler to run attacker-controlled code as SYSTEM or Administrator.',
+      impact: 'Elevation to `NT AUTHORITY\\SYSTEM` or administrative privileges on {{target}}.'
+    },
+    'ad-delegation-abuse': {
+      phase_label: 'Privilege Escalation, Active Directory Kerberos Delegation Abuse',
+      explanation: 'An account or computer object in {{domain}} on {{target}} was configured with unconstrained, constrained (`msDS-AllowedToDelegateTo`), or resource-based constrained delegation (`msDS-AllowedToActOnBehalfOfOtherIdentity`). Using `S4U2Self` and `S4U2Proxy` (or a captured TGT), a service ticket was obtained impersonating a privileged domain account against {{target}}.',
+      impact: 'Impersonation of administrative principals and privileged access to {{target}} or {{domain}}.'
+    },
+    'laps-gmsa-credential-exposure': {
+      phase_label: 'Privilege Escalation, LAPS / gMSA Credential Read Access',
+      explanation: 'The compromised principal {{subject}} held read permissions over the LAPS local administrator password (`ms-Mcs-AdmPwd`) or a Group Managed Service Account password blob (`msDS-ManagedPassword`) in {{domain}}. Querying LDAP recovered the cleartext password or NT hash for the privileged account.',
+      impact: 'Direct recovery of local administrator or privileged service account credentials on {{target}}.'
+    },
+    'ad-gpo-abuse': {
+      phase_label: 'Privilege Escalation, Active Directory Group Policy Object (GPO) Abuse',
+      explanation: 'The compromised principal {{subject}} held modification rights over a Group Policy Object linked to users or computers in {{domain}}, or could link GPOs to an organizational unit. Pushing an immediate scheduled task or startup script via the GPO executed arbitrary commands on linked machines.',
+      impact: 'Administrative command execution across all domain hosts or users governed by the Group Policy Object.'
+    },
+    'mssql-xp-cmdshell-rce': {
+      phase_label: 'Initial Access, Microsoft SQL Server xp_cmdshell / Linked Server Execution',
+      explanation: 'Authenticated access to the Microsoft SQL Server instance on {{target}} as {{subject}} permitted enabling or invoking `xp_cmdshell` (directly or across a trusted linked server via `EXECUTE AT` / `OPENQUERY`) to execute operating system commands under the SQL Server service account.',
+      impact: 'Operating system command execution on {{target}} under the SQL Server service identity.'
+    },
+    'postgresql-command-execution': {
+      phase_label: 'Initial Access, PostgreSQL Superuser Command Execution / File Access',
+      explanation: 'The PostgreSQL session on {{target}} authenticated as a superuser or member of `pg_execute_server_program` / `pg_read_server_files`. Using `COPY ... FROM PROGRAM` or server-side file functions executed operating system commands and accessed restricted host files under the `postgres` account.',
+      impact: 'Operating system command execution and arbitrary file access on {{target}} as the PostgreSQL service account.'
+    },
 
     // ---- Fallback ----
     '_default': {

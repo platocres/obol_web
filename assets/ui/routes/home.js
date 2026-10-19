@@ -1,9 +1,11 @@
 /*!
- * obol ui — routes/home.js — THE ENGAGEMENT SCREEN (the front door / launch surface).
- * Replaces the old dashboard: create an engagement with a platform profile (HTB, OffSec/OSCP,
- * PWK, TryHackMe, HTB CPTS, CTF, OSWP, custom) + machine-type + scope/targets, then launch a
- * run (seeds facts -> lands on the coach). Also the engagement library + active-engagement
- * status..
+ * obol ui - routes/home.js - THE ENGAGEMENT HUB (command center & launchpad).
+ * Two distinct lifecycle modes:
+ *   1. Pre-Engagement (!configured) -> Clean single-screen Launchpad (Platform, Scope, Box Settings).
+ *   2. Active Engagement (configured) -> Unified Mission Header + 2-Column Operations Grid:
+ *        - Left Column: Collapsible Target Rows & Attack Paths (capped at 10, with inline Bulk Nmap/IP Import)
+ *        - Right Column: Clear-Interior Workspace + Pivot Connectivity + Recent Activity
+ *      Engagement Library, In-Place Run Editor, and New Engagement Setup live in top command bar drawers.
  */
 (function (root) {
   'use strict';
@@ -11,57 +13,331 @@
   var U = OBOL.util;
   function esc(s) { return U.esc(s); }
 
-  // Which tunnel tool the connectivity chooser is showing. Ligolo-ng is the recommended default
-  // (a real routed interface). Lives for the session; the selection just re-renders the panel.
   var _tunnelSel = 'ligolo';
-  // Which troubleshooter symptom is open (null = none). Session-lived; picking one re-renders.
   var _ptrSym = null;
-  // A diagnosed-but-unresolved pivot problem turns the connectivity edge amber. Keyed per engagement
-  // so it does not bleed across runs; set when the doctor returns a non-healthy verdict, cleared on a
-  // healthy one or when the operator dismisses it.
+  var _showNewSetup = false;
+  var _showEditRun = false;
+  var _showBulkTarget = false;
+  var _targetFilter = 'all';
+  var _lastEngId = null;
+
   function troubleKey() { var e = OBOL.store.active() || {}; return 'obol.pivotTrouble:' + (e.id || 'x'); }
   function troubleOn() { try { return localStorage.getItem(troubleKey()) === '1'; } catch (e) { return false; } }
   function setTrouble(on) { try { if (on) localStorage.setItem(troubleKey(), '1'); else localStorage.removeItem(troubleKey()); } catch (e) {} }
 
   // Extract IPs and CIDRs from arbitrary pasted text.
   var IP_RE = /\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b/g;
-  function extractScope(text) {
+  function isValidIp(v) {
+    var parts = String(v || '').split('/');
+    if (parts.length > 2) return false;
+    var base = parts[0];
+    var octs = base.split('.');
+    if (octs.length !== 4) return false;
+    if (!octs.every(function (o) { return /^\d+$/.test(o) && +o >= 0 && +o <= 255; })) return false;
+    if (parts.length === 2) {
+      if (!/^\d{1,2}$/.test(parts[1])) return false;
+      var mask = +parts[1];
+      if (mask < 0 || mask > 32) return false;
+    }
+    return true;
+  }
+  function isIgnoredSelfOrBroadcast(ip, lhost) {
+    var base = String(ip || '').split('/')[0];
+    if (!base) return true;
+    var octs = base.split('.').map(Number);
+    if (base === '0.0.0.0' || base === '255.255.255.255' || octs[0] === 127 || octs[0] === 255 || octs[0] === 0) return true;
+    if (octs[0] === 169 && octs[1] === 254) return true;
+    if (lhost && base === lhost) return true;
+    return false;
+  }
+  function extractScope(text, lhost) {
     var out = [], m, seen = {};
+    IP_RE.lastIndex = 0;
     while ((m = IP_RE.exec(text || '')) !== null) {
       var v = m[0];
-      // validate octets 0-255
-      var ok = v.split('/')[0].split('.').every(function (o) { return +o >= 0 && +o <= 255; });
-      if (ok && !seen[v]) { seen[v] = 1; out.push(v); }
+      // Ignore SNMP OIDs and 5+ segment dotted numbers like 1.3.6.1.2.1
+      var before = m.index > 0 ? text.charAt(m.index - 1) : '';
+      var after = text.charAt(m.index + v.length) || '';
+      if (before === '.' || after === '.' || /[\/A-Za-z_-]/.test(before)) continue;
+      if (isValidIp(v) && !isIgnoredSelfOrBroadcast(v, lhost) && !seen[v]) {
+        seen[v] = 1;
+        out.push(v);
+      }
     }
     return out;
   }
   function isCidr(s) { return s.indexOf('/') >= 0; }
 
+  function expandSmallCidr(cidr, lhost) {
+    var parts = String(cidr || '').split('/');
+    if (parts.length !== 2) return [];
+    var mask = parseInt(parts[1], 10);
+    if (isNaN(mask) || mask < 28 || mask > 32) return [];
+    var octs = parts[0].split('.').map(Number);
+    var baseInt = ((octs[0] << 24) | (octs[1] << 16) | (octs[2] << 8) | octs[3]) >>> 0;
+    if (mask === 32) return isIgnoredSelfOrBroadcast(parts[0], lhost) ? [] : [parts[0]];
+    var count = 1 << (32 - mask);
+    var netInt = (baseInt & (~(count - 1) >>> 0)) >>> 0;
+    var out = [];
+    for (var i = 1; i < count - 1; i++) {
+      var n = (netInt + i) >>> 0;
+      var ip = [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+      if (!isIgnoredSelfOrBroadcast(ip, lhost)) out.push(ip);
+    }
+    return out;
+  }
+
+  // Smart Bulk Target / Nmap / /etc/hosts / CIDR parser shared by the Hub and the Targets tab.
+  var NOISE_HOST_WORDS = {
+    junk: 1, open: 1, closed: 1, filtered: 1, tcp: 1, udp: 1, host: 1, is: 1, up: 1, down: 1,
+    status: 1, ports: 1, ignored: 1, states: 1, nmap: 1, scan: 1, report: 1, for: 1, latency: 1,
+    seconds: 1, raw: 1, packets: 1, syn: 1, stealth: 1, service: 1, version: 1, starting: 1,
+  };
+  function cleanHostToken(tok) {
+    tok = String(tok || '').trim().replace(/^[(\["']+|[)\]"',;:]+$/g, '');
+    if (!tok || tok.length < 2 || tok.length > 90) return '';
+    if (/^\d+$/.test(tok) || isValidIp(tok) || /[\/\\:]/.test(tok)) return '';
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$/.test(tok)) return '';
+    if (NOISE_HOST_WORDS[tok.toLowerCase()]) return '';
+    return tok;
+  }
+  function parseBulkInput(text, lhost) {
+    text = String(text || '');
+    var hasScanOutput = /Nmap scan report for|<nmaprun\b|^\s*\d+\/(?:tcp|udp)\s+open\b|\bPorts:\s+\d+\/open\//im.test(text);
+    var hostMap = {};
+    var scanIps = [], scanIpSeen = {};
+    function pushScanIp(ip, hn) {
+      if (!isValidIp(ip) || isCidr(ip) || isIgnoredSelfOrBroadcast(ip, lhost)) return;
+      if (!scanIpSeen[ip]) { scanIpSeen[ip] = 1; scanIps.push(ip); }
+      if (hn && !hostMap[ip]) hostMap[ip] = hn;
+    }
+
+    var lines = text.split(/\r?\n/);
+    lines.forEach(function (line) {
+      if (/\[host down\]|Status:\s*Down/i.test(line)) return;
+      var mNmapParen = /Nmap scan report for\s+([^\s()]+)\s+\(((?:\d{1,3}\.){3}\d{1,3})\)/i.exec(line);
+      if (mNmapParen) {
+        pushScanIp(mNmapParen[2], cleanHostToken(mNmapParen[1]));
+        return;
+      }
+      var mNmapBare = /Nmap scan report for\s+((?:\d{1,3}\.){3}\d{1,3})\b/i.exec(line);
+      if (mNmapBare) {
+        pushScanIp(mNmapBare[1], '');
+        return;
+      }
+      var mGrep = /Host:\s+((?:\d{1,3}\.){3}\d{1,3})\s+\(([^)]*)\)/i.exec(line);
+      if (mGrep) {
+        pushScanIp(mGrep[1], cleanHostToken(mGrep[2]));
+        return;
+      }
+      // /etc/hosts or "<ip> <hostname>" or "<hostname> <ip>" on a simple non-scan line
+      if (/^\s*#/.test(line) || /Nmap|PORT\s+STATE|Host is up|^\s*\d+\/(?:tcp|udp)\b|^\s*\|/i.test(line)) return;
+      var tokens = line.trim().split(/[\s,]+/).filter(Boolean);
+      if (tokens.length >= 2 && tokens.length <= 6) {
+        var ipTok = '';
+        for (var i = 0; i < tokens.length; i++) {
+          if (isValidIp(tokens[i]) && !isCidr(tokens[i]) && !isIgnoredSelfOrBroadcast(tokens[i], lhost)) {
+            ipTok = tokens[i];
+            break;
+          }
+        }
+        if (ipTok && !hostMap[ipTok]) {
+          for (var j = 0; j < tokens.length; j++) {
+            if (tokens[j] === ipTok) continue;
+            var cand = cleanHostToken(tokens[j]);
+            if (cand && (cand.indexOf('.') > 0 || tokens.length <= 3)) {
+              hostMap[ipTok] = cand;
+              break;
+            }
+          }
+        }
+      }
+    });
+
+    // XML <host> support
+    if (/<nmaprun\b/i.test(text)) {
+      var hostBlocks = text.split(/<\/host>/i);
+      hostBlocks.forEach(function (hb) {
+        if (/<status[^>]*state=["']down["']/i.test(hb)) return;
+        var mAddr = /<address[^>]*addr=["']((?:\d{1,3}\.){3}\d{1,3})["'][^>]*addrtype=["']ipv4["']/i.exec(hb)
+          || /<address[^>]*addrtype=["']ipv4["'][^>]*addr=["']((?:\d{1,3}\.){3}\d{1,3})["']/i.exec(hb);
+        if (mAddr) {
+          var mHn = /<hostname[^>]*name=["']([^"']+)["']/i.exec(hb);
+          pushScanIp(mAddr[1], mHn ? cleanHostToken(mHn[1]) : '');
+        }
+      });
+    }
+
+    var allExtracted = extractScope(text, lhost);
+    var cidrs = allExtracted.filter(isCidr);
+    var hostIps = (hasScanOutput && scanIps.length)
+      ? scanIps
+      : allExtracted.filter(function (s) { return !isCidr(s); });
+
+    // If user pasted small CIDRs (/28-/32) and no individual IPs, expand them into host IPs
+    if (!hostIps.length && cidrs.length) {
+      cidrs.forEach(function (c) {
+        expandSmallCidr(c, lhost).forEach(function (ip) {
+          if (hostIps.indexOf(ip) === -1) hostIps.push(ip);
+        });
+      });
+    }
+
+    var hosts = hostIps.map(function (ip) {
+      var hn = hostMap[ip] || '';
+      var dom = '';
+      if (hn && hn.indexOf('.') > 0) {
+        dom = hn.split('.').slice(1).join('.');
+      }
+      return { ip: ip, hostname: hn, domain: dom };
+    });
+
+    // If user pasted a larger subnet CIDR (e.g. 10.10.10.0/24) with no individual host IPs, keep the CIDR as a target scope entry
+    if (!hosts.length && cidrs.length) {
+      cidrs.forEach(function (c) {
+        hosts.push({ ip: c, hostname: '', domain: '' });
+      });
+    }
+
+    // If user entered standalone hostname(s) (e.g. dc01.corp.local or box.htb) with no IPs/CIDRs
+    if (!hosts.length && !cidrs.length && !hasScanOutput) {
+      var seenHn = {};
+      lines.forEach(function (line) {
+        if (/^\s*#/.test(line)) return;
+        line.trim().split(/[\s,]+/).forEach(function (tok) {
+          var hn = cleanHostToken(tok);
+          if (hn && (hn.indexOf('.') > 0 || lines.length === 1) && !seenHn[hn.toLowerCase()]) {
+            seenHn[hn.toLowerCase()] = 1;
+            var dom = hn.indexOf('.') > 0 ? hn.split('.').slice(1).join('.') : '';
+            hosts.push({ ip: hn, hostname: hn, domain: dom });
+          }
+        });
+      });
+    }
+
+    var scope = hostIps.concat(cidrs);
+    if (!scope.length && hosts.length) {
+      scope = hosts.map(function (h) { return h.ip; });
+    }
+    return { scope: scope, hosts: hosts, cidrs: cidrs, hasScanOutput: hasScanOutput };
+  }
+
+  function ingestScanBlocks(text, defaultIp, doneCb) {
+    if (!(OBOL.ingest && OBOL.ingest.ensureParsers)) { if (doneCb) doneCb(0); return; }
+    OBOL.ingest.ensureParsers().then(function (okp) {
+      if (!okp || !OBOL.ingest.run) { if (doneCb) doneCb(0); return; }
+      var totalAdded = 0;
+      var raw = String(text || '');
+      var reportChunks = raw.split(/(?=^Nmap scan report for\b)/im);
+      var hostBlocks = [];
+      if (reportChunks.length > 1) {
+        var preamble = '';
+        reportChunks.forEach(function (chunk) {
+          if (!/^Nmap scan report for\b/i.test(chunk.trim())) {
+            preamble += chunk;
+            return;
+          }
+          if (/^Nmap scan report for[^\r\n]*\[host down\]/i.test(chunk.trim())) return;
+          var mIp = /Nmap scan report for\s+(?:[^\s()]+\s+\()?((?:\d{1,3}\.){3}\d{1,3})\)?/i.exec(chunk);
+          var bip = mIp ? mIp[1] : defaultIp;
+          hostBlocks.push({ ip: bip, text: (preamble ? (preamble + '\n' + chunk) : chunk) });
+          preamble = '';
+        });
+      }
+      if (!hostBlocks.length) {
+        hostBlocks.push({ ip: defaultIp, text: raw });
+      }
+      hostBlocks.forEach(function (b) {
+        var r = OBOL.ingest.run({
+          text: b.text,
+          command: 'nmap',
+          scope: b.ip ? ('host:' + b.ip) : undefined,
+          source: 'paste',
+          quiet: true,
+        });
+        totalAdded += (r && r.added) || 0;
+      });
+      if (doneCb) doneCb(totalAdded);
+    }).catch(function () { if (doneCb) doneCb(0); });
+  }
+
+  function importBulkTargets(text, doneCb) {
+    var eng = OBOL.store.active() || {};
+    var lhost = (eng.params && eng.params.lhost) || '';
+    var parsed = parseBulkInput(text, lhost);
+    if (!parsed.hosts.length && !parsed.cidrs.length) {
+      if (doneCb) doneCb({ ok: false, added: 0, updated: 0 });
+      return;
+    }
+    var added = 0, updated = 0;
+    var factsToAdd = [];
+    var SUP = (OBOL.facts && OBOL.facts.ProofState && OBOL.facts.ProofState.SUPPORTED) || 'supported';
+    OBOL.store.update(function (e) {
+      e.targets = e.targets || [];
+      e.params = e.params || {};
+      if (parsed.scope.length) e.params.scope_defined = true;
+      parsed.hosts.forEach(function (h, idx) {
+        var existing = e.targets.find(function (t) { return (t.ip || t.id) === h.ip; });
+        if (existing) {
+          if (h.hostname && !existing.hostname) { existing.hostname = h.hostname; updated++; }
+        } else {
+          e.targets.push({ id: 't-' + Date.now().toString(36) + '-' + idx, ip: h.ip, hostname: h.hostname || '', os: '' });
+          added++;
+        }
+        if (!e.params.target) {
+          e.params.target = h.ip;
+          e.activeTarget = h.ip;
+        }
+        var sc = 'host:' + h.ip;
+        factsToAdd.push(OBOL.facts.makeFact({ kind: 'target.configured', scope: sc, source: 'targets' }));
+        if (h.hostname) {
+          factsToAdd.push(OBOL.facts.makeFact({ kind: 'host.hostname', scope: sc, value: { name: h.hostname.split('.')[0], fqdn: h.hostname }, state: SUP, source: 'targets' }));
+        }
+        if (h.domain) {
+          factsToAdd.push(OBOL.facts.makeFact({ kind: 'host.domain', scope: sc, value: { domain: h.domain }, state: SUP, source: 'targets' }));
+        }
+      });
+    }, 'targets');
+    if (factsToAdd.length) OBOL.store.addFacts(factsToAdd, 'facts');
+
+    var finish = function (scanFactsAdded) {
+      if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+      if (doneCb) doneCb({ ok: true, added: added, updated: updated, cidrs: parsed.cidrs.length, scanFacts: scanFactsAdded || 0 });
+    };
+
+    if (parsed.hasScanOutput) {
+      var defIp = (parsed.hosts[0] && parsed.hosts[0].ip) || ((OBOL.store.active().params || {}).target) || '';
+      ingestScanBlocks(text, defIp, finish);
+    } else {
+      finish(0);
+    }
+  }
+
   function platformCards(selected) {
     return OBOL.profile.listPresets().map(function (p) {
+      var badgeCls = p.exam ? 'exam' : (p.id === 'client' ? 'client' : 'lab');
+      var badgeTxt = p.exam ? 'exam' : (p.id === 'client' ? 'client' : 'lab');
+      var objText = p.objective_label || (p.flag_names && p.flag_names.length ? p.flag_names.join(', ') : 'Full Compromise');
       return '<label class="pf-card' + (p.id === selected ? ' sel' : '') + '">'
         + '<input type="radio" name="pf-platform" value="' + esc(p.id) + '"' + (p.id === selected ? ' checked' : '') + '>'
         + '<span class="pf-name">' + esc(p.name) + '</span>'
-        + (p.exam ? '<span class="pf-badge exam">exam</span>' : '<span class="pf-badge lab">lab</span>')
-        + '<span class="pf-flags">' + esc(p.flag_names.join(', ')) + '</span>'
+        + '<span class="pf-badge ' + badgeCls + '">' + badgeTxt + '</span>'
+        + '<span class="pf-flags">' + esc(objText) + '</span>'
         + '</label>';
     }).join('');
   }
 
-  // Placeholder for the working-directory field: a GENERIC example, never the operator's own path. Left
-  // blank, the real default is a neutral ~/engagements/<engagement-name> (see the launch handler).
   function workdirHint() {
     var sel = ((OBOL.store.active() || {}).profile || {}).platform || 'custom';
     return OBOL.workspace.join(OBOL.workspace.DEFAULT_BASE, OBOL.profile.isExamPlatform(sel) ? 'exam' : 'box');
   }
 
   function machineOptions(selected) {
-    return '<option value="">Machine Type (Optional)</option>' + OBOL.profile.listMachineTypes().map(function (m) {
+    return '<option value="">Machine Type (Auto / Optional)</option>' + OBOL.profile.listMachineTypes().map(function (m) {
       return '<option value="' + esc(m.id) + '"' + (m.id === selected ? ' selected' : '') + '>' + esc(OBOL.store.runLabel(m)) + '</option>';
     }).join('');
   }
-  // The learner's personal attack-order preference. Defaults to 'balanced' (no nudge). See WORKFLOWS in
-  // profile.js — this only nudges Next Steps within a phase, it never overrides an evidence-driven #1.
+
   function workflowOptions(selected) {
     var sel = (OBOL.profile.normalizeWorkflow && OBOL.profile.normalizeWorkflow(selected)) || OBOL.profile.DEFAULT_WORKFLOW;
     return (OBOL.profile.listWorkflows ? OBOL.profile.listWorkflows() : []).map(function (w) {
@@ -69,10 +345,6 @@
     }).join('');
   }
 
-  // An engagement is "set up" once the operator has actually done something with it: chosen a real
-  // platform, scoped a target, or collected a fact. A brand-new default run (custom platform, no
-  // targets, no facts, still called "Untitled Run") is NOT set up — we greet it with guidance
-  // instead of a confusing phase bar.
   function isConfigured(eng, factCount) {
     if (!eng) return false;
     var prof = eng.profile || {};
@@ -83,30 +355,105 @@
     return realPlatform || targets || scoped || (factCount || 0) > 0 || named;
   }
 
-  // First-run guidance shown in place of the active-run panel until the engagement is set up.
-  function gettingStarted() {
-    return '<div class="eng-welcome">'
-      + '<div class="eng-welcome-h">Set Up Your First Engagement</div>'
-      + '<p class="eng-welcome-sub">obol coaches your next move from the evidence you collect, no run is configured yet. Set one up below and the coach takes over from there.</p>'
-      + '<ol class="eng-steps">'
-      + '<li><span class="eng-step-n">1</span><div><b>Pick A Platform</b><span>Hack The Box, OffSec OSCP, CTF… it decides the flags, proof rules, and report shape.</span></div></li>'
-      + '<li><span class="eng-step-n">2</span><div><b>Set Your Scope</b><span>Paste the target IPs / CIDRs for the box or lab (junk is filtered).</span></div></li>'
-      + '<li><span class="eng-step-n">3</span><div><b>Launch</b><span>obol opens the coach and ranks your first commands. The phase bar lights up as you collect facts.</span></div></li>'
-      + '</ol>'
-      + '<button type="button" class="btn-primary eng-jump">Set It Up Below ↓</button>'
+  function ago(at) {
+    if (!at) return '';
+    var s = Math.max(0, Math.floor((Date.now() - at) / 1000));
+    if (s < 60) return 'Just Now';
+    var m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
+    var h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
+    return Math.floor(h / 24) + 'd ago';
+  }
+
+  // Compact Loadout readiness pill for the Hub command bar
+  function loadoutStatusPill() {
+    var p; try { p = JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { p = null; }
+    var A = OBOL.ARSENAL || {}, seen = {}, total = 0, ready = 0;
+    Object.keys(A).forEach(function (k) {
+      var e = A[k]; if (!e || seen[e.key]) return; seen[e.key] = 1;
+      total++;
+      var pres = e.class === 'builtin' || (p && ((p.tools && p.tools[e.key] && p.tools[e.key].present)
+        || (p.staged || []).indexOf(e.dest || '') >= 0 || (p.digests && p.digests[e.key])));
+      if (pres) ready++;
+    });
+    if (p) {
+      return '<a class="hb-lo-pill is-ok" href="#/loadout" title="Attack box Loadout synced - click to inspect">'
+        + '<span class="hb-lo-dot">●</span> Loadout Stocked (' + ready + '/' + total + ')</a>';
+    }
+    return '<a class="hb-lo-pill is-warn" href="#/loadout" title="Stock or sync your Kali attack box">'
+      + '<span class="hb-lo-dot">●</span> Step 0: Sync Loadout &rarr;</a>';
+  }
+
+  // Top Command Bar: houses the Engagement Library drawer, In-Place Run Editor toggle, New Run toggle, and Manage/Reset disclosure.
+  function topCommandBar(configured) {
+    var engs = (OBOL.store.listEngagements && OBOL.store.listEngagements()) || [];
+    return '<div class="eng-library hb-cmdbar">'
+      + '<div class="hb-cmdbar-left">'
+      + '  <h1 class="route-h1 hb-route-h1">' + (configured ? 'Engagement Hub' : 'Launch Engagement') + '</h1>'
+      + loadoutStatusPill()
+      + '</div>'
+      + '<div class="hb-cmdbar-right">'
+      + '  <details class="eng-lib-drawer">'
+      + '    <summary class="cr-btn-glass small hb-cmd-sum">&#8644; Switch / Library <span class="hb-cmd-count">' + engs.length + '</span></summary>'
+      + '    <div class="eng-lib-popover">'
+      + '      <div class="eng-lib-pop-h"><strong>Saved Engagements</strong><span class="muted small">Stored locally in this browser</span></div>'
+      +        libraryList()
+      + '    </div>'
+      + '  </details>'
+      + (configured
+          ? '<button type="button" class="cr-btn-glass small' + (_showEditRun ? ' is-open' : '') + '" id="hb-toggle-edit">&#9881; Edit Run / LHOST</button>'
+            + '<button type="button" class="cr-btn-neon neon-emerald small" id="hb-toggle-new">' + (_showNewSetup ? 'Close Setup ✕' : '+ New Engagement') + '</button>'
+          : '')
+      + '  <details class="eng-danger-toggle">'
+      + '    <summary class="cr-btn-glass small hb-cmd-sum hb-danger-sum">Manage / Reset</summary>'
+      + '    <div class="eng-danger">'
+      + '      <div class="eng-danger-item"><div class="eng-danger-txt"><strong>Delete All Engagements</strong>'
+      + '      <span>Remove every saved run and its evidence. Keeps your skin &amp; appearance settings.</span></div>'
+      + '      <button class="btn-danger" id="eng-clear">Delete All Engagements</button></div>'
+      + '      <div class="eng-danger-item"><div class="eng-danger-txt"><strong>Full Reset</strong>'
+      + '      <span>Erase <em>everything</em> OBOL saved in this browser (engagements, screenshots, and settings) and start completely fresh. A hard refresh (Ctrl+F5) does not do this.</span></div>'
+      + '      <button class="btn-danger btn-danger-strong" id="eng-reset">Full Reset, Erase All Data</button></div>'
+      + '    </div>'
+      + '  </details>'
+      + '</div>'
       + '</div>';
   }
 
+  // In-Place Run Editor Drawer (edit active engagement name, working dir, LHOST, interface, workflow without creating a new run)
+  function editRunDrawer(eng) {
+    if (!eng) return '';
+    var prof = eng.profile || {};
+    var params = eng.params || {};
+    var root = (eng.workspace && eng.workspace.root) || '';
+    var iface = params.lhost_iface || 'tun0';
+    return '<div id="hb-edit-drawer" class="hb-drawer station-card neon-lane-cyan"' + (_showEditRun ? '' : ' hidden') + '>'
+      + '<div class="hb-drawer-head">'
+      + '  <div><span class="hb-drawer-kicker">ACTIVE RUN CONFIGURATION</span><h3 class="hb-drawer-title">Edit Engagement Settings In Place</h3></div>'
+      + '  <button type="button" class="cr-btn-glass small" id="hb-edit-close">Close ✕</button>'
+      + '</div>'
+      + '<div class="hb-edit-grid">'
+      + '  <label class="eng-field"><span>Engagement Name</span><input id="hb-edit-name" value="' + U.attr(eng.name || '') + '" autocomplete="off"></label>'
+      + '  <label class="eng-field"><span>Working Directory (Kali)</span><input id="hb-edit-workdir" value="' + U.attr(root) + '" placeholder="~/engagements/box" autocomplete="off" spellcheck="false"></label>'
+      + '  <label class="eng-field"><span>Your VPN IP (LHOST)</span><input id="hb-edit-lhost" value="' + U.attr(params.lhost || '') + '" placeholder="e.g. 10.10.14.9" autocomplete="off" spellcheck="false"></label>'
+      + '  <label class="eng-field"><span>Interface</span><select id="hb-edit-iface">'
+      +    ['tun0', 'tun1', 'tap0', 'eth0', 'wlan0', 'vpn0', 'wg0'].map(function (i) { return '<option value="' + i + '"' + (i === iface ? ' selected' : '') + '>' + i + '</option>'; }).join('')
+      + '  <option value="">other / none</option></select></label>'
+      + '  <label class="eng-field"><span>Attack Workflow Nudge</span><select id="hb-edit-wf">' + workflowOptions(prof.workflow || '') + '</select></label>'
+      + '</div>'
+      + '<div class="hb-drawer-foot">'
+      + '  <button type="button" class="cr-btn-neon neon-emerald small" id="hb-edit-save">Save Run Settings</button>'
+      + '</div>'
+      + '</div>';
+  }
+
+  // Unified Mission Header: Active Run Identity + Phase Spine + 4 Neon Vitals + Integrated Next-Move Terminal Bar
   function activePanel() {
     var eng = OBOL.store.active();
     if (!eng) return '';
     var prof = eng.profile || {};
     var preset = (OBOL.profile.PRESETS[prof.platform] || OBOL.profile.PRESETS.custom);
     var exam = OBOL.profile.isExamPlatform(prof.platform);
+    var flagsOn = OBOL.profile.hasFlags ? OBOL.profile.hasFlags(prof) : true;
     var facts = OBOL.store.factSet();
-    // Nothing is "reached" until something is actually known. With no facts yet (a brand-new run,
-    // no targets), recon isn't done — it's simply where you start, so mark it the frontier and
-    // leave every phase unlit rather than lighting recon/enum on an empty engagement.
     var started = Object.keys(facts.kinds()).length > 0;
     var reached = started ? OBOL.phases.phaseIndex(OBOL.phases.targetPhase(facts)) : -1;
     var frontier = started ? OBOL.phases.frontierIndex(facts) : 0;
@@ -116,68 +463,117 @@
     var mt = prof.machine_type ? (OBOL.profile.MACHINE_TYPES[prof.machine_type] || {}).name : '';
     var nf = Object.keys(facts.kinds()).length;
     var isCustom = !prof.platform || prof.platform === 'custom';
-    // at-a-glance counters, folded into the summary box so there's no separate vitals row and the
-    // empty right side of the phase-spine row carries real engagement state instead of dead space.
     var infos = targetInfos(eng);
     var owned = infos.filter(function (i) { return i.lvl === 'privileged'; }).length;
     var totFlags = infos.reduce(function (a, i) { return a + i.flags; }, 0);
     var creds = (OBOL.creds && OBOL.creds.gather()) || [];
+
     function stat(href, cls, val, label, sub) {
       var inner = '<span class="eng-stat-v ' + cls + '">' + val + '</span>'
         + '<span class="eng-stat-k">' + esc(label) + (sub ? '<span class="eng-stat-sub">' + esc(sub) + '</span>' : '') + '</span>';
       return href ? '<a class="eng-stat" href="' + href + '">' + inner + '</a>' : '<span class="eng-stat">' + inner + '</span>';
     }
+    var secondStat = flagsOn
+      ? stat('#/scoreboard', 'es-flags', totFlags, totFlags === 1 ? 'Flag' : 'Flags', '')
+      : stat('#/scoreboard', 'es-flags', owned, owned === 1 ? 'Host Owned' : 'Hosts Owned', '');
     var stats = '<div class="eng-stats">'
       + stat('#/targets', 'es-targets', infos.length, infos.length === 1 ? 'Target' : 'Targets', owned ? (owned + ' Owned') : '')
-      + stat('', 'es-flags', totFlags, totFlags === 1 ? 'Flag' : 'Flags', '')
+      + secondStat
       + stat('#/creds', 'es-creds', creds.length, creds.length === 1 ? 'Credential' : 'Credentials', '')
-      + stat('', 'es-facts', nf, nf === 1 ? 'Fact' : 'Facts', '')
+      + stat('#/findings', 'es-facts', nf, nf === 1 ? 'Fact' : 'Facts', '')
       + '</div>';
-    return '<div class="eng-active">'
-      + '<div class="eng-active-head">'
-      + '<div><div class="eng-active-name">' + esc(OBOL.store.runLabel(eng)) + '</div>'
-      + '<div class="eng-badges">'
-      // only show a platform badge for a real platform — "Custom" told the user nothing
-      + (isCustom ? '' : '<span class="pf-badge ' + (exam ? 'exam' : 'lab') + '">' + esc(preset.name) + (exam ? ' · exam' : '') + '</span>')
-      + (mt ? '<span class="pill">' + esc(mt) + '</span>' : '')
-      + (prof.osid ? '<span class="pill">OSID ' + esc(prof.osid) + '</span>' : '')
-      + '</div></div>'
-      + '<a class="btn-primary" href="#/path">Open Coach →</a>'
+
+    // Integrated Next Move Strip
+    var pack = OBOL.packs.actions();
+    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
+    var allDone = infos.length > 0 && owned === infos.length && (!flagsOn || infos.every(function (i) { return i.flags >= 2; }));
+    var nm = allDone ? null : ((OBOL.coach && OBOL.coach.topMove) ? OBOL.coach.topMove()
+      : OBOL.pack.rankActions(facts, pack, { focusPrefixes: focus, noFlags: !flagsOn })[0]);
+    var activeTgt = (eng.params && eng.params.target) || (infos[0] && infos[0].ip) || '';
+    var nmHtml;
+    if (allDone) {
+      nmHtml = '<div class="hb-anchor">'
+        + '<div class="hb-anchor-main">'
+        + '  <span class="hb-anchor-l">Objectives Complete' + (activeTgt ? ' &middot; ' + esc(activeTgt) : '') + '</span>'
+        + '  <span class="hb-anchor-t">All targets compromised' + (flagsOn ? ' and all flags secured' : '') + '</span>'
+        + '  <span class="hb-anchor-body">Review your attack path, verify proof screenshots, and export your engagement report.</span>'
+        + '</div>'
+        + '<div class="hb-anchor-actions">'
+        + '  <a class="cr-btn-neon neon-emerald small" href="#/report">Open Report &amp; Export &rarr;</a>'
+        + '  <a class="cr-btn-neon neon-cyan small" href="#/evidence">Verify Proof &rarr;</a>'
+        + '</div>'
+        + '</div>';
+    } else if (nm) {
+      var fillOpts = { params: eng.params || {}, profile: eng.profile };
+      var variants = (OBOL.command && OBOL.command.fillAll) ? OBOL.command.fillAll(nm, facts, fillOpts) : [];
+      var v = variants.filter(function (x) { return !x.gated; })[0] || variants[0]
+        || OBOL.command.fillCommand(nm, facts, fillOpts, 0);
+      nmHtml = '<div class="hb-anchor">'
+        + '<div class="hb-anchor-main">'
+        + '  <span class="hb-anchor-l">Next Move' + (activeTgt ? ' &middot; ' + esc(activeTgt) : '') + '</span>'
+        + '  <span class="hb-anchor-t">' + esc(nm.title) + '</span>'
+        + '  <code class="hb-anchor-cmd">' + esc(v.filled) + '</code>'
+        + '</div>'
+        + '<div class="hb-anchor-actions">'
+        + '  <button type="button" class="cr-btn-neon neon-cyan small btn-copy hb-copy" data-copy="' + U.attr(v.filled) + '">Copy Cmd</button>'
+        + '  <a class="cr-btn-neon neon-emerald small" href="#/path">Open Coach &rarr;</a>'
+        + '  <a class="cr-btn-neon neon-amber small" href="#/cruise">Cruise &rarr;</a>'
+        + '</div>'
+        + '</div>';
+    } else {
+      nmHtml = '<div class="hb-anchor hb-anchor-empty">'
+        + '<div class="hb-anchor-main">'
+        + '  <span class="hb-anchor-l">Next Move</span>'
+        + '  <span class="hb-anchor-body">Add a target or paste scan evidence to rank your next command here.</span>'
+        + '</div>'
+        + '<div class="hb-anchor-actions">'
+        + '  <a class="cr-btn-neon neon-emerald small" href="#/evidence">Paste Evidence &rarr;</a>'
+        + '  <a class="cr-btn-neon neon-amber small" href="#/cruise">Open Cruise &rarr;</a>'
+        + '</div>'
+        + '</div>';
+    }
+
+    var lhostBadge = (eng.params && eng.params.lhost)
+      ? '<span class="pill hb-lhost-pill">' + esc((eng.params.lhost_iface || 'tun0') + ': ' + eng.params.lhost) + '</span>'
+      : '';
+
+    return '<div class="eng-active station-card neon-lane-emerald">'
+      + '<div class="eng-active-top">'
+      + '  <div class="eng-active-id">'
+      + '    <div class="eng-active-title-row">'
+      + '      <span class="eng-active-name">' + esc(OBOL.store.runLabel(eng)) + '</span>'
+      + '      <div class="eng-badges">'
+      +          (isCustom ? '' : '<span class="pf-badge ' + (exam ? 'exam' : 'lab') + '">' + esc(preset.name) + (exam ? ' · exam' : '') + '</span>')
+      +          (mt ? '<span class="pill">' + esc(mt) + '</span>' : '')
+      +          (prof.osid ? '<span class="pill">OSID ' + esc(prof.osid) + '</span>' : '')
+      +          (prof.client ? '<span class="pill">' + esc(prof.client) + '</span>' : '')
+      +          lhostBadge
+      + '      </div>'
+      + '    </div>'
+      + '    <div class="home-spine">' + spine + '</div>'
+      + '  </div>'
+      +    stats
       + '</div>'
-      + '<div class="eng-mid"><div class="home-spine">' + spine + '</div>' + stats + '</div>'
-      + engagementPath()
+      + nmHtml
       + '</div>';
   }
 
-  // ── the virtual workspace: obol's model of the operator's Kali working directory, filling over time ──
-  function ago(at) {
-    if (!at) return '';
-    var s = Math.max(0, Math.floor((Date.now() - at) / 1000));
-    if (s < 60) return 'Just Now';
-    var m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
-    var h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
-    return Math.floor(h / 24) + 'd ago';
-  }
+  // ── Virtual Workspace: clear dark interior, 1-click Kali init & serve bar, collapsed empty folders ──
   function factLine(kinds) {
     if (!kinds || !kinds.length) return '';
     var names = kinds.slice(0, 6).map(function (k) { return esc(U.titleCase(OBOL.pack.friendly(k))); });
     return '<div class="ws-file-facts"><span class="mini-label">Proved</span>' + names.join(', ')
       + (kinds.length > 6 ? ' +' + (kinds.length - 6) : '') + '</div>';
   }
-  // human file size, e.g. 5.0 kB — only shown for files a disk-sync measured.
   function fsize(n) { n = +n || 0; if (n <= 0) return ''; if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(1) + ' kB'; return (n / 1048576).toFixed(1) + ' MB'; }
-  // the capture bridge: send the operator to Evidence, pre-addressed to this file's move when it has
-  // one (the command prefills), so pasting the output routes through the normal parser → facts pipeline.
   function captureHref(f) { return f.actionId ? ('#/evidence/' + encodeURIComponent(f.actionId)) : '#/evidence'; }
 
   function fileRow(f, root) {
     var rel = OBOL.vfs.relOf(f.path, root);
     var badge = f.facts.length ? ('<span class="ws-badge">' + f.facts.length + ' Fact' + (f.facts.length === 1 ? '' : 's') + '</span>') : '';
     var suggested = f.status === 'expected' && f.origin === 'suggested';
-    // WS4: a captured file that proved credential/hash facts flows straight into the Creds tracker.
     var credsLink = (f.facts || []).some(function (k) { return /^(credential\.|hash\.)/.test(k); })
-      ? '<a class="ws-file-link" href="#/creds">Use these in Creds →</a>' : '';
-    // a one-word state tag so the tree reads at a glance without expanding a row.
+      ? '<a class="ws-file-link" href="#/creds">Use these in Creds &rarr;</a>' : '';
     var tag = f.status === 'captured' ? '' : suggested ? '<span class="ws-tag ws-tag-sugg">Suggested</span>'
       : f.unknown ? '<span class="ws-tag ws-tag-unk">On Disk</span>'
       : f.manual ? '<span class="ws-tag ws-tag-man">Added</span>'
@@ -187,47 +583,39 @@
     if (f.image) {
       body = '<img class="ws-shot" src="' + esc(f.image) + '" alt="proof screenshot">';
     } else if (f.status === 'captured') {
-      // drill-down: the raw command output as a mini terminal, plus what it proved and where to review it.
       var out = String(f.output || '').replace(/\s+$/, '');
-      var capped = out.length > 4000 ? out.slice(0, 4000) + '\n… (truncated, full output in the Run Log)' : out;
+      var capped = out.length > 4000 ? out.slice(0, 4000) + '\n... (truncated, full output in the Run Log)' : out;
       body = cmdBlock
         + (capped ? '<pre class="ws-mini-term">' + esc(capped) + '</pre>' : '<div class="ws-file-note">Captured, no text body.</div>')
         + factLine(f.facts)
-        + '<div class="ws-file-links"><a class="ws-file-link" href="#/history">Review in the Run Log →</a>' + credsLink + '</div>';
+        + '<div class="ws-file-links"><a class="ws-file-link" href="#/history">Review in the Run Log &rarr;</a>' + credsLink + '</div>';
     } else if (suggested) {
-      // anticipated: the coach is recommending a move that writes this file. obol assumes you are
-      // probably about to create it and pencils it in — it becomes real once you run and paste it.
       body = '<div class="ws-file-note">The coach is suggesting a move that creates this file'
         + (f.title ? ' (<strong>' + esc(f.title) + '</strong>)' : '') + '. Pencilled in, run it, then paste the output to capture it.</div>'
         + cmdBlock
-        + '<div class="ws-file-links"><a class="ws-file-link" href="#/path">Open the move in Next Steps →</a>'
-        + '<a class="ws-file-link" href="' + captureHref(f) + '">Capture its output →</a></div>';
+        + '<div class="ws-file-links"><a class="ws-file-link" href="#/path">Open the move in Next Steps &rarr;</a>'
+        + '<a class="ws-file-link" href="' + captureHref(f) + '">Capture its output &rarr;</a></div>';
     } else if (f.unknown) {
-      // a disk-sync turned this up but obol has no move that made it — stay on the same page, invite it.
-      body = '<div class="ws-file-note">Found on your disk by a workspace sync. obol doesn\'t know this one yet'
+      body = '<div class="ws-file-note">Found on your disk by a workspace sync. OBOL doesn\'t know this one yet'
         + (f.size ? ' (' + esc(fsize(f.size)) + ')' : '') + '. Paste its contents and the parsers will read whatever they recognize.</div>'
-        + '<a class="ws-file-link" href="#/evidence">Paste its contents on Evidence →</a>';
+        + '<a class="ws-file-link" href="#/evidence">Paste its contents on Evidence &rarr;</a>';
     } else if (f.manual) {
       body = '<div class="ws-file-note">You added this file by hand. Paste its contents on Evidence to mint any facts it proves.</div>'
-        + '<a class="ws-file-link" href="#/evidence">Capture it on Evidence →</a>';
+        + '<a class="ws-file-link" href="#/evidence">Capture it on Evidence &rarr;</a>';
     } else if (f.confirmed) {
-      // used by a later command / seen by a sync → it exists on disk, obol just never received the body.
-      body = '<div class="ws-file-note">This file is on your disk, but obol hasn\'t received its output. Paste it on Evidence to capture what it proves.</div>'
+      body = '<div class="ws-file-note">This file is on your disk, but OBOL hasn\'t received its output. Paste it on Evidence to capture what it proves.</div>'
         + cmdBlock
-        + '<a class="ws-file-link" href="' + captureHref(f) + '">Capture it on Evidence →</a>';
+        + '<a class="ws-file-link" href="' + captureHref(f) + '">Capture it on Evidence &rarr;</a>';
     } else {
-      // expected but not captured: obol handed the command but never got the output.
-      body = '<div class="ws-file-note">obol handed you a command that writes this file, but hasn\'t received its output yet.</div>'
+      body = '<div class="ws-file-note">OBOL handed you a command that writes this file, but hasn\'t received its output yet.</div>'
         + cmdBlock
-        + '<a class="ws-file-link" href="' + captureHref(f) + '">Paste its output on Evidence to capture it →</a>';
+        + '<a class="ws-file-link" href="' + captureHref(f) + '">Paste its output on Evidence to capture it &rarr;</a>';
     }
     var desc = OBOL.vfs.describe ? ('<div class="ws-file-desc">' + esc(OBOL.vfs.describe(f)) + '</div>') : '';
     var cls = 'ws-file ws-' + f.status + (suggested ? ' ws-suggested' : '') + (f.confirmed ? ' ws-confirmed' : '')
       + (f.unknown ? ' ws-unknown' : '') + (f.manual ? ' ws-manual' : '') + (f.flag ? ' ws-flag' : '');
-    // WS1: a suggested file reads as a to-do — show the move that creates it right in the row.
-    var fromTag = (suggested && f.title) ? '<span class="ws-from" title="' + U.attr('Created by: ' + f.title) + '">↪ ' + esc(f.title) + '</span>' : '';
-    // WS5: copy the file's full path without expanding.
-    var copyPath = '<button type="button" class="ws-copy-path" data-copy="' + U.attr(f.path || rel) + '" title="Copy path">⧉</button>';
+    var fromTag = (suggested && f.title) ? '<span class="ws-from" title="' + U.attr('Created by: ' + f.title) + '">&#8618; ' + esc(f.title) + '</span>' : '';
+    var copyPath = '<button type="button" class="ws-copy-path" data-copy="' + U.attr(f.path || rel) + '" title="Copy path">&#10697;</button>';
     return '<details class="' + cls + '" data-rel="' + U.attr(rel) + '">'
       + '<summary><span class="ws-dot"></span><span class="ws-file-name">' + esc(f.name) + '</span>' + tag + badge + fromTag
       + (f.at ? '<span class="ws-when">' + esc(ago(f.at)) + '</span>' : '')
@@ -236,17 +624,16 @@
       + '</summary>'
       + '<div class="ws-file-body">' + desc + body + '</div></details>';
   }
-  // The "Sync from your disk" block: a one-shot snapshot command to run, and a box to paste its listing
-  // back. obol reconciles — confirming files it predicted, adopting files it didn't know about.
+
   function syncBlock(eng) {
     var cmd = (OBOL.workspace && OBOL.workspace.snapshotCmd) ? OBOL.workspace.snapshotCmd(eng) : '';
     if (!cmd) return '';
-    return '<details class="ws-sync"><summary>Sync From Your Disk <span class="ws-sync-tag">Bulk-Match The Whole Folder</span></summary>'
-      + '<p class="ws-sync-hint">Run this in your working directory and paste the output back. obol confirms the files it predicted and adopts any it didn\'t know about (you can then paste their contents to mint facts). Nothing is executed here.</p>'
+    return '<details class="ws-sync"><summary>Sync From Your Disk <span class="ws-sync-tag">Bulk-Match Working Folder</span></summary>'
+      + '<p class="ws-sync-hint">Run this in your working directory and paste the output back. OBOL confirms the files it predicted and adopts any it didn\'t know about.</p>'
       + '<div class="ws-sync-cmd"><code id="ws-snap-code">' + esc(cmd) + '</code>'
       + '<button type="button" class="btn-copy ws-snap-copy" data-copy="ws-snap-code">copy</button></div>'
-      + '<textarea id="ws-sync-paste" class="ws-sync-paste" rows="4" placeholder="Paste the file list here…" spellcheck="false"></textarea>'
-      + '<button type="button" class="btn-primary ws-sync-run">Sync Workspace</button>'
+      + '<textarea id="ws-sync-paste" class="ws-sync-paste" rows="3" placeholder="Paste the file list here..." spellcheck="false"></textarea>'
+      + '<button type="button" class="cr-btn-neon neon-cyan small ws-sync-run">Sync Workspace</button>'
       + '</details>';
   }
 
@@ -254,87 +641,133 @@
     var eng = OBOL.store.active();
     if (!eng || !OBOL.vfs) return '';
     var ov = (eng.workspace && eng.workspace.overrides) || {};
-    // Until the operator has actually done something (run/pasted a command, added or synced a file), keep
-    // the workspace a clean, empty skeleton — a lone pencilled-in "suggested" file on a brand-new run reads
-    // as cryptic. Once there is real activity, obol resumes pencilling in what the next moves will create.
     var started = (eng.activities || []).length > 0 || (eng.screenshots || []).length > 0 || ((ov.added || []).length > 0);
     var vfs = OBOL.vfs.build(eng, started ? {} : { suggested: [] });
     var hidden = Object.keys(ov.removed || {}).length;
-    var head = '<div class="ws-panel-head"><h2 class="coach-sec-h">Workspace</h2>'
-      + (vfs.total ? ('<span class="ws-counts"><span class="ws-c-cap">' + vfs.captured + ' File' + (vfs.captured === 1 ? '' : 's') + ' Captured</span>'
-          + (vfs.expected ? ' · <span class="ws-c-exp">' + vfs.expected + ' Pending</span>' : '') + '</span>') : '')
-      + '</div>';
-    // Only show the root path when it's a real directory — an unconfigured run defaults to ".", which rendered
-    // as a lone stray dot. When there's nothing to show, drop the line entirely (keep a synced-at stamp if any).
-    var rootStr = (vfs.root && vfs.root !== '.') ? vfs.root : '';
+    var rootStr = (vfs.root && vfs.root !== '.') ? vfs.root : ((OBOL.workspace && OBOL.workspace.defaultRoot) ? OBOL.workspace.defaultRoot(OBOL.workspace.DEFAULT_BASE, eng) : '~/engagements/run');
     var syncedStamp = ov.syncedAt ? '<span class="ws-synced-at">Synced ' + esc(ago(ov.syncedAt)) + '</span>' : '';
-    var rootLine = (rootStr || syncedStamp)
-      ? '<div class="ws-root">' + (rootStr ? '<code>' + esc(rootStr) + '</code>' : '') + syncedStamp + '</div>'
-      : '';
-    var loInsight = loadoutInsight();
-    var invite = started
-      ? '<p class="ws-invite">A live picture of your Kali working directory. obol pencils in the files the coach\'s next moves'
-        + ' will create, then confirms each one once you run it and paste the output on <a href="#/evidence">Evidence</a>.'
-        + ' Add or remove files by hand, or sync the whole folder below.</p>'
-      : '<p class="ws-invite">This mirrors your Kali working directory. It\'s empty until you start: run a move from'
-        + ' <a href="#/path">Next Steps</a> and paste its output on <a href="#/evidence">Evidence</a>, and the files you'
-        + ' generate show up here as you go.</p>';
-    // what each skeleton folder is for — shown in place of a bare "Empty" so an empty workspace still teaches.
-    var WS_PURPOSE = {
-      scans: 'Scan + enumeration output (nmap, gobuster, enum4linux…)',
-      loot: 'Creds, hashes, and files pulled off targets',
-      exploit: 'Exploit code + payloads you build or fetch',
-      www: 'Files you host and serve to targets',
-      proof: 'Flags + proof screenshots for the report',
-      other: 'Anything else in your working directory',
-    };
-    // WS3: www/ is the serve directory — give it a one-click serve command + a "stage your Loadout payloads
-    // into www/" copy, closing the Loadout → serve → deliver loop in the place you actually serve from.
-    var wwwDir = (vfs.root && vfs.root !== '.') ? (vfs.root.replace(/\/+$/, '') + '/www') : 'www';
-    function wwwHelper(hasFiles) {
-      var serveCmd = 'cd ' + wwwDir + ' && python3 -m http.server 80';
-      var stageCmd = 'cp ~/.obol/arsenal/win/* ' + wwwDir + '/ 2>/dev/null';
-      // Collapsed by default: at the start of a run there's nothing to serve, so keep it out of the way;
-      // when you reach delivery, the summary tells you it's here and one click reveals the commands.
-      return '<details class="ws-www"' + (hasFiles ? ' open' : '') + '>'
-        + '<summary class="ws-www-sum">Serve To Targets <span class="ws-www-hint">Host &amp; Stage Payloads</span></summary>'
-        + '<div class="ws-www-body">'
-        + '<div class="ws-www-row"><span class="ws-www-l">Start Server</span>'
-        + '<code class="ws-copyval" data-copy="' + U.attr(serveCmd) + '" title="Click to copy">' + esc(serveCmd) + '</code></div>'
-        + '<div class="ws-www-row"><span class="ws-www-l">Stage Loadout Payloads</span>'
-        + '<code class="ws-copyval" data-copy="' + U.attr(stageCmd) + '" title="Click to copy">' + esc(stageCmd) + '</code></div></div></details>';
-    }
-    var tree = vfs.folders.map(function (fo) {
+
+    var head = '<div class="ws-panel-head">'
+      + '<div><h2 class="coach-sec-h">Workspace</h2><div class="ws-root"><code>' + esc(rootStr) + '</code>' + syncedStamp + '</div></div>'
+      + '<div class="ws-counts">'
+      + '  <span class="ws-c-cap">' + vfs.captured + ' Captured</span>'
+      + (vfs.expected ? ' <span class="ws-c-exp">' + vfs.expected + ' Pending</span>' : '')
+      + '</div>'
+      + '</div>';
+
+    // 1-Click Kali Workspace Init & Serve Payloads Bar
+    var scaffoldCmd = (OBOL.workspace && OBOL.workspace.scaffold) ? OBOL.workspace.scaffold(eng) : ('mkdir -p ' + rootStr + '/{scans,loot,exploit,www,proof} && cd ' + rootStr);
+    var serveCmd = 'python3 -m http.server 80 --directory ~/.obol/arsenal/www';
+    var quickBar = '<div class="ws-quick-cmds ws-clear-box">'
+      + '<div class="ws-qcmd-row">'
+      + '  <span class="ws-qcmd-lbl">1. Init Kali Dir</span>'
+      + '  <code class="ws-qcmd-code" title="' + U.attr(scaffoldCmd) + '">' + esc(scaffoldCmd) + '</code>'
+      + '  <button type="button" class="ws-copyval cr-btn-glass tiny" data-copy="' + U.attr(scaffoldCmd) + '">Copy</button>'
+      + '</div>'
+      + '<div class="ws-qcmd-row">'
+      + '  <span class="ws-qcmd-lbl">2. Serve Payloads</span>'
+      + '  <code class="ws-qcmd-code" title="' + U.attr(serveCmd) + '">' + esc(serveCmd) + '</code>'
+      + '  <button type="button" class="ws-copyval cr-btn-glass tiny" data-copy="' + U.attr(serveCmd) + '">Copy</button>'
+      + '</div>'
+      + '</div>';
+
+    // Separate populated folders from empty folders so empty folders don't bloat the height!
+    var populatedFolders = vfs.folders.filter(function (fo) { return fo.files && fo.files.length > 0; });
+    var emptyFolders = vfs.folders.filter(function (fo) { return !fo.files || fo.files.length === 0; });
+
+    var populatedHtml = populatedFolders.map(function (fo) {
       var files = fo.files.map(function (f) { return fileRow(f, vfs.root); }).join('');
-      var emptyHint = WS_PURPOSE[fo.key] || 'Empty';
-      return '<div class="ws-folder' + (fo.files.length ? '' : ' ws-empty') + '">'
+      return '<div class="ws-folder">'
         + '<div class="ws-folder-h"><span class="ws-folder-name">' + esc(fo.label) + '</span>'
-        + (fo.files.length ? '<span class="ws-folder-count">' + fo.files.length + '</span>' : '')
+        + '<span class="ws-folder-count">' + fo.files.length + '</span>'
         + '<button type="button" class="ws-add" data-folder="' + U.attr(fo.key) + '" title="Add a file to ' + esc(fo.label) + '" aria-label="Add a file to ' + esc(fo.label) + '">+</button></div>'
-        + (files || '<div class="ws-folder-empty">' + esc(emptyHint) + '</div>')
-        + (fo.key === 'www' ? wwwHelper(fo.files.length) : '') + '</div>';
+        + files + '</div>';
     }).join('');
+
+    var emptyNotice = !populatedFolders.length
+      ? '<div class="ws-zero-note">No files captured yet. Run your first move in Coach or Cruise and paste output back to populate <code>scans/</code>, <code>loot/</code>, and <code>proof/</code> automatically.</div>'
+      : '';
+
+    var emptyStrip = emptyFolders.length
+      ? '<div class="ws-empty-strip"><span class="ws-empty-lbl">Empty folders (click to add file):</span>'
+        + emptyFolders.map(function (fo) {
+            return '<button type="button" class="ws-empty-chip ws-add" data-folder="' + U.attr(fo.key) + '" title="Add a file to ' + esc(fo.label) + '">+ ' + esc(fo.label) + '</button>';
+          }).join('')
+        + '</div>'
+      : '';
+
+    var loInsight = loadoutInsight();
     var footer = hidden ? ('<div class="ws-foot"><button type="button" class="ws-restore" data-x>' + hidden + ' Hidden · Restore</button></div>') : '';
-    return '<aside class="ws-panel">' + head + rootLine + loInsight + invite + '<div class="ws-tree">' + tree + '</div>' + footer + syncBlock(eng) + '</aside>';
+
+    return '<aside class="ws-panel station-card neon-lane-violet">'
+      + head
+      + quickBar
+      + '<div class="ws-tree ws-clear-box">'
+      + populatedHtml
+      + emptyNotice
+      + emptyStrip
+      + '</div>'
+      + loInsight
+      + footer
+      + syncBlock(eng)
+      + '</aside>';
   }
 
-  // Per-engagement Workspace, enriched with GLOBAL Loadout insight: what your synced box can drop into
-  // this engagement's www/ (staged binaries) and which wordlists are on disk. Read-only, from the
-  // per-browser arsenal profile; absent until the operator syncs a box on the Loadout tab.
   function loadoutInsight() {
     var p; try { p = JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { p = null; }
     if (!p) return '';
-    var staged = (p.staged || []).slice(0, 10), wl = Object.keys(p.wordlists || {});
+    var staged = (p.staged || []).slice(0, 8), wl = Object.keys(p.wordlists || {});
     if (!staged.length && !wl.length) return '';
     var chips = staged.map(function (f) { return '<span class="ws-lo-chip">' + esc(f) + '</span>'; }).join('');
-    return '<div class="ws-lo"><a class="ws-lo-h" href="#/loadout">From Your Loadout ↗</a>'
-      + (staged.length ? '<div class="ws-lo-grp"><span class="ws-lo-lbl">Staged, Ready To Serve</span>' + chips + '</div>' : '')
+    return '<details class="ws-lo"><summary class="ws-lo-sum"><span>Staged in Loadout (' + (p.staged || []).length + ' payloads, ' + wl.length + ' wordlists)</span><a class="ws-lo-h" href="#/loadout">Loadout &nearr;</a></summary>'
+      + '<div class="ws-lo-body">'
+      + (staged.length ? '<div class="ws-lo-grp"><span class="ws-lo-lbl">Ready in ~/.obol/arsenal/www</span>' + chips + '</div>' : '')
       + (wl.length ? '<div class="ws-lo-grp"><span class="ws-lo-lbl">Wordlists</span>' + wl.map(function (w) { return '<span class="ws-lo-chip">' + esc(w) + '</span>'; }).join('') + '</div>' : '')
-      + '</div>';
+      + '</div></details>';
   }
 
-  // per-target last-activity timestamp, from the Run Log entries tagged to that host (best-effort:
-  // an activity carries target/scope only when it was captured against a known host).
+  function loadoutSetupCard() {
+    var p; try { p = JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) { p = null; }
+    var A = OBOL.ARSENAL || {}, seen = {}, total = 0, ready = 0;
+    Object.keys(A).forEach(function (k) {
+      var e = A[k]; if (!e || seen[e.key]) return; seen[e.key] = 1;
+      total++;
+      var pres = e.class === 'builtin' || (p && ((p.tools && p.tools[e.key] && p.tools[e.key].present)
+        || (p.staged || []).indexOf(e.dest || '') >= 0 || (p.digests && p.digests[e.key])));
+      if (pres) ready++;
+    });
+    if (p) {
+      var stagedN = (p.staged || []).length;
+      var wlN = Object.keys(p.wordlists || {}).length;
+      var syncStr = p.savedAt ? (' · Synced ' + ago(p.savedAt)) : '';
+      return '<div class="lo-strip lo-strip-ok eng-lo-strip">'
+        + '<span class="lo-strip-ico">✓</span>'
+        + '<span class="lo-strip-txt"><strong>Attack Box Loadout Stocked</strong> · ' + ready + '/' + total + ' tools ready'
+        + (stagedN ? (', ' + stagedN + ' payloads staged') : '')
+        + (wlN ? (', ' + wlN + ' wordlists') : '')
+        + esc(syncStr) + '</span>'
+        + '<a class="lo-strip-go" href="#/loadout">Manage Loadout &rarr;</a>'
+        + '</div>';
+    }
+    var runCmd = 'cd ~/Downloads && chmod +x download-loadout.sh && ./download-loadout.sh';
+    return '<div class="eng-lo-card">'
+      + '<div class="eng-lo-head">'
+      + '<div><span class="eng-lo-kicker">Step 0 · Fresh Or Existing Kali</span><h3 class="eng-lo-title">Stock Or Sync Your Attack Box Loadout</h3></div>'
+      + '<a class="eng-lo-full" href="#/loadout">Open Full Loadout &amp; Arsenal (' + total + ' tools) &rarr;</a>'
+      + '</div>'
+      + '<p class="eng-lo-sub">Works on a brand-new Kali VM or a customized box. It leaves your existing tools, git repos, and wordlists where they are, copies or fetches missing payloads into <code>~/.obol/arsenal/www</code>, and prints an inventory block so OBOL adapts commands to your exact paths (or pass <code>--check-only</code> for zero downloads).</p>'
+      + '<div class="eng-lo-grid">'
+      + '<div class="eng-lo-step"><span class="eng-lo-n">1</span><div class="eng-lo-step-b"><strong>Download Setup Script</strong><p>Non-destructive; keeps existing tools in place and only fetches what is missing.</p>'
+      + '<button type="button" class="cr-btn-neon neon-amber small eng-lo-dl">Download download-loadout.sh</button></div></div>'
+      + '<div class="eng-lo-step"><span class="eng-lo-n">2</span><div class="eng-lo-step-b"><strong>Run On Your Kali Box</strong><p>Or append <code>--check-only</code> to map your box with zero installs:</p>'
+      + '<div class="eng-lo-cmd"><code>' + esc(runCmd) + '</code><button type="button" class="btn-copy" data-copy="' + U.attr(runCmd) + '">Copy</button></div></div></div>'
+      + '<div class="eng-lo-step"><span class="eng-lo-n">3</span><div class="eng-lo-step-b"><strong>Paste The OBOL-ARSENAL Block Back</strong>'
+      + '<div class="eng-lo-paste-row"><textarea class="eng-lo-paste" rows="2" placeholder="Paste the OBOL-ARSENAL block printed at the end of the script..." spellcheck="false"></textarea>'
+      + '<button type="button" class="cr-btn-neon neon-emerald small eng-lo-ingest">Stock Loadout</button></div>'
+      + '<span class="eng-lo-msg" role="status"></span></div></div>'
+      + '</div></div>';
+  }
+
   function lastActivityAt(ip, acts) {
     var t = 0;
     (acts || []).forEach(function (a) {
@@ -343,50 +776,156 @@
     return t;
   }
 
-  // The engagement Attack Path, one COLLAPSIBLE row per target. The summary line carries that box's
-  // identity + access + OS/ports + flags + its own next move + last activity, all at a glance; expand
-  // a row to see its full "what led to what" ribbon (reused from chainview.hostFlow, so a single-box
-  // run is byte-for-byte that target's page). A single target opens by default; with several, they
-  // collapse to scannable rows. The per-target open/closed choice is remembered per browser.
+  // Collapsible Target Board & Attack Paths on the Hub (Capped at 10 targets, with Bulk Nmap/IP Import & Filter Pills)
+  var HUB_TARGET_CAP = 10;
   function engagementPath() {
     var eng = OBOL.store.active(); if (!eng) return '';
-    var infos = targetInfos(eng);
-    if (!infos.length) return '';
+    var allInfos = targetInfos(eng);
     var acts = eng.activities || [];
     var engId = OBOL.store.activeId();
-    var single = infos.length === 1;
-    var rows = infos.map(function (info) {
+    var activeTarget = (eng.params && eng.params.target) || (allInfos[0] && allInfos[0].ip) || '';
+
+    // Sort so the active target is first, then Foothold -> Creds -> Enum -> Scan -> Owned
+    var PRIORITY = { foothold: 5, credentialed: 4, enumerated: 3, discovered: 2, privileged: 1 };
+    var sortedInfos = allInfos.slice().sort(function (a, b) {
+      var aAct = a.ip === activeTarget ? 1 : 0;
+      var bAct = b.ip === activeTarget ? 1 : 0;
+      if (aAct !== bAct) return bAct - aAct;
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return (PRIORITY[b.lvl] || 0) - (PRIORITY[a.lvl] || 0);
+    });
+
+    var counts = {
+      all: sortedInfos.length,
+      foothold: sortedInfos.filter(function (i) { return i.lvl === 'foothold' || i.lvl === 'credentialed'; }).length,
+      privileged: sortedInfos.filter(function (i) { return i.lvl === 'privileged'; }).length,
+      recon: sortedInfos.filter(function (i) { return i.lvl === 'discovered' || i.lvl === 'enumerated'; }).length,
+    };
+
+    var filteredInfos = sortedInfos.filter(function (i) {
+      if (_targetFilter === 'foothold') return i.lvl === 'foothold' || i.lvl === 'credentialed';
+      if (_targetFilter === 'privileged') return i.lvl === 'privileged';
+      if (_targetFilter === 'recon') return i.lvl === 'discovered' || i.lvl === 'enumerated';
+      return true;
+    });
+
+    var shownInfos = filteredInfos.slice(0, HUB_TARGET_CAP);
+    var single = allInfos.length === 1;
+
+    function filterPill(key, label, n) {
+      var on = _targetFilter === key;
+      return '<button type="button" class="hb-tf-pill' + (on ? ' on' : '') + '" data-tf="' + key + '">'
+        + esc(label) + ' <span class="hb-tf-n">' + n + '</span></button>';
+    }
+
+    var filterBar = allInfos.length > 0
+      ? '<div class="hb-tf-bar">'
+        + filterPill('all', 'All', counts.all)
+        + (counts.foothold ? filterPill('foothold', 'Foothold / Creds', counts.foothold) : '')
+        + (counts.privileged ? filterPill('privileged', 'Owned', counts.privileged) : '')
+        + (counts.recon ? filterPill('recon', 'Recon / Enum', counts.recon) : '')
+        + '</div>'
+      : '';
+
+    var showBulk = _showBulkTarget || allInfos.length === 0;
+    var bulkBox = '<div id="hb-bulk-target-box" class="hb-bulk-box ws-clear-box"' + (showBulk ? '' : ' hidden') + '>'
+      + '<div class="hb-bulk-head">'
+      + '  <span class="hb-bulk-title">Add Single Target or Bulk-Paste Scope / Nmap / /etc/hosts</span>'
+      + '  <span class="muted small">Extracts IPs, hostnames, CIDRs &amp; Nmap ports automatically</span>'
+      + '</div>'
+      + '<textarea id="hb-bulk-input" class="hb-bulk-ta" rows="3" placeholder="Examples:&#10;10.10.10.20 sql01.corp.local&#10;10.10.10.30 dc01.corp.local&#10;Or paste raw `nmap -sn` / grepable output / /etc/hosts..." spellcheck="false"></textarea>'
+      + '<div class="hb-bulk-foot">'
+      + (allInfos.length ? '<button type="button" class="cr-btn-glass small" id="hb-bulk-cancel">Close</button>' : '')
+      + '  <button type="button" class="cr-btn-neon neon-emerald small" id="hb-bulk-go">Import &amp; Seed Recon Moves</button>'
+      + '</div>'
+      + '</div>';
+
+    var rows = shownInfos.map(function (info) {
       var ip = info.ip, b = info.badge;
+      var isFocused = ip === activeTarget;
       var idn = OBOL.store.targetIdentity ? OBOL.store.targetIdentity(ip) : { ip: ip, hostname: info.host, domain: info.domain };
       var host = idn.hostname || info.host || '';
+      var dom = idn.domain || info.domain || '';
+      var acc = '<span class="hb-acc ' + b.cls + '">' + b.label + '</span>';
+
+      // Compact at-a-glance summary line (keeps collapsed rows clean and scannable)
+      var sumLeft = '<span class="apath-row-id">'
+        + acc
+        + '<span class="apath-ip">' + esc(ip) + '</span>'
+        + (host ? '<span class="apath-host-lbl">' + esc(host) + '</span>' : '')
+        + (info.os ? '<span class="apath-os-pill">' + esc(info.os) + '</span>' : '')
+        + (info.ports.length ? '<span class="apath-port-pill">' + info.ports.length + ' port' + (info.ports.length === 1 ? '' : 's') + '</span>' : '')
+        + '</span>';
+
+      var showFlags = !OBOL.profile || !OBOL.profile.hasFlags || OBOL.profile.hasFlags((eng || {}).profile) || info.flags > 0;
+      var flags = showFlags ? ('<span class="apath-row-flags' + (info.flags ? '' : ' none') + '">' + OBOL.ic('flag') + ' ' + (info.flags || 0) + '</span>') : '';
+      var next = info.next ? '<span class="apath-row-next" title="' + U.attr(info.next) + '">&rarr; ' + esc(info.next) + '</span>'
+        : (info.lvl === 'privileged' ? '<span class="apath-row-next done">Owned</span>' : '');
+      var focusCtrl = isFocused
+        ? '<span class="hb-focus-chip is-on" title="Active target for Coach &amp; Cruise">● Active</span>'
+        : '<button type="button" class="hb-focus-btn" data-focus-ip="' + U.attr(ip) + '" title="Set ' + U.attr(ip) + ' as active target">Focus</button>';
+      var dossierLink = '<a class="hb-dossier-btn" href="#/target/' + U.attr(ip) + '" title="Open full Target Dossier for ' + U.attr(ip) + '">Target Dossier &rarr;</a>';
+
+      var sumRight = '<span class="apath-row-meta">' + flags + next + focusCtrl + dossierLink + '</span>';
+
+      // Expanded details: full identity pairs, all open port badges, service chips, and Attack Path ribbon
       function idPair(k, v) { return '<span class="apath-id-pair"><span class="apath-id-k">' + k + '</span><span class="apath-id-v">' + esc(v) + '</span></span>'; }
       var portsHtml = info.ports.length
         ? '<span class="apath-id-pair apath-ports"><span class="apath-id-k">Open Ports</span>'
             + info.ports.map(function (p) { return '<span class="apath-port">' + esc(p) + '</span>'; }).join('') + '</span>'
-        : '';
-      var idHtml = (host ? idPair('Hostname', host) : '') + idPair('IP', ip)
-        + (idn.domain ? idPair('Domain', idn.domain) : '')
-        + (info.os ? idPair('OS', info.os) : '')
-        + portsHtml;
-      var acc = '<span class="hb-acc ' + b.cls + '">' + b.label + '</span>';
-      var flags = '<span class="apath-row-flags' + (info.flags ? '' : ' none') + '">' + OBOL.ic('flag') + ' ' + (info.flags || 0) + '</span>';
-      var next = info.next ? '<span class="apath-row-next" title="' + U.attr(info.next) + '">&rarr; ' + esc(info.next) + '</span>'
-        : (info.lvl === 'privileged' ? '<span class="apath-row-next done">Owned</span>' : '');
+        : '<span class="apath-id-pair"><span class="apath-id-k">Open Ports</span><span class="muted small">None recorded yet</span></span>';
       var la = lastActivityAt(ip, acts);
-      var when = la ? '<span class="apath-row-when" title="Last recorded activity on this box">' + esc(ago(la)) + '</span>' : '';
-      var meta = '<span class="apath-row-meta">' + acc + flags + next + when + '</span>';
+      var detailStrip = '<div class="apath-detail-strip">'
+        + (host ? idPair('Hostname', host) : '')
+        + idPair('IP', ip)
+        + (dom ? idPair('Domain', dom) : '')
+        + (info.os ? idPair('OS', info.os) : '')
+        + portsHtml
+        + (la ? idPair('Last Activity', ago(la)) : '')
+        + '</div>';
+
       var flow = OBOL.chainview ? OBOL.chainview.hostFlow(ip, acts) : '';
-      var body = flow
-        ? '<h3 class="apath-body-h">Attack Path: What Led To What</h3>' + flow
-        : '<div class="apath-empty">No moves recorded on this box yet. Run a move and paste its output on <a href="#/evidence">Evidence</a>, and its path fills in here.</div>';
+      var body = detailStrip
+        + (flow
+            ? '<h3 class="apath-body-h">Attack Path: What Led to What</h3>' + flow
+            : '<div class="apath-empty">No moves recorded on this box yet. Run a move from Coach or Cruise and paste output back to build its Attack Path.</div>')
+        + '<div class="apath-body-foot">'
+        + (!isFocused ? '<button type="button" class="cr-btn-glass small" data-focus-ip="' + U.attr(ip) + '">Set As Active Target</button>' : '')
+        + '  <a class="cr-btn-neon neon-cyan small" href="#/target/' + U.attr(ip) + '">Open Target Dossier &amp; Path Graph &rarr;</a>'
+        + '</div>';
+
       var key = 'obol.apath:' + engId + ':' + ip;
       var remembered = null; try { remembered = localStorage.getItem(key); } catch (e) {}
-      var open = remembered == null ? single : remembered === '1';
-      return '<details class="apath-host apath-row"' + (open ? ' open' : '') + ' data-apath-key="' + U.attr(key) + '">'
-        + '<summary class="apath-row-sum"><span class="apath-row-id">' + idHtml + '</span>' + meta + '</summary>'
+      // Open by default only for a single-target run or the currently focused target
+      var open = remembered == null ? (single || isFocused) : remembered === '1';
+      return '<details class="apath-host apath-row hb-lvl-' + info.lvl + (isFocused ? ' is-focused' : '') + '"' + (open ? ' open' : '') + ' data-apath-key="' + U.attr(key) + '">'
+        + '<summary class="apath-row-sum">' + sumLeft + sumRight + '</summary>'
         + '<div class="apath-row-body">' + body + '</div></details>';
     }).join('');
-    return '<div class="eng-apath"><h2 class="coach-sec-h">Engagement Targets</h2><div class="apath-rows">' + rows + '</div></div>';
+
+    var capFooter = '';
+    if (filteredInfos.length > HUB_TARGET_CAP) {
+      capFooter = '<div class="hb-target-cap-bar">'
+        + '<span>Showing top <strong>' + HUB_TARGET_CAP + '</strong> of <strong>' + filteredInfos.length + '</strong> targets on Hub.</span>'
+        + '<a class="cr-btn-neon neon-cyan small" href="#/targets">View All ' + allInfos.length + ' Targets on Targets Tab &rarr;</a>'
+        + '</div>';
+    } else if (allInfos.length > 0) {
+      capFooter = '<div class="hb-target-foot-link">'
+        + '<span class="muted small">Click any row to expand its Attack Path, or open its Target Dossier for scoped moves &amp; graph.</span>'
+        + '<a class="hb-sec-more" href="#/targets">All Targets Tab (' + allInfos.length + ') &rarr;</a>'
+        + '</div>';
+    }
+
+    return '<div class="eng-apath station-card neon-lane-cyan">'
+      + '<div class="hb-board-head">'
+      + '  <div class="hb-board-title-wrap"><h2 class="coach-sec-h">Targets &amp; Attack Paths</h2></div>'
+      + '  <button type="button" class="cr-btn-neon neon-cyan small" id="hb-toggle-bulk">' + (showBulk && allInfos.length ? 'Hide Target Import' : '+ Add / Paste Targets') + '</button>'
+      + '</div>'
+      + (filterBar ? '<div class="hb-board-filter-row">' + filterBar + '</div>' : '')
+      + bulkBox
+      + (rows ? '<div class="apath-rows ws-clear-box">' + rows + '</div>' : '')
+      + capFooter
+      + '</div>';
   }
 
   function libraryList() {
@@ -403,8 +942,6 @@
     return '<ul class="lib-list">' + rows + '</ul>';
   }
 
-  // ---- the engagement hub: the active engagement at a glance (all targets + engagement-wide
-  //      surfaces). Everything below is a projection of the fact ledger, so nothing is invented. ----
   var ACC_BADGE = {
     privileged: { label: 'OWNED', cls: 'hb-acc-root', rank: 4 },
     foothold: { label: 'FOOTHOLD', cls: 'hb-acc-foot', rank: 3 },
@@ -425,11 +962,15 @@
     return out.sort(function (a, b) { return a - b; });
   }
   function hostFlags(f) {
-    var n = 0; ['objective.root_flag', 'objective.local_flag', 'objective.flag'].forEach(function (k) { n += f.values(k).length; });
+    var seen = {}, n = 0;
+    ['objective.root_flag', 'objective.local_flag', 'objective.flag'].forEach(function (k) {
+      (f.values(k) || []).forEach(function (v, idx) {
+        var key = k + '|' + ((v && v.flag) ? String(v.flag).trim().toLowerCase() : idx);
+        if (!seen[key]) { seen[key] = 1; n++; }
+      });
+    });
     return n;
   }
-  // Readable OS, domain, and reachable-service facts for a target's dossier (shared by the hub board
-  // and the Targets screen). All read-only projections of proven facts — nothing is invented.
   function fval(f, k) { try { return (f.values(k) || [])[0] || null; } catch (e) { return null; } }
   function cleanOsDisplay(str) {
     if (!str) return '';
@@ -454,8 +995,6 @@
   }
   function hostOs(f, t) {
     if (t && t.os) return cleanOsDisplay(t.os);
-    // Prefer a SPECIFIC product string ("Windows Server 2016 Standard 14393") that a parser carved
-    // from an authoritative labelled line; fall back to the bare family, capitalized.
     var specific = '', fam = '';
     ['host.os_hint', 'host.os', 'host.os_family'].forEach(function (k) {
       (f.values(k) || []).forEach(function (v) {
@@ -469,9 +1008,6 @@
     return fam ? fam.charAt(0).toUpperCase() + fam.slice(1) : '';
   }
   function hostDomain(f) {
-    // ad.domain_known carries the domain under `name`; host.domain under `domain`. Check both, and since
-    // ad.domain_known is found first, missing `name` here left the card domain blank while the target page
-    // (which reads name) showed it.
     var v = fval(f, 'ad.domain_known') || fval(f, 'host.domain') || fval(f, 'ad.dc_candidate') || {};
     return (v && (v.domain || v.name || v.fqdn || v.dns_domain)) || '';
   }
@@ -486,20 +1022,41 @@
   }
   function pinnedSet(eng) { return ((eng.ui || {}).pinnedTargets) || []; }
 
-  // gather per-target projection used by the vitals + the Targets tab
+  var _targetInfosCache = { key: '', list: [] };
+
   function targetInfos(eng) {
+    if (!eng) return [];
     var pack = OBOL.packs.actions();
-    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
     var pins = pinnedSet(eng);
-    return (eng.targets || []).map(function (t) {
+    var tSig = (eng.targets || []).map(function (t) { return (t.ip || t.id || '') + ':' + (t.hostname || '') + ':' + (t.os || ''); }).join('|');
+    var supCount = 0;
+    (eng.facts || []).forEach(function (f) { if (f && f.state === 'supported') supCount++; });
+    var cacheKey = [
+      eng.id || '',
+      eng._rev || 0,
+      eng.updatedAt || 0,
+      (eng.facts || []).length,
+      supCount,
+      (eng.targets || []).length,
+      pack.length,
+      (eng.profile && eng.profile.platform) || '',
+      (eng.profile && eng.profile.workflow) || '',
+      pins.join(','),
+      tSig,
+    ].join('::');
+    if (_targetInfosCache.key === cacheKey) {
+      return _targetInfosCache.list;
+    }
+    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
+    var flagsOn = (!OBOL.profile || !OBOL.profile.hasFlags || !eng) ? true : OBOL.profile.hasFlags(eng.profile);
+    var list = (eng.targets || []).map(function (t) {
       var ip = t.ip || t.id;
       var f = OBOL.store.factSetForTarget(ip);
       var lvl = hostLevel(f);
-      // Same ranker as the coach (v2), report-only writeup checks excluded, frontier-ready preferred —
-      // so a target card's "→ next" matches what the coach would actually tell you to do on that box.
-      var moves = OBOL.pack.rankActions(f, pack, { focusPrefixes: focus })
+      var targetOwnedAndDone = lvl === 'privileged' && (!flagsOn || (f.has('objective.local_flag') && f.has('objective.root_flag')));
+      var moves = targetOwnedAndDone ? [] : OBOL.pack.rankActions(f, pack, { focusPrefixes: focus, noFlags: !flagsOn })
         .filter(function (a) { return !(OBOL.pack.isReportOnly && OBOL.pack.isReportOnly(a, pack)); });
-      var nextMove = moves.filter(function (a) { return OBOL.phases.prematurity(a, f) === 0; })[0] || moves[0];
+      var nextMove = targetOwnedAndDone ? null : (moves.filter(function (a) { return OBOL.phases.prematurity(a, f) === 0; })[0] || moves[0]);
       return {
         t: t, ip: ip, host: t.hostname || '', os: hostOs(f, t),
         lvl: lvl, badge: ACC_BADGE[lvl], ports: hostPorts(f), flags: hostFlags(f),
@@ -507,23 +1064,18 @@
         next: nextMove ? nextMove.title : '', pinned: pins.indexOf(t.id) >= 0,
       };
     });
+    _targetInfosCache = { key: cacheKey, list: list };
+    return list;
   }
-  // Shared so the Targets screen can show the same rich per-target dossier (OS, domain, ports, access,
-  // next move) the hub board shows, from one projection — the two never drift.
   OBOL.targets = OBOL.targets || {};
   OBOL.targets.all = function (eng) { return targetInfos(eng || OBOL.store.active() || { targets: [] }); };
   OBOL.targets.hostOs = hostOs;
   OBOL.targets.cleanOs = cleanOsDisplay;
   OBOL.targets.ACC_BADGE = ACC_BADGE;
+  OBOL.targets.parseBulkInput = parseBulkInput;
+  OBOL.targets.importBulk = importBulkTargets;
 
-  function surfaceCard(href, ic, name, count, desc) {
-    return '<a class="hb-surf" href="' + href + '"><span class="hb-surf-ic">' + OBOL.ic(ic) + '</span>'
-      + '<span class="hb-surf-t">' + esc(name) + (count != null ? '<span class="hb-surf-n">' + esc(count) + '</span>' : '') + '</span>'
-      + '<span class="hb-surf-d">' + esc(desc) + '</span></a>';
-  }
-
-  // ── Connectivity: the pivots obol has charted + a tunnel-setup chooser ──
-  // Read the pivot-lane facts (minted by parsers/pivot.js) into one per-host projection.
+  // ── Connectivity: pivots + tunnel-setup chooser + symptom-first troubleshooter ──
   function connData(eng) {
     var fs = OBOL.store.factSet();
     var SUP = OBOL.facts.ProofState.SUPPORTED;
@@ -548,10 +1100,6 @@
     }).filter(function (h) { return h.subnetList.length || h.tunnels.length || h.multihomed; });
   }
 
-  // The tool picker: Ligolo-ng first and flagged "recommended", the rest swappable. Shows the
-  // selected tool's when-to-use line, a before-you-start prereq, and its setup steps. The steps
-  // are rendered by the shared OBOL.renderTunnelSteps (data/tunnels.js) on the SAME data-stage keys
-  // the coach's staging guide uses, so a step ticked here shows ticked there and vice-versa.
   function tunnelChooser(params) {
     var tools = OBOL.TUNNELS || [];
     if (!tools.length || !OBOL.renderTunnelSteps) return '';
@@ -567,22 +1115,14 @@
       + '<div class="conn-tool-row" role="group" aria-label="Choose a tunnel tool">' + tabs + '</div>'
       + '<div class="conn-sel"><p class="conn-sel-when">' + esc(sel.when || sel.summary) + '</p>'
       + (sel.prereq ? '<p class="stage-prereq"><span class="stage-prereq-l">Before You Start:</span> ' + esc(sel.prereq) + '</p>' : '')
-      // The full step-by-step guide is long; keep it collapsed so the hub rail stays compact (the coach's
-      // Setup guide works the same way). The shared tick state is preserved across both.
       + '<details class="conn-steps"><summary><span class="stage-sum-l">Setup Steps</span>'
       + '<span class="stage-sum-d">step by step, on your box and the host</span></summary>'
       + OBOL.renderTunnelSteps(sel, params) + '</details>'
       + '</div></div>';
   }
 
-  // You → pivot host → reachable subnet, rendered as nodes carrying their own text (so the graphic
-  // is never the only carrier of meaning). The glow on a live edge is decorative CSS; the tunnel
-  // state is also written as a text tag ("via ligolo" / "no tunnel yet").
   function connMap(pivots, params) {
     var lhost = (params && params.lhost) || 'your box';
-    // The amber "needs attention" state is carried by a single container class on .hb-conn (set from
-    // the persisted trouble flag at render, toggled live by the troubleshooter), so there is one source
-    // of truth for it, not per-row logic that could disagree.
     return '<div class="conn-map" role="group" aria-label="Pivot connectivity map">' + pivots.map(function (h) {
       var label = h.hostname || h.ip;
       var subs = h.subnetList.length ? h.subnetList.join(', ') : 'Subnet Unknown';
@@ -601,10 +1141,6 @@
     }).join('') + '</div>';
   }
 
-  // ── The pivot troubleshooter: a calm, symptom-first diagnostic that expands off this panel ──
-  // You pick what you SEE in plain language (not the cause); it hands machine-labelled probe
-  // commands; you paste the result; OBOL.pivotDoctor returns a verdict with the problem line and a
-  // fix. It only claims what the output supports, and stands down to a checklist when it cannot tell.
   function troubleProbe(p, params) {
     var cmd = OBOL.pivotDoctor.fill(p.cmd, params);
     var whereLbl = p.where === 'host' ? 'On The Target Host' : 'On Your Kali Box';
@@ -631,21 +1167,19 @@
         + '<p class="ptr-hint">' + esc(sel.hint) + '</p>'
         + '<div class="ptr-probe-h">Run one of these, then paste what it prints:</div>'
         + probes
-        + '<textarea class="ptr-paste" data-ptr-paste placeholder="Paste the probe output here. obol reads it and tells you what is wrong and how to fix it." spellcheck="false"></textarea>'
+        + '<textarea class="ptr-paste" data-ptr-paste placeholder="Paste the probe output here. OBOL reads it and tells you what is wrong and how to fix it." spellcheck="false"></textarea>'
         + '<div class="ptr-row"><button type="button" class="btn-primary ptr-go" data-ptr-go="' + esc(sel.key) + '">Diagnose</button>'
         + '<button type="button" class="btn-ghost ptr-clear" data-ptr-clear>Clear</button></div>'
         + '<div class="ptr-verdict" role="status" aria-live="polite"></div>'
         + '</div>';
     }
     return '<details class="conn-trouble"' + (_ptrSym ? ' open' : '') + '><summary><span class="ct-sum-l">Pivot Not Working?</span>'
-      + '<span class="ct-sum-d">Describe what you see — obol diagnoses it.</span></summary>'
+      + '<span class="ct-sum-d">Describe what you see - OBOL diagnoses it.</span></summary>'
       + '<p class="ptr-lead">Pick what you are seeing. You do not need to know the cause.</p>'
       + '<div class="ptr-syms" role="group" aria-label="What are you seeing?">' + chips + '</div>'
       + body + '</details>';
   }
 
-  // Render the doctor's verdict: a healthy all-clear, a likely-cause box with the highlighted line
-  // from the paste and a copy-ready fix, or an honest "could not pin it" with the plain checklist.
   function verdictHtml(res) {
     if (!res) return '';
     if (res.empty) return '<div class="ptr-v ptr-v-note">' + esc(res.verdict) + '</div>';
@@ -668,14 +1202,11 @@
     var eng = OBOL.store.active();
     var params = eng.params || {};
     var pivots = connData(eng);
-    // No pivot yet → keep this compact: a single slim hint, NOT the full tunnel chooser + step guide +
-    // troubleshooter, which otherwise make the hub rail enormously tall (and shove the rest of the page
-    // down). The chooser appears only once there's an actual pivot to set up.
     if (!pivots.length) {
-      return '<div class="hb-conn"><div class="hb-sec-h"><h2>Connectivity</h2></div>'
-        + '<div class="conn-empty">No Pivots Charted Yet. Paste <code>ip a</code> or <code>ip route</code> from a foothold and obol maps the subnets it can reach — a tunnel chooser appears here once there’s a pivot to set up.</div></div>';
+      return '<div class="hb-conn station-card neon-lane-amber"><div class="hb-sec-h"><h2>Connectivity &amp; Pivots</h2></div>'
+        + '<div class="conn-empty ws-clear-box">No Pivots Charted Yet. Paste <code>ip a</code> or <code>ip route</code> from a foothold and OBOL maps the subnets it can reach - a tunnel chooser appears here once there is a pivot to set up.</div></div>';
     }
-    return '<div class="hb-conn' + (troubleOn() ? ' hb-conn--warn' : '') + '"><div class="hb-sec-h"><h2>Connectivity</h2>'
+    return '<div class="hb-conn station-card neon-lane-amber' + (troubleOn() ? ' hb-conn--warn' : '') + '"><div class="hb-sec-h"><h2>Connectivity &amp; Pivots</h2>'
       + '<span class="hb-sec-n">' + pivots.length + ' pivot' + (pivots.length > 1 ? 's' : '') + '</span>'
       + '<span class="conn-warnchip">' + OBOL.ic('bolt') + 'Needs Attention</span>'
       + '</div>' + connMap(pivots, params)
@@ -685,126 +1216,125 @@
       + '</div>';
   }
 
+  // New Engagement / Pre-Engagement Launchpad Form
+  function setupDrawerHtml(configured, sel, prof) {
+    var hiddenAttr = (configured && !_showNewSetup) ? ' hidden' : '';
+    var welcomeBanner = !configured
+      ? '<div class="eng-welcome">'
+        + '<div class="eng-welcome-main">'
+        + '  <span class="hb-drawer-kicker">PRE-ENGAGEMENT LAUNCHPAD</span>'
+        + '  <div class="eng-welcome-h">Set Up Your Engagement</div>'
+        + '  <p class="eng-welcome-sub">Pick a platform profile, paste your target IPs or Nmap scan, and launch. OBOL configures your working folder, seeds recon moves, and tracks every host from scan to report.</p>'
+        + '</div>'
+        + '</div>'
+      : '<div class="hb-drawer-head">'
+        + '  <div><span class="hb-drawer-kicker">NEW RUN</span><h2 class="coach-sec-h">Create New Engagement</h2></div>'
+        + '  <button type="button" class="cr-btn-glass small" id="hb-setup-close">Close ✕</button>'
+        + '</div>';
+
+    return '<div id="eng-setup-drawer" class="eng-setup-drawer"' + hiddenAttr + '>'
+      + '<div class="eng-create station-card neon-lane-cyan" id="eng-setup">'
+      + welcomeBanner
+      + loadoutSetupCard()
+      + '<div class="eng-row2">'
+      + '  <label class="eng-field"><span>1. Engagement Name</span><input id="eng-name" placeholder="e.g. OSCP Prep Set A or Forest" autocomplete="off"></label>'
+      + '  <label class="eng-field"><span>Machine Focus <span class="eng-field-opt">(Optional)</span></span><select id="eng-mt">' + machineOptions(prof.machine_type || '') + '</select></label>'
+      + '</div>'
+      + '<div class="eng-field"><span>2. Platform Profile <span class="eng-field-opt">(decides flag objectives, exam constraints &amp; report template)</span></span><div class="pf-grid" id="pf-grid">' + platformCards(sel) + '</div></div>'
+      + '<div class="eng-row2">'
+      + '  <label class="eng-field pf-osid" id="pf-osid-wrap" style="display:none"><span>OSID (OffSec Exam)</span><input id="eng-osid" placeholder="OS-XXXXX"></label>'
+      + '  <label class="eng-field pf-osid" id="pf-cand-wrap" style="display:none"><span>Candidate / Assessor</span><input id="eng-cand" placeholder="Your name"></label>'
+      + '  <label class="eng-field pf-osid" id="pf-client-wrap" style="display:none"><span>Client / Organization</span><input id="eng-client" placeholder="e.g. Acme Corp"></label>'
+      + '</div>'
+      + '<label class="eng-field"><span>3. Scope / Targets <span class="eng-field-opt">(paste IPs, CIDRs, /etc/hosts, or raw Nmap output - junk is filtered)</span></span>'
+      + '<textarea id="eng-scope" class="ev-textarea ws-clear-box" style="min-height:84px" placeholder="10.10.10.10 dc01.corp.local&#10;10.10.10.20 sql01.corp.local&#10;10.10.10.0/24"></textarea></label>'
+      + '<div class="eng-box-settings ws-clear-box">'
+      + '  <div class="eng-box-settings-h"><span>4. Box &amp; Workspace Context</span><span class="muted small">Optional - defaults to ~/engagements/&lt;name&gt; and auto-learns tun0 from prompts</span></div>'
+      + '  <div class="eng-row3">'
+      + '    <label class="eng-field"><span>Working Directory (Kali)</span><input id="eng-workdir" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
+      + '    <label class="eng-field"><span>Your VM IP (LHOST)</span><input id="eng-lhost" autocomplete="off" spellcheck="false" inputmode="decimal" placeholder="e.g. 10.10.14.9"></label>'
+      + '    <label class="eng-field"><span>Interface</span><select id="eng-iface">'
+      +      ['tun0', 'tun1', 'tap0', 'eth0', 'wlan0', 'vpn0', 'wg0'].map(function (i) { return '<option value="' + i + '"' + (i === 'tun0' ? ' selected' : '') + '>' + i + '</option>'; }).join('')
+      + '    <option value="">other / none</option></select></label>'
+      + '    <label class="eng-field"><span>Attack Workflow</span><select id="eng-wf">' + workflowOptions(prof.workflow || '') + '</select></label>'
+      + '  </div>'
+      + '</div>'
+      + '<div class="eng-launch-row">'
+      + '  <button id="eng-launch" class="cr-btn-neon neon-emerald">Create &amp; Launch Engagement &rarr;</button>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  }
+
   function hubDashboard() {
     var eng = OBOL.store.active();
-    var infos = targetInfos(eng);
-    var creds = (OBOL.creds && OBOL.creds.gather()) || [];
-
-    // the "your next move" anchor — the SAME top move the coach (Next Steps) shows. Uses the shared
-    // OBOL.coach.topMove() so the Hub and the coach can never disagree (and report-only writeup checks
-    // are already excluded there), rather than the old v1 ranker which drifted from the coach's v2.
-    var pack = OBOL.packs.actions();
-    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
-    var nm = (OBOL.coach && OBOL.coach.topMove) ? OBOL.coach.topMove()
-      : OBOL.pack.rankActions(OBOL.store.factSet(), pack, { focusPrefixes: focus })[0];
-    var nmHtml;
-    if (nm) {
-      var nmIdx = (OBOL.command && OBOL.command.bestCommandIndex) ? OBOL.command.bestCommandIndex(nm, OBOL.store.factSet(), { params: eng.params || {}, profile: eng.profile }) : 0;
-      var v = OBOL.command.fillCommand(nm, OBOL.store.factSet(), { params: eng.params || {}, profile: eng.profile }, nmIdx);
-      nmHtml = '<div class="hb-anchor"><div class="hb-anchor-l">Your Next Move</div>'
-        + '<div class="hb-anchor-body"><span class="hb-anchor-t">' + esc(nm.title) + '</span>'
-        + '<code class="hb-anchor-cmd">' + esc(v.filled) + '</code>'
-        + '<button class="btn-copy hb-copy" data-copy="' + U.attr(v.filled) + '">copy</button></div>'
-        + '<a class="hb-anchor-more" href="#/path">Full Coach →</a></div>';
-    } else {
-      nmHtml = '<div class="hb-anchor hb-anchor-empty"><div class="hb-anchor-l">Your Next Move</div>'
-        + '<div class="hb-anchor-body">Paste some evidence and the coach will rank your next command here.</div>'
-        + '<a class="hb-anchor-more" href="#/evidence">Go to Evidence →</a></div>';
-    }
-
-    // recent activity (last few run-log entries)
     var acts = (eng.activities || []).slice(-5).reverse().map(function (a) {
-      return '<li><span class="hb-log-t">' + esc(ago(a.at) || '') + '</span>' + esc(a.title || a.summary || a.cmd || 'activity') + '</li>';
+      return '<li><span class="hb-log-t">' + esc(ago(a.at) || '') + '</span><span class="hb-log-c">' + esc(a.title || a.summary || a.command || a.cmd || 'activity') + '</span></li>';
     }).join('');
 
-    // Targets live in their own tab now, so the hub drops the board. The engagement summary (phase
-    // spine + folded-in counters + attack path) is the hero, the Workspace fills the main column
-    // (readily visible, not buried below the fold), and the engagement-wide surfaces sit in the
-    // rail. The summary's Targets counter and a Surfaces card both deep-link to the Targets tab.
     return '<section class="hub" aria-label="Engagement hub">'
-      + nmHtml
       + activePanel()
       + '<div class="hb-grid">'
-      + '<section class="hb-col-main" aria-label="Workspace">' + workspacePanel() + '</section>'
-      + '<aside class="hb-col-rail" aria-label="Engagement surfaces">'
-      + '<div class="hb-sec-h"><h2>Surfaces</h2></div>'
-      + '<div class="hb-surfs">'
-      + surfaceCard('#/targets', 'crosshair', 'Targets', infos.length, 'Every host, its access level, and its next move.')
-      + surfaceCard('#/map', 'host', 'Map', infos.length, 'Hosts, services, creds and the domain as one graph.')
-      + surfaceCard('#/domain', 'shield', 'Domain', null, 'SharpHound census and the owned-to-DA attack paths.')
-      + surfaceCard('#/creds', 'lock', 'Creds', creds.length, 'The credential reuse matrix across every host.')
-      + surfaceCard('#/findings', 'spark', 'Findings', null, 'Proof-bound findings, grouped for the report.')
-      + surfaceCard('#/report', 'disk', 'Report', null, 'The OSCP writeup, exported md / PDF / docx.')
+      + '  <section class="hb-col-main" aria-label="Targets and attack paths">'
+      +      engagementPath()
+      + '  </section>'
+      + '  <aside class="hb-col-rail" aria-label="Workspace and connectivity">'
+      +      workspacePanel()
+      +      connPanel()
+      + '    <div class="hb-recent station-card neon-lane-emerald">'
+      + '      <div class="hb-sec-h"><h2>Recent Activity</h2><a class="hb-sec-more" href="#/history">Full Run Log &rarr;</a></div>'
+      +        (acts ? '<ul class="hb-log ws-clear-box">' + acts + '</ul>' : '<div class="hb-log-empty ws-clear-box">Nothing logged yet. Your commands and proofs will appear here.</div>')
+      + '    </div>'
+      + '  </aside>'
       + '</div>'
-      + connPanel()
-      + '<div class="hb-recent"><div class="hb-sec-h"><h2>Recent Activity</h2><a class="hb-sec-more" href="#/history">Run Log →</a></div>'
-      + (acts ? '<ul class="hb-log">' + acts + '</ul>' : '<div class="hb-log-empty">Nothing yet. Your commands and proofs will log here.</div>')
-      + '</div></aside>'
-      + '</div></section>';
+      + '</section>';
   }
 
   function render() {
     var active = OBOL.store.active();
+    if (active && active.id !== _lastEngId) {
+      if (_lastEngId !== null) {
+        _showNewSetup = false;
+        _showEditRun = false;
+        _showBulkTarget = false;
+        _targetFilter = 'all';
+      }
+      _lastEngId = active.id;
+    }
     var prof = (active || {}).profile || {};
     var sel = prof.platform || 'custom';
     var factCount = Object.keys(OBOL.store.factSet().kinds()).length;
     var configured = isConfigured(active, factCount);
     return '<section class="engscreen">'
-      + '<h1 class="route-h1">Engagements</h1>'
-      + '<p class="route-sub">Pick a platform, set your scope, and launch a run. The profile decides which flags the hunt targets, the proof requirements, and the report shape.</p>'
-      + (configured
-          ? hubDashboard()
-          : '<div class="eng-top">' + gettingStarted() + workspacePanel() + '</div>')
-      + '<div class="eng-library"><div class="eng-library-head"><h2 class="coach-sec-h">Engagement Library</h2>'
-      + '<details class="eng-danger-toggle"><summary>Manage / Reset</summary>'
-      + '<div class="eng-danger"><div class="eng-danger-item"><div class="eng-danger-txt"><strong>Delete All Engagements</strong>'
-      + '<span>Remove every saved run and its evidence. Keeps your skin &amp; appearance settings.</span></div>'
-      + '<button class="btn-danger" id="eng-clear">Delete All Engagements</button></div>'
-      + '<div class="eng-danger-item"><div class="eng-danger-txt"><strong>Full Reset</strong>'
-      + '<span>Erase <em>everything</em> obol saved in this browser (engagements, screenshots, and settings) and start completely fresh. A hard refresh (Ctrl+F5) does not do this.</span></div>'
-      + '<button class="btn-danger btn-danger-strong" id="eng-reset">Full Reset, Erase All Data</button></div>'
-      + '</div></details></div>'
-      + libraryList() + '</div>'
-      + '<div class="eng-create" id="eng-setup"><h2 class="coach-sec-h">' + (configured ? 'New Engagement' : 'Set Up Your Run') + '</h2>'
-      + '<label class="eng-field"><span>Name</span><input id="eng-name" placeholder="Name this run, e.g. “OSCP prep” or “Lab night 3”" autocomplete="off"></label>'
-      + '<div class="eng-field"><span>Platform Profile</span><div class="pf-grid" id="pf-grid">' + platformCards(sel) + '</div></div>'
-      + '<div class="eng-row2">'
-      + '<label class="eng-field"><span>Machine Type</span><select id="eng-mt">' + machineOptions(prof.machine_type || '') + '</select></label>'
-      + '<label class="eng-field pf-osid" id="pf-osid-wrap" style="display:none"><span>OSID (OffSec Exam)</span><input id="eng-osid" placeholder="OS-XXXXX"></label>'
-      + '<label class="eng-field pf-osid" id="pf-cand-wrap" style="display:none"><span>Candidate</span><input id="eng-cand" placeholder="Your name"></label>'
-      + '</div>'
-      + '<label class="eng-field"><span>Your Workflow <span class="eng-field-opt">(how you like to attack a box)</span></span>'
-      + '<select id="eng-wf">' + workflowOptions(prof.workflow || '') + '</select></label>'
-      + '<div class="eng-field-hint">A gentle, predictable nudge to Next Steps — not a cage. <strong>Flags first</strong> keeps the user and admin flags ahead of pivoting (grab both, mark them off, then pivot); <strong>Map the network early</strong> surfaces multi-homing and tunnels as soon as they appear. The coach still leads with a clear evidence-driven move when there is one. Change it any time.</div>'
-      + '<label class="eng-field"><span>Scope / Targets <span class="eng-field-opt">(paste IPs &amp; CIDRs, junk is filtered)</span></span>'
-      + '<textarea id="eng-scope" class="ev-textarea" style="min-height:90px" placeholder="10.10.10.10  10.10.10.20&#10;10.10.10.0/24"></textarea></label>'
-      + '<label class="eng-field"><span>Working Directory <span class="eng-field-opt">(on your Kali box, optional)</span></span>'
-      + '<input id="eng-workdir" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
-      + '<div class="eng-field-hint">obol fills output paths from this (<code>scans/</code>, <code>loot/</code>, <code>proof/</code>…) and gives you a one-line setup command. Leave blank for a sensible default.</div>'
-      + '<div class="eng-row2">'
-      + '<label class="eng-field"><span>Your VM IP <span class="eng-field-opt">(attacker box, optional)</span></span>'
-      + '<input id="eng-lhost" autocomplete="off" spellcheck="false" inputmode="decimal" placeholder="e.g. 10.10.14.9"></label>'
-      + '<label class="eng-field"><span>Interface</span><select id="eng-iface">'
-      + ['tun0', 'tun1', 'tap0', 'eth0', 'wlan0', 'vpn0', 'wg0'].map(function (i) { return '<option value="' + i + '"' + (i === 'tun0' ? ' selected' : '') + '>' + i + '</option>'; }).join('')
-      + '<option value="">other / none</option></select></label>'
-      + '</div>'
-      + '<div class="eng-field-hint">obol fills <code>{{lhost}}</code> in coercion, relay and reverse-shell commands from this, and never mistakes your own box for a target on import. Leave blank and obol learns it from a pasted <code>[tun0:IP]</code> prompt.</div>'
-      + '<button id="eng-launch" class="btn-primary">Create &amp; Launch Run →</button>'
-      + '</div>'
+      + topCommandBar(configured)
+      + (configured ? editRunDrawer(active) : '')
+      + setupDrawerHtml(configured, sel, prof)
+      + (configured ? hubDashboard() : '')
       + '</section>';
   }
 
   function syncOsidVisibility() {
     var sel = (document.querySelector('input[name="pf-platform"]:checked') || {}).value || 'custom';
     var preset = OBOL.profile.listPresets().find(function (p) { return p.id === sel; }) || {};
-    var show = preset.osid ? '' : 'none';
-    var o = document.getElementById('pf-osid-wrap'), c = document.getElementById('pf-cand-wrap');
-    if (o) o.style.display = show; if (c) c.style.display = show;
+    var showOsid = preset.osid ? '' : 'none';
+    var showCand = (preset.osid || preset.client_field || sel === 'cpts' || sel === 'pnpt') ? '' : 'none';
+    var showClient = (preset.client_field || sel === 'pnpt') ? '' : 'none';
+    var o = document.getElementById('pf-osid-wrap'), c = document.getElementById('pf-cand-wrap'), cl = document.getElementById('pf-client-wrap');
+    if (o) o.style.display = showOsid;
+    if (c) c.style.display = showCand;
+    if (cl) cl.style.display = showClient;
+  }
+
+  function ensureArsenal() {
+    if (OBOL.arsenal && OBOL.arsenal.buildScript && OBOL.arsenal.ingestInventory) return Promise.resolve(true);
+    if (OBOL.lazy && OBOL.lazy.loadGroup) return OBOL.lazy.loadGroup('loadout');
+    return Promise.resolve(false);
   }
 
   function mounted(ctx) {
     var mount = ctx.mount;
-    // platform card selection styling + OSID reveal
+
+    // Platform card selection styling + OSID reveal
     U.on(mount, 'change', 'input[name="pf-platform"]', function (e, t) {
       mount.querySelectorAll('.pf-card').forEach(function (el) { el.classList.remove('sel'); });
       var card = t.closest('.pf-card'); if (card) card.classList.add('sel');
@@ -812,22 +1342,152 @@
     });
     syncOsidVisibility();
 
-    // getting-started CTA: scroll to the setup form and focus the name field
-    U.on(mount, 'click', '.eng-jump', function () {
-      var form = document.getElementById('eng-setup');
-      if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      var nm = document.getElementById('eng-name');
-      if (nm) setTimeout(function () { try { nm.focus(); } catch (e) {} }, 300);
+    // Toggle New Engagement setup drawer on an active engagement
+    U.on(mount, 'click', '#hb-toggle-new, #hb-setup-close', function (e, t) {
+      _showNewSetup = (t.id === 'hb-setup-close') ? false : !_showNewSetup;
+      if (_showNewSetup) _showEditRun = false;
+      OBOL.router.render();
+      if (_showNewSetup) {
+        setTimeout(function () {
+          var nm = document.getElementById('eng-name');
+          if (nm) { try { nm.focus(); } catch (err) {} }
+        }, 50);
+      }
     });
 
-    // hub: copy the next-move anchor command
+    // Toggle In-Place Edit Run drawer
+    U.on(mount, 'click', '#hb-toggle-edit, #hb-edit-close', function (e, t) {
+      _showEditRun = (t.id === 'hb-edit-close') ? false : !_showEditRun;
+      if (_showEditRun) _showNewSetup = false;
+      OBOL.router.render();
+    });
+
+    // Save In-Place Edit Run changes
+    U.on(mount, 'click', '#hb-edit-save', function () {
+      var name = ((document.getElementById('hb-edit-name') || {}).value || '').trim();
+      var wd = OBOL.workspace.sanitizeRoot(((document.getElementById('hb-edit-workdir') || {}).value || '').trim());
+      var lhostRaw = ((document.getElementById('hb-edit-lhost') || {}).value || '').trim();
+      var lhost = /^(\d{1,3}\.){3}\d{1,3}$/.test(lhostRaw) ? lhostRaw : '';
+      var iface = ((document.getElementById('hb-edit-iface') || {}).value || '').trim();
+      var wf = ((document.getElementById('hb-edit-wf') || {}).value || '').trim();
+      if (lhostRaw && !lhost) {
+        U.toast('That VM IP does not look like a valid IPv4 address', 'err');
+        return;
+      }
+      OBOL.store.update(function (e) {
+        if (name) e.name = name;
+        e.workspace = e.workspace || {};
+        if (wd) e.workspace.root = wd;
+        e.params = e.params || {};
+        e.params.lhost = lhost;
+        e.params.lhost_iface = iface;
+        e.profile = e.profile || {};
+        e.profile.workflow = wf;
+      }, 'edit-run');
+      _showEditRun = false;
+      if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+      U.toast('Engagement settings updated');
+      OBOL.router.render();
+    });
+
+    // Target Board: toggle Bulk Target Import box
+    U.on(mount, 'click', '#hb-toggle-bulk, #hb-bulk-cancel', function (e, t) {
+      _showBulkTarget = (t.id === 'hb-bulk-cancel') ? false : !_showBulkTarget;
+      OBOL.router.render();
+      if (_showBulkTarget) {
+        setTimeout(function () {
+          var ta = document.getElementById('hb-bulk-input');
+          if (ta) { try { ta.focus(); } catch (err) {} }
+        }, 40);
+      }
+    });
+
+    // Target Board: run Bulk Target Import
+    U.on(mount, 'click', '#hb-bulk-go', function () {
+      var ta = document.getElementById('hb-bulk-input');
+      var text = (ta && ta.value) || '';
+      if (!text.trim()) { U.toast('Paste one or more IPs, hostnames, or Nmap output first', 'err'); return; }
+      importBulkTargets(text, function (res) {
+        if (!res.ok) {
+          U.toast('No valid target IPs or CIDRs found in that paste', 'err');
+          return;
+        }
+        _showBulkTarget = false;
+        var parts = [];
+        if (res.added) parts.push(res.added + ' target' + (res.added === 1 ? '' : 's') + ' added');
+        if (res.updated) parts.push(res.updated + ' updated');
+        if (res.scanFacts) parts.push(res.scanFacts + ' scan fact' + (res.scanFacts === 1 ? '' : 's') + ' minted');
+        U.toast(parts.join(', ') || 'Scope updated');
+        OBOL.router.render();
+      });
+    });
+
+    // Target Board: filter pills
+    U.on(mount, 'click', '[data-tf]', function (e, t) {
+      _targetFilter = t.getAttribute('data-tf') || 'all';
+      OBOL.router.render();
+    });
+
+    // Target Board: Focus button (sets active target without toggling parent <details>)
+    U.on(mount, 'click', '[data-focus-ip]', function (e, t) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (e && e.stopPropagation) e.stopPropagation();
+      var ip = t.getAttribute('data-focus-ip');
+      if (!ip) return;
+      if (OBOL.store.setActiveTarget) OBOL.store.setActiveTarget(ip);
+      else OBOL.store.update(function (eng) {
+        eng.params = eng.params || {};
+        eng.params.target = ip;
+        eng.activeTarget = ip;
+      }, 'params');
+      if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+      U.toast('Active target set to ' + ip);
+      OBOL.router.render();
+    });
+
+    // Target Dossier link inside <summary>: prevent toggling <details> when clicking the link
+    U.on(mount, 'click', '.hb-dossier-btn', function (e) {
+      if (e && e.stopPropagation) e.stopPropagation();
+    });
+
+    // Step 0 Loadout setup card inside Engagement setup: download script & ingest inventory
+    U.on(mount, 'click', '.eng-lo-dl', function () {
+      ensureArsenal().then(function () {
+        if (!OBOL.arsenal || !OBOL.arsenal.buildScript) { U.toast('Arsenal module still loading, try again', 'err'); return; }
+        var promptStamp = true;
+        try {
+          var v = localStorage.getItem('obol.arsenal-promptstamp');
+          if (v === null) v = localStorage.getItem('obol.arsenal-stamp');
+          if (v !== null) promptStamp = v === '1';
+        } catch (e) {}
+        var blob = new Blob([OBOL.arsenal.buildScript({ promptStamp: promptStamp })], { type: 'text/x-shellscript' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = 'download-loadout.sh';
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+        U.toast('download-loadout.sh downloaded');
+      });
+    });
+
+    U.on(mount, 'click', '.eng-lo-ingest', function () {
+      var box = mount.querySelector('.eng-lo-paste'), msg = mount.querySelector('.eng-lo-msg');
+      var text = (box && box.value) || '';
+      if (!text.trim()) { if (msg) { msg.textContent = 'Paste the script output first.'; msg.className = 'lo-paste-msg eng-lo-msg err'; } return; }
+      ensureArsenal().then(function () {
+        if (!OBOL.arsenal || !OBOL.arsenal.ingestInventory) { U.toast('Arsenal module still loading, try again', 'err'); return; }
+        var r = OBOL.arsenal.ingestInventory(text);
+        if (!r.ok) { if (msg) { msg.textContent = r.reason; msg.className = 'lo-paste-msg eng-lo-msg err'; } return; }
+        U.toast('Loadout stocked ' + r.present + ' tools, ' + r.staged + ' staged');
+        OBOL.router.render();
+      });
+    });
+
+    // Copy buttons
     U.on(mount, 'click', '.btn-copy', function (e, b) {
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
 
-    // hub: remember each per-target Attack Path row's open/closed state per browser. The `toggle`
-    // event does not bubble, so bind it directly on each <details>; a re-render recreates the nodes,
-    // and the guard flag stops a double-bind if the same node somehow survives.
+    // Remember each per-target Attack Path row's open/closed state per browser
     Array.prototype.forEach.call(mount.querySelectorAll('details[data-apath-key]'), function (d) {
       if (d._apathBound) return; d._apathBound = true;
       d.addEventListener('toggle', function () {
@@ -835,17 +1495,13 @@
       });
     });
 
-    // connectivity handlers. Bound ONCE on the persistent #view: the router re-runs mounted() on
-    // every in-place render, so a delegated U.on would stack up — harmless for idempotent handlers,
-    // but a stacked *toggle* (the step tick) fires an even number of times and cancels itself out.
+    // Connectivity handlers (bound once on persistent #view)
     if (!mount._obolConnBound) {
       mount._obolConnBound = true;
-      // swap the selected tunnel tool (re-renders to show its setup steps)
       U.on(mount, 'click', '[data-tunnel-sel]', function (e, t) {
         _tunnelSel = t.getAttribute('data-tunnel-sel');
         OBOL.router.render();
       });
-      // tick a setup step done, in place (shared localStorage key with the coach's staging guide)
       U.on(mount, 'click', '[data-stage]', function (e, t) {
         var id = t.getAttribute('data-stage'), i = t.getAttribute('data-stage-i'), key = 'obol.stage:' + id + ':' + i;
         var was; try { was = localStorage.getItem(key) === '1'; localStorage.setItem(key, was ? '0' : '1'); } catch (x) { was = false; }
@@ -854,33 +1510,30 @@
         t.innerHTML = on ? '✓' : '';
         var li = t.closest('.stage-step'); if (li) li.classList.toggle('done', on);
       });
-      // troubleshooter: pick a symptom (re-renders to reveal its probes + paste box)
       U.on(mount, 'click', '[data-ptr-sym]', function (e, t) {
         var k = t.getAttribute('data-ptr-sym');
-        _ptrSym = (_ptrSym === k) ? null : k;   // toggle off if re-clicked
+        _ptrSym = (_ptrSym === k) ? null : k;
         OBOL.router.render();
       });
-      // diagnose the pasted probe output, in place (so the paste and verdict survive); set/clear the
-      // amber "needs attention" edge state live via the container class.
       U.on(mount, 'click', '[data-ptr-go]', function (e, t) {
         var key = t.getAttribute('data-ptr-go');
         var body = t.closest('.ptr-body'); if (!body) return;
         var ta = body.querySelector('[data-ptr-paste]'), out = body.querySelector('.ptr-verdict');
         var res = OBOL.pivotDoctor.diagnose(key, ta ? ta.value : '', (OBOL.store.active() || {}).params || {});
         if (out) out.innerHTML = verdictHtml(res);
-        // a real, unresolved problem lights the edge amber; a healthy verdict clears it
         if (res && res.matched && !res.healthy) { setTrouble(true); setConnWarn(mount, true); }
         else if (res && res.matched && res.healthy) { setTrouble(false); setConnWarn(mount, false); }
       });
-      // clear the current paste + verdict and drop the amber state (keeps the symptom open)
-      U.on(mount, 'click', '[data-ptr-clear]', function (e, t) {
+      U.on(mount, 'click', '[data-ptr-clear]', function () {
         setTrouble(false);
         OBOL.router.render();
       });
     }
 
-    // library: open / delete
+    // Library: open / delete
     U.on(mount, 'click', '.lib-open', function (e, t) {
+      var drawer = t.closest('details.eng-lib-drawer');
+      if (drawer) drawer.open = false;
       OBOL.store.setActive(t.getAttribute('data-eng')).then(function () { OBOL.app.renderSidebar(); OBOL.router.render(); });
     });
     U.on(mount, 'click', '.lib-del', function (e, t) {
@@ -888,17 +1541,17 @@
       OBOL.store.deleteEngagement(t.getAttribute('data-eng')).then(function () { OBOL.app.renderSidebar(); OBOL.router.render(); });
     });
 
-    // danger zone: delete all engagements (keeps prefs) / full reset (erase all browser data)
+    // Danger zone: delete all engagements / full reset
     U.on(mount, 'click', '#eng-clear', function () {
       if (!confirm('Delete ALL engagements and their evidence?\n\nThis cannot be undone. Your appearance settings are kept.')) return;
       OBOL.store.clearEngagements().then(function () { try { U.toast('All engagements deleted, reloading'); } catch (e) {} setTimeout(function () { location.reload(); }, 150); });
     });
     U.on(mount, 'click', '#eng-reset', function () {
-      if (!confirm('FULL RESET\n\nErase everything obol saved in this browser (every engagement, screenshot, and setting) and start completely fresh.\n\nThis cannot be undone. Continue?')) return;
+      if (!confirm('FULL RESET\n\nErase everything OBOL saved in this browser (every engagement, screenshot, and setting) and start completely fresh.\n\nThis cannot be undone. Continue?')) return;
       OBOL.store.resetAll().then(function () { try { U.toast('All data cleared, reloading fresh'); } catch (e) {} setTimeout(function () { location.reload(); }, 200); });
     });
 
-    // ── virtual workspace: keep the file tree in sync with the operator's real disk ──
+    // Virtual workspace handlers
     function updateOverrides(fn, label) {
       OBOL.store.update(function (e) {
         e.workspace = e.workspace || {};
@@ -908,7 +1561,6 @@
       }, label || 'workspace');
       OBOL.router.render();
     }
-    // remove any file from the view (hide it) — also drop it from the hand-added/synced list.
     U.on(mount, 'click', '.ws-rm', function (e, t) {
       e.preventDefault(); e.stopPropagation();
       var rel = t.getAttribute('data-rel'); if (!rel) return;
@@ -917,7 +1569,6 @@
         ov.added = (ov.added || []).filter(function (a) { return OBOL.vfs.relOf((typeof a === 'string' ? a : a.path), (OBOL.store.active().workspace || {}).root) !== rel; });
       }, 'ws-remove');
     });
-    // add a file by hand to a folder, to match something on disk obol didn't predict.
     U.on(mount, 'click', '.ws-add', function (e, t) {
       e.preventDefault();
       var folder = t.getAttribute('data-folder') || 'other';
@@ -934,12 +1585,10 @@
       }, 'ws-add');
       U.toast('Added ' + rel + '. Paste its contents on Evidence to mint facts');
     });
-    // restore everything the operator hid.
     U.on(mount, 'click', '.ws-restore', function (e) {
       e.preventDefault();
       updateOverrides(function (ov) { ov.removed = {}; }, 'ws-restore');
     });
-    // copy the snapshot command.
     U.on(mount, 'click', '.ws-copyval, .ws-copy-path', function (e, t) {
       if (e && e.preventDefault) e.preventDefault();
       if (e && e.stopPropagation) e.stopPropagation();
@@ -949,9 +1598,10 @@
       var el = document.getElementById(t.getAttribute('data-copy'));
       if (el) U.copy(el.textContent).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
-    // ── hover preview card: peek at a file's contents / purpose without expanding the row ──
+
+    // Hover preview card for Workspace files
     (function wireWorkspacePreview() {
-      if (!OBOL.vfs || matchMedia('(hover: none)').matches) return; // touch devices use click-to-expand
+      if (!OBOL.vfs || matchMedia('(hover: none)').matches) return;
       var byRel = {};
       try { var vt = OBOL.vfs.build(OBOL.store.active()); (vt.files || []).forEach(function (f) { byRel[OBOL.vfs.relOf(f.path, vt.root)] = f; }); } catch (e) { return; }
       var card = document.getElementById('ws-preview'), fresh = false;
@@ -961,21 +1611,19 @@
           : f.unknown ? 'On Disk' : f.manual ? 'Added' : f.confirmed ? 'On Disk' : 'Expected';
         var head = '<div class="ws-pv-head"><span class="ws-pv-name">' + esc(f.name) + '</span><span class="ws-pv-tag ws-pv-' + esc(tag.replace(/\s+/g, '').toLowerCase()) + '">' + esc(tag) + '</span></div>'
           + '<div class="ws-pv-desc">' + esc(OBOL.vfs.describe(f)) + '</div>';
-        // the capture bridge: a clear, clickable pointer to paste the file's CONTENTS on Evidence — the
-        // only way a file's facts get minted (a directory sync confirms existence, never contents).
-        var cta = '<a class="ws-pv-cta" href="' + captureHref(f) + '">Paste Its Contents On Evidence →</a>';
+        var cta = '<a class="ws-pv-cta" href="' + captureHref(f) + '">Paste Its Contents On Evidence &rarr;</a>';
         var body;
         if (f.image) body = '<img class="ws-pv-img" src="' + esc(f.image) + '" alt="">';
         else if (f.status === 'captured' && f.output) {
           var lines = String(f.output).replace(/\s+$/, '').split(/\n/);
-          var shown = lines.slice(0, 16).join('\n') + (lines.length > 16 ? '\n… ' + (lines.length - 16) + ' more line' + (lines.length - 16 === 1 ? '' : 's') : '');
+          var shown = lines.slice(0, 16).join('\n') + (lines.length > 16 ? '\n... ' + (lines.length - 16) + ' more line' + (lines.length - 16 === 1 ? '' : 's') : '');
           body = '<pre class="ws-pv-term">' + esc(shown) + '</pre>';
         } else if (f.status === 'captured') {
           body = '<div class="ws-pv-note">Captured evidence file' + (f.size ? ' (' + esc(fsize(f.size)) + ')' : '') + (f.tool ? ' via ' + esc(f.tool) : '') + '. Saved to your Kali working directory.</div>';
         } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the coach, run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
-        else if (f.unknown) body = '<div class="ws-pv-note">Found on your disk by a sync. obol knows it exists but not what\'s inside.</div>' + cta;
+        else if (f.unknown) body = '<div class="ws-pv-note">Found on your disk by a sync. OBOL knows it exists but not what\'s inside.</div>' + cta;
         else if (f.manual) body = '<div class="ws-pv-note">Added by hand. Syncing only confirms it exists, to mint facts, paste what\'s inside.</div>' + cta;
-        else body = '<div class="ws-pv-note">obol expects this file but hasn\'t received its output yet.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
+        else body = '<div class="ws-pv-note">OBOL expects this file but hasn\'t received its output yet.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
         return head + body;
       }
       function place(row) {
@@ -985,15 +1633,13 @@
         var panel = row.closest('.ws-panel');
         var left, top;
         if (panel) {
-          // Dock the preview into the empty space inside the workspace, to the RIGHT of the file names,
-          // rather than floating it over the Surfaces rail. Right-align it within the panel and track
-          // the hovered row vertically.
           var pr = panel.getBoundingClientRect();
-          left = pr.right - cw - 16;
-          if (left < pr.left + 8) left = pr.left + 8;   // narrow panel: keep it inside
+          left = pr.left - cw - 12;
+          if (left < 8) left = pr.right - cw - 16;
+          if (left < 8) left = 8;
           top = Math.min(Math.max(8, r.top - 2), window.innerHeight - ch - 8);
         } else {
-          left = r.left - cw - 12;                       // fallback: left of the row
+          left = r.left - cw - 12;
           if (left < 8) left = Math.min(r.right + 12, window.innerWidth - cw - 8);
           top = Math.min(Math.max(8, r.top), window.innerHeight - ch - 8);
         }
@@ -1015,7 +1661,7 @@
       }
     })();
 
-    // paste-back sync: reconcile a find manifest against the model.
+    // Paste-back workspace snapshot sync
     U.on(mount, 'click', '.ws-sync-run', function () {
       var ta = document.getElementById('ws-sync-paste');
       var entries = OBOL.vfs.parseSnapshot(ta ? ta.value : '');
@@ -1026,7 +1672,7 @@
       U.toast(r.confirmed + ' confirmed · ' + r.adopted + ' new file' + (r.adopted === 1 ? '' : 's') + ' adopted');
     });
 
-    // create & launch
+    // Create & Launch Engagement
     var launch = document.getElementById('eng-launch');
     if (launch) launch.addEventListener('click', function () {
       var name = (document.getElementById('eng-name').value || '').trim();
@@ -1035,57 +1681,88 @@
       var wf = ((document.getElementById('eng-wf') || {}).value || '');
       var osid = (document.getElementById('eng-osid') || {}).value || '';
       var cand = (document.getElementById('eng-cand') || {}).value || '';
+      var client = (document.getElementById('eng-client') || {}).value || '';
       var scopeText = (document.getElementById('eng-scope').value || '');
-      var scope = extractScope(scopeText);
-      // The operator's own attack box: IP + interface. Feeds {{lhost}} and the import self-IP guard.
       var lhostRaw = ((document.getElementById('eng-lhost') || {}).value || '').trim();
       var lhost = /^(\d{1,3}\.){3}\d{1,3}$/.test(lhostRaw) ? lhostRaw : '';
       var iface = ((document.getElementById('eng-iface') || {}).value || '').trim();
       if (lhostRaw && !lhost) { U.toast('That VM IP doesn\'t look like an IPv4 address, ignoring it', 'err'); }
       if (!name) { name = (OBOL.profile.PRESETS[platform] || {}).name || 'Engagement'; }
 
-      // If the active engagement is still the untouched default, configure it in place rather than
-      // spawning a second, empty run behind it. Otherwise create a fresh engagement as before.
+      var parsedScope = parseBulkInput(scopeText, lhost);
+      var scope = parsedScope.scope;
+
       var active = OBOL.store.active();
       var reuse = active && !isConfigured(active, Object.keys(OBOL.store.factSet().kinds()).length);
 
-      // Working directory: what the operator typed, else a NEUTRAL default under ~/engagements named
-      // after the engagement itself — not the target IP, and not a deep path remembered from a past run.
       var typed = OBOL.workspace.sanitizeRoot((document.getElementById('eng-workdir') || {}).value || '');
+      if (!typed && scopeText) {
+        var mScopeWd = /\[([~\/][^\[\]\r\n]+)\]/.exec(scopeText) || /^\s*(?:cd\s+)?((?:~\/|\/home\/|\/root\/)[A-Za-z0-9._\/-]+)\s*$/m.exec(scopeText);
+        if (mScopeWd) typed = OBOL.workspace.sanitizeRoot(mScopeWd[1]);
+      }
       var root = typed || OBOL.workspace.join(OBOL.workspace.DEFAULT_BASE, OBOL.workspace.slugify(name) || 'engagement');
 
       var seed = function () {
-        // seed targets from bare IPs; keep CIDRs as authorized scope only.
-        var hosts = scope.filter(function (s) { return !isCidr(s); });
+        var hosts = parsedScope.hosts;
         var facts = [];
+        var SUP = (OBOL.facts && OBOL.facts.ProofState && OBOL.facts.ProofState.SUPPORTED) || 'supported';
         OBOL.store.update(function (e) {
           if (reuse) {
             e.name = name;
-            e.profile = Object.assign(e.profile || {}, { platform: platform, machine_type: mt, workflow: wf, osid: osid.trim(), candidate: cand.trim(), scope: scope });
+            e.profile = Object.assign(e.profile || {}, { platform: platform, machine_type: mt, workflow: wf, osid: osid.trim(), candidate: cand.trim(), client: client.trim(), scope: scope });
             e.params = e.params || {}; e.params.platform = platform;
+          }
+          if (!wf && OBOL.profile && OBOL.profile.defaultLens) {
+            e.ui = e.ui || {};
+            e.ui.pathLens = OBOL.profile.defaultLens(e.profile);
+          }
+          if (OBOL.profile && OBOL.profile.reportProfileFor) {
+            e.ui = e.ui || {};
+            e.ui.reportProfile = OBOL.profile.reportProfileFor(e.profile);
           }
           e.workspace = { root: root };
           e.targets = [];
-          hosts.forEach(function (ip, i) {
-            e.targets.push({ id: 't' + i + '-' + Date.now().toString(36), ip: ip, hostname: '', os: '' });
-            facts.push(OBOL.facts.makeFact({ kind: 'target.configured', scope: 'host:' + ip, source: 'engagement' }));
+          hosts.forEach(function (h, i) {
+            e.targets.push({ id: 't' + i + '-' + Date.now().toString(36), ip: h.ip, hostname: h.hostname || '', os: '' });
+            var sc = 'host:' + h.ip;
+            facts.push(OBOL.facts.makeFact({ kind: 'target.configured', scope: sc, source: 'engagement' }));
+            if (h.hostname) {
+              facts.push(OBOL.facts.makeFact({ kind: 'host.hostname', scope: sc, value: { name: h.hostname.split('.')[0], fqdn: h.hostname.indexOf('.') > 0 ? h.hostname : '' }, state: SUP, source: 'engagement' }));
+            }
+            if (h.domain) {
+              facts.push(OBOL.facts.makeFact({ kind: 'host.domain', scope: sc, value: { domain: h.domain }, state: SUP, source: 'engagement' }));
+            }
           });
           if (!e.params) e.params = {};
-          if (hosts[0]) e.params.target = hosts[0];
+          e.activeTarget = hosts[0] ? hosts[0].ip : null;
+          if (hosts[0]) e.params.target = hosts[0].ip;
+          else delete e.params.target;
           if (scope.length) e.params.scope_defined = true;
           if (lhost) { e.params.lhost = lhost; if (iface) e.params.lhost_iface = iface; }
         }, 'launch');
         if (facts.length) OBOL.store.addFacts(facts, 'launch');
-        OBOL.app.renderSidebar();
-        U.toast(hosts.length ? ('Launched ' + hosts.length + ' target(s) scoped') : 'Engagement created, add targets to begin');
-        OBOL.router.go('path');
+        _showNewSetup = false;
+        var finishLaunch = function () {
+          OBOL.app.renderSidebar();
+          U.toast(hosts.length ? ('Launched ' + hosts.length + ' target(s) scoped') : 'Engagement created, add targets to begin');
+          OBOL.router.go('path');
+        };
+        if (parsedScope.hasScanOutput && OBOL.ingest && OBOL.ingest.ensureParsers) {
+          ingestScanBlocks(scopeText, hosts[0] && hosts[0].ip, finishLaunch);
+        } else {
+          finishLaunch();
+        }
       };
 
       if (reuse) { seed(); }
-      else { OBOL.store.createEngagement(name, { platform: platform, machine_type: mt, workflow: wf, osid: osid.trim(), candidate: cand.trim(), scope: scope }).then(seed); }
+      else { OBOL.store.createEngagement(name, { platform: platform, machine_type: mt, workflow: wf, osid: osid.trim(), candidate: cand.trim(), client: client.trim(), scope: scope }).then(seed); }
     });
   }
 
   OBOL.routes = OBOL.routes || {};
-  OBOL.routes.home = { render: render, mounted: mounted };
+  OBOL.routes.home = {
+    render: render,
+    mounted: mounted,
+    openNewSetup: function () { _showNewSetup = true; _showEditRun = false; },
+  };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

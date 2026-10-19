@@ -20,7 +20,8 @@
         "linux"
       ],
       "produces": [
-        "scan.local.interfaces"
+        "scan.local.interfaces",
+        "host.multihomed"
       ],
       "hypothesis": "A Linux foothold can expose additional interfaces or subnets that may become pivot candidates.",
       "commands": [
@@ -120,7 +121,8 @@
         "windows"
       ],
       "produces": [
-        "scan.local.interfaces"
+        "scan.local.interfaces",
+        "host.multihomed"
       ],
       "hypothesis": "A Windows WinRM foothold can expose additional NICs, DNS servers, or subnets that may become pivot candidates.",
       "commands": [

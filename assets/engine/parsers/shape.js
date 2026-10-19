@@ -1,5 +1,5 @@
 /*!
- * obol engine — parsers/shape.js
+ * obol engine - parsers/shape.js
  * The output-shape fallback (Approach A): a final pass that recognizes common tool output by its
  * SHAPE, not by the command that produced it, so a paste with no command line (or a command the
  * dispatcher does not key on) still yields the facts the shape unambiguously proves.
@@ -28,54 +28,76 @@
     if (!text.trim()) return;
     var h = 'host:' + ws.target;
 
-    // (1) A bare "N/tcp open service" port table, pasted without an nmap command line. The dispatcher
-    //     only runs the nmap parser when the command contains "nmap", so a copy-pasted port list (or
-    //     greppable row) otherwise mints nothing. The row pattern is anchored to the line start, so
-    //     only a genuine open-port line matches. We mint the port facts (and the derived reachability),
-    //     but NOT the scan.nmap.* profile facts: we cannot know the scan profile from the shape alone.
+    // (1) A bare "N/tcp open service" port table (or gnmap / masscan / rustscan row), pasted without an
+    //     nmap command line. The row pattern is anchored and excludes open|filtered.
     if (!hasPrefix(facts, 'port:')) {
-      // Line by line (not a global regex): a per-line anchored test cannot skip a row the way a greedy
-      // trailing match in a globally-iterated regex can.
-      var rowRe = /^[ \t]*(\d{1,5})\/(tcp|udp)[ \t]+open\b(?:[ \t]+(\S+))?/i;
+      var rowRe = /^[ \t]*(\d{1,5})\/(tcp|udp)[ \t]+open(?![|\w])(?:[ \t]+(\S+))?/i;
+      var discRe = /Discovered open port (\d{1,5})\/(tcp|udp) on \S+/i;
+      var rustRe = /^\s*Open\s+(?:\d{1,3}(?:\.\d{1,3}){3}|\[?[0-9a-fA-F:]+\]?):(\d{1,5})\s*$/i;
+      var gnmapRe = /\b(\d{1,5})\/open\/(tcp|udp)\/[^\/,\r\n]*\/([^\/,\s\r\n]*)/gi;
       var summary = [], seen = {};
-      text.split(/\r?\n/).forEach(function (line) {
-        var mm = rowRe.exec(line);
-        if (!mm) return;
-        var port = parseInt(mm[1], 10);
+      function addShapePort(port, proto, service) {
         if (!port || port > 65535) return;
-        var proto = mm[2].toLowerCase();
+        proto = (proto || 'tcp').toLowerCase();
         var key = port + '/' + proto;
         if (seen[key]) return; seen[key] = 1;
-        var service = (mm[3] || '').trim();
+        service = (service || '').trim();
         var value = { port: port, protocol: proto, via: 'shape' };
         if (service && service.toLowerCase() !== 'open') value.service = service;
         _add(facts, mkFact('port:' + port, h, value, S, source));
         if (value.service && C._normalize_service) _add(facts, mkFact('service.' + C._normalize_service(value.service), h, value, S, source));
         if (C._parse_service_reachability) C._parse_service_reachability(port, proto, value.service || '', ws, source, facts);
         summary.push(port);
+      }
+      text.split(/\r?\n/).forEach(function (line) {
+        var mm = rowRe.exec(line);
+        if (mm) { addShapePort(parseInt(mm[1], 10), mm[2], mm[3]); return; }
+        var dm = discRe.exec(line);
+        if (dm) { addShapePort(parseInt(dm[1], 10), dm[2], ''); return; }
+        var rm = rustRe.exec(line);
+        if (rm) { addShapePort(parseInt(rm[1], 10), 'tcp', ''); return; }
+        var gm;
+        gnmapRe.lastIndex = 0;
+        while ((gm = gnmapRe.exec(line)) !== null) {
+          addShapePort(parseInt(gm[1], 10), gm[2], gm[3]);
+        }
       });
-      if (summary.length) _add(facts, mkFact('ports.open', h, { ports: uniqNums(summary), via: 'shape' }, S, source));
+      if (summary.length) {
+        _add(facts, mkFact('ports.open', h, { ports: uniqNums(summary), via: 'shape' }, S, source));
+        if (!hasKind(facts, 'host.os_family') && C._add_os_from_text) {
+          var osPortText = text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '');
+          C._add_os_from_text(osPortText, ws, source, facts, 'shape', 'medium', true);
+        }
+      }
     }
 
     // (2) A bare HTTP response (a real status line, or a Server header), pasted without a web-client
     //     command. The dispatcher gates its HTTP parsers on curl/whatweb/wget/etc., so a raw response
     //     saved to a file mints nothing. A status line or a Server header is an unambiguous web signal.
-    if (!hasKind(facts, 'http.reachable') && (/^HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) || /^Server:[ \t]*\S/im.test(text))) {
+    var isNslookup = /^Server:[ \t]*\S+[ \t]*\r?\nAddress(?:es)?[ \t]*:/im.test(text);
+    if (!isNslookup && !hasKind(facts, 'http.reachable') && (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) || /^(?:<\s*)?Server:[ \t]*\S/im.test(text))) {
       _add(facts, mkFact('http.reachable', h, { via: 'shape' }, S, source));
       var servers = [];
-      (text.match(/^Server:[ \t]*(.+)$/gim) || []).forEach(function (l) {
-        var v = l.replace(/^Server:[ \t]*/i, '').trim();
+      (text.match(/^(?:<\s*)?Server:[ \t]*(.+)$/gim) || []).forEach(function (l) {
+        var v = l.replace(/^(?:<\s*)?Server:[ \t]*/i, '').trim();
         if (v && servers.indexOf(v) < 0) servers.push(v);
       });
       var webServers = servers.filter(function (hdr) { return !(C._isNonWebServerHeader && C._isNonWebServerHeader(hdr)); });
       if (webServers.length) _add(facts, mkFact('web.server', h, { headers: webServers.slice(0, 10), via: 'shape' }, S, source));
+      if (!hasKind(facts, 'host.os_family') && C._add_os_from_text) {
+        C._add_os_from_text(text, ws, source, facts, 'shape', 'medium', true);
+      }
     }
 
-    // (3) A crackable-hash blob, pasted without the tool that produced it. The AS-REP / TGS hash tokens
-    //     are self-identifying, so route them to the real hash parsers (which emit the correct fact
-    //     type and structured value); the guard keeps it from double-running when the command already did.
-    if (/\$krb5asrep\$/i.test(text) && !hasKind(facts, 'hash.asrep') && C._parse_asrep_hashes) C._parse_asrep_hashes(text, ws, source, facts);
-    if (/\$krb5tgs\$/i.test(text) && !hasKind(facts, 'hash.tgs') && C._parse_tgs_hashes) C._parse_tgs_hashes(text, ws, source, facts);
+    // (3) A crackable-hash blob, pasted without the tool that produced it. Skip if the paste is
+    //     already cracking output (e.g. hashcat --show `<hash>:<plaintext>`), so the plaintext isn't
+    //     re-appended into the hash token.
+    var isCrack = (C._is_cracking_command && C._is_cracking_command(source)) || /\$krb5(?:asrep|tgs)\$[^\s:]+\$[0-9a-f]{32,}:[^\s:]+/i.test(text);
+    if (!isCrack && /\$krb5asrep\$/i.test(text) && !hasKind(facts, 'hash.asrep') && C._parse_asrep_hashes) C._parse_asrep_hashes(text, ws, source, facts);
+    if (!isCrack && /\$krb5tgs\$/i.test(text) && !hasKind(facts, 'hash.tgs') && C._parse_tgs_hashes) C._parse_tgs_hashes(text, ws, source, facts);
+    if (/^(?:ServicePrincipalName\s+Name|Name\s+MemberOf\s+PasswordLastSet)/im.test(text) && !hasKind(facts, 'ad.user_list') && C._parse_impacket_roast_table) {
+      C._parse_impacket_roast_table(text, ws, source, facts);
+    }
 
     // (4) Share download output or GPP cpassword XML/grep without command
     if (text.indexOf('getting file ') >= 0 && !hasKind(facts, 'loot.files') && C._parse_share_inventory) {
@@ -86,7 +108,7 @@
     }
 
     // (5) Ligolo-ng tunnel establishment or session shape pasted without command
-    if ((/(\[Tunnel\] Interface ligolo is UP|session connected|Agent joined:)/i.test(text) || /ligolo-proxy.*listening/i.test(text)) && !hasKind(facts, 'tunnel.route')) {
+    if ((/(\[Tunnel\] Interface ligolo is UP|session connected|Agent joined:)/i.test(text) || /ligolo-proxy[^\r\n]{0,80}?listening/i.test(text)) && !hasKind(facts, 'tunnel.route')) {
       _add(facts, mkFact('tunnel.route', h, { via: 'ligolo', shape: true }, S, source));
       _add(facts, mkFact('pivot.active', h, { via: 'ligolo', shape: true }, S, source));
     }
@@ -94,6 +116,61 @@
     // (6) Raw SQLite database dump or table schema shape pasted without command
     if (/(SQLite format 3|CREATE TABLE\s+(?:partners|users|accounts|credentials)|^\s*\d+\|[a-zA-Z0-9_.-]+\|\$2[aby]\$)/im.test(text) && !hasKind(facts, 'loot.material')) {
       _add(facts, mkFact('loot.material', h, { kind: 'sqlite_db', via: 'shape' }, S, source));
+    }
+
+    // (7) Ping TTL heuristic: TTL 60..64 -> Linux os_hint, TTL 124..128 -> Windows os_hint (promote = false)
+    if (!hasKind(facts, 'host.os_family') && !hasKind(facts, 'host.os_hint') && C._add_os_observation) {
+      var mTtl = /\b\d+\s+bytes\s+from\s+\S+[^\r\n]{0,120}?\bttl=(\d{1,3})\b/i.exec(text) || /Reply from \S+:\s+bytes=\d+\s+time[=<]\S+\s+TTL=(\d{1,3})/i.exec(text);
+      if (mTtl) {
+        var ttl = parseInt(mTtl[1], 10);
+        if (ttl >= 60 && ttl <= 64) {
+          C._add_os_observation(facts, ws, source, 'linux', mTtl[0], 'medium', 'ping-ttl', false);
+        } else if (ttl >= 124 && ttl <= 128) {
+          C._add_os_observation(facts, ws, source, 'windows', mTtl[0], 'medium', 'ping-ttl', false);
+        }
+      }
+    }
+
+    // (8) Un-keyed OS / kernel / version shapes (uname -a, /proc/version, uname -r, /etc/os-release, lsb_release, ver, sudo -V, pkexec --version)
+    if (!hasKind(facts, 'host.kernel')) {
+      var mUname = C._UNAME_RE && C._UNAME_RE.exec(text);
+      var mProcVer = !mUname && /Linux version\s+([0-9][^\s]+)/i.exec(text);
+      var mBareKernel = !mUname && !mProcVer && /^\s*([2-6]\.\d+\.\d+-(?:[0-9A-Za-z.+_-]*(?:generic|amd64|i[3-6]86|arm64|el\d|kali|debian|ubuntu|arch|alpine)[0-9A-Za-z.+_-]*|\d+-[A-Za-z0-9.+_-]+))\s*$/m.exec(text);
+      if (mUname || mProcVer || mBareKernel) {
+        var kStr = mUname ? ((mUname.groups && mUname.groups.kernel) || mUname[2]) : (mProcVer ? mProcVer[1] : mBareKernel[1].trim());
+        var archStr = mUname ? ((mUname.groups && mUname.groups.arch) || mUname[3]) : '';
+        var kLine = (mUname ? mUname[0] : (mProcVer ? mProcVer[0] : mBareKernel[0])).trim();
+        _add(facts, mkFact('host.kernel', h, { kernel: kStr, via: 'shape' }, S, source));
+        if (archStr && !hasKind(facts, 'host.arch')) {
+          _add(facts, mkFact('host.arch', h, { arch: archStr, via: 'shape' }, S, source));
+        }
+        if (C._add_os_observation) {
+          var kProd = C._os_product_from_label ? C._os_product_from_label(kLine, 'linux') : null;
+          C._add_os_observation(facts, ws, source, 'linux', kLine, 'high', 'uname', true, kProd);
+        }
+        var isRemoteSnmpOrScan = /\b(?:snmpwalk|snmp-check|onesixtyone|nmap)\b/i.test(source || '');
+        if (!isRemoteSnmpOrScan && C._check_linux_kernel_vulns) C._check_linux_kernel_vulns(kStr, ws, source, facts);
+      }
+      var mWinVer = /Microsoft Windows \[Version\s+([0-9.]+)\]/i.exec(text);
+      if (mWinVer) {
+        var wVer = mWinVer[1].trim();
+        _add(facts, mkFact('host.kernel', h, { kernel: wVer, tool: 'ver', via: 'shape' }, S, source));
+        if (C._add_os_observation) {
+          C._add_os_observation(facts, ws, source, 'windows', mWinVer[0], 'high', 'ver', true, 'Windows ' + wVer);
+        }
+      }
+    }
+    var mOsRel = /PRETTY_NAME\s*=\s*["']?([^"'\r\n]+)["']?/i.exec(text) || /Distributor ID:\s*(\S+)/i.exec(text);
+    if (mOsRel && C._add_os_observation) {
+      C._add_os_observation(facts, ws, source, 'linux', mOsRel[0], 'high', 'os-release', true, mOsRel[1].trim());
+    }
+    var mSudoV = /Sudo(?:\s+version|\s+policy\s+plugin\s+version)\s+(1\.(?:8\.(?:[2-9]|[12]\d|3[01])|9\.[0-5](?:p1)?))\b/i.exec(text);
+    if (mSudoV && !hasKind(facts, 'vuln.baron_samedit')) {
+      _add(facts, mkFact('vuln.baron_samedit', h, { version: mSudoV[1], cve: 'CVE-2021-3156', via: 'shape', lead: true }, S, source));
+    }
+    var mPkexec = /pkexec\s+version\s+(0\.(?:0\d\d|10[0-5]))\b/i.exec(text);
+    if (mPkexec && !hasKind(facts, 'vuln.polkit')) {
+      _add(facts, mkFact('vuln.polkit', h, { version: mPkexec[1], cve: 'CVE-2021-4034', via: 'shape', lead: true }, S, source));
     }
 
     _parse_family_resemblance(text, ws, source, facts);
@@ -110,13 +187,14 @@
     // Lines containing both an ACL right token and a target/principal identifier
     if (!hasKind(facts, 'ad.acl_lead') && !hasKind(facts, 'ad.control_paths')) {
       var aclRightRe = /\b(GenericAll|GenericWrite|WriteDacl|WriteOwner|ForceChangePassword|AddMember|AddSelf|AllExtendedRights|AddKeyCredentialLink)\b/i;
-      var aclPrincipalRe = /(?:CN=|DC=|@|[a-zA-Z0-9._-]+\\[a-zA-Z0-9._-]+|\bDomain Admins\b|\bBackup Operators\b|\bDnsAdmins\b|\bUsers\b|\bComputers\b)/i;
+      var aclPrincipalRe = /(?:CN=|DC=|@|(?<![a-zA-Z0-9._-])[a-zA-Z0-9._-]{1,64}\\[a-zA-Z0-9._-]{1,64}|\bDomain Admins\b|\bBackup Operators\b|\bDnsAdmins\b|\bUsers\b|\bComputers\b)/i;
       var matchedAclRight = '', matchedPrincipal = '';
       for (var i = 0; i < lines.length; i++) {
         var l = lines[i];
         var mr = aclRightRe.exec(l);
+        if (!mr) continue;
         var mp = aclPrincipalRe.exec(l);
-        if (mr && mp) {
+        if (mp) {
           matchedAclRight = mr[1];
           matchedPrincipal = mp[0];
           break;
@@ -129,15 +207,18 @@
     }
 
     // 2. ADCS / Certificate Template Family
-    // Output containing both a CA/template header and a vulnerability/EKU signal
+    // Output containing both a CA/template header and an explicit vulnerability/ESC signal
     if (!hasKind(facts, 'adcs.vulnerable')) {
       var adcsHeaderRe = /(?:CA Name|Template Name|pKIEnrollmentService|Certipy|Certificate Authorities)/i;
-      var adcsVulnRe = /(?:EnrolleeSuppliesSubject|ENROLLEE_SUPPLIES_SUBJECT|\bESC1\b|\bESC4\b|\bESC8\b|Client Authentication)/i;
+      var adcsVulnRe = /(?:Enrollee\s*Supplies\s*Subject["']?\s*:\s*(?:True|true)|ENROLLEE_SUPPLIES_SUBJECT|\bESC[1-9]\d?\b|\[!\]\s*Vulnerabilities)/i;
       if (adcsHeaderRe.test(text) && adcsVulnRe.test(text)) {
         var esc = [];
-        if (/ESC1|EnrolleeSuppliesSubject|ENROLLEE_SUPPLIES_SUBJECT/i.test(text)) esc.push('ESC1');
-        if (/\bESC4\b/i.test(text)) esc.push('ESC4');
-        if (/\bESC8\b/i.test(text)) esc.push('ESC8');
+        if (/\bESC1\b|Enrollee\s*Supplies\s*Subject["']?\s*:\s*(?:True|true)|ENROLLEE_SUPPLIES_SUBJECT/i.test(text)) esc.push('ESC1');
+        var escM = text.match(/\bESC([2-9]|1[0-5])\b/gi) || [];
+        escM.forEach(function (e) {
+          var up = e.toUpperCase();
+          if (esc.indexOf(up) < 0) esc.push(up);
+        });
         _add(facts, mkFact('adcs.vulnerable', domScope, { esc: esc, via: 'shape' }, S, source));
       }
     }
@@ -145,7 +226,7 @@
     // 3. Kerberos SPN & AS-REP Directory Entry Family
     // Output containing both an identity field and either a <service>/<host> SPN pattern or DONT_REQ_PREAUTH
     if (!hasKind(facts, 'ad.user_list')) {
-      var idFieldRe = /(?:sAMAccountName|ServicePrincipalName|\bcn:|\bUser:)\s*[:=]\s*([A-Za-z0-9._-]+)/gi;
+      var idFieldRe = /(?:sAMAccountName|\bcn:|\bUser:)\s*[:=]\s*([A-Za-z0-9._-]+)/gi;
       var spnRe = /\b(MSSQLSvc|HTTP|cifs|ldap|host|wsman|krbtgt|exchangeMDB)\/[A-Za-z0-9._-]+/i;
       var asrepRe = /(?:DONT_REQ_PREAUTH|UF_DONT_REQUIRE_PREAUTH|DoesNotRequirePreAuth\s*:\s*True)/i;
       if (spnRe.test(text) || asrepRe.test(text)) {
@@ -163,14 +244,14 @@
     // 4. Share Table Family
     // Multi-line table containing at least one standard share alongside permission tokens (READ, WRITE, Disk)
     if (!hasKind(facts, 'smb.shares')) {
-      var stdShareRe = /\b(IPC\$|ADMIN\$|C\$|SYSVOL|NETLOGON)\b/i;
+      var stdShareRe = /(?:^|\s)(?:IPC\$|ADMIN\$|C\$|SYSVOL|NETLOGON)(?=\s|$)/i;
       var permRe = /\b(READ|WRITE|Disk)\b/i;
       if (stdShareRe.test(text) && permRe.test(text)) {
         _add(facts, mkFact('smb.shares', h, { via: 'shape' }, S, source));
         var hasRead = false, hasWrite = false;
         for (var j = 0; j < lines.length; j++) {
           var row = lines[j];
-          if (/\bIPC\$\b/i.test(row)) continue;
+          if (/(?:^|\s)(?:IPC\$|PRINT\$)(?=\s|$)/i.test(row) || /\bNO\s+ACCESS\b/i.test(row)) continue;
           if (/\bREAD\b/i.test(row)) hasRead = true;
           if (/\bWRITE\b/i.test(row)) hasWrite = true;
         }
@@ -191,53 +272,54 @@
   // mints nothing. A lead is a candidate to try, never proof of exploitation: the module's own
   // produces fact (a real shell) is what proves the box, exactly as the proof discipline requires.
   var VULN_SIGS = [
-    { fact: 'vuln.vsftpd_234', re: /vsftpd[\s_-]*2\.3\.4/i, cve: 'CVE-2011-2523' },
-    { fact: 'vuln.proftpd_modcopy', re: /ProFTPD\s*1\.3\.5/i, cve: 'CVE-2015-3306' },
-    { fact: 'vuln.samba_usermap', re: /Samba\s*3\.0\.2[0-5]/i, cve: 'CVE-2007-2447' },
-    { fact: 'vuln.smbghost', re: /SMBGhost|CVE-2020-0796/i, cve: 'CVE-2020-0796' },
-    { fact: 'vuln.bluekeep', re: /BlueKeep|CVE-2019-0708|rdp-vuln-ms19-0708/i, cve: 'CVE-2019-0708' },
-    { fact: 'vuln.shellshock', re: /Shellshock|CVE-2014-6271|\/cgi-bin\/|mod_cgi/i, cve: 'CVE-2014-6271' },
-    { fact: 'vuln.heartbleed', re: /Heartbleed|CVE-2014-0160|ssl-heartbleed/i, cve: 'CVE-2014-0160' },
-    { fact: 'vuln.drupalgeddon2', re: /Drupalgeddon|CVE-2018-7600|Drupal\s*[78]\.\d/i, cve: 'CVE-2018-7600' },
-    { fact: 'vuln.phpmyadmin_lfi', re: /phpMyAdmin\s*4\.8(\.[01])?\b|CVE-2018-12613/i, cve: 'CVE-2018-12613' },
-    { fact: 'vuln.webmin', re: /MiniServ\s*1\.9|Webmin\s*1\.9|CVE-2019-15107/i, cve: 'CVE-2019-15107' },
+    { fact: 'vuln.vsftpd_234', re: /\bvsftpd[\s_-]*2\.3\.4\b/i, cve: 'CVE-2011-2523' },
+    { fact: 'vuln.proftpd_modcopy', re: /\bproftpd\s+1\.3\.5[a-z]?\b|\bmod_copy\b/i, cve: 'CVE-2015-3306' },
+    { fact: 'vuln.samba_usermap', re: /\bsamba\s+(?:smbd\s+)?3\.0\.2[0-5][a-d]?\b|(?:^|[^A-Za-z0-9-])smb-vuln-cve2007-2447\b(?![\s\S]{0,120}?\bNOT\s+VULNERABLE\b)[\s\S]{0,120}?\bVULNERABLE\b/i, cve: 'CVE-2007-2447' },
+    { fact: 'vuln.smbghost', re: /\bSMBGhost\b|CVE-2020-0796/i, cve: 'CVE-2020-0796' },
+    { fact: 'vuln.bluekeep', re: /\bBlueKeep\b|CVE-2019-0708|(?:^|[^A-Za-z0-9-])rdp-vuln-ms19-0708\b(?![\s\S]{0,120}?\bNOT\s+VULNERABLE\b)[\s\S]{0,120}?\bVULNERABLE\b/i, cve: 'CVE-2019-0708' },
+    { fact: 'vuln.shellshock', re: /\bShellshock\b|CVE-2014-6271|\/cgi-bin\/|\bmod_cgi\b/i, cve: 'CVE-2014-6271' },
+    { fact: 'vuln.heartbleed', re: /\bHeartbleed\b|CVE-2014-0160|(?:^|[^A-Za-z0-9-])ssl-heartbleed\b(?![\s\S]{0,120}?\bNOT\s+VULNERABLE\b)[\s\S]{0,120}?\bVULNERABLE\b/i, cve: 'CVE-2014-0160' },
+    { fact: 'vuln.drupalgeddon2', re: /\bDrupalgeddon|CVE-2018-7600|\bDrupal\s*[78]\.\d/i, cve: 'CVE-2018-7600' },
+    { fact: 'vuln.phpmyadmin_lfi', re: /\bphpMyAdmin\s*4\.8(?:\.[01])?(?![.\d])\b|CVE-2018-12613/i, cve: 'CVE-2018-12613' },
+    { fact: 'vuln.webmin', re: /\b(?:MiniServ|Webmin)[\/\s]+1\.(?:89\d|9[0-2]\d|9(?![.\d]))\b|CVE-2019-15107/i, cve: 'CVE-2019-15107' },
     { fact: 'vuln.usermin', re: /\bUsermin\b/i, cve: '' },
-    { fact: 'vuln.usermin_rce', re: /Usermin\s*(?:v?1\.[89]|1\.820)|EDB-50234/i, cve: 'EDB-50234' },
+    { fact: 'vuln.usermin_rce', re: /\bUsermin\s*(?:v?1\.[89]|1\.820)|EDB-50234/i, cve: 'EDB-50234' },
     { fact: 'vuln.ofbiz', re: /\bOFBiz\b|CVE-2020-9496/i, cve: 'CVE-2020-9496' },
     { fact: 'vuln.cacti', re: /\bCacti\b|CVE-2022-46169/i, cve: 'CVE-2022-46169' },
     { fact: 'vuln.zabbix', re: /\bZabbix\b|CVE-2022-23131/i, cve: 'CVE-2022-23131' },
     { fact: 'vuln.splunk', re: /\bSplunk\b|CVE-2023-46214/i, cve: '' },
-    { fact: 'vuln.text4shell', re: /Text4Shell|commons[-_. ]?text|CVE-2022-42889/i, cve: 'CVE-2022-42889' },
-    { fact: 'vuln.freeswitch', re: /FreeSWITCH|mod_event_socket/i, cve: '' },
+    { fact: 'vuln.text4shell', re: /\bText4Shell\b|commons[-_. ]?text|CVE-2022-42889/i, cve: 'CVE-2022-42889' },
+    { fact: 'vuln.freeswitch', re: /\bFreeSWITCH\b|\bmod_event_socket\b/i, cve: '' },
     { fact: 'vuln.jdwp', re: /JDWP-?Handshake|Java Debug Wire/i, cve: '' },
-    { fact: 'vuln.aerospike', re: /\bAerospike\b|CVE-2020-13151/i, cve: 'CVE-2020-13151' },
-    { fact: 'vuln.aerospike_udf', re: /Aerospike.*5\.[01]|cve-2020-13151/i, cve: 'CVE-2020-13151' },
+    { fact: 'vuln.aerospike', re: /\bAerospike\s+(?:Server|Enterprise|Community|Database|\d)|3000\/tcp\s+open[^\r\n]{0,80}?aerospike|CVE-2020-13151/i, cve: 'CVE-2020-13151' },
+    { fact: 'vuln.aerospike_udf', re: /\bAerospike[^\r\n]{0,60}?\b5\.[01]\b|cve-2020-13151/i, cve: 'CVE-2020-13151' },
     { fact: 'vuln.pico_cms', re: /Pico CMS|Pico v[0-9.]+/i, cve: '' },
-    { fact: 'vuln.screen_suid', re: /screen-4\.5\.0|GNU Screen 4\.5\.0/i, cve: 'CVE-2017-5618' },
-    { fact: 'vuln.wifi_mouse', re: /WiFi\s*Mouse|Mobile\s*Mouse|Mouse\s*Server/i, cve: '' },
-    { fact: 'vuln.solr', re: /Apache Solr|Solr.*(?:8\.[0-3]|7\.|6\.|5\.)|CVE-2019-17558/i, cve: 'CVE-2019-17558' },
-    { fact: 'vuln.achat', re: /A(?:Chat|chat)\s*(?:v?0\.150|beta7)|CVE-2015-8278/i, cve: 'CVE-2015-8278' },
-    { fact: 'vuln.nibbleblog', re: /Nibbleblog|CVE-2015-6967/i, cve: 'CVE-2015-6967' },
-    { fact: 'vuln.iis6_webdav', re: /Microsoft[- ]IIS(?: httpd|\/)?\s*6\.0.*WebDAV|CVE-2017-7269|ScStoragePathFromUrl|ExplodingCan/i, cve: 'CVE-2017-7269' },
+    { fact: 'vuln.screen_suid', re: /screen-4\.5\.0|GNU Screen 4\.5\.0|Screen version 4\.05\.00/i, cve: 'CVE-2017-5618' },
+    { fact: 'vuln.wifi_mouse', re: /\b(?:WiFi|Mobile)\s*Mouse\b|(?<!General Purpose )\bMouse\s*Server\b/i, cve: '' },
+    { fact: 'vuln.solr', re: /\bApache Solr\b|\bSolr[^\r\n]{0,60}?(?:8\.[0-3]|7\.|6\.|5\.)|CVE-2019-17558/i, cve: 'CVE-2019-17558' },
+    { fact: 'vuln.achat', re: /\bA(?:Chat|chat)\s*(?:v?0\.150|beta7)|CVE-2015-8278/i, cve: 'CVE-2015-8278' },
+    { fact: 'vuln.nibbleblog', re: /\bNibbleblog\b|CVE-2015-6967/i, cve: 'CVE-2015-6967' },
+    { fact: 'vuln.iis6_webdav', re: /Microsoft[- ]IIS(?: httpd|\/)?\s*6\.0[^\r\n]{0,120}?WebDAV|CVE-2017-7269|ScStoragePathFromUrl|ExplodingCan/i, cve: 'CVE-2017-7269' },
     { fact: 'vuln.prtg', re: /PRTG Network Monitor|Paessler PRTG/i, cve: '' },
     { fact: 'vuln.gitlab', re: /GitLab Community Edition|GitLab Enterprise Edition/i, cve: '' },
-    { fact: 'vuln.october_cms', re: /October\s*(?:CMS)?\s*(?:v?1\.[0-9.]+|Build\s*\d+)?/i, cve: '' },
-    { fact: 'vuln.rejetto_hfs', re: /HttpFileServer\s*2\.[0-3]|HFS\s*2\.[0-3]|rejetto/i, cve: 'CVE-2014-6287' },
-    { fact: 'vuln.coldfusion', re: /ColdFusion(?:\s*(?:8|9|10))?|CFIDE/i, cve: 'CVE-2010-2861' },
-    { fact: 'vuln.oracle_tns', re: /Oracle TNS Listener|TNSLSNR|1521\/tcp.*oracle/i, cve: '' },
-    { fact: 'vuln.h2_console', re: /H2 Database|h2-console|8082\/tcp.*h2/i, cve: '' },
-    { fact: 'vuln.chkrootkit', re: /chkrootkit(?:\s*(?:0\.[0-4][0-9]?))?/i, cve: 'CVE-2014-0476' },
-    { fact: 'vuln.zabbix_agent', re: /Zabbix Agent|10050\/tcp.*zabbix/i, cve: '' },
-    { fact: 'vuln.myfaces_jsf', re: /javax\.faces\.ViewState|Apache MyFaces|MyFaces/i, cve: '' },
+    { fact: 'vuln.october_cms', re: /\bOctober\s*CMS(?:\s*(?:v?1\.[0-9.]+|Build\s*\d+))?/i, cve: '' },
+    { fact: 'vuln.rejetto_hfs', re: /HttpFileServer\s*2\.[0-3]|\bHFS\s*2\.[0-3]|\brejetto\b/i, cve: 'CVE-2014-6287' },
+    { fact: 'vuln.coldfusion', re: /\bColdFusion\s*(?:8|9|10|MX)\b|\/CFIDE\/|CVE-2010-2861/i, cve: 'CVE-2010-2861' },
+    { fact: 'vuln.oracle_tns', re: /Oracle TNS Listener|TNSLSNR|1521\/tcp\s+open[^\r\n]{0,80}?oracle/i, cve: '' },
+    { fact: 'vuln.h2_console', re: /H2 Database|h2-console|(?:8082|9092)\/tcp\s+open[^\r\n]{0,80}?h2/i, cve: '' },
+    { fact: 'vuln.chkrootkit', re: /\bchkrootkit\s+0\.[0-4][0-9]?\b|CVE-2014-0476/i, cve: 'CVE-2014-0476' },
+    { fact: 'vuln.zabbix_agent', re: /Zabbix Agent|10050\/tcp\s+open[^\r\n]{0,80}?zabbix/i, cve: '' },
+    { fact: 'vuln.myfaces_jsf', re: /javax\.faces\.ViewState|Apache MyFaces|\bMyFaces\b/i, cve: '' },
     { fact: 'vuln.node_serialize', re: /node-serialize|_\$\$ND_FUNC\$\$_/i, cve: 'CVE-2017-5941' },
     { fact: 'vuln.gitea', re: /\bGitea\b|Git with a cup of tea/i, cve: '' },
   ];
   function _parse_vulnmatch(text, ws, source, facts) {
     text = String(text || ''); if (!text.trim()) return;
+    var cleanText = text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '');
     var h = 'host:' + ws.target;
     for (var i = 0; i < VULN_SIGS.length; i++) {
       var s = VULN_SIGS[i];
-      if (s.re.test(text) && !hasKind(facts, s.fact)) {
+      if (s.re.test(cleanText) && !hasKind(facts, s.fact)) {
         _add(facts, mkFact(s.fact, h, { cve: s.cve || null, via: 'vulnmatch', lead: true }, S, source));
       }
     }
@@ -245,14 +327,13 @@
   C._parse_vulnmatch = _parse_vulnmatch;
   function parse(text, scope, cmd, existingFacts) {
     var textStr = String(text || '');
+    if (C._ANSI_RE) textStr = textStr.replace(C._ANSI_RE, '');
     if (!textStr.trim()) return [];
-    var target = scope || '';
-    if (target.indexOf('host:') === 0) target = target.slice(5);
-    if (target.indexOf('domain:') === 0) target = '';
-    if (!target) target = '10.10.10.10';
+    var s = String(scope || '').trim();
+    var target = (s.indexOf('host:') === 0 ? s.slice(5) : (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(s) ? s : '')) || 'target';
     var seed = Array.isArray(existingFacts) ? existingFacts.slice() : [];
     var ws = { target: target, domainSeed: '', seedFacts: seed, facts: seed };
-    var source = cmd || 'shape';
+    var source = cmd ? (C._ANSI_RE ? String(cmd).replace(C._ANSI_RE, '') : String(cmd)) : 'shape';
     var baseFacts = seed.slice();
     var initialLen = baseFacts.length;
     _parse_shape(textStr, ws, source, baseFacts);

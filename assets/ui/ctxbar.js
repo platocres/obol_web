@@ -21,10 +21,10 @@
   function esc(s) { return U.esc(String(s == null ? '' : s)); }
 
   // routes that belong to "an engagement" (the sub-nav + the Engagements parent highlight cover these)
-  var ENG_ROUTES = ['home', 'targets', 'target', 'evidence', 'path', 'map', 'domain', 'creds', 'checklist', 'findings', 'history', 'scoreboard', 'report', 'graph'];
+  var ENG_ROUTES = ['home', 'loadout', 'targets', 'target', 'evidence', 'path', 'map', 'domain', 'creds', 'checklist', 'findings', 'history', 'scoreboard', 'report', 'graph'];
   // the contextual sub-nav, grouped by how a box actually gets worked
   var SUBNAV = [
-    { group: 'Work the box', items: [['home', 'Hub'], ['targets', 'Targets'], ['path', 'Next Steps'], ['evidence', 'Evidence']] },
+    { group: 'Work the box', items: [['home', 'Hub'], ['loadout', 'Loadout'], ['targets', 'Targets'], ['path', 'Next Steps'], ['evidence', 'Evidence']] },
     { group: 'Analyze', items: [['map', 'Map'], ['domain', 'Domain'], ['creds', 'Creds']] },
     { group: 'Track & report', items: [['checklist', 'Checklist'], ['findings', 'Findings'], ['history', 'Run Log'], ['scoreboard', 'Flags'], ['report', 'Report']] },
   ];
@@ -128,10 +128,18 @@
       if (t.id === 'ctx-eng') {
         OBOL.store.setActive(t.value).then(function () { if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar(); render(); OBOL.router.render(); });
       } else if (t.id === 'ctx-cred') {
-        if (t.value === '') { OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.username = ''; eng.params.password = ''; eng.params.nthash = ''; }, 'params'); }
+        if (t.value === '') {
+          OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.username = ''; eng.params.password = ''; eng.params.nthash = ''; }, 'params');
+          if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+          if (OBOL.router && OBOL.router.render) OBOL.router.render();
+        }
         else { OBOL.creds.activate(_creds[+t.value]); }
       } else if (t.id === 'ctx-target') {
-        OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = t.value; }, 'params');
+        if (OBOL.store.setActiveTarget) {
+          OBOL.store.setActiveTarget(t.value);
+        } else {
+          OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = t.value; eng.activeTarget = t.value || null; }, 'params');
+        }
         if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
         OBOL.router.render();
       }

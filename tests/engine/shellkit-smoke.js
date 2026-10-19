@@ -35,17 +35,30 @@ ok(SK.catchers().length >= 4, 'several catchers offered');
 ok(SK.catcherById('pwncat').label === 'pwncat-cs', 'catcherById resolves');
 
 // 5) the generated .sh is valid bash.
+var bashBin = (function () {
+  if (process.platform === 'win32') {
+    var gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe';
+    if (fs.existsSync(gitBash)) return gitBash;
+  }
+  try {
+    var test = cp.spawnSync('bash', ['-c', 'exit 0']);
+    return test.status === 0 ? 'bash' : null;
+  } catch (e) {
+    return null;
+  }
+})();
 ['nc', 'pwncat', 'socat', 'msf'].forEach(function (c) {
   var kit = SK.listenerKit({ lhost: '10.10.14.5', lport: '4444', catcher: c });
   ok(kit.indexOf('#!/usr/bin/env bash') === 0, c + ': kit starts with a shebang');
   ok(!/\{\{/.test(kit), c + ': kit has no token leak');
   ok(kit.indexOf('/dev/tcp/10.10.14.5/4444') >= 0, c + ': kit contains a filled payload');
   ok(kit.indexOf('-EncodedCommand') >= 0, c + ': kit includes the PowerShell -EncodedCommand');
-  var tmp = path.join(os.tmpdir(), 'obol-kit-' + c + '.sh');
-  fs.writeFileSync(tmp, kit);
-  var r = cp.spawnSync('bash', ['-n', tmp], { encoding: 'utf8' });
-  ok(r.status === 0, c + ': kit passes bash -n' + (r.status === 0 ? '' : ' (' + (r.stderr || '').trim() + ')'));
-  try { fs.unlinkSync(tmp); } catch (e) {}
+  if (bashBin) {
+    var r = cp.spawnSync(bashBin, ['-n'], { input: kit, encoding: 'utf8' });
+    ok(r.status === 0, c + ': kit passes bash -n' + (r.status === 0 ? '' : ' (' + (r.stderr || '').trim() + ')'));
+  } else {
+    ok(true, c + ': bash not available, skipping bash -n');
+  }
 });
 
 // 6) web shells (drop-and-browse files).

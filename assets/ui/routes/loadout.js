@@ -1,12 +1,12 @@
 /*!
- * obol ui — routes/loadout.js — THE LOADOUT (step zero: set up your attack box).
- * Leftmost tab, GLOBAL (per-browser), not per-engagement — it describes the operator's Kali box.
+ * obol ui - routes/loadout.js - THE LOADOUT (step zero: set up your attack box).
+ * Leftmost tab, GLOBAL (per-browser), not per-engagement - it describes the operator's Kali box.
  * Two faces from one route:
  *   - no machine profile yet → a guided quickstart (download the script, run it, paste the result back)
  *   - profile present         → "Your Box": a map of where everything lives, plus the live Arsenal state
  * The Arsenal is collapsed into per-category rows with at-a-glance summaries so the page stays short.
  * Never a gate: skip it and every command still works canonical. The browser only GENERATES a setup
- * script and READS the pasted-back inventory — it never fetches or executes anything.
+ * script and READS the pasted-back inventory - it never fetches or executes anything.
  * (Workspace is per-engagement and lives on the Engagements screen, not here.)
  */
 (function (root) {
@@ -38,7 +38,7 @@
     return _moveIdx;
   }
 
-  var _hideKali = true;   // "to fetch" view by default — the tools Kali doesn't already ship
+  var _hideKali = true;   // "to fetch" view by default - the tools Kali doesn't already ship
   var _boxLens = 'fs';    // "Your Box" grouping: 'fs' (where it lives) | 'cap' (what it's for)
   var _capFocus = null;   // when a readiness phase is clicked: the categories to auto-expand in the 'cap' lens
 
@@ -56,7 +56,7 @@
   ];
 
   // Prompt-stamp opt-in (persisted). Default ON but always shown + explained before download, so the
-  // shell change is never a surprise — the operator sees exactly what it does and can untick it.
+  // shell change is never a surprise - the operator sees exactly what it does and can untick it.
   var STAMP_KEY = 'obol.arsenal-promptstamp';
   function stampOn() { try { return localStorage.getItem(STAMP_KEY) !== '0'; } catch (e) { return true; } }
   function stampSet(on) { try { localStorage.setItem(STAMP_KEY, on ? '1' : '0'); } catch (e) {} }
@@ -128,37 +128,38 @@
   function arsenalSection(prof) {
     var cats = byCategory(), keys = catOrder(cats);
     var head = '<div class="lo-sec-head"><h2 class="lo-h2">Arsenal</h2>'
-      + '<div class="lo-sec-tools"><span class="lo-find" title="Press ⌘K / Ctrl-K">⌘K to find a tool</span>'
+      + '<div class="lo-sec-tools"><button type="button" class="lo-find" title="Press Ctrl + K to find a tool"><kbd>Ctrl + K</kbd><span>to find a tool</span></button>'
       + '<label class="lo-toggle"><input type="checkbox" id="lo-hidekali"' + (_hideKali ? ' checked' : '') + '> Hide tools Kali ships</label></div></div>';
     var rows = keys.map(function (cat) {
       var list = cats[cat];
+      var ccls = 'lo-catc-' + catSlug(cat);
       var shown = _hideKali ? list.filter(needsFetch) : list;
       var fetchN = list.filter(needsFetch).length;
       var haveN = prof ? list.filter(function (e) { return isPresent(e, prof); }).length : 0;
       var kaliN = list.length - fetchN;
-      // a category with nothing to fetch, in "hide Kali" mode → a thin satisfied row, not an expander
+      // a category with nothing to fetch, in "hide Kali" mode -> a thin satisfied row, not an expander
       if (_hideKali && !shown.length) {
-        return '<div class="lo-cat lo-cat-flat"><span class="lo-cat-name">' + esc(titleCase(cat)) + '</span>'
+        return '<div class="lo-cat lo-cat-flat ' + ccls + '"><span class="lo-cat-dot"></span><span class="lo-cat-name">' + esc(titleCase(cat)) + '</span>'
           + '<span class="lo-cat-sum">' + list.length + ' ship with Kali ✓</span></div>';
       }
       var summary = [];
       if (prof) summary.push(haveN + ' ready');
       summary.push(fetchN + ' to fetch');
       if (!_hideKali && kaliN) summary.push(kaliN + ' on Kali');
-      return '<details class="lo-cat"><summary class="lo-cat-h"><span class="lo-cat-name">' + esc(titleCase(cat)) + '</span>'
+      return '<details class="lo-cat ' + ccls + '"><summary class="lo-cat-h"><span class="lo-cat-dot"></span><span class="lo-cat-name">' + esc(titleCase(cat)) + '</span>'
         + '<span class="lo-cat-sum">' + summary.join(' · ') + '</span></summary>'
         + '<div class="lo-grid">' + shown.map(function (e) { return toolCard(e, prof); }).join('') + '</div></details>';
     }).join('');
-    return '<div class="lo-block">' + head + rows + '</div>';
+    return '<div class="lo-block lo-block-arsenal">' + head + rows + '</div>';
   }
 
   // Reconcile the pasted-back inventory against what obol EXPECTS: this is the operator's self-check that
   // "everything I think I installed actually installed, and everything I think ships with Kali is really here".
-  // Buckets (de-duped, builtins excluded — shell/coreutils are never probed):
+  // Buckets (de-duped, builtins excluded - shell/coreutils are never probed):
   //   ready         present (on PATH, cloned, or staged+digested)
-  //   alt           present but under a non-canonical name (informational — command-rewrite handles it)
+  //   alt           present but under a non-canonical name (informational - command-rewrite handles it)
   //   fetchMissing  the script fetches/installs it, but it's not on the box (install didn't run or failed)
-  //   manualMissing no published artifact to auto-fetch — needs a manual grab
+  //   manualMissing no published artifact to auto-fetch - needs a manual grab
   //   kaliMissing   obol assumed Kali ships it, but a default install didn't (metapackage gap / misflag)
   function reconcile(prof) {
     var A = OBOL.ARSENAL || {}, seen = {};
@@ -166,7 +167,7 @@
     var r = { ready: [], alt: [], fetchMissing: [], installFailed: [], manualMissing: [], kaliMissing: [] };
     Object.keys(A).forEach(function (k) {
       var e = A[k]; if (!e || seen[e.key]) return; seen[e.key] = 1;
-      if (e.class === 'builtin') { r.ready.push(e); return; }   // shell/coreutils/target-side commands — always available
+      if (e.class === 'builtin') { r.ready.push(e); return; }   // shell/coreutils/target-side commands - always available
       if (isPresent(e, prof)) {
         r.ready.push(e);
         var t = (prof.tools || {})[e.key];
@@ -176,7 +177,7 @@
       if (e.manual) r.manualMissing.push(e);
       else if (needsFetch(e)) {
         if (Object.prototype.hasOwnProperty.call(miss, e.key)) r.installFailed.push(e);  // script tried, couldn't
-        else r.fetchMissing.push(e);                                                      // not attempted yet — run the script
+        else r.fetchMissing.push(e);                                                      // not attempted yet - run the script
       }
       else if (e.os !== 'windows') r.kaliMissing.push(e);   // a Windows command absent from Kali is expected, not a gap
     });
@@ -212,16 +213,16 @@
           'The setup script tried to install these and couldn\'t (no package, a 404, a failed build). Grab each from its source, drop it on your PATH (or in <code>~/.obol/arsenal</code>), and re-paste.',
           reconList(r.installFailed, 'failed', prof))
       + pill(r.fetchMissing, 'lo-rp-warn', 'to install',
-          'obol\'s setup script fetches these, they\'re not on your box yet. Re-run Step 2 (<code>./download-arsenal.sh</code>) and paste back.',
+          'OBOL\'s setup script fetches these, they\'re not on your box yet. Re-run Step 2 (<code>./download-loadout.sh</code>) and paste back.',
           reconList(r.fetchMissing, 'install', prof))
       + pill(r.manualMissing, 'lo-rp-warn', 'manual',
           'No published release to auto-fetch, grab these by hand, then drop them in <code>~/.obol/arsenal/win</code>.',
           reconList(r.manualMissing, 'manual', prof))
       + pill(r.kaliMissing, 'lo-rp-bad', 'expected on Kali, missing',
-          'obol assumed a Kali default install ships these, but yours didn\'t, likely a larger-metapackage tool (<code>apt install &lt;name&gt;</code>) or a flag to fix. Flag it to me if a core one shows here.',
+          'OBOL assumed a Kali default install ships these, but yours didn\'t, likely a larger-metapackage tool (<code>apt install &lt;name&gt;</code>) or a flag to fix. Flag it to me if a core one shows here.',
           reconList(r.kaliMissing, 'plain', prof))
       + pill(r.alt, 'lo-rp-info', 'aliased',
-          'Present under a different name than the canonical one, obol\'s command-rewrite already adapts to these.',
+          'Present under a different name than the canonical one, OBOL\'s command-rewrite already adapts to these.',
           reconList(r.alt, 'alt', prof));
     return '<div class="lo-recon">' + band + '</div>';
   }
@@ -237,14 +238,14 @@
     var tools = prof.tools || {};
     var present = Object.keys(tools).filter(function (k) { return tools[k] && tools[k].present; });
     // pipx tools live on ~/.local/bin; git run-from-repo tools live in ~/tools (reported via `cloned`, or
-    // inferred by class for older profiles). Kali-default tools live on the system PATH — the hero's
+    // inferred by class for older profiles). Kali-default tools live on the system PATH - the hero's
     // "ready" count already covers those, so the map shows only what the script actually PUT on the box.
     var pipx = present.filter(function (k) { return A[k] && A[k].class === 'pipx'; });
     var cloned = Object.keys(prof.cloned || {});
     if (!cloned.length) cloned = present.filter(function (k) { return A[k] && A[k].class === 'git'; });
     // resolve a staged filename → its ARSENAL entry (via dest), so a chip knows its category + description.
     var byDest = {}; Object.keys(A).forEach(function (k) { var e = A[k]; if (e && e.dest && !byDest[e.dest]) byDest[e.dest] = e; });
-    // secondary files that ship INSIDE a tool's archive (no registry entry of their own) — give them a card too.
+    // secondary files that ship INSIDE a tool's archive (no registry entry of their own) - give them a card too.
     var EXTRA = {
       'SharpHound.ps1': { label: 'SharpHound.ps1', category: 'AD', canonical: 'SharpHound.ps1',
         desc: 'The PowerShell build of the SharpHound collector, same BloodHound data collection as the .exe, for when you can run PowerShell but not drop a binary.',
@@ -309,14 +310,18 @@
     }
     function winItem(f) { var e = resolveDest(f); return { label: f, e: e, inv: (e && e.canonical) || '', path: '~/.obol/arsenal/win/' + f }; }
     function keyItem(k, path) { var e = A[k]; return { label: (e && e.label) || k, e: e, inv: (tools[k] && tools[k].invocation) || (e && e.canonical) || k, path: path }; }
-    var winNames = staged.length ? staged : winCache.map(function (k) { return (A[k] && A[k].dest) || k; });
+    var winFileSet = {};
+    Object.keys(A).forEach(function (k) { if (A[k] && A[k].class === 'stage-win' && A[k].dest) winFileSet[A[k].dest] = 1; });
+    winCache.forEach(function (c) { var fn = (c && c.file) || (A[c] && A[c].dest) || c; if (fn) winFileSet[fn] = 1; });
+    var winStaged = staged.filter(function (f) { return winFileSet[f] || /\.(?:exe|ps1|bat|cmd|dll|msi|vbs)$/i.test(f); });
+    var winNames = winStaged.length ? winStaged : winCache.map(function (c) { return (c && c.file) || (A[c] && A[c].dest) || c; });
     var serveCmd = 'cd ' + wwwdir + ' && python3 -m http.server 80';
     var serveHelper = winNames.length
       ? '<div class="lo-serve"><span class="lo-serve-t">Serve these to a target</span>'
         + '<code class="btn-copy lo-serve-cmd" data-copy="' + U.attr(serveCmd) + '" title="Click to copy">' + esc(serveCmd) + '</code>'
         + '<span class="lo-serve-hint">then pull each from the target (hover a payload)</span></div>'
       : '';
-    // Base Kali tools already on the system PATH: obol DID record each one's path + invocation from the paste —
+    // Base Kali tools already on the system PATH: obol DID record each one's path + invocation from the paste  - 
     // surface them as a single collapsed node so that's visible, without spraying /usr/bin across the view.
     var onPathSeen = {}, onPath = [];
     present.forEach(function (k) {
@@ -401,26 +406,28 @@
   function quickstart(prof) {
     var synced = !!prof;
     var steps = '<ol class="lo-steps">'
-      + '<li><span class="lo-step-n">1</span><div><div class="lo-step-t">Download The Setup Script</div>'
-      + '<div class="lo-step-sub">One file. Fetches every tool obol uses that Kali doesn\'t ship and stages the Windows binaries, a fresh box to ready in one run.</div>'
-      + '<label class="lo-optin"><input type="checkbox" class="lo-stamp-opt"' + (stampOn() ? ' checked' : '') + '> Also format my terminal prompt <span class="lo-optin-rec">recommended</span></label>'
-      + '<div class="lo-optin-why">Prepends a dim <code>[UTC time · tun0 IP]</code> line before each prompt, <strong>your prompt itself is untouched</strong>. obol reads it to stitch a pasted whole-session into a correct timeline and auto-fill your VPN IP (<code>{{lhost}}</code>). It\'s additive and reversible (one block in <code>~/.zshrc</code>); untick to skip, everything else works the same.</div>'
-      + '<button class="btn-primary lo-download">Download download-arsenal.sh</button></div></li>'
-      + '<li><span class="lo-step-n">2</span><div><div class="lo-step-t">Run It On Your Kali Box</div>'
-      + '<div class="lo-step-sub">Run it as your normal user (not <code>sudo</code>). This assumes it landed in <code>~/Downloads</code>, adjust the path if you saved it elsewhere. Safe to re-run; it only does the missing work.</div>'
-      + '<div class="lo-recipe"><code>cd ~/Downloads &amp;&amp; chmod +x download-arsenal.sh &amp;&amp; ./download-arsenal.sh</code><button class="btn-copy" data-copy="cd ~/Downloads &amp;&amp; chmod +x download-arsenal.sh &amp;&amp; ./download-arsenal.sh">Copy</button></div></div></li>'
-      + '<li><span class="lo-step-n">3</span><div><div class="lo-step-t">Paste The Result Back</div>'
-      + '<div class="lo-step-sub">The script ends by printing a block fenced between two <code>✂</code> lines, select everything between them (including the <code>✂</code> lines is fine) and paste it here. obol learns your box.</div>'
+      + '<li class="lo-step lo-step-1"><span class="lo-step-n">1</span><div><div class="lo-step-t">Download The Setup Script</div>'
+      + '<div class="lo-step-sub">One script for both fresh and customized Kali boxes. Existing tools, git repos, and wordlists stay right where they are; existing payloads (like <code>linpeas.sh</code> or <code>PrintSpoofer.exe</code>) are copied into <code>~/.obol/arsenal/www</code> so they are ready to serve, and only missing items are downloaded.</div>'
+      + '<div class="lo-optin-box"><label class="lo-optin"><input type="checkbox" class="lo-stamp-opt"' + (stampOn() ? ' checked' : '') + '> Also format my terminal prompt <span class="lo-optin-rec">recommended</span></label>'
+      + '<div class="lo-optin-why">Prepends a dim <code>[UTC time · tun0 IP]</code> line before each prompt, <strong>your prompt itself is untouched</strong>. OBOL reads it to stitch a pasted whole-session into a correct timeline and auto-fill your VPN IP (<code>{{lhost}}</code>). It\'s additive and reversible (one block in <code>~/.zshrc</code>); untick to skip, everything else works the same.</div></div>'
+      + '<button class="btn-primary lo-download">Download download-loadout.sh</button></div></li>'
+      + '<li class="lo-step lo-step-2"><span class="lo-step-n">2</span><div><div class="lo-step-t">Run It On Your Kali Box</div>'
+      + '<div class="lo-step-sub">Run it as your normal user (not <code>sudo</code>; it only prompts once if an <code>apt</code> package is missing). Safe to re-run any time, it only does the missing work:</div>'
+      + '<div class="lo-recipe"><code>cd ~/Downloads &amp;&amp; chmod +x download-loadout.sh &amp;&amp; ./download-loadout.sh &amp;&amp; source ~/.zshrc 2&gt;/dev/null</code><button class="btn-copy" data-copy="cd ~/Downloads &amp;&amp; chmod +x download-loadout.sh &amp;&amp; ./download-loadout.sh &amp;&amp; source ~/.zshrc 2>/dev/null">Copy</button></div>'
+      + '<div class="lo-step-sub" style="margin-top:10px">Already have your box set up the way you like? Pass <code>--check-only</code> to scan and map your existing tools, scripts, and wordlists with <strong>zero downloads or installs</strong>:</div>'
+      + '<div class="lo-recipe"><code>cd ~/Downloads &amp;&amp; chmod +x download-loadout.sh &amp;&amp; ./download-loadout.sh --check-only &amp;&amp; source ~/.zshrc 2&gt;/dev/null</code><button class="btn-copy" data-copy="cd ~/Downloads &amp;&amp; chmod +x download-loadout.sh &amp;&amp; ./download-loadout.sh --check-only &amp;&amp; source ~/.zshrc 2>/dev/null">Copy</button></div></div></li>'
+      + '<li class="lo-step lo-step-3"><span class="lo-step-n">3</span><div><div class="lo-step-t">Paste The Result Back</div>'
+      + '<div class="lo-step-sub">The script ends by printing an <code>OBOL-ARSENAL</code> block between two <code>✂</code> lines. Paste that block here so OBOL learns what is installed, where your scripts and wordlists live, and what payloads are staged in <code>~/.obol/arsenal/www</code>.</div>'
       + '<textarea class="lo-paste" placeholder="Paste the OBOL-ARSENAL block (or the whole script output) here…" spellcheck="false"></textarea>'
       + '<div class="lo-paste-row"><button class="btn-primary lo-ingest">Stock My Loadout</button><span class="lo-paste-msg" role="status"></span></div></div></li>'
       + '</ol>';
     if (!synced) {
-      return '<div class="lo-block"><h2 class="lo-h2">Set Up, One Time, ~2 Minutes</h2>' + steps + '</div>';
+      return '<div class="lo-block lo-block-setup"><h2 class="lo-h2">Set Up Or Sync Your Box (~2 Minutes)</h2>' + steps + '</div>';
     }
-    return '<details class="lo-block lo-setup-done"><summary class="lo-h2 lo-setup-sum">Set Up Again / On Another Box</summary>' + steps + '</details>';
+    return '<details class="lo-block lo-block-setup lo-setup-done"><summary class="lo-h2 lo-setup-sum">Set Up Again / Sync Another Box</summary>' + steps + '</details>';
   }
 
-  // "Ready on your box" = how many of the tools obol uses are actually present — on PATH, cloned to ~/tools,
+  // "Ready on your box" = how many of the tools obol uses are actually present - on PATH, cloned to ~/tools,
   // staged to serve, or cached as a material. Counts the same way the reconciliation band does (isPresent over
   // the registry) so the hero number and "Your Box" agree instead of showing two different "ready" totals.
   function countSummary(prof) {
@@ -444,18 +451,35 @@
     var prof = OBOL.arsenal ? OBOL.arsenal.profileGet() : null;
     var A = OBOL.ARSENAL || {}, total = 0, seen = {};
     Object.keys(A).forEach(function (k) { if (A[k] && !seen[A[k].key]) { seen[A[k].key] = 1; total++; } });
+    var readyCount = prof ? countSummary(prof) : 0;
+    var stagedCount = prof && prof.staged ? prof.staged.length : 0;
     var html = '<section class="coach lo-route">'
-      + '<div class="coach-hero"><div class="coach-hero-main">'
+      + '<div class="coach-hero lo-hero"><div class="coach-hero-main">'
       + '<div class="coach-kicker">Step Zero · <strong>Your Attack Box</strong></div>'
       + '<h1 class="coach-h1">Loadout</h1>'
       + '<p class="coach-sub">' + (prof
-          ? 'obol knows your box and tailors every command to the tools you actually have.'
-          : 'Set up your Kali box once, obol generates the script, you run it, paste the result back. Optional: skip it and every command still works.')
+          ? 'OBOL knows your box, stages your transfer payloads in ~/.obol/arsenal/www, and tailors every command to the exact tool names, scripts, and wordlist paths on your disk.'
+          : 'Works on a brand-new Kali install or an already-configured box. The script locates tools, scripts, and wordlists you already have (leaving them where they are), copies or fetches missing payloads into ~/.obol/arsenal/www, and prints an inventory block so OBOL adapts every command to your exact paths.')
       + '</p></div>'
-      + '<div class="coach-metrics"><div class="metric"><span class="metric-n">' + total + '</span><span class="metric-l">Tools Obol Uses</span></div>'
-      + (prof ? '<div class="metric"><span class="metric-n">' + countSummary(prof) + '</span><span class="metric-l">Ready On Your Box</span></div>' : '')
+      + '<div class="coach-metrics"><div class="metric metric-total"><span class="metric-n">' + total + '</span><span class="metric-l">Tools Obol Uses</span></div>'
+      + (prof ? '<div class="metric metric-ready"><span class="metric-n">' + readyCount + '</span><span class="metric-l">Ready On Your Box</span></div>' : '')
       + '</div></div>';
-    if (!prof) html += '<p class="lo-skip">New here? Do this first, or <a href="#/home">skip to Engagements →</a>. Nothing here blocks you.</p>';
+    if (!prof) {
+      html += '<div class="coach-campaign-bar lo-hero-bar">'
+        + '<div class="lo-hero-bar-inner">'
+        + '<span class="lo-hero-pill lo-pill-opt"><span class="lo-pill-dot">●</span> Fresh Or Existing Kali</span>'
+        + '<span class="lo-hero-msg">You can start an engagement right away, or run this any time a move needs a tool or payload your box is missing. Nothing on your disk is moved or overwritten.</span>'
+        + '<a class="lo-skip-btn" href="#/home">Back to Engagement Hub →</a>'
+        + '</div></div>';
+    } else {
+      html += '<div class="coach-campaign-bar lo-hero-bar lo-hero-bar-ok">'
+        + '<div class="lo-hero-bar-inner">'
+        + '<span class="lo-hero-pill lo-pill-ok"><span class="lo-pill-dot">●</span> Stocked · Synced ' + esc(timeAgo(prof.savedAt)) + '</span>'
+        + '<span class="lo-hero-msg"><strong>' + readyCount + ' / ' + total + '</strong> tools ready on your box'
+        + (stagedCount ? ' · <strong>' + stagedCount + '</strong> payloads staged in <code>~/.obol/arsenal/www</code>' : '') + '</span>'
+        + '<a class="lo-skip-btn" href="#/home">Engagement Hub →</a>'
+        + '</div></div>';
+    }
     html += quickstart(prof);
     if (prof) html += hostMap(prof);
     html += arsenalSection(prof);
@@ -468,10 +492,10 @@
     var promptStamp = cb ? !!cb.checked : stampOn();
     var blob = new Blob([OBOL.arsenal.buildScript({ promptStamp: promptStamp })], { type: 'text/x-shellscript' });
     var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'download-arsenal.sh';
+    a.href = URL.createObjectURL(blob); a.download = 'download-loadout.sh';
     document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
-    U.toast('download-arsenal.sh downloaded');
+    U.toast('download-loadout.sh downloaded');
   }
 
   function mounted(ctx) {
@@ -480,6 +504,7 @@
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
     });
     U.on(mount, 'click', '.lo-download', function () { doDownload(mount); });
+    U.on(mount, 'click', '.lo-find', function () { if (OBOL.palette && OBOL.palette.open) OBOL.palette.open(); });
     U.on(mount, 'change', '.lo-stamp-opt', function (e, t) { stampSet(!!t.checked); });
     U.on(mount, 'change', '#lo-hidekali', function (e, t) { _hideKali = !!t.checked; OBOL.router.render(); });
     U.on(mount, 'click', '.lo-lens2-opt', function (e, t) { _boxLens = t.getAttribute('data-lens') || 'fs'; _capFocus = null; OBOL.router.render(); });

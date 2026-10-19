@@ -61,7 +61,7 @@
       }
     }
     return { matched: false,
-      verdict: 'obol could not pin the cause from this output. That is honest, not a dead end: here is the short checklist that catches most lab pivots.',
+      verdict: 'OBOL could not pin the cause from this output. That is honest, not a dead end: here is the short checklist that catches most lab pivots.',
       checklist: (OBOL.PIVOT_CHECKLIST || []).map(function (c) { return fill(c, params); }) };
   }
 

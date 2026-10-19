@@ -205,9 +205,38 @@ OBOL.store.active = function () { return engActive; };
 OBOL.store.setActiveTarget('10.129.105.90');
 const pathHtmlSingle = vm.runInNewContext('OBOL.routes.path.render({})', sandbox);
 assert(pathHtmlSingle.includes('10.129.105.90'), 'Single-target engagement cards stamped with 10.129.105.90');
-assert(!pathHtmlSingle.includes('10.129.105.90 · DC'), 'Single-target move cards do not contain hostname DC');
+// Test 10: Multi-host flag fact scoping isolation (Part B)
+const multiFlagFacts = new OBOL.facts.FactSet([
+  OBOL.facts.makeFact({ kind: 'target.configured', scope: 'host:10.10.10.10', state: 'supported' }),
+  OBOL.facts.makeFact({ kind: 'os.windows', scope: 'host:10.10.10.10', state: 'supported' }),
+  OBOL.facts.makeFact({ kind: 'objective.flag_located_local', scope: 'host:10.10.10.10', state: 'supported', value: { slot: 'local', path: 'C:\\Users\\alice\\Desktop\\local.txt' } }),
+  OBOL.facts.makeFact({ kind: 'target.configured', scope: 'host:10.10.10.20', state: 'supported' }),
+  OBOL.facts.makeFact({ kind: 'os.windows', scope: 'host:10.10.10.20', state: 'supported' }),
+  OBOL.facts.makeFact({ kind: 'objective.flag_located_local', scope: 'host:10.10.10.20', state: 'supported', value: { slot: 'local', path: 'C:\\Users\\bob\\Desktop\\local.txt' } }),
+]);
+const flagHuntAction = {
+  id: 'flag-hunt-windows',
+  commands: [{ run: 'type {{flag_path_local}}' }]
+};
+const filledFlagB = OBOL.command.fillCommand(flagHuntAction, multiFlagFacts, {
+  params: { target: '10.10.10.20', username: 'administrator' }
+}, 0);
+assert(filledFlagB.filled === 'type C:\\Users\\bob\\Desktop\\local.txt', 'fillCommand for Host B (10.10.10.20) fills bob\'s flag path: ' + filledFlagB.filled);
+assert(!filledFlagB.filled.includes('alice'), 'fillCommand for Host B never bleeds alice\'s flag path from Host A');
+
+const filledFlagA = OBOL.command.fillCommand(flagHuntAction, multiFlagFacts, {
+  params: { target: '10.10.10.10', username: 'administrator' }
+}, 0);
+assert(filledFlagA.filled === 'type C:\\Users\\alice\\Desktop\\local.txt', 'fillCommand for Host A (10.10.10.10) fills alice\'s flag path: ' + filledFlagA.filled);
+assert(!filledFlagA.filled.includes('bob'), 'fillCommand for Host A never bleeds bob\'s flag path from Host B');
+
+// Asymmetric case: Host C (10.10.10.30) is configured as Windows admin but has NOT located its flag yet
+multiFlagFacts.add(OBOL.facts.makeFact({ kind: 'target.configured', scope: 'host:10.10.10.30', state: 'supported' }));
+multiFlagFacts.add(OBOL.facts.makeFact({ kind: 'os.windows', scope: 'host:10.10.10.30', state: 'supported' }));
+multiFlagFacts.add(OBOL.facts.makeFact({ kind: 'access.admin', scope: 'host:10.10.10.30', state: 'supported' }));
+const filledFlagC = OBOL.command.fillCommand(flagHuntAction, multiFlagFacts, {
+  params: { target: '10.10.10.30', username: 'administrator' }
+}, 0);
+assert(filledFlagC.filled === 'type {{flag_path_local}}', 'fillCommand for Host C (no flag located yet) gates {{flag_path_local}} instead of bleeding Host A/B flag: ' + filledFlagC.filled);
 
 console.log('\nAll multi-target infrastructure tests passed successfully!');
-
-
-

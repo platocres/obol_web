@@ -1,5 +1,5 @@
 /*!
- * obol engine — parsers/host.js
+ * obol engine - parsers/host.js
  * Faithful JS port of  (command-exec / shell footholds
  * and Linux/Windows local-privesc leads). Leads never prove admin/root/SYSTEM by themselves.
  */
@@ -11,11 +11,11 @@
   var reAll = C.reAll, reSearch = C.reSearch;
 
   function _exec_tool(command) {
-    var l = command.toLowerCase();
-    var tools = ['evil-winrm', 'wmiexec', 'psexec', 'atexec', 'smbexec'];
+    var l = (command || '').toLowerCase();
+    var tools = ['evil-winrm', 'wmiexec', 'psexec', 'atexec', 'smbexec', 'dcomexec'];
     for (var i = 0; i < tools.length; i++) if (l.indexOf(tools[i]) >= 0) return tools[i];
     if (l.indexOf('enter-pssession') >= 0) return 'winrs';
-    if (l.indexOf('nxc ') >= 0 || l.indexOf('nxc ') === 0) return 'nxc';
+    if (/\b(?:nxc|netexec|crackmapexec|cme)\s+/.test(l)) return 'nxc';
     return 'exec';
   }
   C._exec_tool = _exec_tool;
@@ -37,6 +37,10 @@
     var tool = _exec_tool(command);
     var footholdValue = { method: tool };
     var nonSystem = identities.filter(function (i) { return i.toLowerCase() !== 'nt authority\\system'; });
+    if (!nonSystem.length) {
+      var pm = /C:\\Users\\([A-Za-z0-9._-]+)(?:\\|>)/i.exec(text);
+      if (pm && pm[1] && !/^(Public|Default|All Users)$/i.test(pm[1])) nonSystem.push(pm[1]);
+    }
     if (nonSystem.length) {
       footholdValue.identity = nonSystem[0];
       for (var i = facts.length - 1; i >= 0; i--) {
@@ -59,14 +63,22 @@
     var m = reSearch(C._LINUX_ID_RE, text);
     if (!m) return;
     var h = 'host:' + ws.target, user = m.groups.user.trim();
-    _add(facts, mkFact('access.shell', h, { service: 'ssh' }, S, source));
-    _add(facts, mkFact('foothold.linux', h, { service: 'ssh', identity: user }, S, source));
-    C._add_os_observation(facts, ws, source, 'linux', m[0], 'high', 'ssh', true);
-    if (m.groups.uid === '0' || user.toLowerCase() === 'root') _add(facts, mkFact('access.admin', h, { service: 'ssh', identity: user }, S, source));
+    var cs = ((command || '') + ' ' + (source || '')).toLowerCase();
+    var svc = 'ssh';
+    if (cs.indexOf('psql') >= 0 || cs.indexOf('postgres') >= 0) svc = 'postgresql';
+    else if (cs.indexOf('elastic') >= 0) svc = 'elasticsearch';
+    else if (cs.indexOf('rsync') >= 0) svc = 'rsync';
+    else if (cs.indexOf('nfs') >= 0) svc = 'nfs';
+    else if (cs.indexOf('tftp') >= 0) svc = 'tftp';
+    else if (cs.indexOf('vnc') >= 0) svc = 'vnc';
+    _add(facts, mkFact('access.shell', h, { service: svc }, S, source));
+    _add(facts, mkFact('foothold.linux', h, { service: svc, identity: user }, S, source));
+    C._add_os_observation(facts, ws, source, 'linux', m[0], 'high', svc, true);
+    if (m.groups.uid === '0' || user.toLowerCase() === 'root') _add(facts, mkFact('access.admin', h, { service: svc, identity: user }, S, source));
   }
   C._parse_ssh_exec = _parse_ssh_exec;
 
-  // SSH key login FAILED — the cryptic errors OffSec lab authors lean on to stall people who do not know
+  // SSH key login FAILED - the cryptic errors OffSec lab authors lean on to stall people who do not know
   // the trick. Recognize each cause from the pasted client output and mint ssh.key_rejected (carrying the
   // cause) so the troubleshooter move surfaces the exact fix. Conservative: a successful login (uid= in
   // the same paste) mints nothing here.
@@ -98,7 +110,7 @@
     if (user) foothold.identity = C._clean_username(user);
     _add(facts, mkFact('foothold.windows', h, foothold, S, source));
     C._add_os_observation(facts, ws, source, 'windows', 'nxc rdp authentication succeeded', 'high', 'nxc', true);
-    if (text.toLowerCase().indexOf('pwn3d') >= 0) _add(facts, mkFact('access.admin', h, { service: 'rdp' }, S, source));
+    if (user && C._clean_username(user).toLowerCase() === 'administrator') _add(facts, mkFact('access.admin', h, { service: 'rdp' }, S, source));
   }
   C._parse_nxc_rdp = _parse_nxc_rdp;
 
@@ -140,15 +152,44 @@
   }
 
   var _GTFOBINS_SUDO = {
-    vi: 'vi', vim: 'vim', nano: 'nano', less: 'less', more: 'more', man: 'man', awk: 'awk', gawk: 'gawk',
+    vi: 'vi', vim: 'vim', nano: 'nano', pico: 'pico', less: 'less', more: 'more', man: 'man', awk: 'awk', gawk: 'gawk',
     sed: 'sed', ed: 'ed', find: 'find', nmap: 'nmap', python: 'python', python2: 'python', python3: 'python',
     perl: 'perl', ruby: 'ruby', php: 'php', lua: 'lua', node: 'node', bash: 'bash', sh: 'sh', zsh: 'zsh',
+    ash: 'ash', csh: 'csh', ksh: 'ksh', busybox: 'busybox',
     env: 'env', docker: 'docker', tar: 'tar', zip: 'zip', git: 'git', ftp: 'ftp', gdb: 'gdb', make: 'make',
-    cp: 'cp', mv: 'mv', dd: 'dd', tee: 'tee', wget: 'wget', curl: 'curl', ssh: 'ssh', scp: 'scp', rsync: 'rsync',
-    socat: 'socat', nc: 'nc', tcpdump: 'tcpdump', openssl: 'openssl', mysql: 'mysql', psql: 'psql',
-    systemctl: 'systemctl', journalctl: 'journalctl', apt: 'apt', 'apt-get': 'apt-get', pip: 'pip',
+    strace: 'strace', ltrace: 'ltrace',
+    cp: 'cp', mv: 'mv', dd: 'dd', tee: 'tee', chmod: 'chmod', chown: 'chown',
+    wget: 'wget', curl: 'curl', aria2c: 'aria2c', ssh: 'ssh', scp: 'scp', rsync: 'rsync',
+    socat: 'socat', nc: 'nc', tcpdump: 'tcpdump', openssl: 'openssl', mysql: 'mysql', psql: 'psql', sqlite3: 'sqlite3',
+    systemctl: 'systemctl', journalctl: 'journalctl', service: 'service',
+    apt: 'apt', 'apt-get': 'apt-get', yum: 'yum', dnf: 'dnf', pip: 'pip', pip3: 'pip', npm: 'npm', composer: 'composer',
     screen: 'screen', tmux: 'tmux', xargs: 'xargs', cat: 'cat', base64: 'base64', cut: 'cut', flock: 'flock',
+    apache2: 'apache2', openvpn: 'openvpn', capsh: 'capsh', setarch: 'setarch', time: 'time', timeout: 'timeout',
+    watch: 'watch', expect: 'expect', ionice: 'ionice', nice: 'nice', nohup: 'nohup', stdbuf: 'stdbuf',
+    taskset: 'taskset', chroot: 'chroot', nsenter: 'nsenter', unshare: 'unshare', doas: 'doas',
+    'ansible-playbook': 'ansible-playbook', logrotate: 'logrotate'
   };
+
+  function _normalize_gtfobin(base) {
+    base = String(base || '').toLowerCase();
+    if (_GTFOBINS_SUDO[base]) return _GTFOBINS_SUDO[base];
+    var stripped = base.replace(/\.(?:basic|tiny|nox|gtk3?|athena|orig|distrib)$/i, '').replace(/[0-9.]+$/, '');
+    if (_GTFOBINS_SUDO[stripped]) return _GTFOBINS_SUDO[stripped];
+    return '';
+  }
+
+  var _STOCK_SUID_BINS = new Set([
+    'passwd', 'su', 'sudo', 'mount', 'umount', 'chsh', 'chfn', 'newgrp', 'gpasswd',
+    'fusermount', 'fusermount3', 'pkexec', 'polkit-agent-helper-1', 'ssh-keysign',
+    'dbus-daemon-launch-helper', 'unix_chkpwd', 'chage', 'expiry', 'ping', 'ping6',
+    'traceroute6.iputils', 'pppd', 'ntfs-3g', 'xorg.wrap', 'snap-confine', 'bwrap',
+    'mount.cifs', 'mount.nfs', 'umount.nfs', 'at', 'crontab', 'pam_timestamp_check', 'pt_chown'
+  ]);
+
+  function _is_stock_suid(p) {
+    var base = String(p || '').split('/').pop().toLowerCase();
+    return _STOCK_SUID_BINS.has(base) && /^\/(?:usr\/)?(?:bin|sbin|lib|lib64|libexec)\//i.test(p);
+  }
 
   function _parse_kernel_exploits(text, ws, command, source, facts, leadKinds) {
     var hits = [], cves = [], names = {};
@@ -173,10 +214,23 @@
     if (nk.length) value.names = nk.sort();
     _add_host_privesc_fact(facts, ws, source, 'privesc.kernel_exploit', value, leadKinds);
     _add(facts, mkFact('exploit.candidate', 'host:' + ws.target, { tool: 'linux-exploit-suggester', cves: C.uniqueSortedCI(cves), findings: hits }, S, source));
+    var h = 'host:' + ws.target;
+    if (names['dirtycow'] || names['dirty cow']) {
+      _add(facts, mkFact('vuln.dirtycow', h, { cve: 'CVE-2016-5195', via: 'exploit-suggester', lead: true }, S, source));
+    }
+    if (names['dirtypipe'] || names['dirty pipe']) {
+      _add(facts, mkFact('vuln.dirtypipe', h, { cve: 'CVE-2022-0847', via: 'exploit-suggester', lead: true }, S, source));
+    }
+    if (names['baron samedit'] || names['sudoedit']) {
+      _add(facts, mkFact('vuln.baron_samedit', h, { cve: 'CVE-2021-3156', via: 'exploit-suggester', lead: true }, S, source));
+    }
+    if (names['pwnkit'] || names['polkit'] || names['pkexec']) {
+      _add(facts, mkFact('vuln.polkit', h, { cve: 'CVE-2021-4034', via: 'exploit-suggester', lead: true }, S, source));
+    }
   }
 
   function _parse_linux_privesc_output(text, ws, command, source, facts, leadKinds) {
-    var lowered = text.toLowerCase(), lc = command.toLowerCase();
+    var lowered = text.toLowerCase(), lc = (command || '').toLowerCase(), h = 'host:' + ws.target;
     var idMatch = reSearch(C._LINUX_ID_RE, text);
     if (idMatch) {
       var user = idMatch.groups.user.trim();
@@ -185,23 +239,59 @@
       var groups = C.uniqueSortedCI(reAll(/\d+\(([^)]+)\)/, idLine).map(function (m) { return m[1].toLowerCase(); }));
       if (groups.indexOf('lxd') >= 0 || groups.indexOf('lxc') >= 0) _add_host_privesc_fact(facts, ws, source, 'privesc.lxd_group', { groups: groups, user: user }, leadKinds);
       if (groups.indexOf('docker') >= 0) _add_host_privesc_fact(facts, ws, source, 'privesc.docker_group', { groups: groups, user: user }, leadKinds);
-      if (idMatch.groups.uid === '0' || user.toLowerCase() === 'root') _add(facts, mkFact('access.admin', 'host:' + ws.target, { identity: user, method: 'local-enum' }, S, source));
+      if (idMatch.groups.uid === '0' || user.toLowerCase() === 'root') _add(facts, mkFact('access.admin', h, { identity: user, method: 'local-enum' }, S, source));
     } else if (lc.indexOf('whoami') >= 0 && /(?:^|\n)\s*root\s*(?:\n|$)/i.test(text)) {
-      _add(facts, mkFact('access.admin', 'host:' + ws.target, { identity: 'root', method: 'whoami' }, S, source));
+      _add(facts, mkFact('access.admin', h, { identity: 'root', method: 'whoami' }, S, source));
     }
 
     var uname = reSearch(C._UNAME_RE, text);
     if (uname) {
       _add_host_privesc_fact(facts, ws, source, 'host.kernel', { kernel: uname.groups.kernel, tool: 'uname', evidence: uname[0].trim().slice(0, 220) }, leadKinds);
       _add_host_privesc_fact(facts, ws, source, 'host.arch', { arch: uname.groups.arch, tool: 'uname' }, leadKinds);
+      C._add_os_observation(facts, ws, source, 'linux', uname[0], 'high', 'uname', true, C._os_product_from_label(text, 'linux'));
+      if (C._check_linux_kernel_vulns) C._check_linux_kernel_vulns(uname.groups.kernel, ws, source, facts, leadKinds);
+    } else {
+      var procVer = /Linux version\s+([0-9][^\s]+)/i.exec(text);
+      var bareKernel = /^\s*([2-6]\.\d+\.\d+-[0-9A-Za-z.+_-]+)\s*$/m.exec(text);
+      var kMatch = procVer || ((lc.indexOf('uname') >= 0 || (bareKernel && /(?:generic|amd64|i[3-6]86|arm64|el\d|kali|debian|ubuntu|arch|alpine|-\d+-)/i.test(bareKernel[1]))) ? bareKernel : null);
+      if (kMatch && kMatch[1]) {
+        _add_host_privesc_fact(facts, ws, source, 'host.kernel', { kernel: kMatch[1].trim(), tool: 'uname', evidence: kMatch[0].trim().slice(0, 220) }, leadKinds);
+        C._add_os_observation(facts, ws, source, 'linux', kMatch[0], 'high', 'uname', true, C._os_product_from_label(text, 'linux'));
+        if (C._check_linux_kernel_vulns) C._check_linux_kernel_vulns(kMatch[1].trim(), ws, source, facts, leadKinds);
+      }
+    }
+
+    var osRel = /PRETTY_NAME\s*=\s*["']?([^"'\r\n]+)["']?/i.exec(text) || /Distributor ID:\s*(\S+)/i.exec(text);
+    if (osRel && osRel[1]) {
+      C._add_os_observation(facts, ws, source, 'linux', osRel[0], 'high', 'os-release', true, osRel[1].trim());
+    }
+
+    var sudoVer = /Sudo(?:\s+version|\s+policy\s+plugin\s+version)\s+(1\.(?:8\.(?:[2-9]|[12]\d|3[01])|9\.[0-5](?:p1)?))\b/i.exec(text);
+    if (sudoVer && sudoVer[1]) {
+      _add(facts, mkFact('vuln.baron_samedit', h, { cve: 'CVE-2021-3156', version: sudoVer[1], lead: true }, S, source));
+    }
+
+    var pkexecVer = /pkexec\s+version\s+(0\.(?:0\d\d|10[0-5]))\b/i.exec(text);
+    if (pkexecVer && pkexecVer[1]) {
+      _add(facts, mkFact('vuln.polkit', h, { cve: 'CVE-2021-4034', version: pkexecVer[1], lead: true }, S, source));
     }
 
     var sudoEntries = [];
-    if (lowered.indexOf('may run the following commands') >= 0 || lowered.indexOf('nopasswd:') >= 0) {
+    var hasDoas = /\bpermit\s+(?:nopass\s+)?\S+(?:\s+as\s+root)?/i.test(text);
+    var hasEnvKeep = /env_keep\s*\+?=\s*["']?[^\r\n"']*\b(?:LD_PRELOAD|LD_LIBRARY_PATH)\b/i.test(text);
+    if (lowered.indexOf('may run the following commands') >= 0 || lowered.indexOf('nopasswd:') >= 0 || hasDoas || hasEnvKeep) {
       text.split(/\r?\n/).forEach(function (raw) {
         var line = raw.trim();
         if (!line) return;
         var ll = line.toLowerCase();
+        if (/env_keep\s*\+?=\s*["']?[^\r\n"']*\b(?:LD_PRELOAD|LD_LIBRARY_PATH)\b/i.test(line)) {
+          sudoEntries.push(line.slice(0, 220));
+          return;
+        }
+        if (/\bpermit\s+(?:nopass\s+)?\S+/i.test(line)) {
+          sudoEntries.push(line.slice(0, 220));
+          return;
+        }
         if (ll.indexOf('matching defaults') === 0 || ll.indexOf('user ') === 0 || ll.indexOf('sudoers') === 0) return;
         if (reSearch(C._ID_LINE_RE, line)) return;
         if (ll.indexOf('nopasswd:') >= 0 || /\([^)]+\)\s+\S+/.test(line)) sudoEntries.push(line.slice(0, 220));
@@ -209,21 +299,21 @@
     }
     if (sudoEntries.length) {
       _add_host_privesc_fact(facts, ws, source, 'privesc.sudo_rights',
-        { entries: C.uniqueSortedCI(sudoEntries).slice(0, 20), nopasswd: sudoEntries.some(function (e) { return e.toLowerCase().indexOf('nopasswd') >= 0; }) }, leadKinds);
+        { entries: C.uniqueSortedCI(sudoEntries).slice(0, 20), nopasswd: sudoEntries.some(function (e) { return /nopasswd|nopass/i.test(e); }) }, leadKinds);
       var seenBins = {};
       sudoEntries.forEach(function (entry) {
-        var nopasswd = entry.toLowerCase().indexOf('nopasswd') >= 0;
+        var nopasswd = /nopasswd|nopass/i.test(entry);
         var wildcard = entry.indexOf('*') >= 0;
         var toks = reAll(/(\/[^\s,]+)/, entry).map(function (m) { return m[1]; });
         toks.forEach(function (tok) {
           var base = tok.split('/').pop().toLowerCase();
-          var gid = _GTFOBINS_SUDO[base];
+          var gid = _normalize_gtfobin(base);
           if (!gid || seenBins[base]) return;
           seenBins[base] = true;
           var fixedScript = '';
           for (var k = 0; k < toks.length; k++) {
             var t = toks[k];
-            if (t !== tok && !_GTFOBINS_SUDO[t.split('/').pop().toLowerCase()]) { fixedScript = t; break; }
+            if (t !== tok && !_normalize_gtfobin(t.split('/').pop().toLowerCase())) { fixedScript = t; break; }
           }
           var val = { bin: base, path: tok, gtfobins_id: gid, wildcard: wildcard, nopasswd: nopasswd, ref: 'https://gtfobins.github.io/gtfobins/' + gid + '/#sudo' };
           if (fixedScript) val.fixed_script = fixedScript;
@@ -233,24 +323,30 @@
     }
 
     var suidPaths = {};
-    var suidFind = ['-perm -4000', '-perm -u=s', '-perm /4000', '-perm /u=s'].some(function (t) { return lc.indexOf(t) >= 0; });
-    if (suidFind || lowered.indexOf('suid') >= 0 || lowered.indexOf('rws') >= 0) {
+    var suidFind = ['-perm -4000', '-perm -u=s', '-perm /4000', '-perm /u=s'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\bfind\s+\/.*-perm\b/i.test(text);
+    var bareSuidList = (text.match(/^\s*\/(?:usr\/|bin\/|sbin\/|opt\/)[A-Za-z0-9._\/-]+\s*$/gm) || []).length >= 2;
+    if (suidFind || lowered.indexOf('suid') >= 0 || lowered.indexOf('rws') >= 0 || bareSuidList) {
       text.split(/\r?\n/).forEach(function (raw) {
         var line = raw.trim();
         if (!line || line.indexOf('/proc/') >= 0) return;
         if (line.toLowerCase().indexOf('rws') >= 0) {
           var mm = reSearch(C._SUID_PATH_RE, line);
-          if (mm) suidPaths[mm.groups.path] = true;
+          if (mm && !_is_stock_suid(mm.groups.path)) suidPaths[mm.groups.path] = true;
           return;
         }
-        if (suidFind && line[0] === '/' && line.indexOf(' ') < 0) suidPaths[line] = true;
+        if ((suidFind || bareSuidList) && line[0] === '/' && line.indexOf(' ') < 0 && !_is_stock_suid(line)) suidPaths[line] = true;
       });
     }
     var suidKeys = Object.keys(suidPaths);
     if (suidKeys.length) _add_host_privesc_fact(facts, ws, source, 'privesc.suid_candidate', { paths: suidKeys.sort().slice(0, 40), count: suidKeys.length }, leadKinds);
-    if (suidKeys.some(function (p) { return /screen-4\.5\.0/i.test(p); })) _add_host_privesc_fact(facts, ws, source, 'vuln.screen_suid', { cve: 'CVE-2017-5618', via: 'suid-scan' }, leadKinds);
+    if (suidKeys.some(function (p) { return /screen-4\.5\.0/i.test(p); }) || /screen-4\.5\.0|GNU Screen 4\.5\.0|Screen version 4\.05\.00/i.test(text)) {
+      _add_host_privesc_fact(facts, ws, source, 'vuln.screen_suid', { cve: 'CVE-2017-5618', via: 'suid-scan' }, leadKinds);
+    }
 
-    var caps = reAll(C._CAPABILITY_RE, text).map(function (m) { return { path: m.groups.path, capabilities: m.groups.caps.trim() }; });
+    var caps = reAll(C._CAPABILITY_RE, text).map(function (m) { return { path: m.groups.path, capabilities: m.groups.caps.trim() }; }).filter(function (c) {
+      if (/\/(?:ping6?|mtr-packet|traceroute6\.iputils)$/i.test(c.path) && /^cap_net_raw(?:=[eip]+|\+[eip]+)?$/i.test(c.capabilities)) return false;
+      return true;
+    });
     if (caps.length) _add_host_privesc_fact(facts, ws, source, 'privesc.capability', { entries: caps.slice(0, 40), count: caps.length }, leadKinds);
 
     var passwd = reSearch(C._PASSWD_MODE_RE, text);
@@ -265,8 +361,17 @@
       _add_host_privesc_fact(facts, ws, source, 'privesc.nfs_no_root_squash', { exports: exports.slice(0, 20), count: exports.length || 1 }, leadKinds);
     }
 
-    var cronLines = text.split(/\r?\n/).filter(function (l) { return /cron|timer|systemd/i.test(l) && /\b(writable|world-writable|rwx|777)\b/i.test(l); }).map(function (l) { return l.trim(); });
-    if (cronLines.length) _add_host_privesc_fact(facts, ws, source, 'privesc.cron_writable', { evidence: cronLines.slice(0, 20) }, leadKinds);
+    var cronLines = text.split(/\r?\n/).filter(function (l) {
+      if (/cron|timer|systemd/i.test(l) && /\b(writable|world-writable|rwx|777)\b/i.test(l)) return true;
+      if (/^\s*(?:(?:[0-9*,/-]+\s+){5}|@(?:reboot|hourly|daily|weekly|monthly)\s+)(?:root\s+)?(?<cmd>(?:\/|(?:sh|bash|python\d?|perl|php|ruby)\s+\/)[^\r\n#]+)/i.test(l)) {
+        if (!/\brun-parts\b|\/etc\/cron\.(?:hourly|daily|weekly|monthly)\b|debian-sa1|anacron|e2scrub|fstrim/i.test(l)) return true;
+      }
+      return false;
+    }).map(function (l) { return l.trim(); });
+    if (cronLines.length) {
+      _add_host_privesc_fact(facts, ws, source, 'privesc.cron_writable', { evidence: cronLines.slice(0, 20) }, leadKinds);
+      _add_host_privesc_fact(facts, ws, source, 'privesc.cron', { jobs: cronLines.slice(0, 20), count: cronLines.length }, leadKinds);
+    }
 
     var processLines = text.split(/\r?\n/).filter(function (l) { return /\bUID=0\b|\broot\b.*\bCMD\b|\bCMD:/i.test(l); }).map(function (l) { return l.trim(); });
     if (processLines.length && (lc.indexOf('pspy') >= 0 || lowered.indexOf('uid=0') >= 0 || lowered.indexOf('cmd:') >= 0)) _add_host_privesc_fact(facts, ws, source, 'privesc.process_lead', { commands: processLines.slice(0, 30) }, leadKinds);
@@ -292,14 +397,30 @@
         C._add_os_observation(facts, ws, source, 'windows', (osName || osVersion), 'high', 'systeminfo', true, (osName || ('Windows ' + osVersion)).trim());
       }
       if (sysinfo['system type']) _add_host_privesc_fact(facts, ws, source, 'host.arch', { arch: sysinfo['system type'], tool: 'systeminfo' }, leadKinds);
+    } else {
+      var winVer = /Microsoft Windows \[Version\s+([0-9.]+)\]/i.exec(text);
+      if (winVer && winVer[1]) {
+        _add_host_privesc_fact(facts, ws, source, 'host.kernel', { kernel: winVer[1].trim(), tool: 'ver' }, leadKinds);
+        C._add_os_observation(facts, ws, source, 'windows', winVer[0], 'high', 'ver', true, 'Windows ' + winVer[1].trim());
+      }
     }
 
     var privileges = [];
     reAll(C._WIN_PRIV_RE, text).forEach(function (m) {
       var name = m.groups.name, state = m.groups.state.toLowerCase();
-      if (state === 'enabled' && C._DANGEROUS_WIN_PRIVS.has(name.toLowerCase())) privileges.push(name);
+      if ((state === 'enabled' || state === 'disabled') && C._DANGEROUS_WIN_PRIVS.has(name.toLowerCase())) privileges.push(name);
     });
     if (privileges.length) _add_host_privesc_fact(facts, ws, source, 'privesc.windows_privilege', { privileges: C.uniqueSortedCI(privileges), state: 'Enabled' }, leadKinds);
+
+    var privGroups = [];
+    var winGroupRe = /(?:BUILTIN\\|[A-Za-z0-9._-]+\\|\b)(Backup Operators|DnsAdmins|Server Operators|Print Operators|Account Operators|Hyper-V Administrators|Exchange Windows Permissions|Organization Management)\b/gi;
+    var gm;
+    while ((gm = winGroupRe.exec(text)) !== null) {
+      if (privGroups.indexOf(gm[1]) < 0) privGroups.push(gm[1]);
+    }
+    if (privGroups.length) {
+      _add_host_privesc_fact(facts, ws, source, 'privesc.privileged_group', { groups: C.uniqueSortedCI(privGroups), count: privGroups.length }, leadKinds);
+    }
 
     if (lowered.indexOf('alwaysinstallelevated') >= 0) {
       var aieHklm = false, aieHkcu = false, currentHive = '';
@@ -319,8 +440,17 @@
     if (lowered.indexOf('.exe') >= 0) {
       text.split(/\r?\n/).forEach(function (raw) {
         var line = raw.trim();
-        if (!line || line.toLowerCase().indexOf('.exe') < 0 || line.indexOf('"') >= 0) return;
-        if (/[A-Za-z]:\\Program Files[^,\r\n]+\.exe/i.test(line)) unquoted.push(line.slice(0, 220));
+        if (!line || line.toLowerCase().indexOf('.exe') < 0) return;
+        var mPath = /(?:BINARY_PATH_NAME|Binary Path Name|PathName|Path)\s*[:=]\s*(.+)$/i.exec(line);
+        var cand = mPath ? mPath[1].trim() : line;
+        if (cand[0] === '"') return;
+        var exeIdx = cand.toLowerCase().indexOf('.exe');
+        if (exeIdx < 0) return;
+        var beforeExe = cand.slice(0, exeIdx + 4);
+        if (beforeExe.indexOf('"') >= 0) return;
+        if (/^[A-Za-z]:\\[^"\r\n]*?\s+[^"\r\n]*?\.exe$/i.test(beforeExe) || (!mPath && /[A-Za-z]:\\[^"\r\n]*?\s+[^"\r\n]*?\.exe\b/i.test(beforeExe) && line.indexOf('"') < 0)) {
+          unquoted.push(line.slice(0, 220));
+        }
       });
     }
     if (unquoted.length) _add_host_privesc_fact(facts, ws, source, 'privesc.unquoted_service_path', { services: C.uniqueSortedCI(unquoted).slice(0, 20), count: C.uniqueSortedCI(unquoted).length }, leadKinds);
@@ -333,7 +463,10 @@
     if (weakService.length) _add_host_privesc_fact(facts, ws, source, 'privesc.weak_service_permission', { evidence: C.uniqueSortedCI(weakService).slice(0, 30) }, leadKinds);
 
     var stored = [];
-    [['Target:', 'cmdkey'], ['DefaultPassword', 'autologon'], ['unattend.xml', 'unattend'], ['sysprep', 'sysprep'], ['confCons.xml', 'mRemoteNG'], ['.rdp', 'rdp_file'], ['simontatham', 'putty'], ['winscp', 'winscp'], ['vncpassword', 'vnc']].forEach(function (pair) {
+    var cmdkeyNone = /Currently stored credentials:[\s\S]{0,160}?\*\s*NONE\s*\*/i.test(text);
+    [['Target:', 'cmdkey'], ['Currently stored credentials', 'cmdkey'], ['Saved ', 'cmdkey'], ['DefaultPassword', 'autologon'], ['unattend.xml', 'unattend'], ['sysprep', 'sysprep'], ['confCons.xml', 'mRemoteNG'], ['.rdp', 'rdp_file'], ['simontatham', 'putty'], ['winscp', 'winscp'], ['vncpassword', 'vnc']].forEach(function (pair) {
+      if (pair[1] === 'cmdkey' && cmdkeyNone) return;
+      if (pair[0] === 'DefaultPassword' && !/DefaultPassword\s+REG_SZ\s+\S+/i.test(text)) return;
       if (lowered.indexOf(pair[0].toLowerCase()) >= 0) stored.push(pair[1]);
     });
     if (stored.length) {
@@ -345,16 +478,65 @@
     if (dllHits.length) _add_host_privesc_fact(facts, ws, source, 'privesc.dll_hijack_candidate', { evidence: C.uniqueSortedCI(dllHits).slice(0, 20), count: C.uniqueSortedCI(dllHits).length }, leadKinds);
 
     var patchLines = text.split(/\r?\n/).filter(function (l) { return /\bMS\d{2}-\d{3}\b|CVE-\d{4}-\d+|missing patches?|exploit/i.test(l); }).map(function (l) { return l.trim(); });
-    if (patchLines.length && (command.toLowerCase().indexOf('wesng') >= 0 || command.toLowerCase().indexOf('windows-exploit-suggester') >= 0 || lowered.indexOf('missing') >= 0)) {
+    if (patchLines.length && (/wes(?:\.py|ng)?|windows[- ]exploit[- ]suggester|missing patches?|found vulnerabilities/i.test((command || '') + '\n' + text))) {
       _add_host_privesc_fact(facts, ws, source, 'privesc.patch_gap', { evidence: patchLines.slice(0, 30) }, leadKinds);
       _add(facts, mkFact('exploit.candidate', h, { tool: 'windows-exploit-suggester', findings: patchLines.slice(0, 30) }, S, source));
     }
   }
   C._parse_windows_privesc_output = _parse_windows_privesc_output;
 
-  function _parse_privesc_output(actionId, text, ws, command, source, facts) {
-    if (!text.trim()) return;
-    text = text.replace(C._ANSI_RE, '');
+  function _looks_like_linux_enum(text) {
+    var t = String(text || '');
+    if (!t.trim()) return false;
+    return !!(
+      reSearch(C._UNAME_RE, t) ||
+      /PRETTY_NAME\s*=/i.test(t) ||
+      /Distributor ID:\s*\S+/i.test(t) ||
+      /Linux version\s+[0-9]/i.test(t) ||
+      /^\s*[2-6]\.\d+\.\d+-(?:[0-9A-Za-z.+_-]*(?:generic|amd64|i[3-6]86|arm64|el\d|kali|debian|ubuntu|arch|alpine)[0-9A-Za-z.+_-]*|\d+-[A-Za-z0-9.+_-]+)\s*$/m.test(t) ||
+      /Linux Privilege Escalation Awesome Script|linpeas/i.test(t) ||
+      /══╣/.test(t) ||
+      reSearch(C._CAPABILITY_RE, t) ||
+      reSearch(C._PASSWD_MODE_RE, t) ||
+      /no_root_squash/i.test(t) ||
+      /\bUID=0\b.*\bCMD\b|\bCMD:\s*UID=0\b/i.test(t) ||
+      /^\s*(?:[0-9*,/-]+\s+){5}(?:root\s+)?\/(?:opt|home|tmp|var|srv|etc|usr\/local)\//m.test(t) ||
+      /\bpermit\s+nopass\b/i.test(t) ||
+      /\bfind\s+\/.*-perm\b/i.test(t) ||
+      /\bgetcap\b/i.test(t) ||
+      /(?:^|\r?\n)\s*\/(?:usr\/|bin\/|sbin\/|opt\/)[A-Za-z0-9._\/-]+\s*\r?\n\s*\/(?:usr\/|bin\/|sbin\/|opt\/)[A-Za-z0-9._\/-]+/.test(t) ||
+      /^\s*-[rwxstST-]{9}\s+\d+\s+root\s+/m.test(t) ||
+      /CVE-\d{4}-\d{4,7}.*?\b(?:dirty|pwnkit|polkit|samedit|overlayfs)/i.test(t) ||
+      /Sudo(?:\s+version|\s+policy\s+plugin\s+version)\s+\d/i.test(t) ||
+      /pkexec\s+version\s+\d/i.test(t)
+    );
+  }
+  C._looks_like_linux_enum = _looks_like_linux_enum;
+
+  function _looks_like_windows_enum(text) {
+    var t = String(text || '');
+    if (!t.trim()) return false;
+    return !!(
+      /^\s*OS Name:\s*Microsoft Windows/im.test(t) ||
+      /Microsoft Windows \[Version\s+[0-9.]+\]/i.test(t) ||
+      /Saved [A-Z0-9_-]+ credentials|Currently stored credentials:/i.test(t) ||
+      /ServiceName\s*:\s*\S+[\s\S]{1,200}?PathName\s*:/i.test(t) ||
+      /\b(?:BINARY_PATH_NAME|Binary Path Name|PathName)\s*[:=]\s*["']?[A-Za-z]:\\/i.test(t) ||
+      /\b(?:Backup Operators|DnsAdmins|Server Operators|Print Operators)\b[\s\S]{0,80}?\bS-1-5-/i.test(t) ||
+      /Found vulnerabilities|\bMS\d{2}-\d{3}\b.*CVE-\d{4}-\d+/i.test(t) ||
+      /\.dll\b.*(?:NAME NOT FOUND|PATH NOT FOUND)/i.test(t) ||
+      reSearch(C._AIE_VALUE_RE, t)
+    );
+  }
+  C._looks_like_windows_enum = _looks_like_windows_enum;
+
+  function _parse_privesc_output(a1, a2, a3, a4, a5, a6) {
+    var actionId = a1, text = a2, ws = a3, command = a4, source = a5, facts = a6;
+    if (Array.isArray(a5) && typeof a6 === 'string') {
+      text = a1; ws = a2; command = a3; source = a4; facts = a5; actionId = a6;
+    }
+    if (!text || !String(text).trim()) return;
+    text = String(text).replace(C._ANSI_RE, '');
     var leadKinds = {};
     if (C._LINUX_PRIVESC_ACTION_IDS.has(actionId)) _parse_linux_privesc_output(text, ws, command, source, facts, leadKinds);
     if (C._WINDOWS_PRIVESC_ACTION_IDS.has(actionId)) _parse_windows_privesc_output(text, ws, command, source, facts, leadKinds);
@@ -362,15 +544,10 @@
   }
   C._parse_privesc_output = _parse_privesc_output;
 
-  // ── Bare on-host enum pastes (no privesc action-id) → privesc leads ────────────────
-  // A pasted `whoami /priv` / `whoami /all` token-privilege dump, or a `sudo -l` rights
-  // listing, arrives as operator-ingest with none of the _PRIVESC_ACTION_IDS, so the
-  // action-id-gated _parse_privesc_output never fires. These thin entrypoints let the
-  // dispatcher route such a paste to the matching privesc parser. The parser's inner blocks
-  // are all content-gated (only an Enabled dangerous privilege → privesc.windows_privilege,
-  // only a real sudo rights line → privesc.sudo_rights), so nothing is invented, and they
-  // emit the same privesc.leads roll-up _parse_privesc_output would.
-  function _looks_like_whoami_priv(text) { return !!reSearch(C._WIN_PRIV_RE, text || ''); }
+  function _looks_like_whoami_priv(text) {
+    var t = text || '';
+    return !!(reSearch(C._WIN_PRIV_RE, t) || /\b(?:Backup Operators|DnsAdmins|Server Operators|Print Operators)\b[\s\S]{0,80}?\bS-1-5-/i.test(t));
+  }
   C._looks_like_whoami_priv = _looks_like_whoami_priv;
 
   function _parse_whoami_priv(text, ws, command, source, facts) {
@@ -383,8 +560,11 @@
   C._parse_whoami_priv = _parse_whoami_priv;
 
   function _looks_like_sudo_l(text) {
-    var lowered = (text || '').toLowerCase();
-    return lowered.indexOf('may run the following commands') >= 0 || lowered.indexOf('nopasswd:') >= 0;
+    var t = text || '';
+    var lowered = t.toLowerCase();
+    return lowered.indexOf('may run the following commands') >= 0 || lowered.indexOf('nopasswd:') >= 0 ||
+      /\bpermit\s+(?:nopass\s+)?\S+\s+as\s+root\b/i.test(t) ||
+      /env_keep\s*\+?=\s*["']?[^\r\n"']*\b(?:LD_PRELOAD|LD_LIBRARY_PATH)\b/i.test(t);
   }
   C._looks_like_sudo_l = _looks_like_sudo_l;
 
@@ -535,7 +715,7 @@
   // ── Windows cleartext-cred idioms + PuTTY/plink/WinSCP stored creds (§33) ──────────
   // Cleartext credentials typed into a script/history/config, plus PuTTY's plaintext registry proxy
   // credential and a saved plink `-pw` command line → credential.candidate MATERIAL to try (never
-  // access.* — §34 validates it into credential.available). A login the same transcript shows was
+  // access.* - §34 validates it into credential.available). A login the same transcript shows was
   // DENIED right after is skipped, so a failed `mysql -p'wrong'` never becomes a lead.
   var _WIN_CRED_RES = [
     ['net-use', /net\s+use\s+\\\\\S+\s+\/user:(?<user>\S+)\s+(?<pw>\S+)/gi],
@@ -586,7 +766,7 @@
       seen[key] = true;
       _add(facts, mkFact('credential.candidate', h, { password: pw, via: 'convertto-securestring' }, S, source));
     });
-    // PuTTY stored proxy credential — pair the ProxyPassword value with the nearest ProxyUsername.
+    // PuTTY stored proxy credential - pair the ProxyPassword value with the nearest ProxyUsername.
     var pwm = reSearch(_PUTTY_PROXYPW_RE, text);
     if (pwm) {
       var pw2 = C.stripChars(pwm.groups.pw.trim(), "'\"");
@@ -607,7 +787,7 @@
   // A bespoke executable/script in a user-controllable location, or whose NAME suggests it holds/uses
   // secrets. A lead to inspect ("run this and read what it leaks"), never access on its own.
   var _NOTABLE_NAME_RE = /admin|tool(?:kit)?|connect|console|backup|restore|cred(?:ential)?|passw|secret|vault|keepass|manage(?:r|ment)?|deploy|launch(?:er)?|updat(?:e|er)|agent|helper|remote|vpn|token|keychain|setup|install(?:er)?|\bsvc\b|service|runner|automat/i;
-  var _NOTABLE_EXE_RE = /(?<name>[\w.\-]{1,60}\.(?:exe|bat|cmd|ps1|vbs|sh|py|pl|rb|jar|bin|run|elf))\b/gi;
+  var _NOTABLE_EXE_RE = /(?<![\w.\-])(?<name>[\w.\-]{1,60}\.(?:exe|bat|cmd|ps1|vbs|sh|py|pl|rb|jar|bin|run|elf))\b/gi;
   var _NOTABLE_DIRHDR_RE = /Directory of\s+(?<d>[A-Za-z]:\\[^\r\n]+?)\s*$/im;
   var _NOTABLE_LDIR_RE = /^(?<d>\/[^\r\n:]+):\s*$/;
   var _NOTABLE_IGNORE_RE = /\\Windows\\(?:System32|SysWOW64|WinSxS|servicing|Microsoft\.NET)\\|\/usr\/(?:bin|sbin|lib)\/|(?:^|[\\/])(?:s?bin)\/|python\d|\bpip\d?\b|winpeas|linpeas|pspy|mimikatz|rubeus|powerview|seatbelt|sharphound|godpotato|printspoofer|\.dll$|conhost|svchost|dllhost|taskhostw?|msedge|chrome|firefox|OneDrive|Teams\.exe/i;
@@ -624,6 +804,7 @@
     var lines = String(text || '').split(/\r?\n/);
     for (var li = 0; li < lines.length; li++) {
       var line = lines[li];
+      if (/\bin\s+[\w.]+\s*\(|^\s*File\s+"[^"]+",\s+line\s+\d+|^\s*Traceback\b|\b[\w]+\.run\s*\(/i.test(line)) continue;
       var dm = reSearch(_NOTABLE_DIRHDR_RE, line);
       if (dm) { currentDir = dm.groups.d.trim(); continue; }
       var lm = _NOTABLE_LDIR_RE.exec(line);
@@ -661,7 +842,7 @@
   // ── schtasks /query /v → scheduled-task privesc lead ───────────────────────────────
   // `schtasks /query /v /fo list` prints one block per task: `TaskName:`, `Run As User:`,
   // `Task To Run:`. A task that runs as SYSTEM or an admin AND points at a concrete path is a privesc
-  // lead (replace/overwrite that binary — or its directory — and you inherit the run-as identity).
+  // lead (replace/overwrite that binary - or its directory - and you inherit the run-as identity).
   // Content-gated: only a block that names a privileged run-as AND a path mints; a task run as the
   // current user, or one with no path (N/A / a COM handler), mints nothing.
   var _SCHTASKS_FIELD_RE = /^\s*(?<key>TaskName|Run As User|Task To Run)\s*:\s*(?<value>.+?)\s*$/gim;
@@ -709,9 +890,9 @@
   // Winlogon autologon (DefaultUserName/DefaultPassword REG_SZ) is a real cleartext login; common
   // stored-cred keys (VNC Password, PuTTY session proxy creds, SNMP ValidCommunities) are candidate
   // material. Content-gated so an unrelated reg dump with no credential-ish value mints nothing.
-  var _REG_DEFAULT_PW_RE = /^\s*DefaultPassword\s+REG_SZ\s+(?<pw>\S.*?)\s*$/im;
-  var _REG_DEFAULT_USER_RE = /^\s*DefaultUserName\s+REG_SZ\s+(?<user>\S.*?)\s*$/im;
-  var _REG_DEFAULT_DOMAIN_RE = /^\s*DefaultDomainName\s+REG_SZ\s+(?<dom>\S.*?)\s*$/im;
+  var _REG_DEFAULT_PW_RE = /^\s*DefaultPassword\s+(?:REG_SZ\s+|:\s*)(?<pw>\S.*?)\s*$/im;
+  var _REG_DEFAULT_USER_RE = /^\s*DefaultUserName\s+(?:REG_SZ\s+|:\s*)(?<user>\S.*?)\s*$/im;
+  var _REG_DEFAULT_DOMAIN_RE = /^\s*DefaultDomainName\s+(?:REG_SZ\s+|:\s*)(?<dom>\S.*?)\s*$/im;
   var _REG_VNC_PW_RE = /^\s*(?:Password|ControlPassword|PasswordViewOnly)\s+REG_(?:BINARY|SZ)\s+(?<pw>\S.*?)\s*$/im;
   var _REG_PROXY_PW_RE = /^\s*ProxyPassword\s+REG_SZ\s+(?<pw>\S.*?)\s*$/im;
   var _REG_PROXY_USER_RE = /^\s*ProxyUsername\s+REG_SZ\s+(?<user>\S+)/im;
@@ -733,7 +914,7 @@
     if (!text || !text.trim()) return;
     text = text.replace(C._ANSI_RE, '');
     var h = 'host:' + ws.target, kinds = {};
-    // 1) Winlogon autologon → cleartext credential
+    // 1) Winlogon autologon -> cleartext credential
     var pwm = reSearch(_REG_DEFAULT_PW_RE, text);
     if (pwm) {
       var pw = C.stripChars(pwm.groups.pw.trim(), "'\"");
@@ -744,6 +925,9 @@
         var dm = reSearch(_REG_DEFAULT_DOMAIN_RE, text);
         if (dm && dm.groups.dom.trim()) val.domain = dm.groups.dom.trim();
         _add(facts, mkFact('credential.candidate', h, val, S, source));
+        if (val.user && C._valid_username(val.user, false) && C._valid_password(pw) && C._add_plaintext_credential) {
+          C._add_plaintext_credential(facts, ws, source, val.user, pw, val.domain || C._domain_from_facts(ws), 'winlogon_autologon', '');
+        }
         kinds.autologon = true;
       }
     }
@@ -795,20 +979,14 @@
   }
   C._parse_reg_query = _parse_reg_query;
 
-  // ── icacls / accesschk → writable service/path privesc lead ────────────────────────
-  // icacls prints `<path> <PRINCIPAL>:(perms)` (continuation ACEs indented); accesschk prints a path
-  // then `RW <principal>` / `FILE_ALL_ACCESS` lines. When a LOW-PRIV principal (BUILTIN\Users,
-  // Everyone, Authenticated Users) holds a WRITABLE ACE (F/M/W) on a SERVICE BINARY or program path,
-  // that path is replaceable → you inherit whatever identity runs it. Mint privesc.leads (via
-  // privesc.weak_service_permission). Path-gated: a writable ACE on an ordinary/user path, or a
-  // read-only ACE, mints nothing.
   var _ICACLS_PATH_RE = /(?:[A-Za-z]:\\|\\\\)(?:[^\r\n:()]|:(?=\\))*?\.(?:exe|dll|bat|cmd|ps1|sys|msi|vbs|jar|scr)\b/i;
   var _ICACLS_DIR_PATH_RE = /[A-Za-z]:\\(?:[^\r\n:()]|:(?=\\))*(?:Program Files(?: \(x86\))?|ProgramData|inetpub|xampp|wamp)(?:\\[^\r\n:()]*)?/i;
   var _ACCESSCHK_WRITE_RE = /^\s*(?:RW|W)\s+(?:BUILTIN\\Users|Everyone|NT AUTHORITY\\(?:Authenticated Users|INTERACTIVE)|Authenticated Users|\bUsers\b)/im;
+  var _ACCESSCHK_SVC_HDR_RE = /^\s*RW\s+([A-Za-z0-9_.-]{2,64})\s*$/;
 
   function _looks_like_icacls_accesschk(text) {
     var t = text || '';
-    return !!(reSearch(C._LOWPRIV_WRITE_ACE_RE, t) || reSearch(_ACCESSCHK_WRITE_RE, t));
+    return !!(reSearch(C._LOWPRIV_WRITE_ACE_RE, t) || reSearch(_ACCESSCHK_WRITE_RE, t) || (reSearch(C._WEAK_SVC_ACCESS_RE, t) && /^\s*RW\s+[A-Za-z0-9_.-]+\s*$/m.test(t)));
   }
   C._looks_like_icacls_accesschk = _looks_like_icacls_accesschk;
 
@@ -817,6 +995,8 @@
     if (m) return m[0].trim();
     m = reSearch(_ICACLS_DIR_PATH_RE, line);
     if (m) return m[0].trim();
+    var sm = _ACCESSCHK_SVC_HDR_RE.exec(line);
+    if (sm && !/^(?:BUILTIN|Everyone|Authenticated|Users|NT)$/i.test(sm[1])) return sm[1].trim();
     return '';
   }
 
@@ -830,7 +1010,7 @@
       var p = _program_path_from_line(line);
       if (p) currentPath = p;
       if (!currentPath) return;
-      if (!(reSearch(C._LOWPRIV_WRITE_ACE_RE, line) || reSearch(_ACCESSCHK_WRITE_RE, line))) return;
+      if (!(reSearch(C._LOWPRIV_WRITE_ACE_RE, line) || reSearch(_ACCESSCHK_WRITE_RE, line) || reSearch(C._WEAK_SVC_ACCESS_RE, line))) return;
       var trimmed = line.trim();
       var ev = (trimmed.indexOf(currentPath) === 0 ? trimmed : currentPath + ' ' + trimmed).slice(0, 220), key = ev.toLowerCase();
       if (seen[key]) return;
@@ -842,7 +1022,7 @@
     var leadKinds = {};
     _add_host_privesc_fact(facts, ws, source, 'privesc.weak_service_permission',
       { evidence: evidence.slice(0, 30), paths: Object.keys(paths).sort().slice(0, 20),
-        tool: command.toLowerCase().indexOf('accesschk') >= 0 ? 'accesschk' : 'icacls' }, leadKinds);
+        tool: (command || '').toLowerCase().indexOf('accesschk') >= 0 ? 'accesschk' : 'icacls' }, leadKinds);
     _add_privesc_leads(facts, ws, source, leadKinds);
   }
   C._parse_icacls_accesschk = _parse_icacls_accesschk;
@@ -856,7 +1036,7 @@
   C._parse_shadow_file = _parse_shadow_file;
 
   // ── endpoint defensive posture (read-only detection) ───────────────────────────────
-  // Records which controls are ACTIVE from read-only enumeration output — PowerShell language mode,
+  // Records which controls are ACTIVE from read-only enumeration output - PowerShell language mode,
   // Microsoft Defender real-time state + configured exclusion paths, and whether an AppLocker policy is
   // applied. Mints defense.control purely as situational awareness so the coach can prefer remote-first
   // and warn before on-host tooling; it detects posture only and asserts nothing about evading any control.

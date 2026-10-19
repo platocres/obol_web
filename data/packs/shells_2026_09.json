@@ -333,6 +333,9 @@
           "run": "chmod 600 id_rsa && ssh -i id_rsa -o StrictHostKeyChecking=no {{user}}@{{target}}",
           "note": "save the recovered key to id_rsa first; try likely usernames (key comment, enumerated users, root). An encrypted key (ENCRYPTED header) → ssh2john id_rsa > k.hash && hashcat/john it, then unlock."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     },
     {
@@ -452,6 +455,9 @@
           "run": "ssh -i id_rsa -o StrictHostKeyChecking=no {{user}}@{{target}} '{{command}}'",
           "note": "Key auth, save the recovered private key to id_rsa first."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     }
   ]

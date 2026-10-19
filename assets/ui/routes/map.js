@@ -1,5 +1,5 @@
 /*!
- * obol ui — routes/map.js — the ENGAGEMENT MAP surface.
+ * obol ui - routes/map.js - the ENGAGEMENT MAP surface.
  * The engagement-wide picture: scope ranges + domains up top, targets (colored by access level,
  * DC flagged) hanging from the evidence that ties them, their services + credentials + BloodHound
  * findings below. One inline SVG projected by OBOL.engmap from the engagement's browser state.
@@ -57,7 +57,7 @@
   }
 
   function mounted(ctx) {
-    // Bind on the route's own section (recreated each render), not the persistent #view — a lazy
+    // Bind on the route's own section (recreated each render), not the persistent #view - a lazy
     // route renders twice (stub, then real), so binding on #view would stack the handlers and a
     // click would toggle an even number of times, netting to a no-op.
     var mount = ctx.mount.querySelector('.engmap-route') || ctx.mount;

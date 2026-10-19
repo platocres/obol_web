@@ -102,7 +102,7 @@
       }
       var seed = (OBOL.store && OBOL.store.active && OBOL.store.active())
         ? opt(' data-seed', 'Start From My Active Engagement',
-          'Begin with everything obol already knows about your current box, then mark what fails to refine it.') : '';
+          'Begin with everything OBOL already knows about your current box, then mark what fails to refine it.') : '';
       return '<div class="stuck-answers stuck-intro">'
         + opt(' data-goto="host"', 'Carry Me Across',
           'Answer a few quick questions about your target, and Charon lays out moves to try, in order.')

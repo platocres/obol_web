@@ -150,7 +150,7 @@
 
   function hashOutHtml(value) {
     var wb = W();
-    if (!value || !value.trim()) return '<p class="wb-note">Paste a hash above and obol will name it, give you the hashcat mode and a ready crack command.</p>';
+    if (!value || !value.trim()) return '<p class="wb-note">Paste a hash above and OBOL will name it, give you the hashcat mode and a ready crack command.</p>';
     // Clean up the common lab formatting pitfalls FIRST (wrapped tickets, secretsdump lines, quotes, log
     // prefixes), then identify the cleaned hash. Every change is shown so you see exactly what obol did.
     var nz = wb.normalizeHash(value);
@@ -212,7 +212,7 @@
   // The Encoder shows every encoding at once. It is async because gzip/zlib go through the native
   // compression streams; the sync entry point returns a placeholder, and renderEncoder() fills the panel.
   function encoderPlaceholder() {
-    return '<p class="wb-note">Type or paste anything above. obol shows every common encoding at once. '
+    return '<p class="wb-note">Type or paste anything above. OBOL shows every common encoding at once. '
       + 'To go the other way (decode something, even if it was encoded several times), use Smart Decoder.</p>';
   }
   function renderEncoder(value) {
@@ -255,7 +255,7 @@
     var out = document.getElementById('wb-dc-auto');
     if (!out) return;
     if (!value || !value.trim()) {
-      out.innerHTML = '<p class="wb-note">Paste something encoded above. obol tries every decoding at once and, '
+      out.innerHTML = '<p class="wb-note">Paste something encoded above. OBOL tries every decoding at once and, '
         + 'if it was encoded in layers, peels it to completion. Nothing is sent anywhere.</p>';
       return;
     }
@@ -272,14 +272,14 @@
         var pr = Math.round(smart.best.printable * 100);
         html += '<div class="wb-dc-best">'
           + '<div class="wb-field-l">Decoded To Completion</div>'
-          + '<p class="wb-enc-note">obol peeled ' + smart.best.chain.length + ' layer'
+          + '<p class="wb-enc-note">OBOL peeled ' + smart.best.chain.length + ' layer'
           + (smart.best.chain.length === 1 ? '' : 's') + ' (' + esc(chain) + '), landing on '
           + pr + '% printable text.</p>'
           + codeRow('Decoded result', smart.best.text) + '</div>';
       } else {
         html += '<div class="wb-field-l">Decoded To Completion</div>'
           + '<p class="wb-note">No multi-layer decode produced anything cleaner than what you pasted. '
-          + 'It may be plaintext already, encrypted (not just encoded), or a format obol cannot do in the browser. '
+          + 'It may be plaintext already, encrypted (not just encoded), or a format OBOL cannot do in the browser. '
           + 'The single-layer attempts below show what each codec makes of it.</p>';
       }
 
@@ -321,7 +321,7 @@
       + '<div class="wb-field-l">Input</div>'
       + '<textarea id="wb-dc-in" class="wb-textarea" rows="3" placeholder="Paste something encoded (base64, hex, a gzip blob, several layers deep...)" autocomplete="off" spellcheck="false"></textarea>'
       + '<div id="wb-dc-auto" class="wb-dc-auto">'
-      + '<p class="wb-note">Paste something encoded above. obol tries every decoding at once and, if it was encoded in layers, peels it to completion. Nothing is sent anywhere.</p>'
+      + '<p class="wb-note">Paste something encoded above. OBOL tries every decoding at once and, if it was encoded in layers, peels it to completion. Nothing is sent anywhere.</p>'
       + '</div>'
       + '<details class="wb-dc-manual"><summary>Manual: Try One Codec Yourself</summary>'
       + '<p class="wb-note">A field per codec. Type, then Decode or Encode just that one step. Useful when you know exactly which transform you want, or to build a layered payload by hand.</p>'
@@ -341,7 +341,7 @@
       + '<button class="btn-copy" data-copy="' + U.attr(json) + '" aria-label="Copy ' + U.attr(label) + '">copy</button></div>';
   }
   function jwtOutHtml(value) {
-    if (!value || !value.trim()) return '<p class="wb-note">Paste a JWT (it starts with eyJ...). obol decodes the header and payload and flags what is worth attacking. It decodes, it does not verify: a decoded token is not a trusted token.</p>';
+    if (!value || !value.trim()) return '<p class="wb-note">Paste a JWT (it starts with eyJ...). OBOL decodes the header and payload and flags what is worth attacking. It decodes, it does not verify: a decoded token is not a trusted token.</p>';
     var r = W().decodeJwt(value);
     if (!r.ok) return '<p class="wb-note">' + esc(r.error) + '</p>' + JWT_REFS;
     var flags = r.flags.length
@@ -350,7 +350,7 @@
     return jwtSeg('Header', r.header) + jwtSeg('Payload', r.payload)
       + '<div class="wb-field-l">Signature</div><div class="wb-cmd"><code>' + esc(r.signature || '(none)') + '</code></div>'
       + flags
-      + '<p class="wb-note">This is a decode, not a verification. obol never has the signing key, so it cannot tell you the token is genuine, only what it claims.</p>'
+      + '<p class="wb-note">This is a decode, not a verification. OBOL never has the signing key, so it cannot tell you the token is genuine, only what it claims.</p>'
       + JWT_REFS;
   }
   function jwtPanel() {
@@ -382,7 +382,7 @@
 
   function gtfoOutHtml(value) {
     var R = OBOL.resolve;
-    if (!value || !value.trim()) return '<p class="wb-note">Type a binary you can run as sudo, or one that is SUID, and obol shows the exact GTFOBins escapes with the authoritative page one tap away.</p>';
+    if (!value || !value.trim()) return '<p class="wb-note">Type a binary you can run as sudo, or one that is SUID, and OBOL shows the exact GTFOBins escapes with the authoritative page one tap away.</p>';
     var q = value.trim();
     var fns = R.gtfoFunctions(q);
     var link = '<a class="wb-gtfo-link" href="' + U.attr(fns.url) + '" target="_blank" rel="noopener">Open ' + esc(fns.bin) + ' on GTFOBins</a>';
@@ -399,7 +399,7 @@
     }
     if (fns.known) {
       return '<div class="wb-gtfo-head"><span class="wb-gtfo-bin">' + esc(fns.bin) + '</span>' + link + '</div>'
-        + '<p class="wb-note">GTFOBins knows this binary, but its escape uses an inherit directive obol will not inline (guessing it could be wrong). Open the page above for the exact, current steps.</p>';
+        + '<p class="wb-note">GTFOBins knows this binary, but its escape uses an inherit directive OBOL will not inline (guessing it could be wrong). Open the page above for the exact, current steps.</p>';
     }
     // not an exact match: suggest names
     var sug = R.gtfoSuggest(q);
@@ -506,7 +506,7 @@
       return '<button type="button" class="wb-chip' + (on ? ' on' : '') + '" data-sqli-ctx="' + c[0] + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(c[1]) + '</button>';
     }).join('');
     return '<div class="wb-panel wb-sqli">'
-      + '<p class="wb-linked">Manual by design: you run every query yourself and paste the result back, so obol builds the next payload. No automation, no sqlmap, which keeps it OSCP exam-legal.</p>'
+      + '<p class="wb-linked">Manual by design: you run every query yourself and paste the result back, so OBOL builds the next payload. No automation, no sqlmap, which keeps it OSCP exam-legal.</p>'
       + '<div class="wb-field-l">Database Engine</div>'
       + '<div class="wb-enc-row" role="group" aria-label="Database engine">' + dbmsBtns + '</div>'
       + '<div class="wb-field-l">Injection Context</div>'
@@ -540,7 +540,7 @@
     var wb = W();
     var signals = wb.scanSignals(text);
     if ((!facts || !facts.length) && !signals.length) {
-      return '<p class="wb-note">obol did not recognize anything in that. Either it is not output from a tool obol parses, or it is too fragmentary to route. Paste the whole block, including the command line you ran, and try again. This is honest: if the engine would record nothing, there is nothing to explain.</p>';
+      return '<p class="wb-note">OBOL did not recognize anything in that. Either it is not output from a tool OBOL parses, or it is too fragmentary to route. Paste the whole block, including the command line you ran, and try again. This is honest: if the engine would record nothing, there is nothing to explain.</p>';
     }
     var html = '';
 
@@ -575,7 +575,7 @@
           + '<p class="wb-ex-proves"><strong>Proves:</strong> ' + esc(ex.proves) + '</p>'
           + '<p class="wb-ex-caveat"><strong>Does Not Prove:</strong> ' + esc(ex.caveat) + '</p></div>';
       }).join('');
-      html += '<div class="wb-field-l">What obol Recorded (' + facts.length + ' fact' + (facts.length === 1 ? '' : 's') + ')</div>' + src
+      html += '<div class="wb-field-l">What OBOL Recorded (' + facts.length + ' fact' + (facts.length === 1 ? '' : 's') + ')</div>' + src
         + '<div class="wb-ex-facts">' + cards + '</div>';
     }
 
@@ -596,7 +596,7 @@
   }
   function explainPanel() {
     return '<div class="wb-panel wb-explain">'
-      + '<p class="wb-linked">Paste a whole terminal block, the command and its output together, and obol reads it the way the Evidence route does: it flags what stands out and the next move, records the facts, and says what it adds up to. It explains the real output, it never invents a result.</p>'
+      + '<p class="wb-linked">Paste a whole terminal block, the command and its output together, and OBOL reads it the way the Evidence route does: it flags what stands out and the next move, records the facts, and says what it adds up to. It explains the real output, it never invents a result.</p>'
       + '<div class="wb-field-l">Paste The Command And Its Output</div>'
       + '<textarea id="wb-ex-in" class="wb-textarea" rows="9" placeholder="Paste here, for example:\n$ nxc smb 10.10.10.5 -u svc -p pass --shares\nSMB  10.10.10.5  445  DC01  [*] Windows Server 2019 ... (signing:True) (SMBv1:False)" autocomplete="off" spellcheck="false"></textarea>'
       + '<button id="wb-ex-go" class="wb-go" type="button">Explain This Output</button>'
@@ -614,7 +614,7 @@
       return '<div class="wb-sp-plan ok"><div class="wb-sp-head">No Lockout Policy</div>'
         + '<p class="wb-hash-note">Threshold is 0, so accounts never lock from bad passwords.</p></div>' + warn;
     }
-    if (!plan.ok) return warn || '<p class="wb-note">Fill in the policy above and obol builds a safe spray plan.</p>';
+    if (!plan.ok) return warn || '<p class="wb-note">Fill in the policy above and OBOL builds a safe spray plan.</p>';
     var wb = W();
     return '<div class="wb-sp-plan ok"><div class="wb-sp-head">Your Safe Plan</div>'
       + '<div class="wb-sp-grid">'
@@ -629,7 +629,7 @@
   }
   function sprayPanel() {
     return '<div class="wb-panel wb-spray">'
-      + '<p class="wb-linked">Password spraying locks accounts the moment it crosses the domain lockout threshold. Enter the policy you enumerated (net accounts, or the LDAP/SMB policy query) and obol plans a spray that stays safely under it.</p>'
+      + '<p class="wb-linked">Password spraying locks accounts the moment it crosses the domain lockout threshold. Enter the policy you enumerated (net accounts, or the LDAP/SMB policy query) and OBOL plans a spray that stays safely under it.</p>'
       + '<div class="wb-params">'
       + '<label class="wb-param"><span>Lockout Threshold</span><input id="wb-sp-thr" type="text" inputmode="numeric" value="5" placeholder="5" autocomplete="off"></label>'
       + '<label class="wb-param"><span>Observation Window (Min)</span><input id="wb-sp-win" type="text" inputmode="numeric" value="30" placeholder="30" autocomplete="off"></label>'
@@ -685,7 +685,8 @@
       + '<p class="route-sub">Client-side utilities that answer your situation right here. No network, no execution. '
       + 'They fill from your active engagement and work standalone.</p>'
       + '<nav class="wb-tabs" aria-label="Workbench tools">' + tabbar + '</nav>'
-      + panelFor(_tab);
+      + panelFor(_tab)
+      + '</section>';
   }
 
   function refreshRsOut() {

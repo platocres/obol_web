@@ -1,21 +1,21 @@
 /*!
- * obol data — tools-install.js — OBOL.ARSENAL
+ * obol data - tools-install.js - OBOL.ARSENAL
  * The install/stage registry for the Loadout tab and the generated download-arsenal.sh.
  *
  * This is a faithful port of obol's provisioner slate (the tool cache): the same
  * curated upstream sources, versions, licenses, and detection binaries. obol only
  * *fetches* the tools Kali does NOT ship (the compiled binaries / scripts below); it assumes
  * the apt tooling is already present. We mirror that split exactly:
- *   - `kali`   — ships with a standard Kali install; nothing to fetch (just a ✓ badge).
- *   - `apt`/`pipx`/`git`/`go` — a one-line install for a tool Kali does not ship by default.
- *   - `stage-win`/`stage-lin`/`material` — a binary/script fetched to the attack box and (for
+ *   - `kali`   - ships with a standard Kali install; nothing to fetch (just a [badge]).
+ *   - `apt`/`pipx`/`git`/`go` - a one-line install for a tool Kali does not ship by default.
+ *   - `stage-win`/`stage-lin`/`material` - a binary/script fetched to the attack box and (for
  *     the Windows ones) staged into the workspace www/ dir to serve to a target.
  *
  * Integrity model (also mirrored, enforced by the generated script, not here): fetch upstream
  * `latest` by default; honor an optional pinned `version` + `sha256`; never fabricate a digest.
  *
  * Keyed by the TOOL-NAME string that moves use in `tool`/`tools` and builders use in `equips[]`,
- * so one lookup joins moves ↔ command builders ↔ install recipe ↔ the pasted-back inventory.
+ * so one lookup joins moves <-> command builders <-> install recipe <-> the pasted-back inventory.
  * `variants` lists every invocation a box might expose for command-rewrite (Loadout Phase 3).
  */
 (function (root) {
@@ -23,7 +23,7 @@
   var OBOL = root.OBOL = root.OBOL || {};
   var A = {};
 
-  // ── 1. Kali-default tools — present in a standard Kali install; no fetch. [name, category, os]
+  // -- 1. Kali-default tools - present in a standard Kali install; no fetch. [name, category, os]
   var KALI = [
     ['nmap', 'Recon', 'linux'], ['masscan', 'Recon', 'linux'], ['rustscan', 'Recon', 'linux'],
     ['dig', 'Recon', 'linux'], ['nslookup', 'Recon', 'linux'], ['dnsenum', 'Recon', 'linux'],
@@ -38,6 +38,7 @@
     ['hashcat', 'Cracking', 'multi'], ['john', 'Cracking', 'linux'], ['hashid', 'Cracking', 'linux'],
     ['name-that-hash', 'Cracking', 'linux'], ['gpp-decrypt', 'Cracking', 'linux'], ['psk-crack', 'Cracking', 'linux'],
     ['7z2john', 'Cracking', 'linux'], ['rar2john', 'Cracking', 'linux'], ['zip2john', 'Cracking', 'linux'],
+    ['ssh2john', 'Cracking', 'linux'], ['keepass2john', 'Cracking', 'linux'],
     ['hydra', 'Credentials', 'linux'], ['ffuf', 'Web', 'linux'], ['feroxbuster', 'Web', 'linux'],
     ['gobuster', 'Web', 'linux'], ['wfuzz', 'Web', 'linux'], ['nikto', 'Web', 'linux'],
     ['wpscan', 'Web', 'linux'], ['whatweb', 'Web', 'linux'], ['sqlmap', 'Web', 'linux'],
@@ -58,24 +59,31 @@
     A[row[0]] = { key: row[0], label: row[0], category: row[1], os: row[2], class: 'kali',
       on_kali: true, install: '', canonical: row[0], variants: [row[0]], source: '', license: '', purpose: '' };
   });
+  if (A.xfreerdp) {
+    A.xfreerdp.variants = ['xfreerdp', 'xfreerdp3'];
+  }
 
   // The whole impacket example suite ships on Kali as `impacket-<tool>`; pip installs expose `<tool>.py`.
-  // Linux is case-sensitive and SIX impacket scripts are CamelCase (GetNPUsers.py → impacket-GetNPUsers),
+  // Linux is case-sensitive and SIX impacket scripts are CamelCase (GetNPUsers.py -> impacket-GetNPUsers),
   // so the probe must look for the real case or it reports core AD tools (Kerberoast/AS-REP/S4U) missing
   // on a box that actually ships them. IMP_CASE maps the lowercase key suffix to its true on-disk case.
   var IMP_CASE = { getnpusers: 'GetNPUsers', getuserspns: 'GetUserSPNs', getst: 'getST',
-    gettgt: 'getTGT', raisechild: 'raiseChild', goldenpac: 'goldenPac' };
+    gettgt: 'getTGT', raisechild: 'raiseChild', goldenpac: 'goldenPac', 'get-gpppassword': 'Get-GPPPassword' };
   // One entry per tool obol references, each with its invocation variants for command-rewrite + probe.
   [['psexec', 'Lateral'], ['wmiexec', 'Lateral'], ['dcomexec', 'Lateral'], ['secretsdump', 'Credentials'],
    ['getnpusers', 'AD'], ['getuserspns', 'AD'], ['getst', 'AD'], ['gettgt', 'AD'], ['ticketer', 'AD'],
    ['addcomputer', 'AD'], ['rbcd', 'AD'], ['dacledit', 'AD'], ['lookupsid', 'AD'], ['raisechild', 'AD'],
-   ['goldenpac', 'AD'], ['smbserver', 'Support'], ['dpapi', 'Credentials']].forEach(function (row) {
+   ['goldenpac', 'AD'], ['smbserver', 'Support'], ['dpapi', 'Credentials'],
+   ['smbexec', 'Lateral'], ['changepasswd', 'AD'], ['get-gpppassword', 'Credentials'], ['owneredit', 'AD']].forEach(function (row) {
     var t = row[0], k = 'impacket-' + t, real = IMP_CASE[t] || t;   // real = the Kali wrapper / script case
     A[k] = { key: k, label: k, category: row[1], os: 'linux', class: 'kali', on_kali: true, install: '',
       canonical: 'impacket-' + real,
       variants: ['impacket-' + real, real + '.py', 'impacket-' + t, t + '.py',
         'python3 /usr/share/doc/python3-impacket/examples/' + real + '.py'],
       source: 'fortra/impacket', license: 'Apache-2.0', purpose: 'impacket ' + real };
+    if (real !== t) {
+      A['impacket-' + real] = A[k];
+    }
   });
   // ntlmrelayx also ships on Kali as `impacket-ntlmrelayx` (the bare name is never on PATH), so probe
   // for the wrapper or a fully-provisioned box reports obol's most-used relay tool as missing.
@@ -93,42 +101,44 @@
       canonical: 'nxc', variants: ['nxc', 'netexec', 'crackmapexec', 'cme'], source: 'Pennyw0rth/NetExec', license: 'BSD-2-Clause', purpose: 'swiss-army SMB/LDAP/WinRM/MSSQL' };
   });
 
-  // ── Don't assume what Kali ships. A fresh default install does NOT carry these (verified against the
-  // Kali package catalog, kali.org/tools, not a decked-out box), yet obol's packs use them — so give each a
-  // real install recipe. The setup script already runs every installer have-guarded (present → skip,
-  // missing → install), so wiring a recipe turns "silently assumed present" into "installed if absent".
+  // -- Don't assume what Kali ships. A fresh default install does NOT carry these (verified against the
+  // Kali package catalog, kali.org/tools, not a decked-out box), yet obol's packs use them - so give each a
+  // real install recipe. The setup script already runs every installer have-guarded (present -> skip,
+  // missing -> install), so wiring a recipe turns "silently assumed present" into "installed if absent".
   function reclass(key, patch) { if (A[key]) Object.assign(A[key], patch); }
   // apt packages Kali publishes (install-if-missing; present on a decked-out box, apt-fetched on a bare one)
   [['rustscan', 'rustscan'], ['mitm6', 'mitm6'], ['enum4linux-ng', 'enum4linux-ng'], ['arjun', 'arjun'],
    ['name-that-hash', 'name-that-hash'], ['sprayhound', 'sprayhound'], ['penelope', 'penelope'],
    ['sshpass', 'sshpass'], ['sshuttle', 'sshuttle'], ['ncat', 'ncat'], ['rlwrap', 'rlwrap'],
-   ['kinit', 'krb5-user'], ['klist', 'krb5-user']].forEach(function (r) {
+   ['kinit', 'krb5-user'], ['klist', 'krb5-user'],
+   ['feroxbuster', 'feroxbuster'], ['gobuster', 'gobuster'], ['bloodhound-python', 'bloodhound.py'],
+   ['redis-cli', 'redis-tools'], ['finger', 'finger']].forEach(function (r) {
     reclass(r[0], { class: 'apt', on_kali: false, install: 'sudo apt install -y ' + r[1], bins: [r[0]], source: 'kali/' + r[1] });
   });
   reclass('name-that-hash', { bins: ['name-that-hash', 'nth'], variants: ['name-that-hash', 'nth'] });
   reclass('penelope', { purpose: 'shell handler, auto PTY upgrade, session management, logging + file transfer (catch your reverse shells here)' });
   // pipx (no Kali package)
   reclass('git-dumper', { class: 'pipx', on_kali: false, install: 'pipx install git-dumper', bins: ['git-dumper'], source: 'arthaud/git-dumper', license: 'MIT' });
-  // git run-from-repo (python; no Kali package) — cloned to ~/tools, invoked as windapsearch.py
+  // git run-from-repo (python; no Kali package) - cloned to ~/tools, invoked as windapsearch.py
   reclass('windapsearch', { class: 'git', on_kali: false, install: 'git clone https://github.com/ropnop/windapsearch ~/tools/windapsearch',
     bins: ['windapsearch.py'], canonical: 'windapsearch.py', variants: ['windapsearch.py', 'windapsearch'], source: 'ropnop/windapsearch', license: 'MIT' });
-  // release binary → ~/.local/bin (Go tool, no Kali package)
+  // release binary -> ~/.local/bin (Go tool, no Kali package)
   reclass('kerbrute', { class: 'release-bin', on_kali: false, gh_repo: 'ropnop/kerbrute', gh_asset: 'kerbrute_linux_amd64$',
     bins: ['kerbrute'], canonical: 'kerbrute', dest: 'kerbrute', install: '', source: 'ropnop/kerbrute', license: 'Apache-2.0' });
-  // nltest runs on the TARGET (a Windows domain command), never on your Kali box — class it builtin like the
+  // nltest runs on the TARGET (a Windows domain command), never on your Kali box - class it builtin like the
   // other target-side commands (cmd/powershell/wmic/reg) so it isn't probed and doesn't drag "ready" to 154/155.
   reclass('nltest', { class: 'builtin' });
-  // name-only fixes — genuinely present on a default Kali, obol just probed the wrong name
+  // name-only fixes - genuinely present on a default Kali, obol just probed the wrong name
   reclass('metasploit', { canonical: 'msfconsole', variants: ['msfconsole', 'msfvenom'] });        // metasploit-framework ships msfconsole
   reclass('mssqlclient.py', { canonical: 'impacket-mssqlclient', variants: ['impacket-mssqlclient', 'mssqlclient.py'] });  // alias of the impacket wrapper
   // BloodHound GUI: obol does the analysis on-site and never invokes the GUI, but offer it if the box lacks
   // it. have-guarded, so it only installs (and pulls neo4j) when actually absent.
   reclass('bloodhound', { class: 'apt', on_kali: false, install: 'sudo apt install -y bloodhound', bins: ['bloodhound'], source: 'kali/bloodhound', purpose: 'BloodHound GUI (optional, obol analyses collection data on-site)' });
   // ysoserial: Java deserialization payload generator used by the web lane (java -jar ysoserial.jar).
-  // One jar, Java already present — fetch + cache it like any other material.
+  // One jar, Java already present - fetch + cache it like any other material.
   reclass('ysoserial', { class: 'material', on_kali: false, gh_repo: 'frohoff/ysoserial', gh_asset: 'ysoserial.*\\.jar$', dest: 'ysoserial.jar', bins: ['ysoserial.jar'], canonical: 'ysoserial', source: 'frohoff/ysoserial', license: 'MIT', purpose: 'Java deserialization payload generator (gadget chains)' });
 
-  // ── 2. Not on Kali by default — a one-line install. (pipx/git/go: the AD tools Kali omits.)
+  // -- 2. Not on Kali by default - a one-line install. (pipx/git/go: the AD tools Kali omits.)
   var INSTALL = [
     { key: 'certipy', label: 'Certipy', category: 'AD', os: 'linux', class: 'pipx',
       install: 'pipx install certipy-ad', canonical: 'certipy', variants: ['certipy', 'certipy-ad'],
@@ -145,7 +155,7 @@
     { key: 'targetedkerberoast', label: 'targetedKerberoast', category: 'AD', os: 'linux', class: 'git',
       install: 'git clone https://github.com/ShutdownRepo/targetedKerberoast ~/tools/targetedKerberoast',
       canonical: 'targetedKerberoast.py', variants: ['targetedkerberoast', 'targetedKerberoast.py'],
-      source: 'ShutdownRepo/targetedKerberoast', license: 'Apache-2.0', purpose: 'add-SPN → roast an ACL-controlled user' },
+      source: 'ShutdownRepo/targetedKerberoast', license: 'Apache-2.0', purpose: 'add-SPN -> roast an ACL-controlled user' },
     { key: 'sccmhunter', label: 'SCCMHunter', category: 'AD', os: 'linux', class: 'git',
       install: 'git clone https://github.com/garrettfoster13/sccmhunter ~/tools/sccmhunter && pipx install ~/tools/sccmhunter',
       canonical: 'sccmhunter', variants: ['sccmhunter', 'sccmhunter.py'],
@@ -153,11 +163,153 @@
     { key: 'pygpoabuse', label: 'pyGPOAbuse', category: 'AD', os: 'linux', class: 'git',
       install: 'git clone https://github.com/Hackndo/pyGPOAbuse ~/tools/pyGPOAbuse',
       canonical: 'pygpoabuse', variants: ['pygpoabuse', 'pygpoabuse.py'],
-      source: 'Hackndo/pyGPOAbuse', license: 'MIT', purpose: 'GPO edit-rights → scheduled task' },
+      source: 'Hackndo/pyGPOAbuse', license: 'MIT', purpose: 'GPO edit-rights -> scheduled task' },
     { key: 'zerologon-scan', label: 'zerologon (tester)', category: 'AD', os: 'linux', class: 'git',
       install: 'git clone https://github.com/SecuraBV/CVE-2020-1472 ~/tools/zerologon',
       canonical: 'zerologon-scan', variants: ['zerologon-scan', 'zerologon_tester.py'],
       source: 'SecuraBV/CVE-2020-1472', license: 'MIT', purpose: 'safe Zerologon vulnerability check' },
+    // APT tools
+    { key: 'odat', label: 'odat', category: 'Database', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y odat', bins: ['odat'], canonical: 'odat', variants: ['odat'],
+      source: 'kali/odat', license: 'GPL-2.0', purpose: 'Oracle Database Attacking Tool (SID guess, auth, RCE)' },
+    { key: 'mdb-tables', label: 'mdb-tables', category: 'Database', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y mdbtools', bins: ['mdb-tables'], canonical: 'mdb-tables', variants: ['mdb-tables'],
+      source: 'kali/mdbtools', license: 'LGPL-2.0', purpose: 'Microsoft Access (.mdb) table and data extractor' },
+    { key: 'mdb-export', label: 'mdb-export', category: 'Database', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y mdbtools', bins: ['mdb-export'], canonical: 'mdb-export', variants: ['mdb-export'],
+      source: 'kali/mdbtools', license: 'LGPL-2.0', purpose: 'Microsoft Access (.mdb) table and data extractor' },
+    { key: 'mdb-sql', label: 'mdb-sql', category: 'Database', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y mdbtools', bins: ['mdb-sql'], canonical: 'mdb-sql', variants: ['mdb-sql'],
+      source: 'kali/mdbtools', license: 'LGPL-2.0', purpose: 'Microsoft Access (.mdb) table and data extractor' },
+    { key: 'cisco-decrypt', label: 'cisco-decrypt', category: 'Cracking', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y cisco-decrypt', bins: ['cisco-decrypt'], canonical: 'cisco-decrypt', variants: ['cisco-decrypt'],
+      source: 'kali/cisco-decrypt', license: 'GPL-2.0', purpose: 'Decrypt Cisco Type 7 passwords' },
+    { key: 'cewl', label: 'cewl', category: 'Cracking', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y cewl', bins: ['cewl'], canonical: 'cewl', variants: ['cewl'],
+      source: 'kali/cewl', license: 'GPL-2.0', purpose: 'Spider a website to generate a custom wordlist' },
+    { key: 'davtest', label: 'davtest', category: 'Web', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y davtest', bins: ['davtest'], canonical: 'davtest', variants: ['davtest'],
+      source: 'kali/davtest', license: 'GPL-3.0', purpose: 'Test WebDAV servers for uploadable executable file types' },
+    { key: 'cadaver', label: 'cadaver', category: 'Web', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y cadaver', bins: ['cadaver'], canonical: 'cadaver', variants: ['cadaver'],
+      source: 'kali/cadaver', license: 'GPL-2.0', purpose: 'Interactive command-line WebDAV client' },
+    { key: 'eyewitness', label: 'eyewitness', category: 'Web', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y eyewitness', bins: ['eyewitness'], canonical: 'eyewitness', variants: ['eyewitness'],
+      source: 'kali/eyewitness', license: 'GPL-3.0', purpose: 'Screenshot and fingerprint web services at scale' },
+    { key: 'exiftool', label: 'exiftool', category: 'Web', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y libimage-exiftool-perl', bins: ['exiftool'], canonical: 'exiftool', variants: ['exiftool'],
+      source: 'kali/libimage-exiftool-perl', license: 'Perl', purpose: 'Read/write file metadata and craft polyglot image payloads' },
+    { key: 'searchsploit', label: 'searchsploit', category: 'Exploitation', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y exploitdb', bins: ['searchsploit'], canonical: 'searchsploit', variants: ['searchsploit'],
+      source: 'kali/exploitdb', license: 'GPL-2.0', purpose: 'Offline Exploit-DB search and mirror tool' },
+    { key: 'ipmitool', label: 'ipmitool', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y ipmitool', bins: ['ipmitool'], canonical: 'ipmitool', variants: ['ipmitool'],
+      source: 'kali/ipmitool', license: 'BSD-3-Clause', purpose: 'IPMI/BMC management and cipher-0 / RAKP hash extraction' },
+    { key: 'faketime', label: 'faketime', category: 'Support', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y faketime', bins: ['faketime'], canonical: 'faketime', variants: ['faketime'],
+      source: 'kali/faketime', license: 'GPL-2.0', purpose: 'Run a command with a forged system clock (bypass KRB_AP_ERR_SKEW)' },
+    { key: 'rdate', label: 'rdate', category: 'Support', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y rdate', bins: ['rdate'], canonical: 'rdate', variants: ['rdate'],
+      source: 'kali/rdate', license: 'BSD', purpose: 'Sync local system clock against a remote host or DC' },
+    { key: 'dos2unix', label: 'dos2unix', category: 'Support', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y dos2unix', bins: ['dos2unix'], canonical: 'dos2unix', variants: ['dos2unix'],
+      source: 'kali/dos2unix', license: 'FreeBSD', purpose: 'Strip Windows CRLF line endings from shell and exploit scripts' },
+    { key: 'guestmount', label: 'guestmount', category: 'Support', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y libguestfs-tools', bins: ['guestmount'], canonical: 'guestmount', variants: ['guestmount'],
+      source: 'kali/libguestfs-tools', license: 'GPL-2.0', purpose: 'Mount VHD/VHDX/VMDK disk images to extract SAM/SYSTEM hives' },
+    { key: 'pdftotext', label: 'pdftotext', category: 'Support', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y poppler-utils', bins: ['pdftotext'], canonical: 'pdftotext', variants: ['pdftotext'],
+      source: 'kali/poppler-utils', license: 'GPL-2.0', purpose: 'Extract searchable text from generated or looted PDF files' },
+    { key: 'xdotool', label: 'xdotool', category: 'Support', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y xdotool', bins: ['xdotool'], canonical: 'xdotool', variants: ['xdotool'],
+      source: 'kali/xdotool', license: 'BSD-3-Clause', purpose: 'Simulate X11 keystrokes and mouse actions against open displays or VNC' },
+    { key: 'xwd', label: 'xwd', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y x11-apps', bins: ['xwd'], canonical: 'xwd', variants: ['xwd'],
+      source: 'kali/x11-apps', license: 'MIT', purpose: 'Capture screenshots from an unauthenticated X11 display' },
+    { key: 'zabbix_get', label: 'zabbix_get', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y zabbix-get', bins: ['zabbix_get'], canonical: 'zabbix_get', variants: ['zabbix_get'],
+      source: 'kali/zabbix-get', license: 'GPL-2.0', purpose: 'Query Zabbix agent items and trigger remote system.run commands' },
+    { key: 'memcstat', label: 'memcstat', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y libmemcached-tools', bins: ['memcstat'], canonical: 'memcstat', variants: ['memcstat'],
+      source: 'kali/libmemcached-tools', license: 'BSD-3-Clause', purpose: 'Dump stats and keys from an exposed Memcached instance' },
+    { key: 'telnet', label: 'telnet', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y telnet', bins: ['telnet'], canonical: 'telnet', variants: ['telnet'],
+      source: 'kali/telnet', license: 'BSD', purpose: 'Connect to raw TCP services, Telnet daemons, and SMTP servers' },
+    { key: 'tftp', label: 'tftp', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y tftp-hpa', bins: ['tftp'], canonical: 'tftp', variants: ['tftp'],
+      source: 'kali/tftp-hpa', license: 'BSD', purpose: 'UDP Trivial File Transfer Protocol client' },
+    { key: 'rlogin', label: 'rlogin', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y rsh-client', bins: ['rlogin'], canonical: 'rlogin', variants: ['rlogin'],
+      source: 'kali/rsh-client', license: 'BSD', purpose: 'Legacy Berkeley r-services remote login client' },
+    { key: 'rsh', label: 'rsh', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y rsh-client', bins: ['rsh'], canonical: 'rsh', variants: ['rsh'],
+      source: 'kali/rsh-client', license: 'BSD', purpose: 'Legacy Berkeley r-services remote login client' },
+    { key: 'rwho', label: 'rwho', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y rwho', bins: ['rwho'], canonical: 'rwho', variants: ['rwho'],
+      source: 'kali/rwho', license: 'BSD', purpose: 'List logged-in users announced over legacy rwho broadcasts' },
+    { key: 'dnscat2', label: 'dnscat2', category: 'Tunnel', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y dnscat2', bins: ['dnscat2', 'dnscat'], canonical: 'dnscat2', variants: ['dnscat2', 'dnscat'],
+      source: 'kali/dnscat2', license: 'BSD-2-Clause', purpose: 'Encrypted command-and-control and tunneling over DNS queries' },
+    { key: 'iodine', label: 'iodine', category: 'Tunnel', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y iodine', bins: ['iodine', 'iodined'], canonical: 'iodine', variants: ['iodine', 'iodined'],
+      source: 'kali/iodine', license: 'ISC', purpose: 'IPv4-over-DNS tunnel for restrictive egress networks' },
+    { key: 'gdb', label: 'gdb', category: 'Exploitation', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y gdb', bins: ['gdb'], canonical: 'gdb', variants: ['gdb'],
+      source: 'kali/gdb', license: 'GPL-3.0', purpose: 'GNU Debugger for local binary analysis and remote gdbserver RCE' },
+    { key: 'gcc', label: 'gcc', category: 'Exploitation', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y gcc', bins: ['gcc'], canonical: 'gcc', variants: ['gcc'],
+      source: 'kali/gcc', license: 'GPL-3.0', purpose: 'GNU C compiler for building local kernel and LD_PRELOAD exploits' },
+    { key: 'ltrace', label: 'ltrace', category: 'Linux enum', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y ltrace', bins: ['ltrace'], canonical: 'ltrace', variants: ['ltrace'],
+      source: 'kali/ltrace', license: 'GPL-2.0', purpose: 'Trace dynamic library calls to spot hijackable paths and secrets' },
+    { key: '7z', label: '7z', category: 'Support', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y p7zip-full', bins: ['7z'], canonical: '7z', variants: ['7z'],
+      source: 'kali/p7zip-full', license: 'LGPL-2.1', purpose: 'Extract 7z, ZIP, ISO, VHD, and WIM archives' },
+    { key: 'sqlite3', label: 'sqlite3', category: 'Database', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y sqlite3', bins: ['sqlite3'], canonical: 'sqlite3', variants: ['sqlite3'],
+      source: 'kali/sqlite3', license: 'Public Domain', purpose: 'Inspect and dump SQLite database files' },
+    { key: 'rsync', label: 'rsync', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y rsync', bins: ['rsync'], canonical: 'rsync', variants: ['rsync'],
+      source: 'kali/rsync', license: 'GPL-3.0', purpose: 'List and sync exposed rsync modules' },
+    { key: 'smbpasswd', label: 'smbpasswd', category: 'AD', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y samba-common-bin', bins: ['smbpasswd'], canonical: 'smbpasswd', variants: ['smbpasswd'],
+      source: 'kali/samba-common-bin', license: 'GPL-3.0', purpose: 'Change a Windows/Samba password remotely over SMB' },
+    { key: 'snmpbulkwalk', label: 'snmpbulkwalk', category: 'Recon', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y snmp', bins: ['snmpbulkwalk'], canonical: 'snmpbulkwalk', variants: ['snmpbulkwalk'],
+      source: 'kali/snmp', license: 'BSD', purpose: 'Fast bulk walk of SNMP MIB trees' },
+    { key: 'kdestroy', label: 'kdestroy', category: 'AD', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y krb5-user', bins: ['kdestroy'], canonical: 'kdestroy', variants: ['kdestroy'],
+      source: 'kali/krb5-user', license: 'MIT', purpose: 'Purge cached Kerberos tickets from the active ccache' },
+    { key: 'pykeepass', label: 'pykeepass', category: 'Credentials', os: 'linux', class: 'apt',
+      install: 'sudo apt install -y python3-pykeepass', bins: ['pykeepass'], canonical: 'pykeepass', variants: ['pykeepass'],
+      source: 'kali/python3-pykeepass', license: 'GPL-3.0', purpose: 'Python library for reading KeePass .kdbx databases' },
+    // PIPX tools
+    { key: 'olevba', label: 'olevba', category: 'Support', os: 'linux', class: 'pipx',
+      install: 'pipx install oletools', bins: ['olevba'], canonical: 'olevba', variants: ['olevba'],
+      source: 'decalage2/oletools', license: 'BSD-2-Clause', purpose: 'Extract and analyze VBA macros from Office documents' },
+    { key: 'pwncat-cs', label: 'pwncat-cs', category: 'Support', os: 'linux', class: 'pipx',
+      install: 'pipx install pwncat-cs', bins: ['pwncat-cs'], canonical: 'pwncat-cs', variants: ['pwncat-cs'],
+      source: 'calebstewart/pwncat', license: 'MIT', purpose: 'Reverse-shell handler with auto-PTY upgrade and file transfer' },
+    // GIT tools
+    { key: 'krbrelayx', label: 'krbrelayx', category: 'AD', os: 'linux', class: 'git',
+      install: 'git clone https://github.com/dirkjanm/krbrelayx ~/tools/krbrelayx', canonical: 'krbrelayx.py', variants: ['krbrelayx.py', 'krbrelayx'],
+      source: 'dirkjanm/krbrelayx', license: 'MIT', purpose: 'Kerberos relaying and unconstrained delegation abuse' },
+    { key: 'dnstool', label: 'dnstool', category: 'AD', os: 'linux', class: 'git',
+      install: 'git clone https://github.com/dirkjanm/krbrelayx ~/tools/krbrelayx', canonical: 'dnstool.py', variants: ['dnstool.py', 'dnstool'],
+      source: 'dirkjanm/krbrelayx', license: 'MIT', purpose: 'Manipulate Active Directory Integrated DNS (ADIDNS) records over LDAP' },
+    { key: 'timeroast', label: 'timeroast', category: 'AD', os: 'linux', class: 'git',
+      install: 'git clone https://github.com/SecuraBV/Timeroast ~/tools/Timeroast', canonical: 'timeroast.py', variants: ['timeroast.py', 'timeroast'],
+      source: 'SecuraBV/Timeroast', license: 'GPL-2.0', purpose: 'Unauthenticated NTP MS-SNTP computer account hash roasting' },
+    { key: 'vncpwd', label: 'vncpwd', category: 'Cracking', os: 'linux', class: 'git',
+      install: 'git clone https://github.com/trinitronx/vncpasswd.py ~/tools/vncpasswd.py', canonical: 'vncpasswd.py', variants: ['vncpwd', 'vncpasswd.py', 'vncpasswd'],
+      source: 'trinitronx/vncpasswd.py', license: 'GPL-2.0', purpose: 'Decrypt static DES-encrypted VNC password files and hex blobs' },
+    { key: 'ajpshooter.py', label: 'ajpShooter.py', category: 'Web', os: 'linux', class: 'git',
+      install: 'git clone https://github.com/00theway/Ghostcat-CNVD-2020-10487 ~/tools/Ghostcat-CNVD-2020-10487', canonical: 'ajpShooter.py', variants: ['ajpShooter.py', 'ajpshooter.py'],
+      source: '00theway/Ghostcat-CNVD-2020-10487', license: 'Apache-2.0', purpose: 'Apache Tomcat AJP Ghostcat (CVE-2020-1938) file read and RCE' },
+    // Release binary / material
+    { key: 'rmg', label: 'rmg', category: 'Web', os: 'linux', class: 'material',
+      gh_repo: 'qtc-de/remote-method-guesser', gh_asset: 'rmg-.*\\.jar$', dest: 'rmg.jar', bins: ['rmg', 'rmg.jar'], canonical: 'rmg', variants: ['rmg', 'rmg.jar'],
+      source: 'qtc-de/remote-method-guesser', license: 'MIT', purpose: 'Java RMI registry, Activator, and DGC enumeration and deserialization scanner' },
   ];
   // the three coercion PoCs obol references by filename (run-from-repo python)
   [['petitpotam.py', 'topotam/PetitPotam', 'MS-EFSR coercion (PetitPotam)'],
@@ -171,7 +323,15 @@
   });
   INSTALL.forEach(function (e) { e.on_kali = false; A[e.key] = e; });
 
-  // ── 3. Staged materials / compiled binaries — py REGISTRY.
+  // Git aliases
+  A['krbrelayx.py'] = A.krbrelayx;
+  A['dnstool.py'] = A.dnstool;
+  A['timeroast.py'] = A.timeroast;
+  A.vncpasswd = A.vncpwd;
+  A['vncpasswd.py'] = A.vncpwd;
+  A['ajpShooter.py'] = A['ajpshooter.py'];
+
+  // -- 3. Staged materials / compiled binaries - py REGISTRY.
   //    upstream `latest` unless a version is pinned; the .sh records sha256 (trust-on-first-use).
   var PEASS = 'https://github.com/peass-ng/PEASS-ng/releases/latest/download';
   var AV = 'offensive binary, expect Microsoft Defender to flag/quarantine it; obfuscate or load reflectively.';
@@ -187,6 +347,10 @@
       url: 'https://github.com/DominicBreuker/pspy/releases/latest/download/pspy64', dest: 'pspy64', bins: ['pspy64', 'pspy'], source: 'DominicBreuker/pspy', license: 'MIT', purpose: 'unprivileged process/cron snooping' },
     { key: 'socat', label: 'socat (static)', category: 'Tunnel', os: 'linux', class: 'material',
       url: 'https://raw.githubusercontent.com/andrew-d/static-binaries/master/binaries/linux/x86_64/socat', dest: 'socat', bins: ['socat'], source: 'andrew-d/static-binaries', license: 'GPL-2.0', purpose: 'static relays / shell upgrade on the target' },
+    { key: 'oledump', label: 'oledump', category: 'Support', os: 'linux', class: 'material',
+      url: 'https://raw.githubusercontent.com/DidierStevens/DidierStevensSuite/master/oledump.py', dest: 'oledump.py', bins: ['oledump.py', 'oledump'], source: 'DidierStevens/DidierStevensSuite', license: 'Public Domain', purpose: 'Inspect OLE streams and extract VBA macros from Office files' },
+    { key: 'ligolo-agent', label: 'ligolo-agent', category: 'Tunnel', os: 'linux', class: 'stage-lin',
+      gh_repo: 'nicocha30/ligolo-ng', gh_asset: 'ligolo-ng_agent_.*linux_amd64.*\\.tar\\.gz$', extract_member: '(^|/)agent$', dest: 'agent', bins: ['agent', 'ligolo-agent'], source: 'nicocha30/ligolo-ng', license: 'GPL-3.0', purpose: 'Ligolo-ng Linux target-side tunnel agent' },
     // Windows enum / privesc / AD (fetched to Kali, staged into www/ to serve to a Windows target)
     { key: 'winpeas', label: 'winPEAS (x64)', category: 'Windows enum', os: 'windows', class: 'stage-win',
       url: PEASS + '/winPEASx64.exe', dest: 'winPEASx64.exe', bins: ['winPEASx64.exe'], source: 'peass-ng/PEASS-ng', license: 'GPL-3.0', purpose: 'Windows privesc enumeration', av_note: AV },
@@ -195,9 +359,9 @@
     { key: 'powerview', label: 'PowerView', category: 'Windows enum', os: 'windows', class: 'stage-win',
       url: 'https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/master/Recon/PowerView.ps1', dest: 'PowerView.ps1', bins: ['PowerView.ps1'], source: 'PowerShellMafia/PowerSploit', license: 'BSD-3-Clause', purpose: 'AD situational awareness (PowerShell)', av_note: AV },
     { key: 'procdump', label: 'ProcDump', category: 'Windows privesc', os: 'windows', class: 'stage-win',
-      url: 'https://download.sysinternals.com/files/Procdump.zip', dest: 'procdump64.exe', bins: ['procdump64.exe', 'procdump.exe'], source: 'Sysinternals', license: 'Sysinternals EULA', purpose: 'LSASS minidump (signed MS binary)' },
+      url: 'https://download.sysinternals.com/files/Procdump.zip', extract_member: 'procdump64\\.exe$', dest: 'procdump64.exe', bins: ['procdump64.exe', 'procdump.exe'], source: 'Sysinternals', license: 'Sysinternals EULA', purpose: 'LSASS minidump (signed MS binary)' },
     { key: 'godpotato', label: 'GodPotato', category: 'Windows privesc', os: 'windows', class: 'stage-win',
-      url: 'https://github.com/BeichenDream/GodPotato/releases/latest/download/GodPotato-NET4.exe', dest: 'GodPotato-NET4.exe', bins: ['GodPotato-NET4.exe'], source: 'BeichenDream/GodPotato', license: 'MIT', purpose: 'SeImpersonate → SYSTEM (modern Windows)', av_note: AV },
+      url: 'https://github.com/BeichenDream/GodPotato/releases/latest/download/GodPotato-NET4.exe', dest: 'GodPotato-NET4.exe', bins: ['GodPotato-NET4.exe'], source: 'BeichenDream/GodPotato', license: 'MIT', purpose: 'SeImpersonate -> SYSTEM (modern Windows)', av_note: AV },
     { key: 'winpeas-bat', label: 'winPEAS (.bat)', category: 'Windows enum', os: 'windows', class: 'stage-win',
       url: PEASS + '/winPEAS.bat', dest: 'winPEAS.bat', bins: ['winPEAS.bat'], source: 'peass-ng/PEASS-ng', license: 'GPL-3.0', purpose: 'winPEAS for constrained shells', av_note: AV },
     { key: 'rubeus', label: 'Rubeus', category: 'AD', os: 'windows', class: 'stage-win',
@@ -208,14 +372,14 @@
       install: 'pipx install pypykatz', dest: '', bins: ['pypykatz'], source: 'skelsec/pypykatz', license: 'MIT', purpose: 'pure-python LSASS/registry secrets parser' },
     { key: 'sharphound', label: 'SharpHound', category: 'AD', os: 'windows', class: 'stage-win',
       gh_repo: 'BloodHoundAD/SharpHound', gh_asset: 'SharpHound.*\\.zip$', extract_member: 'SharpHound\\.exe$', dest: 'SharpHound.exe', bins: ['SharpHound.exe'], source: 'BloodHoundAD/SharpHound', license: 'GPL-3.0', purpose: 'BloodHound collection from a Windows foothold', av_note: AV },
-    // SharpWSUS publishes NO GitHub releases (the release API 404s) — there is nothing to auto-fetch, so
+    // SharpWSUS publishes NO GitHub releases (the release API 404s) - there is nothing to auto-fetch, so
     // flag it manual: the setup script skips it (no doomed download) and the Loadout card tells the operator
     // where to get it. Keeping the entry preserves the methodology/card for the WSUS lateral-movement lane.
     // nettitude/SharpWSUS publishes no GitHub release, but Flangvik/SharpCollection tracks a compiled build
-    // (same precompiled-binary mirror pattern as the Ghostpack tools) — fetch from there so it stages like the rest.
+    // (same precompiled-binary mirror pattern as the Ghostpack tools) - fetch from there so it stages like the rest.
     { key: 'sharpwsus', label: 'SharpWSUS', category: 'AD', os: 'windows', class: 'stage-win',
-      url: 'https://raw.githubusercontent.com/Flangvik/SharpCollection/master/NetFramework_4.7_Any/SharpWSUS.exe', dest: 'SharpWSUS.exe', bins: ['SharpWSUS.exe'], source: 'nettitude/SharpWSUS (build: Flangvik/SharpCollection)', license: 'BSD-3-Clause', purpose: 'WSUS admin → lateral movement', av_note: AV },
-    // SharpSCCM attaches the compiled .exe (and a merged build) directly to each release — not a .zip — so
+      url: 'https://raw.githubusercontent.com/Flangvik/SharpCollection/master/NetFramework_4.7_Any/SharpWSUS.exe', dest: 'SharpWSUS.exe', bins: ['SharpWSUS.exe'], source: 'nettitude/SharpWSUS (build: Flangvik/SharpCollection)', license: 'BSD-3-Clause', purpose: 'WSUS admin -> lateral movement', av_note: AV },
+    // SharpSCCM attaches the compiled .exe (and a merged build) directly to each release - not a .zip - so
     // match either; the fetch helper's default case moves a bare .exe straight to dest.
     { key: 'sharpsccm', label: 'SharpSCCM', category: 'AD', os: 'windows', class: 'stage-win',
       gh_repo: 'Mayyhem/SharpSCCM', gh_asset: 'SharpSCCM.*\\.(zip|exe)$', extract_member: 'SharpSCCM\\.exe$', dest: 'SharpSCCM.exe', bins: ['SharpSCCM.exe'], source: 'Mayyhem/SharpSCCM', license: 'BSD-3-Clause', purpose: 'SCCM client-push / policy creds', av_note: AV },
@@ -223,11 +387,39 @@
       install: 'pipx install wesng', dest: '', bins: ['wes.py', 'wes'], source: 'bitsadmin/wesng', license: 'BSD-3-Clause', purpose: 'Windows missing-patch suggester (offline, from systeminfo)' },
     { key: 'nc.exe', label: 'nc64.exe', category: 'Tunnel', os: 'windows', class: 'stage-win',
       url: 'https://github.com/int0x33/nc.exe/raw/master/nc64.exe', dest: 'nc64.exe', bins: ['nc64.exe', 'nc.exe'], source: 'int0x33/nc.exe', license: 'GPL-2.0', purpose: 'Windows netcat for callbacks', av_note: AV },
-    // Pivot binaries (multi — proxy on Kali, agent on the target)
+    // Pivot binaries (multi: proxy on Kali, agent on the target)
     { key: 'chisel', label: 'chisel', category: 'Tunnel', os: 'multi', class: 'material',
       gh_repo: 'jpillora/chisel', gh_asset: 'chisel_.*_linux_amd64\\.gz$', dest: 'chisel', bins: ['chisel'], source: 'jpillora/chisel', license: 'MIT', purpose: 'reverse SOCKS / port-forward pivoting' },
     { key: 'ligolo-ng', label: 'ligolo-ng', category: 'Tunnel', os: 'multi', class: 'material',
       gh_repo: 'nicocha30/ligolo-ng', gh_asset: 'ligolo-ng_proxy_.*linux_amd64.*\\.tar\\.gz$', extract_member: '(^|/)proxy$', dest: 'ligolo-proxy', bins: ['proxy', 'ligolo-proxy', 'ligolo-ng'], source: 'nicocha30/ligolo-ng', license: 'GPL-3.0', purpose: 'route-backed pivoting (proxy on Kali, agent on target)' },
+    { key: 'ligolo-agent-win', label: 'ligolo-agent-win', category: 'Tunnel', os: 'windows', class: 'stage-win',
+      gh_repo: 'nicocha30/ligolo-ng', gh_asset: 'ligolo-ng_agent_.*windows_amd64.*\\.zip$', extract_member: 'agent\\.exe$', dest: 'agent.exe', bins: ['agent.exe'], source: 'nicocha30/ligolo-ng', license: 'GPL-3.0', purpose: 'Ligolo-ng Windows target-side tunnel agent', av_note: AV },
+    { key: 'chisel-win', label: 'chisel-win', category: 'Tunnel', os: 'windows', class: 'stage-win',
+      gh_repo: 'jpillora/chisel', gh_asset: 'chisel_.*_windows_amd64\\.(zip|gz)$', extract_member: 'chisel\\.exe$', dest: 'chisel.exe', bins: ['chisel.exe'], source: 'jpillora/chisel', license: 'MIT', purpose: 'Chisel Windows client for reverse SOCKS / port-forward pivoting', av_note: AV },
+    { key: 'printspoofer', label: 'PrintSpoofer', category: 'Windows privesc', os: 'windows', class: 'stage-win',
+      url: 'https://github.com/itm4n/PrintSpoofer/releases/latest/download/PrintSpoofer64.exe', dest: 'PrintSpoofer64.exe', bins: ['PrintSpoofer64.exe', 'PrintSpoofer.exe'], source: 'itm4n/PrintSpoofer', license: 'MIT', purpose: 'SeImpersonate -> SYSTEM via named-pipe spooler abuse', av_note: AV },
+    { key: 'juicypotato', label: 'JuicyPotato', category: 'Windows privesc', os: 'windows', class: 'stage-win',
+      url: 'https://github.com/ohpe/juicy-potato/releases/latest/download/JuicyPotato.exe', dest: 'JuicyPotato.exe', bins: ['JuicyPotato.exe'], source: 'ohpe/juicy-potato', license: 'GPL-3.0', purpose: 'SeImpersonate -> SYSTEM on legacy Windows (Server 2016 / Win10 < 1809)', av_note: AV },
+    { key: 'juicypotatong', label: 'JuicyPotatoNG', category: 'Windows privesc', os: 'windows', class: 'stage-win',
+      url: 'https://github.com/antonioCoco/JuicyPotatoNG/releases/latest/download/JuicyPotatoNG.zip', extract_member: 'JuicyPotatoNG\\.exe$', dest: 'JuicyPotatoNG.exe', bins: ['JuicyPotatoNG.exe'], source: 'antonioCoco/JuicyPotatoNG', license: 'MIT', purpose: 'Modern DCOM/BITS SeImpersonate -> SYSTEM privilege escalation', av_note: AV },
+    { key: 'accesschk', label: 'accesschk', category: 'Windows privesc', os: 'windows', class: 'stage-win',
+      url: 'https://download.sysinternals.com/files/AccessChk.zip', extract_member: 'accesschk64\\.exe$', dest: 'accesschk64.exe', bins: ['accesschk64.exe', 'accesschk.exe'], source: 'Sysinternals', license: 'Sysinternals EULA', purpose: 'Inspect Windows service, file, and registry DACLs from command line' },
+    { key: 'certify', label: 'Certify', category: 'AD', os: 'windows', class: 'stage-win',
+      url: 'https://github.com/r3motecontrol/Ghostpack-CompiledBinaries/raw/master/Certify.exe', dest: 'Certify.exe', bins: ['Certify.exe'], source: 'GhostPack/Certify', license: 'BSD-3-Clause', purpose: 'AD CS template enumeration and ESC exploitation from a Windows foothold', av_note: AV },
+    { key: 'whisker', label: 'Whisker', category: 'AD', os: 'windows', class: 'stage-win',
+      url: 'https://raw.githubusercontent.com/Flangvik/SharpCollection/master/NetFramework_4.7_Any/Whisker.exe', dest: 'Whisker.exe', bins: ['Whisker.exe'], source: 'eladshamir/Whisker', license: 'BSD-3-Clause', purpose: 'Shadow Credentials (msDS-KeyCredentialLink) manipulation from Windows', av_note: AV },
+    { key: 'krbrelayup', label: 'KrbRelayUp', category: 'AD', os: 'windows', class: 'stage-win',
+      url: 'https://raw.githubusercontent.com/Flangvik/SharpCollection/master/NetFramework_4.7_Any/KrbRelayUp.exe', dest: 'KrbRelayUp.exe', bins: ['KrbRelayUp.exe'], source: 'Dec0ne/KrbRelayUp', license: 'MIT', purpose: 'Local privilege escalation via Kerberos relaying and Shadow Credentials', av_note: AV },
+    { key: 'watson', label: 'Watson', category: 'Windows privesc', os: 'windows', class: 'stage-win',
+      url: 'https://raw.githubusercontent.com/Flangvik/SharpCollection/master/NetFramework_4.7_Any/Watson.exe', dest: 'Watson.exe', bins: ['Watson.exe'], source: 'rasta-mouse/Watson', license: 'MIT', purpose: 'Enumerate missing Windows KB patches for local kernel privilege escalation', av_note: AV },
+    { key: 'powerup', label: 'PowerUp', category: 'Windows privesc', os: 'windows', class: 'stage-win',
+      url: 'https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/master/Privesc/PowerUp.ps1', dest: 'PowerUp.ps1', bins: ['PowerUp.ps1'], source: 'PowerShellMafia/PowerSploit', license: 'BSD-3-Clause', purpose: 'PowerShell local Windows privilege-escalation checks (Invoke-AllChecks)', av_note: AV },
+    { key: 'privesccheck', label: 'PrivescCheck', category: 'Windows privesc', os: 'windows', class: 'stage-win',
+      url: 'https://github.com/itm4n/PrivescCheck/releases/latest/download/PrivescCheck.ps1', dest: 'PrivescCheck.ps1', bins: ['PrivescCheck.ps1'], source: 'itm4n/PrivescCheck', license: 'MIT', purpose: 'Comprehensive PowerShell Windows privilege-escalation enumerator', av_note: AV },
+    { key: 'domainpasswordspray', label: 'DomainPasswordSpray', category: 'AD', os: 'windows', class: 'stage-win',
+      url: 'https://raw.githubusercontent.com/dafthack/DomainPasswordSpray/master/DomainPasswordSpray.ps1', dest: 'DomainPasswordSpray.ps1', bins: ['DomainPasswordSpray.ps1'], source: 'dafthack/DomainPasswordSpray', license: 'MIT', purpose: 'Lockout-aware Active Directory password spraying from a Windows foothold', av_note: AV },
+    { key: 'invoke-powershelltcp', label: 'Invoke-PowerShellTcp', category: 'Windows privesc', os: 'windows', class: 'stage-win',
+      url: 'https://raw.githubusercontent.com/samratashok/nishang/master/Shells/Invoke-PowerShellTcp.ps1', dest: 'Invoke-PowerShellTcp.ps1', bins: ['Invoke-PowerShellTcp.ps1', 'rev.ps1'], source: 'samratashok/nishang', license: 'GPL-3.0', purpose: 'Nishang PowerShell interactive reverse shell script (stager / rev.ps1)', av_note: AV },
   ];
   MAT.forEach(function (e) {
     if (e.on_kali === undefined) e.on_kali = false;
@@ -238,18 +430,38 @@
     A[e.key] = e;
   });
 
-  // ligolo-agent / ligolo-proxy aliases some moves reference → fold onto ligolo-ng
+  // Staged tool aliases
+  A['oledump.py'] = A.oledump;
+  A.PrintSpoofer = A.printspoofer;
+  A.JuicyPotatoNG = A.juicypotatong;
+  A.Watson = A.watson;
+  A['les.sh'] = A['linux-exploit-suggester'];
+  A.les = A['linux-exploit-suggester'];
+
+  // ligolo-agent / ligolo-proxy aliases some moves reference -> fold onto ligolo-ng
   ['ligolo-agent', 'ligolo-proxy'].forEach(function (n) { if (!A[n]) A[n] = A['ligolo-ng']; });
 
-  // ── 4. Shells + OS-native binaries — nothing to install/stage; present by definition.
+  // -- 4. Shells + OS-native binaries - nothing to install/stage; present by definition.
   ['bash', 'sh', 'cmd', 'powershell', 'pwsh', 'stty', 'script', 'sudo', 'wmic', 'sc', 'reg',
-   'icacls', 'accesschk', 'certutil', 'msiexec', 'lxc', 'pymongo'].forEach(function (n) {
+   'icacls', 'certutil', 'msiexec', 'lxc', 'pymongo',
+   'cat', 'grep', 'find', 'ln', 'tar', 'unzip', 'strings', 'uname', 'ip', 'systemctl',
+   'busctl', 'sudoedit', 'screen', 'tmux', 'git', 'python', 'ruby', 'gpg', 'docker',
+   'kubectl', 'aws', 'az', 'gcloud', 'wsl', 'net', 'schtasks', 'type', 'diskshadow',
+   'fodhelper', 'procmon', 'sqlplus', 'burp', 'graphql', 'barmie', 'quiche-client'].forEach(function (n) {
     if (!A[n]) A[n] = { key: n, label: n, category: 'Built-in', os: 'multi', class: 'builtin',
       on_kali: true, install: '', canonical: n, variants: [n], source: '', license: '', purpose: 'shell / OS-native binary' };
   });
 
   // a few remaining referenced tools
-  A.psexec = A.psexec || A['impacket-psexec'];                 // bare `psexec` → impacket
+  A.psexec = A.psexec || A['impacket-psexec'];                 // bare `psexec` -> impacket
+  A.secretsdump = A.secretsdump || A['impacket-secretsdump'];
+  A.mssqlclient = A.mssqlclient || A['impacket-mssqlclient'];
+  A.smbexec = A.smbexec || A['impacket-smbexec'];
+  A.wmiexec = A.wmiexec || A['impacket-wmiexec'];
+  A.dcomexec = A.dcomexec || A['impacket-dcomexec'];
+  A['owneredit.py'] = A['owneredit.py'] || A['impacket-owneredit'];
+  A.impacket = A.impacket || A['impacket-secretsdump'];
+  A.msfconsole = A.msfconsole || A.metasploit;
   // Debian dropped the standalone `ntpdate` package; the command now ships in `ntpsec-ntpdate`. Install-if-missing.
   A.ntpdate = A.ntpdate || { key: 'ntpdate', label: 'ntpdate', category: 'Support', os: 'linux', class: 'apt',
     on_kali: false, install: 'sudo apt install -y ntpsec-ntpdate', bins: ['ntpdate'], canonical: 'ntpdate', variants: ['ntpdate'], source: 'kali/ntpsec-ntpdate', license: '', purpose: 'clock sync before Kerberos (KRB_AP_ERR_SKEW)' };
@@ -258,7 +470,7 @@
   // the Zerologon exploit restore helpers live in the same SecuraBV repo as the tester
   ['set_empty_pw.py', 'reinstall_original_pw.py'].forEach(function (n) { if (!A[n]) A[n] = A['zerologon-scan']; });
 
-  // One-line "what it is / what it's for" blurbs for the Loadout hover cards — the base Kali tools ship with
+  // One-line "what it is / what it's for" blurbs for the Loadout hover cards - the base Kali tools ship with
   // no purpose text, so the catalog can't teach without them. Proper sentence capitalization; kept terse.
   var PURPOSE = {
     nmap: 'Port + service scanner, the backbone of every box\'s recon.',
@@ -343,7 +555,7 @@
   };
   Object.keys(PURPOSE).forEach(function (k) { if (A[k] && !(A[k].purpose || '').trim()) A[k].purpose = PURPOSE[k]; });
 
-  // Fuller "what it is / what you use it for" descriptions for the Loadout hover cards — written to teach a
+  // Fuller "what it is / what you use it for" descriptions for the Loadout hover cards - written to teach a
   // newcomer, not just label the tool. (`purpose` stays the short chip/catalog label.) Educational; proper caps.
   var DESC = {
     nmap: 'The go-to network scanner. Run it first on any target to discover open ports and fingerprint the services and versions behind them, the map that tells you where to attack.',
@@ -425,7 +637,7 @@
     metasploit: 'The Metasploit Framework console, a huge library of exploits, payloads, and post-exploitation modules in one tool. (OSCP limits its use to a single target.)',
     msfvenom: 'Generates payloads and shellcode in any format (exe, elf, raw, and more), most often used to build a reverse shell to deliver to a target.',
     'git-dumper': 'Reconstructs a web app’s source code from an exposed .git directory, which frequently contains hard-coded credentials and secrets in its history.',
-    certipy: 'The AD Certificate Services attack tool. Finds and exploits vulnerable certificate templates (ESC1–ESC8) to obtain certs that authenticate as privileged users.',
+    certipy: 'The AD Certificate Services attack tool. Finds and exploits vulnerable certificate templates (ESC1-ESC8) to obtain certs that authenticate as privileged users.',
     bloodyad: 'Reads and abuses Active Directory objects over LDAP, enumerate what you can write to, then flip attributes or ACLs to escalate privileges.',
     coercer: 'Forces a Windows host (often a DC) to authenticate to you across many RPC methods, the trigger half of coerce-and-relay attacks like PetitPotam.',
     pywhisker: 'Adds “shadow credentials” (a key you control) to an account you can write to, letting you authenticate as it via certificates, a stealthy takeover.',
@@ -455,7 +667,7 @@
     sharphound: 'The data collector for BloodHound. Run it on a Windows foothold to gather AD objects, sessions, and ACLs, then analyze the output to find paths to Domain Admin.',
     sharpwsus: 'Abuses an internal WSUS (Windows Update) server you control to push a malicious update to its clients, a lateral-movement and privilege-escalation path in enterprise AD.',
     sharpsccm: 'Attacks Microsoft SCCM/MECM from a client, extract network-access-account credentials and abuse client-push to run code on other managed machines.',
-    wesng: 'Windows Exploit Suggester – Next Generation. Compares a host’s patch level (from systeminfo) against Microsoft’s database to list missing patches with public exploits.',
+    wesng: 'Windows Exploit Suggester - Next Generation. Compares a host’s patch level (from systeminfo) against Microsoft’s database to list missing patches with public exploits.',
     'nc.exe': 'A Windows build of netcat. Upload it to a target to create reverse shells or move data when the built-in tools are limited.',
     chisel: 'A fast TCP/UDP tunnel over HTTP. Run the server on Kali and the client on a compromised host to build a SOCKS proxy or port-forwards into internal networks.',
     'ligolo-ng': 'A modern pivoting tool that creates a real network interface to the target’s internal subnets, so you reach internal hosts as if locally connected, cleaner than proxychains.',
@@ -532,7 +744,7 @@
     if (A[n]) { if (!(A[n].desc || '').trim()) A[n].desc = A.nxc.desc; if (!(A[n].example || '').trim()) A[n].example = A.nxc.example; }
   });
 
-  // One canonical example per tool for the Loadout hover cards — teaching syntax a newcomer can adapt
+  // One canonical example per tool for the Loadout hover cards - teaching syntax a newcomer can adapt
   // (placeholders like <target> / <user> / <dc-ip>). Educational invocation only; swap in your own values.
   var EXAMPLE = {
     nmap: 'nmap -sC -sV -p- -oN scan.txt <target>',
@@ -638,6 +850,20 @@
     pypykatz: 'pypykatz lsa minidump lsass.dmp',
   };
   Object.keys(EXAMPLE).forEach(function (k) { if (A[k] && !A[k].example) A[k].example = EXAMPLE[k]; });
+
+  Object.keys(A).forEach(function (k) {
+    var e = A[k];
+    var lk = k.toLowerCase();
+    if (!A[lk]) A[lk] = e;
+    if (e && typeof e === 'object') {
+      var aliases = [].concat(e.variants || [], e.bins || [], e.dest ? [e.dest] : []);
+      aliases.forEach(function (al) {
+        var lal = String(al || '').toLowerCase();
+        if (lal && !A[lal]) A[lal] = e;
+        if (al && !A[al]) A[al] = e;
+      });
+    }
+  });
 
   OBOL.ARSENAL = A;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

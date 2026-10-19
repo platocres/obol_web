@@ -18,24 +18,47 @@
       + '|' + (c.secret || c.nthash || '');
   }
 
+  function normType(raw, nthash, secret) {
+    if (nthash && !secret) return 'NT';
+    var u = String(raw || '').toUpperCase();
+    if (u === 'NT' || u === 'NTHASH') return 'NT';
+    if (u === 'PW' || u === 'PASSWORD') return 'PW';
+    if (u === 'OT' || u === 'OTHER') return 'OT';
+    return nthash ? 'NT' : (secret ? 'PW' : '?');
+  }
+
   // Gather deduped credentials from the engagement ledger + proven facts.
   function gather(eng, fs) {
     eng = eng || (OBOL.store && OBOL.store.active());
     fs = fs || (OBOL.store && OBOL.store.factSet());
     var out = [], seen = {};
-    function push(c) { var k = keyOf(c); if (!c.user || seen[k]) return; seen[k] = 1; out.push(c); }
+    function push(c) {
+      var k = keyOf(c);
+      if (!c.user) return;
+      if (seen[k]) {
+        if (c.source === 'proven') seen[k].source = 'proven';
+        if (!seen[k].scope && c.scope) seen[k].scope = c.scope;
+        return;
+      }
+      seen[k] = c;
+      out.push(c);
+    }
     ((eng && eng.credentials) || []).forEach(function (c) {
-      push({ user: c.user || c.username || '', domain: c.domain || '', secret: c.secret || c.password || '',
-        nthash: c.nthash || c.hash || '', type: c.secretType || ((c.nthash || c.hash) ? 'NT' : ((c.secret || c.password) ? 'PW' : '?')),
-        source: 'logged' });
+      var sec = c.secret || c.password || '';
+      var nth = c.nthash || c.hash || '';
+      push({ user: c.user || c.username || '', domain: c.domain || '', secret: sec,
+        nthash: nth, type: normType(c.secretType, nth, sec),
+        source: c.source || 'logged', scope: c.scope || '' });
     });
     ((fs && fs.facts) || []).forEach(function (f) {
       if (f.state !== 'supported') return;
       if (f.kind !== 'credential.available' && f.kind !== 'credential.plaintext' && f.kind !== 'credential.admin') return;
       var v = f.value || {}; if (!v.user) return;
-      var dom = v.domain || (String(f.scope || '').indexOf('domain:') === 0 ? f.scope.slice(7) : '');
-      push({ user: v.user, domain: dom, secret: v.password || '', nthash: v.nthash || v.hash || '',
-        type: (v.nthash || v.hash) ? 'NT' : (v.password ? 'PW' : '?'), source: 'proven', scope: f.scope });
+      var dom = v.domain || ((String(f.scope || '').indexOf('domain:') === 0 && f.scope !== 'domain:domain') ? f.scope.slice(7) : '');
+      var sec = v.password || '';
+      var nth = v.nthash || v.hash || '';
+      push({ user: v.user, domain: dom, secret: sec, nthash: nth,
+        type: normType(v.secretType, nth, sec), source: 'proven', scope: f.scope });
     });
     return out;
   }
@@ -45,7 +68,18 @@
     eng = eng || (OBOL.store && OBOL.store.active());
     var p = (eng && eng.params) || {};
     if (!p.username) return '';
-    return keyOf({ user: p.username, domain: p.domain, secret: p.password, nthash: p.nthash });
+    var exact = keyOf({ user: p.username, domain: p.domain, secret: p.password, nthash: p.nthash });
+    var list = gather(eng);
+    for (var i = 0; i < list.length; i++) {
+      if (keyOf(list[i]) === exact) return exact;
+    }
+    if (p.domain) {
+      var noDom = keyOf({ user: p.username, domain: '', secret: p.password, nthash: p.nthash });
+      for (var j = 0; j < list.length; j++) {
+        if (keyOf(list[j]) === noDom) return noDom;
+      }
+    }
+    return exact;
   }
 
   // Add a manually-entered credential (a hash or any other secret) to the engagement ledger, so it
@@ -70,11 +104,14 @@
   // Make this credential the active one: push it into params so every command re-fills.
   function activate(cred) {
     if (!cred) return;
+    var sec = cred.secret || cred.password || '';
+    var nth = cred.nthash || cred.hash || '';
     OBOL.store.update(function (eng) {
       eng.params = eng.params || {};
       eng.params.username = cred.user || '';
-      eng.params.password = cred.secret || '';
-      eng.params.nthash = cred.nthash || '';
+      if (sec) { eng.params.password = sec; eng.params.nthash = ''; }
+      else if (nth) { eng.params.nthash = nth; eng.params.password = ''; }
+      else { eng.params.password = ''; eng.params.nthash = ''; }
       if (cred.domain) eng.params.domain = cred.domain;
     }, 'params');
     if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();

@@ -458,9 +458,9 @@ README.md                  operator-facing tour
 CLAUDE.md                  the active build's plan of record + status log
 docs/
   MOVE-ENGINE.md           the move/ranking contract (read before touching moves)
-  DECISION-MAP.md          the decision graph
-  PARITY-OBOL-LOCAL.md     the obol-local source-of-truth map
-  ...
+  DECISION-MAP.md          the decision graph and gap-report guide
+  FLAG-PATHS.md            generated port-to-flag reachability map (tools/flag-paths.js --emit)
+  tasks/                   self-contained implementation specs for active backlog items
 assets/
   css/obol.css             the single stylesheet (tokens + light/dark)
   engine/                  the pure, shared engine (window / worker / Node)

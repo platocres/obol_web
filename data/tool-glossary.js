@@ -57,6 +57,7 @@
       '-r': 'Follow redirects.',
       '-H': 'Add a request header such as a cookie.',
       '--wildcard': 'Continue even when the server returns a wildcard response for everything.',
+      '--append-domain': 'Append the base domain to each word in vhost mode (gobuster 3.5+).',
     },
     feroxbuster: {
       '-f': 'Add a trailing slash to each request.',
@@ -236,6 +237,7 @@
       '--pw-nt-hash': 'Treat the supplied password as an NTLM hash.',
       '-k': 'Use Kerberos authentication (needs a ticket in KRB5CCNAME).',
       '-no-pass': 'Send no password, authenticate with the Kerberos ticket.',
+      '--no-pass': 'Send no password (anonymous, null session, or Kerberos ticket).',
       '-W': 'Workgroup / domain for the login.',
       '-p': 'Target port (445 default, 139 for the legacy SMB service).',
     },

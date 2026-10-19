@@ -1,5 +1,5 @@
 /*!
- * obol ui — quickpaste.js — the one global paste.
+ * obol ui - quickpaste.js - the one global paste.
  *
  * A header-reachable overlay (the trigger lives in the sticky appbar, so it is available from any
  * surface, Learn included) that runs the SAME ingest pipeline as the Evidence route: conservative
@@ -17,10 +17,9 @@
 
   function routeOptions() {
     var eng = OBOL.store.active() || {};
-    var cur = (eng.params || {}).target || '';
     var ts = (eng.targets || []).map(function (t) { return t.ip || ''; }).filter(Boolean);
-    return '<option value="auto">Auto-route by the IP in the output (recommended)</option>'
-      + ts.map(function (ip) { return '<option value="' + U.attr(ip) + '"' + (ip === cur ? ' selected' : '') + '>Force everything onto ' + esc(ip) + '</option>'; }).join('');
+    return '<option value="auto" selected>Auto-route by the IP in the output (recommended)</option>'
+      + ts.map(function (ip) { return '<option value="' + U.attr(ip) + '">Force everything onto ' + esc(ip) + '</option>'; }).join('');
   }
 
   function build() {
@@ -71,16 +70,27 @@
   function rawPaste(text, route) {
     var eng = OBOL.store.active() || {};
     var known = (eng.targets || []).map(function (t) { return t.ip; }).filter(Boolean);
-    var tip = (route && route !== 'auto') ? route : (OBOL.ingest.detectTarget('', text, { known: known }) || (eng.params || {}).target || '');
+    var last = (OBOL.ingest && typeof OBOL.ingest.getLastCopied === 'function') ? OBOL.ingest.getLastCopied() : null;
+    var tip = (route && route !== 'auto') ? route : (OBOL.ingest.detectTarget((last && last.command) || '', text, { known: known, lhost: (eng.params && eng.params.lhost) || '' }) || (last && last.target) || (eng.params || {}).target || '');
     if (tip && known.indexOf(tip) < 0) {
       OBOL.store.update(function (e) {
         e.targets = e.targets || [];
         if (!e.targets.some(function (t) { return t.ip === tip; })) e.targets.push({ id: 't-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), ip: tip, hostname: '', os: '', source: 'paste' });
-        if (!e.params) e.params = {}; if (!e.params.target) e.params.target = tip;
+        if (!e.params) e.params = {};
+        if (!e.params.target) {
+          e.params.target = tip;
+          e.activeTarget = tip;
+        }
       }, 'targets');
       if (OBOL.facts) OBOL.store.addFacts([OBOL.facts.makeFact({ kind: 'target.configured', scope: 'host:' + tip, source: 'paste' })], 'facts');
     }
-    var rr = OBOL.ingest.run({ text: text, scope: tip ? ('host:' + tip) : undefined, source: 'paste' });
+    var rr = OBOL.ingest.run({
+      text: text,
+      command: (last && last.command) || '',
+      actionId: (last && last.actionId) || '',
+      scope: tip ? ('host:' + tip) : undefined,
+      source: 'paste'
+    });
     return { ok: !!(rr && rr.ok), added: (rr && rr.added) || 0, imported: 1, hosts: tip ? [tip] : [] };
   }
 
@@ -89,15 +99,22 @@
     var route = _overlay.querySelector('#qp-route').value || 'auto';
     var resEl = _overlay.querySelector('#qp-result');
     if (!text.trim()) { resEl.innerHTML = '<span class="qp-err">Paste some output first.</span>'; return; }
-    resEl.innerHTML = '<span class="qp-wait">Reading…</span>';
+    resEl.innerHTML = '<span class="qp-wait">Reading...</span>';
     OBOL.ingest.ensureParsers().then(function (okp) {
       if (!okp) { resEl.innerHTML = '<span class="qp-err">Parsers are unavailable right now.</span>'; return; }
       var r;
       try { r = OBOL.ingest.importSession(text, { target: route, fileName: '' }); }
       catch (e) { r = { ok: false, reason: (e && e.message) || 'error' }; }
       // No prompt-anchored commands found: it is a single raw output paste, not a full session.
-      if (r && r.ok && r.imported === 0) { try { r = rawPaste(text, route); } catch (e) { r = { ok: false, reason: (e && e.message) || 'error' }; } }
+      if (r && r.ok && r.imported === 0 && !r.arsenal) { try { r = rawPaste(text, route); } catch (e) { r = { ok: false, reason: (e && e.message) || 'error' }; } }
       if (!r || !r.ok) { resEl.innerHTML = '<span class="qp-err">Could not read that (' + esc((r && r.reason) || 'error') + ').</span>'; return; }
+      if (r.arsenal && r.arsenal.ok) {
+        resEl.innerHTML = '<div class="qp-ok"><b>Loadout synced:</b> ' + r.arsenal.present + ' tools ready, ' + r.arsenal.staged + ' staged, ' + (r.arsenal.wordlists || 0) + ' wordlists mapped. <a href="#/loadout" data-qp-close>Open Loadout -></a></div>';
+        if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+        if (OBOL.router) OBOL.router.render();
+        try { U.toast('Loadout stocked ' + r.arsenal.present + ' tools, ' + r.arsenal.staged + ' staged'); } catch (e) {}
+        return;
+      }
       var hosts = r.hosts || [];
       var msg;
       if (r.added === 0) {
@@ -107,7 +124,8 @@
         if (hosts.length) msg += ', filed under ' + hosts.map(function (h) { return '<code>' + esc(h) + '</code>'; }).join(', ');
         msg += '.';
       }
-      resEl.innerHTML = '<div class="qp-ok">' + msg + ' <a href="#/evidence" data-qp-close>Open Evidence →</a></div>';
+      resEl.innerHTML = '<div class="qp-ok">' + msg + ' <a href="#/evidence" data-qp-close>Open Evidence -></a></div>';
+      if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
       if (OBOL.router) OBOL.router.render();
       try { U.toast(r.added ? ('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's')) : 'Nothing new proven'); } catch (e) {}
     });

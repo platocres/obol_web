@@ -45,7 +45,7 @@ const checks = [
   { pack: 'recon_2026_09', action: 'vnc-desktop-shell', mustHave: ['vncpwd'] },
   // Batch 2 (Ranks 26-45 additions):
   { pack: 'ad_2026_09', action: 'timeroasting', mustHave: ['-M timeroast', '31300'], produces: 'hash.sntp' },
-  { pack: 'ad_2026_09', action: 'ad-recycle-bin-enum', mustHave: ['isDeleted', '1.2.840.113556.1.4.417'], produces: 'ad.deleted_objects' },
+  { pack: 'ad_2026_09', action: 'ad-recycle-bin-enum', mustHave: ['isDeleted', '1.2.840.113556.1.4.417'], produces: 'credential.candidate' },
   { pack: 'ad_2026_09', action: 'azuread-connect-dump', mustHave: ['Get-MSOLCredentials.ps1'], produces: 'credential.admin' },
   { pack: 'cracking_2026_09', action: 'vnc-decrypt', mustHave: ['vncpwd'], produces: 'credential.available' },
   { pack: 'linux_privesc_2026_09', action: 'wildcard-symlink-privesc', mustHave: ['ln -s /root/root.txt', 'unzip -p'], produces: 'objective.root_flag' },
