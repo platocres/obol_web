@@ -230,9 +230,7 @@
     return '<div class="tb-field' + wide + '" data-field-id="' + esc(field.id) + '" data-filter="' + attr(hay) + '"' + (hidden ? ' hidden' : '') + '>' + fieldControl(builder, field, values[field.id]) + snippetsHtml(field) + presetsHtml(field) + '</div>';
   }
   function groupsFor(builder) {
-    var pf = primaryField(builder);
-    var pfid = pf ? pf.id : null;
-    var fields = (builder.fields || []).filter(function (f) { return !pfid || f.id !== pfid; });
+    var fields = (builder.fields || []);
     var byId = {}; fields.forEach(function (f) { byId[f.id] = f; });
     if (Array.isArray(builder.fieldGroups) && builder.fieldGroups.length) {
       var claimed = {};
@@ -241,7 +239,6 @@
           title: g.title,
           description: g.description,
           fields: (g.fields || []).map(function (id) {
-            if (id === pfid) return null;
             claimed[id] = true;
             return byId[id];
           }).filter(Boolean)
@@ -500,10 +497,14 @@
       return true;
     } catch (e) { return false; }
   }
-  function shellParams() {
+  function shellParams(bodyEl) {
     var manual = OBOL.bind && OBOL.bind.isManual && OBOL.bind.isManual();
     var p = manual ? {} : ((OBOL.store.active() || {}).params || {});
-    return { lhost: p.lhost || '', lport: p.lport || '4444' };
+    var lhEl = bodyEl && bodyEl.querySelector ? bodyEl.querySelector('.shk-lhost') : null;
+    var lpEl = bodyEl && bodyEl.querySelector ? bodyEl.querySelector('.shk-lport') : null;
+    var lh = lhEl ? lhEl.value.trim() : (p.lhost || '');
+    var lp = lpEl ? lpEl.value.trim() : (p.lport || '4444');
+    return { lhost: lh, lport: lp || '4444' };
   }
   function shellStationCard(open) {
     return '<article class="tool-card station-card shell-station lane-shells' + (open ? ' open' : '') + '" data-station-id="shell">'
@@ -526,7 +527,7 @@
     var ENC_MODES = [{ id: 'raw', label: 'Raw' }, { id: 'b64', label: 'Base64' }, { id: 'url', label: 'URL' }];
     function encMode() { var m = ((OBOL.store.active() || {}).ui || {}).shellEnc || 'raw'; return ENC_MODES.some(function (e) { return e.id === m; }) ? m : 'raw'; }
     function draw() {
-      var sp = shellParams();
+      var sp = shellParams(body);
       var catchers = SK.catchers();
       var cur = ((OBOL.store.active() || {}).ui || {}).shellCatcher || 'nc';
       if (!catchers.some(function (c) { return c.id === cur; })) cur = 'nc';
@@ -575,7 +576,7 @@
         + '</div>';
     }
     function updateCommands() {
-      var sp = shellParams();
+      var sp = shellParams(body);
       var em = encMode();
       var pays = SK.payloads(sp.lhost || 'LHOST', sp.lport || '4444');
       var allPaySecs = body.querySelectorAll('.shk-pays');
@@ -626,7 +627,7 @@
       U.toast(okd ? 'Web shell downloaded' : 'Download blocked by the browser', okd ? '' : 'err');
     });
     U.on(body, 'click', '.shk-dl', function () {
-      var sp = shellParams();
+      var sp = shellParams(body);
       var cur = ((OBOL.store.active() || {}).ui || {}).shellCatcher || 'nc';
       var kit = SK.listenerKit({ lhost: sp.lhost || 'LHOST', lport: sp.lport || '4444', catcher: cur });
       var okd = downloadText('obol-listener-' + (sp.lport || '4444') + '.sh', kit);
@@ -713,8 +714,13 @@
 
   // ================================ panel mounting ================================
   function collect(form, builder) {
-    var out = {};
-    (builder.fields || []).forEach(function (f) { var el = form.elements ? form.elements.namedItem(f.id) : null; if (!el) return; out[f.id] = f.type === 'checkbox' ? !!el.checked : el.value; });
+    var out = Object.assign({}, (form && form._panelState) || {});
+    (builder.fields || []).forEach(function (f) {
+      var el = (form && form.elements) ? form.elements.namedItem(f.id) : null;
+      if (!el) return;
+      out[f.id] = f.type === 'checkbox' ? !!el.checked : el.value;
+      if (form && form._panelState) form._panelState[f.id] = out[f.id];
+    });
     return out;
   }
   function applyVisibility(form, builder, values) {
@@ -722,7 +728,11 @@
   }
   function setFormValue(form, builder, fid, val) {
     var f = (builder.fields || []).filter(function (x) { return x.id === fid; })[0]; if (!f) return;
-    var el = form.elements && form.elements.namedItem(fid); if (!el) return;
+    if (form) {
+      form._panelState = form._panelState || {};
+      form._panelState[fid] = f.type === 'checkbox' ? truthy(val) : (val == null ? '' : val);
+    }
+    var el = form && form.elements && form.elements.namedItem(fid); if (!el) return;
     if (f.type === 'checkbox') el.checked = truthy(val); else el.value = (val == null ? '' : val);
   }
 
@@ -842,6 +852,7 @@
     panelEl.innerHTML = panelBody(builder, start, activeRecipe);
 
     var form = panelEl.querySelector('.tb-form');
+    if (form) form._panelState = Object.assign({}, start);
     var code = panelEl.querySelector('.tb-code');
     var edit = panelEl.querySelector('.tb-edit');
     var render = panelEl.querySelector('.tb-render');
@@ -891,8 +902,12 @@
       for (var i = 0; i < chips.length; i++) {
         var fid = chips[i].getAttribute('data-toggle-field'), f = fieldsById[fid];
         var vis = !(f && f.visibleWhen && !TB.conditionMatches(f.visibleWhen, norm));
+        if (!vis && truthy(current[fid])) {
+          setFormValue(form, builder, fid, false);
+          current[fid] = false;
+        }
         chips[i].hidden = !vis;
-        var on = truthy(current[fid]);
+        var on = vis && truthy(current[fid]);
         chips[i].classList.toggle('on', on); chips[i].setAttribute('aria-pressed', on ? 'true' : 'false');
       }
     }
@@ -933,16 +948,17 @@
     }
     function recompile(save) {
       var current = collect(form, builder);
-      applyVisibility(form, builder, TB.normalizeValues(builder, current, context));
-      var activeId = TK ? TK.matchingRecipe(builder, TB.normalizeValues(builder, current, context)) : null;
+      syncToggleChips(current);
+      var norm = TB.normalizeValues(builder, current, context);
+      applyVisibility(form, builder, norm);
+      var activeId = TK ? TK.matchingRecipe(builder, norm) : null;
       // reflect active recipe tile
       var tiles = panelEl.querySelectorAll('.tb-recipe');
       for (var ti = 0; ti < tiles.length; ti++) { var on = tiles[ti].getAttribute('data-recipe') === activeId; tiles[ti].classList.toggle('selected', on); tiles[ti].classList.toggle('is-glow', on); tiles[ti].setAttribute('aria-pressed', on ? 'true' : 'false'); }
       if (liveName) liveName.textContent = activeId ? (TK.recipeById(builder.id, activeId) || {}).label || '' : 'custom';
       edited = false;
-      syncModeChips(current);
-      syncToggleChips(current);
-      syncRecipeFilter(current);
+      syncModeChips(norm);
+      syncRecipeFilter(norm);
       renderNeeds(current);
       try { showCmd(TB.compile(builder, current, context), true); }
       catch (err) {
@@ -951,7 +967,7 @@
         // placeholdered command cannot compile (e.g. no executable selected).
         var pv = compilePreview(builder, current, context);
         if (pv) showCmd(pv, 'preview');
-        else { var missing = TB.validateRequired(builder, TB.normalizeValues(builder, current, context)); showCmd(missing.length ? ('Fill the ' + missing.length + ' required field' + (missing.length > 1 ? 's' : '') + ' below to build this command.') : 'Complete the required fields to generate a command.', false); }
+        else { var missing = TB.validateRequired(builder, norm); showCmd(missing.length ? ('Fill the ' + missing.length + ' required field' + (missing.length > 1 ? 's' : '') + ' below to build this command.') : 'Complete the required fields to generate a command.', false); }
       }
       // select option descriptions
       var sels = form.querySelectorAll('select');

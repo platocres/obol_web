@@ -1,11 +1,11 @@
 /*!
- * obol engine — toolbuilder.js
+ * obol engine - toolbuilder.js
  * The Tool Builder command COMPILER
  * data/tool-builder-current.js + data/tool-builder-schema.js. Pure and runtime-independent:
  * it validates a builder definition, resolves field values (defaults + dotted-key autofill),
  * and compiles the {executable, tokens[]} model into a single shell-safe command string.
  *
- * It NEVER executes anything — it only produces text. Builders that declare an execution hook
+ * It NEVER executes anything - it only produces text. Builders that declare an execution hook
  * (execute/exec/spawn/runCommand/autoRun) are rejected by validate(). Attaches to `root` under
  * OBOL.toolbuilder using the same module pattern as the rest of the engine, so it runs in the
  * browser, a Web Worker, and Node (the smoke test loads it directly).
@@ -257,6 +257,11 @@
         if (value !== '' && value != null) out[field.id] = value;
       }
       if (out[field.id] === undefined && field.default !== undefined) out[field.id] = field.default;
+    });
+    arr(builder && builder.fields).forEach(function (field) {
+      if (field && field.type === 'checkbox' && field.visibleWhen && !conditionMatches(field.visibleWhen, out)) {
+        out[field.id] = false;
+      }
     });
     return out;
   }
