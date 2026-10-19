@@ -32,7 +32,8 @@ function isLocal(url) {
 function hashOf(url, missing) {
   const file = path.join(ROOT, url.split('?')[0]);
   if (!fs.existsSync(file)) { missing.push(url); return null; }
-  return crypto.createHash('sha1').update(fs.readFileSync(file)).digest('hex').slice(0, 8);
+  const norm = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  return crypto.createHash('sha1').update(norm, 'utf8').digest('hex').slice(0, 8);
 }
 
 function main() {
