@@ -32,14 +32,9 @@
   };
 
   var PRESETS = {
-    htb: { name: 'Hack The Box', aliases: ['hackthebox', 'hack-the-box'],
-      flag_names: ['user.txt', 'root.txt'], flag_formats: ['hex32', 'hex64', 'brace'],
-      slots: { 'user.txt': 'local', 'root.txt': 'root' } },
-    cpts: { name: 'Hack The Box CPTS', aliases: ['htb-cpts', 'hackthebox-cpts', 'htb-exam'],
-      flag_names: ['flag.txt', 'user.txt', 'root.txt'], flag_formats: ['hex32', 'hex64', 'brace', 'token'],
-      slots: { 'user.txt': 'local', 'root.txt': 'root' },
-      proof: { required_slots: [], note: 'CPTS is graded on the report: capture each finding with reproducible evidence (command + output), and screenshot each flag with a host-identity command in the same terminal.' } },
-    oscp: { name: 'OffSec OSCP', aliases: ['offsec', 'offensive-security', 'pen-200', 'pen200'],
+    oscp: { name: 'OffSec OSCP', aliases: ['offsec', 'offensive-security', 'pen-200', 'pen200', 'oscp+'],
+      flags_enabled: true, default_lens: 'oscp+', report_profile: 'oscp',
+      objective_label: 'local.txt, proof.txt',
       flag_names: ['local.txt', 'proof.txt'], flag_formats: ['hex32', 'hex64', 'token'],
       slots: { 'local.txt': 'local', 'proof.txt': 'root' },
       proof: { required_slots: ['local', 'root'],
@@ -47,23 +42,64 @@
         points: { local: 10, root: 10, flag: 10 }, pass_threshold: 70, ad_set_points: 40,
         points_note: 'OSCP: local.txt + proof.txt = 20 pts/standalone machine; 70 to pass. The AD set scores all-or-nothing (40).' } },
     pwk: { name: 'OffSec Labs', aliases: ['oscp-lab', 'oscp-labs', 'offsec-lab', 'offsec-labs', 'pen-200-labs', 'pen200-labs'],
+      flags_enabled: true, default_lens: 'oscp+', report_profile: 'oscp',
+      objective_label: 'local.txt, proof.txt',
       flag_names: ['local.txt', 'proof.txt'], flag_formats: ['hex32', 'hex64', 'token'],
       slots: { 'local.txt': 'local', 'proof.txt': 'root' } },
+    cpts: { name: 'Hack The Box CPTS', aliases: ['htb-cpts', 'hackthebox-cpts', 'htb-exam'],
+      flags_enabled: true, default_lens: 'all', report_profile: 'cpts',
+      platform_focus: ['ad.', 'web.', 'pivot.', 'credential.', 'privesc.'],
+      objective_label: 'flag.txt, user.txt, root.txt (12/14 to pass)',
+      flag_names: ['flag.txt', 'user.txt', 'root.txt'], flag_formats: ['hex32', 'hex64', 'brace', 'token'],
+      slots: { 'user.txt': 'local', 'root.txt': 'root' },
+      proof: { required_slots: [], points: { local: 1, root: 1, flag: 1 }, pass_threshold: 12,
+        note: 'CPTS is graded on the report and 12/14 flags: capture each finding with reproducible evidence (command + output), CVSS/CWE, and screenshot each flag with a host-identity command in the same terminal.',
+        points_note: 'HTB CPTS: 12 of 14 flags required to reach the passing threshold, graded on a commercial-standard penetration test report.' } },
+    pnpt: { name: 'TCM Security PNPT', aliases: ['tcm-pnpt', 'tcm', 'tcm-security', 'practical-network-penetration-tester'],
+      flags_enabled: false, default_lens: 'all', report_profile: 'pnpt',
+      platform_focus: ['ad.', 'credential.', 'kerberos', 'hash.', 'smb.', 'ldap.', 'pivot.', 'domain.'],
+      objective_label: 'Domain Compromise · No CTF flags',
+      flag_names: [], flag_formats: [], slots: {},
+      proof: { required_slots: [], no_flags: true,
+        note: 'PNPT has no CTF flags: the objective is full Active Directory Domain Controller compromise starting from external/OSINT scope, graded on a professional client pentest report and live debrief.',
+        points_note: 'TCM PNPT: No CTF flags exist. Compromise the Domain Controller (Domain Admin / SYSTEM) and document the full attack path and remediations.' } },
+    htb: { name: 'Hack The Box', aliases: ['hackthebox', 'hack-the-box'],
+      flags_enabled: true, default_lens: 'all', report_profile: 'cpts',
+      objective_label: 'user.txt, root.txt',
+      flag_names: ['user.txt', 'root.txt'], flag_formats: ['hex32', 'hex64', 'brace'],
+      slots: { 'user.txt': 'local', 'root.txt': 'root' } },
     thm: { name: 'TryHackMe', aliases: ['tryhackme', 'try-hack-me'],
+      flags_enabled: true, default_lens: 'all', report_profile: 'generic',
+      objective_label: 'user.txt, root.txt, flag.txt',
       flag_names: ['user.txt', 'root.txt', 'flag.txt', 'flag1.txt', 'flag2.txt'], flag_formats: ['brace', 'hex32', 'token'],
       slots: { 'user.txt': 'local', 'root.txt': 'root' } },
     ctf: { name: 'Capture the Flag', aliases: ['capture-the-flag'],
+      flags_enabled: true, default_lens: 'all', report_profile: 'technical',
+      objective_label: 'flag.txt, flag, proof.txt',
       flag_names: ['flag.txt', 'flag', 'flag1.txt', 'proof.txt'], flag_formats: ['brace', 'uuid', 'hex32', 'hex64', 'token'], slots: {} },
+    client: { name: 'Client Pentest', aliases: ['organization', 'org', 'corporate', 'pentest', 'consulting', 'client-pentest', 'org-pentest'],
+      flags_enabled: false, default_lens: 'all', report_profile: 'client',
+      platform_focus: ['service.', 'web.', 'ad.', 'credential.', 'privesc.'],
+      objective_label: 'Client Deliverable · No CTF flags',
+      flag_names: [], flag_formats: [], slots: {},
+      proof: { required_slots: [], no_flags: true,
+        note: 'Client assessments have no CTF flags: capture reproducible command + output evidence and host identity for every finding to support business impact and remediation.',
+        points_note: 'Organization Assessment: Focus on vulnerability validation, business impact proof, and actionable remediation guidance.' } },
     oswp: { name: 'OffSec OSWP', aliases: ['offsec-wireless', 'wep-500', 'pen-210', 'pen210'],
+      flags_enabled: false, default_lens: 'all', report_profile: 'oswp',
+      platform_focus: ['wifi.', 'credential.'],
+      objective_label: 'WPA/WEP Handshake & Key',
       flag_names: DEFAULT_FLAG_NAMES.slice(), flag_formats: DEFAULT_FORMATS.slice(), slots: Object.assign({}, DEFAULT_SLOTS),
-      proof: { required_slots: [], note: 'OSWP is graded on the report: for each authorized network, show the captured handshake/PMKID, the crack, and the recovered key with evidence.', wifi_screenshots: true } },
+      proof: { required_slots: [], no_flags: true, note: 'OSWP is graded on the report: for each authorized network, show the captured handshake/PMKID, the crack, and the recovered key with evidence.', wifi_screenshots: true } },
     custom: { name: 'Custom', aliases: ['default', 'generic', 'lab'],
+      flags_enabled: true, default_lens: 'all', report_profile: 'generic',
+      objective_label: 'user.txt, root.txt, local.txt, proof.txt',
       flag_names: DEFAULT_FLAG_NAMES.slice(), flag_formats: DEFAULT_FORMATS.slice(), slots: Object.assign({}, DEFAULT_SLOTS) },
   };
   var DEFAULT_PLATFORM = 'custom';
-  var EXAM_PLATFORMS = { oscp: true, oswp: true, cpts: true };
+  var EXAM_PLATFORMS = { oscp: true, oswp: true, cpts: true, pnpt: true };
   var OSID_PLATFORMS = { oscp: true, oswp: true };
-  var EXAM_LAB_COUNTERPART = { oscp: 'pwk', pwk: 'oscp', cpts: 'htb', htb: 'cpts' };
+  var EXAM_LAB_COUNTERPART = { oscp: 'pwk', pwk: 'oscp', cpts: 'htb', htb: 'cpts', pnpt: 'client', client: 'pnpt' };
 
   var MACHINE_TYPES = {
     standalone: { name: 'Standalone server', aliases: ['standalone', 'server', 'box'], focus: ['service.', 'web.', 'http.', 'ftp.', 'ssh.', 'exploit.'] },
@@ -74,19 +110,11 @@
     wireless: { name: 'Wireless / Wi-Fi target', aliases: ['wifi', 'wlan', 'wireless', 'oswp'], focus: ['wifi.', 'credential.'] },
   };
 
-  // ── Learner workflow presets ────────────────────────────────────────────────
+  // Learner workflow presets:
   // Neurodivergent and disabled learners differ in the ORDER they like to attack a box, and a coach that
   // fights that order is exhausting. These presets express a personal workflow as a set of focus prefixes,
-  // fed to the ranker as a NUDGE (the same modest, within-phase bonus the machine-type focus uses) — never an
-  // override: a clearly evidence-driven #1 (a fresh keystone, the endgame cash-in) always stays #1. They let a
-  // learner tell the coach "I grab both flags before I ever pivot" or "surface the pivot the moment a second
-  // network shows" and have Next Steps lean that way, predictably, every box.
-  //   'balanced'    — no personal nudge; pure evidence/phase order (the engine's own judgement).
-  //   'flags-first' — capture the user flag, then escalate to the admin/root flag, BEFORE committing to a
-  //                   pivot. Nudges the flag hunts + the privesc that unlocks the root flag above pivoting,
-  //                   so "mark the admin flag off my list, then pivot" is the path of least resistance.
-  //   'pivot-aware' — surface multi-homing / tunnelling as soon as a second network or a route appears, so a
-  //                   learner who likes to map the whole lab before escalating sees the pivot early.
+  // fed to the ranker as a NUDGE (the same modest, within-phase bonus the machine-type focus uses) - never an
+  // override: a clearly evidence-driven #1 (a fresh keystone, the endgame cash-in) always stays #1.
   var WORKFLOWS = {
     balanced: { name: 'Balanced (let the coach decide)', aliases: ['balanced', 'default', 'auto', 'none'], focus: [] },
     'flags-first': { name: 'Flags first, pivot last', aliases: ['flags-first', 'flags', 'flag-first', 'objective-first', 'admin-first'],
@@ -117,15 +145,38 @@
   function normalizePlatform(v) { var k = slug(v); return ALIAS_TO_ID[k] || ALIAS_TO_ID[String(v || '').trim().toLowerCase()] || ''; }
   function normalizeMachineType(v) { return MACHINE_ALIAS[slug(v)] || ''; }
   function machineFocus(mt) { var m = MACHINE_TYPES[normalizeMachineType(mt)]; return m ? m.focus.slice() : []; }
+  function platformFocus(plat) { var p = PRESETS[normalizePlatform(plat)]; return (p && p.platform_focus) ? p.platform_focus.slice() : []; }
   // A normalized workflow id, defaulting to 'balanced' so an unset or unknown preference never nudges.
   function normalizeWorkflow(v) { return WORKFLOW_ALIAS[slug(v)] || ''; }
   function workflowFocus(wf) { var w = WORKFLOWS[normalizeWorkflow(wf)]; return w ? w.focus.slice() : []; }
-  // The combined ranker nudge for an engagement profile: machine-type focus + the learner's workflow
-  // preference. The one place the UI and tests should ask for "what focus does this profile imply", so the
-  // two never drift apart.
+  function hasFlags(profile) {
+    var prof = normalizeProfile(profile);
+    if (prof.flag_names && prof.flag_names.length) return true;
+    var preset = PRESETS[prof.platform] || PRESETS[DEFAULT_PLATFORM];
+    return preset.flags_enabled !== false;
+  }
+  function defaultLens(profile) {
+    var prof = normalizeProfile(profile);
+    var preset = PRESETS[prof.platform] || PRESETS[DEFAULT_PLATFORM];
+    return preset.default_lens || 'oscp+';
+  }
+  function reportProfileFor(profile) {
+    var prof = normalizeProfile(profile);
+    var preset = PRESETS[prof.platform] || PRESETS[DEFAULT_PLATFORM];
+    return preset.report_profile || 'oscp';
+  }
+  // The combined ranker nudge for an engagement profile: platform focus + machine-type focus + workflow
+  // preference. On flagless profiles (PNPT, Client, OSWP), 'objective.' is excluded from workflow nudges.
   function profileFocus(profile) {
     var prof = profile || {};
-    return machineFocus(prof.machine_type).concat(workflowFocus(prof.workflow));
+    var raw = platformFocus(prof.platform).concat(machineFocus(prof.machine_type)).concat(workflowFocus(prof.workflow));
+    var flagsOn = hasFlags(prof);
+    var seen = {}, out = [];
+    raw.forEach(function (f) {
+      if (!flagsOn && f === 'objective.') return;
+      if (f && !seen[f]) { seen[f] = 1; out.push(f); }
+    });
+    return out;
   }
   function isExamPlatform(p) { return !!EXAM_PLATFORMS[normalizePlatform(p)]; }
   function counterpartPlatform(p) {
@@ -149,6 +200,10 @@
     return Object.keys(PRESETS).map(function (pid) {
       var p = PRESETS[pid];
       return { id: pid, name: p.name, flag_names: p.flag_names.slice(), flag_formats: p.flag_formats.slice(),
+        flags_enabled: p.flags_enabled !== false,
+        objective_label: p.objective_label || p.flag_names.join(', '),
+        default_lens: p.default_lens || 'oscp+',
+        report_profile: p.report_profile || 'oscp',
         exam: !!EXAM_PLATFORMS[pid], osid: !!OSID_PLATFORMS[pid], ad_set: !!((p.proof || {}).ad_set_points) };
     });
   }
@@ -166,7 +221,7 @@
     if (mt) out.machine_type = mt;
     var wf = normalizeWorkflow(data.workflow);
     if (wf && wf !== DEFAULT_WORKFLOW) out.workflow = wf;
-    ['candidate', 'osid'].forEach(function (k) { if (data[k] != null && data[k] !== '') out[k] = String(data[k]).trim(); });
+    ['candidate', 'osid', 'client', 'assessor'].forEach(function (k) { if (data[k] != null && data[k] !== '') out[k] = String(data[k]).trim(); });
     if (Array.isArray(data.ad_set)) out.ad_set = data.ad_set.map(function (h) { return String(h).trim(); }).filter(Boolean);
     if (Array.isArray(data.scope)) out.scope = data.scope.map(function (s) { return String(s).trim(); }).filter(Boolean);
     return out;
@@ -175,10 +230,18 @@
   function resolveFlagConfig(profile) {
     var prof = normalizeProfile(profile);
     var preset = PRESETS[prof.platform] || PRESETS[DEFAULT_PLATFORM];
-    var names = (prof.flag_names && prof.flag_names.length ? prof.flag_names : preset.flag_names) || DEFAULT_FLAG_NAMES;
+    var flagsOn = hasFlags(prof);
+    var names = (prof.flag_names && prof.flag_names.length ? prof.flag_names : preset.flag_names);
+    if (!names || (!names.length && flagsOn)) names = DEFAULT_FLAG_NAMES;
     var formats = (prof.flag_formats && prof.flag_formats.length ? prof.flag_formats : preset.flag_formats) || DEFAULT_FORMATS;
     var slots = Object.assign({}, DEFAULT_SLOTS, preset.slots || {});
-    return { platform: prof.platform, platform_name: preset.name, names: cleanNames(names), formats: cleanFormats(formats).length ? cleanFormats(formats) : DEFAULT_FORMATS.slice(), slots: slots };
+    return {
+      platform: prof.platform, platform_name: preset.name,
+      flags_enabled: flagsOn,
+      names: cleanNames(names),
+      formats: cleanFormats(formats).length ? cleanFormats(formats) : DEFAULT_FORMATS.slice(),
+      slots: slots,
+    };
   }
 
   function resolveProofConfig(profile) {
@@ -186,8 +249,11 @@
     var preset = PRESETS[prof.platform] || PRESETS[DEFAULT_PLATFORM];
     var spec = Object.assign({}, DEFAULT_PROOF, preset.proof || {});
     var slots = (spec.required_slots || []).filter(function (s) { return ['local', 'root', 'flag'].indexOf(s) >= 0; });
+    var flagsOn = hasFlags(prof);
     return {
       platform: prof.platform, platform_name: preset.name,
+      flags_enabled: flagsOn, no_flags: !flagsOn || !!spec.no_flags,
+      objective_label: preset.objective_label || '',
       required_slots: slots, required: !!slots.length,
       identity_linux: spec.identity_linux.slice(), identity_windows: spec.identity_windows.slice(),
       note: spec.note, points: Object.assign({}, spec.points),
@@ -208,7 +274,8 @@
     WORKFLOWS: WORKFLOWS, DEFAULT_WORKFLOW: DEFAULT_WORKFLOW,
     FORMAT_PATTERNS: FORMAT_PATTERNS, DEFAULT_FLAG_NAMES: DEFAULT_FLAG_NAMES, DEFAULT_FORMATS: DEFAULT_FORMATS,
     normalizePlatform: normalizePlatform, normalizeMachineType: normalizeMachineType, normalizeWorkflow: normalizeWorkflow,
-    machineFocus: machineFocus, workflowFocus: workflowFocus, profileFocus: profileFocus,
+    machineFocus: machineFocus, platformFocus: platformFocus, workflowFocus: workflowFocus, profileFocus: profileFocus,
+    hasFlags: hasFlags, defaultLens: defaultLens, reportProfileFor: reportProfileFor,
     isExamPlatform: isExamPlatform, counterpartPlatform: counterpartPlatform,
     toggledPlatform: toggledPlatform, listPresets: listPresets, listMachineTypes: listMachineTypes, listWorkflows: listWorkflows,
     normalizeProfile: normalizeProfile, resolveFlagConfig: resolveFlagConfig, resolveProofConfig: resolveProofConfig,

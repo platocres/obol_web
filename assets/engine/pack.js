@@ -1,8 +1,8 @@
 /*!
- * obol engine — pack.js
+ * obol engine - pack.js
  * Methodology packs: fact-gated actions loaded from data, plus the planner. An Action is
  * a methodology branch expressed as data: what facts must already be proven (`requires_*`),
- * what a successful run can prove (`produces`, as fact kinds), and — conservatively — what
+ * what a successful run can prove (`produces`, as fact kinds), and - conservatively - what
  * it does *not* prove. The planner asks which actions the current facts unlock, which are
  * blocked and why, and ranks the unlocked ones by the phase/frontier model.
  *
@@ -30,11 +30,11 @@
   // (d.locus / d.scope) and otherwise DERIVE from the move's tool + gates, so new moves get a sensible
   // default with zero data churn and the handful of judgment calls can be pinned in the override maps.
   //
-  // locus — where you operate relative to the target host, lowest-friction first:
+  // locus - where you operate relative to the target host, lowest-friction first:
   //   'R' remote/offline from Kali · 'F' one-shot code-exec on the box · 'I' interactive on-host session.
   // The coach prefers R, then F, then I: staying off-host is faster and safer in a timed lab, and the
   // on-host parsers are a safety net for when you are legitimately on the box, never a nudge to go there.
-  var LOCUS_REMOTE = { // run from Kali against the target, or offline on Kali — off-host either way
+  var LOCUS_REMOTE = { // run from Kali against the target, or offline on Kali - off-host either way
     nmap: 1, rustscan: 1, masscan: 1, dig: 1, nslookup: 1, ffuf: 1, gobuster: 1, feroxbuster: 1, dirb: 1,
     curl: 1, wget: 1, nikto: 1, wpscan: 1, whatweb: 1, 'gobuster-vhost': 1,
     nxc: 1, netexec: 1, crackmapexec: 1, cme: 1, ldapsearch: 1, windapsearch: 1, smbmap: 1, smbclient: 1,
@@ -78,7 +78,7 @@
   // ---- per-COMMAND locus, for the Next Steps Remote/On-Host toggle ---------------------------------
   // This is a DIFFERENT axis from the move-level ranking locus above. The ranking locus asks "where is it
   // launched from" (prefer off-host). This asks the question a learner actually cares about: "does this
-  // command put me ON the host?" — because OSCP only counts a flag read from a session on the target. By
+  // command put me ON the host?" - because OSCP only counts a flag read from a session on the target. By
   // this axis a tool that hands you a shell (ssh, evil-winrm, rdp, psexec) is ON-HOST even though it is
   // launched from Kali; a tool that only interrogates or acts on the host from Kali (nmap, nxc, hydra) is
   // REMOTE. A command may pin its own locus with d.locus on the command object for the rare odd case.
@@ -124,6 +124,9 @@
   function defaultCommandLocus(move) {
     var prod = (move && move.produces) || [];
     for (var i = 0; i < prod.length; i++) if (OBJECTIVE_FLAG_RE.test(prod[i])) return 'onhost';
+    var loci = moveCommandLoci(move);
+    if (loci.onhost && !loci.remote) return 'onhost';
+    if (loci.remote && !loci.onhost) return 'remote';
     return 'remote';
   }
 
@@ -167,7 +170,7 @@
       var s = sb[i];
       if (s === 'objective.flag_located') {
         var text = (cmd.run || '') + ' ' + (cmd.note || '');
-        var isRoot = /(?:[*\\/.]|flag_path_)root\b|(?:[*\\/.]|flag_path_)proof\b|root\.txt|proof\.txt|root\/proof/i.test(text);
+        var isRoot = /(?:[*\\/.]|flag_path_)root\b|(?:[*\\/.]|flag_path_)proof\b|root\.txt|proof\.txt|root\/proof|Administrator\\+Desktop/i.test(text);
         var isLocal = /(?:[*\\/.]|flag_path_)local\b|user\.txt|local\.txt|\*user\*\.txt|\buser flag\b/i.test(text);
         if (isRoot && !isLocal) {
           var hasRoot = (facts.values('objective.flag_located') || []).some(function (v) { return v && v.slot === 'root'; })
@@ -179,6 +182,34 @@
           var hasLocal = (facts.values('objective.flag_located') || []).some(function (v) { return v && v.slot === 'local'; })
             || facts.has('objective.local_flag') || facts.has('objective.flag_located_local');
           if (hasLocal) return true;
+          continue;
+        }
+      }
+      if (s === 'ad.group_joined' && facts.has('ad.attack_paths')) {
+        var apVals = facts.values('ad.attack_paths') || [];
+        var joinedMap = {};
+        (facts.values('ad.group_joined') || []).forEach(function (jv) {
+          if (jv && jv.group) joinedMap[String(jv.group).split('@')[0].trim().toLowerCase()] = 1;
+        });
+        var groupHops = [];
+        for (var p = 0; p < apVals.length; p++) {
+          var hops = (apVals[p] && apVals[p].path) || [];
+          for (var h = 0; h < hops.length; h++) {
+            var hop = hops[h];
+            if (!hop || /^memberof$/i.test(String(hop.edge || ''))) continue;
+            var isGrp = /group/i.test(String(hop.to_kind || '')) || /^add(?:member|self)$/i.test(String(hop.edge || ''));
+            if (!isGrp && !hop.to_kind && hop.to && !/^getchanges/i.test(String(hop.edge || ''))) {
+              var shortTo = String(hop.to).split('@')[0].trim();
+              var domPart = String(hop.to).indexOf('@') >= 0 ? String(hop.to).split('@')[1].trim() : '';
+              if (shortTo && (!domPart || shortTo.toLowerCase() !== domPart.toLowerCase()) && shortTo.indexOf('.') < 0) isGrp = true;
+            }
+            if (isGrp && hop.to) groupHops.push(String(hop.to).split('@')[0].trim().toLowerCase());
+          }
+          if (groupHops.length || hops.length) break;
+        }
+        if (groupHops.length > 0) {
+          var allJoined = groupHops.every(function (gn) { return !!joinedMap[gn]; });
+          if (allJoined) return true;
           continue;
         }
       }
@@ -243,18 +274,26 @@
   // settled, and not skipped (skipFn lets the UI exclude commands gated on facts the operator has not
   // earned yet), prefer the house toolkit (nxc), then a switchless probe, then earliest pack order. Falls
   // back to the first locus-matching command (even if settled/gated) so the toggle always has a target.
-  function preferredCommandIndex(move, locus, facts, skipFn) {
-    var cs = (move && move.commands) || [], best = -1, bestRank = 99, bestProbe = false, bestFeasible = false, i;
+  function preferredCommandIndex(move, locus, facts, skipFn, triedFn) {
+    var cs = (move && move.commands) || [], best = -1, bestTried = true, bestRank = 99, bestProbe = false, bestFeasible = false, i;
     for (i = 0; i < cs.length; i++) {
       if (commandLocus(cs[i]) !== locus) continue;
       if (commandSettled(cs[i], facts)) continue;
       if (!commandIsEligible(cs[i], facts)) continue;
       if (skipFn && skipFn(cs[i], i)) continue;
+      var tried = !!(triedFn && triedFn(cs[i], i));
       var portCheck = (OBOL.command && OBOL.command.commandPortFeasible) ? OBOL.command.commandPortFeasible(cs[i], facts) : { feasible: true };
       var feasible = portCheck.feasible !== false;
       var rank = commandToolkitRank(cs[i]), probe = rank === 0 && isSwitchlessProbe(cs[i]);
-      if (best === -1 || (feasible && !bestFeasible) || (feasible === bestFeasible && (rank < bestRank || (rank === bestRank && probe && !bestProbe)))) {
-        best = i; bestRank = rank; bestProbe = probe; bestFeasible = feasible;
+      if (
+        best === -1 ||
+        (!tried && bestTried) ||
+        (tried === bestTried && (
+          (feasible && !bestFeasible) ||
+          (feasible === bestFeasible && (rank < bestRank || (rank === bestRank && probe && !bestProbe)))
+        ))
+      ) {
+        best = i; bestTried = tried; bestRank = rank; bestProbe = probe; bestFeasible = feasible;
       }
     }
     if (best === -1) for (i = 0; i < cs.length; i++) if (commandLocus(cs[i]) === locus && commandIsEligible(cs[i], facts)) return i;
@@ -268,7 +307,7 @@
     return 1;
   }
 
-  // scope — where a technique sits in the OSCP syllabus, for a newcomer-safe lens:
+  // scope - where a technique sits in the OSCP syllabus, for a newcomer-safe lens:
   //   'oscp' core exam material · 'oscp+' modern AD past the core · 'beyond' exotic / legacy / edge CVEs.
   // Default is 'oscp'; a move escalates only when its id, tool, or an earned gate fact matches a curated
   // signal. Curated (not auto-derived) because syllabus placement is a judgment call, overridable via d.scope.
@@ -278,17 +317,17 @@
   var SCOPE_PLUS_TOOLS = { certipy: 1, pywhisker: 1, ntlmrelayx: 1, responder: 1, coercer: 1, mitm6: 1,
     'impacket-ticketer': 1, 'impacket-rbcd': 1, 'impacket-dacledit': 1, 'impacket-getst': 1, bloodyad: 1,
     'petitpotam.py': 1, 'printerbug.py': 1, 'dfscoerce.py': 1, pygpoabuse: 1, targetedkerberoast: 1 };
-  // Note: credential.certificate is deliberately NOT a plus-fact — it is overloaded (an ADCS cert in AD,
+  // Note: credential.certificate is deliberately NOT a plus-fact - it is overloaded (an ADCS cert in AD,
   // but also a bare SSH key for ssh-key-login, which is core). ADCS is caught by the certipy tool + the
   // adcs.vulnerable gate instead. Likewise the id regex uses `shadow-cred`, not a bare `shadow`, so that
-  // crack-shadow (cracking /etc/shadow — core OSCP) is not mistaken for the shadow-credentials attack.
+  // crack-shadow (cracking /etc/shadow - core OSCP) is not mistaken for the shadow-credentials attack.
   var SCOPE_PLUS_FACTS = { 'adcs.vulnerable': 1, 'ad.coerced_auth': 1, 'ad.unconstrained': 1,
     'ad.gpo_control': 1, 'ad.gpo_writable': 1, 'ad.gmsa': 1, 'hash.krbtgt': 1, 'ad.control_paths': 1, 'relay.success': 1 };
   var SCOPE_PLUS_ID_RE = /deleg|shadow-cred|rbcd|dacl|golden|silver|gpo|relay|coerce|unconstrained|constrained/;
   function deriveScope(d) {
     if (d.scope) return d.scope;
     var id = String(d.id || '').toLowerCase();
-    // Key the tool signal on the PRIMARY tool only — a secondary tool in the array (e.g. targetedKerberoast
+    // Key the tool signal on the PRIMARY tool only - a secondary tool in the array (e.g. targetedKerberoast
     // listed alongside the standard GetUserSPNs Kerberoast) must not escalate an otherwise-core move.
     var primary = String((d.tool || (d.tools && d.tools[0]) || '')).toLowerCase();
     var gates = (d.requires_all || []).concat(d.requires_any || []);
@@ -372,24 +411,47 @@
             var meth = (c.method || '').toLowerCase();
             var isCrack = meth.indexOf('crack') >= 0 || meth.indexOf('hashcat') >= 0 || meth.indexOf('john') >= 0;
             if (!isCrack) return false;
-            if (hasTgs && c.hash_type && c.hash_type !== 'tgs') return false;
-            if (hasAsrep && c.hash_type && c.hash_type !== 'asrep') return false;
+            var ht = String(c.hash_type || '').toLowerCase();
+            if (hasTgs && ht && ht !== 'tgs' && ht !== 'krb5tgs') return false;
+            if (hasAsrep && ht && ht !== 'asrep' && ht !== 'krb5asrep') return false;
             return true;
           });
           if (!cracked) return false;
         }
       }
     }
-    // True once every produced kind is already proven — re-running gains no new facts.
+    // True once every produced kind is already proven - re-running gains no new facts.
     var pk = this.produces;
     if (!pk.length) return false;
     var have = facts.kinds();
-    for (var i = 0; i < pk.length; i++) { if (!have[pk[i]]) return false; }
+    if (this.id === 'bloodhound-collect' && (have['ad.graph.collected'] || have['ad.attack_paths'])) return true;
+    if (this.id === 'ad-path-manual' && ((have['ad.attack_paths'] && have['ad.acl_lead']) || have['ad.control_paths'])) return true;
+    if (this.id === 'bloodyad-acl' || this.id === 'ad-acl-abuse') {
+      return !!(have['ad.control_paths'] || have['ad.domain_control'] || have['loot.ntds'] || have['access.admin']);
+    }
+    var allHeld = true;
+    for (var i = 0; i < pk.length; i++) { if (!have[pk[i]]) { allHeld = false; break; } }
+    if (allHeld) return true;
+    // Multi-OS / multi-foothold moves (e.g. produces both foothold.linux and foothold.windows)
+    // cannot prove both OS footholds on a single host. Treat an OS-foothold output as satisfied
+    // once any full OS foothold (foothold.linux or foothold.windows) is held, a webshell/shell
+    // output as satisfied once that shell or a full OS foothold is held, and an admin/system/root
+    // output as satisfied once any admin/system/root fact is held.
+    var hasOsFoot = !!(have['foothold.linux'] || have['foothold.windows']);
+    var hasAdmin = !!(have['access.admin'] || have['access.system'] || have['access.root']);
+    for (var j = 0; j < pk.length; j++) {
+      var k = pk[j];
+      if (have[k]) continue;
+      if ((k === 'foothold.linux' || k === 'foothold.windows') && hasOsFoot) continue;
+      if (k === 'foothold.webshell' && hasOsFoot) continue;
+      if ((k === 'access.admin' || k === 'access.system' || k === 'access.root') && hasAdmin) continue;
+      return false;
+    }
     return true;
   };
 
   Action.prototype.obsolete = function (facts) {
-    // True once a later achievement makes this move pointless — e.g. the coercion→relay lane is moot
+    // True once a later achievement makes this move pointless - e.g. the coercion→relay lane is moot
     // after a completed DCSync (loot.ntds). Retired like a settled move: dropped from the ready list and
     // the blocked list alike, so the coach stops steering you toward a means to an end you already hold.
     for (var i = 0; i < this.obsoleted_by.length; i++) { if (facts.has(this.obsoleted_by[i])) return true; }
@@ -398,7 +460,7 @@
 
   var DEPRIORITIZE_PENALTY = 40;
   Action.prototype.effectivePriority = function (facts) {
-    // Base priority, minus a penalty once a fact makes this move a side-quest rather than the point — e.g.
+    // Base priority, minus a penalty once a fact makes this move a side-quest rather than the point - e.g.
     // post-domain-admin persistence / path-mapping / pivots sink below the objective (flag capture) and the
     // cross-box loot once you already hold loot.ntds. The move stays AVAILABLE, just no longer up top.
     var p = this.priority;
@@ -408,7 +470,7 @@
 
   Action.prototype.eligible = function (facts) {
     // True when the target's OS and proven facts satisfy this action's prerequisites.
-    if (!osCompatible(facts, this.os)) return false;
+    if (!osCompatible(facts, this.os, this)) return false;
     for (var i = 0; i < this.requires_all.length; i++) {
       if (!facts.has(this.requires_all[i])) return false;
     }
@@ -424,7 +486,7 @@
 
   Action.prototype.unmet = function (facts) {
     // A friendly one-line reason this action is blocked (first unmet prerequisite).
-    if (!osCompatible(facts, this.os)) {
+    if (!osCompatible(facts, this.os, this)) {
       var family = hostOsFamily(facts) || 'another OS';
       return 'blocked because target looks like ' + family;
     }
@@ -578,11 +640,11 @@
     'mssql.reachable': 'MSSQL is reachable', 'mssql.authenticated': 'an authenticated MSSQL session',
     'access.root': 'root access', 'privesc.script_sink': 'an injectable sink in a sudo-allowed script',
     'host.notable_program': 'a bespoke local program worth investigating (a run-this-and-read-it lead)',
-    'host.program_inspected': 'a notable local program obol has already inspected',
+    'host.program_inspected': 'a notable local program OBOL has already inspected',
     'lead.stalled': 'a promising move that didn\'t land for a technical reason (worth another look)',
     'ad.domain_control': 'a DACL control right over the domain root',
     'web.exposed_artifact': 'an exposed credential-bearing artifact (db/git/archive/config) to fetch and read',
-    'web.artifact_looted': 'an exposed artifact obol has already fetched and read',
+    'web.artifact_looted': 'an exposed artifact OBOL has already fetched and read',
     'web.param_candidate': 'a discovered request parameter', 'web.params_discovered': 'parameter fuzzing completed for an endpoint',
     'web.param_probed': 'an injection probe tried against a parameter', 'web.injectable_param': 'a confirmed injectable parameter',
     'web.param_exploited': 'an injectable parameter handed off for exploitation',
@@ -592,7 +654,7 @@
     'tftp.reachable': 'a reachable TFTP service', 'x11.reachable': 'an open X11 display',
     'cloud.credential': 'a cloud credential', 'privesc.cron': 'a writable or hijackable cron job',
     'ssh.key_rejected': 'an SSH key the server refuses',
-    // operational blockers (diagnostic walls a pasted error reveals — each surfaces its fix doctor)
+    // operational blockers (diagnostic walls a pasted error reveals - each surfaces its fix doctor)
     'blocker.host_down': 'a host-unreachable result from a ping-gated scan',
     'blocker.name_resolution': 'a name-resolution failure', 'blocker.clock_skew': 'a Kerberos clock-skew error',
     'blocker.crlf': 'a CRLF / bad-interpreter error', 'blocker.no_tty': 'a no-TTY / no-terminal error',
@@ -617,6 +679,10 @@
     'vuln.freeswitch': 'the FreeSWITCH fingerprint', 'vuln.jdwp': 'an open JDWP debug port',
     'vuln.aerospike': 'the Aerospike UDF fingerprint', 'vuln.wifi_mouse': 'the WiFi Mouse Server fingerprint',
     'vuln.jenkins': 'the Jenkins RCE fingerprint', 'vuln.nosqli': 'a NoSQL-injection fingerprint',
+    'vuln.dirtycow': 'a DirtyCow-vulnerable Linux kernel (< 4.8.3)',
+    'vuln.dirtypipe': 'a DirtyPipe-vulnerable Linux kernel (5.8 - 5.16.10)',
+    'vuln.baron_samedit': 'a Baron Samedit-vulnerable sudo version (CVE-2021-3156)',
+    'vuln.polkit': 'a PwnKit-vulnerable pkexec version (CVE-2021-4034)',
   };
 
   function friendly(kind) {
@@ -639,9 +705,9 @@
   }
 
   // ---- "Opens Up Next": the aspirational roadmap of locked moves ----------------------------------
-  // Only CAPABILITY-unlocks belong here — moves you work TOWARD (a credential, a shell, admin, a user
+  // Only CAPABILITY-unlocks belong here - moves you work TOWARD (a credential, a shell, admin, a user
   // list, a reachable service). Contingency moves (the blocker.* trap doctors, the vuln.* fingerprint
-  // exploits) are not a roadmap — you don't pursue "my clock is skewed" — so they are excluded; they
+  // exploits) are not a roadmap - you don't pursue "my clock is skewed" - so they are excluded; they
   // surface reactively elsewhere. Report-only writeup checks are excluded too. The rest sort by how CLOSE
   // they are to unlocking (fewest unmet prerequisites first), each carrying the fact-chips it still needs.
   function isContingencyMove(a) {
@@ -696,19 +762,30 @@
     });
     var keys = Object.keys(families);
     if (!keys.length) {
-      if (facts.has('foothold.windows') || facts.has('winrm.authenticated') || facts.has('rdp.authenticated')) families.windows = true;
-      if (facts.has('foothold.linux')) families.linux = true;
+      if (facts.has('foothold.windows') || facts.has('winrm.authenticated') || facts.has('rdp.authenticated') || facts.has('os.windows') || facts.has('ad.dc_candidate')) families.windows = true;
+      if (facts.has('foothold.linux') || facts.has('os.linux')) families.linux = true;
+      keys = Object.keys(families);
+    }
+    if (!keys.length) {
+      facts.values('host.os_hint').forEach(function (v) {
+        var fam = normalizeOsName(v.family || '');
+        if (fam) families[fam] = true;
+      });
       keys = Object.keys(families);
     }
     return keys.length === 1 ? keys[0] : '';
   }
 
-  function osCompatible(facts, actionOs) {
+  function osCompatible(facts, actionOs, action) {
     var allowed = {};
     (actionOs || []).forEach(function (item) { var n = normalizeOsName(item); if (n) allowed[n] = true; });
     var keys = Object.keys(allowed);
-    if (!keys.length) return true;
     var family = hostOsFamily(facts);
+    if (family === 'linux' && action && action.pack_id === 'obol_ad_2026_09') {
+      var hasAdSmb = facts.has('smb.reachable') || facts.has('ldap.reachable') || facts.has('kerberos.reachable') || facts.has('winrm.reachable') || facts.has('ad.dc_candidate');
+      if (!hasAdSmb) return false;
+    }
+    if (!keys.length) return true;
     if (!family) return true;
     return !!allowed[family];
   }
@@ -717,7 +794,12 @@
   // In the browser, packs are provided as already-parsed JSON (fetched by the loader),
   // so loadPacks concatenates + dedupes by action id (first definition wins).
   function actionsFromPackData(packData) {
-    return (packData.actions || []).map(function (a) { return new Action(a); });
+    var pid = (packData && packData.id) || '';
+    return (packData.actions || []).map(function (a) {
+      var act = new Action(a);
+      if (pid && !act.pack_id) act.pack_id = pid;
+      return act;
+    });
   }
 
   function loadPacks(packDataList) {
@@ -732,6 +814,19 @@
     return out;
   }
 
+  var FLAG_HUNT_IDS = {
+    'flag-hunt-linux': 1,
+    'flag-hunt-root-linux': 1,
+    'flag-hunt-windows': 1,
+    'flag-hunt-root-windows': 1,
+  };
+  function isFlagHuntAction(a) {
+    if (!a) return false;
+    if (FLAG_HUNT_IDS[a.id] || a.pack_id === 'obol_flag_hunt_2026_09') return true;
+    var prod = a.produces || [];
+    return prod.length > 0 && prod.every(function (k) { return OBJECTIVE_FLAG_RE.test(k); });
+  }
+
   // ------------------------------------------------------------------ planner --
   // The live actions, ranked by the engagement phase/flow model. Bucketed by how far
   // ahead of the target's frontier they reach (0 = on-flow), then by pack priority.
@@ -739,7 +834,9 @@
     opts = opts || {};
     var doneIds = opts.doneIds || {};
     var focus = opts.focusPrefixes || [];
+    var noFlags = !!(opts.noFlags || opts.flagsEnabled === false);
     var live = pack.filter(function (a) {
+      if (noFlags && isFlagHuntAction(a)) return false;
       return a.eligible(facts) && !a.settled(facts) && !a.obsolete(facts) && !doneIds[a.id];
     });
     var frontier = P.frontierIndex(facts);
@@ -755,7 +852,7 @@
     }
 
     // The machine-type focus is a NUDGE, not an override: it adds a modest bonus so a matching move edges
-    // ahead of a comparable one, but it must never bury a much higher-priority move — e.g. the priority-99
+    // ahead of a comparable one, but it must never bury a much higher-priority move - e.g. the priority-99
     // domain-compromise cash-in (produces access.admin) must not sit below a priority-40 AD enum just because
     // a "DC" focus matches ad.* but not access.*. Rank within a phase bucket by effective priority + focus
     // bonus (effective priority applies the deprioritize-when penalty for side-quest moves).
@@ -771,12 +868,15 @@
 
   // The OS-compatible actions that are NOT yet eligible, each with its unmet-requirement
   // reason. Ordered by phase then priority like the live frontier.
-  function lockedActions(facts, pack) {
+  function lockedActions(facts, pack, opts) {
+    opts = opts || {};
+    var noFlags = !!(opts.noFlags || opts.flagsEnabled === false);
     var frontier = P.frontierIndex(facts);
     var out = [];
     pack.forEach(function (a) {
+      if (noFlags && isFlagHuntAction(a)) return;
       if (a.eligible(facts) || a.settled(facts) || a.obsolete(facts)) return;
-      if (!osCompatible(facts, a.os)) return;
+      if (!osCompatible(facts, a.os, a)) return;
       out.push({ action: a, reason: a.unmet(facts) });
     });
     out.sort(function (x, y) {
@@ -788,8 +888,13 @@
     return out;
   }
 
-  function blockedActions(facts, pack) {
-    var blocked = pack.filter(function (a) { return !a.eligible(facts) && !a.settled(facts) && !a.obsolete(facts); });
+  function blockedActions(facts, pack, opts) {
+    opts = opts || {};
+    var noFlags = !!(opts.noFlags || opts.flagsEnabled === false);
+    var blocked = pack.filter(function (a) {
+      if (noFlags && isFlagHuntAction(a)) return false;
+      return !a.eligible(facts) && !a.settled(facts) && !a.obsolete(facts);
+    });
     return blocked.slice().sort(function (a, b) { return b.priority - a.priority; });
   }
 
@@ -802,59 +907,83 @@
   // so they never bury the evidenced next step. Pure function of facts (+ fact timestamps).
   var V2_INF = 1e6;
   var V2_GOALS = ['objective.flag', 'objective.local_flag', 'objective.root_flag', 'access.admin', 'access.system', 'access.root', 'loot.ntds'];
+  var V2_GOALS_NO_FLAGS = ['access.admin', 'access.system', 'access.root', 'loot.ntds'];
   // Keystone weighting (gate-wiring aware): `enable` already rewards the single BEST door a move opens
-  // (Math.max over newly-unlocked moves). Keystone adds the BREADTH — how many currently-blocked moves a
-  // move's produced facts unblock, goal-tempered — so a pivotal fact (credential.available unblocks the whole
+  // (Math.max over newly-unlocked moves). Keystone adds the BREADTH - how many currently-blocked moves a
+  // move's produced facts unblock, goal-tempered - so a pivotal fact (credential.available unblocks the whole
   // authenticated surface; loot.ntds unblocks the endgame) is favoured over a narrow lead of equal
   // goal-distance, WITHOUT a hand-tuned priority bump. Kept small + capped: a refinement that breaks ties
   // toward the keystone, never a term that overrides a clearly-better-progress move. Tune against the corpus.
   var V2_KEYSTONE_W = 0.15;    // weight of the breadth term in the score
   var V2_KEYSTONE_CAP = 4;     // max accumulated breadth before the weight applies (bounds its influence)
   // Endgame objective pull. Goal-distance is MIN-over-goals, so the moment ONE objective is met (you grab the
-  // user flag — objective.local_flag is a goal) the distance collapses to 0 and every move, including the
-  // still-open ROOT/proof-flag capture, reads zero progress — the two-flag split would otherwise let
+  // user flag - objective.local_flag is a goal) the distance collapses to 0 and every move, including the
+  // still-open ROOT/proof-flag capture, reads zero progress - the two-flag split would otherwise let
   // enumeration/pivot keystone bury the flag you came to capture. This pull gives any move that DIRECTLY
   // produces an as-yet-uncaptured objective.*flag a strong, bounded bonus so the reachable flag leads. It is a
-  // within-tier score term (never changes the tier), so a genuinely fresher/higher-tier lead still wins — it
+  // within-tier score term (never changes the tier), so a genuinely fresher/higher-tier lead still wins - it
   // decides "what now that I CAN grab a flag", not "ignore a fresh keystone to grab one".
   var V2_OBJECTIVE_RE = /^objective\.(flag|local_flag|root_flag)$/;
   var V2_OBJECTIVE_W = 3;      // bonus for a move that captures an unmet objective flag (beats typical keystone)
   // Specific EARNED control/loot/credential facts: a move gated on one of these is a deterministic
-  // cash-in (DCSync given control paths, a crack given a hash), not a gamble — full reliability.
+  // cash-in (DCSync given control paths, a crack given a hash), not a gamble - full reliability.
   var V2_SPECIFIC = {
     'ad.control_paths': 1, 'ad.gpo_control': 1, 'ad.gpo_writable': 1, 'hash.krbtgt': 1,
     'hash.asrep': 1, 'hash.tgs': 1, 'hash.ntlm': 1, 'loot.ntds': 1, 'ad.zerologon': 1,
     'adcs.vulnerable': 1, 'credential.certificate': 1, 'ad.sid_history': 1, 'ad.coerced_auth': 1,
     'ad.unconstrained': 1, 'privesc.sudo_rights': 1, 'privesc.windows_privilege': 1,
+    'privesc.suid_candidate': 1, 'privesc.cron': 1, 'privesc.cron_writable': 1, 'privesc.capabilities': 1,
+    'privesc.capability': 1, 'privesc.sudo_binary': 1, 'privesc.passwd_writable': 1, 'privesc.nfs_no_root_squash': 1,
+    'privesc.process_lead': 1, 'privesc.script_sink': 1, 'privesc.dll_hijack_candidate': 1, 'privesc.stored_credentials': 1, 'privesc.patch_gap': 1,
+    'privesc.weak_service_permission': 1, 'privesc.scheduled_task': 1, 'privesc.unquoted_service_path': 1,
+    'privesc.always_install_elevated': 1, 'privesc.autorun': 1, 'privesc.lxd_group': 1, 'privesc.docker_group': 1,
     'db.session': 1, 'ad.gmsa': 1, 'kerberos.tickets': 1, 'smb.ms17_010': 1, 'hash.mscache': 1,
+    'vuln.dirtycow': 1, 'vuln.dirtypipe': 1, 'vuln.baron_samedit': 1, 'vuln.polkit': 1,
+    'smb.writable_share': 1, 'access.admin_share': 1, 'share.users_readable': 1,
+    'ad.laps': 1, 'ad.rbcd': 1, 'ad.delegation': 1, 'ad.group_joined': 1, 'ad.domain_control': 1,
+    'privesc.kernel_exploit': 1,
   };
   var V2_PRIV = { 'access.admin': 1, 'access.system': 1, 'access.root': 1, 'loot.ntds': 1, 'objective.flag': 1, 'objective.local_flag': 1, 'objective.root_flag': 1 };
   // An exploit/foothold move is EVIDENCED (not a bare-port gamble) when the box actually shows a
   // reason to run it: a proven vulnerability fingerprint, a credential/hash in hand, an existing
   // foothold/access to escalate from, looted material, or an earned privesc/kerberos/ADCS primitive.
-  // A move that lands a foothold but is eligible only because a port/service is open — with none of
-  // these held — is a "try if vulnerable" gamble and must not outrank the evidenced next step
+  // A move that lands a foothold but is eligible only because a port/service is open - with none of
+  // these held - is a "try if vulnerable" gamble and must not outrank the evidenced next step
   // (same discipline already applied to coerce/relay/check moves). EternalBlue is the model: it
   // requires its smb.ms17_010 NSE verdict, so it is evidenced, never a bare-445 guess.
   var V2_EVIDENCE_RE = /^(vuln\.|credential\.|hash\.|access\.|foothold\.|loot\.|privesc\.|kerberos\.|adcs\.)/;
   // Concrete AD primitives a collection/enumeration PROVED (a BloodHound attack path, an ACL lead, a
-  // delegation right, a trust) — abusing one is an evidenced move, not a bare-port guess. (The earned
+  // delegation right, a trust) - abusing one is an evidenced move, not a bare-port guess. (The earned
   // control/loot facts like ad.control_paths/ad.gpo_control are already in V2_SPECIFIC.)
   var V2_AD_LEAD = { 'ad.attack_paths': 1, 'ad.acl_lead': 1, 'ad.delegation': 1, 'ad.trusts': 1 };
   var V2_FOOTHOLD = { 'foothold.linux': 1, 'foothold.windows': 1, 'foothold.webshell': 1, 'access.shell': 1, 'access.admin': 1, 'access.system': 1, 'access.root': 1 };
-  // Evidence = something you PROVED (a vuln verdict, a credential, a hash, a foothold, a control lead) —
+  // Evidence = something you PROVED (a vuln verdict, a credential, a hash, a foothold, a control lead) -
   // never a mere "service reachable" recon fact. kerberos.reachable matched /^kerberos\./ and so was wrongly
   // treated as evidence, which let blind password-spray look "indicated" (reliable) and headline over the
   // deterministic AS-REP roast. A reachable port proves nothing about a credential or a vuln.
-  // A `*_confirmed` fact is a PROVEN vulnerability verdict (web.sqli_confirmed, web.cmdi_confirmed, …) — the
+  // A `*_confirmed` fact is a PROVEN vulnerability verdict (web.sqli_confirmed, web.cmdi_confirmed, …) - the
   // same class of evidence as a vuln.* fingerprint, so a move gated on one is evidenced, not a bare-port
   // gamble. Without this a confirmed SQLi left sqlmap-automation capped as speculative, below weaker leads.
   function v2EvidenceFact(g) { if (/\.reachable$/.test(g)) return false; return !!V2_SPECIFIC[g] || !!V2_AD_LEAD[g] || V2_EVIDENCE_RE.test(g) || /_confirmed$/.test(g); }
   function v2ProducesFoothold(a) { for (var i = 0; i < a.produces.length; i++) { var k = a.produces[i]; if (V2_FOOTHOLD[k] || /_confirmed$/.test(k)) return true; } return false; }
-  function v2Indicated(a, haveObj) { var g = a.requires_all.concat(a.requires_any), i; for (i = 0; i < g.length; i++) if (haveObj[g[i]] && v2EvidenceFact(g[i])) return true; return false; }
+  function v2Earned(a, haveObj) {
+    if (!haveObj) return false;
+    if (a.id === 'linux-kernel-exploit') return !!haveObj['privesc.kernel_exploit'];
+    if (a.id === 'baron-samedit') return !!(haveObj['vuln.baron_samedit'] || haveObj['privesc.kernel_exploit']);
+    if ((a.id === 'bloodyad-acl' || a.id === 'ad-acl-abuse') && (haveObj['ad.attack_paths'] || haveObj['ad.acl_lead'] || haveObj['ad.control_paths'])) return true;
+    var gates = a.requires_all.concat(a.requires_any), i;
+    for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && (V2_SPECIFIC[gates[i]] || /^vuln\./.test(gates[i]))) return true;
+    return false;
+  }
+  function v2Indicated(a, haveObj) {
+    if (a.id === 'linux-kernel-exploit' && haveObj && haveObj['privesc.kernel_exploit']) return true;
+    var g = a.requires_all.concat(a.requires_any), i;
+    for (i = 0; i < g.length; i++) if (haveObj[g[i]] && v2EvidenceFact(g[i])) return true;
+    return false;
+  }
 
   function v2Speculative(a, haveObj) {
-    // A guidance/troubleshooter move produces only advice.* — it mints no attack fact, so it can never
+    // A guidance/troubleshooter move produces only advice.* - it mints no attack fact, so it can never
     // be a "try-if-vulnerable" gamble. Exempt it before the id-regex/payoff checks (otherwise a doctor
     // whose id merely contains "relay"/"responder"/"check" would be wrongly capped below everything).
     if (a.produces.length && a.produces.every(function (k) { return /^advice\./.test(k); })) return false;
@@ -863,7 +992,7 @@
       var k = a.produces[i];
       if (k === 'exploit.candidate' || k === 'ad.coerced_auth' || k === 'credential.netntlm') return true;
     }
-    // A move that claims a real PAYOFF — a foothold/privilege, or a VALIDATED credential — while eligible
+    // A move that claims a real PAYOFF - a foothold/privilege, or a VALIDATED credential - while eligible
     // without any proven indicator (a fingerprint, a held credential/hash, a foothold) is a gamble: blind
     // password spraying or default-cred guessing against a bare user list, or firing an exploit at an open
     // port. Cap it below evidenced moves so the deterministic path (AS-REP roast, crack a captured hash)
@@ -876,7 +1005,8 @@
   }
   // Minimal steps from a set of held fact-kinds to any goal, through the produce/require graph:
   // AND over a move's requirements, OR over a fact's producers. Memoized, cycle-guarded.
-  function v2GoalDistance(haveObj, producers) {
+  function v2GoalDistance(haveObj, producers, goals) {
+    var goalList = goals || V2_GOALS;
     var memoF = {}, memoM = {};
     function fc(f, stack) {
       if (haveObj[f]) return 0;
@@ -898,14 +1028,14 @@
       c = Math.min(c, V2_INF); memoM[m.id] = c; return c;
     }
     var d = V2_INF;
-    for (var g = 0; g < V2_GOALS.length; g++) d = Math.min(d, fc(V2_GOALS[g], {}));
+    for (var g = 0; g < goalList.length; g++) d = Math.min(d, fc(goalList[g], {}));
     return d;
   }
-  function v2ProgressFrom(d0, haveObj, produces, producers) {
+  function v2ProgressFrom(d0, haveObj, produces, producers, goals) {
     var h2 = {}, k;
     for (k in haveObj) h2[k] = 1;
     for (var i = 0; i < produces.length; i++) h2[produces[i]] = 1;
-    var d1 = v2GoalDistance(h2, producers);
+    var d1 = v2GoalDistance(h2, producers, goals);
     if (d0 >= V2_INF) return d1 >= V2_INF ? 0 : 5;
     return Math.max(0, d0 - d1);
   }
@@ -920,10 +1050,9 @@
     return true;
   }
   function v2Reliability(a, haveObj) {
-    var gates = a.requires_all.concat(a.requires_any), i;
-    for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && (V2_SPECIFIC[gates[i]] || /^vuln\./.test(gates[i]))) return 1.0;
+    if (v2Earned(a, haveObj)) return 1.0;
     if (v2Speculative(a, haveObj)) return 0.25;
-    for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return 0.3;
+    for (var i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return 0.3;
     return 0.8;
   }
   // Recency: the fact-kinds from the operator's latest ingest batch (within 2s of the newest fact),
@@ -934,7 +1063,7 @@
     for (i = 0; i < facts.facts.length; i++) { f = facts.facts[i]; if (f.state === SUPP && f.created_at > maxT) maxT = f.created_at; }
     // "latest batch" = facts minted within ~2s of the newest. created_at is seconds in the live app
     // (facts.makeFact uses Date.now()/1000) but milliseconds in tests/fixtures, so size the window to
-    // the unit — otherwise a 2000-in-seconds window spans ~33 min and the whole session reads as
+    // the unit - otherwise a 2000-in-seconds window spans ~33 min and the whole session reads as
     // "recent", which collapses the recency tier and lets raw priority surface noise.
     var win = maxT > 1e12 ? 2000 : 2;
     var cut = maxT - win, recent = {}, before = {};
@@ -943,18 +1072,104 @@
       if (f.state !== SUPP) continue;
       if (f.created_at >= cut) recent[f.kind] = 1; else before[f.kind] = 1;
     }
+    // Two-step Nmap opening unification: when the operator runs `nmap -p-` (minting port:* and *.reachable)
+    // and then runs `nmap -sC -sV` (minting scan.nmap.version), `earlyRecon` held back service enumeration
+    // until `scan.nmap.version` completed. Fold the opening port/service reachability facts into `recent`
+    // so completing the version scan unlocks the full initial enumeration frontier instead of only moves
+    // gated on `scan.nmap.version` / `ad.domain_known` / `host.fqdn`.
+    if (recent['scan.nmap.version'] && !before['scan.nmap.version'] && !before['credential.available'] && !before['foothold.linux'] && !before['foothold.windows'] && !before['access.shell']) {
+      for (var bk in before) {
+        if (/^port:|^ports\.|^service\.|\.reachable$|^ad\.dc_candidate$|^host\.|^scan\.nmap\.quick$/.test(bk)) {
+          recent[bk] = 1;
+          delete before[bk];
+        }
+      }
+    }
     return { recent: recent, before: before };
+  }
+
+  function accessEpoch(facts) {
+    if (!facts) return 'anon';
+    var hasFact = function (k) {
+      if (typeof facts.has === 'function') return facts.has(k);
+      if (facts.facts && Array.isArray(facts.facts)) {
+        return facts.facts.some(function (f) { return f.kind === k && f.state !== 'refuted' && f.state !== 'inconclusive'; });
+      }
+      if (Array.isArray(facts)) {
+        return facts.some(function (f) { return (f.kind || f) === k; });
+      }
+      return !!facts[k];
+    };
+    var getValues = function (k) {
+      if (typeof facts.values === 'function') return facts.values(k) || [];
+      if (facts.facts && Array.isArray(facts.facts)) {
+        var out = [];
+        facts.facts.forEach(function (f) {
+          if (f.kind === k && f.state !== 'refuted' && f.state !== 'inconclusive' && f.value) out.push(f.value);
+        });
+        return out;
+      }
+      return [];
+    };
+
+    var adminVal = hasFact('access.root') ? 'root'
+      : (hasFact('access.system') ? 'system'
+      : (hasFact('access.admin') ? 'admin'
+      : (hasFact('credential.admin') ? 'cred' : '')));
+
+    var fhVal = hasFact('foothold.windows') ? 'win'
+      : (hasFact('foothold.linux') ? 'lin'
+      : (hasFact('access.shell') ? 'shell' : ''));
+
+    var credMap = {};
+    ['credential.available', 'credential.validated', 'credential.plaintext'].forEach(function (k) {
+      var vals = getValues(k);
+      vals.forEach(function (v) {
+        if (!v) return;
+        var u = String(v.user || v.username || '').toLowerCase().trim();
+        if (!u) return;
+        var hasPw = !!(v.password || v.secret);
+        var hasHash = !!(v.nthash || v.hash || v.ntlm);
+        var secType = (hasPw && hasHash) ? 'both' : (hasPw ? 'pw' : (hasHash ? 'hash' : 'id'));
+        if (!credMap[u] || credMap[u] === 'id') credMap[u] = secType;
+        else if (secType === 'both') credMap[u] = 'both';
+      });
+    });
+
+    var credUsers = Object.keys(credMap).sort().map(function (u) {
+      return u + ':' + credMap[u];
+    });
+
+    var openHashes = [];
+    if (hasFact('hash.asrep')) openHashes.push('asrep');
+    if (hasFact('hash.tgs')) openHashes.push('tgs');
+    if (hasFact('hash.ntlm')) openHashes.push('ntlm');
+
+    if (!adminVal && !fhVal && credUsers.length === 0 && openHashes.length === 0) {
+      return 'anon';
+    }
+
+    var parts = [];
+    if (adminVal) parts.push('adm:' + adminVal);
+    if (fhVal) parts.push('fh:' + fhVal);
+    if (credUsers.length > 0) parts.push('cred:' + credUsers.join(','));
+    if (openHashes.length > 0) parts.push('h:' + openHashes.join(','));
+
+    return parts.join('|') || 'anon';
   }
 
   function nextActionsV2(facts, pack, opts) {
     opts = opts || {};
     var doneIds = opts.doneIds || {}, focus = opts.focusPrefixes || [];
-    var live = pack.filter(function (a) { return a.eligible(facts) && !a.settled(facts) && !a.obsolete(facts) && !doneIds[a.id]; });
+    var noFlags = !!(opts.noFlags || opts.flagsEnabled === false);
+    var goals = opts.goals || (noFlags ? V2_GOALS_NO_FLAGS : V2_GOALS);
+    var activePack = noFlags ? pack.filter(function (a) { return !isFlagHuntAction(a); }) : pack;
+    var live = activePack.filter(function (a) { return a.eligible(facts) && !a.settled(facts) && !a.obsolete(facts) && !doneIds[a.id]; });
     var haveObj = facts.kinds();
     var producers = {};
-    pack.forEach(function (a) { a.produces.forEach(function (k) { (producers[k] = producers[k] || []).push(a); }); });
+    activePack.forEach(function (a) { a.produces.forEach(function (k) { (producers[k] = producers[k] || []).push(a); }); });
     var rec = v2Recency(facts, opts);
-    var d0 = v2GoalDistance(haveObj, producers);
+    var d0 = v2GoalDistance(haveObj, producers, goals);
     // "Orient before exploit" applies only at the OPENING: you have run a port scan but not yet the thorough
     // service scan, and you hold no foothold or usable credential. In that window a freshly-unlocked recon
     // move (the service scan that deepens the ports you just found) leads the enumeration it feeds. The
@@ -963,8 +1178,9 @@
     // never bury them. This is the "finish your service scan before you dump" discipline and nothing more.
     var earlyRecon = !haveObj['credential.available'] && !haveObj['scan.nmap.version'];
     if (earlyRecon) for (var _fk in haveObj) { if (/^foothold\./.test(_fk) || /^access\.(shell|admin|system|root|desktop)$/.test(_fk)) { earlyRecon = false; break; } }
-    // "Validate before use" is live while you hold a usable credential you have not yet proven works.
-    var validateFirst = !!haveObj['credential.available'] && !haveObj['credential.validated'];
+    var v2Foothold = false; for (var _hk in haveObj) { if (/^foothold\./.test(_hk) || /^access\.(shell|admin|system|root|desktop)$/.test(_hk)) { v2Foothold = true; break; } }
+    // "Validate before use" is live while you hold a usable credential you have not yet proven works (and are not already logged in).
+    var validateFirst = !!haveObj['credential.available'] && !haveObj['credential.validated'] && !v2Foothold && !haveObj['smb.authenticated'] && !haveObj['ldap.authenticated'] && !haveObj['winrm.authenticated'];
     // "Map and get on the box before you reach for a named misconfiguration." While you hold a credential but
     // have NOT mapped the domain (no attack/control paths, no graph) and have NO foothold yet, a move that
     // EXPLOITS A SPECIFIC named AD misconfiguration (ADCS ESC, a trust hop, SCCM) is premature: you have not
@@ -974,7 +1190,6 @@
     // Self-disables the moment you map (a path/graph fact mints) or land a foothold, so the post-map killchain,
     // where the named abuse IS the next step, is untouched. (ranker-sim.js measures this.)
     var v2Mapped = !!(haveObj['ad.attack_paths'] || haveObj['ad.control_paths'] || haveObj['ad.graph.collected']);
-    var v2Foothold = false; for (var _hk in haveObj) { if (/^foothold\./.test(_hk) || /^access\.(shell|admin|system|root|desktop)$/.test(_hk)) { v2Foothold = true; break; } }
     var specializeHold = !!haveObj['credential.available'] && !v2Mapped && !v2Foothold;
     var SPECIALIZE_RE = /^(adcs\.vulnerable|credential\.certificate|ad\.trusts|sccm\.)/;
     function isSpecialize(a) { return (a.produces || []).some(function (k) { return SPECIALIZE_RE.test(k); }); }
@@ -994,9 +1209,15 @@
       }
     }
 
+    var hasWinShellSurface = !!(haveObj['foothold.windows'] || haveObj['access.shell'] || haveObj['access.admin'] || haveObj['access.system']
+      || haveObj['smb.reachable'] || haveObj['winrm.reachable'] || haveObj['winrm.authenticated'] || haveObj['rdp.reachable']
+      || haveObj['port:445'] || haveObj['port:139'] || haveObj['port:5985'] || haveObj['port:5986'] || haveObj['port:3389'] || haveObj['port:22']);
+    var isDcBox = !!(haveObj['ad.dc_candidate'] || haveObj['ad.domain_controller']);
+    var isAdTarget = !!(haveObj['ad.domain_known'] || isDcBox || haveObj['service.ldap'] || haveObj['port:389'] || haveObj['port:88'] || haveObj['kerberos.reachable'] || haveObj['ldap.reachable']);
+    var adMapped = !!(haveObj['ad.graph.collected'] || haveObj['ad.control_paths'] || haveObj['ad.acl_lead'] || haveObj['ad.attack_paths']);
+
     var scored = live.map(function (a) {
-      var gates = a.requires_all.concat(a.requires_any), indicated = false, i;
-      for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) { indicated = true; break; }
+      var indicated = v2Earned(a, haveObj), i;
       var spec = v2Speculative(a, haveObj);
       var fresh = v2EligAgainst(a, haveObj) && !v2EligAgainst(a, rec.before);
 
@@ -1005,9 +1226,6 @@
       if (fresh && hasActiveHighValueLead && onlyLowLevelReconFresh && (a.phase === 'recon' || a.id.indexOf('scan') >= 0)) {
         fresh = false;
       }
-      var isDcBox = haveObj['ad.dc_candidate'] || haveObj['ad.domain_controller'];
-      var isAdTarget = haveObj['ad.domain_known'] || isDcBox || haveObj['service.ldap'] || haveObj['port:389'];
-      var adMapped = haveObj['ad.graph.collected'] || haveObj['ad.control_paths'] || haveObj['ad.acl_lead'] || haveObj['ad.attack_paths'];
       // Anti-thrash on Domain Controller: generic host LPE / tunnel fallbacks must not leapfrog the AD attack chain
       if (fresh && isDcBox && !adMapped) {
         if (a.dcDefer) {
@@ -1019,24 +1237,24 @@
       var h2 = {}, k;
       for (k in haveObj) h2[k] = 1;
       a.produces.forEach(function (p) { h2[p] = 1; });
-      var dH2 = v2GoalDistance(h2, producers);
+      var dH2 = v2GoalDistance(h2, producers, goals);
       var progA = d0 >= V2_INF ? (dH2 >= V2_INF ? 0 : 5) : Math.max(0, d0 - dH2);
       // enablement + keystone in one forward pass over the moves this one unblocks (1-step lookahead):
-      //   enable   = the single BEST door a opens (goal-tempered) — the deepest unlock.
-      //   keystone = the BREADTH of doors it opens — how many blocked moves become eligible, each tempered
+      //   enable   = the single BEST door a opens (goal-tempered) - the deepest unlock.
+      //   keystone = the BREADTH of doors it opens - how many blocked moves become eligible, each tempered
       //              by its reliability and whether it advances toward a goal (0.5 floor for being unblocked
       //              at all). Capped so a fact that unblocks the whole authenticated surface is favoured as
       //              the pivot, without letting raw fan-out dominate a better-progress move.
       var enable = 0, keystone = 0;
-      pack.forEach(function (b) {
+      activePack.forEach(function (b) {
         if (b.id === a.id || v2EligAgainst(b, haveObj) || !v2EligAgainst(b, h2)) return;
-        var relB = v2Reliability(b, h2), progB = v2ProgressFrom(dH2, h2, b.produces, producers);
+        var relB = v2Reliability(b, h2), progB = v2ProgressFrom(dH2, h2, b.produces, producers, goals);
         enable = Math.max(enable, relB * progB);
         keystone += relB * (0.5 + progB);
       });
       if (keystone > V2_KEYSTONE_CAP) keystone = V2_KEYSTONE_CAP;
       // Keystone is a MIDDLE-GAME term: it helps you reach a winning position, it does not adjudicate the
-      // win itself. Once a move directly produces a privilege/goal fact it is a cash-in — rank it by
+      // win itself. Once a move directly produces a privilege/goal fact it is a cash-in - rank it by
       // progress + hand-tuned priority (the canonical endgame), never by how many further doors it opens,
       // so e.g. own-domain-pth (PtH, p99) is not displaced by silver-ticket just because forging a ticket
       // also unblocks ticket-reuse.
@@ -1068,49 +1286,87 @@
       // grep-able (see the transition vocabulary on the Action constructor).
       // Values and fact-conditions are unchanged from the id-string version.
       // (a) Hash in hand -> Cracking it is the single most logical immediate transition
-      if (st.credTier === 'crackable_hash' && (a.transition.indexOf('crack') === 0 || a.produces.indexOf('credential.available') >= 0)) {
+      if (st.credTier === 'crackable_hash' && (!spec || indicated) && (a.transition.indexOf('crack') === 0 || a.produces.indexOf('credential.available') >= 0)) {
         score += 4.5;
         if (tier < 2) tier = 2;
       }
       // (b) Control Path / ACL Lead in hand -> DCSync / takeover cash-in leads (suppressed once NTDS / DA is already held)
-      if (st.adPosture === 'dcsync_ready' && !haveObj['loot.ntds'] && !haveObj['access.admin'] && (a.transition === 'dcsync' || a.produces.indexOf('loot.ntds') >= 0 || a.produces.indexOf('access.admin') >= 0)) {
+      var isDcsyncCashIn = a.transition === 'dcsync' || ((!spec || indicated) && (a.produces.indexOf('loot.ntds') >= 0 || a.produces.indexOf('access.admin') >= 0) && a.requires_all.concat(a.requires_any).some(function (k) {
+        return k === 'ad.control_paths' || k === 'ad.domain_control';
+      }));
+      if (st.adPosture === 'dcsync_ready' && !haveObj['loot.ntds'] && !haveObj['access.admin'] && isDcsyncCashIn) {
         score += 7.0;
         if (tier < 2) tier = 2;
       }
-      // (c) Foothold established -> Privesc enumeration is the immediate next phase
-      if (st.accessLevel === 'foothold' && a.transition === 'privesc_act') {
-        score += 2.5;
+      if ((st.adPosture === 'paths_mapped' || haveObj['ad.attack_paths'] || haveObj['ad.acl_lead']) && !haveObj['ad.control_paths'] && !haveObj['ad.domain_control'] && !haveObj['loot.ntds'] && !haveObj['access.admin'] && (a.transition === 'map_acl' || a.id === 'ad-acl-abuse')) {
+        score += (a.transition === 'map_acl' ? 6.5 : 5.5);
+        if (tier < 2) tier = 2;
+      }
+      // (c) Foothold established -> Privesc enumeration or indicated privesc cash-in is the immediate next phase
+      var privescIndicated = (!spec || indicated) && ((a.id === 'linux-kernel-exploit' && !!haveObj['privesc.kernel_exploit']) || a.requires_all.concat(a.requires_any).some(function (k) {
+        return haveObj[k] && ((/^privesc\./.test(k) && k !== 'privesc.leads') || /^vuln\.(dirtycow|dirtypipe|baron_samedit|polkit|screen_suid|chkrootkit)$/.test(k));
+      }));
+      var inFootholdStage = (st.accessLevel === 'foothold' || haveObj['foothold.linux'] || haveObj['foothold.windows'] || haveObj['access.shell']) && !haveObj['access.root'] && !haveObj['access.admin'] && !haveObj['access.system'];
+      if (inFootholdStage && privescIndicated && (a.transition === 'privesc_act' || a.produces.some(function (p) { return V2_PRIV[p]; }))) {
+        score += 3.5;
+        if (tier < 2) tier = 2;
+      }
+      if (haveObj['foothold.linux'] && !haveObj['access.root'] && !haveObj['access.admin']) {
+        var hasLinuxPrivescIndicator = !!(haveObj['privesc.sudo_rights'] || haveObj['privesc.suid_candidate'] || haveObj['privesc.cron'] || haveObj['privesc.cron_writable'] || haveObj['privesc.capabilities'] || haveObj['privesc.capability'] || haveObj['privesc.sudo_binary'] || haveObj['privesc.passwd_writable'] || haveObj['privesc.nfs_no_root_squash'] || haveObj['privesc.kernel_exploit']);
+        if (!hasLinuxPrivescIndicator) {
+          var isLinuxOrient = (!spec || indicated) && (
+            a.transition === 'privesc_orient' ||
+            a.id === 'linux-enum' ||
+            ((a.produces.indexOf('privesc.sudo_rights') >= 0 || a.produces.indexOf('privesc.suid_candidate') >= 0) && !haveObj['privesc.sudo_rights'] && !haveObj['privesc.suid_candidate'])
+          );
+          if (isLinuxOrient) {
+            score += 5.0;
+            if (tier < 2) tier = 2;
+          }
+        }
+      }
+      if (haveObj['foothold.windows'] && !haveObj['access.admin'] && !haveObj['access.system']) {
+        var hasWinPrivescIndicator = !!(haveObj['privesc.windows_privilege'] || haveObj['privesc.weak_service_permission'] || haveObj['privesc.scheduled_task'] || haveObj['privesc.unquoted_service_path'] || haveObj['privesc.always_install_elevated'] || haveObj['privesc.autorun']);
+        if (!hasWinPrivescIndicator && (a.transition === 'privesc_orient' || a.id === 'windows-enum')) {
+          score += 5.0;
+          if (tier < 2) tier = 2;
+        }
       }
       // (d) Admin credential or admin access in hand -> Capture root flag leads everything!
-      if ((st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred' || haveObj['access.admin'] || haveObj['access.system'] || haveObj['credential.admin']) && a.transition === 'root_flag_win' && !haveObj['objective.root_flag']) {
+      if (!noFlags && hasWinShellSurface && (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred' || haveObj['access.admin'] || haveObj['access.system'] || haveObj['credential.admin']) && a.transition === 'root_flag_win' && !haveObj['objective.root_flag']) {
         score += 8.0;
         if (tier < 2) tier = 2;
-      } else if ((st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred') && a.transition === 'foothold_win') {
+      } else if (hasWinShellSurface && (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred') && a.transition === 'foothold_win') {
         score += 3.5;
         if (tier < 2) tier = 2;
       }
       // (d2) Credential in hand without active shell/foothold -> Interactive shell leads to establish foothold
-      if ((st.credTier === 'domain_user' || haveObj['credential.available']) && !haveObj['access.shell'] && !haveObj['foothold.windows'] && a.transition === 'foothold_win') {
+      if (hasWinShellSurface && (st.credTier === 'domain_user' || haveObj['credential.available']) && !haveObj['access.shell'] && !haveObj['foothold.windows'] && a.transition === 'foothold_win') {
         score += 4.5;
         if (tier < 2) tier = 2;
       }
       // (e) SMB shares discovered or readable -> Browse & download leads
-      if ((haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares'] || haveObj['smb.null_session'] || haveObj['smb.guest_session']) && (a.transition === 'loot_browse' || a.transition === 'gpp')) {
+      if ((haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares'] || haveObj['smb.null_session'] || haveObj['smb.guest_session']) && a.transition === 'loot_browse') {
+        score += 4.5;
+        if (tier < 2) tier = 2;
+      }
+      if (isAdTarget && (haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares']) && a.transition === 'gpp') {
         score += 4.5;
         if (tier < 2) tier = 2;
       }
       // (e2) Downloaded loot contains XML / GPP policy artifacts -> GPP passwords leads
-      if ((haveObj['loot.files'] || haveObj['config.review']) && a.transition === 'gpp') {
+      if (isAdTarget && (haveObj['loot.files'] || haveObj['config.review']) && a.transition === 'gpp') {
         score += 5.5;
         if (tier < 2) tier = 2;
       }
       // (e3) GPP candidate in hand without available secret -> Decrypt leads
-      if (haveObj['credential.candidate'] && !haveObj['credential.available'] && a.transition === 'gpp') {
+      var hasGppCand = (typeof facts.values === 'function' ? facts.values('credential.candidate') : []).some(function (v) { return v && v.kind === 'gpp_cpassword'; });
+      if (isAdTarget && hasGppCand && !haveObj['credential.available'] && a.transition === 'gpp') {
         score += 6.5;
         if (tier < 2) tier = 2;
       }
       // (f) Cred in hand on Windows box -> User flag pull leads if not yet captured
-      if ((st.credTier === 'domain_user' || haveObj['credential.available']) && a.transition === 'user_flag_win' && !haveObj['objective.local_flag']) {
+      if (!noFlags && hasWinShellSurface && (st.credTier === 'domain_user' || haveObj['credential.available']) && a.transition === 'user_flag_win' && !haveObj['objective.local_flag']) {
         if (haveObj['access.shell'] || haveObj['foothold.windows'] || haveObj['smb.content_accessible'] || haveObj['smb.readable_share']) {
           score += 4.5;
         } else {
@@ -1118,8 +1374,13 @@
         }
         if (tier < 2) tier = 2;
       }
+      // (g0) Domain user list in hand without credentials -> AS-REP roasting leads immediately
+      if (isAdTarget && haveObj['ad.user_list'] && !haveObj['credential.available'] && !haveObj['hash.asrep'] && a.transition === 'asrep_roast') {
+        score += 4.5;
+        if (tier < 2) tier = 2;
+      }
       // (g) Cred in hand on Windows box -> Kerberoasting leads (suppressed if DCSync cash-in is already available)
-      if (haveObj['credential.available'] && a.transition === 'kerberoast' && !haveObj['hash.tgs'] && st.adPosture !== 'dcsync_ready' && !haveObj['loot.ntds']) {
+      if (isAdTarget && haveObj['credential.available'] && a.transition === 'kerberoast' && !haveObj['hash.tgs'] && st.adPosture !== 'dcsync_ready' && !haveObj['loot.ntds']) {
         score += 4.0;
         if (tier < 2) tier = 2;
       }
@@ -1143,11 +1404,77 @@
           if (tier < 2) tier = 2;
         }
       }
+      // (i2) Active ACL lead or group membership joined, but control path (e.g. DCSync rights) not yet granted -> finish ACL abuse!
+      if (isAdTarget && (haveObj['ad.acl_lead'] || haveObj['ad.group_joined']) && !haveObj['ad.control_paths'] && !haveObj['loot.ntds'] && !haveObj['access.admin'] && a.transition === 'map_acl') {
+        score += 6.5;
+        if (tier < 2) tier = 2;
+      }
 
-      // Endgame objective pull: a reachable, still-uncaptured flag is the box's actual objective — surface it
+      // Stage 3 Web Surface Discovery leads ahead of speculative probes on non-AD web targets
+      if (!isAdTarget && haveObj['http.reachable'] && haveObj['scan.nmap.version'] && !haveObj['foothold.linux'] && !haveObj['foothold.windows']) {
+        var isPrimaryWebDiscovery = (
+          a.id === 'content-discovery' || a.id === 'web-content-discovery' || a.id === 'gobuster-dir' ||
+          a.id === 'ffuf-dir' || a.id === 'feroxbuster-dir' || a.id === 'check-web-components' ||
+          a.id === 'recon-web-triage' || a.id === 'whatweb-fingerprint'
+        );
+        if (isPrimaryWebDiscovery) {
+          score += 3.0;
+          if (tier < 2) tier = 2;
+        }
+      }
+
+      // Unauthenticated AD Opening Discovery: after Nmap on an AD target with no user list or credentials yet,
+      // active anonymous SMB, LDAP, and RPC/Kerberos user enumeration must lead ahead of passive L2 poisoners
+      // (mitm6, Responder, ntlmrelayx), optional NSE vuln scans, and generic DNS/CNAME report checks.
+      if (isAdTarget && !haveObj['ad.user_list'] && !haveObj['credential.available'] && !haveObj['foothold.windows'] && !haveObj['access.shell']) {
+        if (a.id === 'recon-smb-anon' || a.id === 'ad-anon-ldap-enum' || a.id === 'ad-user-enum') {
+          score += 3.5;
+          if (haveObj['scan.nmap.version'] && tier < 2) tier = 2;
+        } else if (a.id === 'mitm6-ipv6-takeover' || a.id === 'responder-poison' || a.id === 'ntlm-relay-attack' || a.id === 'timeroasting' || a.id === 'check-subdomain-takeover' || a.id === 'check-dns-email') {
+          if (tier > 0) tier = 0;
+          score -= 1.5;
+        } else if (a.id === 'nmap-vuln-scripts' && haveObj['scan.nmap.version']) {
+          score -= 1.0;
+        }
+      }
+
+      // Demote AD-specific transitions on non-AD targets
+      var isAdSpecific = (
+        a.transition === 'gpp' || a.transition === 'kerberoast' || a.transition === 'asrep_roast' ||
+        a.transition === 'dcsync' || a.transition === 'map_acl' || a.transition === 'map_graph' ||
+        a.transition === 'map_manual' ||
+        a.id === 'ad-dc-identify' || a.id === 'ad-user-enum' ||
+        a.id === 'gpp-passwords' || a.id === 'ad-path-manual' || a.id === 'bloodhound-collect' ||
+        a.id === 'ad-recycle-bin-enum' || a.id === 'kerberoast' || a.id === 'asrep-roast' ||
+        a.id === 'dcsync' || a.id === 'powerview-enum' || a.id === 'adcs-esc' ||
+        a.id === 'sccm-enum' || a.id === 'sccm-exploit' || a.id === 'ad-legacy-enum' ||
+        a.id === 'ad-psdotnet-enum' || a.id === 'adidns-abuse' || a.id === 'azuread-connect-dump' ||
+        a.id === 'timeroasting' || a.id === 'kerberos-relay' || a.id === 'trust-enum' ||
+        a.id === 'wsus-abuse' || a.id === 'coerce-auth' || a.id === 'printnightmare' ||
+        a.id === 'responder-poison' || a.id === 'ntlm-relay-attack' || a.id === 'mitm6-ipv6-takeover' || a.id === 'certifried'
+      );
+      if (!isAdTarget && isAdSpecific) {
+        tier = -1;
+        score -= 20;
+      }
+
+      // Demote Windows shell moves when no Windows shell surface exists
+      if (!hasWinShellSurface && (a.id === 'flag-hunt-windows' || a.id === 'win-interactive-shell')) {
+        tier = -1;
+        score -= 10;
+      }
+
+      // Invariant: unindicated speculative moves stay in tier -1
+      if (spec && !indicated && tier > -1) {
+        tier = -1;
+      }
+
+      // Endgame objective pull: a reachable, still-uncaptured flag is the box's actual objective - surface it
       // over keystone-rich enumeration even after another goal (e.g. the user flag) already zeroed the
       // goal-distance. See V2_OBJECTIVE_W.
-      for (i = 0; i < a.produces.length; i++) { if (V2_OBJECTIVE_RE.test(a.produces[i]) && !haveObj[a.produces[i]]) { score += V2_OBJECTIVE_W; break; } }
+      if (!noFlags) {
+        for (i = 0; i < a.produces.length; i++) { if (V2_OBJECTIVE_RE.test(a.produces[i]) && !haveObj[a.produces[i]]) { score += V2_OBJECTIVE_W; break; } }
+      }
       return { a: a, tier: tier, score: score };
     });
     scored.sort(function (x, y) {
@@ -1216,7 +1543,7 @@
       if (tx !== ty) return tx - ty;
       // Remote-first: among moves equal on goal-progress AND hand-tuned priority, prefer the lowest-friction
       // locus (R < F < I) so the coach never nudges you onto the box when an off-host move reaches the same
-      // objective. Placed below priority so it only decides genuine twins — it never overrides a move the
+      // objective. Placed below priority so it only decides genuine twins - it never overrides a move the
       // pack deliberately ranked higher.
       var lx = locusRank(x.a.locus), ly = locusRank(y.a.locus);
       if (lx !== ly) return lx - ly;
@@ -1233,7 +1560,7 @@
     var adOriented = haveObj['ad.dc_candidate'] && haveObj['ad.domain_known'];
     var committed = !!(haveObj['access.shell'] || haveObj['access.admin'] || haveObj['access.system'] || haveObj['credential.available']);
     if (!committed) for (var _ck in haveObj) { if (/^foothold\./.test(_ck)) { committed = true; break; } }
-    if (!adOriented && !committed) {
+    if (isAdTarget && !adOriented && !committed) {
       var isOrient = function (a) { return a.produces.some(function (k) { return (k === 'ad.dc_candidate' || k === 'ad.domain_known' || k === 'ad.base_dn' || k === 'ad.anonymous_bind') && !haveObj[k]; }); };
       if (!ordered.slice(0, 3).some(isOrient)) {
         for (var oi = 3; oi < ordered.length; oi++) { if (isOrient(ordered[oi])) { ordered.splice(2, 0, ordered.splice(oi, 1)[0]); break; } }
@@ -1249,7 +1576,7 @@
   }
 
   // A "report-only" check: an info-severity finding whose produced facts enable nothing (no action
-  // requires them) — an SPF/DMARC review, a security-header or TLS read, a CORS/HTTP-methods probe.
+  // requires them) - an SPF/DMARC review, a security-header or TLS read, a CORS/HTTP-methods probe.
   // They belong in the writeup, not at the top of the coach, so the UI groups them out of the live
   // "ready" list instead of letting one headline a box you are actively working. Conservative: a move
   // is spared the moment any of its produced facts is consumed by another move (then it enables
@@ -1276,29 +1603,30 @@
   // --------------------------------------------------------------- full-route planner --
   // The lowest-cost sequence of moves from the current facts to any goal. Action cost encodes
   // reliability: a cash-in earned off specific evidence is cheap (1), an ordinary enumeration step
-  // 1.5, a generic privilege shortcut 8, a speculative "try-if-vulnerable" move 12 — so the plan
+  // 1.5, a generic privilege shortcut 8, a speculative "try-if-vulnerable" move 12 - so the plan
   // prefers dependable routes and only resorts to speculation when nothing else reaches the goal.
   // A* with the step-distance heuristic (admissible: every step costs >= 1). Exact + instant for a
   // lab-sized graph. Returns { path:[actionId,...], cost, reachable }; reachable:false is an honest
   // "no route from here with the current move library", not a guess. OS is fixed per engagement, so
   // os-compatibility is judged once against the live facts.
   function v2ActionCost(a, haveObj) {
-    var gates = a.requires_all.concat(a.requires_any), i, earned = false;
-    for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && V2_SPECIFIC[gates[i]]) { earned = true; break; }
+    var i, earned = v2Earned(a, haveObj);
     var base;
     if (v2Speculative(a, haveObj) && !earned) base = 12;
     else if (earned) base = 1;
     else { base = 1.5; for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) { base = 8; break; } }
     // Remote-first: a small surcharge for stepping onto the host (R +0, F +0.3, I +0.6) so the planner
-    // prefers the Kali-side route when steps otherwise tie — never enough to reorder a genuinely cheaper
+    // prefers the Kali-side route when steps otherwise tie - never enough to reorder a genuinely cheaper
     // path. Running a command from Kali beats getting on the box: faster, and it leaves nothing behind.
     return base + locusRank(a.locus) * 0.3;
   }
   function planPath(facts, pack, opts) {
     opts = opts || {};
-    var goals = opts.goals || V2_GOALS;
+    var noFlags = !!(opts.noFlags || opts.flagsEnabled === false);
+    var goals = opts.goals || (noFlags ? V2_GOALS_NO_FLAGS : V2_GOALS);
+    var activePack = noFlags ? pack.filter(function (a) { return !isFlagHuntAction(a); }) : pack;
     var producers = {}, relevant = {}, i;
-    pack.forEach(function (a) {
+    activePack.forEach(function (a) {
       a.produces.forEach(function (k) { (producers[k] = producers[k] || []).push(a); });
       a.requires_all.concat(a.requires_any).forEach(function (k) { relevant[k] = 1; });
     });
@@ -1332,7 +1660,7 @@
     }
     var start = {}, have = facts.kinds(), k;
     for (k in have) start[k] = 1;
-    var gScore = {}, came = {}, open = [{ st: start, gc: 0, f: v2GoalDistance(start, producers) }];
+    var gScore = {}, came = {}, open = [{ st: start, gc: 0, f: v2GoalDistance(start, producers, goals) }];
     gScore[sig(start)] = 0;
     var exp = 0, MAXEXP = 60000;
     while (open.length) {
@@ -1342,8 +1670,8 @@
       if (++exp > MAXEXP) break;
       if (isGoal(cur.st)) { var pathIds = [], s = cs; while (came[s]) { pathIds.unshift(came[s].move); s = came[s].prev; } return { path: pathIds, cost: cur.gc, reachable: true }; }
       if (cur.gc > gScore[cs]) continue;
-      for (var ai = 0; ai < pack.length; ai++) {
-        var a = pack[ai];
+      for (var ai = 0; ai < activePack.length; ai++) {
+        var a = activePack[ai];
         if (!applic(a, cur.st)) continue;
         var addsRelevant = false, pk;
         for (var pi = 0; pi < a.produces.length; pi++) { pk = a.produces[pi]; if (relevant[pk] && !cur.st[pk]) { addsRelevant = true; break; } }
@@ -1352,7 +1680,7 @@
         for (kk in cur.st) ns[kk] = 1;
         a.produces.forEach(function (p) { ns[p] = 1; });
         var nsig = sig(ns), ng = cur.gc + v2ActionCost(a, cur.st);
-        if (gScore[nsig] === undefined || ng < gScore[nsig]) { gScore[nsig] = ng; came[nsig] = { prev: cs, move: a.id }; open.push({ st: ns, gc: ng, f: ng + v2GoalDistance(ns, producers) }); }
+        if (gScore[nsig] === undefined || ng < gScore[nsig]) { gScore[nsig] = ng; came[nsig] = { prev: cs, move: a.id }; open.push({ st: ns, gc: ng, f: ng + v2GoalDistance(ns, producers, goals) }); }
       }
     }
     return { path: null, cost: Infinity, reachable: false };
@@ -1362,6 +1690,7 @@
     DEFAULT_PACK: DEFAULT_PACK,
     PACK_NAMES: PACK_NAMES,
     Action: Action,
+    isFlagHuntAction: isFlagHuntAction,
     deriveLocus: deriveLocus,
     deriveScope: deriveScope,
     locusRank: locusRank,
@@ -1389,16 +1718,19 @@
     nextActionsV2: nextActionsV2,
     rankActions: rankActions,
     isReportOnly: isReportOnly,
-    // Shared fact-classification — the move linter (tools/move-lint.js) uses the SAME predicates the
+    // Shared fact-classification - the move linter (tools/move-lint.js) uses the SAME predicates the
     // ranker does, so a move that passes the lint is, by construction, one the ranker places sanely.
     GOALS: V2_GOALS,
+    GOALS_NO_FLAGS: V2_GOALS_NO_FLAGS,
     isEvidenceFact: v2EvidenceFact,
     producesFoothold: v2ProducesFoothold,
     producesPrivilege: function (a) { for (var i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return true; return false; },
     isIndicated: v2Indicated,
+    v2Earned: v2Earned,
     planPath: planPath,
     ranker: 'v2',
     lockedActions: lockedActions,
     blockedActions: blockedActions,
+    accessEpoch: accessEpoch,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

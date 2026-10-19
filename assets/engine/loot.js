@@ -48,20 +48,21 @@
     return dir ? (dir + '/' + name) : name;
   }
 
-  // Every proven ad.user_list username, deduped (case-insensitively) and sorted — mirrors
+  // Every proven ad.user_list username, deduped (case-insensitively) and sorted - mirrors
   // loot.py.materialize_userlist so the file obol names matches the one it would write.
-  // Noise that must never land in loot/users.txt: machine accounts (end with $), and the Exchange system
-  // mailboxes (SM_*) and health mailboxes (HealthMailbox*) that an LDAP --users dump is full of. Feeding
-  // these to kerbrute / spraying / AS-REP roasting wastes requests and, for a bad list, trips
+  // Noise that must never land in loot/users.txt: machine accounts (end with $), Exchange duplicate/system
+  // accounts (start with $ or SM_*), and health mailboxes (HealthMailbox*) that an LDAP/RPC user dump is full of.
+  // Feeding these to kerbrute / spraying / AS-REP roasting wastes requests and, for a bad list, trips
   // KDC_ERR_C_PRINCIPAL_UNKNOWN. Mirrors the pack's awk HANDOFF filter so the one-command heredoc and the
   // hand-rolled pipeline agree. Real accounts (Administrator, krbtgt, svc-*, people) are kept.
   function isNoiseUser(u) {
-    return /\$$/.test(u) || /^SM_/.test(u) || /^HealthMailbox/i.test(u) || u === '-Username-';
+    return /\$$/.test(u) || /^\$/.test(u) || /^SM_/.test(u) || /^HealthMailbox/i.test(u) || u === '-Username-';
   }
   function usernames(facts) {
     if (!facts || !facts.values) return [];
     var seen = {}, out = [];
-    facts.values('ad.user_list').forEach(function (v) {
+    var lists = facts.values('ad.user_list').concat(facts.values('web.users'));
+    lists.forEach(function (v) {
       ((v && v.users) || []).forEach(function (u) {
         u = String(u == null ? '' : u).trim();
         var key = u.toLowerCase();
@@ -77,7 +78,8 @@
     if (!facts || !facts.values) return [];
     var seen = {}, out = [];
     facts.values(kind).forEach(function (v) {
-      ((v && v.hashes) || []).forEach(function (h) {
+      var list = (v && v.hashes) ? v.hashes : (v && v.hash ? [v.hash] : []);
+      list.forEach(function (h) {
         h = String(h == null ? '' : h).trim();
         if (h && !seen[h]) { seen[h] = true; out.push(h); }
       });
@@ -85,7 +87,7 @@
     return out;
   }
 
-  // asrep / tgs / hashes — the basename a roast writes and its crack reads, so both resolve to the
+  // asrep / tgs / hashes - the basename a roast writes and its crack reads, so both resolve to the
   // SAME file. Derived from the action id + produces/requires tags.
   function hashName(action) {
     action = action || {};
@@ -117,11 +119,16 @@
     return g.indexOf('ad.user_list') >= 0 || g.indexOf('web.users') >= 0;
   }
 
+  function cracksHashFile(action) {
+    var g = [].concat((action && action.requires_all) || [], (action && action.requires_any) || []);
+    return g.indexOf('hash.asrep') >= 0 || g.indexOf('hash.tgs') >= 0;
+  }
+
   // The loot-derived {{token}} values for an action. Operator-pinned inputs win, so this only
   // supplies a token the operator has not set. `userlist` resolves to the PROVEN list once enumerated;
   // before that it stays unfilled for a spray move (a live dependency signal) but seeds a default names
-  // list for a discovery move (so VRFY enum and friends are runnable at once); `hashfile`/`wordlist`
-  // always resolve to their stable paths.
+  // list for a discovery move (so VRFY enum and friends are runnable at once); `hashfile` resolves
+  // to its stable path for roast moves or once the corresponding roast hash is proven.
   function tokensFor(action, facts, dirs, inputs) {
     inputs = inputs || {};
     var out = {};
@@ -129,7 +136,12 @@
       if (usernames(facts).length) out.userlist = userlistPath(dirs);
       else if (!spraysUserList(action)) out.userlist = DEFAULT_NAMES;
     }
-    if (!inputs.hashfile) out.hashfile = hashfilePath(dirs, action);
+    if (!inputs.hashfile) {
+      var hKind = _HASHFILE_FACT_KIND[hashName(action)];
+      if (!cracksHashFile(action) || (hKind && ((facts && facts.has && facts.has(hKind)) || hashesOf(facts, hKind).length))) {
+        out.hashfile = hashfilePath(dirs, action);
+      }
+    }
     if (!inputs.wordlist) out.wordlist = wordlistPath(inputs, action);
     return out;
   }

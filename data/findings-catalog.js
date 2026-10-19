@@ -16,7 +16,7 @@
    "nist": "AC-3",
    "match": {
     "facts_any": [
-     "web.authz_bypass"
+     "web.idor_candidate"
     ]
    }
   },
@@ -152,7 +152,10 @@
    "match": {
     "facts_any": [
      "ad.control_paths",
-     "ad.attack_paths"
+     "ad.attack_paths",
+     "ad.acl_lead",
+     "ad.group_joined",
+     "ad.domain_control"
     ]
    }
   },
@@ -194,8 +197,9 @@
    "attack": "T1558.001",
    "nist": "IA-5",
    "match": {
-    "facts_any": [
-     "hash.krbtgt"
+    "facts_all": [
+     "hash.krbtgt",
+     "kerberos.tickets"
     ]
    }
   },
@@ -344,7 +348,8 @@
    "nist": "AC-6",
    "match": {
     "facts_any": [
-     "credential.plaintext"
+     "loot.credentials",
+     "file.nsclient_ini"
     ]
    }
   },
@@ -362,7 +367,14 @@
    ],
    "cwe": "CWE-522",
    "attack": "T1552.006",
-   "nist": "IA-5"
+   "nist": "IA-5",
+   "match": {
+    "fact_value": {
+     "kind": "credential.candidate",
+     "field": "kind",
+     "equals": "gpp_cpassword"
+    }
+   }
   },
   {
    "key": "ipv6-dns-takeover",
@@ -394,7 +406,12 @@
    ],
    "cwe": "CWE-300",
    "attack": "T1557.001",
-   "nist": "SC-7"
+   "nist": "SC-7",
+   "match": {
+    "facts_any": [
+     "credential.netntlm"
+    ]
+   }
   },
   {
    "key": "ntlm-relay",
@@ -420,7 +437,7 @@
    "title": "Password Spraying / Weak Password Policy",
    "category": "credential",
    "severity": "high",
-   "confidence": "candidate",
+   "confidence": "confirmed",
    "remediation": "Enforce account lockout and MFA, ban seasonal and company-derived passwords, and alert on one-password-against-many-accounts patterns.",
    "refs": [
     "https://cwe.mitre.org/data/definitions/307.html",
@@ -431,26 +448,12 @@
    "attack": "T1110.003",
    "nist": "IA-5",
    "match": {
-    "facts_any": [
-     "ad.user_list"
-    ]
+    "fact_value": {
+     "kind": "credential.available",
+     "field": "method",
+     "equals": "password-spray"
+    }
    }
-  },
-  {
-   "key": "weak-password-hashing",
-   "title": "Weak / Fast Password Hashing",
-   "category": "crypto",
-   "severity": "high",
-   "confidence": "confirmed",
-   "remediation": "Store credentials using a modern memory-hard KDF (Argon2, bcrypt, or yescrypt) and enforce long passphrases so recovered hashes are uncrackable in practice.",
-   "refs": [
-    "https://cwe.mitre.org/data/definitions/916.html",
-    "https://attack.mitre.org/techniques/T1110/002/",
-    "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
-   ],
-   "cwe": "CWE-916",
-   "attack": "T1110.002",
-   "nist": "IA-5"
   },
   {
    "key": "cve-angularjs-2019-10768",
@@ -10419,7 +10422,8 @@
    "nist": "AC-6",
    "match": {
     "facts_any": [
-     "privesc.cron_writable"
+     "privesc.cron_writable",
+     "privesc.cron"
     ]
    }
   },
@@ -10589,7 +10593,9 @@
    "match": {
     "facts_any": [
      "privesc.sudo_rights",
-     "privesc.sudo_binary"
+     "privesc.sudo_binary",
+     "privesc.script_sink",
+     "vuln.baron_samedit"
     ]
    }
   },
@@ -10610,7 +10616,9 @@
    "nist": "AC-6",
    "match": {
     "facts_any": [
-     "privesc.suid_candidate"
+     "privesc.suid_candidate",
+     "vuln.screen_suid",
+     "vuln.polkit"
     ]
    }
   },
@@ -10846,7 +10854,13 @@
    ],
    "cwe": "CWE-98",
    "attack": "T1190",
-   "nist": "SI-10"
+   "nist": "SI-10",
+   "match": {
+    "facts_all": [
+     "web.lfi_confirmed",
+     "foothold.webshell"
+    ]
+   }
   },
   {
    "key": "local-file-inclusion",
@@ -10952,6 +10966,157 @@
      "kind": "smb.smbv1",
      "field": "enabled",
      "equals": true
+    }
+   }
+  },
+  {
+   "key": "linux-kernel-privilege-escalation",
+   "title": "Linux Kernel Privilege Escalation",
+   "category": "privesc",
+   "severity": "high",
+   "confidence": "confirmed",
+   "remediation": "Upgrade the Linux kernel to a patched release, reboot into the updated kernel, and restrict unprivileged access to kernel subsystems such as user namespaces and eBPF where appropriate.",
+   "refs": [
+    "https://cwe.mitre.org/data/definitions/269.html",
+    "https://attack.mitre.org/techniques/T1068/"
+   ],
+   "cwe": "CWE-269",
+   "attack": "T1068",
+   "nist": "SI-2",
+   "match": {
+    "facts_any": [
+     "privesc.kernel_exploit",
+     "vuln.dirtycow",
+     "vuln.dirtypipe"
+    ]
+   }
+  },
+  {
+   "key": "windows-scheduled-task-abuse",
+   "title": "Windows Scheduled Task Privilege Escalation",
+   "category": "privesc",
+   "severity": "high",
+   "confidence": "confirmed",
+   "remediation": "Restrict write permissions on scheduled task binaries, scripts, and working directories to Administrators and SYSTEM, and run scheduled tasks under least-privilege service accounts.",
+   "refs": [
+    "https://cwe.mitre.org/data/definitions/269.html",
+    "https://attack.mitre.org/techniques/T1053/005/"
+   ],
+   "cwe": "CWE-269",
+   "attack": "T1053.005",
+   "nist": "AC-6",
+   "match": {
+    "facts_any": [
+     "privesc.scheduled_task"
+    ]
+   }
+  },
+  {
+   "key": "ad-delegation-abuse",
+   "title": "Active Directory Kerberos Delegation Abuse",
+   "category": "ad",
+   "severity": "high",
+   "confidence": "confirmed",
+   "remediation": "Eliminate unconstrained delegation, restrict constrained delegation to specific services, protect privileged accounts with the Account is sensitive and cannot be delegated flag, and audit msDS-AllowedToActOnBehalfOfOtherIdentity ACLs.",
+   "refs": [
+    "https://cwe.mitre.org/data/definitions/269.html",
+    "https://attack.mitre.org/techniques/T1558/"
+   ],
+   "cwe": "CWE-269",
+   "attack": "T1558",
+   "nist": "AC-6",
+   "match": {
+    "facts_any": [
+     "ad.unconstrained",
+     "ad.delegation",
+     "ad.rbcd"
+    ]
+   }
+  },
+  {
+   "key": "laps-gmsa-credential-exposure",
+   "title": "LAPS / gMSA Credential Exposure",
+   "category": "ad",
+   "severity": "high",
+   "confidence": "confirmed",
+   "remediation": "Audit and restrict read access on ms-Mcs-AdmPwd and PrincipalsAllowedToRetrieveManagedPassword to dedicated administrative groups, and monitor directory queries against LAPS and gMSA attributes.",
+   "refs": [
+    "https://cwe.mitre.org/data/definitions/522.html",
+    "https://attack.mitre.org/techniques/T1552/"
+   ],
+   "cwe": "CWE-522",
+   "attack": "T1552",
+   "nist": "IA-5",
+   "match": {
+    "facts_any": [
+     "ad.laps",
+     "ad.laps_lead",
+     "ad.gmsa"
+    ]
+   }
+  },
+  {
+   "key": "ad-gpo-abuse",
+   "title": "Active Directory Group Policy Object (GPO) Abuse",
+   "category": "ad",
+   "severity": "high",
+   "confidence": "confirmed",
+   "remediation": "Restrict Edit Settings, Delete, Modify Security permissions on Group Policy Objects and SYSVOL policy folders to Tier-0 administrators, and alert on GPO modifications.",
+   "refs": [
+    "https://cwe.mitre.org/data/definitions/269.html",
+    "https://attack.mitre.org/techniques/T1484/001/"
+   ],
+   "cwe": "CWE-269",
+   "attack": "T1484.001",
+   "nist": "AC-6",
+   "match": {
+    "facts_any": [
+     "ad.gpo_writable",
+     "ad.gpo_control"
+    ]
+   }
+  },
+  {
+   "key": "mssql-xp-cmdshell-rce",
+   "title": "Microsoft SQL Server xp_cmdshell Command Execution",
+   "category": "access",
+   "severity": "critical",
+   "confidence": "confirmed",
+   "remediation": "Disable xp_cmdshell unless strictly required, restrict sysadmin role membership and IMPERSONATE permissions, and run the SQL Server service under a least-privilege domain or virtual account.",
+   "refs": [
+    "https://cwe.mitre.org/data/definitions/78.html",
+    "https://attack.mitre.org/techniques/T1505/001/"
+   ],
+   "cwe": "CWE-78",
+   "attack": "T1505.001",
+   "nist": "AC-6",
+   "match": {
+    "fact_value": {
+     "kind": "foothold.windows",
+     "field": "method",
+     "equals": "xp_cmdshell"
+    }
+   }
+  },
+  {
+   "key": "postgresql-command-execution",
+   "title": "PostgreSQL Authenticated Command Execution",
+   "category": "access",
+   "severity": "critical",
+   "confidence": "confirmed",
+   "remediation": "Restrict PostgreSQL superuser and pg_execute_server_program privileges, enforce strong password authentication in pg_hba.conf, and bind the database listener to trusted interfaces.",
+   "refs": [
+    "https://cwe.mitre.org/data/definitions/78.html",
+    "https://attack.mitre.org/techniques/T1190/"
+   ],
+   "cwe": "CWE-78",
+   "attack": "T1190",
+   "nist": "AC-6",
+   "match": {
+    "fact_value": {
+     "kind": "foothold.linux",
+     "field": "service",
+     "equals": "postgresql"
     }
    }
   }

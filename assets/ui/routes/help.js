@@ -1,5 +1,5 @@
 /*!
- * obol ui — routes/help.js — the Help tab. The MAP of obol: what each surface is for, when to reach for
+ * obol ui - routes/help.js - the Help tab. The MAP of obol: what each surface is for, when to reach for
  * it, and obol's own vocabulary. Content lives in data/help-content.js (OBOL.HELP); this renders it.
  * Three sub-views (Index / Quick Start / Glossary), triage cards on the Index, a collapsible by-section
  * accordion with Go There deep links, a calm Charon quick-start, and an obol-vocabulary glossary.
@@ -20,9 +20,13 @@
 
   function subRow(sub) {
     var kids = (sub.subs && sub.subs.length) ? '<div class="help-subs help-subs--deep">' + sub.subs.map(subRow).join('') + '</div>' : '';
-    return '<div class="help-sub"><div class="help-sub-main"><span class="help-sub-t">' + esc(sub.title) + '</span> '
-      + '<span class="help-sub-what">' + esc(sub.what) + '</span></div>'
-      + gotoBtn(sub.goto, 'Go', sub.set) + '</div>' + kids;
+    return '<div class="help-sub"><div class="help-sub-main">'
+      + '<span class="help-sub-t">' + esc(sub.title) + '</span> '
+      + '<span class="help-sub-what">' + esc(sub.what) + '</span>'
+      + (sub.when ? '<div class="help-sub-when"><span class="help-lbl">When</span> ' + esc(sub.when) + '</div>' : '')
+      + (sub.tip ? '<div class="help-sub-tip"><span class="help-lbl">Tip</span> ' + esc(sub.tip) + '</div>' : '')
+      + '</div>'
+      + gotoBtn(sub.goto || sub.href, 'Go', sub.set) + '</div>' + kids;
   }
 
   function sectionCard(s, open) {
@@ -39,39 +43,75 @@
       + '<span class="help-sec-what">' + esc(s.what) + '</span></summary>'
       + '<div class="help-sec-body">'
       + (s.when ? '<p class="help-when"><span class="help-lbl">When</span> ' + esc(s.when) + '</p>' : '')
-      + '<div class="help-goable">' + gotoBtn(s.goto, 'Go To ' + s.title) + '</div>'
+      + (s.tip ? '<p class="help-tip"><span class="help-lbl">Tip</span> ' + esc(s.tip) + '</p>' : '')
+      + '<div class="help-goable">' + gotoBtn(s.goto || s.href, 'Go To ' + s.title) + '</div>'
       + (subsHtml ? '<div class="help-subs">' + subsHtml + '</div>' : '')
       + '</div></details>';
   }
 
   function renderIndex(H, focus) {
     var triage = '<div class="help-triage">' + (H.triage || []).map(function (t) {
-      return '<button type="button" class="help-tri" data-goto="' + U.attr(t.goto) + '">'
+      return '<button type="button" class="help-tri" data-goto="' + U.attr(t.goto || t.href) + '">'
         + '<span class="help-tri-t">' + esc(t.title) + '</span>'
         + '<span class="help-tri-b">' + esc(t.body) + '</span>'
         + '<span class="help-tri-cta">' + esc(t.cta) + ' &rsaquo;</span></button>';
     }).join('') + '</div>';
     var sections = (H.sections || []).map(function (s) { return sectionCard(s, s.id === focus); }).join('');
     return triage
-      + '<h2 class="help-h2">Everything In obol, By Section</h2>'
+      + '<h2 class="help-h2">Everything In OBOL, By Section</h2>'
       + '<p class="help-note">Open a section to see what it holds. Every row has a Go There.</p>'
       + '<div class="help-index">' + sections + '</div>';
   }
 
+  function getQuickstartSteps() {
+    try {
+      var raw = localStorage.getItem('obol-quickstart-steps');
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
   function renderStart(H) {
+    var stored = getQuickstartSteps();
+    var steps = H.quickstart || [];
+    var doneCount = 0;
+    steps.forEach(function (q, i) {
+      if (stored[i] || stored[q.id] || stored[q.title]) doneCount++;
+    });
+    var totalSteps = steps.length || 4;
+    var pct = Math.round((doneCount / totalSteps) * 100);
+
     // the cyberpunk Charon illustration, floating in emanating ring-light (same ferryman as Stuck?)
     var intro = '<div class="help-charon">'
       + '<div class="charon-fig"><span class="charon-aura"></span><span class="charon-ring"></span><span class="charon-ring r2"></span>'
       + '<img class="charon-img" src="assets/img/charon.webp?v=2" width="216" height="216" loading="lazy" decoding="async" alt="Charon the ferryman, hooded with glowing red eyes in a skull boat on the green Styx"></div>'
       + '<p class="help-charon-say">' + esc(H.charonIntro || '') + '</p></div>';
-    var cards = (H.quickstart || []).map(function (q, i) {
-      return '<div class="help-qs"><div class="help-qs-n" aria-hidden="true">' + (i + 1) + '</div>'
-        + '<div class="help-qs-b"><div class="help-qs-t">' + esc(q.title) + '</div>'
+
+    var progress = '<div class="help-qs-progress" role="region" aria-label="Quick Start Progress">'
+      + '<div class="help-qs-progress-head">'
+      + '<span class="help-qs-progress-txt">' + doneCount + ' of ' + totalSteps + ' Complete</span>'
+      + '<span class="help-qs-progress-pct">' + pct + '%</span>'
+      + '</div>'
+      + '<div class="help-qs-progress-bar"><div class="help-qs-progress-fill" style="width:' + pct + '%;"></div></div>'
+      + '</div>';
+
+    var cards = steps.map(function (q, i) {
+      var isDone = !!(stored[i] || stored[q.id] || stored[q.title]);
+      return '<div class="help-qs' + (isDone ? ' is-done' : '') + '">'
+        + '<div class="help-qs-check">'
+        + '<label class="help-qs-step-lbl">'
+        + '<input type="checkbox" class="help-qs-step-cb" data-step-idx="' + i + '" data-step-id="' + esc(q.id || '') + '"' + (isDone ? ' checked' : '') + '>'
+        + '<span class="help-qs-step-title">' + (i + 1) + '. ' + esc(q.title) + '</span>'
+        + '</label>'
+        + '</div>'
+        + '<div class="help-qs-b">'
         + (q.charon ? '<p class="help-qs-say">' + esc(q.charon) + '</p>' : '')
         + '<p class="help-qs-body">' + esc(q.body) + '</p>'
-        + gotoBtn(q.goto, q.cta) + '</div></div>';
+        + gotoBtn(q.goto || q.href, q.cta) + '</div></div>';
     }).join('');
-    return intro + '<div class="help-qs-grid">' + cards + '</div>';
+
+    return intro + progress + '<div class="help-qs-grid">' + cards + '</div>';
   }
 
   function renderGlossary(H) {
@@ -82,7 +122,7 @@
       return '<div class="help-term"><div class="help-term-t">' + esc(g.term) + '</div>'
         + '<div class="help-term-d">' + esc(g.def) + '</div>' + see + '</div>';
     }).join('');
-    return '<p class="help-note">The words obol uses. For pentest terms (SUID, Kerberoast, and the rest) see Learn and the field notes.</p>'
+    return '<p class="help-note">The words OBOL uses. For pentest terms (SUID, Kerberoast, and the rest) see Learn and the field notes.</p>'
       + '<div class="help-glossary">' + terms + '</div>';
   }
 
@@ -103,8 +143,9 @@
     var tab = sub === 'glossary' ? 'glossary' : (sub === '' || sub === 'start') ? 'start' : 'index';
     var focus = (tab === 'index' && sub && sub !== 'index') ? sub : '';
     var head = '<section class="help-route"><div class="help-head"><h1 class="route-h1">Help</h1>'
-      + '<p class="route-sub">What each part of obol is for, and when to reach for it. This is the map. For how to pentest, see Learn and the field notes.</p></div>'
-      + tabBar(tab);
+      + '<p class="route-sub">What each part of OBOL is for, and when to reach for it. This is the map. For how to pentest, see Learn and the field notes.</p></div>'
+      + tabBar(tab)
+      + '<div class="help-search-bar"><input type="search" id="help-search" class="help-search-input" placeholder="Search Help sections, tools, and glossary..." autocomplete="off" spellcheck="false" aria-label="Search Help"></div>';
     if (!H.sections) {
       return head + '<p class="route-sub">Help is coming online. If you just opened it, give the bundle a moment and try again.</p></section>';
     }
@@ -125,6 +166,100 @@
       if (set) { try { var o = JSON.parse(set); OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; Object.keys(o).forEach(function (k) { eng.ui[k] = o[k]; }); }, 'ui'); } catch (x) {} }
       var go = b.getAttribute('data-goto'); if (go) location.hash = go;
     });
+
+    // H4: Live search input filtering sections, subs, glossary terms, and quick-start cards
+    U.on(mount, 'input', '#help-search', function (e, inp) {
+      var q = (inp.value || '').trim().toLowerCase();
+
+      // Filter Index sections and sub-rows
+      var secs = mount.querySelectorAll('.help-sec');
+      Array.prototype.forEach.call(secs, function (sec) {
+        if (!q) {
+          sec.style.display = '';
+          Array.prototype.forEach.call(sec.querySelectorAll('.help-sub'), function (sub) { sub.style.display = ''; });
+          Array.prototype.forEach.call(sec.querySelectorAll('.help-grp'), function (grp) { grp.style.display = ''; });
+          return;
+        }
+        var secSum = sec.querySelector('.help-sec-sum');
+        var secSumText = secSum ? secSum.textContent.toLowerCase() : '';
+        var secBody = sec.querySelector('.help-sec-body');
+        var secBodyText = secBody ? secBody.textContent.toLowerCase() : '';
+        var secMatches = secSumText.indexOf(q) >= 0 || secBodyText.indexOf(q) >= 0;
+        var matchingSubs = 0;
+        Array.prototype.forEach.call(sec.querySelectorAll('.help-sub'), function (sub) {
+          var subText = sub.textContent.toLowerCase();
+          var subMatches = subText.indexOf(q) >= 0;
+          sub.style.display = subMatches ? '' : 'none';
+          if (subMatches) matchingSubs++;
+        });
+        Array.prototype.forEach.call(sec.querySelectorAll('.help-grp'), function (grp) {
+          var hasVisible = Array.prototype.some.call(grp.querySelectorAll('.help-sub'), function (s) { return s.style.display !== 'none'; });
+          grp.style.display = hasVisible ? '' : 'none';
+        });
+        if (secMatches || matchingSubs > 0) {
+          sec.style.display = '';
+          sec.open = true;
+          if (secMatches && matchingSubs === 0) {
+            Array.prototype.forEach.call(sec.querySelectorAll('.help-sub'), function (sub) { sub.style.display = ''; });
+            Array.prototype.forEach.call(sec.querySelectorAll('.help-grp'), function (grp) { grp.style.display = ''; });
+          }
+        } else {
+          sec.style.display = 'none';
+        }
+      });
+
+      // Filter Glossary terms
+      var terms = mount.querySelectorAll('.help-term');
+      Array.prototype.forEach.call(terms, function (term) {
+        if (!q) {
+          term.style.display = '';
+          return;
+        }
+        var termText = term.textContent.toLowerCase();
+        term.style.display = termText.indexOf(q) >= 0 ? '' : 'none';
+      });
+
+      // Filter Quick Start cards
+      var qsCards = mount.querySelectorAll('.help-qs');
+      Array.prototype.forEach.call(qsCards, function (card) {
+        if (!q) {
+          card.style.display = '';
+          return;
+        }
+        var cardText = card.textContent.toLowerCase();
+        card.style.display = cardText.indexOf(q) >= 0 ? '' : 'none';
+      });
+    });
+
+    // H5: Stepped Quick Start persistence and progress updating
+    U.on(mount, 'change', '.help-qs-step-cb', function (e, cb) {
+      var idx = cb.getAttribute('data-step-idx');
+      var id = cb.getAttribute('data-step-id');
+      var stored = getQuickstartSteps();
+      if (cb.checked) {
+        stored[idx] = true;
+        if (id) stored[id] = true;
+      } else {
+        delete stored[idx];
+        if (id) delete stored[id];
+      }
+      try {
+        localStorage.setItem('obol-quickstart-steps', JSON.stringify(stored));
+      } catch (err) {}
+      var card = cb.closest('.help-qs');
+      if (card) card.classList.toggle('is-done', cb.checked);
+
+      var total = mount.querySelectorAll('.help-qs-step-cb').length || 4;
+      var checkedCount = mount.querySelectorAll('.help-qs-step-cb:checked').length;
+      var txtEl = mount.querySelector('.help-qs-progress-txt');
+      if (txtEl) txtEl.textContent = checkedCount + ' of ' + total + ' Complete';
+      var pctEl = mount.querySelector('.help-qs-progress-pct');
+      var pct = Math.round((checkedCount / total) * 100);
+      if (pctEl) pctEl.textContent = pct + '%';
+      var fillEl = mount.querySelector('.help-qs-progress-fill');
+      if (fillEl) fillEl.style.width = pct + '%';
+    });
+
     // a deep link to a section opens it (the <details open> above) and scrolls it into view
     var s = subOf(ctx);
     var focus = (s && s !== 'start' && s !== 'glossary' && s !== 'index') ? s : '';

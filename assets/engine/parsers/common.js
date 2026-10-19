@@ -1,5 +1,5 @@
 /*!
- * obol engine — parsers/common.js  (was _common.js — renamed; GitHub Pages/Jekyll drops underscore-prefixed files)
+ * obol engine - parsers/common.js  (was _common.js - renamed; GitHub Pages/Jekyll drops underscore-prefixed files)
  * Shared compiled regexes, scoping/validation helpers, and the `_add` dedup primitive.
  * Faithful JS port of 
  *
@@ -43,22 +43,23 @@
   C.reSearch = reSearch;
 
   // ---- regexes ----------------------------------------- //
+  C._IPV4_RE = /^\d{1,3}(?:\.\d{1,3}){3}$/;
   C._DOMAIN_RE = /\(domain:([^)]+)\)/i;
   C._NAME_RE = /\(name:([^)]+)\)/i;
-  C._NXC_PROTO_REACHABLE_RE = /^(?<proto>LDAP|SMB|WINRM|RDP|SSH|FTP)\s+\S+\s+\d+\s+\S+/im;
+  C._NXC_PROTO_REACHABLE_RE = /^(?<proto>LDAP|LDAPS|SMB|WINRM|RDP|SSH|FTP|MSSQL|WMI|VNC|NFS)\s+(?<host>\S+)\s+\d+\s+\S+/im;
   C._SAM_RE = /\bsAMAccountName:\s*([^\s,;]+)/i;
   C._UPN_RE = /\buserPrincipalName:\s*([^\s,;@]+)(?:@[^\s,;]+)?/i;
   // Column 5 is the sAMAccountName. Require an alnum/$ first char so the '-Username-' header row and
   // other dash-led artifacts never match as a user (a real account never starts with '-' or '.').
-  C._NXC_USER_ROW_RE = /^(?:LDAP|SMB)\s+\S+\s+\d+\s+\S+\s+(?!\[[^\]]+\])(?<user>[A-Za-z0-9$][A-Za-z0-9._$-]+)\b/im;
-  C._NXC_RID_USER_RE = /^(?:SMB|RPC)\s+\S+\s+\d+\s+\S+\s+(?:0x[0-9a-f]+|\d+):\s+(?:[^\\\s]+\\)?(?<user>[A-Za-z0-9._$-]{2,})\s+\(SidTypeUser\)/im;
-  C._RPC_USER_RE = /\buser:\[(?<user>[^\]]+)\]\s+rid:\[[^\]]+\]/i;
+  C._NXC_USER_ROW_RE = /^(?:LDAP|SMB)\s+\S+\s+\d+\s+\S+\s+(?!\[[^\]]+\]|GROUP-MEM\b|Share\b|Permissions\b|---+)(?:[^\\\s]+\\)?(?<user>[A-Za-z0-9$][A-Za-z0-9._$-]+)\b/im;
+  C._NXC_RID_USER_RE = /^(?:(?:SMB|RPC)\s+\S+\s+\d+\s+\S+\s+)?(?:0x[0-9a-f]+|\d+):\s+(?:[^\\\s]+\\)?(?<user>[A-Za-z0-9._$-]{2,})\s+\(SidTypeUser\)/im;
+  C._RPC_USER_RE = /\buser:\[(?<user>[^\]]+)\]\s+rid:\[[^\]]+\]|\bAccount:\s*(?:[^\\\s]+\\)?(?<user2>[A-Za-z0-9._$-]{2,})\s+Name:|\bFound user:\s*(?<user3>[A-Za-z0-9._$-]+),\s*uid\s*=\s*\d+|^\s+username:\s*['"]?(?<user4>[A-Za-z0-9._$-]{2,})['"]?\s*$/im;
   C._BASE_DN_RE = /\b(?:namingContexts|defaultNamingContext|rootDomainNamingContext):\s*([A-Za-z0-9_=,.-]+)/i;
   C._ASREP_RE = /(\$krb5asrep\$[^\s]+)/i;
-  C._ASREP_USER_RE = /\$krb5asrep\$\d+\$([^:@$]+)(?:@([^:$]+))?:/i;
+  C._ASREP_USER_RE = /\$krb5asrep\$(?:\d+\$)?(?![0-9a-fA-F]{32}\$[0-9a-fA-F]{32})(?!\d+\$[0-9a-fA-F]{32})(?<user>[^:@$\s)]+)(?:[@$](?![0-9a-fA-F]{32}\b)(?<domain>[A-Za-z0-9_.-]+))?(?=[:$)\s]|$)/i;
   C._TGS_RE = /(\$krb5tgs\$[^\s]+)/i;
-  C._TGS_USER_RE = /\$krb5tgs\$\d+\$\*?([^$*:]+)/i;
-  C._NTDS_HASH_RE = /(?:(?<domain>[^\s\\:]+)\\)?(?<user>[^\s\\:]+):(?<rid>\d+):[0-9a-fA-F]{32}:(?<nt>[0-9a-fA-F]{32}):::/;
+  C._TGS_USER_RE = /\$krb5tgs\$(?:\d+\$)?(?![0-9a-fA-F]{32}\$[0-9a-fA-F]{32})(?!\d+\$[0-9a-fA-F]{32})\*?(?<user>[^$*:\s)]+)(?:\$(?![0-9a-fA-F]{32}\b)(?<domain>[A-Za-z0-9_.-]+))?/i;
+  C._NTDS_HASH_RE = /(?<![^\s\\:])(?:(?<domain>[^\s\\:]{1,128})\\)?(?<user>[^\s\\:]{1,128}):(?<rid>\d+):[0-9a-fA-F]{32}:(?<nt>[0-9a-fA-F]{32}):::/;
   var NXC_ROW_PREFIX = '(?:(?:SMB|WINRM|WMI|RPC|SSH)\\s+\\S+\\s+\\d+\\s+\\S+\\s+)?';
   C._SYSTEM_ID_RE = /\bnt authority\\system\b/i;
   C._WHOAMI_ID_RE = new RegExp('^' + NXC_ROW_PREFIX + '(?<id>nt authority\\\\system|[A-Za-z0-9][A-Za-z0-9.-]*\\\\[A-Za-z0-9._$-]{2,})\\s*$', 'im');
@@ -70,40 +71,40 @@
   C._PENELOPE_HOST_RE = /(?<host>[A-Za-z0-9][\w.-]*)~(?<ip>\d{1,3}(?:\.\d{1,3}){3})/;
   C._ESC_RE = /\bESC(\d{1,2})\b/;
   C._AD_CONTROL_RIGHT_RE = /\b(GenericAll|GenericWrite|WriteDACL|WriteDacl|WriteOwner|FullControl|AllExtendedRights|ForceChangePassword|AddMember|WriteMembers|ReadGMSAPassword|msDS-AllowedToActOnBehalfOfOtherIdentity|AllowedToAct|RBCD|DCSync|GetChanges|GetChangesAll)\b/i;
-  C._AD_CONTROL_SUCCESS_RE = /\b(?:success(?:fully)?|modified|changed|granted|added|written|set|able to replicate)\b.*\b(?:groupMember|member|owner|GenericAll|FullControl|DACL|delegation|msDS-AllowedToAct|AllowedToAct|RBCD|rights?|DCSync|replicat)\b|\b(?:groupMember|owner|GenericAll|FullControl|DACL|delegation|msDS-AllowedToAct|AllowedToAct|RBCD|rights?|DCSync|replicat)\b.*\b(?:success(?:fully)?|modified|changed|granted|added|written|set|able to replicate)\b/i;
+  C._AD_CONTROL_SUCCESS_RE = /\b(?:success(?:fully)?|modified|changed|granted|added|written|set|able to replicate)\b[^\r\n]{0,200}?\b(?:groupMember|member|owner(?:sid)?|GenericAll|FullControl|DACL|delegation|msDS-AllowedToAct|AllowedToAct|RBCD|rights?|DCSync|replicat)\b|\b(?:groupMember|owner(?:sid)?|GenericAll|FullControl|DACL|delegation|msDS-AllowedToAct|AllowedToAct|RBCD|rights?|DCSync|replicat)\b[^\r\n]{0,200}?\b(?:success(?:fully)?|modified|changed|granted|added|written|set|able to replicate)\b/i;
   C._ADD_COMPUTER_SUCCESS_RE = /\b(?:success(?:fully)?\s+)?(?:added|created)\s+(?:machine|computer)\s+(?:account\s+)?['"]?(?<name>[A-Za-z0-9_.-]+\$?)['"]?/i;
-  C._TICKET_FILE_RE = /\b(?:Saving|Saved|Wrote|Writing|Ticket written)\b[^\n]*?(?<file>[A-Za-z0-9_./\\-]+\.(?:ccache|kirbi))/i;
+  C._TICKET_FILE_RE = /\b(?:Saving|Saved|Wrote|Writing|Ticket written)\b[^\n]*?(?<file>[A-Za-z0-9_./\\@$+-]+\.(?:ccache|kirbi))/i;
   C._IMPERSONATE_RE = /\bimpersonat(?:e|ing)\s+(?:user\s+)?['"]?(?<user>[A-Za-z0-9._$-]+)/i;
   C._GMSA_HASH_RE = /(?:(?<domain>[A-Za-z0-9_.-]+)\\)?(?<user>[A-Za-z0-9._-]+\$)\s*[:\s]+(?:NTLM|NTHASH|RC4_HMAC|rc4_hmac)\s*[:=]\s*(?<nt>[0-9a-fA-F]{32})/i;
   C._GMSA_READ_ERROR_RE = /\b(no\s+object\s+found|noresulterror|does\s+not\s+exist|not\s+found|access[_\s]?denied|insufficient|denied|unauthorized|traceback|exception)\b/i;
   C._LAPS_PASSWORD_RE = /\b(?:ms-Mcs-AdmPwd|msLAPS-Password|LAPS\s+Password|Password)\s*[:=]\s*(?<pw>\S+)/i;
   C._LAPS_COMPUTER_RE = /\b(?:Computer|Name|sAMAccountName)\s*[:=]\s*(?<computer>[A-Za-z0-9_.-]+\$?)/i;
   C._LAPS_USER_RE = /\b(?:User|Username|Account)\s*[:=]\s*(?<user>[A-Za-z0-9._$-]+)/i;
-  C._JOHN_SHOW_RE = /^(?<user>[A-Za-z0-9._$-]{2,}):(?<password>[^:\s][^:\r\n]*)(?::.*)?$/;
+  C._JOHN_SHOW_RE = /^(?<user>[A-Za-z0-9._$\\/-]{2,}):(?<password>[^:\s][^:\r\n]*)(?::.*)?$/;
   C._JOHN_CRACKED_FOOTER_RE = /\b\d+\s+password\s+hash(?:es)?\s+cracked\b/i;
-  // "Loaded N password hash" preamble — gates the LIVE-cracked-line parser so an ordinary
+  // "Loaded N password hash" preamble - gates the LIVE-cracked-line parser so an ordinary
   // `text  (aside)` line elsewhere never trips it.
   C._JOHN_LOADED_RE = /Loaded\s+\d+\s+password\s+hash/i;
   // john's LIVE cracking output (a normal run, not --show) prints each recovered secret as
-  // `<plaintext>        (<label>)` — e.g. an archive password `codeblue        (backup.zip)`.
-  C._JOHN_CRACKED_LIVE_RE = /^(?<pw>\S.*?)\s{2,}\((?<label>[^)]+)\)\s*$/;
+  // `<plaintext>        (<label>)` - e.g. an archive password `codeblue        (backup.zip)`.
+  C._JOHN_CRACKED_LIVE_RE = /^(?<pw>\S[^\r\n]{0,120}?)\s{2,}\((?<label>[^)\r\n]+)\)\s*$/;
   C._CPASSWORD_RE = /\bcpassword\s*=\s*["']?([^"'\s<>]+)/i;
   C._GPP_FILE_RE = /\b(?:Groups|ScheduledTasks|Services|DataSources|Printers|Drives)\.xml\b/i;
   // Whitespace is restricted to [ \t] (not \s) so a greedy trailing match cannot eat the line's own
   // newline and skip the next port row when iterated globally (reAll). A port row is always one line.
-  C._NMAP_OPEN_RE = /^(?<port>\d+)\/(?:tcp|udp)[ \t]+open(?:\|\w+)?(?:[ \t]+(?<service>\S+))?(?:[ \t]+(?<version>.*?))?[ \t]*$/im;
+  C._NMAP_OPEN_RE = /^(?<port>\d+)\/(?:tcp|udp)[ \t]+open(?![|\w])(?:[ \t]+(?<service>\S+))?(?:[ \t]+(?<version>[^\r\n]*?))?[ \t]*$/im;
   C._NMAP_DISCOVERED_RE = /Discovered open port (?<port>\d+)\/(?<proto>tcp|udp) on (?<host>\S+)/i;
   // The leading "| "/"|_" pipe is nmap's TEXT formatter; the -oX XML carries the same smb-os-discovery
-  // lines WITHOUT it (just indentation) inside the <script output="…"> attribute, so the pipe is optional.
+  // lines WITHOUT it (just indentation) inside the <script output="..."> attribute, so the pipe is optional.
   C._NMAP_DOMAIN_NAME_RE = /^\s*\|?_?\s*(?:Domain name|DNS_Domain_Name|NetBIOS_Domain_Name):\s*(?<domain>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
   C._NMAP_FQDN_RE = /^\s*\|?_?\s*FQDN:\s*(?<fqdn>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
   C._NMAP_COMPUTER_NAME_RE = /^\s*\|?_?\s*(?:Computer name|NetBIOS computer name):\s*(?<name>[A-Za-z0-9_.-]+)\s*$/im;
-  C._NMAP_SMB_SIGNING_RE = /Message signing enabled(?: and (?<required>required)| but not required)?/i;
+  C._NMAP_SMB_SIGNING_RE = /Message signing enabled(?: and (?<required>required)| but not required)?|message_signing:\s*(?<mode>disabled|required|supported)/i;
   C._NMAP_HTTP_TITLE_RE = /^\|\s*_?http-title:\s*(?<title>.+)$/im;
   C._NMAP_HTTP_SERVER_RE = /^\|\s*_?http-server-header:\s*(?<header>.+)$/im;
   // "Microsoft-HTTPAPI/2.0" is the Windows HTTP Server API behind WinRM (5985/47001), WSUS and SSDP/UPnP,
   // NOT a browsable web app. A server header that is ONLY this must never mint web.server, or it unlocks the
-  // whole web-exploit lane (exposed-files, CMS, Log4Shell…) on a plain AD box and buries the real next move.
+  // whole web-exploit lane (exposed-files, CMS, Log4Shell...) on a plain AD box and buries the real next move.
   C._isNonWebServerHeader = function (hdr) { return /^microsoft-httpapi\b/i.test(String(hdr || '').trim()); };
   C._NMAP_HTTP_GENERATOR_RE = /^\|\s*_?http-generator:\s*(?<generator>.+)$/im;
   C._NMAP_HTTP_REDIRECT_RE = /^\|\s*_?http-title:\s*Did not follow redirect to (?<location>\S+)/im;
@@ -112,72 +113,96 @@
   C._NMAP_SNMP_FIELD_RE = /^\|_?\s*(?<key>enterprise|name|description|location|contact):\s*(?<value>.+)$/im;
   C._NXC_SIGNING_RE = /\(signing:(?<enabled>True|False)\)/i;
   C._NXC_SMBV1_RE = /\(SMBv1:(?<enabled>True|False)\)/i;
-  C._WEB_GOBUSTER_RE = /^(?<path>\/\S*)\s+\(Status:\s*(?<code>\d{3})\)/m;
-  C._WEB_FEROX_RE = /^\s*(?<code>\d{3})\s+\w+\s+\d+l\s+\d+w\s+\d+c\s+(?<url>https?:\/\/\S+)/im;
-  C._WEB_FFUF_RE = /^(?<token>\S+)\s+\[Status:\s*(?<code>\d{3})/m;
+  C._WEB_GOBUSTER_RE = /^\s*(?:Found:\s*)?(?:https?:\/\/[^/\s]+)?(?<path>\/\S*)\s+\(?Status:\s*(?<code>\d{3})\)?/im;
+  C._WEB_FEROX_RE = /^\s*(?<code>\d{3})\s+\w+\s+\d+l\s+\d+w(?:\s+\d+c)?\s+(?<url>https?:\/\/\S+|\/\S*)/im;
+  C._WEB_FFUF_RE = /^\s*(?<token>\S+)\s+\[Status:\s*(?<code>\d{3})/m;
+  C._WEB_DIRSEARCH_RE = /^\s*(?:\[\d{2}:\d{2}:\d{2}\]\s+)?(?<code>\d{3})\s+-\s+\S+(?:\s+[KMGT]?B)?\s+-\s+(?:https?:\/\/[^/\s]+)?(?<path>\/\S*)/im;
   C._WEB_WFUZZ_RE = /^\d+:\s+(?:C=)?(?<code>\d{3})\s+\d+\s*L\s+\d+\s*W\s+\d+\s*C[a-z]*\s+"(?<payload>[^"]*)"/m;
   C._WEB_DIRB_RE = /^\+\s+(?<url>https?:\/\/\S+)\s+\(CODE:(?<code>\d{3})/im;
-  C._WEB_GOBUSTER_VHOST_RE = /Found:\s*(?<name>\S+)\s+\(Status:\s*(?<code>\d{3})\)/i;
-  C._NIKTO_FINDING_RE = /^\+\s+(?<text>\S.+)$/m;
+  C._WEB_GOBUSTER_VHOST_RE = /Found:\s*(?<name>\S+)\s+\(?Status:\s*(?<code>\d{3})\)?/i;
+  C._NIKTO_FINDING_RE = /^\+\s+(?:OSVDB-\d+:\s+)?(?:(?<path>\/[^\s:]*):\s*)?(?<text>\S.+)$/m;
   C._WEB_PATH_IN_TEXT_RE = /\/[A-Za-z0-9_][A-Za-z0-9_./-]{1,}/;
   C._WEB_INTERESTING_RE = /\/admin|\/api|\/upload|\/backup|\/login|\/dashboard|\/config|\/phpmyadmin|\/wp-admin|\.git|\.svn|\.bak|\.old|\.zip|\.tar|\.sql|\.env|\.config/i;
   C._GIT_HEAD_RE = /\bref:\s+refs\/heads\/(?<branch>[A-Za-z0-9_./-]+)/i;
   C._GIT_DUMPER_SUCCESS_RE = /\b(?:fetching|downloading|downloaded|repository|objects|refs\/heads|HEAD)\b/i;
-  C._SOURCE_SECRET_RE = /\b(?<key>password|passwd|pwd|secret|api[_-]?key|token|connection(?:string)?|connstr)\b\s*[:=]\s*(?<value>[^\s"']{4,}|"[^"]{4,}"|'[^']{4,}')/i;
+  C._SOURCE_SECRET_RE = /(?:^|[\s"'`$]|[A-Za-z0-9_]*_)(?<key>password|passwd|pwd|secret|api[_-]?key|token|connection(?:string)?|connstr)\b\s*[:=]\s*(?<value>[^\s"']{4,}|"[^"]{4,}"|'[^']{4,}')/i;
   C._LFI_PASSWD_RE = /root:[^:\n]{0,12}:0:0:[^:\n]*:[^:\n]*:/m;
   C._LFI_PASSWD_SECOND_RE = /^\s*(?:daemon|bin|sys|sync|games|nobody|www-data|sshd|mail|proxy):[^:\n]*:\d+:\d+:/m;
   C._LFI_WIN_INI_RE = /\[(?:extensions|fonts|mci extensions|files|mail)\]|;\s*for 16-bit app support|\[boot loader\]/i;
   C._LFI_FILE_PARAM_RE = /(?:resource=|file:\/\/|=)(?<path>\/[A-Za-z0-9_./-]+|[A-Za-z]:\\[^\s'"&]+)/;
   C._B64_TOKEN_RE = /[A-Za-z0-9+/]{40,}={0,2}/;
   C._CMDI_UID_RE = /\buid=\d+\([^)\n]+\)\s+gid=\d+\([^)\n]+\)/;
-  C._CMDI_WIN_RE = /\bnt authority\\+system\b|\bMicrosoft Windows \[Version\b/i;
-  C._SQL_ERROR_RE = /You have an error in your SQL syntax|Warning:\s*mysqli?_\w+\(\)|supplied argument is not a valid MySQL|SQL syntax.*?(?:MariaDB|MySQL) server|Unclosed quotation mark after the character string|quoted string not properly terminated|Incorrect syntax near|Microsoft OLE DB Provider for (?:ODBC Drivers|SQL Server)|System\.Data\.SqlClient\.SqlException|Unknown column '[^']+' in 'where clause'|ORA-\d{5}|PostgreSQL query failed|pg_query\(\)|pg_exec\(\)|SQLSTATE\[\w+\]|java\.sql\.SQLException|SQLite3?::(?:query|exec)|near ".+?": syntax error/i;
-  C._IMDS_MARKER_RE = /\b(?:ami-id|instance-id|instance-action|iam\/security-credentials|meta-data\/|security-credentials|placement\/availability-zone|block-device-mapping|public-keys\/|reservation-id)\b/i;
+  C._CMDI_WIN_RE = /\bnt authority\\+(?:system|network service|local service|iusr)\b|\biis apppool\\[a-z0-9_.-]+|\bMicrosoft Windows \[Version\b/i;
+  C._SQL_ERROR_RE = /You have an error in your SQL syntax|Warning:\s*mysqli?_\w+\(\)|supplied argument is not a valid MySQL|SQL syntax[^\r\n]{0,160}?(?:MariaDB|MySQL) server|Unclosed quotation mark after the character string|quoted string not properly terminated|Incorrect syntax near|Microsoft OLE DB Provider for (?:ODBC Drivers|SQL Server)|System\.Data\.SqlClient\.SqlException|Unknown column '[^']+' in 'where clause'|ORA-\d{5}|PostgreSQL query failed|pg_query\(\)|pg_exec\(\)|SQLSTATE\[\w+\]|java\.sql\.SQLException|SQLite3?::(?:query|exec)|near "[^"\r\n]{1,120}": syntax error/i;
+  C._IMDS_MARKER_RE = /\b(?:ami-id|instance-id|instance-action|iam\/security-credentials|meta-data\/|security-credentials|placement\/availability-zone|block-device-mapping|public-keys\/|reservation-id|compute\.azEnvironment|Metadata-Flavor:\s*Google)\b/i;
   C._AWS_KEY_RE = /"AccessKeyId"\s*:\s*"(?<akid>(?:AKIA|ASIA)[A-Z0-9]{8,})"/;
   C._AWS_SECRET_RE = /"SecretAccessKey"\s*:\s*"(?<secret>[^"\n]{8,})"/;
   C._AWS_TOKEN_RE = /"Token"\s*:\s*"(?<token>[^"\n]{16,})"/;
   C._NOSQL_OP_RE = /\[\$(?:ne|gt|gte|lt|lte|regex|in|nin|where|exists)\]|"\$(?:ne|gt|gte|lt|lte|regex|in|nin|where|expr|function)"|%5[Bb]%24(?:ne|gt|gte|lt|lte|regex|in|nin|where)%5[Dd]/i;
   C._NOSQL_SUCCESS_RE = /"(?:success|authenticated|isAdmin|admin|loggedin|logged_in)"\s*:\s*true|"(?:token|jwt|session|auth_token|accessToken)"\s*:\s*"[^"\n]{8,}"|\bLogin successful\b|\bWelcome back\b|\bAuthentication succeeded\b/i;
-  C._SET_COOKIE_SESSION_RE = /^Set-Cookie:\s*(?:session|connect\.sid|token|auth|PHPSESSID|jwt|jsessionid)\b/im;
-  C._LOGIN_REDIRECT_RE = /^Location:\s*\S*\/(?:admin|dashboard|home|profile|account|portal|welcome)\b/im;
+  C._SET_COOKIE_SESSION_RE = /^\s*(?:<\s*)?Set-Cookie:\s*(?:session|connect\.sid|token|auth|PHPSESSID|jwt|jsessionid)\b/im;
+  C._LOGIN_REDIRECT_RE = /^\s*(?:<\s*)?Location:\s*\S*\/(?:admin|dashboard|home|profile|account|portal|welcome)\b/im;
   C._JWT_TOOL_KEY_RE = /(?<secret>\S{1,64})\s+is the CORRECT key|(?:key confirmed|correct key|signing key(?:\s+found)?)\s*[:=]\s*['"]?(?<secret2>\S{1,64})/i;
   C._JWT_HASHCAT_RE = /^ey[A-Za-z0-9_-]+\.ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+:(?<secret>\S+)\s*$/m;
   C._JWT_FORGE_RE = /"alg"\s*:\s*"none"|hbGciOiJub25l|-X\s+a\b|--exploit\s+a\b|-I\s+-pc\b/i;
   C._WEB_AUTHZ_SUCCESS_RE = /"(?:isAdmin|is_admin|admin)"\s*:\s*(?:true|"?admin(?:istrator)?"?)|"role"\s*:\s*"admin(?:istrator)?"|\bWelcome,?\s+admin(?:istrator)?\b|\bAdmin(?:istrator)?\s+(?:Dashboard|Panel|Console|Area)\b/i;
   C._NIKTO_NOISE_PREFIXES = ['target ip', 'target hostname', 'target port', 'start time', 'end time', 'server:', 'ssl info', 'root page', 'retrieved', 'no cgi', 'scan terminated', 'host(s) tested', 'requests:', '0 host', '1 host'];
-  C._SQLMAP_VULN_RE = /\b(?:parameter\s+['"].+?['"]\s+is vulnerable|is vulnerable to .+sql injection|appears to be .+sql injectable)\b/i;
+  C._SQLMAP_VULN_RE = /\b(?:parameter\s+['"][^'"\r\n]{1,120}['"]\s+is vulnerable|is vulnerable to [^\r\n]{1,80}?sql injection|appears to be [^\r\n]{1,80}?sql injectable|sqlmap identified the following injection point|Parameter:\s*\S+\s+\((?:GET|POST|URI|Cookie|HEADER)\))/i;
   C._SQLMAP_DBMS_RE = /\bback-end DBMS:\s*(?<dbms>[^\r\n]+)/i;
   C._SQLMAP_DATABASE_HEADER_RE = /\bavailable databases\s*\[(?<count>\d+)\]/i;
   C._SQLMAP_STAR_ROW_RE = /^\[\*\]\s+(?<name>[A-Za-z0-9_$.-]{1,80})\s*$/m;
   C._SQLMAP_TABLE_RE = /\bDatabase:\s*(?<database>[A-Za-z0-9_$.-]+)\s*\n(?:\[[^\n]+\]\s*)?Table:\s*(?<table>[A-Za-z0-9_$.-]+)/i;
-  C._SQLMAP_DUMP_RE = /\b(?:dumped|dumping)\b.+\b(?:entries|CSV file|table)\b/i;
-  C._SQLMAP_OS_SHELL_RE = /\bos-shell\b|os-shell\s*>|web backdoor.*(?:uploaded|created|saved)|command shell session/i;
-  C._HTTP_STATUS_RE = /^HTTP\/\S+\s+(?<status>\d{3})(?:\s+(?<reason>.*))?$/im;
-  C._HTTP_HEADER_RE = /^(?<key>Server|X-Powered-By|Location|Content-Type):\s*(?<value>.+)$/im;
+  C._SQLMAP_DUMP_RE = /\b(?:dumped|dumping)\b[^\r\n]{1,120}?\b(?:entries|CSV file|table)\b/i;
+  C._SQLMAP_OS_SHELL_RE = /(?:^|\s)os-shell\s*>|going to use a web backdoor|web backdoor[^\r\n]{0,80}?(?:uploaded|created|saved)|command shell session/i;
+  C._HTTP_STATUS_RE = /^\s*(?:<\s*)?HTTP\/\S+\s+(?<status>\d{3})(?:\s+(?<reason>.*))?$/im;
+  C._HTTP_HEADER_RE = /^\s*(?:<\s*)?(?<key>Server|X-Powered-By|Location|Content-Type):\s*(?<value>.+)$/im;
   C._WHATWEB_PLUGIN_RE = /\b(?<name>[A-Za-z][A-Za-z0-9_.+-]{1,30})\[(?<value>[^\]\r\n]{1,120})\]/;
   C._SSH_BANNER_RE = /\bSSH-(?<version>[12]\.\d+)-(?<banner>[^\r\n]+)/i;
-  C._FTP_BANNER_RE = /^(?:220[- ](?<banner>.+)|230\s+(?<login>Login successful.*))$/im;
-  C._SNMP_SYSDESCR_RE = /SNMPv2-MIB::sysDescr\.0\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
-  C._SNMP_SYSNAME_RE = /SNMPv2-MIB::sysName\.0\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
-  C._SNMP_SYSLOCATION_RE = /SNMPv2-MIB::sysLocation\.0\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
-  C._SNMP_SYSCONTACT_RE = /SNMPv2-MIB::sysContact\.0\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
+  C._FTP_BANNER_RE = /^(?:220[- ](?<banner>.+)|230[- ](?<login>(?:Login successful|User logged in|Anonymous access granted|Anonymous user logged in|Guest login ok).*))$/im;
+  C._SNMP_SYSDESCR_RE = /(?:SNMPv2-MIB::sysDescr\.0|(?:iso|\.?1)\.3\.6\.1\.2\.1\.1\.1\.0)\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
+  C._SNMP_SYSNAME_RE = /(?:SNMPv2-MIB::sysName\.0|(?:iso|\.?1)\.3\.6\.1\.2\.1\.1\.5\.0)\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
+  C._SNMP_SYSLOCATION_RE = /(?:SNMPv2-MIB::sysLocation\.0|(?:iso|\.?1)\.3\.6\.1\.2\.1\.1\.6\.0)\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
+  C._SNMP_SYSCONTACT_RE = /(?:SNMPv2-MIB::sysContact\.0|(?:iso|\.?1)\.3\.6\.1\.2\.1\.1\.4\.0)\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
 
   C._OS_SIGNATURES = {
     windows: [
       /\bMicrosoft Windows\b/i, /\bWindows\s+(?:Server|\d|XP|Vista)\b/i,
       /\bOS:\s*Windows\b/i, /\bRunning:\s*(?:Microsoft\s+)?Windows\b/i,
       /cpe:\/o:microsoft:windows/i, /\bMicrosoft-IIS\b/i,
+      /\bASP\.NET\b/i, /\bWin(?:32|64)\b/i, /\bMicrosoft FTP Service\b/i,
+      /\bMicrosoft-HTTPAPI\b/i, /\bWindows NT\b/i, /\bActive Directory\b/i,
+      /\bms-wbt-server\b/i,
     ],
     linux: [
       /\bLinux\b/i, /\bUbuntu\b/i, /\bDebian\b/i, /\bCentOS\b/i, /\bRed Hat\b/i,
       /\bFedora\b/i, /\bSamba\b/i, /\bUnix\b/i, /cpe:\/o:linux/i,
+      /\bKali\b/i, /\bAlpine\b/i, /\bArch Linux\b/i, /\bGentoo\b/i,
+      /\bRocky Linux\b/i, /\bAlmaLinux\b/i, /\bopenSUSE\b/i, /\bSUSE\b/i,
+      /\bOracle Linux\b/i, /\bFreeBSD\b/i,
     ],
   };
 
-  C._PRIVESC_ACTION_IDS = new Set(['linux-enum', 'sudo-abuse', 'writable-passwd', 'nfs-squash', 'lxc-lxd-escape', 'docker-socket', 'suid-gtfobins', 'pspy-monitor', 'cron-abuse', 'capabilities', 'linux-loot-hunt', 'linux-persistence', 'windows-enum', 'seimpersonate', 'unquoted-service-path', 'weak-service-permissions', 'alwaysinstallelevated', 'dpapi-secrets', 'stored-credentials', 'wesng-patch-gaps', 'windows-persistence', 'lsass-dump-onbox']);
-  C._LINUX_PRIVESC_ACTION_IDS = new Set(['linux-enum', 'sudo-abuse', 'writable-passwd', 'nfs-squash', 'lxc-lxd-escape', 'docker-socket', 'suid-gtfobins', 'pspy-monitor', 'cron-abuse', 'capabilities', 'linux-loot-hunt', 'linux-persistence']);
-  C._WINDOWS_PRIVESC_ACTION_IDS = new Set(Array.from(C._PRIVESC_ACTION_IDS).filter(function (x) { return !C._LINUX_PRIVESC_ACTION_IDS.has(x); }));
-  C._WEB_LFI_ACTION_IDS = new Set(['lfi-probe', 'xxe']);
+  C._LINUX_PRIVESC_ACTION_IDS = new Set([
+    'linux-enum', 'sudo-abuse', 'writable-passwd', 'nfs-squash', 'lxc-lxd-escape',
+    'docker-socket', 'suid-gtfobins', 'pspy-monitor', 'cron-abuse', 'capabilities',
+    'linux-loot-hunt', 'linux-persistence', 'dirtycow', 'dirtypipe', 'baron-samedit',
+    'polkit-abuse', 'linux-kernel-exploit', 'screen-suid-privesc', 'chkrootkit-local-privesc',
+    'Shared-object-injection', 'wildcards-tar-rsync', 'systemd-service-abuse',
+    'env-path-hijack', 'npm-package-privesc', 'doas-privesc', 'logrotate-exploitation',
+    'ansible-playbook-injection', 'consul-service-rce', 'couchdb-admin-party-privesc',
+    'privesc-shell-upgrade'
+  ]);
+  C._WINDOWS_PRIVESC_ACTION_IDS = new Set([
+    'windows-enum', 'seimpersonate', 'unquoted-service-path', 'weak-service-permissions',
+    'alwaysinstallelevated', 'dpapi-secrets', 'stored-credentials', 'wesng-patch-gaps',
+    'windows-persistence', 'lsass-dump-onbox', 'printspoofer-namedpipe', 'potato-family',
+    'dll-hijacking', 'scheduled-tasks', 'uac-bypass', 'wifi-passwords'
+  ]);
+  C._PRIVESC_ACTION_IDS = new Set([].concat(
+    Array.from(C._LINUX_PRIVESC_ACTION_IDS),
+    Array.from(C._WINDOWS_PRIVESC_ACTION_IDS)
+  ));
+  C._WEB_LFI_ACTION_IDS = new Set(['lfi-probe', 'lfi-secret-harvest', 'xxe']);
   C._WEB_CMDI_ACTION_IDS = new Set(['command-injection', 'ssti', 'web-shells', 'file-upload', 'verb-tampering', 'deserialization', 'tomcat-deploy', 'jenkins-access', 'check-struts2', 'ssti-to-rce', 'http-put-webshell', 'authz-abuse']);
   // The web-exploit moves whose whole point IS landing code execution: when their paste shows command
   // output (uid=/whoami/nt authority), that IS a web foothold, so _parse_web_cmdi mints foothold.webshell
@@ -198,14 +223,14 @@
     Array.from(C._WEB_SQLI_ACTION_IDS), Array.from(C._WEB_SSRF_ACTION_IDS),
     Array.from(C._WEB_NOSQLI_ACTION_IDS), Array.from(C._WEB_JWT_ACTION_IDS),
     Array.from(C._WEB_XSS_ACTION_IDS), Array.from(C._WEB_IDOR_ACTION_IDS)));
-  C._AD_ABUSE_ACTION_IDS = new Set(['bloodyad-acl', 'ad-acl-abuse', 'delegation-abuse', 'getst-impersonation', 'gmsa-read', 'laps-read', 'ticket-reuse', 'kerberos-tickets']);
+  C._AD_ABUSE_ACTION_IDS = new Set(['bloodyad-acl', 'ad-acl-abuse', 'delegation-abuse', 'getst-impersonation', 'gmsa-read', 'laps-read', 'ticket-reuse', 'kerberos-tickets', 'golden-ticket', 'silver-ticket', 'diamond-ticket']);
 
-  C._UNAME_RE = /\bLinux\s+(?<host>\S+)\s+(?<kernel>[0-9][^\s]+).*?\b(?<arch>x86_64|i[3-6]86|aarch64|armv\w+)\b/i;
+  C._UNAME_RE = /\bLinux\s+(?<host>\S+)\s+(?<kernel>[0-9][^\s]+)[^\r\n]{0,200}?\b(?<arch>x86_64|i[3-6]86|aarch64|armv\w+)\b/i;
   C._SUID_PATH_RE = /(?<path>\/[A-Za-z0-9_./+-]+)/;
-  C._LOCAL_FILE_SECRET_RE = /(?:password|passwd|pwd|api[_-]?key|secret|token|connectionstring)\s*[=:]\s*['"]?\S{3,}|-----BEGIN (?:OPENSSH|RSA|DSA|EC|PGP) PRIVATE KEY-----/i;
-  C._CAPABILITY_RE = /^(?<path>\/\S+)\s*=\s*(?<caps>[^#\r\n]+cap_[^#\r\n]+)$/im;
-  C._PASSWD_MODE_RE = /^(?<mode>-[rwxstST-]{9})\s+.*\s+(?<path>\/etc\/passwd)\b/m;
-  C._WIN_PRIV_RE = /^\s*(?<name>Se[A-Za-z0-9]+Privilege)\s+.+?\s+(?<state>Enabled|Disabled)\s*$/im;
+  C._LOCAL_FILE_SECRET_RE = /(?:^|[\s"'`$]|[A-Za-z0-9_]*_)(?:password|passwd|pwd|api[_-]?key|secret|token|connectionstring)\s*[=:]\s*['"]?\S{3,}|-----BEGIN (?:OPENSSH|RSA|DSA|EC|PGP) PRIVATE KEY-----/i;
+  C._CAPABILITY_RE = /^\s*(?<path>\/\S+)\s*(?:=\s*|\s+)(?<caps>cap_[a-z0-9_,]+?[+=][eip]+[^\r\n#]*)$/im;
+  C._PASSWD_MODE_RE = /^\s*(?<mode>-[rwxstST-]{9}[.+]?)\s+[^\r\n]{1,120}?\s+(?<path>\/etc\/passwd)\b/m;
+  C._WIN_PRIV_RE = /^\s*(?<name>Se[A-Za-z0-9]+Privilege)\b[^\r\n]{1,120}?\b(?<state>Enabled|Disabled)\s*$/im;
   C._SYSTEMINFO_FIELD_RE = /^\s*(?<key>OS Name|OS Version|System Type):\s*(?<value>.+)$/im;
   C._DANGEROUS_WIN_PRIVS = new Set(['seimpersonateprivilege', 'seassignprimarytokenprivilege', 'sedebugprivilege', 'sebackupprivilege', 'serestoreprivilege', 'setakeownershipprivilege', 'seloaddriverprivilege', 'semanagevolumeprivilege', 'setcbprivilege']);
   C._AIE_VALUE_RE = /AlwaysInstallElevated\s+REG_DWORD\s+0x(?<val>[0-9a-fA-F]+)/i;
@@ -213,13 +238,13 @@
   C._HKCU_HEADER_RE = /^\s*(?:HKEY_CURRENT_USER|HKCU)\b/i;
   C._WEAK_SVC_ACCESS_RE = /\b(?:SERVICE_CHANGE_CONFIG|SERVICE_ALL_ACCESS|SERVICE_CHANGE|WRITE_DAC|WRITE_OWNER)\b/;
   C._LOWPRIV_WRITE_ACE_RE = /(?:BUILTIN\\Users|NT AUTHORITY\\(?:Authenticated Users|INTERACTIVE)|Authenticated Users|Everyone|\bUsers)\s*:\s*\([^)]*[FMW][^)]*\)/i;
-  C._ANSI_RE = /\x1b\[[0-9;]*m/g;
+  C._ANSI_RE = /\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][AB012])/g;
   C._ID_LINE_RE = /\buid=\d+\(/i;
   C._CVE_RE = /CVE-\d{4}-\d{3,7}/i;
   C._EXPLOIT_PROBABILITY_RE = /\b(?:\d{1,3}\s?%|highly probable|probable|exposure|vulnerable|exploitable)\b/i;
   C._KERNEL_EXPLOIT_NAMES = ['pwnkit', 'dirtycow', 'dirty cow', 'dirtypipe', 'dirty pipe', 'polkit', 'pkexec', 'baron samedit', 'overlayfs', 'af_packet', 'ptrace', 'netfilter', 'sequoia', 'looney tunables', 'gameoverlay', 'nftables', 'sudoedit', 'snapd', 'dirtysock'];
   C._KERNEL_EXPLOIT_NEGATION_RE = /\bnot\s+(?:vulnerable|exploitable|affected|applicable)\b|\bpatched\b|\bnot\s+a\s+match\b|\bn\/a\b/i;
-  C._NXC_AUTH_RE = /^\s*(?<proto>SMB|LDAP|WINRM|RDP|SSH|FTP)\s+\S+\s+\d+\s+\S+\s+\[\+\]\s+(?<auth>.+)$/im;
+  C._NXC_AUTH_RE = /^\s*(?<proto>SMB|LDAP|WINRM|RDP|SSH|FTP|MSSQL|WMI)\s+(?<host>\S+)\s+\d+\s+\S+\s+\[\+\]\s+(?<auth>.+)$/im;
   C._AUTH_MATERIAL_RE = /^(?:(?<domain>[^\\\s:/]+)\\)?(?<user>[A-Za-z0-9._$-]{2,}):(?<secret>[^\s()]+)/;
   C._NT_HASH_RE = /^(?:[0-9a-fA-F]{32}:)?[0-9a-fA-F]{32}$/;
   C._EW_PROMPT_RE = /\*Evil-WinRM\*\s+PS\s+/i;
@@ -241,13 +266,13 @@
   C._INTERACTIVE_RE = /\*Evil-WinRM\*\s+PS|semi-interactive shell|Launching semi-interactive|^\[[^\]]+\]:\s*PS[> ]/im;
   C._WPSCAN_USER_SECTION_RE = /User\(s\) Identified[\s\S]*/i;
   C._WPSCAN_USER_RE = /^\s*\[\+\]\s+(?<u>[A-Za-z0-9._@-]{2,64})\s*$/m;
-  C._WPSCAN_VULN_RE = /\[!\]\s*Title:\s*(?<t>.+?)\s*$/m;
+  C._WPSCAN_VULN_RE = /\[!\]\s*Title:\s*(?<t>[^\r\n]+?)\s*$/m;
   C._WPSCAN_VERSION_RE = /WordPress version\s+(?<v>\d[\w.]+)/i;
-  C._WPSCAN_LOGIN_RE = /\[SUCCESS\]\s*-\s*(?<u>[^/\r\n]+?)\s*\/\s*(?<p>\S.*?)\s*$/m;
+  C._WPSCAN_LOGIN_RE = /\[SUCCESS\]\s*-\s*(?<u>[^/\r\n]{1,80}?)\s*\/\s*(?<p>\S[^\r\n]{0,120}?)\s*$/m;
   C._SQL_VERSION_BANNER_RE = /\b\d+\.\d+\.\d+[\w.-]*-?(?:MariaDB|MySQL)\b|\bMySQL\s+\d+\.\d+|Microsoft SQL Server\s+\d{4}|PostgreSQL\s+\d+\.\d+/i;
   C._TRUST_NLTEST_RE = /^\s*\d+:\s+\S+\s+(?<fqdn>[A-Za-z0-9-]+\.[A-Za-z0-9.-]+)/m;
   C._TRUST_DOMAINTRUST_RE = /TargetName\s*[:=]\s*(?<fqdn>[A-Za-z0-9][A-Za-z0-9.-]+)/i;
-  C._DOMAIN_SID_RE = /Domain SID (?:is|:)\s*[:=]?\s*(?<sid>S-1-5-21-[0-9-]+)/i;
+  C._DOMAIN_SID_RE = /Domain SID(?:\s+is|\s*:)\s*[:=]?\s*(?<sid>S-1-5-21-[0-9-]+)/i;
 
   // ---- string helpers ----------------------------------------------------------- //
   function stripChars(s, chars) {
@@ -317,7 +342,7 @@
   function _add(out, fact) {
     for (var i = 0; i < out.length; i++) {
       var e = out[i];
-      if (e.kind === fact.kind && e.state === fact.state && F.valuesEqual(e.value, fact.value)) return;
+      if (e.kind === fact.kind && e.scope === fact.scope && e.state === fact.state && F.valuesEqual(e.value, fact.value)) return;
     }
     out.push(fact);
   }
@@ -358,26 +383,59 @@
   // Pull a SPECIFIC OS product ("Windows Server 2016 Standard 14393", "Ubuntu 20.04") out of an
   // authoritative LABELLED line: smb-os-discovery / nmap OS detection / systeminfo (OS: / OS
   // details: / Running:), or NetExec SMB banner ([*] Windows 7 / Server 2008 R2...).
+  function _os_matches_family(str, family) {
+    var s = String(str || '');
+    if (family === 'windows') {
+      if (/\bSamba\b|Windows 6\.1 Build 0\b/i.test(s)) return false;
+      return /\b(?:Windows|Microsoft|Win32|Win64)\b/i.test(s);
+    }
+    if (family === 'linux') {
+      return /\b(?:Linux|Ubuntu|Debian|CentOS|Red Hat|Fedora|Samba|Unix|Kali|Alpine|Arch|Gentoo|Rocky|AlmaLinux|openSUSE|SUSE|Oracle Linux|FreeBSD)\b/i.test(s);
+    }
+    return s.toLowerCase().indexOf(family) >= 0;
+  }
+
   function _os_product_from_label(text, family) {
+    text = text || '';
+    if (family === 'windows' && (/Windows 6\.1 Build 0\b/i.test(text) || /\bSamba\b/i.test(text))) {
+      return '';
+    }
     // 1) NetExec banner: [*] Windows 7 / Server 2008 R2 Build 7601 x64 (name:DC)...
-    var nxcRe = /\[\*\]\s+((?:Windows|Linux|Unix)[^\(\r\n]+?)(?:\s*\((?:name|domain|signing|SMBv1|Null Auth)|$)/im;
-    var nm = nxcRe.exec(text || '');
+    var nxcRe = /\[\*\]\s+((?:Windows|Linux|Unix|Samba|Ubuntu|Debian|FreeBSD)[^\(\r\n]+?)(?:\s*\((?:name|domain|signing|SMBv1|Null Auth)|$)/im;
+    var nm = nxcRe.exec(text);
     if (nm && nm[1]) {
       var np = nm[1].trim();
-      if (np && np.toLowerCase().indexOf(family) >= 0) return _clean_os_string(np).slice(0, 80);
+      if (np && _os_matches_family(np, family)) return _clean_os_string(np).slice(0, 80);
     }
 
     // 2) OS: / OS details: / Running:
     var re = /\b(?:OS(?:\s*details)?|Running)\s*:\s*([^\n|]+)/gi;
     var m;
-    while ((m = re.exec(text || ''))) {
+    while ((m = re.exec(text))) {
       var raw = m[1].trim()
         .replace(/\s+(microsoft-ds|netbios-ssn|msrpc|microsoft-rpc|workgroup)\b.*$/i, '')
         .replace(/[.,;]+\s*$/, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
       var p = _clean_os_string(raw);
-      if (p && p.toLowerCase().indexOf(family) >= 0) return p.slice(0, 80);
+      if (p && _os_matches_family(p, family)) return p.slice(0, 80);
+    }
+
+    // 3) Additional OS product labels (/etc/os-release, lsb_release, ver, systeminfo, service banners)
+    if (family === 'linux') {
+      var pm = /PRETTY_NAME\s*=\s*["']?([^"'\r\n]+)["']?/i.exec(text);
+      if (pm && pm[1]) return pm[1].trim().slice(0, 80);
+      var dm = /Description:\s*([^\r\n]+)/i.exec(text);
+      if (dm && dm[1] && _os_matches_family(dm[1], 'linux')) return dm[1].trim().slice(0, 80);
+      var lm = /\b(Ubuntu[\s0-9.]*|Debian[^\s);,]*|CentOS[\s0-9.]*|Red Hat[^\r\n,;)]*|Fedora[\s0-9.]*|FreeBSD[\s0-9.]*|Alpine[\s0-9.]*)/i.exec(text);
+      if (lm && lm[1]) return lm[1].trim().slice(0, 80);
+    } else if (family === 'windows') {
+      var vm = /Microsoft Windows \[Version\s+([0-9.]+)\]/i.exec(text);
+      if (vm && vm[1]) return ('Windows (Build ' + vm[1].trim() + ')').slice(0, 80);
+      var sm = /^\s*OS Name:\s*(Microsoft Windows[^\r\n]+)/im.exec(text);
+      if (sm && sm[1]) return sm[1].trim().slice(0, 80);
+      var wm = /\b(Windows Server 20\d\d(?:\s+R2)?[^\r\n,;()]*|Windows (?:10|11|7|8(?:\.1)?|XP)[^\r\n,;()]*)/i.exec(text);
+      if (wm && wm[1] && !/Windows 6\.1 Build 0\b/i.test(wm[1])) return wm[1].trim().slice(0, 80);
     }
     return '';
   }
@@ -397,21 +455,58 @@
 
   function _add_os_from_text(text, ws, source, facts, tool, confidence, promote) {
     confidence = confidence || 'high';
+    text = text || '';
+    // Strip attacker Kali/Parrot prompt header lines so they never match Linux OS signatures
+    var cleanText = text.replace(/^\s*(?:┌──\([^\r\n]*|└─[$#]\s*[^\r\n]*|(?:kali|parrot|root)@(?:kali|parrot)[^\r\n]*[$#]\s*[^\r\n]*)$/gim, '');
     var matches = {};
     Object.keys(C._OS_SIGNATURES).forEach(function (family) {
       var pats = C._OS_SIGNATURES[family];
       for (var i = 0; i < pats.length; i++) {
-        var m = reSearch(pats[i], text);
-        if (m) { matches[family] = _line_for_match(text, m) || m[0]; break; }
+        var m = reSearch(pats[i], cleanText);
+        if (m) { matches[family] = _line_for_match(cleanText, m) || m[0]; break; }
       }
     });
+    if (/Windows 6\.1 Build 0\b/i.test(cleanText) || /\bSamba\b/i.test(cleanText)) {
+      var win61 = reSearch(/Windows 6\.1 Build 0\b|\bSamba\b/i, cleanText);
+      if (win61 && !matches.linux) matches.linux = _line_for_match(cleanText, win61) || win61[0];
+      delete matches.windows;
+    }
+    if (matches.windows && matches.linux) {
+      var sambaCollision = /(?:Windows[^\r\n]{0,200}(?:Samba|Debian|Ubuntu)|(?:Samba|Debian|Ubuntu)[^\r\n]{0,200}Windows)/i.test(cleanText) || /Windows 6\.1 Build 0\b/i.test(cleanText);
+      if (sambaCollision) {
+        delete matches.windows;
+      } else if ((/OS(?:\s*details)?:\s*(?:Microsoft\s+)?Windows\b/i.test(cleanText) || /Service Info:[^\r\n]{0,160}?\bOS:\s*Windows\b/i.test(cleanText) || /Running:\s*(?:Microsoft\s+)?Windows\b/i.test(cleanText) || /Microsoft Windows \[Version/i.test(cleanText) || /\[\*\]\s*Windows\b/i.test(cleanText)) && !/\bSamba\b/i.test(cleanText)) {
+        delete matches.linux;
+      }
+    }
     var keys = Object.keys(matches);
     var promoteSingle = promote && keys.length === 1;
     keys.forEach(function (family) {
-      _add_os_observation(facts, ws, source, family, matches[family], confidence, tool, promoteSingle, _os_product_from_label(text, family));
+      _add_os_observation(facts, ws, source, family, matches[family], confidence, tool, promoteSingle, _os_product_from_label(cleanText, family));
     });
   }
   C._add_os_from_text = _add_os_from_text;
+
+  function _check_linux_kernel_vulns(kernelStr, ws, source, facts, leadKinds) {
+    var ks = String(kernelStr || '').trim();
+    var m = /^(\d+)\.(\d+)(?:\.(\d+))?/.exec(ks);
+    if (!m) return;
+    var major = parseInt(m[1], 10), minor = parseInt(m[2], 10), patch = m[3] !== undefined ? parseInt(m[3], 10) : 0;
+    var h = 'host:' + ws.target;
+    if ((major === 2 && minor === 6 && patch >= 22) || (major === 2 && minor > 6) || major === 3 || (major === 4 && (minor < 8 || (minor === 8 && patch < 3)))) {
+      _add(facts, mkFact('vuln.dirtycow', h, { cve: 'CVE-2016-5195', kernel: ks, via: 'kernel-version', lead: true }, ProofState.SUPPORTED, source));
+      _add(facts, mkFact('privesc.kernel_exploit', h, { cves: ['CVE-2016-5195'], names: ['dirtycow'], kernel: ks, via: 'kernel-version' }, ProofState.SUPPORTED, source));
+      if (leadKinds) leadKinds['privesc.kernel_exploit'] = true;
+    }
+    if (major === 5 && (minor > 8 || (minor === 8 && patch >= 0)) && (minor < 16 || (minor === 16 && patch < 11))) {
+      if (!(major === 5 && minor === 10 && patch >= 102) && !(major === 5 && minor === 15 && patch >= 25)) {
+        _add(facts, mkFact('vuln.dirtypipe', h, { cve: 'CVE-2022-0847', kernel: ks, via: 'kernel-version', lead: true }, ProofState.SUPPORTED, source));
+        _add(facts, mkFact('privesc.kernel_exploit', h, { cves: ['CVE-2022-0847'], names: ['dirtypipe'], kernel: ks, via: 'kernel-version' }, ProofState.SUPPORTED, source));
+        if (leadKinds) leadKinds['privesc.kernel_exploit'] = true;
+      }
+    }
+  }
+  C._check_linux_kernel_vulns = _check_linux_kernel_vulns;
 
   function _clean_username(user) {
     user = stripChars((user || '').trim(), ';:');
@@ -435,9 +530,10 @@
 
   function _valid_password(password) {
     password = (password || '').trim();
-    if (!password || ['?', '*', '<password>', '{{password}}'].indexOf(password) >= 0) return false;
+    if (!password || ['?', '*', '!', '!!', 'x', 'NP', '<password>', '{{password}}', '(null)', 'null', 'none'].indexOf(password) >= 0) return false;
+    if (/^(?:\*+|!+|no\s+password\*+)$/i.test(password)) return false;
     var l = password.toLowerCase();
-    if (l.indexOf('status') === 0 || l.indexOf('recovered') === 0 || l.indexOf('progress') === 0 || l.indexOf('guess') === 0) return false;
+    if (l === '(null)' || l === 'null' || l.indexOf('status') === 0 || l.indexOf('recovered') === 0 || l.indexOf('progress') === 0 || l.indexOf('guess') === 0 || l.indexOf('no password') === 0) return false;
     return true;
   }
   C._valid_password = _valid_password;
@@ -472,7 +568,8 @@
     var users = {};
     [C._NXC_RID_USER_RE, C._RPC_USER_RE].forEach(function (rx) {
       reAll(rx, text).forEach(function (m) {
-        var user = _clean_username(m.groups.user);
+        var raw = (m.groups && (m.groups.user || m.groups.user2 || m.groups.user3 || m.groups.user4)) || '';
+        var user = _clean_username(raw);
         if (_valid_username(user, false)) users[user] = true;
       });
     });
@@ -518,7 +615,7 @@
 
   function _is_smb_command(command) {
     var cmd = ' ' + command.toLowerCase() + ' ';
-    return cmd.indexOf(' smb ') >= 0 || cmd.indexOf('smbclient') >= 0 || cmd.indexOf('rpcclient') >= 0 || cmd.indexOf('enum4linux') >= 0 || cmd.indexOf('smbmap') >= 0;
+    return cmd.indexOf(' smb ') >= 0 || cmd.indexOf('smbclient') >= 0 || cmd.indexOf('rpcclient') >= 0 || cmd.indexOf('enum4linux') >= 0 || cmd.indexOf('smbmap') >= 0 || cmd.indexOf('lookupsid') >= 0 || cmd.indexOf('samrdump') >= 0;
   }
   C._is_smb_command = _is_smb_command;
 
@@ -531,21 +628,21 @@
   function _is_ssh_command(command) {
     var l = ' ' + command.toLowerCase() + ' ';
     if (l.indexOf('sshuttle') >= 0) return false;
-    return l.indexOf('sshpass') >= 0 || l.indexOf(' ssh ') >= 0 || l.indexOf(' nxc ssh ') >= 0;
+    return l.indexOf('sshpass') >= 0 || l.indexOf(' ssh ') >= 0 || l.indexOf(' nxc ssh ') >= 0 || l.indexOf(' netexec ssh ') >= 0 || l.indexOf(' cme ssh ') >= 0;
   }
   C._is_ssh_command = _is_ssh_command;
 
   function _is_exec_command(command) {
     var l = command.toLowerCase();
-    var isNxc = l.indexOf('nxc ') >= 0 || l.indexOf('nxc ') === 0;
-    if (isNxc && /\s-x(\s|'|")/.test(l)) return true;
-    return ['wmiexec', 'psexec', 'atexec', 'smbexec', 'evil-winrm', 'enter-pssession', 'penelope'].some(function (t) { return l.indexOf(t) >= 0; });
+    var isNxc = /\b(?:nxc|netexec|crackmapexec|cme)\s+/.test(l);
+    if (isNxc && /\s-[xX](\s|'|")/.test(l)) return true;
+    return ['wmiexec', 'psexec', 'atexec', 'smbexec', 'dcomexec', 'evil-winrm', 'enter-pssession', 'penelope'].some(function (t) { return l.indexOf(t) >= 0; });
   }
   C._is_exec_command = _is_exec_command;
 
   function _is_web_vhost_command(command) {
     var c = command.toLowerCase();
-    if (c.indexOf('gobuster vhost') >= 0) return true;
+    if (c.indexOf('gobuster vhost') >= 0 || /\bgobuster\b.*\bvhost\b/.test(c)) return true;
     if (c.indexOf('host: fuzz') >= 0 || c.indexOf('host:fuzz') >= 0) return true;
     return c.indexOf('wfuzz') >= 0 && c.indexOf('host:') >= 0 && c.indexOf('fuzz') >= 0;
   }
@@ -554,15 +651,17 @@
   function _is_web_content_command(command) {
     if (_is_web_vhost_command(command)) return false;
     var c = command.toLowerCase();
-    if (c.indexOf('feroxbuster') >= 0 || c.indexOf('gobuster dir') >= 0 || c.indexOf('dirb ') >= 0 || c.indexOf('dirsearch') >= 0) return true;
+    if (c.indexOf('feroxbuster') >= 0 || c.indexOf('gobuster dir') >= 0 || /\bgobuster\b.*\bdir\b/.test(c) || c.indexOf('dirb ') >= 0 || c.indexOf('dirsearch') >= 0 || c.indexOf('katana') >= 0 || c.indexOf('hakrawler') >= 0) return true;
     if (c.indexOf('wfuzz') >= 0) return true;
-    return c.indexOf('ffuf') >= 0 && c.indexOf('/fuzz') >= 0;
+    return c.indexOf('ffuf') >= 0 && c.indexOf('fuzz') >= 0;
   }
   C._is_web_content_command = _is_web_content_command;
 
   function _url_path(url) {
-    var m = /^https?:\/\/[^/]+(\/\S*)/.exec(url);
-    return m ? m[1] : url;
+    var s = String(url || '').trim().replace(/^\/+(?=https?:\/\/)/i, '');
+    var m = /^https?:\/\/[^/\s]+(\/\S*)?/i.exec(s);
+    if (m) return m[1] || '/';
+    return s;
   }
   C._url_path = _url_path;
 

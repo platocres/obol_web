@@ -205,5 +205,44 @@ ok(hostA && hostA.chain && hostA.chain.length >= 2 && hostA.chain[hostA.chain.le
 ok(hostA && hostA.chain.some((s) => typeof s.technique === 'string' && typeof s.detail === 'string'),
   'chain steps carry synthesized detail + technique fields');
 
+// ── 9) CPTS, PNPT, and Client profiles + operator prose + studio helpers ────
+const cptsCtx = ctxWith(false, { platform: 'cpts', candidate: 'Jane Doe' });
+ok(R.defaultFor(cptsCtx) === 'cpts', 'defaultFor() picks cpts for a cpts platform');
+const cptsMd = R.toMarkdown(R.document('cpts', cptsCtx));
+ok(cptsMd.indexOf('# CPTS Penetration Test Report') !== -1, 'CPTS report renders CPTS cover heading');
+ok(cptsMd.indexOf('14 flags') !== -1 && cptsMd.indexOf('12 flags required to pass') !== -1, 'CPTS objective summary tracks 14-flag exam progress');
+
+const pnptCtx = ctxWith(false, { platform: 'pnpt', candidate: 'Jane Doe', client: 'Acme Corp' });
+ok(R.defaultFor(pnptCtx) === 'pnpt', 'defaultFor() picks pnpt for a pnpt platform');
+const pnptBlocks = R.document('pnpt', pnptCtx);
+const pnptMd = R.toMarkdown(pnptBlocks);
+ok(pnptMd.indexOf('# External & Internal Penetration Test Report') !== -1, 'PNPT report renders External & Internal Penetration Test Report cover');
+ok(pnptMd.indexOf('## Compromise & Objective Summary') !== -1, 'PNPT report renders Compromise & Objective Summary instead of flag table');
+ok(pnptMd.indexOf('Appendix: Proof and Local Contents') === -1, 'PNPT report suppresses flag appendix table');
+const pnptGaps = R.validate('pnpt', pnptCtx);
+ok(!pnptGaps.some((g) => /no flags captured/i.test(g.message)), 'validate(pnpt) does not warn about missing flags on flagless engagement');
+
+const clientCtx = ctxWith(false, { platform: 'client', client: 'Beta Industries', execSummary: 'Custom executive summary for Beta Industries.' });
+ok(R.defaultFor(clientCtx) === 'generic', 'defaultFor() picks generic for client platform');
+const clientMd = R.toMarkdown(R.document('client', clientCtx));
+ok(clientMd.indexOf('Custom executive summary for Beta Industries.') !== -1, 'execSummary honors custom operator executive summary');
+
+// Natural operator prose
+const stepNmap = R.describeCommandStep('nmap -sC -sV 10.10.10.10', 'ALPHA', '');
+ok(/Conducted port and service enumeration against ALPHA/i.test(stepNmap), 'describeCommandStep generates natural prose for nmap');
+const stepSudo = R.describeCommandStep('sudo -l', 'ALPHA', '');
+ok(/Enumerated local privileges, permissions, and escalation vectors on ALPHA/i.test(stepSudo), 'describeCommandStep generates natural prose for sudo -l');
+const stepNxc = R.describeCommandStep('nxc smb 10.10.10.10 -u admin -p <redacted>', 'ALPHA', '');
+ok(/Authenticated to the SMB service on ALPHA/i.test(stepNxc), 'describeCommandStep generates natural prose for nxc');
+
+// Outline & Submission Helper & Page Breaks
+const oscpBlocks = R.document('oscp', ctxWith(false, { osid: 'OS-99999', candidate: 'Operator' }));
+const outlineItems = R.outline(oscpBlocks);
+ok(Array.isArray(outlineItems) && outlineItems.length >= 6 && outlineItems[0].text === 'OSCP Exam Report', 'outline() extracts H1-H3 navigation items');
+const subOscp = R.submissionHelper('oscp', ctxWith(false, { osid: 'OS-99999' }));
+ok(subOscp.archiveName === 'OSCP-OS-99999-Exam-Report.7z' && /7z a/.test(subOscp.archiveCmd) && /md5sum/.test(subOscp.hashCmd), 'submissionHelper(oscp) returns .7z + md5sum commands');
+const oscpHtmlPages = R.toHtml(oscpBlocks).split('<div class="page-break"></div>');
+ok(oscpHtmlPages.length >= 4, 'toHtml() emits page-break markers after cover, per-host walkthroughs, and appendix (' + oscpHtmlPages.length + ' sheets)');
+
 console.log(fail ? ('\nREPORT SMOKE: ' + fail + ' FAILURES') : '\nREPORT SMOKE: all passed');
 process.exit(fail ? 1 : 0);

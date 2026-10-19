@@ -900,7 +900,7 @@
     if (FACT_EXPLAIN[kind]) return FACT_EXPLAIN[kind];
     var keys = Object.keys(FACT_EXPLAIN);
     for (var i = 0; i < keys.length; i++) { if (keys[i].slice(-1) === ':' || keys[i].slice(-1) === '.') { if (kind.indexOf(keys[i]) === 0) return FACT_EXPLAIN[keys[i]]; } }
-    return { proves: 'obol minted a fact from this line.', caveat: 'Read it as a lead to weigh, not a guarantee. The coach ranks what it unlocks.' };
+    return { proves: 'OBOL minted a fact from this line.', caveat: 'Read it as a lead to weigh, not a guarantee. The coach ranks what it unlocks.' };
   }
   W.explainKind = explainKind;
 

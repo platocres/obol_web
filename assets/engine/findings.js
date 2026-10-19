@@ -63,17 +63,81 @@
     return ta.length > 0 && tupleLt(ta, tb);
   }
 
+  var STD_SECURITY_HEADERS = [
+    'strict-transport-security',
+    'content-security-policy',
+    'x-frame-options',
+    'x-content-type-options',
+    'referrer-policy',
+    'permissions-policy'
+  ];
+  var HEADER_ALIASES = {
+    'hsts': 'strict-transport-security',
+    'csp': 'content-security-policy'
+  };
+  var FLAG_ALIASES = [
+    ['cors_null_origin', 'cors_null'],
+    ['cors_origin_reflection', 'cors_origin_reflected'],
+    ['missing_spf', 'dns_no_spf'],
+    ['weak_spf', 'dns_weak_spf'],
+    ['missing_dmarc', 'dns_no_dmarc'],
+    ['dmarc_policy_none', 'dns_weak_dmarc'],
+    ['tls_outdated_protocol', 'tls_outdated'],
+    ['tls_cert_expired', 'tls_expired'],
+    ['tls_cert_validation_failed', 'tls_validation_failed'],
+    ['hsts_short', 'hsts_weak']
+  ];
+
   function observedFlags(fs) {
-    // Every `flags` entry across the observation facts a findings-check produced.
-    var flags = {};
+    // Every `flags` entry across the observation facts a findings-check produced,
+    // plus derived flags from structured fields minted by parsers/findings.js.
+    var out = {};
     for (var i = 0; i < FLAG_FACTS.length; i++) {
-      var vals = fs.values(FLAG_FACTS[i]);
+      var kind = FLAG_FACTS[i];
+      var vals = fs.values(kind);
       for (var j = 0; j < vals.length; j++) {
-        var fl = vals[j].flags || [];
-        for (var k = 0; k < fl.length; k++) flags[String(fl[k])] = true;
+        var v = vals[j] || {};
+        if (Array.isArray(v.flags)) {
+          for (var k = 0; k < v.flags.length; k++) out[String(v.flags[k])] = 1;
+        }
+        if (kind === 'http.headers') {
+          if (v.server && /\d+\.\d+/.test(String(v.server))) out['server_version_disclosed'] = 1;
+        } else if (kind === 'http.methods') {
+          if (Array.isArray(v.risky) && v.risky.length) out['http_methods_risky'] = 1;
+        } else if (kind === 'http.cors') {
+          var orig = v.origin || v.allow_origin || '';
+          if (v.misconfigured || orig === 'null' || orig === '*' || v.allow_credentials) {
+            if (orig === 'null') { out['cors_null_origin'] = 1; out['cors_null'] = 1; }
+            else if (orig === '*') { out['cors_wildcard'] = 1; }
+            else if (v.misconfigured || v.allow_credentials) { out['cors_origin_reflection'] = 1; out['cors_origin_reflected'] = 1; }
+          }
+        } else if (kind === 'http.exposed') {
+          if (Array.isArray(v.files) && v.files.length) out['exposed_file'] = 1;
+        } else if (kind === 'dns.email') {
+          if (v.spf === null || v.spf === '' || v.spf === false) { out['missing_spf'] = 1; out['dns_no_spf'] = 1; }
+          else if (typeof v.spf === 'string' && /\+all/i.test(v.spf)) { out['spf_plus_all'] = 1; out['dns_weak_spf'] = 1; }
+          else if ((typeof v.spf === 'string' && /[~?]all/i.test(v.spf)) || (v.spf === true && v.weak)) { out['weak_spf'] = 1; out['dns_weak_spf'] = 1; }
+          if (v.dmarc === null || v.dmarc === '' || v.dmarc === false) { out['missing_dmarc'] = 1; out['dns_no_dmarc'] = 1; }
+          else if ((typeof v.dmarc === 'string' && /p=none/i.test(v.dmarc)) || (v.dmarc === true && v.weak)) { out['dmarc_policy_none'] = 1; out['dns_weak_dmarc'] = 1; }
+        } else if (kind === 'dns.takeover') {
+          if (v.target || v.fingerprint) out['subdomain_takeover'] = 1;
+        } else if (kind === 'tls.info') {
+          if (Array.isArray(v.weak_protocols) && v.weak_protocols.length) { out['tls_outdated_protocol'] = 1; out['tls_outdated'] = 1; }
+          if (v.cert_issue === 'self-signed') out['tls_self_signed'] = 1;
+          if (v.cert_issue === 'expired') { out['tls_cert_expired'] = 1; out['tls_expired'] = 1; }
+          if (v.cert_issue) { out['tls_cert_validation_failed'] = 1; out['tls_validation_failed'] = 1; }
+        } else if (kind === 'smb.signing') {
+          if (v.required === false || v.enabled === false || v.signing === false) out['smb_signing_disabled'] = 1;
+        }
       }
     }
-    return flags; // plain object used as a set
+    for (var a = 0; a < FLAG_ALIASES.length; a++) {
+      var f1 = FLAG_ALIASES[a][0], f2 = FLAG_ALIASES[a][1];
+      if (out[f1]) out[f2] = 1;
+      if (out[f2]) out[f1] = 1;
+    }
+    if (out['spf_plus_all']) out['dns_weak_spf'] = 1;
+    return out; // plain object used as a set
   }
 
   function presentHeaders(fs) {
@@ -81,10 +145,39 @@
     var seen = false, names = {};
     var vals = fs.values('http.headers');
     for (var i = 0; i < vals.length; i++) {
+      var v = vals[i] || {};
       seen = true;
-      var hdrs = vals[i].headers || {};
-      for (var name in hdrs) {
-        if (Object.prototype.hasOwnProperty.call(hdrs, name)) names[String(name).toLowerCase()] = true;
+      var hasHeadersMap = v.headers && typeof v.headers === 'object' && !Array.isArray(v.headers);
+      if (hasHeadersMap) {
+        for (var name in v.headers) {
+          if (Object.prototype.hasOwnProperty.call(v.headers, name)) {
+            var hk = String(name).toLowerCase();
+            names[hk] = '1';
+            if (HEADER_ALIASES[hk]) names[HEADER_ALIASES[hk]] = '1';
+          }
+        }
+      }
+      if (Array.isArray(v.present)) {
+        for (var p = 0; p < v.present.length; p++) {
+          var pk = String(v.present[p]).toLowerCase();
+          names[pk] = '1';
+          if (HEADER_ALIASES[pk]) names[HEADER_ALIASES[pk]] = '1';
+        }
+      }
+      if (v.server) {
+        names['server'] = v.server;
+      }
+      if (Array.isArray(v.missing) && !hasHeadersMap) {
+        var miss = {};
+        for (var m = 0; m < v.missing.length; m++) {
+          var mk = String(v.missing[m]).toLowerCase();
+          miss[mk] = 1;
+          if (HEADER_ALIASES[mk]) miss[HEADER_ALIASES[mk]] = 1;
+        }
+        for (var s = 0; s < STD_SECURITY_HEADERS.length; s++) {
+          var sh = STD_SECURITY_HEADERS[s];
+          if (!miss[sh]) names[sh] = '1';
+        }
       }
     }
     return { seen: seen, names: names };
@@ -133,7 +226,7 @@
       for (i = 0; i < factsAny.length; i++) {
         if (fs.has(factsAny[i])) return 'proven: ' + factsAny[i];
       }
-      return null;
+      if (!m.fact_value) return null;
     }
     var factsAll = m.facts_all || [];
     if (factsAll.length) {
@@ -178,8 +271,24 @@
     return null; // a rule-less entry never auto-matches
   }
 
+  function flagSourceKinds(flag) {
+    var f = String(flag || '');
+    if (f === 'smb_signing_disabled') return ['smb.signing'];
+    if (f === 'http_methods_risky') return ['http.methods'];
+    if (f.indexOf('cors_') === 0) return ['http.cors'];
+    if (f === 'exposed_file') return ['http.exposed'];
+    if (f === 'server_version_disclosed' || f === 'tech_disclosed' || f === 'csp_weak' || f === 'hsts_short' || f === 'hsts_weak') return ['http.headers'];
+    if (f.indexOf('spf_') === 0 || f === 'weak_spf' || f === 'missing_spf' || f.indexOf('dmarc_') === 0 || f === 'missing_dmarc' || f.indexOf('dns_') === 0) return ['dns.email'];
+    if (f === 'subdomain_takeover') return ['dns.takeover'];
+    if (f.indexOf('tls_') === 0) return ['tls.info'];
+    if (f.indexOf('cookie_') === 0) return ['http.cookies'];
+    if (f === 'mixed_content' || f === 'password_autocomplete' || f === 'csrf_missing') return ['http.body'];
+    if (f === 'http_no_redirect' || f === 'http_serves_content') return ['http.redirect'];
+    return FLAG_FACTS.slice();
+  }
+
   function matchTriggerKinds(match) {
-    // The observation fact-kinds a catalog `match` rule keys off — the facts obol recorded
+    // The observation fact-kinds a catalog `match` rule keys off - the facts obol recorded
     // that PROVE this finding (used to attribute a finding to the host whose facts triggered it).
     if (!match) return [];
     var ks = [];
@@ -188,16 +297,22 @@
     });
     var fv = match.fact_value;
     if (fv && typeof fv === 'object' && fv.kind) ks.push(String(fv.kind));
+    if (match.header_absent) ks.push('http.headers');
+    if (match.tech) ks.push('web.tech', 'web.server');
+    if (match.flag) {
+      flagSourceKinds(match.flag).forEach(function (k) { ks.push(k); });
+    }
     return ks;
   }
 
   function findingView(fnd, evidence, kev) {
     // The client/report-facing dict for a matched finding, with the KEV overlay applied.
     var hit = fnd.cve ? kev[String(fnd.cve).trim().toUpperCase()] : null;
+    var atk = Array.isArray(fnd.attack) ? (fnd.attack[0] || '') : (fnd.attack || '');
     return {
       key: fnd.key || '', title: fnd.title || '', category: fnd.category || 'other',
       severity: fnd.severity || 'info', confidence: fnd.confidence || 'confirmed',
-      cwe: fnd.cwe || '', attack: fnd.attack || '', nist: fnd.nist || '', cve: fnd.cve || '',
+      cwe: fnd.cwe || '', attack: atk, nist: fnd.nist || '', cve: fnd.cve || '',
       remediation: fnd.remediation || '', refs: fnd.refs || [], evidence: evidence,
       trigger_kinds: matchTriggerKinds(fnd.match),
       kev: !!hit,

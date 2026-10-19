@@ -1,12 +1,12 @@
 /*!
- * obol engine — engmap.js
+ * obol engine - engmap.js
  * The ENGAGEMENT MAP: a client-side projection of the whole engagement's browser state
  * (targets, facts, scope, credentials, bloodhound) as a tiered node/edge model, rendered
  * to a self-contained inline SVG (tier rows top→down, bezier edges, node classes by
  * type/access so the active skin themes it).
  *
  * 
- * Conservative: NEVER invents a host-to-host edge from a shared subnet — a target hangs from a
+ * Conservative: NEVER invents a host-to-host edge from a shared subnet - a target hangs from a
  * scope range only where CIDR/IP membership proves it, from a domain only where an identity/DC
  * fact ties it, and a credential links to a host only where a host-scoped fact ties them.
  *
@@ -120,7 +120,7 @@
 
   // Coarse access level, ported verbatim from graph.py target_access_level.
   function accessLevel(factset) {
-    if (factset.has('access.system') || factset.has('access.admin')) return 'privileged';
+    if (factset.has('access.system') || factset.has('access.admin') || factset.has('access.root')) return 'privileged';
     if (factset.has('foothold.windows') || factset.has('foothold.linux')
         || factset.has('access.shell') || factset.has('winrm.authenticated')
         || factset.has('foothold.webshell')) return 'foothold';
@@ -439,7 +439,7 @@
       var cx = m.cx;
       var main = '<text x="' + cx + '" y="' + (m.y + (n.type === 'target' ? NH / 2 - 2 : NH / 2 + 4))
         + '" text-anchor="middle" class="em-label" font-size="12">'
-        + '<title>' + esc(n.label) + (meta.fqdn ? '' + esc(meta.fqdn) : '') + '</title>'
+        + '<title>' + esc(n.label) + (meta.fqdn ? ' · ' + esc(meta.fqdn) : '') + '</title>'
         + esc(trunc(n.label)) + '</text>';
       var sub = '';
       if (n.type === 'target') {

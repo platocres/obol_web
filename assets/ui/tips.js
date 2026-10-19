@@ -1,5 +1,5 @@
 /*!
- * obol ui — tips.js — the calm tip feed that lives next to the Focus button in the context bar.
+ * obol ui - tips.js - the calm tip feed that lives next to the Focus button in the context bar.
  * Cycles OBOL.TIPS one at a time, slowly (20s), pausing on hover. A "›" advances manually; a "×" turns
  * tips off (persisted per browser); when off, a quiet lightbulb remains to turn them back on. Honors
  * prefers-reduced-motion (no auto-advance, no fade). The ctxbar includes html() in its row and calls
@@ -39,7 +39,7 @@
     if (isOff()) {
       return '<button type="button" class="tipfeed-on" title="Show tips" aria-label="Show tips">' + BULB + '</button>';
     }
-    return '<div class="tipfeed" role="note" aria-label="obol tip">'
+    return '<div class="tipfeed" role="note" aria-label="OBOL tip">'
       + '<span class="tipfeed-ic" aria-hidden="true">' + BULB + '</span>'
       + '<button type="button" class="tipfeed-text" title="' + attr(current()) + '" aria-label="Show the full tip">' + esc(current()) + '</button>'
       + '<button type="button" class="tipfeed-next" title="Next tip" aria-label="Next tip">' + CHEV + '</button>'

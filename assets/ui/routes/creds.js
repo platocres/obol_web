@@ -1,5 +1,5 @@
 /*!
- * obol ui — routes/creds.js — the engagement's credential ledger, grouped by the host each cred was
+ * obol ui - routes/creds.js - the engagement's credential ledger, grouped by the host each cred was
  * found on / works on. The one place every credential of every kind obol has seen lives: working
  * creds, found-but-untested, roasted hashes to crack, krbtgt/golden-ticket material, and enumerated
  * usernames. Per cred: secret (shown + copy), type, where it came from, which flag its access unlocked,
@@ -62,7 +62,7 @@
       var v = x.value || {};
       if ((x.kind === 'access.admin' || x.kind === 'access.system' || x.kind === 'access.root') && ident(v) === u) adminHere = true;
       else if (x.kind === 'credential.admin' && String(v.user || '').toLowerCase() === u) adminHere = true;
-      else if ((x.kind === 'credential.available' || x.kind.indexOf('.authenticated') > 0) && String(v.user || '').toLowerCase() === u) validHere = true;
+      else if ((x.kind === 'credential.available' || x.kind === 'credential.plaintext' || x.kind.indexOf('.authenticated') > 0) && String(v.user || '').toLowerCase() === u) validHere = true;
     });
     if (adminHere) return { level: 'admin' };
     if (validHere) return { level: 'valid' };
@@ -202,7 +202,7 @@
   // mirror the copyable lists plus the full ledger, so you can keep records off-app for any one kind. ----
   var EXPORT_MENU = [
     ['all', 'All Credentials', 'The full ledger: every row with its status, source, and what it unlocked.'],
-    ['usernames', 'Usernames', 'Every account name seen, one per row.'],
+    ['users', 'Usernames', 'Every account name seen, one per row.'],
     ['passwords', 'Passwords', 'Every plaintext password.'],
     ['ntlm', 'NT Hashes', 'username and NT hash.'],
     ['combos', 'Combos', 'username and password.'],
@@ -228,13 +228,13 @@
       });
       return csvRows([head].concat(body));
     }
-    var items = (lists[kind] || []);
+    var items = (kind === 'users' || kind === 'usernames') ? (lists.users || lists.usernames || []) : (lists[kind] || []);
     if (kind === 'ntlm' || kind === 'combos') {
       var h2 = kind === 'ntlm' ? ['Username', 'NT Hash'] : ['Username', 'Password'];
       var b2 = items.map(function (s) { var i = String(s).indexOf(':'); return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)]; });
       return csvRows([h2].concat(b2));
     }
-    var h1 = kind === 'usernames' ? 'Username' : kind === 'passwords' ? 'Password' : 'Hash';
+    var h1 = (kind === 'users' || kind === 'usernames') ? 'Username' : kind === 'passwords' ? 'Password' : 'Hash';
     return csvRows([[h1]].concat(items.map(function (s) { return [s]; })));
   }
   function downloadCsv(name, text) {
@@ -450,7 +450,7 @@
 
     return '<section class="creds-route">'
       + '<div class="cv-top"><h1 class="route-h1">Credentials</h1>' + exportMenu(vault.lists) + '</div>'
-      + '<p class="route-sub">Every credential of every kind obol has seen this engagement, grouped by the host it works on or came from. Click a secret or flag to copy it. <strong>Load</strong> arms the whole console with any credential; <strong>Cracked</strong> / <strong>Used</strong> / <strong>Failed</strong> are yours to set and obol remembers them.</p>'
+      + '<p class="route-sub">Every credential of every kind OBOL has seen this engagement, grouped by the host it works on or came from. Click a secret or flag to copy it. <strong>Load</strong> arms the whole console with any credential; <strong>Cracked</strong> / <strong>Used</strong> / <strong>Failed</strong> are yours to set and OBOL remembers them.</p>'
       + listsBlock(vault.lists)
       + ((hostCards || domainCard || handCard) ? (shead('Credentials By Host', 'Grouped by the host each credential works on, or the host it was collected from.', 'purple') + viewToggle(provenOnly)) : '')
       + (hostCards || '') + domainCard + handCard + userSec
@@ -465,8 +465,10 @@
       if (e.domain) eng.params.domain = e.domain;
       if (e.secret) { eng.params.password = e.secret; eng.params.nthash = ''; }
       else if (e.nthash) { eng.params.nthash = e.nthash; eng.params.password = ''; }
+      else { eng.params.password = ''; eng.params.nthash = ''; }
     }, 'params');
     if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+    if (OBOL.router && OBOL.router.render) OBOL.router.render();
     U.toast('Console armed with ' + (e.user || 'credential'));
   }
 
@@ -482,7 +484,7 @@
         U.copy(t.getAttribute('data-copyval')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
       });
       U.on(mount, 'click', '[data-load]', function (e, t) { e.preventDefault(); e.stopPropagation(); loadEntry((render._entries || [])[+t.getAttribute('data-load')]); });
-      // mark a list written to loot/ (tracked in the Workspace, contents in its hover preview) — in place
+      // mark a list written to loot/ (tracked in the Workspace, contents in its hover preview) - in place
       U.on(mount, 'click', '[data-made]', function (e, t) {
         e.preventDefault(); e.stopPropagation();
         var file = t.getAttribute('data-made');

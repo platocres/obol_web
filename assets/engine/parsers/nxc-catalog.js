@@ -1,14 +1,14 @@
 /*!
- * obol engine — parsers/nxc-catalog.js
+ * obol engine - parsers/nxc-catalog.js
  *
  * The NetExec (nxc) CAPABILITY CATALOG + a generic, data-driven parser driver. nxc is the preferred tool,
  * and the goal is EXHAUSTIVE coverage: every protocol × flag × module we offer as a move/command has (1) a
  * declared fact it produces (or is marked informational), (2) a gate + locus for move generation, and (3) a
- * parser that mints that fact from the command's real output — proven by tests/engine/nxc-switch-parsers.js,
+ * parser that mints that fact from the command's real output - proven by tests/engine/nxc-switch-parsers.js,
  * which pastes real output (success → fact, denied/empty → nothing).
  *
  * Design: ONE catalog, ONE driver. Capabilities already covered by the hand-written parsers
- * (directory.js / creds.js — shares, --ntds/--sam, roasting, laps, rid-brute, coerce, exec) carry
+ * (directory.js / creds.js - shares, --ntds/--sam, roasting, laps, rid-brute, coerce, exec) carry
  * `existing: true` and the driver leaves them to those parsers (facts dedupe either way); the test still
  * verifies them end-to-end. Capabilities the hand-written parsers miss carry an `extract(text, ws, C)` the
  * driver runs. Informational enumeration (group/disk/session listings with no graph-actionable fact) carries
@@ -28,27 +28,27 @@
   // the payload, and only act on success lines ([+] / module OK), never on [-]/denied/error lines.
   function payloadLines(text) {
     return String(text || '').split(/\r?\n/).map(function (l) {
-      return l.replace(/^\s*(?:SMB|LDAP|WINRM|MSSQL|RDP|FTP|SSH|WMI|VNC|NFS|[A-Z_]+)\s+\S+\s+\d+\s+\S+\s+/i, '').trim();
+      return l.replace(/^\s*(?:SMB|LDAP|WINRM|MSSQL|RDP|FTP|SSH|WMI|VNC|NFS|[A-Z0-9_-]+)\s+\S+\s+\d+\s+\S+\s+/i, '').trim();
     }).filter(Boolean);
   }
   function hasDenied(text) { return /\[-\]|access[_ ]denied|logon failure|STATUS_|authentication failed|error/i.test(text); }
-  // Filenames that routinely hold credentials/secrets — the "useful results" filter for a spider dump.
+  // Filenames that routinely hold credentials/secrets - the "useful results" filter for a spider dump.
   var LOOT_HINT_RE = /passw|pwd|cred|secret|unattend|sysprep|web\.config|\.config\b|id_rsa|id_ed25519|\.ppk|\.kdbx|\.key\b|vnc|vpn|\.bak\b|backup|\.vmdk|\.ovpn|\.pfx\b|\.ps1\b|connection|database|\.kee?pass|autologin|\.gpg|\.pgp/i;
-  // Stored-credential modules (mRemoteNG, WinSCP, PuTTY, Veeam, KeePass trigger, registry autologon…) all
+  // Stored-credential modules (mRemoteNG, WinSCP, PuTTY, Veeam, KeePass trigger, registry autologon...) all
   // print recovered user/password pairs in a handful of shapes. Pull them as candidate credentials.
   function modCreds(text, ws, kind) {
     var out = [], seen = {};
     payloadLines(text).forEach(function (l) {
-      var m = l.match(/(?:user(?:name)?|login)\s*[:=]\s*(\S+).*?(?:pass(?:word)?|pwd)\s*[:=]\s*(\S+)/i)
+      var m = l.match(/(?:user(?:name)?|login|ssid)\s*[:=]\s*(\S+).*?(?:pass(?:word)?|pwd|key)\s*[:=]\s*(\S+)/i)
         || l.match(/^(\S+):([^:\s]{3,})$/);
-      var pw = l.match(/(?:pass(?:word)?|pwd)\s*[:=]\s*(\S{3,})/i);
+      var pw = l.match(/(?:pass(?:word)?|pwd|key)\s*[:=]\s*(\S{3,})/i);
       if (m && !seen[l]) { seen[l] = 1; out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: kind, user: m[1], password: m[2], tool: 'nxc' } }); }
       else if (pw && !m && !seen[l]) { seen[l] = 1; out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: kind, password: pw[1], tool: 'nxc' } }); }
     });
     return out;
   }
 
-  // ─────────────────────────── the catalog ───────────────────────────
+  // --------------------------- the catalog ---------------------------
   // Each entry: { id, proto, flag|module, produces:[...], locus:'R',
   //   existing?:true | informational?:true | extract:fn(text,ws,C)->[{kind,value}] , gate:[...] (for moves) }
   var CAT = [
@@ -56,7 +56,7 @@
     // ========================= SMB =========================
     { id: 'smb-auth', proto: 'smb', validate: true, produces: ['credential.available'], existing: true,
       gate: ['smb.reachable', 'port:445', 'credential.candidate', 'credential.available'] },
-    { id: 'smb-shares', proto: 'smb', flag: '--shares', produces: ['smb.shares'], existing: true,
+    { id: 'smb-shares', proto: 'smb', flag: '--shares', produces: ['smb.shares', 'smb.writable_share'], existing: true,
       gate: ['smb.reachable', 'port:445'] },
     { id: 'smb-rid-brute', proto: 'smb', flag: '--rid-brute', produces: ['ad.user_list'], existing: true,
       gate: ['smb.reachable', 'port:445'] },
@@ -142,7 +142,7 @@
         // spider_plus crawls readable shares and writes a JSON manifest; its output names the saved file and
         // the files found. The manifest itself is loot.files; any found file whose NAME matches the
         // credential-material hints is a candidate secret worth pulling (the "filter for useful results"
-        // signal — see the spider-secrets move).
+        // signal - see the spider-secrets move).
         var out = [];
         if (/spider_plus|saved\s+(?:output|share)|found:|\.json\b/i.test(text)) {
           out.push({ kind: 'loot.files', scope: host(ws), value: { kind: 'spider_manifest', detail: 'nxc spider_plus crawl of readable shares', tool: 'nxc' } });
@@ -151,7 +151,7 @@
         payloadLines(text).forEach(function (l) {
           if (LOOT_HINT_RE.test(l)) { var m = l.match(/[^\s\/\\]+\.[A-Za-z0-9]{1,8}\b|[^\s\/\\]*(?:passw|cred|secret|unattend|backup)[^\s\/\\]*/i); if (m) hits.push(m[0]); }
         });
-        if (hits.length) out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: 'spider_secret_file', files: hits.slice(0, 50), count: hits.length, tool: 'nxc', note: 'filenames matching credential-material hints — pull and inspect' } });
+        if (hits.length) out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: 'spider_secret_file', files: hits.slice(0, 50), count: hits.length, tool: 'nxc', note: 'filenames matching credential-material hints - pull and inspect' } });
         return out;
       } },
     { id: 'smb-wdigest', proto: 'smb', module: 'wdigest', produces: ['config.review'],
@@ -227,14 +227,14 @@
       gate: ['smb.reachable', 'port:445'],
       extract: function (text, ws) {
         // pre-created (pre-Win2000) computer accounts authenticate with the lowercased machine name as the
-        // password — a usable credential candidate.
+        // password - a usable credential candidate.
         var out = [];
         payloadLines(text).forEach(function (l) { var m = l.match(/([A-Za-z0-9_-]+\$)\s*:\s*([A-Za-z0-9_-]+)/); if (m) out.push({ kind: 'credential.candidate', scope: dom(ws), value: { kind: 'pre2k_computer', user: m[1], password: m[2], tool: 'nxc' } }); });
         return out;
       } },
     { id: 'smb-ntlmv1', proto: 'smb', module: 'ntlmv1', produces: ['config.review'],
       gate: ['smb.reachable', 'port:445'],
-      extract: function (text, ws) { return /ntlmv1.*(?:enabled|allow|vulnerable)|lmcompatibilitylevel\s*[:=]\s*[0-2]/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'ntlmv1_enabled', detail: 'NTLMv1 permitted — crackable/relayable', tool: 'nxc' } }] : []; } },
+      extract: function (text, ws) { return /ntlmv1.*(?:enabled|allow|vulnerable)|lmcompatibilitylevel\s*[:=]\s*[0-2]/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'ntlmv1_enabled', detail: 'NTLMv1 permitted - crackable/relayable', tool: 'nxc' } }] : []; } },
 
     // --- SMB defensive / coercion-enabler checks (informational leads) ---
     { id: 'smb-enum-av', proto: 'smb', module: 'enum_av', produces: ['defense.control'],
@@ -272,7 +272,7 @@
     // SCF/URL/LNK drop on a writable share → captures SMB auth from any user who browses it (pair with Responder).
     { id: 'smb-slinky', proto: 'smb', module: 'slinky', produces: ['config.review'],
       gate: ['smb.authenticated', 'credential.available'],
-      extract: function (text, ws) { return /added|\.url|\.lnk|dropped|\[\+\]/i.test(text) && !hasDenied(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'malicious_file_drop', detail: 'URL/LNK planted on a writable share — run Responder to capture browsing users’ NetNTLM', tool: 'nxc' } }] : []; } },
+      extract: function (text, ws) { return /added|\.url|\.lnk|dropped|\[\+\]/i.test(text) && !hasDenied(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'malicious_file_drop', detail: 'URL/LNK planted on a writable share - run Responder to capture browsing users’ NetNTLM', tool: 'nxc' } }] : []; } },
     { id: 'smb-scuffy', proto: 'smb', module: 'scuffy', produces: ['config.review'],
       gate: ['smb.authenticated', 'credential.available'],
       extract: function (text, ws) { return CAT_BY_ID['smb-slinky'].extract(text, ws); } },
@@ -348,6 +348,11 @@
       gate: ['credential.available', 'ldap.reachable'],
       extract: function (text, ws) {
         var users = C._usernames(text);
+        C.reAll(/Member:\s*([^\s,]+)/gi, text).forEach(function (m) {
+          var u = C._clean_username(m[1] || '');
+          if (C._valid_username(u) && users.indexOf(u) < 0) users.push(u);
+        });
+        users = C.uniqueSortedCI(users);
         return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-group-mem', note: 'members of the queried group' } }] : [];
       } },
     { id: 'ldap-password-not-required', proto: 'ldap', flag: '--password-not-required', produces: ['ad.user_list'],
@@ -368,7 +373,7 @@
     { id: 'ldap-user-desc', proto: 'ldap', module: 'user-desc', produces: ['credential.candidate'],
       gate: ['credential.available', 'ldap.reachable'],
       extract: function (text, ws) {
-        // Passwords left in the AD 'description' attribute — a classic. Mint any description that looks like
+        // Passwords left in the AD 'description' attribute - a classic. Mint any description that looks like
         // it carries a secret as a candidate credential.
         var out = [];
         payloadLines(text).forEach(function (l) { if (/pass|pwd|cred|login|temp|welcome|changeme|default/i.test(l) && /[:=]|description/i.test(l)) out.push({ kind: 'credential.candidate', scope: dom(ws), value: { kind: 'ad_description', detail: l.slice(0, 160), tool: 'nxc' } }); });
@@ -383,7 +388,7 @@
       extract: function (text, ws) { return /trust|forest|outbound|inbound|bidirectional/i.test(text) ? [{ kind: 'ad.trusts', scope: dom(ws), value: { detail: 'domain/forest trusts via nxc enum_trusts', tool: 'nxc' } }] : []; } },
     { id: 'ldap-ldap-checker', proto: 'ldap', module: 'ldap-checker', produces: ['config.review'],
       gate: ['ldap.reachable', 'port:389'],
-      extract: function (text, ws) { return /signing\s*(?:not|is not|none)|channel binding\s*(?:not|never)|not (?:enforced|required)/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'ldap_signing_not_enforced', detail: 'LDAP signing / channel binding not enforced — relayable', tool: 'nxc' } }] : []; } },
+      extract: function (text, ws) { return /signing\s*(?:not|is not|none)|channel binding\s*(?:not|never)|not (?:enforced|required)/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'ldap_signing_not_enforced', detail: 'LDAP signing / channel binding not enforced - relayable', tool: 'nxc' } }] : []; } },
 
     // --- LDAP informational ---
     { id: 'ldap-maq', proto: 'ldap', module: 'maq', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
@@ -454,7 +459,7 @@
       gate: ['port:2049', 'nfs.reachable'],
       extract: function (text, ws) {
         var exports = payloadLines(text).filter(function (l) { return /^\//.test(l) || /\s(?:rw|ro)\b/.test(l); });
-        return exports.length ? [{ kind: 'loot.files', scope: host(ws), value: { kind: 'nfs_exports', exports: exports.slice(0, 50), count: exports.length, tool: 'nxc', note: 'NFS exports — mount and read (watch for no_root_squash)' } }] : [];
+        return exports.length ? [{ kind: 'loot.files', scope: host(ws), value: { kind: 'nfs_exports', exports: exports.slice(0, 50), count: exports.length, tool: 'nxc', note: 'NFS exports - mount and read (watch for no_root_squash)' } }] : [];
       } },
 
     // ========================= VNC =========================
@@ -471,32 +476,110 @@
   OBOL._nxcCatalog = CAT;
   OBOL._nxcCatalogById = CAT_BY_ID;
 
+  var MODULE_BANNER_MAP = {
+    'gpp_pass': 'smb-gpp-password',
+    'gpp_password': 'smb-gpp-password',
+    'gpp_autologin': 'smb-gpp-autologin',
+    'lsassy': 'smb-lsassy',
+    'nanodump': 'smb-nanodump',
+    'handlekatz': 'smb-handlekatz',
+    'procdump': 'smb-procdump',
+    'masky': 'smb-masky',
+    'spider_plus': 'smb-spider-plus',
+    'wdigest': 'smb-wdigest',
+    'coerce_plus': 'smb-coerce-plus',
+    'petitpotam': 'smb-coerce-plus',
+    'dfscoerce': 'smb-coerce-plus',
+    'shadowcoerce': 'smb-coerce-plus',
+    'printerbug': 'smb-coerce-plus',
+    'backup_operator': 'smb-backup-operator',
+    'reg-winlogon': 'smb-reg-winlogon',
+    'reg-query': 'smb-reg-query',
+    'veeam': 'smb-veeam',
+    'mremoteng': 'smb-mremoteng',
+    'winscp': 'smb-winscp',
+    'putty': 'smb-putty',
+    'keepass_trigger': 'smb-keepass-trigger',
+    'install_elevated': 'smb-install-elevated',
+    'pre2k': 'smb-pre2k',
+    'ntlmv1': 'smb-ntlmv1',
+    'enum_av': 'smb-enum-av',
+    'ms17-010': 'smb-ms17-010',
+    'zerologon': 'smb-zerologon',
+    'smbghost': 'smb-smbghost',
+    'rdcman': 'smb-rdcman',
+    'iis': 'smb-iis',
+    'firefox': 'smb-firefox',
+    'powershell_history': 'smb-powershell-history',
+    'met_inject': 'smb-met-inject',
+    'slinky': 'smb-slinky',
+    'scuffy': 'smb-scuffy',
+    'daclread': 'ldap-daclread',
+    'group-mem': 'ldap-group-mem',
+    'adcs': 'ldap-adcs',
+    'user-desc': 'ldap-user-desc',
+    'get-desc-users': 'ldap-get-desc-users',
+    'enum_trusts': 'ldap-enum-trusts',
+    'ldap-checker': 'ldap-ldap-checker',
+    'mssql_coerce': 'mssql-coerce'
+  };
+
   // Which capabilities does a command invoke? Matches the protocol + each flag/module token present.
-  function match(command) {
+  function match(command, text) {
     var lc = String(command || '').toLowerCase();
-    var protoM = lc.match(/\bnxc\s+(smb|ldap|winrm|mssql|rdp|ftp|ssh|wmi|vnc|nfs)\b/) || lc.match(/\bnetexec\s+(smb|ldap|winrm|mssql|rdp|ftp|ssh|wmi|vnc|nfs)\b/);
-    var proto = protoM ? protoM[1] : null;
-    if (!proto) return [];
-    return CAT.filter(function (e) {
-      if (e.proto !== proto) return false;
-      if (e.module) return new RegExp('-m\\s+' + e.module + '\\b', 'i').test(lc);
-      if (e.flag) { var f = e.flag.replace(/[-]/g, '\\-'); return new RegExp('(^|\\s)' + f + '(\\s|$|=)', 'i').test(command); }
-      // A validate-only entry with its own extractor (e.g. ftp-auth → loot.files from a listing) runs when
-      // no flag/module is present on the command; plain auth-success (credential.available) stays with
-      // _parse_nxc_common, so these two don't collide.
-      if (e.validate && e.extract) return !/(^|\s)(-M\s|--)/.test(command);
-      return false;
-    });
+    var protoM = lc.match(/\b(?:nxc|netexec|crackmapexec|cme)\s+(smb|ldap|winrm|mssql|rdp|ftp|ssh|wmi|vnc|nfs)\b/);
+    if (!protoM && text) {
+      protoM = /^\s*(SMB|LDAP|WINRM|MSSQL|RDP|FTP|SSH|WMI|VNC|NFS)\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+/im.exec(text);
+    }
+    var proto = protoM ? protoM[1].toLowerCase() : null;
+    var out = [];
+    if (proto) {
+      out = CAT.filter(function (e) {
+        if (e.proto !== proto) return false;
+        if (e.module) {
+          if (e.module === 'coerce_plus' && /-m\s+(?:coerce_plus|petitpotam|dfscoerce|shadowcoerce|printerbug)\b/i.test(lc)) return true;
+          return new RegExp('-m\\s+' + e.module + '\\b', 'i').test(lc);
+        }
+        if (e.flag) { var f = e.flag.replace(/[-]/g, '\\-'); return new RegExp('(^|\\s)' + f + '(\\s|$|=)', 'i').test(command); }
+        // A validate-only entry with its own extractor (e.g. ftp-auth -> loot.files from a listing) runs when
+        // no flag/module is present on the command; plain auth-success (credential.available) stays with
+        // _parse_nxc_common, so these two don't collide.
+        if (e.validate && e.extract) return !/(^|\s)(-M\s|--)/i.test(command);
+        return false;
+      });
+    }
+    if (text) {
+      var bannerRe = /^\s*([A-Z0-9_-]{3,20})\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+\s+\S+/gm, bm;
+      while ((bm = bannerRe.exec(text)) !== null) {
+        var bKey = bm[1].toLowerCase();
+        var catId = MODULE_BANNER_MAP[bKey];
+        if (catId && CAT_BY_ID[catId] && out.indexOf(CAT_BY_ID[catId]) < 0) {
+          out.push(CAT_BY_ID[catId]);
+        }
+      }
+      if (!command || !/(^|\s)(-M\s|--)/i.test(command)) {
+        if (/\[(?:SYSTEM|CREDENTIAL|CHROME)\].*?(?:password|secret)\s*:/i.test(text) && out.indexOf(CAT_BY_ID['smb-dpapi']) < 0) out.push(CAT_BY_ID['smb-dpapi']);
+        if ((/Account:\s*\S+\s+NTLM:\s*[a-f0-9]{32}/i.test(text) || /msDS-ManagedPassword/i.test(text)) && out.indexOf(CAT_BY_ID['ldap-gmsa']) < 0) out.push(CAT_BY_ID['ldap-gmsa']);
+        if (/^\s*LDAP\s+\S+\s+\d+\s+\S+\s+.*\bunconstrained\b/im.test(text) && out.indexOf(CAT_BY_ID['ldap-trusted-for-delegation']) < 0) out.push(CAT_BY_ID['ldap-trusted-for-delegation']);
+        if (/^\s*NFS\s+\S+\s+\d+\s+\S+\s+.*(?:\s(?:rw|ro)\b|\s\/)/im.test(text) && out.indexOf(CAT_BY_ID['nfs-shares']) < 0) out.push(CAT_BY_ID['nfs-shares']);
+      }
+    }
+    return out;
   }
 
   function _parse_nxc_capability(text, command, ws, source, facts) {
-    if (hasDenied(text) && !/\[\+\]/.test(text)) return; // a pure failure/denied paste mints nothing
-    match(command).forEach(function (e) {
-      if (!e.extract || e.existing || e.informational) return;
+    if (hasDenied(text) && !/\[\+\]/.test(text) && !/\bvulnerable\b/i.test(text)) return; // a pure failure/denied paste mints nothing
+    match(command, text).forEach(function (e) {
+      if (!e || !e.extract || e.existing || e.informational) return;
       var got;
       try { got = e.extract(text, ws, C) || []; } catch (x) { got = []; }
       got.forEach(function (f) { _add(facts, mkFact(f.kind, f.scope || host(ws), f.value || {}, S, source)); });
     });
+    if (/-m\s+wifi\b/i.test(command || '') || /^\s*WIFI\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+/im.test(text || '')) {
+      modCreds(text, ws, 'wifi').forEach(function (f) {
+        _add(facts, mkFact(f.kind, f.scope || host(ws), f.value || {}, S, source));
+      });
+    }
   }
   C._parse_nxc_capability = _parse_nxc_capability;
 

@@ -1,10 +1,10 @@
 /*!
- * obol engine — parsers/websource.js
+ * obol engine - parsers/websource.js
  * Port of the fixture-reachable §33 web source/disclosure parsers from
  *  product-signature fingerprint and the SQLi oracle
  * (differential boolean + reflected UNION column). The remaining OSWE content-gated parsers
  * (verbose_error, source_secret, pem_key, js_framework, graphql, phpinfo, dependency_manifest,
- * git_exposed, xmlrpc, cracked_hash, weak_hashing) are intentionally NOT ported — see index.js.
+ * git_exposed, xmlrpc, cracked_hash, weak_hashing) are intentionally NOT ported - see index.js.
  * Like the Python module, `_add` here appends (no cross-pass dedup).
  */
 (function (root) {
@@ -20,7 +20,7 @@
     return t;
   }
   function _scope(ws) { return ws && ws.target ? 'host:' + normalizeTarget(ws.target) : ''; }
-  function _add(facts, fact) { facts.push(fact); }
+  function _add(facts, fact) { if (C && C._add) C._add(facts, fact); else if (facts) facts.push(fact); }
 
   // ---- product-signature fingerprint ---- //
   var _PRODUCT_SIGS = [
@@ -38,7 +38,7 @@
     ['phpmyadmin', /\bphpMyAdmin\b|pma_username/i, /phpMyAdmin\s+(\d+\.\d+\.\d+)/i, 'LOAD_FILE/INTO OUTFILE, SQL console, known LFI/RCE CVEs'],
     ['gophish', /\bgophish\b|X-Gophish/i, null, 'admin panel default creds; phishing infra'],
     ['jamovi', /\bjamovi\b/i, /jamovi\s+(\d+\.\d+(?:\.\d+)?)/i, 'Rj-editor / compute-module RCE'],
-    ['splunk', /Splunk\s+(?:Enterprise|Inc)|\/en-US\/account\/login/i, /Splunk[^\d]{0,20}(\d+\.\d+\.\d+)/i, 'custom-app scripted-input RCE; splunk.secret → $7$ decrypt'],
+    ['splunk', /Splunk\s+(?:Enterprise|Inc)|\/en-US\/account\/login/i, /Splunk[^\d]{0,20}(\d+\.\d+\.\d+)/i, 'custom-app scripted-input RCE; splunk.secret -> $7$ decrypt'],
     ['powershell-web-access', /PowerShell Web Access|\/pswa\//i, null, 'gateway to any Windows host, try captured/guessed domain creds'],
   ];
 
@@ -48,6 +48,7 @@
   C._has_product_signature = _has_product_signature;
 
   function _parse_product_signature(text, ws, command, source, facts) {
+    if (Array.isArray(source) && !facts) { facts = source; source = command; command = ''; }
     for (var i = 0; i < _PRODUCT_SIGS.length; i++) {
       var tech = _PRODUCT_SIGS[i][0], sigRx = _PRODUCT_SIGS[i][1], verRx = _PRODUCT_SIGS[i][2], lead = _PRODUCT_SIGS[i][3];
       if (!reSearch(sigRx, text || '')) continue;
@@ -90,6 +91,7 @@
   C._reflected_union_marker = _reflected_union_marker;
 
   function _parse_sqli_oracle(text, ws, command, source, facts) {
+    if (Array.isArray(source) && !facts) { facts = source; source = command; command = ''; }
     var t = text || '', h = 'host:' + ws.target;
     if (reSearch(_SQLI_TRUE_RE, t) && reSearch(_SQLI_FALSE_RE, t) && reSearch(_LOGIN_SUCCESS_RE, t) && reSearch(_LOGIN_FAILURE_RE, t)) {
       _add(facts, mkFact('web.sqli_confirmed', h, { tool: 'manual', method: 'differential_boolean', evidence: 'true vs false payload produced differing responses (boolean-based oracle)' }, S, source));
@@ -120,8 +122,8 @@
 
   // ---- secret-in-source (signing keys, config/framework secrets, VCS tokens, connection URIs) ---- //
   // Signing keys and config secrets disclosed in recovered source (LFI / .git dump / decompile /
-  // verbose error). A JWT signing key → web.jwt_secret + credential.candidate; a DB/config/framework
-  // password, a VCS PAT, or a credentialed connection URI → credential.candidate. Leads to validate.
+  // verbose error). A JWT signing key -> web.jwt_secret + credential.candidate; a DB/config/framework
+  // password, a VCS PAT, or a credentialed connection URI -> credential.candidate. Leads to validate.
   var _SECRET_DENY = {
     changeme: 1, change_me: 1, password: 1, secret: 1, 'your-256-bit-secret': 1, yoursecret: 1,
     xxx: 1, xxxx: 1, todo: 1, none: 1, null: 1, example: 1, placeholder: 1, redacted: 1,
@@ -135,20 +137,20 @@
   // Field-style DB/service credential (decompiled jar / source): `sqlPass = "…"`, `dbPassword = "…"`.
   var _FIELD_CRED_RE = /\b(?<key>(?:sql|db|database|mysql|mssql|postgres|pg|jdbc|ftp|smtp|imap|redis|mongo|ldap|admin|root)_?(?:pass(?:word|wd)?|pwd))\s*=\s*["'](?<s>[^"']{3,})["']/gi;
   // A framework-config password field with a quoted literal value (PHP / WordPress define / .env).
-  var _PHP_PW_RE = /(?:public|private|protected|var|static)?\s*\$(?<key>\w*(?:pass(?:word|wd)?|pwd))\s*=\s*["'](?<s>[^"']{3,})["']/gi;
-  var _DEFINE_PW_RE = /define\(\s*["'](?<key>\w*(?:pass(?:word|wd)?|pwd)\w*)["']\s*,\s*["'](?<s>[^"']{3,})["']/gi;
+  var _PHP_PW_RE = /(?:(?:public|private|protected|var|static)\s+)?\$(?<key>\w{0,64}(?:pass(?:word|wd)?|pwd))\s*=\s*["'](?<s>[^"']{3,})["']/gi;
+  var _DEFINE_PW_RE = /define\(\s*["'](?<key>\w{0,64}(?:pass(?:word|wd)?|pwd)\w{0,64})["']\s*,\s*["'](?<s>[^"']{3,})["']/gi;
   var _ENV_PW_RE = /^\s*(?:export\s+)?(?<key>[A-Z][A-Z0-9_]*(?:PASS(?:WORD|WD)?|PWD))\s*=\s*["']?(?<s>[^\s"'#]{3,})/gm;
   // A credential embedded in a connection URI: mysql://user:pass@host, ftp://u:p@host, etc.
-  var _URI_CRED_RE = /(?<scheme>[a-z][a-z0-9+.\-]{1,15}):\/\/(?<user>[^:/@\s]{1,64}):(?<s>[^@/\s]{3,64})@(?<host>[\w.\-]+)/gi;
+  var _URI_CRED_RE = /\b(?<scheme>[a-z][a-z0-9+.\-]{1,15}):\/\/(?<user>[^:/@\s]{1,64}):(?<s>[^@/\s]{3,64})@(?<host>[\w.\-]+)/gi;
   // A version-control access token, a GitHub PAT (classic gh?_ / fine-grained github_pat_) or a
   // GitLab glpat-. The token IS the credential.
   var _VCS_TOKEN_RE = /\b(?<token>gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|glpat-[A-Za-z0-9_-]{20,})\b/g;
-  // A pasted PRIVATE KEY (id_rsa / .pem / .ppk-exported) is a key IN HAND → credential.certificate, which
+  // A pasted PRIVATE KEY (id_rsa / .pem / .ppk-exported) is a key IN HAND -> credential.certificate, which
   // lights ssh-key-login. This is the payoff of pulling an id_rsa a share-spider flagged.
   var _PRIVKEY_RE = /-----BEGIN (?:OPENSSH|RSA|DSA|EC|PGP|ENCRYPTED(?: PRIVATE KEY)?) PRIVATE KEY-----|PuTTY-User-Key-File-\d/;
   // A password inside a DB connection string (web.config / appsettings / JDBC): "...;Password=P@ss;...".
   // The field regexes above want a quoted literal; a connection string is semicolon-delimited, so catch it
-  // directly — but only in a connection-string context, so a stray "pwd=" elsewhere isn't a false positive.
+  // directly - but only in a connection-string context, so a stray "pwd=" elsewhere isn't a false positive.
   var _CONNSTR_CTX_RE = /connectionstring|connection string|data source|initial catalog|integrated security|\bserver\s*=|jdbc:|\buid\s*=/i;
   var _CONNSTR_PW_RE = /(?:password|pwd)\s*=\s*(?<s>[^;"'\s>&]{3,})/gi;
 

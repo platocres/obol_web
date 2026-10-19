@@ -116,7 +116,16 @@
       var fromField = (fromEngine && fromEngine.sharedMap && fromEngine.sharedMap[param]) || param;
       var toField = (toEngine && toEngine.sharedMap && toEngine.sharedMap[param]) || param;
       var v = (fromValues || {})[fromField];
-      if (v !== undefined && v !== '') out[toField] = v;
+      if (v !== undefined && v !== '') {
+        if (param === 'url' && station && station.id === 'web-content') {
+          if (toField === 'url' && String(v).indexOf('FUZZ') === -1) {
+            v = String(v).replace(/\/+$/, '') + '/FUZZ';
+          } else if (toField === 'target') {
+            v = String(v).replace(/\/+FUZZ\b.*$/i, '');
+          }
+        }
+        out[toField] = v;
+      }
     });
     return out;
   }

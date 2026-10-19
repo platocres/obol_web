@@ -1,5 +1,5 @@
 /*!
- * obol engine — parsers/pivot.js — connectivity parsers (interfaces/subnets + live tunnels).
+ * obol engine - parsers/pivot.js - connectivity parsers (interfaces/subnets + live tunnels).
  *
  * Powers the engagement-hub connectivity view: from a foothold's own interface/route dump, mint the
  * subnets it can reach (and flag it multihomed); from a pivot tool's setup output, mint the live
@@ -8,17 +8,17 @@
  * content-gated, and loopback / link-local / multicast / reserved addresses are never a subnet.
  *
  * Covers the real shapes an operator pastes on either side of a pivot:
- *   interfaces — Linux `ip a`/`ip -4 a`, ifconfig, Windows ipconfig
- *   routes     — Linux `ip route`, `netstat -rn` (Destination/Gateway/Genmask), Windows `route print`
- *                (Network Destination/Netmask) — the last two carry the netmask as a dotted quad in a
+ *   interfaces - Linux `ip a`/`ip -4 a`, ifconfig, Windows ipconfig
+ *   routes     - Linux `ip route`, `netstat -rn` (Destination/Gateway/Genmask), Windows `route print`
+ *                (Network Destination/Netmask) - the last two carry the netmask as a dotted quad in a
  *                column, so a netmask-aware row reader handles both without caring about column order
- *   neighbours — Linux `ip neigh`, Linux/Windows `arp -a`: the adjacent hosts the foothold has talked
- *                to (scan.local.neighbors) — the shortlist to aim a pivot scan at
- *   listeners  — Windows `netstat -ano`, Linux `netstat -tlnp`/`ss -tlnp`: services it is listening on,
- *                internal-bound ones included (scan.local.listeners) — the classic pivot targets
- *   resolvers  — `/etc/resolv.conf`, Windows DNS Servers: the internal DNS (scan.local.dns)
- *   tunnels    — chisel (reverse SOCKS), ssh -D (dynamic SOCKS), ligolo-ng + sshuttle (routed),
- *                dnscat2 (DNS) — recognized from the command AND from the tool's own success banner,
+ *   neighbours - Linux `ip neigh`, Linux/Windows `arp -a`: the adjacent hosts the foothold has talked
+ *                to (scan.local.neighbors) - the shortlist to aim a pivot scan at
+ *   listeners  - Windows `netstat -ano`, Linux `netstat -tlnp`/`ss -tlnp`: services it is listening on,
+ *                internal-bound ones included (scan.local.listeners) - the classic pivot targets
+ *   resolvers  - `/etc/resolv.conf`, Windows DNS Servers: the internal DNS (scan.local.dns)
+ *   tunnels    - chisel (reverse SOCKS), ssh -D (dynamic SOCKS), ligolo-ng + sshuttle (routed),
+ *                dnscat2 (DNS) - recognized from the command AND from the tool's own success banner,
  *                so pasting just the output still lights the connectivity edge.
  */
 (function (root) {
@@ -54,38 +54,55 @@
     return [(net >>> 24) & 255, (net >>> 16) & 255, (net >>> 8) & 255, net & 255].join('.') + '/' + pfx;
   }
 
+  var _NXC_LINE_PFX_RE = /^\s*(?:SMB|WINRM|WMI|RPC|SSH|LDAP|MSSQL|RDP|FTP)\s+\S+\s+\d+\s+\S+\s+/gm;
+
   function _parse_local_net(text, ws, source, facts) {
     var h = 'host:' + ws.target, ifaces = [], subnets = {}, seen = {}, m;
-    function addSubnet(net, pfx) { if (isRoutable(net) && pfx >= 1 && pfx <= 30) subnets[netCidr(net, pfx)] = 1; }
+    var cleanText = String(text || '').replace(_NXC_LINE_PFX_RE, '');
+    function addSubnet(net, pfx) { if (isRoutable(net) && pfx >= 8 && pfx <= 30) subnets[netCidr(net, pfx)] = 1; }
 
     // Linux `ip a` / `ip -4 a`: "inet 172.16.5.10/24"
     var reCidr = /\binet6?\s+(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})\b/gi;
-    while ((m = reCidr.exec(text))) { var ip = m[1], pfx = +m[2]; if (!isRoutable(ip) || seen[ip]) continue; seen[ip] = 1; ifaces.push({ ip: ip, cidr: ip + '/' + pfx }); addSubnet(ip, pfx); }
+    while ((m = reCidr.exec(cleanText))) { var ip = m[1], pfx = +m[2]; if (!isRoutable(ip) || seen[ip]) continue; seen[ip] = 1; ifaces.push({ ip: ip, cidr: ip + '/' + pfx }); addSubnet(ip, pfx); }
     // ifconfig: "inet 172.16.5.10  netmask 255.255.255.0" (or "inet addr:...  Mask:...")
     var reMask = /\binet\s+(?:addr:)?(\d{1,3}(?:\.\d{1,3}){3})\b[\s\S]{0,60}?(?:netmask|Mask:)\s*(\d{1,3}(?:\.\d{1,3}){3})/gi;
-    while ((m = reMask.exec(text))) { var ip2 = m[1]; if (!isRoutable(ip2) || seen[ip2]) continue; var pfx2 = maskPrefix(m[2]); if (pfx2 < 0) continue; seen[ip2] = 1; ifaces.push({ ip: ip2, cidr: ip2 + '/' + pfx2 }); addSubnet(ip2, pfx2); }
-    // Windows ipconfig: "IPv4 Address. . . : 172.16.5.10" then "Subnet Mask . . . : 255.255.255.0"
-    var reWin = /IPv4 Address[^\n:]*:\s*(\d{1,3}(?:\.\d{1,3}){3})[\s\S]{0,160}?Subnet Mask[^\n:]*:\s*(\d{1,3}(?:\.\d{1,3}){3})/gi;
-    while ((m = reWin.exec(text))) { var ip3 = m[1]; if (!isRoutable(ip3) || seen[ip3]) continue; var pfx3 = maskPrefix(m[2]); if (pfx3 < 0) continue; seen[ip3] = 1; ifaces.push({ ip: ip3, cidr: ip3 + '/' + pfx3 }); addSubnet(ip3, pfx3); }
+    while ((m = reMask.exec(cleanText))) { var ip2 = m[1]; if (!isRoutable(ip2) || seen[ip2]) continue; var pfx2 = maskPrefix(m[2]); if (pfx2 < 0) continue; seen[ip2] = 1; ifaces.push({ ip: ip2, cidr: ip2 + '/' + pfx2 }); addSubnet(ip2, pfx2); }
+    // Windows ipconfig: "IPv4 Address. . . : 172.16.5.10" then optional "Subnet Mask . . . : 255.255.255.0"
+    var reWin = /IPv4 Address[^\n:]*:\s*(\d{1,3}(?:\.\d{1,3}){3})(?:\s*\(Preferred\))?(?:[\s\S]{0,160}?Subnet Mask[^\n:]*:\s*(\d{1,3}(?:\.\d{1,3}){3}))?/gi;
+    while ((m = reWin.exec(cleanText))) { var ip3 = m[1]; if (!isRoutable(ip3) || seen[ip3]) continue; var pfx3 = m[2] ? maskPrefix(m[2]) : 24; if (pfx3 < 0) continue; seen[ip3] = 1; ifaces.push({ ip: ip3, cidr: ip3 + '/' + pfx3 }); addSubnet(ip3, pfx3); }
+    // PowerShell Get-NetIPAddress: "IPAddress : 172.16.5.10 ... PrefixLength : 24"
+    var rePsNet = /IPAddress\s*:\s*(\d{1,3}(?:\.\d{1,3}){3})[\s\S]{0,200}?PrefixLength\s*:\s*(\d{1,2})\b/gi;
+    while ((m = rePsNet.exec(cleanText))) { var ip4 = m[1], pfx4 = +m[2]; if (!isRoutable(ip4) || seen[ip4]) continue; seen[ip4] = 1; ifaces.push({ ip: ip4, cidr: ip4 + '/' + pfx4 }); addSubnet(ip4, pfx4); }
     // Linux `ip route`: "172.16.6.0/24 dev eth1 ..." / "... via ..."
     var reRoute = /(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})\s+(?:dev|via|proto|scope)/gi;
-    while ((m = reRoute.exec(text))) { addSubnet(m[1], +m[2]); }
+    while ((m = reRoute.exec(cleanText))) { addSubnet(m[1], +m[2]); }
     // `netstat -rn` (Destination Gateway Genmask ...) and Windows `route print` (Network Destination
     // Netmask Gateway ...): both put a dotted-quad network and a dotted-quad netmask on the same row,
     // in different columns. Read the first routable quad as the network and the first valid netmask
     // quad on the line as the mask, so column order does not matter and header rows (no quads) skip.
-    String(text).split(/\r?\n/).forEach(function (line) {
+    cleanText.split(/\r?\n/).forEach(function (line) {
       if (/\binet6?\b/i.test(line) || /\//.test(line)) return;     // handled by the CIDR / ifconfig readers above
       var quads = line.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g);
       if (!quads || quads.length < 2) return;
       var net = quads[0]; if (!isRoutable(net)) return;
-      for (var i = 1; i < quads.length; i++) { var p = maskPrefix(quads[i]); if (p >= 1 && p <= 30) { addSubnet(net, p); break; } }
+      for (var i = 1; i < quads.length; i++) {
+        var p = maskPrefix(quads[i]);
+        if (p >= 8 && p <= 30 && netCidr(net, p) === (net + '/' + p)) { addSubnet(net, p); break; }
+      }
     });
 
     var subs = Object.keys(subnets);
+    var internalSubs = (ws && ws.target && isRoutable(ws.target))
+      ? subs.filter(function (s) { var pfx = +(s.split('/')[1] || 24); return netCidr(ws.target, pfx) !== s; })
+      : subs;
     if (ifaces.length) _add(facts, mkFact('scan.local.interfaces', h, { interfaces: ifaces.slice(0, 12), subnets: subs.slice(0, 12) }, S, source));
     if (subs.length) _add(facts, mkFact('scan.local.routes', h, { subnets: subs.slice(0, 16) }, S, source));
-    if (ifaces.length >= 2) _add(facts, mkFact('host.multihomed', h, { interfaces: ifaces.length }, S, source));
+    if (ifaces.length >= 2) {
+      _add(facts, mkFact('host.multihomed', h, { interfaces: ifaces.length }, S, source));
+      _add(facts, mkFact('pivot.candidate', h, { interfaces: ifaces.slice(0, 12), subnets: (internalSubs.length ? internalSubs : subs).slice(0, 12) }, S, source));
+    } else if (subs.length >= 2 && internalSubs.length >= 1) {
+      _add(facts, mkFact('pivot.candidate', h, { interfaces: ifaces.slice(0, 12), subnets: internalSubs.slice(0, 12) }, S, source));
+    }
   }
 
   // The setup / status output that confirms a live pivot channel from this foothold. Recognized from
@@ -93,6 +110,21 @@
   // banner so a pasted output alone still counts. Conservative: a tool name plus a real success token.
   function _parse_tunnel(text, ws, source, facts, command) {
     var h = 'host:' + ws.target, lc = String(command || '').toLowerCase(), t = String(text || ''), cmd = String(command || '');
+
+    // obol sync token: obol:fact:pivot_active | subnet=... | via=... | host=...
+    var syncRe = /obol:fact:pivot_active\s*\|\s*subnet=([^\s|]+)\s*\|\s*via=([^\s|]+)\s*\|\s*host=([^\s|]+)/i;
+    var sm = syncRe.exec(t);
+    if (sm) {
+      var sSubnet = sm[1], sVia = sm[2].toLowerCase(), sHost = sm[3];
+      var syncScope = sHost ? ('host:' + sHost) : h;
+      if (sVia === 'chisel' || sVia === 'ssh-dynamic') {
+        _add(facts, mkFact('tunnel.socks', syncScope, { subnet: sSubnet, via: sVia, host: sHost, port: 1080 }, S, source));
+      } else {
+        _add(facts, mkFact('tunnel.route', syncScope, { subnet: sSubnet, via: sVia, host: sHost }, S, source));
+      }
+      _add(facts, mkFact('pivot.active', syncScope, { subnet: sSubnet, via: sVia, host: sHost }, S, source));
+    }
+
     // chisel reverse SOCKS: the command carrying R:socks, or the client/server success banner.
     if ((/\bchisel\b/.test(lc) && /r:socks/i.test(lc)) || (/\bchisel\b/i.test(t) && /(Connected\b|Connected \(|Listening on|tun:\s|proxy#\d|session|R:socks)/i.test(t)))
       _add(facts, mkFact('tunnel.socks', h, { via: 'chisel' }, S, source));
@@ -112,7 +144,7 @@
       _add(facts, mkFact('tunnel.dns', h, { via: 'dnscat2' }, S, source));
   }
 
-  // Adjacent hosts from the foothold's own ARP/neighbour cache — the machines it has actually talked to
+  // Adjacent hosts from the foothold's own ARP/neighbour cache - the machines it has actually talked to
   // on its segments, which is the shortlist to aim a pivot scan at. Linux `ip neigh` ("10.0.0.1 dev eth0
   // lladdr aa:.. REACHABLE"), Linux `arp -a` ("? (10.0.0.1) at aa:.. [ether] on eth0"), Windows `arp -a`
   // ("  10.0.0.1    aa-bb-..  dynamic"). Conservative: only routable unicast IPs, and only a line that
@@ -129,7 +161,7 @@
     if (list.length) _add(facts, mkFact('scan.local.neighbors', h, { hosts: list.slice(0, 32) }, S, source));
   }
 
-  // Services the foothold is listening on — including ones bound to an internal interface that are
+  // Services the foothold is listening on - including ones bound to an internal interface that are
   // invisible from outside, so reaching them means pivoting. Windows `netstat -ano`, Linux `netstat
   // -tlnp` / `ss -tlnp`. Only rows in a LISTEN(ING) state; a listener on 0.0.0.0 / :: / 127.0.0.1 is
   // recorded too (a localhost-only service is the classic pivot target). Conservative: no state token,
@@ -139,7 +171,7 @@
     String(text).split(/\r?\n/).forEach(function (line) {
       if (!/\bLISTEN(?:ING)?\b/i.test(line)) return;
       // the local address is the one before the state; take the last :port on the local side
-      var m = line.match(/(?:\b|\[)(?:\d{1,3}(?:\.\d{1,3}){3}|\*|::|[0-9a-f:]*\]?):(\d{1,5})\b/gi);
+      var m = line.match(/(?:^|\s|\[)(?:\d{1,3}(?:\.\d{1,3}){3}(?:%[A-Za-z0-9_.-]+)?|\*|::|[0-9a-f:]*\]?):(\d{1,5})\b/gi);
       if (!m) return;
       var first = m[0], port = +((first.match(/:(\d{1,5})\b/) || [])[1]);
       if (port >= 1 && port <= 65535) ports[port] = 1;
@@ -148,7 +180,7 @@
     if (list.length) _add(facts, mkFact('scan.local.listeners', h, { ports: list.slice(0, 48) }, S, source));
   }
 
-  // The foothold's own resolvers — the internal DNS servers (often a DC) that name the rest of the
+  // The foothold's own resolvers - the internal DNS servers (often a DC) that name the rest of the
   // estate. Linux `/etc/resolv.conf` ("nameserver 10.0.0.2"), Windows ipconfig /all ("DNS Servers . . :
   // 10.0.0.2"). Conservative: only routable unicast servers; a commented or empty file mints nothing.
   function _parse_local_dns(text, ws, source, facts) {

@@ -1,5 +1,5 @@
 /*!
- * obol engine — command.js
+ * obol engine - command.js
  * Command templating: build the {{token}} context from proven facts + engagement params,
  * fill a command template, and render an action's command variants. Faithful JS port of the
  * relevant parts of  (command_context / fill_template / fill_command).
@@ -39,15 +39,86 @@
     return null;
   }
 
+  function isMultiOrKnownHost(list, targetScope) {
+    if (!targetScope || !list || !list.length) return false;
+    var hostScopes = {};
+    var count = 0;
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i];
+      if (!f || !f.scope) continue;
+      if (f.scope === targetScope) return true;
+      if (f.scope.indexOf('host:') === 0 && f.scope !== 'host:target') {
+        if (!hostScopes[f.scope]) {
+          hostScopes[f.scope] = true;
+          count++;
+          if (count > 1) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function scopedValues(facts, kind, targetIp) {
+    if (!facts) return [];
+    var list = (facts && facts.facts) || (Array.isArray(facts) ? facts : []);
+    if (targetIp && list.length) {
+      var targetScope = 'host:' + targetIp;
+      var hostMatches = [];
+      var genericMatches = [];
+      for (var i = 0; i < list.length; i++) {
+        var f = list[i];
+        if (!f) continue;
+        var k = f.kind || f.k || '';
+        if (k !== kind) continue;
+        if (f.state && OBOL.facts && f.state !== OBOL.facts.ProofState.SUPPORTED && f.state !== 'supported') continue;
+        var val = f.value !== undefined ? f.value : f.v;
+        if (f.scope === targetScope) {
+          hostMatches.push(val);
+        } else if (!f.scope || f.scope === 'global' || f.scope === 'host:target' || f.scope.indexOf('host:') !== 0) {
+          genericMatches.push(val);
+        }
+      }
+      if (hostMatches.length) return hostMatches;
+      if (isMultiOrKnownHost(list, targetScope)) return genericMatches;
+    }
+    if (typeof facts.values === 'function') {
+      return facts.values(kind);
+    }
+    var out = [];
+    for (var j = 0; j < list.length; j++) {
+      var fj = list[j];
+      if (!fj) continue;
+      var kj = fj.kind || fj.k || '';
+      if (kj !== kind) continue;
+      if (fj.state && OBOL.facts && fj.state !== OBOL.facts.ProofState.SUPPORTED && fj.state !== 'supported') continue;
+      out.push(fj.value !== undefined ? fj.value : fj.v);
+    }
+    return out;
+  }
+
   // Open ports as sorted numbers, from port:NNN facts (recon output).
-  function openPorts(facts) {
+  function openPorts(facts, targetIp) {
     var ports = [];
     if (!facts) return ports;
     var list = (facts && facts.facts) || (Array.isArray(facts) ? facts : []);
+    var targetScope = targetIp ? ('host:' + targetIp) : '';
+    var strictScope = isMultiOrKnownHost(list, targetScope);
+    if (!strictScope && targetScope) {
+      for (var s = 0; s < list.length; s++) {
+        var fs = list[s];
+        if (!fs) continue;
+        var ks = fs.kind || fs.k || '';
+        if (fs.scope === targetScope && ks.indexOf('port:') === 0) {
+          strictScope = true;
+          break;
+        }
+      }
+    }
     for (var i = 0; i < list.length; i++) {
       var f = list[i];
       if (!f) continue;
-      if (f.state && OBOL.facts && f.state !== OBOL.facts.ProofState.SUPPORTED) continue;
+      if (f.state && OBOL.facts && f.state !== OBOL.facts.ProofState.SUPPORTED && f.state !== 'supported') continue;
+      if (strictScope && f.scope && f.scope.indexOf('host:') === 0 && f.scope !== 'host:target' && f.scope !== targetScope) continue;
       var k = f.kind || f.k || '';
       if (k.indexOf('port:') === 0) {
         var n = parseInt(k.split(':')[1], 10);
@@ -55,7 +126,8 @@
       }
     }
     // also honor a ports.open summary fact carrying a list
-    var summary = firstVal(facts, 'ports.open');
+    var summaries = scopedValues(facts, 'ports.open', targetIp);
+    var summary = summaries && summaries[0] ? summaries[0] : (strictScope ? null : firstVal(facts, 'ports.open'));
     if (summary && Array.isArray(summary.ports)) {
       summary.ports.forEach(function (p) { var n = parseInt(p, 10); if (!isNaN(n)) ports.push(n); });
     }
@@ -88,6 +160,11 @@
         return (OBOL.facts && OBOL.facts.factFromJson) ? OBOL.facts.factFromJson(x) : x;
       }));
     }
+    function fvals(kind) {
+      if (!facts) return [];
+      if (typeof facts.values === 'function') return facts.values(kind);
+      return scopedValues(facts, kind, '');
+    }
     var params = opts.params || {};
     var extra = opts.extra || {};
     var tgt = opts.target || params.target || params.rhost || '';
@@ -95,7 +172,7 @@
     var ctx = Object.assign({ target: tgt || '<target>' }, paramsToInputs(params));
     if (tgt) ctx.target = tgt;
 
-    var ports = openPorts(facts);
+    var ports = openPorts(facts, tgt);
     if (ports.length) ctx.nmap_ports = ports.join(',');
 
     var dom = firstVal(facts, 'ad.domain_known');
@@ -104,8 +181,27 @@
       ctx.basedn = dom.name.split('.').map(function (p) { return 'DC=' + p; }).join(',');
       ctx.dc = dom.name;
     }
+    if (!ctx.domain) {
+      var hdoms = fvals('host.domain');
+      for (var hd = 0; hd < hdoms.length; hd++) {
+        var dname = hdoms[hd].domain || hdoms[hd].name || '';
+        if (dname) { ctx.domain = dname; break; }
+      }
+    }
+    if (!ctx.domain) {
+      var fqdns = fvals('host.fqdn');
+      for (var fq = 0; fq < fqdns.length; fq++) {
+        var fqStr = String(fqdns[fq].fqdn || fqdns[fq].name || '');
+        var fqParts = fqStr.split('.');
+        if (fqParts.length >= 3) {
+          ctx.domain = fqParts.slice(1).join('.');
+          break;
+        }
+      }
+    }
+    if (ctx.domain && !ctx.dc) ctx.dc = ctx.domain;
     if (!ctx.basedn) {
-      var bases = facts.values('ad.base_dn');
+      var bases = fvals('ad.base_dn');
       for (var i = 0; i < bases.length; i++) {
         var bd = bases[i].base_dn || bases[i].basedn || '';
         if (bd) { ctx.basedn = bd; break; }
@@ -128,36 +224,78 @@
       var lop = firstVal(facts, 'listener.open');
       ctx.lport = (lop && lop.lport) || params.lport || '4444';
     }
-    // iface: the operator's attacker interface (responder -I, mitm6 -i, …). Pinned from the engagement's
-    // configured VM interface, defaulting to tun0 — the VPN adapter for HTB/OSCP-style labs.
+    // iface: the operator's attacker interface (responder -I, mitm6 -i, ...). Pinned from the engagement's
+    // configured VM interface, defaulting to tun0 - the VPN adapter for HTB/OSCP-style labs.
     if (!ctx.iface) ctx.iface = params.lhost_iface || 'tun0';
 
-    // credentials: prefer credential.available then credential.plaintext. IDENTITY-COHERENT fill — never
+    // credentials: prefer credential.available then credential.plaintext. IDENTITY-COHERENT fill - never
     // pair one credential's username with another's secret. `-u svc-alfresco -H <administrator-hash>` just
     // fails auth; the user and the secret must come from the SAME credential. When params already pin a
     // user, fill that same user's secret; otherwise adopt the first credential wholesale.
-    var creds = facts.values('credential.available');
-    if (!creds.length) creds = facts.values('credential.plaintext');
+    var creds = fvals('credential.available');
+    if (!creds.length) creds = fvals('credential.plaintext');
     function _lc(x) { return String(x == null ? '' : x).toLowerCase(); }
+    function _credRank(c) {
+      if (!c) return -1;
+      var s = 0;
+      if (c.admin) s += 4;
+      if (/^administrator$/i.test(c.user || '')) s += 2;
+      if (c.validated) s += 2;
+      if (c.password || c.secret || c.nthash || c.hash) s += 1;
+      return s;
+    }
+    var rankedCreds = creds.map(function (c, i) { return { c: c, i: i, r: _credRank(c) }; })
+      .sort(function (a, b) { return (b.r - a.r) || (b.i - a.i); })
+      .map(function (x) { return x.c; });
     if (ctx.user) {
-      for (var c = 0; c < creds.length; c++) {
-        if (_lc(creds[c].user) !== _lc(ctx.user)) continue;
-        if (!ctx.password && creds[c].password) ctx.password = creds[c].password;
-        var nhm = creds[c].nthash || creds[c].hash;
-        if (!ctx.nthash && nhm) ctx.nthash = nhm;
-        if (!ctx.domain && creds[c].domain) ctx.domain = creds[c].domain;
+      for (var c = 0; c < rankedCreds.length; c++) {
+        if (_lc(rankedCreds[c].user) !== _lc(ctx.user)) continue;
+        if (!ctx.password && !ctx.nthash) {
+          if (rankedCreds[c].password) ctx.password = rankedCreds[c].password;
+          var nhm = rankedCreds[c].nthash || rankedCreds[c].hash;
+          if (nhm) ctx.nthash = nhm;
+        }
+        if (!ctx.domain && rankedCreds[c].domain) ctx.domain = rankedCreds[c].domain;
         break;
       }
-    } else if (creds.length) {
-      var c0 = creds[0];
+    } else if (rankedCreds.length) {
+      var c0 = rankedCreds[0];
       if (c0.user) ctx.user = c0.user;
       if (c0.password && !ctx.password) ctx.password = c0.password;
       var nh0 = c0.nthash || c0.hash;
       if (nh0 && !ctx.nthash) ctx.nthash = nh0;
       if (c0.domain && !ctx.domain) ctx.domain = c0.domain;
     }
+    if (!ctx.user) {
+      var fhList = fvals('foothold.linux').concat(fvals('foothold.windows'));
+      for (var fi = 0; fi < fhList.length; fi++) {
+        var fu = fhList[fi] && (fhList[fi].identity || fhList[fi].user);
+        if (fu) {
+          ctx.user = String(fu).replace(/^.*\\/, '').trim();
+          if (ctx.user) break;
+        }
+      }
+    }
+    if (!ctx.user && opts && opts.action && opts.action.id === 'asrep-roast') {
+      var cands = fvals('credential.candidate');
+      for (var ci = 0; ci < cands.length; ci++) {
+        if (cands[ci] && cands[ci].kind === 'asrep_roastable' && cands[ci].user) {
+          ctx.user = String(cands[ci].user).trim();
+          break;
+        }
+      }
+      if (!ctx.user) {
+        var uls = fvals('ad.user_list');
+        for (var ui = 0; ui < uls.length; ui++) {
+          if (uls[ui] && Array.isArray(uls[ui].asrep_users) && uls[ui].asrep_users.length) {
+            ctx.user = String(uls[ui].asrep_users[0]).trim();
+            break;
+          }
+        }
+      }
+    }
 
-    // krbtgt key for golden-ticket forging — the DEDICATED krbtgt NT hash from a DCSync/NTDS dump, NEVER
+    // krbtgt key for golden-ticket forging - the DEDICATED krbtgt NT hash from a DCSync/NTDS dump, NEVER
     // the first credential's hash (forging with the wrong key silently produces an unusable ticket).
     if (!ctx.krbtgt_hash) {
       var kt = firstVal(facts, 'hash.krbtgt');
@@ -168,7 +306,7 @@
     // krbtgt_hash). So the moment you dump NTDS, the "read the flag / own the box with the DA hash"
     // commands fill with the built-in Administrator (RID 500) hash, with NO manual credential swap.
     if (!ctx.dahash) {
-      var avs = facts.values('credential.available');
+      var avs = fvals('credential.available');
       for (var ai = 0; ai < avs.length; ai++) {
         var v = avs[ai];
         if (v && v.method === 'dcsync' && (v.nthash || v.hash)) {
@@ -194,24 +332,26 @@
     // ADCS ca/template/pfx
     var adcs = firstVal(facts, 'adcs.vulnerable');
     if (adcs) {
-      if (adcs.ca && !ctx.ca_name) ctx.ca_name = adcs.ca;
+      var caVal = adcs.ca || (adcs.cas && adcs.cas[0]) || '';
+      if (caVal && !ctx.ca_name) ctx.ca_name = caVal;
       if (adcs.templates && adcs.templates.length && !ctx.template) ctx.template = adcs.templates[0];
     }
-    var certs = facts.values('credential.certificate');
+    var certs = fvals('credential.certificate');
     for (var ci = 0; ci < certs.length; ci++) {
-      if (certs[ci].files && certs[ci].files.length) { ctx.pfx = certs[ci].files[0]; break; }
+      var pfxFile = certs[ci].pfx || (certs[ci].files && certs[ci].files[0]);
+      if (pfxFile) { ctx.pfx = pfxFile; break; }
     }
 
     // DC identity
     if (!ctx.dc_netbios || !ctx.dc_account) {
       var dcName = '';
-      var dcCands = facts.values('ad.dc_candidate');
+      var dcCands = fvals('ad.dc_candidate');
       for (var d = 0; d < dcCands.length; d++) {
         dcName = dcCands[d].name || dcCands[d].hostname || dcCands[d].netbios || '';
         if (dcName) break;
       }
       if (!dcName) {
-        var hns = facts.values('host.hostname');
+        var hns = scopedValues(facts, 'host.hostname', tgt);
         for (var h = 0; h < hns.length; h++) { dcName = hns[h].name || hns[h].hostname || ''; if (dcName) break; }
       }
       if (dcName) {
@@ -220,37 +360,89 @@
         if (!ctx.dc_account) ctx.dc_account = short + '$';
       }
     }
+    if (!ctx.hostname) {
+      var hnList = fvals('host.hostname');
+      for (var hi = 0; hi < hnList.length; hi++) {
+        var hnVal = hnList[hi] && (hnList[hi].name || hnList[hi].hostname);
+        if (hnVal) { ctx.hostname = hnVal; break; }
+      }
+      if (!ctx.hostname) {
+        var dcList = fvals('ad.dc_candidate');
+        for (var di = 0; di < dcList.length; di++) {
+          var dcVal = dcList[di] && (dcList[di].name || dcList[di].hostname || dcList[di].netbios);
+          if (dcVal) { ctx.hostname = dcVal; break; }
+        }
+      }
+    }
+    if (!ctx.dc_fqdn) {
+      var fqList = fvals('host.fqdn');
+      for (var fqi = 0; fqi < fqList.length; fqi++) {
+        if (fqList[fqi] && fqList[fqi].fqdn) { ctx.dc_fqdn = fqList[fqi].fqdn; break; }
+      }
+      if (!ctx.dc_fqdn && ctx.hostname && ctx.domain) {
+        ctx.dc_fqdn = (ctx.hostname.indexOf('.') >= 0) ? ctx.hostname : (ctx.hostname + '.' + ctx.domain);
+      }
+    }
 
     // domain SID
-    var sids = facts.values('ad.domain_sid');
+    var sids = fvals('ad.domain_sid');
     for (var s = 0; s < sids.length; s++) { if (sids[s].sid) { ctx.domain_sid = sids[s].sid; break; } }
 
-    // BloodHound cash-in tokens from first abusable edge
-    var paths = facts.values('ad.attack_paths');
+    // BloodHound cash-in tokens from attack path hops (advancing past already-joined groups)
+    var paths = fvals('ad.attack_paths');
+    var joinedSet = {};
+    fvals('ad.group_joined').forEach(function (jv) {
+      if (jv && jv.group) joinedSet[String(jv.group).split('@')[0].trim().toLowerCase()] = 1;
+    });
     for (var p = 0; p < paths.length; p++) {
+      var pHops = Array.isArray(paths[p].path) ? paths[p].path : [];
       var fa = paths[p].first_action || {};
-      if (fa.target) {
-        if (!ctx.group) ctx.group = fa.target;
-        if (!ctx.target_sam) ctx.target_sam = fa.target;
+      var faTgt = String(fa.target || '').split('@')[0].trim();
+      var chosenGroup = '';
+      var chosenSam = '';
+      for (var hi = 0; hi < pHops.length; hi++) {
+        var hop = pHops[hi];
+        if (!hop || /^memberof$/i.test(String(hop.edge || ''))) continue;
+        var hShort = String(hop.to || '').split('@')[0].trim();
+        if (!hShort) continue;
+        var isGrpHop = /group/i.test(String(hop.to_kind || '')) || /^add(?:member|self)$/i.test(String(hop.edge || ''));
+        if (!isGrpHop && !hop.to_kind && !/^getchanges/i.test(String(hop.edge || ''))) {
+          var domPart = String(hop.to || '').indexOf('@') >= 0 ? String(hop.to).split('@')[1].trim() : '';
+          if ((!domPart || hShort.toLowerCase() !== domPart.toLowerCase()) && hShort.indexOf('.') < 0) isGrpHop = true;
+        }
+        if (isGrpHop) {
+          if (!chosenGroup && !joinedSet[hShort.toLowerCase()]) chosenGroup = hShort;
+          if (!chosenSam && !joinedSet[hShort.toLowerCase()]) chosenSam = hShort;
+        } else if (!chosenSam) {
+          chosenSam = hShort;
+        }
+      }
+      if (!chosenGroup && faTgt && fa.kind !== 'domain' && (!ctx.domain || faTgt.toLowerCase() !== String(ctx.domain).toLowerCase())) {
+        chosenGroup = faTgt;
+      }
+      if (!chosenSam && faTgt) chosenSam = faTgt;
+      if (chosenGroup || chosenSam) {
+        if (chosenGroup && !ctx.group) ctx.group = chosenGroup;
+        if (chosenSam && !ctx.target_sam) ctx.target_sam = chosenSam;
         break;
       }
     }
-    // …and, when BloodHound wasn't run, from a bloodyAD `get writable` lead (ad.acl_lead). obol does NOT
+    // ...and, when BloodHound wasn't run, from a bloodyAD `get writable` lead (ad.acl_lead). obol does NOT
     // guess which single group is the winner (that would hard-code one lab's path): it ranks the abusable
     // groups the lead actually shows and lets the operator try them until one unlocks with evidence.
-    //   {{group}}                — the top-ranked candidate to try first (a starting point, not the answer)
-    //   {{abuse_groups_quoted}}  — every reasonable candidate, quoted & space-joined, for a ONE-SHOT sweep
-    //                              (`for g in {{abuse_groups_quoted}}; do add groupMember "$g" …`)
+    //   {{group}}                - the top-ranked candidate to try first (a starting point, not the answer)
+    //   {{abuse_groups_quoted}}  - every reasonable candidate, quoted & space-joined, for a ONE-SHOT sweep
+    //                              (`for g in {{abuse_groups_quoted}}; do add groupMember "$g" ...`)
     // Ranking is try-order only; whichever add actually sticks (and then unlocks DCSync) is the real path.
     if (ctx.group === undefined || ctx.target_sam === undefined || ctx.abuse_groups_quoted === undefined) {
       // The standard high-value AD groups, in the order worth trying: direct-DA first, then the groups
-      // whose membership yields domain control (WriteDACL→DCSync, SeBackup, service install, DLL-on-DC).
+      // whose membership yields domain control (WriteDACL->DCSync, SeBackup, service install, DLL-on-DC).
       var ABUSE_PRIORITY = ['domain admins', 'enterprise admins', 'administrators',
         'exchange windows permissions', 'account operators', 'organization management',
         'backup operators', 'server operators', 'dnsadmins', 'print operators',
         'group policy creator owners', 'key admins', 'enterprise key admins'];
       var leadTargets = [];
-      facts.values('ad.acl_lead').forEach(function (v) {
+      fvals('ad.acl_lead').forEach(function (v) {
         (v.targets || []).forEach(function (tgt) { if (tgt && leadTargets.indexOf(tgt) < 0) leadTargets.push(tgt); });
       });
       // Candidates = the reasonable, known-abusable groups the lead shows, in priority order. When the
@@ -261,36 +453,48 @@
       var candidates = [];
       ABUSE_PRIORITY.forEach(function (g) { if (lowerSet[g]) candidates.push(lowerSet[g]); });
       if (!candidates.length) candidates = ABUSE_PRIORITY.map(function (g) { return g.replace(/\b\w/g, function (c) { return c.toUpperCase(); }); });
-      if (ctx.group === undefined) ctx.group = candidates[0] || leadTargets[0] || '';
-      if (ctx.target_sam === undefined) ctx.target_sam = candidates[0] || leadTargets[0] || '';
+      if (ctx.group === undefined && leadTargets.length) ctx.group = candidates[0] || leadTargets[0] || '';
+      if (ctx.target_sam === undefined && leadTargets.length) ctx.target_sam = candidates[0] || leadTargets[0] || '';
       if (ctx.abuse_groups_quoted === undefined) ctx.abuse_groups_quoted = candidates.map(function (g) { return '"' + String(g).replace(/(["\\$`])/g, '\\$1') + '"'; }).join(' ');
     }
 
     // flag-hunt tokens from the engagement profile (which flag names the hunt searches)
-    if (OBOL.profile) {
-      var fc = OBOL.profile.resolveFlagConfig(opts.profile || {});
-      if (!ctx.flag_inames_linux) ctx.flag_inames_linux = OBOL.profile.linuxInameExpr(fc.names);
-      if (!ctx.flag_names_windows) ctx.flag_names_windows = OBOL.profile.windowsNameList(fc.names);
+    var fc = (OBOL.profile && OBOL.profile.resolveFlagConfig)
+      ? OBOL.profile.resolveFlagConfig(opts.profile || {})
+      : { names: ['local.txt', 'user.txt', 'proof.txt', 'root.txt'], slots: { 'local.txt': 'local', 'user.txt': 'local', 'proof.txt': 'root', 'root.txt': 'root' } };
+    if (!ctx.flag_inames_linux && OBOL.profile && OBOL.profile.linuxInameExpr) ctx.flag_inames_linux = OBOL.profile.linuxInameExpr(fc.names);
+    if (!ctx.flag_names_windows && OBOL.profile && OBOL.profile.windowsNameList) ctx.flag_names_windows = OBOL.profile.windowsNameList(fc.names);
 
       // Per-slot flag file PATHS for the on-host capture step. Prefer a path obol actually LOCATED (a
       // nxc/smb spider, or a prior read) so step 3/4 fill with the real file, the user's Desktop, the
-      // platform's own name — instead of a guessed placeholder; else a profile-aware default.
+      // platform's own name, instead of a guessed placeholder; else a profile-aware default.
       var _flagName = function (slot) {
         var ns = fc.names || [];
         for (var i = 0; i < ns.length; i++) if ((fc.slots || {})[ns[i]] === slot) return ns[i];
         return slot === 'root' ? 'root.txt' : 'user.txt';
       };
       var _locatedPath = function (slot) {
-        var kinds = ['objective.flag_located', slot === 'root' ? 'objective.root_flag' : 'objective.local_flag'];
+        var kinds = [
+          'objective.flag_located',
+          slot === 'root' ? 'objective.root_flag' : 'objective.local_flag',
+          slot === 'root' ? 'objective.flag_located_root' : 'objective.flag_located_local'
+        ];
         for (var k = 0; k < kinds.length; k++) {
-          var vs = (facts && facts.values) ? (facts.values(kinds[k]) || []) : [];
+          var vs = scopedValues(facts, kinds[k], tgt);
           var candidates = [];
           for (var i = 0; i < vs.length; i++) {
-            if (vs[i] && vs[i].path && vs[i].slot === slot) {
-              var p = String(vs[i].path);
-              if (/\.lnk$/i.test(p) || /[\\/](?:Recent|AppData|Temp)[\\/]/i.test(p)) continue;
-              candidates.push(p);
+            var v = vs[i];
+            if (!v) continue;
+            var p = '';
+            if (typeof v === 'string') {
+              p = v;
+            } else if (typeof v === 'object') {
+              if (v.slot && v.slot !== slot && v.slot !== (slot === 'local' ? 'user' : 'root')) continue;
+              p = String(v.path || v.file || v.value || '');
             }
+            if (!p) continue;
+            if (/\.lnk$/i.test(p) || /[\\/](?:Recent|AppData|Temp)[\\/]/i.test(p)) continue;
+            candidates.push(p);
           }
           if (candidates.length) {
             for (var c = 0; c < candidates.length; c++) {
@@ -303,27 +507,29 @@
       };
       var _isLinux = facts && facts.has && (facts.has('foothold.linux') || facts.has('access.shell') || facts.has('os.linux'))
         && !facts.has('foothold.windows') && !facts.has('os.windows');
-      // The USER/local flag lives on SOME user's Desktop, which you cannot guess once you are privileged:
-      // as Administrator/SYSTEM/root the active user is NOT the flag owner, so a `C:\Users\Administrator\
-      // Desktop\user.txt` guess is confidently wrong (it was the Forest failure). So the local path fills
-      // from a LOCATED path, else the active user's own Desktop ONLY when that user is unprivileged (you
-      // are that user), else it is LEFT UNFILLED so the on-host capture GATES behind "locate it first"
-      // (flag_path_local is a gate token) instead of handing you a path that does not exist.
-      var _priv = /^(administrator|admin|system|localsystem|nt\s*authority\\?system|root)$/i.test(String(ctx.user || '').trim());
+      var _priv = function (u) {
+        var s = String(u || '').toLowerCase();
+        return !s || /^(?:administrator|admin|root|system|nt authority\\system|guest|defaultaccount|krbtgt|www-data|apache|nginx|nobody|daemon|http|postgres|mysql|redis|tomcat|iis apppool|network service|local service)$/.test(s) || /\$$/.test(s);
+      };
+      // The ROOT/proof flag path is an earned gate token (only filled once located).
+      // The USER/local flag path prefers a located path; otherwise, when the active user is an unprivileged
+      // user (not admin/root/SYSTEM), it defaults to that user's own Desktop/home directory.
       if (ctx.flag_path_local === undefined) {
         var _locL = _locatedPath('local');
-        if (_locL) ctx.flag_path_local = _locL;
-        // else: leave {{flag_path_local}} unfilled → the capture gates until you LOCATE the user flag.
+        if (_locL) {
+          ctx.flag_path_local = _locL;
+        } else if (ctx.user && !_priv(ctx.user) && !(facts && facts.has && (facts.has('access.admin') || facts.has('access.system') || facts.has('access.root')))) {
+          ctx.flag_path_local = _isLinux
+            ? ('/home/' + ctx.user + '/' + _flagName('local'))
+            : ('C:\\Users\\' + ctx.user + '\\Desktop\\' + _flagName('local'));
+        }
       }
-      // The ROOT/proof flag path for capture. Prefer a path obol actually LOCATED (a nxc/smb spider,
-      // a recursive dir /s /b, or prior read) so capture fills with the real proven file instead of a
-      // guessed placeholder. When unlocated, it remains unfilled so read commands stay gated behind
-      // locating the flag first (both flag_path_local and flag_path_root are earned gate tokens).
       if (ctx.flag_path_root === undefined) {
         var _locR = _locatedPath('root');
-        if (_locR) ctx.flag_path_root = _locR;
+        if (_locR) {
+          ctx.flag_path_root = _locR;
+        }
       }
-    }
 
     // SMB share tokens: resolve the top-ranked readable share from discovered shares (smb.shares / smb.readable_share)
     // Priority order:
@@ -333,10 +539,10 @@
     // Exclude transport noise: IPC$, PRINT$
     if (!ctx.share) {
       var allShares = [];
-      facts.values('smb.shares').forEach(function (v) {
+      fvals('smb.shares').forEach(function (v) {
         (v.shares || []).forEach(function (s) { if (s && s.name) allShares.push(s); });
       });
-      facts.values('smb.readable_share').forEach(function (s) {
+      fvals('smb.readable_share').forEach(function (s) {
         if (s && s.name && !allShares.some(function (x) { return x.name.toUpperCase() === s.name.toUpperCase(); })) {
           allShares.push(Object.assign({ readable: true }, s));
         }
@@ -344,7 +550,8 @@
       var BOILERPLATE = { 'IPC$': 1, 'PRINT$': 1 };
       var readableList = allShares.filter(function (s) {
         var n = (s.name || '').toUpperCase();
-        return (s.readable === true || !s.permission || (s.permission && s.permission.indexOf('READ') >= 0)) && !BOILERPLATE[n];
+        var isAdminShare = (n === 'ADMIN$' || n === 'C$');
+        return (s.readable === true || (!s.permission && !isAdminShare) || (s.permission && s.permission.indexOf('READ') >= 0)) && !BOILERPLATE[n];
       });
       var customList = readableList.filter(function (s) {
         var n = (s.name || '').toUpperCase();
@@ -371,7 +578,7 @@
 
     // cpassword from GPP hunting facts (credential.candidate with kind: 'gpp_cpassword')
     if (!ctx.cpassword) {
-      var gppCandidates = facts.values('credential.candidate');
+      var gppCandidates = fvals('credential.candidate');
       for (var gc = 0; gc < gppCandidates.length; gc++) {
         var gVal = gppCandidates[gc] || {};
         if (gVal.kind === 'gpp_cpassword' && gVal.values && gVal.values.length) {
@@ -381,14 +588,14 @@
       }
     }
 
-    // workspace output-directory tokens ({{scandir}} etc.) — from opts.workspace when the caller
+    // workspace output-directory tokens ({{scandir}} etc.) - from opts.workspace when the caller
     // supplies it (OBOL.workspace.tokens(eng)), else relative fallbacks so commands still form.
     var wsd = opts.workspace || { root: '.', scandir: 'scans', lootdir: 'loot', exploitdir: 'exploit', wwwdir: 'www', proofdir: 'proof' };
     ['root', 'scandir', 'lootdir', 'exploitdir', 'wwwdir', 'proofdir'].forEach(function (k) {
       if (ctx[k] === undefined && wsd[k] !== undefined) ctx[k] = wsd[k];
     });
 
-    // loot-materialized file tokens ({{userlist}}/{{hashfile}}/{{wordlist}}) — resolve to stable
+    // loot-materialized file tokens ({{userlist}}/{{hashfile}}/{{wordlist}}) - resolve to stable
     // paths under the workspace loot/ dir so the roast that writes {{hashfile}} and the crack that
     // reads it agree, and {{userlist}} points at the file obol can materialize from ad.user_list.
     // Only fills for an action the caller identified (opts.action); params still win over these.
@@ -404,7 +611,25 @@
       var v = extra[k];
       if (v !== null && v !== undefined && v !== '') ctx[k] = v;
     });
+    if (ctx.basedn && !ctx.base_dn) ctx.base_dn = ctx.basedn;
+    if (ctx.template && !ctx.cert_template) ctx.cert_template = ctx.template;
+    if (ctx.group && !ctx.target_group) ctx.target_group = ctx.group;
+    if (ctx.target_sam && !ctx.victim) ctx.victim = ctx.target_sam;
+    if (ctx.lhost && !ctx.attacker_ip) ctx.attacker_ip = ctx.lhost;
+    if (ctx.hashfile && !ctx.hashes_file) ctx.hashes_file = ctx.hashfile;
+    if (ctx.sid && !ctx.oracle_sid) ctx.oracle_sid = ctx.sid;
     return ctx;
+  }
+
+  function quoteStateAt(str, idx) {
+    var q = '';
+    for (var i = 0; i < idx; i++) {
+      var ch = str.charAt(i);
+      if (ch === '\\' && q !== "'") { i++; continue; }
+      if (!q && (ch === "'" || ch === '"')) q = ch;
+      else if (q === ch) q = '';
+    }
+    return q;
   }
 
   // Substitute known {{tokens}}; leave unknown placeholders visible (they signal a dependency).
@@ -417,12 +642,36 @@
       var sval = String(ctx[key]);
       if (SHELL_VALUE_TOKENS[key] && shellQuote(sval) !== sval) {
         var quoted = shellQuote(sval);
-        cmd = cmd.split("'" + placeholder + "'").join(quoted)
-                 .split('"' + placeholder + '"').join(quoted)
-                 .split(placeholder).join(quoted);
+        if (cmd.indexOf(placeholder) >= 0) {
+          var out = '';
+          var pos = 0;
+          var found;
+          while ((found = cmd.indexOf(placeholder, pos)) >= 0) {
+            out += cmd.slice(pos, found);
+            var qState = quoteStateAt(out, out.length);
+            if ((qState === "'" || qState === '"') && out.charAt(out.length - 1) === qState && cmd.charAt(found + placeholder.length) === qState && quoteStateAt(out.slice(0, -1), out.length - 1) === '') {
+              out = out.slice(0, -1) + quoted;
+              pos = found + placeholder.length + 1;
+              continue;
+            }
+            if (qState === "'") {
+              out += sval.replace(/'/g, "'\\''");
+            } else if (qState === '"') {
+              out += sval.replace(/(["\\$`])/g, '\\$1');
+            } else {
+              out += quoted;
+            }
+            pos = found + placeholder.length;
+          }
+          cmd = out + cmd.slice(pos);
+        }
       } else {
         cmd = cmd.split(placeholder).join(sval);
       }
+    });
+    cmd = cmd.replace(/\{\{([a-zA-Z0-9_]+)\|([^}]*)\}\}/g, function (_, k, defVal) {
+      var v = ctx[k];
+      return (v !== undefined && v !== null && v !== '') ? String(v) : defVal;
     });
     return cmd.split(LIT_OPEN).join('{{').split(LIT_CLOSE).join('}}');
   }
@@ -442,16 +691,45 @@
     prof = prof || _arsenalProfile();
     if (!prof) return filled;
     var A = (root.OBOL && root.OBOL.ARSENAL) || {};
-    var tools = (action && (action.tools && action.tools.length ? action.tools : [action.tool])) || [];
     var ptools = prof.tools || {};
-    tools.forEach(function (t) {
+    var rawTools = [];
+    if (action) {
+      if (action.tools && action.tools.length) rawTools = rawTools.concat(action.tools);
+      if (action.tool) rawTools.push(action.tool);
+      if (action.cmdTool) rawTools.push(action.cmdTool);
+    }
+    // Also inspect standalone command tokens in `filled` so multi-tool pipelines and per-variant tools rewrite cleanly.
+    String(filled).split(/[\s|;&()`"']+/).forEach(function (tok) {
+      if (!tok || tok.charAt(0) === '-') return;
+      var base = tok.split('/').pop().toLowerCase();
+      if (A[base]) rawTools.push(base);
+      else if (base.slice(-3) === '.py' && A[base.slice(0, -3)]) rawTools.push(base.slice(0, -3));
+    });
+    var seenKey = {};
+    rawTools.forEach(function (t) {
       if (!t) return;
-      var e = A[String(t).toLowerCase()]; if (!e) return;
-      var rec = ptools[e.key]; var inv = rec && rec.present && rec.invocation;
+      var tl = String(t).toLowerCase();
+      var e = A[tl] || (tl.slice(-3) === '.py' ? A[tl.slice(0, -3)] : null);
+      if (!e || seenKey[e.key]) return;
+      seenKey[e.key] = 1;
+      var rec = ptools[e.key];
+      var inv = rec && rec.present && rec.invocation;
       if (!inv) return;
-      (e.variants || []).forEach(function (v) {
-        if (!v || v === inv) return;
-        filled = filled.replace(new RegExp('(^|\\s)' + _reEsc(v) + '(?=\\s|$)', 'g'), '$1' + inv);
+      // Guard older profiles where a cloned git repo recorded its bare lowercase key instead of a script invocation
+      if (rec.via === 'cloned' && inv === e.key && e.canonical && e.canonical !== e.key) {
+        inv = rec.path ? ('python3 ' + rec.path.replace(/\/+$/, '') + '/' + e.canonical) : e.canonical;
+      }
+      var variants = (e.variants && e.variants.length) ? e.variants.slice() : [e.canonical || e.key];
+      if (e.canonical && variants.indexOf(e.canonical) < 0) variants.push(e.canonical);
+      variants.forEach(function (v) {
+        if (!v) return;
+        var isPy = v.slice(-3).toLowerCase() === '.py' || inv.indexOf('python') === 0;
+        if (isPy) {
+          var pyRe = new RegExp('(^|\\s)(?:python3?\\s+)?(?:(?:\\$HOME|~|\\/opt|\\/usr\\/local|\\/usr\\/share)\\/[^\\s"\';|&]*\\/)?' + _reEsc(v) + '(?=\\s|$)', 'g');
+          filled = filled.replace(pyRe, '$1' + inv);
+        } else if (v !== inv) {
+          filled = filled.replace(new RegExp('(^|\\s)' + _reEsc(v) + '(?=\\s|$)', 'g'), '$1' + inv);
+        }
       });
     });
     var wl = prof.wordlists || {};
@@ -459,15 +737,17 @@
       filled = filled.replace(/\/usr\/share\/wordlists\/rockyou\.txt(?:\.gz)?/g, wl.rockyou)
                      .replace(/(^|\s)rockyou\.txt(?=\s|$)/g, '$1' + wl.rockyou);
     }
-    if (wl.seclists) filled = filled.replace(/\/usr\/share\/seclists\b/g, wl.seclists);
+    if (wl.seclists) {
+      filled = filled.replace(/\/usr\/share\/(?:wordlists\/)?(?:seclists|SecLists)\b/g, wl.seclists);
+    }
     return filled;
   }
 
   // Fill a command variant of an action (0-based). Returns {tool, run, note, filled, webNote}.
   // obol is the hands-on edition: where an action carries a web-suited command (`web` on a
-  // variant, or `web_command` on the action) — one tuned for a human who must copy/paste or attach
-  // the output by hand, not a terminal reading it off disk — that form is preferred here. A
-  // `web_note` carries the matching hands-on guidance (e.g. "large output → tee to a file and
+  // variant, or `web_command` on the action) - one tuned for a human who must copy/paste or attach
+  // the output by hand, not a terminal reading it off disk - that form is preferred here. A
+  // `web_note` carries the matching hands-on guidance (e.g. "large output -> tee to a file and
   // attach it in Evidence"). Neither field exists in obol's mined data; both are additive.
   function fillCommand(action, facts, opts, index) {
     opts = opts || {};
@@ -476,42 +756,43 @@
     if (index < 0 || index >= commands.length) index = 0;
     var c = commands[index] || {};
     var run = c.web || c.run || action.web_command || action.command || '';
+    var actForArsenal = (c.tool && action && c.tool !== action.tool) ? Object.assign({}, action, { cmdTool: c.tool }) : action;
     return {
       tool: c.tool || action.tool || '',
       note: c.note || '',
       webNote: c.web_note || action.web_note || '',
-      win: !!c.win,   // a box-ending move — the coach flags it "PWN THIS TARGET"
+      win: !!c.win,   // a box-ending move - the coach flags it "PWN THIS TARGET"
       run: run,
       // thread the action so the loot glue can resolve {{userlist}}/{{hashfile}} for THIS move, then
-      // rewrite to the operator's synced box (invocation + wordlist paths) — a no-op until they sync.
-      filled: applyArsenal(fillTemplate(run, facts, opts.action === action ? opts : Object.assign({}, opts, { action: action })), action, opts.arsenal),
+      // rewrite to the operator's synced box (invocation + wordlist paths) - a no-op until they sync.
+      filled: applyArsenal(fillTemplate(run, facts, opts.action === action ? opts : Object.assign({}, opts, { action: action })), actForArsenal, opts.arsenal),
     };
   }
 
-  // All variants of an action, filled — for the coach to show "many commands".
+  // All variants of an action, filled - for the coach to show "many commands".
   function fillAll(action, facts, opts) {
     var commands = (action.commands && action.commands.length) ? action.commands : [{ run: action.command, tool: action.tool }];
     return commands.map(function (c, i) { return fillCommand(action, facts, opts, i); });
   }
 
-  // The distinctive ACTION tokens of a command — the verbs/subcommands that say WHAT it does, with the
+  // The distinctive ACTION tokens of a command - the verbs/subcommands that say WHAT it does, with the
   // tool name, flags, param values (target/domain/user/secret/…), paths, numbers and shell scaffolding
   // stripped out. Two commands with the same action tokens are "the same move" regardless of which host or
   // credential filled them, so this is how obol tells that a suggested command is one you already ran.
-  // Long flags that only say WHERE/HOW to connect, not what the move does — dropped so `--host`/`--dc-ip`
+  // Long flags that only say WHERE/HOW to connect, not what the move does - dropped so `--host`/`--dc-ip`
   // don't drown out the real action, and so a run with `--detail` matches one without it.
   var _PLUMBING_FLAGS = { host: 1, 'dc-ip': 1, 'dc-host': 1, dns: 1, domain: 1, port: 1, timeout: 1, detail: 1,
     json: 1, threads: 1, jitter: 1, nameserver: 1, 'no-pass': 1, gc: 1, 'min-rate': 1 };
   // Bare words that are shell scaffolding or output plumbing, never an action.
   var _NOISE_WORDS = { 'for': 1, 'in': 1, 'do': 1, 'done': 1, 'then': 1, 'fi': 1, 'else': 1, 'echo': 1,
     'sudo': 1, 'while': 1, 'tee': 1, 'cat': 1 };
-  // Short flags that DEFINE the action and must be kept — `-x`/`-X` (execute a command) is the whole
+  // Short flags that DEFINE the action and must be kept - `-x`/`-X` (execute a command) is the whole
   // difference between `nxc smb …` (validate the credential) and `nxc smb … -x '<cmd>'` (run a command),
   // so dropping it made running the validator wrongly mark the exec command as already run.
   var _ACTION_SHORT_FLAGS = { x: 1 };
   function _actionSig(cmd, params) {
-    // Process the WHOLE pipeline (do NOT stop at the first pipe): the transform after a `|` — awk / grep /
-    // sort in a HANDOFF — is exactly what distinguishes `nxc … --users | tee` from `… | awk | grep | sort`,
+    // Process the WHOLE pipeline (do NOT stop at the first pipe): the transform after a `|` - awk / grep /
+    // sort in a HANDOFF - is exactly what distinguishes `nxc … --users | tee` from `… | awk | grep | sort`,
     // so two commands that share a prefix but differ downstream must NOT collapse to the same signature.
     var toks = String(cmd || '').trim().split(/\s+/);
     var vals = {};
@@ -519,7 +800,7 @@
       var v = params && params[k]; if (v) vals[String(v).toLowerCase()] = 1;
     });
     var out = {};
-    // Include the leading tool token too (i=0): the tool IS distinctive — `certipy find` and
+    // Include the leading tool token too (i=0): the tool IS distinctive - `certipy find` and
     // `sccmhunter find` share the `find` subcommand but are NOT the same move, so dropping the tool made
     // one wrongly match the other. Shell keywords (`for`/`while`/`sudo`) fall out via the noise filter.
     for (var i = 0; i < toks.length; i++) {
@@ -586,6 +867,43 @@
     pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1, flag_path_local: 1, flag_path_root: 1, share: 1, cpassword: 1
   };
 
+  function _normCmd(s) {
+    return String(s || '').trim().replace(/\s+/g, ' ');
+  }
+
+  function primaryBinary(cmdStr) {
+    var m = String(cmdStr || '').trim().match(/^(?:sudo\s+)?(\S+)/);
+    return m ? m[1].replace(/^.*[\\/]/, '') : '';
+  }
+
+  function commandTriedInEpoch(action, cmdObj, filledStr, activities, epoch) {
+    if (!action || !cmdObj || !Array.isArray(activities) || !activities.length) return false;
+    var rawRun = _normCmd(cmdObj.run);
+    var filledCmd = _normCmd(filledStr);
+    var cmdTool = String(cmdObj.tool || primaryBinary(rawRun) || '').toLowerCase().replace(/\.(py|exe)$/, '');
+    var sameToolCount = 0;
+    var cmds = action.commands || [];
+    if (cmdTool) {
+      for (var c = 0; c < cmds.length; c++) {
+        var ct = String(cmds[c].tool || primaryBinary(cmds[c].run) || '').toLowerCase().replace(/\.(py|exe)$/, '');
+        if (ct === cmdTool) sameToolCount++;
+      }
+    }
+    var isFlagHuntSession = (action.id === 'flag-hunt-windows' || action.id === 'flag-hunt-root-windows') && cmdTool === 'evil-winrm';
+    for (var a = 0; a < activities.length; a++) {
+      var act = activities[a];
+      if (!act || (act.action_id || act.actionId) !== action.id) continue;
+      if (epoch && act.epoch && act.epoch !== epoch) continue;
+      var ac = _normCmd(act.command);
+      if (ac && (ac === rawRun || (filledCmd && ac === filledCmd))) return true;
+      var ad = _normCmd(act.dispatch);
+      if (filledCmd && ad && ad.indexOf(filledCmd) >= 0) return true;
+      var actTool = String(act.tool || primaryBinary(ac) || '').toLowerCase().replace(/\.(py|exe)$/, '');
+      if (cmdTool && actTool === cmdTool && (!ac || sameToolCount === 1 || isFlagHuntSession)) return true;
+    }
+    return false;
+  }
+
   function bestCommandIndex(action, facts, opts) {
     if (!action) return 0;
     var commands = action.commands || [];
@@ -598,8 +916,13 @@
       var un = unfilledTokens(filled[i].filled || '');
       return un.some(function (t) { return EARNED_TOKENS[t]; });
     }
+    var acts = Array.isArray(opts.activities) ? opts.activities : null;
+    var curEpoch = opts.epoch || ((root.OBOL && root.OBOL.pack && root.OBOL.pack.accessEpoch && facts) ? root.OBOL.pack.accessEpoch(facts) : '');
+    var triedFn = acts ? function (cmd, i) {
+      return commandTriedInEpoch(action, cmd, filled[i] && filled[i].filled, acts, curEpoch);
+    } : null;
     if (root.OBOL && root.OBOL.pack && root.OBOL.pack.preferredCommandIndex) {
-      return root.OBOL.pack.preferredCommandIndex(action, locus, facts || null, isGated);
+      return root.OBOL.pack.preferredCommandIndex(action, locus, facts || null, isGated, triedFn);
     }
     for (var i = 0; i < commands.length; i++) {
       var cmd = commands[i];
@@ -743,7 +1066,9 @@
   OBOL.command = {
     shellQuote: shellQuote,
     openPorts: openPorts,
+    scopedValues: scopedValues,
     buildContext: buildContext,
+    commandContext: buildContext,
     fillTemplate: fillTemplate,
     fillCommand: fillCommand,
     fillAll: fillAll,
@@ -753,6 +1078,7 @@
     commandPortFeasible: commandPortFeasible,
     explainFlags: explainFlags,
     bestCommandIndex: bestCommandIndex,
+    commandTriedInEpoch: commandTriedInEpoch,
     EARNED_TOKENS: EARNED_TOKENS,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

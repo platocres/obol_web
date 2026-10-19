@@ -1,13 +1,13 @@
 /*!
- * obol data — field-notes.js — OBOL.FIELD_NOTES, OBOL.FIELD_DOCTORS, OBOL.fieldNote()
+ * obol data - field-notes.js - OBOL.FIELD_NOTES, OBOL.FIELD_DOCTORS, OBOL.fieldNote()
  *
- * Execution help for the Next Steps canvas, scoped to a (move, command) — NOT the Learn tab's teaching
+ * Execution help for the Next Steps canvas, scoped to a (move, command) - NOT the Learn tab's teaching
  * prose. It answers the one question a learner has with a command in front of them: "how do I make THIS
  * run work?" Each authored entry is { land:[...], mistakes:[...], win:'...', doctor?:{title,body,code?} }:
- *   land     — 1-3 plain steps to land the command (voice: the tunnel wizard's "you'll know it worked").
- *   mistakes — the usual ways it goes wrong (always-on, distinct from the reactive doctor).
- *   win      — the single observable that tells you it worked.
- *   doctor   — an optional authored "if it fails like X" note tied to THIS command.
+ *   land - 1-3 plain steps to land the command (voice: the tunnel wizard's "you'll know it worked").
+ *   mistakes - the usual ways it goes wrong (always-on, distinct from the reactive doctor).
+ *   win - the single observable that tells you it worked.
+ *   doctor - an optional authored "if it fails like X" note tied to THIS command.
  * FIELD_NOTES is keyed by moveId -> array indexed by command position. It does NOT need to cover every
  * move: OBOL.fieldNote() falls back to the move's own command note + hypothesis, which the pack authors
  * already write richly, so an un-authored command still shows useful, non-empty help. Seed the high-traffic
@@ -4072,6 +4072,32 @@
       "mistakes": [
         "Wrong --format."
       ]
+    },
+    {
+      "when": "When the Kerberoast ticket starts with $krb5tgs$18$ (AES-256).",
+      "land": [
+        "hashcat -m 19700 with rockyou. Modern AD accounts with AES encryption enabled produce etype 18 tickets instead of RC4 (etype 23)."
+      ],
+      "look": [
+        "hashcat prints the hash:password line (Cracked)."
+      ],
+      "win": "The AES-256 service account password appears.",
+      "mistakes": [
+        "Running -m 13100 against an etype 18 ($krb5tgs$18$) ticket, which causes a Token length / Separator unmatched error."
+      ]
+    },
+    {
+      "when": "When the Kerberoast ticket starts with $krb5tgs$17$ (AES-128).",
+      "land": [
+        "hashcat -m 19600 with rockyou for etype 17 tickets."
+      ],
+      "look": [
+        "hashcat prints the hash:password line (Cracked)."
+      ],
+      "win": "The AES-128 service account password appears.",
+      "mistakes": [
+        "Using -m 13100 or -m 19700 on an etype 17 ($krb5tgs$17$) ticket."
+      ]
     }
   ],
   "crack-asrep-offline": [
@@ -4115,6 +4141,19 @@
       "mistakes": [
         "Spending time cracking when pass-the-hash would have worked."
       ]
+    },
+    {
+      "when": "Legacy LM hash mode when the SAM line has a non-empty first half.",
+      "land": [
+        "hashcat -m 3000 with rockyou and -O. LM hashes split passwords into two 7-character halves and uppercase them, making them trivial to crack."
+      ],
+      "look": [
+        "The cracked 7-character password halves in hashcat output."
+      ],
+      "win": "Both LM halves crack and reveal the cleartext password.",
+      "mistakes": [
+        "Trying to crack empty LM hashes (aad3b435b51404eeaad3b435b51404ee) which represent disabled or blank LM."
+      ]
     }
   ],
   "crack-netntlmv2": [
@@ -4129,6 +4168,19 @@
       "win": "The user password appears.",
       "mistakes": [
         "Trimming the hash line, which breaks mode 5600. It wants the full user$realm form."
+      ]
+    },
+    {
+      "when": "When Responder or a downgrade captures a NetNTLMv1 challenge and response.",
+      "land": [
+        "hashcat -m 5500 with rockyou and -O. NetNTLMv1 uses a 24-byte response format that cracks significantly faster than v2."
+      ],
+      "look": [
+        "The cracked NetNTLMv1 password line."
+      ],
+      "win": "The NetNTLMv1 password appears.",
+      "mistakes": [
+        "Using mode 5600 on a NetNTLMv1 challenge or mode 5500 on NetNTLMv2."
       ]
     }
   ],
@@ -4827,19 +4879,6 @@
   ],
   "mysql-login": [
     {
-      "when": "You have MySQL creds (or suspect weak ones) and port 3306 is open.",
-      "land": [
-        "Connect and run version() to confirm access. Note there is NO space between -p and the password."
-      ],
-      "look": [
-        "A version string means you are in. SHOW DATABASES next."
-      ],
-      "win": "MySQL returns its version, so the login works.",
-      "mistakes": [
-        "A space after -p, which makes mysql prompt instead of using the password."
-      ]
-    },
-    {
       "when": "Try root with a blank password, a classic misconfiguration.",
       "land": [
         "root with --password= (empty). Surprisingly common on labs."
@@ -4850,6 +4889,19 @@
       "win": "A blank-password root logs in.",
       "mistakes": [
         "Not trying the empty password before assuming you need creds."
+      ]
+    },
+    {
+      "when": "You have MySQL creds (or suspect weak ones) and port 3306 is open.",
+      "land": [
+        "Connect and run version() to confirm access. Note there is NO space between -p and the password."
+      ],
+      "look": [
+        "A version string means you are in. SHOW DATABASES next."
+      ],
+      "win": "MySQL returns its version, so the login works.",
+      "mistakes": [
+        "A space after -p, which makes mysql prompt instead of using the password."
       ]
     }
   ],
@@ -4945,6 +4997,19 @@
       "win": "Captured service account NetNTLM hash via local SQL login.",
       "mistakes": [
         "Assuming local SQL login cannot access external UNC shares."
+      ]
+    },
+    {
+      "when": "Port 1433 is open and you do not yet hold a credential.",
+      "land": [
+        "Run the Nmap MSSQL discovery and empty-password scripts against port 1433."
+      ],
+      "look": [
+        "SQL Server version, NTLM domain and computer name, or an empty sa password."
+      ],
+      "win": "Instance metadata and NTLM domain details are enumerated, or sa logs in with a blank password.",
+      "mistakes": [
+        "Skipping unauthenticated MSSQL NTLM info and blank-sa checks before hunting credentials."
       ]
     }
   ],
@@ -6170,20 +6235,20 @@
     {
       "when": "MATCH THE BUILD FIRST. This is what prevents the failure.",
       "land": [
-        "Pick the potato for the build: GodPotato for 2012-2022 and Win8-11, PrintSpoofer for spooler paths. The potato-select move helps."
+        "Pick the potato for the build: Modern Server 2019+ / Win10 1809+ (Build >= 17763) uses GodPotato or PrintSpoofer; Legacy Server 2016 / Win10 < 1809 (Build <= 14393) uses JuicyPotato."
       ],
       "look": [
-        "The build-to-potato match."
+        "The OS build number (Build >= 17763 vs Build <= 14393)."
       ],
-      "win": "You pick the right potato for the OS.",
+      "win": "You pick the right potato for the OS build.",
       "mistakes": [
-        "Using an old potato on a modern build."
+        "Using JuicyPotato on Build >= 17763 where custom OXID resolution is blocked."
       ]
     },
     {
-      "when": "Run the chosen potato.",
+      "when": "Modern Windows (Server 2019+ / Win10 1809+ Build >= 17763): run GodPotato or PrintSpoofer.",
       "land": [
-        "Serve the potato from your box, fetch it, and run it to execute a command as SYSTEM."
+        "Serve GodPotato-NET4.exe or PrintSpoofer64.exe from your box, fetch it, and run a harmless SYSTEM proof first."
       ],
       "look": [
         "nt authority\\system from the potato output."
@@ -6194,16 +6259,16 @@
       ]
     },
     {
-      "when": "Prove SYSTEM, then fire the real payload.",
+      "when": "Legacy Windows (Server 2016 / Win10 < 1809 Build <= 14393): run JuicyPotato.",
       "land": [
-        "Prove SYSTEM with a harmless write and read it back first, then run your real payload (a reverse shell from the Workbench)."
+        "Use JuicyPotato.exe with a listening port (-l) and -t * on pre-1809 builds where the classic DCOM OXID path works."
       ],
       "look": [
         "The proof file as SYSTEM, then your shell."
       ],
       "win": "You confirm SYSTEM and land your payload.",
       "mistakes": [
-        "Skipping the proof and assuming it worked."
+        "Running JuicyPotato on Windows Server 2019+ (Build >= 17763)."
       ]
     }
   ],
@@ -6543,6 +6608,19 @@
       "win": "Remote secretsdump returns the hashes.",
       "mistakes": [
         "Running it without the admin rights it needs."
+      ]
+    },
+    {
+      "when": "HiveNightmare or SeriousSAM (CVE-2021-36934) shadow copy extraction.",
+      "land": [
+        "Check permissions on SAM with icacls and copy SAM and SYSTEM from HarddiskVolumeShadowCopy1 to %TEMP%."
+      ],
+      "look": [
+        "Successful copy of SAM.bak and SYSTEM.bak as an unprivileged user."
+      ],
+      "win": "You obtain SAM and SYSTEM backup hives without administrator rights.",
+      "mistakes": [
+        "Missing shadow copies on the target, or running on a patched Windows build where BUILTIN\\Users lacks read permissions."
       ]
     }
   ],
@@ -7706,6 +7784,32 @@
       "win": "john shows the results.",
       "mistakes": [
         "Confusing --show with a crack run."
+      ]
+    },
+    {
+      "when": "Roasted ticket uses Kerberos 5 TGS-REP etype 17 (AES-128).",
+      "land": [
+        "hashcat -m 19600 with rockyou. Used when the service account enforces AES-128 encryption."
+      ],
+      "look": [
+        "Cracked AES-128 service-account password."
+      ],
+      "win": "The AES-128 TGS ticket cracks.",
+      "mistakes": [
+        "Using mode 13100 on an AES ticket. Check the header prefix ($krb5tgs$17$)."
+      ]
+    },
+    {
+      "when": "Roasted ticket uses Kerberos 5 TGS-REP etype 18 (AES-256).",
+      "land": [
+        "hashcat -m 19700 with rockyou. Used when the service account ticket starts with $krb5tgs$18$."
+      ],
+      "look": [
+        "Cracked AES-256 service-account password."
+      ],
+      "win": "The AES-256 TGS ticket cracks.",
+      "mistakes": [
+        "Using mode 13100 on an AES ticket. Check the header prefix ($krb5tgs$18$)."
       ]
     }
   ],
@@ -9105,6 +9209,136 @@
       "win": "ESC9/10 impersonation.",
       "mistakes": [
         "Not restoring the victim UPN afterward."
+      ]
+    },
+    {
+      "when": "ESC7: add yourself as an Officer with ManageCA rights.",
+      "land": [
+        "certipy ca -add-officer to grant your user Manage Certificates rights on the CA."
+      ],
+      "look": [
+        "Successfully added officer message from certipy."
+      ],
+      "win": "Officer rights granted on CA.",
+      "mistakes": [
+        "Not holding ManageCA permissions initially."
+      ]
+    },
+    {
+      "when": "ESC7: enable the SubCA template.",
+      "land": [
+        "certipy ca -enable-template SubCA to ensure the CA processes requests."
+      ],
+      "look": [
+        "Confirmation that the SubCA template is enabled."
+      ],
+      "win": "SubCA template enabled.",
+      "mistakes": [
+        "Target CA does not permit enabling templates."
+      ]
+    },
+    {
+      "when": "ESC7: request a certificate as Administrator using SubCA.",
+      "land": [
+        "certipy req with -template SubCA -upn administrator. The initial request is denied or pending."
+      ],
+      "look": [
+        "A Request ID returned by the CA."
+      ],
+      "win": "Request ID obtained for issuance.",
+      "mistakes": [
+        "Missing the Request ID for the next command."
+      ]
+    },
+    {
+      "when": "ESC7: issue the pending certificate request.",
+      "land": [
+        "certipy ca -issue-request with your Request ID using your officer rights."
+      ],
+      "look": [
+        "Confirmation that the request was successfully issued."
+      ],
+      "win": "Certificate request issued by officer.",
+      "mistakes": [
+        "Using the wrong Request ID."
+      ]
+    },
+    {
+      "when": "ESC7: retrieve the issued Administrator certificate.",
+      "land": [
+        "certipy req -retrieve with your Request ID to download the certificate as a .pfx file."
+      ],
+      "look": [
+        "A saved administrator.pfx file."
+      ],
+      "win": "Administrator PFX retrieved for PKINIT authentication.",
+      "mistakes": [
+        "Attempting retrieval before the request has been issued."
+      ]
+    },
+    {
+      "when": "ESC4: modify a vulnerable certificate template.",
+      "land": [
+        "certipy template with -save-old to backup original config and enable client auth and enrollee SAN."
+      ],
+      "look": [
+        "Template modified successfully message and backup JSON written."
+      ],
+      "win": "Template altered to an ESC1 vulnerable state.",
+      "mistakes": [
+        "Forgetting -save-old, preventing clean restoration later."
+      ]
+    },
+    {
+      "when": "ESC4: request a certificate using the altered template.",
+      "land": [
+        "certipy req with -template and -upn administrator to obtain the certificate."
+      ],
+      "look": [
+        "An administrator.pfx certificate file."
+      ],
+      "win": "Administrator certificate acquired.",
+      "mistakes": [
+        "Requesting before template modification took effect."
+      ]
+    },
+    {
+      "when": "ESC4: restore the original template configuration.",
+      "land": [
+        "certipy template with -configuration using the saved JSON backup."
+      ],
+      "look": [
+        "Template restored successfully message."
+      ],
+      "win": "Template restored to original state, avoiding detection and service disruption.",
+      "mistakes": [
+        "Leaving the template vulnerable and breaking CA operations."
+      ]
+    },
+    {
+      "when": "ESC3: enrollment agent abuse via on-behalf-of certificate request.",
+      "land": [
+        "Request an Enrollment Agent certificate, then use its .pfx with -on-behalf-of to request a User certificate for Administrator."
+      ],
+      "look": [
+        "A newly issued administrator.pfx obtained via enrollment agent delegation."
+      ],
+      "win": "Administrator certificate issued through ESC3 enrollment agent rights.",
+      "mistakes": [
+        "Missing Certificate Request Agent rights on the initial template or lacking permission on the target User template."
+      ]
+    },
+    {
+      "when": "ESC4: overwrite template ACLs to a default ESC1-vulnerable configuration.",
+      "land": [
+        "certipy template with -save-old and -write-default-configuration to rewrite the template to standard ESC1 settings."
+      ],
+      "look": [
+        "Template configuration saved to backup and default vulnerable configuration written."
+      ],
+      "win": "Template converted to vulnerable default ESC1 configuration with backup preserved.",
+      "mistakes": [
+        "Not preserving the backup file needed to revert changes after compromise."
       ]
     }
   ],
@@ -12680,19 +12914,6 @@
   ],
   "oracle-tns-odat-rce": [
     {
-      "when": "You have valid Oracle database credentials and port 1521 is reachable.",
-      "land": [
-        "Leverage ODAT dbmsscheduler module to create and execute a privileged system task."
-      ],
-      "look": [
-        "[+] Job created and executed successfully; command payload executes as SYSTEM."
-      ],
-      "win": "Operating system command execution achieved through Oracle DBMS_SCHEDULER.",
-      "mistakes": [
-        "Omitting --sysdba flag for administrative accounts or using wrong Oracle SID."
-      ]
-    },
-    {
       "when": "Oracle TNS listener is discovered on port 1521 and active SID is unknown.",
       "land": [
         "Run ODAT sidguesser dictionary brute force to identify valid Oracle service names (XE, ORCL)."
@@ -12703,6 +12924,19 @@
       "win": "Valid Oracle System Identifier discovered for subsequent authentication probes.",
       "mistakes": [
         "Testing database authentication without first confirming an active Oracle SID."
+      ]
+    },
+    {
+      "when": "You have valid Oracle database credentials and port 1521 is reachable.",
+      "land": [
+        "Leverage ODAT dbmsscheduler module to create and execute a privileged system task."
+      ],
+      "look": [
+        "[+] Job created and executed successfully; command payload executes as SYSTEM."
+      ],
+      "win": "Operating system command execution achieved through Oracle DBMS_SCHEDULER.",
+      "mistakes": [
+        "Omitting --sysdba flag for administrative accounts or using wrong Oracle SID."
       ]
     }
   ],
@@ -13330,10 +13564,10 @@
     windows: { label: 'Confirm who you are, your privileges, the host, and the network', cmd: 'whoami /all & hostname & ipconfig /all' },
   };
 
-  // Reactive doctors — surfaced in the canvas when a pasted error has minted the matching blocker.* fact,
+  // Reactive doctors - surfaced in the canvas when a pasted error has minted the matching blocker.* fact,
   // regardless of which command is selected. Concise fixes; the full fix move still exists in the engine.
   OBOL.FIELD_DOCTORS = {
-    'blocker.clock_skew': { title: 'Kerberos Clock Skew', body: 'KRB_AP_ERR_SKEW means your clock is more than 5 minutes off the DC. Sync to the DC, then retry. Your credential is fine.', code: 'sudo ntpdate <dc-ip>   # or: sudo rdate -n <dc-ip>' },
+    'blocker.clock_skew': { title: 'Kerberos Clock Skew', body: 'KRB_AP_ERR_SKEW means your clock is more than 5 minutes off the DC. Sync to the DC (or use NTLM instead of Kerberos), then retry. Your credential is fine.', code: 'sudo ntpsec-ntpdate <dc-ip> || sudo rdate -n <dc-ip> || sudo ntpdate <dc-ip>' },
     'blocker.name_resolution': { title: 'Name Resolution', body: 'A tool was handed a hostname with no DNS. Map it in /etc/hosts and retry.', code: 'echo "<target-ip> <host.domain>" | sudo tee -a /etc/hosts' },
     'blocker.no_tty': { title: 'No TTY For Sudo', body: 'sudo wants a real terminal. Upgrade your shell to a PTY first.', code: 'python3 -c \'import pty;pty.spawn("/bin/bash")\'' },
     'blocker.crlf': { title: 'Bad Interpreter (CRLF)', body: 'A script you uploaded has Windows line endings. Strip the \\r and run it again.', code: 'sed -i \'s/\\r$//\' <script>' },
@@ -13350,6 +13584,19 @@
     'blocker.logon_failure': { title: 'Login Failed', why: 'STATUS_LOGON_FAILURE / authentication failure: the service rejected this credential.', body: 'Usually the password is wrong, but just as often the username or realm format is off. Try both DOMAIN\\user and user@domain, match the exact case, and confirm the account is not disabled or locked. For Kerberos, a skewed clock reads as a logon failure, so sync to the DC.', code: "nxc smb <target> -u <user> -p <pass>   # also try -u 'DOMAIN\\user' and user@domain", gotcha: 'One failure is a typo. Many failures across accounts trip a lockout, so switch to one password across many users with a delay before you retry in bulk.' },
     'blocker.ldap_anonymous_disabled': { title: 'Anonymous LDAP Is Bind-Restricted', why: 'The DC accepted the anonymous bind but denied the anonymous search (operationsError: a successful bind must be completed).', body: 'You cannot enumerate this DC over LDAP without a credential, the bind "succeeding" is a red herring. Get one first: AS-REP roast a user from a names list, or spray a small password across users, then re-run LDAP enumeration authenticated.', code: 'nxc ldap <target> -u <user> -p <pass> --users', gotcha: 'This is a box policy, not a tool error, so the anonymous --users dump will keep returning nothing no matter how many times you run it.' },
     'blocker.smb_null_denied': { title: 'Null SMB Session Rejected', why: "An anonymous SMB attempt (-u '' -p '') was refused (STATUS_ACCESS_DENIED).", body: 'This host does not allow null sessions, so anonymous share enumeration will not work here. Get a credential (found, sprayed, or roasted) and re-run, or try the guest account.', code: "nxc smb <target> -u guest -p '' --shares", gotcha: 'Do not keep retrying the null session, it is a box policy and will not change.' },
+    'blocker.xp_cmdshell_disabled': { title: 'xp_cmdshell Is Disabled', why: 'SQL Server blocked access to sys.xp_cmdshell by policy.', body: 'If you are connected as sysadmin (sa), enable xp_cmdshell in place and re-run your command.', code: "EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;" },
+    'blocker.cracking_exhausted': { title: 'Wordlist Exhausted', why: 'Hashcat or John finished the wordlist without cracking the hash.', body: 'A straight rockyou pass missed it. Re-run with a rule set (best64 or OneRuleToRuleThemAll) or build a custom wordlist from the target domain and usernames.', code: 'hashcat -a 0 <hashfile> /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule' },
+    'blocker.hashcat_env': { title: 'Hashcat OpenCL / GPU Device Error', why: 'No OpenCL-compatible GPU or runtime was found in this VM.', body: 'Pass --force to run on the CPU, or switch to John the Ripper which runs on CPU out of the box.', code: 'hashcat --force <hashfile> /usr/share/wordlists/rockyou.txt' },
+    'blocker.web_wildcard': { title: 'Wildcard Catch-All Response', why: 'The web server returns a valid status code for every non-existent URL.', body: 'Filter out the catch-all response by byte size (-fs) or word count (-fw) in ffuf, or pass --exclude-length in gobuster.', code: 'ffuf -u http://<target>/FUZZ -w /usr/share/seclists/Discovery/Web-Content/common.txt -fs <size>' },
+    'blocker.kerberos_spn': { title: 'Kerberos Principal / SPN Unknown', why: 'KDC_ERR_S_PRINCIPAL_UNKNOWN: the KDC rejected the target principal.', body: 'Kerberos requires the target FQDN (dc01.corp.local), not an IP address. Add the FQDN to /etc/hosts and target the hostname.', code: 'echo "<target-ip> <domain>" | sudo tee -a /etc/hosts' },
+    'blocker.nxc_c_share_denied': { title: 'C$ Admin Share Denied (UAC Token Filtering)', why: 'NetExec authenticated over SMB, but C$ or ADMIN$ returned STATUS_ACCESS_DENIED.', body: 'The account is either a standard non-admin user or a local administrator blocked by remote UAC token filtering (LocalAccountTokenFilterPolicy). Try WinRM/RDP, use the Built-in Administrator (RID 500), or authenticate with a domain account.', code: 'nxc winrm <target> -u <user> -p <pass>' },
+    'blocker.protected_users': { title: 'Protected Users Group Restriction', why: 'The account belongs to the Protected Users security group, which blocks NTLM and RC4.', body: 'Protected Users cannot authenticate via NTLM or pass-the-hash. Request an AES Kerberos TGT using the plaintext password or AES key, export KRB5CCNAME, and connect with -k against the target FQDN.', code: 'impacket-getTGT <domain>/<user>:<pass> -dc-ip <dc-ip> && export KRB5CCNAME=<user>.ccache' },
+    'blocker.account_not_delegated': { title: 'Account Cannot Be Delegated', why: 'NOT_DELEGATED flag is set on the target principal, blocking S4U2Proxy / delegation impersonation.', body: 'Pick another high-privilege principal in Domain Admins or Administrators that does not have the AccountNotDelegated flag set, and re-run getST -impersonate.', code: 'impacket-getST -spn <spn> -impersonate <alt-admin> <domain>/<svc>:<pass>' },
+    'blocker.winrm_closed': { title: 'WinRM / PowerShell Remoting Unreachable', why: 'TCP 5985/5986 is closed or WSMan refused the connection.', body: 'Evil-WinRM cannot connect without WinRM listening. Switch to SMB/RPC lateral execution (impacket-psexec, impacket-wmiexec, impacket-smbexec) or RDP.', code: 'impacket-wmiexec <domain>/<user>:<pass>@<target>' },
+    'blocker.nxc_spider_usage': { title: 'spider_plus Flag Syntax', why: 'spider_plus is a NetExec module (-M spider_plus), not a standalone CLI flag.', body: 'Invoke spider_plus with -M spider_plus (and add -o DOWNLOAD_FLAG=True to pull readable files).', code: 'nxc smb <target> -u <user> -p <pass> -M spider_plus -o DOWNLOAD_FLAG=True' },
+    'blocker.account_restricted': { title: 'Account Disabled or Restricted', why: 'STATUS_ACCOUNT_DISABLED or STATUS_ACCOUNT_RESTRICTION: the account exists and the password may be right, but logon is blocked by policy.', body: 'If you have WriteAccountControl or GenericAll over the account, re-enable it via bloodyAD or PowerView; otherwise switch to another discovered credential.', code: 'bloodyAD -u <user> -p <pass> -d <domain> --host <dc-ip> remove uac <target-user> -f ACCOUNTDISABLE' },
+    'blocker.dcsync_denied': { title: 'DCSync Denied - Missing Replication Rights', why: 'DRSUAPI ERROR_DS_DRA_BAD_DN / ERROR_DS_DRA_ACCESS_DENIED: the account does not hold Replicating Directory Changes + Replicating Directory Changes All on the domain root yet.', body: 'You must walk the ACL chain first. If you have GenericAll or WriteDacl over an intermediate group (such as Exchange Windows Permissions), add your account to that group and then grant yourself DCSync rights on the domain root before running secretsdump.', code: 'bloodyAD -u <user> -p \'<pass>\' -d <domain> --host <dc-ip> add dcsync <user>' },
+    'blocker.nxc_bh_config': { title: 'NetExec BloodHound-CE Config Conflict', why: 'Your ~/.nxc/nxc.conf has bh_enabled / BloodHound-CE enabled, which breaks nxc ldap --bloodhound.', body: 'Run bloodhound-python directly instead (Command 1 on Collect BloodHound Data), or disable bh_enabled in ~/.nxc/nxc.conf.', code: 'bloodhound-python -d <domain> -u <user> -p \'<pass>\' -ns <dc-ip> -c All --zip' },
   };
 
   // Resolve a (move, command index) to a canvas note, with a graceful fallback to the pack's own command

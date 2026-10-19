@@ -1,5 +1,5 @@
 /*!
- * obol ui — decisiontree.js — OBOL.decisionTreeView
+ * obol ui - decisiontree.js - OBOL.decisionTreeView
  *
  * The left-to-right DECISION MAP renderer for the by-port forest (OBOL.decisionMap.decisionTree). One
  * reusable component, mounted wherever a port-rooted decision view is wanted (the Learn by-port view
@@ -7,8 +7,8 @@
  * semantic LOD (labels resolve as you zoom in), own tidy LTR layout, filter chips, a parser-coverage
  * lens, and collapsible subtrees. No dependencies beyond OBOL.decisionMap + OBOL.ic.
  *
- * Design intent (docs/DECISION-MAP.md): first paint is the whole forest at a far fit-zoom — the
- * impressive "mass" — but navigable, because LOD hides detail at distance and the ranker's spine is lit
+ * Design intent (docs/DECISION-MAP.md): first paint is the whole forest at a far fit-zoom - the
+ * impressive "mass" - but navigable, because LOD hides detail at distance and the ranker's spine is lit
  * so the path that matters is always visible. A port's tree ends at a hand-off leaf (→ a post-foothold
  * interchange) rather than inlining the endgame. The parser lens recolors nodes by whether obol can
  * read each move's result, turning the map into a coverage X-ray.
@@ -139,7 +139,7 @@
   }
   function legend(state) {
     if (state.lens === 'parser') {
-      return '<div class="dt-legend"><span class="dt-lg parse-verified">obol reads the result</span>'
+      return '<div class="dt-legend"><span class="dt-lg parse-verified">OBOL reads the result</span>'
         + '<span class="dt-lg parse-partial">partly readable</span>'
         + '<span class="dt-lg parse-gap">parse gap (unreadable)</span>'
         + '<span class="dt-lg parse-noproduce">enum / no fact</span></div>';
@@ -207,7 +207,7 @@
           if (state.lens === 'parser') {
             var sig = (OBOL.PARSER_SIGNATURES && findSig(id)) || null;
             html += '<div class="dth-parse parse-' + n.parse + '">' + parseLabel(n.parse) + '</div>';
-            if (sig) html += '<div class="dth-looks">obol looks for: ' + esc(sig) + '</div>';
+            if (sig) html += '<div class="dth-looks">OBOL looks for: ' + esc(sig) + '</div>';
           }
           html += '<div class="dth-open">click to open this move</div>';
         } else if (kind === 'handoff') { html += '<div class="dth-d">Continues in the post-foothold map for what you now hold.</div>'; }
@@ -246,7 +246,7 @@
     return { render: render };
   }
 
-  function parseLabel(s) { return s === 'verified' ? 'obol can read this result' : s === 'partial' ? 'result partly readable' : s === 'gap' ? 'parse gap: nothing reads this result' : 'enumeration move (no fact to read)'; }
+  function parseLabel(s) { return s === 'verified' ? 'OBOL can read this result' : s === 'partial' ? 'result partly readable' : s === 'gap' ? 'parse gap: nothing reads this result' : 'enumeration move (no fact to read)'; }
   function findSig(moveId) {
     // the plain-language "looks for" of whichever signature emits one of this move's produced facts
     try {

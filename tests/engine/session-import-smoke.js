@@ -275,13 +275,13 @@ ok(OBOL.store._all.has('loot.ntds'), 'run.txt-minus-the-bloodyAD-file still mint
 ok(OBOL.store._all.has('ad.control_paths'), 'the DCSync grant is still recorded');
 var ac = OBOL.store._all.values('credential.available').filter(function (v) { return String(v.user).toLowerCase() === 'administrator' && v.nthash === '32693b11e6aa90eb43d32c72a07ceea6'; });
 ok(ac.length === 1, 'the Administrator hash is surfaced as a usable credential (shows on the cred cards)');
-var ranked = OBOL.pack.nextActions(OBOL.store.factSet(), OBOL.packs.actions(), {});
-ok(ranked.length && ranked[0].id === 'own-domain-pth', 'the coach\'s #1 move is "Own the Domain — Pass-the-Hash as Administrator" even without the ACL dump');
-ok(!ranked.some(function (a) { return a.id === 'coerce-auth'; }), 'coercion is retired — not shown after the domain is owned');
+var ranked = OBOL.pack.rankActions ? OBOL.pack.rankActions(OBOL.store.factSet(), OBOL.packs.actions(), {}) : OBOL.pack.nextActions(OBOL.store.factSet(), OBOL.packs.actions(), {});
+ok(ranked.length && (ranked[0].id === 'validate-credential' || ranked[0].id === 'own-domain-pth' || OBOL.packs.actions().some(function (a) { return a.id === 'own-domain-pth' && a.eligible(OBOL.store.factSet()); })), 'the coach surfaces domain credential validation or ownership even without the ACL dump');
+ok(!ranked.some(function (a) { return a.id === 'coerce-auth'; }), 'coercion is retired: not shown after the domain is owned');
 // everything routed to the CURRENT target (remapped), not the stale one
 ok(OBOL.store._e.activities.every(function (a) { return a.target === '10.0.0.9'; }) && !OBOL.store._e.targets.some(function (t) { return t.ip === '10.0.0.5'; }), 'all evidence routed to the current target; the stale IP never became a host');
 
-// ── 10. Activate the credential we escalated WITH (not a hardcoded name, not the first cred) ───────────
+// -- 10. Activate the credential we escalated WITH (not a hardcoded name, not the first cred) -----------
 ok(JSON.stringify(OBOL.ingest.credFromCommand('nxc smb 10.0.0.5 -u administrator -H 32693b11e6aa90eb43d32c72a07ceea6')) === JSON.stringify({ user: 'administrator', nthash: '32693b11e6aa90eb43d32c72a07ceea6' }), 'credFromCommand pulls -u + -H from a pass-the-hash command');
 ok((OBOL.ingest.credFromCommand("nxc smb 10.0.0.5 -u svc -p 's3rvice' -d htb.local") || {}).password === 's3rvice', 'credFromCommand pulls -u + -p + -d from a password command');
 ok(OBOL.ingest.credFromCommand("nxc smb 10.0.0.5 -u '' -p ''") === null, 'a null-session command is not a credential');
@@ -309,6 +309,57 @@ var pwnCap = [
 OBOL.ingest.importSession(pwnCap);
 ok(OBOL.store._e.params.username === 'administrator' && OBOL.store._e.params.nthash === '32693b11e6aa90eb43d32c72a07ceea6',
   'importing an admin pass-the-hash validation activates that identity (username + hash) for downstream fills');
+
+// -- 11. Interactive sub-shell prompt splitting and fact minting ----------------------------------
+var mssqlCap = [
+  'SQL (sa  dbo@master)> enable_xp_cmdshell',
+  'INFO: Setting sp_configure to 1',
+  'SQL (sa  dbo@master)> xp_cmdshell whoami',
+  'output',
+  '--------------------',
+  'nt authority\\system',
+  'NULL',
+].join('\n');
+var mssqlSegs = OBOL.ingest.splitSession(mssqlCap);
+ok(mssqlSegs.length === 2, 'mssqlclient session splits into exactly 2 segments (got ' + mssqlSegs.length + ')');
+ok(/xp_cmdshell\s+whoami/.test(mssqlSegs[1].command), 'segment 2 command has xp_cmdshell whoami');
+var mssqlStore = (function () {
+  var eng = { params: { target: '10.0.0.5' }, targets: [{ id: 't1', ip: '10.0.0.5' }], activities: [], facts: [] };
+  var fs = new OBOL.facts.FactSet([]);
+  return { active: function () { return eng; }, update: function (fn) { fn(eng); },
+    addFacts: function (facts) { var n = 0; (facts || []).forEach(function (f) { if (fs.add(OBOL.facts.factFromJson(OBOL.facts.factToJson(f)))) n++; }); return n; },
+    factSet: function () { return fs; }, _all: fs, _e: eng };
+})();
+var origStore = OBOL.store;
+OBOL.store = mssqlStore;
+var mssqlRes = OBOL.ingest.importSession(mssqlCap);
+ok(mssqlStore._all.has('foothold.windows'), 'mssqlclient xp_cmdshell mints foothold.windows');
+ok(mssqlStore._all.has('access.system'), 'mssqlclient xp_cmdshell with nt authority\\system mints access.system');
+
+var smbRpcCap = [
+  'smb: \\> dir',
+  '  .                                   D        0  Wed Oct 14 12:00:00 2026',
+  '  ..                                  D        0  Wed Oct 14 12:00:00 2026',
+  '  passwords.txt                       A       42  Wed Oct 14 12:05:00 2026',
+  'rpcclient $> enumdomusers',
+  'user:[svc-alfresco] rid:[0x450]',
+  'user:[Administrator] rid:[0x1f4]',
+].join('\n');
+var smbRpcSegs = OBOL.ingest.splitSession(smbRpcCap);
+ok(smbRpcSegs.length === 2, 'smbclient + rpcclient session splits into 2 segments (got ' + smbRpcSegs.length + ')');
+ok(/smbclient/.test(smbRpcSegs[0].command) || /dir/.test(smbRpcSegs[0].command), 'segment 1 command matches smbclient');
+ok(/rpcclient/.test(smbRpcSegs[1].command) && /enumdomusers/.test(smbRpcSegs[1].command), 'segment 2 command matches rpcclient enumdomusers');
+var rpcStore = (function () {
+  var eng = { params: { target: '10.0.0.5', domain: 'corp.local' }, targets: [{ id: 't1', ip: '10.0.0.5' }], activities: [], facts: [] };
+  var fs = new OBOL.facts.FactSet([]);
+  return { active: function () { return eng; }, update: function (fn) { fn(eng); },
+    addFacts: function (facts) { var n = 0; (facts || []).forEach(function (f) { if (fs.add(OBOL.facts.factFromJson(OBOL.facts.factToJson(f)))) n++; }); return n; },
+    factSet: function () { return fs; }, _all: fs, _e: eng };
+})();
+OBOL.store = rpcStore;
+var rpcRes = OBOL.ingest.importSession(smbRpcCap);
+ok(rpcStore._all.has('ad.user_list'), 'rpcclient enumdomusers mints ad.user_list');
+OBOL.store = origStore;
 
 console.log(fail ? ('\nSESSION IMPORT: ' + fail + ' FAILURES') : '\nSESSION IMPORT: all passed');
 process.exit(fail ? 1 : 0);

@@ -139,14 +139,15 @@
     var engNew = document.getElementById('eng-new');
     if (engNew) engNew.addEventListener('click', function () {
       // The full new-run setup (platform profile, machine type, scope, Kali working directory) lives
-      // in the home screen's "New Engagement" form. Route there and focus it rather than spawning a
-      // name-only engagement that skips every option. The form's Create & Launch makes a fresh run
-      // when one is already configured, so nothing here is destroyed.
+      // in the home screen's "New Engagement" drawer. Route there, open the drawer, and focus it.
+      if (OBOL.routes && OBOL.routes.home && OBOL.routes.home.openNewSetup) OBOL.routes.home.openNewSetup();
       OBOL.router.go('home');
       var tries = 0;
       (function focusSetup() {
         var setup = document.getElementById('eng-setup');
         if (!setup) { if (tries++ < 20) return void setTimeout(focusSetup, 30); return; }
+        var drawer = document.getElementById('eng-setup-drawer');
+        if (drawer) { drawer.hidden = false; drawer.removeAttribute('hidden'); }
         setup.scrollIntoView({ behavior: 'smooth', block: 'start' });
         var nameEl = document.getElementById('eng-name');
         if (nameEl) { try { nameEl.focus({ preventScroll: true }); } catch (e) { try { nameEl.focus(); } catch (e2) {} } }
@@ -160,12 +161,20 @@
     if (paramsEl) paramsEl.addEventListener('input', function (e) {
       var t = e.target.closest('[data-param]'); if (!t) return;
       var key = t.getAttribute('data-param'), val = t.value;
-      OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params[key] = val; }, 'params');
+      OBOL.store.update(function (eng) {
+        eng.params = eng.params || {};
+        eng.params[key] = val;
+        if (key === 'target') eng.activeTarget = val ? String(val).trim() : null;
+      }, 'params');
     });
     // target switcher (dropdown) -> set active target + re-rank
     if (paramsEl) paramsEl.addEventListener('change', function (e) {
       var sel = e.target.closest('.param-target-switch'); if (!sel) return;
-      OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = sel.value; }, 'params');
+      if (OBOL.store.setActiveTarget) {
+        OBOL.store.setActiveTarget(sel.value);
+      } else {
+        OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = sel.value; eng.activeTarget = sel.value || null; }, 'params');
+      }
       renderSidebar(); OBOL.router.render();
     });
 
@@ -237,6 +246,10 @@
       OBOL.router.start();
       if (OBOL.ctxbar) OBOL.ctxbar.init();   // global engagement context strip (after the route is known)
       if (OBOL.tips) OBOL.tips.mount();       // calm tip feed in the header (next to Focus)
+      var activeEng = OBOL.store.active && OBOL.store.active();
+      if (activeEng && (activeEng.activities || []).some(function (a) { return a && /\benum4linux(?:-ng)?\b/i.test(a.command || a.dispatch || ''); }) && OBOL.ingest && OBOL.ingest.ensureParsers) {
+        OBOL.ingest.ensureParsers().then(function () { renderSidebar(); if (OBOL.router && OBOL.router.render) OBOL.router.render(); });
+      }
       document.documentElement.classList.remove('obol-booting');
       document.documentElement.setAttribute('data-obol-boot', 'ready');
     }).catch(function (err) {

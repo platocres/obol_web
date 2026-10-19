@@ -1,5 +1,5 @@
 /*!
- * obol engine — decisionmap.js — OBOL.decisionMap
+ * obol engine - decisionmap.js - OBOL.decisionMap
  *
  * The by-port DECISION MAP: a port-rooted, left-to-right decision forest derived from the same move
  * graph and the same ranker that power the coach, so the map can never contradict Next Steps.
@@ -7,18 +7,18 @@
  * Why this exists (read docs/DECISION-MAP.md before changing it): it is both a teaching surface AND a
  * self-diagnostic. Because it is DERIVED (never hand-drawn), three classes of coverage gap show up on
  * it automatically, which is the whole point:
- *   - coverage gap  — a technique that *should* exist for a port but no move represents it
+ *   - coverage gap - a technique that *should* exist for a port but no move represents it
  *                     (found by diffing against data/coverage-expected.js).
- *   - wiring gap    — a move exists but isn't connected: it produces a fact nothing needs (dead-end),
+ *   - wiring gap - a move exists but isn't connected: it produces a fact nothing needs (dead-end),
  *                     requires a fact nothing produces (unreachable), or lands a foothold with no
  *                     hand-off to a post-exploitation map.
- *   - parse gap     — a move exists and is wired, but no parser can read its output into the fact it
+ *   - parse gap - a move exists and is wired, but no parser can read its output into the fact it
  *                     claims to produce, so running it never advances the coach ("write-only" node).
  *                     Derived empirically by running each move's fixture through the real parsers.
  *
  * Nothing here is authored per-port by hand. The only authored layers are the one-line fork conditions
  * (data/decision-forks.js), the plain-language parser "looks for" lines (data/parser-signatures.js),
- * and the expected-coverage spec (data/coverage-expected.js) — each lint-gated, each a sentence, not a
+ * and the expected-coverage spec (data/coverage-expected.js) - each lint-gated, each a sentence, not a
  * tree. Add a move or wire a fact and the map (and these diagnostics) update themselves.
  */
 (function (root) {
@@ -50,8 +50,8 @@
     { re: /^hash\./, to: 'offline-hash', label: 'you have a hash to crack' },
     { re: /^credential\.available$/, to: 'domain-cred', label: 'you have a usable credential' },
     { re: /^loot\.ntds$/, to: 'domain-cred', label: 'you dumped the domain (NTDS)' },
-    { re: /^access\.admin$|^access\.system$/, to: 'proof', label: 'you are admin / SYSTEM — capture proof' },
-    { re: /^tunnel\./, to: 'pivot', label: 'you can reach a deeper network — pivot' },
+    { re: /^access\.admin$|^access\.system$/, to: 'proof', label: 'you are admin / SYSTEM - capture proof' },
+    { re: /^tunnel\./, to: 'pivot', label: 'you can reach a deeper network - pivot' },
   ];
   function handoffFor(fact) {
     for (var i = 0; i < HANDOFF.length; i++) if (HANDOFF[i].re.test(fact)) return HANDOFF[i];
@@ -126,7 +126,7 @@
     actions().forEach(function (m) {
       var e = out[m.id] || (out[m.id] = { id: m.id, produces: produces(m), minted: [], selfRead: false });
       // advice.* are guidance receipts (a troubleshooter's "here is the fix"), not facts a parser reads
-      // back from pasted output — so they are never a parse gap; grade only the real produced facts.
+      // back from pasted output - so they are never a parse gap; grade only the real produced facts.
       var prod = (e.produces || []).filter(function (f) { return !/^advice\./.test(f); });
       var readq = prod.filter(readable);
       if (!prod.length) e.status = 'noproduce';                // enum/terminal/guidance move, no parseable fact
@@ -221,7 +221,7 @@
     opts = opts || {};
     var S = study();
     var evAll = (S.evidence && S.evidence()) || [];
-    // the 'scan' card is the "before anything, scan" primer, not an open port — the forest root already
+    // the 'scan' card is the "before anything, scan" primer, not an open port - the forest root already
     // IS the port scan, so exclude it here (otherwise it renders a redundant subtree and a "first" chip).
     var portsOnly = evAll.filter(function (e) { return e.tier === 'ports' && e.key !== 'scan'; });
     var want = opts.ports && opts.ports.length ? opts.ports : null; // array of evidence keys
@@ -248,7 +248,7 @@
       reqSet(m).forEach(function (f) { allRequired[f] = (allRequired[f] || 0) + 1; });
     });
 
-    // wiring: a requires_all member (or an entire requires_any group) that is not obtainable — no move
+    // wiring: a requires_all member (or an entire requires_any group) that is not obtainable - no move
     // produces it, no parser reads it, and it is not environmental, so the move can never become ready.
     var wiring = { unreachable: [], deadEnd: [], missingHandoff: [] };
     acts.forEach(function (m) {
@@ -260,9 +260,9 @@
       produces(m).forEach(function (f) {
         var consumed = allRequired[f] > 0, hand = !!handoffFor(f);
         // terminal/report facts: loot, proof, observations, and recorded credential MATERIAL whose
-        // usable form (credential.available / .candidate) is emitted alongside — the material fact
+        // usable form (credential.available / .candidate) is emitted alongside - the material fact
         // itself feeds the report, not another move, so it is not a wiring dead-end.
-        var term = /^(objective|flag|proof|loot\.|config\.review|defense\.|advice\.|snmp\.info|host\.|web\.(server|tech|title|content_map|source)|dns\.|tls\.|persistence\.|credential\.plaintext$|db\.creds$)/.test(f);
+        var term = /^(objective|flag|proof|loot\.|config\.review|defense\.|advice\.|snmp\.info|host\.|web\.(server|tech|title|content_map|source)|dns\.|tls\.|http\.(headers|cors|body|redirect|methods|exposed)$|persistence\.|credential\.(plaintext|admin)$|db\.creds$|pivot\.active$|lateral\.movement$|ad\.(gpo_control|sid_history)$|scan\.(nmap\.vuln|local\.interfaces)$|service\.(vnc|mail|http3)$|vuln\.candidates$|privesc\.stored_credentials$)/.test(f);
         if (!consumed && !hand && !term) wiring.deadEnd.push({ id: m.id, fact: f });
       });
     });
@@ -271,7 +271,7 @@
     acts.forEach(function (m) { produces(m).forEach(function (f) { var h = handoffFor(f); if (h && !accessKeys[h.to]) wiring.missingHandoff.push({ id: m.id, fact: f, to: h.to }); }); });
 
     // parse gaps: a move whose produced fact(s) no parser can read (nothing recognizes its result, so
-    // running it never advances the coach) — graded from the capability set, not a single fixture.
+    // running it never advances the coach) - graded from the capability set, not a single fixture.
     var pc = parserCoverage();
     var parse = { gap: [], partial: [] };
     Object.keys(pc).forEach(function (id) {
@@ -280,13 +280,13 @@
       else if (e.status === 'partial') parse.partial.push({ id: id, produces: e.produces, unreadable: e.unreadable });
     });
 
-    // orphan parser facts: a fact a parser mints that NOTHING uses — no move produces it AND no move
-    // requires it. A parser-only fact that some move requires (e.g. smb.ms17_010 → eternalblue) is
+    // orphan parser facts: a fact a parser mints that NOTHING uses - no move produces it AND no move
+    // requires it. A parser-only fact that some move requires (e.g. smb.ms17_010 -> eternalblue) is
     // correct design, not an orphan, so those are excluded.
     var mintedAll = {};
     Object.keys(pc).forEach(function (id) { (pc[id].minted || []).forEach(function (k) { mintedAll[k] = 1; }); });
     var orphanParserFacts = Object.keys(mintedAll).filter(function (k) {
-      return !allProduced[k] && !allRequired[k] && !/^(host\.|scan\.|ports\.open|port:|web\.|service\.|.*\.reachable$)/.test(k);
+      return !allProduced[k] && !allRequired[k] && !/^(host\.|scan\.|ports\.open|port:|web\.|service\.|.*\.reachable$|objective\.|blocker\.|credential\.validation$|ad\.(domain_sid|acl_paths|group_joined|rbcd|delegation|sccm_candidates)$|pivot\.(candidate|ports)$|db\.(hashes|linked_server)$|mssql\.linked_servers$|oracle\.sid$|redis\.unauth$|mongo\.unauth$|memcached\.open$|x11\.unauth$|smtp\.(open_relay|users)$)/.test(k);
     });
 
     // coverage: expected techniques per port with no backing move

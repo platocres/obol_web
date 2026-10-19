@@ -1,8 +1,8 @@
 /*!
- * obol ui — routes/target.js — the per-target page:
- * the attack-chain bar (where this box is on the kill chain), the ATTACK PATH (proven facts +
- * done/next moves as a phase-column graph), a coarse access level, ranked next moves scoped to
- * this target, captured flags, and the proven-fact storyline. Reached at #/target/<ip>.
+ * obol ui - routes/target.js - Target Dossier (#/target/<ip>):
+ * shows the attack-chain bar (where this box is on the kill chain), the ATTACK PATH (proven facts +
+ * done/next moves as a phase-column graph), coarse access level, ranked next moves scoped to
+ * this target, captured flags, and the proven-fact storyline.
  */
 (function (root) {
   'use strict';
@@ -21,13 +21,13 @@
   function accessLevel(f) {
     if (f.has('access.system') || f.has('access.admin') || f.has('access.root')) return 'privileged';
     if (f.has('foothold.windows') || f.has('foothold.linux') || f.has('access.shell') || f.has('winrm.authenticated') || f.has('foothold.webshell')) return 'foothold';
-    if (f.has('credential.available') || f.has('credential.candidate')) return 'credentialed';
+    if (f.has('credential.available') || f.has('credential.plaintext') || f.has('credential.candidate')) return 'credentialed';
     if (f.facts.some(function (x) { return x.state === 'supported' && x.kind.indexOf('target.') !== 0 && x.kind.indexOf('host.') !== 0; })) return 'enumerated';
     return 'discovered';
   }
 
   function findTarget(ip) {
-    var eng = OBOL.store.active();
+    var eng = OBOL.store.active() || {};
     return (eng.targets || []).find(function (t) { return t.ip === ip || t.id === ip; }) || null;
   }
 
@@ -53,13 +53,13 @@
             + '<code class="tw-fkind">' + esc(k) + '</code></li>';
         }).join('') + '</ul>' + (kinds.length > 10 ? '<div class="tw-facts-more">+' + (kinds.length - 10) + ' more proven</div>' : '')
       : '<div class="tw-ev-empty">Nothing proven here yet. Run a move, then paste its output.</div>';
-    // Inline paste — stays on this box's page (no jarring jump to the Evidence tab). Facts are routed to
+    // Inline paste - stays on this box's page (no jarring jump to the Evidence tab). Facts are routed to
     // this host's scope; a big dump or a screenshot still has a link out to the full Evidence surface.
-    return '<div class="tw-ev-head"><button type="button" class="btn-primary tw-ev-paste" data-tw-paste aria-expanded="false">' + OBOL.ic('clip') + ' Paste Output For This Box</button></div>'
+    return '<div class="tw-ev-head"><button type="button" class="cr-btn-neon neon-emerald small tw-ev-paste" data-tw-paste aria-expanded="false">' + OBOL.ic('clip') + ' Paste Output For This Box</button></div>'
       + '<div class="tw-ingest" data-ip="' + U.attr(ip) + '" hidden>'
-      + '<textarea class="tw-ingest-text" placeholder="Paste this box’s command output here — prompt, command, and all output. obol mints only what it proves and files it under ' + esc(ip) + '. You stay right here on this box." spellcheck="false"></textarea>'
-      + '<div class="tw-ingest-row"><button type="button" class="btn-primary tw-ingest-go">Ingest → Facts</button>'
-      + '<a class="tw-ingest-ev" href="#/evidence/">Big Output Or A Screenshot? Full Evidence ↗</a>'
+      + '<textarea class="tw-ingest-text" placeholder="Paste this box\'s command output here - prompt, command, and all output. OBOL mints only what it proves and files it under ' + esc(ip) + '. You stay right here on this box." spellcheck="false"></textarea>'
+      + '<div class="tw-ingest-row"><button type="button" class="cr-btn-neon neon-emerald small tw-ingest-go">Ingest &rarr; Facts</button>'
+      + '<a class="tw-ingest-ev" href="#/evidence/">Big Output Or A Screenshot? Full Evidence &nearr;</a>'
       + '<span class="tw-ingest-result" role="status"></span></div></div>'
       + rows
       + '<div class="tw-ev-note">Every fact minted here lands in the engagement report, filed under <b>' + esc(ip) + '</b>.</div>';
@@ -79,20 +79,21 @@
 
   function render(ctx) {
     var ip = ctx.args[0];
-    var eng = OBOL.store.active();
+    var eng = OBOL.store.active() || {};
     var t = findTarget(ip);
-    if (!t) return '<section class="target-route"><h1 class="route-h1">Target ' + esc(ip) + '</h1><div class="coach-empty">No such target in this engagement. <a href="#/targets">Back to Targets</a></div></section>';
+    if (!t) return '<section class="target-route"><h1 class="route-h1">Target Dossier: ' + esc(ip) + '</h1><div class="coach-empty">No such target in this engagement. <a href="#/targets">Back to Targets</a></div></section>';
     ip = t.ip || ip;
 
     var facts = OBOL.store.factSetForTarget(ip);
     var pack = OBOL.packs.actions();
-    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
+    var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
+    var flagsOn = (!OBOL.profile || !OBOL.profile.hasFlags || !eng) ? true : OBOL.profile.hasFlags(eng.profile);
     var dirs = (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(eng) : {};
     // Rank this box's moves with the SAME shared logic the coach/hub use (report-only writeup checks
-    // excluded, frontier-ready first), scoped to this host's facts — so "Next Steps for this box" never
+    // excluded, frontier-ready first), scoped to this host's facts, so "Next Steps for this box" never
     // disagrees with the full coach or the hub.
     var moves = (OBOL.coach && OBOL.coach.rankFor) ? OBOL.coach.rankFor(facts).onFlow
-      : OBOL.pack.rankActions(facts, pack, { focusPrefixes: focus });
+      : OBOL.pack.rankActions(facts, pack, { focusPrefixes: focus, noFlags: !flagsOn });
     var lvl = accessLevel(facts);
     var reached = OBOL.phases.phaseIndex(OBOL.phases.targetPhase(facts));
     var frontier = OBOL.phases.frontierIndex(facts);
@@ -102,7 +103,7 @@
       return '<span class="spine-node ph-' + p + (i <= reached ? ' reached' : '') + (i === frontier ? ' frontier' : '') + '">' + p + '</span>';
     }).join('<span class="spine-sep">›</span>');
 
-    // captured flags — rich entries (slot label, file, value) so the operator can confirm each capture
+    // captured flags - rich entries (slot label, file, value) so the operator can confirm each capture
     // at a glance (a real flag, not a stray hash) and knows which flag came from where.
     var SLOT_LABEL = { root: 'Root flag', local: 'Local flag', user: 'Local flag' };
     var flagFacts = [];
@@ -153,10 +154,8 @@
         }).join('') + '</ul>'
       : '';
 
-    // Attack Path bar: the ordered, causal path actually walked (what led to what → the flags),
+    // Attack Path bar: the ordered, causal path actually walked (what led to what -> the flags),
     // reconstructed from the run ledger + prereq graph, rendered as a dense horizontal block ribbon.
-    // Each block synthesizes obol's two surfaces: the milestone + concrete subject (attack_path)
-    // AND the command that produced it + real causal link (storyline). Off-path parents get "← from".
     var steps = OBOL.chain.build({ facts: facts, activities: eng.activities || [], actions: pack, host: ip });
     var story = OBOL.chainview.ribbon(steps);
 
@@ -165,7 +164,7 @@
     var moveHtml = moves.slice(0, 6).map(function (a) {
       var aIdx = (OBOL.command && OBOL.command.bestCommandIndex) ? OBOL.command.bestCommandIndex(a, facts, { params: params, target: ip, profile: eng.profile, workspace: dirs }) : 0;
       var v = OBOL.command.fillCommand(a, facts, { params: params, target: ip, profile: eng.profile, workspace: dirs }, aIdx);
-      // The "Set Up First" prep step (e.g. write loot/users.txt from the users obol proved) — the SAME step
+      // The "Set Up First" prep step (e.g. write loot/users.txt from the users obol proved) - the SAME step
       // the coach renders, so a move whose command reads a file you must create first never ships here
       // without the command that creates it.
       var prep = (OBOL.coach && OBOL.coach.prepBlock) ? OBOL.coach.prepBlock(a, facts, dirs) : '';
@@ -180,34 +179,49 @@
     var svg = OBOL.graph ? OBOL.graph.buildGraphSvg(facts, pack, false) : '<div class="coach-empty">graph loading…</div>';
 
     var acc = ACCESS[lvl];
-    // Identity at a glance — IP / Hostname / Domain, each labelled, the hostname brighter. The hostname
+    // Identity at a glance: IP / Hostname / Domain, each labelled, the hostname brighter. The hostname
     // and domain fill in the moment obol proves them; until then the slot reads "not captured yet".
     var idn = OBOL.store.targetIdentity(ip);
+    var activeTarget = (eng.params && eng.params.target) || '';
+    var isFocused = ip === activeTarget;
+    var focusBtn = isFocused
+      ? '<span class="hb-focus-chip is-on" title="Active target for Coach &amp; Cruise">● Active Target</span>'
+      : '<button type="button" class="cr-btn-neon neon-cyan small" id="td-focus-btn" data-focus-ip="' + U.attr(ip) + '">Set As Active Target</button>';
+
     function identRow(label, val, cls, title) {
       return '<div class="ident-row"><dt>' + label + '</dt>'
         + '<dd class="' + cls + (val ? '' : ' ident-empty') + '"' + (title ? ' title="' + U.attr(title) + '"' : '') + '>'
         + (val ? esc(val) : 'not captured yet') + '</dd></div>';
     }
     return '<section class="target-route">'
-      + '<div class="target-head">'
-      + '<div class="target-crumbs"><a class="crumb" href="#/targets">Targets</a>'
-      + '<span class="acc-pill ' + acc.cls + '">' + acc.label + '</span>'
-      + (flags.length ? '<span class="pill flag-pill">' + OBOL.ic('flag') + ' ' + flags.map(esc).join(', ') + '</span>' : '') + '</div>'
+      + '<div class="target-head station-card neon-lane-cyan">'
+      + '<div class="target-crumbs">'
+      + '  <a class="crumb" href="#/home">Engagement Hub</a>'
+      + '  <span class="crumb-sep">/</span>'
+      + '  <a class="crumb" href="#/targets">Targets</a>'
+      + '  <span class="crumb-sep">/</span>'
+      + '  <span class="crumb-cur">Target Dossier</span>'
+      + '  <span class="acc-pill ' + acc.cls + '">' + acc.label + '</span>'
+      +    (flags.length ? '<span class="pill flag-pill">' + OBOL.ic('flag') + ' ' + flags.map(esc).join(', ') + '</span>' : '')
+      + '  <span class="target-head-spacer"></span>'
+      +    focusBtn
+      + '</div>'
       + '<dl class="ident target-ident">'
       + '<div class="ident-row"><dt>IP</dt><dd class="ident-ip"><h1 class="route-h1 inline">' + esc(idn.ip) + '</h1></dd></div>'
       + identRow('Hostname', idn.hostname, 'ident-host', idn.hostname && idn.fqdn !== idn.hostname ? idn.fqdn : '')
       + identRow('Domain', idn.domain, 'ident-dom', '')
       + identRow('OS', idn.os, 'ident-os', '')
-      + '</dl></div>'
+      + '</dl>'
       + '<div class="home-spine target-chain">' + chain + '</div>'
+      + '</div>'
 
       // the spine: the working loop for this box, Next Steps beside Evidence
       + '<div class="tw-spine">'
-      + '<section class="tw-panel tw-next"><div class="tw-panel-h"><span class="tw-panel-l">Next Steps for this box</span><span class="tw-panel-tag">ranked by the coach</span></div>'
-      + '<div class="tw-panel-b">' + (moveHtml || '<div class="coach-empty">No moves yet, paste evidence to unlock.</div>')
-      + '<a class="btn-ghost tw-fullcoach" href="#/path">Full coach →</a></div></section>'
-      + '<section class="tw-panel tw-ev"><div class="tw-panel-h"><span class="tw-panel-l">Evidence &amp; proven facts</span><span class="tw-panel-tag">this box, feeds the report</span></div>'
-      + '<div class="tw-panel-b">' + evidencePanel(ip, facts) + '</div></section>'
+      + '<section class="tw-panel tw-next station-card neon-lane-emerald"><div class="tw-panel-h"><span class="tw-panel-l">Next Steps for this box</span><span class="tw-panel-tag">ranked by the coach</span></div>'
+      + '<div class="tw-panel-b ws-clear-box">' + (moveHtml || '<div class="coach-empty">No moves yet, paste evidence to unlock.</div>')
+      + '<a class="btn-ghost tw-fullcoach" href="#/path">Full coach &rarr;</a></div></section>'
+      + '<section class="tw-panel tw-ev station-card neon-lane-violet"><div class="tw-panel-h"><span class="tw-panel-l">Evidence &amp; proven facts</span><span class="tw-panel-tag">this box, feeds the report</span></div>'
+      + '<div class="tw-panel-b ws-clear-box">' + evidencePanel(ip, facts) + '</div></section>'
       + '</div>'
       + launchers(ip)
 
@@ -229,7 +243,7 @@
     var mount = ctx.mount || document;
     if (OBOL.graphview) OBOL.graphview.attach(mount);
     if (OBOL.graphtip && OBOL.graph && OBOL.graph.buildNodeInfo) {
-      var eng = OBOL.store.active();
+      var eng = OBOL.store.active() || {};
       var ip = (location.hash.split('/')[2] || (eng.params || {}).target || '');
       var facts = OBOL.store.factSetForTarget ? OBOL.store.factSetForTarget(ip) : OBOL.store.factSet();
       var dirs = (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(eng) : {};
@@ -239,8 +253,17 @@
     U.on(mount, 'click', '.btn-copy', function (e, b) {
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
+    U.on(mount, 'click', '#td-focus-btn', function (e, b) {
+      var ip = b.getAttribute('data-focus-ip');
+      if (!ip) return;
+      if (OBOL.store.setActiveTarget) OBOL.store.setActiveTarget(ip);
+      else OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = ip; eng.activeTarget = ip; }, 'params');
+      if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+      U.toast('Active target set to ' + ip);
+      OBOL.router.render();
+    });
     // inline paste for this box: toggle the box, then ingest in place (routed to this host's scope) and
-    // re-render — the operator never leaves the target view.
+    // re-render - the operator never leaves the target view.
     U.on(mount, 'click', '[data-tw-paste]', function (e, t) {
       var box = mount.querySelector('.tw-ingest'); if (!box) return;
       var open = box.hasAttribute('hidden');
@@ -268,12 +291,13 @@
     // library already filled for it.
     U.on(mount, 'click', '[data-launch]', function (e, t) {
       var ip = t.getAttribute('data-ip'), where = t.getAttribute('data-launch');
-      OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = ip; }, 'params');
+      if (OBOL.store.setActiveTarget) OBOL.store.setActiveTarget(ip);
+      else OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = ip; eng.activeTarget = ip; }, 'params');
       if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
       OBOL.router.go(where);
     });
     // per-flag proof screenshot: attach (bound to the flag's slot + this host) / remove.
-    var tgtIp = location.hash.split('/')[2] || (OBOL.store.active().params || {}).target || '';
+    var tgtIp = location.hash.split('/')[2] || ((OBOL.store.active() || {}).params || {}).target || '';
     var ssInput = mount.querySelector('#flag-ss-file');
     var pendingSlot = '';
     U.on(mount, 'click', '.flag-attach', function (e, b) { pendingSlot = b.getAttribute('data-slot') || ''; if (ssInput) ssInput.click(); });

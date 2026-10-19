@@ -60,6 +60,11 @@
     if (reducedMotion()) { el.textContent = text; return; }
     el.textContent = ''; var i = 0;
     _typeTimer = setInterval(function () {
+      if (!el.isConnected || (OBOL.router && OBOL.router.current && OBOL.router.current().name !== 'stuck' && OBOL.router.current().name !== 'library')) {
+        clearInterval(_typeTimer);
+        _typeTimer = null;
+        return;
+      }
       i += 2; el.textContent = text.slice(0, i);
       if (i >= text.length) { el.textContent = text; clearInterval(_typeTimer); _typeTimer = null; }
     }, 16);
@@ -97,7 +102,7 @@
       }
       var seed = (OBOL.store && OBOL.store.active && OBOL.store.active())
         ? opt(' data-seed', 'Start From My Active Engagement',
-          'Begin with everything obol already knows about your current box, then mark what fails to refine it.') : '';
+          'Begin with everything OBOL already knows about your current box, then mark what fails to refine it.') : '';
       return '<div class="stuck-answers stuck-intro">'
         + opt(' data-goto="host"', 'Carry Me Across',
           'Answer a few quick questions about your target, and Charon lays out moves to try, in order.')

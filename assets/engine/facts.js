@@ -1,5 +1,5 @@
 /*!
- * obol engine — facts.js
+ * obol engine - facts.js
  * The fact layer: obol's single source of truth. A Fact is one thing the operator
  * has *proven* (or refuted, or found inconclusive) about a target, always tied to the
  * command/evidence that established it. Actions are gated on facts; the report is
@@ -18,7 +18,7 @@
   var ProofState = {
     SUPPORTED: 'supported',       // evidence affirmatively established this
     REFUTED: 'refuted',           // evidence establishes this is NOT so
-    INCONCLUSIVE: 'inconclusive', // attempted, ambiguous — no claim earned
+    INCONCLUSIVE: 'inconclusive', // attempted, ambiguous - no claim earned
   };
 
   function now() { return Date.now() / 1000; }
@@ -81,12 +81,53 @@
     return true;
   }
 
+  var FLAG_FACT_KINDS = {
+    'objective.local_flag': 1,
+    'objective.root_flag': 1,
+    'objective.flag': 1,
+    'proof.captured': 1,
+  };
+
+  function mergeFlagFactIfDuplicate(list, fact) {
+    if (!fact || !FLAG_FACT_KINDS[fact.kind] || !fact.value || typeof fact.value !== 'object') return -1;
+    var fHash = String(fact.value.flag || '').trim().toLowerCase();
+    var fSlot = String(fact.value.slot || '').trim().toLowerCase();
+    for (var i = 0; i < list.length; i++) {
+      var ex = list[i];
+      if (!ex || ex.kind !== fact.kind || ex.scope !== fact.scope || !ex.value || typeof ex.value !== 'object') continue;
+      var exHash = String(ex.value.flag || '').trim().toLowerCase();
+      var exSlot = String(ex.value.slot || '').trim().toLowerCase();
+      var sameHash = !!(fHash && exHash && fHash === exHash);
+      var sameSlot = !!(fact.kind !== 'objective.flag' && fact.kind !== 'proof.captured' && fSlot && exSlot && fSlot === exSlot && (!fHash || !exHash || fHash === exHash));
+      if (sameHash || sameSlot) {
+        var newPath = String(fact.value.path || '');
+        var oldPath = String(ex.value.path || '');
+        if ((/[\/\\]/.test(newPath) && !/[\/\\]/.test(oldPath)) || (newPath.length > oldPath.length && !/[\/\\]/.test(oldPath))) {
+          ex.value.path = fact.value.path;
+          if (fact.value.name) ex.value.name = fact.value.name;
+        }
+        if (fact.value.block && (!ex.value.block || String(fact.value.block).length > String(ex.value.block).length)) {
+          ex.value.block = fact.value.block;
+        }
+        if (fact.source && (!ex.source || /\.log$/i.test(ex.source)) && !/\.log$/i.test(fact.source)) {
+          ex.source = fact.source;
+        }
+        return i;
+      }
+    }
+    return -1;
+  }
+
   // A small queryable collection of facts. Actions ask two questions of it:
   // "is this kind proven?" and "what are the proven values for this kind?".
   function FactSet(facts) {
-    this.facts = (facts || []).slice();
+    this.facts = [];
     // (kind, scope, value) of facts whose PROOF STATE this session changed in place.
     this.state_changed = [];
+    var src = facts || [];
+    for (var i = 0; i < src.length; i++) {
+      if (src[i]) this.add(src[i]);
+    }
   }
 
   FactSet.prototype.has = function (kind) {
@@ -123,10 +164,22 @@
     return new Set(Object.keys(this.kinds()));
   };
 
+  function isKnownFalsePositiveFact(fact) {
+    if (!fact || !fact.value || typeof fact.value !== 'object') return false;
+    var v = fact.value;
+    if (fact.kind === 'host.notable_program' && String(v.name || '').toLowerCase() === 'runner.run') return true;
+    if (fact.kind === 'loot.keepass_dump' && String(v.file || '').toUpperCase() === 'PATTERN.KDBX' && !v.has_hash) return true;
+    if ((fact.kind === 'ad.rbcd' || fact.kind === 'ad.delegation') && Array.isArray(v.evidence) && v.evidence.length > 0 && v.evidence.every(function (e) {
+      return /:\s*(?:WRITE|READ|CREATE_CHILD)\s*$/i.test(String(e || ''));
+    })) return true;
+    return false;
+  }
+
   FactSet.prototype.add = function (fact) {
     // Add a fact unless an identical (kind, scope, value) one is present.
     // Returns true if it was actually new. A correction (same key, different state)
     // supersedes the old one in place so a mis-proven fact stops gating the planner.
+    if (isKnownFalsePositiveFact(fact)) return false;
     for (var i = 0; i < this.facts.length; i++) {
       var existing = this.facts[i];
       if (existing.kind === fact.kind && existing.scope === fact.scope
@@ -140,6 +193,17 @@
         }
         return false;
       }
+    }
+    var flagIdx = mergeFlagFactIfDuplicate(this.facts, fact);
+    if (flagIdx >= 0) {
+      var exFlag = this.facts[flagIdx];
+      if (exFlag.state !== fact.state) {
+        exFlag.state = fact.state;
+        exFlag.created_at = fact.created_at;
+        this.state_changed.push([exFlag.kind, exFlag.scope, Object.assign({}, exFlag.value)]);
+        return true;
+      }
+      return false;
     }
     this.facts.push(fact);
     return true;

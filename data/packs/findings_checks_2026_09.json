@@ -481,7 +481,8 @@
       ],
       "produces": [
         "credential.available",
-        "loot.credentials"
+        "credential.candidate",
+        "loot.material"
       ],
       "priority": 72,
       "autonomy": "approve",
@@ -531,7 +532,8 @@
       ],
       "produces": [
         "credential.available",
-        "loot.credentials"
+        "credential.candidate",
+        "loot.material"
       ],
       "priority": 73,
       "autonomy": "approve",
@@ -576,6 +578,7 @@
       "os": [
         "linux"
       ],
+      "speculative": true,
       "requires_all": [],
       "requires_any": [
         "foothold.linux"

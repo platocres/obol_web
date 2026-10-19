@@ -115,5 +115,32 @@ Object.keys(OBOL.TOOL_RECIPES).forEach(function (bid) {
   ok(offenders.length === 0, 'every recipe compiles from a bound context (no non-secret required field unfilled)' + (offenders.length ? ': ' + offenders.join(' | ') : ''));
 })();
 
+// Batch 1 targeted smoke assertions
+(function () {
+  // 1. tb-ldapsearch -H
+  var ldapCmd = TB.compile(byId['tb-ldapsearch'], { scheme: 'ldap', target: '10.10.10.10', baseDn: 'DC=corp,DC=local' }, CTX);
+  ok(ldapCmd.indexOf('-H ldap://') >= 0, 'tb-ldapsearch compiles with -H');
+
+  // 2. tb-gobuster-ferox vhost without -b and with --append-domain
+  var gobCmd = TB.compile(byId['tb-gobuster-ferox'], { engine: 'gobuster', gobusterMode: 'vhost', target: 'http://corp.local', wordlist: 'subdomains.txt', statusMode: 'filter', statusCodes: '404' }, CTX);
+  ok(gobCmd.indexOf('--append-domain') >= 0 && gobCmd.indexOf('-b') === -1, 'tb-gobuster-ferox vhost includes --append-domain and omits -b');
+
+  // 3. tb-msfvenom --list payloads compiling without lhost
+  var msfBuilder = byId['tb-msfvenom'];
+  var msfMissing = TB.validateRequired(msfBuilder, TB.normalizeValues(msfBuilder, { listPayloads: true }, CTX));
+  var msfCmd = TB.compile(msfBuilder, { listPayloads: true }, CTX);
+  ok(msfMissing.length === 0 && msfCmd.indexOf('-l payloads') >= 0, 'tb-msfvenom --list payloads compiles without required lhost');
+
+  // 4. carryShared adding/stripping /FUZZ
+  var web = TK.stationById('web-content');
+  var ffufEng = web && web.engines[0];
+  var gobEng = web && web.engines[1];
+  if (web && ffufEng && gobEng) {
+    var toGob = TK.carryShared(web, ffufEng, gobEng, { url: 'http://10.10.10.10/FUZZ' });
+    var toFfuf = TK.carryShared(web, gobEng, ffufEng, { target: 'http://10.10.10.10' });
+    ok(toGob.target === 'http://10.10.10.10' && toFfuf.url === 'http://10.10.10.10/FUZZ', 'carryShared strips and adds /FUZZ between web-content engines');
+  }
+})();
+
 if (fail) { console.error('toolkit-smoke: ' + fail + ' FAIL'); process.exit(1); }
 console.log('toolkit-smoke: OK');

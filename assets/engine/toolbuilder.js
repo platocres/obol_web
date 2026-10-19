@@ -246,6 +246,12 @@
     Object.keys(base).forEach(function (k) { out[k] = base[k]; });
     Object.keys(values || {}).forEach(function (k) { var v = values[k]; if (v !== undefined) out[k] = v; });
     arr(builder && builder.fields).forEach(function (field) {
+      if (field.type === 'select' && out[field.id] === '') {
+        var selDef = (builder && builder.defaults && builder.defaults[field.id] !== undefined)
+          ? builder.defaults[field.id]
+          : field.default;
+        if (selDef !== undefined) out[field.id] = selDef;
+      }
       if ((out[field.id] === undefined || out[field.id] === '') && field.autofill) {
         var value = contextValue(context || {}, field.autofill);
         if (value !== '' && value != null) out[field.id] = value;
@@ -264,6 +270,7 @@
   function validateRequired(builder, values) {
     var missing = [];
     arr(builder.fields).forEach(function (field) {
+      if (field.visibleWhen && !conditionMatches(field.visibleWhen, values)) return;
       var required = field.required === true || (field.requiredWhen ? conditionMatches(field.requiredWhen, values) : false);
       if (!required) return;
       var v = values[field.id];
@@ -288,7 +295,11 @@
     }
     throw new Error('Tool Builder command executable is invalid');
   }
-  function valueWithAffixes(token, value) { return String(token.prefix || '') + String(value) + String(token.suffix || ''); }
+  function valueWithAffixes(token, value) {
+    var pfx = token.prefix || '';
+    if (pfx === ':' && String(value).indexOf(':') >= 0) pfx = '';
+    return String(pfx) + String(value) + String(token.suffix || '');
+  }
   function splitRepeat(value, mode) {
     var raw = String(value == null ? '' : value);
     if (mode === 'comma') return raw.split(',').map(function (v) { return v.trim(); }).filter(Boolean);
@@ -301,7 +312,9 @@
       if (Object.prototype.hasOwnProperty.call(part, 'literal')) { out += String(part.literal); return; }
       var value = values[part.field];
       if (value === undefined || value === null || value === '') return;
-      out += String(part.prefix || '') + String(value) + String(part.suffix || '');
+      var pfx = part.prefix || '';
+      if (pfx === ':' && String(value).indexOf(':') >= 0) pfx = '';
+      out += String(pfx) + String(value) + String(part.suffix || '');
     });
     return out;
   }
@@ -315,10 +328,16 @@
     var resolved = normalizeValues(builder, values, context);
     var missing = validateRequired(builder, resolved);
     if (missing.length) throw new Error('Missing required fields: ' + missing.join(', '));
+    var fieldsById = {};
+    arr(builder.fields).forEach(function (f) { if (f && f.id) fieldsById[f.id] = f; });
     var q = quoterFor(builder.executionContext);
     var parts = [q(commandExecutable(builder, resolved))];
     arr(builder.command.tokens).forEach(function (token) {
       if (!conditionMatches(token.when, resolved)) return;
+      if (token.field) {
+        var f = fieldsById[token.field];
+        if (f && f.visibleWhen && !conditionMatches(f.visibleWhen, resolved)) return;
+      }
       if (token.kind === 'literal') { parts.push(String(token.value)); return; }
       var value = resolved[token.field];
       if (token.kind === 'toggle') { if (truthy(value)) parts.push(String(token.flag)); return; }

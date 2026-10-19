@@ -1,5 +1,5 @@
 /*!
- * obol engine — parsers/dns.js — internal-resolver interrogation.
+ * obol engine - parsers/dns.js - internal-resolver interrogation.
  *
  * The pivot value chain's DNS link: you discovered the foothold's internal resolver (scan.local.dns),
  * you query it, and what it answers names the rest of the estate. In an AD environment the resolver is
@@ -38,23 +38,26 @@
     var names = {};      // every fqdn seen (for the zone receipt)
     var domain = '', dcNames = {}, m;
 
-    // A records — dig/AXFR row "name. TTL IN A 1.2.3.4", host "name has address 1.2.3.4",
+    // A records - dig/AXFR row "name. TTL IN A 1.2.3.4", host "name has address 1.2.3.4",
     // nslookup "Name: name \n Address: 1.2.3.4"
-    var reA = /([A-Za-z0-9_.-]+?)\.?\s+(?:\d+\s+)?IN\s+A\s+(\d{1,3}(?:\.\d{1,3}){3})/gi;
+    var reA = /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,253}?)\.?\s+(?:\d+\s+)?IN\s+A\s+(\d{1,3}(?:\.\d{1,3}){3})/gi;
     while ((m = reA.exec(t))) { var nm = norm(m[1]); if (isRoutable(m[2])) { aRec[nm] = m[2]; names[nm] = 1; } }
-    var reHost = /([A-Za-z0-9_.-]+?)\s+has address\s+(\d{1,3}(?:\.\d{1,3}){3})/gi;
+    var reHost = /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,253}?)\s+has address\s+(\d{1,3}(?:\.\d{1,3}){3})/gi;
     while ((m = reHost.exec(t))) { var nh = norm(m[1]); if (isRoutable(m[2])) { aRec[nh] = m[2]; names[nh] = 1; } }
     // Windows nslookup prints an A record as "host  internet address = 1.2.3.4"
-    var reNslA = /([A-Za-z0-9_.-]+?)\s+internet address\s*=\s*(\d{1,3}(?:\.\d{1,3}){3})/gi;
+    var reNslA = /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,253}?)\s+internet address\s*=\s*(\d{1,3}(?:\.\d{1,3}){3})/gi;
     while ((m = reNslA.exec(t))) { var na = norm(m[1]); if (isRoutable(m[2])) { aRec[na] = m[2]; names[na] = 1; } }
+    // Standard nslookup block "Name:\tdc01.corp.local\nAddress: 10.10.10.10"
+    var reNslBlock = /^Name:\s*([A-Za-z0-9_.-]{1,253})\s*\r?\nAddress(?:es)?:\s*(\d{1,3}(?:\.\d{1,3}){3})/gim;
+    while ((m = reNslBlock.exec(t))) { var nb = norm(m[1]); if (isRoutable(m[2])) { aRec[nb] = m[2]; names[nb] = 1; } }
 
-    // SOA / NS — the authoritative host is a DC, and the owner name is the domain
-    var reSoa = /([A-Za-z0-9_.-]+?)\.?\s+(?:\d+\s+)?IN\s+SOA\s+([A-Za-z0-9_.-]+)/i;
+    // SOA / NS - the authoritative host is a DC, and the owner name is the domain
+    var reSoa = /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,253}?)\.?\s+(?:\d+\s+)?IN\s+SOA\s+([A-Za-z0-9_.-]+)/i;
     m = reSoa.exec(t); if (m) { domain = domain || norm(m[1]); dcNames[norm(m[2])] = 1; }
-    var reNs = /([A-Za-z0-9_.-]+?)\.?\s+(?:\d+\s+)?IN\s+NS\s+([A-Za-z0-9_.-]+)/gi;
+    var reNs = /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,253}?)\.?\s+(?:\d+\s+)?IN\s+NS\s+([A-Za-z0-9_.-]+)/gi;
     while ((m = reNs.exec(t))) { domain = domain || norm(m[1]); dcNames[norm(m[2])] = 1; }
 
-    // SRV — the DC locators. dig row "_ldap._tcp.dc._msdcs.acme.local. IN SRV 0 100 389 dc01.acme.local."
+    // SRV - the DC locators. dig row "_ldap._tcp.dc._msdcs.acme.local. IN SRV 0 100 389 dc01.acme.local."
     // and nslookup "_ldap._tcp.dc._msdcs.acme.local  service = 0 100 389 dc01.acme.local"
     var reSrv = /_(?:ldap|kerberos|gc|kpasswd)\._tcp(?:\.[A-Za-z0-9_.-]*?)?\.([A-Za-z0-9.-]+?)\.?\s+(?:(?:\d+\s+)?IN\s+SRV|service\s*=)\s+\d+\s+\d+\s+\d+\s+([A-Za-z0-9_.-]+)/gi;
     while ((m = reSrv.exec(t))) {
@@ -70,7 +73,12 @@
     var reSvrHost = /svr hostname\s*=\s*([A-Za-z0-9_.-]+)/gi;
     while ((m = reSvrHost.exec(t))) dcNames[norm(m[1])] = 1;
 
-    Object.keys(names).forEach(function (n) { if (!domain && n.indexOf('.') > 0 && aRec[n]) { /* leave domain to authoritative records */ } });
+    Object.keys(names).forEach(function (n) {
+      if (/^dc\d*\.[a-z0-9.-]+\.[a-z]{2,}$/i.test(n) && aRec[n]) {
+        dcNames[n] = 1;
+        if (!domain) domain = n.split('.').slice(1).join('.');
+      }
+    });
 
     if (domain) _add(facts, mkFact('ad.domain_known', 'domain:' + domain, { name: domain, tool: 'dns' }, S, source));
 
@@ -86,4 +94,5 @@
   }
 
   C._parse_dns = _parse_dns;
+  C._parse_dns_zone = _parse_dns;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

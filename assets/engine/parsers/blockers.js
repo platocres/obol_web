@@ -1,7 +1,7 @@
 /*!
- * obol engine — parsers/blockers.js — the "cryptic wall" detectors.
+ * obol engine - parsers/blockers.js - the "cryptic wall" detectors.
  *
- * Classic OSCP/HTB traps are rarely a real defence — they are an error message a learner has not seen
+ * Classic OSCP/HTB traps are rarely a real defence - they are an error message a learner has not seen
  * before, and the fix is one command. Each recognizer below reads a pasted failure and mints a
  * blocker.* fact so the matching fix/guidance move surfaces with the exact remedy. Everything here is
  * content-gated and additive: a benign paste mints nothing, and a blocker only appears once the user's
@@ -18,7 +18,7 @@
 
   // kind -> the signature that proves the wall. Ordered; several may fire from one paste.
   var WALLS = [
-    // recon: nmap says the host is down because ICMP is filtered — the #1 beginner trap. Fix: -Pn.
+    // recon: nmap says the host is down because ICMP is filtered - the #1 beginner trap. Fix: -Pn.
     { kind: 'blocker.host_down', re: /Note:\s*Host seems down|0 hosts up|host (?:seems|appears) to be down|increase .*--host-timeout/i },
     // name resolution: a box addressed by a hostname (box.htb) that is not in /etc/hosts.
     { kind: 'blocker.name_resolution', re: /Could not resolve host(?:name)?|Name or service not known|Temporary failure in name resolution|Name does not resolve|getaddrinfo .*Name or service/i },
@@ -38,12 +38,12 @@
     { kind: 'blocker.tls_scheme', re: /SSL.*WRONG_VERSION_NUMBER|wrong version number|record layer failure|sslv3 alert handshake failure|routines::?(?:unexpected eof|wrong version)/i },
     // hashcat/john refusing the hash: wrong mode, a username: prefix left on, or CRLF in the hash file.
     { kind: 'blocker.hash_format', re: /Token length exception|No hashes loaded|No password hashes loaded(?: with these settings)?|Separator unmatched|Signature unmatched|Line-length exception|Hashfile '[^']*' on line \d+/i },
-    // a reverse shell that never calls back — the payload ran but egress is filtered.
+    // a reverse shell that never calls back - the payload ran but egress is filtered.
     { kind: 'blocker.egress_blocked', re: /nc:.*(?:Connection refused|No route to host|Network is unreachable)|Ncat: (?:Connection refused|TIMEOUT|No route to host)|socat.*(?:Connection refused|refused)|curl:\s*\(7\)\s*Failed to connect/i },
     // NTLM relay refused because the target requires SMB signing (relay-tool phrasing, not nxc's enum
-    // "signing:True" line) — relay to a host that has signing OFF instead.
+    // "signing:True" line) - relay to a host that has signing OFF instead.
     { kind: 'blocker.smb_signing', re: /signing is required(?:,| )|SMB signing is enabled|SigningRequired\s*[:=]\s*True|signing.*required.*(?:attack won|relay|abort)/i },
-    // Kerberos says the principal/SPN/host is unknown — almost always an IP instead of the FQDN, a
+    // Kerberos says the principal/SPN/host is unknown - almost always an IP instead of the FQDN, a
     // wrong SPN, or a case/realm mistake.
     { kind: 'blocker.kerberos_spn', re: /KDC_ERR_S_PRINCIPAL_UNKNOWN|KDC_ERR_C_PRINCIPAL_UNKNOWN|Server not found in Kerberos database|Principal (?:unknown|not found in)/i },
     // Responder running but catching nothing because its own SMB/HTTP servers are off (or your smbd is
@@ -57,20 +57,28 @@
     { kind: 'blocker.logon_failure', re: /STATUS_LOGON_FAILURE|0xc000006d|Authentication failure|Failed to authenticate|Login failed for user/i },
     // Kerberos clock skew: DC rejected ticket because time drift > 5 mins.
     { kind: 'blocker.clock_skew', re: /KRB_AP_ERR_SKEW|clock skew too great|time difference too large/i },
-    // hashcat/john cannot use the GPU/OpenCL (common in a VM) — fall back to CPU / --force.
+    // hashcat/john cannot use the GPU/OpenCL (common in a VM) - fall back to CPU / --force.
     { kind: 'blocker.hashcat_env', re: /No devices found\/left|clGetPlatformIDs|No OpenCL compatible|ADL_Main_Control_Create|increase.*--force|You can use --force to override/i },
     // anonymous LDAP bind rejected by DC policy (DSID-0C09075A).
     { kind: 'blocker.ldap_anonymous_disabled', re: /000004DC:\s*LdapErr:\s*DSID-0C09075A|operationsError.*successful bind must be completed|In order to perform this operation a successful bind must be completed/i },
     // NetExec --get-file quietly defaulting to administrative C$ share instead of the target share.
     { kind: 'blocker.nxc_c_share_denied', re: /from share ["']C\$["']|Error writing file .* from share ["']C\$["']|(?:share\s+["']?C\$["']?|enumerating\s+C\$).*(?:0xc0000022|STATUS_ACCESS_DENIED)/i },
     // account in Protected Users group: KDC refuses RC4/DES Kerberos tickets and NTLM authentication.
-    { kind: 'blocker.protected_users', re: /KDC_ERR_ETYPE_NOSUPP|KDC has no support for encryption type|Protected Users/i },
+    { kind: 'blocker.protected_users', re: /KDC_ERR_ETYPE_NOSUPP|KDC has no support for encryption type|(?:member of|in|blocked by)\s+["']?Protected Users/i },
     // delegation target account has AccountNotDelegated = True (Marked Sensitive).
     { kind: 'blocker.account_not_delegated', re: /AccountNotDelegated\s*:\s*True|KDC_ERR_BADOPTION|account is marked as sensitive and cannot be delegated/i },
     // WinRM port 5985 closed / connection refused (evil-winrm failing on non-WinRM targets).
     { kind: 'blocker.winrm_closed', re: /ECONNREFUSED.*(?:5985|evil-winrm)|Connection refused.*(?:port 5985|5985)|Cannot establish connection to remote endpoint.*5985/i },
     // NetExec --spider usage banner from missing positional share/pattern arguments.
     { kind: 'blocker.nxc_spider_usage', re: /usage:\s*nxc\s+smb.*--spider|--spider:\s*(?:expected|error)|nxc smb: error:.*--spider|--spider requires|arguments are required:\s*share/i },
+    // xp_cmdshell disabled on MSSQL server.
+    { kind: 'blocker.xp_cmdshell_disabled', re: /SQL Server blocked access to procedure 'sys\.xp_cmdshell'|EXECUTE permission was denied on the object 'xp_cmdshell'/i },
+    // cracking exhausted: wordlist or hash exhaustion.
+    { kind: 'blocker.cracking_exhausted', re: /Status\.+:\s*Exhausted|\b0\s+password\s+hashes\s+cracked\b/i },
+    // DCSync failed: principal lacks Replicating Directory Changes rights (ERROR_DS_DRA_BAD_DN / ERROR_DS_DRA_ACCESS_DENIED).
+    { kind: 'blocker.dcsync_denied', re: /DRSUAPI\s+SessionError:\s*code:\s*0x20f7\s*-\s*ERROR_DS_DRA_BAD_DN|ERROR_DS_DRA_BAD_DN|ERROR_DS_DRA_ACCESS_DENIED/i },
+    // NetExec --bloodhound blocked by default ~/.nxc/nxc.conf BloodHound-CE setting.
+    { kind: 'blocker.nxc_bh_config', re: /Your configuration has BloodHound-CE enabled,\s*however this version is currently unsupported/i },
   ];
 
   function _parse_op_blockers(text, ws, command, source, facts) {
@@ -78,6 +86,10 @@
     var h = 'host:' + ws.target;
     var isNmap = (command && /^\s*nmap\b/i.test(command)) || /Starting Nmap|Nmap scan report for/i.test(t);
     var isRoastOrEnum = command && /--asreproast|--kerberoast|--users|GetNPUsers|GetUserSPNs/i.test(command);
+    var isEnum4linux = (command && /\benum4linux(?:-ng)?\b/i.test(command)) || /^ENUM4LINUX - next generation/im.test(t);
+    var enum4linuxSucceeded = isEnum4linux && /\[\+\]\s*(?:Found \d+\s+(?:user|group|share)|Server allows authentication|Appears to be|Long domain name|Domain SID)/i.test(t);
+    var isAnonSmbProbe = (command && /^(?:smb-anon|ad-user-enum)\b/i.test(command))
+      || (/\[\+\]\s*[^\\\r\n]*\\:\s*$/im.test(t) && !/\[\+\]\s*[^\\\r\n]*\\[A-Za-z0-9._$-]+:/im.test(t));
     // Strip nmap script probe lines so unauthenticated NSE probe outputs (like ms10-061: NT_STATUS_ACCESS_DENIED)
     // never masquerade as operational authentication/execution blockers for the operator.
     var tWithoutNse = t.replace(/^\|\s*[-_a-zA-Z0-9]+:\s*NT_STATUS_ACCESS_DENIED.*$/gim, '')
@@ -85,12 +97,13 @@
     for (var i = 0; i < WALLS.length; i++) {
       var w = WALLS[i];
       if (w.kind === 'blocker.access_denied') {
-        if (isNmap || isRoastOrEnum) continue;
+        if (isNmap || isRoastOrEnum || enum4linuxSucceeded || isAnonSmbProbe) continue;
         if (w.re.test(tWithoutNse)) {
           _add(facts, mkFact(w.kind, h, { tool: C._exec_tool ? C._exec_tool(command || '') : '', via: 'blocker-detect' }, S, source));
         }
         continue;
       }
+      if (w.kind === 'blocker.logon_failure' && (enum4linuxSucceeded || /\\\$krb5(?:asrep|tgs)\$|Testing credentials \(\$krb5/i.test(t) || (/^(?:bloodyad-acl|dcsync)\b/i.test(command || '') && /Traceback \(most recent call last\):|SessionError:\s*STATUS_LOGON_FAILURE/i.test(t)))) continue;
       if (w.re.test(t)) _add(facts, mkFact(w.kind, h, { tool: C._exec_tool ? C._exec_tool(command || '') : '', via: 'blocker-detect' }, S, source));
     }
   }

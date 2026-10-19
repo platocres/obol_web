@@ -1,5 +1,5 @@
 /*!
- * obol ui — routes/history.js — the Run Log: every command run / evidence ingested on this engagement,
+ * obol ui - routes/history.js - the Run Log: every command run / evidence ingested on this engagement,
  * newest first, with what it proved and its full saved output. The coach shows only the moves that matter
  * for the attack path; this is the complete record for review across runs. Read-only over the ledger.
  */

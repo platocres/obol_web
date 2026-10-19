@@ -133,5 +133,56 @@ ok(!/\{\{[a-z]/i.test(script), 'no {{token}} leaks survive into the exam script'
 const labScript = C.buildScript(lab.batch, { pack: PACK, facts: facts, params: { target: '10.10.10.5' }, mode: 'lab', phase: lab.phase });
 ok(/LAB MODE: .*NOT exam-legal/.test(labScript), 'lab script carries the NOT-exam-legal caveat');
 
+// ── Loadout readiness + self-healing stage scripts ──────────────────────────────────────────────────
+const rUnsynced = C.checkArsenalReadiness('recon', null, null);
+ok(rUnsynced.synced === false, 'checkArsenalReadiness reports synced:false when no profile exists');
+const rSynced = C.checkArsenalReadiness('recon', null, {
+  tools: { nmap: { present: true }, nxc: { present: true } },
+  staged: ['linpeas.sh'],
+  wordlists: { rockyou: '/usr/share/wordlists/rockyou.txt' },
+});
+ok(rSynced.synced === true && rSynced.stageReady.indexOf('nmap') >= 0 && rSynced.stageMissing.indexOf('ffuf') >= 0, 'checkArsenalReadiness identifies ready vs missing stage tools');
+
+const st1Exam = C.buildStageScript('recon', { mode: 'exam', params: { target: '10.10.10.5' }, facts: facts, pack: PACK });
+ok(/Self-healing Loadout runtime preamble/.test(st1Exam), 'Stage 1 script embeds the self-healing Loadout runtime preamble');
+ok(!/OBOL-ARSENAL/.test(st1Exam), 'Stage 1 script does not dump noisy OBOL-ARSENAL inventory JSON');
+ok(!/\{\{[a-z]/i.test(st1Exam), 'Stage 1 script has no {{token}} leaks');
+
+const st2Lab = C.buildStageScript('enum', { mode: 'lab', params: { target: '10.10.10.5', username: 'svc', password: 'pw' }, facts: credFacts, pack: PACK });
+ok(/Self-healing Loadout runtime preamble/.test(st2Lab), 'Stage 2 script embeds the self-healing Loadout runtime preamble');
+ok(!/OBOL-ARSENAL/.test(st2Lab), 'Stage 2 script does not dump noisy OBOL-ARSENAL inventory JSON');
+ok(!/\{\{[a-z]/i.test(st2Lab), 'Stage 2 script has no {{token}} leaks');
+
+const st3Win = C.buildStageScript('foothold', { mode: 'lab', osFamily: 'windows', params: { target: '10.10.10.5', username: 'svc', password: 'pw' }, facts: credFacts, pack: PACK });
+const st4Win = C.buildStageScript('loot', { mode: 'lab', osFamily: 'windows', params: { target: '10.10.10.5', username: 'Administrator', nthash: '32693b11e6aa90eb43d32c72a07ceea6' }, facts: credFacts, pack: PACK });
+ok(/^#!\/usr\/bin\/env bash/.test(st3Win), 'Stage 3 Windows script is a Kali bash script');
+ok(/^#!\/usr\/bin\/env bash/.test(st4Win) && /evil-winrm/.test(st4Win), 'Stage 4 Windows script is a Kali bash script that logs onto the host and launches interactive shell');
+
+const shellInfo = C.buildHostShellAccess('loot', { osFamily: 'windows', params: { target: '10.10.10.5', username: 'Administrator', nthash: '32693b11e6aa90eb43d32c72a07ceea6' }, facts: credFacts });
+ok(/evil-winrm -i 10\.10\.10\.5 -u 'Administrator' -H '32693b11e6aa90eb43d32c72a07ceea6'/.test(shellInfo.loginCmd), 'buildHostShellAccess builds interactive Evil-WinRM host login command');
+ok(/whoami & hostname & ipconfig/.test(shellInfo.proofCmd), 'buildHostShellAccess builds OSCP proof one-liner');
+
+const { execFileSync } = require('child_process');
+const os = require('os');
+const bashCandidates = ['C:\\Program Files\\Git\\bin\\bash.exe', '/bin/bash', 'bash'];
+const bashBin = bashCandidates.find((b) => { try { return fs.existsSync(b); } catch (e) { return false; } }) || 'bash';
+try {
+  const tmp1 = path.join(os.tmpdir(), 'obol-cruise-st1.sh');
+  const tmp2 = path.join(os.tmpdir(), 'obol-cruise-st2.sh');
+  const tmp3 = path.join(os.tmpdir(), 'obol-cruise-st3.sh');
+  const tmp4 = path.join(os.tmpdir(), 'obol-cruise-st4.sh');
+  fs.writeFileSync(tmp1, st1Exam.replace(/\r\n/g, '\n'), 'utf8');
+  fs.writeFileSync(tmp2, st2Lab.replace(/\r\n/g, '\n'), 'utf8');
+  fs.writeFileSync(tmp3, st3Win.replace(/\r\n/g, '\n'), 'utf8');
+  fs.writeFileSync(tmp4, st4Win.replace(/\r\n/g, '\n'), 'utf8');
+  execFileSync(bashBin, ['-n', tmp1]);
+  execFileSync(bashBin, ['-n', tmp2]);
+  execFileSync(bashBin, ['-n', tmp3]);
+  execFileSync(bashBin, ['-n', tmp4]);
+  ok(true, 'Stage 1, Stage 2, Stage 3, and Stage 4 scripts pass bash -n syntax validation');
+} catch (err) {
+  ok(false, 'Stage 1/2/3/4 bash -n failed: ' + err.message);
+}
+
 if (fail) { console.error('\nCRUISE SMOKE: ' + fail + ' failed'); process.exit(1); }
 console.log('\nCRUISE SMOKE: all passed');

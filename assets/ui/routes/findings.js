@@ -1,8 +1,8 @@
 /*!
- * obol ui — routes/findings.js — cross-host findings roll-up.
+ * obol ui - routes/findings.js - cross-host findings roll-up.
  * Gathers finding.<category> facts across every host in the engagement, grouped by severity then
  * category, each with its host (scope), evidence, and remediation (enriched from reportmeta when
- * that bundle is loaded). Read-only projection over the fact ledger — nothing is invented.
+ * that bundle is loaded). Read-only projection over the fact ledger - nothing is invented.
  */
 (function (root) {
   'use strict';
@@ -57,47 +57,61 @@
         refs: v.cve || enrich.cve || '',
       });
     });
-    // 2) derive findings from what the operator actually RAN and PROVED: an activity whose action
-    // carries a report block and that minted at least one fact IS a finding (no over-claim — it's
-    // tied to real evidence). This is what fills the roll-up on AD/host boxes with no web checks.
     var eng = OBOL.store.active() || {};
-    var actions = (OBOL.packs && OBOL.packs.actions) ? OBOL.packs.actions() : [];
-    var byId = {}; actions.forEach(function (a) { byId[a.id] = a; });
-    (eng.activities || []).forEach(function (act) {
-      if (!act || !act.action_id || !(act.produced || []).length) return;
-      var a = byId[act.action_id]; if (!a || !a.report || !a.report.finding) return;
-      var sev = normSev(a.report.severity);
-      if (sev === 'info') return; // skip informational-only recon notes
-      push({
-        title: a.report.finding,
-        category: (a.produces && a.produces[0] ? a.produces[0].split('.')[0] : 'finding'),
-        severity: sev,
-        host: (act.scope || '').replace(/^host:/, '').replace(/^domain:/, '') || act.target || 'engagement',
-        evidence: act.command || '',
-        remediation: '', refs: '',
-      });
-    });
-    // 3) fact-driven catalog findings: the ported match engine (assets/engine/findings.js) matched
+    var coveredTriggerKinds = {};
+    // 2) fact-driven catalog findings: the ported match engine (assets/engine/findings.js) matched
     // against the cross-host fact ledger. Each is attributed to the host whose facts triggered it.
     if (OBOL.findings && OBOL.findings.assess) {
       var primary = (eng.targets && eng.targets[0] && eng.targets[0].ip) || 'engagement';
       OBOL.findings.assess(facts).forEach(function (v) {
+        var h = hostForFinding(facts, v.trigger_kinds, primary);
+        (v.trigger_kinds || []).forEach(function (tk) { coveredTriggerKinds[h + '|' + tk] = 1; coveredTriggerKinds['*|' + tk] = 1; });
         push({
           title: v.title,
           category: v.category || 'finding',
           severity: normSev(v.severity),
-          host: hostForFinding(facts, v.trigger_kinds, primary),
+          host: h,
           evidence: v.evidence || '',
           remediation: v.remediation || '',
           refs: v.cve || (v.refs && v.refs.length ? v.refs[0] : '') || '',
         });
       });
     }
+    // 3) derive findings from what the operator actually RAN and PROVED: an activity whose action
+    // carries a report block and that minted at least one of its own produced facts (and is not already
+    // covered by a catalog finding) is included.
+    var actions = (OBOL.packs && OBOL.packs.actions) ? OBOL.packs.actions() : [];
+    var byId = {}; actions.forEach(function (a) { byId[a.id] = a; });
+    var NON_VULN_FACT_RE = /^(blocker\.|credential\.validation$|objective\.|proof\.|smb\.reachable$|http\.reachable$|ldap\.reachable$|kerberos\.reachable$|winrm\.reachable$|ssh\.reachable$|host\.|os\.|ad\.domain_known$|ad\.base_dn$|ad\.dc_candidate$)/;
+    var GENERIC_REQ_RE = /^(foothold\.|access\.|credential\.(?:available|plaintext|candidate)$|smb\.authenticated$|winrm\.authenticated$|http\.reachable$|port:)/;
+    (eng.activities || []).forEach(function (act) {
+      if (!act || !act.action_id || /^flag-hunt-/.test(act.action_id) || !(act.produced || []).length) return;
+      var a = byId[act.action_id]; if (!a || !a.report || !a.report.finding) return;
+      var sev = normSev(a.report.severity);
+      if (sev === 'info') return; // skip informational-only recon notes
+      var aProduces = Array.isArray(a.produces) ? a.produces : [];
+      var rawProd = (act.produced || []).filter(function (k) { return !NON_VULN_FACT_RE.test(k); });
+      var meaningfulProd = rawProd.filter(function (k) {
+        return !aProduces.length || aProduces.indexOf(k) >= 0;
+      });
+      if (!meaningfulProd.length) return;
+      var h = (act.scope || '').replace(/^host:/, '').replace(/^domain:/, '') || act.target || 'engagement';
+      var specReqs = [].concat(a.requires_all || [], a.requires_any || []).filter(function (k) { return !GENERIC_REQ_RE.test(k); });
+      if (rawProd.concat(specReqs).some(function (k) { return coveredTriggerKinds[h + '|' + k] || coveredTriggerKinds['*|' + k]; })) return;
+      push({
+        title: a.report.finding,
+        category: (a.produces && a.produces[0] ? a.produces[0].split('.')[0] : 'finding'),
+        severity: sev,
+        host: h,
+        evidence: act.command || '',
+        remediation: '', refs: '',
+      });
+    });
     return out;
   }
 
   // Resolve a host key (an IP, or "engagement"/"domain:…") to its proven identity so a finding can carry
-  // both the IP and the hostname — the anchor a severity-sorted list needs to say *which box* it is on.
+  // both the IP and the hostname - the anchor a severity-sorted list needs to say *which box* it is on.
   function identity(host) {
     if (!host || /[^0-9.]/.test(host)) return { ip: host, hostname: '' };
     try { return (OBOL.store && OBOL.store.targetIdentity) ? OBOL.store.targetIdentity(host) : { ip: host, hostname: '' }; }
@@ -105,7 +119,8 @@
   }
   function hostPill(host) {
     var id = identity(host), hn = id && id.hostname ? id.hostname : '';
-    return '<span class="pill finding-host"' + (hn ? ' title="' + U.attr(host + '' + hn) + '"' : '') + '>'
+    var tip = hn && hn !== host ? (host + ' · ' + hn) : host;
+    return '<span class="pill finding-host"' + (hn ? ' title="' + U.attr(tip) + '"' : '') + '>'
       + esc(host) + (hn ? '<span class="finding-hostname">' + esc(hn) + '</span>' : '') + '</span>';
   }
 
@@ -203,8 +218,8 @@
     }).join('') + '</div>';
     var cols = A.tactics.map(function (col) {
       var cells = col.cells.map(function (c) {
-        var canShow = !c.used && c.covered;     // grayed, but obol can show what it looks like
-        var aria = c.id + ' ' + c.name + (c.used ? ', used this engagement' + (c.subs.length ? ' (' + c.subs.length + ' sub-technique' + (c.subs.length === 1 ? '' : 's') + ')' : '') : (canShow ? ', not done yet, obol has an example' : ', not observed'));
+        var canShow = !c.used && c.covered;     // grayed, but OBOL can show what it looks like
+        var aria = c.id + ' ' + c.name + (c.used ? ', used this engagement' + (c.subs.length ? ' (' + c.subs.length + ' sub-technique' + (c.subs.length === 1 ? '' : 's') + ')' : '') : (canShow ? ', not done yet, OBOL has an example' : ', not observed'));
         return '<button type="button" class="fw-cell' + (c.used ? ' used' : (canShow ? ' can-show' : '')) + '" data-tech="' + U.attr(c.id) + '"'
           + ' aria-label="' + U.attr(aria) + '"' + (c.used || canShow ? '' : ' tabindex="-1"') + '>'
           + '<span class="fw-cell-n">' + esc(c.name) + '</span>'
@@ -221,11 +236,11 @@
       + '<button type="button" class="fw-mx-btn' + (mode === 'labeled' ? ' active' : '') + '" data-fwmx="labeled">Labeled</button>'
       + '<button type="button" class="fw-mx-btn' + (mode === 'compact' ? ' active' : '') + '" data-fwmx="compact">Compact</button></div>';
     var canShowN = A.tactics.reduce(function (n, col) { return n + col.cells.filter(function (c) { return !c.used && c.covered; }).length; }, 0);
-    var canShowNote = canShowN ? ' A dotted cell is a technique you have not done yet that obol can show you: hover or click it for the example command.' : '';
+    var canShowNote = canShowN ? ' A dotted cell is a technique you have not done yet that OBOL can show you: hover or click it for the example command.' : '';
     return '<p class="route-sub">Your ATT&CK coverage this engagement: <b>' + A.usedTotal + '</b> technique' + (A.usedTotal === 1 ? '' : 's') + ' across <b>' + usedCols + '</b> tactic' + (usedCols === 1 ? '' : 's') + '. Coloured by what you did: a blue team’s SIEM would be trying to detect these. Click a lit cell for detail.' + canShowNote + ' ATT&CK v' + esc(A.version || '') + '.</p>'
       + kcStrip + toggle
       + '<div class="fw-matrix-wrap"><div class="fw-matrix fw-matrix--' + mode + '">' + cols + '</div></div>'
-      + '<div id="fw-detail" class="fw-detail"><p class="fw-detail-hint">Select a lit technique for what you did, how it is detected, and how it is countered. Select a dotted technique for the obol command that performs it.</p></div>';
+      + '<div id="fw-detail" class="fw-detail"><p class="fw-detail-hint">Select a lit technique for what you did, how it is detected, and how it is countered. Select a dotted technique for the OBOL command that performs it.</p></div>';
   }
 
   // The detail for one matrix cell: every used technique under it (the cell id, or its sub-techniques).
@@ -243,7 +258,7 @@
     var pack = (m && m.pack) || (OBOL.packs && OBOL.packs.actions ? OBOL.packs.actions() : []);
     var params = {}; try { params = (OBOL.store.active() || {}).params || {}; } catch (e) {}
     var ex = OBOL.frameworks.exampleCommands(cellId, pack, { params: params, max: 4 });
-    if (!ex.length) return '<p class="fw-detail-hint">No obol example for this technique.</p>';
+    if (!ex.length) return '<p class="fw-detail-hint">No OBOL example for this technique.</p>';
     var url = t.url || 'https://attack.mitre.org/techniques/' + cellId.replace('.', '/') + '/';
     return '<div class="fw-ex-head"><a href="' + U.attr(url) + '" target="_blank" rel="noopener">' + esc(cellId) + '</a> ' + esc(t.n || cellId)
       + ' <span class="fw-ex-sub">You have not done this yet. Here is what it looks like in obol.</span></div>'
@@ -265,7 +280,7 @@
     try { params = (OBOL.store.active() || {}).params || {}; } catch (e) {}
     var ex = OBOL.frameworks.exampleCommands(technique, pack, { params: params, max: opts.max || 2 });
     if (!ex.length) return '';
-    return '<div class="fw-hc-lbl">' + esc(opts.label || 'In obol This Looks Like') + '</div>'
+    return '<div class="fw-hc-lbl">' + esc(opts.label || 'In OBOL This Looks Like') + '</div>'
       + ex.map(function (e) {
           return '<div class="fw-hc-ex"><div class="fw-hc-exh">' + esc(e.tool || e.title)
             + (e.tool ? ' <span class="fw-hc-exm">' + esc(e.title) + '</span>' : '') + '</div>'
@@ -287,7 +302,7 @@
       + (tacNames.length ? '<div class="fw-hc-tac">' + tacNames.map(function (n) { return '<span class="fw-hc-tag">' + esc(n) + '</span>'; }).join('') + '</div>' : '');
 
     if (!ids.length) {
-      var examples = fwExamplesHtml(m, cellId, { label: 'In obol This Looks Like' });
+      var examples = fwExamplesHtml(m, cellId, { label: 'In OBOL This Looks Like' });
       var un = '<div class="fw-hc-un">' + (examples ? 'You have not done this yet.' : 'Not observed this engagement.') + '</div>';
       if (t.det) un += '<div class="fw-hc-row"><span class="fw-hc-lbl">A Defender Spots It By</span> ' + esc(String(t.det).slice(0, 220)) + (String(t.det).length > 220 ? '…' : '') + '</div>';
       un += examples;
@@ -342,7 +357,7 @@
       OBOL.frameworks.exampleCommands(id, pack, { params: params, max: 2 }).forEach(function (e) { if (!seen[e.moveId]) { seen[e.moveId] = 1; cmds.push(e); } });
     });
     if (cmds.length) {
-      body += '<div class="fw-hc-lbl">obol Commands This Blocks</div>'
+      body += '<div class="fw-hc-lbl">OBOL Commands This Blocks</div>'
         + cmds.slice(0, 3).map(function (e) {
             return '<div class="fw-hc-ex"><div class="fw-hc-exh">' + esc(e.tool || e.title)
               + (e.tool ? ' <span class="fw-hc-exm">' + esc(e.title) + '</span>' : '') + '</div>'
@@ -359,7 +374,7 @@
   };
   function renderDefensive(m) {
     if (!m.defensive.length) return '<p class="route-sub">No techniques to defend against yet. Prove some findings first.</p>';
-    var out = '<p class="route-sub">How a blue team catches and stops what you did, as the MITRE D3FEND defensive-tactic matrix. Each countermeasure below counters one or more of the ATT&CK techniques you used. Hover a countermeasure to see the obol command it would block.</p>';
+    var out = '<p class="route-sub">How a blue team catches and stops what you did, as the MITRE D3FEND defensive-tactic matrix. Each countermeasure below counters one or more of the ATT&CK techniques you used. Hover a countermeasure to see the OBOL command it would block.</p>';
     // the D3FEND matrix: coloured tactic columns with the countermeasures that answer your findings
     var d3 = m.d3fend || { tactics: [] };
     if (d3.tactics.length) {
@@ -409,7 +424,7 @@
   }
 
   function renderCves(m) {
-    if (!m.cves.length) return '<p class="route-sub">No CVEs detected in your findings yet.</p>';
+    if (!m || !m.cves || !m.cves.length) return '<p class="route-sub">No CVEs detected in your findings yet.</p>';
     var kevN = m.cves.filter(function (c) { return c.kev; }).length;
     return '<p class="route-sub"><b>' + m.cves.length + '</b> CVE' + (m.cves.length === 1 ? '' : 's') + ' detected'
       + (kevN ? ', <b>' + kevN + '</b> actively exploited (CISA KEV)' : '') + '. Actively-exploited first.</p>'
@@ -447,7 +462,6 @@
   function render() {
     var findings = gather();
     var active = ((OBOL.store.active() || {}).ui || {}).findingsView || 'findings';
-    if (active !== 'findings' && !findings.length) active = 'findings';
     var head = '<section class="findings-route"><div class="findings-head"><h1 class="route-h1">Findings</h1></div>' + fwTabBar(active);
 
     if (active === 'findings') {
@@ -515,7 +529,16 @@
       if (!wrap) return;
       document.querySelectorAll('.fw-hovercard-float').forEach(function (n) { n.remove(); });
       var card = null, curKey = null, model = null;
-      function ensure() { if (!card) { card = document.createElement('div'); card.className = 'fw-hovercard-float'; card.setAttribute('aria-hidden', 'true'); document.body.appendChild(card); } return card; }
+      function ensure() {
+        if (!card) {
+          card = document.createElement('div');
+          card.className = 'fw-hovercard-float';
+          card.setAttribute('aria-hidden', 'true');
+          document.body.appendChild(card);
+          window.addEventListener('hashchange', hide);
+        }
+        return card;
+      }
       function place(x, y) {
         var c = card; if (!c) return;
         var w = c.offsetWidth || 300, h = c.offsetHeight || 150, vw = window.innerWidth, vh = window.innerHeight;

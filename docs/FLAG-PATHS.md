@@ -47,192 +47,192 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 ## Canonical path per entry point
 
 ### `first` — Before anything, scan
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `21` — FTP
 - **Foothold:** vsftpd 2.3.4 Backdoor (CVE-2011-2523)
-- **User flag:** vsftpd 2.3.4 Backdoor (CVE-2011-2523) → Hunt for Flags (Linux)
+- **User flag:** vsftpd 2.3.4 Backdoor (CVE-2011-2523) → Capture the User Flag (Linux)
 - **Root/Admin:** vsftpd 2.3.4 Backdoor (CVE-2011-2523) → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `22` — SSH
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → ADCS Misconfiguration Abuse (ESC1-11) → Log in over SSH with a Recovered Private Key
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Blind SSH Brute (Common Users, Last Resort) → Authenticated Remote Command (SSH)
+- **User flag:** Blind SSH Brute (Common Users, Last Resort) → Authenticated Remote Command (SSH) → Capture the User Flag (Windows)
+- **Root/Admin:** Blind SSH Brute (Common Users, Last Resort) → Authenticated Remote Command (SSH) → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `23` — Telnet
 - **Foothold:** Log In Over Telnet
-- **User flag:** Log In Over Telnet → Hunt for Flags (Linux)
+- **User flag:** Log In Over Telnet → Capture the User Flag (Linux)
 - **Root/Admin:** Log In Over Telnet → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `25/110/143` — SMTP, POP3, IMAP
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** POP3 / IMAP Enumeration → DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
 
 ### `53` — DNS
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `69` — TFTP
 - **Foothold:** TFTP Write to Shell
-- **User flag:** TFTP Write to Shell → Hunt for Flags (Linux)
+- **User flag:** TFTP Write to Shell → Capture the User Flag (Linux)
 - **Root/Admin:** TFTP Write to Shell → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `79` — Finger
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `80/443` — HTTP, HTTPS
 - **Foothold:** Jenkins Exploitation
-- **User flag:** Jenkins Exploitation → Hunt for Flags (Windows)
-- **Root/Admin:** Jenkins Exploitation → DLL Search-Order / Phantom DLL Hijack
+- **User flag:** Jenkins Exploitation → Capture the User Flag (Windows)
+- **Root/Admin:** Jenkins Exploitation → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ### `88` — Kerberos  _(domain control is a milestone on the way to the flag)_
-- **Foothold:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Authenticated Remote Execution
+- **User flag:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Identify the Domain Controller and Domain → DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
 - **Domain control:** Own the Domain, Pass-the-Hash as Administrator → DCSync
 
 ### `111/2049` — NFS
 - **Foothold:** NFS Export to Shell
-- **User flag:** NFS no_root_squash → Hunt for Flags (Windows)
+- **User flag:** NFS Export to Shell → Capture the User Flag (Linux)
 - **Root/Admin:** NFS no_root_squash
 
 ### `135/139/445` — SMB, RPC  _(domain control is a milestone on the way to the flag)_
-- **Foothold:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Authenticated Remote Execution
+- **User flag:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Identify the Domain Controller and Domain → DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
 - **Domain control:** Own the Domain, Pass-the-Hash as Administrator → DCSync
 
 ### `161` — SNMP
-- **Foothold:** SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `389/636/3268` — LDAP, Global Catalog  _(domain control is a milestone on the way to the flag)_
-- **Foothold:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Authenticated Remote Execution
+- **User flag:** Anonymous LDAP Enumeration → AS-REP Roasting → Crack AS-REP Hashes → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Identify the Domain Controller and Domain → DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
 - **Domain control:** Own the Domain, Pass-the-Hash as Administrator → DCSync
 
 ### `500` — IKE, IPsec VPN
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `512/513/514` — r-services (rexec, rlogin, rsh)
 - **Foothold:** Log In via r-services (rlogin/rsh)
-- **User flag:** Log In via r-services (rlogin/rsh) → Hunt for Flags (Linux)
+- **User flag:** Log In via r-services (rlogin/rsh) → Capture the User Flag (Linux)
 - **Root/Admin:** Log In via r-services (rlogin/rsh)
 
 ### `873` — rsync
 - **Foothold:** Rsync Writable Module to Shell
-- **User flag:** Rsync Writable Module to Shell → Hunt for Flags (Linux)
+- **User flag:** Rsync Writable Module to Shell → Capture the User Flag (Linux)
 - **Root/Admin:** Rsync Writable Module to Shell → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `1433` — MSSQL
-- **Foothold:** MSSQL Login → MSSQL xp_cmdshell Command Execution → Stored Credential Hunting (Windows) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** MSSQL Login → MSSQL xp_cmdshell Command Execution → Hunt for Flags (Windows)
-- **Root/Admin:** MSSQL Login → MSSQL xp_cmdshell Command Execution → DLL Search-Order / Phantom DLL Hijack
+- **Foothold:** MSSQL Login → MSSQL xp_cmdshell Command Execution
+- **User flag:** MSSQL Login → MSSQL xp_cmdshell Command Execution → Capture the User Flag (Windows)
+- **Root/Admin:** MSSQL Login → MSSQL xp_cmdshell Command Execution → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ### `1521` — Oracle TNS
 - **Foothold:** Oracle TNS Enumeration & Login → Oracle to Command Execution
-- **User flag:** Oracle TNS Enumeration & Login → Oracle to Command Execution → Hunt for Flags (Linux)
-- **Root/Admin:** Oracle TNS Enumeration & Login → Oracle to Command Execution → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
+- **User flag:** Oracle Database TNS ODAT DBMS_SCHEDULER Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Oracle Database TNS ODAT DBMS_SCHEDULER Execution
 
 ### `3306` — MySQL, MariaDB
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution
+- **User flag:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `3389` — RDP
-- **Foothold:** BlueKeep RDP Pre-Auth RCE (CVE-2019-0708) → DPAPI Credential Decryption → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** BlueKeep RDP Pre-Auth RCE (CVE-2019-0708) → Hunt for Flags (Windows)
+- **Foothold:** BlueKeep RDP Pre-Auth RCE (CVE-2019-0708)
+- **User flag:** BlueKeep RDP Pre-Auth RCE (CVE-2019-0708) → Capture the User Flag (Windows)
 - **Root/Admin:** BlueKeep RDP Pre-Auth RCE (CVE-2019-0708)
 
 ### `5432` — PostgreSQL
 - **Foothold:** PostgreSQL Login → PostgreSQL to Command Execution
-- **User flag:** PostgreSQL Login → PostgreSQL to Command Execution → Hunt for Flags (Linux)
+- **User flag:** PostgreSQL Login → PostgreSQL to Command Execution → Capture the User Flag (Linux)
 - **Root/Admin:** PostgreSQL Login → PostgreSQL to Command Execution → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `5900` — VNC
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** VNC Enumeration → VNC Desktop to Shell
+- **User flag:** VNC Enumeration → VNC Desktop to Shell → Capture the User Flag (Linux)
+- **Root/Admin:** VNC Enumeration → VNC Desktop to Shell → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `5985/5986` — WinRM
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `6000` — X11
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `6379` — Redis
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Redis Rogue Server Master Replication RCE
+- **User flag:** Redis Rogue Server Master Replication RCE → Capture the User Flag (Linux)
+- **Root/Admin:** Redis Rogue Server Master Replication RCE → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `1099` — Java RMI
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution
+- **User flag:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `8009` — AJP (Tomcat)
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Tomcat AJP Ghostcat (CVE-2020-1938) → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution
+- **User flag:** Tomcat AJP Ghostcat (CVE-2020-1938) → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Tomcat AJP Ghostcat (CVE-2020-1938) → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `8080` — HTTP-alt (Tomcat, Jenkins)
 - **Foothold:** Jenkins Exploitation
-- **User flag:** Jenkins Exploitation → Hunt for Flags (Windows)
-- **Root/Admin:** Jenkins Exploitation → DLL Search-Order / Phantom DLL Hijack
+- **User flag:** Jenkins Exploitation → Capture the User Flag (Windows)
+- **Root/Admin:** Jenkins Exploitation → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ### `10000/20000` — Webmin, Usermin
 - **Foothold:** Jenkins Exploitation
-- **User flag:** Jenkins Exploitation → Hunt for Flags (Windows)
-- **Root/Admin:** Jenkins Exploitation → DLL Search-Order / Phantom DLL Hijack
+- **User flag:** Jenkins Exploitation → Capture the User Flag (Windows)
+- **Root/Admin:** Jenkins Exploitation → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ### `9200` — Elasticsearch
 - **Foothold:** Elasticsearch to Command Execution
-- **User flag:** Elasticsearch to Command Execution → Hunt for Flags (Linux)
-- **Root/Admin:** Jenkins Exploitation → DLL Search-Order / Phantom DLL Hijack
+- **User flag:** Elasticsearch to Command Execution → Capture the User Flag (Linux)
+- **Root/Admin:** Jenkins Exploitation → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ### `11211` — Memcached
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `27017` — MongoDB
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `1978` — WiFi Mouse Server
 - **Foothold:** Jenkins Exploitation
-- **User flag:** WiFi Mouse Server Unauthenticated RCE (EDB-50972) → Hunt for Flags (Windows)
-- **Root/Admin:** WiFi Mouse Server Unauthenticated RCE (EDB-50972) → DLL Search-Order / Phantom DLL Hijack
+- **User flag:** WiFi Mouse Server Unauthenticated RCE (EDB-50972) → Capture the User Flag (Windows)
+- **Root/Admin:** WiFi Mouse Server Unauthenticated RCE (EDB-50972) → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ### `3000-3003` — Aerospike
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Usermin Authenticated RCE (EDB-50234)
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Hunt for Flags (Windows)
-- **Root/Admin:** DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `8000/8787/5005` — JDWP (Java debug)
 - **Foothold:** JDWP Java Debug Port RCE
-- **User flag:** Jenkins Exploitation → Hunt for Flags (Windows)
-- **Root/Admin:** Jenkins Exploitation → DLL Search-Order / Phantom DLL Hijack
+- **User flag:** Jenkins Exploitation → Capture the User Flag (Windows)
+- **Root/Admin:** Jenkins Exploitation → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ### `8021` — FreeSWITCH Event Socket
 - **Foothold:** FreeSWITCH Event Socket Command Execution (EDB-47799)
-- **User flag:** FreeSWITCH Event Socket Command Execution (EDB-47799) → Hunt for Flags (Windows)
-- **Root/Admin:** FreeSWITCH Event Socket Command Execution (EDB-47799) → DLL Search-Order / Phantom DLL Hijack
+- **User flag:** FreeSWITCH Event Socket Command Execution (EDB-47799) → Capture the User Flag (Windows)
+- **Root/Admin:** FreeSWITCH Event Socket Command Execution (EDB-47799) → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ---
 

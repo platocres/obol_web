@@ -215,7 +215,49 @@
   function phaseTintClass(ph) { return 'ns-ph-' + (ph || 'enum'); }
   function fillTemplate(tpl) {
     if (!hasEng()) return tpl;
-    try { return L().fill(tpl, engFacts(), engParams()) || tpl; } catch (e) { return tpl; }
+    var facts = engFacts();
+    var params = Object.assign({}, engParams());
+    var act = (OBOL.store && OBOL.store.active) ? OBOL.store.active() : null;
+    if (OBOL.bind) {
+      var isMan = (typeof OBOL.bind.isManual === 'function') ? OBOL.bind.isManual() : !!(act && act.ui && act.ui.bind && act.ui.bind.manual);
+      if (isMan) {
+        var emptyFacts = (OBOL.facts && OBOL.facts.FactSet) ? new OBOL.facts.FactSet([]) : [];
+        try { return L().fill(tpl, emptyFacts, {}) || tpl; } catch (e) { return tpl; }
+      }
+      var effTarget = (typeof OBOL.bind.effectiveTarget === 'function') ? OBOL.bind.effectiveTarget() : ((act && act.params && (act.params.target || act.params.rhost)) || (OBOL.store && OBOL.store.activeTarget && OBOL.store.activeTarget()) || '');
+      if (effTarget) {
+        params.target = effTarget;
+        params.rhost = effTarget;
+      }
+      var effId = (typeof OBOL.bind.effectiveIdentity === 'function') ? OBOL.bind.effectiveIdentity() : null;
+      if (effId) {
+        if (effId.user) { params.user = effId.user; params.username = effId.user; }
+        var sec = effId.secret || effId.password || '';
+        if (sec) { params.secret = sec; params.password = sec; }
+        var nh = effId.nthash || effId.hash || '';
+        if (nh) { params.nthash = nh; params.hash = nh; }
+        if (effId.domain) { params.domain = effId.domain; }
+
+        if (OBOL.facts && OBOL.facts.FactSet) {
+          var synFact = {
+            kind: 'credential.available',
+            state: 'supported',
+            value: {
+              user: effId.user || '',
+              password: sec,
+              nthash: nh,
+              domain: effId.domain || ''
+            }
+          };
+          facts = new OBOL.facts.FactSet([synFact].concat((facts && facts.facts) || []));
+        }
+      }
+      var bPort = (act && act.ui && act.ui.bind && act.ui.bind.port);
+      if (bPort) {
+        params.port = bPort;
+      }
+    }
+    try { return L().fill(tpl, facts, params) || tpl; } catch (e) { return tpl; }
   }
   function cmdCard(entry) {
     var key = entry.template;
@@ -335,9 +377,9 @@
       }).join('');
       return '<div class="lib-tcol" style="--tac:' + hue + '"><h3 class="lib-tcol-h">' + esc(tacticName(tid)) + '</h3><div class="lib-tcol-cells">' + cells + '</div></div>';
     }).join('');
-    var detail = _aSel ? attackDetailHtml(_aSel, techs) : '<div class="lib-tdetail lib-tdetail-empty"><p>Select a technique to see the obol moves and commands behind it.</p></div>';
+    var detail = _aSel ? attackDetailHtml(_aSel, techs) : '<div class="lib-tdetail lib-tdetail-empty"><p>Select a technique to see the OBOL moves and commands behind it.</p></div>';
     return '<div class="lib-lens lib-lens-attack">'
-      + '<p class="lib-attack-intro">Every ATT&CK technique obol can perform, with the moves and commands behind each. This is what obol <em>can</em> do, the whole lineup. For what you have actually done on a box, see the Findings tab\'s matrix.</p>'
+      + '<p class="lib-attack-intro">Every ATT&CK technique OBOL can perform, with the moves and commands behind each. This is what OBOL <em>can</em> do, the whole lineup. For what you have actually done on a box, see the Findings tab\'s matrix.</p>'
       + '<div class="lib-attack-split"><div class="lib-matrix">' + cols + '</div>' + detail + '</div></div>';
   }
   function attackDetailHtml(code, techs) {
@@ -358,14 +400,14 @@
     return '<div class="lib-tdetail" style="--tac:' + hue + '">'
       + '<div class="lib-tdetail-head"><span class="lib-tdetail-id">' + esc(t.id) + '</span><h3 class="lib-tdetail-n">' + esc(t.name) + '</h3></div>'
       + '<div class="lib-ttags">' + tactics + '</div>'
-      + '<h4 class="lib-tdetail-sub">obol Moves (' + t.moves.length + ')</h4><ul class="lib-tmoves">' + moveList + '</ul>'
+      + '<h4 class="lib-tdetail-sub">OBOL Moves (' + t.moves.length + ')</h4><ul class="lib-tmoves">' + moveList + '</ul>'
       + link + '</div>';
   }
 
   // ════════════════════════════════════════════════════════════════════════════════════════════════
   // SHELL + RENDER
   // ════════════════════════════════════════════════════════════════════════════════════════════════
-  var INTRO = '<p class="lib-intro">Browse everything obol knows. No ranking, no engagement needed: the full lineup of moves and commands, mapped onto ATT&CK, yours to explore.</p>';
+  var INTRO = '<p class="lib-intro">Browse everything OBOL knows. No ranking, no engagement needed: the full lineup of moves and commands, mapped onto ATT&CK, yours to explore.</p>';
 
   function lensBody() {
     if (_lens === 'moves') return movesLensHtml();
@@ -379,6 +421,12 @@
     var lens = (ctx.args && ctx.args[0]) || 'moves';
     if (!LENSES.some(function (t) { return t.id === lens; })) lens = 'moves';
     _lens = lens;
+    if (ctx && ctx.query) {
+      var qm = /(?:^|&)q=([^&]*)/.exec(ctx.query);
+      if (qm && qm[1]) {
+        try { _mQ = decodeURIComponent(qm[1]); } catch (e) { _mQ = qm[1]; }
+      }
+    }
     return '<section class="library lib-lens-' + _lens + '">'
       + '<div class="lib-head"><h1 class="route-h1">Library</h1>' + INTRO + '</div>'
       + tabsHtml()

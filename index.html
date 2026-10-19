@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OBOL: Offensive Box Operations Ledger</title>
-  <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the obol engine: proof-gated next-move coach, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
-  <link rel="stylesheet" href="assets/css/obol.css?v=ae795a21">
+  <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the OBOL engine: proof-gated next-move coach, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
+  <link rel="stylesheet" href="assets/css/obol.css?v=a07aaf37">
   <script>
     /* Pre-paint skin: set before first paint so there is no flash. Tiny + synchronous. */
     (function () {
@@ -47,8 +47,7 @@
       </div>
       <nav class="mainnav" aria-label="Primary">
         <a data-nav href="#/study">Learn</a>
-        <a data-nav href="#/loadout">Loadout</a>
-        <a data-nav data-nav-match="home targets target evidence path map domain creds checklist findings history scoreboard report graph" href="#/home">Engagements</a>
+        <a data-nav data-nav-match="home loadout targets target evidence path map domain creds checklist findings history scoreboard report graph" href="#/home">Engagements</a>
         <a data-nav href="#/tools">Tools</a>
         <a data-nav href="#/workbench">Workbench</a>
         <a data-nav data-nav-match="stuck" href="#/library">Library</a>
@@ -56,9 +55,10 @@
         <a data-nav href="#/help">Help</a>
       </nav>
       <div id="tip-slot" class="tip-slot"><!-- calm tip feed (assets/ui/tips.js) --></div>
-      <button id="nav-search" class="nav-search" type="button" aria-label="Search commands" title="Search commands, tools, and moves (Ctrl+K)">
+      <button id="nav-search" class="nav-search" type="button" aria-label="Search commands" title="Search commands, tools, and moves (Ctrl + K)">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
         <span class="nav-search-l">Search</span>
+        <kbd class="nav-search-kbd">Ctrl + K</kbd>
       </button>
       <button id="nav-focus" class="nav-focus" type="button" aria-pressed="false" title="Focus mode: hide secondary panels for low-distraction work">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="3.2"/></svg>
@@ -136,56 +136,56 @@
   </div>
 
   <!-- Critical path only. Everything else is route-lazy (assets/ui/lazy.js). -->
-  <script defer src="assets/engine/facts.js?v=06d1ae20"></script>
-  <script defer src="assets/engine/phases.js?v=eeda3e49"></script>
-  <script defer src="assets/engine/pack.js?v=a8615b03"></script>
-  <script defer src="assets/engine/profile.js?v=513ff174"></script>
-  <script defer src="assets/engine/command.js?v=6e57ce2d"></script>
-  <script defer src="assets/engine/workspace.js?v=aac4515b"></script>
-  <script defer src="assets/engine/vfs.js?v=196287a4"></script>
-  <script defer src="assets/engine/loot.js?v=9d5ea616"></script>
-  <script defer src="assets/engine/playbook.js?v=ecb8ce1f"></script>
-  <script defer src="assets/engine/chain.js?v=4ea821c5"></script>
-  <script defer src="data/findings-catalog.js?v=beb70717"></script>
-  <script defer src="data/narratives.js?v=4f659491"></script>
-  <script defer src="assets/engine/findings.js?v=827193dc"></script>
-  <script defer src="data/packs-bundle.js?v=526279dd"></script>
-  <script defer src="data/tools-install.js?v=74fa506b"></script>
-  <script defer src="data/tunnels.js?v=6b564048"></script>
-  <script defer src="data/pivot-troubleshooter.js?v=fa03f312"></script>
-  <script defer src="data/field-notes.js?v=c18d843e"></script>
-  <script defer src="data/tool-staging.js?v=05274935"></script>
-  <script defer src="assets/engine/pivotdoctor.js?v=9206c25f"></script>
-  <script defer src="assets/engine/packs.js?v=6453cae2"></script>
-  <script defer src="data/gtfobins.js?v=a5e96afc"></script>
-  <script defer src="assets/engine/resolve.js?v=d36398b5"></script>
-  <script defer src="assets/ui/util.js?v=1e24227e"></script>
-  <script defer src="assets/ui/icons.js?v=7a2476f7"></script>
-  <script defer src="assets/ui/mobile.js?v=df656661"></script>
-  <script defer src="assets/ui/factpick.js?v=a25af38b"></script>
-  <script defer src="assets/ui/store.js?v=d7badf7b"></script>
-  <script defer src="assets/ui/credbar.js?v=4d0fbe24"></script>
-  <script defer src="data/tips.js?v=b19cf9e5"></script>
-  <script defer src="assets/ui/tips.js?v=7ccc8da3"></script>
-  <script defer src="assets/ui/ctxbar.js?v=a315dff5"></script>
-  <script defer src="assets/ui/quickpaste.js?v=a4681c34"></script>
-  <script defer src="assets/ui/chainview.js?v=52d5576a"></script>
-  <script defer src="assets/ui/graphview.js?v=e6b3f8e5"></script>
-  <script defer src="assets/ui/graphtip.js?v=e692bd3e"></script>
-  <script defer src="assets/ui/ingest.js?v=005b02f7"></script>
-  <script defer src="assets/ui/router.js?v=0aaae52a"></script>
-  <script defer src="assets/ui/lazy.js?v=1fef5a91"></script>
-  <script defer src="assets/ui/palette.js?v=f2e8499f"></script>
-  <script defer src="assets/ui/routes/home.js?v=ea3ea893"></script>
-  <script defer src="assets/ui/routes/targets.js?v=e1159007"></script>
-  <script defer src="assets/ui/routes/evidence.js?v=ba0cb04e"></script>
-  <script defer src="assets/ui/routes/path.js?v=9a22ef4a"></script>
-  <script defer src="assets/ui/boot.js?v=171b539d"></script>
+  <script defer src="assets/engine/facts.js?v=c0b85001"></script>
+  <script defer src="assets/engine/phases.js?v=c526e4c2"></script>
+  <script defer src="assets/engine/pack.js?v=31d8663f"></script>
+  <script defer src="assets/engine/profile.js?v=2179856c"></script>
+  <script defer src="assets/engine/command.js?v=e048c149"></script>
+  <script defer src="assets/engine/workspace.js?v=df6b7730"></script>
+  <script defer src="assets/engine/vfs.js?v=3c165f6e"></script>
+  <script defer src="assets/engine/loot.js?v=60db5fe5"></script>
+  <script defer src="assets/engine/playbook.js?v=73750f11"></script>
+  <script defer src="assets/engine/chain.js?v=dc5a0f40"></script>
+  <script defer src="data/findings-catalog.js?v=3cae45e2"></script>
+  <script defer src="data/narratives.js?v=f5205094"></script>
+  <script defer src="assets/engine/findings.js?v=e6f64d28"></script>
+  <script defer src="data/packs-bundle.js?v=c138b43f"></script>
+  <script defer src="data/tools-install.js?v=a2540e11"></script>
+  <script defer src="data/tunnels.js?v=d01a63d8"></script>
+  <script defer src="data/pivot-troubleshooter.js?v=ad994ee0"></script>
+  <script defer src="data/field-notes.js?v=51be2efd"></script>
+  <script defer src="data/tool-staging.js?v=85818c47"></script>
+  <script defer src="assets/engine/pivotdoctor.js?v=ec9d2e5a"></script>
+  <script defer src="assets/engine/packs.js?v=a90dc37a"></script>
+  <script defer src="data/gtfobins.js?v=ff786d3f"></script>
+  <script defer src="assets/engine/resolve.js?v=8974eeaa"></script>
+  <script defer src="assets/ui/util.js?v=fe55474c"></script>
+  <script defer src="assets/ui/icons.js?v=9fffb690"></script>
+  <script defer src="assets/ui/mobile.js?v=912b45f0"></script>
+  <script defer src="assets/ui/factpick.js?v=012097b2"></script>
+  <script defer src="assets/ui/store.js?v=ba1adc4a"></script>
+  <script defer src="assets/ui/credbar.js?v=a7b99ba0"></script>
+  <script defer src="data/tips.js?v=d9fb019f"></script>
+  <script defer src="assets/ui/tips.js?v=869d5db4"></script>
+  <script defer src="assets/ui/ctxbar.js?v=19884c54"></script>
+  <script defer src="assets/ui/quickpaste.js?v=b547656b"></script>
+  <script defer src="assets/ui/chainview.js?v=3b7e3f4c"></script>
+  <script defer src="assets/ui/graphview.js?v=2cd81edc"></script>
+  <script defer src="assets/ui/graphtip.js?v=bb9b0267"></script>
+  <script defer src="assets/ui/ingest.js?v=2da12667"></script>
+  <script defer src="assets/ui/router.js?v=a6127913"></script>
+  <script defer src="assets/ui/lazy.js?v=e1ac1dc2"></script>
+  <script defer src="assets/ui/palette.js?v=5d1537c0"></script>
+  <script defer src="assets/ui/routes/home.js?v=bbf42297"></script>
+  <script defer src="assets/ui/routes/targets.js?v=69d3e280"></script>
+  <script defer src="assets/ui/routes/evidence.js?v=f027569e"></script>
+  <script defer src="assets/ui/routes/path.js?v=fca23139"></script>
+  <script defer src="assets/ui/boot.js?v=17067804"></script>
 
   <!-- Presentation-only, loaded after the critical path so the boot budget is untouched:
        motion background, coin bursts on genuine proof, and the appearance settings. -->
-  <script defer src="assets/ui/backdrop.js?v=dbf8e955"></script>
-  <script defer src="assets/ui/coin.js?v=43c60e5a"></script>
-  <script defer src="assets/ui/settings.js?v=4c31bd87"></script>
+  <script defer src="assets/ui/backdrop.js?v=02051310"></script>
+  <script defer src="assets/ui/coin.js?v=84066fee"></script>
+  <script defer src="assets/ui/settings.js?v=917eea55"></script>
 </body>
 </html>

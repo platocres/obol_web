@@ -42,10 +42,25 @@ REQUIRED.forEach(function (r) { ok(ids[r], 'surface "' + r + '" has a Help entry
 ['findings-list', 'findings-attack', 'findings-defensive', 'findings-compliance', 'findings-cves']
   .forEach(function (v) { ok(ids[v], 'Findings sub-view "' + v + '" has a Help entry'); });
 
-// every section carries What text; glossary + quickstart populated
-ok(H.sections.every(function (s) { return s.what && s.what.length > 10; }), 'every top section has What text');
-ok(Array.isArray(H.glossary) && H.glossary.length >= 8 && H.glossary.every(function (g) { return g.term && g.def; }), 'glossary populated (term + def)');
-ok(Array.isArray(H.quickstart) && H.quickstart.length >= 3 && H.quickstart.every(function (q) { return q.goto && q.cta; }), 'quick-start steps have a target + CTA');
+// every section carries What, When, Tip, and href; glossary + quickstart populated
+ok(H.sections.every(function (s) { return s.what && s.when && s.tip && (s.href || s.goto); }), 'every top section has what, when, tip, and href');
+ok(Array.isArray(H.glossary) && H.glossary.length >= 20 && H.glossary.every(function (g) { return g.term && g.def; }), 'glossary populated with 20+ terms (term + def)');
+
+// verify required OSCP / Obol methodology glossary terms
+var REQUIRED_TERMS = [
+  'Access Epoch', 'Blocker / Field Doctor', 'Cruise Batch', 'Earned Token',
+  'Frontier', 'Goal Distance', 'Keystone Move', 'Locus (Remote / On-Host)',
+  'Proof Discipline', 'Settled Command', 'Speculative Move', 'Station'
+];
+var glossaryTerms = {}; H.glossary.forEach(function (g) { glossaryTerms[g.term] = 1; });
+REQUIRED_TERMS.forEach(function (t) { ok(glossaryTerms[t], 'glossary includes term "' + t + '"'); });
+
+// quick-start 4 steps
+ok(Array.isArray(H.quickstart) && H.quickstart.length === 4 && H.quickstart.every(function (q) { return q.goto && q.cta; }), 'quick-start steps populated (4 steps with target + CTA)');
+var expectedSteps = ['Set Your Loadout', 'Create An Engagement & Target', 'Run & Paste Your First Scan', 'Follow Next Steps To Proof'];
+expectedSteps.forEach(function (title, i) {
+  ok(H.quickstart[i] && H.quickstart[i].title === title, 'quick-start step ' + (i + 1) + ' is "' + title + '"');
+});
 ok(typeof H.charonIntro === 'string' && /Charon/.test(H.charonIntro), 'Charon intro present');
 
 // house style: no em or en dashes anywhere in the authored content

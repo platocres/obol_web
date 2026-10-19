@@ -1,7 +1,7 @@
 /*!
- * obol engine — parsers/services.js
- * Faithful JS port of 
- * Generic service metadata: HTTP, SSH, FTP, SNMP — reachability/fingerprints only.
+ * obol engine - parsers/services.js
+ * Faithful JS port of
+ * Generic service metadata: HTTP, SSH, FTP, SNMP - reachability/fingerprints only.
  */
 (function (root) {
   'use strict';
@@ -12,9 +12,15 @@
 
   function _parse_http_metadata(text, ws, source, facts) {
     var h = 'host:' + ws.target;
-    C._add_os_from_text(text, ws, source, facts, 'http', 'medium', false);
+    C._add_os_from_text(text, ws, source, facts, 'http', 'medium', true);
     var statusValues = [];
     reAll(C._HTTP_STATUS_RE, text).forEach(function (m) {
+      var value = { status: parseInt(m.groups.status, 10) };
+      var reason = (m.groups.reason || '').trim();
+      if (reason) value.reason = reason;
+      statusValues.push(value);
+    });
+    reAll(/^https?:\/\/\S+\s+\[(?<status>\d{3})(?:\s+(?<reason>[^\]\r\n]+))?\]/im, text).forEach(function (m) {
       var value = { status: parseInt(m.groups.status, 10) };
       var reason = (m.groups.reason || '').trim();
       if (reason) value.reason = reason;
@@ -33,17 +39,24 @@
       else if (key === 'location') redirects[value] = true;
       else if (key === 'content-type') contentTypes[value] = true;
     });
+    reAll(/\bHTTPServer\[[^\]]*\]\[(?<srv>[^\]\r\n]+)\]/i, text).forEach(function (m) {
+      if (m.groups && m.groups.srv && m.groups.srv.trim()) servers[m.groups.srv.trim()] = true;
+    });
     reAll(C._WHATWEB_PLUGIN_RE, text).forEach(function (m) {
       var name = m.groups.name.trim(), value = m.groups.value.trim();
       var nl = name.toLowerCase();
       if (['title', 'ip', 'country', 'email', 'summary'].indexOf(nl) >= 0) return;
       if (nl === 'httpserver' || nl === 'server') servers[value] = true;
+      else if (nl === 'redirectlocation') redirects[value] = true;
       else tech.push({ name: name, value: value });
     });
     var titleMatch = /\bTitle\[(?<title>[^\]\r\n]+)\]/.exec(text);
     if (titleMatch && titleMatch.groups.title.trim()) _add(facts, mkFact('web.title', h, { titles: [titleMatch.groups.title.trim()] }, S, source));
     var svHeaders = C.uniqueSortedCI(Object.keys(servers)).filter(function (hdr) { return !(C._isNonWebServerHeader && C._isNonWebServerHeader(hdr)); });
-    if (svHeaders.length) _add(facts, mkFact('web.server', h, { headers: svHeaders.slice(0, 10) }, S, source));
+    if (svHeaders.length) {
+      _add(facts, mkFact('http.reachable', h, { tool: 'http-client' }, S, source));
+      _add(facts, mkFact('web.server', h, { headers: svHeaders.slice(0, 10) }, S, source));
+    }
     if (Object.keys(redirects).length) _add(facts, mkFact('http.redirect', h, { locations: C.uniqueSortedCI(Object.keys(redirects)).slice(0, 10) }, S, source));
     if (Object.keys(contentTypes).length) C.uniqueSortedCI(Object.keys(contentTypes)).forEach(function (item) { tech.push({ name: 'content-type', value: item }); });
     if (tech.length) {
@@ -62,7 +75,7 @@
   function _parse_ssh_banner(text, ws, source, facts) {
     var banners = C.uniqueSortedCI(reAll(C._SSH_BANNER_RE, text).map(function (m) { return m[0].trim(); }));
     if (!banners.length) return;
-    C._add_os_from_text(banners.join('\n'), ws, source, facts, 'ssh', 'medium', false);
+    C._add_os_from_text(banners.join('\n'), ws, source, facts, 'ssh', 'medium', true);
     _add(facts, mkFact('ssh.reachable', 'host:' + ws.target, { tool: 'banner' }, S, source));
     _add(facts, mkFact('ssh.banner', 'host:' + ws.target, { banners: banners.slice(0, 10) }, S, source));
   }
@@ -87,28 +100,32 @@
     var writeOk = reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text);
     if (!banners.length && !loginSuccess && !writeOk) return;
     var h = 'host:' + ws.target;
+    C._add_os_from_text(text, ws, source, facts, 'ftp', 'medium', true);
     _add(facts, mkFact('ftp.reachable', h, { tool: 'ftp-client' }, S, source));
     if (banners.length) _add(facts, mkFact('ftp.banner', h, { banners: C.uniqueSortedCI(banners).slice(0, 10) }, S, source));
-    var isAnon = /\banonymous\b/i.test(command) || /\banonymous\b/i.test(text) || loginSuccess;
-    if (loginSuccess && /\banonymous\b/i.test(command)) _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'ftp-client' }, S, source));
+    var anonInText = /\bName\s*\([^)]*\):\s*(?:anonymous|ftp)\b|\bUSER\s+(?:anonymous|ftp)\b|331[\s-]+(?:Anonymous|Guest|Password required for anonymous)\b|230[\s-]+(?:Anonymous|Guest)\b|\bAnonymous FTP login allowed\b/i.test(text);
+    var isAnon = /\banonymous\b/i.test(command) || anonInText;
+    if (loginSuccess && isAnon) _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'ftp-client' }, S, source));
     if (writeOk) _add(facts, mkFact('ftp.anon_write', h, { tool: 'ftp-client', anonymous: isAnon }, S, source));
   }
   C._parse_ftp_output = _parse_ftp_output;
 
-  // LanManager users table (enterprises.77.1.2.25.1.1.*): each STRING is a local/SMB account name —
+  // LanManager users table (enterprises.77.1.2.25.1.1.*): each STRING is a local/SMB account name -
   // the spray list an SNMP read hands you for free. A running-process command line
-  // (hrSWRunParameters / hrSWRunName) may carry a password inline → a candidate cred.
+  // (hrSWRunParameters / hrSWRunName) may carry a password inline -> a candidate cred.
   var _SNMP_USER_RE = /(?:^|\D)77\.1\.2\.25\.1\.1[.\d]*\s*=\s*STRING:\s*"?(?<user>[^"\r\n]+?)"?\s*$/gim;
-  var _SNMP_RUNPARAM_RE = /hrSWRun(?:Parameters|Name)[.\d]*\s*=\s*STRING:\s*"?(?<val>[^"\r\n]+)/gi;
+  var _SNMP_RUNPARAM_RE = /(?:hrSWRun(?:Parameters|Name)|(?:iso|\.?1)\.3\.6\.1\.2\.1\.25\.4\.2\.1\.[45])[.\d]*\s*=\s*STRING:\s*"?(?<val>[^"\r\n]+)/gi;
   var _SNMP_PROC_PW_RE = /(?:-p|--password|--pass|pwd|passwd)[=\s]+['"]?(?<pw>[^\s'"]{3,})/i;
   var _SNMP_PROC_USER_RE = /(?:-u|--user(?:name)?)[=\s]+['"]?(?<user>[^\s'"]{2,})/i;
+  var _ONESIXTYONE_RE = /^\s*\d{1,3}(?:\.\d{1,3}){3}\s+\[(?<community>[A-Za-z0-9_.\-@!$%^&+=]{1,64})\]\s+(?<description>\S[^\r\n]*)/m;
 
   function _parse_snmp_output(text, ws, command, source, facts) {
     var lowered = text.toLowerCase();
-    if (['timeout', 'no response from', 'authorizationerror', 'authentication failure'].some(function (m) { return lowered.indexOf(m) >= 0; })) return;
+    var hasMibLines = /(?:snmpv2-mib|host-resources-mib|if-mib|ip-mib|tcp-mib|udp-mib|iso\.3\.6\.1|\.1\.3\.6\.1)[^\r\n]{0,120}=\s*(?:string|integer|oid|ipaddress|timeticks|counter\d*|gauge\d*|hex-string|bits):/i.test(text) || _ONESIXTYONE_RE.test(text);
+    if (!hasMibLines && ['timeout', 'no response from', 'authorizationerror', 'authentication failure'].some(function (m) { return lowered.indexOf(m) >= 0; })) return;
     if (lowered.indexOf('snmpv2-mib::') < 0 && lowered.indexOf('= string:') < 0
         && lowered.indexOf('iso.3.6.1') < 0 && text.indexOf('.1.3.6.1') < 0
-        && !/\[[^\]]+\]\s+\S/.test(text)) return;
+        && !_ONESIXTYONE_RE.test(text)) return;
     var h = 'host:' + ws.target, value = {};
     [['description', C._SNMP_SYSDESCR_RE], ['name', C._SNMP_SYSNAME_RE], ['location', C._SNMP_SYSLOCATION_RE], ['contact', C._SNMP_SYSCONTACT_RE]].forEach(function (pair) {
       var m = reSearch(pair[1], text);
@@ -116,7 +133,7 @@
     });
     var community = C._command_arg(command, ['-c', '--community']);
     if (!community) {
-      var one = /\[(?<community>[^\]]+)\]\s+(?<description>.+)/.exec(text);
+      var one = _ONESIXTYONE_RE.exec(text);
       if (one) {
         community = one.groups.community.trim();
         if (value.description === undefined) value.description = one.groups.description.trim();
@@ -153,11 +170,11 @@
   }
   C._parse_snmp_output = _parse_snmp_output;
 
-  // SQLite dump (`sqlite3 <db> .dump`) → credential.candidate. The TERMINAL path's mirror of the
-  // native ingest_sqlite reader: obol types `curl … && sqlite3 db .dump`, and the captured
+  // SQLite dump (`sqlite3 <db> .dump`) -> credential.candidate. The TERMINAL path's mirror of the
+  // native ingest_sqlite reader: obol types `curl ... && sqlite3 db .dump`, and the captured
   // INSERT/CREATE-TABLE stream is parsed here so a leaked app store still yields logins.
-  var _SQLD_CREATE_RE = /CREATE TABLE\s+["`\[]?(?<t>\w+)["`\]]?\s*\((?<cols>.+)\)/gi;
-  var _SQLD_INSERT_RE = /INSERT INTO\s+["`\[]?(?<t>\w+)["`\]]?\s*(?:\([^)]*\))?\s*VALUES\s*\((?<vals>.+)\)\s*;/gi;
+  var _SQLD_CREATE_RE = /CREATE TABLE\s+["`\[]?(?<t>\w+)["`\]]?\s*\((?<cols>[^\r\n]{1,4000})\)/gi;
+  var _SQLD_INSERT_RE = /INSERT INTO\s+["`\[]?(?<t>\w+)["`\]]?\s*(?:\([^)\r\n]{0,1000}\))?\s*VALUES\s*\((?<vals>[^\r\n]{1,4000})\)\s*;/gi;
   var _SQLD_USER_COL = /^(?:user(?:name)?|uname|login|email|account|name|admin)$/i;
   var _SQLD_SECRET_COL = /^(?:pass(?:word|wd)?|pwd|secret|hash|passhash|pw)$/i;
   var _SQLD_HASH_RE = /^(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{56}|[0-9a-f]{64}|[0-9a-f]{128}|\$(?:2[aby]|1|5|6|y)\$[^\s]+)$/i;

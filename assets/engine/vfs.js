@@ -1,19 +1,19 @@
 /*!
- * obol engine — vfs.js — the VIRTUAL WORKSPACE.
+ * obol engine - vfs.js - the VIRTUAL WORKSPACE.
  * obol can't read the operator's Kali disk, but it knows a lot about what should be on it: the folder
  * skeleton it handed them (workspace.scaffold), the output path of every command it generated
  * (nmap -oN scans/…, a roast --asreproast loot/…, tee …), the flag files it tells them to read
  * (cat local.txt), and the content of whatever they pasted back. This module reconstructs that as a
  * file tree so the engagement screen can show the workspace filling up over time. It is a MODEL, not a
- * mirror — each file is one of a few honest states:
- *   captured   — obol has the content (pasted/attached output) and the facts it proved.
- *   expected   — obol handed OR is right now suggesting a command that writes this file; it assumes the
+ * mirror - each file is one of a few honest states:
+ *   captured   - obol has the content (pasted/attached output) and the facts it proved.
+ *   expected   - obol handed OR is right now suggesting a command that writes this file; it assumes the
  *                operator is probably creating it, but hasn't received the content. Two origins:
- *                  'ran'       — the operator already dispatched the command (activity ledger).
- *                  'suggested' — the coach is recommending the move now; the file is anticipated.
+ *                  'ran'       - the operator already dispatched the command (activity ledger).
+ *                  'suggested' - the coach is recommending the move now; the file is anticipated.
  *                An expected file flips `confirmed` true once a later paste USES the path (proving it
  *                really landed on disk), and flips to captured the moment obol receives its content.
- *   scaffolded — an empty folder from the skeleton, nothing in it yet.
+ *   scaffolded - an empty folder from the skeleton, nothing in it yet.
  * Pure + self-contained (window / worker / node). Suggested moves are read from the live engine when
  * present; when they are not (tests, worker), caller may pass opts.suggested instead.
  */
@@ -29,28 +29,32 @@
   function outputPaths(cmd) {
     cmd = String(cmd || '');
     var out = [], m;
+    var isNxcOrSsh = /\b(?:nxc|netexec|crackmapexec|cme|ssh|scp|sftp|mount)\b/i.test(cmd);
     var RES = [
       /-o[NXGoA]\s+(\S+)/g,                       // nmap -oN/-oX/-oG/-oA (and -o base)
       /--?(?:outfile|output|outputfile|out)[=\s]+(\S+)/g,
       /--asreproast\s+(\S+)/g,
       /--kerberoasting\s+(\S+)/g,
       /\/outfile:(\S+)/g,                          // Rubeus /outfile:x
-      /(?:^|\s)-o\s+(\S+)/g,                        // gobuster/ffuf/nikto/curl -o file (nmap -oN has no space, so no clash)
       /(?:^|\s)tee\s+(?:-a\s+)?(\S+)/g,
-      /(?:^|[^0-9>])>>?\s*(\S+)/g,                 // > file / >> file (not 2>… fd-redirect)
+      /(?:^|[^0-9>])>>?\s*(\S+)/g,                 // > file / >> file (not 2>... fd-redirect)
     ];
+    if (!isNxcOrSsh) {
+      RES.push(/(?:^|\s)-o\s+(\S+)/g);             // gobuster/ffuf/nikto/curl -o file (skip nxc -M -o KEY=VAL)
+    }
     RES.forEach(function (re) {
       while ((m = re.exec(cmd)) !== null) {
         var p = m[1];
         if (!p || p === '-' || p === '&1' || p === '&2' || /^\/dev\/(null|stdout|stderr)$/.test(p) || /^[&|]/.test(p)) continue;
         p = p.replace(/['";]+$/, '');
+        if (p.indexOf('=') >= 0 || /^(?:TARGET|DOWNLOAD_FLAG|LISTENER|ACTION|MAX_FILE_SIZE|OUTPUT_FOLDER|PATTERN)/i.test(p)) continue;
         if (p && out.indexOf(p) === -1) out.push(p);
       }
     });
     return out;
   }
 
-  // The flag / proof files a command READS or is told to grab: `cat local.txt`, `type …\proof.txt`,
+  // The flag / proof files a command READS or is told to grab: `cat local.txt`, `type ...\proof.txt`,
   // the flag-hunt spider, or an unresolved {{flag_path_*}} token. These are the OSCP objective files, // obol tells the operator to read them, assumes they are creating/saving them, and confirms the flag
   // from the paste that follows. Returns canonical proof-folder paths.
   // ONLY the exact objective filenames (optionally a digit, e.g. local1.txt), never `users.txt`,
@@ -67,7 +71,7 @@
       var mm = tok.match(FLAG_TOKEN);
       if (mm) push(mm[1]);
     });
-    // unresolved flag-path tokens → canonical proof files, so an anticipated flag still shows.
+    // unresolved flag-path tokens -> canonical proof files, so an anticipated flag still shows.
     if (/\{\{\s*flag_path_local\s*\}\}/.test(cmd) && !out.some(function (p) { return /(local|user)\.txt$/i.test(p); })) push('local.txt');
     if (/\{\{\s*flag_path_root\s*\}\}/.test(cmd) && !out.some(function (p) { return /(root|proof)\.txt$/i.test(p); })) push('proof.txt');
     return out;
@@ -92,29 +96,34 @@
   }
 
   function toolOf(cmd) {
-    var t = String(cmd || '').trim().split(/\s+/)[0] || '';
+    var parts = String(cmd || '').trim().split(/\s+/);
+    var t = parts[0] || '';
+    if (/^[a-z0-9]+(?:-[a-z0-9]+)+$/i.test(t) && parts[1] && !/^[-$]/.test(parts[1])) {
+      t = parts[1];
+    }
     t = t.split('/').pop().replace(/\.(py|exe|sh)$/, '');
     return t || 'tool';
   }
 
   // The moves the coach is recommending RIGHT NOW, filled and reduced to {command,title,tool}. Read
   // from the live engine only for the active engagement (nextActions ranks against its FactSet). Any
-  // gap in the engine — or a non-active engagement — yields [], so the model degrades to run-only.
+  // gap in the engine - or a non-active engagement - yields [], so the model degrades to run-only.
   function liveSuggestions(eng) {
     try {
       if (!OBOL.pack || !OBOL.packs || !OBOL.command || !OBOL.store || !OBOL.phases) return [];
       if (!OBOL.store.activeId || OBOL.store.activeId() !== eng.id) return [];
       var facts = OBOL.store.factSet();
       var pack = OBOL.packs.actions();
-      var focus = (OBOL.profile && eng.profile) ? OBOL.profile.machineFocus(eng.profile.machine_type) : [];
-      var ranked = OBOL.pack.nextActions(facts, pack, { focusPrefixes: focus });
-      // only the on-flow frontier — the moves obol is actually telling the operator to run next.
+      var focus = (OBOL.profile && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
+      var flagsOn = (!OBOL.profile || !OBOL.profile.hasFlags || !eng) ? true : OBOL.profile.hasFlags(eng.profile);
+      var ranked = OBOL.pack.nextActions(facts, pack, { focusPrefixes: focus, noFlags: !flagsOn });
+      // only the on-flow frontier - the moves obol is actually telling the operator to run next.
       var onFlow = ranked.filter(function (a) { return OBOL.phases.prematurity(a, facts) === 0; }).slice(0, 8);
       var dirs = (OBOL.workspace && OBOL.workspace.dirs) ? OBOL.workspace.dirs(eng) : { root: '.' };
       var out = [];
       onFlow.forEach(function (a) {
         var variants = OBOL.command.fillAll(a, facts, { params: eng.params || {}, profile: eng.profile, workspace: dirs });
-        var v = variants[0]; // the preferred variant — the next thing to do
+        var v = variants.filter(function (x) { return !x.gated; })[0] || variants[0]; // prefer ungated variant
         if (v) out.push({ command: v.filled || v.run || '', title: a.title || '', tool: v.tool || a.tool || '', id: a.id });
       });
       return out;
@@ -125,9 +134,12 @@
   // (values are only meaningful for the engagement currently loaded in the store).
   function activeFactset(eng) {
     try { if (OBOL.store && OBOL.store.activeId && OBOL.store.activeId() === eng.id && OBOL.store.factSet) return OBOL.store.factSet(); } catch (e) {}
+    if (eng && Array.isArray(eng.facts)) {
+      return (OBOL.facts && OBOL.facts.FactSet) ? new OBOL.facts.FactSet(eng.facts) : eng.facts;
+    }
     return null;
   }
-  // Index a FactSet (or a raw fact array) by kind → [{scope, value, at}], SUPPORTED facts only.
+  // Index a FactSet (or a raw fact array) by kind -> [{scope, value, at}], SUPPORTED facts only.
   function indexFacts(factset) {
     var idx = {};
     if (!factset) return idx;
@@ -136,7 +148,9 @@
     arr.forEach(function (f) {
       if (!f || !f.kind) return;
       if (SUP != null && f.state != null && f.state !== SUP) return;
-      (idx[f.kind] = idx[f.kind] || []).push({ scope: f.scope || '', value: f.value || {}, at: f.created_at || 0 });
+      var rawAt = f.created_at || f.at || 0;
+      var atMs = (typeof rawAt === 'number' && rawAt > 0 && rawAt < 1e11) ? Math.round(rawAt * 1000) : (Number(rawAt) || 0);
+      (idx[f.kind] = idx[f.kind] || []).push({ scope: f.scope || '', value: f.value || {}, at: atMs });
     });
     return idx;
   }
@@ -146,6 +160,8 @@
     eng = eng || {}; opts = opts || {};
     var dirs = (OBOL.workspace && OBOL.workspace.dirs) ? OBOL.workspace.dirs(eng) : { root: '.' };
     var configured = !!(OBOL.workspace && OBOL.workspace.isConfigured && OBOL.workspace.isConfigured(eng));
+    var scandir = dirs.scandir || dirs.scans || 'scans';
+    var lootdir = dirs.lootdir || dirs.loot || 'loot';
     var proofdir = dirs.proofdir || dirs.proof || 'proof';
     var byPath = {}; // path -> file
     function file(path, patch) {
@@ -162,11 +178,11 @@
     }
 
     var flagCaptured = false; // did any paste actually prove a flag? then anticipated flag files are real.
-    var referenced = {};      // basenames any activity command touched — used to CONFIRM expected files.
+    var referenced = {};      // basenames any activity command touched - used to CONFIRM expected files.
 
     // Fact VALUES, so a file can state what it actually proved ("5 open ports", "NTDS: 15 accounts").
     // Pull the active FactSet (or one the caller passed) and index it by kind; matched to a file by the
-    // producing activity's kinds + scope + time. Absent → files fall back to generic counts, never guesses.
+    // producing activity's kinds + scope + time. Absent -> files fall back to generic counts, never guesses.
     var factset = opts.facts || activeFactset(eng);
     var factIdx = indexFacts(factset);
     // best value for a produced kind on a given scope near a time: prefer scope match, then time proximity.
@@ -186,6 +202,25 @@
         var v = valueFor(k, a.scope || (a.target ? ('host:' + a.target) : ''), a.at);
         if (v && typeof v === 'object') { f.valMap = f.valMap || {}; f.valMap[k] = v; }
       });
+    }
+
+    function recordCapturedArtifact(relPath, folder, a, toolOverride) {
+      var p = /[\/\\]/.test(relPath) ? relPath : (OBOL.workspace ? OBOL.workspace.join(folder, relPath) : folder + '/' + relPath);
+      var f = file(p);
+      f.folder = folderOf(p) !== 'other' ? folderOf(p) : folder;
+      f.command = f.command || (a && a.command) || '';
+      f.tool = toolOverride || f.tool || toolOf((a && a.command) || '');
+      f.origin = 'ran';
+      f.status = 'captured';
+      if (a && (a.at || 0) > f.at) f.at = a.at || 0;
+      if (a && a.produced) {
+        a.produced.forEach(function (k) { if (f.facts.indexOf(k) === -1) f.facts.push(k); });
+      }
+      var content = (a && typeof a.stdout === 'string' && a.stdout.trim()) ? a.stdout : '';
+      if (content && content.length > f.output.length) f.output = content;
+      if (a) attachValues(f, a);
+      referenced[baseName(p)] = true;
+      return f;
     }
 
     // 1) files implied by the commands the operator actually ran (the activity ledger).
@@ -218,6 +253,52 @@
         if (provedFlag && content) { f.status = 'captured'; if (content.length > f.output.length) f.output = content; }
         else if (provedFlag) { f.status = 'captured'; }
       });
+
+      // 1b) Cruise stage logs, BloodHound archives, and Cruise step files created on disk during Cruise execution.
+      var tIp = a.target || ((a.scope && a.scope.indexOf('host:') === 0) ? a.scope.slice(5) : '') || ((eng.params && eng.params.target) || '');
+      var actId = a.action_id || (String(a.command || '').trim().split(/\s+/)[0] || '');
+      var logRe = /\b(?:scans\/)?(obol-stage[1-5]-\d{8}-\d{6}\.log)\b/g, lm;
+      while ((lm = logRe.exec((a.command || '') + '\n' + content)) !== null) {
+        recordCapturedArtifact(scandir + '/' + lm[1], 'scans', a, 'cruise');
+      }
+      var bhRe = /\b(\d{8,14}_bloodhound\.zip)\b/g, bm;
+      while ((bm = bhRe.exec(content)) !== null) {
+        recordCapturedArtifact(lootdir + '/' + bm[1], 'loot', a, 'bloodhound-python');
+      }
+      if (tIp && (content || produced.length)) {
+        if (actId === 'nmap-quick' && produced.indexOf('ports.open') !== -1) {
+          recordCapturedArtifact(scandir + '/nmap-ports-' + tIp + '.gnmap', 'scans', a, 'nmap');
+          recordCapturedArtifact(scandir + '/nmap-svc-' + tIp + '.nmap', 'scans', a, 'nmap');
+          recordCapturedArtifact(scandir + '/nmap-svc-' + tIp + '.xml', 'scans', a, 'nmap');
+        } else if (actId === 'nmap-udp-top' && content) {
+          recordCapturedArtifact(scandir + '/nmap-udp-' + tIp + '.nmap', 'scans', a, 'nmap');
+        }
+        if (produced.indexOf('ad.user_list') !== -1 && /^(?:ad-anon-ldap-enum|smb-rid-brute|kerbrute-userenum)$/i.test(actId)) {
+          recordCapturedArtifact(lootdir + '/users.txt', 'loot', a);
+        }
+        if (produced.indexOf('hash.asrep') !== -1) {
+          recordCapturedArtifact(lootdir + '/asrep-' + tIp + '.txt', 'loot', a, 'impacket-GetNPUsers');
+        }
+        if (produced.indexOf('hash.tgs') !== -1) {
+          recordCapturedArtifact(lootdir + '/kerberoast-' + tIp + '.txt', 'loot', a, 'impacket-GetUserSPNs');
+        }
+        if (actId === 'crack-hashes-john' && produced.indexOf('credential.plaintext') !== -1) {
+          recordCapturedArtifact(lootdir + '/john.pot', 'loot', a, 'john');
+          recordCapturedArtifact(lootdir + '/cracked-users.txt', 'loot', a, 'john');
+        }
+        if (actId === 'bloodyad-acl' && produced.indexOf('ad.acl_lead') !== -1) {
+          recordCapturedArtifact(lootdir + '/writable-acl-' + tIp + '.txt', 'loot', a, 'bloodyAD');
+        }
+        if (actId === 'dcsync' && produced.indexOf('loot.ntds') !== -1) {
+          recordCapturedArtifact(lootdir + '/ntds-' + tIp + '.ntds', 'loot', a, 'impacket-secretsdump');
+        }
+      }
+    });
+
+    (eng.facts || []).forEach(function (f) {
+      if (f && f.source && /^obol-stage[1-5]-\d{8}-\d{6}\.log$/i.test(f.source)) {
+        recordCapturedArtifact(scandir + '/' + f.source, 'scans', null, 'cruise');
+      }
     });
 
     // 2) proof screenshots live in proof/ and are always captured evidence.
@@ -226,6 +307,53 @@
       var nm = (s.caption ? OBOL.workspace.slugify(s.caption) : (s.slot || ('shot-' + (i + 1)))) + '.png';
       var p = OBOL.workspace.join(proofdir, nm);
       file(p, { status: 'captured', at: s.at || 0, image: s.data_uri, tool: 'screenshot', name: nm, folder: 'proof', origin: 'ran' });
+    });
+
+    // 2.0) proven flag facts (objective.local_flag, objective.root_flag, objective.flag) materialized in proof/.
+    // Deduplicate by (fk, scope, flagValue) and prefer paths with directory separators (e.g. root.txt over proof.txt).
+    ['objective.local_flag', 'objective.root_flag', 'objective.flag'].forEach(function (fk) {
+      var grouped = {};
+      (factIdx[fk] || []).forEach(function (ff, idx) {
+        var fv = ff.value || {};
+        var key = (ff.scope || '') + '|' + (fv.flag ? String(fv.flag).trim().toLowerCase() : ('idx-' + idx));
+        var cur = grouped[key];
+        if (!cur) {
+          grouped[key] = ff;
+        } else {
+          var newP = String(fv.path || fv.file || '');
+          var oldP = String((cur.value && (cur.value.path || cur.value.file)) || '');
+          if (/[\/\\]/.test(newP) && !/[\/\\]/.test(oldP)) grouped[key] = ff;
+        }
+      });
+      Object.keys(grouped).forEach(function (gKey) {
+        var ff = grouped[gKey];
+        flagCaptured = true;
+        var fv = ff.value || {};
+        var defName = fk === 'objective.root_flag' ? 'proof.txt' : 'local.txt';
+        var rawPath = fv.path || fv.file || defName;
+        var fn = baseName(rawPath) || defName;
+        var plainPath = /[\/\\]/.test(fn) ? fn : (OBOL.workspace ? OBOL.workspace.join(proofdir, fn) : proofdir + '/' + fn);
+        var f;
+        if (byPath[plainPath]) {
+          f = byPath[plainPath];
+        } else {
+          var hostSuffix = (ff.scope && ff.scope.indexOf('host:') === 0 && (eng.targets || []).length > 1)
+            ? ('-' + ff.scope.slice(5))
+            : '';
+          var displayFile = hostSuffix ? fn.replace(/(\.txt)?$/i, hostSuffix + '$1') : fn;
+          f = flagFile(displayFile);
+        }
+        f.status = 'captured';
+        f.origin = 'ran';
+        f.confirmed = true;
+        f.flag = true;
+        f.tool = f.tool || 'flag';
+        if ((ff.at || 0) > f.at) f.at = ff.at || 0;
+        if (f.facts.indexOf(fk) === -1) f.facts.push(fk);
+        f.valMap = f.valMap || {};
+        f.valMap[fk] = fv;
+        if (!f.output && fv.flag) f.output = String(fv.flag);
+      });
     });
 
     // 2a) loot and spidered/downloaded files proven by facts (loot.files / smbclient / smbmap / spider_plus).
@@ -325,6 +453,7 @@
     // 3) the moves the coach is recommending RIGHT NOW. obol assumes the operator is probably about to
     // create these files, so they show as expected/anticipated, unless a real run already owns the path
     // (a run always wins). Confirmed later when a paste uses the file; captured when its output arrives.
+    var flagsOn = (!OBOL.profile || !OBOL.profile.hasFlags || !eng) ? true : OBOL.profile.hasFlags(eng.profile);
     var suggestions = opts.suggested || liveSuggestions(eng);
     suggestions.forEach(function (s) {
       if (!s || !s.command) return;
@@ -332,11 +461,13 @@
         if (byPath[p]) return; // a real run already owns this file
         file(p, { origin: 'suggested', command: s.command, tool: s.tool || toolOf(s.command), title: s.title || '', actionId: s.id || '' });
       });
-      flagPaths(s.command).forEach(function (nm) {
-        var p = /[\/\\]/.test(nm) ? nm : (OBOL.workspace ? OBOL.workspace.join(proofdir, nm) : proofdir + '/' + nm);
-        if (byPath[p]) return;
-        file(p, { origin: 'suggested', flag: true, folder: 'proof', command: s.command, tool: s.tool || toolOf(s.command), title: s.title || '', actionId: s.id || '' });
-      });
+      if (flagsOn) {
+        flagPaths(s.command).forEach(function (nm) {
+          var p = /[\/\\]/.test(nm) ? nm : (OBOL.workspace ? OBOL.workspace.join(proofdir, nm) : proofdir + '/' + nm);
+          if (byPath[p]) return;
+          file(p, { origin: 'suggested', flag: true, folder: 'proof', command: s.command, tool: s.tool || toolOf(s.command), title: s.title || '', actionId: s.id || '' });
+        });
+      }
     });
 
     // 4) confirmation pass. An expected file is confirmed to exist on disk (the honest middle state
@@ -417,7 +548,7 @@
     gmsa_ntlm_hash: ['gMSA Hash', 'gMSA Hashes'], source_secret: ['Source Secret', 'Source Secrets'],
     database_dump_secret: ['Database Secret', 'Database Secrets'], machine_account: ['Machine Account', 'Machine Accounts'],
   };
-  // The richest honest metric obol can state from the PARSED VALUES a file proved — the real "5 open
+  // The richest honest metric obol can state from the PARSED VALUES a file proved - the real "5 open
   // ports (22, 80, 445)", "NTDS: 15 accounts", "3 NTLM hashes". Values come straight from the FactSet,
   // never inferred from the filename. Returns '' when no value-bearing fact is linked to the file.
   function richMetric(vm) {
@@ -463,7 +594,7 @@
       var parts = t.split(/\t/);
       var p = (parts[0] || '').trim().replace(/^\.\//, '');
       if (!p || /[<>]/.test(p) || /\/$/.test(p)) return; // not a file
-      if (!/[./]/.test(p) && parts.length < 2) return;   // a bare word with no path/size — probably prose
+      if (!/[./]/.test(p) && parts.length < 2) return;   // a bare word with no path/size - probably prose
       if (seen[p]) return; seen[p] = true;
       var size = parseInt(parts[1], 10); if (isNaN(size)) size = 0;
       out.push({ path: p, size: size, mtime: (parts[2] || '').trim() });
@@ -473,9 +604,9 @@
 
   // Reconcile a parsed manifest against what obol already tracks. Returns the NEW overrides object to
   // persist plus counts. Pure: it reads the engagement's current model, never mutates it.
-  //   confirmed — a path obol predicted/ran that the manifest proves is on disk.
-  //   adopted   — a path obol had no idea about; kept as a synced 'unknown' file inviting its contents.
-  //   missing   — a path obol expected that the manifest did NOT show (informational only; not removed).
+  //   confirmed - a path obol predicted/ran that the manifest proves is on disk.
+  //   adopted   - a path obol had no idea about; kept as a synced 'unknown' file inviting its contents.
+  //   missing   - a path obol expected that the manifest did NOT show (informational only; not removed).
   function reconcile(eng, entries) {
     eng = eng || {};
     var root = ((eng.workspace && eng.workspace.root) || '.');

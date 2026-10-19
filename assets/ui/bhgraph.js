@@ -1,5 +1,5 @@
 /*!
- * obol ui — bhgraph.js — the interactive BloodHound attack-path graph (
+ * obol ui - bhgraph.js - the interactive BloodHound attack-path graph (
  * domainGraphSVG): typed nodes laid out by depth, drag-to-move nodes, wheel-zoom, background-pan,
  * MemberOf (traversal, muted) vs control (abusable, highlighted) edges with labels, the domain
  * goal + owned source highlighted, and per-path highlight chips. Pure DOM (no library).
@@ -9,36 +9,92 @@
   var OBOL = root.OBOL = root.OBOL || {};
 
   var ICON = { user: '\uD83D\uDC64', group: '\uD83D\uDC65', computer: '\uD83D\uDDA5', domain: '\uD83C\uDF10', object: '\u2b24', gpo: '\uD83D\uDCDC' };
-  var NW = 150, NH = 34, COLW = 210, ROW = 74, PADX = 24, PADY = 34;
+  var NW = 150, NH = 34, COLW = 240, ROW = 90, PADX = 24, PADY = 38;
   var R = 20;   // node circle radius (BloodHound-style round nodes, label underneath)
 
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function isMemberOf(edge) { return String(edge || '').toLowerCase() === 'memberof'; }
   function trunc(s, n) { s = String(s || ''); return s.length <= (n || 16) ? s : s.slice(0, (n || 16) - 1) + '\u2026'; }
 
-  // Lay out nodes into depth columns; return a positions map {id:{x,y}}.
+  // Lay out nodes into depth columns, vertically centered against the tallest column; return {id:{x,y}}.
   function layout(graph) {
-    var byDepth = {};
-    graph.nodes.forEach(function (n) { (byDepth[n.depth] = byDepth[n.depth] || []).push(n); });
+    var byDepth = {}, maxRows = 1;
+    graph.nodes.forEach(function (n) {
+      var col = (byDepth[n.depth] = byDepth[n.depth] || []);
+      col.push(n);
+      if (col.length > maxRows) maxRows = col.length;
+    });
     var pos = {};
     Object.keys(byDepth).forEach(function (d) {
-      byDepth[d].forEach(function (n, i) { pos[n.id] = { x: PADX + (+d) * COLW, y: PADY + i * ROW }; });
+      var col = byDepth[d];
+      var offsetY = ((maxRows - col.length) * ROW) / 2;
+      col.forEach(function (n, i) { pos[n.id] = { x: PADX + (+d) * COLW, y: PADY + offsetY + i * ROW }; });
     });
     return pos;
   }
 
   function center(p) { return { x: p.x + NW / 2, y: p.y + NH / 2 }; }
+  function isLongFlatSpan(a, b) {
+    return Math.abs(b.x - a.x) > COLW * 1.3 && Math.abs(b.y - a.y) < 36;
+  }
   // Draw the edge from circle boundary to circle boundary so the arrowhead sits just outside the target
-  // node (visible), not buried under it.
+  // node (visible), not buried under it. If an edge skips a depth column on the same horizontal band,
+  // arc it above the intermediate column so it does not slice straight through intermediate nodes.
   function edgePath(pos, e) {
     if (!pos[e.from] || !pos[e.to]) return '';
     var a = center(pos[e.from]), b = center(pos[e.to]);
     var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
     var ux = dx / len, uy = dy / len;
-    return 'M' + (a.x + ux * R) + ',' + (a.y + uy * R) + ' L' + (b.x - ux * R) + ',' + (b.y - uy * R);
+    var x1 = a.x + ux * R, y1 = a.y + uy * R;
+    var x2 = b.x - ux * R, y2 = b.y - uy * R;
+    if (isLongFlatSpan(a, b)) {
+      var cx = (x1 + x2) / 2, cy = Math.min(y1, y2) - 42;
+      return 'M' + x1 + ',' + y1 + ' Q' + cx + ',' + cy + ' ' + x2 + ',' + y2;
+    }
+    return 'M' + x1 + ',' + y1 + ' L' + x2 + ',' + y2;
   }
 
-  // Render the graph into `container`. opts.onNodeClick(nodeId) optional.
+  function edgeLabelPoint(pos, from, to) {
+    var a = center(pos[from]), b = center(pos[to]);
+    if (isLongFlatSpan(a, b)) {
+      return { x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 26 };
+    }
+    var t = 0.58;
+    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t - 6 };
+  }
+
+  function chipLabel(hops, idx, multiSrc) {
+    if (!hops || !hops.length) return 'path ' + (idx + 1);
+    var src = hops[0].from;
+    var abuse = hops.filter(function (h) { return !isMemberOf(h.edge); });
+    var pivot = '';
+    if (!abuse.length) {
+      pivot = hops[hops.length - 1].to;
+    } else if (abuse.length === 1) {
+      pivot = abuse[0].from === src ? abuse[0].to : abuse[0].from;
+    } else {
+      pivot = abuse[0].to;
+    }
+    var prefix = 'path ' + (idx + 1) + ' \u00b7 ';
+    if (multiSrc) prefix += trunc(src, 14) + ' \u2192 ';
+    else if (abuse.length) prefix += 'via ';
+    return prefix + trunc(pivot, 22) + ' (' + hops.length + 'h)';
+  }
+
+  function pathBannerHtml(hops, idx) {
+    if (!hops || !hops.length) return '';
+    var chain = '<span class="bh-rn owned">' + esc(hops[0].from) + '</span>';
+    hops.forEach(function (h, hi) {
+      var isGoal = hi === hops.length - 1;
+      var isMem = isMemberOf(h.edge);
+      var edgeTxt = h.edge + (h.alt_edges && h.alt_edges.length > 1 ? ' (+' + (h.alt_edges.length - 1) + ')' : '');
+      chain += '<span class="bh-re' + (isMem ? '' : ' abuse') + '">' + esc(edgeTxt) + '</span>'
+        + '<span class="bh-rn' + (isGoal ? ' goal' : '') + '">' + esc(h.to) + '</span>';
+    });
+    return '<span class="bh-pb-tag">Path ' + (idx + 1) + ' (' + hops.length + ' hop' + (hops.length === 1 ? '' : 's') + ')</span><div class="bh-route-chain">' + chain + '</div>';
+  }
+
+  // Render the graph into `container`. opts.onNodeClick(nodeId) and opts.onPathSelect(pathIdx) optional.
   function renderInto(container, graph, opts) {
     opts = opts || {};
     if (!graph || !graph.nodes || !graph.nodes.length) {
@@ -46,19 +102,24 @@
       return;
     }
     var pos = layout(graph);
-    var goalIds = {}; graph.nodes.forEach(function (n) { if (n.type === 'domain') goalIds[n.id] = 1; });
+    var goalIds = {}; graph.nodes.forEach(function (n) { if (n.type === 'domain' || n.goal) goalIds[n.id] = 1; });
     // Progress overlay: colour every node on the canvas by your real/what-if status, not just the path
     // source. opts.owned (a map of UPPER short name -> 1) marks the accounts you hold; opts.reached marks
     // the ones an owned account already controls. With no overlay given, fall back to the old depth-0 rule.
-    var ownedSet = opts.owned || null, reachedSet = opts.reached || null;
+    var ownedSet = opts.owned || null, reachedSet = opts.reached || null, inspectedSet = opts.inspected || null;
     var ownedIds = {}; graph.nodes.forEach(function (n) {
       var up = String(n.id).toUpperCase();
-      if (ownedSet ? ownedSet[up] : (n.depth === 0)) ownedIds[n.id] = 1;
+      if (ownedSet ? ownedSet[up] : (n.depth === 0 && !n.deadEnd)) ownedIds[n.id] = 1;
+    });
+    var inspectedIds = {};
+    if (inspectedSet) graph.nodes.forEach(function (n) {
+      var up = String(n.id).toUpperCase();
+      if (inspectedSet[up] && !ownedIds[n.id] && !goalIds[n.id]) inspectedIds[n.id] = 1;
     });
     var reachedIds = {};
     if (reachedSet) graph.nodes.forEach(function (n) {
       var up = String(n.id).toUpperCase();
-      if (reachedSet[up] && !ownedIds[n.id] && !goalIds[n.id]) reachedIds[n.id] = 1;
+      if (reachedSet[up] && !ownedIds[n.id] && !goalIds[n.id] && !inspectedIds[n.id]) reachedIds[n.id] = 1;
     });
 
     // Per-node lookup + outgoing edges, for the hover card (full name, role, and what it can abuse).
@@ -69,44 +130,106 @@
     var maxX = 0, maxY = 0;
     Object.keys(pos).forEach(function (k) { maxX = Math.max(maxX, pos[k].x + NW); maxY = Math.max(maxY, pos[k].y + NH); });
 
-    // path chips
+    // path chips + active path detail banner
     var chipRow = '';
-    if (graph.count > 1) {
+    var pathList = graph.paths || [];
+    var deadEnds = graph.deadEnds || [];
+    if (graph.count > 0 || deadEnds.length > 0) {
+      var srcs = {};
+      pathList.forEach(function (p) { if (p && p[0] && p[0].from) srcs[p[0].from] = 1; });
+      var multiSrc = Object.keys(srcs).length > 1 || deadEnds.length > 0;
       var chips = [];
-      for (var i = 0; i < graph.count; i++) chips.push('<button class="bh-chip" data-path="' + i + '">path ' + (i + 1) + '</button>');
-      chipRow = '<div class="bh-chips"><button class="bh-chip active" data-path="all">all paths</button>' + chips.join('') + '</div>';
+      for (var i = 0; i < graph.count; i++) {
+        var cLbl = chipLabel(pathList[i], i, multiSrc);
+        chips.push('<button class="bh-chip" data-path="' + i + '">' + esc(cLbl) + '</button>');
+      }
+      deadEnds.forEach(function (dId) {
+        chips.push('<button class="bh-chip deadend" data-deadend="' + esc(dId) + '">' + esc(trunc(dId, 16)) + ' \u00b7 0 paths (dead-end)</button>');
+      });
+      var deadNote = deadEnds.length
+        ? (' <b>' + esc(deadEnds.join(', ')) + '</b> ' + (deadEnds.length === 1 ? 'has' : 'have') + ' 0 outbound paths to Domain Admin (shown on the left as dead-end).')
+        : '';
+      chipRow = '<div class="bh-chips"><button class="bh-chip active" data-path="all">all paths (' + graph.count + ')</button>' + chips.join('') + '</div>'
+        + '<div class="bh-path-banner"><span class="bh-pb-hint">Showing all ' + graph.count + ' distinct path' + (graph.count === 1 ? '' : 's') + '. Click a path chip above to isolate its route and step-by-step commands.' + deadNote + '</span></div>';
     }
+
+    var legendHtml = '<div class="bh-legend-bar">'
+      + '<div class="bh-leg-group"><span class="bh-leg-title">Lines:</span>'
+      + '<span class="bh-leg-item" title="Passive group membership - inherited automatically, no command needed"><svg width="28" height="10" class="bh-leg-svg"><line x1="1" y1="5" x2="27" y2="5" class="bh-leg-line-mem"/></svg> <b>Dotted grey</b> = <code>MemberOf</code> (group membership, automatic)</span>'
+      + '<span class="bh-leg-item" title="Active ACL or control permission - requires running an exploit command"><svg width="28" height="10" class="bh-leg-svg"><line x1="1" y1="5" x2="27" y2="5" class="bh-leg-line-abuse"/></svg> <b>Solid red</b> = Abusable ACL (requires command)</span>'
+      + '</div>'
+      + '<div class="bh-leg-group"><span class="bh-leg-title">Circles:</span>'
+      + '<span class="bh-leg-item" title="Account you hold credentials for or marked as Owned / What-If"><span class="bh-leg-d owned"></span> <b>Solid green</b> = Owned / What-If</span>'
+      + '<span class="bh-leg-item" title="Group or object an owned account already controls via membership or ACL"><span class="bh-leg-d reached"></span> <b>Dashed cyan</b> = Reached (already controlled)</span>'
+      + (Object.keys(inspectedIds).length ? '<span class="bh-leg-item" title="Currently selected in the Inspect dropdown"><span class="bh-leg-d inspected"></span> <b>Dashed amber</b> = Inspecting</span>' : '')
+      + '<span class="bh-leg-item" title="Domain Admins group or the Domain root object"><span class="bh-leg-d goal"></span> <b>Solid red</b> = Domain Admin Goal</span>'
+      + '<span class="bh-leg-item"><span class="bh-leg-d user"></span> User (' + ICON.user + ')</span>'
+      + '<span class="bh-leg-item"><span class="bh-leg-d group"></span> Group (' + ICON.group + ')</span>'
+      + '<span class="bh-leg-item"><span class="bh-leg-d computer"></span> Computer (' + ICON.computer + ')</span>'
+      + '</div>'
+      + '<div class="bh-hint">Drag nodes to rearrange \u00b7 scroll to zoom \u00b7 drag background to pan \u00b7 click any node to inspect it.</div>'
+      + '</div>';
 
     container.innerHTML = chipRow + '<div class="bh-graph-wrap"><svg class="bh-graph" xmlns="' + svgNS + '" width="100%" '
       + 'viewBox="0 0 ' + (maxX + PADX) + ' ' + (maxY + PADY) + '">'
-      + '<defs><marker id="bh-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
-      + '<path d="M0,0 L10,5 L0,10 z" class="bh-arrowhead"/></marker></defs>'
+      + '<defs>'
+      + '<marker id="bh-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
+      + '<path d="M0,0 L10,5 L0,10 z" class="bh-arrowhead"/></marker>'
+      + '<marker id="bh-arrow-abuse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
+      + '<path d="M0,0 L10,5 L0,10 z" class="bh-arrowhead-abuse"/></marker>'
+      + '</defs>'
       + '<g class="bh-viewport"></g></svg></div>'
-      + '<div class="bh-hint">Drag nodes to rearrange · scroll to zoom · drag the background to pan · red edges are abusable control, grey is MemberOf.'
-      + ((ownedSet || reachedSet) ? ' <span class="bh-leg"><span class="bh-leg-d owned"></span>owned</span> <span class="bh-leg"><span class="bh-leg-d reached"></span>reached (you already control)</span> <span class="bh-leg"><span class="bh-leg-d goal"></span>Domain Admin</span>' : '')
-      + '</div>';
+      + legendHtml;
 
     var svg = container.querySelector('svg.bh-graph');
     var vp = container.querySelector('.bh-viewport');
 
+    // Merge parallel edges between the same (from, to) pair so multiple ACL rights between the same
+    // two principals never draw overlapping labels on the exact same line.
+    var mergedEdges = [], pairMap = {};
+    graph.edges.forEach(function (e) {
+      var isMem = isMemberOf(e.edge);
+      var pKey = e.from + '\u0000' + e.to + '\u0000' + (isMem ? 'M' : 'A');
+      var m = pairMap[pKey];
+      if (!m) {
+        m = { from: e.from, to: e.to, isMem: isMem, edges: [], paths: [], edgeByPath: {} };
+        pairMap[pKey] = m;
+        mergedEdges.push(m);
+      }
+      var allRightNames = (e.alt_edges && e.alt_edges.length) ? e.alt_edges : [e.edge];
+      allRightNames.forEach(function (rn) { if (m.edges.indexOf(rn) < 0) m.edges.push(rn); });
+      (e.paths || []).forEach(function (pi) {
+        if (m.paths.indexOf(pi) < 0) m.paths.push(pi);
+        if (!m.edgeByPath[pi]) m.edgeByPath[pi] = e.edge;
+      });
+    });
+
     // edges first (under nodes)
-    graph.edges.forEach(function (e, i) {
+    mergedEdges.forEach(function (m) {
       var g = document.createElementNS(svgNS, 'g');
-      g.setAttribute('class', 'bh-edge ' + (isMemberOf(e.edge) ? 'bh-edge-member' : 'bh-edge-abuse'));
-      g.setAttribute('data-paths', (e.paths || []).join(','));
+      g.setAttribute('class', 'bh-edge ' + (m.isMem ? 'bh-edge-member' : 'bh-edge-abuse'));
+      g.setAttribute('data-paths', m.paths.join(','));
       var path = document.createElementNS(svgNS, 'path');
-      path.setAttribute('d', edgePath(pos, e));
-      path.setAttribute('marker-end', 'url(#bh-arrow)');
-      path.setAttribute('data-from', e.from); path.setAttribute('data-to', e.to);
+      path.setAttribute('d', edgePath(pos, m));
+      path.setAttribute('marker-end', m.isMem ? 'url(#bh-arrow)' : 'url(#bh-arrow-abuse)');
+      path.setAttribute('data-from', m.from); path.setAttribute('data-to', m.to);
       g.appendChild(path);
-      if (!isMemberOf(e.edge)) {
-        var a = center(pos[e.from]), b = center(pos[e.to]);
+      if (!m.isMem) {
+        var pt = edgeLabelPoint(pos, m.from, m.to);
+        var defaultLbl = m.edges.length > 1 ? (m.edges[0] + ' +' + (m.edges.length - 1)) : m.edges[0];
         var lbl = document.createElementNS(svgNS, 'text');
         lbl.setAttribute('class', 'bh-edge-label');
-        lbl.setAttribute('x', (a.x + b.x) / 2); lbl.setAttribute('y', (a.y + b.y) / 2 - 3);
+        lbl.setAttribute('x', pt.x); lbl.setAttribute('y', pt.y);
         lbl.setAttribute('text-anchor', 'middle');
-        lbl.textContent = e.edge;
-        lbl.setAttribute('data-from', e.from); lbl.setAttribute('data-to', e.to);
+        lbl.setAttribute('data-default-label', defaultLbl);
+        lbl.setAttribute('data-path-map', JSON.stringify(m.edgeByPath));
+        lbl.textContent = defaultLbl;
+        lbl.setAttribute('data-from', m.from); lbl.setAttribute('data-to', m.to);
+        if (m.edges.length > 1) {
+          var tEl = document.createElementNS(svgNS, 'title');
+          tEl.textContent = m.edges.join(', ');
+          g.appendChild(tEl);
+        }
         g.appendChild(lbl);
       }
       vp.appendChild(g);
@@ -115,7 +238,7 @@
     // nodes
     graph.nodes.forEach(function (n) {
       var g = document.createElementNS(svgNS, 'g');
-      g.setAttribute('class', 'bh-node bh-type-' + n.type + (goalIds[n.id] ? ' goal' : '') + (ownedIds[n.id] ? ' owned' : '') + (reachedIds[n.id] ? ' reached' : ''));
+      g.setAttribute('class', 'bh-node bh-type-' + n.type + (goalIds[n.id] ? ' goal' : '') + (ownedIds[n.id] ? ' owned' : '') + (inspectedIds[n.id] ? ' inspected' : '') + (reachedIds[n.id] ? ' reached' : '') + (n.deadEnd ? ' deadend' : ''));
       g.setAttribute('data-id', n.id);
       g.setAttribute('data-paths', (n.paths || []).join(','));
       g.setAttribute('transform', 'translate(' + pos[n.id].x + ',' + pos[n.id].y + ')');
@@ -132,7 +255,13 @@
       lbl.setAttribute('class', 'bh-node-lbl'); lbl.setAttribute('x', cx); lbl.setAttribute('y', cy + R + 15);
       lbl.setAttribute('text-anchor', 'middle'); lbl.textContent = trunc(n.label, 20);
       g.appendChild(lbl);
-      var title = document.createElementNS(svgNS, 'title'); title.textContent = n.label + ' (' + n.type + ')';
+      if (n.deadEnd) {
+        var sub = document.createElementNS(svgNS, 'text');
+        sub.setAttribute('class', 'bh-node-sub'); sub.setAttribute('x', cx); sub.setAttribute('y', cy + R + 27);
+        sub.setAttribute('text-anchor', 'middle'); sub.textContent = '(no path to DA)';
+        g.appendChild(sub);
+      }
+      var title = document.createElementNS(svgNS, 'title'); title.textContent = n.label + ' (' + n.type + (n.deadEnd ? ' - 0 paths to DA' : '') + ')';
       g.appendChild(title);
       vp.appendChild(g);
     });
@@ -144,7 +273,7 @@
     card.style.display = 'none';
     container.appendChild(card);
 
-    wire(svg, vp, pos, opts, { card: card, nodeById: nodeById, outEdges: outEdges, goalIds: goalIds, ownedIds: ownedIds, reachedIds: reachedIds });
+    wire(svg, vp, pos, opts, { card: card, nodeById: nodeById, outEdges: outEdges, goalIds: goalIds, ownedIds: ownedIds, inspectedIds: inspectedIds, reachedIds: reachedIds, pathList: pathList, count: graph.count, deadEnds: deadEnds });
   }
 
   var TYPE_NAME = { user: 'User', group: 'Group', computer: 'Computer', domain: 'Domain', gpo: 'GPO', object: 'Object' };
@@ -153,8 +282,10 @@
   function nodeCardHtml(n, ctx) {
     var roles = '';
     if (ctx.ownedIds[n.id]) roles += '<span class="bh-nc-tag owned">owned</span>';
+    if (ctx.inspectedIds && ctx.inspectedIds[n.id]) roles += '<span class="bh-nc-tag inspected">inspecting</span>';
     if (ctx.reachedIds && ctx.reachedIds[n.id]) roles += '<span class="bh-nc-tag reached">reached</span>';
     if (ctx.goalIds[n.id]) roles += '<span class="bh-nc-tag goal">domain goal</span>';
+    if (n.deadEnd) roles += '<span class="bh-nc-tag deadend">0 paths</span>';
     var out = (ctx.outEdges[n.id] || []);
     var rels = out.slice(0, 6).map(function (e) {
       var t = ctx.nodeById[e.to], toLabel = t ? t.label : e.to;
@@ -167,9 +298,12 @@
         + '<ul class="bh-nc-rels">' + rels + '</ul>'
       : '';
     var paths = (n.paths || []).length;
+    var pathLine = paths
+      ? '<div class="bh-nc-paths">On ' + paths + ' attack path' + (paths === 1 ? '' : 's') + '</div>'
+      : (n.deadEnd ? '<div class="bh-nc-paths deadend">0 outbound paths to Domain Admin (dead-end account)</div>' : '');
     return '<div class="bh-nc-h">' + esc((ICON[n.type] || '') + ' ' + (n.label || n.id)) + '</div>'
       + '<div class="bh-nc-sub">' + esc(TYPE_NAME[n.type] || n.type || 'object') + roles + '</div>'
-      + (paths ? '<div class="bh-nc-paths">On ' + paths + ' attack path' + (paths === 1 ? '' : 's') + '</div>' : '')
+      + pathLine
       + relsBlock;
   }
 
@@ -190,8 +324,8 @@
         p.setAttribute('d', edgePath(pos, { from: p.getAttribute('data-from'), to: p.getAttribute('data-to') }));
       });
       vp.querySelectorAll('text.bh-edge-label[data-from="' + cssEsc(id) + '"], text.bh-edge-label[data-to="' + cssEsc(id) + '"]').forEach(function (t) {
-        var a = center(pos[t.getAttribute('data-from')]), b = center(pos[t.getAttribute('data-to')]);
-        t.setAttribute('x', (a.x + b.x) / 2); t.setAttribute('y', (a.y + b.y) / 2 - 3);
+        var pt = edgeLabelPoint(pos, t.getAttribute('data-from'), t.getAttribute('data-to'));
+        t.setAttribute('x', pt.x); t.setAttribute('y', pt.y);
       });
     }
     function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
@@ -249,11 +383,25 @@
     }
 
     // path highlight chips
-    var chipsWrap = svg.parentElement.parentElement.querySelector('.bh-chips');
+    var hostContainer = svg.parentElement.parentElement;
+    var chipsWrap = hostContainer.querySelector('.bh-chips');
+    var bannerEl = hostContainer.querySelector('.bh-path-banner');
     if (chipsWrap) chipsWrap.addEventListener('click', function (e) {
       var b = e.target.closest('.bh-chip'); if (!b) return;
       chipsWrap.querySelectorAll('.bh-chip').forEach(function (x) { x.classList.remove('active'); });
       b.classList.add('active');
+      var deadId = b.getAttribute('data-deadend');
+      if (deadId) {
+        vp.querySelectorAll('.bh-node, .bh-edge').forEach(function (el) {
+          var on = el.getAttribute('data-id') === deadId;
+          el.classList.toggle('dim', !on); el.classList.toggle('hot', on);
+        });
+        if (bannerEl) {
+          bannerEl.innerHTML = '<span class="bh-pb-tag deadend">0 Paths</span><span class="bh-pb-hint"><b>' + esc(deadId) + '</b> has no outbound path to Domain Admin in this BloodHound collection (standard account with 0 outbound ACL or privileged group edges).</span>';
+        }
+        if (opts.onNodeClick) opts.onNodeClick(deadId);
+        return;
+      }
       var sel = b.getAttribute('data-path');
       vp.querySelectorAll('.bh-node, .bh-edge').forEach(function (el) {
         if (sel === 'all') { el.classList.remove('dim', 'hot'); return; }
@@ -261,6 +409,26 @@
         var on = paths.indexOf(sel) >= 0;
         el.classList.toggle('dim', !on); el.classList.toggle('hot', on);
       });
+      vp.querySelectorAll('text.bh-edge-label').forEach(function (lbl) {
+        var defLbl = lbl.getAttribute('data-default-label') || lbl.textContent;
+        if (sel === 'all') { lbl.textContent = defLbl; return; }
+        try {
+          var pMap = JSON.parse(lbl.getAttribute('data-path-map') || '{}');
+          if (pMap[sel]) lbl.textContent = pMap[sel];
+        } catch (x) {}
+      });
+      if (bannerEl) {
+        if (sel === 'all') {
+          var dEnds = ctx.deadEnds || [];
+          var dNote = dEnds.length ? (' <b>' + esc(dEnds.join(', ')) + '</b> ' + (dEnds.length === 1 ? 'has' : 'have') + ' 0 outbound paths to Domain Admin (shown on the left as dead-end).') : '';
+          bannerEl.innerHTML = '<span class="bh-pb-hint">Showing all ' + (ctx.count || 0) + ' distinct path' + ((ctx.count || 0) === 1 ? '' : 's') + '. Click a path chip above to isolate its route and step-by-step commands.' + dNote + '</span>';
+        } else {
+          var pi = Number(sel);
+          var pHops = (ctx.pathList && ctx.pathList[pi]) || [];
+          bannerEl.innerHTML = pathBannerHtml(pHops, pi);
+        }
+      }
+      if (opts.onPathSelect) opts.onPathSelect(sel === 'all' ? null : Number(sel));
     });
   }
 
