@@ -33,6 +33,7 @@
       + '<button type="button" class="qp-x" data-qp-close aria-label="Close">×</button></div>'
       + '<p class="qp-sub">Paste one command’s output, or a whole terminal session. Conservative parsers mint only the facts the output actually proves, and each lands on the host it names. New hosts are added for you.</p>'
       + '<textarea id="qp-text" class="qp-text" placeholder="Paste nmap, nxc, ffuf, secretsdump… output here" spellcheck="false" aria-label="Pasted output"></textarea>'
+      + '<div id="qp-binding" class="qp-sub" role="status" aria-live="polite"></div>'
       + '<div class="qp-row"><label class="qp-route">Route facts to <select id="qp-route" aria-label="Route facts to">' + routeOptions() + '</select></label>'
       + '<button type="button" class="btn-primary" id="qp-go">Mint facts</button></div>'
       + '<div class="qp-result" id="qp-result" role="status" aria-live="polite"></div>'
@@ -48,7 +49,24 @@
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
     document.body.appendChild(ov);
+    ov.querySelector('#qp-text').addEventListener('input', updateBinding);
+    ov.querySelector('#qp-route').addEventListener('change', updateBinding);
     return ov;
+  }
+  function updateBinding() {
+    if (!_overlay || !OBOL.ingest || !OBOL.ingest.preview) return;
+    var text = _overlay.querySelector('#qp-text').value || '', route = _overlay.querySelector('#qp-route').value || 'auto';
+    var el = _overlay.querySelector('#qp-binding'), segments = OBOL.ingest.splitSession(text);
+    if (segments.length > 1) {
+      el.textContent = segments.length + ' commands: ' + (route === 'auto' ? 'each result is associated with its own observed host and command.' : 'explicitly file all results under ' + route + '; original source hosts stay in the record.');
+      return;
+    }
+    var preview = OBOL.ingest.preview({ text: text, scope: route !== 'auto' ? 'host:' + route : undefined, forceTarget: route !== 'auto' });
+    var labels = { 'pasted-command': 'pasted command', 'supplied-command': 'specified command', 'copied-command': 'last copied command', output: 'observed output', 'selected-target': 'selected target', 'forced-target': 'explicit forced destination' };
+    el.textContent = 'Association: ' + (preview.target || 'target unresolved') + ' / ' + (preview.principal || 'identity unresolved')
+      + (preview.service ? ' / ' + preview.service : '') + ' / ' + (preview.locus === 'onhost' ? 'target shell' : 'local tool')
+      + ' (from ' + (labels[preview.source] || preview.source) + ').'
+      + (preview.conflicts && preview.conflicts.length ? ' Context differs from the visible selection; check the pasted command and route.' : '');
   }
 
   function open() {
@@ -58,6 +76,7 @@
     _overlay.querySelector('#qp-result').innerHTML = '';
     _overlay.querySelector('#qp-text').value = '';
     _overlay.classList.add('open');
+    updateBinding();
     setTimeout(function () { var t = _overlay && _overlay.querySelector('#qp-text'); if (t) t.focus(); }, 30);
   }
   function close() {
@@ -70,8 +89,8 @@
   function rawPaste(text, route) {
     var eng = OBOL.store.active() || {};
     var known = (eng.targets || []).map(function (t) { return t.ip; }).filter(Boolean);
-    var last = (OBOL.ingest && typeof OBOL.ingest.getLastCopied === 'function') ? OBOL.ingest.getLastCopied() : null;
-    var tip = (route && route !== 'auto') ? route : (OBOL.ingest.detectTarget((last && last.command) || '', text, { known: known, lhost: (eng.params && eng.params.lhost) || '' }) || (last && last.target) || (eng.params || {}).target || '');
+    var binding = OBOL.ingest.preview({ text: text, scope: route && route !== 'auto' ? 'host:' + route : undefined, forceTarget: route && route !== 'auto' });
+    var tip = binding.target || '';
     if (tip && known.indexOf(tip) < 0) {
       OBOL.store.update(function (e) {
         e.targets = e.targets || [];
@@ -86,12 +105,11 @@
     }
     var rr = OBOL.ingest.run({
       text: text,
-      command: (last && last.command) || '',
-      actionId: (last && last.actionId) || '',
       scope: tip ? ('host:' + tip) : undefined,
+      forceTarget: route && route !== 'auto',
       source: 'paste'
     });
-    return { ok: !!(rr && rr.ok), added: (rr && rr.added) || 0, imported: 1, hosts: tip ? [tip] : [] };
+    return Object.assign({}, rr || {}, { ok: !!(rr && rr.ok), imported: 1, hosts: tip ? [tip] : [] });
   }
 
   function mint() {
@@ -99,6 +117,7 @@
     var route = _overlay.querySelector('#qp-route').value || 'auto';
     var resEl = _overlay.querySelector('#qp-result');
     if (!text.trim()) { resEl.innerHTML = '<span class="qp-err">Paste some output first.</span>'; return; }
+    updateBinding();
     resEl.innerHTML = '<span class="qp-wait">Reading...</span>';
     OBOL.ingest.ensureParsers().then(function (okp) {
       if (!okp) { resEl.innerHTML = '<span class="qp-err">Parsers are unavailable right now.</span>'; return; }
@@ -108,26 +127,36 @@
       // No prompt-anchored commands found: it is a single raw output paste, not a full session.
       if (r && r.ok && r.imported === 0 && !r.arsenal) { try { r = rawPaste(text, route); } catch (e) { r = { ok: false, reason: (e && e.message) || 'error' }; } }
       if (!r || !r.ok) { resEl.innerHTML = '<span class="qp-err">Could not read that (' + esc((r && r.reason) || 'error') + ').</span>'; return; }
-      if (r.arsenal && r.arsenal.ok) {
+      if (r.arsenal && r.arsenal.ok && !r.added) {
         resEl.innerHTML = '<div class="qp-ok"><b>Loadout synced:</b> ' + r.arsenal.present + ' tools ready, ' + r.arsenal.staged + ' staged, ' + (r.arsenal.wordlists || 0) + ' wordlists mapped. <a href="#/loadout" data-qp-close>Open Loadout -></a></div>';
         if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
         if (OBOL.router) OBOL.router.render();
         try { U.toast('Loadout stocked ' + r.arsenal.present + ' tools, ' + r.arsenal.staged + ' staged'); } catch (e) {}
         return;
       }
-      var hosts = r.hosts || [];
-      var msg;
-      if (r.added === 0) {
-        msg = '<span class="qp-warn">No new facts. That output did not prove anything the coach did not already know.</span>';
-      } else {
-        msg = '<b>Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + '</b> from ' + r.imported + ' command' + (r.imported === 1 ? '' : 's');
-        if (hosts.length) msg += ', filed under ' + hosts.map(function (h) { return '<code>' + esc(h) + '</code>'; }).join(', ');
-        msg += '.';
+      if (r.workspaceSync && r.workspaceSync.ok && !r.added) {
+        resEl.innerHTML = '<div class="qp-ok"><b>Workspace synced:</b> ' + r.workspaceSync.confirmed + ' confirmed, ' + r.workspaceSync.adopted + ' new file' + (r.workspaceSync.adopted === 1 ? '' : 's') + ' adopted. <a href="#/home" data-qp-close>Open Hub -></a></div>';
+        if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+        if (OBOL.router) OBOL.router.render();
+        try { U.toast(r.workspaceSync.confirmed + ' confirmed · ' + r.workspaceSync.adopted + ' new file' + (r.workspaceSync.adopted === 1 ? '' : 's') + ' adopted'); } catch (e) {}
+        return;
       }
-      resEl.innerHTML = '<div class="qp-ok">' + msg + ' <a href="#/evidence" data-qp-close>Open Evidence -></a></div>';
+      if (r.targetsImported && r.targetsImported.ok) {
+        var ti = r.targetsImported;
+        resEl.innerHTML = '<div class="qp-ok"><b>Targets imported:</b> ' + (ti.added || 0) + ' added' + (ti.updated ? (', ' + ti.updated + ' updated') : '') + '. <a href="#/targets" data-qp-close>Open Targets -></a></div>';
+        if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+        if (OBOL.router) OBOL.router.render();
+        try { U.toast((ti.added || 0) + ' target' + (ti.added === 1 ? '' : 's') + ' added'); } catch (e) {}
+        return;
+      }
+      var hosts = r.hosts || [];
+      resEl.innerHTML = OBOL.ingest.renderOutcome(r.outcome)
+        + '<div class="qp-sub">' + r.added + ' new fact' + (r.added === 1 ? '' : 's')
+        + (hosts.length ? ', filed under ' + hosts.map(function (h) { return '<code>' + esc(h) + '</code>'; }).join(', ') : '')
+        + '.</div><a href="#/evidence" data-qp-close>Open Evidence -></a>';
       if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
       if (OBOL.router) OBOL.router.render();
-      try { U.toast(r.added ? ('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's')) : 'Nothing new proven'); } catch (e) {}
+      try { U.toast(OBOL.ingest.outcomeMessage(r)); } catch (e) {}
     });
   }
 

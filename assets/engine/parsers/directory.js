@@ -15,15 +15,74 @@
   var mkFact = C.mkFact, _add = C._add, S = C.ProofState.SUPPORTED, REF = C.ProofState.REFUTED;
   var reAll = C.reAll, reSearch = C.reSearch;
 
+  function credentialFingerprint(value) {
+    value = value || {};
+    return OBOL.facts.fingerprint(JSON.stringify([
+      String(value.domain || value.realm || value.authRealm || '').trim().toLowerCase().replace(/\.$/, ''),
+      String(value.user || value.username || '').trim().toLowerCase(),
+      value.nthash ? 'nthash' : 'password', value.nthash ? String(value.nthash).toLowerCase() : String(value.password || value.secret || '')
+    ]));
+  }
+  C.credentialFingerprint = credentialFingerprint;
+  function observedHost(ws, host) { return (((ws || {}).context || {}).forceTarget) || host || (ws || {}).target; }
+  C._observed_host = observedHost;
+
+  // Authentication observations describe one identity on one host/service. A selected
+  // credential ID is attached only when the output agrees with the supplied attempt.
+  function _auth_observation(ws, value) {
+    var out = Object.assign({}, value || {}), ctx = (ws && ws.context) || {};
+    var target = String((ws && ws.target) || 'target');
+    var realm = String(out.domain || out.realm || '').toLowerCase().replace(/\.$/, '');
+    var user = String(out.user || '').toLowerCase();
+    var service = String(out.service || '').toLowerCase();
+    out.target = target;
+    if (ws.observedTarget && ws.observedTarget !== target) out.observedTarget = ws.observedTarget;
+    if (realm) out.realm = realm;
+    if (user) out.principal = (realm ? realm + '\\' : '') + user;
+    var selected = ctx.principal || '';
+    if (selected && typeof selected === 'object') selected = (selected.realm || selected.domain || ctx.authRealm || '') + '\\' + (selected.user || selected.username || '');
+    selected = String(selected).toLowerCase().replace(/\.$/, '');
+    var expected = String(ctx.authRealm || '').toLowerCase().replace(/\.$/, '');
+    var selectedUser = selected.replace(/^.*[\\/]/, '').replace(/@.*$/, '');
+    var selectedRealm = selected.indexOf('\\') >= 0 ? selected.split('\\')[0] : (selected.indexOf('@') >= 0 ? selected.split('@')[1] : expected);
+    var agrees = (!ctx.target || String(ctx.target).toLowerCase() === target.toLowerCase()) &&
+      (!ctx.service || !service || String(ctx.service).toLowerCase() === service) &&
+      (!selectedUser || !user || selectedUser === user) && (!selectedRealm || !realm || selectedRealm === realm);
+    if (agrees && !user && selectedUser) {
+      user = selectedUser; realm = selectedRealm || expected;
+      out.user = user; out.association = 'attempt';
+      if (realm) out.domain = realm;
+      out.principal = (realm ? realm + '\\' : '') + user;
+    }
+    if (agrees && !realm && user && selectedUser === user && selectedRealm) {
+      realm = selectedRealm;
+      out.principal = realm + '\\' + user;
+      out.association = 'attempt';
+    }
+    if (realm) { out.realm = realm; out.authRealm = realm; }
+    if (out.password || out.nthash) out.credentialFingerprint = credentialFingerprint(out);
+    var selectedCredential = ctx.credential && (ctx.credential.value || ctx.credential);
+    if (selectedCredential && (out.password || out.nthash)) {
+      var expectedHash = C._nt_hash(selectedCredential.nthash || selectedCredential.ntlm || '');
+      var expectedPassword = selectedCredential.password || (selectedCredential.secretType === 'password' ? selectedCredential.secret : '') || '';
+      if ((out.nthash && expectedHash && out.nthash !== expectedHash) || (out.password && expectedPassword && out.password !== expectedPassword)) agrees = false;
+    }
+    if (ctx.credentialFingerprint && out.credentialFingerprint && ctx.credentialFingerprint !== out.credentialFingerprint) agrees = false;
+    if (agrees && ctx.credentialId && user && selectedUser === user) out.credentialId = ctx.credentialId;
+    if (agrees && ctx.attemptKey) out.attemptKey = ctx.attemptKey;
+    return out;
+  }
+  C._auth_observation = _auth_observation;
+
   function _parse_nxc_common(text, ws, source, facts) {
     var h = 'host:' + ws.target;
-    C._add_os_from_text(text, ws, source, facts, 'nxc', 'high', true);
     var protoMatches = reAll(C._NXC_PROTO_REACHABLE_RE, text);
     var hostSet = {};
     protoMatches.forEach(function (m) {
       if (m.groups && m.groups.host && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(m.groups.host)) hostSet[m.groups.host] = 1;
     });
     var multiHost = Object.keys(hostSet).length > 1;
+    if (Object.keys(hostSet).length === 1) h = 'host:' + observedHost(ws, Object.keys(hostSet)[0]);
     var domain = '';
     var dm = reSearch(C._DOMAIN_RE, text);
     if (dm) {
@@ -38,7 +97,7 @@
       var nm = reSearch(C._NAME_RE, text);
       if (nm) _add(facts, mkFact('host.hostname', h, { name: nm[1].trim() }, S, source));
       if (nm || domain) {
-        var value = { host: ws.target };
+        var value = { host: h.slice(5) };
         if (nm) value.name = nm[1].trim();
         if (domain) value.domain = domain;
         _add(facts, mkFact('ad.dc_candidate', h, value, S, source));
@@ -54,10 +113,11 @@
 
     protoMatches.forEach(function (m) {
       var proto = m.groups.proto.toLowerCase();
-      var lineHost = (multiHost && m.groups && m.groups.host && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(m.groups.host)) ? m.groups.host : ws.target;
+      var lineHost = observedHost(ws, m.groups && m.groups.host);
       var lh = 'host:' + lineHost;
       var lineWs = lineHost === ws.target ? ws : Object.assign({}, ws, { target: lineHost });
-      var line = m[0];
+      var line = text.slice(m.index).split(/\r?\n/)[0];
+      C._add_os_from_text(line, lineWs, source, facts, 'nxc', 'high', true);
       if (['ldap', 'smb', 'winrm', 'rdp', 'ssh', 'ftp'].indexOf(proto) >= 0) _add(facts, mkFact(proto + '.reachable', lh, { tool: 'nxc' }, S, source));
       if (proto === 'mssql') {
         _add(facts, mkFact('service.ms-sql-s', lh, { tool: 'nxc' }, S, source));
@@ -227,7 +287,9 @@
     if (domain) value.domain = domain;
     _add(facts, mkFact('credential.available', C._scope_for_domain(ws, domain), value, S, source));
     // kerbrute VALID LOGIN already proved this credential against the KDC, so it is validated.
-    _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, via: method || 'valid-login' }, S, source));
+    var observed = _auth_observation(ws, { user: user, password: password, domain: domain || '', service: 'kerberos', via: method || 'valid-login', outcome: 'accepted' });
+    delete observed.password;
+    _add(facts, mkFact('credential.validated', 'host:' + ws.target, observed, S, source));
   }
   C._add_valid_login_credential = _add_valid_login_credential;
 
@@ -643,41 +705,28 @@
     }
     if (!plain) return;
 
-    var domain = C._domain_from_facts(ws) || (root.OBOL && root.OBOL.store && root.OBOL.store.active && root.OBOL.store.active() && (root.OBOL.store.active().params || {}).domain) || '';
+    var domain = C._domain_from_facts(ws) || '';
     var user = '';
-    var allF = (ws && (ws.facts || ws.seedFacts)) || (root.OBOL && root.OBOL.store && root.OBOL.store.active && root.OBOL.store.active() && root.OBOL.store.active().facts) || facts || [];
+    var allF = (ws && (ws.facts || ws.seedFacts)) || facts || [];
+    var associated = [];
     for (var i = 0; i < allF.length; i++) {
       var f = allF[i];
-      if (f.kind === 'credential.candidate' && (f.value || {}).kind === 'gpp_cpassword' && (f.value || {}).user) {
-        user = f.value.user;
-        if ((f.value || {}).domain) domain = domain || f.value.domain;
-        break;
+      if (f.kind === 'credential.candidate' && f.state === S && (f.value || {}).kind === 'gpp_cpassword' && (f.value || {}).user && (f.value.count || 1) === 1) {
+        associated.push(f.value);
       }
     }
-    if (!user) {
-      var genericAccts = { guest: true, krbtgt: true, defaultaccount: true };
-      for (var j = 0; j < allF.length; j++) {
-        var fj = allF[j];
-        if (fj.kind === 'ad.user_list' && (fj.value || {}).users && fj.value.users.length) {
-          for (var ui = 0; ui < fj.value.users.length; ui++) {
-            var candU = fj.value.users[ui];
-            if (candU && !genericAccts[candU.toLowerCase()]) {
-              user = candU;
-              break;
-            }
-          }
-          if (user) break;
-        }
-      }
+    if (associated.length === 1) {
+      user = associated[0].user;
+      domain = associated[0].domain || domain;
     }
-    user = user || 'SVC_TGS';
-    var val = { user: user, password: plain, secret: plain, secretType: 'password', method: 'gpp-decrypt' };
+    var val = { kind: 'gpp_plaintext', password: plain, secret: plain, secretType: 'password', method: 'gpp-decrypt' };
+    if (user) { val.user = user; val.association = 'single-gpp-source'; }
+    else val.association = 'unresolved';
     if (domain) val.domain = domain;
     var scope = C._scope_for_domain(ws, domain);
-    _add(facts, mkFact('credential.available', scope, val, S, source));
+    if (user) _add(facts, mkFact('credential.available', scope, val, S, source));
     _add(facts, mkFact('credential.candidate', scope, val, S, source));
     _add(facts, mkFact('credential.plaintext', scope, val, S, source));
-    _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, via: 'gpp-decrypt' }, S, source));
   }
   C._parse_gpp_decrypted = _parse_gpp_decrypted;
 
@@ -779,9 +828,11 @@
 
   function _parse_auth_material(auth) {
     auth = auth.replace(/(?:\s+\([^)]*\))+\s*$/, '').trim();
-    var m = reSearch(C._AUTH_MATERIAL_RE, auth);
+    var m = /^(?:(?<domain>[^\\\s:/]+)\\)?(?<user>[A-Za-z0-9._$@-]+):(?<secret>[^\r\n]*)$/.exec(auth);
     if (!m) return ['', '', ''];
-    return [(m.groups.domain || '').trim(), C._clean_username(m.groups.user), m.groups.secret.trim()];
+    var user = m.groups.user, domain = (m.groups.domain || '').trim();
+    if (user.indexOf('@') >= 0) { domain = domain || user.split('@')[1]; user = user.split('@')[0]; }
+    return [domain, C._clean_username(user), m.groups.secret.trim()];
   }
   C._parse_auth_material = _parse_auth_material;
 
@@ -789,27 +840,34 @@
     user = C._clean_username(user);
     if (!C._valid_username(user, false)) return;
     var nthash = C._nt_hash(secret);
-    if (!nthash && !C._valid_password(secret)) return;
-    var domainName = domain || C._domain_from_facts(ws);
+    var hasSecret = !!nthash || (C._valid_password(secret) && !/^(?:\*{3,}|<redacted>|\[redacted\])$/i.test(secret));
+    var ctx = (ws && ws.context) || {};
+    var domainName = domain || ctx.authRealm || '';
+    var selectedCredential = ctx.credential && (ctx.credential.value || ctx.credential);
+    var localAccount = !!(selectedCredential && selectedCredential.accountType === 'local' && (!domain || String(domain).toLowerCase() === String(ctx.authRealm || selectedCredential.realm || '').toLowerCase())) ||
+      !!(domainName && (String(domainName).toLowerCase() === String(ws.target).toLowerCase() || String(domainName).toLowerCase() === String(ws.hostname || '').toLowerCase()));
     var value = { user: user, service: proto, method: nthash ? 'pth' : 'nxc' };
-    if (nthash) value.nthash = nthash; else value.password = secret;
-    if (domainName) value.domain = domainName;
-    _add(facts, mkFact('credential.available', C._scope_for_domain(ws, domainName), value, S, source));
+    if (nthash) value.nthash = nthash; else if (hasSecret) value.password = secret;
+    if (domainName) value.realm = domainName;
+    if (domainName && !localAccount) value.domain = domainName;
+    if (localAccount) { value.accountType = 'local'; value.targetBinding = ws.target; }
+    value = _auth_observation(ws, value);
+    if (hasSecret) _add(facts, mkFact('credential.available', domainName && !localAccount ? ('domain:' + domainName) : ('host:' + ws.target), value, S, source));
     if (['smb', 'ldap', 'winrm', 'rdp', 'ftp', 'ssh'].indexOf(proto) >= 0) {
       _add(facts, mkFact(proto + '.authenticated', 'host:' + ws.target, value, S, source));
     }
-    _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, service: proto }, S, source));
+    var observed = Object.assign({}, value, { outcome: 'accepted' });
+    delete observed.password; delete observed.nthash;
+    _add(facts, mkFact('credential.validated', 'host:' + ws.target, observed, S, source));
     if (proto === 'winrm') {
       _add(facts, mkFact('winrm.reachable', 'host:' + ws.target, { tool: 'nxc' }, S, source));
-      _add(facts, mkFact('foothold.windows', 'host:' + ws.target, value, S, source));
     } else if (proto === 'ssh') {
       _add(facts, mkFact('ssh.reachable', 'host:' + ws.target, { tool: 'nxc' }, S, source));
-      _add(facts, mkFact('foothold.linux', 'host:' + ws.target, value, S, source));
-      _add(facts, mkFact('access.shell', 'host:' + ws.target, value, S, source));
     } else if (proto === 'mssql') {
       _add(facts, mkFact('db.session', 'host:' + ws.target, { engine: 'mssql', user: user, tool: 'nxc' }, S, source));
     }
-    if (admin) _add(facts, mkFact('access.admin', 'host:' + ws.target, value, S, source));
+    if (admin && proto === 'mssql') _add(facts, mkFact('db.admin', 'host:' + ws.target, Object.assign({}, observed, { engine: 'mssql', role: 'sysadmin', authorizationProof: 'nxc-pwn3d' }), S, source));
+    else if (admin) _add(facts, mkFact('access.admin', 'host:' + ws.target, Object.assign({}, observed, { authorizationProof: 'nxc-pwn3d' }), S, source));
   }
   C._add_authenticated_service = _add_authenticated_service;
 
@@ -825,12 +883,13 @@
       if (/\((?:Guest|Null Auth:True)\)/i.test(auth)) return;
       var parsed = _parse_auth_material(auth);
       var domain = parsed[0], user = parsed[1], secret = parsed[2];
-      if (!user || !secret) return;
+      if (!user) return;
       if (/^(?:guest|anonymous)$/i.test(user)) return;
-      var lineHost = (multiHost && m.groups && m.groups.host && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(m.groups.host)) ? m.groups.host : ws.target;
-      var lineWs = lineHost === ws.target ? ws : Object.assign({}, ws, { target: lineHost });
+      var lineHost = observedHost(ws, m.groups && m.groups.host);
+      var hostname = /^\s*\S+\s+\S+\s+\d+\s+(\S+)/.exec(m[0]);
+      var lineWs = Object.assign({}, ws, { target: lineHost, observedTarget: m.groups && m.groups.host, hostname: hostname ? hostname[1] : '' });
       var linePwned = /\(pwn3d!\)/i.test(auth);
-      var admin = (linePwned && (proto === 'smb' || proto === 'wmi' || proto === 'mssql')) || user.toLowerCase() === 'administrator' || (proto === 'ssh' && user.toLowerCase() === 'root');
+      var admin = linePwned && (proto === 'smb' || proto === 'wmi' || proto === 'mssql');
       _add_authenticated_service(facts, lineWs, source, proto, user, secret, domain, admin);
     });
   }
@@ -843,57 +902,95 @@
     if (isAnonOnly) {
       cleaned = cleaned.replace(/^[^\r\n]*(?:Error enumerating shares|LSAD SessionError):[^\r\n]*STATUS_ACCESS_DENIED[^\r\n]*$/gim, '');
     }
-    var lowered = cleaned.toLowerCase();
-    Object.keys(C._FAILURE_REASONS).forEach(function (marker) {
-      if (lowered.indexOf(marker) >= 0) _add(facts, mkFact('credential.validation', 'host:' + ws.target, { reason: C._FAILURE_REASONS[marker] }, REF, source));
+    cleaned.split(/\r?\n/).forEach(function (line) {
+      var row = /^\s*(SMB|LDAP|WINRM|RDP|SSH|FTP|MSSQL|WMI)\s+(\S+)\s+(\d+)\s+\S+\s+(?:\[[-*]\]\s*)?(.*)$/i.exec(line);
+      var lineWs = row ? Object.assign({}, ws, { target: observedHost(ws, row[2]), observedTarget: row[2] }) : ws;
+      var ctx = (ws && ws.context) || {};
+      var service = row ? row[1].toLowerCase() : String(ctx.service || '');
+      var auth = row ? row[4] : line;
+      var parsed = _parse_auth_material(auth.replace(/\s+STATUS_[A-Z_]+.*$/i, ''));
+      var value = { reason: '', service: service };
+      if (parsed[1]) value.user = parsed[1];
+      if (parsed[0]) value.domain = parsed[0];
+      if (parsed[2] && !/^(?:\*{3,}|<redacted>|\[redacted\])$/i.test(parsed[2])) value.password = parsed[2];
+      if (row) value.port = +row[3];
+      Object.keys(C._FAILURE_REASONS).forEach(function (marker) {
+        if (line.toLowerCase().indexOf(marker) < 0) return;
+        value.reason = C._FAILURE_REASONS[marker];
+        var authorization = marker === 'status_access_denied';
+        value.outcome = authorization ? 'denied' : 'rejected';
+        value.stage = authorization ? 'authorization' : 'authentication';
+        var observed = _auth_observation(lineWs, value);
+        delete observed.password;
+        _add(facts, mkFact(authorization ? 'credential.authorization' : 'credential.validation', 'host:' + lineWs.target, observed, authorization ? S : REF, source));
+      });
     });
   }
   C._parse_auth_failures = _parse_auth_failures;
 
-  // Auth BLOCKERS: a credential that is valid but refused for a fixable reason - the cryptic walls that
-  // strand people mid-authentication. A forced password change (STATUS_PASSWORD_MUST_CHANGE) and
+  // Auth blockers record the barrier for the attempted context, without asserting validity.
+  // A forced password change (STATUS_PASSWORD_MUST_CHANGE) and
   // Kerberos clock skew (KRB_AP_ERR_SKEW) each mint a blocker.* fact so the matching fix move surfaces.
   function _parse_auth_blockers(text, ws, source, facts) {
     var t = String(text || '').replace(/^[^\r\n]*\bguest:\s*STATUS_ACCOUNT_DISABLED[^\r\n]*$/gim, '');
+    function add(kind, re, tool, stage) {
+      t.split(/\r?\n/).forEach(function (line) {
+        if (!re.test(line)) return;
+        var row = /^\s*(SMB|LDAP|WINRM|RDP|SSH|FTP|MSSQL|WMI)\s+(\S+)\s+\d+\s+\S+\s+(?:\[[-*]\]\s*)?(.*)$/i.exec(line);
+        var lineWs = row ? Object.assign({}, ws, { target: observedHost(ws, row[2]), observedTarget: row[2] }) : ws;
+        var parsed = _parse_auth_material(row ? row[3].replace(/\s+STATUS_[A-Z_]+.*$/i, '') : '');
+        var value = { tool: tool || 'auth', stage: stage || 'authentication', service: row ? row[1].toLowerCase() : (((ws || {}).context || {}).service || '') };
+        if (parsed[1]) value.user = parsed[1];
+        if (parsed[0]) value.domain = parsed[0];
+        if (parsed[2] && !/^(?:\*{3,}|<redacted>|\[redacted\])$/i.test(parsed[2])) value.password = parsed[2];
+        value = _auth_observation(lineWs, value);
+        delete value.password;
+        _add(facts, mkFact(kind, 'host:' + lineWs.target, value, S, source));
+      });
+    }
     if (/STATUS_PASSWORD_MUST_CHANGE|STATUS_PASSWORD_EXPIRED|password must (?:be )?change|must change (?:your )?password|password has expired/i.test(t))
-      _add(facts, mkFact('blocker.password_change', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+      add('blocker.password_change', /STATUS_PASSWORD_MUST_CHANGE|STATUS_PASSWORD_EXPIRED|password must (?:be )?change|must change (?:your )?password|password has expired/i);
     if (/KRB_AP_ERR_SKEW|clock skew too great|kerberos[^\n]*\bskew\b|time difference too large/i.test(t))
-      _add(facts, mkFact('blocker.clock_skew', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
-    // NTLM refused but the credential is valid - a DC with NTLM disabled answers SMB auth with
-    // STATUS_NOT_SUPPORTED; the same credential works over Kerberos (-k).
+      add('blocker.clock_skew', /KRB_AP_ERR_SKEW|clock skew too great|kerberos[^\n]*\bskew\b|time difference too large/i, 'auth', 'environment');
+    // An NTLM refusal does not establish whether the credential is valid.
     if (/STATUS_NOT_SUPPORTED/i.test(t) && /\b(smb|ldap|nxc|SMBv|NTLM)\b/i.test(t))
-      _add(facts, mkFact('blocker.ntlm_disabled', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+      add('blocker.ntlm_disabled', /STATUS_NOT_SUPPORTED/i, 'auth', 'environment');
     if (/STATUS_ACCOUNT_LOCKED_OUT|account (?:is |has been )?locked out|lockoutThreshold reached/i.test(t))
-      _add(facts, mkFact('blocker.lockout', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+      add('blocker.lockout', /STATUS_ACCOUNT_LOCKED_OUT|account (?:is |has been )?locked out|lockoutThreshold reached/i);
     if (/STATUS_ACCOUNT_DISABLED|STATUS_ACCOUNT_RESTRICTION|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_ACCOUNT_EXPIRED|STATUS_INVALID_LOGON_HOURS/i.test(t))
-      _add(facts, mkFact('blocker.account_restricted', C._scope_for_domain(ws), { tool: 'auth' }, S, source));
+      add('blocker.account_restricted', /STATUS_ACCOUNT_DISABLED|STATUS_ACCOUNT_RESTRICTION|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_ACCOUNT_EXPIRED|STATUS_INVALID_LOGON_HOURS/i);
     // An LDAP WRITE denied (bloodyAD/dacledit `insufficientAccessRights` when granting DCSync, setting an
     // owner, or adding a group member) right after you GRANTED yourself that right is the classic AD wall:
     // the right exists but your CURRENT session's token predates it, so re-authenticate and retry. Keyed on
     // the LDAP-modify signature (insufficientAccessRights), not a bare ACCESS_DENIED, so it never fires on
     // the NTDS replication denial (rpc_s_access_denied), which has its own grant-first field note.
     if (/insufficientAccessRights|insufficient access rights/i.test(t))
-      _add(facts, mkFact('blocker.acl_reauth', C._scope_for_domain(ws), { tool: 'ldap' }, S, source));
+      add('blocker.acl_reauth', /insufficientAccessRights|insufficient access rights/i, 'ldap', 'authorization');
   }
   C._parse_auth_blockers = _parse_auth_blockers;
 
   function _parse_evil_winrm(text, ws, command, source, facts) {
     var low = text.toLowerCase();
     if (low.indexOf('winrmauthorizationerror') >= 0 || low.indexOf('winrmhttptransporterror') >= 0 || /\b401\b/.test(text) || low.indexOf('unauthorized') >= 0) return;
-    if (!(reSearch(C._EW_PROMPT_RE, text) || low.indexOf('evil-winrm shell') >= 0)) return;
+    if (!reSearch(C._EW_PROMPT_RE, text)) return;
     var h = 'host:' + ws.target;
     var user = C._command_arg(command, ['-u', '--user', '--username']);
     var password = C._command_arg(command, ['-p', '--password']);
     var nthash = C._nt_hash(C._command_arg(command, ['-H', '--hash']));
     var domain = C._command_arg(command, ['-r', '--realm', '-d', '--domain']);
-    var value = { service: 'winrm', tool: 'evil-winrm' };
+    var value = { service: 'winrm', tool: 'evil-winrm', proof: 'interactive-prompt' };
     if (user) value.user = C._clean_username(user);
     if (nthash) value.nthash = nthash; else if (password) value.password = password;
     if (domain) value.domain = domain;
+    value = _auth_observation(ws, value);
     _add(facts, mkFact('winrm.authenticated', h, value, S, source));
     _add(facts, mkFact('foothold.windows', h, value, S, source));
     // An evil-winrm shell proves the credential works here, so it is validated.
-    if (value.user) _add(facts, mkFact('credential.validated', h, { user: value.user, service: 'winrm' }, S, source));
+    if (value.user) {
+      var observed = Object.assign({}, value, { outcome: 'accepted' });
+      delete observed.password; delete observed.nthash;
+      _add(facts, mkFact('credential.validated', h, observed, S, source));
+    }
     C._add_os_observation(facts, ws, source, 'windows', 'evil-winrm authenticated shell', 'high', 'evil-winrm', true);
     if (user && (nthash || (password && C._valid_password(password)))) {
       var cred = { user: C._clean_username(user), service: 'winrm', method: nthash ? 'pth' : 'evil-winrm' };
@@ -1177,9 +1274,9 @@
       var nt = m.groups.nt.toLowerCase();
       if (!C._valid_username(user) || seen[user.toLowerCase() + '|' + nt]) return;
       seen[user.toLowerCase() + '|' + nt] = true;
-      var item = { user: user, nthash: nt, method: 'gmsa' };
+      var item = { user: user, nthash: nt, method: 'gmsa', accountType: 'domain' };
       var domain = m.groups.domain || C._domain_from_facts(ws);
-      if (domain) item.domain = domain;
+      if (domain) { item.domain = domain; item.realm = domain; }
       entries.push(item);
       _add(facts, mkFact('credential.ntlm_hash', C._scope_for_domain(ws, domain), item, S, source));
     });
@@ -1234,26 +1331,20 @@
       var key = computer.toLowerCase() + '|' + currentUser.toLowerCase() + '|' + password;
       if (seen[key]) return;
       seen[key] = true;
-      creds.push({ kind: 'laps_password', computer: computer, user: currentUser, password: password });
+      creds.push({ kind: 'laps_password', computer: computer, targetBinding: computer.replace(/\$$/, ''), accountType: 'local', realm: computer.replace(/\$$/, ''), user: currentUser, password: password, method: 'laps' });
     });
     creds.forEach(function (cred) {
       _add(facts, mkFact('credential.candidate', C._scope_for_domain(ws), cred, S, source));
-      _add(facts, mkFact('credential.available', C._scope_for_domain(ws), {
+      _add(facts, mkFact('credential.available', 'host:' + cred.targetBinding, {
         user: cred.user || 'Administrator',
         password: cred.password,
-        service: 'smb/winrm',
         method: 'laps',
-        domain: (ws && ws.domain) || ''
-      }, S, source));
-      _add(facts, mkFact('credential.admin', C._scope_for_domain(ws), {
-        user: cred.user || 'Administrator',
-        password: cred.password,
-        method: 'laps'
-      }, S, source));
-      _add(facts, mkFact('access.admin', C._scope_for_domain(ws), {
-        user: cred.user || 'Administrator',
-        password: cred.password,
-        method: 'laps'
+        computer: cred.computer,
+        targetBinding: cred.targetBinding,
+        accountType: 'local',
+        realm: cred.realm,
+        domain: '',
+        sourceDomain: C._domain_from_facts(ws) || ''
       }, S, source));
     });
   }
@@ -1623,12 +1714,10 @@
       var rawUser = (hm[1] || '').trim();
       var cleanUser = rawUser.replace(/@.*$/, '').replace(/^[^\\]+\\/, '');
       var nthash = (hm[2] || '').toLowerCase();
-      var domain = (ws && ws.domainSeed) ? ws.domainSeed : (rawUser.indexOf('@') >= 0 ? rawUser.split('@')[1] : '');
+      var domain = rawUser.indexOf('@') >= 0 ? rawUser.split('@')[1] : (rawUser.indexOf('\\') >= 0 ? rawUser.split('\\')[0] : ((ws && ws.domainSeed) || ''));
       _add(facts, mkFact('hash.ntlm', C._scope_for_domain(ws, domain), { nthash: nthash, user: cleanUser, via: 'certipy-auth' }, S, source));
       _add(facts, mkFact('credential.available', C._scope_for_domain(ws, domain), { user: cleanUser, nthash: nthash, domain: domain, kind: 'cert_auth_nt_hash', via: 'certipy-auth' }, S, source));
-      if (/^(?:administrator|admin|krbtgt)$/i.test(cleanUser) || /da|admin/i.test(cleanUser)) {
-        _add(facts, mkFact('credential.admin', C._scope_for_domain(ws, domain), { user: cleanUser, nthash: nthash, domain: domain, via: 'certipy-auth' }, S, source));
-      }
+      // A recovered account hash does not establish administrative authorization.
     } else if (/Got TGT|Saved credential cache|\.ccache/i.test(text)) {
       _add(facts, mkFact('credential.available', C._scope_for_domain(ws), { kind: 'cert_auth_tgt', via: 'certipy-auth' }, S, source));
     }

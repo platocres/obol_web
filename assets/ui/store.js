@@ -15,7 +15,7 @@
   'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
   var DB_NAME = 'obol-db';
-  var DB_VERSION = 1;
+  var DB_VERSION = 2;
   var LS_PREFS = 'obol-prefs';
   var LS_SNAPSHOT = 'obol-idb-fallback';
 
@@ -45,7 +45,8 @@
       req.onupgradeneeded = function (e) {
         var db = e.target.result;
         if (!db.objectStoreNames.contains('engagements')) db.createObjectStore('engagements', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('blobs')) db.createObjectStore('blobs', { keyPath: 'id' });
+        var blobs = db.objectStoreNames.contains('blobs') ? e.target.transaction.objectStore('blobs') : db.createObjectStore('blobs', { keyPath: 'id' });
+        if (!blobs.indexNames.contains('engagementId')) blobs.createIndex('engagementId', 'engagementId', { unique: false });
         if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
       };
       req.onsuccess = function () {
@@ -132,6 +133,17 @@
   // A brand-new draft carries an EMPTY name on purpose: the UI shows it as "No Run Yet" and never a
   // fake "Untitled Run" placeholder. The launch flow fills in a real name when the operator sets up.
   function newEngagement(name) {
+    var seedParams = {};
+    try {
+      var ar = JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null');
+      if (ar && typeof ar === 'object') {
+        if (ar.lhost) {
+          seedParams.lhost = ar.lhost;
+          seedParams.lhost_iface = ar.lhost_iface || 'tun0';
+        }
+        if (ar.tooldir) seedParams.toolsDir = ar.tooldir;
+      }
+    } catch (e) {}
     return {
       id: uid('eng'),
       name: name == null ? '' : name,
@@ -139,7 +151,7 @@
       updatedAt: Date.now(),
       schema: 3,
       profile: { platform: 'custom', machine_type: '', candidate: '', osid: '', scope: [] }, // engagement profile
-      params: {},          // target/domain/username/password/lhost/…
+      params: seedParams,  // target/domain/username/password/lhost/...
       targets: [],         // [{id, ip, hostname, os, ...}]
       credentials: [],     // [{user, secret, secretType, ...}]
       activities: [],      // recorded outcomes (paste-back)
@@ -180,7 +192,56 @@
         }
       }
     });
+    function archiveLegacy(f, reason) {
+      e.unresolvedLegacyFacts = e.unresolvedLegacyFacts || [];
+      if (!e.unresolvedLegacyFacts.some(function (old) { return old.fact && old.fact.kind === f.kind && old.fact.scope === f.scope && JSON.stringify(old.fact.value) === JSON.stringify(f.value); })) {
+        e.unresolvedLegacyFacts.push({fact:JSON.parse(JSON.stringify(f)),reason:reason});
+      }
+    }
+    e.credentials.forEach(function(c) {
+      var origin = String(c.method || c.via || c.notes || '');
+      if ((/\blaps\b/i.test(origin) && !c.computer && !c.targetBinding) || (/gpp-decrypt/i.test(origin) && c.association !== 'single-gpp-source')) {
+        c.unresolved = true;
+        c.unresolvedReason = 'Legacy material lacks an unambiguous computer or principal association. Original material is retained.';
+      }
+    });
     e.facts = e.facts.filter(function (f) {
+      var legacyValue = f.value || {}, legacyMethod = String(legacyValue.method || legacyValue.via || '');
+      if (/^credential\.(available|plaintext)$/.test(f.kind) && ((/laps/i.test(legacyMethod) && !legacyValue.targetBinding && !legacyValue.computer)
+        || (legacyMethod === 'gpp-decrypt' && legacyValue.association !== 'single-gpp-source'))) {
+        archiveLegacy(f, 'Recovered legacy material had no reliable identity or computer binding. It remains an unresolved candidate.');
+        f.kind = 'credential.candidate';
+        f.value = Object.assign({}, legacyValue, {kind:'legacy-unresolved-material',association:'unresolved'});
+      }
+      var nxc = /^(nxc|pth)$/i.test(legacyMethod) && /^(smb|ldap|winrm|ssh|rdp|mssql|wmi)$/i.test(legacyValue.service || '');
+      var loginOnlyShell = nxc && /^(?:foothold\.(?:windows|linux)|access\.shell)$/.test(f.kind);
+      var unprovenAdmin = nxc && f.kind === 'access.admin' && legacyValue.authorizationProof !== 'nxc-pwn3d';
+      if (unprovenAdmin) {
+        var host = String(f.scope || '').replace(/^host:/,''), user = String(legacyValue.user || '').toLowerCase();
+        var pwnProof = e.activities.some(function(a) {
+          return activityTarget(a) === host && String(a.stdout || '').split(/\r?\n/).some(function(line) {
+            var observed = /^\s*(SMB|LDAP|WINRM|SSH|RDP|MSSQL|WMI)\s+(\S+)\s+\d+\s+\S+\s+\[\+\]\s+(?:([^\s\\:]+)\\)?([^\s:]+):([\s\S]*?)\s+\(Pwn3d!\)/i.exec(line);
+            if (!observed || observed[1].toLowerCase() !== String(legacyValue.service).toLowerCase() || observed[2] !== host || observed[4].toLowerCase() !== user) return false;
+            if (String(observed[3] || '').toLowerCase() !== String(legacyValue.domain || legacyValue.realm || '').toLowerCase()) return false;
+            var expected = legacyValue.nthash || legacyValue.hash || legacyValue.password || legacyValue.secret;
+            return !!expected && (legacyValue.nthash || legacyValue.hash ? observed[5].toLowerCase() === String(expected).toLowerCase() : observed[5] === String(expected));
+          });
+        });
+        if (pwnProof && legacyValue.service !== 'mssql') { f.value = Object.assign({}, legacyValue, {authorizationProof:'nxc-pwn3d'}); unprovenAdmin = false; }
+        else if (pwnProof) {
+          archiveLegacy(f, 'Database sysadmin authorization is separate from operating-system administrative access.');
+          f.kind = 'db.admin'; f.value = Object.assign({}, legacyValue, {engine:'mssql',role:'sysadmin',authorizationProof:'nxc-pwn3d'}); unprovenAdmin = false;
+        }
+      }
+      var materialOnly = /(?:^|[-_ ])(?:laps|gmsa|sam|ntds|dcsync|credential.dump|certipy.auth|gpp.decrypt)(?:$|[-_ ])/i.test(legacyMethod);
+      var offlineProof = /^credential\.(validated|admin)$/.test(f.kind) && /^(john|hashcat|hashcat_ntlm)$/.test(legacyMethod);
+      var inferredProof = materialOnly && /^(credential\.(validated|admin)|access\.(admin|system|root)|foothold\.)/.test(f.kind);
+      if (offlineProof || inferredProof || loginOnlyShell || unprovenAdmin) {
+        archiveLegacy(f, 'Recovered material, login alone, or an inferred role did not establish this access claim. Original evidence is retained.');
+        return false;
+      }
+      // Older builds incorrectly promoted offline cracks to authenticated/admin proof.
+      if (/^credential\.(validated|admin)$/.test(f.kind) && /^(john|hashcat|hashcat_ntlm)$/.test((f.value || {}).via || (f.value || {}).method || '')) return false;
       if (f.kind === 'objective.root_flag' && f.value && f.value.flag && localFlagMap[f.value.flag]) {
         f.kind = 'objective.local_flag';
         f.value.slot = 'local';
@@ -202,7 +263,98 @@
     if (!e.params.target && e.targets.length && (e.targets[0].ip || e.targets[0].id)) {
       e.params.target = e.targets[0].ip || e.targets[0].id;
     }
+    migrateChecklist(e);
+    if (OBOL.context) OBOL.context.normalize(e);
     return e;
+  }
+
+  function checklistKey(actionId, target) { return JSON.stringify([target || '*', actionId]); }
+  function activityTarget(a) { return a.target || (/^host:/.test(a.scope || '') ? a.scope.slice(5) : ''); }
+  function migrateChecklist(eng) {
+    eng.checklist = eng.checklist || {};
+    Object.keys(eng.checklist).forEach(function (id) {
+      if (id.charAt(0) === '[') return;
+      var hosts = {};
+      (eng.activities || []).forEach(function (a) {
+        if ((a.action_id || a.actionId) === id && activityTarget(a)) hosts[activityTarget(a)] = true;
+      });
+      var ips = Object.keys(hosts);
+      // Legacy manual ticks have no origin. Anchor them to their saved focus, never every host.
+      var target = ips.length === 1 ? ips[0] : (eng.activeTarget || (eng.params && eng.params.target) || '*');
+      var key = checklistKey(id, target);
+      var state = eng.checklist[id];
+      if (state === 'empty') state = 'empty:anon';
+      if (!eng.checklist[key]) eng.checklist[key] = state;
+      delete eng.checklist[id];
+    });
+    eng.checklistVersion = 2;
+    if (OBOL.context) Object.keys(eng.checklist).forEach(function(key) {
+      if (!/^empty(?::|$)/.test(String(eng.checklist[key]))) return;
+      var pair; try { pair = JSON.parse(key); } catch (e) { return; }
+      var supported = (eng.activities || []).some(function(a) { return activityTarget(a) === pair[0] && (a.action_id || a.actionId) === pair[1] && a.outcome && a.outcome.retireMove; });
+      if (!supported) {
+        eng.unresolvedLegacyChecklist = eng.unresolvedLegacyChecklist || {};
+        eng.unresolvedLegacyChecklist[key] = {state:eng.checklist[key],reason:'Legacy automatic retirement had no scoped, conclusive outcome. The move remains available.'};
+        delete eng.checklist[key];
+      }
+    });
+  }
+
+  function normalizeDomain(name) { return String(name || '').trim().toLowerCase().replace(/\.$/, ''); }
+  function domainsForTarget(eng, ip, hostFacts) {
+    var domains = {};
+    function take(name) { name = normalizeDomain(name); if (name && name !== 'domain') domains[name] = true; }
+    ((eng && eng.targets) || []).forEach(function (t) { if ((t.ip || t.id) === ip) take(t.domain); });
+    hostFacts.forEach(function (f) {
+      if (f.state !== 'supported') return;
+      var v = f.value || {};
+      if (/^(host\.domain|ad\.domain_known)$/.test(f.kind)) take(v.domain || v.name);
+      if (f.kind === 'host.fqdn' && String(v.fqdn || v.name || '').indexOf('.') >= 0) take(String(v.fqdn || v.name).split('.').slice(1).join('.'));
+    });
+    // A configured domain applies to its configured host, not every host in the engagement.
+    if (!Object.keys(domains).length && eng && (eng.targets || []).length <= 1 && eng.params && eng.params.target === ip) take(eng.params.domain);
+    return domains;
+  }
+
+  function referencesBlob(value, id) {
+    if (value === id) return true;
+    if (!value || typeof value !== 'object') return false;
+    return Object.keys(value).some(function (key) { return referencesBlob(value[key], id); });
+  }
+  // Also repairs legacy blob ownership and removes previously orphaned binary evidence.
+  function reconcileBlobs(deletedIds, clearAll) {
+    deletedIds = deletedIds || [];
+    function ownerOf(rec) {
+      if (rec.engagementId && deletedIds.indexOf(rec.engagementId) < 0 && _mem.engagements[rec.engagementId]) return rec.engagementId;
+      return Object.keys(_mem.engagements).find(function (id) {
+        return deletedIds.indexOf(id) < 0 && referencesBlob(_mem.engagements[id], rec.id);
+      }) || '';
+    }
+    Object.keys(_mem.blobs).forEach(function (id) {
+      var owner = clearAll ? '' : ownerOf(_mem.blobs[id]);
+      if (owner) _mem.blobs[id].engagementId = owner; else delete _mem.blobs[id];
+    });
+    if (!_useIDB || !_db) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      try {
+        var tx = _db.transaction(['engagements', 'blobs'], 'readwrite');
+        var engagements = tx.objectStore('engagements'), blobs = tx.objectStore('blobs');
+        if (clearAll) { engagements.clear(); blobs.clear(); }
+        else {
+          deletedIds.forEach(function (id) { engagements.delete(id); });
+          var req = blobs.openCursor();
+          req.onsuccess = function () {
+            var cursor = req.result; if (!cursor) return;
+            var rec = cursor.value, owner = ownerOf(rec);
+            if (!owner) cursor.delete();
+            else if (rec.engagementId !== owner) { rec.engagementId = owner; cursor.update(rec); }
+            cursor.continue();
+          };
+        }
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = tx.onabort = function () { reject(tx.error || new Error('Evidence cleanup failed')); };
+      } catch (err) { reject(err); }
+    });
   }
 
   // ---- change notification ----
@@ -308,6 +460,7 @@
       if (!_activeId || !_mem.engagements[_activeId]) {
         _activeId = Object.keys(_mem.engagements)[0];
       }
+      await reconcileBlobs();
       return this;
     },
 
@@ -348,8 +501,9 @@
       return eng;
     },
     async deleteEngagement(id) {
+      await flushSave();
+      await reconcileBlobs([id]);
       delete _mem.engagements[id];
-      if (_useIDB && _db) await idbDelete('engagements', id).catch(function () {});
       var remaining = Object.keys(_mem.engagements);
       if (!remaining.length) {
         var fresh = newEngagement('');
@@ -366,10 +520,10 @@
     // Delete every engagement (keeps appearance prefs). The caller reloads; init() then seeds a
     // fresh, empty "Untitled Run".
     async clearEngagements() {
-      var ids = Object.keys(_mem.engagements);
+      await flushSave();
+      await reconcileBlobs([], true);
       _mem.engagements = {}; _mem.blobs = {}; _activeId = null;
       if (_useIDB && _db) {
-        for (var i = 0; i < ids.length; i++) await idbDelete('engagements', ids[i]).catch(function () {});
         await this.setSetting('activeEngagement', null).catch(function () {});
       } else { snapshotFallback(); }
       emit('active');
@@ -377,14 +531,21 @@
     // Full factory reset: erase ALL obol data in this browser — the IndexedDB database (engagements,
     // blobs, settings) plus every obol localStorage/sessionStorage key. The caller reloads afterward.
     async resetAll() {
+      if (_saveTimer) clearTimeout(_saveTimer);
+      _saveTimer = null; _dirtyIds = {};
       _mem = { engagements: {}, blobs: {}, settings: {} }; _activeId = null;
       try {
         for (var i = localStorage.length - 1; i >= 0; i--) {
           var k = localStorage.key(i);
-          if (k && (/^obol/i.test(k) || k === LS_PREFS || k === LS_SNAPSHOT)) localStorage.removeItem(k);
+          if (k && (/^obol(?:[.:-]|$)/i.test(k) || k === LS_PREFS || k === LS_SNAPSHOT)) localStorage.removeItem(k);
         }
       } catch (e) {}
-      try { sessionStorage.clear(); } catch (e2) {}
+      try {
+        for (var si = sessionStorage.length - 1; si >= 0; si--) {
+          var sk = sessionStorage.key(si);
+          if (sk && /^obol(?:[.:-]|$)/i.test(sk)) sessionStorage.removeItem(sk);
+        }
+      } catch (e2) {}
       try { if (_db) { _db.close(); _db = null; } } catch (e3) {}
       await new Promise(function (resolve) {
         try {
@@ -445,7 +606,9 @@
     update(mutator, reason) {
       var eng = _mem.engagements[_activeId];
       if (!eng) return;
+      var contextBefore = OBOL.context ? OBOL.context.beforeUpdate(eng) : null;
       mutator(eng);
+      if (OBOL.context) OBOL.context.reconcile(eng, contextBefore);
       scheduleSave();
       emit(reason || 'update');
     },
@@ -473,6 +636,42 @@
         }
       }, 'active-target');
     },
+    resolvedContext(opts) {
+      return OBOL.context.resolve(Object.assign({ engagement: this.active() }, opts || {}));
+    },
+    selectCredential(id, target) {
+      this.update(function (eng) { OBOL.context.select(eng, id, target); }, 'credential-selection');
+    },
+    setCredentialPin(enabled) {
+      this.update(function (eng) { OBOL.context.setPin(eng, !!enabled); }, 'credential-pin');
+    },
+    credentialPin() {
+      var selected = OBOL.context && OBOL.context.pin(this.active());
+      return { enabled: selected !== undefined, credentialId: selected === undefined ? null : selected };
+    },
+    checklistKey: checklistKey,
+    setChecklist(actionId, state, target) {
+      this.update(function (eng) {
+        migrateChecklist(eng);
+        eng.checklist[checklistKey(actionId, target || eng.activeTarget || (eng.params && eng.params.target))] = state;
+      }, 'done');
+    },
+    doneIdsForTarget(target, facts, engagement) {
+      var eng = engagement || this.active() || {}, out = {};
+      migrateChecklist(eng);
+      target = target || eng.activeTarget || (eng.params && eng.params.target) || '*';
+      var epoch = OBOL.pack.accessEpoch(facts || this.factSetForTarget(target));
+      Object.keys(eng.checklist).forEach(function (key) {
+        var pair; try { pair = JSON.parse(key); } catch (e) { return; }
+        if (!Array.isArray(pair) || pair[0] !== target) return;
+        var state = eng.checklist[key], id = pair[1];
+        if (state === 'done' || state === 'empty:' + epoch) out[id] = true;
+        if (state === 'empty' && !(eng.activities || []).some(function (a) {
+          return (a.action_id || a.actionId) === id && activityTarget(a) === target && (a.addedCount > 0 || (a.produced || []).some(function (k) { return !/^(blocker\.|credential\.validation$)/.test(k); }));
+        })) out[id] = true;
+      });
+      return out;
+    },
     // A per-target FactSet: this host's facts + applicable domain-/engagement-scoped facts.
     // Unscanned targets in multi-target engagements do not inherit other hosts' domain credentials/loot
     // until they have been scanned, and non-AD Linux hosts do not inherit Windows AD/DC compromise facts.
@@ -481,9 +680,9 @@
       var arr = ((eng && eng.facts) || []).filter(function (f) { return f && typeof f === 'object' && f.kind; });
       var hostScope = 'host:' + ip;
       var targetList = (eng && eng.targets) || [];
-      var multiTarget = targetList.length > 1 || (targetList.length === 0 && arr.some(function (f) {
+      var multiTarget = targetList.length > 1 || arr.some(function (f) {
         return f && f.scope && f.scope.indexOf('host:') === 0 && f.scope !== hostScope && f.scope !== 'host:target';
-      }));
+      });
       var hostFacts = arr.filter(function (f) { return f && (f.scope === hostScope || (!multiTarget && f.scope === 'host:target')); });
       var hasHostActivity = hostFacts.some(function (f) {
         return f.state === 'supported' && f.kind.indexOf('target.') !== 0
@@ -511,11 +710,14 @@
         return f.state === 'supported' && /^(kerberos\.reachable|ad\.dc_candidate|port:(88|3268|3269))$/.test(f.kind);
       });
       var DC_ONLY_DOMAIN_RE = /^(access\.admin|loot\.ntds|hash\.krbtgt|persistence\.domain|ad\.(acl_lead|control_paths|attack_paths|group_joined|domain_control)|adcs\.vulnerable)$/;
+      var targetDomains = domainsForTarget(eng, ip, hostFacts);
       var sel = arr.filter(function (f) {
         var s = f.scope || '';
         if (s === hostScope || (!multiTarget && s === 'host:target')) return true;
         if (s === '' || s.indexOf('scope:') === 0) return !multiTarget || hasHostActivity;
         if (s.indexOf('domain:') === 0) {
+          if (!multiTarget && s === 'domain:domain' && /^(credential\.|dns\.)/.test(f.kind)) return true;
+          if (!targetDomains[normalizeDomain(s.slice(7))]) return false;
           if (isLinux && !hasAdOrSmb) {
             return s === 'domain:domain' && (f.kind.indexOf('credential.') === 0 || f.kind.indexOf('dns.') === 0);
           }
@@ -545,7 +747,7 @@
       }
       var fqdn = first('host.fqdn', ['fqdn', 'name']);
       var hostname = (tgt.hostname || first('host.hostname', ['name', 'hostname']) || (fqdn ? fqdn.split('.')[0] : '')).trim();
-      var domain = (first('host.domain', ['domain', 'name']) || first('ad.domain_known', ['name', 'domain']) || (params.domain || '')).trim();
+      var domain = (tgt.domain || first('host.domain', ['domain', 'name']) || first('ad.domain_known', ['name', 'domain']) || ((eng.targets || []).length <= 1 ? params.domain || '' : '')).trim();
       var os = (tgt.os || (OBOL.targets && OBOL.targets.hostOs ? OBOL.targets.hostOs(fs, tgt) : '') || '').trim();
       return { ip: realIp, hostname: hostname, domain: domain, fqdn: fqdn, os: os };
     },
@@ -576,7 +778,11 @@
             var dName = String(dv.domain || dv.name || '').trim().replace(/0\.$/, '').replace(/\.$/, '');
             if (dName && dName.toLowerCase() !== 'domain' && dName.toLowerCase() !== 'workgroup' && dName.indexOf('.') > 0) {
               eng.params = eng.params || {};
-              if (!eng.params.domain) eng.params.domain = dName;
+              var domainHost = /^host:/.test(f.scope || '') ? f.scope.slice(5) : '';
+              if (domainHost) {
+                (eng.targets || []).forEach(function (tg) { if (tg.ip === domainHost && !tg.domain) tg.domain = dName; });
+              }
+              if (!eng.params.domain && (domainHost === eng.params.target || (!domainHost && (eng.targets || []).length <= 1))) eng.params.domain = dName;
             }
           }
           if ((f.kind === 'host.os_hint' || f.kind === 'host.os' || f.kind === 'host.os_family') && f.state === SUP && String(f.scope).indexOf('host:') === 0) {
@@ -589,13 +795,13 @@
               (eng.targets || []).forEach(function (tg) { if (tg.ip === ipOs && !tg.os) tg.os = clean.charAt(0).toUpperCase() + clean.slice(1); });
             }
           }
-          var isCredFact = (f.kind === 'credential.available' || f.kind === 'credential.plaintext' || f.kind === 'credential.admin'
-            || f.type === 'credential.available' || f.type === 'credential.plaintext' || f.type === 'credential.admin');
+          var isCredFact = (f.kind === 'credential.available' || f.kind === 'credential.plaintext' || f.kind === 'credential.ntlm_hash'
+            || f.type === 'credential.available' || f.type === 'credential.plaintext');
           if (isCredFact && f.state === SUP) {
             var cv = f.value || {};
             var u = String(cv.user || cv.username || '').trim();
             var rawH = String(cv.nthash || cv.hash || '').trim();
-            var rawP = String(cv.secret || cv.password || '').trim();
+            var rawP = String(cv.secret || cv.password || '');
             var isNT = (cv.secret_type === 'NT' || cv.secretType === 'NT' || cv.hash_type === 'ntlm' || (!!rawH && !rawP));
             var h = String(rawH || (isNT ? rawP : '') || '').trim();
             var p = isNT ? '' : rawP;
@@ -605,8 +811,10 @@
               eng.credentials = eng.credentials || [];
               var exists = eng.credentials.some(function (c) {
                 return (c.user || '').toLowerCase() === u.toLowerCase()
+                  && String(c.domain || '').toLowerCase() === d.toLowerCase()
                   && (c.secret || c.password || '') === (p || '')
-                  && (c.nthash || '') === (h || '');
+                  && (c.nthash || '') === (h || '')
+                  && String(c.targetBinding || c.computer || '') === String(cv.targetBinding || cv.computer || '');
               });
               if (!exists) {
                 eng.credentials.push({
@@ -616,19 +824,16 @@
                   secret: p || '',
                   nthash: h || '',
                   secretType: st,
-                  source: 'proven',
+                  source: 'recovered',
                   scope: f.scope || '',
+                  targetBinding: cv.targetBinding || '',
+                  computer: cv.computer || '',
+                  accountType: cv.accountType || '',
+                  association: cv.association || '',
                   notes: 'Discovered via ' + (cv.method || f.source || 'evidence')
                 });
               }
-              eng.params = eng.params || {};
-              var isAdmFact = (f.kind === 'credential.admin' || f.type === 'credential.admin');
-              if (!eng.params.username || (isAdmFact && !/^(?:administrator|root)$/i.test(eng.params.username))) {
-                eng.params.username = u;
-                if (h && !p) { eng.params.nthash = h; eng.params.password = ''; }
-                else if (p) { eng.params.password = p; eng.params.nthash = ''; }
-                if (d && !eng.params.domain) eng.params.domain = d;
-              }
+              // New material is offered as a candidate. Selection is deliberate and target-specific.
             }
           }
         });
@@ -649,18 +854,20 @@
       scheduleSave();
       emit(reason || 'facts');
     },
-    retractFactKind(kind) {
+    retractFactKind(kind, scope) {
+      if (typeof scope !== 'string') throw new Error('A fact scope is required for retraction');
       var eng = this.active();
       if (!eng) return;
       var fs = this.factSet();
-      fs.facts = fs.facts.filter(function (f) { return f.kind !== kind; });
+      fs.facts = fs.facts.filter(function (f) { return f.kind !== kind || f.scope !== scope; });
       this.setFacts(fs, 'retract');
     },
 
     // ---- blobs (screenshots / large evidence) ----
     async putBlob(blob, meta) {
       var id = uid('blob');
-      var rec = Object.assign({ id: id, at: Date.now() }, meta || {}, { blob: blob });
+      if (!_activeId) throw new Error('An engagement is required for binary evidence');
+      var rec = Object.assign({ at: Date.now() }, meta || {}, { id: id, engagementId: _activeId, blob: blob });
       _mem.blobs[id] = rec;
       if (_useIDB && _db) { try { await idbPut('blobs', rec); } catch (e) {} }
       return id;

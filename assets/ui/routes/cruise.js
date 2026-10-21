@@ -63,7 +63,7 @@
   };
 
   function cruiseDoneIds(eng) {
-    var out = Object.assign({}, (eng && eng.checklist) || {});
+    var out = OBOL.store.doneIdsForTarget ? OBOL.store.doneIdsForTarget((eng.params || {}).target, cruiseFactsFor(eng), eng) : {};
     targetActivities(eng).forEach(function (a) {
       var id = a && (a.action_id || a.move_id);
       if (id && STAGE1_RECON_IDS[id] && (!a.blockers || !a.blockers.length)) {
@@ -198,7 +198,7 @@
       + '  <strong class="cr-cp-title">' + esc(a.title) + '</strong>'
       + '  <span class="cr-cp-phase">' + esc(ph) + '</span>'
       + '  <div class="cr-cp-actions">'
-      + '    <button type="button" class="cr-btn-neon neon-amber small cr-copy" data-copy="' + attr(cp.command) + '">' + ic('copy') + 'Copy Command</button>'
+      + '    <button type="button" class="cr-btn-neon neon-amber small cr-copy" data-copy="' + attr(cp.command) + '" data-copy-action="' + attr(a.id) + '" data-copy-locus="' + attr(OBOL.pack.commandExecutionLocus ? OBOL.pack.commandExecutionLocus((a.commands || [])[cp.cmdIndex || 0]) : OBOL.pack.defaultCommandLocus(a)) + '">' + ic('copy') + 'Copy Command</button>'
       + '    <a class="cr-btn-glass small" href="#/path" title="View full move breakdown in Next Steps">Open in Next Steps &rarr;</a>'
       + '  </div>'
       + '</div>'
@@ -226,17 +226,9 @@
 
     var pasteBanner = '';
     if (_lastPaste) {
-      var pCount = _lastPaste.added || 0;
       var pKinds = (_lastPaste.kinds || []).slice(0, 8);
-      pasteBanner = '<div class="cr-paste-debrief ' + (pCount > 0 ? 'is-gain' : 'is-neutral') + '">'
-        + '<div class="cr-paste-debrief-main">'
-        + '  <span class="cr-paste-debrief-badge">' + (pCount > 0 ? ('+' + pCount + ' NEW FACT' + (pCount === 1 ? '' : 'S') + ' MINTED') : 'HYPOTHESES CHECKED (0 NEW FACTS)') + '</span>'
-        + '  <span class="cr-paste-debrief-text">'
-        + (pCount > 0
-          ? ('Parsed ' + (_lastPaste.commands || 1) + ' step' + (_lastPaste.commands === 1 ? '' : 's') + ' and updated the Theory of the Case below.')
-          : 'Marked those probes as tried in this epoch and shifted the script below to the Deep Fallback Wave.')
-        + '  </span>'
-        + '</div>'
+      pasteBanner = '<div class="cr-paste-debrief is-neutral">'
+        + OBOL.ingest.renderOutcome(_lastPaste.outcome)
         + (pKinds.length ? ('<div class="cr-paste-debrief-chips">' + pKinds.map(function (k) { return '<span class="cr-fact-chip mono">' + esc(k) + '</span>'; }).join('') + '</div>') : '')
         + '</div>';
     }
@@ -316,6 +308,9 @@
 
     var st = stPlan.stages.filter(function (s) { return s.id === selectedStageId; })[0] || stPlan.stages[0];
     var opts = optsFor(eng);
+    if (!OBOL.cruise.validTarget(opts.params.target)) {
+      return '<section class="cr-station tool-card"><h2>Target Required</h2><p role="status">Configure a valid target or target scope before generating a Cruise script.</p></section>';
+    }
     var scriptCtx = {
       mode: stPlan.mode,
       params: opts.params,
@@ -324,7 +319,7 @@
       facts: facts,
       pack: pack,
       osFamily: stPlan.osFamily,
-      doneIds: (eng && eng.checklist) || {},
+      doneIds: cruiseDoneIds(eng),
     };
     var script = OBOL.cruise.buildStageScript(st.id, scriptCtx);
     var oneLiner = OBOL.cruise.buildStageOneLiner(st.id, scriptCtx);
@@ -429,8 +424,8 @@
     var wsRoot = (OBOL.workspace && OBOL.workspace.rootFor)
       ? OBOL.workspace.rootFor(eng)
       : ((opts.workspace && opts.workspace.root && opts.workspace.root !== '.') ? String(opts.workspace.root).trim() : '');
-    var targetArg = ' "' + (opts.params.target || '10.10.10.10') + '"';
-    var cdPrefix = wsRoot ? ('cd ' + wsRoot + ' && ') : '';
+    var targetArg = ' ' + OBOL.command.shellQuote(opts.params.target);
+    var cdPrefix = wsRoot ? ('cd ' + OBOL.command.shellQuote(wsRoot) + ' && ') : '';
     var runHint = (st.ext === '.bat')
       ? fileName
       : (cdPrefix + 'bash ~/Downloads/' + fileName + targetArg);
@@ -670,18 +665,26 @@
       if (r.arsenal && r.arsenal.ok) {
         newKinds.unshift('loadout.synced (' + r.arsenal.present + ' tools)');
       }
+      if (r.workspaceSync && r.workspaceSync.ok) {
+        newKinds.unshift('workspace.synced (' + r.workspaceSync.confirmed + ' confirmed)');
+      }
+      if (r.targetsImported && r.targetsImported.ok) {
+        newKinds.unshift('targets.imported (' + (r.targetsImported.added || 0) + ')');
+      }
       _lastPaste = {
         at: Date.now(),
         added: added,
         commands: r.imported || 1,
         kinds: newKinds,
         arsenal: r.arsenal || null,
+        outcome: r.outcome || null,
       };
-      _selectedStage = null;
-      OBOL.store.update(function (e) { if (e.ui) delete e.ui.cruiseStage; }, 'cruise-stage');
-      var toastMsg = added
-        ? ('Handoff updated: +' + added + ' new fact' + (added === 1 ? '' : 's') + (r.arsenal && r.arsenal.ok ? (' + Loadout synced (' + r.arsenal.present + ' tools)') : ''))
-        : (r.arsenal && r.arsenal.ok ? ('Loadout synced (' + r.arsenal.present + ' tools) & hypotheses recorded') : 'Hypotheses recorded in Handoff');
+      if (r.outcome && r.outcome.conclusive) {
+        _selectedStage = null;
+        OBOL.store.update(function (e) { if (e.ui) delete e.ui.cruiseStage; }, 'cruise-stage');
+      }
+      var toastMsg = r.outcome ? OBOL.ingest.outcomeMessage(r)
+        : (r.arsenal && r.arsenal.ok ? ('Loadout synced (' + r.arsenal.present + ' tools)') : 'Output saved for review');
       U.toast(toastMsg);
       OBOL.router.render();
     };
@@ -782,6 +785,8 @@
     U.on(mount, 'click', '.cr-copy', function (e, el) {
       e.preventDefault();
       var text = el.getAttribute('data-copy') || '';
+      if (el.getAttribute('data-copy-action') && OBOL.ingest) OBOL.ingest.setLastCopied({ command: text, actionId: el.getAttribute('data-copy-action'),
+        target: ((OBOL.store.active() || {}).params || {}).target || '', executionLocus: el.getAttribute('data-copy-locus') || 'remote' });
       U.copy(text).then(function (ok) { U.toast(ok ? 'Copied to clipboard' : 'Copy failed', ok ? '' : 'err'); });
     });
 
@@ -806,6 +811,7 @@
         osFamily: stPlan.osFamily,
         doneIds: doneIds,
       });
+      if (!script) { U.toast('Configure a valid target before generating a Cruise script.', 'err'); return; }
       var ok = downloadScript(fname, script);
       var runCmd = el.getAttribute('data-runcmd') || '';
       if (ok && runCmd && U.copy) {

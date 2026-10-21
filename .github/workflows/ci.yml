@@ -22,7 +22,7 @@ concurrency:
 jobs:
   engine-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,5 +34,60 @@ jobs:
           find assets/engine assets/ui -name '*.js' -print0 | xargs -0 -n1 node --check
           node --check data/toolset.js
           node --check data/packs-bundle.js
+      - name: Verify state, parsing, recommendations, and report contracts
+        run: |
+          set -e
+          for test in \
+            fact-canon-smoke \
+            command-rewrite-smoke \
+            locus-scope-smoke \
+            planner-smoke \
+            ranker-keystone-smoke \
+            ranker-newports-smoke \
+            parser-resilience \
+            ingest-routing-smoke \
+            session-import-smoke \
+            outcome-parsers-smoke \
+            report-smoke \
+            report-preflight-smoke \
+            report-secret-variants \
+            audit-regressions \
+            parser-proof-regressions \
+            context-migration-regressions \
+            context-location-regressions \
+            parser-coverage-contract \
+            context-outcome-flow
+          do
+            node "tests/engine/$test.js"
+          done
+      - name: Check observed parser coverage and corpus assertions
+        run: node tools/gap-report.js --check
+
+  browser-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install the tested browser runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Verify real ingestion, state transitions, and visible outcomes
+        env:
+          OBOL_BEHAVIOR_OUTPUT: test-results/outcome-flow
+          OBOL_AUDIT_OUTPUT: test-results/audit
+        run: |
+          node tests/browser-outcome-flow.js
+          node tests/browser-audit-smoke.js
+      - name: Retain browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-behavior-evidence
+          path: test-results/
+          if-no-files-found: ignore
 
 

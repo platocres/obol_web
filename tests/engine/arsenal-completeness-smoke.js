@@ -120,7 +120,7 @@ ok(script.includes('for cand in "/opt/$repo_dir" "$HOME/$repo_dir"') && script.i
 ok(script.includes('def scan_tree(root_dir, max_d=3):') && script.includes('"via":"located"'), 'Python inventory probe scans /opt, ~/tools, and $HOME to locate moved scripts and wordlists');
 
 // Execute the embedded Python inventory probe against a synthetic existing-Kali home directory
-const pyMatch = script.match(/INV=\$\(python3 - "\$REC" "\$WWW" <<'PY'\n([\s\S]*?)\nPY\n\)/);
+const pyMatch = script.match(/INV=\$\(python3 - "\$REC" "\$WWW"(?: "\$TOOLDIR")? <<'PY'\n([\s\S]*?)\nPY\n\)/);
 ok(!!pyMatch, 'extracted embedded Python inventory probe from download-arsenal.sh');
 if (pyMatch) {
   const os = require('os');

@@ -2,10 +2,10 @@
  * obol engine - parsers/nxc-catalog.js
  *
  * The NetExec (nxc) CAPABILITY CATALOG + a generic, data-driven parser driver. nxc is the preferred tool,
- * and the goal is EXHAUSTIVE coverage: every protocol × flag × module we offer as a move/command has (1) a
+ * and the goal is EXHAUSTIVE coverage: every protocol x flag x module we offer as a move/command has (1) a
  * declared fact it produces (or is marked informational), (2) a gate + locus for move generation, and (3) a
- * parser that mints that fact from the command's real output - proven by tests/engine/nxc-switch-parsers.js,
- * which pastes real output (success → fact, denied/empty → nothing).
+ * parser that mints that fact from the command's real output - proven by tests/engine/legacy/nxc-switch-parsers.js,
+ * which pastes real output (success -> fact, denied/empty -> nothing).
  *
  * Design: ONE catalog, ONE driver. Capabilities already covered by the hand-written parsers
  * (directory.js / creds.js - shares, --ntds/--sam, roasting, laps, rid-brute, coerce, exec) carry
@@ -87,13 +87,20 @@
         });
         return out;
       } },
-    { id: 'smb-dpapi', proto: 'smb', flag: '--dpapi', produces: ['credential.candidate', 'credential.plaintext'],
+    { id: 'smb-dpapi', proto: 'smb', flag: '--dpapi', produces: ['credential.candidate', 'credential.plaintext', 'credential.available'],
       gate: ['access.admin', 'access.system'],
       extract: function (text, ws) {
         var out = [];
         payloadLines(text).forEach(function (l) {
+          var up = l.match(/\[(?:SYSTEM|CREDENTIAL|CHROME|[^\]]+)\]\s*([^\s:]+\\[^\s:]+|[A-Za-z0-9_.-]+)\s+-\s+(?:password|secret)\s*:\s*(\S+)/i);
           var m = l.match(/\[(?:SYSTEM|CREDENTIAL|CHROME|.*)\].*?(?:password|secret)\s*:\s*(\S+)/i) || l.match(/\b([^\s:]+):([^\s:]{4,})\s*$/);
-          if (m) out.push({ kind: 'credential.plaintext', scope: host(ws), value: { kind: 'dpapi', detail: l, tool: 'nxc' } });
+          if (m) {
+            var pw = up ? up[2] : (m[2] || m[1]);
+            var usr = up ? up[1] : (m[2] ? m[1] : undefined);
+            out.push({ kind: 'credential.plaintext', scope: host(ws), value: { kind: 'dpapi', user: usr, password: pw, detail: l, tool: 'nxc' } });
+            out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: 'dpapi', user: usr, password: pw, detail: l, tool: 'nxc' } });
+            if (usr && pw) out.push({ kind: 'credential.available', scope: host(ws), value: { user: usr, password: pw, method: 'dpapi', service: 'smb' } });
+          }
         });
         return out;
       } },
@@ -119,7 +126,7 @@
         var ps = (text.match(/Passwords?\s*:\s*\[?['"]?([^'"\]\n]+)/i) || [])[1];
         return (us || ps) ? [{ kind: 'credential.candidate', scope: host(ws), value: { kind: 'gpp_autologin', user: us && us.trim(), password: ps && ps.trim(), tool: 'nxc' } }] : [];
       } },
-    { id: 'smb-lsassy', proto: 'smb', module: 'lsassy', produces: ['hash.ntlm', 'credential.plaintext'],
+    { id: 'smb-lsassy', proto: 'smb', module: 'lsassy', produces: ['hash.ntlm', 'credential.plaintext', 'credential.candidate', 'credential.available'],
       gate: ['access.admin', 'access.system'],
       extract: function (text, ws) {
         // lsassy lines: "[+] domain\user  <nthash>" or "domain\user  lm:nt" or "domain\user  <plaintext>".
@@ -127,13 +134,24 @@
         payloadLines(text).forEach(function (l) {
           l = l.replace(/^\[[-+*!]\]\s*/, '');
           var m = l.match(/^([A-Za-z0-9_.-]+\\[^\s]+)\s+(?:[a-f0-9]{32}:)?([a-f0-9]{32})\b/i);
-          if (m && !seen[m[2]]) { seen[m[2]] = 1; out.push({ kind: 'hash.ntlm', scope: host(ws), value: { user: m[1], nthash: m[2].toLowerCase(), tool: 'nxc', via: 'lsassy' } }); return; }
+          if (m && !seen[m[2]]) {
+            seen[m[2]] = 1;
+            var nt = m[2].toLowerCase();
+            out.push({ kind: 'hash.ntlm', scope: host(ws), value: { user: m[1], nthash: nt, tool: 'nxc', via: 'lsassy' } });
+            out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: 'lsass_ntlm', user: m[1], nthash: nt, tool: 'nxc', via: 'lsassy' } });
+            return;
+          }
           var p = l.match(/^([A-Za-z0-9_.-]+\\[^\s]+)\s+([^\s:][^\s]{2,})$/);
-          if (p && !/^[a-f0-9]{32}$/i.test(p[2]) && !seen[l]) { seen[l] = 1; out.push({ kind: 'credential.plaintext', scope: host(ws), value: { user: p[1], password: p[2], tool: 'nxc', via: 'lsassy' } }); }
+          if (p && !/^[a-f0-9]{32}$/i.test(p[2]) && !seen[l]) {
+            seen[l] = 1;
+            out.push({ kind: 'credential.plaintext', scope: host(ws), value: { user: p[1], password: p[2], tool: 'nxc', via: 'lsassy' } });
+            out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: 'lsass_plaintext', user: p[1], password: p[2], tool: 'nxc', via: 'lsassy' } });
+            out.push({ kind: 'credential.available', scope: host(ws), value: { user: p[1], password: p[2], method: 'lsassy', service: 'smb' } });
+          }
         });
         return out;
       } },
-    { id: 'smb-nanodump', proto: 'smb', module: 'nanodump', produces: ['hash.ntlm', 'credential.plaintext'],
+    { id: 'smb-nanodump', proto: 'smb', module: 'nanodump', produces: ['hash.ntlm', 'credential.plaintext', 'credential.candidate', 'credential.available'],
       gate: ['access.admin', 'access.system'],
       extract: function (text, ws) { return CAT_BY_ID['smb-lsassy'].extract(text, ws); } },
     { id: 'smb-spider-plus', proto: 'smb', module: 'spider_plus', produces: ['loot.files', 'credential.candidate'],
@@ -177,19 +195,19 @@
       } },
     { id: 'smb-gen-relay-list', proto: 'smb', flag: '--gen-relay-list', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
 
-    // --- SMB LSASS-dump family (all emit domain\user → hash/plaintext like lsassy) ---
-    { id: 'smb-handlekatz', proto: 'smb', module: 'handlekatz', produces: ['hash.ntlm', 'credential.plaintext'],
+    // --- SMB LSASS-dump family (all emit domain\user -> hash/plaintext like lsassy) ---
+    { id: 'smb-handlekatz', proto: 'smb', module: 'handlekatz', produces: ['hash.ntlm', 'credential.plaintext', 'credential.candidate', 'credential.available'],
       gate: ['access.admin', 'access.system'], extract: function (text, ws) { return CAT_BY_ID['smb-lsassy'].extract(text, ws); } },
-    { id: 'smb-procdump', proto: 'smb', module: 'procdump', produces: ['hash.ntlm', 'credential.plaintext'],
+    { id: 'smb-procdump', proto: 'smb', module: 'procdump', produces: ['hash.ntlm', 'credential.plaintext', 'credential.candidate', 'credential.available'],
       gate: ['access.admin', 'access.system'], extract: function (text, ws) { return CAT_BY_ID['smb-lsassy'].extract(text, ws); } },
-    { id: 'smb-masky', proto: 'smb', module: 'masky', produces: ['hash.ntlm', 'credential.plaintext'],
+    { id: 'smb-masky', proto: 'smb', module: 'masky', produces: ['hash.ntlm', 'credential.plaintext', 'credential.candidate', 'credential.available'],
       gate: ['access.admin', 'access.system'], extract: function (text, ws) { return CAT_BY_ID['smb-lsassy'].extract(text, ws); } },
 
     // --- SMB privileged dumps / registry secrets ---
     { id: 'smb-backup-operator', proto: 'smb', module: 'backup_operator', produces: ['loot.ntds', 'hash.ntlm'],
       gate: ['privesc.windows_privilege', 'access.admin'],
       extract: function (text, ws) {
-        // SeBackupPrivilege → remote registry-hive / NTDS dump: emits the same user:rid:lm:nt::: lines.
+        // SeBackupPrivilege -> remote registry-hive / NTDS dump: emits the same user:rid:lm:nt::: lines.
         var out = [], seen = {};
         payloadLines(text).forEach(function (l) {
           var m = l.match(/^([^\s:]+):\d+:[a-f0-9]{32}:([a-f0-9]{32}):::/i);
@@ -212,7 +230,18 @@
       gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'winscp'); } },
     { id: 'smb-putty', proto: 'smb', module: 'putty', produces: ['credential.candidate'],
       gate: ['foothold.windows', 'access.admin'], extract: function (text, ws) { return modCreds(text, ws, 'putty'); } },
-    { id: 'smb-keepass-discover', proto: 'smb', module: 'keepass_discover', informational: true, produces: [], gate: ['foothold.windows', 'access.admin'] },
+    { id: 'smb-keepass-discover', proto: 'smb', module: 'keepass_discover', produces: ['loot.keepass_dump', 'loot.files'],
+      gate: ['foothold.windows', 'access.admin'],
+      extract: function (text, ws) {
+        if (/\.kdbx\b|keepass.*found|found.*\.kdbx/i.test(text) && !hasDenied(text)) {
+          var m = text.match(/[A-Za-z]:\\[^\r\n"']*\.kdbx\b|\/[^\s"']*\.kdbx\b/i);
+          return [
+            { kind: 'loot.keepass_dump', scope: host(ws), value: { path: m ? m[0] : 'Database.kdbx', detail: 'KeePass .kdbx database discovered via nxc keepass_discover', tool: 'nxc' } },
+            { kind: 'loot.files', scope: host(ws), value: { kind: 'keepass_kdbx', path: m ? m[0] : 'Database.kdbx', tool: 'nxc' } }
+          ];
+        }
+        return [];
+      } },
     { id: 'smb-keepass-trigger', proto: 'smb', module: 'keepass_trigger', produces: ['credential.candidate'],
       gate: ['access.admin', 'access.system'], extract: function (text, ws) { return modCreds(text, ws, 'keepass_master'); } },
 
@@ -236,13 +265,28 @@
       gate: ['smb.reachable', 'port:445'],
       extract: function (text, ws) { return /ntlmv1.*(?:enabled|allow|vulnerable)|lmcompatibilitylevel\s*[:=]\s*[0-2]/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'ntlmv1_enabled', detail: 'NTLMv1 permitted - crackable/relayable', tool: 'nxc' } }] : []; } },
 
-    // --- SMB defensive / coercion-enabler checks (informational leads) ---
+    // --- SMB defensive / coercion-enabler checks ---
     { id: 'smb-enum-av', proto: 'smb', module: 'enum_av', produces: ['defense.control'],
       gate: ['access.admin', 'access.system'],
       extract: function (text, ws) { return /defender|antivirus|edr|crowdstrike|carbon|sentinel|\bav\b/i.test(text) ? [{ kind: 'defense.control', scope: host(ws), value: { kind: 'av_edr', detail: payloadLines(text).slice(0, 10).join('; '), tool: 'nxc' } }] : []; } },
-    { id: 'smb-spooler', proto: 'smb', module: 'spooler', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
-    { id: 'smb-webdav', proto: 'smb', module: 'webdav', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
-    { id: 'smb-runasppl', proto: 'smb', module: 'runasppl', informational: true, produces: [], gate: ['access.admin', 'access.system'] },
+    { id: 'smb-spooler', proto: 'smb', module: 'spooler', produces: ['ad.coerced_auth'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) {
+        return /spooler service (?:is )?(?:enabled|running)/i.test(text) && !/disabled|not running/i.test(text)
+          ? [{ kind: 'ad.coerced_auth', scope: dom(ws), value: { detail: 'Print Spooler service enabled (coercion vector available)', tool: 'nxc', via: 'spooler' } }] : [];
+      } },
+    { id: 'smb-webdav', proto: 'smb', module: 'webdav', produces: ['ad.coerced_auth'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) {
+        return /webclient service (?:is )?(?:enabled|running)/i.test(text) && !/disabled|not running/i.test(text)
+          ? [{ kind: 'ad.coerced_auth', scope: dom(ws), value: { detail: 'WebClient service enabled (HTTP-to-LDAP/SMB coercion available)', tool: 'nxc', via: 'webdav' } }] : [];
+      } },
+    { id: 'smb-runasppl', proto: 'smb', module: 'runasppl', produces: ['defense.control'],
+      gate: ['access.admin', 'access.system'],
+      extract: function (text, ws) {
+        return /runasppl.*(?:enabled|1|true)/i.test(text) && !/runasppl.*(?:disabled|not enabled|\b0\b|false)/i.test(text)
+          ? [{ kind: 'defense.control', scope: host(ws), value: { kind: 'lsass_ppl', detail: 'RunAsPPL (LSASS Protected Process Light) enabled', tool: 'nxc' } }] : [];
+      } },
 
     // --- SMB CVE-confirmation modules: a VULNERABLE verdict mints the fact that promotes the exploit move ---
     { id: 'smb-ms17-010', proto: 'smb', module: 'ms17-010', produces: ['smb.ms17_010'],
@@ -254,8 +298,34 @@
     { id: 'smb-smbghost', proto: 'smb', module: 'smbghost', produces: ['vuln.smbghost'],
       gate: ['smb.reachable', 'port:445'],
       extract: function (text, ws) { return /vulnerable/i.test(text) && !/not\s+vulnerable/i.test(text) ? [{ kind: 'vuln.smbghost', scope: host(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'CVE-2020-0796' } }] : []; } },
-    { id: 'smb-nopac', proto: 'smb', module: 'nopac', informational: true, produces: [], gate: ['credential.available', 'ad.dc_candidate'] },
-    { id: 'smb-printnightmare', proto: 'smb', module: 'printnightmare', informational: true, produces: [], gate: ['smb.reachable', 'port:445'] },
+    { id: 'smb-nopac', proto: 'smb', module: 'nopac', produces: ['ad.nopac'],
+      gate: ['credential.available', 'ad.dc_candidate'],
+      extract: function (text, ws) {
+        return (/\bvulnerable\b|TGT\s+with\s+PAC\s+size|\bnoPac\b.*(?:\[\+\]|vulnerable)/i.test(text)) && !/not\s+vulnerable/i.test(text)
+          ? [{ kind: 'ad.nopac', scope: dom(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'CVE-2021-42278/CVE-2021-42287' } }] : [];
+      } },
+    { id: 'smb-printnightmare', proto: 'smb', module: 'printnightmare', produces: ['vuln.printnightmare'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) {
+        return /\bvulnerable\b/i.test(text) && !/not\s+vulnerable/i.test(text)
+          ? [{ kind: 'vuln.printnightmare', scope: host(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'CVE-2021-34527' } }] : [];
+      } },
+    { id: 'smb-enum-cve', proto: 'smb', module: 'enum_cve', produces: ['ad.zerologon', 'vuln.printnightmare', 'vuln.smbghost', 'ad.nopac', 'adcs.vulnerable', 'exploit.candidate'],
+      gate: ['smb.reachable', 'port:445'],
+      extract: function (text, ws) {
+        if (!/vulnerable|cve-\d{4}-\d+/i.test(text) || /not\s+vulnerable|0\s+cve/i.test(text)) return [];
+        var out = [];
+        if (/cve-2020-1472|zerologon/i.test(text)) out.push({ kind: 'ad.zerologon', scope: host(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'CVE-2020-1472', via: 'enum_cve' } });
+        if (/cve-2021-34527|cve-2021-1675|printnightmare/i.test(text)) out.push({ kind: 'vuln.printnightmare', scope: host(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'CVE-2021-34527', via: 'enum_cve' } });
+        if (/cve-2020-0796|smbghost/i.test(text)) out.push({ kind: 'vuln.smbghost', scope: host(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'CVE-2020-0796', via: 'enum_cve' } });
+        if (/cve-2021-42278|cve-2021-42287|nopac|samaccountname/i.test(text)) out.push({ kind: 'ad.nopac', scope: dom(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'CVE-2021-42278', via: 'enum_cve' } });
+        if (/cve-2022-26923|certifried/i.test(text)) out.push({ kind: 'adcs.vulnerable', scope: dom(ws), value: { verdict: 'vulnerable', tool: 'nxc', cve: 'CVE-2022-26923', via: 'enum_cve' } });
+        if (!out.length && /cve-\d{4}-\d+/i.test(text)) {
+          var cves = text.match(/CVE-\d{4}-\d+/gi) || [];
+          out.push({ kind: 'exploit.candidate', scope: host(ws), value: { cves: cves, detail: 'unpatched CVEs flagged by nxc enum_cve: ' + cves.join(', '), tool: 'nxc' } });
+        }
+        return out;
+      } },
 
     // --- SMB more stored-application credentials ---
     { id: 'smb-rdcman', proto: 'smb', module: 'rdcman', produces: ['credential.candidate'],
@@ -269,10 +339,10 @@
     { id: 'smb-met-inject', proto: 'smb', module: 'met_inject', produces: ['foothold.windows'],
       gate: ['access.admin', 'access.system'],
       extract: function (text, ws) { return /\(Pwn3d!\)|injected|meterpreter|session opened/i.test(text) && !hasDenied(text) ? [{ kind: 'foothold.windows', scope: host(ws), value: { method: 'met_inject', tool: 'nxc' } }] : []; } },
-    // SCF/URL/LNK drop on a writable share → captures SMB auth from any user who browses it (pair with Responder).
+    // SCF/URL/LNK drop on a writable share -> captures SMB auth from any user who browses it (pair with Responder).
     { id: 'smb-slinky', proto: 'smb', module: 'slinky', produces: ['config.review'],
       gate: ['smb.authenticated', 'credential.available'],
-      extract: function (text, ws) { return /added|\.url|\.lnk|dropped|\[\+\]/i.test(text) && !hasDenied(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'malicious_file_drop', detail: 'URL/LNK planted on a writable share - run Responder to capture browsing users’ NetNTLM', tool: 'nxc' } }] : []; } },
+      extract: function (text, ws) { return /added|\.url|\.lnk|dropped|\[\+\]/i.test(text) && !hasDenied(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'malicious_file_drop', detail: 'URL/LNK planted on a writable share - run Responder to capture browsing users NetNTLM', tool: 'nxc' } }] : []; } },
     { id: 'smb-scuffy', proto: 'smb', module: 'scuffy', produces: ['config.review'],
       gate: ['smb.authenticated', 'credential.available'],
       extract: function (text, ws) { return CAT_BY_ID['smb-slinky'].extract(text, ws); } },
@@ -290,6 +360,12 @@
       gate: ['ldap.reachable', 'port:389', 'credential.candidate', 'credential.available'] },
     { id: 'ldap-users', proto: 'ldap', flag: '--users', produces: ['ad.user_list'], existing: true,
       gate: ['ldap.reachable', 'port:389'] },
+    { id: 'ldap-active-users', proto: 'ldap', flag: '--active-users', produces: ['ad.user_list'],
+      gate: ['ldap.reachable', 'port:389'],
+      extract: function (text, ws) {
+        var users = C._usernames(text);
+        return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-active-users' } }] : [];
+      } },
     { id: 'ldap-groups', proto: 'ldap', flag: '--groups', informational: true, produces: [], gate: ['ldap.reachable', 'port:389'] },
     { id: 'ldap-asreproast', proto: 'ldap', flag: '--asreproast', produces: ['hash.asrep', 'credential.candidate'], existing: true,
       gate: ['ad.user_list', 'ldap.reachable'] },
@@ -365,7 +441,7 @@
     { id: 'ldap-adcs', proto: 'ldap', module: 'adcs', produces: ['adcs.vulnerable'],
       gate: ['credential.available', 'ldap.reachable'],
       extract: function (text, ws) {
-        // nxc ldap -M adcs lists CAs / templates; a vulnerable ESC template is the ADCS lead (→ adcs-esc /
+        // nxc ldap -M adcs lists CAs / templates; a vulnerable ESC template is the ADCS lead (-> adcs-esc /
         // certifried / cert-authenticate). A plain CA listing with no ESC verdict is just enumeration.
         return /ESC\d|vulnerable|enrollee supplies subject|ENROLLEE_SUPPLIES_SUBJECT|EDITF_ATTRIBUTESUBJECTALTNAME/i.test(text)
           ? [{ kind: 'adcs.vulnerable', scope: dom(ws), value: { detail: 'vulnerable ADCS template/CA via nxc adcs', tool: 'nxc' } }] : [];
@@ -390,8 +466,14 @@
       gate: ['ldap.reachable', 'port:389'],
       extract: function (text, ws) { return /signing\s*(?:not|is not|none)|channel binding\s*(?:not|never)|not (?:enforced|required)/i.test(text) ? [{ kind: 'config.review', scope: host(ws), value: { kind: 'ldap_signing_not_enforced', detail: 'LDAP signing / channel binding not enforced - relayable', tool: 'nxc' } }] : []; } },
 
-    // --- LDAP informational ---
-    { id: 'ldap-maq', proto: 'ldap', module: 'maq', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
+    // --- LDAP quota & informational ---
+    { id: 'ldap-maq', proto: 'ldap', module: 'maq', produces: ['ad.maq_allow'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) {
+        var m = text.match(/MachineAccountQuota\s*[:=]\s*(\d+)/i);
+        var q = m ? parseInt(m[1], 10) : 0;
+        return q >= 1 ? [{ kind: 'ad.maq_allow', scope: dom(ws), value: { quota: q, detail: 'MachineAccountQuota is ' + q + ' (domain users can add machine accounts)', tool: 'nxc' } }] : [];
+      } },
     { id: 'ldap-query', proto: 'ldap', flag: '--query', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
     { id: 'ldap-whoami', proto: 'ldap', module: 'whoami', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
     { id: 'ldap-subnets', proto: 'ldap', module: 'subnets', informational: true, produces: [], gate: ['credential.available', 'ldap.reachable'] },
@@ -412,8 +494,18 @@
       gate: ['db.session'] },
     { id: 'mssql-exec-ps', proto: 'mssql', flag: '-X', produces: ['foothold.windows'], existing: true,
       gate: ['db.session'] },
-    { id: 'mssql-query', proto: 'mssql', flag: '-q', informational: true, produces: [], gate: ['db.session'] },
-    { id: 'mssql-priv', proto: 'mssql', module: 'mssql_priv', informational: true, produces: [], gate: ['db.session'] },
+    { id: 'mssql-query', proto: 'mssql', flag: '-q', produces: ['db.session', 'db.databases'], existing: true, gate: ['db.session'] },
+    { id: 'mssql-priv', proto: 'mssql', module: 'mssql_priv', produces: ['db.session', 'mssql.sysadmin'],
+      gate: ['db.session'],
+      extract: function (text, ws) {
+        if (/sysadmin|can impersonate|\(Pwn3d!\)|\[\+\].*admin/i.test(text) && !hasDenied(text)) {
+          return [
+            { kind: 'db.session', scope: host(ws), value: { service: 'mssql', privileged: true, tool: 'nxc' } },
+            { kind: 'mssql.sysadmin', scope: host(ws), value: { detail: 'MSSQL sysadmin privilege confirmed or impersonated via nxc mssql_priv', tool: 'nxc' } }
+          ];
+        }
+        return [];
+      } },
     { id: 'mssql-coerce', proto: 'mssql', module: 'mssql_coerce', produces: ['ad.coerced_auth'],
       gate: ['db.session'],
       extract: function (text, ws) { return /received connection|coerc|\[\+\].*success|ntlmv2/i.test(text) ? [{ kind: 'ad.coerced_auth', scope: dom(ws), value: { detail: 'auth coerced via MSSQL (xp_dirtree/xp_fileexist)', tool: 'nxc' } }] : []; } },
@@ -421,8 +513,28 @@
     // ========================= RDP =========================
     { id: 'rdp-auth', proto: 'rdp', validate: true, produces: ['rdp.authenticated'], existing: true,
       gate: ['rdp.reachable', 'port:3389', 'credential.available', 'hash.ntlm'] },
-    { id: 'rdp-screenshot', proto: 'rdp', flag: '--screenshot', informational: true, produces: [], gate: ['rdp.reachable', 'port:3389'] },
-    { id: 'rdp-nla-screenshot', proto: 'rdp', flag: '--nla-screenshot', informational: true, produces: [], gate: ['rdp.reachable', 'port:3389'] },
+    { id: 'rdp-exec', proto: 'rdp', flag: '-x', produces: ['foothold.windows'],
+      gate: ['rdp.authenticated', 'rdp.reachable', 'port:3389'],
+      extract: function (text, ws) {
+        if (hasDenied(text)) return [];
+        return /\(Pwn3d!\)|Executed command/i.test(text) ? [{ kind: 'foothold.windows', scope: host(ws), value: { service: 'rdp', method: 'rdp-exec', tool: 'nxc' } }] : [];
+      } },
+    { id: 'rdp-exec-ps', proto: 'rdp', flag: '-X', produces: ['foothold.windows'],
+      gate: ['rdp.authenticated', 'rdp.reachable', 'port:3389'],
+      extract: function (text, ws) {
+        if (hasDenied(text)) return [];
+        return /\(Pwn3d!\)|Executed command/i.test(text) ? [{ kind: 'foothold.windows', scope: host(ws), value: { service: 'rdp', method: 'rdp-exec-ps', tool: 'nxc' } }] : [];
+      } },
+    { id: 'rdp-screenshot', proto: 'rdp', flag: '--screenshot', produces: ['loot.files'], gate: ['rdp.reachable', 'port:3389'],
+      extract: function (text, ws) {
+        if (hasDenied(text)) return [];
+        var m = text.match(/screenshot[^\r\n]*?\bsaved(?:\s+to)?\s+([^\s"']+\.png)\b/i)
+          || text.match(/\bsaved(?:\s+screenshot)?(?:\s+to)?\s+([^\s"']+\.png)\b/i)
+          || (/screenshot/i.test(text) && text.match(/([^\s"']*\.png)\b/i));
+        return m ? [{ kind: 'loot.files', scope: host(ws), value: { kind: 'rdp_screenshot', path: m[1], detail: 'RDP desktop screenshot saved by NetExec (--screenshot)', tool: 'nxc' } }] : [];
+      } },
+    { id: 'rdp-nla-screenshot', proto: 'rdp', flag: '--nla-screenshot', produces: ['loot.files'], gate: ['rdp.reachable', 'port:3389'],
+      extract: function (text, ws) { return CAT_BY_ID['rdp-screenshot'].extract(text, ws); } },
 
     // ========================= FTP =========================
     { id: 'ftp-auth', proto: 'ftp', validate: true, produces: ['loot.files'],
@@ -441,7 +553,17 @@
       gate: ['ssh.reachable', 'port:22', 'credential.candidate', 'credential.available'] },
     { id: 'ssh-exec', proto: 'ssh', flag: '-x', produces: ['foothold.linux', 'access.shell'], existing: true,
       gate: ['credential.available', 'ssh.reachable'] },
-    { id: 'ssh-sudo-check', proto: 'ssh', flag: '--sudo-check', informational: true, produces: [], gate: ['credential.available', 'ssh.reachable'] },
+    { id: 'ssh-sudo-check', proto: 'ssh', flag: '--sudo-check', produces: ['privesc.sudo_rights', 'foothold.linux'],
+      gate: ['credential.available', 'ssh.reachable'],
+      extract: function (text, ws) {
+        if ((/\[\+\].*sudo|can run sudo|\(Pwn3d!\)|ALL\s*=\s*\(/i.test(text)) && !/cannot run sudo|not in the sudoers|\[-\]/i.test(text)) {
+          return [
+            { kind: 'privesc.sudo_rights', scope: host(ws), value: { detail: 'sudo rights confirmed via nxc ssh --sudo-check', tool: 'nxc' } },
+            { kind: 'foothold.linux', scope: host(ws), value: { service: 'ssh', method: 'nxc-ssh-sudo', tool: 'nxc' } }
+          ];
+        }
+        return [];
+      } },
 
     // ========================= WMI =========================
     { id: 'wmi-exec', proto: 'wmi', flag: '-x', produces: ['foothold.windows'], existing: true,
@@ -455,11 +577,16 @@
       } },
 
     // ========================= NFS =========================
-    { id: 'nfs-shares', proto: 'nfs', flag: '--shares', produces: ['loot.files'],
+    { id: 'nfs-shares', proto: 'nfs', flag: '--shares', produces: ['loot.files', 'privesc.nfs_no_root_squash'],
       gate: ['port:2049', 'nfs.reachable'],
       extract: function (text, ws) {
         var exports = payloadLines(text).filter(function (l) { return /^\//.test(l) || /\s(?:rw|ro)\b/.test(l); });
-        return exports.length ? [{ kind: 'loot.files', scope: host(ws), value: { kind: 'nfs_exports', exports: exports.slice(0, 50), count: exports.length, tool: 'nxc', note: 'NFS exports - mount and read (watch for no_root_squash)' } }] : [];
+        var out = [];
+        if (exports.length) out.push({ kind: 'loot.files', scope: host(ws), value: { kind: 'nfs_exports', exports: exports.slice(0, 50), count: exports.length, tool: 'nxc', note: 'NFS exports - mount and read (watch for no_root_squash)' } });
+        if (/no_root_squash|root\s+escape\s*:\s*true/i.test(text)) {
+          out.push({ kind: 'privesc.nfs_no_root_squash', scope: host(ws), value: { detail: 'NFS share exported with no_root_squash / root escape enabled', tool: 'nxc' } });
+        }
+        return out;
       } },
 
     // ========================= VNC =========================
@@ -499,14 +626,21 @@
     'mremoteng': 'smb-mremoteng',
     'winscp': 'smb-winscp',
     'putty': 'smb-putty',
+    'keepass_discover': 'smb-keepass-discover',
     'keepass_trigger': 'smb-keepass-trigger',
     'install_elevated': 'smb-install-elevated',
     'pre2k': 'smb-pre2k',
     'ntlmv1': 'smb-ntlmv1',
     'enum_av': 'smb-enum-av',
+    'spooler': 'smb-spooler',
+    'webdav': 'smb-webdav',
+    'runasppl': 'smb-runasppl',
     'ms17-010': 'smb-ms17-010',
     'zerologon': 'smb-zerologon',
     'smbghost': 'smb-smbghost',
+    'nopac': 'smb-nopac',
+    'printnightmare': 'smb-printnightmare',
+    'enum_cve': 'smb-enum-cve',
     'rdcman': 'smb-rdcman',
     'iis': 'smb-iis',
     'firefox': 'smb-firefox',
@@ -521,6 +655,8 @@
     'get-desc-users': 'ldap-get-desc-users',
     'enum_trusts': 'ldap-enum-trusts',
     'ldap-checker': 'ldap-ldap-checker',
+    'maq': 'ldap-maq',
+    'mssql_priv': 'mssql-priv',
     'mssql_coerce': 'mssql-coerce'
   };
 

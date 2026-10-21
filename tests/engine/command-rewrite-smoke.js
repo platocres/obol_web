@@ -24,8 +24,48 @@ const prof = {
     certipy: { present: true, invocation: 'certipy' },
     krbrelayx: { present: true, invocation: 'python3 /opt/krbrelayx/krbrelayx.py', path: '/opt/krbrelayx/krbrelayx.py', via: 'located' },
     targetedkerberoast: { present: true, invocation: 'targetedkerberoast', path: '/opt/targetedKerberoast', via: 'cloned' },
+    'set_empty_pw.py': {
+      present: true,
+      invocation: 'python3 /home/kali/tools/CVE-2020-1472/set_empty_pw.py',
+      path: '/home/kali/tools/CVE-2020-1472/set_empty_pw.py',
+      dir: '/home/kali/tools/CVE-2020-1472',
+      via: 'cloned'
+    },
+    'autoblue-ms17-010': {
+      present: true,
+      invocation: 'python3 /home/kali/tools/MS17-010/eternalblue_exploit7.py',
+      path: '/home/kali/tools/MS17-010/eternalblue_exploit7.py',
+      dir: '/home/kali/tools/MS17-010',
+      via: 'cloned'
+    },
+    'reinstall_original_pw.py': {
+      present: true,
+      invocation: 'python3 /home/kali/tools/CVE-2020-1472/reinstall_original_pw.py',
+      path: '/home/kali/tools/CVE-2020-1472/reinstall_original_pw.py',
+      dir: '/home/kali/tools/CVE-2020-1472',
+      via: 'cloned'
+    },
+    _unused_autoblue: {
+      present: true,
+      invocation: 'python3 /home/kali/tools/MS17-010/eternalblue_exploit7.py',
+      path: '/home/kali/tools/MS17-010/eternalblue_exploit7.py',
+      dir: '/home/kali/tools/MS17-010',
+      via: 'cloned'
+    },
+    'keepass-dump-masterkey': {
+      present: true,
+      invocation: 'python3 /home/kali/tools/keepass-dump-masterkey/poc.py',
+      path: '/home/kali/tools/keepass-dump-masterkey/poc.py',
+      dir: '/home/kali/tools/keepass-dump-masterkey',
+      scripts: { 'poc.py': '/home/kali/tools/keepass-dump-masterkey/poc.py', 'keepass_dump_masterkey.py': '/home/kali/tools/keepass-dump-masterkey/poc.py' },
+      via: 'cloned'
+    },
   },
   wordlists: { rockyou: '/opt/lists/rockyou.txt', seclists: '/opt/SecLists' },
+  lhost: '10.10.14.55',
+  lhost_iface: 'tun0',
+  tooldir: '/home/kali/tools',
+  wwwdir: '/home/kali/.obol/arsenal/www',
   savedAt: Date.now(),
 };
 
@@ -52,6 +92,14 @@ ok(C.applyArsenal('targetedKerberoast.py -d corp.local -u user -p pass', { tool:
   'legacy cloned profile with lowercase key upgrades to python3 <dir>/<canonical>');
 ok(C.applyArsenal('certipy find -vulnerable && impacket-getST -spn cifs/dc.corp.local corp.local/user', { tool: 'certipy' }, prof).indexOf('getST.py -spn') > 0,
   'secondary tool in a multi-tool pipeline is rewritten even when action.tool only names the primary tool');
+ok(C.applyArsenal('python3 set_empty_pw.py DC01 10.10.10.10', { tool: 'set_empty_pw.py' }, prof) === 'python3 /home/kali/tools/CVE-2020-1472/set_empty_pw.py DC01 10.10.10.10',
+  'multi-script repo (zerologon-exploit) rewrites set_empty_pw.py to its exact repo script');
+ok(C.applyArsenal('python3 reinstall_original_pw.py DC01 10.10.10.10 aad3b4', { tool: 'reinstall_original_pw.py' }, prof) === 'python3 /home/kali/tools/CVE-2020-1472/reinstall_original_pw.py DC01 10.10.10.10 aad3b4',
+  'multi-script repo (zerologon-exploit) rewrites reinstall_original_pw.py to reinstall_original_pw.py (never clobbered by set_empty_pw.py)');
+ok(C.applyArsenal('python3 eternalblue_exploit8.py 10.10.10.40 shellcode/sc_all.bin', { tool: 'autoblue' }, prof) === 'python3 /home/kali/tools/MS17-010/eternalblue_exploit8.py 10.10.10.40 shellcode/sc_all.bin',
+  'multi-script repo (autoblue) rewrites eternalblue_exploit8.py to eternalblue_exploit8.py (never clobbered by eternalblue_exploit7.py)');
+ok(C.applyArsenal('python3 keepass_dump_masterkey.py -d KeePass.DMP', { tool: 'keepass_dump_masterkey.py' }, prof) === 'python3 /home/kali/tools/keepass-dump-masterkey/poc.py -d KeePass.DMP',
+  'renamed upstream repo script (keepass-dump-masterkey poc.py) rewrites keepass_dump_masterkey.py cleanly');
 
 console.log('# wordlist paths');
 ok(C.applyArsenal('hashcat -m 1000 hash.txt /usr/share/wordlists/rockyou.txt', { tool: 'hashcat' }, prof).indexOf('/opt/lists/rockyou.txt') >= 0,
@@ -86,15 +134,20 @@ const pasteBlock = '✂────── COPY FROM HERE ──────\nOBO
   tools: { nxc: { present: true, invocation: 'netexec', path: '/usr/bin/netexec' } },
   staged: ['linpeas.sh', 'winPEASx64.exe'],
   wwwdir: '/home/kali/.obol/arsenal/www',
+  tooldir: '/home/kali/tools',
+  lhost: '10.10.14.77',
+  lhost_iface: 'tun0',
   wordlists: { rockyou: '/opt/lists/rockyou.txt', seclists: '/opt/SecLists' }
 }) + '\n✂────── TO HERE ──────';
 const ingRun = OBOL.ingest.run({ text: pasteBlock });
-ok(ingRun && ingRun.ok && ingRun.arsenal && ingRun.arsenal.present === 1 && ingRun.arsenal.staged === 2,
-  'OBOL.ingest.run intercepts OBOL-ARSENAL v1 and stocks Loadout profile');
+ok(ingRun && ingRun.ok && ingRun.arsenal && ingRun.arsenal.present === 1 && ingRun.arsenal.staged === 2 && ingRun.arsenal.lhost === '10.10.14.77',
+  'OBOL.ingest.run intercepts OBOL-ARSENAL v1 and stocks Loadout profile + lhost');
 const ingSess = OBOL.ingest.importSession(pasteBlock);
 ok(ingSess && ingSess.ok && ingSess.arsenal && ingSess.arsenal.wordlists === 2,
   'OBOL.ingest.importSession intercepts OBOL-ARSENAL v1 and stocks Loadout profile');
+const ingDirect = OBOL.arsenal.ingestInventory(pasteBlock);
+ok(ingDirect && ingDirect.ok && ingDirect.lhost === '10.10.14.77' && ingDirect.lhost_iface === 'tun0',
+  'OBOL.arsenal.ingestInventory parses lhost and lhost_iface from OBOL-ARSENAL v1');
 
 console.log(fail ? ('\nFAILED (' + fail + ')') : '\nALL PASS');
 process.exit(fail ? 1 : 0);
-

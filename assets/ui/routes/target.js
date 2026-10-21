@@ -45,6 +45,8 @@
   // the Evidence half of the spine: what you have proven about this box + a way to add more.
   // One paste feeds the engagement-wide report, filed under this host (see the global paste, phase 3).
   function evidencePanel(ip, facts) {
+    var latest = (((OBOL.store.active() || {}).activities) || []).find(function (a) { return a && a.target === ip && a.outcome; });
+    var receipt = latest && OBOL.ingest ? OBOL.ingest.renderOutcome(latest.outcome) : '';
     var kinds = provenKinds(facts);
     var rows = kinds.length
       ? '<ul class="tw-facts">' + kinds.slice(0, 10).map(function (k) {
@@ -61,7 +63,7 @@
       + '<div class="tw-ingest-row"><button type="button" class="cr-btn-neon neon-emerald small tw-ingest-go">Ingest &rarr; Facts</button>'
       + '<a class="tw-ingest-ev" href="#/evidence/">Big Output Or A Screenshot? Full Evidence &nearr;</a>'
       + '<span class="tw-ingest-result" role="status"></span></div></div>'
-      + rows
+      + receipt + rows
       + '<div class="tw-ev-note">Every fact minted here lands in the engagement report, filed under <b>' + esc(ip) + '</b>.</div>';
   }
 
@@ -170,7 +172,7 @@
       var prep = (OBOL.coach && OBOL.coach.prepBlock) ? OBOL.coach.prepBlock(a, facts, dirs) : '';
       return '<article class="tmove"><div class="tmove-head"><span class="ph-chip ph-' + OBOL.phases.phaseOfAction(a) + '">' + esc(U.titleCase(OBOL.phases.phaseOfAction(a))) + '</span>'
         + '<span class="tmove-title">' + esc(a.title) + '</span>'
-        + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '">copy</button></div>'
+        + '<button class="btn-copy" data-copy="' + U.attr(v.filled) + '" data-copy-action="' + U.attr(a.id) + '" data-copy-target="' + U.attr(ip) + '" data-copy-locus="' + U.attr(OBOL.pack.commandExecutionLocus ? OBOL.pack.commandExecutionLocus((a.commands || [])[aIdx]) : OBOL.pack.commandLocus((a.commands || [])[aIdx])) + '">copy</button></div>'
         + prep
         + '<pre class="cmd-run"><code>' + esc(v.filled) + '</code></pre></article>';
     }).join('');
@@ -251,6 +253,8 @@
       OBOL.graphtip.attach(mount, info);
     }
     U.on(mount, 'click', '.btn-copy', function (e, b) {
+      if (b.getAttribute('data-copy-action') && OBOL.ingest) OBOL.ingest.setLastCopied({ command: b.getAttribute('data-copy'), actionId: b.getAttribute('data-copy-action'),
+        target: b.getAttribute('data-copy-target'), executionLocus: b.getAttribute('data-copy-locus') || 'remote' });
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
     U.on(mount, 'click', '#td-focus-btn', function (e, b) {
@@ -283,8 +287,24 @@
         if (!okp) { if (out) out.textContent = 'Parsers still loading, try again.'; t.disabled = false; return; }
         var r = OBOL.ingest.run({ text: text, scope: 'host:' + ip, source: 'paste' });
         if (!r || !r.ok) { if (out) out.textContent = (r && r.reason === 'parsers') ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
-        if (r.added) { U.toast('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's') + ', updating this box'); OBOL.router.render(); }
-        else { t.disabled = false; if (out) out.textContent = r.facts.length ? ('Recognized ' + r.facts.length + ', nothing new (already known).') : 'No facts recognized (output saved).'; }
+        if (r.arsenal && r.arsenal.ok && !r.added) {
+          U.toast('Loadout stocked ' + r.arsenal.present + ' tools, ' + r.arsenal.staged + ' staged');
+          OBOL.router.render();
+          return;
+        }
+        if (r.workspaceSync && r.workspaceSync.ok && !r.added) {
+          U.toast(r.workspaceSync.confirmed + ' confirmed · ' + r.workspaceSync.adopted + ' new file' + (r.workspaceSync.adopted === 1 ? '' : 's') + ' adopted');
+          OBOL.router.render();
+          return;
+        }
+        if (r.targetsImported && r.targetsImported.ok) {
+          U.toast((r.targetsImported.added || 0) + ' target' + (r.targetsImported.added === 1 ? '' : 's') + ' imported');
+          OBOL.router.render();
+          return;
+        }
+        U.toast(OBOL.ingest.outcomeMessage(r));
+        t.disabled = false;
+        OBOL.router.render();
       });
     });
     // contextual launchers: make this box the active target, then open the global Tools / Playbooks

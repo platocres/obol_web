@@ -30,7 +30,7 @@
   function _parse_command_execution(text, ws, command, source, facts) {
     var h = 'host:' + ws.target;
     var identities = reAll(C._WHOAMI_ID_RE, text).map(function (m) { return _normalize_identity(m.groups.id); }).filter(Boolean);
-    var isSystem = !!reSearch(C._SYSTEM_ID_RE, text);
+    var isSystem = identities.some(function (identity) { return identity.toLowerCase() === 'nt authority\\system'; });
     var interactive = !!reSearch(C._INTERACTIVE_RE, text) || command.toLowerCase().indexOf('enter-pssession') >= 0;
     var executed = identities.length > 0 || !!reSearch(C._EXEC_SUCCESS_RE, text) || interactive;
     if (!executed) return;
@@ -59,12 +59,22 @@
   }
   C._parse_command_execution = _parse_command_execution;
 
+  function _is_local_enum_report(text, command) {
+    var cmd = String(command || '').toLowerCase();
+    return /\b(?:linpeas|winpeas|linux-exploit-suggester|les\.sh|getcap)\b|\bsudo\s+-l\b|\bfind\s+[^\r\n]*-perm\b/.test(cmd) ||
+      /(?:╣|={3,})[^\r\n]*(?:Current user|Operative system|Capabilities)|Executing Linux Exploit Suggester|Files with capabilities \(limited to/i.test(text);
+  }
+  C._is_local_enum_report = _is_local_enum_report;
+
   function _parse_ssh_exec(text, ws, command, source, facts) {
     var m = reSearch(C._LINUX_ID_RE, text);
     if (!m) return;
+    // A copied enumeration report can contain uid lines without establishing a new
+    // remote session. Its identity and privilege leads are read by local-enum parsers.
+    if (_is_local_enum_report(text, command)) return;
     var h = 'host:' + ws.target, user = m.groups.user.trim();
     var cs = ((command || '') + ' ' + (source || '')).toLowerCase();
-    var svc = 'ssh';
+    var svc = /\bssh\b/.test(cs) ? 'ssh' : 'shell';
     if (cs.indexOf('psql') >= 0 || cs.indexOf('postgres') >= 0) svc = 'postgresql';
     else if (cs.indexOf('elastic') >= 0) svc = 'elasticsearch';
     else if (cs.indexOf('rsync') >= 0) svc = 'rsync';
@@ -74,7 +84,7 @@
     _add(facts, mkFact('access.shell', h, { service: svc }, S, source));
     _add(facts, mkFact('foothold.linux', h, { service: svc, identity: user }, S, source));
     C._add_os_observation(facts, ws, source, 'linux', m[0], 'high', svc, true);
-    if (m.groups.uid === '0' || user.toLowerCase() === 'root') _add(facts, mkFact('access.admin', h, { service: svc, identity: user }, S, source));
+    if (m.groups.uid === '0') _add(facts, mkFact('access.admin', h, { service: svc, identity: user, uid: 0 }, S, source));
   }
   C._parse_ssh_exec = _parse_ssh_exec;
 
@@ -239,7 +249,7 @@
       var groups = C.uniqueSortedCI(reAll(/\d+\(([^)]+)\)/, idLine).map(function (m) { return m[1].toLowerCase(); }));
       if (groups.indexOf('lxd') >= 0 || groups.indexOf('lxc') >= 0) _add_host_privesc_fact(facts, ws, source, 'privesc.lxd_group', { groups: groups, user: user }, leadKinds);
       if (groups.indexOf('docker') >= 0) _add_host_privesc_fact(facts, ws, source, 'privesc.docker_group', { groups: groups, user: user }, leadKinds);
-      if (idMatch.groups.uid === '0' || user.toLowerCase() === 'root') _add(facts, mkFact('access.admin', h, { identity: user, method: 'local-enum' }, S, source));
+      if (idMatch.groups.uid === '0') _add(facts, mkFact('access.admin', h, { identity: user, uid: 0, method: 'local-enum' }, S, source));
     } else if (lc.indexOf('whoami') >= 0 && /(?:^|\n)\s*root\s*(?:\n|$)/i.test(text)) {
       _add(facts, mkFact('access.admin', h, { identity: 'root', method: 'whoami' }, S, source));
     }
@@ -384,7 +394,8 @@
 
   function _parse_windows_privesc_output(text, ws, command, source, facts, leadKinds) {
     var lowered = text.toLowerCase(), h = 'host:' + ws.target;
-    if (reSearch(C._SYSTEM_ID_RE, text)) {
+    var observedSystem = reAll(C._WHOAMI_ID_RE, text).some(function (m) { return m.groups.id.toLowerCase() === 'nt authority\\system'; });
+    if (observedSystem) {
       C._add_os_observation(facts, ws, source, 'windows', 'Windows local command output', 'high', 'local-enum', true);
       _add(facts, mkFact('access.system', h, { identity: 'nt authority\\system', method: 'local-enum' }, S, source));
     }

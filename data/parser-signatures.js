@@ -79,12 +79,12 @@
     'secretsdump': {
       looksFor: 'secretsdump / mimikatz / pypykatz dumps - NTLM hashes, the full NTDS, the krbtgt key, cached (DCC2) hashes, Linux /etc/shadow, and any cleartext.',
       regex: 'user:rid:lm:nt:::, $DCC2$, krbtgt:502',
-      emits: ['hash.ntlm', 'loot.ntds', 'hash.krbtgt', 'hash.mscache', 'credential.plaintext', 'loot.shadow', 'credential.admin', 'loot.sam'],
+      emits: ['hash.ntlm', 'loot.ntds', 'hash.krbtgt', 'hash.mscache', 'credential.plaintext', 'loot.shadow', 'loot.sam'],
     },
     'cracked': {
       looksFor: "john/hashcat cracked lines - a recovered 'hash:password' pair, plus hash identifier output (hashid/nth) and IKE PSK / IPMI RAKP hash captures.",
       regex: '<hash>:<password> (Cracked)',
-      emits: ['credential.available', 'credential.candidate', 'credential.validated', 'hash.type', 'hash.ike_psk', 'hash.candidate'],
+      emits: ['credential.available', 'credential.plaintext', 'credential.candidate', 'hash.type', 'hash.ike_psk', 'hash.candidate'],
     },
     'auth-validation': {
       looksFor: "nxc / evil-winrm auth results - the '[+] domain\\\\user:secret (Pwn3d!)' success and the failure lines, over SMB, WinRM, and RDP.",
@@ -102,7 +102,7 @@
       regex: 'GenericAll, Unconstrained, has control over, Computer:X Password:Y',
       emits: ['ad.graph.collected', 'ad.attack_paths', 'ad.control_paths', 'ad.acl_lead', 'ad.acl_paths', 'ad.domain_control',
         'ad.gmsa', 'ad.gpo_writable', 'ad.unconstrained', 'ad.group_joined', 'ad.computer_added',
-        'lateral.movement', 'ad.coerced_auth', 'ad.gpo_control', 'ad.sid_history', 'ad.laps_lead', 'credential.candidate', 'ad.delegation', 'ad.laps', 'ad.rbcd'],
+        'lateral.movement', 'ad.coerced_auth', 'ad.gpo_control', 'ad.sid_history', 'ad.laps_lead', 'credential.candidate', 'ad.delegation', 'ad.laps', 'ad.rbcd', 'ad.nopac', 'ad.maq_allow'],
     },
     'adcs': {
       looksFor: 'certipy / pywhisker output - a `find -vulnerable` run naming ESC1-16 templates (adcs.vulnerable), a saved .pfx certificate from `req` or a shadow-credentials add (credential.certificate), and a `certipy auth` that exchanges a cert for the account’s NT hash (hash.ntlm → a usable credential).',
@@ -153,7 +153,7 @@
     'database': {
       looksFor: "a database session's output - a version/current-user banner or engine prompt that proves the login (db.session), listed databases and tables, and dumped credential rows.",
       regex: 'mysql>, SQL>, List of databases, Server version:',
-      emits: ['db.session', 'db.creds', 'db.databases', 'db.tables', 'db.hashes', 'db.linked_server', 'mssql.linked_servers', 'oracle.sid', 'loot.material', 'credential.candidate', 'foothold.windows'],
+      emits: ['db.session', 'db.admin', 'db.creds', 'db.databases', 'db.tables', 'db.hashes', 'db.linked_server', 'mssql.linked_servers', 'mssql.sysadmin', 'oracle.sid', 'loot.material', 'credential.candidate', 'foothold.windows'],
     },
     'snmp': {
       looksFor: 'snmpwalk / snmp-check output - the community string that worked, running processes and users, and any credentials in the MIB.',
@@ -183,7 +183,7 @@
     'op-blocker': {
       looksFor: "a classic operational wall from a pasted error - nmap 'host seems down' (needs -Pn), 'could not resolve host' (needs /etc/hosts), a CRLF 'bad interpreter', 'sudo: no tty present', Defender/AMSI blocking a payload, a SeImpersonate potato that failed, HTTP fuzzing rate-limited (429), or an http/https scheme mismatch (WRONG_VERSION_NUMBER).",
       regex: 'Host seems down | Could not resolve host | bad interpreter | no tty present | contains malicious content | the handle is invalid | 429 Too Many Requests | WRONG_VERSION_NUMBER',
-      emits: ['blocker.host_down', 'blocker.name_resolution', 'blocker.crlf', 'blocker.no_tty', 'blocker.amsi', 'blocker.potato', 'blocker.rate_limited', 'blocker.tls_scheme', 'blocker.hash_format', 'blocker.egress_blocked', 'blocker.smb_signing', 'blocker.kerberos_spn', 'blocker.responder_quiet', 'blocker.web_wildcard', 'blocker.hashcat_env', 'blocker.xp_cmdshell_disabled', 'blocker.cracking_exhausted', 'blocker.dcsync_denied', 'blocker.nxc_bh_config'],
+      emits: ['blocker.host_down', 'blocker.name_resolution', 'blocker.crlf', 'blocker.no_tty', 'blocker.amsi', 'blocker.potato', 'blocker.rate_limited', 'blocker.tls_scheme', 'blocker.hash_format', 'blocker.egress_blocked', 'blocker.smb_signing', 'blocker.kerberos_spn', 'blocker.responder_quiet', 'blocker.web_wildcard', 'blocker.hashcat_env', 'blocker.xp_cmdshell_disabled', 'blocker.cracking_exhausted', 'blocker.dcsync_denied', 'blocker.nxc_bh_config', 'blocker.maq_zero'],
     },
     'ssh-key-rejected': {
       looksFor: "an SSH key login that failed, and why - unprotected key perms, a passphrase prompt, the OpenSSH 8.8+ ssh-rsa block (no mutual signature algorithm), an invalid key format, or a bare \"Permission denied (publickey)\" (often target-side StrictModes).",

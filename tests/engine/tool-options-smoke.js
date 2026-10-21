@@ -86,6 +86,10 @@ tooled.forEach(function (b) {
   // a couple of real stacks from the brief
   cleanCompile(nxc, { protocol: 'ldap', authMode: 'password', username: 'u', password: 'p', doUsers: true, doGroups: true, doAsrep: true, doKerberoast: true }, 'nxc ldap users+groups+asrep+kerberoast');
   cleanCompile(nxc, { protocol: 'smb', authMode: 'ntlm', username: 'administrator', hash: 'aad3b', doSam: true, doLsa: true, doNtds: true }, 'nxc smb sam+lsa+ntds');
+  var smbGrpLaps = TB.compile(nxc, { protocol: 'smb', target: '10.10.10.10', authMode: 'password', username: 'u', password: 'p', doGroups: true, doLaps: true }, CTX);
+  ok(smbGrpLaps.indexOf('--local-groups') >= 0 && smbGrpLaps.indexOf('--groups') === -1 && smbGrpLaps.indexOf('--laps') >= 0, 'nxc smb uses --local-groups and --laps (' + smbGrpLaps + ')');
+  var ldapGrpLaps = TB.compile(nxc, { protocol: 'ldap', target: '10.10.10.10', authMode: 'password', username: 'u', password: 'p', doGroups: true, doLaps: true }, CTX);
+  ok(ldapGrpLaps.indexOf('--groups') >= 0 && ldapGrpLaps.indexOf('--local-groups') === -1 && ldapGrpLaps.indexOf('-M laps') >= 0, 'nxc ldap uses --groups and -M laps (' + ldapGrpLaps + ')');
   // hidden checkbox toggle (e.g. doBloodhound on LDAP) must be coerced to false when protocol is switched to smb/winrm
   var nxcSwitched = TB.compile(nxc, { protocol: 'winrm', target: '10.10.10.10', authMode: 'anonymous', doBloodhound: true, doAsrep: true }, CTX);
   ok(nxcSwitched.indexOf('-c All') === -1 && nxcSwitched.indexOf('--asreproast') === -1, 'hidden protocol toggles do not leak tokens when protocol changes (' + nxcSwitched + ')');
@@ -322,17 +326,15 @@ tooled.forEach(function (b) {
         if (!VOID_TAGS[el.tagName] && !/\/$/.test(attrStr.trim())) stack.push(el);
       } else if (m[4]) {
         var cur = stack[stack.length - 1];
-        if (cur !== root) {
-          var txt = decodeEntities(m[4]);
-          if (cur.children.length > 0) {
-            var tn = new MiniEl('#TEXT');
-            tn._text = txt;
-            tn.parentNode = cur;
-            cur.children.push(tn);
-          } else {
-            cur._text = (cur._text || '') + txt;
-            if (cur.tagName === 'TEXTAREA') cur._value = cur._text;
-          }
+        var txt = decodeEntities(m[4]);
+        if (cur === root || cur.children.length > 0) {
+          var tn = new MiniEl('#TEXT');
+          tn._text = txt;
+          tn.parentNode = cur === root ? parent : cur;
+          cur.children.push(tn);
+        } else {
+          cur._text = (cur._text || '') + txt;
+          if (cur.tagName === 'TEXTAREA') cur._value = cur._text;
         }
       }
     }
@@ -381,12 +383,12 @@ tooled.forEach(function (b) {
     ok(!!(form && form.elements.namedItem('protocol')), 'tb-nxc form contains protocol control in ' + modeLabel);
 
     var chips = card.querySelectorAll('.tb-mode-chip');
-    ok(chips.length === 5, 'tb-nxc renders 5 protocol chips in ' + modeLabel + ' (got ' + chips.length + ')');
+    ok(chips.length === 8, 'tb-nxc renders 8 protocol chips in ' + modeLabel + ' (got ' + chips.length + ')');
     var activeInit = chips.filter(function (c) { return c.classList.contains('on'); });
     ok(activeInit.length === 1 && activeInit[0].getAttribute('data-mode-value') === 'smb',
       'tb-nxc initial active protocol chip is smb in ' + modeLabel);
 
-    ['smb', 'ldap', 'winrm', 'ftp', 'mssql'].forEach(function (proto) {
+    ['smb', 'ldap', 'winrm', 'mssql', 'ssh', 'rdp', 'ftp', 'wmi'].forEach(function (proto) {
       var chip = chips.filter(function (c) { return c.getAttribute('data-mode-value') === proto; })[0];
       ok(!!chip, 'tb-nxc has chip for ' + proto + ' in ' + modeLabel);
       chip.click();

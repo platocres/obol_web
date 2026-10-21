@@ -139,10 +139,11 @@
   }
   function legend(state) {
     if (state.lens === 'parser') {
-      return '<div class="dt-legend"><span class="dt-lg parse-verified">OBOL reads the result</span>'
-        + '<span class="dt-lg parse-partial">partly readable</span>'
-        + '<span class="dt-lg parse-gap">parse gap (unreadable)</span>'
-        + '<span class="dt-lg parse-noproduce">enum / no fact</span></div>';
+      return '<div class="dt-legend"><span class="dt-lg parse-verified">sample demonstrates declared results</span>'
+        + '<span class="dt-lg parse-partial">sample demonstrates some results</span>'
+        + '<span class="dt-lg parse-unverified">unverified or missing sample</span>'
+        + '<span class="dt-lg parse-parser-error">parser error</span>'
+        + '<span class="dt-lg parse-noproduce">no output proof required</span></div>';
     }
     return '<div class="dt-legend"><span class="dt-lg dt-lg-spine">the coach’s next move</span>'
       + '<span class="dt-lg dt-lg-handoff">→ hand-off to a post-foothold map</span>'
@@ -246,7 +247,12 @@
     return { render: render };
   }
 
-  function parseLabel(s) { return s === 'verified' ? 'OBOL can read this result' : s === 'partial' ? 'result partly readable' : s === 'gap' ? 'parse gap: nothing reads this result' : 'enumeration move (no fact to read)'; }
+  function parseLabel(s) {
+    return s === 'verified' ? 'Sample demonstrates all declared result facts' : s === 'partial' ? 'Sample demonstrates only some declared result facts'
+      : s === 'parser-error' ? 'Sample parsing reported an error; not verified' : s === 'nofixture' ? 'No result sample available; not verified'
+      : s === 'noparser' ? 'Parser not loaded; sample not verified' : s === 'unverified' ? 'Sample has not demonstrated this move result'
+      : s === 'noproduce' ? 'No output proof required for this manual or guidance move' : 'Declared capability has not been verified by a sample';
+  }
   function findSig(moveId) {
     // the plain-language "looks for" of whichever signature emits one of this move's produced facts
     try {

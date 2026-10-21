@@ -57,8 +57,8 @@
   var _aSel = '';          // selected technique code
 
   function hasEng() { try { return !!(OBOL.store && OBOL.store.active && OBOL.store.active()); } catch (e) { return false; } }
-  function engFacts() { try { return OBOL.store.factSet(); } catch (e) { return new OBOL.facts.FactSet([]); } }
-  function engParams() { try { return (OBOL.store.active() || {}).params || {}; } catch (e) { return {}; } }
+  function engFacts() { try { return OBOL.store.resolvedContext ? OBOL.store.resolvedContext().facts : OBOL.store.factSet(); } catch (e) { return new OBOL.facts.FactSet([]); } }
+  function engParams() { try { return OBOL.store.resolvedContext ? OBOL.store.resolvedContext().params : (OBOL.store.active() || {}).params || {}; } catch (e) { return {}; } }
   function reducedMotion() { try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
 
   // ── sub-tab bar ──────────────────────────────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@
       var text = (filled[i] && filled[i].filled) || c.run || '';
       if (!text) return '';
       return '<div class="lib-cmd"><code>' + esc(text) + '</code>'
-        + '<button class="btn-copy lib-copy" data-copy="' + attr(text) + '" aria-label="Copy command">Copy</button></div>'
+        + '<button class="btn-copy lib-copy" data-copy="' + attr(text) + '" data-copy-action="' + attr(move.id) + '" data-copy-locus="' + attr(OBOL.pack.commandExecutionLocus(c)) + '" aria-label="Copy command">Copy</button></div>'
         + (c.note ? '<p class="lib-cmd-note">' + esc(c.note) + '</p>' : '');
     }).join('');
   }
@@ -472,7 +472,11 @@
     var rootEl = _mount.querySelector('.library') || _mount;
 
     // shared: copy
-    U.on(rootEl, 'click', '.lib-copy', function (e, t) { e.stopPropagation(); U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); }); });
+    U.on(rootEl, 'click', '.lib-copy', function (e, t) {
+      e.stopPropagation(); var command = t.getAttribute('data-copy');
+      if (OBOL.ingest && OBOL.ingest.setLastCopied) OBOL.ingest.setLastCopied({command:command,actionId:t.getAttribute('data-copy-action') || '',locus:t.getAttribute('data-copy-locus') || 'remote',target:engParams().target || ''});
+      U.copy(command).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
 
     if (_lens === 'moves') {
       U.on(rootEl, 'input', '#lib-moves-q', function (e, t) { _mQ = t.value; refreshMoves(); });

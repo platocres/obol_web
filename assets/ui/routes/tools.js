@@ -89,10 +89,13 @@
     var host = params.hostname || c.dc || target;
     var scheme = 'http://';
     var url = host ? (scheme + host) : '';
+    var arProf = null;
+    try { arProf = JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) {}
+    var secBase = (arProf && arProf.wordlists && arProf.wordlists.seclists) ? String(arProf.wordlists.seclists).replace(/\/+$/, '') : '/usr/share/seclists';
     return {
       target: { value: target, ip: params.rhost || params.ip || target, hostname: params.hostname || c.dc || '', url: url, fuzzurl: url ? (url + '/FUZZ') : '' },
-      context: (function () { var dom = c.domain || params.domain || ''; return { domain: dom, baseDn: dom ? ('DC=' + dom.split('.').join(',DC=')) : '', username: c.user || params.username || '', port: params.port || '', lhost: params.lhost || '', lport: params.lport || '' }; })(),
-      workspace: { wordlist: params.wordlist || '/usr/share/seclists/Discovery/Web-Content/raft-small-words.txt', outputDir: params.outputDir || 'loot', hashfile: params.hashfile || 'hashes.txt' },
+      context: (function () { var dom = c.domain || params.domain || ''; return { domain: dom, baseDn: dom ? ('DC=' + dom.split('.').join(',DC=')) : '', username: c.user || params.username || '', port: params.port || '', lhost: params.lhost || c.lhost || (arProf && arProf.lhost) || '', lport: params.lport || '' }; })(),
+      workspace: { wordlist: params.wordlist || (secBase + '/Discovery/Web-Content/raft-small-words.txt'), outputDir: params.outputDir || 'loot', hashfile: params.hashfile || 'hashes.txt' },
     };
   }
 

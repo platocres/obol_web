@@ -68,11 +68,7 @@
     var scope = C._scope_for_domain(ws, domainName);
     _add(facts, mkFact('credential.plaintext', scope, value, S, source));
     _add(facts, mkFact('credential.available', scope, value, S, source));
-    if (method === 'john' || method === 'hashcat' || method === 'hashcat_ntlm') _add(facts, mkFact('credential.validated', 'host:' + ws.target, { user: user, via: method }, S, source));
-    var uLow = (user || '').toLowerCase();
-    if (uLow === 'administrator' || uLow === 'root') {
-      _add(facts, mkFact('credential.admin', scope, value, S, source));
-    }
+    // Recovery proves possession only. Authentication and privilege need service evidence.
   }
   C._add_plaintext_credential = _add_plaintext_credential;
 
@@ -240,23 +236,30 @@
   var _CROWBAR_RE = /SUCCESS:\s*\S+:(?<port>\d{1,5})\s*-\s*(?<user>[^:\s]+):(?<pw>\S+)/gim;
   function _parse_hydra(text, ws, command, source, facts) {
     var h = 'host:' + ws.target, m, seen = {}, n = 0;
-    function addBrute(svc, port, user, pw) {
-      var key = svc + '|' + user + '|' + pw;
+    function addBrute(svc, port, user, pw, line) {
+      var hostMatch = /\bhost:\s*(\S+)/i.exec(line || '') || /\bHost:\s*(\S+)/i.exec(line || '') || /(?:^|SUCCESS:\s*)(\d{1,3}(?:\.\d{1,3}){3})(?=[:\s])/i.exec(line || '');
+      var lineTarget = C._observed_host ? C._observed_host(ws, hostMatch && hostMatch[1]) : (hostMatch ? hostMatch[1] : ws.target);
+      var lineWs = Object.assign({}, ws, { target: lineTarget });
+      var key = lineTarget + '|' + svc + '|' + user + '|' + pw;
       if (seen[key]) return;
       seen[key] = 1; n++;
       var cred = { user: user, password: pw, service: svc, port: port || 0, via: 'online-brute' };
-      _add(facts, mkFact('credential.available', h, cred, S, source));
-      _add(facts, mkFact('credential.plaintext', h, cred, S, source));
-      _add(facts, mkFact('credential.validated', h, { user: user, service: svc, via: 'online-brute' }, S, source));
+      if (C._auth_observation) cred = C._auth_observation(lineWs, cred);
+      var scope = 'host:' + lineTarget;
+      _add(facts, mkFact('credential.available', scope, cred, S, source));
+      _add(facts, mkFact('credential.plaintext', scope, cred, S, source));
+      var observed = Object.assign({}, cred, { outcome: 'accepted' });
+      delete observed.password;
+      _add(facts, mkFact('credential.validated', scope, observed, S, source));
     }
     _HYDRA_RE.lastIndex = 0;
-    while ((m = _HYDRA_RE.exec(text))) addBrute(m.groups.svc, +m.groups.port, m.groups.user, m.groups.pw);
+    while ((m = _HYDRA_RE.exec(text))) addBrute(m.groups.svc, +m.groups.port, m.groups.user, m.groups.pw, m[0]);
     _MEDUSA_RE.lastIndex = 0;
-    while ((m = _MEDUSA_RE.exec(text))) addBrute(m.groups.svc, 0, m.groups.user, m.groups.pw);
+    while ((m = _MEDUSA_RE.exec(text))) addBrute(m.groups.svc, 0, m.groups.user, m.groups.pw, m[0]);
     _NCRACK_RE.lastIndex = 0;
-    while ((m = _NCRACK_RE.exec(text))) addBrute(m.groups.svc, +m.groups.port, m.groups.user, m.groups.pw);
+    while ((m = _NCRACK_RE.exec(text))) addBrute(m.groups.svc, +m.groups.port, m.groups.user, m.groups.pw, m[0]);
     _CROWBAR_RE.lastIndex = 0;
-    while ((m = _CROWBAR_RE.exec(text))) addBrute('rdp', +m.groups.port, m.groups.user, m.groups.pw);
+    while ((m = _CROWBAR_RE.exec(text))) addBrute('rdp', +m.groups.port, m.groups.user, m.groups.pw, m[0]);
     return n;
   }
   C._parse_hydra = _parse_hydra;
@@ -304,8 +307,8 @@
     var ntdsContext = !!krbtgtNt || lc.indexOf('--ntds') >= 0 || lc.indexOf('-just-dc') >= 0 ||
       ['ntds.dit', 'drsuapi', 'dumping domain credentials'].some(function (mk) { return lowered.indexOf(mk) >= 0; });
     var dumpDomain = Object.keys(domCounts).sort(function (a, b) { return domCounts[b] - domCounts[a]; })[0] || '';
-    var domainName = C._domain_from_facts(ws) || dumpDomain || '';
-    var scope = domainName ? ('domain:' + domainName) : C._scope_for_domain(ws);
+    var domainName = ntdsContext ? (dumpDomain || C._domain_from_facts(ws) || '') : '';
+    var scope = domainName ? ('domain:' + domainName) : ('host:' + ws.target);
     _add(facts, mkFact('hash.ntlm', scope, { count: entries.length, entries: entries }, S, source));
     _add(facts, mkFact('credential.candidate', scope, { kind: 'ntlm_hash', count: entries.length }, S, source));
     if (krbtgtNt) _add(facts, mkFact('hash.krbtgt', scope, { nthash: krbtgtNt }, S, source));
@@ -314,21 +317,18 @@
       var admin = entries.filter(function (e) { return e.rid === 500; })[0]
         || entries.filter(function (e) { return e.user.toLowerCase() === 'administrator'; })[0];
       if (admin && admin.nthash && admin.nthash !== '31d6cfe0d16ae931b73c59d7e0c089c0') {
-        var av = { user: admin.user, nthash: admin.nthash, method: 'dcsync', hash_type: 'ntlm' };
+        var av = { user: admin.user, nthash: admin.nthash, method: 'dcsync', hash_type: 'ntlm', accountType: 'domain' };
         var adom = admin.domain || domainName;
         if (adom) av.domain = adom;
         _add(facts, mkFact('credential.available', scope, av, S, source));
-        _add(facts, mkFact('credential.admin', scope, av, S, source));
-        _add(facts, mkFact('access.admin', scope, av, S, source));
       }
     } else {
       _add(facts, mkFact('loot.sam', 'host:' + ws.target, { count: entries.length, method: 'sam-dump' }, S, source));
       var localAdmin = entries.filter(function (e) { return e.rid === 500; })[0]
         || entries.filter(function (e) { return e.user.toLowerCase() === 'administrator'; })[0];
       if (localAdmin && localAdmin.nthash && localAdmin.nthash !== '31d6cfe0d16ae931b73c59d7e0c089c0') {
-        var lav = { user: localAdmin.user, nthash: localAdmin.nthash, method: 'sam-dump', hash_type: 'ntlm' };
+        var lav = { user: localAdmin.user, nthash: localAdmin.nthash, method: 'sam-dump', hash_type: 'ntlm', accountType: 'local', targetBinding: ws.target };
         _add(facts, mkFact('credential.available', 'host:' + ws.target, lav, S, source));
-        _add(facts, mkFact('credential.admin', 'host:' + ws.target, lav, S, source));
       }
     }
   }
@@ -748,7 +748,7 @@
   var _SPIDER_PATH_RE = /(?:\/\/|\\\\)[^\s/\\]+[/\\](?:([A-Za-z])\$|Users)[/\\]([^\s\[\]"']*?(?:local|proof|user|root|flag\d?)\.txt)(?=\s|$|\[|"|')/gi;
   function _strip_prompt(line) {
     return String(line)
-      .replace(/^\s*(?:(?:SMB|WINRM|WMI|RPC|SSH)\s+\S+\s+\d+\s+\S+\s+)/i, '')
+      .replace(/^\s*(?:(?:SMB|WINRM|WMI|RPC|SSH|RDP|MSSQL)\s+\S+\s+\d+\s+\S+\s+)/i, '')
       .replace(/^\s*\*?Evil-WinRM\*?\s*PS\s+[A-Za-z]:\\[^>\r\n]*>\s*/i, '')
       .replace(/^\s*PS\s+[A-Za-z]:\\[^>\r\n]*>\s*/i, '')
       .replace(/^\s*[A-Za-z]:\\[^>\r\n]*>\s*/, '')
@@ -768,7 +768,7 @@
       seen[flag] = 1;
       var base = String(path || '').split(/[\\/]/).pop() || '';
       var slot = slotHint || _slot_for_flagfile(base);
-      var isExec = command && /-x\b|wmiexec|psexec|smbclient.*get/i.test(command);
+      var isExec = command && /-[xX]\b|wmiexec|psexec|smbclient.*get/i.test(command);
       var kind = (onHost || isExec) ? _flag_kind(slot) : 'objective.flag_located';
       _add(facts, mkFact(kind, scope, { flag: flag, slot: slot, name: base, path: path || '' }, S, source));
       if (kind === 'objective.local_flag' || kind === 'objective.root_flag' || kind === 'objective.flag') {

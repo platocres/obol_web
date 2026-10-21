@@ -359,6 +359,48 @@ var rpcStore = (function () {
 OBOL.store = rpcStore;
 var rpcRes = OBOL.ingest.importSession(smbRpcCap);
 ok(rpcStore._all.has('ad.user_list'), 'rpcclient enumdomusers mints ad.user_list');
+
+// ── 12. Total Paste Parity: OBOL-ARSENAL, OBOL-WS-SNAPSHOT, and multi-command sessions via ingest.run ──
+load(path.join(ENG, 'vfs.js'));
+var parityStore = (function () {
+  var eng = { params: { target: '10.0.0.5', domain: 'corp.local' }, workspace: { root: '~/box' }, targets: [{ id: 't1', ip: '10.0.0.5' }], activities: [], facts: [] };
+  var fs = new OBOL.facts.FactSet([]);
+  return { active: function () { return eng; }, update: function (fn) { fn(eng); },
+    addFacts: function (facts) { var n = 0; (facts || []).forEach(function (f) { if (fs.add(OBOL.facts.factFromJson(OBOL.facts.factToJson(f)))) n++; }); return n; },
+    factSet: function () { return fs; }, _all: fs, _e: eng };
+})();
+OBOL.store = parityStore;
+
+// A) Single-command ingest.run delegates multi-command sessions when no fixed command/actionId is set
+var runMulti = OBOL.ingest.run({ text: cap, scope: 'host:10.0.0.5', source: 'paste' });
+ok(runMulti.ok && runMulti.imported === 3 && runMulti.added > 0 && Array.isArray(runMulti.facts) && runMulti.facts.length > 0,
+  'ingest.run handles multi-command session paste and returns unified {imported, added, facts}');
+
+// B) OBOL-WS-SNAPSHOT works through both ingest.run and importSession
+var wsSnap = ['### OBOL-WS-SNAPSHOT', 'scans/nmap.txt\t2048\t2026-10-20T08:00', 'loot/hashes.txt\t128\t2026-10-20T08:05', '### END'].join('\n');
+var wsRunRes = OBOL.ingest.run({ text: wsSnap, source: 'paste' });
+ok(wsRunRes.ok && wsRunRes.workspaceSync && wsRunRes.workspaceSync.ok && wsRunRes.workspaceSync.adopted === 2,
+  'ingest.run intercepts OBOL-WS-SNAPSHOT and reconciles virtual workspace');
+var wsSessRes = OBOL.ingest.importSession(wsSnap);
+ok(wsSessRes.ok && wsSessRes.workspaceSync && wsSessRes.workspaceSync.ok,
+  'importSession intercepts OBOL-WS-SNAPSHOT and reconciles virtual workspace');
+
+// C) Mixed session + OBOL-ARSENAL v1 in a single paste imports commands AND syncs Loadout
+var mixedPaste = [
+  '└─$ ./download-loadout.sh --check-only',
+  'OBOL-ARSENAL v1',
+  '{"v":1,"lhost":"10.10.14.77","lhost_iface":"tun0","tooldir":"/home/kali/.obol/arsenal","tools":{"nmap":{"present":true,"path":"/usr/bin/nmap"}},"staged":["linpeas.sh"],"wordlists":{"rockyou":"/usr/share/wordlists/rockyou.txt"}}',
+  '└─$ nxc smb 10.0.0.5 -u Administrator -p Pass123',
+  'SMB 10.0.0.5 445 DC01 [+] corp.local\\Administrator:Pass123 (Pwn3d!)'
+].join('\n');
+var mixedRes = OBOL.ingest.run({ text: mixedPaste, scope: 'host:10.0.0.5', source: 'paste' });
+ok(mixedRes.ok && mixedRes.arsenal && mixedRes.arsenal.ok && mixedRes.added > 0,
+  'mixed Loadout + session paste syncs Loadout AND mints command facts in one pass');
+
+// D) vfs.parseSnapshot rejects JSON, Nmap port lines, and prose
+ok(OBOL.vfs.parseSnapshot('{"v":1,"tools":{"nmap":{"present":true}}}\n80/tcp open http Apache/2.4\nThis is a sentence with a period.').length === 0,
+  'vfs.parseSnapshot ignores JSON, Nmap port lines, and prose');
+
 OBOL.store = origStore;
 
 console.log(fail ? ('\nSESSION IMPORT: ' + fail + ' FAILURES') : '\nSESSION IMPORT: all passed');

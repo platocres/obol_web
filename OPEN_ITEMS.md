@@ -4,9 +4,22 @@
 
 ---
 
+## October 2026 agreed review: items 1-3 implemented
+
+- **Item 1, shared context:** target-specific credential selection, separate target domain/account realm, explicit no-credential selection, and a visible temporary cross-target pin. Command generation and recommendations use the same scoped context.
+- **Item 2, truthful results:** recovered material, authentication, authorization, shell execution, and privilege are separate observations. Shared receipts cover supported success, completed-negative, rejection, denial, environment errors, partial/mixed/duplicate output, and unresolved/parser errors. Legacy unsupported claims are archived and automatic unsupported retirements reopen.
+- **Item 3, behavioral verification:** CI now runs stateful engine, parser corpus, migration, export, and real-browser checks. Coverage reports distinguish declared capability from demonstrated samples and remaining gaps.
+- **Item 4 remains under discussion.** The current Coach overview remains available; proposed alternative views are optional concepts. Cruise stays separate while experimental. Preserve the neon-glass visual language and meaningful methodology/organization/phase colors, with 1920x1080 as the primary desktop baseline and responsive behavior elsewhere.
+
+See [Context, outcomes, and behavioral verification](docs/CONTEXT-OUTCOMES.md) for the implemented contract, migration behavior, tests, and coverage limits. The UI ideas below are a backlog, not authorization to implement them.
+
+---
+
 ## Pillar 1: Information Architecture & Navigation Consolidation
 
 ### 1.1 Streamline the 13-Item Engagement Sub-Nav (`assets/ui/ctxbar.js`)
+> Unapproved historical proposal. In particular, combining Coach and Cruise conflicts with the current decision to keep Cruise separate.
+
 - **Problem**: Inside an engagement, the user sees three control surfaces simultaneously: the top `appbar`, the 13-link `ctxbar` sub-nav (`Hub`, `Loadout`, `Targets`, `Next Steps`, `Evidence`, `Map`, `Domain`, `Creds`, `Checklist`, `Findings`, `Run Log`, `Flags`, `Report`), and the left `#sidebar`. 13 items in a secondary nav bar creates visual overload and splits unified workflows across multiple tabs.
 - **Solution**:
   - Consolidate `ctxbar` from 13 links down to **6-7 primary engagement stations**:
@@ -23,6 +36,8 @@
   - `assets/ui/routes/targets.js`, `assets/ui/routes/map.js`, `assets/ui/routes/domain.js`
 
 ### 1.2 Seamless `Coach ⇄ Cruise` Mode Switcher & Inline Paste on Coach (`assets/ui/routes/path.js`, `assets/ui/routes/cruise.js`)
+> The Coach/Cruise switcher is unapproved. Cruise stays separate. The old claim that Coach lacks inline paste is stale; retain the existing paste flow and shared outcome receipts.
+
 - **Problem**: `Next Steps` (`#/path`, step-by-step Coach) and `Cruise` (`#/cruise`, automated batch stage scripts) are two ways of working the exact same active target/engagement, yet `Cruise` sits in the top global nav labeled `Experimental` and Coach cards require opening the modal overlay or leaving for `#/evidence` to paste output.
 - **Solution**:
   - Add a 1-click **`Step-by-Step Coach ⇄ Cruise Stage Runner`** toggle pill in the header of both `#/path` and `#/cruise`.

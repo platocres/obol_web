@@ -23,7 +23,6 @@
     'credential.validated': 'a validated credential',
     'credential.plaintext': 'a cracked plaintext credential',
     'credential.available': 'a usable credential',
-    'credential.admin': 'an administrative credential',
     'ad.user_list': 'a domain user list',
     'ad.acl_lead': 'writable Active Directory objects',
     'ad.group_joined': 'privileged AD group membership',
@@ -191,7 +190,7 @@
     }
 
     var MILESTONE_PRIORITY = [
-      'loot.ntds', 'access.system', 'access.root', 'access.admin', 'credential.admin',
+      'loot.ntds', 'access.system', 'access.root', 'access.admin',
       'hash.krbtgt', 'ad.dcsync_granted', 'ad.domain_control', 'ad.group_joined', 'ad.control_paths', 'ad.acl_lead',
       'foothold.windows', 'foothold.linux', 'foothold.webshell', 'access.shell',
       'credential.plaintext', 'credential.available',
@@ -292,7 +291,7 @@
       if (nonFlags.length) {
         var primary = nonFlags[0];
         emit(primary, ct.cmd, ct.tool, r.at || 0, rOut);
-        // Mark co-produced secondary facts from the same single command (e.g. dcsync co-minting hash.ntlm/hash.krbtgt/credential.admin)
+        // Mark co-produced secondary facts from the same single command (e.g. dcsync co-minting hash.ntlm/hash.krbtgt)
         // as seen so a later re-run does not re-emit them out of order.
         if (primary === 'loot.ntds') {
           nonFlags.slice(1).forEach(function (k) { seen[k] = true; });

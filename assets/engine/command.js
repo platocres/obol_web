@@ -12,7 +12,10 @@
   'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
 
-  var SHELL_VALUE_TOKENS = { password: true, nthash: true };
+  // These tokens deliberately contain authored shell syntax, rather than one argument.
+  var EXPRESSION_TOKENS = { command: true, kerberos_command: true, sudo_command: true,
+    abuse_groups_quoted: true, shares_readable_quoted: true, flag_inames_linux: true, flag_names_windows: true };
+  var PATH_TOKENS = /(?:dir|file|path|list|script|binary|archive|keyfile|export)$/i;
   var LIT_OPEN = '\x00OBOL_LBRACE\x00';
   var LIT_CLOSE = '\x00OBOL_RBRACE\x00';
 
@@ -155,6 +158,13 @@
   // Build the {{token}} context from facts + params (+ extra which wins).
   function buildContext(facts, opts) {
     opts = opts || {};
+    var resolved = opts.context && opts.context.params ? opts.context : null;
+    if (!resolved && OBOL.context) {
+      var activeEng = opts.engagement || (OBOL.store && OBOL.store.active && OBOL.store.active()) || null;
+      resolved = OBOL.context.resolve({ engagement: activeEng, facts: facts, params: opts.params || (activeEng && activeEng.params) || {},
+        target: opts.target, command: opts.command || '', service: opts.service, locus: opts.locus, actionId: opts.action && opts.action.id });
+    }
+    if (resolved) { facts = resolved.facts; opts = Object.assign({}, opts, { params: resolved.params, target: resolved.target }); }
     if (Array.isArray(facts) && OBOL.facts && OBOL.facts.FactSet) {
       facts = new OBOL.facts.FactSet(facts.map(function (x) {
         return (OBOL.facts && OBOL.facts.factFromJson) ? OBOL.facts.factFromJson(x) : x;
@@ -176,7 +186,7 @@
     if (ports.length) ctx.nmap_ports = ports.join(',');
 
     var dom = firstVal(facts, 'ad.domain_known');
-    if (dom && dom.name) {
+    if (!ctx.domain && dom && dom.name) {
       ctx.domain = dom.name;
       ctx.basedn = dom.name.split('.').map(function (p) { return 'DC=' + p; }).join(',');
       ctx.dc = dom.name;
@@ -213,10 +223,12 @@
       ctx.basedn = ctx.domain.split('.').map(function (p) { return 'DC=' + p; }).join(',');
     }
 
-    // lhost: params-pinned, else a listener fact, else leave for operator
+    var arProf = _arsenalProfile();
+    // lhost: params-pinned, else a listener fact, else synced Loadout VPN IP, else leave for operator
     if (!ctx.lhost) {
       var lo = firstVal(facts, 'listener.open');
       if (lo && lo.lhost) ctx.lhost = lo.lhost;
+      else if (arProf && arProf.lhost) ctx.lhost = arProf.lhost;
     }
     // lport: params-pinned (set in the sidebar), else a listener fact, else the 4444 convention so a
     // reverse-shell / listener command is complete out of the box. The operator can change it anywhere.
@@ -225,13 +237,16 @@
       ctx.lport = (lop && lop.lport) || params.lport || '4444';
     }
     // iface: the operator's attacker interface (responder -I, mitm6 -i, ...). Pinned from the engagement's
-    // configured VM interface, defaulting to tun0 - the VPN adapter for HTB/OSCP-style labs.
-    if (!ctx.iface) ctx.iface = params.lhost_iface || 'tun0';
+    // configured VM interface or synced Loadout VPN interface, defaulting to tun0.
+    if (!ctx.iface) ctx.iface = params.lhost_iface || (arProf && arProf.lhost_iface) || 'tun0';
+    if (!ctx.arsenal_www) ctx.arsenal_www = (arProf && arProf.wwwdir) || '~/.obol/arsenal/www';
+    if (!ctx.tooldir) ctx.tooldir = params.toolsDir || (arProf && arProf.tooldir) || '~/tools';
 
     // credentials: prefer credential.available then credential.plaintext. IDENTITY-COHERENT fill - never
     // pair one credential's username with another's secret. `-u svc-alfresco -H <administrator-hash>` just
     // fails auth; the user and the secret must come from the SAME credential. When params already pin a
     // user, fill that same user's secret; otherwise adopt the first credential wholesale.
+    if (!resolved) {
     var creds = fvals('credential.available');
     if (!creds.length) creds = fvals('credential.plaintext');
     function _lc(x) { return String(x == null ? '' : x).toLowerCase(); }
@@ -266,7 +281,8 @@
       if (nh0 && !ctx.nthash) ctx.nthash = nh0;
       if (c0.domain && !ctx.domain) ctx.domain = c0.domain;
     }
-    if (!ctx.user) {
+    }
+    if (!ctx.user && !resolved) {
       var fhList = fvals('foothold.linux').concat(fvals('foothold.windows'));
       for (var fi = 0; fi < fhList.length; fi++) {
         var fu = fhList[fi] && (fhList[fi].identity || fhList[fi].user);
@@ -509,7 +525,7 @@
         && !facts.has('foothold.windows') && !facts.has('os.windows');
       var _priv = function (u) {
         var s = String(u || '').toLowerCase();
-        return !s || /^(?:administrator|admin|root|system|nt authority\\system|guest|defaultaccount|krbtgt|www-data|apache|nginx|nobody|daemon|http|postgres|mysql|redis|tomcat|iis apppool|network service|local service)$/.test(s) || /\$$/.test(s);
+        return !s || /^(?:administrator|admin|root|system|nt authority\\system|guest|defaultaccount|krbtgt|www-data|apache|nginx|nobody|daemon|http|postgres|mysql|redis|tomcat|iis apppool|network service|local service)$/.test(s) || /^svc[-_]/i.test(s) || /\$$/.test(s);
       };
       // The ROOT/proof flag path is an earned gate token (only filled once located).
       // The USER/local flag path prefers a located path; otherwise, when the active user is an unprivileged
@@ -572,7 +588,7 @@
 
       var candidateNames = customList.concat(policyList).map(function (s) { return s.name; });
       if (candidateNames.length) {
-        ctx.shares_readable_quoted = candidateNames.map(function (n) { return '"' + n + '"'; }).join(' ');
+        ctx.shares_readable_quoted = candidateNames.map(function (n) { return '"' + String(n).replace(/(["\\$`])/g, '\\$1') + '"'; }).join(' ');
       }
     }
 
@@ -621,64 +637,80 @@
     return ctx;
   }
 
-  function quoteStateAt(str, idx) {
+  function quoteStateAt(str, idx, shell) {
     var q = '';
     for (var i = 0; i < idx; i++) {
       var ch = str.charAt(i);
-      if (ch === '\\' && q !== "'") { i++; continue; }
-      if (!q && (ch === "'" || ch === '"')) q = ch;
+      if ((shell === 'powershell' && ch === '`' && q !== "'") || (shell === 'bash' && ch === '\\' && q !== "'")) { i++; continue; }
+      if (shell === 'powershell' && q === "'" && ch === "'" && str.charAt(i + 1) === "'") { i++; continue; }
+      if (!q && (ch === '"' || (shell !== 'cmd' && ch === "'"))) q = ch;
       else if (q === ch) q = '';
     }
     return q;
   }
 
-  // Substitute known {{tokens}}; leave unknown placeholders visible (they signal a dependency).
+  function inferShell(run) {
+    if (/^\s*(?:\$env:|(?:Get|Set|Add|Remove|New|Invoke|Import|Start|Stop|Enable|Disable)-[A-Za-z]|IEX\b)/i.test(run)) return 'powershell';
+    if (/^\s*(?:cmd\s+\/c\b|schtasks\b|reg\s+(?:query|add)|icacls\b|net\s+(?:user|localgroup)|type\s+)/i.test(run)) return 'cmd';
+    if (/^\s*(?:hostname|whoami|ipconfig)\b[^\r\n]*;\s*(?:ipconfig|type|Get-)/i.test(run)) return 'powershell';
+    return 'bash';
+  }
+
+  function renderValue(value, key, shell, quote, opts) {
+    var s = String(value);
+    if (EXPRESSION_TOKENS[key] || (opts.expressionTokens && opts.expressionTokens.indexOf(key) >= 0)) return s;
+    if (shell === 'powershell') {
+      if (quote === "'") return s.replace(/'/g, "''");
+      if (quote === '"') return s.replace(/`/g, '``').replace(/(["$])/g, '`$1');
+      return /^[A-Za-z0-9_@%+=:,.\\\/-]+$/.test(s) ? s : "'" + s.replace(/'/g, "''") + "'";
+    }
+    if (shell === 'cmd') {
+      // CMD expands %variables% and delayed !variables! even inside quotes. Refuse
+      // unrepresentable literals rather than handing the operator an altered argument.
+      if (/["%!\r\n\x00]/.test(s)) {
+        if (opts.errors) opts.errors.push('Cannot safely render ' + key + ' for CMD. Use PowerShell or Bash.');
+        return '{{' + key + '}}';
+      }
+      if (quote === '"') return s;
+      return /^[A-Za-z0-9_@+=:,.\\\/-]+$/.test(s) ? s : '"' + s + '"';
+    }
+    if (quote === "'") return s.replace(/'/g, "'\\''");
+    if (quote === '"') return s.replace(/(["\\$`])/g, '\\$1');
+    if (PATH_TOKENS.test(key) && /^~\//.test(s)) {
+      return /^[A-Za-z0-9_@%+=:,.\/-]+$/.test(s.slice(1)) ? s : '"$HOME"' + shellQuote(s.slice(1));
+    }
+    return shellQuote(s);
+  }
+
+  // A single pass ensures discovered values cannot introduce new template tokens.
   function fillTemplate(text, facts, opts) {
     if (!text) return '';
+    opts = opts || {};
     var cmd = String(text).split('\\{\\{').join(LIT_OPEN).split('\\}\\}').join(LIT_CLOSE);
-    var ctx = buildContext(facts, opts);
-    Object.keys(ctx).forEach(function (key) {
-      var placeholder = '{{' + key + '}}';
-      var sval = String(ctx[key]);
-      if (SHELL_VALUE_TOKENS[key] && shellQuote(sval) !== sval) {
-        var quoted = shellQuote(sval);
-        if (cmd.indexOf(placeholder) >= 0) {
-          var out = '';
-          var pos = 0;
-          var found;
-          while ((found = cmd.indexOf(placeholder, pos)) >= 0) {
-            out += cmd.slice(pos, found);
-            var qState = quoteStateAt(out, out.length);
-            if ((qState === "'" || qState === '"') && out.charAt(out.length - 1) === qState && cmd.charAt(found + placeholder.length) === qState && quoteStateAt(out.slice(0, -1), out.length - 1) === '') {
-              out = out.slice(0, -1) + quoted;
-              pos = found + placeholder.length + 1;
-              continue;
-            }
-            if (qState === "'") {
-              out += sval.replace(/'/g, "'\\''");
-            } else if (qState === '"') {
-              out += sval.replace(/(["\\$`])/g, '\\$1');
-            } else {
-              out += quoted;
-            }
-            pos = found + placeholder.length;
-          }
-          cmd = out + cmd.slice(pos);
-        }
-      } else {
-        cmd = cmd.split(placeholder).join(sval);
+    var ctx = buildContext(facts, opts), shell = opts.shell || inferShell(cmd);
+    cmd = cmd.replace(/\{\{([a-zA-Z0-9_]+)(?:\|((?:\{\{[a-zA-Z0-9_]+\}\}|[^{}])*))?\}\}/g, function (placeholder, key, defVal, offset) {
+      var value = ctx[key];
+      if (key === 'domain' && ctx.auth_realm && ctx.user) {
+        var before = cmd.slice(0, offset), after = cmd.slice(offset + placeholder.length);
+        var principalRealm = /\{\{(?:user|username)\}\}@['"]?$/.test(before) || /^(?:\/|\\+)\{\{(?:user|username)\}\}/.test(after);
+        var authFlag = /(?:^|\s)(?:-d|--domain|-domain)\s+['"]?$/.test(before)
+          && /\b(?:nxc|netexec|crackmapexec|smbmap|smbclient|rpcclient)\b/.test(cmd);
+        if (principalRealm || authFlag) value = ctx.auth_realm;
       }
-    });
-    cmd = cmd.replace(/\{\{([a-zA-Z0-9_]+)\|([^}]*)\}\}/g, function (_, k, defVal) {
-      var v = ctx[k];
-      return (v !== undefined && v !== null && v !== '') ? String(v) : defVal;
+      if (value === undefined || value === null || value === '') {
+        if (defVal === undefined) return placeholder;
+        value = defVal.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, function (nested, name) {
+          return ctx[name] !== undefined && ctx[name] !== null && ctx[name] !== '' ? String(ctx[name]) : nested;
+        });
+      }
+      return renderValue(value, key, shell, quoteStateAt(cmd, offset, shell), opts);
     });
     return cmd.split(LIT_OPEN).join('{{').split(LIT_CLOSE).join('}}');
   }
 
-  // ── Loadout command-rewrite ──────────────────────────────────────────────────────
+  // -- Loadout command-rewrite ------------------------------------------------------
   // Once the operator has synced their box (Loadout), rewrite a filled command to THEIR box's reality:
-  //   - tool invocation: impacket-psexec ↔ psexec.py ↔ python3 …/psexec.py; nxc ↔ netexec ↔ crackmapexec
+  //   - tool invocation: impacket-psexec <-> psexec.py <-> python3 .../psexec.py; nxc <-> netexec <-> crackmapexec
   //   - wordlist paths: the real rockyou / SecLists location on this box
   // Conservative + reversible: only a recognized ARSENAL variant appearing as a STANDALONE token is
   // swapped, and only for the actual invocation the box reported; anything un-synced or unknown is left
@@ -721,14 +753,31 @@
       }
       var variants = (e.variants && e.variants.length) ? e.variants.slice() : [e.canonical || e.key];
       if (e.canonical && variants.indexOf(e.canonical) < 0) variants.push(e.canonical);
+      var pyVariants = variants.filter(function (x) { return x && x.slice(-3).toLowerCase() === '.py'; });
+      var multiPyRepo = pyVariants.length > 1;
       variants.forEach(function (v) {
         if (!v) return;
-        var isPy = v.slice(-3).toLowerCase() === '.py' || inv.indexOf('python') === 0;
+        var vl = v.toLowerCase();
+        var vInv = inv;
+        if (rec.scripts && rec.scripts[vl]) {
+          var sp = rec.scripts[vl];
+          vInv = (sp.slice(-3).toLowerCase() === '.py' && sp.indexOf('python') !== 0) ? ('python3 ' + sp) : sp;
+        } else if (multiPyRepo && vl.slice(-3) === '.py') {
+          var invBase = inv.split('/').pop().toLowerCase();
+          if (invBase !== vl && inv.indexOf('/') >= 0) {
+            var dirPart = inv.slice(0, inv.lastIndexOf('/'));
+            if (dirPart.indexOf('python') !== 0 && vl.slice(-3) === '.py') dirPart = 'python3 ' + dirPart;
+            vInv = dirPart + '/' + v;
+          } else if (rec.dir) {
+            vInv = 'python3 ' + String(rec.dir).replace(/\/+$/, '') + '/' + v;
+          }
+        }
+        var isPy = vl.slice(-3) === '.py' || vInv.indexOf('python') === 0;
         if (isPy) {
-          var pyRe = new RegExp('(^|\\s)(?:python3?\\s+)?(?:(?:\\$HOME|~|\\/opt|\\/usr\\/local|\\/usr\\/share)\\/[^\\s"\';|&]*\\/)?' + _reEsc(v) + '(?=\\s|$)', 'g');
-          filled = filled.replace(pyRe, '$1' + inv);
-        } else if (v !== inv) {
-          filled = filled.replace(new RegExp('(^|\\s)' + _reEsc(v) + '(?=\\s|$)', 'g'), '$1' + inv);
+          var pyRe = new RegExp('(^|\\s)(?:python3?\\s+)?(?:(?:\\$HOME|~|\\/opt|\\/usr\\/local|\\/usr\\/share|\\/home\\/[^\\s"\';|&\\/]+)\\/[^\\s"\';|&]*\\/)?' + _reEsc(v) + '(?=\\s|$)', 'gi');
+          filled = filled.replace(pyRe, '$1' + vInv);
+        } else if (v !== vInv) {
+          filled = filled.replace(new RegExp('(^|\\s)' + _reEsc(v) + '(?=\\s|$)', 'g'), '$1' + vInv);
         }
       });
     });
@@ -751,11 +800,18 @@
   // attach it in Evidence"). Neither field exists in obol's mined data; both are additive.
   function fillCommand(action, facts, opts, index) {
     opts = opts || {};
+    if (action && action.resolvedContext) {
+      facts = action.resolvedContext.facts;
+      opts = Object.assign({}, opts, {params:action.resolvedContext.params,target:action.resolvedContext.target});
+    }
     index = index || 0;
     var commands = (action.commands && action.commands.length) ? action.commands : [{ run: action.command, tool: action.tool }];
     if (index < 0 || index >= commands.length) index = 0;
     var c = commands[index] || {};
     var run = c.web || c.run || action.web_command || action.command || '';
+    var errors = [];
+    var fillOpts = Object.assign({}, opts, { action: action, command: run, locus: opts.locus || (OBOL.pack && OBOL.pack.commandExecutionLocus ? OBOL.pack.commandExecutionLocus(c) : 'remote'), shell: c.shell || opts.shell || inferShell(run), errors: errors });
+    var filled = fillTemplate(run, facts, fillOpts);
     var actForArsenal = (c.tool && action && c.tool !== action.tool) ? Object.assign({}, action, { cmdTool: c.tool }) : action;
     return {
       tool: c.tool || action.tool || '',
@@ -765,7 +821,8 @@
       run: run,
       // thread the action so the loot glue can resolve {{userlist}}/{{hashfile}} for THIS move, then
       // rewrite to the operator's synced box (invocation + wordlist paths) - a no-op until they sync.
-      filled: applyArsenal(fillTemplate(run, facts, opts.action === action ? opts : Object.assign({}, opts, { action: action })), actForArsenal, opts.arsenal),
+      filled: errors.length ? '' : applyArsenal(filled, actForArsenal, opts.arsenal),
+      blocked: errors.length > 0, errors: errors,
     };
   }
 
@@ -876,7 +933,7 @@
     return m ? m[1].replace(/^.*[\\/]/, '') : '';
   }
 
-  function commandTriedInEpoch(action, cmdObj, filledStr, activities, epoch) {
+  function commandTriedInEpoch(action, cmdObj, filledStr, activities, epoch, target) {
     if (!action || !cmdObj || !Array.isArray(activities) || !activities.length) return false;
     var rawRun = _normCmd(cmdObj.run);
     var filledCmd = _normCmd(filledStr);
@@ -890,16 +947,25 @@
       }
     }
     var isFlagHuntSession = (action.id === 'flag-hunt-windows' || action.id === 'flag-hunt-root-windows') && cmdTool === 'evil-winrm';
+    var currentContext = OBOL.context && OBOL.store && OBOL.store.active ? OBOL.context.resolve({engagement:OBOL.store.active(),target:target,command:filledStr || rawRun,actionId:action.id,locus:OBOL.pack && OBOL.pack.commandExecutionLocus ? OBOL.pack.commandExecutionLocus(cmdObj) : 'remote'}) : null;
     for (var a = 0; a < activities.length; a++) {
       var act = activities[a];
       if (!act || (act.action_id || act.actionId) !== action.id) continue;
+      var actTarget = act.target || (/^host:/.test(act.scope || '') ? act.scope.slice(5) : '');
+      if (target && actTarget !== target) continue;
       if (epoch && act.epoch && act.epoch !== epoch) continue;
+      if (act.outcome && !act.outcome.retireCommand) continue;
+      if (currentContext) {
+        var previousContext = act.context || (act.outcome && act.outcome.context);
+        if (!previousContext) continue;
+        if ((previousContext.credentialId || null) !== currentContext.credentialId || (previousContext.service || '') !== currentContext.service || (previousContext.locus || 'remote') !== currentContext.locus) continue;
+      }
       var ac = _normCmd(act.command);
       if (ac && (ac === rawRun || (filledCmd && ac === filledCmd))) return true;
       var ad = _normCmd(act.dispatch);
       if (filledCmd && ad && ad.indexOf(filledCmd) >= 0) return true;
       var actTool = String(act.tool || primaryBinary(ac) || '').toLowerCase().replace(/\.(py|exe)$/, '');
-      if (cmdTool && actTool === cmdTool && (!ac || sameToolCount === 1 || isFlagHuntSession)) return true;
+      if (!currentContext && cmdTool && actTool === cmdTool && (!ac || sameToolCount === 1 || isFlagHuntSession)) return true;
     }
     return false;
   }
@@ -912,14 +978,18 @@
     var locus = opts.locus || (action.locus === 'F' || action.locus === 'I' ? 'onhost' : 'remote');
     var filled = fillAll(action, facts, opts);
     function isGated(cmd, i) {
+      var commandFacts = facts && facts.forAction ? facts.forAction(action, cmd) : facts;
+      if (action.eligible && commandFacts && !action.eligible(commandFacts)) return true;
+      if (OBOL.pack && OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmd, commandFacts)) return true;
       if (!filled[i]) return false;
+      if (filled[i].blocked) return true;
       var un = unfilledTokens(filled[i].filled || '');
       return un.some(function (t) { return EARNED_TOKENS[t]; });
     }
     var acts = Array.isArray(opts.activities) ? opts.activities : null;
     var curEpoch = opts.epoch || ((root.OBOL && root.OBOL.pack && root.OBOL.pack.accessEpoch && facts) ? root.OBOL.pack.accessEpoch(facts) : '');
     var triedFn = acts ? function (cmd, i) {
-      return commandTriedInEpoch(action, cmd, filled[i] && filled[i].filled, acts, curEpoch);
+      return commandTriedInEpoch(action, cmd, filled[i] && filled[i].filled, acts, curEpoch, opts.params && opts.params.target);
     } : null;
     if (root.OBOL && root.OBOL.pack && root.OBOL.pack.preferredCommandIndex) {
       return root.OBOL.pack.preferredCommandIndex(action, locus, facts || null, isGated, triedFn);
