@@ -29,7 +29,7 @@
       'data/tool-glossary.js?v=545023e5', 'data/tool-recipes.js?v=91e09076', 'data/tool-stations.js?v=1b822340',
       'assets/engine/toolkit.js?v=cb14c479', 'assets/engine/shellkit.js?v=8289e51a', 'assets/engine/pivotkit.js?v=e59dbec6', 'assets/ui/pivotstation.js?v=697a8be7', 'assets/engine/workbench.js?v=4690530a', 'assets/ui/bind.js?v=70d1fd1b', 'assets/ui/routes/tools.js?v=f02b12fe'],
     loadout: ['assets/engine/arsenal.js?v=d2a0f7eb', 'assets/ui/routes/loadout.js?v=6edd12d8'],
-    workbench: ['assets/engine/workbench.js?v=4690530a', 'assets/ui/routes/workbench.js?v=1390be19'],
+    workbench: ['assets/engine/workbench.js?v=4690530a', 'assets/ui/routes/workbench.js?v=8f861413'],
     stuck: ['data/stuck-catalog.js?v=7bee4a9a', 'assets/engine/stuck.js?v=9f3ec324', 'assets/ui/routes/stuck.js?v=1a559f6b'],
     // Library folds Stuck? in as a sub-lens, so it carries Stuck?'s data+engine+route plus the ATT&CK
     // catalog/map (for the ATT&CK lens) and the library engine itself.

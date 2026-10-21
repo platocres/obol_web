@@ -823,10 +823,10 @@
         var scope = 'host:' + (activeParams().target || 'target');
         // Recover the command from the paste's own prompt/command line, and widen the dispatch the way
         // the ingester does, so routing works without a separate command box.
-        var derived = (OBOL.ingest && OBOL.ingest.deriveCommand) ? OBOL.ingest.deriveCommand(text) : '';
-        var dispatch = (OBOL.ingest && typeof OBOL.ingest.dispatchLabel === 'function') ? OBOL.ingest.dispatchLabel(derived, text) : derived;
+        var inferredCmd = (OBOL.ingest && OBOL.ingest.deriveCommand) ? OBOL.ingest.deriveCommand(text) : '';
+        var dispatch = (OBOL.ingest && typeof OBOL.ingest.dispatchLabel === 'function') ? OBOL.ingest.dispatchLabel(inferredCmd, text) : inferredCmd;
         var res;
-        try { res = OBOL.parsers.parseActionOutput({ command: dispatch || derived, stdout: text, source: 'explain', scope: scope, domain: activeParams().domain || '' }); }
+        try { res = OBOL.parsers.parseActionOutput({ command: dispatch || inferredCmd, stdout: text, source: 'explain', scope: scope, domain: activeParams().domain || '' }); }
         catch (e) { if (out) out.innerHTML = '<p class="wb-note">The parser hit an error on that input.</p>'; return; }
         if (out) out.innerHTML = explainOutHtml(text, (res && res.facts) || []);
       };

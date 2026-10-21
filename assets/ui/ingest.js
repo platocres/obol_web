@@ -652,14 +652,14 @@
     var rawOptCmd = (opts.command && opts.command.trim()) || '';
     var trimmedText = _trimPriorScrollback(text, rawOptCmd, (eng && eng.activities) || []).replace(/[ \t]+$/gm, '');
     var binding = sourceBinding(Object.assign({}, opts, { text: trimmedText }), eng);
-    var derived = binding.derived, cmd = binding.command, lastCopiedFallback = binding.last;
+    var inferredCmd = binding.derived, cmd = binding.command, lastCopiedFallback = binding.last;
     // Widen the DISPATCH label with whatever the paste reveals about its tool, so output-only pastes and
     // out-of-order evidence still reach the right parser. Lineage/tool below stay the honest `cmd`.
     var dispatchCmd = dispatchLabel(cmd, trimmedText);
     var firstTok = rawOptCmd.split(/\s+/)[0] || '';
     var originalAction = opts.actionId || '';
-    if (derived && rawOptCmd && (extractTool(derived) !== extractTool(rawOptCmd)
-      || (OBOL.context && OBOL.context.serviceOf && OBOL.context.serviceOf(derived) !== OBOL.context.serviceOf(rawOptCmd)))) originalAction = '';
+    if (inferredCmd && rawOptCmd && (extractTool(inferredCmd) !== extractTool(rawOptCmd)
+      || (OBOL.context && OBOL.context.serviceOf && OBOL.context.serviceOf(inferredCmd) !== OBOL.context.serviceOf(rawOptCmd)))) originalAction = '';
     var inferredActId = originalAction || (/^[a-z0-9]+(?:-[a-z0-9]+)+$/i.test(firstTok) ? firstTok : '') || (lastCopiedFallback ? lastCopiedFallback.actionId : '');
     if (!inferredActId && cmd) {
       if (/\bbloodyAD\b/i.test(cmd)) inferredActId = 'bloodyad-acl';
