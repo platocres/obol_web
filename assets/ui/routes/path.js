@@ -289,13 +289,13 @@
   function cmdUnmetGates(v) {
     return OBOL.command.unfilledTokens((v && v.filled) || '').filter(function (t) { return GATE_TOKENS[t]; });
   }
-  function cmdGated(v) { return cmdUnmetGates(v).length > 0; }
+  function cmdGated(v) { return !!(v && v.blocked) || cmdUnmetGates(v).length > 0; }
 
-  function cmdWasTriedInEpoch(move, cmdObj, filledObj, eng, curEpoch) {
+  function cmdWasTriedInEpoch(move, cmdObj, filledObj, eng, curEpoch, target) {
     if (!move || !cmdObj || !eng) return false;
     var filledStr = filledObj && filledObj.filled ? filledObj.filled : '';
     if (OBOL.command && OBOL.command.commandTriedInEpoch) {
-      return OBOL.command.commandTriedInEpoch(move, cmdObj, filledStr, eng.activities || [], curEpoch);
+      return OBOL.command.commandTriedInEpoch(move, cmdObj, filledStr, eng.activities || [], curEpoch, target || move.contextTarget || (eng.params && eng.params.target));
     }
     return false;
   }
@@ -306,13 +306,17 @@
   function firstCmdIndexForLocus(move, locus, facts) {
     if (!move) return 0;
     var eng = OBOL.store.active() || {};
-    var filled = OBOL.command.fillAll(move, facts, { params: eng.params || {}, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
+    var commandParams = move.resolvedContext ? move.resolvedContext.params : Object.assign({}, eng.params || {}, facts && facts.context ? {target:facts.context.target} : {});
+    var filled = OBOL.command.fillAll(move, facts, { params: commandParams, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
     var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch && facts) ? OBOL.pack.accessEpoch(facts) : '';
     return OBOL.pack.preferredCommandIndex(
       move,
       locus,
       facts || null,
-      function (cmd, i) { return cmdGated(filled[i]); },
+      function (cmd, i) {
+        var commandFacts = facts && facts.forAction ? facts.forAction(move, cmd) : facts;
+        return (move.eligible && commandFacts && !move.eligible(commandFacts)) || cmdGated(filled[i]);
+      },
       function (cmd, i) { return cmdWasTriedInEpoch(move, cmd, filled[i], eng, curEpoch); }
     );
   }
@@ -336,6 +340,7 @@
   function nsCommandRows(action, filled, selLocus, selIdx, spansBoth, facts, focusMode) {
     var eng = OBOL.store.active() || {}, acts = eng.activities || [], params = eng.params || {};
     var gatedNeeds = {};   // earned-token -> 1, union across all hidden (gated) commands, for the affordance
+    var unavailableVariants = {};
     var items = [];
     var bhHopBanner = '';
     if (facts && facts.has('ad.attack_paths') && (action.id === 'bloodyad-acl' || action.id === 'ad-acl-abuse')) {
@@ -374,11 +379,21 @@
       }
     }
     (action.commands || []).forEach(function (cmdObj, i) {
+      var commandFacts = facts && facts.forAction ? facts.forAction(action, cmdObj) : facts;
+      if (action.eligible && commandFacts && !action.eligible(commandFacts)) {
+        var unavailableLocus = OBOL.pack.commandLocus(cmdObj);
+        unavailableVariants[(unavailableLocus === 'onhost' ? 'On-Host' : 'Remote') + ': ' + action.unmet(commandFacts)] = true;
+        return;
+      }
       // A command that has done its job drops out: a run-once probe (the switchless null-session check)
       // disappears once the fact it was there to prove is held, so you never re-run a question you answered.
-      if (OBOL.pack.commandSettled(cmdObj, facts)) return;
-      if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmdObj, facts)) return;
+      if (OBOL.pack.commandSettled(cmdObj, commandFacts)) return;
+      if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmdObj, commandFacts)) return;
       var v = filled[i] || {};
+      if (v.blocked) {
+        items.push({ index: i, locus: OBOL.pack.commandLocus(cmdObj), hidden: false, isLead: i === selIdx, ran: false, html: '<div class="cmd-note" role="status">' + esc((v.errors || []).join(' ')) + '</div>' });
+        return;
+      }
       // A command whose time has not come drops out too: it still needs an EARNED fact (base DN, domain, a
       // credential) the operator has not proven yet. Collect what it waits on, then hide it; it returns,
       // filled, once that fact is minted. (Config tokens like lhost are not gates, see GATE_TOKENS.)
@@ -470,6 +485,9 @@
       rows += '<div class="ns-cmd-locked" role="note">' + OBOL.ic('lock')
         + '<span>More unlocks once you have ' + esc(humanList(needs)) + '.</span></div>';
     }
+    Object.keys(unavailableVariants).forEach(function (reason) {
+      rows += '<div class="ns-cmd-locked" role="note">' + OBOL.ic('lock') + '<span>' + esc(reason) + '</span></div>';
+    });
     return bhHopBanner + rows;
   }
   // "a, b and c" from a short list, for the unlocks affordance.
@@ -480,6 +498,7 @@
   }
 
   function actionTargetLabel(action, facts, eng, focusedTarget) {
+    if (action.contextTarget) return action.contextTarget;
     // 1. If currently focused on a specific target:
     if (focusedTarget) return focusedTarget;
 
@@ -534,6 +553,7 @@
   // CSS when .selected) so the delegated fill / paste-back / copy listeners work without a re-render.
   function nsCard(action, facts, params, opts) {
     opts = opts || {};
+    if (action.resolvedContext) { facts = action.resolvedContext.facts; params = action.resolvedContext.params; }
     var famClass = ' ns-ph-' + OBOL.phases.phaseOfAction(action);
     var dirs = OBOL.workspace.tokens(OBOL.store.active());
     var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: dirs });
@@ -569,7 +589,7 @@
     // button for screen readers. It is a focusable region with an aria-label and Enter/Space handling.
     return '<article class="ns-card' + famClass + (opts.selected ? ' selected is-glow' : '') + '" tabindex="0"'
       + ' aria-expanded="' + (opts.selected ? 'true' : 'false') + '"'
-      + ' aria-label="' + U.attr(action.title + ' - press Enter to open its commands and field notes') + '" data-action="' + esc(action.id) + '">'
+      + ' aria-label="' + U.attr(action.title + ' - press Enter to open its commands and field notes') + '" data-action="' + esc(action.id) + '" data-context-target="' + esc(params.target || '') + '">'
       + (opts.rank ? '<span class="ns-rank">#' + opts.rank + '</span>' : '')
       + '<div class="ns-card-head">'
       + (opts.suggested ? '<span class="ns-suggested">Suggested Start</span>' : '')
@@ -610,7 +630,10 @@
         if (k === 'blocker.nxc_bh_config' && (facts.has('ad.graph.collected') || facts.has('ad.attack_paths'))) {
           return;
         }
-        var d = Object.assign({ factKind: k }, docs[k]);
+        var scopes = {};
+        (facts.facts || []).forEach(function (f) { if (f.kind === k && f.state === 'supported') scopes[f.scope] = true; });
+        Object.keys(scopes).forEach(function (scope) {
+        var d = Object.assign({ factKind: k, factScope: scope }, docs[k]);
         if (d.code) {
           var tmpl = String(d.code)
             .replace(/<(?:dc-ip|target-ip|target)>/g, '{{target}}')
@@ -620,9 +643,10 @@
             .replace(/<host\.domain>/g, '{{dc_fqdn|{{domain}}}}')
             .replace(/<share>/g, '{{share}}')
             .replace(/<hashfile>/g, '{{hashfile}}');
-          d.code = nsFill(tmpl, facts, params);
+          d.code = nsFill(tmpl, facts, Object.assign({}, params, /^host:/.test(scope) ? { target: scope.slice(5) } : {}));
         }
         out.push(d);
+        });
       }
     });
     return out;
@@ -639,7 +663,7 @@
             + '<span class="fix-card-badge">DIAGNOSTIC DETECTED</span>'
             + '<h3 class="fix-card-title">' + esc(d.title || d.factKind) + '</h3>'
             + '</div>'
-            + (d.factKind ? ('<button type="button" class="fix-card-dismiss" data-dismiss-blocker="' + esc(d.factKind) + '" title="Dismiss this diagnostic">✓ Resolved</button>') : '')
+            + (d.factKind ? ('<button type="button" class="fix-card-dismiss" data-dismiss-blocker="' + esc(d.factKind) + '" data-fact-scope="' + esc(d.factScope || '') + '" title="Dismiss this diagnostic">✓ Resolved</button>') : '')
             + '</div>'
             + '<div class="fix-card-body">'
             + (d.why ? ('<div class="fix-card-why"><strong>Root Cause:</strong> ' + esc(d.why) + '</div>') : '')
@@ -980,9 +1004,9 @@
   // learner sees what the command looks like run and the output to expect, without leaving Next Steps. The
   // on/off choice persists (localStorage), so once you turn it on it stays on across every move.
   function exampleOn() { try { var v = localStorage.getItem('obol.show-example'); return v === null ? true : v === '1'; } catch (e) { return true; } }
-  function nsExampleBlock(move) {
+  function nsExampleBlock(move, idx, cmdText) {
     if (!move || !OBOL.study || !OBOL.study.replayFor) return '';
-    var rp = null; try { rp = OBOL.study.replayFor(move.id); } catch (e) { rp = null; }
+    var rp = null; try { rp = OBOL.study.replayFor(move.id, idx, cmdText); } catch (e) { rp = null; }
     if (!rp || !rp.hasOutput || !rp.steps || !rp.steps.length) return ''; // only promise it where real output exists
     var open = exampleOn();
     var promptFor = function (where) { return where === 'host' ? 'C:\\>' : 'kali$'; };
@@ -1007,6 +1031,7 @@
   function nsCanvasHtml(move, idx, facts, params) {
     if (!move) return '<div class="ns-canvas-head"><span class="ns-canvas-kick">Field Notes</span></div>'
       + '<div class="ns-canvas-empty">Pick a move on the left to see how to land it, step by step.</div>';
+    if (move.resolvedContext) { facts = move.resolvedContext.facts; params = move.resolvedContext.params; }
     var filled = OBOL.command.fillAll(move, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
     var cmdText = (filled[idx] && filled[idx].filled) || '';
     var note = OBOL.fieldNote ? OBOL.fieldNote(move, idx) : null;
@@ -1024,7 +1049,7 @@
     if (cmdText) html += '<div class="ns-canvas-cmd' + phCls + '"><code>' + esc(cmdText) + '</code></div>';
 
     // "See It Run": toggleable Learn-style example run + expected output for this move.
-    html += nsExampleBlock(move);
+    html += nsExampleBlock(move, idx, cmdText);
 
     var flagsExpl = (OBOL.command && OBOL.command.explainFlags) ? OBOL.command.explainFlags(cmdText) : [];
     var mistakes = (note && note.mistakes) || [];
@@ -1309,8 +1334,27 @@
   function computeCoach(overrideTarget) {
     var eng = OBOL.store.active();
     var targetIp = (overrideTarget !== undefined) ? overrideTarget : (OBOL.store.activeTarget ? OBOL.store.activeTarget() : null);
-    var multiTgt = ((eng && eng.targets) || []).length > 1;
-    var facts = (targetIp && (overrideTarget !== undefined || multiTgt) && OBOL.store.factSetForTarget)
+    if (!targetIp && OBOL.context && (eng.targets || []).length > 1) {
+      var computations = eng.targets.filter(function (t) { return t.ip || t.id; }).map(function (t) {
+        return rankFor(OBOL.store.factSetForTarget(t.ip || t.id), {target:t.ip || t.id});
+      });
+      if (computations.length) {
+        var result = Object.assign({}, computations[0], {target:null,targetContexts:computations});
+        ['onFlow','comingUp','reportChecks'].forEach(function (section) {
+          var picks = {}, entries = [];
+          computations.forEach(function (c, hostIndex) { c[section].forEach(function (a, rank) {
+            if (a.id === nsSel.id && nsSel.target && picks[a.id] && picks[a.id].action.contextTarget === nsSel.target) return;
+            if (a.id === nsSel.id && a.contextTarget === nsSel.target) { picks[a.id] = {action:a,rank:rank,hostIndex:hostIndex}; return; }
+            if (picks[a.id] && picks[a.id].rank <= rank) return;
+            picks[a.id] = {action:a,rank:rank,hostIndex:hostIndex};
+          }); });
+          Object.keys(picks).forEach(function (id) { entries.push(picks[id]); });
+          result[section] = entries.sort(function (a,b) { return a.rank-b.rank || a.hostIndex-b.hostIndex; }).map(function (e) { return e.action; });
+        });
+        return result;
+      }
+    }
+    var facts = (targetIp && OBOL.store.factSetForTarget)
       ? OBOL.store.factSetForTarget(targetIp)
       : OBOL.store.factSet();
     return rankFor(facts, { target: targetIp });
@@ -1324,26 +1368,17 @@
     var eng = OBOL.store.active();
     var params = Object.assign({}, (eng && eng.params) || {});
     if (opts.target) params.target = opts.target;
-    var pack = OBOL.packs.actions();
-    var doneIds = {};
-    // 'done' = the operator ticked it; 'empty' = its tool ran and proved nothing (a useless path RIGHT NOW,
-    // e.g. no SCCM in this environment). Both retire the move from the ready list. The un-retire test is per
-    var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch) ? OBOL.pack.accessEpoch(facts) : 'anon';
-    function moveEverProduced(actionId, epoch) {
-      return (eng && eng.activities || []).some(function (a) {
-        if (!a || a.action_id !== actionId) return false;
-        if (epoch && a.epoch && a.epoch !== epoch) return false;
-        if (typeof a.addedCount === 'number') return a.addedCount > 0;
-        return (a.produced || []).some(function (k) {
-          return !/^(smb\.reachable|http\.reachable|ldap\.reachable|kerberos\.reachable|winrm\.reachable|ssh\.reachable|host\.|os\.|ad\.domain_known|ad\.base_dn|ad\.dc_candidate|credential\.validation|blocker\.)/.test(k);
-        });
-      });
+    var context = null;
+    if (OBOL.context) {
+      var hosts = {};
+      ((facts && facts.facts) || []).forEach(function (f) { if (/^host:/.test(f.scope || '') && f.scope !== 'host:target') hosts[f.scope.slice(5)] = true; });
+      var contextTarget = opts.target || (Object.keys(hosts).length === 1 ? Object.keys(hosts)[0] : params.target);
+      context = OBOL.context.resolve({engagement:eng,target:contextTarget,facts:facts,params:params,locus:'overview'});
+      facts = context.facts; params = context.params;
     }
-    Object.keys((eng && eng.checklist) || {}).forEach(function (k) {
-      var st = eng.checklist[k];
-      if (st === 'done' || st === 'empty:' + curEpoch) { doneIds[k] = true; return; }
-      if (st === 'empty' && !moveEverProduced(k, curEpoch)) doneIds[k] = true;
-    });
+    var pack = OBOL.packs.actions();
+    var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch) ? OBOL.pack.accessEpoch(facts) : 'anon';
+    var doneIds = OBOL.store.doneIdsForTarget ? OBOL.store.doneIdsForTarget(params.target, facts, eng) : {};
 
     var focus = (OBOL.profile && eng && eng.profile) ? OBOL.profile.profileFocus(eng.profile) : [];
     var flagsOn = (!OBOL.profile || !OBOL.profile.hasFlags || !eng) ? true : OBOL.profile.hasFlags(eng.profile);
@@ -1369,14 +1404,16 @@
     function hasRunnableCommand(a) {
       var cmds = a.commands || []; if (!cmds.length) return true;
       var eng = OBOL.store.active() || {};
-      var filled = OBOL.command.fillAll(a, facts, { params: eng.params || {}, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
+      var filled = OBOL.command.fillAll(a, facts, { params: params, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
       var loci = (OBOL.pack && OBOL.pack.moveCommandLoci) ? OBOL.pack.moveCommandLoci(a, facts) : null;
       for (var i = 0; i < cmds.length; i++) {
-        if (!OBOL.pack.commandIsEligible(cmds[i], facts)) continue;
-        if (OBOL.pack.commandSettled(cmds[i], facts)) continue;
+        var commandFacts = facts.forAction ? facts.forAction(a, cmds[i]) : facts;
+        if (!a.eligible(commandFacts)) continue;
+        if (!OBOL.pack.commandIsEligible(cmds[i], commandFacts)) continue;
+        if (OBOL.pack.commandSettled(cmds[i], commandFacts)) continue;
         if (cmdGated(filled[i])) continue;
         if (!hasFoot && loci && loci.both && OBOL.pack.commandLocus && OBOL.pack.commandLocus(cmds[i]) === 'onhost') continue;
-        if (cmdWasTriedInEpoch(a, cmds[i], filled[i], eng, curEpoch)) continue;
+        if (cmdWasTriedInEpoch(a, cmds[i], filled[i], eng, curEpoch, params.target)) continue;
         return true;
       }
       return false;
@@ -1432,7 +1469,11 @@
 
     var factCount = Object.keys(facts.kinds()).length;
     var phaseName = OBOL.phases.PHASES[frontier] || 'recon';
-    return { eng: eng, facts: facts, params: params, target: opts.target || null, pack: pack, frontier: frontier,
+    if (context) {
+      function bind(a) { var instance = Object.create(a); instance.contextTarget = context.target; instance.resolvedContext = context; return instance; }
+      onFlow = onFlow.map(bind); comingUp = comingUp.map(bind); reportChecks = reportChecks.map(bind);
+    }
+    return { eng: eng, facts: facts, params: params, context:context, target: opts.target || null, pack: pack, frontier: frontier,
       onFlow: onFlow, comingUp: comingUp, reportChecks: reportChecks, locked: locked,
       lens: lens, hiddenBy: hiddenBy, factCount: factCount, phaseName: phaseName,
       campId: campId, campTrack: campTrack, hiddenByCamp: hiddenByCamp };
@@ -1457,6 +1498,7 @@
   // _pasteFlash carries that summary across the ingest-triggered re-render (the toast element is wiped);
   // render() emits it once at the top of the coach, then clears it.
   var _pasteFlash = null;
+  var _dismissedOutcomes = {};
   // Rank a fact kind by how much the operator cares to hear it announced (0 = loudest).
   function flashRank(k) {
     if (/^objective\.(root_flag|local_flag|flag)$/.test(k)) return 0;
@@ -1486,7 +1528,7 @@
     if (k === 'hash.asrep') return 'Captured an AS-REP roastable hash' + (who ? (' for ' + who) : '');
     if (k === 'hash.tgs') return 'Captured a Kerberoast hash' + (who ? (' for ' + who) : '');
     if (k === 'credential.validated') return 'Validated the credential' + (who ? (' for ' + who) : '') + ' (it works here)';
-    if (k === 'credential.available') return 'A working credential' + (who ? (' for ' + who) : '');
+    if (k === 'credential.available') return 'Recovered credential material' + (who ? (' for ' + who) : '') + ' (authentication untested)';
     if (k === 'ad.acl_lead') {
       var tg = (v.targets || []).slice(0, 3);
       return 'Found writable objects' + (tg.length ? (': ' + tg.join(', ') + ((v.targets || []).length > tg.length ? (', +' + ((v.targets || []).length - tg.length) + ' more') : '')) : '');
@@ -1745,16 +1787,16 @@
 
     var opensCount = OBOL.pack.opensUpNext ? OBOL.pack.opensUpNext(facts, pack).length : locked.length;
     var html = '<section class="coach ns-coach-wrap">';
-    // Positive feedback: a plain-language banner of what the last paste LEARNED + the move it unlocked,
-    // so a paste that minted facts never reads as "nothing happened". Shown once, then cleared.
-    if (_pasteFlash) {
-      var fl = _pasteFlash; _pasteFlash = null;
-      html += '<div class="coach-flash" role="status">'
-        + '<div class="coach-flash-h">' + OBOL.ic('flag') + '<span>Parsed ' + fl.total + ' fact' + (fl.total === 1 ? '' : 's') + '. Here is what OBOL learned:</span>'
-        + '<button class="coach-flash-x" aria-label="Dismiss">×</button></div>'
-        + '<ul class="coach-flash-list">' + fl.phrases.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('')
-        + (fl.extra ? ('<li class="coach-flash-more">and ' + fl.extra + ' more detail' + (fl.extra === 1 ? '' : 's') + '</li>') : '') + '</ul>'
-        + (fl.next ? ('<div class="coach-flash-next">Next move: <strong>' + esc(fl.next) + '</strong></div>') : '') + '</div>';
+    // Retain the latest scoped result across renders and target switches. The recorded outcome,
+    // rather than a new-fact count, explains success, negative results, failures, and uncertainty.
+    var outcomeTarget = c.target || params.target || '';
+    var latestOutcome = (eng.activities || []).find(function (a) { return a && a.outcome && (!outcomeTarget || a.target === outcomeTarget); });
+    var outcomeId = latestOutcome ? String(latestOutcome.target || '') + ':' + String(latestOutcome.at || '') : '';
+    if (latestOutcome && !_dismissedOutcomes[outcomeId]) {
+      html += '<div class="coach-flash" data-receipt-id="' + esc(outcomeId) + '">'
+        + '<div class="coach-flash-h"><span>Latest recorded outcome</span><button class="coach-flash-x" aria-label="Dismiss">×</button></div>'
+        + OBOL.ingest.renderOutcome(latestOutcome.outcome)
+        + '<a href="#/history">Review saved output in Run Log</a></div>';
     }
 
     // hero
@@ -2006,10 +2048,14 @@
     // ---- Next Steps card grid: select a card (glow follows), toggle Remote/On-Host, pick a command.
     // These update the DOM and the canvas IN PLACE (no full re-render) so scroll and focus are preserved.
     function freshCtx() {
-      var targetIp = OBOL.store.activeTarget && OBOL.store.activeTarget();
+      var targetIp = (OBOL.store.activeTarget && OBOL.store.activeTarget()) || nsSel.target;
       var facts = (targetIp && OBOL.store.factSetForTarget) ? OBOL.store.factSetForTarget(targetIp) : OBOL.store.factSet();
       var params = Object.assign({}, (OBOL.store.active() || {}).params || {});
       if (targetIp) params.target = targetIp;
+      if (OBOL.store.resolvedContext) {
+        var resolved = OBOL.store.resolvedContext({target:targetIp || params.target,facts:facts});
+        facts = resolved.facts; params = resolved.params;
+      }
       return { facts: facts, pack: OBOL.packs.actions(), params: params };
     }
     function moveById(pack, id) { return pack.filter(function (a) { return a.id === id; })[0]; }
@@ -2020,6 +2066,7 @@
     }
     function selectCard(card) {
       var id = card.getAttribute('data-action'); if (!id) return;
+      nsSel.target = card.getAttribute('data-context-target') || null;
       var fx = freshCtx(); var m = moveById(fx.pack, id); if (!m) return;
       nsSel.id = id;
       nsSel.userLocus = false;
@@ -2065,7 +2112,7 @@
     }
     // dismiss the "what obol learned" flash banner
     U.on(mount, 'click', '.coach-flash-x', function (e, t) {
-      var fl = t.closest('.coach-flash'); if (fl) fl.remove();
+      var fl = t.closest('.coach-flash'); if (fl) { _dismissedOutcomes[fl.getAttribute('data-receipt-id') || ''] = true; fl.remove(); }
     });
     // Open the clicked card and make it the focus, WITHOUT closing the other open cards (multi-open mode).
     function openCardKeepOthers(card) {
@@ -2176,10 +2223,13 @@
       var copiedCmd = t.getAttribute('data-copy') || '';
       if (card && copiedCmd && OBOL.ingest && typeof OBOL.ingest.setLastCopied === 'function') {
         var goBtn = card.querySelector('.mi-go');
+        var copyMove = moveById(OBOL.packs.actions(), card.getAttribute('data-action') || '');
+        var copyObj = copyMove && copyMove.commands && copyMove.commands[nsSel.idx];
         OBOL.ingest.setLastCopied({
           command: copiedCmd,
           actionId: card.getAttribute('data-action') || '',
-          target: (goBtn && goBtn.getAttribute('data-target-ip')) || ''
+          target: (goBtn && goBtn.getAttribute('data-target-ip')) || '',
+          locus: nsSel.locus || 'remote', commandObj: copyObj
         });
       }
       U.copy(copiedCmd).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
@@ -2298,7 +2348,7 @@
     U.on(mount, 'click', '[data-dismiss-blocker]', function (e, t) {
       var k = t.getAttribute('data-dismiss-blocker');
       if (k && OBOL.store && OBOL.store.retractFactKind) {
-        OBOL.store.retractFactKind(k);
+        OBOL.store.retractFactKind(k, t.getAttribute('data-fact-scope'));
         U.toast('Diagnostic resolved');
         OBOL.router.render();
       }
@@ -2306,7 +2356,7 @@
     // mark done
     U.on(mount, 'click', '.btn-done', function (e, t) {
       var id = t.getAttribute('data-action');
-      OBOL.store.update(function (eng) { eng.checklist = eng.checklist || {}; eng.checklist[id] = 'done'; }, 'done');
+      OBOL.store.setChecklist(id, 'done');
       U.toast('Marked done, recomputing');
       OBOL.router.render();
     });
@@ -2372,144 +2422,33 @@
     OBOL.ingest.ensureParsers().then(function (okp) {
       if (!okp) { if (out) out.textContent = 'Parsers still loading, try again.'; t.disabled = false; return; }
       var tIp = t.getAttribute('data-target-ip') || '';
+      var inputMove = moveById(OBOL.packs.actions(), box.getAttribute('data-action') || '');
+      var inputObj = inputMove && inputMove.id === nsSel.id && inputMove.commands && inputMove.commands[nsSel.idx];
       var r = OBOL.ingest.run({ text: text, command: box.getAttribute('data-cmd') || '',
         actionId: box.getAttribute('data-action') || '', source: 'paste',
-        scope: tIp ? ('host:' + tIp) : undefined });
+        scope: tIp ? ('host:' + tIp) : undefined, locus: nsSel.locus || 'remote', commandObj: inputObj || undefined });
       if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
-      var factsOnlyBlockers = r.facts && r.facts.length > 0 && r.facts.every(function (f) { return /^(blocker\.|credential\.validation$)/.test(f.kind); });
-      if (r.added && !factsOnlyBlockers) {
-        // Positive, value-aware feedback: say what obol learned + the next move, so the paste never
-        // reads as silent. The flash survives the re-render below (the toast element gets wiped).
-        _pasteFlash = pasteSummary(r.facts);
-        var lead = _pasteFlash && _pasteFlash.phrases[0] ? _pasteFlash.phrases[0] : ('Minted ' + r.added + ' fact' + (r.added === 1 ? '' : 's'));
-        U.toast(lead + ' · coach updated');
-        OBOL.router.render(); // coach advances: the move may now be satisfied and new moves appear
-      } else {
-        var aid = box.getAttribute('data-action') || '';
-        var toolNm = extractToolName(box.getAttribute('data-cmd') || '') || 'the tool';
-        var bodyLines = text.trim().split(/\r?\n/).filter(function (l) { return l.trim(); }).length;
-        var eng2 = OBOL.store.active() || {};
-        var facts2 = (OBOL.store && OBOL.store.factSet && OBOL.store.factSet()) || null;
-        var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch) ? OBOL.pack.accessEpoch(facts2) : (r.epoch || 'anon');
-        var moveEverPaid = (eng2.activities || []).some(function (a) {
-          if (!a || a.action_id !== aid) return false;
-          if (curEpoch && a.epoch && a.epoch !== curEpoch) return false;
-          if (typeof a.addedCount === 'number') return a.addedCount > 0;
-          return (a.produced || []).some(function (k) {
-            return !/^(smb\.reachable|http\.reachable|ldap\.reachable|kerberos\.reachable|winrm\.reachable|ssh\.reachable|host\.|os\.|ad\.domain_known|ad\.base_dn|ad\.dc_candidate|credential\.validation|blocker\.)/.test(k);
-          });
-        });
-        var blockers = r.blockers || (r.facts && r.facts.filter(function (f) { return /^blocker\./.test(f.kind); }).map(function (f) { return f.kind; })) || [];
-
-        // Case 1: Blocker / Field Doctor (DOCTOR_IN_PLACE or DEFER_FOR_PRECONDITION)
-        if ((blockers.length > 0 || r.looksError) && aid) {
-          var isEnvBlocker = blockers.some(function (b) {
-            return /^(blocker\.clock_skew|blocker\.name_resolution|blocker\.no_tty|blocker\.crlf|blocker\.hash_format|blocker\.hashcat_env|blocker\.web_wildcard|blocker\.tls_scheme|blocker\.kerberos_spn|blocker\.xp_cmdshell_disabled|blocker\.password_change|blocker\.ntlm_disabled|blocker\.nxc_c_share_denied|blocker\.nxc_spider_usage|ssh\.key_rejected)$/.test(b);
-          });
-          if (isEnvBlocker) {
-            // Keep in place so the reactive Field Doctor banner in the canvas shows the fix
-            t.disabled = false;
-            OBOL.router.render();
-            return;
-          }
-          var isRefusal = blockers.some(function (b) {
-            return /^(blocker\.access_denied|blocker\.smb_null_denied|blocker\.ldap_anonymous_disabled|blocker\.logon_failure|blocker\.winrm_closed|blocker\.account_restricted|blocker\.account_not_delegated|blocker\.protected_users|blocker\.cracking_exhausted)$/.test(b);
-          }) || r.looksError;
-
-          if (isRefusal) {
-            // Check if the move has another eligible command that has not been tried yet in this epoch
-            var pack = OBOL.packs.actions();
-            var move = moveById(pack, aid);
-            var nextCmdIdx = -1;
-            if (move && move.commands && move.commands.length > 1) {
-              var hasFoot2 = !!(facts2 && (facts2.has('foothold.windows') || facts2.has('foothold.linux') || facts2.has('access.shell') || facts2.has('foothold.webshell')));
-              var filledAll = OBOL.command.fillAll(move, facts2, { params: eng2.params || {}, profile: eng2.profile, workspace: OBOL.workspace.tokens(eng2) });
-              var curLocus = nsSel.locus || OBOL.pack.defaultCommandLocus(move);
-              for (var ci = 0; ci < move.commands.length; ci++) {
-                var cObj = move.commands[ci];
-                if (OBOL.pack.commandSettled(cObj, facts2)) continue;
-                if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cObj, facts2)) continue;
-                if (cmdGated(filledAll[ci])) continue;
-                var cLoc = OBOL.pack.commandLocus ? OBOL.pack.commandLocus(cObj) : 'remote';
-                if (!hasFoot2 && cLoc === 'onhost') continue;
-                if (cLoc !== curLocus) continue;
-                if (!cmdWasTriedInEpoch(move, cObj, filledAll[ci], eng2, curEpoch)) {
-                  nextCmdIdx = ci;
-                  break;
-                }
-              }
-            }
-            if (nextCmdIdx >= 0) {
-              nsSel.idx = nextCmdIdx;
-              var stepMsg = (toolNm || 'Command') + ' was refused - stepped to next command on card';
-              _pasteFlash = { phrases: [stepMsg], extra: 0, total: 1, next: (move && move.title) || '' };
-              U.toast((toolNm || 'Command') + ' was refused. Stepping to alternate command.');
-              t.disabled = false;
-              OBOL.router.render();
-              return;
-            } else {
-              OBOL.store.update(function (engg) {
-                engg.checklist = engg.checklist || {};
-                engg.checklist[aid] = 'empty:' + curEpoch;
-              }, 'done');
-              var nextTitle = '';
-              try { var mNext = computeCoach().onFlow[0]; nextTitle = mNext ? mNext.title : ''; } catch (e) {}
-              _pasteFlash = { phrases: [(toolNm || 'Command') + ' was refused - retired card for this access epoch'], extra: 0, total: 1, next: nextTitle };
-              U.toast((toolNm || 'Command') + ' was refused. Retired for this access epoch.');
-              OBOL.router.render();
-              return;
-            }
-          }
-        }
-
-        // Case 2: Clean Empty Run (STEP_COMMAND vs RETIRE_FOR_EPOCH)
-        if (aid && !r.parseError && r.recognizedTool && !r.looksError && bodyLines >= 2) {
-          var pack2 = OBOL.packs.actions();
-          var move2 = moveById(pack2, aid);
-          var nextEmptyIdx = -1;
-          if (move2 && move2.commands && move2.commands.length > 1) {
-            var filledAll2 = OBOL.command.fillAll(move2, facts2, { params: eng2.params || {}, profile: eng2.profile, workspace: OBOL.workspace.tokens(eng2) });
-            var curLocus = nsSel.locus || OBOL.pack.defaultCommandLocus(move2);
-            for (var ci2 = 0; ci2 < move2.commands.length; ci2++) {
-              var cObj2 = move2.commands[ci2];
-              if (OBOL.pack.commandSettled(cObj2, facts2)) continue;
-              if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cObj2, facts2)) continue;
-              if (cmdGated(filledAll2[ci2])) continue;
-              if (OBOL.pack.commandLocus(cObj2) !== curLocus) continue;
-              if (!cmdWasTriedInEpoch(move2, cObj2, filledAll2[ci2], eng2, curEpoch)) {
-                var prefIdx = firstCmdIndexForLocus(move2, curLocus, facts2);
-                nextEmptyIdx = (!cmdWasTriedInEpoch(move2, move2.commands[prefIdx], filledAll2[prefIdx], eng2, curEpoch)) ? prefIdx : ci2;
-                break;
-              }
-            }
-          }
-          if (nextEmptyIdx >= 0) {
-            nsSel.idx = nextEmptyIdx;
-            _pasteFlash = { phrases: [toolNm + ' ran clean with no new facts - stepped to next command'], extra: 0, total: 1, next: (move2 && move2.title) || '' };
-            U.toast(toolNm + ' ran clean with no new facts. Stepping to next command.');
-            t.disabled = false;
-            OBOL.router.render();
-            return;
-          }
-          OBOL.store.update(function (engg) { engg.checklist = engg.checklist || {}; engg.checklist[aid] = 'empty:' + curEpoch; }, 'done');
-          var nextTitle2 = '';
-          try { var mNext2 = computeCoach().onFlow[0]; nextTitle2 = mNext2 ? mNext2.title : ''; } catch (e) {}
-          _pasteFlash = { phrases: [toolNm + ' ran with no new facts - retired card for this access epoch'], extra: 0, total: 1, next: nextTitle2 };
-          U.toast(toolNm + ' ran, nothing found here. Retired from the coach.');
-          OBOL.router.render();
-          return;
-        }
-
-        t.disabled = false;
-        if (out) {
-          // The output is always saved as evidence; only fact extraction may come up empty.
-          out.innerHTML = r.parseError
-            ? ('Output saved, the parser skipped part of it, no new facts. <a href="#/evidence/' + esc(aid) + '">Open in Evidence ↗</a>')
-            : r.facts.length
-              ? ('Recognized ' + r.facts.length + ', nothing new (already known).')
-              : 'No facts recognized (output saved). <a href="#/evidence/' + esc(aid) + '">Set the command in Evidence ↗</a>';
-        }
+      if (r.arsenal && r.arsenal.ok && !r.added) {
+        U.toast('Loadout stocked ' + r.arsenal.present + ' tools, ' + r.arsenal.staged + ' staged');
+        OBOL.router.render();
+        return;
       }
+      if (r.workspaceSync && r.workspaceSync.ok && !r.added) {
+        U.toast(r.workspaceSync.confirmed + ' confirmed · ' + r.workspaceSync.adopted + ' new file' + (r.workspaceSync.adopted === 1 ? '' : 's') + ' adopted');
+        OBOL.router.render();
+        return;
+      }
+      if (r.targetsImported && r.targetsImported.ok) {
+        U.toast((r.targetsImported.added || 0) + ' target' + (r.targetsImported.added === 1 ? '' : 's') + ' imported');
+        OBOL.router.render();
+        return;
+      }
+      // Ingestion owns outcome semantics. Keep unknown, partial, and environment failures
+      // available rather than retiring a move from a zero-fact or generic error heuristic.
+      _pasteFlash = { outcome: r.outcome, target: tIp || ((OBOL.store.active() || {}).params || {}).target || '' };
+      U.toast(OBOL.ingest.outcomeMessage(r));
+      t.disabled = false;
+      OBOL.router.render();
       });
     });
   }

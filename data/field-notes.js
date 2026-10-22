@@ -74,47 +74,15 @@
   ],
   "flag-hunt-windows": [
     {
-      "when": "Once you have LOCATED the user flag (the search step below). This reads the real path obol found, so it is blank until you search.",
+      "when": "When port 5985 is open and you hold a domain or local password.",
       "land": [
-        "Run it in your shell ON the host. obol fills the exact path from your locate, so you never type a Desktop that is not there.",
-        "hostname + ipconfig next to the flag is the report screenshot."
+        "Connects directly over WinRM and drops you into an interactive PowerShell session ON the box.",
+        "Once inside, run the locate step below, then capture the flag with hostname and ipconfig for the report."
       ],
       "mistakes": [
-        "Capturing the value without hostname/ipconfig in the same frame.",
-        "Guessing the path. The user flag is almost never on YOUR Desktop once you are admin, so locate first."
+        "Reading the flag remotely from Kali when OffSec requires an interactive shell screenshot."
       ],
-      "win": "The flag prints under your hostname and the target IP."
-    },
-    {
-      "when": "FIRST, before you read. The user flag lives on some user's Desktop, and as admin that is not you, so search for it.",
-      "land": [
-        "Run it in your WinRM/PowerShell session. It lists every matching flag file across all user Desktops.",
-        "Paste the path it prints: obol fills the read above with the real location."
-      ],
-      "mistakes": [
-        "Skipping the search and reading a guessed path (the Forest trap: user.txt is on svc-alfresco's Desktop, not Administrator's)."
-      ],
-      "win": "A real path like `C:\\Users\\svc-alfresco\\Desktop\\user.txt` prints. The read step above lights up, filled."
-    },
-    {
-      "when": "When you hold a hash or credential but have no shell yet. Runs from Kali, so it only LOCATES the flag file.",
-      "land": [
-        "Note the path, then get on the host to read it for the report."
-      ],
-      "mistakes": [
-        "Treating the spider output as the capture. A remote read scores zero for OffSec."
-      ],
-      "win": "A path like `Users\\svc\\Desktop\\user.txt` prints. Switch to On-Host to grab it."
-    },
-    {
-      "when": "A LAB shortcut (not OffSec-legal) when you hold the dumped Administrator hash and just want the value.",
-      "land": [
-        "Searches every user Desktop and prints the flag in one shot, no shell. obol fills the hash and the flag names for you."
-      ],
-      "mistakes": [
-        "Using this on the exam. A remote read earns zero: for OffSec, locate then capture ON the host."
-      ],
-      "win": "The flag value prints straight away, with no session."
+      "win": "You land at an *Evil-WinRM* PS prompt on the target."
     },
     {
       "when": "When you hold a hash or credential but have no shell yet, and you want an OSCP-honest capture.",
@@ -131,9 +99,165 @@
         "body": "A `CLIENT_TO_SERVER_SEALING` crash the instant it connects on a fresh Kali is the rubyntlm 0.6.7 bug (auth already succeeded), not your hash. Update the gem, then re-run:",
         "code": "sudo gem install rubyntlm"
       }
+    },
+    {
+      "when": "FIRST, before you read. The user flag lives on some user's Desktop, and as admin that is not you, so search for it.",
+      "land": [
+        "Run it in your WinRM/PowerShell session. It lists every matching flag file across all user Desktops.",
+        "Paste the path it prints: obol fills the read above with the real location."
+      ],
+      "mistakes": [
+        "Skipping the search and reading a guessed path (the Forest trap: user.txt is on svc-alfresco's Desktop, not Administrator's)."
+      ],
+      "win": "A real path like `C:\\Users\\svc-alfresco\\Desktop\\user.txt` prints. The read step above lights up, filled."
+    },
+    {
+      "when": "Once you have LOCATED the user flag (the search step below). This reads the real path obol found, so it is blank until you search.",
+      "land": [
+        "Run it in your shell ON the host. obol fills the exact path from your locate, so you never type a Desktop that is not there.",
+        "hostname + ipconfig next to the flag is the report screenshot."
+      ],
+      "mistakes": [
+        "Capturing the value without hostname/ipconfig in the same frame.",
+        "Guessing the path. The user flag is almost never on YOUR Desktop once you are admin, so locate first."
+      ],
+      "win": "The flag prints under your hostname and the target IP."
+    },
+    {
+      "when": "When port 5985 is open and you want to locate user.txt from Kali in one command.",
+      "land": [
+        "Searches all user profile directories over WinRM and prints the full path to user.txt.",
+        "Paste the output into Obol so {{flag_path_local}} fills automatically."
+      ],
+      "mistakes": [
+        "Stopping after locating the path without reading the flag contents."
+      ],
+      "win": "A path like C:\\Users\\svc\\Desktop\\user.txt prints."
+    },
+    {
+      "when": "Once {{flag_path_local}} is known and you want a fast remote read over WinRM.",
+      "land": [
+        "Reads the confirmed user flag file over WinRM in a single shot from Kali."
+      ],
+      "mistakes": [
+        "Using a remote one-liner without an interactive host proof when exam rules require a full shell frame."
+      ],
+      "win": "The 32-hex user flag prints from WinRM."
+    },
+    {
+      "when": "When you hold an NT hash (no plaintext password) and want to read {{flag_path_local}} over WinRM.",
+      "land": [
+        "Passes the NT hash directly to WinRM and prints the user flag."
+      ],
+      "mistakes": [
+        "Passing LM:NT instead of the 32-hex NT hash when a single hash token is expected."
+      ],
+      "win": "The user flag prints over WinRM via pass-the-hash."
+    },
+    {
+      "when": "When a low-privileged domain credential can read the Users SMB share and WinRM is closed.",
+      "land": [
+        "Downloads user.txt straight from the Users share over SMB without needing remote code execution."
+      ],
+      "mistakes": [
+        "Assuming you need admin rights when the Users share is readable by standard domain users."
+      ],
+      "win": "user.txt downloads and prints locally."
+    },
+    {
+      "when": "When you hold a hash or credential but have no shell yet. Runs from Kali, so it only LOCATES the flag file.",
+      "land": [
+        "Note the path, then get on the host to read it for the report."
+      ],
+      "mistakes": [
+        "Treating the spider output as the capture. A remote read scores zero for OffSec."
+      ],
+      "win": "A path like `Users\\svc\\Desktop\\user.txt` prints. Switch to On-Host to grab it."
+    },
+    {
+      "when": "When you hold administrative credentials on SMB and need to locate user.txt or local.txt across all profiles.",
+      "land": [
+        "Sweeps every user's Desktop directory in under a second over SMB.",
+        "Paste the output so Obol locks in {{flag_path_local}}."
+      ],
+      "mistakes": [
+        "Running SMB -x with a non-admin account (SMB command execution requires local admin)."
+      ],
+      "win": "The exact Desktop path to user.txt or local.txt prints."
+    },
+    {
+      "when": "A LAB shortcut (not OffSec-legal) when you hold the dumped Administrator hash and just want the value.",
+      "land": [
+        "Searches every user Desktop and prints the flag in one shot, no shell. obol fills the hash and the flag names for you."
+      ],
+      "mistakes": [
+        "Using this on the exam. A remote read earns zero: for OffSec, locate then capture ON the host."
+      ],
+      "win": "The flag value prints straight away, with no session."
+    },
+    {
+      "when": "When port 3389 (RDP) is open and you want whoami, hostname, ipconfig, and the user flag in one command.",
+      "land": [
+        "Executes the full identity and flag proof chain over RDP via NetExec without manually opening a GUI client."
+      ],
+      "mistakes": [
+        "Running before {{flag_path_local}} is known."
+      ],
+      "win": "Identity, IP configuration, and the user flag print together from RDP."
+    },
+    {
+      "when": "When port 3389 is open and you want an automated PNG desktop screenshot for your report.",
+      "land": [
+        "Captures the live RDP desktop session to ~/.nxc/screenshots/ and records the file path in Obol.",
+        "Open Evidence -> Proof Screenshots to copy the path and attach the PNG directly to the local.txt slot."
+      ],
+      "mistakes": [
+        "Using too short a screentime when the Windows desktop takes several seconds to render."
+      ],
+      "win": "NetExec saves a PNG screenshot and Obol surfaces the path in Evidence."
     }
   ],
   "flag-hunt-root-windows": [
+    {
+      "when": "Only if the proof flag is NOT on Administrator's Desktop (rare).",
+      "land": [
+        "Searches every Desktop for your profile's flag names. Paste the path and the reads above fill with it."
+      ],
+      "mistakes": [],
+      "win": "The search finds proof.txt / root.txt and prints its path."
+    },
+    {
+      "when": "When port 5985 is open and you want to locate root.txt over WinRM using the Administrator NT hash.",
+      "land": [
+        "Runs a recursive PowerShell search across C:\\Users over WinRM and prints the exact path to the root flag."
+      ],
+      "mistakes": [],
+      "win": "The full path to root.txt or proof.txt prints over WinRM."
+    },
+    {
+      "when": "When SMB/WinRM are restricted and you want to locate root.txt or proof.txt over WMI with the Administrator hash.",
+      "land": [
+        "Sweeps every user profile Desktop over WMI (port 135) and prints the matching flag path."
+      ],
+      "mistakes": [],
+      "win": "The root/proof flag path prints over WMI."
+    },
+    {
+      "when": "When you hold an administrative password and want to locate root.txt or proof.txt over WMI.",
+      "land": [
+        "Scans every user Desktop over WMI without traversing slow system directories."
+      ],
+      "mistakes": [],
+      "win": "The exact path to root.txt or proof.txt prints."
+    },
+    {
+      "when": "When you hold an administrative password and want to locate root.txt or proof.txt over SMB.",
+      "land": [
+        "Scans every user Desktop over SMB and fills {{flag_path_root}} once pasted."
+      ],
+      "mistakes": [],
+      "win": "The exact path to root.txt or proof.txt prints over SMB."
+    },
     {
       "when": "The moment you are SYSTEM/Administrator and want the proof flag without a shell.",
       "land": [
@@ -144,6 +268,64 @@
         "Switching your active credential to Administrator by hand. obol already fills the dumped hash."
       ],
       "win": "The proof/root flag value prints from Kali."
+    },
+    {
+      "when": "When port 5985 is open and you want to read {{flag_path_root}} over WinRM with the Administrator hash.",
+      "land": [
+        "Reads the located root/proof flag over WinRM via pass-the-hash in a single command."
+      ],
+      "mistakes": [],
+      "win": "The root/proof flag value prints over WinRM."
+    },
+    {
+      "when": "When WinRM is closed and you hold an administrative password to read {{flag_path_root}} over WMI.",
+      "land": [
+        "Executes type against the located root flag over WMI (port 135) with no service binary dropped."
+      ],
+      "mistakes": [],
+      "win": "The root/proof flag value prints over WMI."
+    },
+    {
+      "when": "When you hold an administrative password and want to read {{flag_path_root}} over SMB.",
+      "land": [
+        "Reads the confirmed root/proof flag directly over SMB."
+      ],
+      "mistakes": [],
+      "win": "The root/proof flag value prints over SMB."
+    },
+    {
+      "when": "A fallback remote read if nxc is unavailable.",
+      "land": [
+        "Same DA hash, via impacket wmiexec. Semi-interactive wmiexec works too."
+      ],
+      "mistakes": [],
+      "win": "The root flag prints from the wmiexec call."
+    },
+    {
+      "when": "When port 5985 is open and you need an interactive Administrator session via pass-the-hash for your report screenshot.",
+      "land": [
+        "Connects as Administrator using the NT hash (-H) so you can run the on-host proof read inside a real shell."
+      ],
+      "mistakes": [
+        "Pasting LM:NT instead of the 32-hex NT hash."
+      ],
+      "win": "You land at an *Evil-WinRM* PS prompt as Administrator."
+    },
+    {
+      "when": "When port 5985 is open and you hold an administrative plaintext password.",
+      "land": [
+        "Opens an interactive Evil-WinRM session so you can capture the proof flag with whoami, hostname, and ipconfig."
+      ],
+      "mistakes": [],
+      "win": "You land at an elevated *Evil-WinRM* PS prompt."
+    },
+    {
+      "when": "Inside your interactive elevated PowerShell session when you need to verify the exact path to root.txt or proof.txt.",
+      "land": [
+        "Searches all Desktop folders in under a second and prints the full path."
+      ],
+      "mistakes": [],
+      "win": "The full path to root.txt or proof.txt prints in your shell."
     },
     {
       "when": "For the report proof: capture the root flag inside a shell ON the host.",
@@ -157,23 +339,67 @@
       "win": "The proof flag prints beneath whoami showing SYSTEM or Administrator."
     },
     {
-      "when": "A fallback remote read if nxc is unavailable.",
+      "when": "When root.txt appears empty or missing on Administrator's Desktop, indicating an NTFS Alternate Data Stream (ADS).",
       "land": [
-        "Same DA hash, via impacket wmiexec. Semi-interactive wmiexec works too."
+        "Run dir /r in cmd.exe to reveal hidden :$DATA streams attached to files or folders on the Desktop."
       ],
-      "mistakes": [],
-      "win": "The root flag prints from the wmiexec call."
+      "mistakes": [
+        "Running dir without /r, which hides alternate data streams."
+      ],
+      "win": "A hidden stream like filename.txt:root.txt:$DATA is listed."
     },
     {
-      "when": "Only if the proof flag is NOT on Administrator's Desktop (rare).",
+      "when": "Inside PowerShell when hunting for flags hidden in NTFS Alternate Data Streams.",
       "land": [
-        "Searches every Desktop for your profile's flag names. Paste the path and the reads above fill with it."
+        "Lists every non-default stream across files on the Administrator Desktop and populates {{filename}} and {{stream_name}}."
       ],
       "mistakes": [],
-      "win": "The search finds proof.txt / root.txt and prints its path."
+      "win": "The hidden FileName and Stream name print."
+    },
+    {
+      "when": "Once an NTFS Alternate Data Stream flag has been identified.",
+      "land": [
+        "Reads the hidden stream content directly in PowerShell."
+      ],
+      "mistakes": [
+        "Using regular type or Get-Content without -Stream, which only reads the default stream."
+      ],
+      "win": "The 32-hex root flag hidden in the alternate stream prints."
+    },
+    {
+      "when": "When port 3389 (RDP) is open and you want whoami, hostname, ipconfig, and the root/proof flag in one command.",
+      "land": [
+        "Executes the elevated identity and proof flag read over RDP via NetExec."
+      ],
+      "mistakes": [
+        "Running before {{flag_path_root}} is confirmed."
+      ],
+      "win": "Elevated identity, IP configuration, and the proof flag print together from RDP."
+    },
+    {
+      "when": "When port 3389 is open and you want an automated PNG desktop screenshot for your proof.txt report slot.",
+      "land": [
+        "Captures the elevated RDP session to ~/.nxc/screenshots/ and surfaces the path in Evidence -> Proof Screenshots."
+      ],
+      "mistakes": [],
+      "win": "NetExec saves a PNG screenshot and Obol links it for the proof.txt slot."
     }
   ],
   "recon-smb-anon": [
+    {
+      "when": "First touch on port 445: confirm the SMB banner, hostname, domain, signing state, and whether null sessions are accepted.",
+      "land": [
+        "Run the switchless probe first so Obol extracts the OS build, hostname, DNS domain, and SMB signing requirement."
+      ],
+      "look": [
+        "(name:...) and (domain:...) in the banner, plus (signing:False) for relay opportunities.",
+        "A [+] line confirming anonymous/null session authentication succeeds."
+      ],
+      "win": "Target hostname, domain, OS build, and null-session status print in one line.",
+      "mistakes": [
+        "Firing heavy enumeration flags before checking if null sessions are even permitted."
+      ]
+    },
     {
       "when": "An opener. The moment a scan shows 445 or 139, before you hold any credential.",
       "look": [
@@ -271,6 +497,19 @@
       "mistakes": [
         "Expecting access. DNS output is reconnaissance that feeds later steps."
       ]
+    },
+    {
+      "when": "When you want record enumeration, an AXFR attempt, and subdomain brute-forcing in a single pass.",
+      "land": [
+        "Point --dnsserver at the target so queries go directly to its authoritative service."
+      ],
+      "look": [
+        "Zone transfer dumps or brute-forced hostnames resolving to internal or vhost IPs."
+      ],
+      "win": "dnsenum outputs NS/MX records, any allowed zone transfer, and discovered subdomains.",
+      "mistakes": [
+        "Omitting --dnsserver and querying your local resolver instead of the target DNS server."
+      ]
     }
   ],
   "recon-snmp": [
@@ -348,6 +587,19 @@
       "win": "psk-crack prints the recovered pre-shared key.",
       "mistakes": [
         "Treating a cracked PSK as VPN access. It is one credential to validate."
+      ]
+    },
+    {
+      "when": "When psk-crack is slow or you want GPU-accelerated cracking of a captured Aggressive Mode IKE PSK hash.",
+      "land": [
+        "Run hashcat mode 5400 (IKE-PSK MD5) or 5300 (IKE-PSK SHA1) against the 9-field hash file captured by ike-scan."
+      ],
+      "look": [
+        "Status: Cracked and the recovered pre-shared key at the end of the hash line."
+      ],
+      "win": "hashcat recovers the VPN pre-shared key offline.",
+      "mistakes": [
+        "Using mode 5400 on a SHA1 PSK hash (switch to -m 5300 if hashcat reports a token length error)."
       ]
     }
   ],
@@ -430,6 +682,19 @@
       "win": "Your user, hostname, and target IP print together in the frame.",
       "mistakes": [
         "Forgetting the screenshot. The framed identity plus IP is the proof."
+      ]
+    },
+    {
+      "when": "When you recover an encrypted VNC password hex blob from the Windows registry or a .vnc / passwd file.",
+      "land": [
+        "VNC uses a static DES key to obfuscate stored passwords; vncpwd reverses it instantly."
+      ],
+      "look": [
+        "The cleartext password printed by vncpwd."
+      ],
+      "win": "The obfuscated VNC hex password decrypts to cleartext.",
+      "mistakes": [
+        "Trying to brute-force a VNC hex blob in hashcat when it uses a fixed, reversible DES key."
       ]
     }
   ],
@@ -1208,6 +1473,19 @@
       ]
     },
     {
+      "when": "Right after confirming SMB 3.1.1, to check CVE-2020-0796 safely with NetExec.",
+      "land": [
+        "NetExec's smbghost module checks SMBv3.1.1 compression negotiation without sending a crash-inducing payload."
+      ],
+      "look": [
+        "VULNERABLE to SMBGhost (CVE-2020-0796) in the module output."
+      ],
+      "win": "NetExec confirms the host is vulnerable to SMBGhost.",
+      "mistakes": [
+        "Jumping straight to the RCE PoC before verifying compression is enabled."
+      ]
+    },
+    {
       "when": "Before risking the exploit.",
       "look": [
         "A clear Vulnerable or Not vulnerable verdict."
@@ -1491,6 +1769,19 @@
       "win": "You drop into a root shell and id shows uid=0.",
       "mistakes": [
         "Using this generic form verbatim. The precise command differs per binary."
+      ]
+    },
+    {
+      "when": "When sudo -l allows systemctl status, journalctl, or another command that spawns less as its pager.",
+      "land": [
+        "Run the command in an interactive terminal wide/short enough to trigger the pager, then type !sh and press Enter."
+      ],
+      "look": [
+        "The less pager prompt (:), where typing !sh spawns a root shell."
+      ],
+      "win": "Typing !sh inside the pager drops you into a root shell.",
+      "mistakes": [
+        "Passing --no-pager or running in a non-interactive shell where systemd skips invoking less."
       ]
     }
   ],
@@ -1963,6 +2254,19 @@
       "mistakes": [
         "Running it before the scheduled job has fired."
       ]
+    },
+    {
+      "when": "When a privileged cron job or script runs 7z or tar with a wildcard (*) in a directory you can write to.",
+      "land": [
+        "Plant a symlink pointing to the protected file (such as /root/root.txt or /root/.ssh/id_rsa) so the privileged archiver packs or leaks its contents."
+      ],
+      "look": [
+        "The target file contents included in the resulting archive or error output."
+      ],
+      "win": "The privileged archive job follows or exposes the symlinked root file.",
+      "mistakes": [
+        "Using a relative symlink target that breaks when the cron job runs from a different working directory."
+      ]
     }
   ],
   "systemd-timer-abuse": [
@@ -2074,6 +2378,19 @@
       "win": "uid=0 from the SUID bash after the script runs.",
       "mistakes": [
         "A wrong module name or directory; match the import exactly."
+      ]
+    },
+    {
+      "when": "When the imported .py source file is read-only, but the __pycache__ directory is writable.",
+      "land": [
+        "Compile your payload to a .pyc file matching the exact Python version tag and copy it over the cached bytecode in __pycache__."
+      ],
+      "look": [
+        "Matching size and timestamp header so Python loads your compiled .pyc on the next root execution."
+      ],
+      "win": "Root executes your trojanized .pyc bytecode from __pycache__.",
+      "mistakes": [
+        "Mismatched Python minor version tag or header bytes, causing Python to ignore the .pyc and re-read the .py source."
       ]
     }
   ],
@@ -2238,6 +2555,30 @@
       "mistakes": [
         "Forgetting -k on a self-signed TLS cert, so HTTPS targets error out."
       ]
+    },
+    {
+      "when": "When standard wordlists fail to crack a hash or login and the site has rich custom text (bios, team pages, blog posts).",
+      "land": [
+        "Crawls the web application to depth 2 and extracts target-specific words into cewl.txt for password spraying or hash cracking."
+      ],
+      "look": [
+        "Company names, project codenames, and unusual proper nouns written into cewl.txt."
+      ],
+      "win": "A custom target wordlist is generated in cewl.txt.",
+      "mistakes": [
+        "Setting minimum word length too high and missing short custom passwords."
+      ]
+    },
+    {
+      "when": "When you have multiple web ports or vhosts and want a quick visual triage of every page.",
+      "land": [
+        "Captures a headless browser screenshot and response headers into an HTML report folder."
+      ],
+      "look": [
+        "Login portals, default admin dashboards, and version banners visible in the rendered page."
+      ],
+      "win": "Visual screenshots and headers are saved to eyewitness_report.",
+      "mistakes": []
     }
   ],
   "web-access-blocked": [
@@ -2576,6 +2917,30 @@
       "mistakes": [
         "Not noting the response-size baseline, so every port looks the same."
       ]
+    },
+    {
+      "when": "When a POST JSON endpoint fetches a user-supplied URL and you want to scan localhost ports through it.",
+      "land": [
+        "Send one baseline request to note the closed-port response size, then pass that size to -fs so only open internal ports print."
+      ],
+      "look": [
+        "Port numbers returning a different response size, status code, or timing."
+      ],
+      "win": "ffuf reveals internal-only ports listening on 127.0.0.1.",
+      "mistakes": [
+        "Forgetting -fs, flooding your terminal with thousands of identical closed-port responses."
+      ]
+    },
+    {
+      "when": "When a GET query parameter accepts a URL and you want to sweep localhost ports with auto-calibration.",
+      "land": [
+        "-ac automatically calibrates baseline filtering so open internal ports stand out immediately."
+      ],
+      "look": [
+        "Hits on internal ports such as 3000, 5000, 6379, 8000, 8080, or 9000."
+      ],
+      "win": "Hidden loopback services are discovered through the GET SSRF parameter.",
+      "mistakes": []
     }
   ],
   "ssti": [
@@ -2969,6 +3334,17 @@
       "mistakes": [
         "Ignoring xmlrpc; it is a quiet bulk password-testing channel."
       ]
+    },
+    {
+      "when": "On older WordPress instances (<= 5.2.3) to check for unauthenticated draft/private post disclosure (CVE-2019-17671).",
+      "land": [
+        "Appending ?static=1 bypasses the query filter on vulnerable versions and dumps unpublished draft posts."
+      ],
+      "look": [
+        "Draft post bodies containing internal URLs, password reset notes, or admin credentials."
+      ],
+      "win": "Unpublished WordPress draft posts print without authentication.",
+      "mistakes": []
     }
   ],
   "nikto-scan": [
@@ -4948,6 +5324,19 @@
       ]
     },
     {
+      "when": "Right after validating an MSSQL login, to check if the account can escalate to sysadmin via IMPERSONATE or TRUSTWORTHY db_owner.",
+      "land": [
+        "NetExec's mssql_priv module automatically enumerates and exploits EXECUTE AS logins and trustworthy databases."
+      ],
+      "look": [
+        "can impersonatesa / sysadmin confirmed in the mssql_priv output."
+      ],
+      "win": "Your SQL login escalates to sysadmin, unlocking xp_cmdshell.",
+      "mistakes": [
+        "Assuming a low-privilege SQL login is a dead end before checking EXECUTE AS permissions."
+      ]
+    },
+    {
       "when": "Interactive client with Windows auth (a domain account).",
       "land": [
         "mssqlclient.py with -windows-auth drops you at an SQL prompt."
@@ -5835,6 +6224,19 @@
       "mistakes": [
         "No listener up."
       ]
+    },
+    {
+      "when": "When Administration > Scripts is restricted or fails, and an active Zabbix agent has EnableRemoteCommands=1.",
+      "land": [
+        "Create a monitoring Item with a system.run[...,nowait] key so the Zabbix agent executes your reverse shell."
+      ],
+      "look": [
+        "An incoming shell from the monitored host on your listener within 60 seconds."
+      ],
+      "win": "The Zabbix agent executes system.run and connects back to your listener.",
+      "mistakes": [
+        "Omitting ,nowait inside system.run[], which can block the agent thread when the shell stays open."
+      ]
     }
   ],
   "splunk-app-rce": [
@@ -5875,6 +6277,19 @@
       "win": "The scripted input fires your reverse shell.",
       "mistakes": [
         "No listener, or expecting it instantly when it runs on an interval."
+      ]
+    },
+    {
+      "when": "When the Splunk web UI is unreachable or you prefer deploying the malicious app straight through the Splunkd REST API (port 8089).",
+      "land": [
+        "Uploads and installs shell.tar.gz in a single curl call using Splunk admin credentials."
+      ],
+      "look": [
+        "An XML feed response confirming the app was installed, followed by a shell on your listener."
+      ],
+      "win": "Splunkd installs the app over port 8089 and triggers your scripted input.",
+      "mistakes": [
+        "Forgetting to start your netcat listener before uploading the app."
       ]
     }
   ],
@@ -6130,6 +6545,19 @@
       "mistakes": [
         "Stopping at the first hit instead of sweeping the common set."
       ]
+    },
+    {
+      "when": "When the target is a Java / Spring Boot application with Actuator endpoints exposed.",
+      "land": [
+        "Downloads the live JVM /actuator/heapdump and greps strings for cleartext passwords, JWT secrets, and active session tokens."
+      ],
+      "look": [
+        "SPRING_DATASOURCE_PASSWORD, Authorization headers, session cookies, or database URLs in memory."
+      ],
+      "win": "Cleartext credentials or active session tokens are extracted from the JVM heapdump.",
+      "mistakes": [
+        "Ignoring /actuator/heapdump because it is binary; strings or VisualVM pulls secrets out of it in seconds."
+      ]
     }
   ],
   "check-http-redirect": [
@@ -6215,6 +6643,19 @@
       "win": "A stored credential or autologon password surfaces.",
       "mistakes": [
         "Skipping this. Stored creds are a frequent easy win."
+      ]
+    },
+    {
+      "when": "Immediately after landing on a Windows foothold, to check for credentials left in PowerShell command history.",
+      "land": [
+        "Reads ConsoleHost_history.txt for the current user (and check other accessible user profiles under AppData\\Roaming\\Microsoft\\Windows\\PowerShell\\PSReadLine)."
+      ],
+      "look": [
+        "ConvertTo-SecureString, New-Object PSCredential, net use, or administrative commands containing passwords."
+      ],
+      "win": "PowerShell command history reveals a cleartext password or administrative command.",
+      "mistakes": [
+        "Checking only the active session's in-memory history (Get-History) instead of the persistent PSReadLine file on disk."
       ]
     }
   ],
@@ -6407,6 +6848,19 @@
       "win": "The MSI installs your payload as SYSTEM.",
       "mistakes": [
         "Wrong architecture MSI for the target."
+      ]
+    },
+    {
+      "when": "After transferring your msfvenom MSI payload onto the Windows target.",
+      "land": [
+        "Runs msiexec silently (/quiet /qn); Windows Installer executes the package as NT AUTHORITY\\SYSTEM."
+      ],
+      "look": [
+        "An incoming SYSTEM shell on your listener (or the local admin group addition taking effect)."
+      ],
+      "win": "msiexec runs the MSI as SYSTEM and delivers your elevated shell.",
+      "mistakes": [
+        "Omitting /quiet /qn, which can hang waiting for a GUI prompt in a non-interactive session."
       ]
     }
   ],
@@ -7149,6 +7603,19 @@
       "mistakes": [
         "Forgetting to restore the original config afterward."
       ]
+    },
+    {
+      "when": "When you hold SERVICE_CHANGE_CONFIG plus SERVICE_STOP/START (such as Server Operators membership) and want a one-liner.",
+      "land": [
+        "Updates the service binPath to your reverse shell or command and immediately cycles the service to trigger execution as SYSTEM."
+      ],
+      "look": [
+        "[SC] ChangeServiceConfig SUCCESS followed by your payload connecting back as SYSTEM."
+      ],
+      "win": "The reconfigured service restarts and executes your payload as SYSTEM.",
+      "mistakes": [
+        "Forgetting the required space after binPath= (sc.exe requires `binPath= \"...\"`)."
+      ]
     }
   ],
   "windows-namedpipe-impersonation": [
@@ -7230,6 +7697,19 @@
       "win": "Fast discovery feeding a targeted nmap.",
       "mistakes": [
         "Rustscanning so aggressively you miss ports on a rate-limited host."
+      ]
+    },
+    {
+      "when": "When you want raw packet-rate TCP discovery across all 65,535 ports (remember to pass -e tun0 on VPN labs).",
+      "land": [
+        "Sweeps all TCP ports at 1000 packets/sec and writes grepable output for Obol to parse."
+      ],
+      "look": [
+        "Discovered open port lines across high and non-standard port numbers."
+      ],
+      "win": "All open TCP ports are discovered and written to masscan.gnmap.",
+      "mistakes": [
+        "Running masscan over a VPN without -e tun0, or setting --rate too high and dropping packets."
       ]
     },
     {
@@ -7398,6 +7878,19 @@
     }
   ],
   "ad-anon-ldap-enum": [
+    {
+      "when": "First probe against port 389/636: confirm the domain name, base DN, and whether anonymous LDAP bind is permitted.",
+      "land": [
+        "Run the switchless nxc ldap check first; a [+] line means anonymous bind is open and --users will work."
+      ],
+      "look": [
+        "The domain FQDN, DC hostname, and a [+] anonymous bind confirmation."
+      ],
+      "win": "Anonymous LDAP bind and domain naming context are confirmed.",
+      "mistakes": [
+        "Running heavy LDAP queries before checking whether the DC requires authentication."
+      ]
+    },
     {
       "when": "Try a free anonymous LDAP dump before you have any creds.",
       "land": [
@@ -7828,16 +8321,16 @@
       ]
     },
     {
-      "when": "Pre-check SYSVOL access.",
+      "when": "Once you hold any domain credential, to spider SYSVOL for Group Policy Preferences cpassword XML files.",
       "land": [
-        "Confirm SYSVOL and NETLOGON are reachable with null auth first."
+        "Most DCs block null sessions on SYSVOL but allow any authenticated domain user to read it; nxc finds and decrypts cpassword automatically."
       ],
       "look": [
-        "Readable SYSVOL."
+        "Found cpassword and decrypted cleartext user/password lines in the module output."
       ],
-      "win": "SYSVOL is reachable.",
+      "win": "Authenticated SYSVOL spider recovers and decrypts a GPP password.",
       "mistakes": [
-        "Assuming access without checking."
+        "Only checking GPP anonymously and forgetting to re-run once you get a standard domain user."
       ]
     },
     {
@@ -7854,6 +8347,19 @@
       ]
     },
     {
+      "when": "After downloading XML files from SYSVOL or a custom replication share with smbclient.",
+      "land": [
+        "Searches every downloaded XML file for the cpassword attribute so Obol can extract and decrypt it."
+      ],
+      "look": [
+        "userName=\"...\" and cpassword=\"...\" inside Groups.xml, Services.xml, or ScheduledTasks.xml."
+      ],
+      "win": "grep locates the exact XML line containing cpassword.",
+      "mistakes": [
+        "Searching only Groups.xml and missing Services.xml or ScheduledTasks.xml."
+      ]
+    },
+    {
       "when": "Decrypt a cpassword by hand.",
       "land": [
         "gpp-decrypt the cpassword value."
@@ -7865,6 +8371,17 @@
       "mistakes": [
         "Pasting extra whitespace into the cpassword."
       ]
+    },
+    {
+      "when": "When you prefer Impacket's dedicated GPP spider and decrypter over SMB.",
+      "land": [
+        "Connects to SYSVOL, locates every Group Policy Preferences XML file, and decrypts cpassword values."
+      ],
+      "look": [
+        "Decrypted username and password pairs printed from SYSVOL XML files."
+      ],
+      "win": "impacket-Get-GPPPassword extracts and decrypts the GPP credential.",
+      "mistakes": []
     }
   ],
   "smb-share-inventory": [
@@ -8568,6 +9085,32 @@
       "mistakes": [
         "Dumping the whole DB when one account would do."
       ]
+    },
+    {
+      "when": "On a DC where you belong to Backup Operators or hold SeBackupPrivilege and need an on-host VSS snapshot of ntds.dit.",
+      "land": [
+        "Runs diskshadow with a script that creates a Volume Shadow Copy of C: so you can copy ntds.dit and the SYSTEM hive without locking errors."
+      ],
+      "look": [
+        "Shadow copy creation success and an exposed drive letter containing Windows\\NTDS\\ntds.dit."
+      ],
+      "win": "diskshadow exposes a readable VSS copy of ntds.dit.",
+      "mistakes": [
+        "Running diskshadow from a non-elevated shell or using CRLF/encoding errors in the script file."
+      ]
+    },
+    {
+      "when": "On a host running Azure AD Connect (Entra Connect) with an ADSync database.",
+      "land": [
+        "Decrypts the high-privilege MSOL_ synchronization account credentials stored in the local ADSync database."
+      ],
+      "look": [
+        "Cleartext domain and MSOL_ account username and password."
+      ],
+      "win": "The Azure AD Connect MSOL_ synchronization credential is recovered in cleartext.",
+      "mistakes": [
+        "Overlooking Azure AD Connect on member servers, which often holds replication/DCSync rights in AD."
+      ]
     }
   ],
   "dcsync": [
@@ -8639,18 +9182,15 @@
       ]
     },
     {
-      "when": "An interactive shell as Administrator over WinRM.",
+      "when": "Right after confirming (Pwn3d!), to verify command execution as Administrator over SMB without opening a full shell.",
       "land": [
-        "Pure pass-the-hash, no plaintext."
+        "Executes a one-liner over SMB using the dumped Administrator NT hash."
       ],
       "look": [
-        "An Evil-WinRM prompt as Administrator."
+        "nt authority\\system or domain\\administrator in the command output."
       ],
-      "win": "An admin shell via PtH.",
-      "mistakes": [
-        "Trying WinRM where it is not listening.",
-        "Evil-WinRM dies with `NameError: uninitialized constant Net::NTLM::Client::SessionCrypto::CLIENT_TO_SERVER_SEALING` right after it connects: that is the `rubyntlm` 0.6.7 bug on a fresh Kali, not your hash. Auth actually succeeded; the first sealed message is what throws. Fix it with `sudo gem install rubyntlm` (pulls 0.6.8, which carries the patch), then re-run. The Loadout script does this for you."
-      ]
+      "win": "Remote command execution as Administrator is confirmed over SMB.",
+      "mistakes": []
     },
     {
       "when": "A SYSTEM shell when WinRM is closed.",
@@ -8664,11 +9204,25 @@
       "mistakes": [
         "Forgetting the empty LM half in the hash string."
       ]
+    },
+    {
+      "when": "An interactive shell as Administrator over WinRM.",
+      "land": [
+        "Pure pass-the-hash, no plaintext."
+      ],
+      "look": [
+        "An Evil-WinRM prompt as Administrator."
+      ],
+      "win": "An admin shell via PtH.",
+      "mistakes": [
+        "Trying WinRM where it is not listening.",
+        "Evil-WinRM dies with `NameError: uninitialized constant Net::NTLM::Client::SessionCrypto::CLIENT_TO_SERVER_SEALING` right after it connects: that is the `rubyntlm` 0.6.7 bug on a fresh Kali, not your hash. Auth actually succeeded; the first sealed message is what throws. Fix it with `sudo gem install rubyntlm` (pulls 0.6.8, which carries the patch), then re-run. The Loadout script does this for you."
+      ]
     }
   ],
   "validate-credential": [
     {
-      "when": "You hold a credential you FOUND (a config password, a reused guess), not one you cracked.",
+      "when": "You hold recovered credential material that has not been validated on this target and service, including an offline-cracked password.",
       "land": [
         "Run the switchless nxc check: proto, target, user, secret, nothing else."
       ],
@@ -8678,7 +9232,7 @@
       "win": "You know the credential authenticates before you spend a single move on it.",
       "mistakes": [
         "Building a whole attack on a credential you never confirmed, then blaming the exploit when it was the password all along.",
-        "Re-validating a credential you cracked or already logged in with, that one is already proven, so this step hides for it."
+        "Treating offline recovery or a login on another host or service as proof here. A result applies to the exact credential, target, and service; a changed secret requires its own evidence."
       ]
     },
     {
@@ -8736,16 +9290,16 @@
       ]
     },
     {
-      "when": "Run a command without logging in (wmiexec).",
+      "when": "Run a single command remotely over SMB once your credential shows (Pwn3d!).",
       "land": [
-        "Runs over WMI, dropping no service."
+        "Executes cmd.exe /c over SMB and returns the output directly in your terminal."
       ],
       "look": [
-        "Command output."
+        "Command output printed beneath the SMB host line."
       ],
-      "win": "A command runs via WMI.",
+      "win": "A remote command runs over SMB.",
       "mistakes": [
-        "Reaching for psexec first when wmiexec is quieter."
+        "Running -x without local Administrator rights on the target."
       ]
     },
     {
@@ -9409,6 +9963,30 @@
       "mistakes": [
         "Forgetting to clean up the key you added."
       ]
+    },
+    {
+      "when": "From an on-host Windows foothold when you hold GenericWrite / WriteProperty on a target's msDS-KeyCredentialLink.",
+      "land": [
+        "Whisker writes a new device key credential to the target object and prints the exact Rubeus asktgt command to run next."
+      ],
+      "look": [
+        "The base64 certificate blob and the Rubeus asktgt /certificate:... command."
+      ],
+      "win": "Whisker plants the key credential and outputs the Rubeus PKINIT command.",
+      "mistakes": [
+        "Targeting a DC that lacks a PKINIT-capable DC certificate (Shadow Credentials requires AD CS or DC certificates supporting PKINIT)."
+      ]
+    },
+    {
+      "when": "From a low-privilege Windows foothold when LDAP signing is not enforced and you can relay local authentication to add Shadow Credentials.",
+      "land": [
+        "Relays local machine authentication to the DC's LDAP service to write msDS-KeyCredentialLink on the local computer object."
+      ],
+      "look": [
+        "Shadow credentials successfully written to the local machine account."
+      ],
+      "win": "KrbRelayUp writes Shadow Credentials on the host for local privilege escalation to SYSTEM.",
+      "mistakes": []
     }
   ],
   "delegation-abuse": [
@@ -9450,6 +10028,19 @@
       "mistakes": [
         "No coercion to bring the auth in."
       ]
+    },
+    {
+      "when": "When you want to configure Resource-Based Constrained Delegation (RBCD) over LDAP in one step with bloodyAD.",
+      "land": [
+        "Writes the attacker computer SID into msDS-AllowedToActOnBehalfOfOtherIdentity on the target computer object."
+      ],
+      "look": [
+        "Confirmation that the RBCD attribute was updated on the target computer."
+      ],
+      "win": "bloodyAD configures RBCD on the target computer, ready for impacket-getST -impersonate.",
+      "mistakes": [
+        "Forgetting the trailing $ on the machine account names."
+      ]
     }
   ],
   "golden-ticket": [
@@ -9482,19 +10073,6 @@
       ]
     },
     {
-      "when": "Sweep every reasonable group at once.",
-      "land": [
-        "obol fills the list with the high-value groups to try."
-      ],
-      "look": [
-        "A group that accepts your add."
-      ],
-      "win": "A group add sticks.",
-      "mistakes": [
-        "Trying one group when a sweep is cheap."
-      ]
-    },
-    {
       "when": "The winning add.",
       "land": [
         "obol fills the highest-value group you can write to."
@@ -9505,6 +10083,19 @@
       "win": "You join a powerful group.",
       "mistakes": [
         "Not re-authenticating to pick up the new membership."
+      ]
+    },
+    {
+      "when": "Sweep every reasonable group at once.",
+      "land": [
+        "obol fills the list with the high-value groups to try."
+      ],
+      "look": [
+        "A group that accepts your add."
+      ],
+      "win": "A group add sticks.",
+      "mistakes": [
+        "Trying one group when a sweep is cheap."
       ]
     },
     {
@@ -9570,6 +10161,43 @@
       "win": "FullControl via impacket.",
       "mistakes": [
         "Not cleaning up the ACE afterward."
+      ]
+    },
+    {
+      "when": "When a high-value target account you control (via GenericAll/GenericWrite) is currently disabled.",
+      "land": [
+        "Clears the ACCOUNTDISABLE flag on userAccountControl over LDAP so you can authenticate as the account."
+      ],
+      "look": [
+        "Confirmation that ACCOUNTDISABLE was removed from the target account."
+      ],
+      "win": "The disabled AD account is re-enabled and ready for login.",
+      "mistakes": [
+        "Resetting a disabled account's password without clearing ACCOUNTDISABLE first (login will fail with STATUS_ACCOUNT_DISABLED)."
+      ]
+    },
+    {
+      "when": "When your user belongs to AD Recycle Bin or holds rights to read deleted objects in Active Directory.",
+      "land": [
+        "Queries the Deleted Objects container for soft-deleted accounts that often carry legacy passwords or description attributes."
+      ],
+      "look": [
+        "Deleted user or admin objects with custom attributes, SIDs, or passwords."
+      ],
+      "win": "Deleted AD objects and their attributes are enumerated from the Recycle Bin.",
+      "mistakes": []
+    },
+    {
+      "when": "When BloodHound shows WriteOwner on a target user or group and you prefer Impacket's owneredit.py.",
+      "land": [
+        "Sets your user as the owner of {{target_sam}} over LDAP; follow immediately with dacledit to grant FullControl."
+      ],
+      "look": [
+        "Owner SID modified successfully in the owneredit output."
+      ],
+      "win": "Ownership of the target AD object transfers to your account.",
+      "mistakes": [
+        "Stopping after owneredit without running dacledit next (ownership alone only grants WriteDACL until you add the ACE)."
       ]
     }
   ],
@@ -9642,6 +10270,17 @@
   ],
   "gmsa-read": [
     {
+      "when": "First choice from Kali: dump every gMSA NT hash your account is permitted to read in one command.",
+      "land": [
+        "NetExec queries LDAP (using LDAPS automatically when required) and parses the msDS-ManagedPassword blob into an NT hash."
+      ],
+      "look": [
+        "Account: <gmsa>$ and its 32-hex NTLM hash in the nxc output."
+      ],
+      "win": "The gMSA NT hash prints and Obol records it as a ready credential.",
+      "mistakes": []
+    },
+    {
       "when": "Check who can read a gMSA password.",
       "land": [
         "List the gMSAs and the allowed principals."
@@ -9666,9 +10305,31 @@
       "mistakes": [
         "Expecting it when you are not an allowed principal."
       ]
+    },
+    {
+      "when": "When you know the specific gMSA account name and want to pull its NTLM hash with bloodyAD.",
+      "land": [
+        "Queries msDS-ManagedPassword for {{gmsa_account}} and prints the decoded NTLM hash."
+      ],
+      "look": [
+        "ntlm: <hash> printed for the gMSA account."
+      ],
+      "win": "bloodyAD extracts the gMSA NTLM hash over LDAP.",
+      "mistakes": []
     }
   ],
   "laps-read": [
+    {
+      "when": "First choice from Kali: dump the LAPS local administrator password over SMB/LDAP with NetExec's built-in --laps flag.",
+      "land": [
+        "Queries both legacy LAPS (ms-Mcs-AdmPwd) and Windows LAPS attributes for any computer object your user can read."
+      ],
+      "look": [
+        "LAPS Administrator password printed beside the computer hostname."
+      ],
+      "win": "The cleartext LAPS local admin password is recovered.",
+      "mistakes": []
+    },
     {
       "when": "Read LAPS local-admin passwords (nxc).",
       "land": [
@@ -9694,6 +10355,17 @@
       "mistakes": [
         "Reading the legacy attribute on a Windows-LAPS deployment."
       ]
+    },
+    {
+      "when": "When you want a raw ldapsearch query from Kali to dump ms-MCS-AdmPwd across all computer objects.",
+      "land": [
+        "Filters for any computer object with a populated ms-MCS-AdmPwd attribute that your account has ReadLAPSPassword rights on."
+      ],
+      "look": [
+        "ms-MCS-AdmPwd: <cleartext-password> under the computer's DN."
+      ],
+      "win": "ldapsearch prints the cleartext LAPS password.",
+      "mistakes": []
     }
   ],
   "ticket-reuse": [
@@ -9925,6 +10597,17 @@
       "mistakes": [
         "Letting the ticket expire before using it."
       ]
+    },
+    {
+      "when": "On a Windows foothold when you want to extract a usable TGT for the current identity without touching LSASS.",
+      "land": [
+        "Abuses the Kerberos GSS-API delegation trick to request a forwardable TGT for the current user or machine account."
+      ],
+      "look": [
+        "A base64-encoded .kirbi TGT printed by Rubeus."
+      ],
+      "win": "A usable Kerberos TGT is extracted without elevation or LSASS access.",
+      "mistakes": []
     }
   ],
   "powerview-enum": [
@@ -10724,6 +11407,19 @@
       "mistakes": [
         "Expecting HTTPS WSUS to be easily abusable."
       ]
+    },
+    {
+      "when": "Once SharpWSUS inspect confirms WSUS uses HTTP and you have administrative access on the WSUS server.",
+      "land": [
+        "Creates and approves a malicious WSUS update pointing to a signed binary (such as PsExec64.exe) with your command arguments."
+      ],
+      "look": [
+        "Update creation GUID and approval confirmation from SharpWSUS."
+      ],
+      "win": "The malicious WSUS update is approved and executes as SYSTEM on downstream clients.",
+      "mistakes": [
+        "Using an unsigned custom executable as the WSUS payload (Windows Update requires a Microsoft-signed binary such as PsExec.exe or cmd.exe)."
+      ]
     }
   ],
   "sccm-enum": [
@@ -10820,6 +11516,19 @@
       "win": "A coercion method is confirmed.",
       "mistakes": [
         "No relay or capture ready to catch the auth."
+      ]
+    },
+    {
+      "when": "Before setting up a relay, to check whether Print Spooler (MS-RPRN) and WebClient (HTTP/WebDAV coercion) are running.",
+      "land": [
+        "WebClient enabled means the host can be coerced over HTTP (which bypasses SMB signing requirements when relaying to LDAP)!"
+      ],
+      "look": [
+        "Spooler service enabled and WebClient service enabled in the module output."
+      ],
+      "win": "Spooler and/or WebDAV coercion vectors are confirmed active.",
+      "mistakes": [
+        "Only checking SMB coercion when WebDAV (HTTP -> LDAP relay) avoids SMB signing entirely."
       ]
     },
     {
@@ -11002,6 +11711,17 @@
   ],
   "nopac": [
     {
+      "when": "First step with any low-privilege domain user: check if the DC is vulnerable to sAMAccountName spoofing (CVE-2021-42278/42287).",
+      "land": [
+        "Compares Kerberos ticket sizes with and without a PAC to confirm vulnerability in seconds without creating a machine account yet."
+      ],
+      "look": [
+        "VULNERABLE / ticket size differential in the nopac module output."
+      ],
+      "win": "The DC is confirmed vulnerable to noPac.",
+      "mistakes": []
+    },
+    {
       "when": "noPac (CVE-2021-42278 + 42287), OSCP+ scope.",
       "land": [
         "Scan, exploit and DCSync-dump in one. Needs MachineAccountQuota > 0."
@@ -11016,6 +11736,17 @@
     }
   ],
   "printnightmare": [
+    {
+      "when": "Before staging an SMB share and payload DLL, check if the target's Print Spooler is vulnerable to CVE-2021-1675 / CVE-2021-34527.",
+      "land": [
+        "Queries MS-RPRN / MS-PAR RPC endpoints to confirm whether remote driver installation is open."
+      ],
+      "look": [
+        "Vulnerable to PrintNightmare in the NetExec output."
+      ],
+      "win": "NetExec confirms the host is vulnerable to PrintNightmare.",
+      "mistakes": []
+    },
     {
       "when": "Host the evil DLL.",
       "land": [
@@ -11168,6 +11899,17 @@
   ],
   "timeroasting": [
     {
+      "when": "Unauthenticated against a Domain Controller: harvest MS-SNTP computer account hashes in one NetExec command.",
+      "land": [
+        "Queries the DC's NTP service across computer RIDs and outputs hashcat mode 31300 ($sntp-ms$) hashes."
+      ],
+      "look": [
+        "$sntp-ms$ lines printed for domain computer accounts."
+      ],
+      "win": "Machine account SNTP hashes are harvested without any credentials.",
+      "mistakes": []
+    },
+    {
       "when": "An unauthenticated machine-hash harvest.",
       "land": [
         "The Windows Time service on the DC answers the signed-reply requests."
@@ -11221,6 +11963,17 @@
     }
   ],
   "adidns-abuse": [
+    {
+      "when": "When you want to inject a specific A record into Active Directory-Integrated DNS over LDAP.",
+      "land": [
+        "Any authenticated domain user can create new ADIDNS records by default; point a missing hostname or service record to your attacker IP."
+      ],
+      "look": [
+        "Confirmation from bloodyAD that the DNS record was created."
+      ],
+      "win": "The custom ADIDNS record points to your listener IP.",
+      "mistakes": []
+    },
     {
       "when": "A wildcard record.",
       "land": [
@@ -13440,10 +14193,6 @@
   ]
 };
 
-
-
-
-
   // Move-level "What": the goal of the move in plain language, with NO assumed knowledge, and how it moves
   // the learner toward the flag. Authored once per move; OBOL.fieldNote() applies it to every command. These
   // are distilled from the Learn section's longer "why this, why now" teaching notes to one or two sentences,
@@ -13597,6 +14346,7 @@
     'blocker.account_restricted': { title: 'Account Disabled or Restricted', why: 'STATUS_ACCOUNT_DISABLED or STATUS_ACCOUNT_RESTRICTION: the account exists and the password may be right, but logon is blocked by policy.', body: 'If you have WriteAccountControl or GenericAll over the account, re-enable it via bloodyAD or PowerView; otherwise switch to another discovered credential.', code: 'bloodyAD -u <user> -p <pass> -d <domain> --host <dc-ip> remove uac <target-user> -f ACCOUNTDISABLE' },
     'blocker.dcsync_denied': { title: 'DCSync Denied - Missing Replication Rights', why: 'DRSUAPI ERROR_DS_DRA_BAD_DN / ERROR_DS_DRA_ACCESS_DENIED: the account does not hold Replicating Directory Changes + Replicating Directory Changes All on the domain root yet.', body: 'You must walk the ACL chain first. If you have GenericAll or WriteDacl over an intermediate group (such as Exchange Windows Permissions), add your account to that group and then grant yourself DCSync rights on the domain root before running secretsdump.', code: 'bloodyAD -u <user> -p \'<pass>\' -d <domain> --host <dc-ip> add dcsync <user>' },
     'blocker.nxc_bh_config': { title: 'NetExec BloodHound-CE Config Conflict', why: 'Your ~/.nxc/nxc.conf has bh_enabled / BloodHound-CE enabled, which breaks nxc ldap --bloodhound.', body: 'Run bloodhound-python directly instead (Command 1 on Collect BloodHound Data), or disable bh_enabled in ~/.nxc/nxc.conf.', code: 'bloodhound-python -d <domain> -u <user> -p \'<pass>\' -ns <dc-ip> -c All --zip' },
+    'blocker.maq_zero': { title: 'MachineAccountQuota Is 0', why: 'ms-DS-MachineAccountQuota is 0, so standard domain users cannot add a new machine account for RBCD, noPac, or Certifried.', body: 'Use an existing compromised machine account (via a machine hash or silver ticket), or check BloodHound for an OU where your principal holds CreateChild (Computer) rights.', code: null },
   };
 
   // Resolve a (move, command index) to a canvas note, with a graceful fallback to the pack's own command

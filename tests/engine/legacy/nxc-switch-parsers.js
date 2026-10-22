@@ -9,7 +9,7 @@
  */
 'use strict';
 var path = require('path');
-function req(p) { require(path.join(__dirname, '..', '..', p)); }
+function req(p) { require(path.join(__dirname, '..', '..', '..', p)); }
 ['facts', 'phases', 'pack', 'profile', 'command', 'workspace'].forEach(function (m) { req('assets/engine/' + m + '.js'); });
 ['common', 'nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'blockers', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
@@ -51,6 +51,9 @@ var sample = {
   'smb-nanodump':      { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 -M nanodump", ok: 'NANODUMP 10.10.10.10 445 DC [+] corp.local\\admin aad3b435b51404ee:5835048ce94ad0564e29a924a03510ef', neg: 'NANODUMP 10.10.10.10 445 DC [-] failed' },
   'smb-spider-plus':   { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 -M spider_plus", ok: 'SPIDER_PLUS 10.10.10.10 445 DC [+] Saved output to /tmp/nxc_spider/10.10.10.10.json\nSPIDER_PLUS found: SYSVOL/scripts/backup.config', neg: 'SPIDER_PLUS 10.10.10.10 445 DC [-] no readable shares' },
   'smb-wdigest':       { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 -M wdigest -o ACTION=enable", ok: 'WDIGEST 10.10.10.10 445 DC [+] UseLogonCredential set to 1', neg: 'WDIGEST 10.10.10.10 445 DC [-] access denied' },
+  'smb-enum-trusts':   { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 -M enum_trusts", ok: D + 'TrustDirection: Bidirectional -> child.corp.local', neg: D + '[-] access denied' },
+  'smb-laps':          { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --laps", ok: D + '[+] corp.local\\administrator:Summer2021Pass! (Pwn3d!)', neg: D + '[-] no LAPS' },
+  'smb-timeroast':     { cmd: "nxc smb 10.10.10.10 -M timeroast", ok: D + '1000:$sntp-ms$abcdef0123456789abcdef0123456789$0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', neg: D + '[-] no sntp response' },
   'smb-groups':        { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --groups", ok: D + 'Domain Admins membercount: 2\n' + D + 'Enterprise Admins membercount: 1', neg: D + '[-] access denied' },
   'smb-local-groups':  { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --local-groups", ok: D + 'Administrators membercount: 3', neg: D + '[-] access denied' },
   'smb-sessions':      { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 --sessions", ok: D + 'Enumerated sessions\n' + D + '\\\\10.10.10.50 user: jdoe', neg: D + '[-] access denied' },
@@ -82,8 +85,9 @@ var sample = {
   'smb-ms17-010':      { cmd: "nxc smb 10.10.10.10 -M ms17-010", ok: D + 'VULNERABLE to MS17-010', neg: D + 'not vulnerable to MS17-010' },
   'smb-zerologon':     { cmd: "nxc smb 10.10.10.10 -M zerologon", ok: D + 'VULNERABLE to Zerologon (CVE-2020-1472)', neg: D + 'not vulnerable' },
   'smb-smbghost':      { cmd: "nxc smb 10.10.10.10 -M smbghost", ok: D + 'VULNERABLE to SMBGhost (CVE-2020-0796)', neg: D + 'not vulnerable' },
-  'smb-nopac':         { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 -M nopac", ok: D + 'MachineAccountQuota check for noPac', neg: D + '[-] not vulnerable' },
+  'smb-nopac':         { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 -M nopac", ok: D + '[+] Target is VULNERABLE to noPac (TGT with PAC size 490)', neg: D + '[-] not vulnerable' },
   'smb-printnightmare':{ cmd: "nxc smb 10.10.10.10 -M printnightmare", ok: D + 'Target may be vulnerable to PrintNightmare', neg: D + 'not vulnerable' },
+  'smb-enum-cve':      { cmd: "nxc smb 10.10.10.10 -M enum_cve", ok: D + '[+] VULNERABLE to CVE-2020-1472 (Zerologon)', neg: D + '[-] 0 CVEs found, not vulnerable' },
   'smb-rdcman':        { cmd: "nxc smb 10.10.10.10 -u jdoe -p Winter2021 -M rdcman", ok: 'RDCMAN 10.10.10.10 445 DC [+] Username: admin Password: Rdp2021', neg: 'RDCMAN 10.10.10.10 445 DC [-] nothing' },
   'smb-iis':           { cmd: "nxc smb 10.10.10.10 -u admin -p P -M iis", ok: 'IIS 10.10.10.10 445 DC [+] AppPool Username: svc_web Password: Web2021', neg: 'IIS 10.10.10.10 445 DC [-] nothing' },
   'smb-firefox':       { cmd: "nxc smb 10.10.10.10 -u admin -p P -M firefox", ok: 'FIREFOX 10.10.10.10 445 DC [+] Username: jdoe@site.com Password: Firefox2021', neg: 'FIREFOX 10.10.10.10 445 DC [-] no logins' },
@@ -105,6 +109,7 @@ var sample = {
 
   'ldap-auth':         { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021", ok: L + '[+] corp.local\\jdoe:Winter2021', neg: L + '[-] corp.local\\jdoe:Winter2021 STATUS_LOGON_FAILURE' },
   'ldap-users':        { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --users", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + '-Username-     -Last PW Set-\n' + L + 'administrator  2021-01-02\n' + L + 'svc-sql        2020-05-05', neg: L + '[-] STATUS_ACCESS_DENIED' },
+  'ldap-active-users': { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --active-users", ok: L + '[+] corp.local\\jdoe:Winter2021\n' + L + '-Username-     -Last PW Set-\n' + L + 'administrator  2021-01-02\n' + L + 'svc-sql        2020-05-05', neg: L + '[-] STATUS_ACCESS_DENIED' },
   'ldap-groups':       { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --groups", ok: L + 'Domain Admins membercount: 2\n' + L + 'Enterprise Admins membercount: 1', neg: L + '[-] STATUS_ACCESS_DENIED' },
   'ldap-asreproast':   { cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --asreproast o.txt", ok: L + '$krb5asrep$23$svc-x@CORP.LOCAL:abcd1234$ef567890abcdef1234567890abcdef', neg: L + '[-] no AS-REP roastable users' },
   'ldap-kerberoasting':{ cmd: "nxc ldap 10.10.10.10 -u jdoe -p Winter2021 --kerberoasting o.txt", ok: L + '$krb5tgs$23$*svc-sql$CORP.LOCAL$MSSQL/sql*$abcdef1234567890abcdef1234567890', neg: L + '[-] no kerberoastable users' },
@@ -128,6 +133,8 @@ var sample = {
   'mssql-exec-ps':     { cmd: "nxc mssql 10.10.10.10 -u sa -p P -X 'whoami'", ok: M + '[+] corp.local\\sa:P (Pwn3d!)\n' + M + 'nt service\\mssqlserver', neg: M + '[-] login failed' },
   'mssql-query':       { cmd: "nxc mssql 10.10.10.10 -u sa -p P -q 'SELECT name FROM sys.databases'", ok: M + '[+] corp.local\\sa:P\n' + M + 'master\n' + M + 'appdb', neg: M + '[-] login failed' },
   'rdp-auth':          { cmd: "nxc rdp 10.10.10.10 -u jdoe -p Winter2021", ok: R + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)', neg: R + '[-] corp.local\\jdoe:Winter2021' },
+  'rdp-exec':          { cmd: "nxc rdp 10.10.10.10 -u jdoe -p Winter2021 -x whoami", ok: R + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)\n' + R + 'Executed command\n' + R + 'corp\\jdoe', neg: R + '[-] corp.local\\jdoe:Winter2021' },
+  'rdp-exec-ps':       { cmd: "nxc rdp 10.10.10.10 -u jdoe -p Winter2021 -X '$env:COMPUTERNAME'", ok: R + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)\n' + R + 'Executed command\n' + R + 'DC01', neg: R + '[-] corp.local\\jdoe:Winter2021' },
   'rdp-screenshot':    { cmd: "nxc rdp 10.10.10.10 --screenshot", ok: R + 'Screenshot saved /tmp/10.10.10.10.png', neg: R + '[-] connection failed' },
   'rdp-nla-screenshot':{ cmd: "nxc rdp 10.10.10.10 --nla-screenshot", ok: R + 'Screenshot (no NLA) saved /tmp/10.10.10.10.png', neg: R + '[-] connection failed' },
   'ftp-auth':          { cmd: "nxc ftp 10.10.10.10 -u anonymous -p ''", ok: F + '[+] anonymous:\n' + F + 'drwxr-xr-x  2 0  0  4096 Jan 01 backup', neg: F + '[-] anonymous: STATUS login incorrect' },
@@ -135,7 +142,7 @@ var sample = {
 
   'ssh-auth':          { cmd: "nxc ssh 10.10.10.10 -u jdoe -p Winter2021", ok: SS + '[+] jdoe:Winter2021', neg: SS + '[-] jdoe:Winter2021 Authentication failed' },
   'ssh-exec':          { cmd: "nxc ssh 10.10.10.10 -u jdoe -p Winter2021 -x id", ok: SS + '[+] jdoe:Winter2021\n' + SS + 'uid=1000(jdoe) gid=1000(jdoe)', neg: SS + '[-] Authentication failed' },
-  'ssh-sudo-check':    { cmd: "nxc ssh 10.10.10.10 -u jdoe -p Winter2021 --sudo-check", ok: SS + 'Determining if jdoe can run sudo via a sudo -l test', neg: SS + '[-] Authentication failed' },
+  'ssh-sudo-check':    { cmd: "nxc ssh 10.10.10.10 -u jdoe -p Winter2021 --sudo-check", ok: SS + '[+] jdoe can run sudo (Pwn3d!)', neg: SS + '[-] Authentication failed' },
   'wmi-exec':          { cmd: "nxc wmi 10.10.10.10 -u jdoe -p Winter2021 -x whoami", ok: WM + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)\n' + WM + 'nt authority\\system', neg: WM + '[-] corp.local\\jdoe:Winter2021' },
   'wmi-exec-ps':       { cmd: "nxc wmi 10.10.10.10 -u jdoe -p Winter2021 -X '$env:COMPUTERNAME'", ok: WM + '[+] corp.local\\jdoe:Winter2021 (Pwn3d!)\n' + WM + 'DC01', neg: WM + '[-] corp.local\\jdoe:Winter2021' },
   'nfs-shares':        { cmd: "nxc nfs 10.10.10.10 --shares", ok: NF + '[+] Enumerated shares\n' + NF + '/export/home  *  rw\n' + NF + '/srv/backup  10.0.0.0/8  ro', neg: NF + '[-] no exports' },

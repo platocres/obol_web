@@ -79,11 +79,33 @@
     { kind: 'blocker.dcsync_denied', re: /DRSUAPI\s+SessionError:\s*code:\s*0x20f7\s*-\s*ERROR_DS_DRA_BAD_DN|ERROR_DS_DRA_BAD_DN|ERROR_DS_DRA_ACCESS_DENIED/i },
     // NetExec --bloodhound blocked by default ~/.nxc/nxc.conf BloodHound-CE setting.
     { kind: 'blocker.nxc_bh_config', re: /Your configuration has BloodHound-CE enabled,\s*however this version is currently unsupported/i },
+    // MachineAccountQuota is 0: domain users cannot create a machine account without GenericAll/CreateChild on an OU.
+    { kind: 'blocker.maq_zero', re: /MachineAccountQuota\s*[:=]\s*0\b/i },
   ];
 
   function _parse_op_blockers(text, ws, command, source, facts) {
     var t = String(text || ''); if (!t) return;
     var h = 'host:' + ws.target;
+    function addWall(wall, content) {
+      var lines = content.split(/\r?\n/).filter(function (line) { return wall.re.test(line); });
+      if (!lines.length) lines = [content];
+      lines.forEach(function (line) {
+        var row = /^\s*(SMB|LDAP|WINRM|RDP|SSH|FTP|MSSQL|WMI)\s+(\S+)\s+(\d+)\s+\S+\s+(?:\[[-*]\]\s*)?(.*)$/i.exec(line);
+        var lineWs = row ? Object.assign({}, ws, { target: C._observed_host ? C._observed_host(ws, row[2]) : row[2], observedTarget: row[2] }) : ws;
+        var value = { tool: C._exec_tool ? C._exec_tool(command || '') : '', via: 'blocker-detect', service: row ? row[1].toLowerCase() : (((ws || {}).context || {}).service || '') };
+        value.stage = wall.kind === 'blocker.logon_failure' || wall.kind === 'blocker.password_change' || wall.kind === 'blocker.account_restricted' ? 'authentication' : (wall.kind === 'blocker.access_denied' ? 'authorization' : 'environment');
+        if (row) {
+          value.port = +row[3];
+          var parsed = C._parse_auth_material ? C._parse_auth_material(row[4].replace(/\s+STATUS_[A-Z_]+.*$/i, '')) : [];
+          if (parsed[0]) value.domain = parsed[0];
+          if (parsed[1]) value.user = parsed[1];
+          if (parsed[2] && !/^(?:\*{3,}|<redacted>|\[redacted\])$/i.test(parsed[2])) value.password = parsed[2];
+        }
+        if (C._auth_observation) value = C._auth_observation(lineWs, value);
+        delete value.password; delete value.nthash;
+        _add(facts, mkFact(wall.kind, 'host:' + lineWs.target, value, S, source));
+      });
+    }
     var isNmap = (command && /^\s*nmap\b/i.test(command)) || /Starting Nmap|Nmap scan report for/i.test(t);
     var isRoastOrEnum = command && /--asreproast|--kerberoast|--users|GetNPUsers|GetUserSPNs/i.test(command);
     var isEnum4linux = (command && /\benum4linux(?:-ng)?\b/i.test(command)) || /^ENUM4LINUX - next generation/im.test(t);
@@ -99,12 +121,12 @@
       if (w.kind === 'blocker.access_denied') {
         if (isNmap || isRoastOrEnum || enum4linuxSucceeded || isAnonSmbProbe) continue;
         if (w.re.test(tWithoutNse)) {
-          _add(facts, mkFact(w.kind, h, { tool: C._exec_tool ? C._exec_tool(command || '') : '', via: 'blocker-detect' }, S, source));
+          addWall(w, tWithoutNse);
         }
         continue;
       }
       if (w.kind === 'blocker.logon_failure' && (enum4linuxSucceeded || /\\\$krb5(?:asrep|tgs)\$|Testing credentials \(\$krb5/i.test(t) || (/^(?:bloodyad-acl|dcsync)\b/i.test(command || '') && /Traceback \(most recent call last\):|SessionError:\s*STATUS_LOGON_FAILURE/i.test(t)))) continue;
-      if (w.re.test(t)) _add(facts, mkFact(w.kind, h, { tool: C._exec_tool ? C._exec_tool(command || '') : '', via: 'blocker-detect' }, S, source));
+      if (w.re.test(t)) addWall(w, t);
     }
   }
   C._parse_op_blockers = _parse_op_blockers;

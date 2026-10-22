@@ -14,6 +14,7 @@
 
   // Identity key for dedupe + active-match: who + which secret.
   function keyOf(c) {
+    if (c.id && OBOL.context) return c.id;
     return String(c.user || '').toLowerCase() + '|' + String(c.domain || '').toLowerCase()
       + '|' + (c.secret || c.nthash || '');
   }
@@ -30,6 +31,7 @@
   // Gather deduped credentials from the engagement ledger + proven facts.
   function gather(eng, fs) {
     eng = eng || (OBOL.store && OBOL.store.active());
+    if (OBOL.context) return OBOL.context.credentials(eng);
     fs = fs || (OBOL.store && OBOL.store.factSet());
     var out = [], seen = {};
     function push(c) {
@@ -52,7 +54,7 @@
     });
     ((fs && fs.facts) || []).forEach(function (f) {
       if (f.state !== 'supported') return;
-      if (f.kind !== 'credential.available' && f.kind !== 'credential.plaintext' && f.kind !== 'credential.admin') return;
+      if (f.kind !== 'credential.available' && f.kind !== 'credential.plaintext') return;
       var v = f.value || {}; if (!v.user) return;
       var dom = v.domain || ((String(f.scope || '').indexOf('domain:') === 0 && f.scope !== 'domain:domain') ? f.scope.slice(7) : '');
       var sec = v.password || '';
@@ -66,6 +68,7 @@
   // The key of the credential currently filling commands (matches the engagement params).
   function activeKey(eng) {
     eng = eng || (OBOL.store && OBOL.store.active());
+    if (OBOL.context && eng) return OBOL.context.selectedId(eng, (eng.params || {}).target) || '';
     var p = (eng && eng.params) || {};
     if (!p.username) return '';
     var exact = keyOf({ user: p.username, domain: p.domain, secret: p.password, nthash: p.nthash });
@@ -104,6 +107,13 @@
   // Make this credential the active one: push it into params so every command re-fills.
   function activate(cred) {
     if (!cred) return;
+    if (OBOL.context && OBOL.store.selectCredential) {
+      OBOL.store.selectCredential(cred.id || OBOL.context.material(cred, cred.scope).id);
+      if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+      if (OBOL.router) OBOL.router.render();
+      U.toast('Selected ' + (cred.domain ? cred.domain + '\\' : '') + cred.user + '; authentication remains evidence-specific');
+      return;
+    }
     var sec = cred.secret || cred.password || '';
     var nth = cred.nthash || cred.hash || '';
     OBOL.store.update(function (eng) {
@@ -181,10 +191,17 @@
         + '</div>'
         + '</div>';
     }).join('');
-    var empty = creds.length ? '' : '<div class="cred-empty">None yet, prove one from Evidence, or add one below.</div>';
+    var empty = creds.length ? '' : '<div class="cred-empty">None yet, recover material from Evidence, or add one below.</div>';
     var adder = addOpen ? addForm()
       : '<button class="cred-add-btn" type="button">+ Add Credential</button>';
-    el.innerHTML = empty + rows + adder;
+    var selection = '';
+    if (OBOL.context) {
+      var pinned = OBOL.store.credentialPin();
+      selection = '<div class="cred-selection"><button type="button" class="btn-mini cred-none" aria-pressed="' + (!active ? 'true' : 'false') + '">Use no credential</button>'
+        + '<label class="cred-pin"><input type="checkbox" class="cred-pin-toggle"' + (pinned.enabled ? ' checked' : '') + '> Keep this credential across targets</label>'
+        + '<div class="cred-empty">' + (pinned.enabled ? 'Temporary override for this session. Target memories are preserved.' : 'Selection is remembered for this target. Material is not proof of access.') + '</div></div>';
+    }
+    el.innerHTML = selection + empty + rows + adder;
   }
 
   // Wire delegated handlers once.
@@ -192,6 +209,8 @@
     var el = document.getElementById('cred-switch');
     if (!el || el._wired) return;
     el._wired = true;
+    U.on(el, 'click', '.cred-none', function () { OBOL.store.selectCredential(null); if (OBOL.router) OBOL.router.render(); });
+    U.on(el, 'change', '.cred-pin-toggle', function (e, t) { OBOL.store.setCredentialPin(t.checked); if (OBOL.router) OBOL.router.render(); });
     U.on(el, 'click', '.cred-copy', function (e, t) {
       if (e.stopPropagation) e.stopPropagation();
       var what = t.getAttribute('data-what') || 'Value';
@@ -215,7 +234,7 @@
     U.on(el, 'click', '.cf-save', function () {
       var user = (el.querySelector('.cf-user') || {}).value, secret = (el.querySelector('.cf-secret') || {}).value;
       var domain = (el.querySelector('.cf-domain') || {}).value, type = (el.querySelector('.cf-type') || {}).value || 'PW';
-      user = (user || '').trim(); secret = (secret || '').trim();
+      user = (user || '').trim(); secret = String(secret || '');
       if (!user) { U.toast('Enter a username', 'err'); return; }
       if (!secret) { U.toast('Enter the secret / hash', 'err'); return; }
       addOpen = false; // close before add() so the store-change re-render draws the collapsed state

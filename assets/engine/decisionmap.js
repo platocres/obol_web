@@ -12,9 +12,9 @@
  *   - wiring gap - a move exists but isn't connected: it produces a fact nothing needs (dead-end),
  *                     requires a fact nothing produces (unreachable), or lands a foothold with no
  *                     hand-off to a post-exploitation map.
- *   - parse gap - a move exists and is wired, but no parser can read its output into the fact it
- *                     claims to produce, so running it never advances the coach ("write-only" node).
- *                     Derived empirically by running each move's fixture through the real parsers.
+ *   - parse gap - declared parser capabilities do not cover a move's result facts. Separate sample
+ *                     grades show which result facts were actually observed through the real parsers;
+ *                     a declaration alone never verifies a move's sample.
  *
  * Nothing here is authored per-port by hand. The only authored layers are the one-line fork conditions
  * (data/decision-forks.js), the plain-language parser "looks for" lines (data/parser-signatures.js),
@@ -58,16 +58,15 @@
     return null;
   }
 
-  // --- the parser CAPABILITY SET: every fact obol can recognize from output, from PARSER_SIGNATURES.
-  //     An emit ending in "." is a prefix wildcard (service. -> service.mysql). This is the source of
-  //     truth for the parse-gap lens: a produced fact outside it is one nothing can read.
-  var _cap = null;
+  // The declared parser capability set is metadata, not demonstrated parser behavior.
+  // A trailing dot is a prefix wildcard. Actual fixture observations are recorded separately.
+  var _cap = null, _capSource = null;
   function capability() {
-    if (_cap) return _cap;
-    var exact = {}, pref = [];
     var S = sigs();
+    if (_cap && _capSource === S) return _cap;
+    var exact = {}, pref = [];
     Object.keys(S).forEach(function (k) { (S[k].emits || []).forEach(function (e) { if (e.charAt(e.length - 1) === '.') pref.push(e); else exact[e] = 1; }); });
-    _cap = { exact: exact, pref: pref };
+    _cap = { exact: exact, pref: pref }; _capSource = S;
     return _cap;
   }
   function capable(fact) {
@@ -83,59 +82,47 @@
   function isActionIntent(f) { return /^(listener\.|tunnel\.|persistence\.|enum\.deep$)/.test(f); }
   // can obol ever obtain this fact? (a move produced it, a parser can read it, or it is environmental)
   function obtainable(fact, producedIndex) { return !!(producedIndex[fact]) || capable(fact) || isEnv(fact); }
-  // is a produced fact readable back (so running the move advances the coach)? parseable, handed off,
-  // environmental, or a legitimate action-intent fact.
-  function readable(fact) { return capable(fact) || isEnv(fact) || isActionIntent(fact) || !!handoffFor(fact); }
+  // Declared parsing support or an environmental input. A hand-off consumes a fact; it cannot
+  // substitute for a parser that observes the fact.
+  function readable(fact) { return capable(fact) || isEnv(fact) || isActionIntent(fact); }
 
   // ---------------------------------------------------------------------------------------------
   // Parser coverage: run each move's fixture output through the real parser dispatch and record
   // which fact kinds actually mint, vs what the move claims to `produce`. This is the parse-gap lens.
   // ---------------------------------------------------------------------------------------------
-  function fixtureText(fx) {
-    if (!fx) return '';
-    if (fx.output) return fx.output;
-    if (fx.steps && fx.steps.length) return fx.steps.map(function (s) { return s.output || ''; }).join('\n');
-    return '';
-  }
-  var _parseCov = null;
+  var _parseCov = null, _parseCovFixtures = null, _parseCovParser = null, _parseCovActions = null, _parseCovSignatures = null;
   function parserCoverage() {
-    if (_parseCov) return _parseCov;
+    var P = OBOL.parsers, fxMap = fixtures(), moves = actions(), parser = P && P.parseActionOutput, signatures = sigs();
+    if (_parseCov && _parseCovFixtures === fxMap && _parseCovParser === parser && _parseCovActions === moves && _parseCovSignatures === signatures) return _parseCov;
     var out = {};
-    var P = OBOL.parsers;
-    actions().forEach(function (m) {
-      var fx = fixtures()[m.id];
-      var prod = produces(m);
-      var entry = { id: m.id, produces: prod, minted: [], status: 'nofixture' };
-      if (!fx || !fixtureText(fx)) { out[m.id] = entry; return; }
-      if (!P || !P.parseActionOutput) { entry.status = 'noparser'; out[m.id] = entry; return; }
-      var minted = [];
-      try {
-        var r = P.parseActionOutput({
-          actionId: m.id, command: fx.cmd || '', stdout: fixtureText(fx), stderr: '',
-          scope: 'host:10.10.10.10', domain: 'acme.internal',
-        });
-        minted = (r.facts || []).map(function (f) { return f.kind; });
-      } catch (e) { entry.error = (e && e.message) || String(e); }
-      entry.minted = minted;
-      // the move's own sample output demonstrating one of its facts is a bonus "shown" signal, not the
-      // grade (a teaching fixture often shows an earlier representative step than the fact's real run).
-      entry.selfRead = prod.some(function (f) { return minted.indexOf(f) >= 0; });
-      out[m.id] = entry;
+    moves.forEach(function (m) {
+      var fx = fxMap[m.id], prod = produces(m).filter(function (f) { return !/^advice\./.test(f) && !isActionIntent(f); });
+      var declared = prod.filter(readable);
+      var e = {id:m.id,produces:produces(m),minted:[],hit:[],selfRead:false,status:'nofixture',
+        capabilityStatus:!prod.length ? 'noproduce' : declared.length === prod.length ? 'declared' : declared.length ? 'partial' : 'gap',
+        unreadable:prod.filter(function(f){return !readable(f);}),unverified:prod.slice(),diagnostics:[],fixtureCount:0};
+      out[m.id] = e;
+      if (!prod.length) { e.status = 'noproduce'; return; }
+      var samples = [];
+      if (fx && fx.steps && fx.steps.length) fx.steps.forEach(function(s){if(s && s.output) samples.push({command:s.cmd || fx.cmd || '',output:s.output});});
+      else if (fx && fx.output) samples.push({command:fx.cmd || '',output:fx.output});
+      e.fixtureCount = samples.length;
+      if (!samples.length) return;
+      if (!parser) {e.status='noparser';return;}
+      samples.forEach(function(sample){
+        try {
+          var r = parser({actionId:m.id,command:sample.command,stdout:sample.output,stderr:'',scope:'host:10.10.10.10',domain:'acme.internal'});
+          (r.facts || []).forEach(function(f){if(f.state === 'supported' && e.minted.indexOf(f.kind) < 0)e.minted.push(f.kind);});
+          (r.diagnostics || []).forEach(function(d){e.diagnostics.push(d);});
+          if(r.error)e.diagnostics.push({message:r.error});
+        } catch(err) {e.diagnostics.push({message:(err && err.message) || String(err)});}
+      });
+      e.hit = prod.filter(function(f){return e.minted.indexOf(f) >= 0;});
+      e.unverified = prod.filter(function(f){return e.hit.indexOf(f) < 0;});
+      e.selfRead = e.hit.length > 0;
+      e.status = e.diagnostics.length ? 'parser-error' : e.hit.length === prod.length ? 'verified' : e.hit.length ? 'partial' : 'unverified';
     });
-    // Grade each move on CAPABILITY, not on its one fixture: can any parser read each produced fact?
-    actions().forEach(function (m) {
-      var e = out[m.id] || (out[m.id] = { id: m.id, produces: produces(m), minted: [], selfRead: false });
-      // advice.* are guidance receipts (a troubleshooter's "here is the fix"), not facts a parser reads
-      // back from pasted output - so they are never a parse gap; grade only the real produced facts.
-      var prod = (e.produces || []).filter(function (f) { return !/^advice\./.test(f); });
-      var readq = prod.filter(readable);
-      if (!prod.length) e.status = 'noproduce';                // enum/terminal/guidance move, no parseable fact
-      else if (readq.length === prod.length) e.status = 'verified';
-      else if (readq.length) e.status = 'partial';
-      else e.status = 'gap';                                   // runs, but obol can read NONE of its result
-      e.unreadable = prod.filter(function (f) { return !readable(f); });
-    });
-    _parseCov = out;
+    _parseCov = out; _parseCovFixtures = fxMap; _parseCovParser = parser; _parseCovActions = moves; _parseCovSignatures = signatures;
     return out;
   }
 
@@ -270,14 +257,18 @@
     var accessKeys = {}; ((S.evidence && S.evidence()) || []).forEach(function (e) { if (e.tier === 'access') accessKeys[e.key] = 1; });
     acts.forEach(function (m) { produces(m).forEach(function (f) { var h = handoffFor(f); if (h && !accessKeys[h.to]) wiring.missingHandoff.push({ id: m.id, fact: f, to: h.to }); }); });
 
-    // parse gaps: a move whose produced fact(s) no parser can read (nothing recognizes its result, so
-    // running it never advances the coach) - graded from the capability set, not a single fixture.
+    // Declared capability gaps and empirical fixture results answer different questions.
     var pc = parserCoverage();
-    var parse = { gap: [], partial: [] };
+    var parse = { gap: [], partial: [], verified: [], unverified: [], missingFixture: [], errors: [], statusCounts:{} };
     Object.keys(pc).forEach(function (id) {
       var e = pc[id];
-      if (e.status === 'gap') parse.gap.push({ id: id, produces: e.produces, unreadable: e.unreadable });
-      else if (e.status === 'partial') parse.partial.push({ id: id, produces: e.produces, unreadable: e.unreadable });
+      parse.statusCounts[e.status] = (parse.statusCounts[e.status] || 0) + 1;
+      if (e.capabilityStatus === 'gap') parse.gap.push({ id: id, produces: e.produces, unreadable: e.unreadable });
+      else if (e.capabilityStatus === 'partial') parse.partial.push({ id: id, produces: e.produces, unreadable: e.unreadable });
+      if (e.status === 'verified') parse.verified.push(id);
+      else if (e.status === 'nofixture') parse.missingFixture.push(id);
+      else if (e.status === 'parser-error') parse.errors.push({id:id,diagnostics:e.diagnostics});
+      if (e.status !== 'verified' && e.status !== 'noproduce') parse.unverified.push({id:id,status:e.status,unverified:e.unverified});
     });
 
     // orphan parser facts: a fact a parser mints that NOTHING uses - no move produces it AND no move
@@ -304,7 +295,8 @@
       counts: {
         moves: acts.length,
         unreachable: wiring.unreachable.length, deadEnd: wiring.deadEnd.length, missingHandoff: wiring.missingHandoff.length,
-        parseGap: parse.gap.length, parsePartial: parse.partial.length,
+        parseGap: parse.gap.length, parsePartial: parse.partial.length, fixtureVerified:parse.verified.length, fixtureUnverified:parse.unverified.length,
+        fixtureMissing:parse.missingFixture.length, fixtureErrors:parse.errors.length, fixtureStatusCounts:parse.statusCounts,
         orphanParserFacts: orphanParserFacts.length, coverageGap: coverage.length,
       } };
   }
@@ -315,6 +307,6 @@
     gapReport: gapReport,
     handoffFor: handoffFor,
     capability: capability,
-    _reset: function () { _byId = null; _parseCov = null; _cap = null; },
+    _reset: function () { _byId = null; _parseCov = null; _parseCovFixtures = null; _parseCovParser = null; _parseCovActions = null; _parseCovSignatures = null; _cap = null; _capSource = null; },
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

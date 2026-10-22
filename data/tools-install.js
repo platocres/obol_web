@@ -306,20 +306,35 @@
     { key: 'ajpshooter.py', label: 'ajpShooter.py', category: 'Web', os: 'linux', class: 'git',
       install: 'git clone https://github.com/00theway/Ghostcat-CNVD-2020-10487 ~/tools/Ghostcat-CNVD-2020-10487', canonical: 'ajpShooter.py', variants: ['ajpShooter.py', 'ajpshooter.py'],
       source: '00theway/Ghostcat-CNVD-2020-10487', license: 'Apache-2.0', purpose: 'Apache Tomcat AJP Ghostcat (CVE-2020-1938) file read and RCE' },
+    { key: 'set_empty_pw.py', label: 'set_empty_pw.py (Zerologon)', category: 'AD', os: 'linux', class: 'git',
+      install: 'git clone https://github.com/RiskSense-Ops/zerologon ~/tools/zerologon-exploit', canonical: 'set_empty_pw.py', variants: ['set_empty_pw.py', 'set_empty_pw'],
+      source: 'RiskSense-Ops/zerologon', license: 'Apache-2.0', purpose: 'Zerologon (CVE-2020-1472) DC machine-account password reset script' },
+    { key: 'reinstall_original_pw.py', label: 'reinstall_original_pw.py (Zerologon)', category: 'AD', os: 'linux', class: 'git',
+      install: 'git clone https://github.com/RiskSense-Ops/zerologon ~/tools/zerologon-exploit', canonical: 'reinstall_original_pw.py', variants: ['reinstall_original_pw.py', 'reinstall_original_pw'],
+      source: 'RiskSense-Ops/zerologon', license: 'Apache-2.0', purpose: 'Zerologon (CVE-2020-1472) DC machine-account NTLM hash restore script' },
+    { key: 'keepass-dump-masterkey', label: 'keepass_dump_masterkey.py', category: 'Cracking', os: 'linux', class: 'git',
+      install: 'git clone https://github.com/matro7sh/keepass-dump-masterkey ~/tools/keepass-dump-masterkey', canonical: 'keepass_dump_masterkey.py', variants: ['keepass_dump_masterkey.py', 'keepass-dump-masterkey', 'poc.py'],
+      source: 'matro7sh/keepass-dump-masterkey', license: 'MIT', purpose: 'CVE-2023-32784 KeePass 2.x memory dump master-password recovery' },
+    { key: 'smbghost-scanner', label: 'scanner.py (SMBGhost)', category: 'Recon', os: 'linux', class: 'git',
+      install: 'git clone https://github.com/ollypwn/SMBGhost ~/tools/SMBGhost', canonical: 'scanner.py', variants: ['smbghost-scanner', 'scanner.py'],
+      source: 'ollypwn/SMBGhost', license: 'MIT', purpose: 'CVE-2020-0796 SMBv3 compression vulnerability scanner' },
+    { key: 'smbghost-rce', label: 'SMBGhost_RCE.py', category: 'Exploitation', os: 'linux', class: 'git',
+      install: 'git clone https://github.com/chompie1337/SMBGhost_RCE_PoC ~/tools/SMBGhost_RCE_PoC', canonical: 'SMBGhost_RCE.py', variants: ['SMBGhost_RCE.py', 'smbghost_rce.py', 'smbghost-rce'],
+      source: 'chompie1337/SMBGhost_RCE_PoC', license: 'MIT', purpose: 'CVE-2020-0796 SMBv3 compression remote code execution PoC' },
     // Release binary / material
     { key: 'rmg', label: 'rmg', category: 'Web', os: 'linux', class: 'material',
       gh_repo: 'qtc-de/remote-method-guesser', gh_asset: 'rmg-.*\\.jar$', dest: 'rmg.jar', bins: ['rmg', 'rmg.jar'], canonical: 'rmg', variants: ['rmg', 'rmg.jar'],
       source: 'qtc-de/remote-method-guesser', license: 'MIT', purpose: 'Java RMI registry, Activator, and DGC enumeration and deserialization scanner' },
   ];
-  // the three coercion PoCs obol references by filename (run-from-repo python)
-  [['petitpotam.py', 'topotam/PetitPotam', 'MS-EFSR coercion (PetitPotam)'],
-   ['printerbug.py', 'dirkjanm/krbrelayx', 'MS-RPRN coercion (PrinterBug)'],
-   ['dfscoerce.py', 'Wh04m1001/DFSCoerce', 'MS-DFSNM coercion (DFSCoerce)'],
-   ['nopac.py', 'Ridter/noPac', 'noPac (CVE-2021-42278/42287)'],
-   ['cve-2021-1675.py', 'cube0x0/CVE-2021-1675', 'PrintNightmare (CVE-2021-1675)']].forEach(function (r) {
-    INSTALL.push({ key: r[0], label: r[0], category: 'AD', os: 'linux', class: 'git',
+  // the coercion and AD PoCs obol references by filename (run-from-repo python)
+  [['petitpotam.py', 'topotam/PetitPotam', 'MS-EFSR coercion (PetitPotam)', 'PetitPotam.py', ['PetitPotam.py', 'petitpotam.py', 'PetitPotam', 'petitpotam']],
+   ['printerbug.py', 'dirkjanm/krbrelayx', 'MS-RPRN coercion (PrinterBug)', 'printerbug.py', ['printerbug.py', 'printerbug']],
+   ['dfscoerce.py', 'Wh04m1001/DFSCoerce', 'MS-DFSNM coercion (DFSCoerce)', 'dfscoerce.py', ['dfscoerce.py', 'dfscoerce']],
+   ['nopac.py', 'Ridter/noPac', 'noPac (CVE-2021-42278/42287)', 'noPac.py', ['noPac.py', 'nopac.py', 'noPac', 'nopac']],
+   ['cve-2021-1675.py', 'cube0x0/CVE-2021-1675', 'PrintNightmare (CVE-2021-1675)', 'CVE-2021-1675.py', ['CVE-2021-1675.py', 'cve-2021-1675.py']]].forEach(function (r) {
+    INSTALL.push({ key: r[0], label: r[3], category: 'AD', os: 'linux', class: 'git',
       install: 'git clone https://github.com/' + r[1] + ' ~/tools/' + r[1].split('/')[1],
-      canonical: r[0], variants: [r[0]], source: r[1], license: 'see upstream', purpose: r[2] });
+      canonical: r[3], variants: r[4], source: r[1], license: 'see upstream', purpose: r[2] });
   });
   INSTALL.forEach(function (e) { e.on_kali = false; A[e.key] = e; });
 
@@ -330,6 +345,13 @@
   A.vncpasswd = A.vncpwd;
   A['vncpasswd.py'] = A.vncpwd;
   A['ajpShooter.py'] = A['ajpshooter.py'];
+  A['PetitPotam.py'] = A['petitpotam.py'];
+  A['noPac.py'] = A['nopac.py'];
+  A['CVE-2021-1675.py'] = A['cve-2021-1675.py'];
+  A['keepass_dump_masterkey.py'] = A['keepass-dump-masterkey'];
+  A['SMBGhost_RCE.py'] = A['smbghost-rce'];
+  A['smbghost_rce.py'] = A['smbghost-rce'];
+  A['scanner.py'] = A['smbghost-scanner'];
 
   // -- 3. Staged materials / compiled binaries - py REGISTRY.
   //    upstream `latest` unless a version is pinned; the .sh records sha256 (trust-on-first-use).
@@ -466,7 +488,7 @@
   A.ntpdate = A.ntpdate || { key: 'ntpdate', label: 'ntpdate', category: 'Support', os: 'linux', class: 'apt',
     on_kali: false, install: 'sudo apt install -y ntpsec-ntpdate', bins: ['ntpdate'], canonical: 'ntpdate', variants: ['ntpdate'], source: 'kali/ntpsec-ntpdate', license: '', purpose: 'clock sync before Kerberos (KRB_AP_ERR_SKEW)' };
   A['autoblue-ms17-010'] = A['autoblue-ms17-010'] || { key: 'autoblue-ms17-010', label: 'AutoBlue-MS17-010', category: 'Exploitation', os: 'linux', class: 'git', on_kali: false,
-    install: 'git clone https://github.com/3ndG4me/AutoBlue-MS17-010 ~/tools/AutoBlue-MS17-010', canonical: 'autoblue-ms17-010', variants: ['autoblue-ms17-010'], source: '3ndG4me/AutoBlue-MS17-010', license: 'see upstream', purpose: 'EternalBlue (MS17-010) exploit chain' };
+    install: 'git clone https://github.com/3ndG4me/AutoBlue-MS17-010 ~/tools/AutoBlue-MS17-010', canonical: 'eternalblue_exploit7.py', variants: ['eternalblue_exploit7.py', 'eternalblue_exploit8.py', 'zzz_exploit.py', 'autoblue-ms17-010', 'autoblue'], source: '3ndG4me/AutoBlue-MS17-010', license: 'see upstream', purpose: 'EternalBlue (MS17-010) exploit chain' };
   // the Zerologon exploit restore helpers live in the same SecuraBV repo as the tester
   ['set_empty_pw.py', 'reinstall_original_pw.py'].forEach(function (n) { if (!A[n]) A[n] = A['zerologon-scan']; });
 

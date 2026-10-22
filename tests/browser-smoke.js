@@ -252,12 +252,14 @@ function serve() {
   ok(swapped, 'clicking a credential fills the engagement params (bob + NT hash)');
   ok(await page.locator('#cred-switch .cred-row.active', { hasText: 'bob' }).count() === 1, 'the chosen credential is marked active');
 
-  // Retire/un-retire is judged PER MOVE (its own runs), not per fact-kind. Run on the coach route.
+  // Retry suppression belongs to this target and access epoch, rather than unrelated fact kinds.
   await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(150);
   await page.evaluate(() => {
     const S = window.OBOL.store, F = window.OBOL.facts;
-    S.update((e) => { e.checklist = e.checklist || {}; e.checklist['bloodyad-acl'] = 'empty'; }, 'done');
+    const target = S.active().params.target;
+    S.setActiveTarget(target);
+    S.setChecklist('bloodyad-acl', 'empty:' + window.OBOL.pack.accessEpoch(S.factSetForTarget(target)), target);
     S.addFacts([F.makeFact({ kind: 'host.os_hint', scope: 'host:10.10.10.9', value: { os: 'windows' }, state: F.ProofState.SUPPORTED, source: 'test' })], 'test');
     window.OBOL.router.render();
   });
@@ -272,17 +274,22 @@ function serve() {
   });
   await page.waitForTimeout(120);
   ok((await page.locator('.ns-card[data-action="bloodyad-acl"]').count()) === 0, 'a produced fact-kind from an UNRELATED move does not un-retire (the sccm regression)');
-  // New evidence: a run attributed to THIS move produces a fact → un-retire (the chain is recoverable).
+  // New access material changes the epoch and permits retrying the move.
   // The get-writable run yields an ACL lead, so mint that fact too (ACL abuse is gated on a known abusable
   // ACL — see docs/MOVE-ENGINE.md), which is also what makes the move eligible again.
   await page.evaluate(() => {
     const S = window.OBOL.store, F = window.OBOL.facts;
     S.addFacts([F.makeFact({ kind: 'ad.acl_lead', scope: 'domain:corp.local', value: { right: 'WriteDacl' }, state: F.ProofState.SUPPORTED, source: 'bloodyad-acl' })], 'test');
+    S.addFacts([F.makeFact({ kind: 'credential.available', scope: 'host:' + S.active().params.target, value: { user: 'epoch-fixture', password: 'NewAccessPassword!' }, source: 'test' })], 'test');
     S.update((e) => { e.activities = e.activities || []; e.activities.unshift({ at: Date.now(), action_id: 'bloodyad-acl', produced: ['ad.acl_lead'], command: "bloodyAD -d corp.local --host 10.10.10.9 -u alice -p x get writable" }); }, 'activity');
     window.OBOL.router.render();
   });
   await page.waitForTimeout(120);
-  ok((await page.locator('.ns-card[data-action="bloodyad-acl"]').count()) >= 1, 'the move RE-APPEARS once one of ITS OWN runs produced a fact (un-retired)');
+  ok((await page.locator('.ns-card[data-action="bloodyad-acl"]').count()) >= 1, 'the move reappears when new credentials change the target access epoch');
+  await page.evaluate(() => window.OBOL.store.update(e => {
+    e.facts = e.facts.filter(f => (f.value || {}).user !== 'epoch-fixture');
+    e.credentials = e.credentials.filter(c => c.user !== 'epoch-fixture');
+  }));
 
   // Run Log: every command run is recorded and reviewable (with a filter), not just the attack-path moves.
   await page.evaluate(() => {
@@ -504,7 +511,15 @@ function serve() {
   // exec command, so clear that pin: with no pinned user the fill adopts the first COMPLETE credential
   // (alice, who has a password), making the {{command}} exec command runnable. Bounce through another route
   // so the coach re-renders from the live store (no full reload, so nothing else is disturbed).
-  await page.evaluate(() => { window.OBOL.store.update(function (eng) { eng.params = eng.params || {}; delete eng.params.username; delete eng.params.nthash; delete eng.params.user; delete eng.params.password; }, 'params'); });
+  await page.evaluate(() => {
+    const S = window.OBOL.store, F = window.OBOL.facts, scope = 'host:' + S.active().params.target;
+    S.addFacts([
+      F.makeFact({ kind: 'credential.available', scope, value: { user: 'alice', password: 'S3cret!' }, source: 'test' }),
+      F.makeFact({ kind: 'credential.validated', scope, value: { user: 'alice', service: 'smb' }, source: 'test' }),
+      F.makeFact({ kind: 'smb.authenticated', scope, value: { user: 'alice' }, source: 'test' })
+    ]);
+    S.update(function (eng) { eng.params = eng.params || {}; delete eng.params.username; delete eng.params.nthash; delete eng.params.user; delete eng.params.password; }, 'params');
+  });
   await page.evaluate(() => window.OBOL.router.go('home'));
   await page.waitForTimeout(80);
   await page.evaluate(() => window.OBOL.router.go('path'));

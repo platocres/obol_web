@@ -181,7 +181,8 @@
         "loot.ntds",
         "hash.type",
         "hash.candidate",
-        "hash.ike_psk"
+        "hash.ike_psk",
+        "hash.sntp"
       ],
       "produces": [
         "credential.available"

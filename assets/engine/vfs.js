@@ -588,12 +588,14 @@
     String(text || '').split(/\r?\n/).forEach(function (line) {
       var t = line.replace(/\s+$/, '');
       if (!t) return;
-      if (/OBOL-WS-SNAPSHOT|### END|^#\s|^\$\s|^find\s|^cd\s/.test(t)) return; // markers / prompt / the command echo
+      if (/OBOL-WS-SNAPSHOT|OBOL-ARSENAL|### END|^#\s|^\$\s|^find\s|^cd\s/i.test(t)) return; // markers / prompt / the command echo
       // strip a shell prompt sigil if the paste kept it
       t = t.replace(/^.*?[$#]\s+/, function (m) { return /[$#]\s+$/.test(m) && /find|cd/.test(m) ? '' : m; });
       var parts = t.split(/\t/);
       var p = (parts[0] || '').trim().replace(/^\.\//, '');
-      if (!p || /[<>]/.test(p) || /\/$/.test(p)) return; // not a file
+      if (!p || /[<>"{}|*?\\]/.test(p) || /\/$/.test(p) || /^[{\[]/.test(p)) return; // not a file
+      if (parts.length < 2 && /\s/.test(p)) return; // prose or command stdout line without tab delimiter
+      if (/^\d+\/(?:tcp|udp)$/i.test(p) || /^https?:\/\//i.test(p)) return; // nmap port or URL
       if (!/[./]/.test(p) && parts.length < 2) return;   // a bare word with no path/size - probably prose
       if (seen[p]) return; seen[p] = true;
       var size = parseInt(parts[1], 10); if (isNaN(size)) size = 0;

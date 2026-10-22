@@ -68,13 +68,21 @@ to it. That is the signal the derivation is trustworthy.
    ever recognize from pasted output."* An `emits` entry ending in `.` is a prefix wildcard
    (`service.` covers `service.mysql`, …).
 
-A move is graded by whether each fact it `produces` is **readable**:
+A declared capability is metadata. It does not demonstrate that a move's output is parsed correctly.
+`capabilityStatus` records whether the signature set declares all, some, or none of the produced facts.
+The parser lens grades the move's own samples separately:
 
-- `verified` — every produced fact is in the capability set (or is environmental / a legitimate
-  action-intent fact / a hand-off). Running it advances the coach.
-- `partial` — some produced facts are unreadable.
-- `gap` — **none** of its produced facts can be read. A write-only move.
-- `noproduce` — an enumeration/terminal move that declares no fact (correct, not a gap).
+- `verified`: real parsing of the sample demonstrates every declared observable result fact.
+- `partial`: the sample demonstrates some result facts, with others still unverified.
+- `unverified`: the available sample demonstrates none of the declared result facts.
+- `nofixture` / `noparser`: a sample or the parser is unavailable; verification has not happened.
+- `parser-error`: sample parsing threw or returned diagnostics; verification did not pass.
+- `noproduce`: a guidance/manual-intent move has no observable parser result to verify.
+
+Only supported observations count. Refuted facts, declarations, hand-off metadata, and expected
+fixture kinds never count as observed proof. Each procedure step is parsed with its own command.
+A verified teaching sample demonstrates that sample only; success/failure families and complete
+state transitions are covered by the parser corpus and behavioral suites, not inferred from this label.
 
 **This set must not drift from the real parsers**, or the lens lies. `node tools/gap-report.js
 --verify` cross-checks it both ways against the actual parsers (static `mkFact('literal')` kinds ∪
@@ -85,7 +93,11 @@ the live fixture corpus run through `OBOL.parsers.parseActionOutput`):
 - *stale emit* — a signature lists a fact no parser mints → the lens would falsely show a move as
   readable. Fix: remove it (and note the real gap it was masking).
 
-`--check` exits non-zero on any unreachable move, missing hand-off, or signature drift — wire it into
+The live corpus verifier checks actual supported/refuted kinds, required values, forbidden conclusions,
+counts, lineage, and parser diagnostics. Missing files and parser failures are reported rather than
+silently skipped. Expected kinds are assertions and are never added to the observed emit set.
+
+`--check` exits non-zero on any unreachable move, missing hand-off, signature drift, or corpus failure. Wire it into
 CI next to the pack/stamp checks.
 
 ---
@@ -146,24 +158,23 @@ SSRF that reaches the instance metadata service already mints a typed `cloud.cre
 parser also keeps the generic `credential.candidate`), and that lead drives a first-class aws-cli
 enumeration / loot / escalation module.
 
-### Current scoreboard (this build)
+### Reading the current scoreboard
 
-`node tools/gap-report.js --check` → `unreachable 0 · missing-handoff 0 · parseGap 0 ·
-parsePartial 0 · signature-drift 0`. 201 moves, 130 with authored fork conditions. Everything that
-blocks an attack chain is closed, every expected technique that lists a module resolves, and every
-move's result is readable. The coverage report now shows 13 gaps on purpose: these are the
-deliberately-seeded beyond-OSCP radar entries (`moves: []` in `coverage-expected.js`) that read red
-until a module is built for them — the regression suites assert every coverage gap is one of these
-seeded entries, never an accident. What else remains is the dead-end review list
-(terminal/observational facts) and 8 orphan parser sub-signals — both benign.
+Run `node tools/gap-report.js --check` for the current counts. The declared-capability check, the
+per-move teaching samples, and the parser corpus measure different things. A clean declared-capability
+check does not mean every move's output has been demonstrated or every success and failure is covered.
+The move-sample status histogram is disjoint; the missing-sample and error totals are also shown as
+subsets of moves whose observable results are not fully verified. Corpus case counts are reported
+separately from move counts. Review each remaining unverified result before claiming coverage.
 
 ### How to close a **parse** gap concretely
 
-A parse gap means a parser is missing. The parsers live in `assets/engine/parsers/*.js`,
-dispatched by command in `parsers/index.js`; `obol-local` is the donor for ported logic. After
-adding/porting a parser: add every fact kind it mints to the matching signature's `emits` in
-`data/parser-signatures.js`, then `node tools/gap-report.js --verify` must show **0 drift** both ways
-and the move should flip to `verified`/`partial`.
+A declared parse gap means a result lacks declared parser support. Inspect the actual parser and a
+representative sample to decide whether the parser or its metadata is missing. Parsers live in
+`assets/engine/parsers/*.js`, dispatched in `parsers/index.js`. Keep their actual result kinds in
+the matching signature's `emits`, and add real samples and corpus assertions for the result, its
+failure modes, and forbidden privilege overclaims. `verified` requires the move's own sample to
+demonstrate all its observable result kinds; adding a signature alone cannot change that grade.
 
 ---
 

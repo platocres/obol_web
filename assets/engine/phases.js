@@ -124,7 +124,7 @@
     var accessLevel = 'none';
     if (has('access.system') || has('access.root') || has('loot.ntds') || has('objective.root_flag')) {
       accessLevel = 'system';
-    } else if (has('access.admin') || has('credential.admin') || has('privesc.sudo_rights')) {
+    } else if (has('access.admin') || has('privesc.sudo_rights')) {
       accessLevel = 'admin';
     } else if (has('foothold.windows') || has('foothold.linux') || has('foothold.webshell') || has('access.shell') || has('access.command_exec')) {
       accessLevel = 'foothold';
@@ -132,7 +132,7 @@
 
     // 2. Credential Tier
     var credTier = 'none';
-    if (has('loot.ntds') || has('hash.krbtgt') || has('credential.admin')) {
+    if (has('loot.ntds') || has('hash.krbtgt')) {
       credTier = 'admin_cred';
     } else if (has('credential.available') || has('credential.validated') || has('credential.plaintext') || has('credential.ntlm_hash')) {
       credTier = 'domain_user';

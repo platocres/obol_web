@@ -230,9 +230,10 @@
   // "Your Box": a reconciliation band + a map of where the arsenal lives on the host (synced face only).
   function hostMap(prof) {
     var A = OBOL.ARSENAL || {};
-    var cache = Object.keys(prof.digests || {});
-    var winCache = cache.filter(function (k) { return A[k] && (A[k].class === 'stage-win'); });
-    var linCache = cache.filter(function (k) { return A[k] && (A[k].class === 'material' || A[k].class === 'stage-lin'); });
+    var allKeys = [], seenKey = {};
+    Object.keys(A).forEach(function (k) { var e = A[k]; if (e && !seenKey[e.key]) { seenKey[e.key] = 1; allKeys.push(e.key); } });
+    var winCache = allKeys.filter(function (k) { return A[k] && (A[k].class === 'stage-win') && isPresent(A[k], prof); });
+    var linCache = allKeys.filter(function (k) { return A[k] && (A[k].class === 'material' || A[k].class === 'stage-lin') && isPresent(A[k], prof); });
     var staged = prof.staged || [];
     var wl = prof.wordlists || {};
     var tools = prof.tools || {};
@@ -258,7 +259,7 @@
 
     // serve context: where the Windows payloads live + the operator's VPN IP (for target-side download lines).
     var wwwdir = prof.wwwdir || '~/.obol/arsenal/www';
-    var lhost = '<lhost>'; try { lhost = ((OBOL.store.active() || {}).params || {}).lhost || '<lhost>'; } catch (e) {}
+    var lhost = '<lhost>'; try { lhost = ((OBOL.store.active() || {}).params || {}).lhost || prof.lhost || '<lhost>'; } catch (e) {}
     var idx = moveIndex();
 
     // hover card for a tool chip: name, colored category, what it's for, example, where used, and (for a
@@ -336,7 +337,7 @@
     var fsRows = node('~/.obol/arsenal/win', winNames.map(winItem), serveHelper)
       + node('~/.obol/arsenal', linCache.map(function (k) { return keyItem(k, '~/.obol/arsenal/' + ((A[k] && A[k].dest) || k)); }))
       + node('~/.local/bin', pipx.map(function (k) { return keyItem(k, (tools[k] && tools[k].path) || ''); }))
-      + node('~/tools', cloned.map(function (k) { return keyItem(k, (prof.cloned && prof.cloned[k]) || (tools[k] && tools[k].path) || ''); }))
+      + node(prof.tooldir || '~/tools', cloned.map(function (k) { return keyItem(k, (prof.cloned && prof.cloned[k]) || (tools[k] && tools[k].path) || ''); }))
       + node('/usr/share/wordlists', Object.keys(wl).map(function (n) { return { label: n, e: null, inv: '', path: wl[n] }; }))
       + node('$PATH · Kali defaults', onPath);
 
@@ -519,9 +520,35 @@
       var text = (box && box.value) || '';
       if (!text.trim()) { if (msg) msg.textContent = 'Paste the script output first.'; return; }
       var r = OBOL.arsenal.ingestInventory(text);
-      if (!r.ok) { if (msg) { msg.textContent = r.reason; msg.className = 'lo-paste-msg err'; } return; }
-      U.toast('Loadout stocked ' + r.present + ' tools, ' + r.staged + ' staged');
-      OBOL.router.render();
+      if (r.ok) {
+        if (OBOL.ingest && OBOL.ingest.ensureParsers && (/={3,}\s*OBOL STEP\s+\d+:/i.test(text) || (OBOL.ingest.splitSession && OBOL.ingest.splitSession(text).some(function (s) { return s && s.command && !/download-loadout|setup-kali/i.test(s.command); })))) {
+          OBOL.ingest.ensureParsers().then(function (okp) {
+            var sRes = okp ? OBOL.ingest.importSession(text, { target: 'auto' }) : null;
+            var extra = (sRes && sRes.added) ? (' + ' + sRes.added + ' fact' + (sRes.added === 1 ? '' : 's') + ' minted') : '';
+            U.toast('Loadout stocked ' + r.present + ' tools, ' + r.staged + ' staged' + extra);
+            OBOL.router.render();
+          });
+          return;
+        }
+        U.toast('Loadout stocked ' + r.present + ' tools, ' + r.staged + ' staged');
+        OBOL.router.render();
+        return;
+      }
+      if (OBOL.ingest && OBOL.ingest.ensureParsers) {
+        OBOL.ingest.ensureParsers().then(function (okp) {
+          var sRes = okp ? OBOL.ingest.importSession(text, { target: 'auto' }) : null;
+          if (sRes && sRes.ok && (sRes.added > 0 || (sRes.workspaceSync && sRes.workspaceSync.ok) || (sRes.targetsImported && sRes.targetsImported.ok))) {
+            if (sRes.workspaceSync && sRes.workspaceSync.ok && !sRes.added) U.toast('Workspace synced: ' + sRes.workspaceSync.confirmed + ' confirmed');
+            else if (sRes.targetsImported && sRes.targetsImported.ok) U.toast((sRes.targetsImported.added || 0) + ' target(s) imported');
+            else U.toast('Minted ' + sRes.added + ' fact' + (sRes.added === 1 ? '' : 's') + ' from paste');
+            OBOL.router.render();
+            return;
+          }
+          if (msg) { msg.textContent = r.reason; msg.className = 'lo-paste-msg err'; }
+        });
+        return;
+      }
+      if (msg) { msg.textContent = r.reason; msg.className = 'lo-paste-msg err'; }
     });
   }
 

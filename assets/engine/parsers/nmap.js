@@ -237,100 +237,38 @@
   }
   C._parse_nmap_script_facts = _parse_nmap_script_facts;
 
+  function xmlAttr(attrs, name) {
+    var m = new RegExp('(?:^|\\s)' + name + '\\s*=\\s*(["\'])([\\s\\S]*?)\\1', 'i').exec(attrs || '');
+    return m ? m[2].replace(/&#(x[0-9a-f]+|[0-9]+);/gi, function (_, n) {
+      var point = n[0].toLowerCase() === 'x' ? parseInt(n.slice(1), 16) : parseInt(n, 10);
+      return point <= 0x10ffff ? String.fromCodePoint(point) : '';
+    }).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&') : '';
+  }
+
   function _parse_nmap_xml(text, ws, source, facts, actionId, command) {
-    text = text || '';
-    // XXE hardening: reject entity DEFINITIONS and a DOCTYPE internal subset (where entities live).
-    // nmap ALWAYS emits a bare `<!DOCTYPE nmaprun>` (no subset), which is inert - allow it, or real
-    // nmap XML never parses. The <nmaprun>...</nmaprun> block extracted below excludes the doctype
-    // anyway, and DOMParser (application/xml) is non-validating and never fetches external DTDs.
-    if (/<!ENTITY/i.test(text) || /<!DOCTYPE[^>]*\[/i.test(text)) return false;
+    if (!/<nmaprun\b/i.test(text || '')) return false;
+    // Never fall back to text parsing of rejected XML or expand an external entity.
+    if (/<!ENTITY/i.test(text) || /<!DOCTYPE[^>]*\[/i.test(text) || text.length > 8000000) return true;
     var block = _NMAPRUN_BLOCK_RE.exec(text);
-    if (!block) return false;
-    var xml = block[0];
-    if (xml.length > 8000000) return false;
-    if (typeof DOMParser === 'undefined') return false; // Node fixture path uses text regexes
-    var doc;
-    try {
-      doc = new DOMParser().parseFromString(xml, 'application/xml');
-      if (doc.getElementsByTagName('parsererror').length) return false;
-    } catch (e) { return false; }
-    var h = 'host:' + ws.target;
-    // The inline coach box tags a paste with the move's OWN suggested command, which may not be what
-    // the operator actually ran. nmap XML carries the real invocation in <nmaprun args="...">, so fold
-    // that into the flag signal - otherwise a `-sC -sV` scan pasted onto the fast-scan move never
-    // proves scan.nmap.version and the coach re-suggests a scan the operator already ran.
-    var nmaprunEl = doc.querySelector('nmaprun');
-    var cmdL = (source + ' ' + (command || '') + ' ' + ((nmaprunEl && nmaprunEl.getAttribute('args')) || '')).toLowerCase();
-
-    var host = doc.querySelector('host');
-    var status = host ? host.querySelector('status') : null;
-    var hostDown = status && status.getAttribute('state') === 'down';
-    if (host && !hostDown) _add(facts, mkFact('host.up', h, { target: ws.target }, S, source));
-
-    var openPorts = {};
-    Array.prototype.forEach.call(doc.querySelectorAll('port'), function (portEl) {
-      var st = portEl.querySelector('state');
-      if (!st || st.getAttribute('state') !== 'open') return;
-      var port = parseInt(portEl.getAttribute('portid'), 10);
-      if (isNaN(port)) return;
-      var proto = (portEl.getAttribute('protocol') || 'tcp').toLowerCase();
-      var value = { port: port, protocol: proto };
-      var svc = portEl.querySelector('service');
-      if (svc) {
-        var name = (svc.getAttribute('name') || '').trim();
-        var version = _clean_version([svc.getAttribute('product'), svc.getAttribute('version'), svc.getAttribute('extrainfo')].filter(Boolean).join(' '));
-        if (name) value.service = name;
-        if (version) value.version = version;
-      }
-      openPorts[port + '/' + proto] = value;
+    if (!block) return true;
+    var xml = block[0], runAttrs = (/<nmaprun\b([^>]*)>/i.exec(xml) || [])[1];
+    var hosts = xml.match(/<host\b[^>]*>[\s\S]*?<\/host>/gi) || [];
+    hosts.forEach(function (host) {
+      var status = /<status\b([^>]*)>/i.exec(host);
+      if (status && xmlAttr(status[1], 'state') === 'down') return;
+      var addresses = host.match(/<address\b[^>]*>/gi) || [], address = '';
+      ['ipv4', 'ipv6'].some(function (type) {
+        return addresses.some(function (el) {
+          if (xmlAttr(el, 'addrtype') !== type) return false;
+          address = xmlAttr(el, 'addr'); return !!address;
+        });
+      });
+      if (!address && hosts.length === 1) address = ws.target;
+      if (!address) return;
+      var hostWs = Object.assign({}, ws, { target: ws.context && ws.context.forceTarget ? ws.target : address });
+      var scriptLines = (host.match(/<script\b[^>]*>/gi) || []).map(function (el) { return xmlAttr(el, 'output'); }).join('\n');
+      _parse_nmap_single('<nmaprun>\n' + host + '\n' + scriptLines, hostWs, source, facts, actionId || '', (command || '') + ' ' + xmlAttr(runAttrs, 'args'));
     });
-
-    var scriptText = Array.prototype.map.call(doc.querySelectorAll('script'), function (el) { return el.getAttribute('output') || ''; }).filter(Boolean).join('\n');
-    var osXmlLines = Array.prototype.map.call(doc.querySelectorAll('osmatch, osclass'), function (el) {
-      var nm = (el.getAttribute('name') || '').trim();
-      if (nm) return 'OS details: ' + nm;
-      var fam = (el.getAttribute('osfamily') || '').trim();
-      var gen = (el.getAttribute('osgen') || '').trim();
-      var combined = [fam, gen].filter(Boolean).join(' ');
-      return combined ? ('OS details: ' + combined) : '';
-    }).filter(Boolean).join('\n');
-    var bannerBlob = [osXmlLines, scriptText].concat(Object.keys(openPorts).map(function (k) { return openPorts[k].version; })).filter(Boolean).join('\n');
-    C._add_os_from_text(bannerBlob, ws, source, facts, 'nmap', 'high', true);
-
-    var summary = [];
-    Object.keys(openPorts).sort().forEach(function (k) {
-      var value = openPorts[k];
-      summary.push(value.port);
-      _add(facts, mkFact('port:' + value.port, h, value, S, source));
-      if (value.service) _add(facts, mkFact('service.' + _normalize_service(value.service), h, value, S, source));
-      _parse_service_reachability(value.port, value.protocol, value.service || '', ws, source, facts);
-    });
-    if (summary.length) {
-      _add(facts, mkFact('ports.open', h, { ports: uniqSortedNums(summary) }, S, source));
-      if (cmdL.indexOf('proxychains') >= 0 || actionId === 'proxychains-nmap-tcp') {
-        _add(facts, mkFact('pivot.ports', h, { ports: uniqSortedNums(summary), via: 'proxychains' }, S, source));
-      }
-    }
-
-    // Scan-profile markers, now that we can also read the CONTENT: a scan that returned service
-    // versions or NSE script output IS a version/script scan, whatever command it was tagged with.
-    var hasVersionInfo = !!scriptText.trim() || Object.keys(openPorts).some(function (k) { return openPorts[k].version; });
-    var hasUdpOpen = Object.keys(openPorts).some(function (k) { return openPorts[k].protocol === 'udp'; });
-    var hasVulnScript = /--script[=\s]+[^\r\n]*vuln/i.test(cmdL) || /\bVULNERABLE:\b|\b(?:http|smb|ssl|ftp|rdp|rmi)-vuln-[a-z0-9-]+/i.test(scriptText);
-    // ANY nmap scan that returned open ports has done the port discovery - mark it so the coach stops
-    // offering a basic port scan after a targeted -p <list> or -sV scan (which never carries -p-).
-    if (summary.length || actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || cmdL.indexOf('-p-') >= 0) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
-    if (actionId.indexOf('version') >= 0 || cmdL.indexOf('-sc') >= 0 || cmdL.indexOf('-sv') >= 0 || hasVersionInfo) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
-    if (actionId.indexOf('udp') >= 0 || cmdL.indexOf('-su') >= 0 || hasUdpOpen) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
-    if (actionId.indexOf('vuln') >= 0 || hasVulnScript) _add(facts, mkFact('scan.nmap.vuln', h, { profile: 'nse-vuln' }, S, source));
-
-    var scriptContext = scriptText.trim() ? _parse_nmap_script_facts(scriptText, ws, source, facts) : {};
-    var tcpPorts = Object.keys(openPorts).map(function (k) { return openPorts[k]; }).filter(function (v) { return v.protocol === 'tcp'; }).map(function (v) { return v.port; });
-    if ([88, 389, 445].every(function (p) { return tcpPorts.indexOf(p) >= 0; }) || _looks_like_ad_ldap(scriptText)) {
-      var value = { ports: [88, 389, 445].filter(function (p) { return tcpPorts.indexOf(p) >= 0; }) };
-      Object.keys(scriptContext).forEach(function (k) { value[k] = scriptContext[k]; });
-      _add(facts, mkFact('ad.dc_candidate', h, value, S, source));
-    }
     return true;
   }
   C._parse_nmap_xml = _parse_nmap_xml;
@@ -344,6 +282,8 @@
   function _parse_nmap_single(text, ws, source, facts, actionId, command) {
     var h = 'host:' + ws.target, srcL = (source + ' ' + (command || '')).toLowerCase();
     var openPorts = {};
+    var snmpOs = /^\s*[|_ ]*description:\s*(Linux\b[^\r\n]*)/im.exec(text);
+    if (snmpOs) C._add_os_observation(facts, ws, source, 'linux', snmpOs[1], 'high', 'nmap-snmp', true);
     var osText = text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '');
     C._add_os_from_text(osText, ws, source, facts, 'nmap', 'high', true);
 
@@ -379,19 +319,15 @@
       }
     }
     if (text.indexOf('<nmaprun') >= 0) {
-      var xmlPortRe = /<port\s+[^>]*?\bprotocol=["'](tcp|udp)["'][^>]*?\bportid=["'](\d{1,5})["'][^>]*?>([\s\S]{0,1500}?)<\/port>/gi, xpm;
+      var xmlPortRe = /<port\b([^>]*)>([\s\S]*?)<\/port>/gi, xpm;
       while ((xpm = xmlPortRe.exec(text)) !== null) {
-        var xProto = xpm[1].toLowerCase(), xPort = parseInt(xpm[2], 10), xBody = xpm[3];
-        if (!/<state\s+[^>]*?\bstate=["']open["']/i.test(xBody)) continue;
+        var xProto = xmlAttr(xpm[1], 'protocol').toLowerCase(), xPort = parseInt(xmlAttr(xpm[1], 'portid'), 10), xBody = xpm[2];
+        if (!/^(tcp|udp)$/.test(xProto) || !xPort || xPort > 65535 || !/<state\s+[^>]*?\bstate=["']open["']/i.test(xBody)) continue;
         var xVal = { port: xPort, protocol: xProto };
         var xSvcM = /<service\b([^>]*?)>/i.exec(xBody);
         if (xSvcM) {
-          var xAttrs = xSvcM[1];
-          var xName = (/name=["']([^"']+)["']/i.exec(xAttrs) || [])[1] || '';
-          var xProd = (/product=["']([^"']+)["']/i.exec(xAttrs) || [])[1] || '';
-          var xVer = (/version=["']([^"']+)["']/i.exec(xAttrs) || [])[1] || '';
-          var xExtra = (/extrainfo=["']([^"']+)["']/i.exec(xAttrs) || [])[1] || '';
-          var xFullVer = _clean_version([xProd, xVer, xExtra].filter(Boolean).join(' '));
+          var xAttrs = xSvcM[1], xName = xmlAttr(xAttrs, 'name');
+          var xFullVer = _clean_version(['product', 'version', 'extrainfo'].map(function (key) { return xmlAttr(xAttrs, key); }).filter(Boolean).join(' '));
           if (xName) xVal.service = xName;
           if (xFullVer) xVal.version = xFullVer;
         }
@@ -406,7 +342,7 @@
       }
     }
 
-    if (/Host is up|Nmap scan report for|Status:\s*Up\b|<status\s+[^>]*?\bstate=["']up["']/i.test(text)) {
+    if (Object.keys(openPorts).length || /Host is up|Status:\s*Up\b|<status\s+[^>]*?\bstate=["']up["']/i.test(text)) {
       var value = { target: ws.target };
       var latency = /Host is up \(([^)]+)\)/i.exec(text);
       if (latency) value.latency = latency[1];
@@ -466,7 +402,7 @@
         var hm = /^\s*Nmap scan report for\s+(?:[^\r\n(]+\((\d{1,3}(?:\.\d{1,3}){3})\)|(\d{1,3}(?:\.\d{1,3}){3})|(\S+))/im.exec(blk);
         if (!hm) { header += blk + '\n'; continue; }
         var bTarget = hm[1] || hm[2] || ws.target;
-        var bWs = Object.assign({}, ws, { target: bTarget });
+        var bWs = Object.assign({}, ws, { target: ws.context && ws.context.forceTarget ? ws.target : bTarget });
         _parse_nmap_single(header + blk, bWs, source, facts, actionId, command);
       }
       return;

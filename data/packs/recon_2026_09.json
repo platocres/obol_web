@@ -1617,6 +1617,11 @@
           "note": "You need SMB 3.1.1; the build must be Win10 1903/1909 or Server 2019 for the compression bug."
         },
         {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u '' -p '' -M smbghost",
+          "note": "NetExec's smbghost module checks SMBv3.1.1 compression negotiation without sending a crash-inducing payload."
+        },
+        {
           "tool": "python",
           "run": "python3 scanner.py {{target}}",
           "note": "The ollypwn SMBGhost scanner prints Vulnerable or Not vulnerable before you risk the exploit."

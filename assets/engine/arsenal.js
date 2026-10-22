@@ -47,12 +47,20 @@
       // pipx + user-local installs land here; put it on PATH now so the inventory probe sees them this run.
       'export PATH="$HOME/.local/bin:$HOME/go/bin:/usr/local/bin:/usr/sbin:/sbin:$PATH"',
       'export PIP_BREAK_SYSTEM_PACKAGES=1',   // PEP 668: tolerate pip on externally-managed Kali/Debian
+      'export GIT_TERMINAL_PROMPT=0',
+      'CURL_OPTS=(-fsSL --connect-timeout 15 --max-time 180 --retry 1)',
+      'SUDO_KEEPALIVE=""',
+      'cleanup(){ [ -n "${SUDO_KEEPALIVE:-}" ] && kill "$SUDO_KEEPALIVE" 2>/dev/null || true; }',
+      'on_interrupt(){ trap - INT TERM EXIT; cleanup; printf "\\n  \\033[1;31m! Interrupted (Ctrl-C) - stopping download-loadout.sh.\\033[0m\\n" >&2; kill 0 2>/dev/null || true; exit 130; }',
+      'trap cleanup EXIT',
+      'trap on_interrupt INT TERM',
+      'check_rc(){ local rc=$1; if [ "$rc" -eq 130 ] || [ "$rc" -eq 143 ]; then on_interrupt; fi; return "$rc"; }',
       // CRITICAL: apt output is suppressed, so any debconf prompt (e.g. krb5-user asking for the default realm)
       // would hang invisibly forever. sudo RESETS the environment, so exporting DEBIAN_FRONTEND is not enough -
       // it must be passed THROUGH sudo via `env`. APT_RUN wraps every apt-get so debconf always takes defaults.
       'export DEBIAN_FRONTEND=noninteractive',
-      'APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)',
-      'APT_RUN(){ $SUDO env DEBIAN_FRONTEND=noninteractive apt-get "$@"; }',
+      'APT_OPTS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=2)',
+      'APT_RUN(){ $SUDO env DEBIAN_FRONTEND=noninteractive apt-get "$@"; check_rc $?; }',
       // optional: a GitHub token lifts the 60/hr anonymous API limit used to resolve release assets.
       'GH_AUTH=(); [ -n "${GITHUB_TOKEN:-}" ] && GH_AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")',
       'SUDO=""; if [ "$(id -u)" -ne 0 ]; then command -v sudo >/dev/null 2>&1 && SUDO="sudo"; fi',
@@ -93,7 +101,7 @@
       'ZBX_EOF',
       '  chmod +x "$HOME/.local/bin/zabbix_get"; say "installed zabbix_get python3 shim -> ~/.local/bin/zabbix_get"; }',
       'obol_apt(){ (have "$2" || python3 -c "import $2" >/dev/null 2>&1) && { skip "$2"; return; }; [ "$CHECK_ONLY" = "1" ] && return; ensure_apt; say "apt $1"; if ! APT_RUN install "${APT_OPTS[@]}" "$1" >/dev/null 2>&1; then if [ "$1" = "zabbix-get" ]; then obol_zabbix_shim; else warn "apt $1 failed"; fi; fi; }',
-      'obol_pipx(){ have "$2" && { skip "$2"; return; }; [ "$CHECK_ONLY" = "1" ] && return; say "pipx $1"; pipx install "$1" >/dev/null 2>&1 || pipx install --force "$1" >/dev/null 2>&1 || warn "pipx $1 failed (try: pipx install $1)"; }',
+      'obol_pipx(){ have "$2" && { skip "$2"; return; }; [ "$CHECK_ONLY" = "1" ] && return; say "pipx $1"; pipx install "$1" >/dev/null 2>&1 || { check_rc $?; pipx install --force "$1" >/dev/null 2>&1 || { check_rc $?; warn "pipx $1 failed (try: pipx install $1)"; }; }; }',
       // locates an existing clone/script in ~/tools, /opt, $HOME, /usr/local, or /usr/share before cloning,
       // then places wrapper shims in ~/.local/bin so tools can run from any directory.
       'obol_git(){ local url="$1" k="$2" bin="${3:-$2}" repo_dir;',
@@ -111,20 +119,26 @@
       '  fi;',
       '  if [ -d "$d" ]; then skip "$k ($d)";',
       '  elif [ "$CHECK_ONLY" = "1" ]; then return;',
-      '  else say "git $k ($repo_dir)"; git clone --depth 1 "$url" "$d" >/dev/null 2>&1 || { warn "clone $k failed"; return; }; fi;',
+      '  else say "git $k ($repo_dir)"; git clone --depth 1 "$url" "$d" >/dev/null 2>&1 || { check_rc $?; warn "clone $k failed"; return; }; fi;',
       '  mkdir -p "$HOME/.local/bin";',
-      '  local target_py; target_py=$(find "$d" -maxdepth 2 -type f -iname "${bare}.py" | head -n1);',
-      '  [ -z "$target_py" ] && target_py=$(find "$d" -maxdepth 2 -type f -iname "$bin" | head -n1);',
+      '  local target_py; target_py=$(find "$d" -maxdepth 3 -type f -iname "${bare}.py" | head -n1);',
+      '  [ -z "$target_py" ] && target_py=$(find "$d" -maxdepth 3 -type f -iname "$bin" | head -n1);',
+      '  if [ -z "$target_py" ] && [ "$k" = "keepass-dump-masterkey" ]; then target_py=$(find "$d" -maxdepth 3 -type f -iname "poc.py" | head -n1); fi;',
       '  if [ -n "$target_py" ]; then',
+      '    local actual_bn actual_bare;',
+      '    actual_bn=$(basename "$target_py"); actual_bare="${actual_bn%.py}";',
       '    printf \'#!/usr/bin/env bash\\nexec python3 "%s" "$@"\\n\' "$target_py" > "$HOME/.local/bin/$bare";',
       '    chmod +x "$HOME/.local/bin/$bare";',
       '    printf \'#!/usr/bin/env bash\\nexec python3 "%s" "$@"\\n\' "$target_py" > "$HOME/.local/bin/${bare}.py";',
       '    chmod +x "$HOME/.local/bin/${bare}.py";',
+      '    for sn in "$bin" "$actual_bn" "$actual_bare"; do',
+      '      [ -n "$sn" ] && [ ! -f "$HOME/.local/bin/$sn" ] && { printf \'#!/usr/bin/env bash\\nexec python3 "%s" "$@"\\n\' "$target_py" > "$HOME/.local/bin/$sn"; chmod +x "$HOME/.local/bin/$sn"; };',
+      '    done;',
       '  fi;',
       '  case "$repo_dir" in',
       '    *CVE-2020-1472*|*zerologon*)',
       '      for zb in zerologon_tester.py set_empty_pw.py reinstall_original_pw.py; do',
-      '        local zf; zf=$(find "$d" -maxdepth 2 -type f -iname "$zb" | head -n1);',
+      '        local zf; zf=$(find "$d" -maxdepth 3 -type f -iname "$zb" | head -n1);',
       '        if [ -n "$zf" ]; then',
       '          printf \'#!/usr/bin/env bash\\nexec python3 "%s" "$@"\\n\' "$zf" > "$HOME/.local/bin/$zb";',
       '          chmod +x "$HOME/.local/bin/$zb";',
@@ -157,7 +171,7 @@
       '  fi;',
       '  return 1; }',
       'obol_gh_urls(){ local repo="$1" rc="$CACHE/.gh_$(printf "%s" "$repo" | tr "/" "_").json";',
-      '  [ -s "$rc" ] || curl -fsSL "${GH_AUTH[@]}" "https://api.github.com/repos/$repo/releases/latest" -o "$rc" 2>/dev/null || rm -f "$rc";',
+      '  [ -s "$rc" ] || curl "${CURL_OPTS[@]}" "${GH_AUTH[@]}" "https://api.github.com/repos/$repo/releases/latest" -o "$rc" 2>/dev/null || { check_rc $?; rm -f "$rc"; };',
       '  [ -s "$rc" ] && grep -oE "https://[^\\"]*" "$rc" || true; }',
       // obol_bin <key> <repo> <asset-regex> <binname> - install-if-missing a standalone release binary to ~/.local/bin.
       'obol_bin(){ local k="$1" repo="$2" re="$3" bn="$4" out="$HOME/.local/bin/$4"; ',
@@ -167,7 +181,7 @@
       '  say "fetch $k ($repo)"; mkdir -p "$HOME/.local/bin"; ',
       '  local url; url=$(obol_gh_urls "$repo" | grep -E "$re" | head -n1); ',
       '  [ -n "$url" ] || { warn "$k: no asset matched /$re/"; return; }; ',
-      '  curl -fsSL "$url" -o "$out" || { warn "fetch $k failed"; return; }; chmod +x "$out"; ',
+      '  curl "${CURL_OPTS[@]}" "$url" -o "$out" || { check_rc $?; warn "fetch $k failed"; return; }; chmod +x "$out"; ',
       '  local h; h=$(sha256sum "$out" | cut -d" " -f1); rec "$k" "$h" "$out"; }',
       '# obol_fetch <key> <url> <dest> [sha256] [extract-member-regex]',
       'obol_fetch(){ local k="$1" u="$2" d="$3" pin="${4:-}" mem="${5:-}" out="$CACHE/$3";',
@@ -175,7 +189,7 @@
       '    [ "$CHECK_ONLY" = "1" ] && return;',
       '    say "fetch $k";',
       '    local tmp; tmp=$(mktemp);',
-      '    if ! curl -fsSL "$u" -o "$tmp"; then rm -f "$tmp"; warn "fetch $k failed"; return; fi;',
+      '    if ! curl "${CURL_OPTS[@]}" "$u" -o "$tmp"; then check_rc $?; rm -f "$tmp"; warn "fetch $k failed"; return; fi;',
       '    case "$u" in',
       '      *.zip) local td; td=$(mktemp -d); unzip -o "$tmp" -d "$td" >/dev/null 2>&1;',
       '        local f; if [ -n "$mem" ]; then f=$(find "$td" -type f | grep -iE "$mem" | head -n1); else f=$(find "$td" -type f -iname "$d" | head -n1); [ -z "$f" ] && f=$(find "$td" -type f | head -n1); fi;',
@@ -196,7 +210,7 @@
       '  say "fetch $k ($repo)";',
       '  local url; url=$(obol_gh_urls "$repo" | grep -E "$re" | head -n1);',
       '  [ -n "$url" ] || { warn "$k: no asset matched /$re/"; return; };',
-      '  local tmp; tmp=$(mktemp); curl -fsSL "$url" -o "$tmp" || { warn "fetch $k failed"; return; };',
+      '  local tmp; tmp=$(mktemp); curl "${CURL_OPTS[@]}" "$url" -o "$tmp" || { check_rc $?; rm -f "$tmp"; warn "fetch $k failed"; return; };',
       '  case "$url" in',
       '    *.zip) local td; td=$(mktemp -d); unzip -o "$tmp" -d "$td" >/dev/null 2>&1;',
       '      local f; if [ -n "$mem" ]; then f=$(find "$td" -type f | grep -iE "$mem" | head -n1); else f=$(find "$td" -type f -iname "$d" | head -n1); [ -z "$f" ] && f=$(find "$td" -type f | head -n1); fi;',
@@ -240,7 +254,7 @@
     out.push('printf "\\n\\033[1mobol arsenal\\033[0m, stocking your box (cache: $CACHE)\\n\\n"');
     // Sudo is used ONLY for apt (base packages + the pipx bootstrap); pipx/git/fetch/stamp all run as you.
     // Prime it once up front so the password is asked now, not mid-download, and keep the ticket warm.
-    out.push('if [ "$CHECK_ONLY" != "1" ] && [ -n "$SUDO" ]; then printf "  apt packages need sudo (you may be prompted for your password once).\\n"; $SUDO -v || warn "sudo unavailable - skipping apt packages; user-space installs will still run."; ( while true; do $SUDO -n true 2>/dev/null; sleep 50; done ) & SUDO_KEEPALIVE=$!; trap \'kill "$SUDO_KEEPALIVE" 2>/dev/null\' EXIT; fi');
+    out.push('if [ "$CHECK_ONLY" != "1" ] && [ -n "$SUDO" ]; then printf "  apt packages need sudo (you may be prompted for your password once).\\n"; $SUDO -v || warn "sudo unavailable - skipping apt packages; user-space installs will still run."; ( while true; do $SUDO -n true 2>/dev/null; sleep 50; done ) >/dev/null 2>&1 </dev/null & SUDO_KEEPALIVE=$!; fi');
     out.push('');
     // bootstrap: a fresh Kali may lack curl/git/unzip or pipx; take it 0->ready (PEP 668-safe, older-tolerant).
     out.push('echo "[prep] base packages + pipx"');
@@ -344,7 +358,7 @@
     out.push('done');
     out.push('[ -z "$SECLISTS_FOUND" ] && SECLISTS_FOUND=$(find /usr/share /opt "$HOME" -maxdepth 3 -type d -iname "seclists" 2>/dev/null | head -n1)');
     out.push('if [ -n "$SECLISTS_FOUND" ]; then skip "seclists ($SECLISTS_FOUND)";');
-    out.push('elif [ "$CHECK_ONLY" != "1" ]; then ensure_apt; say "apt seclists (wordlists for web/DNS/AD)"; APT_RUN install "${APT_OPTS[@]}" seclists >/dev/null 2>&1 || warn "apt seclists failed"; fi');
+    out.push('elif [ "$CHECK_ONLY" != "1" ]; then ensure_apt; say "apt seclists (~1.2 GB wordlist package - downloading & unpacking, please wait...)"; APT_RUN install "${APT_OPTS[@]}" --no-install-recommends seclists || warn "apt seclists failed"; fi');
     out.push('');
     // hashcat needs an OpenCL/CUDA/HIP backend to run AT ALL. A plain Kali VM has no GPU and no CPU OpenCL
     // runtime, so hashcat exits immediately with "clGetPlatformIDs(): CL_PLATFORM_NOT_FOUND_KHR". Install
@@ -353,7 +367,7 @@
     // when there is none.
     out.push('echo "[cracking] hashcat OpenCL backend"');
     out.push('if have hashcat; then');
-    out.push('  HC_I=$(hashcat -I 2>&1 || true);');
+    out.push('  HC_I=$(timeout 10 hashcat -I 2>&1 || true);');
     out.push('  if printf "%s" "$HC_I" | grep -qiE "Backend Device ID" && ! printf "%s" "$HC_I" | grep -qiE "No devices|CL_PLATFORM_NOT_FOUND"; then skip "hashcat backend present";');
     out.push('  elif [ "$CHECK_ONLY" != "1" ]; then ensure_apt; say "pocl (CPU OpenCL so hashcat runs in a VM)";');
     out.push('    APT_RUN install "${APT_OPTS[@]}" pocl-opencl-icd ocl-icd-libopencl1 >/dev/null 2>&1 || warn "pocl install failed, hashcat needs an OpenCL/CUDA runtime (or use john, which needs none)";');
@@ -369,16 +383,17 @@
     out.push('if have evil-winrm; then');
     out.push('  if gem list rubyntlm 2>/dev/null | grep -q "0.6.8"; then skip "rubyntlm 0.6.8+";');
     out.push('  elif [ "$CHECK_ONLY" != "1" ] && gem list rubyntlm 2>/dev/null | grep -q "0.6.7"; then say "rubyntlm 0.6.7 breaks WinRM sealing, installing 0.6.8";');
-    out.push('    $SUDO gem install rubyntlm -v ">= 0.6.8" >/dev/null 2>&1 || gem install --user-install rubyntlm -v ">= 0.6.8" >/dev/null 2>&1 || warn "rubyntlm update failed, run: sudo gem install rubyntlm";');
+    out.push('    $SUDO gem install --no-document rubyntlm -v ">= 0.6.8" >/dev/null 2>&1 || { check_rc $?; gem install --no-document --user-install rubyntlm -v ">= 0.6.8" >/dev/null 2>&1 || { check_rc $?; warn "rubyntlm update failed, run: sudo gem install --no-document rubyntlm"; }; };');
     out.push('  else skip "rubyntlm (not the buggy 0.6.7)"; fi');
     out.push('else skip "evil-winrm not installed"; fi');
     out.push('');
     // the paste-back block: a single OBOL-ARSENAL v1 line obol ingests to learn this box.
     out.push('# ---- paste the block below back into obol (Loadout) ----');
     out.push('emit(){ printf "%s" "$1"; }');
-    out.push('INV=$(python3 - "$REC" "$WWW" <<\'PY\'');
-    out.push('import json,sys,os,shutil,importlib.util');
+    out.push('INV=$(python3 - "$REC" "$WWW" "$TOOLDIR" <<\'PY\'');
+    out.push('import json,sys,os,shutil,importlib.util,subprocess,re');
     out.push('rec,www=sys.argv[1],sys.argv[2]');
+    out.push('tooldir=sys.argv[3] if len(sys.argv)>3 else os.path.expanduser("~/tools")');
     out.push('cache_dir=os.path.dirname(rec) or os.path.expanduser("~/.obol/arsenal")');
     out.push('home=os.path.expanduser("~")');
     out.push('extra_p=[os.path.join(home,".local","bin"),os.path.join(home,"go","bin"),"/usr/local/bin","/usr/sbin","/sbin"]');
@@ -407,7 +422,7 @@
     out.push('            fl = f.lower()');
     out.push('            if fl not in disk_files: disk_files[fl] = os.path.join(dp, f)');
     out.push('        if cur_d >= max_d: dns[:] = []');
-    out.push('for rdir, md in [(os.path.join(home,"tools"),3),("/opt",3),("/usr/share/wordlists",3),("/usr/share/peass",3),("/usr/share/windows-resources",3),("/usr/share/nishang",3),("/usr/local",3),(home,2)]:');
+    out.push('for rdir, md in [(tooldir,3),(os.path.join(home,"tools"),3),("/opt",3),("/usr/share/wordlists",3),("/usr/share/peass",3),("/usr/share/windows-resources",3),("/usr/share/nishang",3),("/usr/local",3),(home,2)]:');
     out.push('    scan_tree(rdir, md)');
     out.push('digests={}; cloned={}');
     out.push('try:');
@@ -440,16 +455,30 @@
     out.push('        for f in os.listdir(sdir):');
     out.push('            if not f.startswith(".") and f!="index.json" and os.path.isfile(os.path.join(sdir,f)) and f not in staged:');
     out.push('                staged.append(f)');
-    out.push('# run-from-repo tools cloned/located are marked present with a runnable invocation:');
+    out.push('# run-from-repo tools cloned/located are marked present with a runnable invocation and per-script paths:');
     out.push('for k,d in cloned.items():');
-    out.push('    if not tools.get(k,{}).get("present"):');
-    out.push('        vs=names.get(k,[k]); inv=vs[0] if vs else k');
-    out.push('        for v in vs:');
-    out.push('            c1=os.path.join(d, v if v.endswith(".py") else v+".py")');
-    out.push('            c2=os.path.join(d, v)');
-    out.push('            if os.path.isfile(c1): inv="python3 "+c1; break');
-    out.push('            if os.path.isfile(c2): inv=("python3 "+c2) if c2.endswith(".py") else c2; break');
-    out.push('        tools[k]={"present":True,"invocation":inv,"path":d,"via":"cloned"}');
+    out.push('    vs=names.get(k,[k]); inv=vs[0] if vs else k; found_script=""; scripts={}');
+    out.push('    want={}; order_list=[]');
+    out.push('    for v in vs:');
+    out.push('        vl=v.lower(); want[vl]=1; order_list.append(vl)');
+    out.push('        if not vl.endswith(".py"): want[vl+".py"]=1; order_list.append(vl+".py")');
+    out.push('    if k=="keepass-dump-masterkey": want["poc.py"]=1; order_list.append("poc.py")');
+    out.push('    for dp, dns, fns in os.walk(d):');
+    out.push('        for fn in fns:');
+    out.push('            fl=fn.lower()');
+    out.push('            if fl in want and fl not in scripts:');
+    out.push('                scripts[fl]=os.path.join(dp, fn)');
+    out.push('                if k=="keepass-dump-masterkey" and fl=="poc.py": scripts.setdefault("keepass_dump_masterkey.py", os.path.join(dp, fn))');
+    out.push('    for cand in order_list:');
+    out.push('        if cand in scripts: found_script=scripts[cand]; break');
+    out.push('    if found_script:');
+    out.push('        inv=("python3 "+found_script) if found_script.lower().endswith(".py") else found_script');
+    out.push('        tools[k]={"present":True,"invocation":inv,"path":found_script,"dir":d,"scripts":scripts,"via":"cloned"}');
+    out.push('    elif not tools.get(k,{}).get("present"):');
+    out.push('        tools[k]={"present":True,"invocation":inv,"path":d,"dir":d,"via":"cloned"}');
+    out.push('    else:');
+    out.push('        tools[k]["dir"]=d');
+    out.push('        if scripts: tools[k]["scripts"]=scripts');
     out.push('wl={}');
     out.push('for rp in ["/usr/share/wordlists/rockyou.txt","/opt/wordlists/rockyou.txt","/opt/lists/rockyou.txt",os.path.join(home,"wordlists","rockyou.txt"),os.path.join(home,"lists","rockyou.txt"),os.path.join(cache_dir,"rockyou.txt"),disk_files.get("rockyou.txt","")]:');
     out.push('    if rp and os.path.isfile(rp): wl["rockyou"]=rp; break');
@@ -457,6 +486,14 @@
     out.push('    if rgz and os.path.isfile(rgz): wl["rockyou-gz"]=rgz; break');
     out.push('for sp in ["/usr/share/seclists","/usr/share/wordlists/seclists","/usr/share/wordlists/SecLists","/opt/SecLists","/opt/seclists",disk_dirs.get("seclists",""),os.path.join(home,"SecLists"),os.path.join(home,"seclists"),os.path.join(home,"tools","SecLists"),os.path.join(home,"wordlists","SecLists")]:');
     out.push('    if sp and os.path.isdir(sp): wl["seclists"]=sp; break');
+    out.push('lhost=""; lhost_iface=""');
+    out.push('try:');
+    out.push('    ip_out=subprocess.check_output(["ip","-4","-o","addr","show"],text=True,stderr=subprocess.DEVNULL,timeout=3)');
+    out.push('    for ln in ip_out.splitlines():');
+    out.push('        m=re.search(r"^\\d+:\\s+(\\S+)\\s+inet\\s+(\\d+\\.\\d+\\.\\d+\\.\\d+)/",ln)');
+    out.push('        if m and m.group(1)!="lo" and re.match(r"^(?:tun|tap|wg|utun|ppp)\\d*",m.group(1)):');
+    out.push('            lhost_iface,lhost=m.group(1),m.group(2); break');
+    out.push('except Exception: pass');
     // best-effort accounting: of everything the script TRIED to provide, what is still not on the box? That is
     // a genuine failure the operator must resolve by hand - emit it so both the terminal and obol can say so.
     out.push('attempts=' + JSON.stringify(installAttempts(A)));
@@ -467,7 +504,7 @@
     out.push('try:');
     out.push('    open(os.path.join(os.path.dirname(rec) or ".", ".missing"),"w").write("".join(k+"\\t"+h+"\\n" for k,h in sorted(missing.items())))');
     out.push('except Exception: pass');
-    out.push('print(json.dumps({"v":1,"tools":tools,"staged":staged,"wwwdir":www,"digests":digests,"cloned":cloned,"wordlists":wl,"missing":missing}))');
+    out.push('print(json.dumps({"v":1,"tools":tools,"staged":staged,"wwwdir":www,"tooldir":tooldir,"cachedir":cache_dir,"lhost":lhost,"lhost_iface":lhost_iface,"digests":digests,"cloned":cloned,"wordlists":wl,"missing":missing}))');
     out.push('PY');
     out.push(')');
     // Informational notes + the best-effort gap report print FIRST, so the copy block is the LAST thing on
@@ -540,20 +577,48 @@
     return obj;
   }
   function profileGet() { try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null'); } catch (e) { return null; } }
+  function syncProfileToEngagement(inv) {
+    if (!inv || typeof inv !== 'object') return;
+    if (OBOL.store && typeof OBOL.store.update === 'function') {
+      try {
+        OBOL.store.update(function (eng) {
+          if (!eng) return;
+          eng.params = eng.params || {};
+          if (inv.lhost && !eng.params.lhost) {
+            eng.params.lhost = inv.lhost;
+            eng.params.lhost_iface = inv.lhost_iface || 'tun0';
+          }
+          if (inv.tooldir && !eng.params.toolsDir) {
+            eng.params.toolsDir = inv.tooldir;
+          }
+        }, 'arsenal-sync');
+      } catch (e) {}
+    }
+    try { if (OBOL.ctxbar && typeof OBOL.ctxbar.render === 'function') OBOL.ctxbar.render(); } catch (e) {}
+    try { if (OBOL.app && typeof OBOL.app.renderSidebar === 'function') OBOL.app.renderSidebar(); } catch (e) {}
+  }
   function profileSet(inv) {
     if (!inv) return null;
     inv.savedAt = Date.now();
     try { localStorage.setItem(PROFILE_KEY, JSON.stringify(inv)); } catch (e) {}
+    syncProfileToEngagement(inv);
     return inv;
   }
   function profileClear() { try { localStorage.removeItem(PROFILE_KEY); } catch (e) {} }
-  // Ingest a raw paste -> store it as the profile. Returns {ok, present, staged, reason}.
+  // Ingest a raw paste -> store it as the profile. Returns {ok, present, staged, wordlists, lhost, lhost_iface, reason}.
   function ingestInventory(text) {
     var inv = parseInventory(text);
     if (!inv) return { ok: false, reason: 'no OBOL-ARSENAL block found in that paste' };
     profileSet(inv);
     var present = 0; Object.keys(inv.tools || {}).forEach(function (k) { if (inv.tools[k] && inv.tools[k].present) present++; });
-    return { ok: true, present: present, staged: (inv.staged || []).length, wordlists: Object.keys(inv.wordlists || {}).length };
+    return {
+      ok: true,
+      present: present,
+      staged: (inv.staged || []).length,
+      wordlists: Object.keys(inv.wordlists || {}).length,
+      lhost: inv.lhost || '',
+      lhost_iface: inv.lhost_iface || ''
+    };
   }
 
   OBOL.arsenal = {

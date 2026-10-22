@@ -205,14 +205,14 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **Root/Admin:** Jenkins Exploitation → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ### `11211` — Memcached
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
-- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `27017` — MongoDB
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
-- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Interactive SMB Share Browsing & File Retrieval → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `1978` — WiFi Mouse Server
 - **Foothold:** Jenkins Exploitation

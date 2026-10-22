@@ -10,7 +10,8 @@
 
   var PARAM_FIELDS = [
     { key: 'target', label: 'Target', ph: '10.10.10.10' },
-    { key: 'domain', label: 'Domain', ph: 'corp.local' },
+    { key: 'domain', label: 'Target domain', ph: 'corp.local' },
+    { key: 'authRealm', label: 'Account realm', ph: 'account domain or local host' },
     { key: 'username', label: 'User', ph: 'administrator' },
     { key: 'password', label: 'Password', ph: '', secret: true },
     { key: 'nthash', label: 'NT hash', ph: '', secret: true },

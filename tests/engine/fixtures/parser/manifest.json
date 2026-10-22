@@ -341,12 +341,13 @@
         "host.os_hint",
         "host.os_family",
         "hash.ntlm",
-        "credential.candidate"
+        "credential.candidate",
+        "credential.available"
       ],
       "expected_facts": [
         {
           "kind": "hash.ntlm",
-          "scope": "domain:corp.local",
+          "scope": "host:10.10.10.10",
           "value_contains": {
             "count": 2,
             "entries": [
@@ -362,6 +363,15 @@
           }
         },
         {
+          "kind": "credential.available",
+          "scope": "host:10.10.10.10",
+          "value_contains": {
+            "user": "Administrator",
+            "accountType": "local",
+            "targetBinding": "10.10.10.10"
+          }
+        },
+        {
           "kind": "credential.candidate",
           "value_contains": {
             "kind": "ntlm_hash",
@@ -372,7 +382,9 @@
       "forbidden_supported_kinds": [
         "loot.ntds",
         "hash.krbtgt",
-        "credential.available",
+        "credential.validated",
+        "credential.admin",
+        "access.admin",
         "credential.plaintext"
       ]
     },
@@ -676,6 +688,7 @@
       "stdout": "outputs/laps_gmsa_material_not_access.txt",
       "expected_supported_kinds": [
         "credential.candidate",
+        "credential.available",
         "credential.ntlm_hash"
       ],
       "expected_facts": [
@@ -688,6 +701,16 @@
           }
         },
         {
+          "kind": "credential.available",
+          "scope": "host:WEB01",
+          "value_contains": {
+            "user": "Administrator",
+            "computer": "WEB01$",
+            "targetBinding": "WEB01",
+            "accountType": "local"
+          }
+        },
+        {
           "kind": "credential.ntlm_hash",
           "scope": "domain:corp.local",
           "value_contains": {
@@ -697,7 +720,8 @@
         }
       ],
       "forbidden_supported_kinds": [
-        "credential.available",
+        "credential.validated",
+        "credential.admin",
         "credential.plaintext",
         "foothold.windows",
         "access.admin",
@@ -769,7 +793,7 @@
       "expected_facts": [
         {"kind": "privesc.kernel_exploit", "value_contains": {"cves": ["CVE-2016-5195", "CVE-2021-3560", "CVE-2021-4034"]}},
         {"kind": "privesc.sudo_binary", "value_contains": {"bin": "tar", "gtfobins_id": "tar", "nopasswd": true}},
-        {"kind": "privesc.capability", "value_contains": {"count": 2}}
+        {"kind": "privesc.capability", "value_contains": {"count": 1, "entries": [{"path": "/usr/bin/python3.8", "capabilities": "cap_setuid+ep"}]}}
       ],
       "forbidden_supported_kinds": [
         "access.admin",

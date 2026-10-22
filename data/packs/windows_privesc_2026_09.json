@@ -1182,7 +1182,6 @@
         "file.nsclient_ini"
       ],
       "produces": [
-        "credential.admin",
         "access.system"
       ],
       "priority": 82,
@@ -1233,8 +1232,7 @@
       ],
       "produces": [
         "credential.candidate",
-        "credential.available",
-        "credential.admin"
+        "credential.available"
       ],
       "priority": 72,
       "phase": "loot",
@@ -1283,8 +1281,7 @@
       ],
       "produces": [
         "credential.candidate",
-        "credential.available",
-        "credential.admin"
+        "credential.available"
       ],
       "priority": 75,
       "phase": "escalate",

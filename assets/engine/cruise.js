@@ -80,6 +80,7 @@
     pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1, flag_path_local: 1 };
 
   function cmdGated(filledCmd) {
+    if (filledCmd && filledCmd.blocked) return true;
     var s = (filledCmd && filledCmd.filled) || '';
     var un = (OBOL.command && OBOL.command.unfilledTokens) ? (OBOL.command.unfilledTokens(s) || []) : [];
     for (var i = 0; i < un.length; i++) { if (GATE_TOKENS[un[i]]) return true; }
@@ -584,6 +585,24 @@
     ].join('\n');
   }
 
+  function validTarget(value) {
+    var target = String(value || '').trim();
+    if (!target || target.length > 253) return false;
+    var ipv4 = /^(\d{1,3}(?:\.\d{1,3}){3})(?:\/(\d{1,2}))?$/.exec(target);
+    if (ipv4) return ipv4[1].split('.').every(function (n) { return Number(n) <= 255; }) && (ipv4[2] === undefined || Number(ipv4[2]) <= 32);
+    if (/^[0-9.\/]+$/.test(target)) return false;
+    if (target.indexOf(':') >= 0) {
+      var v6 = target.split('/'), groups = v6[0].split(':');
+      return v6.length <= 2 && (v6.length === 1 || /^\d{1,3}$/.test(v6[1]) && Number(v6[1]) <= 128)
+        && /^[0-9a-f:]+$/i.test(v6[0]) && groups.length >= 3 && groups.length <= 9
+        && groups.every(function (g) { return g.length <= 4; })
+        && (v6[0].indexOf('::') >= 0 ? v6[0].indexOf('::') === v6[0].lastIndexOf('::') && groups.filter(Boolean).length < 8 : groups.length === 8 && groups.every(Boolean));
+    }
+    return target.replace(/\.$/, '').split('.').every(function (label) {
+      return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label);
+    });
+  }
+
   function buildStageScript(stageId, ctx) {
     ctx = ctx || {};
     var mode = (ctx.mode === 'lab') ? 'lab' : 'exam';
@@ -591,7 +610,8 @@
     var facts = ctx.facts || null;
     var pack = ctx.pack || (OBOL.packs && OBOL.packs.actions && OBOL.packs.actions()) || [];
     var targetRaw = (ctx.target || params.target || '').trim();
-    var targetVal = targetRaw ? shellEsc(targetRaw) : '10.10.10.10';
+    if (!validTarget(targetRaw)) return '';
+    var targetVal = shellEsc(targetRaw);
     var rawDom = params.domain || '';
     if (!rawDom && facts && typeof facts.values === 'function') {
       var domFacts = (facts.values('ad.domain_known') || []).concat(facts.values('host.domain') || []);
@@ -604,7 +624,7 @@
     var rawPass = params.password || '';
     var rawHash = params.nthash || '';
     if (!rawUser && facts && typeof facts.values === 'function') {
-      var credFacts = (facts.values('credential.admin') || []).concat(facts.values('credential.available') || []).concat(facts.values('credential.plaintext') || []);
+      var credFacts = (facts.values('credential.available') || []).concat(facts.values('credential.plaintext') || []);
       for (var ci = 0; ci < credFacts.length; ci++) {
         var cf = credFacts[ci] || {};
         var cu = cf.user || cf.username || '';
@@ -1264,7 +1284,8 @@
     var facts = ctx.facts || null;
     var osFam = ctx.osFamily || detectTargetOs(facts);
     var p = ctx.params || {};
-    var targetVal = markerSafe((p.target || '10.10.10.10').trim()) || '10.10.10.10';
+    if (!validTarget(ctx.target || p.target)) return null;
+    var targetVal = markerSafe(String(ctx.target || p.target).trim());
     var dom = markerSafe(p.domain || '');
     var user = markerSafe(p.user || p.username || '');
     var pass = p.password || '';
@@ -1277,16 +1298,8 @@
         var dv = facts.values('ad.domain_known');
         if (dv.length && dv[0]) dom = markerSafe(dv[0].domain || dv[0].name || '');
       }
-      var adminCreds = (facts.values('credential.admin') || []);
-      var availCreds = (facts.values('credential.available') || []).concat(facts.values('credential.plaintext') || []);
-      var pool = (stageId === 'loot' && adminCreds.length) ? adminCreds.concat(availCreds) : availCreds.concat(adminCreds);
-      if (stageId === 'loot' && adminCreds.length) {
-        // Prefer Administrator / root / admin credential for Stage 4 proof shell
-        var bestAdmin = adminCreds[0];
-        user = markerSafe(bestAdmin.user || bestAdmin.username || user);
-        pass = bestAdmin.password || '';
-        nthash = markerSafe(bestAdmin.nthash || bestAdmin.hash || '');
-      } else if (!user && pool.length) {
+      var pool = (facts.values('credential.available') || []).concat(facts.values('credential.plaintext') || []);
+      if (!user && pool.length) {
         var best = pool[0];
         user = markerSafe(best.user || best.username || '');
         pass = best.password || '';
@@ -1366,7 +1379,9 @@
     ctx = ctx || {};
     var facts = ctx.facts || null;
     var osFam = ctx.osFamily || detectTargetOs(facts);
-    var targetVal = markerSafe(((ctx.params && ctx.params.target) || '10.10.10.10').trim()) || '10.10.10.10';
+    var targetRaw = ctx.target || (ctx.params && ctx.params.target) || '';
+    if (!validTarget(targetRaw)) return '';
+    var targetVal = markerSafe(String(targetRaw).trim());
     if (stageId === 'foothold') {
       if (osFam === 'windows') {
         return 'cmd /c "echo ===== OBOL STEP 1: flag-hunt-windows whoami ipconfig ' + targetVal + ' ===== & whoami & hostname & ipconfig & (for /r C:\\Users %F in (local.txt user.txt) do @if exist \\"%F\\" (echo ===FLAG:%F:: & type \\"%F\\" & echo.)) & echo ===== OBOL STEP 2: windows-enum systeminfo whoami /all ' + targetVal + ' ===== & ver & systeminfo & whoami /all & cmdkey /list & echo ===== OBOL STEP 3: local-windows-interfaces ipconfig /all route print arp -a ' + targetVal + ' ===== & route print & arp -a & netstat -ano"';
@@ -1431,7 +1446,6 @@
       }
 
       var rawCreds = (facts.values('credential.available') || [])
-        .concat(facts.values('credential.admin') || [])
         .concat(facts.values('credential.plaintext') || []);
       var seenUsers = {};
       var uniqueUsers = [];
@@ -1780,6 +1794,7 @@
     manualCheckpoints: manualCheckpoints,
     planStages: planStages,
     buildStageScript: buildStageScript,
+    validTarget: validTarget,
     buildStageOneLiner: buildStageOneLiner,
     buildHostShellAccess: buildHostShellAccess,
     summarizeHandoff: summarizeHandoff,

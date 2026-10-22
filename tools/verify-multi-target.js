@@ -85,7 +85,7 @@ const eng = {
     domain: 'lab.local'
   },
   targets: [
-    { id: 't-1', ip: '10.10.11.41', hostname: 'DC01', os: 'Windows' },
+    { id: 't-1', ip: '10.10.11.41', hostname: 'DC01', os: 'Windows', domain: 'lab.local' },
     { id: 't-2', ip: '10.10.11.42', hostname: 'WEB01', os: 'Linux' }
   ],
   facts: [
@@ -125,7 +125,7 @@ assert(fsA.has('ad.domain_known') === true, 'Target A inherits domain:lab.local 
 assert(fsB.has('port:80') === true, 'Target B has port:80');
 assert(fsB.has('port:445') === false, 'Target B does NOT have port:445 (isolated from A)');
 assert(fsB.has('http.reachable') === true, 'Target B has http.reachable');
-assert(fsB.has('ad.domain_known') === true, 'Target B inherits domain:lab.local fact');
+assert(fsB.has('ad.domain_known') === false, 'Target B without proven domain membership does not inherit domain facts');
 
 // Test 3: Command Context & Templating
 const testCmd = { run: 'nmap -sC -sV -p {{nmap_ports}} {{target}}' };

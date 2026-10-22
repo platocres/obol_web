@@ -103,7 +103,10 @@
   }
   function parseBulkInput(text, lhost) {
     text = String(text || '');
-    var hasScanOutput = /Nmap scan report for|<nmaprun\b|^\s*\d+\/(?:tcp|udp)\s+open\b|\bPorts:\s+\d+\/open\//im.test(text);
+    var isNmapScan = /Nmap scan report for|<nmaprun\b|^\s*\d+\/(?:tcp|udp)\s+open\b|\bPorts:\s+\d+\/open\//im.test(text);
+    var isOtherToolScan = /^\s*(?:SMB|WINRM|SSH|LDAP|WMI|MSSQL|RDP|FTP)\s+(?:\d{1,3}\.){3}\d{1,3}\s+\d+\b|={3,}\s*OBOL STEP\s+\d+:|\benum4linux\b|Discovered open port\s+\d+\/|(?:\d{1,3}\.){3}\d{1,3}\s+is alive/im.test(text)
+      || !!(OBOL.ingest && typeof OBOL.ingest.recognizesTool === 'function' && OBOL.ingest.recognizesTool('', text));
+    var hasScanOutput = isNmapScan || isOtherToolScan;
     var hostMap = {};
     var scanIps = [], scanIpSeen = {};
     function pushScanIp(ip, hn) {
@@ -128,6 +131,14 @@
       var mGrep = /Host:\s+((?:\d{1,3}\.){3}\d{1,3})\s+\(([^)]*)\)/i.exec(line);
       if (mGrep) {
         pushScanIp(mGrep[1], cleanHostToken(mGrep[2]));
+        return;
+      }
+      var mNxc = /^\s*(?:SMB|WINRM|SSH|LDAP|WMI|MSSQL|RDP|FTP)\s+((?:\d{1,3}\.){3}\d{1,3})\s+\d+\s+([^\s\[*+-]+)/i.exec(line);
+      if (mNxc) {
+        var nxcHn = cleanHostToken(mNxc[2]);
+        var mDom = /\(domain:([^)\s]+)\)/i.exec(line);
+        if (nxcHn && mDom && nxcHn.indexOf('.') < 0 && mDom[1].indexOf('.') > 0) nxcHn = nxcHn + '.' + mDom[1];
+        pushScanIp(mNxc[1], nxcHn);
         return;
       }
       // /etc/hosts or "<ip> <hostname>" or "<hostname> <ip>" on a simple non-scan line
@@ -228,6 +239,13 @@
       if (!okp || !OBOL.ingest.run) { if (doneCb) doneCb(0); return; }
       var totalAdded = 0;
       var raw = String(text || '');
+      var isPureNmap = /Nmap scan report for|<nmaprun\b|^\s*\d+\/(?:tcp|udp)\s+open\b|\bPorts:\s+\d+\/open\//im.test(raw)
+        && !/={3,}\s*OBOL STEP\s+\d+:/i.test(raw);
+      if (!isPureNmap && OBOL.ingest.importSession) {
+        var sRes = OBOL.ingest.importSession(raw, { target: defaultIp || 'auto' });
+        if (doneCb) doneCb((sRes && sRes.added) || 0, sRes);
+        return;
+      }
       var reportChunks = raw.split(/(?=^Nmap scan report for\b)/im);
       var hostBlocks = [];
       if (reportChunks.length > 1) {
@@ -262,10 +280,32 @@
   }
 
   function importBulkTargets(text, doneCb) {
+    if (/OBOL-ARSENAL|OBOL-WS-SNAPSHOT/i.test(String(text || '')) && OBOL.ingest && OBOL.ingest.ensureParsers) {
+      OBOL.ingest.ensureParsers().then(function (okp) {
+        var sRes = (okp && OBOL.ingest.importSession) ? OBOL.ingest.importSession(text, { target: 'auto' }) : OBOL.ingest.run({ text: text });
+        if (sRes && sRes.ok && ((sRes.arsenal && sRes.arsenal.ok) || (sRes.workspaceSync && sRes.workspaceSync.ok) || sRes.added > 0)) {
+          if (doneCb) doneCb({ ok: true, added: (sRes.hosts || []).length, updated: 0, cidrs: 0, scanFacts: sRes.added || 0, arsenal: sRes.arsenal, workspaceSync: sRes.workspaceSync });
+          return;
+        }
+        if (doneCb) doneCb({ ok: false, added: 0, updated: 0 });
+      });
+      return;
+    }
     var eng = OBOL.store.active() || {};
     var lhost = (eng.params && eng.params.lhost) || '';
     var parsed = parseBulkInput(text, lhost);
     if (!parsed.hosts.length && !parsed.cidrs.length) {
+      if (OBOL.ingest && OBOL.ingest.ensureParsers) {
+        OBOL.ingest.ensureParsers().then(function (okp) {
+          var sRes = (okp && OBOL.ingest.importSession) ? OBOL.ingest.importSession(text, { target: 'auto' }) : null;
+          if (sRes && sRes.ok && (sRes.added > 0 || (sRes.arsenal && sRes.arsenal.ok) || (sRes.workspaceSync && sRes.workspaceSync.ok))) {
+            if (doneCb) doneCb({ ok: true, added: (sRes.hosts || []).length, updated: 0, cidrs: 0, scanFacts: sRes.added || 0, arsenal: sRes.arsenal, workspaceSync: sRes.workspaceSync });
+            return;
+          }
+          if (doneCb) doneCb({ ok: false, added: 0, updated: 0 });
+        });
+        return;
+      }
       if (doneCb) doneCb({ ok: false, added: 0, updated: 0 });
       return;
     }
@@ -739,13 +779,14 @@
     if (p) {
       var stagedN = (p.staged || []).length;
       var wlN = Object.keys(p.wordlists || {}).length;
+      var vpnStr = p.lhost ? (' · VPN ' + (p.lhost_iface || 'tun0') + ': ' + p.lhost) : '';
       var syncStr = p.savedAt ? (' · Synced ' + ago(p.savedAt)) : '';
       return '<div class="lo-strip lo-strip-ok eng-lo-strip">'
         + '<span class="lo-strip-ico">✓</span>'
         + '<span class="lo-strip-txt"><strong>Attack Box Loadout Stocked</strong> · ' + ready + '/' + total + ' tools ready'
         + (stagedN ? (', ' + stagedN + ' payloads staged') : '')
         + (wlN ? (', ' + wlN + ' wordlists') : '')
-        + esc(syncStr) + '</span>'
+        + esc(vpnStr + syncStr) + '</span>'
         + '<a class="lo-strip-go" href="#/loadout">Manage Loadout &rarr;</a>'
         + '</div>';
     }
@@ -1250,12 +1291,18 @@
       + '<textarea id="eng-scope" class="ev-textarea ws-clear-box" style="min-height:84px" placeholder="10.10.10.10 dc01.corp.local&#10;10.10.10.20 sql01.corp.local&#10;10.10.10.0/24"></textarea></label>'
       + '<div class="eng-box-settings ws-clear-box">'
       + '  <div class="eng-box-settings-h"><span>4. Box &amp; Workspace Context</span><span class="muted small">Optional - defaults to ~/engagements/&lt;name&gt; and auto-learns tun0 from prompts</span></div>'
-      + '  <div class="eng-row3">'
-      + '    <label class="eng-field"><span>Working Directory (Kali)</span><input id="eng-workdir" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
-      + '    <label class="eng-field"><span>Your VM IP (LHOST)</span><input id="eng-lhost" autocomplete="off" spellcheck="false" inputmode="decimal" placeholder="e.g. 10.10.14.9"></label>'
-      + '    <label class="eng-field"><span>Interface</span><select id="eng-iface">'
-      +      ['tun0', 'tun1', 'tap0', 'eth0', 'wlan0', 'vpn0', 'wg0'].map(function (i) { return '<option value="' + i + '"' + (i === 'tun0' ? ' selected' : '') + '>' + i + '</option>'; }).join('')
-      + '    <option value="">other / none</option></select></label>'
+      + (function () {
+          var arP = null; try { arP = JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) {}
+          var actP = ((OBOL.store.active() || {}).params) || {};
+          var defLh = actP.lhost || (arP && arP.lhost) || '';
+          var defIf = actP.lhost_iface || (arP && arP.lhost_iface) || 'tun0';
+          return '  <div class="eng-row3">'
+            + '    <label class="eng-field"><span>Working Directory (Kali)</span><input id="eng-workdir" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
+            + '    <label class="eng-field"><span>Your VM IP (LHOST)</span><input id="eng-lhost" value="' + U.attr(defLh) + '" autocomplete="off" spellcheck="false" inputmode="decimal" placeholder="e.g. 10.10.14.9"></label>'
+            + '    <label class="eng-field"><span>Interface</span><select id="eng-iface">'
+            +      ['tun0', 'tun1', 'tap0', 'eth0', 'wlan0', 'vpn0', 'wg0'].map(function (i) { return '<option value="' + i + '"' + (i === defIf ? ' selected' : '') + '>' + i + '</option>'; }).join('')
+            + '    <option value="">other / none</option></select></label>';
+        })()
       + '    <label class="eng-field"><span>Attack Workflow</span><select id="eng-wf">' + workflowOptions(prof.workflow || '') + '</select></label>'
       + '  </div>'
       + '</div>'
@@ -1414,6 +1461,8 @@
         }
         _showBulkTarget = false;
         var parts = [];
+        if (res.arsenal && res.arsenal.ok) parts.push('Loadout stocked (' + res.arsenal.present + ' tools)');
+        if (res.workspaceSync && res.workspaceSync.ok) parts.push('Workspace synced (' + res.workspaceSync.confirmed + ' confirmed)');
         if (res.added) parts.push(res.added + ' target' + (res.added === 1 ? '' : 's') + ' added');
         if (res.updated) parts.push(res.updated + ' updated');
         if (res.scanFacts) parts.push(res.scanFacts + ' scan fact' + (res.scanFacts === 1 ? '' : 's') + ' minted');
@@ -1476,9 +1525,35 @@
       ensureArsenal().then(function () {
         if (!OBOL.arsenal || !OBOL.arsenal.ingestInventory) { U.toast('Arsenal module still loading, try again', 'err'); return; }
         var r = OBOL.arsenal.ingestInventory(text);
-        if (!r.ok) { if (msg) { msg.textContent = r.reason; msg.className = 'lo-paste-msg eng-lo-msg err'; } return; }
-        U.toast('Loadout stocked ' + r.present + ' tools, ' + r.staged + ' staged');
-        OBOL.router.render();
+        if (r.ok) {
+          if (OBOL.ingest && OBOL.ingest.ensureParsers && (/={3,}\s*OBOL STEP\s+\d+:/i.test(text) || (OBOL.ingest.splitSession && OBOL.ingest.splitSession(text).some(function (s) { return s && s.command && !/download-loadout|setup-kali/i.test(s.command); })))) {
+            OBOL.ingest.ensureParsers().then(function (okp) {
+              var sRes = okp ? OBOL.ingest.importSession(text, { target: 'auto' }) : null;
+              var extra = (sRes && sRes.added) ? (' + ' + sRes.added + ' fact' + (sRes.added === 1 ? '' : 's') + ' minted') : '';
+              U.toast('Loadout stocked ' + r.present + ' tools, ' + r.staged + ' staged' + extra);
+              OBOL.router.render();
+            });
+            return;
+          }
+          U.toast('Loadout stocked ' + r.present + ' tools, ' + r.staged + ' staged');
+          OBOL.router.render();
+          return;
+        }
+        if (OBOL.ingest && OBOL.ingest.ensureParsers) {
+          OBOL.ingest.ensureParsers().then(function (okp) {
+            var sRes = okp ? OBOL.ingest.importSession(text, { target: 'auto' }) : null;
+            if (sRes && sRes.ok && (sRes.added > 0 || (sRes.workspaceSync && sRes.workspaceSync.ok) || (sRes.targetsImported && sRes.targetsImported.ok))) {
+              if (sRes.workspaceSync && sRes.workspaceSync.ok && !sRes.added) U.toast('Workspace synced: ' + sRes.workspaceSync.confirmed + ' confirmed');
+              else if (sRes.targetsImported && sRes.targetsImported.ok) U.toast((sRes.targetsImported.added || 0) + ' target(s) imported');
+              else U.toast('Minted ' + sRes.added + ' fact' + (sRes.added === 1 ? '' : 's') + ' from paste');
+              OBOL.router.render();
+              return;
+            }
+            if (msg) { msg.textContent = r.reason; msg.className = 'lo-paste-msg eng-lo-msg err'; }
+          });
+          return;
+        }
+        if (msg) { msg.textContent = r.reason; msg.className = 'lo-paste-msg eng-lo-msg err'; }
       });
     });
 
@@ -1664,8 +1739,26 @@
     // Paste-back workspace snapshot sync
     U.on(mount, 'click', '.ws-sync-run', function () {
       var ta = document.getElementById('ws-sync-paste');
-      var entries = OBOL.vfs.parseSnapshot(ta ? ta.value : '');
-      if (!entries.length) { U.toast('No file list found in that paste', 'err'); return; }
+      var text = ta ? ta.value : '';
+      var entries = OBOL.vfs.parseSnapshot(text);
+      if (!entries.length) {
+        if (OBOL.ingest && OBOL.ingest.ensureParsers && text.trim()) {
+          OBOL.ingest.ensureParsers().then(function (okp) {
+            var sRes = (okp && OBOL.ingest.importSession) ? OBOL.ingest.importSession(text, { target: 'auto' }) : null;
+            if (sRes && sRes.ok && (sRes.added > 0 || (sRes.arsenal && sRes.arsenal.ok) || (sRes.targetsImported && sRes.targetsImported.ok))) {
+              if (sRes.arsenal && sRes.arsenal.ok && !sRes.added) U.toast('Loadout stocked ' + sRes.arsenal.present + ' tools, ' + sRes.arsenal.staged + ' staged');
+              else if (sRes.targetsImported && sRes.targetsImported.ok) U.toast((sRes.targetsImported.added || 0) + ' target(s) imported');
+              else U.toast('Minted ' + sRes.added + ' fact' + (sRes.added === 1 ? '' : 's') + ' from paste');
+              OBOL.router.render();
+              return;
+            }
+            U.toast('No file list found in that paste', 'err');
+          });
+          return;
+        }
+        U.toast('No file list found in that paste', 'err');
+        return;
+      }
       var r = OBOL.vfs.reconcile(OBOL.store.active(), entries);
       OBOL.store.update(function (e) { e.workspace = e.workspace || {}; e.workspace.overrides = r.overrides; }, 'ws-sync');
       OBOL.router.render();

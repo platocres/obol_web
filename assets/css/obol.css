@@ -3651,8 +3651,12 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 /* parser-coverage lens: recolor each move by whether obol can read its result */
 .dt-stage[data-lens="parser"] .dt-node.parse-verified .dt-box { stroke: var(--green); fill: color-mix(in srgb, var(--green) 13%, var(--surf2)); }
 .dt-stage[data-lens="parser"] .dt-node.parse-partial  .dt-box { stroke: var(--yellow); fill: color-mix(in srgb, var(--yellow) 13%, var(--surf2)); }
-.dt-stage[data-lens="parser"] .dt-node.parse-gap      .dt-box { stroke: var(--red); fill: color-mix(in srgb, var(--red) 15%, var(--surf2)); stroke-width: 2; }
-.dt-stage[data-lens="parser"] .dt-node.parse-noproduce .dt-box { stroke: var(--line-hot); fill: var(--surf2); stroke-dasharray: 3 3; }
+.dt-stage[data-lens="parser"] .dt-node.parse-gap .dt-box,
+.dt-stage[data-lens="parser"] .dt-node.parse-parser-error .dt-box { stroke: var(--red); fill: color-mix(in srgb, var(--red) 15%, var(--surf2)); stroke-width: 2; }
+.dt-stage[data-lens="parser"] .dt-node.parse-noproduce .dt-box,
+.dt-stage[data-lens="parser"] .dt-node.parse-unverified .dt-box,
+.dt-stage[data-lens="parser"] .dt-node.parse-nofixture .dt-box,
+.dt-stage[data-lens="parser"] .dt-node.parse-noparser .dt-box { stroke: var(--line-hot); fill: var(--surf2); stroke-dasharray: 3 3; }
 .dt-stage[data-lens="parser"] .dt-node.dt-port .dt-box,
 .dt-stage[data-lens="parser"] .dt-node.dt-scan .dt-box { stroke: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 
@@ -3671,8 +3675,8 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 .dth-parse { margin-top: 7px; font-family: var(--mono); font-size: 11px; font-weight: 800; letter-spacing: .02em; padding: 3px 7px; border-radius: 6px; display: inline-block; }
 .dth-parse.parse-verified { color: color-mix(in srgb, var(--green) 72%, var(--text)); background: color-mix(in srgb, var(--green) 15%, transparent); }
 .dth-parse.parse-partial  { color: color-mix(in srgb, var(--yellow) 68%, var(--text)); background: color-mix(in srgb, var(--yellow) 15%, transparent); }
-.dth-parse.parse-gap      { color: color-mix(in srgb, var(--red) 75%, var(--text)); background: color-mix(in srgb, var(--red) 16%, transparent); }
-.dth-parse.parse-noproduce { color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
+.dth-parse.parse-gap,.dth-parse.parse-parser-error { color: color-mix(in srgb, var(--red) 75%, var(--text)); background: color-mix(in srgb, var(--red) 16%, transparent); }
+.dth-parse.parse-noproduce,.dth-parse.parse-unverified,.dth-parse.parse-nofixture,.dth-parse.parse-noparser { color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
 .dth-looks { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--text-2); font-style: italic; }
 .dth-open { margin-top: 7px; font-family: var(--mono); font-size: 11px; color: var(--accent-2); font-weight: 700; }
 
@@ -3684,8 +3688,8 @@ main#view:has(.study-map) { max-width: 1600px; margin-inline: auto; }
 .dt-lg-handoff::before { background: color-mix(in srgb, var(--purple) 70%, var(--line)); }
 .dt-lg.parse-verified::before { background: var(--green); }
 .dt-lg.parse-partial::before { background: var(--yellow); }
-.dt-lg.parse-gap::before { background: var(--red); }
-.dt-lg.parse-noproduce::before { background: transparent; border: 1.5px dashed var(--line-hot); }
+.dt-lg.parse-gap::before,.dt-lg.parse-parser-error::before { background: var(--red); }
+.dt-lg.parse-noproduce::before,.dt-lg.parse-unverified::before { background: transparent; border: 1.5px dashed var(--line-hot); }
 
 /* ============================================================================
    ENGAGEMENT SURFACES - accessibility + neon accent pass

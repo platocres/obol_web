@@ -23,6 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import vm from 'node:vm';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -182,13 +183,22 @@ for (const d of PRUNE_AFTER_BUILD) { const p = path.join(STAGE, d); if (fs.exist
 
 // 5) gate — scan the finished tree
 const hits = [];
+const syntaxHits = [];
 (function walk(dir) {
   for (const name of fs.readdirSync(dir)) {
     const p = path.join(dir, name), rel = path.relative(STAGE, p);
     if (fs.statSync(p).isDirectory()) { if (name !== '.git') walk(p); continue; }
     if (!isText(rel)) continue;
-    const lines = fs.readFileSync(p, 'utf8').split('\n');
-    lines.forEach((ln, i) => {
+    const content = fs.readFileSync(p, 'utf8');
+    // Scripts must still PARSE. The scrub rules rewrite raw text and can corrupt code that happens to
+    // match a lineage keyword (e.g. a variable named `derived`), so a broken publish fails here rather
+    // than shipping silently. This catches syntax breaks, not semantic ones, so prefer naming code away
+    // from the scrub keywords (ported/adapted/derived/parity/mirror*/emulat*/harvest*).
+    if (/\.(?:js|mjs|cjs)$/i.test(rel)) {
+      try { new vm.Script(content, { filename: rel }); }
+      catch (err) { syntaxHits.push({ rel, message: (err && err.message) || String(err) }); }
+    }
+    content.split('\n').forEach((ln, i) => {
       for (const [label, re] of FORBIDDEN) {
         if (re.test(ln)) hits.push({ rel, line: i + 1, label, text: ln.trim().slice(0, 140) });
       }
@@ -204,17 +214,22 @@ console.log(`overrides : ${overrode} curated file(s) swapped in (tools/publish/o
 console.log(`dropped   : ${denied} private/provenance files (${DENY.join(', ')})`);
 console.log(`pruned    : ${pruned} build-only dir(s) after build (${PRUNE_AFTER_BUILD.join(', ')})`);
 console.log(`gate      : ${hits.length ? hits.length + ' FORBIDDEN TOKEN(S) STILL PRESENT' : 'CLEAN — no forbidden tokens'}`);
+console.log(`syntax    : ${syntaxHits.length ? syntaxHits.length + ' SCRIPT(S) FAIL TO PARSE' : 'CLEAN - all scripts parse'}`);
+if (syntaxHits.length) {
+  console.log('\n--- scripts that no longer parse (scrub corrupted code) ---');
+  for (const h of syntaxHits) console.log(`  ${h.rel}: ${h.message}`);
+}
 if (hits.length) {
   console.log('\n--- remaining hits (must be fixed before publishing) ---');
   for (const h of hits.slice(0, 200)) console.log(`  ${h.rel}:${h.line}  [${h.label}]  ${h.text}`);
   if (hits.length > 200) console.log(`  … and ${hits.length - 200} more`);
 }
 
-if (PUBLISH_TO && hits.length) {
-  console.error('\nRefusing to publish: gate is not clean.');
+if (PUBLISH_TO && (hits.length || syntaxHits.length)) {
+  console.error('\nRefusing to publish: ' + (hits.length ? 'gate is not clean' : 'scripts fail to parse') + '.');
   process.exit(1);
 }
-if (PUBLISH_TO && !hits.length) {
+if (PUBLISH_TO && !hits.length && !syntaxHits.length) {
   // mirror staged tree into the target checkout, preserving its .git
   for (const name of fs.readdirSync(PUBLISH_TO)) { if (name !== '.git') rmrf(path.join(PUBLISH_TO, name)); }
   (function copyTree(from, to) {
@@ -226,4 +241,4 @@ if (PUBLISH_TO && !hits.length) {
   })(STAGE, PUBLISH_TO);
   console.log(`\nSynced clean tree into ${PUBLISH_TO} (commit + push done separately).`);
 }
-process.exit(hits.length && PUBLISH_TO ? 1 : 0);
+process.exit((hits.length || syntaxHits.length) && PUBLISH_TO ? 1 : 0);

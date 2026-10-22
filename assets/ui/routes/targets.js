@@ -241,10 +241,19 @@
       btn.disabled = true;
       OBOL.targets.importBulk(text, function (res) {
         btn.disabled = false;
-        if (res && res.ok) {
-          _showBulk = false;
-          OBOL.router.render();
+        if (!res || !res.ok) {
+          U.toast('No valid target IPs or CIDRs found in that paste', 'err');
+          return;
         }
+        _showBulk = false;
+        var parts = [];
+        if (res.arsenal && res.arsenal.ok) parts.push('Loadout stocked (' + res.arsenal.present + ' tools)');
+        if (res.workspaceSync && res.workspaceSync.ok) parts.push('Workspace synced (' + res.workspaceSync.confirmed + ' confirmed)');
+        if (res.added) parts.push(res.added + ' target' + (res.added === 1 ? '' : 's') + ' added');
+        if (res.updated) parts.push(res.updated + ' updated');
+        if (res.scanFacts) parts.push(res.scanFacts + ' scan fact' + (res.scanFacts === 1 ? '' : 's') + ' minted');
+        U.toast(parts.join(', ') || 'Scope updated');
+        OBOL.router.render();
       });
     });
 

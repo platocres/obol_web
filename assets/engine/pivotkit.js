@@ -1,7 +1,7 @@
 /*!
  * obol engine - pivotkit.js - the Pivot Station (OBOL.pivotkit). Pure, Node-safe, tested.
  *
- * Ports obol-local's TRANSPORT_HALVES: for each tunnel transport, which half runs LOCALLY (on your Kali
+ * Ports obol's TRANSPORT_HALVES: for each tunnel transport, which half runs LOCALLY (on your Kali
  * box) and which runs ON THE TARGET. obol writes BOTH halves, filled from the engagement (your LHOST,
  * the foothold host, the discovered internal subnet, any SSH credential); you run the local .sh and
  * paste the on-host one-liner onto the target. obol never touches the target. Transport is auto-chosen

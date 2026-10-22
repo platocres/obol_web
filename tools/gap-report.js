@@ -4,15 +4,15 @@
  *
  * Loads the real engine + packs + parsers + the decision-map data, then prints the three gap lenses:
  *   COVERAGE  — a technique the expected-coverage oracle lists for a port, with no backing move.
- *   PARSE     — a move whose produced fact(s) no parser can read (running it never advances the coach).
+ *   PARSE: declared parser support, reported separately from actual per-move sample observations.
  *   WIRING    — a move that can never become ready (a requirement nothing produces/parses/hands over),
  *               plus a dead-end review list and truly-orphan parser facts.
- * Plus fork-condition coverage, and (--verify) a drift check that the authored PARSER_SIGNATURES emit
- * set matches what the parsers actually mint (static mkFact literals ∪ the live parser corpus).
+ * Plus fork-condition coverage, and (--verify) real corpus assertions and a comparison of authored
+ * PARSER_SIGNATURES with source-declared and actually observed emits.
  *
  * Run:  node tools/gap-report.js            (full report)
  *       node tools/gap-report.js --verify   (also cross-check signatures vs real parsers)
- *       node tools/gap-report.js --check     (exit 1 on a hard problem: unreachable move or signature drift)
+ *       node tools/gap-report.js --check    (exit 1 on unreachable moves, missing hand-offs, missing signature emits, or corpus failure)
  */
 'use strict';
 var fs = require('fs'), path = require('path');
@@ -40,14 +40,18 @@ function list(arr, fmt) { if (!arr.length) { console.log('  (none)'); return; } 
 
 console.log('OBOL decision-map gap report — ' + gr.counts.moves + ' moves');
 console.log(JSON.stringify(gr.counts));
+console.log('Fixture status totals: ' + gr.parse.verified.length + ' fully demonstrated, ' + gr.parse.unverified.length
+  + ' not fully demonstrated, ' + ((gr.parse.statusCounts || {}).noproduce || 0) + ' without observable output proof.');
+console.log('Missing samples (' + gr.parse.missingFixture.length + ') and parser errors (' + gr.parse.errors.length
+  + ') are subsets of not fully demonstrated, not additional moves. Signature declarations are reported separately.');
 
 hd('COVERAGE gaps — expected technique with no backing move (' + gr.coverage.length + ')');
 list(gr.coverage, function (c) { return '[' + c.port + '] ' + c.technique + (c.note ? '  — ' + c.note : ''); });
 
-hd('PARSE gaps — move result no parser can read (' + gr.parse.gap.length + ')');
+hd('DECLARED PARSER CAPABILITY gaps (' + gr.parse.gap.length + ')');
 list(gr.parse.gap, function (g) { return g.id + '  → unreadable: ' + g.unreadable.join(', '); });
 
-hd('PARSE partial — some produced facts unreadable (' + gr.parse.partial.length + ')');
+hd('DECLARED PARSER CAPABILITY partial coverage (' + gr.parse.partial.length + ')');
 list(gr.parse.partial, function (g) { return g.id + '  → unreadable: ' + g.unreadable.join(', '); });
 
 hd('WIRING — unreachable moves (' + gr.wiring.unreachable.length + ')');
@@ -67,7 +71,7 @@ var forks = OBOL.DECISION_FORKS || {}, withFork = A.filter(function (m) { return
 hd('Fork-condition coverage');
 console.log('  ' + withFork + '/' + A.length + ' moves have an authored fork condition');
 
-var drift = { missingEmit: [], staleEmit: [] };
+var drift = { missingEmit: [], staleEmit: [] }, corpus = {passed:0,total:0,failures:[]};
 if (VERIFY || CHECK) {
   // static mkFact('literal') kinds across parser sources + prefix families already allowed
   var srcKinds = {};
@@ -77,21 +81,17 @@ if (VERIFY || CHECK) {
     // data-driven parsers (e.g. blockers.js) declare the kind they emit in a `kind: 'blocker.*'` table
     // and mint it with mkFact(entry.kind, …); harvest just those so the drift check sees them without
     // sweeping up the kind: fields of ordinary extract-return objects.
-    (s.match(/\bkind:\s*'(?:blocker|advice)\.[a-z0-9._]+'/g) || []).forEach(function (m) { srcKinds[m.replace(/.*'([^']+)'.*/, '$1')] = 1; });
+    (s.match(/\bkind:\s*'(?:blocker|advice)\.[a-z0-9._]+'/g) || []).forEach(function (m) { srcKinds[m.replace(/.*'([^']+)'.*/, '$1')] = 1; }); (OBOL._nxcCatalog || []).forEach(function (c) { (c.produces || []).forEach(function (k) { srcKinds[k] = 1; }); });
   });
   // live corpus-minted kinds (parser fixtures exercise diverse real outputs)
   var minted = {};
   try {
     var man = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/engine/fixtures/parser/manifest.json'), 'utf8'));
-    (man.cases || []).forEach(function (tc) {
-      try {
-        var out = fs.readFileSync(path.join(ROOT, 'tests/engine/fixtures/parser', tc.stdout), 'utf8');
-        var r = OBOL.parsers.parseActionOutput({ actionId: tc.action_id || '', command: tc.command || '', stdout: out, scope: 'host:10.10.10.10', domain: tc.domain || '' });
-        (r.facts || []).forEach(function (fct) { minted[fct.kind] = 1; });
-      } catch (e) {}
-      (tc.expected_supported_kinds || []).forEach(function (k) { minted[k] = 1; });
-    });
-  } catch (e) {}
+    corpus = require('./verify-parser-corpus.js').verifyCorpus(man, function(tc){return fs.readFileSync(path.join(ROOT,'tests/engine/fixtures/parser',tc.stdout),'utf8');}, OBOL.parsers.parseActionOutput);
+    minted = corpus.minted;
+  } catch (e) { corpus.failures.push({id:'manifest',errors:[(e && e.message) || String(e)]}); }
+  hd('EMPIRICAL PARSER CORPUS: ' + corpus.passed + '/' + corpus.total + ' cases passed');
+  list(corpus.failures,function(c){return c.id + ': ' + c.errors.join('; ');});
   var cap = DM.capability();
   function isEnv(k) { return /^(target\.|host\.up$|ports\.open$|port:|scan\.|service\.)/.test(k) || /\.reachable$/.test(k); }
   function covered(k) { if (isEnv(k)) return true; if (cap.exact[k]) return true; for (var i = 0; i < cap.pref.length; i++) if (k.indexOf(cap.pref[i]) === 0) return true; return false; }
@@ -99,14 +99,15 @@ if (VERIFY || CHECK) {
   Object.keys(srcKinds).concat(Object.keys(minted)).forEach(function (k) { if (!covered(k) && drift.missingEmit.indexOf(k) < 0) drift.missingEmit.push(k); });
   // a signature exact emit that is neither a static literal nor corpus-minted = possibly stale
   Object.keys(cap.exact).forEach(function (k) { if (!srcKinds[k] && !minted[k]) drift.staleEmit.push(k); });
-  hd('SIGNATURE DRIFT — real parser emits missing from PARSER_SIGNATURES (' + drift.missingEmit.length + ')');
+  hd('SIGNATURE DRIFT: source-declared or observed emits missing from PARSER_SIGNATURES (' + drift.missingEmit.length + ')');
   console.log('  ' + (drift.missingEmit.sort().join(', ') || '(none)'));
-  hd('SIGNATURE DRIFT — signature emits no parser produces (review) (' + drift.staleEmit.length + ')');
+  hd('SIGNATURE REVIEW: emits not observed in source declarations or the corpus (' + drift.staleEmit.length + ')');
   console.log('  ' + (drift.staleEmit.sort().join(', ') || '(none)'));
 }
+if (VERIFY && corpus.failures.length) process.exitCode = 1;
 
 if (CHECK) {
-  var hard = gr.wiring.unreachable.length + gr.wiring.missingHandoff.length + drift.missingEmit.length;
-  if (hard) { console.error('\nGAP CHECK FAIL: ' + gr.wiring.unreachable.length + ' unreachable, ' + gr.wiring.missingHandoff.length + ' missing hand-off, ' + drift.missingEmit.length + ' signature-drift.'); process.exit(1); }
-  console.log('\nGAP CHECK OK: no unreachable moves, no missing hand-offs, no signature drift.');
+  var hard = gr.wiring.unreachable.length + gr.wiring.missingHandoff.length + drift.missingEmit.length + corpus.failures.length;
+  if (hard) { console.error('\nGAP CHECK FAIL: ' + gr.wiring.unreachable.length + ' unreachable, ' + gr.wiring.missingHandoff.length + ' missing hand-off, ' + drift.missingEmit.length + ' signature-drift, ' + corpus.failures.length + ' corpus failures.'); process.exit(1); }
+  console.log('\nGAP CHECK OK: no unreachable moves, missing hand-offs, signature drift, or parser corpus failures.');
 }

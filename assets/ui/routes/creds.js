@@ -25,7 +25,7 @@
     return /\$$/.test(u) || /^sm_/i.test(u) || /^\$/.test(u) || /^healthmailbox/i.test(u)
       || lu === 'guest' || lu === 'defaultaccount' || lu === 'krbtgt';
   }
-  function credKey(e) { return [String(e.user || '').toLowerCase(), e.secret || e.nthash || e.krbhash || '', e.type].join('|'); }
+  function credKey(e) { return [String(e.user || '').toLowerCase(), String(e.domain || '').toLowerCase(), e.secret || e.nthash || e.krbhash || '', e.type].join('|'); }
 
   // ---- persisted per-cred marks (cracked / used) and collapse state ----
   function marks() { var e = OBOL.store.active() || {}; return (e.creds && e.creds.marks) || {}; }
@@ -49,19 +49,32 @@
   }
 
   // Per-credential status on a host. ADMIN is only claimed when THIS user is the one proven admin
-  // (an access.admin/credential.admin fact whose identity/user matches), never just because someone
+  // (an access.admin fact whose identity/user matches), never just because someone
   // owns the box: on HTB Forest svc-alfresco is a valid foothold you escalate FROM, not an admin.
   function cellStatus(cred, host) {
     var f = OBOL.store.factSetForTarget(host.ip);
     var u = String(cred.user || '').toLowerCase();
     if (!u) return { level: '' };
+    if (OBOL.context) {
+      var candidate = OBOL.context.material({user:cred.user,domain:cred.domain,password:cred.secret,nthash:cred.nthash});
+      var rows = (f.facts || []).filter(function (x) {
+        if (x.state !== 'supported' || x.scope !== 'host:' + host.ip) return false;
+        var v = x.value || {};
+        if (v.credentialFingerprint) return v.credentialFingerprint === candidate.credentialFingerprint;
+        if (v.credentialId) return v.credentialId === candidate.id;
+        if (!v.password && !v.nthash && !v.hash) return false;
+        return OBOL.context.material(v, x.scope).credentialFingerprint === candidate.credentialFingerprint;
+      });
+      var auth = rows.filter(function (x) { return /^(?:credential\.validated|(?:smb|ldap|winrm|ssh|rdp|mssql)\.authenticated)$/.test(x.kind); });
+      var admin = rows.some(function (x) { return /^access\.(?:admin|root|system)$/.test(x.kind); });
+      return {level:admin ? 'admin' : auth.length ? 'valid' : '', services:auth.map(function (x) { return (x.value || {}).service || x.kind.split('.')[0]; }).filter(function(v,i,a){return a.indexOf(v)===i;})};
+    }
     function ident(v) { return String((v && (v.identity || v.user)) || '').toLowerCase(); }
     var adminHere = false, validHere = false;
     (f.facts || []).forEach(function (x) {
       if (x.state !== 'supported') return;
       var v = x.value || {};
       if ((x.kind === 'access.admin' || x.kind === 'access.system' || x.kind === 'access.root') && ident(v) === u) adminHere = true;
-      else if (x.kind === 'credential.admin' && String(v.user || '').toLowerCase() === u) adminHere = true;
       else if ((x.kind === 'credential.available' || x.kind === 'credential.plaintext' || x.kind.indexOf('.authenticated') > 0) && String(v.user || '').toLowerCase() === u) validHere = true;
     });
     if (adminHere) return { level: 'admin' };
@@ -71,7 +84,7 @@
   function worksOnFor(e, hosts) {
     if (!e.user || (e.type !== 'PW' && e.type !== 'NT' && e.type !== 'KRBTGT')) return [];
     var out = [];
-    hosts.forEach(function (h) { var s = cellStatus(e, h); if (s.level) out.push({ ip: h.ip, hostname: h.hostname || '', level: s.level }); });
+    hosts.forEach(function (h) { var s = cellStatus(e, h); if (s.level) out.push({ ip: h.ip, hostname: h.hostname || '', level: s.level, services:s.services || [] }); });
     return out;
   }
   function unlockedFor(e, hosts) {
@@ -126,7 +139,7 @@
       entries.push(e);
     }
     (OBOL.creds.gather(eng, fs) || []).forEach(function (c) {
-      add({ user: c.user, domain: c.domain, secret: c.secret || '', nthash: c.nthash || '', type: (c.nthash && !c.secret) ? 'NT' : 'PW', src: c.source || '' }, c.scope);
+      add({ id:c.id, user: c.user, domain: c.domain, secret: c.secret || '', nthash: c.nthash || '', type: (c.nthash && !c.secret) ? 'NT' : c.secret ? 'PW' : 'USER', src: c.source || '', accountType:c.accountType,targetBinding:c.targetBinding,computer:c.computer }, c.scope);
     });
     facts.filter(function (f) { return f.kind === 'hash.ntlm'; }).forEach(function (f) {
       ((f.value || {}).entries || []).forEach(function (e) { if (e.user) add({ user: e.user, domain: e.domain || '', secret: '', nthash: e.nthash || '', type: 'NT', src: 'dump' }, f.scope); });
@@ -212,7 +225,7 @@
   function csvCell(v) { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
   function csvRows(rows) { return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n') + '\r\n'; }
   function statusText(e) {
-    if (e.worksOn && e.worksOn.length) return e.worksOn.map(function (w) { return (w.hostname || w.ip) + ' (' + w.level + ')'; }).join('; ');
+    if (e.worksOn && e.worksOn.length) return e.worksOn.map(function (w) { return (w.hostname || w.ip) + ' (' + w.level + ((w.services || []).length ? ', ' + w.services.join('/') : '') + ')'; }).join('; ');
     if (e.failed) return 'tried, failed';
     if (e.type === 'AS-REP' || e.type === 'TGS') return e.cracked ? 'cracked' : 'needs crack';
     if (e.status === 'user') return 'username only';
@@ -293,9 +306,9 @@
   function typeBadge(t) { return '<span class="cv-type cv-type-' + esc(t.toLowerCase().replace(/[^a-z]/g, '')) + '">' + esc(t) + '</span>'; }
   function statusCell(e, groupIp) {
     var here = (e.worksOn || []).filter(function (w) { return w.ip === groupIp; })[0];
-    if (here) return '<span class="cv-place ' + (here.level === 'admin' ? 'adm' : 'ok') + '">' + (here.level === 'admin' ? 'Admin here' : 'Valid here') + '</span>';
-    var elsewhere = (e.worksOn || []).map(function (w) { return w.hostname || w.ip; });
-    if (elsewhere.length) return '<span class="cv-place ok">Works on ' + esc(elsewhere.join(', ')) + '</span>';
+    if (here) return '<span class="cv-place ' + (here.level === 'admin' ? 'adm' : 'ok') + '">' + (here.level === 'admin' ? 'Admin demonstrated' : 'Authenticated') + ((here.services || []).length ? ' (' + esc(here.services.join('/')) + ')' : '') + '</span>';
+    var elsewhere = (e.worksOn || []).map(function (w) { return (w.hostname || w.ip) + ((w.services || []).length ? ' (' + w.services.join('/') + ')' : ''); });
+    if (elsewhere.length) return '<span class="cv-place ok">Authenticated on ' + esc(elsewhere.join(', ')) + '</span>';
     if (e.failed) return '<span class="cv-place fail">Tried, failed</span>';
     if (e.type === 'AS-REP' || e.type === 'TGS') return e.cracked ? '<span class="cv-place ok">Cracked</span>' : '<span class="cv-place crack">Needs crack</span>';
     return '<span class="cv-place found">Untested</span>';
@@ -459,6 +472,18 @@
 
   function loadEntry(e) {
     if (!e) return;
+    if (OBOL.context) {
+      var record = OBOL.context.material({user:e.user,domain:e.domain,password:e.secret,nthash:e.nthash,
+        secretType:e.secret || e.nthash ? e.type : 'USER',accountType:e.accountType || (e.domain ? 'domain' : e.scopeHost ? 'local' : 'unknown'),
+        targetBinding:e.targetBinding || (!e.domain ? e.scopeHost : ''),computer:e.computer}, e.scopeHost ? 'host:' + e.scopeHost : '');
+      var found = OBOL.context.credentials(OBOL.store.active()).find(function(c){return c.id === e.id || c.id === record.id;});
+      if (!found) OBOL.store.update(function(eng){eng.credentials.push(Object.assign({}, record, {source:'logged'}));}, 'credentials');
+      OBOL.store.selectCredential(found ? found.id : record.id);
+      if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+      if (OBOL.router && OBOL.router.render) OBOL.router.render();
+      U.toast('Selected ' + (e.domain ? e.domain + '\\' : '') + (e.user || 'identity') + '; target domain preserved');
+      return;
+    }
     OBOL.store.update(function (eng) {
       eng.params = eng.params || {};
       eng.params.username = e.user || '';

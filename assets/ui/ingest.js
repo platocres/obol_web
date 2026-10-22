@@ -229,6 +229,99 @@
   var ERR_MARKERS = /\busage:|\btraceback\b|command not found|no such file|unrecognized option|invalid option|\bmissing option\b|permission denied|access is denied|status_access_denied|status_logon_failure|nt_status_[a-z0-9_]+|error enumerating|ldaperr:|operationserror|successful bind must be completed|\bunauthorized\b|logon failure|connection refused|could not connect|connection reset|name or service not known|\berror:/i;
   function looksLikeError(text) { return ERR_MARKERS.test(String(text || '')); }
 
+  function outputIdentity(text) {
+    var m = /^\s*(SMB|LDAP|WINRM|SSH|RDP|FTP|MSSQL|WMI)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+\d+\s+\S+\s+\[[+-]\]\s+([^\r\n]+)/im.exec(String(text || ''));
+    if (!m) return null;
+    var auth = /^([^\s:]+):/.exec(m[3]);
+    if (!auth) return { target: m[2], service: m[1].toLowerCase(), principal: '' };
+    var result = { target: m[2], service: m[1].toLowerCase(), principal: auth[1] };
+    if (OBOL._parserCommon && OBOL._parserCommon._parse_auth_material) {
+      var material = OBOL._parserCommon._parse_auth_material(m[3]);
+      if (material[1] && material[2] && !/^(?:\*{3,}|<redacted>|\[redacted\])$/i.test(material[2])) {
+        result.credential = { user: material[1], domain: material[0] || '' };
+        if (/^(?:[a-f0-9]{32}:)?[a-f0-9]{32}$/i.test(material[2])) result.credential.nthash = material[2].split(':').pop();
+        else result.credential.password = material[2];
+      }
+    }
+    return result;
+  }
+  function principalName(value) { return String(value || '').toLowerCase().replace(/\.$/, ''); }
+  function executionLocus(command, cmdObj, fallback) {
+    if (OBOL.pack && OBOL.pack.commandExecutionLocus && (command || cmdObj)) {
+      return OBOL.pack.commandExecutionLocus(cmdObj || { tool: extractTool(command), run: command });
+    }
+    return fallback || 'remote';
+  }
+  function sourceBinding(opts, eng) {
+    opts = opts || {}; eng = eng || {};
+    var text = String(opts.text || ''), params = eng.params || {}, explicit = String(opts.command || '').trim();
+    var derived = deriveCommand(text, explicit), revealed = sniffCommand(text), signature = contentSignatures(text);
+    var observed = outputIdentity(text), known = (eng.targets || []).map(function (t) { return t.ip || t.id; }).filter(Boolean);
+    var observedTarget = detectTarget('', text, { known: known, lhost: params.lhost || '' });
+    var observedService = observed && observed.service || (OBOL.context && OBOL.context.serviceOf ? OBOL.context.serviceOf(signature) : '');
+    var scopeTarget = /^host:/.test(opts.scope || '') ? opts.scope.slice(5) : '';
+    var last = !derived && !explicit && !revealed && !opts.actionId ? getLastCopied() : null;
+    if (last && ((observedTarget && observedTarget !== last.target)
+      || (scopeTarget && scopeTarget !== last.target && !opts.fromSession)
+      || (observedService && (!last.context || !last.context.service || observedService !== last.context.service))
+      || (observed && observed.principal && last.context && last.context.principal && principalName(observed.principal) !== principalName(last.context.principal)))) last = null;
+    var command = derived || explicit || (last && last.command) || '';
+    var target = opts.forceTarget ? scopeTarget || (typeof opts.forceTarget === 'string' ? opts.forceTarget : params.target || '') : observedTarget || (last && last.target) || scopeTarget
+      || detectTarget(command, text, { known: known, lhost: params.lhost || '' }) || params.target || '';
+    return { command: command, derived: derived, last: last, observed: observed, target: target,
+      service: observedService || (OBOL.context && OBOL.context.serviceOf ? OBOL.context.serviceOf(command) : ''),
+      actionId: opts.actionId || (last && last.actionId) || '',
+      locus: opts.executionLocus || (last && last.locus) || executionLocus(command, opts.commandObj, opts.locus),
+      source: opts.forceTarget ? 'forced-target' : derived ? 'pasted-command' : explicit ? 'supplied-command' : last ? 'copied-command' : observedTarget || signature ? 'output' : 'selected-target',
+      conflicts: scopeTarget && observedTarget && scopeTarget !== observedTarget && !opts.forceTarget ? ['observed-host-differs-from-selected-target'] : [] };
+  }
+  function resolveInputContext(binding, opts, eng, params) {
+    if (opts.context && (!binding.target || opts.context.target === binding.target)
+      && (!binding.observed || !binding.observed.principal || principalName(binding.observed.principal) === principalName(opts.context.principal))
+      && (!binding.service || !opts.context.service || binding.service === opts.context.service)) return opts.context;
+    if (!(OBOL.context && OBOL.context.resolve)) return { target: binding.target, targetDomain: params.domain || '', params: params, service: binding.service, locus: binding.locus };
+    var options = { engagement: eng, target: binding.target, params: params, command: binding.command,
+      actionId: binding.actionId, service: binding.service, locus: binding.locus };
+    if (binding.last && binding.last.context) options.credentialId = binding.last.context.credentialId || null;
+    var actual = credFromCommand(binding.command) || (binding.observed && binding.observed.credential), candidates = [];
+    if (actual && OBOL.context.credentials && OBOL.context.material) {
+      var actualMaterial = OBOL.context.material(actual);
+      var observedRealm = binding.observed && binding.observed.principal.indexOf('\\') > 0 ? binding.observed.principal.split('\\')[0] : '';
+      candidates = OBOL.context.credentials(eng).filter(function (c) {
+        return principalName(c.user) === principalName(actualMaterial.user)
+          && (!(actualMaterial.domain || observedRealm) || principalName(c.domain) === principalName(actualMaterial.domain || observedRealm))
+          && (actualMaterial.nthash ? principalName(c.nthash) === principalName(actualMaterial.nthash) : c.password === actualMaterial.password);
+      });
+      options.credentialId = candidates.length === 1 ? candidates[0].id : null;
+    } else if (binding.observed && binding.observed.principal) {
+      var user = binding.observed.principal;
+      candidates = OBOL.context.credentials(eng).filter(function (c) { return principalName(c.principal) === principalName(user); });
+      // A username without a matching bound command cannot establish which secret version was used.
+      if (!binding.last) options.credentialId = null;
+    }
+    var result = OBOL.context.resolve(options);
+    result.selectionSource = binding.source;
+    result.conflicts = (result.conflicts || []).concat(binding.conflicts || []);
+    if (!result.credentialId && binding.observed && binding.observed.principal) {
+      result.principal = binding.observed.principal;
+      var split = result.principal.split('\\');
+      if (split.length > 1) result.authRealm = split[0];
+    }
+    return result;
+  }
+  function observedTargets(text) {
+    var found = [], re = /^(?:\s*(?:SMB|LDAP|WINRM|SSH|RDP|FTP|MSSQL|WMI)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+\d+|Nmap scan report for (?:[^\n(]+\()?((?:\d{1,3}\.){3}\d{1,3})\)?\s*$)/gmi, m;
+    while ((m = re.exec(String(text || '')))) { var ip = m[1] || m[2]; if (found.indexOf(ip) < 0) found.push(ip); }
+    return found;
+  }
+  function preview(opts) {
+    var eng = OBOL.store.active() || {}, binding = sourceBinding(opts, eng);
+    var ctx = resolveInputContext(binding, opts || {}, eng, Object.assign({}, eng.params || {}, { target: binding.target }));
+    var result = OBOL.context && OBOL.context.snapshot ? OBOL.context.snapshot(ctx) : { target: binding.target, service: binding.service, locus: binding.locus };
+    result.source = binding.source; result.conflicts = (ctx.conflicts || []).slice();
+    return result;
+  }
+
   // The operator's own attacker IP, read from a terminal prompt like the Kali/HTB `[tun0:10.10.14.191]`
   // (also tap/vpn/wg/eth). This is YOUR listener/LHOST - obol fills {{lhost}} with it so coercion, relay
   // and reverse-shell commands form without hand-typing your VPN address on every box.
@@ -319,6 +412,20 @@
   }
 
   function ready() { return !!(OBOL.parsers && OBOL.parsers.parseActionOutput); }
+  function classifyOutcome(input) {
+    if (OBOL.outcomes && OBOL.outcomes.classify) return OBOL.outcomes.classify(input);
+    return { version: 1, kind: 'unknown', status: 'unresolved', retryable: true, conclusive: false, retireCommand: false, retireMove: false,
+      title: 'Output saved; outcome unresolved', summary: 'Outcome interpretation is unavailable. The evidence is retained and this attempt remains available.',
+      detail: 'Reload the application to restore the outcome interpreter.', established: [], unresolved: ['Outcome interpretation unavailable.'], next: 'review', context: {} };
+  }
+  function renderOutcome(outcome) {
+    if (OBOL.outcomes && OBOL.outcomes.render) return OBOL.outcomes.render(outcome);
+    return '<div class="outcome-receipt" data-outcome="unknown" role="status">Output saved; outcome unresolved. The attempt remains available.</div>';
+  }
+  function outcomeMessage(result) {
+    var outcome = result && (result.outcome || result);
+    return OBOL.outcomes && OBOL.outcomes.describe ? OBOL.outcomes.describe(outcome) : 'Output saved; review the recorded observations and context.';
+  }
   var _healedEngs = {};
   function _healLegacyActivities() {
     if (!ready() || !OBOL.store || !OBOL.store.active) return false;
@@ -332,16 +439,19 @@
           || (a.produced || []).some(function (k) { return k === 'blocker.protected_users'; }));
     });
     if (!targetsToHeal.length) return false;
+    var healingScopes = {};
+    targetsToHeal.forEach(function (a) { healingScopes['host:' + (a.target || (eng.params && eng.params.target) || 'target')] = true; });
     OBOL.store.update(function (e) {
       e.facts = (e.facts || []).filter(function (f) {
         if (!f || !/^blocker\.(?:access_denied|logon_failure|protected_users)$/.test(f.kind)) return true;
+        if (!healingScopes[f.scope]) return true;
         return !/\benum4linux(?:-ng)?\b/i.test(String(f.source || ''));
       });
     }, 'facts');
     var anyAdded = false;
     targetsToHeal.forEach(function (act) {
       var tIp = act.target || (eng.params && eng.params.target) || 'target';
-      var dom = (eng.params && eng.params.domain) || '';
+      var dom = OBOL.store.targetIdentity ? OBOL.store.targetIdentity(tIp).domain : (eng.params && eng.params.domain) || '';
       var healStdout = String(act.stdout || '').replace(/[ \t]+$/gm, '');
       if (/\.\.\. \[truncated,/.test(healStdout) && /'501':[\s\S]{1,120}?username:\s*Guest/i.test(healStdout) && !/username:\s*krbtgt/i.test(healStdout)) {
         healStdout += "\n'502':\n  username: krbtgt\n'503':\n  username: DefaultAccount\n";
@@ -366,8 +476,8 @@
           found.addedCount = (found.addedCount || 0) + added;
           found.blockers = blockers;
         }
-        if (e.checklist && e.checklist['recon-smb-anon'] && String(e.checklist['recon-smb-anon']).indexOf('empty:') === 0 && progressFacts.some(function (f) { return f.kind === 'ad.user_list'; })) {
-          delete e.checklist['recon-smb-anon'];
+        if (e.checklist && e.checklist[OBOL.store.checklistKey('recon-smb-anon', tIp)] && String(e.checklist[OBOL.store.checklistKey('recon-smb-anon', tIp)]).indexOf('empty:') === 0 && progressFacts.some(function (f) { return f.kind === 'ad.user_list'; })) {
+          delete e.checklist[OBOL.store.checklistKey('recon-smb-anon', tIp)];
         }
       }, 'evidence');
     });
@@ -411,9 +521,93 @@
     if (!obj || typeof obj !== 'object' || !obj.tools) return null;
     obj.savedAt = Date.now();
     try { localStorage.setItem('obol.arsenal-profile', JSON.stringify(obj)); } catch (e) {}
+    if (OBOL.store && typeof OBOL.store.update === 'function') {
+      try {
+        OBOL.store.update(function (eng) {
+          if (!eng) return;
+          eng.params = eng.params || {};
+          if (obj.lhost && !eng.params.lhost) {
+            eng.params.lhost = obj.lhost;
+            eng.params.lhost_iface = obj.lhost_iface || 'tun0';
+          }
+          if (obj.tooldir && !eng.params.toolsDir) {
+            eng.params.toolsDir = obj.tooldir;
+          }
+        }, 'arsenal-sync');
+      } catch (e) {}
+    }
+    try { if (OBOL.ctxbar && typeof OBOL.ctxbar.render === 'function') OBOL.ctxbar.render(); } catch (e) {}
+    try { if (OBOL.app && typeof OBOL.app.renderSidebar === 'function') OBOL.app.renderSidebar(); } catch (e) {}
     var present = 0;
     Object.keys(obj.tools || {}).forEach(function (k) { if (obj.tools[k] && obj.tools[k].present) present++; });
-    return { ok: true, present: present, staged: (obj.staged || []).length, wordlists: Object.keys(obj.wordlists || {}).length };
+    return { ok: true, present: present, staged: (obj.staged || []).length, wordlists: Object.keys(obj.wordlists || {}).length, lhost: obj.lhost || '', lhost_iface: obj.lhost_iface || '' };
+  }
+
+  function _tryWorkspaceSnapshot(text) {
+    var s = String(text || '');
+    if (!(OBOL.vfs && typeof OBOL.vfs.parseSnapshot === 'function' && typeof OBOL.vfs.reconcile === 'function')) return null;
+    var hasMarker = /OBOL-WS-SNAPSHOT/i.test(s);
+    var hasTabManifest = /^(?!\s*#)[A-Za-z0-9._\/-]+\t\d+\t\d{4}-\d{2}-\d{2}/m.test(s);
+    if (!hasMarker && !hasTabManifest) return null;
+    var snapText = s;
+    if (hasMarker) {
+      var m = /(?:#{2,}\s*)?OBOL-WS-SNAPSHOT[^\r\n]*\r?\n([\s\S]*?)(?:###\s*END\b|$)/i.exec(s);
+      if (m) snapText = m[1];
+    }
+    var entries = OBOL.vfs.parseSnapshot(snapText);
+    if (!entries || !entries.length) return null;
+    var eng = (OBOL.store && typeof OBOL.store.active === 'function') ? OBOL.store.active() : {};
+    var r = OBOL.vfs.reconcile(eng || {}, entries);
+    if (OBOL.store && typeof OBOL.store.update === 'function') {
+      try {
+        OBOL.store.update(function (e) {
+          if (!e) return;
+          e.workspace = e.workspace || {};
+          e.workspace.overrides = r.overrides;
+        }, 'ws-sync');
+      } catch (e) {}
+    }
+    try { if (OBOL.app && typeof OBOL.app.renderSidebar === 'function') OBOL.app.renderSidebar(); } catch (e) {}
+    return { ok: true, confirmed: r.confirmed || 0, adopted: r.adopted || 0, missing: r.missing || 0, total: r.total || entries.length };
+  }
+
+  function _stripArsenalBlock(text) {
+    return String(text || '')
+      .replace(/OBOL-ARSENAL(?:\s+v\d+)?\r?\n\{[^\r\n]*\}\r?\n?/g, '')
+      .replace(/──\s*Copy these two lines[\s\S]*$/g, '');
+  }
+
+  function _stripWorkspaceSnapshot(text) {
+    return String(text || '')
+      .replace(/^[^\r\n]*echo\s+['"]###\s*OBOL-WS-SNAPSHOT['"][^\r\n]*\r?\n?/gim, '')
+      .replace(/(?:#{2,}\s*)?OBOL-WS-SNAPSHOT[^\r\n]*\r?\n[\s\S]*?(?:###\s*END[^\r\n]*\r?\n?|$)/gi, '');
+  }
+
+  function _hasNonSetupCommands(text) {
+    var s = String(text || '').trim();
+    if (!s) return false;
+    if (/={3,}\s*OBOL STEP\s+\d+:/i.test(s)) return true;
+    var segs = splitSession(s);
+    var realSegs = segs.filter(function (seg) {
+      return seg && seg.command && !/download-loadout\.sh|setup-kali\.sh|OBOL-WS-SNAPSHOT|OBOL-ARSENAL/i.test(seg.command);
+    });
+    if (realSegs.length > 0) return true;
+    if (segs.length > 0) return false;
+    if (/OBOL Loadout|Tools ready:|Wordlists mapped:|~/.test(s) && !recognizesTool('', s)) return false;
+    return recognizesTool('', s);
+  }
+
+  function _tryPureTargetsImport(text) {
+    if (!(OBOL.targets && typeof OBOL.targets.importBulk === 'function')) return null;
+    var lines = String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) { return l && !/^#/.test(l); });
+    if (!lines.length || lines.length > 500) return null;
+    var ipOrHostsRe = /^(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2}|\s+[a-zA-Z0-9][a-zA-Z0-9._-]+(?:\s+[a-zA-Z0-9][a-zA-Z0-9._-]+)*)?$/;
+    if (!lines.every(function (l) { return ipOrHostsRe.test(l); })) return null;
+    var syncRes = null;
+    try {
+      OBOL.targets.importBulk(text, function (res) { syncRes = res; });
+    } catch (e) { return null; }
+    return (syncRes && syncRes.ok && (syncRes.added || syncRes.updated || syncRes.cidrs)) ? syncRes : null;
   }
 
   // Parse + mint + record. No DOM, no toast - the caller renders the outcome.
@@ -423,10 +617,29 @@
     opts = opts || {};
     var text = opts.text || '';
     if (!text.trim()) return { ok: false, reason: 'empty' };
-    var ar = _tryArsenalIngest(text);
-    if (ar && ar.ok) {
-      return { ok: true, arsenal: ar, added: 0, facts: [], cmd: 'obol-arsenal', lines: text.split(/\r?\n/).length,
-        fileName: opts.fileName || '', parseError: '', recognizedTool: true, looksError: false, epoch: 'anon', blockers: [] };
+    var ar = null, ws = null;
+    if (!opts.fromSession) {
+      ar = _tryArsenalIngest(text);
+      if (ar && ar.ok) text = _stripArsenalBlock(text);
+      ws = _tryWorkspaceSnapshot(text);
+      if (ws && ws.ok) text = _stripWorkspaceSnapshot(text);
+      if (((ar && ar.ok) || (ws && ws.ok)) && !_hasNonSetupCommands(text)) {
+        return { ok: true, arsenal: ar, workspaceSync: ws, added: 0, facts: [], imported: 1, commands: 1,
+          cmd: ar ? 'obol-arsenal' : 'obol-workspace', lines: String(opts.text || '').split(/\r?\n/).length,
+          fileName: opts.fileName || '', parseError: '', recognizedTool: true, looksError: false, epoch: 'anon', blockers: [] };
+      }
+      var hasCruiseSteps = /={3,}\s*OBOL STEP\s+\d+:/i.test(text);
+      var rawOptCheck = (opts.command && opts.command.trim()) || '';
+      if (hasCruiseSteps || (!rawOptCheck && !opts.actionId && splitSession(text).length > 1)) {
+        if (!ready()) return { ok: false, reason: 'parsers' };
+        var fixedTarget = (opts.scope && opts.scope.indexOf('host:') === 0) ? opts.scope.slice(5) : 'auto';
+        var sRes = importSession(text, { target: opts.forceTarget ? fixedTarget : 'auto', fileName: opts.fileName || '', source: opts.source || 'paste' });
+        if (sRes && sRes.ok) {
+          if (ar && ar.ok) sRes.arsenal = ar;
+          if (ws && ws.ok) sRes.workspaceSync = ws;
+          return sRes;
+        }
+      }
     }
     if (!ready()) return { ok: false, reason: 'parsers' };
     // Route on what the paste ACTUALLY shows (its prompt/command line) over the move's canned
@@ -438,13 +651,16 @@
     var params = (eng && eng.params) || {};
     var rawOptCmd = (opts.command && opts.command.trim()) || '';
     var trimmedText = _trimPriorScrollback(text, rawOptCmd, (eng && eng.activities) || []).replace(/[ \t]+$/gm, '');
-    var derived = deriveCommand(trimmedText, rawOptCmd);
-    var cmd = derived || rawOptCmd;
+    var binding = sourceBinding(Object.assign({}, opts, { text: trimmedText }), eng);
+    var inferredCmd = binding.derived, cmd = binding.command, lastCopiedFallback = binding.last;
     // Widen the DISPATCH label with whatever the paste reveals about its tool, so output-only pastes and
     // out-of-order evidence still reach the right parser. Lineage/tool below stay the honest `cmd`.
-    var dispatchCmd = dispatchLabel(rawOptCmd && rawOptCmd !== cmd ? (rawOptCmd + '  ' + cmd) : cmd, trimmedText);
+    var dispatchCmd = dispatchLabel(cmd, trimmedText);
     var firstTok = rawOptCmd.split(/\s+/)[0] || '';
-    var inferredActId = opts.actionId || (/^[a-z0-9]+(?:-[a-z0-9]+)+$/i.test(firstTok) ? firstTok : '');
+    var originalAction = opts.actionId || '';
+    if (inferredCmd && rawOptCmd && (extractTool(inferredCmd) !== extractTool(rawOptCmd)
+      || (OBOL.context && OBOL.context.serviceOf && OBOL.context.serviceOf(inferredCmd) !== OBOL.context.serviceOf(rawOptCmd)))) originalAction = '';
+    var inferredActId = originalAction || (/^[a-z0-9]+(?:-[a-z0-9]+)+$/i.test(firstTok) ? firstTok : '') || (lastCopiedFallback ? lastCopiedFallback.actionId : '');
     if (!inferredActId && cmd) {
       if (/\bbloodyAD\b/i.test(cmd)) inferredActId = 'bloodyad-acl';
       else if (/\bdacledit(?:\.py)?\b|\bowneredit(?:\.py)?\b/i.test(cmd)) inferredActId = 'ad-acl-abuse';
@@ -467,57 +683,79 @@
     // to (opts.scope); a normal paste checks whether the command/output explicitly names a known configured
     // target, falling back to the engagement's active target.
     var knownIps = ((eng && eng.targets) || []).map(function (t) { return t && (t.ip || t.id); }).filter(Boolean);
-    var detectedIp = (!opts.scope && knownIps.length > 1)
-      ? detectTarget(cmd, trimmedText, { known: knownIps, lhost: params.lhost || '' })
-      : '';
-    var routedIp = (detectedIp && knownIps.indexOf(detectedIp) >= 0) ? detectedIp : (params.target || 'target');
-    if (!params.target && !opts.scope) {
-      var earlyIp = detectTarget(cmd, trimmedText, { lhost: params.lhost || '', known: knownIps });
-      if (earlyIp) routedIp = earlyIp;
-    }
-    var scope = opts.scope || ('host:' + routedIp);
+    var routedIp = binding.target || params.target || 'target';
+    var scope = opts.scope && !/^host:/.test(opts.scope) ? opts.scope : ('host:' + routedIp);
     var scopeIp = scope.indexOf('host:') === 0 ? scope.slice(5) : (params.target || '');
+    params = Object.assign({}, params, { target: scopeIp || params.target });
+    if (OBOL.store.targetIdentity && knownIps.length > 1) params.domain = OBOL.store.targetIdentity(scopeIp).domain || '';
+    binding.target = scopeIp; binding.actionId = inferredActId;
+    var resolvedContext = resolveInputContext(binding, opts, eng, params);
+    var routing = { mode: opts.forceTarget ? 'forced' : 'observed', target: scopeIp, sourceTargets: observedTargets(trimmedText) };
+    if (opts.forceTarget) resolvedContext = Object.assign({}, resolvedContext, { forceTarget: scopeIp });
+    if (resolvedContext.params) params = resolvedContext.params;
+    var contextSnapshot = OBOL.context && OBOL.context.snapshot ? OBOL.context.snapshot(resolvedContext)
+      : OBOL.outcomes && OBOL.outcomes.snapshot ? OBOL.outcomes.snapshot(resolvedContext) : { target: scopeIp };
+    contextSnapshot.routing = routing;
     var res, parseError = '';
     try {
-      res = OBOL.parsers.parseActionOutput({ actionId: inferredActId, command: dispatchCmd, stdout: parseText, source: opts.fileName || cmd || 'paste', scope: scope, domain: params.domain || '' });
+      res = OBOL.parsers.parseActionOutput({ actionId: inferredActId, command: dispatchCmd, stdout: parseText, source: opts.fileName || cmd || 'paste', scope: scope, domain: resolvedContext.targetDomain || '', context: resolvedContext, observedAt: typeof opts.at === 'number' ? opts.at / 1000 : undefined });
     } catch (e) { res = { facts: [] }; parseError = (e && e.message) || 'parse failed'; }
     if (res && res.error) parseError = res.error; // a sub-parser threw but earlier facts survived
     var facts = (res && res.facts) || [];
-    var existingFs = (OBOL.store && OBOL.store.factSet) ? OBOL.store.factSet() : null;
+    var existingFs = OBOL.store.factSetForTarget ? OBOL.store.factSetForTarget(scopeIp) : OBOL.store.factSet();
     var epoch = (OBOL.pack && OBOL.pack.accessEpoch) ? OBOL.pack.accessEpoch(existingFs || (OBOL.store && OBOL.store.factSet && OBOL.store.factSet())) : 'anon';
     var blockers = facts.filter(function (f) { return /^(?:blocker\.|ssh\.key_rejected$)/.test(f.kind); }).map(function (f) { return f.kind; });
-    var progressFacts = facts.filter(function (f) { return f && !/^(?:blocker\.|ssh\.key_rejected$|credential\.validation$)/.test(f.kind); });
-    var metaFacts = facts.filter(function (f) { return f && /^(?:blocker\.|ssh\.key_rejected$|credential\.validation$)/.test(f.kind); });
+    var progressFacts = facts.filter(function (f) { return f && !/^(?:blocker\.|ssh\.key_rejected$|credential\.(?:validation|authorization)$)/.test(f.kind); });
+    var metaFacts = facts.filter(function (f) { return f && /^(?:blocker\.|ssh\.key_rejected$|credential\.(?:validation|authorization)$)/.test(f.kind); });
+    var outcome = classifyOutcome({ text: trimmedText, command: cmd || dispatchCmd, actionId: inferredActId,
+      facts: facts, previousFacts: existingFs, parseError: parseError, diagnostics: (res && res.diagnostics) || [], context: resolvedContext });
+    outcome.routing = routing;
     var added = OBOL.store.addFacts(progressFacts, 'evidence');
     if (metaFacts.length) OBOL.store.addFacts(metaFacts, 'evidence');
     if (!blockers.length && OBOL.store && typeof OBOL.store.retractFactKind === 'function') {
-      var cmdAndOut = cmd + '\n' + trimmedText;
-      if (/\b(?:rdate|ntpdate|ntpsec-ntpdate|timedatectl|faketime)\b/i.test(cmdAndOut) || (added > 0)) {
-        OBOL.store.retractFactKind('blocker.clock_skew');
+      function proven(pattern) {
+        return facts.some(function (f) { return f.state === 'supported' && f.scope === scope && pattern.test(f.kind); });
       }
-      if (/\/etc\/hosts\b/i.test(cmdAndOut)) {
-        OBOL.store.retractFactKind('blocker.name_resolution');
+      var observationAt = typeof opts.at === 'number' ? opts.at / 1000 : Date.now() / 1000;
+      function clear(kind, matches, domainRepair) {
+        var fsClear = OBOL.store.factSet(), before = fsClear.facts.length;
+        fsClear.facts = fsClear.facts.filter(function (f) {
+          if (f.kind !== kind || (f.created_at && f.created_at > observationAt)) return true;
+          var sameScope = f.scope === scope;
+          if (domainRepair && /^domain:/.test(f.scope || '')) {
+            var realm = String(resolvedContext.authRealm || resolvedContext.targetDomain || '').toLowerCase().replace(/\.$/, '');
+            sameScope = !!realm && f.scope.slice(7).toLowerCase().replace(/\.$/, '') === realm;
+          }
+          return !sameScope || (matches && !matches(f));
+        });
+        if (fsClear.facts.length !== before) OBOL.store.setFacts(fsClear, 'retract');
       }
-      if (/\b(?:dos2unix|sed\s+-i[^\r\n]*\\r|tr\s+-d\s+['"]?\\r)\b/i.test(cmdAndOut)) {
-        OBOL.store.retractFactKind('blocker.crlf');
-      }
-      if (/\bchmod\s+[46]00\b/i.test(cmdAndOut)) {
-        OBOL.store.retractFactKind('ssh.key_rejected');
-      }
-      if (added > 0) {
-        [
-          'blocker.name_resolution', 'blocker.no_tty', 'blocker.crlf',
-          'blocker.hash_format', 'blocker.hashcat_env', 'blocker.nxc_spider_usage',
-          'blocker.logon_failure', 'blocker.password_change', 'blocker.kerberos_spn',
-          'blocker.xp_cmdshell_disabled', 'blocker.cracking_exhausted',
-          'blocker.web_wildcard', 'blocker.tls_scheme', 'blocker.rate_limited',
-          'blocker.amsi', 'blocker.potato', 'blocker.egress_blocked',
-          'blocker.nxc_c_share_denied', 'blocker.winrm_closed', 'ssh.key_rejected'
-        ].forEach(function (bk) {
-          OBOL.store.retractFactKind(bk);
+      var authProof = facts.filter(function (f) { return f.state === 'supported' && f.scope === scope && /^(credential\.validated|(?:smb|ldap|winrm|rdp|ssh)\.authenticated)$/.test(f.kind); });
+      function sameAuthentication(f) {
+        var v = f.value || {};
+        return authProof.some(function (p) {
+          var pv = p.value || {}, service = pv.service || (/\.authenticated$/.test(p.kind) ? p.kind.split('.')[0] : '');
+          if (!service || !v.service || service !== v.service) return false;
+          if (v.credentialId && pv.credentialId) return v.credentialId === pv.credentialId;
+          if (v.credentialFingerprint && pv.credentialFingerprint) return v.credentialFingerprint === pv.credentialFingerprint;
+          return false; // Ambiguous legacy observations are not cleared by another identity's success.
         });
       }
+      var kerberosSuccess = facts.some(function (f) {
+        return f.state === 'supported' && /^(kerberos\.tickets|hash\.(asrep|tgs))$/.test(f.kind);
+      });
+      if (kerberosSuccess || (/\b(?:ntpdate|ntpsec-ntpdate|rdate)\b/i.test(cmd) && /(?:step|adjust) time|offset\s+[-+]?\d|time server/i.test(trimmedText))) clear('blocker.clock_skew', null, true);
+      if (proven(/^(credential\.validated|(?:smb|ldap|winrm|rdp|ssh)\.authenticated)$/)) {
+        clear('blocker.logon_failure', sameAuthentication); clear('blocker.password_change', sameAuthentication);
+      }
+      if (proven(/^winrm\.authenticated$/)) clear('blocker.winrm_closed');
+      if (/xp_cmdshell/i.test(cmd) && proven(/^(access\.system|foothold\.windows)$/)) clear('blocker.xp_cmdshell_disabled');
+      if (facts.some(function (f) { return f.state === 'supported' && f.kind === 'credential.available' && /^(john|hashcat)/.test((f.value || {}).method || ''); })) {
+        var sameOperation = function (f) { return !!cmd && f.source === cmd; };
+        clear('blocker.hash_format', sameOperation); clear('blocker.hashcat_env', sameOperation); clear('blocker.cracking_exhausted', sameOperation);
+      }
     }
+
     var CAP = 48000;
     var lines = trimmedText.split(/\r?\n/).length;
     var stored = trimmedText.length > CAP
@@ -532,59 +770,31 @@
         source: opts.source || 'paste', tool: (extractTool(cmd) || 'paste'),
         target: scopeIp || params.target || '', scope: scope, file: opts.fileName || '', action_id: inferredActId || '',
         produced: facts.map(function (f) { return f.kind; }), addedCount: added, epoch: epoch, blockers: blockers,
+        parseError: parseError, parseDiagnostics: (res && res.diagnostics) || [], outcome: outcome, context: contextSnapshot, routing: routing,
         stdout: stored, sample: trimmedText.slice(0, 400) });
     }, 'activity');
     var recognized = recognizesTool(cmd, trimmedText);
     var looksErr = looksLikeError(trimmedText);
-    var isEnvBlocker = blockers.some(function (b) {
-      return /^(blocker\.clock_skew|blocker\.name_resolution|blocker\.no_tty|blocker\.crlf|blocker\.hash_format|blocker\.hashcat_env|blocker\.web_wildcard|blocker\.tls_scheme|blocker\.kerberos_spn|blocker\.xp_cmdshell_disabled|blocker\.password_change|blocker\.ntlm_disabled|blocker\.nxc_c_share_denied|blocker\.nxc_spider_usage|ssh\.key_rejected)$/.test(b);
-    });
-    var isRefusalBlocker = blockers.some(function (b) {
-      return /^(blocker\.access_denied|blocker\.smb_null_denied|blocker\.ldap_anonymous_disabled|blocker\.logon_failure|blocker\.winrm_closed|blocker\.account_restricted|blocker\.account_not_delegated|blocker\.protected_users|blocker\.cracking_exhausted)$/.test(b);
-    });
-    if (inferredActId && !parseError && recognized && !isEnvBlocker && OBOL.packs && OBOL.packs.actions && OBOL.command && OBOL.command.commandTriedInEpoch) {
-      var actEng = OBOL.store.active() || {};
-      var actList = actEng.activities || [];
-      var moveObj = (OBOL.packs.actions() || []).filter(function (m) { return m && m.id === inferredActId; })[0];
-      var fsNow = (OBOL.store && OBOL.store.factSet) ? OBOL.store.factSet() : existingFs;
-      var moveSettledNow = !!(moveObj && typeof moveObj.settled === 'function' && moveObj.settled(fsNow));
-      if (moveObj && !moveSettledNow && moveObj.commands && moveObj.commands.length && ((!added && ((!looksErr && !blockers.length && lines >= 2) || isRefusalBlocker)) || added > 0)) {
-        var hasFoot = !!(fsNow && (fsNow.has('foothold.windows') || fsNow.has('foothold.linux') || fsNow.has('access.shell') || fsNow.has('foothold.webshell')));
-        var filledNow = OBOL.command.fillAll(moveObj, fsNow, { params: params, profile: actEng.profile, workspace: (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(actEng) : {} });
-        var loci = (OBOL.pack && OBOL.pack.moveCommandLoci) ? OBOL.pack.moveCommandLoci(moveObj, fsNow) : null;
-        var defLocus = (loci && !loci.both) ? (loci.onhost ? 'onhost' : 'remote') : ((OBOL.pack && OBOL.pack.defaultCommandLocus) ? OBOL.pack.defaultCommandLocus(moveObj) : 'remote');
-        var hasUntried = false;
-        for (var ci = 0; ci < moveObj.commands.length; ci++) {
-          var cObj = moveObj.commands[ci];
-          if (OBOL.pack && OBOL.pack.commandSettled && OBOL.pack.commandSettled(cObj, fsNow)) continue;
-          if (OBOL.pack && OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cObj, fsNow)) continue;
-          var un = OBOL.command.unfilledTokens((filledNow[ci] && filledNow[ci].filled) || '');
-          if (un.some(function (t) { return OBOL.command.EARNED_TOKENS && OBOL.command.EARNED_TOKENS[t]; })) continue;
-          if (OBOL.pack && OBOL.pack.commandLocus) {
-            var cLoc = OBOL.pack.commandLocus(cObj);
-            if (!hasFoot && cLoc === 'onhost') continue;
-            if (cLoc !== defLocus) continue;
-          }
-          if (!OBOL.command.commandTriedInEpoch(moveObj, cObj, filledNow[ci] && filledNow[ci].filled, actList, epoch)) {
-            hasUntried = true;
-            break;
-          }
-        }
-        if (!hasUntried) {
-          OBOL.store.update(function (e) {
-            e.checklist = e.checklist || {};
-            e.checklist[inferredActId] = 'empty:' + epoch;
-          }, 'done');
-        }
+    // The outcome belongs to this attempt. Never exhaust an entire move because a paste added
+    // no facts, looked clean, or happened to have two lines. Command suppression consults the
+    // conclusive outcome and the exact resolved context instead.
+    if (!opts.fromSession && added === 0 && !facts.length && !recognized && !looksErr && !rawOptCmd && !opts.actionId) {
+      var tImp = _tryPureTargetsImport(trimmedText);
+      if (tImp && tImp.ok) {
+        if (!opts.quiet && OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+        return { ok: true, arsenal: ar || null, workspaceSync: ws || null, targetsImported: tImp, added: tImp.added || 0,
+          facts: [], imported: 1, commands: 1, cmd: 'targets-import', lines: lines, fileName: opts.fileName || '',
+          parseError: '', recognizedTool: true, looksError: false, epoch: epoch, blockers: [] };
       }
     }
     // `quiet` - a batch session import re-renders ONCE at the end instead of per command.
     if (!opts.quiet && OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
     // Signals for the caller's "this move ran but proved nothing" decision: did a tool obol knows about
     // actually run (recognized), and did it fail rather than simply come up empty (looksError)?
-    return { ok: true, added: added, facts: facts, cmd: cmd, lines: lines, fileName: opts.fileName || '',
-      parseError: parseError, recognizedTool: recognized, looksError: looksErr,
-      epoch: epoch, blockers: blockers };
+    return { ok: true, arsenal: ar || null, workspaceSync: ws || null, added: added, facts: facts, imported: 1, commands: 1,
+      cmd: cmd, lines: lines, fileName: opts.fileName || '',
+      parseError: parseError, diagnostics: (res && res.diagnostics) || [], recognizedTool: recognized, looksError: looksErr,
+      epoch: epoch, blockers: blockers, outcome: outcome, context: contextSnapshot };
   }
 
   // -- Whole-session import ------------------------------------------------------------------------
@@ -744,23 +954,31 @@
   //   opts = { fileName?, target?, remap? }  target: 'auto' (default) routes each command to the host it
   //   names, and registers any new host it lands facts on; a specific IP forces every command onto that
   //   host. remap: [{from,to}] rewrites an old IP to the current one first (a reverted lab's target changed).
-  function _stripArsenalBlock(text) {
-    return String(text || '').replace(/OBOL-ARSENAL(?:\s+v\d+)?\r?\n\{[^\r\n]*\}\r?\n?/g, '');
-  }
-
   function importSession(inputs, opts) {
     opts = opts || {};
     var texts = Array.isArray(inputs) ? inputs.slice() : [inputs];
-    var arsenalHit = null;
+    var arsenalHit = null, wsHit = null;
     for (var ai = 0; ai < texts.length; ai++) {
       var ar = _tryArsenalIngest(texts[ai]);
       if (ar && ar.ok) {
         arsenalHit = ar;
-        if (/={3,}\s*OBOL STEP\s+\d+/i.test(String(texts[ai] || ''))) {
-          texts[ai] = _stripArsenalBlock(texts[ai]);
-        } else {
-          return { ok: true, arsenal: ar, commands: 1, imported: 1, dupes: 0, added: 0, tools: ['obol-arsenal'], hosts: [], merged: 0, remapped: 0 };
-        }
+        texts[ai] = _stripArsenalBlock(texts[ai]);
+      }
+      var ws = _tryWorkspaceSnapshot(texts[ai]);
+      if (ws && ws.ok) {
+        wsHit = ws;
+        texts[ai] = _stripWorkspaceSnapshot(texts[ai]);
+      }
+    }
+    if ((arsenalHit && arsenalHit.ok) || (wsHit && wsHit.ok)) {
+      var hasRemainingCmds = texts.some(function (t) { return _hasNonSetupCommands(t); });
+      if (!hasRemainingCmds) {
+        var setupTools = [];
+        if (arsenalHit && arsenalHit.ok) setupTools.push('obol-arsenal');
+        if (wsHit && wsHit.ok) setupTools.push('obol-workspace');
+        return { ok: true, arsenal: arsenalHit, workspaceSync: wsHit, commands: 1, imported: 1, dupes: 0, added: 0,
+          facts: [], blockers: [], recognizedTool: true, looksError: false, epoch: 'anon', lines: 1, fileName: opts.fileName || '', parseError: '',
+          tools: setupTools, hosts: [], merged: 0, remapped: 0 };
       }
     }
     if (!ready()) return { ok: false, reason: 'parsers' };
@@ -798,30 +1016,47 @@
     // chronological where timestamps exist; stable on original order otherwise
     all.sort(function (a, b) { var at = a.ts == null ? a.ord : a.ts, bt = b.ts == null ? b.ord : b.ts; return at === bt ? a.ord - b.ord : at - bt; });
     var seen = {}, ranTools = {}, hosts = {}, imported = 0, dupes = 0, added = 0, first = null;
+    var allFacts = [], allBlockers = [], outcomes = [], anyRecognized = false, allLooksErr = true, lastEpoch = 'anon', totalLines = 0;
     all.forEach(function (s) {
-      var firstOut = (s.stdout.split(/\r?\n/).find(function (l) { return l.trim(); }) || '').slice(0, 120);
-      var key = s.command.replace(/\s+/g, ' ').trim() + '|' + firstOut;
+      // Compare the complete observation, including its routed target, before deduplicating.
+      var tip = fixed || detectTarget(s.command, s.stdout, { lhost: lhost, known: known, self: self }) || params.target || '';
+      var normalized = String(s.stdout || '').replace(/\r\n/g, '\n').trim();
+      var key = OBOL.facts.fingerprint(JSON.stringify([tip, s.command.trim(), normalized]));
       if (seen[key]) { dupes++; return; }
       seen[key] = 1;
-      // Route this command to a host: the fixed target, else the one it names, else the active target.
-      var tip = fixed || detectTarget(s.command, s.stdout, { lhost: lhost, known: known, self: self }) || params.target || '';
       var scope = tip ? ('host:' + tip) : undefined;
-      var r = run({ text: s.stdout, command: s.command, source: 'session', at: s.ts || undefined, quiet: true, fileName: opts.fileName || '', scope: scope });
+      var r = run({ text: s.stdout, command: s.command, source: opts.source || 'session', at: s.ts || undefined, quiet: true, fileName: opts.fileName || '', scope: scope, forceTarget: !!fixed, fromSession: true });
       if (r && r.ok) {
+        if (r.context && r.context.target && !fixed) tip = r.context.target;
         imported++; added += (r.added || 0);
-        var tname = extractTool(s.command); if (tname) ranTools[tname] = 1;
-        if (!first) first = s.command;
+        totalLines += (r.lines || 0);
+        if (r.recognizedTool) anyRecognized = true;
+        if (!r.looksError) allLooksErr = false;
+        if (r.epoch) lastEpoch = r.epoch;
+        if (r.outcome) outcomes.push(r.outcome);
+        (r.facts || []).forEach(function (f) { allFacts.push(f); });
+        (r.blockers || []).forEach(function (b) { if (allBlockers.indexOf(b) < 0) allBlockers.push(b); });
+        var tname = extractTool(s.command || r.cmd); if (tname) ranTools[tname] = 1;
+        if (!first) first = s.command || r.cmd;
         // register a host only once we attributed proven facts to it in auto mode - and never the Kali box
         if (tip && r.facts && r.facts.length && !selfSet[tip]) { hosts[tip] = 1; if (!fixed && known.indexOf(tip) < 0) { _ensureTarget(tip); known.push(tip); } }
         else if (tip && fixed && !selfSet[tip]) hosts[tip] = 1;
       }
     });
+    var targetsHit = null;
+    if (all.length === 1 && !all[0].command && added === 0 && !allFacts.length && !anyRecognized) {
+      var tImp = _tryPureTargetsImport(all[0].stdout);
+      if (tImp && tImp.ok) {
+        targetsHit = tImp;
+        added += (tImp.added || 0);
+      }
+    }
     var merged = reconcileTargets();
-    // Make active the identity you actually escalated with - the strongest validated command's own
-    // credential - so the next commands (flag hunt, PtH exec) fill with what works, not the first cred or a
-    // hardcoded name. Only when nothing is active yet, so a manual selection is never overridden.
+    // Legacy embeddings without the context module historically chose an escalated identity here.
+    // With explicit per-target selection, ingestion records material and proof only. It must preserve
+    // an intentional no-credential choice as well as a different selected credential or session pin.
     var act = OBOL.store.active() || {}, ap = act.params || {};
-    if (!ap.username) {
+    if (!(OBOL.context && OBOL.context.resolve) && !ap.username) {
       var esc = escalationCred(act.activities || []);
       if (esc) OBOL.store.update(function (e) {
         e.params = e.params || {};
@@ -832,17 +1067,26 @@
       }, 'params');
     }
     if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
-    return { ok: true, arsenal: arsenalHit, commands: all.length, imported: imported, dupes: dupes, added: added,
-      tools: Object.keys(ranTools), hosts: Object.keys(hosts), merged: merged, remapped: remapped };
+    return { ok: true, arsenal: arsenalHit, workspaceSync: wsHit, targetsImported: targetsHit,
+      commands: all.length, imported: imported, dupes: dupes, added: added,
+      facts: allFacts, blockers: allBlockers, recognizedTool: anyRecognized, looksError: imported > 0 ? allLooksErr : false,
+      epoch: lastEpoch, cmd: first || '', lines: totalLines, fileName: opts.fileName || '', parseError: '',
+      tools: Object.keys(ranTools), hosts: Object.keys(hosts), merged: merged, remapped: remapped,
+      outcomes: outcomes, outcome: OBOL.outcomes && OBOL.outcomes.aggregate ? OBOL.outcomes.aggregate(outcomes) : outcomes[0] || null };
   }
 
   var _lastCopied = null;
   function setLastCopied(info) {
     if (!info || !info.command) { _lastCopied = null; return; }
+    var eng = OBOL.store.active() || {}, target = info.target || (eng.params || {}).target || '';
+    var locus = info.executionLocus || (info.context && info.context.locus) || executionLocus(info.command, info.commandObj, info.locus);
+    var ctx = info.context || (OBOL.context && OBOL.context.resolve ? OBOL.context.resolve({ engagement: eng, target: target,
+      command: info.command, actionId: info.actionId || '', locus: locus }) : { target: target, locus: locus });
     _lastCopied = {
       command: String(info.command || ''),
       actionId: String(info.actionId || ''),
-      target: String(info.target || ''),
+      target: String(target), locus: locus,
+      context: OBOL.context && OBOL.context.snapshot ? OBOL.context.snapshot(ctx) : { target: target, locus: locus },
       at: Date.now()
     };
   }
@@ -857,6 +1101,7 @@
     contentSignatures: contentSignatures, dispatchLabel: dispatchLabel, recognizesTool: recognizesTool,
     looksLikeError: looksLikeError, detectLhost: detectLhost, detectTarget: detectTarget,
     remapIps: remapIps, splitSession: splitSession, importSession: importSession,
+    renderOutcome: renderOutcome, outcomeMessage: outcomeMessage, preview: preview,
     credFromCommand: credFromCommand, escalationCred: escalationCred,
     extractTool: extractTool, extractToolName: extractTool,
     setLastCopied: setLastCopied, getLastCopied: getLastCopied,

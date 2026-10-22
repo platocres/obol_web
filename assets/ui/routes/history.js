@@ -48,6 +48,7 @@
         + '<button class="btn-copy hl-copy" data-copy="' + U.attr(a.command || cmd) + '" title="Copy command">copy</button>'
         + '</div>'
         + '<pre class="hl-cmd"><code>' + esc(cmd) + '</code></pre>'
+        + (a.outcome && OBOL.ingest ? OBOL.ingest.renderOutcome(a.outcome) : '')
         + '<div class="hl-facts">' + chips + '</div>'
         + body
         + '</article>';

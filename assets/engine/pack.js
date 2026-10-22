@@ -105,6 +105,14 @@
     if (CMD_ONHOST_SESSION[t] || CMD_ONHOST_RUN[t]) return 'onhost';
     return 'remote';
   }
+  // Authentication context uses where the command is entered, independently of
+  // the UI posture above. A remote session launcher still needs remote proof.
+  function commandExecutionLocus(cmd) {
+    if (!cmd) return 'remote';
+    if (cmd.executionLocus === 'onhost' || cmd.executionLocus === 'remote') return cmd.executionLocus;
+    var t = String((cmd.tool || cmd.tools && cmd.tools[0] || '')).toLowerCase();
+    return CMD_ONHOST_RUN[t] ? 'onhost' : 'remote';
+  }
   function commandIsOnHost(cmd) { return commandLocus(cmd) === 'onhost'; }
   // A move's command loci at a glance: does it offer remote commands, on-host commands, or both? The
   // Remote/On-Host toggle only appears when a move genuinely spans both eligible, plausible commands.
@@ -224,7 +232,7 @@
     if (!facts) return true;
 
     if (cmd.requires_admin) {
-      var hasAdmin = facts.has('access.admin') || facts.has('credential.admin') || facts.has('access.system');
+      var hasAdmin = facts.has('access.admin') || facts.has('access.system');
       if (!hasAdmin) return false;
     }
     if (cmd.requires_share) {
@@ -258,7 +266,7 @@
     // Inherent heuristics: commands requiring admin execution (nxc smb -x, wmiexec, psexec, smbexec)
     var runStr = String(cmd.run || '');
     if ((cmd.tool === 'nxc' && runStr.indexOf('smb ') >= 0 && /\s-[xX]\s/.test(runStr)) || cmd.tool === 'impacket-psexec' || cmd.tool === 'impacket-wmiexec' || cmd.tool === 'impacket-smbexec') {
-      var hasAdm = facts.has('access.admin') || facts.has('credential.admin') || facts.has('access.system');
+      var hasAdm = facts.has('access.admin') || facts.has('access.system');
       if (!hasAdm) return false;
     }
     // Inherent heuristics: hardcoded /Users or --spider Users require evidence of accessible share
@@ -395,6 +403,19 @@
   Action.prototype.producedKinds = function () { return new Set(this.produces); };
 
   Action.prototype.settled = function (facts) {
+    // Supported observations can unlock later work while the current operation
+    // remains incomplete. Only captured terminal objectives settle by kind alone.
+    if (facts && facts.context && !(this.produces.length && this.produces.every(function (kind) {
+      return /^objective\.(?:flag|local_flag|root_flag)$/.test(kind);
+    }))) {
+      if (!facts.commandCompleted) return false;
+      var action = this, applicable = [];
+      (this.commands || []).forEach(function (cmd, index) {
+        var commandFacts = facts.forAction ? facts.forAction(action, cmd) : facts;
+        if (action.eligible(commandFacts) && commandIsEligible(cmd, commandFacts)) applicable.push({cmd:cmd,index:index});
+      });
+      return applicable.length > 0 && applicable.every(function (entry) { return facts.commandCompleted(action, entry.cmd, entry.index); });
+    }
     // Cracking actions (crack-tgs, crack-asrep, crack-ntlm, etc.) require specific hash evidence.
     // They must NOT be marked settled simply because an unrelated low-priv credential exists.
     if (this.id.indexOf('crack-') === 0 || this.id === 'hashcat' || this.id === 'john') {
@@ -469,6 +490,10 @@
   };
 
   Action.prototype.eligible = function (facts) {
+    if (facts && facts.forAction && (!facts.context || facts.context.actionId !== this.id)) {
+      var action = this, candidates = facts.forActionContexts ? facts.forActionContexts(this) : [facts.forAction(this)];
+      return candidates.some(function (candidate) { return action.eligible(candidate); });
+    }
     // True when the target's OS and proven facts satisfy this action's prerequisites.
     if (!osCompatible(facts, this.os, this)) return false;
     for (var i = 0; i < this.requires_all.length; i++) {
@@ -485,6 +510,11 @@
   };
 
   Action.prototype.unmet = function (facts) {
+    if (facts && facts.forAction && (!facts.context || facts.context.actionId !== this.id)) {
+      var action = this, candidates = facts.forActionContexts ? facts.forActionContexts(this) : [facts.forAction(this)];
+      var eligible = candidates.filter(function (candidate) { return action.eligible(candidate); })[0];
+      return this.unmet(eligible || candidates[0]);
+    }
     // A friendly one-line reason this action is blocked (first unmet prerequisite).
     if (!osCompatible(facts, this.os, this)) {
       var family = hostOsFamily(facts) || 'another OS';
@@ -544,7 +574,7 @@
     'hash.krbtgt': 'the krbtgt hash', 'hash.tgt': 'a TGT',
     'credential.candidate': 'candidate credentials', 'credential.available': 'a usable credential',
     'credential.validation': 'credential validation evidence',
-    'credential.admin': 'an admin credential', 'credential.certificate': 'certificate material',
+    'credential.certificate': 'certificate material',
     'credential.ntlm_hash': 'an NT hash', 'credential.plaintext': 'a plaintext password',
     'credential.weak_hash': 'a weak/unsalted password-hashing scheme',
     'kerberos.tickets': 'Kerberos tickets', 'kerberos.reachable': 'Kerberos is reachable',
@@ -683,6 +713,12 @@
     'vuln.dirtypipe': 'a DirtyPipe-vulnerable Linux kernel (5.8 - 5.16.10)',
     'vuln.baron_samedit': 'a Baron Samedit-vulnerable sudo version (CVE-2021-3156)',
     'vuln.polkit': 'a PwnKit-vulnerable pkexec version (CVE-2021-4034)',
+    'ad.nopac': 'a noPac-vulnerable DC (CVE-2021-42278/42287)',
+    'vuln.printnightmare': 'a PrintNightmare-vulnerable Spooler (CVE-2021-34527)',
+    'ad.maq_allow': 'a non-zero MachineAccountQuota (>= 1)',
+    'mssql.sysadmin': 'MSSQL sysadmin privilege or impersonation path',
+    'hash.sntp': 'an MS-SNTP Timeroast machine hash',
+    'loot.keepass_dump': 'a discovered KeePass database (.kdbx) or master key dump',
   };
 
   function friendly(kind) {
@@ -942,6 +978,8 @@
     'smb.writable_share': 1, 'access.admin_share': 1, 'share.users_readable': 1,
     'ad.laps': 1, 'ad.rbcd': 1, 'ad.delegation': 1, 'ad.group_joined': 1, 'ad.domain_control': 1,
     'privesc.kernel_exploit': 1,
+    'ad.nopac': 1, 'vuln.printnightmare': 1, 'ad.maq_allow': 1,
+    'mssql.sysadmin': 1, 'hash.sntp': 1, 'loot.keepass_dump': 1,
   };
   var V2_PRIV = { 'access.admin': 1, 'access.system': 1, 'access.root': 1, 'loot.ntds': 1, 'objective.flag': 1, 'objective.local_flag': 1, 'objective.root_flag': 1 };
   // An exploit/foothold move is EVIDENCED (not a bare-port gamble) when the box actually shows a
@@ -1115,7 +1153,7 @@
     var adminVal = hasFact('access.root') ? 'root'
       : (hasFact('access.system') ? 'system'
       : (hasFact('access.admin') ? 'admin'
-      : (hasFact('credential.admin') ? 'cred' : '')));
+      : ''));
 
     var fhVal = hasFact('foothold.windows') ? 'win'
       : (hasFact('foothold.linux') ? 'lin'
@@ -1131,14 +1169,14 @@
         var hasPw = !!(v.password || v.secret);
         var hasHash = !!(v.nthash || v.hash || v.ntlm);
         var secType = (hasPw && hasHash) ? 'both' : (hasPw ? 'pw' : (hasHash ? 'hash' : 'id'));
-        if (!credMap[u] || credMap[u] === 'id') credMap[u] = secType;
-        else if (secType === 'both') credMap[u] = 'both';
+        var records = (facts.facts || []).filter(function (f) { return f.kind === k && f.value === v; });
+        var scope = records.length ? records[0].scope : '';
+        var id = OBOL.facts.credentialIdentity(v, scope);
+        credMap[u + ':' + secType + ':' + id] = true;
       });
     });
 
-    var credUsers = Object.keys(credMap).sort().map(function (u) {
-      return u + ':' + credMap[u];
-    });
+    var credUsers = Object.keys(credMap).sort();
 
     var openHashes = [];
     if (hasFact('hash.asrep')) openHashes.push('asrep');
@@ -1333,7 +1371,7 @@
         }
       }
       // (d) Admin credential or admin access in hand -> Capture root flag leads everything!
-      if (!noFlags && hasWinShellSurface && (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred' || haveObj['access.admin'] || haveObj['access.system'] || haveObj['credential.admin']) && a.transition === 'root_flag_win' && !haveObj['objective.root_flag']) {
+      if (!noFlags && hasWinShellSurface && (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred' || haveObj['access.admin'] || haveObj['access.system']) && a.transition === 'root_flag_win' && !haveObj['objective.root_flag']) {
         score += 8.0;
         if (tier < 2) tier = 2;
       } else if (hasWinShellSurface && (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred') && a.transition === 'foothold_win') {
@@ -1385,7 +1423,7 @@
         if (tier < 2) tier = 2;
       }
       // (h) TGS Hash in hand -> Crack TGS leads immediately
-      if (haveObj['hash.tgs'] && a.transition === 'crack_tgs' && !haveObj['credential.admin'] && !haveObj['loot.ntds']) {
+      if (haveObj['hash.tgs'] && a.transition === 'crack_tgs' && !haveObj['loot.ntds']) {
         score += 24.0;
         if (tier < 2) tier = 2;
       }
@@ -1520,8 +1558,7 @@
       // Validate before use: while you hold a credential you have not validated yet (a FOUND credential,
       // not a cracked one), the step that CONFIRMS it authenticates leads over the moves that spend it.
       // Mirrors the anonymous probe, a cheap check before you commit. The validating move produces
-      // credential.validated and settles the instant it is proven; a cracked / bruteforced / already-logged-in
-      // credential is validated from the start, so this never fires for those (the move is already gone).
+      // credential.validated and settles the instant successful authentication is proven.
       if (validateFirst) {
         var xcv = x.a.produces.indexOf('credential.validated') >= 0, ycv = y.a.produces.indexOf('credential.validated') >= 0;
         if (xcv !== ycv) return xcv ? -1 : 1;
@@ -1695,6 +1732,7 @@
     deriveScope: deriveScope,
     locusRank: locusRank,
     commandLocus: commandLocus,
+    commandExecutionLocus: commandExecutionLocus,
     commandIsOnHost: commandIsOnHost,
     moveCommandLoci: moveCommandLoci,
     defaultCommandLocus: defaultCommandLocus,

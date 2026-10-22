@@ -1,14 +1,14 @@
 /*!
- * obol engine — study.js
+ * obol engine - study.js
  * Study mode's engine half. Pure functions over the loaded packs (OBOL.packs.actions()) + ARSENAL +
  * the embedded sample-output map (OBOL.STUDY_FIXTURES).
  *
  * The conditional "study cell" is DERIVED, not hand-authored: every field maps to data the move
- * already carries — hypothesis / requires_* / produces / does_not_prove / commands[].note / refs —
+ * already carries - hypothesis / requires_* / produces / does_not_prove / commands[].note / refs -
  * plus two graph walks (what mints my prereqs, what my output opens). The one non-pack piece is the
  * sample output; a move with no fixture still produces a full cell (the Watch replay just shows no
  * streamed output yet). Each fixture pins the exact command its output came from (cmd/tool), so the
- * Watch replay always types the command that produced the result shown — command and output are one
+ * Watch replay always types the command that produced the result shown - command and output are one
  * coherent run, never a sample paired against a different command.
  *
  * Lanes are the methodology taxonomy: every move is auto-assigned to a lane from its source pack and
@@ -62,7 +62,7 @@
     if (!_packToLane) { _packToLane = {}; LANE_DEFS.forEach(function (d) { d.packs.forEach(function (p) { _packToLane[p] = d.key; }); }); }
     return _packToLane[base] || 'recon';
   }
-  // a few moves live in a pack that doesn't match their nature (nmap scans ship in the AD pack) —
+  // a few moves live in a pack that doesn't match their nature (nmap scans ship in the AD pack) -
   // reassign by id so the taxonomy reads right.
   function laneForMove(m) {
     if (/^nmap-/.test(m.id)) return 'recon';
@@ -313,7 +313,7 @@
       producedBy: producersOf(reqs).filter(function (x) { return x.id !== m.id; }).map(function (x) { return { id: x.id, title: x.title }; }),
       commands: commands,
       // A fixture pins the exact command its sample output came from (fx.cmd / fx.tool), so the Watch
-      // replay types that command above its real result — command and output are one coherent run, never
+      // replay types that command above its real result - command and output are one coherent run, never
       // a guess paired against the ranker. A multi-step fixture (fx.steps) models a tool that is set up
       // on BOTH your box and the target: each step carries its own `where` (local / host), command and
       // output, played in the real order. Single fixtures fall back to the move's remote-first command.
@@ -339,8 +339,137 @@
   }
 
   function stripPrompt(s) { return String(s || '').replace(/^\s*(kali\$|root@[^\s#]*[#$]|C:\\[^>]*>|[#$])\s*/, '').trim(); }
-  function replayFor(moveId) {
+  var _ACT_FLAGS = ['--shares', '--rid-brute', '--pass-pol', '--local-groups', '--groups', '--users', '--active-users', '--laps', '--gmsa', '--sam', '--lsa', '--ntds', '--dpapi', '--asreproast', '--kerberoasting', '--bloodhound', '--trusted-for-delegation', '--find-delegation', '--admin-count', '--password-not-required', '--loggedon-users', '--sessions', '--disks', '--computers', '--gen-relay-list', '--spider', '--screenshot', '--nla-screenshot', '--ls', '--sudo-check', '-x', '-X', '-q', '-L', 'enumdomusers', 'querydominfo', 'lookupnames'];
+  function _cmdSig(raw) {
+    var s = stripPrompt(String(raw || '')).replace(/^\s*(?:sudo|proxychains4?|stdbuf\s+\S+|timeout\s+\S+|\w+=\S+)\s+/i, '').trim();
+    var parts = s.split(/\s+/);
+    var first = (parts[0] || '').replace(/^.*[/\\]/, '').toLowerCase();
+    if ((first === 'python' || first === 'python3' || first === 'perl' || first === 'ruby' || first === 'bash' || first === 'sh') && parts[1]) {
+      first = parts[1].replace(/^.*[/\\]/, '').toLowerCase();
+    }
+    first = first.replace(/^impacket-/, '').replace(/\.(?:py|exe|sh|ps1|pl|rb)$/i, '');
+    if (first === 'netexec' || first === 'cme' || first === 'crackmapexec') first = 'nxc';
+    var proto = '';
+    if (first === 'nxc' && parts[1]) proto = parts[1].toLowerCase();
+    var mods = [], mRe = /-M\s+([A-Za-z0-9_.-]+)/g, mm;
+    while ((mm = mRe.exec(s)) !== null) mods.push(mm[1].toLowerCase());
+    mods.sort();
+    var flags = [];
+    _ACT_FLAGS.forEach(function (fl) {
+      var escFl = fl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (new RegExp('(?:^|\\s)' + escFl + '(?:\\s|=|$)', 'i').test(s)) flags.push(fl.toLowerCase());
+    });
+    flags.sort();
+    return { exec: first, proto: proto, mods: mods, flags: flags };
+  }
+  function _fillSampleTokens(cmd) {
+    var map = {
+      target: '10.10.10.10', dc_ip: '10.10.10.10', dc_fqdn: 'DC01.acme.internal', hostname: 'DC01',
+      domain: 'acme.internal', basedn: 'DC=acme,DC=internal', base_dn: 'DC=acme,DC=internal',
+      user: 'jbloggs', username: 'jbloggs', dauser: 'Administrator',
+      password: 'Autumn2026!', nthash: '8846f7eaee8fb117ad06bdd830b7586c', dahash: '31d6cfe0d16ae931b73c59d7e0c089c0',
+      lhost: '10.10.14.5', attacker_ip: '10.10.14.5', lport: '4444', port: '80', url: 'http://10.10.10.10',
+      share: 'Users', userlist: 'users.txt', hashfile: 'hashes.txt', wordlist: '/usr/share/wordlists/rockyou.txt',
+      flag_path_local: 'C:\\Users\\jbloggs\\Desktop\\local.txt', flag_path_root: 'C:\\Users\\Administrator\\Desktop\\proof.txt',
+      target_sam: 'svc_adm', group: 'Domain Admins', template: 'User'
+    };
+    return String(cmd || '').replace(/\{\{([a-zA-Z0-9_]+)(?:\|([^}]*))?\}\}/g, function (_, k, defV) {
+      return map[k] || defV || ('<' + k + '>');
+    });
+  }
+  function _synthVariantStep(m, cmdIdx, rawCmdObj, targetCmd, fx) {
+    var L = cmdLocus(rawCmdObj);
+    var where = L.label === 'ON-TARGET' ? 'host' : 'local';
+    var sampleCmd = _fillSampleTokens((targetCmd && !/\{\{/.test(targetCmd)) ? targetCmd : (rawCmdObj.run || targetCmd));
+    var fn = (OBOL.fieldNote && m) ? OBOL.fieldNote(m, cmdIdx) : null;
+    var looks = (fn && fn.look) || [];
+    var outLines = [], sig = '', teach = (rawCmdObj && rawCmdObj.note) || (fx && fx.teach) || '';
+    if (looks.length) {
+      looks.slice(0, 3).forEach(function (lk, i) {
+        var idxDash = lk.indexOf(' - ');
+        var pat = idxDash > 0 ? lk.slice(0, idxDash).trim() : lk.trim();
+        var desc = idxDash > 0 ? lk.slice(idxDash + 3).trim() : '';
+        outLines.push(pat);
+        if (i === 0) { sig = pat; if (desc) teach = desc; }
+      });
+    } else if (fx && fx.signal) {
+      outLines.push(fx.signal);
+      sig = fx.signal;
+    }
+    return {
+      step: { where: where, tool: rawCmdObj.tool || '', command: sampleCmd, outputLines: outLines, note: rawCmdObj.note || '' },
+      sig: sig,
+      teach: teach
+    };
+  }
+  function replayFor(moveId, cmdIdx, cmdText) {
     var cell = cellFor(moveId); if (!cell) return null;
+    var m = byId(moveId), fx = fixtures()[moveId] || null;
+    if (cmdIdx !== undefined && cmdIdx !== null && m && m.commands && m.commands[cmdIdx]) {
+      var rawCmdObj = m.commands[cmdIdx];
+      var rawRun = rawCmdObj.run || '';
+      var tSig = _cmdSig(rawRun);
+      var cands = [];
+      if (fx) {
+        if (fx.steps && fx.steps.length) {
+          fx.steps.forEach(function (s) {
+            if (s && s.cmd && s.output) cands.push({ cmd: s.cmd, out: s.output, sig: fx.signal || '', teach: fx.teach || '', where: s.where === 'host' ? 'host' : 'local', tool: s.tool || '' });
+          });
+        } else if (fx.cmd && fx.output) {
+          cands.push({ cmd: fx.cmd, out: fx.output, sig: fx.signal || '', teach: fx.teach || '', where: cmdLocus(rawCmdObj).label === 'ON-TARGET' ? 'host' : 'local', tool: fx.tool || '' });
+        }
+        if (fx.how && Array.isArray(fx.how.items)) {
+          fx.how.items.forEach(function (it) {
+            (it.demo || []).forEach(function (d) {
+              if (d && d.run && d.out) {
+                cands.push({ cmd: d.run, out: d.out, sig: d.sig || fx.signal || '', teach: it.note || it.d || fx.teach || '', where: cmdLocus(rawCmdObj).label === 'ON-TARGET' ? 'host' : 'local', tool: rawCmdObj.tool || '' });
+              }
+            });
+          });
+        }
+      }
+      var best = null, bestScore = -1;
+      cands.forEach(function (c) {
+        var cSig = _cmdSig(c.cmd);
+        if (!tSig.exec || tSig.exec !== cSig.exec) return;
+        if (tSig.exec === 'nxc' && tSig.proto && cSig.proto && tSig.proto !== cSig.proto) return;
+        if (tSig.mods.join(',') !== cSig.mods.join(',')) {
+          var sharedMod = tSig.mods.filter(function (x) { return cSig.mods.indexOf(x) >= 0; });
+          if (!sharedMod.length) return;
+        }
+        if (tSig.flags.join(',') !== cSig.flags.join(',')) {
+          var sharedFl = tSig.flags.filter(function (x) { return cSig.flags.indexOf(x) >= 0; });
+          if ((tSig.flags.length || cSig.flags.length) && !sharedFl.length) return;
+        }
+        var score = 20;
+        tSig.mods.forEach(function (x) { if (cSig.mods.indexOf(x) >= 0) score += 10; });
+        tSig.flags.forEach(function (x) { if (cSig.flags.indexOf(x) >= 0) score += 5; });
+        if (score > bestScore) { bestScore = score; best = c; }
+      });
+      var vStep, vSig, vTeach;
+      if (best) {
+        var bLines = String(best.out || '').split('\n');
+        if (bLines.length && best.cmd && stripPrompt(bLines[0]) === stripPrompt(best.cmd)) bLines = bLines.slice(1);
+        vStep = { where: best.where, tool: best.tool || rawCmdObj.tool || '', command: best.cmd, outputLines: bLines, note: rawCmdObj.note || '' };
+        vSig = best.sig;
+        vTeach = best.teach;
+      } else {
+        var syn = _synthVariantStep(m, cmdIdx, rawCmdObj, cmdText || rawRun, fx);
+        vStep = syn.step;
+        vSig = syn.sig;
+        vTeach = syn.teach;
+      }
+      var L0 = cmdLocus(rawCmdObj);
+      return {
+        id: cell.id, title: cell.title, phase: cell.phase, laneKey: cell.laneKey,
+        tool: vStep.tool || '', locus: L0.label, tag: L0.tag,
+        command: vStep.command || '', note: vStep.note || '',
+        steps: [vStep], multi: false,
+        outputLines: vStep.outputLines || [], hasOutput: (vStep.outputLines || []).length > 0,
+        signal: vSig || '', teach: vTeach || '',
+        proves: cell.proves, opens: (cell.opens[0] || {}).title || '', next: laneNext(moveId),
+      };
+    }
     var primary = cell.commands[0] || null, out = cell.output;
     var steps = [];
     if (out && out.steps) {
@@ -358,7 +487,7 @@
       steps = [{ where: where, tool: out.tool || (primary ? primary.tool : ''), command: pcmd, outputLines: lines2, note: primary ? primary.note : '' }];
     }
     // No sample-output fixture? Still make a navigable replay from the move's own remote-first command, so
-    // every move (including freshly-added ones with no fixture yet) is a complete cell — output is a nicety,
+    // every move (including freshly-added ones with no fixture yet) is a complete cell - output is a nicety,
     // not a requirement (the Watch pane simply shows the command with no canned result until a fixture lands).
     if (!steps.length && primary) {
       steps = [{ where: primary.locus === 'ON-TARGET' ? 'host' : 'local', tool: primary.tool || '', command: primary.run || '', outputLines: [], note: primary.note || '' }];
@@ -691,8 +820,8 @@
     });
     return { ok: !issues.length, issues: issues };
   }
-  // facts an opening move needs that come "from the environment" (a target, reachability) — not from
-  // another move — so a path that starts mid-stream isn't flagged for them.
+  // facts an opening move needs that come "from the environment" (a target, reachability) - not from
+  // another move - so a path that starts mid-stream isn't flagged for them.
   function isExternal(fact) { return /^(target\.|host\.up|ports\.open|port:|.*\.reachable$|http\.reachable|foothold\.)/.test(fact); }
 
   // --- signal recognition helpers: the "so what" behind evidence -------------------------------
@@ -722,7 +851,7 @@
       unlocks: allMoves().filter(function (m) { return reqSet(m).indexOf(fact) >= 0; }).map(function (m) { return { id: m.id, title: m.title }; }),
     };
   }
-  // other moves that reach the same outcome (share a produced fact) — the candidates for "which, when?"
+  // other moves that reach the same outcome (share a produced fact) - the candidates for "which, when?"
   function alternativesFor(moveId) {
     var m = byId(moveId); if (!m) return [];
     var prod = m.produces || []; if (!prod.length) return [];
