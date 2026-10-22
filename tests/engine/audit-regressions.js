@@ -116,14 +116,14 @@ function check(condition, message) { assert.ok(condition, message); count++; }
   const imported = O.ingest.importSession([capture1, capture2, capture1], { target: B, quiet: true });
   check(imported.imported === 2 && imported.dupes === 1 && eng.activities.length === before + 2, 'Session dedup uses the whole observation rather than its shared opening banner');
 
-  const originalFill = O.command.fillAll;
+  const originalFill = O.command.fillCommand;
   O.packs.actions = () => [new O.pack.Action({ id: 'target-probe', requires_all: [], produces: ['test.probe'], commands: [{ run: 'echo {{target}}' }] })];
-  let filledTarget;
-  O.command.fillAll = (action, facts, opts) => { filledTarget = opts.params.target; return originalFill(action, facts, opts); };
+  let filledTarget, filledProbe;
+  O.command.fillCommand = (action, facts, opts, index) => { filledTarget = opts.params.target; const result=originalFill(action, facts, opts, index); filledProbe=result.filled; return result; };
   S.update(e => { e.params.target = B; });
   O.coach.rankFor(set([hostFact('host.up', A)]), { target: A });
-  O.command.fillAll = originalFill; O.packs.actions = () => [];
-  check(filledTarget === A, 'Per-target eligibility fills commands with that target even when another host is active');
+  O.command.fillCommand = originalFill; O.packs.actions = () => [];
+  check(filledTarget === A && filledProbe === 'echo ' + A, 'Per-target eligibility fills commands with that target even when another host is active');
   const savedTargets = eng.targets;
   S.update(e => { e.targets = [{ ip: A }]; });
   S.setActiveTarget(A);

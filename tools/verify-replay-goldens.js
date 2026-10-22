@@ -203,7 +203,7 @@ const top3IdsStage5 = coach5.onFlow.slice(0, 3).map(m => m.id);
 assert(!top3IdsStage5.includes('kerberoast'), 'Stage 5: kerberoast MUST NOT be in top 3 on Forest');
 const filledBloodyAD = OBOL.command.fillAll(coach5.onFlow[0], OBOL.store.factSet(), { params: OBOL.store.active().params });
 console.log('  Stage 5 Suggested Command:', filledBloodyAD[0].filled);
-assert(filledBloodyAD[0].filled.includes('bloodyAD -d htb.local --host 10.129.105.202 -u svc-alfresco -p \'s3rvice\' get writable --detail'), 'Stage 5: bloodyAD get writable is the #1 command');
+assert(filledBloodyAD[0].filled.includes("bloodyAD -d htb.local --host 10.129.105.202 -u 'svc-alfresco' -p 's3rvice' get writable --detail"), 'Stage 5: bloodyAD get writable is the #1 command with its account quoted');
 
 // --- Forest Stage 6: DCSync Rights Added -> dcsync Must Be #1 ---
 console.log('\n[Forest Stage 6: DCSync Execution]');

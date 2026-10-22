@@ -318,9 +318,9 @@
       if (kt && kt.nthash) ctx.krbtgt_hash = kt.nthash;
     }
 
-    // Domain-admin hash from a DCSync/NTDS dump, resolved INDEPENDENTLY of the active credential (like
-    // krbtgt_hash). So the moment you dump NTDS, the "read the flag / own the box with the DA hash"
-    // commands fill with the built-in Administrator (RID 500) hash, with NO manual credential swap.
+    // Resolve admin hash aliases from the command's scoped material. A resolved
+    // context contains only the selected credential, so these aliases never
+    // silently switch away from the account the operator chose.
     if (!ctx.dahash) {
       var avs = fvals('credential.available');
       for (var ai = 0; ai < avs.length; ai++) {
@@ -811,6 +811,7 @@
     var run = c.web || c.run || action.web_command || action.command || '';
     var errors = [];
     var fillOpts = Object.assign({}, opts, { action: action, command: run, locus: opts.locus || (OBOL.pack && OBOL.pack.commandExecutionLocus ? OBOL.pack.commandExecutionLocus(c) : 'remote'), shell: c.shell || opts.shell || inferShell(run), errors: errors });
+    if (!fillOpts.context && facts && facts.forAction) fillOpts.context = facts.forAction(action, c)._resolvedContext;
     var filled = fillTemplate(run, facts, fillOpts);
     var actForArsenal = (c.tool && action && c.tool !== action.tool) ? Object.assign({}, action, { cmdTool: c.tool }) : action;
     return {
@@ -933,8 +934,10 @@
     return m ? m[1].replace(/^.*[\\/]/, '') : '';
   }
 
-  function commandTriedInEpoch(action, cmdObj, filledStr, activities, epoch, target) {
+  function commandTriedInEpoch(action, cmdObj, filledStr, activities, epoch, target, resolvedContext) {
     if (!action || !cmdObj || !Array.isArray(activities) || !activities.length) return false;
+    activities = activities.filter(function (a) { return a && (a.action_id || a.actionId) === action.id; });
+    if (!activities.length) return false;
     var rawRun = _normCmd(cmdObj.run);
     var filledCmd = _normCmd(filledStr);
     var cmdTool = String(cmdObj.tool || primaryBinary(rawRun) || '').toLowerCase().replace(/\.(py|exe)$/, '');
@@ -947,7 +950,9 @@
       }
     }
     var isFlagHuntSession = (action.id === 'flag-hunt-windows' || action.id === 'flag-hunt-root-windows') && cmdTool === 'evil-winrm';
-    var currentContext = OBOL.context && OBOL.store && OBOL.store.active ? OBOL.context.resolve({engagement:OBOL.store.active(),target:target,command:filledStr || rawRun,actionId:action.id,locus:OBOL.pack && OBOL.pack.commandExecutionLocus ? OBOL.pack.commandExecutionLocus(cmdObj) : 'remote'}) : null;
+    var currentContext = resolvedContext;
+    if (!currentContext && action.resolvedContext && action.resolvedContext.target === target) currentContext = action.resolvedContext.facts.forAction(action, cmdObj)._resolvedContext;
+    if (!currentContext && OBOL.context && OBOL.store && OBOL.store.active) currentContext = OBOL.context.resolve({engagement:OBOL.store.active(),target:target,command:filledStr || rawRun,actionId:action.id,locus:OBOL.pack && OBOL.pack.commandExecutionLocus ? OBOL.pack.commandExecutionLocus(cmdObj) : 'remote'});
     for (var a = 0; a < activities.length; a++) {
       var act = activities[a];
       if (!act || (act.action_id || act.actionId) !== action.id) continue;
@@ -980,7 +985,7 @@
     function isGated(cmd, i) {
       var commandFacts = facts && facts.forAction ? facts.forAction(action, cmd) : facts;
       if (action.eligible && commandFacts && !action.eligible(commandFacts)) return true;
-      if (OBOL.pack && OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmd, commandFacts)) return true;
+      if (OBOL.pack && OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmd, commandFacts, action)) return true;
       if (!filled[i]) return false;
       if (filled[i].blocked) return true;
       var un = unfilledTokens(filled[i].filled || '');

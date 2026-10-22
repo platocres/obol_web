@@ -85,9 +85,16 @@
     var st = { s: 1, x: 0, y: 0, min: 0.15, max: 5 };
     function clamp(s) { return Math.max(st.min, Math.min(st.max, s)); }
     function apply() { svg.style.transform = 'translate(' + st.x + 'px,' + st.y + 'px) scale(' + st.s + ')'; }
+    var waitingForSize = null;
     function fit() {
+      if (!view.isConnected) { if (waitingForSize) waitingForSize.disconnect(); waitingForSize = null; return; }
       var vw = view.clientWidth, vh = view.clientHeight, pad = 20;
-      if (!vw || !vh) { requestAnimationFrame(fit); return; }
+      if (!vw || !vh) {
+        // Hidden graphs wait for a size change instead of polling every frame.
+        if (!waitingForSize && typeof ResizeObserver === 'function') { waitingForSize = new ResizeObserver(fit); waitingForSize.observe(view); }
+        return;
+      }
+      if (waitingForSize) { waitingForSize.disconnect(); waitingForSize = null; }
       var s = clamp(Math.min((vw - pad) / iw, (vh - pad) / ih) || 1);
       st.s = s; st.x = Math.max(pad / 2, (vw - iw * s) / 2); st.y = Math.max(pad / 2, (vh - ih * s) / 2); apply();
     }

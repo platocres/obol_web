@@ -13,7 +13,7 @@
     parsers: [
       'assets/engine/parsers/common.js?v=ed477d98',
       'assets/engine/parsers/nmap.js?v=ea8f8417', 'assets/engine/parsers/directory.js?v=e6c936a1',
-      'assets/engine/parsers/creds.js?v=9236f236', 'assets/engine/parsers/host.js?v=3ad360c7',
+      'assets/engine/parsers/creds.js?v=fbae432e', 'assets/engine/parsers/host.js?v=3ad360c7',
       'assets/engine/parsers/services.js?v=26176532', 'assets/engine/parsers/database.js?v=5a84b7bf',
       'assets/engine/parsers/web.js?v=b4644a29', 'assets/engine/parsers/websource.js?v=de442185',
       'assets/engine/parsers/findings.js?v=94c491fa', 'assets/engine/parsers/shape.js?v=2e96e9df',

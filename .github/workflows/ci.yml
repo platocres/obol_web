@@ -57,6 +57,7 @@ jobs:
             context-location-regressions \
             parser-coverage-contract \
             context-outcome-flow \
+            forest-handoff-regressions \
             publish-scrub-smoke
           do
             node "tests/engine/$test.js"
@@ -80,9 +81,11 @@ jobs:
         env:
           OBOL_BEHAVIOR_OUTPUT: test-results/outcome-flow
           OBOL_AUDIT_OUTPUT: test-results/audit
+          OBOL_PERFORMANCE_OUTPUT: test-results/performance
         run: |
           node tests/browser-outcome-flow.js
           node tests/browser-audit-smoke.js
+          node tests/browser-performance-smoke.js
       - name: Retain browser evidence
         if: always()
         uses: actions/upload-artifact@v4

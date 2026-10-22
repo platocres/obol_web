@@ -158,6 +158,71 @@ const server = http.createServer((req, res) => {
     }, { A, B });
     check(Object.values(scopeResult).every(Boolean), 'Real browser restores target choices, explicit none, and pin without changing the target domain');
 
+    await fresh('Recovered credential handoff');
+    const recovered = '$krb5asrep$23$charlie@ALPHA.LOCAL:' + '1'.repeat(32) + '$' + '2'.repeat(64) + ':FixtureCharliePassword!';
+    result = await paste('hashcat -m 18200 loot/asrep.hashes --show', recovered, 'success', 'crack-asrep');
+    check(await page.evaluate(() => OBOL.store.resolvedContext().credential.user === 'alice'), 'Recovering another credential preserves the active identity');
+    const selectRecovered = page.getByRole('button', { name: /Select and Validate.*charlie/i });
+    await selectRecovered.waitFor();
+    fs.mkdirSync(OUTPUT, { recursive: true });
+    await page.screenshot({ path: path.join(OUTPUT, 'credential-prompt.png'), fullPage: true });
+    await page.evaluate(() => {
+      // A rebuilt sidebar must not make one user click select the account repeatedly.
+      for (let i = 0; i < 4; i++) {
+        const sidebar = document.getElementById('cred-switch');
+        sidebar.replaceWith(sidebar.cloneNode(false));
+        OBOL.app.renderSidebar();
+        OBOL.credbar.mount();
+      }
+      window.__selectionCalls = 0;
+      window.__originalSelection = OBOL.store.selectCredential;
+      OBOL.store.selectCredential = function (...args) { window.__selectionCalls++; return window.__originalSelection.apply(this, args); };
+    });
+    await selectRecovered.click();
+    const selected = await page.evaluate(() => {
+      OBOL.store.selectCredential = window.__originalSelection;
+      const c = OBOL.store.resolvedContext({service:'smb'});
+      return {calls:window.__selectionCalls,user:c.credential.user,authenticated:c.facts.has('smb.authenticated'),ready:OBOL.coach.compute().onFlow[0].id};
+    });
+    check(selected.calls === 1 && selected.user === 'charlie', 'One prompt click selects the recovered credential once after sidebar rebuilds');
+    check(!selected.authenticated && selected.ready === 'validate-credential', 'Selection opens credential validation without fabricating authentication');
+    await page.locator('.ns-card').first().getByRole('heading', {name:'Validate A Found Credential',exact:true}).waitFor();
+
+    await fresh('Administrator proof attempt without prior validation');
+    const adminHash = 'a'.repeat(32), proofPath = 'C:\\Users\\Administrator\\Desktop\\root.txt';
+    await page.evaluate(({ A }) => {
+      OBOL.store.addFacts(['os.windows','ad.dc_candidate','objective.local_flag'].map(kind => OBOL.facts.makeFact({kind,scope:'host:' + A,value:{}})));
+      OBOL.router.render();
+    }, { A });
+    result = await paste('impacket-secretsdump alpha.local/alice@' + A + ' -just-dc',
+      '[*] Using the DRSUAPI method to get NTDS.DIT secrets\nalpha.local\\Administrator:500:' + 'b'.repeat(32) + ':' + adminHash + ':::', 'success', 'dcsync');
+    await page.getByRole('button', {name:/Select and Validate.*Administrator/i}).click();
+    const rootCard = page.locator('.ns-card[data-action="flag-hunt-root-windows"]');
+    await rootCard.locator('.ns-body').waitFor();
+    check(await page.locator('.ns-card').first().getAttribute('data-action') === 'flag-hunt-root-windows', 'Selecting recovered Administrator opens the root proof attempt first');
+    check(await rootCard.getByRole('button', {name:'Remote',exact:true}).getAttribute('aria-pressed') === 'true', 'Untested Administrator defaults to the remote proof attempt in the visible card');
+    const proofCommands = await page.evaluate(() => {
+      const c = OBOL.coach.compute(), move = c.onFlow.find(a => a.id === 'flag-hunt-root-windows');
+      return {probe:OBOL.command.fillCommand(move,c.facts,{params:c.params},0).filled,admin:c.facts.forAction(move,move.commands[0]).has('access.admin')};
+    });
+    check(!proofCommands.admin && proofCommands.probe.includes('-H ' + adminHash), 'The visible proof attempt uses selected material without claiming administrative access');
+    check((await rootCard.locator('.ns-body').textContent()).includes('-H ' + adminHash), 'The fully filled hash command is actually shown to the user');
+    await page.screenshot({path:path.join(OUTPUT,'administrator-proof-attempt.png'),fullPage:true});
+    result = await paste(proofCommands.probe,
+      'SMB ' + A + ' 445 ALPHA [-] alpha.local\\Administrator:' + adminHash + ' STATUS_LOGON_FAILURE', 'rejected', 'flag-hunt-root-windows');
+    check(!result.a.includes('access.admin') && !result.a.includes('objective.root_flag'), 'A failed browser proof attempt creates no administrative or objective proof');
+    result = await paste(proofCommands.probe,
+      'SMB ' + A + ' 445 ALPHA [+] alpha.local\\Administrator:' + adminHash + ' (Pwn3d!)\nSMB ' + A + ' 445 ALPHA ' + proofPath, 'success', 'flag-hunt-root-windows');
+    check(result.a.includes('access.admin') && !result.b.includes('access.admin'), 'The successful proof attempt establishes administrative access only on its observed host');
+    const proofRead = await page.evaluate(() => {
+      const c = OBOL.coach.compute(), move = c.onFlow.find(a => a.id === 'flag-hunt-root-windows');
+      return OBOL.command.fillCommand(move,c.facts,{params:c.params},5).filled;
+    });
+    check(proofRead.includes(proofPath) && !proofRead.includes('{{'), 'Pasting the located path fills the next flag read');
+    result = await paste(proofRead,
+      'SMB ' + A + ' 445 ALPHA [+] alpha.local\\Administrator:' + adminHash + ' (Pwn3d!)\nSMB ' + A + ' 445 ALPHA ' + 'f'.repeat(32), 'success', 'flag-hunt-root-windows');
+    check(result.a.includes('objective.root_flag') && !result.b.includes('objective.root_flag'), 'The browser captures the root proof without a separate credential-validation step');
+
     await fresh('Credential ledger proof boundaries');
     await page.evaluate(() => { location.hash = '#/creds'; });
     await page.locator('.creds-route').waitFor();

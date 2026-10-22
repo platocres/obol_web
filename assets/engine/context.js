@@ -104,6 +104,8 @@
     normalize(eng); target = clean(target || eng.activeTarget || (eng.params || {}).target);
     if (id != null && !credentials(eng).some(function (c) { return c.id === id; })) throw new Error('Credential selection is no longer available');
     var active = clean((eng.params || {}).target || eng.activeTarget);
+    var selections = shape(eng); selections.anonymousByTarget = selections.anonymousByTarget || {};
+    if (id == null) selections.anonymousByTarget[target] = true; else delete selections.anonymousByTarget[target];
     if (pin(eng) !== undefined && target === active) pins[eng.id] = id; else shape(eng).byTarget[target] = id;
     if (target === active) applySelection(eng, target);
     return id;
@@ -179,14 +181,19 @@
   }
   function resolve(opts) {
     opts = opts || {}; var eng = opts.engagement || null;
-    if (eng) normalize(eng);
+    // Reuse work only within this resolution. A new paste or selection gets a fresh
+    // frame, so cached projections never outlive the evidence/identity snapshot.
+    var frame = opts._frame;
+    if (eng && !frame) normalize(eng);
     var p = Object.assign({}, opts.params || (eng && eng.params) || {}), target = clean(opts.target || p.target || (eng && eng.activeTarget)), allFacts = opts.facts || (eng && eng.facts) || [];
-    var domain = targetDomain(eng, target, allFacts, p), selected, source = 'none', registry = credentials(eng || { facts: list(allFacts) });
+    var domain = frame ? frame.domain : targetDomain(eng, target, allFacts, p), selected, source = 'none', registry = frame ? frame.registry : credentials(eng || { facts: list(allFacts) });
     if (owns(opts, 'credentialId')) { selected = opts.credentialId; source = 'explicit'; }
     else if (eng) { selected = selectedId(eng, target); source = pin(eng) !== undefined ? 'session-pin' : 'target-memory'; }
     var c = registry.find(function (x) { return x.id === selected; }) || null;
     if (!eng && selected === undefined && (p.username || p.user)) { c = material({ user:p.username || p.user, domain:p.authRealm || '', password:p.password || '', nthash:p.nthash || '' }); source = 'explicit-params'; }
-    var scoped = scopeFacts(eng, target, allFacts, domain), conflicts = [], unresolved = [];
+    if (!frame) frame = { domain:domain, registry:registry, scoped:scopeFacts(eng, target, allFacts, domain),
+      materials:new Map(), projections:Object.create(null), contexts:Object.create(null), attempts:Object.create(null) };
+    var scoped = frame.scoped, conflicts = [], unresolved = [];
     if (!eng && selected === undefined && !c) {
       var scopedRegistry = credentials({facts:scoped});
       if (scopedRegistry.length === 1) { c = scopedRegistry[0]; source = 'single-scoped-candidate'; }
@@ -198,6 +205,13 @@
     if (c && c.targetBinding && targetAliases(eng, target).indexOf(lower(c.targetBinding).replace(/\$$/, '')) < 0) conflicts.push('credential-target-binding-differs');
     if (c && realm && domain && lower(realm) !== lower(domain)) conflicts.push('authentication-realm-differs-from-target-domain');
     var principal = c ? c.principal : '';
+    var projectionKey = JSON.stringify([c && c.id, svc, locus]);
+    var projection = frame.projections[projectionKey];
+    if (!projection) {
+    function factMaterial(f) {
+      if (!frame.materials.has(f)) frame.materials.set(f, material(f.value || {}, f.scope));
+      return frame.materials.get(f);
+    }
     scoped = scoped.filter(function (f) {
       var v = f.value || {};
       if (/^access\.(admin|system|root)$/.test(f.kind) && locus !== 'onhost' && locus !== 'overview') {
@@ -205,11 +219,11 @@
         if (v.credentialId && v.credentialId !== c.id) return false;
         if (v.credentialFingerprint && v.credentialFingerprint !== c.credentialFingerprint) return false;
         if (!v.credentialId && !v.credentialFingerprint) {
-          if ((!v.password && !v.nthash && !v.hash) || material(v, f.scope).credentialFingerprint !== c.credentialFingerprint) return false;
+          if ((!v.password && !v.nthash && !v.hash) || factMaterial(f).credentialFingerprint !== c.credentialFingerprint) return false;
         }
         if (svc && v.service && lower(v.service) !== svc) return false;
       }
-      if (/^credential\.(available|plaintext|ntlm_hash)$/.test(f.kind)) return !!c && material(v, f.scope).id === c.id;
+      if (/^credential\.(available|plaintext|ntlm_hash)$/.test(f.kind)) return !!c && factMaterial(f).id === c.id;
       if (/^credential\.(validated|validation|authorization|admin)$/.test(f.kind) || /^(smb|ldap|winrm|ssh|rdp|mssql)\.authenticated$/.test(f.kind) || (/^blocker\./.test(f.kind) && (v.credentialId || v.user || v.principal))) {
         if (!c) return false;
         if (v.credentialId) { if (v.credentialId !== c.id) return false; }
@@ -228,20 +242,29 @@
       return true;
     });
     if (c && (c.password || c.nthash) && !scoped.some(function (f) { return f.state === 'supported' && f.kind === 'credential.available'; }) && O.facts) scoped.push(O.facts.makeFact({kind:'credential.available',scope:'host:' + target,state:'supported',value:{user:c.user,domain:c.domain,password:c.password,nthash:c.nthash,credentialId:c.id,targetBinding:c.targetBinding,accountType:c.accountType,selectedMaterial:true}}));
+    projection = frame.projections[projectionKey] = O.facts ? new O.facts.FactSet(scoped) : {facts:scoped};
+    }
     ['username','user','password','nthash','credentialId','authRealm','auth_realm'].forEach(function (k) { delete p[k]; });
     p.target = target; p.domain = domain; p.target_domain = domain; p.authRealm = realm; p.auth_realm = realm;
     if (c) { p.username = c.user; p.user = c.user; p.password = c.password; p.nthash = c.nthash; p.credentialId = c.id; }
+    // The projection is already deduplicated. Give each action its own context
+    // and array without rebuilding the ledger with quadratic FactSet.add calls.
+    var view = Object.create(projection); view.facts = projection.facts.slice(); view.state_changed = [];
     var result = { target:target,targetDomain:domain,authRealm:realm,principal:principal,credentialId:c ? c.id : null,credentialFingerprint:c ? c.credentialFingerprint : '',credential:c,
-      service:svc,locus:locus,facts:O.facts ? new O.facts.FactSet(scoped) : {facts:scoped},params:p,
+      service:svc,locus:locus,facts:view,params:p,
       selectionSource:source,conflicts:conflicts,unresolved:unresolved,actionId:opts.actionId || '' };
     result.attemptKey = JSON.stringify([target,result.credentialId,svc,result.locus,result.actionId]);
+    Object.defineProperty(result.facts, '_resolvedContext', {value:result});
     result.facts.context = snapshot(result);
     result.facts.forAction = function (action, command) {
       var commands = action.commands || [], cmd = command || commands[0] || {};
       var actionLocus = commands.length && O.pack && O.pack.commandExecutionLocus
         ? O.pack.commandExecutionLocus(cmd) : action.locus === 'F' || action.locus === 'I' ? 'onhost' : 'remote';
-      return resolve({engagement:eng,target:target,facts:allFacts,params:p,credentialId:result.credentialId,locus:actionLocus,
-        command:cmd.web || cmd.run || action.command || '',actionId:action.id}).facts;
+      var commandText = cmd.web || cmd.run || action.command || '';
+      var key = JSON.stringify([action.id, actionLocus, serviceOf(commandText)]);
+      if (!frame.contexts[key]) frame.contexts[key] = resolve({engagement:eng,target:target,facts:allFacts,params:p,credentialId:result.credentialId,locus:actionLocus,
+        command:commandText,actionId:action.id,_frame:frame}).facts;
+      return frame.contexts[key];
     };
     result.facts.forActionContexts = function (action) {
       var seen = Object.create(null), candidates = [];
@@ -253,7 +276,8 @@
     };
     result.facts.commandCompleted = function (action, cmd, index) {
       if (!eng || !O.command || !O.command.commandTriedInEpoch || !O.command.fillCommand) return false;
-      var attempts = (eng.activities || []).filter(function (activity) {
+      var attempts = frame.attempts[action.id];
+      if (!attempts) attempts = frame.attempts[action.id] = (eng.activities || []).filter(function (activity) {
         return activity && (activity.action_id || activity.actionId) === action.id
           && activity.outcome && activity.outcome.conclusive && activity.outcome.retireCommand;
       });
@@ -262,7 +286,7 @@
       var filled = O.command.fillCommand(action, commandFacts, { params:p, target:target }, index);
       if (filled.blocked) return false;
       var epoch = O.pack && O.pack.accessEpoch ? O.pack.accessEpoch(result.facts) : '';
-      return O.command.commandTriedInEpoch(action, cmd, filled.filled, attempts, epoch, target);
+      return O.command.commandTriedInEpoch(action, cmd, filled.filled, attempts, epoch, target, commandFacts._resolvedContext);
     };
     return result;
   }

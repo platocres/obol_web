@@ -82,6 +82,7 @@
     if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   function spawn(m) {
+    if (!enabled() || !fullMotion() || document.hidden) return;
     ensureCanvas();
     var n = Math.min(28, m.coins * (m.tier === "jackpot" ? 2 : 1));
     var ox = vw / 2, oy = vh * 0.34, big = m.tier === "jackpot" || m.tier === "pwned";
@@ -99,6 +100,7 @@
   var GRAV = 0.28, DRAG = 0.99;
   function loop() {
     rafId = 0; if (document.hidden) return;
+    if (!enabled() || !fullMotion()) { stopEffects(); return; }
     ctx.clearRect(0, 0, vw, vh);
     var alive = [];
     for (var i = 0; i < particles.length; i++) {
@@ -153,6 +155,7 @@
   }
   var levelEl = null, levelTimer = 0;
   function levelUp(label) {
+    if (!enabled() || !fullMotion()) return;
     if (!levelEl) {
       levelEl = document.createElement("div"); levelEl.id = "obolcoin-levelup"; levelEl.setAttribute("aria-live", "polite");
       levelEl.style.cssText = "position:fixed;left:50%;top:40%;transform:translate(-50%,-50%) scale(.6);z-index:10001;pointer-events:none;" +
@@ -168,14 +171,23 @@
   }
 
   // ── public API ──
+  function stopEffects() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = 0; particles = [];
+    clearTimeout(bannerTimer); clearTimeout(levelTimer);
+    if (ctx) ctx.clearRect(0, 0, vw, vh);
+    if (bannerEl) bannerEl.style.opacity = "0";
+    if (levelEl) levelEl.style.opacity = "0";
+  }
+  function updateMotion() { if (!enabled() || !fullMotion()) stopEffects(); }
   function burst(tierOrKind, label) {
-    if (!enabled() || reduceMotion()) return;
+    if (!enabled() || !fullMotion()) return;
     var m = (tierOrKind && tierOrKind.tier) ? tierOrKind : (milestoneFor(tierOrKind) || { tier: tierOrKind || "foothold", label: label || "pwned", coins: 8 });
     spawn(m);
   }
   // store.js calls this with the kinds of facts just minted (an evidence paste / BH ingest).
   function burstForFactKinds(kinds) {
-    if (!enabled() || reduceMotion() || !kinds || !kinds.length) return;
+    if (!enabled() || !fullMotion() || !kinds || !kinds.length) return;
     var lvl = escalationWin(kinds);
     if (lvl && fullMotion()) levelUp(lvl);
     var m = bestMilestone(kinds);
@@ -185,7 +197,7 @@
 
   var api = {
     burst: burst, burstForFactKinds: burstForFactKinds, levelUp: levelUp,
-    enabled: enabled, setEnabled: function (on) { lsSet(LS_COINS, on ? "1" : "0"); }, milestoneFor: milestoneFor
+    enabled: enabled, setEnabled: function (on) { lsSet(LS_COINS, on ? "1" : "0"); updateMotion(); }, updateMotion:updateMotion, milestoneFor: milestoneFor
   };
   root.obolCoins = api; OBOL.coins = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

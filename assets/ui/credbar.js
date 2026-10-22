@@ -109,6 +109,7 @@
     if (!cred) return;
     if (OBOL.context && OBOL.store.selectCredential) {
       OBOL.store.selectCredential(cred.id || OBOL.context.material(cred, cred.scope).id);
+      if (OBOL.coach && OBOL.coach.selectValidation) OBOL.coach.selectValidation();
       if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
       if (OBOL.router) OBOL.router.render();
       U.toast('Selected ' + (cred.domain ? cred.domain + '\\' : '') + cred.user + '; authentication remains evidence-specific');
@@ -145,6 +146,24 @@
   }
 
   var addOpen = false;
+  function prompt(target) {
+    var eng = OBOL.store.active();
+    if (!eng || !OBOL.context) return '';
+    target = target || (eng.params || {}).target;
+    if (!target) return '';
+    var ctx = OBOL.store.resolvedContext({target:target,locus:'overview'});
+    var notice = (eng.ui || {}).credentialNotice || {};
+    var ids = notice.target === target ? notice.ids || [] : [];
+    var choices = gather(eng).filter(function (c) { return c.id !== ctx.credentialId && ids.indexOf(c.id) >= 0; });
+    var pending = ctx.credential && !ctx.facts.has('credential.validated');
+    if (pending) choices.unshift(ctx.credential);
+    if (!choices.length) return '';
+    return '<div class="credential-next" role="status"><strong>' + (pending ? 'Validate Your Selected Credential' : 'New Credential Recovered') + '</strong>'
+      + '<p>' + (pending ? 'Commands now use ' + esc(ctx.principal) + '. Confirm this identity on ' + esc(target) + ' before relying on its access.'
+        : 'Keep your current identity, or select the recovered account to test its access. You can also switch identities in Parameters.') + '</p>'
+      + choices.slice(0, 4).map(function (c) { return '<button type="button" class="btn-mini" data-select-validate="' + U.attr(c.id) + '" data-credential-target="' + U.attr(target) + '">'
+        + (c.id === ctx.credentialId ? 'Validate ' : 'Select and Validate ') + esc(c.principal || c.user) + '</button>'; }).join(' ') + '</div>';
+  }
   function addForm() {
     return '<div class="cred-add-form">'
       + '<input class="cf-fld cf-user" type="text" placeholder="user" autocomplete="off" spellcheck="false">'
@@ -204,11 +223,25 @@
     el.innerHTML = selection + empty + rows + adder;
   }
 
-  // Wire delegated handlers once.
+  var selectionPromptWired = false;
+  // The document survives sidebar renders, so its handler must survive them too.
   function mount() {
     var el = document.getElementById('cred-switch');
     if (!el || el._wired) return;
     el._wired = true;
+    if (!selectionPromptWired) {
+      selectionPromptWired = true;
+      U.on(document, 'click', '[data-select-validate]', function (e, t) {
+        var id = t.getAttribute('data-select-validate'), target = t.getAttribute('data-credential-target');
+        if (!gather().some(function (c) { return c.id === id; })) return;
+        OBOL.store.setActiveTarget(target);
+        OBOL.store.selectCredential(id, target);
+        // Clear the card selection so the newly ranked credential test opens.
+        if (OBOL.coach && OBOL.coach.selectValidation) OBOL.coach.selectValidation();
+        if (OBOL.quickpaste && OBOL.quickpaste.close) OBOL.quickpaste.close();
+        if (OBOL.router.current().name === 'path') OBOL.router.render(); else OBOL.router.go('path');
+      });
+    }
     U.on(el, 'click', '.cred-none', function () { OBOL.store.selectCredential(null); if (OBOL.router) OBOL.router.render(); });
     U.on(el, 'change', '.cred-pin-toggle', function (e, t) { OBOL.store.setCredentialPin(t.checked); if (OBOL.router) OBOL.router.render(); });
     U.on(el, 'click', '.cred-copy', function (e, t) {
@@ -249,5 +282,5 @@
   }
 
   OBOL.creds = { keyOf: keyOf, gather: gather, activeKey: activeKey, activate: activate, add: add, remove: remove };
-  OBOL.credbar = { render: render, mount: mount };
+  OBOL.credbar = { render: render, mount: mount, prompt:prompt };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -419,7 +419,8 @@
       detail: 'Reload the application to restore the outcome interpreter.', established: [], unresolved: ['Outcome interpretation unavailable.'], next: 'review', context: {} };
   }
   function renderOutcome(outcome) {
-    if (OBOL.outcomes && OBOL.outcomes.render) return OBOL.outcomes.render(outcome);
+    if (OBOL.outcomes && OBOL.outcomes.render) return OBOL.outcomes.render(outcome)
+      + (OBOL.credbar && OBOL.credbar.prompt ? OBOL.credbar.prompt(outcome && outcome.context && outcome.context.target) : '');
     return '<div class="outcome-receipt" data-outcome="unknown" role="status">Output saved; outcome unresolved. The attempt remains available.</div>';
   }
   function outcomeMessage(result) {
@@ -710,7 +711,8 @@
     var outcome = classifyOutcome({ text: trimmedText, command: cmd || dispatchCmd, actionId: inferredActId,
       facts: facts, previousFacts: existingFs, parseError: parseError, diagnostics: (res && res.diagnostics) || [], context: resolvedContext });
     outcome.routing = routing;
-    var added = OBOL.store.addFacts(progressFacts, 'evidence');
+    var knownCredentialIds = OBOL.context ? OBOL.context.credentials(OBOL.store.active()).map(function (c) { return c.id; }) : [];
+    var added = OBOL.store.addFacts(progressFacts, 'evidence', scopeIp);
     if (metaFacts.length) OBOL.store.addFacts(metaFacts, 'evidence');
     if (!blockers.length && OBOL.store && typeof OBOL.store.retractFactKind === 'function') {
       function proven(pattern) {
@@ -763,6 +765,13 @@
       : trimmedText;
     OBOL.store.update(function (e) {
       e.activities = e.activities || [];
+      if (OBOL.context) {
+        var discovered = OBOL.context.credentials(e).filter(function (c) {
+          return knownCredentialIds.indexOf(c.id) < 0 && (c.scope === scope
+            || (c.domain && resolvedContext.targetDomain && c.domain.toLowerCase() === resolvedContext.targetDomain.toLowerCase()));
+        });
+        if (discovered.length) { e.ui = e.ui || {}; e.ui.credentialNotice = {target:scopeIp,ids:discovered.map(function (c) { return c.id; })}; }
+      }
       // `command` stays the honest lineage (may be empty for an attached file); `dispatch` is the widened
       // routing label obol recovered from the content - the coach's "already run" check reads it so an
       // ATTACHED dump (no typed command) still marks the command that produced it ran.

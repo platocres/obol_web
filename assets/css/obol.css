@@ -8988,3 +8988,16 @@ aside#sidebar > .side-h:first-of-type {
   border-color: rgba(15, 23, 42, 0.15);
 }
 
+.credential-next { margin: 12px 0; padding: 14px; border: 1px solid var(--accent, #14c765); border-radius: 8px; background: var(--surf2); color: var(--text); }
+.credential-next p { margin: 8px 0; font-size: 13px; line-height: 1.5; }
+.credential-next button { margin: 4px 6px 0 0; white-space: normal; }
+
+/* The application motion preference covers CSS effects as well as canvases. */
+:root[data-motion="off"] *, :root[data-motion="off"] *::before, :root[data-motion="off"] *::after,
+:root[data-motion="reduced"] *, :root[data-motion="reduced"] *::before, :root[data-motion="reduced"] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+:root[data-motion="off"] .rp-out, :root[data-motion="off"] .rp-cap,
+:root[data-motion="reduced"] .rp-out, :root[data-motion="reduced"] .rp-cap { opacity: 1; }
+:root[data-motion="off"] .rp-pop, :root[data-motion="reduced"] .rp-pop { transform: none; }
