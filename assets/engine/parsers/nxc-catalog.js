@@ -535,6 +535,9 @@
       } },
     { id: 'rdp-nla-screenshot', proto: 'rdp', flag: '--nla-screenshot', produces: ['loot.files'], gate: ['rdp.reachable', 'port:3389'],
       extract: function (text, ws) { return CAT_BY_ID['rdp-screenshot'].extract(text, ws); } },
+    // --screentime sets how long the RDP session stays up for --screenshot: same capture, so it reuses the screenshot parser.
+    { id: 'rdp-screentime', proto: 'rdp', flag: '--screentime', produces: ['loot.files'], gate: ['rdp.reachable', 'port:3389'],
+      extract: function (text, ws) { return CAT_BY_ID['rdp-screenshot'].extract(text, ws); } },
 
     // ========================= FTP =========================
     { id: 'ftp-auth', proto: 'ftp', validate: true, produces: ['loot.files'],
