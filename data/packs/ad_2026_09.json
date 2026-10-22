@@ -1908,8 +1908,7 @@
       "requires_any": [
         "ad.delegation",
         "ad.rbcd",
-        "ad.unconstrained",
-        "ad.unconstrained_delegation",
+        "ad.unconstrained",
         "ad.control_paths",
         "ad.maq_allow"
       ],
