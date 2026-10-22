@@ -56,7 +56,8 @@ jobs:
             context-migration-regressions \
             context-location-regressions \
             parser-coverage-contract \
-            context-outcome-flow
+            context-outcome-flow \
+            publish-scrub-smoke
           do
             node "tests/engine/$test.js"
           done
