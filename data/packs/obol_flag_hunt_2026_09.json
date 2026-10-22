@@ -259,6 +259,10 @@
         "access.admin",
         "access.system"
       ],
+      "credential_probe": {
+        "users": ["administrator"],
+        "methods": ["dcsync"]
+      },
       "os": [
         "windows"
       ],
@@ -266,7 +270,7 @@
         "objective.root_flag"
       ],
       "sequence": true,
-      "hypothesis": "You are SYSTEM/Administrator - capture the proof flag (Administrator's Desktop\\proof.txt / root.txt) before anything else so the box's final objective is done. Grab it with hostname + ipconfig for the screenshot, then move on to persistence/pivot knowing the box is owned.",
+      "hypothesis": "Capture the proof flag using established administrative access, or test recovered Administrator material with a remote flag attempt. Paste the result to record the access actually demonstrated. For the proof screenshot, capture the flag with hostname and ipconfig in an established session.",
       "report": {
         "finding": "Captured the root/proof flag from the Windows host.",
         "severity": "critical"

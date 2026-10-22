@@ -751,7 +751,7 @@
       var os = (tgt.os || (OBOL.targets && OBOL.targets.hostOs ? OBOL.targets.hostOs(fs, tgt) : '') || '').trim();
       return { ip: realIp, hostname: hostname, domain: domain, fqdn: fqdn, os: os };
     },
-    addFacts(facts, reason) {
+    addFacts(facts, reason, observedTarget) {
       // facts: array of OBOL.facts (or serialized). Returns count actually added (deduped).
       var eng = this.active();
       if (!eng) return 0;
@@ -840,6 +840,24 @@
       }
       if (added || (facts && facts.length)) {
         eng.facts = fs.facts.map(OBOL.facts.factToJson);
+        var selected = OBOL.context && OBOL.context.selectedId(eng, (eng.params || {}).target);
+        if (OBOL.context && (!selected || !OBOL.context.credentials(eng).some(function (c) { return c.id === selected; })) && OBOL.context.pin(eng) === undefined
+          && !((eng.contextSelections || {}).anonymousByTarget || {})[(eng.params || {}).target]) {
+          var activeIp = (eng.params || {}).target || eng.activeTarget;
+          var applicable = this.factSetForTarget(activeIp).facts;
+          var domainUnknown = !Object.keys(domainsForTarget(eng, activeIp, applicable.filter(function (f) { return f.scope === 'host:' + activeIp; }))).length;
+          var candidateFact = (facts || []).find(function (f) {
+            return f && f.state === 'supported' && /^credential\.(available|plaintext|ntlm_hash)$/.test(f.kind)
+              && ((observedTarget === activeIp && domainUnknown && /^domain:/.test(f.scope || ''))
+                || applicable.some(function (a) { return a.kind === f.kind && a.scope === f.scope && OBOL.facts.valuesEqual(a.value, f.value); }));
+          });
+          if (candidateFact) {
+            var materialValue = Object.assign({}, candidateFact.value);
+            if (!materialValue.domain && /^domain:/.test(candidateFact.scope || '') && candidateFact.scope !== 'domain:domain') materialValue.domain = candidateFact.scope.slice(7);
+            var candidateId = OBOL.context.material(materialValue, candidateFact.scope).id;
+            if (OBOL.context.credentials(eng).some(function (c) { return c.id === candidateId; })) OBOL.context.select(eng, candidateId, activeIp);
+          }
+        }
         scheduleSave();
         emit(reason || 'facts');
       }

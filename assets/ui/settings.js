@@ -57,6 +57,8 @@
       e.stopPropagation();
       var next = MOTION[(MOTION.indexOf(motionLevel()) + 1) % MOTION.length];
       lsSet(LS_MOTION, next); if (OBOL.backdrop) OBOL.backdrop.update(); syncMotion();
+      if (OBOL.coins && OBOL.coins.updateMotion) OBOL.coins.updateMotion();
+      if (OBOL.tips && OBOL.tips.refresh) OBOL.tips.refresh();
     });
     fx.appendChild(motionBtn);
     coinBtn = document.createElement("button"); coinBtn.type = "button"; coinBtn.className = "obol-set-btn";

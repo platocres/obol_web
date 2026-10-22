@@ -291,11 +291,11 @@
   }
   function cmdGated(v) { return !!(v && v.blocked) || cmdUnmetGates(v).length > 0; }
 
-  function cmdWasTriedInEpoch(move, cmdObj, filledObj, eng, curEpoch, target) {
+  function cmdWasTriedInEpoch(move, cmdObj, filledObj, eng, curEpoch, target, context) {
     if (!move || !cmdObj || !eng) return false;
     var filledStr = filledObj && filledObj.filled ? filledObj.filled : '';
     if (OBOL.command && OBOL.command.commandTriedInEpoch) {
-      return OBOL.command.commandTriedInEpoch(move, cmdObj, filledStr, eng.activities || [], curEpoch, target || move.contextTarget || (eng.params && eng.params.target));
+      return OBOL.command.commandTriedInEpoch(move, cmdObj, filledStr, eng.activities || [], curEpoch, target || move.contextTarget || (eng.params && eng.params.target), context);
     }
     return false;
   }
@@ -303,11 +303,11 @@
   // The default command for a move at a locus: the house-toolkit (nxc) pick, a switchless probe first, never
   // a command already settled by a held fact, never one still gated on an unearned fact, and preferring
   // untried commands over those already run in the current access epoch.
-  function firstCmdIndexForLocus(move, locus, facts) {
+  function firstCmdIndexForLocus(move, locus, facts, variants) {
     if (!move) return 0;
     var eng = OBOL.store.active() || {};
     var commandParams = move.resolvedContext ? move.resolvedContext.params : Object.assign({}, eng.params || {}, facts && facts.context ? {target:facts.context.target} : {});
-    var filled = OBOL.command.fillAll(move, facts, { params: commandParams, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
+    var filled = variants || OBOL.command.fillAll(move, facts, { params: commandParams, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
     var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch && facts) ? OBOL.pack.accessEpoch(facts) : '';
     return OBOL.pack.preferredCommandIndex(
       move,
@@ -388,7 +388,7 @@
       // A command that has done its job drops out: a run-once probe (the switchless null-session check)
       // disappears once the fact it was there to prove is held, so you never re-run a question you answered.
       if (OBOL.pack.commandSettled(cmdObj, commandFacts)) return;
-      if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmdObj, commandFacts)) return;
+      if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmdObj, commandFacts, action)) return;
       var v = filled[i] || {};
       if (v.blocked) {
         items.push({ index: i, locus: OBOL.pack.commandLocus(cmdObj), hidden: false, isLead: i === selIdx, ran: false, html: '<div class="cmd-note" role="status">' + esc((v.errors || []).join(' ')) + '</div>' });
@@ -539,7 +539,9 @@
     function hasUngated(loc) {
       for (var i = 0; i < cmds.length; i++) {
         if (OBOL.pack.commandSettled(cmds[i], facts)) continue;
-        if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmds[i], facts)) continue;
+        var commandFacts = facts && facts.forAction ? facts.forAction(action, cmds[i]) : facts;
+        if (action.eligible && commandFacts && !action.eligible(commandFacts)) continue;
+        if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmds[i], commandFacts, action)) continue;
         if (OBOL.pack.commandLocus(cmds[i]) === loc && !cmdGated(filled[i])) return true;
       }
       return false;
@@ -549,19 +551,19 @@
     return selLocus;
   }
 
-  // One ranked card. opts: { rank, selected, suggested, targetBadge }. The expanded body is always in the DOM (shown via
-  // CSS when .selected) so the delegated fill / paste-back / copy listeners work without a re-render.
+  // Closed cards need only their summary. Build commands when a card is opened.
   function nsCard(action, facts, params, opts) {
     opts = opts || {};
     if (action.resolvedContext) { facts = action.resolvedContext.facts; params = action.resolvedContext.params; }
     var famClass = ' ns-ph-' + OBOL.phases.phaseOfAction(action);
+    var nCmd = (action.commands || []).length, body = '';
+    if (opts.selected) {
     var dirs = OBOL.workspace.tokens(OBOL.store.active());
-    var filled = OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: dirs });
+    var filled = opts.filled || OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: dirs });
     var loci = OBOL.pack.moveCommandLoci(action, facts);
-    var rawLocus = (opts.selected && nsSel.userLocus && nsSel.locus) ? nsSel.locus : ((opts.selected && nsSel.locus) ? nsSel.locus : OBOL.pack.defaultCommandLocus(action));
+    var rawLocus = (opts.selected && nsSel.userLocus && nsSel.locus) ? nsSel.locus : ((opts.selected && nsSel.locus) ? nsSel.locus : OBOL.pack.defaultCommandLocus(action, facts));
     var selLocus = (opts.selected && nsSel.userLocus && loci.both) ? rawLocus : effectiveLocus(action, facts, filled, rawLocus);
-    var selIdx = opts.selected ? nsSel.idx : firstCmdIndexForLocus(action, selLocus, facts);
-    var nCmd = (action.commands || []).length;
+    var selIdx = nsSel.idx;
     var cardTargetIp = (opts.targetBadge && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(opts.targetBadge))
       ? opts.targetBadge
       : ((OBOL.store.activeTarget && OBOL.store.activeTarget()) || (params && params.target) || '');
@@ -570,7 +572,7 @@
         + '<button type="button" data-locus="remote" class="' + (selLocus === 'remote' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'remote') + '">Remote</button>'
         + '<button type="button" data-locus="onhost" class="' + (selLocus === 'onhost' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'onhost') + '">On-Host</button>'
         + '</div>' : '';
-    var body = '<div class="ns-body">'
+    body = '<div class="ns-body">'
       + toggle
       + prepBlock(action, facts, dirs)
       + '<div class="ns-cmds">' + nsCommandRows(action, filled, selLocus, selIdx, loci.both, facts, opts.focusMode) + '</div>'
@@ -585,9 +587,11 @@
       + '<a class="mi-evlink" href="#/evidence/' + esc(action.id) + '">Big output or a screenshot? Full Evidence</a>'
       + '<span class="mi-result" role="status"></span></div></div>'
       + '</div>';
+    }
     // Not role="button" - the expanded body holds real buttons/inputs, which must not nest inside a
     // button for screen readers. It is a focusable region with an aria-label and Enter/Space handling.
     return '<article class="ns-card' + famClass + (opts.selected ? ' selected is-glow' : '') + '" tabindex="0"'
+      + (opts.selected ? '' : ' data-body-deferred="1"')
       + ' aria-expanded="' + (opts.selected ? 'true' : 'false') + '"'
       + ' aria-label="' + U.attr(action.title + ' - press Enter to open its commands and field notes') + '" data-action="' + esc(action.id) + '" data-context-target="' + esc(params.target || '') + '">'
       + (opts.rank ? '<span class="ns-rank">#' + opts.rank + '</span>' : '')
@@ -1404,16 +1408,16 @@
     function hasRunnableCommand(a) {
       var cmds = a.commands || []; if (!cmds.length) return true;
       var eng = OBOL.store.active() || {};
-      var filled = OBOL.command.fillAll(a, facts, { params: params, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
       var loci = (OBOL.pack && OBOL.pack.moveCommandLoci) ? OBOL.pack.moveCommandLoci(a, facts) : null;
       for (var i = 0; i < cmds.length; i++) {
         var commandFacts = facts.forAction ? facts.forAction(a, cmds[i]) : facts;
         if (!a.eligible(commandFacts)) continue;
-        if (!OBOL.pack.commandIsEligible(cmds[i], commandFacts)) continue;
+        if (!OBOL.pack.commandIsEligible(cmds[i], commandFacts, a)) continue;
         if (OBOL.pack.commandSettled(cmds[i], commandFacts)) continue;
-        if (cmdGated(filled[i])) continue;
         if (!hasFoot && loci && loci.both && OBOL.pack.commandLocus && OBOL.pack.commandLocus(cmds[i]) === 'onhost') continue;
-        if (cmdWasTriedInEpoch(a, cmds[i], filled[i], eng, curEpoch, params.target)) continue;
+        var filled = OBOL.command.fillCommand(a, facts, { params: params, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) }, i);
+        if (cmdGated(filled)) continue;
+        if (cmdWasTriedInEpoch(a, cmds[i], filled, eng, curEpoch, params.target, commandFacts._resolvedContext)) continue;
         return true;
       }
       return false;
@@ -1481,6 +1485,7 @@
   // The authoritative ranking every screen shares, plus the renderers (prep step + full move card) so the
   // per-target panel can show the exact same "Set Up First" steps and cards the coach does.
   OBOL.coach = {
+    selectValidation: function () { nsSel = {id:null,idx:0,locus:null}; },
     compute: computeCoach,
     rankFor: rankFor,
     topMove: function () { return computeCoach().onFlow[0] || null; },
@@ -1785,7 +1790,8 @@
     var flagsOn = (!OBOL.profile || !OBOL.profile.hasFlags || !eng) ? true : OBOL.profile.hasFlags(eng.profile);
     var compState = evaluateCompletionState(eng, c.target, facts, flagsOn);
 
-    var opensCount = OBOL.pack.opensUpNext ? OBOL.pack.opensUpNext(facts, pack).length : locked.length;
+    var opens = OBOL.pack.opensUpNext ? OBOL.pack.opensUpNext(facts, pack) : [];
+    var opensCount = OBOL.pack.opensUpNext ? opens.length : locked.length;
     var html = '<section class="coach ns-coach-wrap">';
     // Retain the latest scoped result across renders and target switches. The recorded outcome,
     // rather than a new-fact count, explains success, negative results, failures, and uncertainty.
@@ -1923,12 +1929,12 @@
       nsSel.id = selMove ? selMove.id : null;
       nsSel.userLocus = false;
       var initFilled = selMove ? OBOL.command.fillAll(selMove, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) }) : [];
-      nsSel.locus = selMove ? effectiveLocus(selMove, facts, initFilled, OBOL.pack.defaultCommandLocus(selMove)) : null;
+      nsSel.locus = selMove ? effectiveLocus(selMove, facts, initFilled, OBOL.pack.defaultCommandLocus(selMove, facts)) : null;
       nsSel.idx = selMove ? firstCmdIndexForLocus(selMove, nsSel.locus, facts) : 0;
     } else {
       var selCmds = selMove.commands || [];
       var selFilled = OBOL.command.fillAll(selMove, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
-      if (!nsSel.locus) nsSel.locus = OBOL.pack.defaultCommandLocus(selMove);
+      if (!nsSel.locus) nsSel.locus = OBOL.pack.defaultCommandLocus(selMove, facts);
       if (!nsSel.userLocus) nsSel.locus = effectiveLocus(selMove, facts, selFilled, nsSel.locus);
       // Re-point a stale selection: out of range, OR a command that has since settled (a run-once probe now
       // hidden), OR one still gated on an unearned fact (now hidden), OR one that no longer matches the
@@ -2018,7 +2024,7 @@
 
     // the aspirational roadmap of capability-unlocks (contingency doctors/vulns excluded by the engine)
     if (!compState.complete) {
-      html += nsOpensStrip(OBOL.pack.opensUpNext(facts, pack));
+      html += nsOpensStrip(opens);
     }
 
     html += '</div>'; // .ns-main
@@ -2059,6 +2065,13 @@
       return { facts: facts, pack: OBOL.packs.actions(), params: params };
     }
     function moveById(pack, id) { return pack.filter(function (a) { return a.id === id; })[0]; }
+    function hydrateCard(card, move, fx, filled) {
+      if (!card.hasAttribute('data-body-deferred')) return;
+      var holder = document.createElement('div');
+      holder.innerHTML = nsCard(move, fx.facts, fx.params, {selected:true,filled:filled,focusMode:nsFocusMode()});
+      card.insertBefore(holder.querySelector('.ns-body'), card.querySelector('.ns-foot'));
+      card.removeAttribute('data-body-deferred');
+    }
     function repaintCanvas() {
       var el = mount.querySelector('#ns-canvas'); if (!el) return;
       var fx = freshCtx(); var m = moveById(fx.pack, nsSel.id);
@@ -2071,8 +2084,9 @@
       nsSel.id = id;
       nsSel.userLocus = false;
       var mFilled = OBOL.command.fillAll(m, fx.facts, { params: fx.params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
-      nsSel.locus = effectiveLocus(m, fx.facts, mFilled, OBOL.pack.defaultCommandLocus(m));
-      nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus, fx.facts);
+      nsSel.locus = effectiveLocus(m, fx.facts, mFilled, OBOL.pack.defaultCommandLocus(m, fx.facts));
+      nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus, fx.facts, mFilled);
+      hydrateCard(card, m, fx, mFilled);
       // glow + expand follow the selection
       Array.prototype.forEach.call(mount.querySelectorAll('.ns-card.selected'), function (o) {
         o.classList.remove('selected', 'is-glow', 'ns-bloom'); o.setAttribute('aria-expanded', 'false');
@@ -2120,8 +2134,9 @@
       var fx = freshCtx(); var m = moveById(fx.pack, id); if (!m) return;
       nsOpen[id] = true; nsSel.id = id; nsSel.userLocus = false;
       var mFilled = OBOL.command.fillAll(m, fx.facts, { params: fx.params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
-      nsSel.locus = effectiveLocus(m, fx.facts, mFilled, OBOL.pack.defaultCommandLocus(m));
-      nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus, fx.facts);
+      nsSel.locus = effectiveLocus(m, fx.facts, mFilled, OBOL.pack.defaultCommandLocus(m, fx.facts));
+      nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus, fx.facts, mFilled);
+      hydrateCard(card, m, fx, mFilled);
       Array.prototype.forEach.call(mount.querySelectorAll('.ns-card.selected'), function (o) { o.classList.remove('is-glow'); });
       card.classList.add('selected', 'is-glow'); card.setAttribute('aria-expanded', 'true');
       card.classList.remove('ns-bloom'); void card.offsetWidth; card.classList.add('ns-bloom');

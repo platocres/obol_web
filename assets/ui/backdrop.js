@@ -63,6 +63,7 @@
   function pauseLoop() { if (rafId) { cancelAnimationFrame(rafId); rafId = 0; } }
   function setIdleFlag(on) { try { if (on) document.documentElement.setAttribute("data-idle", "1"); else document.documentElement.removeAttribute("data-idle"); } catch (e) {} }
   function markActive() {
+    if (effectiveMotion() !== "full") { clearTimeout(idleTimer); return; }
     idlePaused = false; setIdleFlag(false); clearTimeout(idleTimer);
     idleTimer = setTimeout(function () { idlePaused = true; setIdleFlag(true); pauseLoop(); }, IDLE_MS);
     if (shouldAnimate()) startLoop();

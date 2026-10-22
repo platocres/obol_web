@@ -91,7 +91,9 @@
 
   function stopTimer() { if (_timer) { clearInterval(_timer); _timer = null; } }
   function ensureTimer() {
-    if (_timer || REDUCED || isOff()) return;
+    var motion = ''; try { motion = localStorage.getItem('obol.motion'); } catch (e) {}
+    if (REDUCED || motion === 'off' || motion === 'reduced' || isOff()) { stopTimer(); return; }
+    if (_timer) return;
     _timer = setInterval(function () {
       if (isOff() || _hover || _open) return;
       if (!document.querySelector('.tipfeed-text')) return;   // not on a screen with the feed

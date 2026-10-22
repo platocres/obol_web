@@ -86,6 +86,9 @@
       if (/^\d+\s+password\s+hash(?:es)?\s+cracked\b/i.test(line)) return;
 
       if (ll.indexOf('$krb5asrep$') >= 0 || ll.indexOf('$krb5tgs$') >= 0) {
+        // Hashcat's Hash.Target status line is often abbreviated. It is not a
+        // recovered hash:password record, even when the session says Cracked.
+        if (!/^(?:[^\s:$]+:)?\$krb5(?:asrep|tgs)\$/i.test(line)) return;
         var idx = line.lastIndexOf(':');
         if (idx < 0) return;
         var hashText = line.slice(0, idx), password = line.slice(idx + 1).trim();
