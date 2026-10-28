@@ -15,7 +15,11 @@ OBOL's state machine and parser pipeline are modeled on both eras of Ludwig Witt
 
 > *"The world is the totality of facts, not of things... A state of affairs (a state of things) is a combination of objects (things)."* (§1.1, §2.01)
 
-In OBOL, a pasted terminal buffer is merely a collection of raw strings ("things"). The engagement state machine ([`OBOL.store`](assets/ui/store.js) and [`OBOL.pack`](assets/engine/pack.js)) operates exclusively on **facts** (`{ kind, scope, value, state }`).
+In OBOL, a pasted terminal buffer is merely a collection of raw strings ("things"). As terminal text flows into the state machine ([`OBOL.store`](assets/ui/store.js) and [`OBOL.pack`](assets/engine/pack.js)), OBOL distinguishes three levels of representation:
+
+1. **Tokens (raw lexical slices)**: Uninterpreted whitespace- or delimiter-separated substrings in terminal output (such as `svc_loanmgr`, `445/tcp`, or a 32-character hex chunk) prior to classification.
+2. **Atoms (typed protocol/OS primitives)**: Tokens that match one of OBOL's ~45 structural primitive patterns (such as an IPv4 address, Kerberos SPN, Windows SID, or cryptographic hash).
+3. **Facts (proven states of affairs)**: Structured propositions (`{ kind, scope, value, state }`) minted when atoms co-occur inside a valid structural and positive-polarity context. The ranking and planning engine operates exclusively on facts.
 
 Before any CLI author formats output into ASCII tables, Unicode box borders, or colored banners, the underlying primitives are dictated by **network protocols and operating system specifications**:
 

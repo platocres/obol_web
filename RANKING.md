@@ -26,7 +26,63 @@ flowchart TD
 
 ---
 
+## Notation & Formal Logic Quick Reference
+
+Every formula in this specification is followed immediately by a plain-English explanation. Use the two tables below as a quick cheat sheet for any formal logic operator or OBOL engine variable.
+
+### Logic & Set Notation
+
+| Symbol | Plain-English Reading | Example in This Doc |
+| :---: | :--- | :--- |
+| $\land$ / $\lor$ / $\neg$ | **AND** (both hold) / **OR** (at least one holds) / **NOT** (does not hold) | $\text{eligible}(a, F) \land \neg\text{settled}(a, F)$ means eligible AND NOT settled |
+| $\iff$ | **If and only if** (exact definition / two-way equivalence) | Defines the exact condition under which `eligible` or `settled` is true |
+| $\forall$ / $\exists$ | **For every** item / **There is at least one** item | $\forall k \in \text{req}_{\text{all}}(a)$ means every required prerequisite fact $k$ |
+| $\in$ / $\notin$ | **Is present in** / **Is not present in** a set or list | $k \in K(F)$ means fact kind $k$ is currently proven |
+| $\subseteq$ | **Is a subset of** (every item on the left belongs to the set on the right) | $F \subseteq \mathcal{F}$ means scoped facts drawn from the full engagement store |
+| $\cup$ / $\cap$ / $\setminus$ | **Combined with** (union) / **Overlap between** (intersection) / **Excluding** (difference) | $H_0 \cup \text{prod}(a)$ means current facts combined with the facts move $a$ produces |
+| $\emptyset$ | **Empty set** (nothing present / list has zero items) | $\text{req}_{\text{any}}(a) = \emptyset$ means move $a$ has no `requires_any` list |
+| $\lvert X \rvert$ | **Count of items** in set $X$ | $\lvert \text{eliminates}(a) \rvert$ means number of attack lanes move $a$ rules in or out |
+| $\lbrace x \mid \text{cond} \rbrace$ | **The set of all $x$ where `cond` is true** (filtered set) | $\lbrace g \in G \mid g \notin K(F) \rbrace$ means all goals not yet proven |
+| $\langle x_1, x_2, \dots \rangle$ | **Ordered sequence** (an array or list where position matters) | $\Phi = \langle \texttt{recon}_0, \dots, \texttt{loot}_5 \rangle$ lists the 6 ordered phases |
+| $\to$ / $\mapsto$ / $\leftarrow$ | **Leads to** / **Maps input to output** / **Updates value to** | $(x, y) \mapsto \text{dry}(x) - \text{dry}(y)$ compares dry-attempt counts of two moves |
+| $\sum$ / $\min$ / $\max$ | **Sum of** / **Smallest value of** / **Largest value of** | $\min_{g \in G_{\text{active}}} \text{fc}(g, H)$ picks the fewest steps to reach any open goal |
+| $\mathbb{I}[\text{cond}]$ | **Indicator (`1` or `0`)**: equals `1` when `cond` holds, `0` otherwise | Multiplies a weight $w_i$ only when rule $i$ matches |
+| $\infty$ | **Unreachable** (`V2_INF = 99` in code) | Returned when no chain of moves can produce a required fact |
+
+### OBOL Engine & Scoring Symbols
+
+| Symbol | Code Equivalent | Plain-English Meaning |
+| :---: | :--- | :--- |
+| $\mathcal{F}$, $F$, $F_{\text{ctx}}$, $f$ | `eng.facts`, `FactSet`, `OBOL.context.resolve`, `Fact` | $\mathcal{F}$ is the full engagement fact store, $F$ is a target-scoped subset, $F_{\text{ctx}}$ is the identity-filtered view, and $f$ is one individual fact record |
+| $\mathcal{K}$, $K(F)$ | Fact `kind` vocabulary, `facts.kinds()` (`supported` only) | $\mathcal{K}$ is all possible dotted fact names (e.g. `port:445`); $K(F)$ is the set of fact names currently **proven** in $F$ |
+| $H$, $H_0$, $H_a$ | Held-kind sets in [`pack.js`](assets/engine/pack.js) | $H$ is a working set of proven fact kinds: $H_0 = K(F)$ holds **before** move $a$, and $H_a = H_0 \cup \text{prod}(a)$ would hold **if move $a$ succeeded** |
+| $\text{Epoch}(F)$ | `accessEpoch(facts)` | Fingerprint string of your current privilege, shell foothold, credentials, and hashes (`anon` when none are held); changing it resets dry-probe counters |
+| $\mathcal{A}$, $a$, $\mathcal{L}(F)$ | `OBOL.packs.actions()`, `Action`, live candidates | $\mathcal{A}$ is the full 355-move library, $a$ (or $b, m, x, y$) is an individual move, and $\mathcal{L}(F)$ is the **live candidate pool** eligible and unfinished right now |
+| $\text{req}_{\text{all}}(a)$, $\text{req}_{\text{any}}(a)$, $\text{prod}(a)$ | `a.requires_all`, `a.requires_any`, `a.produces` | Mandatory prerequisites (ALL must hold), trigger facts (AT LEAST ONE must hold), and output facts minted when move $a$ succeeds |
+| $\Phi$, $\phi$, $\text{Reached}(F)$, $\text{Frontier}(F)$ | `OBOL.phases`, `targetPhase(facts)`, `frontierIndex` | $\Phi$ is the 6 kill-chain stages `0..5`, $\phi$ is a fact or move's stage index, $\text{Reached}(F)$ is the furthest stage proven so far, and $\text{Frontier}(F)$ is the active actionable stage |
+| $\text{Tier}(a, F)$, $\text{StageRank}(a, F)$, $\mathbf{RankKey}$ | `tier` (`-1..5`), `stageRank` (`-1..4`), comparator in `nextActionsV2` | Macro Causal Frontier tier (endgame flags down to speculative gambles), sub-role priority within that tier, and the full left-to-right sort tuple |
+| $G$, $G_{\text{active}}(F)$, $\mathcal{P}(k)$ | `V2_GOALS`, active unachieved goals, producer map | $G$ is all win conditions, $G_{\text{active}}(F)$ is win conditions **not yet achieved**, and $\mathcal{P}(k)$ is the set of moves capable of producing fact $k$ |
+| $\text{fc}(k, H)$, $\text{mc}(m, H)$, $d(H, G_{\text{active}})$ | `v2GoalDistance` AND/OR recursion | $\text{fc}$ is minimum steps to obtain fact $k$ (OR-choice), $\text{mc}$ is minimum steps to run move $m$ (AND-sum), and $d$ is fewest steps from state $H$ to any open goal |
+| $\Delta d(a, F)$ | `progA` (`v2ProgressFrom`) | **Direct Goal Progress**: how many steps closer to an open goal move $a$ takes you immediately |
+| $R(a, F)$ | `v2Reliability(a, H)` | **Epistemic Prior Reliability**: confidence multiplier (`1.00` proven lead, `0.80` standard enum, `0.30` unindicated priv shortcut, `0.25` speculative gamble) |
+| $U(a, F)$, $E(a, F)$, $K(a, F)$ | Newly unlocked moves, `enable`, `keystone` (`V2_KEYSTONE_CAP = 2.5`) | $U$ is follow-up moves unlocked by $a$, $E$ is the single best reliability-weighted follow-up step, and $K$ is the capped total breadth of doors opened by $a$ |
+| $S(a, F)$ | `score` in `nextActionsV2` | **Expected Graph Utility Score** breaking ties within the same `(Tier, StageRank)` bucket |
+| $\Omega_{\text{obj}}$, $\Phi_{\text{focus}}$, $\Phi_{\text{risk}}$, $\Psi_{\text{side}}$ | `V2_OBJECTIVE_W` (`+2.0`), `profileFocus` (`+0.5`), spray risk (`-0.5`), `deprioritize_when` (`5.0`) | Bounded score modifiers: uncaptured flag pull, machine-profile focus bonus, blind spray lockout penalty, and post-goal side-quest suppression |
+| $\pi^{\ast}$, $c(a, H)$, $g(H)$, $h(H)$, $f(H)$ | `planPath`, `v2ActionCost`, A\* search cost | $\pi^{\ast}$ is the lowest-cost full route to a goal, $c$ is single-move cost, $g$ is cost spent so far, $h = d$ is optimistic steps left, and $f = g + h$ is A\* priority |
+| $C(a)$, $c_i$, $\text{dry}(a)$ | `a.commands`, command $i$, `moveDryTriesInEpoch` | $C(a)$ is the ordered command list on move $a$, $c_i$ is command variant $i$, and $\text{dry}(a)$ counts conclusive 0-finding runs in the current Access Epoch |
+
+---
+
 ## 2. Formal State Representation: Facts, Scopes, and Access Epochs
+
+### Core Vocabulary: Tokens, Atoms, Facts, and Command Placeholders
+
+Before introducing the state equations, it helps to separate four distinct terms used across [`INFERENCE.md`](INFERENCE.md) and `RANKING.md` (because "token" means something different in raw text parsing than it does in command templating, and neither is the same as an atom or a fact):
+
+1. **Raw Output Tokens (parser input in [`INFERENCE.md`](INFERENCE.md))**: Uninterpreted whitespace- or delimiter-separated substrings sliced out of terminal output (such as `svc_loanmgr`, `445/tcp`, or a 32-character hex chunk). A raw token has no fixed semantic meaning on its own.
+2. **Atoms (typed primitives in [`inference.js`](assets/engine/parsers/inference.js))**: Raw output tokens that match one of OBOL's ~45 protocol or OS primitive patterns (for example, classifying `10.10.10.5` as an IPv4 atom, `S-1-5-21-...` as a SID atom, or `$krb5tgs$...` as a Kerberos hash atom). Atoms are pattern-validated building blocks rather than proven engagement state.
+3. **Facts**, $f \in \mathcal{F}$ (in [`facts.js`](assets/engine/facts.js)): Proven propositions about the target minted when parsers observe atoms in a valid structural and positive-polarity context. The ranking and planning engine operates **exclusively on facts**.
+4. **Command Template Tokens (`{{token}}` in [`command.js`](assets/engine/command.js))**: Named placeholder slots inside a move's authored command string (such as `{{target}}`, `{{domain}}`, `{{user}}`, `{{hashfile}}`, or `{{flag_path}}`) that OBOL fills automatically from proven fact payloads. Placeholders listed in `EARNED_TOKENS` also act as readiness gates: a command variant is held back until proven facts supply every earned token it requires (see Section 8.1).
 
 ### 2.1 The Fact Tuple and Proof States ([`assets/engine/facts.js`](assets/engine/facts.js))
 
@@ -35,6 +91,8 @@ The engagement state is a finite set of structured facts $\mathcal{F} = \lbrace 
 ```math
 f = (\text{kind},\, \text{scope},\, \text{value},\, \text{state},\, \text{source},\, t_{\text{created}})
 ```
+
+> **In plain English:** Every fact stored by OBOL is a 6-field record stating **what** was observed (`kind`, such as `port:445`), **where** it applies (`scope`, a specific host IP or AD domain), **extracted details** (`value`, such as a username/password or share name), **whether it was proven or disproven** (`state`: `supported`, `refuted`, or `inconclusive`), **which paste produced it** (`source`), and **when** it was recorded.
 
 where:
 - $\text{kind} \in \mathcal{K}$ is a hierarchical dotted predicate (e.g., `port:445`, `smb.readable_share`, `ad.acl_lead`, `credential.available`, `access.admin`, `objective.root_flag`).
@@ -49,13 +107,15 @@ For any scoped fact set $F \subseteq \mathcal{F}$, the set of **proven fact kind
 K(F) = \{\, f.\text{kind} \mid f \in F \;\land\; f.\text{state} = \texttt{supported} \,\}
 ```
 
+> **In plain English:** `K(F)` is simply the set of fact names (`kind` strings) inside `F` whose status is **proven** (`supported`). Facts marked `refuted` or `inconclusive` are excluded so failed logins or ambiguous checks never unlock downstream moves.
+
 A `refuted` or `inconclusive` fact never satisfies a positive prerequisite gate. Deduplication is enforced on the canonical fingerprint $(\text{kind}, \text{scope}, \text{claim}(f))$.
 
 ### 2.2 Identity-Scoped Context Projection ([`assets/engine/context.js`](assets/engine/context.js))
 
 In a multi-host, multi-credential engagement, flat global booleans cause cross-account and cross-host contamination (for example, an administrative proof earned on Host A or by Account 1 falsely unlocking privileged commands on Host B or for Account 2).
 
-Before evaluating eligibility or command filling, `OBOL.context.resolve` constructs an identity-coherent projection $F_{\text{ctx}} = \Pi(\mathcal{F}, \text{target}, \text{credId}, \text{service}, \text{locus})$:
+Before evaluating eligibility or command filling, `OBOL.context.resolve` constructs an identity-coherent projection $F_{\text{ctx}} = \Pi(\mathcal{F}, \text{target}, \text{credId}, \text{service}, \text{locus})$ - in plain terms, a filtered view of the engagement fact store scoped strictly to one target, one selected credential, one network service, and one execution location:
 
 1. **Host Isolation**: Only facts scoped to `host:<target>` (and `domain:<fqdn>` when `<target>` is proven to belong to `<fqdn>`) enter $F_{\text{ctx}}$.
 2. **Credential Coherence**: Username, plaintext password, NTLM hash, and authentication realm (`domain` vs. local `.`) are drawn atomically from the single selected credential $c^* = \text{credId}$, never mixing one principal's username with another principal's secret.
@@ -70,6 +130,8 @@ OBOL formalizes this via the **Access Epoch function** $\text{Epoch}(F)$, which 
 ```math
 \text{Epoch}(F) = \text{join}\Big(\big[\, \text{adm}(F),\; \text{fh}(F),\; \text{creds}(F),\; \text{hashes}(F) \,\big]\Big)
 ```
+
+> **In plain English:** The Access Epoch joins four summary tags into a single fingerprint string describing your current level of access and material: highest privilege (`root`, `system`, or `admin`), active shell foothold (`win`, `lin`, or `shell`), held credentials, and captured hash types. Whenever you gain a new credential, hash, shell, or admin level, this fingerprint changes - automatically unlocking previously dry commands so OBOL can re-test them under your newly earned access.
 
 where:
 - $\text{adm}(F) \in \lbrace \texttt{adm:root}, \texttt{adm:system}, \texttt{adm:admin}, \emptyset \rbrace$
@@ -101,6 +163,8 @@ A move $a$ is **eligible** under fact set $F$ (`a.eligible(F)`) if and only if:
 \text{eligible}(a, F) \iff \text{osCompatible}(a, F) \;\land\; \Big(\forall k \in \text{req}_{\text{all}}(a),\, k \in K(F)\Big) \;\land\; \Big(\text{req}_{\text{any}}(a) = \emptyset \;\lor\; \exists k \in \text{req}_{\text{any}}(a),\, k \in K(F)\Big)
 ```
 
+> **In plain English:** A move is allowed to run right now only when three checks pass: (1) it supports the target's operating system, (2) **every** mandatory prerequisite in its `requires_all` list is already proven, and (3) either it has no `requires_any` list or **at least one** trigger fact in `requires_any` is already proven.
+
 ### 3.2 Settlement and Obsolescence (`a.settled(F)` and `a.obsolete(F)`)
 
 A move $a$ is **settled** when its epistemic purpose has already been fulfilled on the active target:
@@ -108,6 +172,8 @@ A move $a$ is **settled** when its epistemic purpose has already been fulfilled 
 ```math
 \text{settled}(a, F) \iff \text{prod}(a) \neq \emptyset \;\land\; \Big(\forall k \in \text{prod}(a),\, k \in K(F)\Big) \;\land\; \neg\text{PartialUnfinished}(a, F)
 ```
+
+> **In plain English:** A move is considered finished ("settled") once it declares at least one expected output fact, **every** output fact it promises to produce is already proven on the target, and its most recent run did not stop mid-way (such as a truncated scan or a multi-service credential validator that still has untested services left).
 
 where $\text{PartialUnfinished}(a, F)$ holds if the most recent execution of $a$ was classified as `partial` (e.g., a truncated scan output) without a subsequent conclusive completion receipt, or if $a$ is a multi-service validator (`validate-credential`) with remaining untested services.
 
@@ -121,6 +187,8 @@ Thus, the **live candidate set** $\mathcal{L}(F) \subseteq \mathcal{A}$ passed t
 \mathcal{L}(F) = \{\, a \in \mathcal{A} \mid \text{eligible}(a, F) \;\land\; \neg\text{settled}(a, F) \;\land\; \neg\text{obsolete}(a, F) \;\land\; a.\text{id} \notin \text{Done}(F) \,\}
 ```
 
+> **In plain English:** The live candidate pool handed to the ranker consists of all moves in the 355-move library that are **currently allowed to run** (`eligible`), **not yet finished** (`settled`), **not superseded by higher access** (`obsolete`), and **not manually checked off** (`Done`) by the operator.
+
 ### 3.3 The Six-Phase Frontier Model ([`assets/engine/phases.js`](assets/engine/phases.js))
 
 Independent of the fine-grained ranker, OBOL projects the engagement onto an ordered six-phase sequence:
@@ -129,17 +197,23 @@ Independent of the fine-grained ranker, OBOL projects the engagement onto an ord
 \Phi = \langle \texttt{recon}_0,\, \texttt{enum}_1,\, \texttt{creds}_2,\, \texttt{access}_3,\, \texttt{escalate}_4,\, \texttt{loot}_5 \rangle
 ```
 
+> **In plain English:** OBOL organizes a penetration test into six ordered stages from start (`0`) to finish (`5`): Reconnaissance (`0`), Enumeration (`1`), Credential Recovery (`2`), Initial Access (`3`), Privilege Escalation (`4`), and Looting / Proof Capture (`5`).
+
 Each fact kind $k \in \mathcal{K}$ maps to a phase index $\phi(k) \in \lbrace 0, \dots, 5 \rbrace$ via longest-prefix matching (`PHASE_RULES`). The target's current reached phase and active frontier index are:
 
 ```math
 \text{Reached}(F) = \max_{k \in K(F)} \phi(k), \qquad \text{Frontier}(F) = \min\big(5,\, \text{Reached}(F) + 1\big)
 ```
 
+> **In plain English:** `Reached(F)` is the furthest kill-chain stage (`0` through `5`) proven by any fact you hold so far. `Frontier(F)` is one stage ahead of `Reached(F)` (capped at stage `5`), marking the furthest stage OBOL treats as immediately actionable rather than premature.
+
 The **prematurity** of a move $a$ with phase $\phi(a)$ is:
 
 ```math
 \text{prematurity}(a, F) = \max\big(0,\, \phi(a) - \text{Frontier}(F)\big)
 ```
+
+> **In plain English:** Prematurity counts how many stages ahead of your active frontier a move sits. Moves at or behind your frontier have prematurity `0` (shown under **Ready Now**); moves two or more stages ahead of what you have proven so far have prematurity `1` or higher (parked under **Coming Up**).
 
 In the Cockpit UI ([`assets/ui/routes/path.js`](assets/ui/routes/path.js), `OBOL.coach` in code), moves in $\mathcal{L}(F)$ with $\text{prematurity}(a, F) = 0$ and at least one runnable, untried command populate **Ready Now (`onFlow`)**; moves with $\text{prematurity}(a, F) > 0$ populate **Coming Up (`comingUp`)**; and informational writeup checks (`isReportOnly(a, A)`) populate **Report Checks (`reportChecks`)**.
 
@@ -155,6 +229,8 @@ In a traditional weighted-sum recommender, every rule adds a numeric bonus $+w_i
 S_{\text{legacy}}(a, F) = S_{\text{graph}}(a, F) + \sum_{i} w_i \cdot \mathbb{I}[\text{rule}_i(a, F)]
 ```
 
+> **In plain English:** A traditional single-number recommender starts with a base graph score and adds bonus points (`w_i`) for every heuristic rule that move `a` matches. As detailed below, mixing kill-chain stage priority and graph math into a single flat sum makes rankings fragile as move packs grow.
+
 In a stateful penetration testing engine, this architecture suffers from three structural failure modes:
 
 1. **The Recency Window Decay Trap**: If "newly unlocked" moves are detected solely by a wall-clock timestamp window (for example, facts created within $\Delta t \le 2\text{ s}$ of $\max t$), then as soon as an operator runs a single post-authentication command (such as reading `user.txt` 10 seconds after validating a credential), the credential fact ages out of the 2-second window. All remaining credential-unlocked moves drop back to the baseline tier unless ad-hoc rules forcibly pin them upward.
@@ -168,6 +244,8 @@ OBOL resolves all three failure modes by decomposing ranking into three strictly
 ```math
 \mathbf{RankKey}(a, F) = \big(\text{Tier}(a, F),\; \text{StageRank}(a, F),\; S(a, F),\; \text{priority}(a),\; -\text{toolkitRank}(a),\; -\text{locusRank}(a)\big)
 ```
+
+> **In plain English:** Instead of adding everything into one number, OBOL sorts moves column-by-column from left to right: **Macro Frontier Tier** decides first; ties inside the same tier break by **Stage Role** (`StageRank`); ties there break by the **Graph Utility Score** (`S`); and any remaining ties break by **authored priority**, **preferred house tool** (smaller rank number wins), and **remote-first execution** (running from Kali beats running on-host).
 
 1. **Macro-Stage Causal Frontier Tier**, $\text{Tier}(a, F) \in \lbrace -1, 0, 1, 2, 3, 4, 5 \rbrace$: Encodes **which causal frontier of the kill-chain** the move belongs to given the current persistent state $K(F)$. Because Tier 5 $>$ Tier 4 $>$ Tier 3 $>$ Tier 2 $>$ Tier 1 $>$ Tier 0 $>$ Tier $-1$ is a strict lexicographic partition, an Earned Material transform in Tier 4 (such as cracking a captured TGS hash or abusing a discovered writable ACL) **automatically** ranks above every general authenticated probe in Tier 3, with zero magic weights added to $S(a, F)$.
 2. **Within-Tier Structural Role**, $\text{StageRank}(a, F) \in \lbrace -1, 0, 1, 2, 3, 4 \rbrace$: Orders the operational sub-roles within the same macro-tier by action cost and directness (e.g., within Tier 3: capturing an unmet 1-command local flag objective $>$ running a 1-command fast escalation probe $>$ running a multi-step whole-domain graph collector $>$ manual enumeration).
@@ -186,9 +264,11 @@ Each live move $a \in \mathcal{L}(F)$ is initialized to its base epistemic tier:
 \end{cases}
 ```
 
-where $\text{Fresh}(a, F) \iff \text{eligible}(a, K(F)) \land \neg\text{eligible}(a, K_{\text{before}}(F))$ (subject to anti-thrash guards that suppress low-level recon pings when a high-value lead is already held, and defer generic host LPE fallbacks `a.dcDefer` on unmapped Domain Controllers).
+> **In plain English:** Before high-priority stage promotions (Tiers 3 through 5) are applied, every eligible move starts in one of four base tiers: **`-1` (Speculative)** for blind gambles with no supporting evidence indicator; **`2` (Fresh)** for moves newly unlocked by your most recent paste; **`1` (Earned)** for evidence-backed moves unlocked in an earlier step that are still open; or **`0` (Baseline)** for routine general enumeration.
 
-The promotion operator $\text{promote}(t, r)$ then elevates $(\text{Tier}, \text{StageRank}) \leftarrow \max\big((\text{Tier}, \text{StageRank}), (t, r)\big)$ across the active persistent state:
+where $\text{Fresh}(a, F) \iff \text{eligible}(a, K(F)) \land \neg\text{eligible}(a, K_{\text{before}}(F))$ - in plain terms, move $a$ is eligible now, whereas it was *not* eligible before the latest paste (subject to anti-thrash guards that suppress low-level recon pings when a high-value lead is already held, and defer generic host LPE fallbacks `a.dcDefer` on unmapped Domain Controllers).
+
+The promotion operator $\text{promote}(t, r)$ then elevates $(\text{Tier}, \text{StageRank}) \leftarrow \max\big((\text{Tier}, \text{StageRank}), (t, r)\big)$ across the active persistent state - raising a move's `(Tier, StageRank)` pair whenever it qualifies for a higher frontier stage below, while never lowering an already-higher assignment:
 
 | Causal Frontier Tier | Sub-Role (`stageRank`) | Persistent State Condition & Transition Role | Operational Meaning |
 | :--- | :---: | :--- | :--- |
@@ -222,11 +302,15 @@ Let $G$ be the engagement goal set. With flags enabled (`V2_GOALS`):
 G = \{\texttt{objective.root\_flag},\; \texttt{objective.local\_flag},\; \texttt{objective.flag},\; \texttt{access.root},\; \texttt{access.admin},\; \texttt{access.system},\; \texttt{loot.ntds},\; \texttt{ad.domain\_admin}\}
 ```
 
+> **In plain English:** When flag hunting is enabled (exam / CTF mode), winning goals include capturing a root, user, or general proof flag, gaining `root` / `Administrator` / `SYSTEM` access, dumping Active Directory's `NTDS.dit` database, or proving Domain Admin control.
+
 With flags disabled (`V2_GOALS_NO_FLAGS`):
 
 ```math
 G_{\text{no-flags}} = \{\texttt{access.root},\; \texttt{access.admin},\; \texttt{access.system},\; \texttt{loot.ntds},\; \texttt{ad.domain\_admin}\}
 ```
+
+> **In plain English:** When flag hunting is disabled (client assessment mode), flag files are omitted and the winning goals are strictly full host or domain administrative compromise.
 
 To prevent an already-achieved intermediate goal (such as `objective.local_flag` after capturing `user.txt`) from zeroing the distance to the remaining goals, `nextActionsV2` defines the **active unachieved goal set**:
 
@@ -236,6 +320,8 @@ G_{\text{active}}(F) = \begin{cases}
 G & \text{otherwise}
 \end{cases}
 ```
+
+> **In plain English:** `G_active(F)` filters the goal list down to **only the goals you have not achieved yet**. Capturing `user.txt` early will not trick the ranker into thinking the engagement is 0 steps from finished while `root.txt` and `SYSTEM` are still open. (Once every goal has been achieved, it falls back to the full goal set `G`.)
 
 For any set of held fact kinds $H \subseteq \mathcal{K}$, let $\mathcal{P}(k) = \lbrace m \in \mathcal{A} \mid k \in \text{prod}(m) \rbrace$ be the set of moves that produce fact kind $k$. The minimal step distance $d(H, G_{\text{active}})$ through the AND/OR prerequisite hypergraph is defined mutually recursively over fact nodes $\text{fc}(k)$ (OR-nodes) and move nodes $\text{mc}(m)$ (AND-nodes):
 
@@ -247,6 +333,8 @@ For any set of held fact kinds $H \subseteq \mathcal{K}$, let $\mathcal{P}(k) = 
 \end{cases}
 ```
 
+> **In plain English:** The step cost to obtain a single fact `k` from your current state `H` is **`0` steps** if you already hold `k`; otherwise it is **the cheapest move cost** among all moves capable of producing `k` (an **OR** choice, since you only need one producer move to succeed); or **unreachable** (`99` in code) if no move in the library produces `k`.
+
 ```math
 \text{mc}(m, H) = 1 + \sum_{r \in \text{req}_{\text{all}}(m)} \text{fc}(r, H) + \begin{cases}
 \min_{r \in \text{req}_{\text{any}}(m)} \text{fc}(r, H) & \text{if } \text{req}_{\text{any}}(m) \neq \emptyset \\
@@ -254,11 +342,15 @@ For any set of held fact kinds $H \subseteq \mathcal{K}$, let $\mathcal{P}(k) = 
 \end{cases}
 ```
 
+> **In plain English:** The step cost to execute move `m` from state `H` equals **`1` step for move `m` itself**, plus the **sum** of steps needed to earn **all** missing prerequisites in `requires_all` (an **AND** requirement), plus the **single cheapest** trigger option from `requires_any` (if `requires_any` is non-empty).
+
 with cycle detection (returning $\text{fc}(k, H) = \infty$ if $k$ is already on the active recursion stack) and memoization ceiling `V2_INF = 99`. The distance from state $H$ to the active goal set is:
 
 ```math
 d(H, G_{\text{active}}) = \min_{g \in G_{\text{active}}} \text{fc}(g, H)
 ```
+
+> **In plain English:** Your current goal distance (`d`) is the **fewest total moves** required to reach *any* still-unachieved goal in `G_active` from your current proven facts `H`.
 
 ### 5.2 Direct Goal Progress $\Delta d(a, F)$ (`v2ProgressFrom`)
 
@@ -271,6 +363,8 @@ Let $H_0 = K(F)$ be the currently proven fact kinds, $d_0 = d(H_0, G_{\text{acti
 \max(0,\, d_0 - d_a) & \text{otherwise}
 \end{cases}
 ```
+
+> **In plain English:** Direct Goal Progress (`progA`) measures how many steps closer to an open goal move `a` takes you if it succeeds: **`0`** if goals were unreachable before and remain unreachable after; **`5`** if no goal path existed yet and move `a` bridges you onto a valid path to a goal; or **`d_0 - d_a`** (floored at `0`), the exact number of steps shaved off the shortest path to an open goal.
 
 ### 5.3 Epistemic Prior Reliability $R(a, F)$ (`v2Reliability`)
 
@@ -300,6 +394,8 @@ R(a, H) = \begin{cases}
 \end{cases}
 ```
 
+> **In plain English:** Reliability acts as a confidence multiplier (`25%` to `100%`) weighting a move's expected payoff: **`1.00`** when backed by a confirmed vulnerability, writable ACL, credential, or captured hash; **`0.80`** for normal deterministic enumeration; **`0.30`** for unindicated privilege-escalation shortcuts claiming admin/root without specific evidence; and **`0.25`** for blind gambles like unindicated CVE exploits or password sprays.
+
 ### 5.4 One-Step Deepest Enablement $E(a, F)$ and Bounded Keystone Breadth $K(a, F)$
 
 A pivotal intermediate move (such as dumping a user list, collecting a TGS hash, or validating a credential) may not reach a terminal flag in 1 step $(\Delta d(a, F) = 0)$, but it **unlocks** downstream moves that do.
@@ -310,6 +406,8 @@ Let $U(a, F)$ be the set of moves in $\mathcal{A}$ that are currently **ineligib
 U(a, F) = \{\, b \in \mathcal{A} \setminus \{a\} \mid \neg\text{eligible}(b, H_0) \;\land\; \text{eligible}(b, H_a) \,\}
 ```
 
+> **In plain English:** `U(a, F)` is the set of **new doors opened by move `a`** - every other move in the library that is locked right now, but would immediately become unlocked (`eligible`) if move `a` succeeded.
+
 For each newly unblocked move $b \in U(a, F)$, let $R_b = R(b, H_a)$ be its reliability in the post-move state $H_a$, and let $\Delta d_b(a, F)$ be its goal progress from $H_a$:
 
 ```math
@@ -319,7 +417,9 @@ For each newly unblocked move $b \in U(a, F)$, let $R_b = R(b, H_a)$ be its reli
 \end{cases}
 ```
 
-where $\text{InEscalationWindow}(H_0) \iff \texttt{credential.available} \in H_0 \land H_0 \cap \lbrace \texttt{access.admin}, \texttt{access.system}, \texttt{loot.ntds} \rbrace = \emptyset$. This escalation-aware lookahead recognizes that when a low-privilege credential is already held in $H_0$, roasting a service ticket (`hash.tgs` $\to$ `crack-tgs`) yields a **new escalated credential** even though the boolean kind `credential.available` is already present in $H_0$.
+> **In plain English:** For each newly unlocked follow-up move `b`, OBOL calculates how many steps closer to a goal `b` would take you next. Special case: when you already hold a low-privilege login (not yet admin) and move `a` captures a fresh Kerberos service ticket (`hash.tgs`) that `b` can crack into a *second, potentially privileged* account, OBOL credits `b` with `1` step of progress even though the generic fact name `credential.available` is already present.
+
+where $\text{InEscalationWindow}(H_0) \iff \texttt{credential.available} \in H_0 \land H_0 \cap \lbrace \texttt{access.admin}, \texttt{access.system}, \texttt{loot.ntds} \rbrace = \emptyset$ (in plain terms: you hold a non-admin credential, and have not yet achieved `admin`, `SYSTEM`, or an `NTDS.dit` dump).
 
 From $U(a, F)$, OBOL computes two 1-step lookahead quantities:
 
@@ -329,11 +429,15 @@ From $U(a, F)$, OBOL computes two 1-step lookahead quantities:
 E(a, F) = \max_{b \in U(a, F)} \big(R_b \cdot \Delta d_b(a, F)\big) \qquad (\text{with } E(a, F) = 0 \text{ if } U(a, F) = \emptyset)
 ```
 
+> **In plain English:** Deepest Enablement (`enable`) inspects every follow-up move `b` that move `a` would unlock and takes the **single highest reliability-weighted goal step** among them (`0` if `a` unlocks nothing). It rewards setup moves that directly tee up a high-confidence winning strike.
+
 **2. Bounded Keystone Breadth $K(a, F)$ (`keystone`)** - the reliability-tempered breadth of the attack surface unblocked by $a$, giving every newly unblocked move $b \in U(a, F)$ a base weight of $0.5$ plus its goal progress $\Delta d_b(a, F)$, capped at $K_{\max} = 2.5$ (`V2_KEYSTONE_CAP`):
 
 ```math
 K_{\text{raw}}(a, F) = \min\left(2.5,\; \sum_{b \in U(a, F)} R_b \cdot \big(0.5 + \Delta d_b(a, F)\big)\right)
 ```
+
+> **In plain English:** Raw Keystone Breadth (`keystone`) sums up **how wide an attack surface move `a` opens**: each newly unlocked follow-up move `b` adds `0.5` base points plus its own goal progress, weighted by `b`'s reliability, up to a hard ceiling of `2.5` so a noisy move unlocking dozens of minor checks cannot overpower direct goal progress.
 
 Because keystone fan-out is a **middle-game** pivot metric (meant to help reach a winning position, never to displace an endgame cash-in or promote post-compromise persistence), $K(a, F)$ is zeroed for direct privilege cash-ins and deprioritized side-quests:
 
@@ -344,6 +448,8 @@ K_{\text{raw}}(a, F) & \text{otherwise}
 \end{cases}
 ```
 
+> **In plain English:** Keystone breadth drops to **`0`** whenever move `a` is already a direct admin/root cash-in or has been marked as a post-compromise side quest (`deprioritize_when`), keeping breadth bonuses focused strictly on middle-game discovery and pivoting.
+
 ### 5.5 The Complete Graph Utility Score Formula $S(a, F)$
 
 Combining Direct Progress $\Delta d(a, F)$, Deepest Enablement $E(a, F)$, Keystone Breadth $K(a, F)$ (with weight $w_K = 0.25$), Epistemic Prior Reliability $R(a, F)$, and bounded situational modifiers yields the complete scoring equation in [`nextActionsV2`](assets/engine/pack.js):
@@ -351,6 +457,8 @@ Combining Direct Progress $\Delta d(a, F)$, Deepest Enablement $E(a, F)$, Keysto
 ```math
 S(a, F) = R(a, F) \cdot \Big(\Delta d(a, F) + 0.6 \cdot E(a, F) + 0.25 \cdot K(a, F)\Big) + \Omega_{\text{obj}}(a, F) + \Phi_{\text{focus}}(a) + \Phi_{\text{risk}}(a, F) - \Psi_{\text{side}}(a, F)
 ```
+
+> **In plain English:** Within the same `(Tier, StageRank)` bucket, a move's score is its **reliability** (`0.25` to `1.00`) multiplied by three graph payoffs - **direct steps saved toward a goal** (`1.0x`), **best follow-up move unlocked** (`0.6x`), and **total breadth of doors opened** (`0.25x`, capped at `2.5`) - plus bounded nudges for **uncaptured flags** (`+2.0`) and **machine-profile focus** (`+0.5`), minus penalties for **blind password-spray lockout risk** (`-0.5`) or **already-moot side quests** (`-5.0`).
 
 where every modifier is explicitly bounded and defined. First, **Endgame Uncaptured Objective Pull**, $\Omega_{\text{obj}}(a, F)$:
 
@@ -360,6 +468,8 @@ where every modifier is explicitly bounded and defined. First, **Endgame Uncaptu
 0 & \text{otherwise}
 \end{cases}
 ```
+
+> **In plain English:** When flag hunting is enabled and move `a` directly captures an uncollected flag (`root_flag`, `local_flag`, or `flag`), it receives an extra **`+2.0` score pull** so grabbing a reachable flag never loses a tie to lateral enumeration.
 
 The remaining three modifiers are:
 
@@ -422,6 +532,8 @@ At state $H \subseteq \mathcal{K}$, taking applicable move $a$ incurs step cost:
 c(a, H) = c_{\text{base}}(a, H) + 0.3 \cdot \text{locusRank}(a.\text{locus})
 ```
 
+> **In plain English:** When the full-route A\* planner (`planPath`) searches for the most dependable end-to-end attack path to a goal, each move's cost equals its **base reliability cost** plus a small **execution-friction surcharge**: `+0.0` when run remotely from Kali (`R`), `+0.3` for a one-shot on-target command (`F`), or `+0.6` for an interactive on-target session (`I`).
+
 where:
 
 ```math
@@ -433,6 +545,8 @@ c_{\text{base}}(a, H) = \begin{cases}
 \end{cases}
 ```
 
+> **In plain English:** Dependable moves cost very little and blind gambles cost a lot: **`1.0`** for an evidence-backed earned move, **`1.5`** for routine enumeration, **`8.0`** for an unindicated privilege-escalation shortcut, and **`12.0`** for a speculative blind exploit or spray (making a single blind gamble cost as much as 12 earned steps).
+
 and $\text{locusRank}(\texttt{R}) = 0$, $\text{locusRank}(\texttt{F}) = 1$, $\text{locusRank}(\texttt{I}) = 2$.
 
 ### 7.2 Admissibility and Optimality of the A\* Search
@@ -440,6 +554,8 @@ and $\text{locusRank}(\texttt{R}) = 0$, $\text{locusRank}(\texttt{F}) = 1$, $\te
 The A\* search maintains an open priority queue ordered by $f(H) = g(H) + h(H)$, where:
 - $g(H)$ is the exact accumulated path cost $\sum_{i=1}^{m} c(a_i, H_{i-1})$ from $H_0$ to $H$.
 - $h(H) = d(H, G)$ (`v2GoalDistance`) is the minimum number of moves required to reach any goal from $H$.
+
+> **In plain English:** A\* always expands the candidate route with the lowest `cost spent so far (g) + minimum steps remaining (h)`. Because every move costs at least `1.0` (`h` never overestimates the true remaining cost), the very first goal-reaching route popped from the queue is mathematically guaranteed to be the lowest-cost dependable plan.
 
 Because every move in the graph has step cost $c(a, H) \ge 1.0$, and any path of $k$ moves can reduce the step distance $d(H, G)$ by at most $k$ steps along the chosen AND-branch, $h(H) = d(H, G)$ is an **admissible heuristic** $(h(H) \le h^*(H))$. Furthermore, `planPath` enforces dynamic OS-family consistency (`osOkIn(a, st)`): once a path accrues a Linux foothold (`foothold.linux`), Windows-only moves are pruned from that branch (and vice versa), preventing impossible cross-OS plans.
 
@@ -493,6 +609,8 @@ For a given move $a$, target host $T$, and access epoch $E = \text{Epoch}(F)$, l
 ```math
 \text{onFlow}_{\text{sorted}} = \text{stableSort}\Big(\text{onFlow},\; (x, y) \mapsto \text{dry}(x) - \text{dry}(y)\Big)
 ```
+
+> **In plain English:** After tiers and scores are computed, OBOL performs an order-preserving sort by **dry-attempt count** (`dry`): every untried move (`0` dry runs in the current Access Epoch) stays ahead of moves that already ran clean and returned zero findings (`1+` dry runs), while preserving the exact rank order inside each group. When Card `#1` comes back empty, it rotates down cleanly and the next best untried hypothesis becomes Card `#1`.
 
 Untried hypotheses $(\text{dry} = 0)$ always lead tried-and-dry hypotheses $(\text{dry} \ge 1)$, and the Cockpit UI (`render()` in `path.js`) automatically advances `nsSel.id` to `onFlow[0].id` whenever the previously expanded card has been demoted by a dry probe.
 
