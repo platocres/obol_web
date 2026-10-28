@@ -89,13 +89,15 @@ restores the active engagement from IndexedDB, and registers the routes.
 The `<script defer>` sequence in `index.html` is:
 
 ```
-engine:  facts -> phases -> pack -> profile -> context -> command -> workspace -> vfs -> loot -> playbook -> chain
-data:    findings-catalog -> narratives -> (engine: findings) -> packs-bundle -> tools-install -> tunnels ->
-         pivot-troubleshooter -> field-notes -> tool-staging
+engine:  facts -> phases -> pack -> profile -> context -> command -> workspace ->
+         vfs -> loot -> playbook -> chain
+data:    findings-catalog -> narratives -> (engine: findings) -> packs-bundle ->
+         tools-install -> tunnels -> pivot-troubleshooter -> field-notes -> tool-staging
 engine:  pivotdoctor -> packs -> (data: gtfobins) -> resolve
-ui:      util -> icons -> mobile -> factpick -> store -> credbar -> (data: tips) -> tips -> ctxbar ->
-         quickpaste -> chainview -> graphview -> graphtip -> (engine: outcomes) -> ingest -> router -> lazy -> palette
-routes:  home -> targets -> evidence -> path            (only the first surfaces up front)
+ui:      util -> icons -> mobile -> factpick -> store -> credbar -> (data: tips) ->
+         tips -> ctxbar -> quickpaste -> chainview -> graphview -> graphtip ->
+         (engine: outcomes) -> ingest -> router -> lazy -> palette
+routes:  home -> targets -> evidence -> path   (only the first surfaces up front)
 ui:      boot -> backdrop -> coin -> settings
 ```
 
@@ -190,16 +192,17 @@ Raw Terminal Paste
    │
    ▼
 1. Session Splitter & Scrollback Trimmer (assets/ui/ingest.js)
-   │  Splits multi-command scrollback, interactive sub-shells, or Cruise markers (===== OBOL STEP ... =====)
+   │  Splits multi-command scrollback, sub-shells, or Cruise markers (===== OBOL STEP ... =====)
    │  Extracts typed command, strips ANSI escape codes & spinner CR overwrites
    ▼
 2. Scope & Context Router (assets/ui/ingest.js + assets/engine/context.js)
-   │  Auto-learns {{lhost}} from prompt stamps; routes output to host:<ip>, domain:<name>, and active credential
+   │  Auto-learns {{lhost}} from prompt stamps; routes output to host:<ip>,
+   │  domain:<name>, and active credential
    ▼
-3. 3-Tier Multi-Strategy Parser & Wittgensteinian Inference Cascade (assets/engine/parsers/index.js)
-   │  ├── Tier 1: Command-Gated & Content-Sniffed Domain Parsers (15 domain modules + nxc-catalog.js, 443 signals)
+3. 3-Tier Parser & Wittgensteinian Inference Cascade (assets/engine/parsers/index.js)
+   │  ├── Tier 1: Domain Parsers (15 domain modules + nxc-catalog.js, 443 signals)
    │  ├── Tier 2: Output-Shape & Blocker Fallback (shape.js, blockers.js)
-   │  └── Tier 3: Wittgensteinian Contextual Inference Engine (inference.js: 5 cross-domain language-game rules + causal entailment)
+   │  └── Tier 3: Wittgensteinian Contextual Inference (inference.js: 5 rules + causal entailment)
    ▼
 4. FactSet Deduplication, Proof-State Ledger & Outcome Classification (facts.js + outcomes.js)
 ```
@@ -247,11 +250,11 @@ assets/
                            graph.js, creds.js, scoreboard.js, playbooks.js, cruise.js, map.js,
                            findings.js, history.js, help.js)
 data/
-  packs-bundle.js          generated move bundle (19 packs, 355 moves, 1,923 commands; includes oscp_gapfill_2026_10.json)
-  tool-staging.js          ObolToolStaging (13 Hero Deck payload keys + on-host staging cradles)
+  packs-bundle.js          generated move bundle (19 packs, 355 moves, 1,923 commands)
+  tool-staging.js          ObolToolStaging (13 Hero Deck payload keys + staging cradles)
   resources.js             curated OSCP resources and practice scenarios for #/start
-  help-content.js          4-tab Help & 7-chapter Operator Manual content + 32-term glossary
-  study-fixtures.js        355 move keys (100% 1:1 coverage across all 355 active moves) & 37 practice box walkthroughs
+  help-content.js          4-tab Help & 7-chapter Operator Manual + 32-term glossary
+  study-fixtures.js        355 move keys (1:1 coverage) & 37 practice box walkthroughs
   field-notes.js findings-catalog.js narratives.js gtfobins.js toolset.js tool-glossary.js ...
 screenshots/               the images used by the README
 ```

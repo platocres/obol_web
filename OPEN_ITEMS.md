@@ -1,6 +1,6 @@
 # OBOL Open Items: UX, Neurodivergent/Accessibility & Operator Roadmap
 
-> **Trigger Phrase**: When the user says **"Let's look at open items"** (or asks about the roadmap, backlog, or next UX improvements), read this file (`OPEN_ITEMS.md`) and keep both `qa/OPEN_ITEMS.md` and `prod/OPEN_ITEMS.md` in sync as items are completed or updated. (`qa/` is authoritative; `prod/` is the active production mirror.)
+> **Trigger Phrase**: When the user says **"Let's look at open items"** (or asks about the roadmap, backlog, or next UX improvements), read this file (`OPEN_ITEMS.md` in `qa/`, dev-only) and keep it updated as items are completed or refined.
 
 ---
 
@@ -11,7 +11,7 @@
 - **Item 3, behavioral verification:** CI now runs stateful engine, parser corpus, migration, export, and real-browser checks. Coverage reports distinguish declared capability from demonstrated samples and remaining gaps.
 - **Item 4 remains under discussion.** The current Coach overview remains available; proposed alternative views are optional concepts. Cruise stays separate while experimental. Preserve the neon-glass visual language and meaningful methodology/organization/phase colors, with 1920x1080 as the primary desktop baseline and responsive behavior elsewhere.
 
-See [Context, outcomes, and behavioral verification](docs/CONTEXT-OUTCOMES.md) for the implemented contract, migration behavior, tests, and coverage limits. The UI ideas below are a backlog, not authorization to implement them.
+See [`assets/engine/context.js`](assets/engine/context.js) and [`assets/engine/outcomes.js`](assets/engine/outcomes.js) for the implemented contract, migration behavior, and outcome classification rules. The UI ideas below are a backlog, not authorization to implement them.
 
 ---
 

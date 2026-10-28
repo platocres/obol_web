@@ -333,7 +333,7 @@ read before that box is marked done. The move/technique axis is already banked i
   404 body (`23708bbeb1b8`) and a proxychains curl 200 (`e0c783a21aa5`) should both mint `http.reachable`,
   each with a guard (a DNS-failure curl true-negative, `f87b247fe3a8`). Two Stage 5 fixes then CLOSED all
   three: services.js `_parse_http_metadata` mints `http.reachable` from a returned response body (HTML or
-  an "HTTP Error <code>" wrapper, guarded so a no-body transport failure stays unreachable;
+  an `"HTTP Error <code>"` wrapper, guarded so a no-body transport failure stays unreachable;
   `tests/engine/http-reachable-body-smoke.js`), and services.js `_parse_ftp_output` mints `loot.files`
   from an FTP directory listing (Windows IIS and Unix `ls -l` row shapes, reached on an ftp command or FTP
   control codes and minting only inside that context; `tests/engine/ftp-listing-loot-smoke.js`). Recall is
@@ -371,8 +371,8 @@ read before that box is marked done. The move/technique axis is already banked i
   (`tests/engine/labeled-leak-cred-smoke.js`), the websource parser gained `_parse_labeled_creds`
   (a `labeled_leak` credential.candidate). (b) The deliberate stricter-floor batch then opened two
   `http.reachable` misses (a PowerShell-wrapped curl 404 and a proxychains curl 200); services.js
-  `_parse_http_metadata` gained a response-body reachability branch (HTML document or "HTTP Error
-  <code>" wrapper), DNS/connection-failure guarded, reproduced corpus-free in
+  `_parse_http_metadata` gained a response-body reachability branch (HTML document or `"HTTP Error <code>"`
+  wrapper), DNS/connection-failure guarded, reproduced corpus-free in
   `tests/engine/http-reachable-body-smoke.js`, closing both. (c) The last backlog miss (an ftp `ls`
   IIS listing exposing backup.mdb that should mint loot.files) was closed by a `_parse_ftp_output`
   directory-listing branch (Windows IIS and Unix `ls -l` rows, reached on an ftp command or FTP control

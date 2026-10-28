@@ -45,14 +45,17 @@ Different security tools - and successive versions of the same tool - participat
 Every terminal paste or log file attachment flows through a deterministic pre-normalization layer followed by a strictly additive three-tier cascade in [`parseActionOutput`](assets/engine/parsers/index.js):
 
 ```mermaid
+%%{init: {'flowchart': {'wrappingWidth': 460, 'nodeSpacing': 32, 'rankSpacing': 34}}}%%
 flowchart TD
-    Paste["Raw Terminal Paste / Multi-Command Session"] --> Norm["Pre-Parser Signal Normalization (common.js / index.js)\n1. ANSI & OSC Escape Stripping (stripAnsi)\n2. Carriage-Return Progress Overwrite Resolution (_normalize_cr)\n3. Multiplexer Split-Pane Bleed Stripping (_strip_tmux_split)\n4. 80-Col Wrapped Hash & Folded LDIF Unwrapping (_unwrap_kerberos_hashes)\n5. Tunnel & Command Wrapper Peeling (_strip_proxychains / _strip_cmd_wrappers)"]
-    Norm --> Env["Context Envelope Builder (ingest.js)\n1. Operator Attention Frame (copiedQueue + activities[0..2] + Catalog Match)\n2. Shell Prompt Telemetry (locus, user, cwd, subshell, promptLine)\n3. Command Argument Echo Set & Protocol Envelope Guard\n4. Local-Shell Target Routing Anchor"]
-    Env --> T1["Tier 1: Tool-Signature Parsers\n(nmap.js, directory.js, web.js, host.js, creds.js, services.js, database.js)"]
-    T1 --> T2["Tier 2: Structural Shape & Family Resemblance\n(shape.js - command-less tables, hashes, headers, ACLs)"]
-    T2 --> T3["Tier 3: Wittgensteinian Contextual Inference (inference.js)\n- Markup-Scoped Wrapper-Delta Diffing\n- Dynamic 2D Table Header (ASCII/Unicode/CSV) & KV Block Mapper\n- 45-Atom Lexicon + Per-Line Polarity + Boilerplate Subtraction\n- Global Entity Cross-Referencing & 8 Co-Occurrence Families (7A-7H)"]
-    T3 --> Entail["Causal Entailment & Gate Synchronizer\n- Promotes candidate credentials to credential.available / hash.*\n- Links out-of-order AD domains (host.domain + ad.domain_known)\n- Backfills implied reachability/OS/foothold gates while preserving skipped scans"]
-    Entail --> Store["Mint Facts to OBOL.store & Classify Attempt Outcome"]
+    Paste["<b>Raw Terminal Paste / Multi-Command Session</b><br/>stdout, echoed command, active target, copied-command queue"]
+    Paste --> Norm["<b>1. Pre-Parser Signal Normalization</b> (common.js / index.js)<br/>stripAnsi, CR overwrite (_normalize_cr), tmux split-pane peel, 80-col hash & LDIF unwrap, proxychains/sudo peel"]
+    Paste --> Env["<b>2. Context Envelope Builder</b> (ingest.js)<br/>5-slot copiedQueue + activities[0..2] + 355-move catalog match, shell prompt locus, arg echoSet, HTTP header isolation"]
+    Norm --> T1["<b>3. Tier 1: Tool-Signature Parsers</b><br/>nmap.js, directory.js, web.js, host.js, creds.js, services.js, database.js"]
+    Env --> T1
+    T1 --> T2["<b>4. Tier 2: Structural Shape & Family Resemblance</b> (shape.js)<br/>Command-less port tables, raw HTTP responses, hashes, kernel banners, ACL/ADCS families"]
+    T2 --> T3["<b>5. Tier 3: Wittgensteinian Contextual Inference</b> (inference.js)<br/>Wrapper-delta diffing, 2D table & KV mapper, 45-atom lexicon, per-line polarity, 8 co-occurrence families (7A-7H)"]
+    T3 --> Entail["<b>6. Causal Entailment & Gate Synchronizer</b><br/>Promotes candidate creds/hashes, links out-of-order AD domains, backfills implied reachability/OS/foothold gates"]
+    Entail --> Store["<b>7. OBOL.store & Attempt Outcome Classifier</b><br/>Mints scoped facts & updates Cockpit frontier"]
 ```
 
 ### 2.1 Pre-Parser Signal Normalization ([`common.js`](assets/engine/parsers/common.js) & [`index.js`](assets/engine/parsers/index.js))
@@ -154,7 +157,7 @@ Section 7 of [`inference.js`](assets/engine/parsers/inference.js) evaluates eigh
 - **7C (Port/Proto + Positive Polarity)**: `<port>/<tcp|udp>` + `OPEN`/`LISTEN`/`SUCCEEDED` -> `port:<N>` + `ports.open` + service `.reachable`.
 - **7D (POSIX Identity)**: `uid=<N>(<user>) gid=<N>(<group>)` -> `web.rce` (when from a web client) + `foothold.linux` (+ `access.root` when `uid=0`).
 - **7E (NTLM Pair & Modular Hash Co-Occurrence)**: Unhandled `lm:nt` pairs and `$2y$`/`$6$`/`$krb5tgs$`/`$krb5asrep$`/`$DCC2$` hashes -> `hash.ntlm` / `hash.tgs` / `hash.asrep` / `hash.mscache2` / `hash.crackable` + `credential.available`.
-- **7F (Domain\User or UPN + Auth Success & Directory Lists)**: `DOMAIN\user:secret` + `AUTHENTICATED`/`Pwn3d!`/`[+]`, or directory identities co-occurring with SIDs/SPNs/DNs -> `credential.available`, `<proto>.authenticated`, `access.admin` (on `Pwn3d!`), and `ad.user_list`.
+- **7F (`DOMAIN\user` or UPN + Auth Success & Directory Lists)**: `DOMAIN\user:secret` + `AUTHENTICATED`/`Pwn3d!`/`[+]`, or directory identities co-occurring with SIDs/SPNs/DNs -> `credential.available`, `<proto>.authenticated`, `access.admin` (on `Pwn3d!`), and `ad.user_list`.
 - **7G (UNC Share Paths)**: `\\host\ShareName\...` -> `smb.shares`.
 - **7H (POSIX Permissions + Paths)**: `-rwsr-xr-x` SUID binaries, `cap_*+ep` file capabilities, and world-writable `/etc/passwd` or `/etc/shadow` -> `privesc.suid`, `privesc.capabilities`, `privesc.writable_etc`.
 

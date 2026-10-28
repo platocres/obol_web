@@ -249,7 +249,7 @@ Axis status values: `DONE (date)`, `PARTIAL (date, note)`, or `NOT YET`.
     SECOND OUTPUT-AXIS FIX SHIPPED (2026-10-22): native on-host directory listings now mint
     loot.files. The loot axis (601 prose-confirmed opportunities, the largest of the three) was the
     lead, and native shell listings were the biggest patterned residue after smbclient: cmd "dir"
-    ("Directory of C:\path" plus dated "MM/DD/YYYY HH:MM AM  <size|<DIR>>  name" rows), PowerShell
+    ("Directory of C:\path" plus dated `"MM/DD/YYYY HH:MM AM  <size|<DIR>>  name"` rows), PowerShell
     Get-ChildItem ("Mode  LastWriteTime  Length Name" table), and Invoke-Command { ls } (the same
     table with a trailing PSComputerName column). These carry no tool token on the unit command
     (just "dir"/"ls"/"gci"), so index.js sniffs the header anchors and the new _parse_fs_listing
@@ -381,10 +381,10 @@ Axis status values: `DONE (date)`, `PARTIAL (date, note)`, or `NOT YET`.
     anchor (`f87b247fe3a8`, a DNS-resolution-failure curl) guarding against firing `http.reachable` when
     nothing was reached. Two Stage 5 fixes (2026-10-23) then CLOSED all three misses. (1) `services.js`
     `_parse_http_metadata` now mints `http.reachable` from a returned response body (an HTML document, or
-    an "HTTP Error <code>" Invoke-WebRequest wrapper line) even when no status line and no Server header
+    an `"HTTP Error <code>"` Invoke-WebRequest wrapper line) even when no status line and no Server header
     were printed, guarded so a name resolution or connection failure (no body) stays unreachable (the
     `f87b247fe3a8` anchor stays silent). (2) `services.js` `_parse_ftp_output` now mints `loot.files` from
-    an FTP directory listing (Windows IIS "MM-DD-YY HH:MMAM/PM <size|<DIR>> name" and Unix `ls -l` row
+    an FTP directory listing (Windows IIS `"MM-DD-YY HH:MMAM/PM <size|<DIR>> name"` and Unix `ls -l` row
     shapes), reached when the command names ftp or the output carries FTP control codes (200 PORT / 227
     Passive / 125|150 data channel) and minting only inside that FTP context so a stray date or permission
     line never mints. Recall is back to 100.0% / 104-of-104, 0 forbidden hits; the facts-axis backlog is
@@ -434,7 +434,7 @@ Axis status values: `DONE (date)`, `PARTIAL (date, note)`, or `NOT YET`.
     placeholder/boolean value never mints (see the Derived Artifacts Index). HTTP error-body
     reachability, the remaining item on this axis, is now also CLOSED (2026-10-23) by the first Stage 5
     parser fix: `services.js` `_parse_http_metadata` mints `http.reachable` from a returned response body
-    (HTML document or "HTTP Error <code>" wrapper), so `23708bbeb1b8` (curl 404) and `e0c783a21aa5`
+    (HTML document or `"HTTP Error <code>"` wrapper), so `23708bbeb1b8` (curl 404) and `e0c783a21aa5`
     (proxychains curl 200) now both mint it, while the DNS-failure true-negative anchor (`f87b247fe3a8`,
     no body) stays silent (see `qa/tests/engine/http-reachable-body-smoke.js`).
   - **flow**: DONE (2026-08-20, refreshed 2026-10-11). Captured in
