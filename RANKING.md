@@ -216,19 +216,17 @@ Within any `(Tier, StageRank)` bucket, OBOL ranks moves by their **Expected Grap
 
 ### 5.1 Recursive AND/OR Attack-Graph Distance (`v2GoalDistance`)
 
-Let $G$ be the engagement goal set:
+Let $G$ be the engagement goal set. With flags enabled (`V2_GOALS`):
 
-- With flags enabled (`V2_GOALS`):
+```math
+G = \{\texttt{objective.root\_flag},\; \texttt{objective.local\_flag},\; \texttt{objective.flag},\; \texttt{access.root},\; \texttt{access.admin},\; \texttt{access.system},\; \texttt{loot.ntds},\; \texttt{ad.domain\_admin}\}
+```
 
-  ```math
-  G = \{\texttt{objective.root\_flag},\; \texttt{objective.local\_flag},\; \texttt{objective.flag},\; \texttt{access.root},\; \texttt{access.admin},\; \texttt{access.system},\; \texttt{loot.ntds},\; \texttt{ad.domain\_admin}\}
-  ```
+With flags disabled (`V2_GOALS_NO_FLAGS`):
 
-- With flags disabled (`V2_GOALS_NO_FLAGS`):
-
-  ```math
-  G_{\text{no-flags}} = \{\texttt{access.root},\; \texttt{access.admin},\; \texttt{access.system},\; \texttt{loot.ntds},\; \texttt{ad.domain\_admin}\}
-  ```
+```math
+G_{\text{no-flags}} = \{\texttt{access.root},\; \texttt{access.admin},\; \texttt{access.system},\; \texttt{loot.ntds},\; \texttt{ad.domain\_admin}\}
+```
 
 To prevent an already-achieved intermediate goal (such as `objective.local_flag` after capturing `user.txt`) from zeroing the distance to the remaining goals, `nextActionsV2` defines the **active unachieved goal set**:
 
@@ -325,26 +323,26 @@ where $\text{InEscalationWindow}(H_0) \iff \texttt{credential.available} \in H_0
 
 From $U(a, F)$, OBOL computes two 1-step lookahead quantities:
 
-1. **Deepest 1-Step Enablement $E(a, F)$ (`enable`)**: The single highest reliability-weighted progress among all doors that $a$ opens:
+**1. Deepest 1-Step Enablement $E(a, F)$ (`enable`)** - the single highest reliability-weighted progress among all doors that $a$ opens:
 
-   ```math
-   E(a, F) = \max_{b \in U(a, F)} \big(R_b \cdot \Delta d_b(a, F)\big) \qquad (\text{with } E(a, F) = 0 \text{ if } U(a, F) = \emptyset)
-   ```
+```math
+E(a, F) = \max_{b \in U(a, F)} \big(R_b \cdot \Delta d_b(a, F)\big) \qquad (\text{with } E(a, F) = 0 \text{ if } U(a, F) = \emptyset)
+```
 
-2. **Bounded Keystone Breadth $K(a, F)$ (`keystone`)**: The reliability-tempered breadth of the attack surface unblocked by $a$, giving every newly unblocked move $b \in U(a, F)$ a base weight of $0.5$ plus its goal progress $\Delta d_b(a, F)$, capped at $K_{\max} = 2.5$ (`V2_KEYSTONE_CAP`):
+**2. Bounded Keystone Breadth $K(a, F)$ (`keystone`)** - the reliability-tempered breadth of the attack surface unblocked by $a$, giving every newly unblocked move $b \in U(a, F)$ a base weight of $0.5$ plus its goal progress $\Delta d_b(a, F)$, capped at $K_{\max} = 2.5$ (`V2_KEYSTONE_CAP`):
 
-   ```math
-   K_{\text{raw}}(a, F) = \min\left(2.5,\; \sum_{b \in U(a, F)} R_b \cdot \big(0.5 + \Delta d_b(a, F)\big)\right)
-   ```
+```math
+K_{\text{raw}}(a, F) = \min\left(2.5,\; \sum_{b \in U(a, F)} R_b \cdot \big(0.5 + \Delta d_b(a, F)\big)\right)
+```
 
-   Because keystone fan-out is a **middle-game** pivot metric (meant to help reach a winning position, never to displace an endgame cash-in or promote post-compromise persistence), $K(a, F)$ is zeroed for direct privilege cash-ins and deprioritized side-quests:
+Because keystone fan-out is a **middle-game** pivot metric (meant to help reach a winning position, never to displace an endgame cash-in or promote post-compromise persistence), $K(a, F)$ is zeroed for direct privilege cash-ins and deprioritized side-quests:
 
-   ```math
-   K(a, F) = \begin{cases}
-   0 & \text{if } \big(\text{prod}(a) \cap \texttt{V2\_PRIV} \neq \emptyset\big) \;\lor\; \big(\texttt{deprioritize\_when}(a) \cap H_0 \neq \emptyset\big) \\
-   K_{\text{raw}}(a, F) & \text{otherwise}
-   \end{cases}
-   ```
+```math
+K(a, F) = \begin{cases}
+0 & \text{if } \big(\text{prod}(a) \cap \texttt{V2\_PRIV} \neq \emptyset\big) \;\lor\; \big(\texttt{deprioritize\_when}(a) \cap H_0 \neq \emptyset\big) \\
+K_{\text{raw}}(a, F) & \text{otherwise}
+\end{cases}
+```
 
 ### 5.5 The Complete Graph Utility Score Formula $S(a, F)$
 
@@ -354,16 +352,16 @@ Combining Direct Progress $\Delta d(a, F)$, Deepest Enablement $E(a, F)$, Keysto
 S(a, F) = R(a, F) \cdot \Big(\Delta d(a, F) + 0.6 \cdot E(a, F) + 0.25 \cdot K(a, F)\Big) + \Omega_{\text{obj}}(a, F) + \Phi_{\text{focus}}(a) + \Phi_{\text{risk}}(a, F) - \Psi_{\text{side}}(a, F)
 ```
 
-where every modifier is explicitly bounded and defined:
+where every modifier is explicitly bounded and defined. First, **Endgame Uncaptured Objective Pull**, $\Omega_{\text{obj}}(a, F)$:
 
-- **Endgame Uncaptured Objective Pull**, $\Omega_{\text{obj}}(a, F)$:
+```math
+\Omega_{\text{obj}}(a, F) = \begin{cases}
+2.0 \quad (\texttt{V2\_OBJECTIVE\_W}) & \text{if flags enabled } \land \exists p \in \text{prod}(a) \cap \{\texttt{objective.root\_flag},\; \texttt{objective.local\_flag},\; \texttt{objective.flag}\} \text{ with } p \notin H_0 \\
+0 & \text{otherwise}
+\end{cases}
+```
 
-  ```math
-  \Omega_{\text{obj}}(a, F) = \begin{cases}
-  2.0 \quad (\texttt{V2\_OBJECTIVE\_W}) & \text{if flags enabled } \land \exists p \in \text{prod}(a) \cap \{\texttt{objective.root\_flag},\; \texttt{objective.local\_flag},\; \texttt{objective.flag}\} \text{ with } p \notin H_0 \\
-  0 & \text{otherwise}
-  \end{cases}
-  ```
+The remaining three modifiers are:
 
 - **Profile Focus Alignment**, $\Phi_{\text{focus}}(a)$: $+0.5$ if any fact in $\text{prod}(a)$ matches the active machine profile's `focusPrefixes` (e.g., `ad.` on an AD profile), else $0$.
 - **Blind Spray Risk Penalty**, $\Phi_{\text{risk}}(a, F)$: $-0.5$ if $\text{transition}(a) = \texttt{spray}$ and neither `policy.lockout` nor `smb.null_session` is proven in $H_0$ (penalizing account-lockout risk), else $0$.
@@ -487,22 +485,15 @@ When the operator pastes terminal output (or clicks **Ran - Nothing Found**), `O
 
 For a given move $a$, target host $T$, and access epoch $E = \text{Epoch}(F)$, let $\mathcal{H}(a, T, E)$ be the chronological list of activity records in the current epoch matching move $a$ (either directly by `action_id === a.id` or by cross-card `commandSignature` equivalence on a command of $a$):
 
-1. **Productive Reset**: If the most recent activity for $a$ in epoch $E$ produced any non-incidental fact (anything beyond echoed connection/session banners) or settled a `settled_by` command of $a$, then:
-
-   ```math
-   \text{moveDryTriesInEpoch}(a, F, E, T) = 0
-   ```
-
-   The move remains at `#1` in `onFlow` and immediately promotes its next sequential command to Command `#1`.
+1. **Productive Reset**: If the most recent activity for $a$ in epoch $E$ produced any non-incidental fact (anything beyond echoed connection/session banners) or settled a `settled_by` command of $a$, then $\text{moveDryTriesInEpoch}(a, F, E, T) = 0$. The move remains at `#1` in `onFlow` and immediately promotes its next sequential command to Command `#1`.
 2. **Dry-Probe Increment**: Otherwise, $\text{moveDryTriesInEpoch}(a, F, E, T)$ counts the number of conclusive dry attempts in epoch $E$ (where no new facts were produced, no `environment-error` / `partial` / `blocker.*` occurred, and either `action_id === a.id` or `outcome.retireCommand === true`).
 3. **Complete Command Exhaustion (`hasRunnableCommand(a)`)**: If every eligible command on move $a$ is either gated on an unearned fact or has been tried in epoch $E$, `hasRunnableCommand(a)` returns `false` and $a$ leaves `onFlow` until a new fact or new `accessEpoch` unlocks additional commands.
-4. **Stable Dry-Count Rotation in `rankFor` ([`assets/ui/routes/path.js`](assets/ui/routes/path.js))**:
-   Among all moves in `onFlow`, OBOL applies a stable partition by `moveDryTriesInEpoch`:
+4. **Stable Dry-Count Rotation in `rankFor` ([`assets/ui/routes/path.js`](assets/ui/routes/path.js))**: Among all moves in `onFlow`, OBOL applies a stable partition by `moveDryTriesInEpoch`:
 
-   ```math
-   \text{onFlow}_{\text{sorted}} = \text{stableSort}\Big(\text{onFlow},\; (x, y) \mapsto \text{dry}(x) - \text{dry}(y)\Big)
-   ```
+```math
+\text{onFlow}_{\text{sorted}} = \text{stableSort}\Big(\text{onFlow},\; (x, y) \mapsto \text{dry}(x) - \text{dry}(y)\Big)
+```
 
-   Untried hypotheses $(\text{dry} = 0)$ always lead tried-and-dry hypotheses $(\text{dry} \ge 1)$, and the Cockpit UI (`render()` in `path.js`) automatically advances `nsSel.id` to `onFlow[0].id` whenever the previously expanded card has been demoted by a dry probe.
+Untried hypotheses $(\text{dry} = 0)$ always lead tried-and-dry hypotheses $(\text{dry} \ge 1)$, and the Cockpit UI (`render()` in `path.js`) automatically advances `nsSel.id` to `onFlow[0].id` whenever the previously expanded card has been demoted by a dry probe.
 
 As a result, an operator following the simple rule **"Always run Command `#1` on Card `#1` and paste the output"** is guided smoothly through multi-step enumerations, automatically pivoted past dry probes (such as an empty `bloodyAD get writable` check rotating cleanly to `kerberoast`), and promoted immediately to Tier 4 and Tier 5 cash-ins the instant a hash, credential, ACL lead, or administrative session is earned.
